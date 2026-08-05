@@ -18,6 +18,7 @@ import { Button } from "../ui/button";
 import { PageSection } from "../ui/page";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { InlineAlert } from "../ui/state";
+import { cn } from "../ui/cn";
 
 interface Props {
   onOpenSession: (sessionId: string) => void;
@@ -91,14 +92,14 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
   }
 
   return (
-    <div className={`automations-page ${sel ? "automations-page-has-detail" : ""}`}>
-    <div className="automations-page-main">
+    <div className="relative flex min-h-0 min-w-0 flex-1">
+    <div className={cn("min-w-0 flex-1 overflow-y-auto px-6 pb-[60px] pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-5", sel && "basis-[340px] grow-0 border-r border-line px-3.5 pb-10 pt-4 max-[900px]:hidden")}>
     <PageSection>
       <PageHeader
         className={sel ? "mb-3.5 items-center" : "max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5"}
       >
         <div>
-          <PageTitle className={sel ? "text-base" : undefined}>Actions</PageTitle>
+          <PageTitle className={sel ? "text-body" : undefined}>Actions</PageTitle>
           <PageDescription className={sel ? "hidden" : undefined}>
             Run a registered repo script behind a form. Each run opens as a session you can fork.
           </PageDescription>
@@ -127,23 +128,23 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
       {loading ? (
         <div className="loading">Loading…</div>
       ) : actions.length === 0 ? (
-        <div className="automations-empty">
+        <div className="px-4 py-12 text-center text-dim">
           <p>No actions yet.</p>
-          <p className="automations-empty-sub">
+          <p className="text-control-label text-faint">
             Register a script from a repo (e.g. scripts/run-maintenance.sh).
           </p>
         </div>
       ) : (
-        <div className="automations-table">
+        <div className="flex flex-col border-t border-line">
           {actions.map((a) => (
             <button
               key={a.id}
-              className={`automations-row ${sel?.id === a.id ? "active" : ""}`}
+              className={cn("flex w-full min-w-0 items-center gap-3 border-0 border-b border-line bg-transparent px-2.5 py-2.5 text-left text-fg hover:bg-hover max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3", sel?.id === a.id && "bg-active")}
               onClick={() => onSelect(a.id)}
             >
-              <span className="automations-row-main">
-                <span className="automations-row-name">{a.name}</span>
-                <span className="automations-row-trigger">
+              <span className="flex min-w-0 flex-1 flex-col gap-px">
+                <span className="truncate text-body font-semibold">{a.name}</span>
+                <span className="truncate font-mono text-meta text-faint">
                   {a.kind === "mcp"
                     ? `${a.mcpServer} · ${a.toolName}`
                     : `${a.repo ? repoLabel(a.repo) : ""} · ${a.scriptPath}`}
@@ -154,7 +155,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
                   confirm
                 </span>
               )}
-              <span className="automations-row-next">
+              <span className="w-[84px] shrink-0 text-right text-label text-faint max-[560px]:hidden">
                 {a.lastRunAt ? relativeTime(a.lastRunAt) : ""}
               </span>
             </button>
@@ -165,10 +166,10 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
     </div>
 
       {sel && (
-        <aside className="automations-drawer">
-          <div className="automations-drawer-head">
+        <aside className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-line bg-panel max-[900px]:border-l-0">
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
             <button
-              className="automations-drawer-back"
+              className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.5 border-0 bg-transparent px-1.5 py-1 text-body font-medium text-fg max-[900px]:inline-flex"
               onClick={() => onSelect("")}
               title="Back to actions"
             >
@@ -177,14 +178,14 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
               </svg>
               Actions
             </button>
-            <span className="automations-drawer-title">{sel.name}</span>
-            <div className="automations-drawer-actions">
+            <span className="min-w-0 truncate text-control-label font-semibold">{sel.name}</span>
+            <div className="ml-auto flex shrink-0 gap-1.5">
               <Button size="sm" variant="danger" onClick={() => handleDelete(sel)}>
                 Delete
               </Button>
             </div>
             <button
-              className="automations-drawer-close"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-dim hover:bg-hover hover:text-fg max-[900px]:hidden"
               onClick={() => onSelect("")}
               title="Close"
             >
@@ -193,15 +194,15 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
               </svg>
             </button>
           </div>
-          <div className="automations-drawer-body">
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pb-10 pt-[18px]">
             {sel.description && (
-              <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim">
+              <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-control-label leading-relaxed text-dim">
                 {sel.description}
               </div>
             )}
 
             <div>
-              <div className="automations-drawer-section-label mb-1.5">Run</div>
+              <div className="mb-1.5 text-label font-semibold text-faint">Run</div>
               <RunForm
                 key={sel.id}
                 action={sel}
@@ -213,8 +214,8 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
             </div>
 
             <div>
-              <div className="automations-drawer-section-label mb-1.5">Configuration</div>
-              <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-[13px]">
+              <div className="mb-1.5 text-label font-semibold text-faint">Configuration</div>
+              <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-control-label">
                 <DetailKey>Type</DetailKey>
                 <span className="text-dim">
                   {sel.kind === "mcp"
@@ -224,7 +225,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
 
                 <DetailKey>{sel.kind === "mcp" ? "Tool" : "Script"}</DetailKey>
                 <span className="text-dim min-w-0">
-                  <span className="automation-cron">
+                  <span className="rounded-sm bg-active px-1.5 py-px font-mono text-meta">
                     {sel.kind === "mcp"
                       ? `${sel.mcpServer} · ${sel.toolName}`
                       : `${sel.repo ? repoLabel(sel.repo) : ""}:${sel.scriptPath}`}
@@ -253,7 +254,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
             </div>
 
             <div>
-              <div className="automations-drawer-section-label mb-1.5">Activity</div>
+              <div className="mb-1.5 text-label font-semibold text-faint">Activity</div>
               {sel.lastRunAt ? (
                 <div className="text-dim text-supporting">
                   last run {relativeTime(sel.lastRunAt)}
@@ -261,7 +262,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
                     <>
                       {" · "}
                       <a
-                        className="automation-session-link"
+                        className="text-accent hover:underline"
                         onClick={(e) => {
                           e.preventDefault();
                           onOpenSession(sel.lastRunSessionId!);
@@ -321,7 +322,7 @@ function RunForm({
   }
 
   return (
-    <div className="automation-form automation-form-inline">
+    <div className="flex flex-col gap-3.5 [&_label]:flex [&_label]:flex-col [&_label]:gap-1.5 [&_label]:text-supporting [&_label]:font-medium [&_label]:text-dim [&_input]:rounded-md [&_input]:border [&_input]:border-line-strong [&_input]:bg-raised [&_input]:px-3 [&_input]:py-2 [&_input]:text-control-label [&_input]:text-fg [&_select]:rounded-md [&_select]:border [&_select]:border-line-strong [&_select]:bg-raised [&_select]:px-3 [&_select]:py-2 [&_select]:text-control-label [&_select]:text-fg">
       {action.inputs.length === 0 && (
         <div className="mt-1 text-supporting text-faint">This action takes no inputs.</div>
       )}
@@ -371,7 +372,7 @@ function RunForm({
 
       {error && <InlineAlert>{error}</InlineAlert>}
 
-      <div className="automation-form-actions" style={{ justifyContent: "flex-start" }}>
+      <div className="flex justify-start gap-2.5">
         <Button variant="primary" className="px-[22px]" onClick={run} disabled={busy}>
           {busy ? "Starting…" : action.confirm ? "Confirm & run" : "Run"}
         </Button>
@@ -465,8 +466,8 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
   }
 
   return (
-    <div className="automation-form">
-      <div className="automation-form-title">New action</div>
+    <div className="flex flex-col gap-3.5 rounded-panel border border-line-strong bg-panel p-[18px] [&_label]:flex [&_label]:flex-1 [&_label]:flex-col [&_label]:gap-1.5 [&_label]:text-supporting [&_label]:font-medium [&_label]:text-dim [&_input]:rounded-md [&_input]:border [&_input]:border-line-strong [&_input]:bg-raised [&_input]:px-3 [&_input]:py-2 [&_input]:text-control-label [&_input]:text-fg [&_select]:rounded-md [&_select]:border [&_select]:border-line-strong [&_select]:bg-raised [&_select]:px-3 [&_select]:py-2 [&_select]:text-control-label [&_select]:text-fg">
+      <div className="text-body font-semibold">New action</div>
 
       <label>
         Name
@@ -491,7 +492,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
       </label>
 
       {kind === "repo" ? (
-        <div className="automation-form-row">
+        <div className="flex gap-3.5">
           <label>
             Repo
             <select value={repo} onChange={(e) => setRepo(e.target.value)}>
@@ -519,7 +520,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
           </label>
         </div>
       ) : (
-        <div className="automation-form-row">
+        <div className="flex gap-3.5">
           <label style={{ flex: 2 }}>
             MCP server
             <input
@@ -549,7 +550,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
       )}
 
       {kind === "repo" && (
-        <div className="automation-form-actions" style={{ justifyContent: "flex-start" }}>
+        <div className="flex justify-start gap-2.5">
           <Button
             size="sm"
             className="border-line-strong bg-transparent"
@@ -561,12 +562,12 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
         </div>
       )}
 
-      <div className="automation-form-title" style={{ fontSize: 14, marginTop: 8 }}>
+      <div className="mt-2 text-body font-semibold">
         Inputs {kind === "mcp" ? "(arg names)" : argMode === "positional" ? "(in order →)" : ""}
       </div>
       {inputs.length === 0 && <div className="mt-1 text-supporting text-faint">No inputs — the script runs with no args.</div>}
       {inputs.map((input, idx) => (
-        <div className="automation-form-row" key={idx} style={{ alignItems: "flex-end" }}>
+        <div className="flex items-end gap-3.5" key={idx}>
           <label>
             Variable name
             <input
@@ -610,7 +611,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
           </Button>
         </div>
       ))}
-      <div className="automation-form-actions" style={{ justifyContent: "flex-start" }}>
+      <div className="flex justify-start gap-2.5">
         <Button size="sm" className="border-line-strong bg-transparent" onClick={addInput}>
           + Add input
         </Button>
@@ -627,10 +628,10 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
 
       {error && <InlineAlert>{error}</InlineAlert>}
 
-      <div className="automation-form-actions">
+      <div className="flex justify-end gap-2.5">
         <Button
           size="sm"
-          className="min-h-7 border-line-strong bg-transparent px-3 text-[13px]"
+          className="min-h-7 border-line-strong bg-transparent px-3 text-control-label"
           onClick={onClose}
           disabled={saving}
         >

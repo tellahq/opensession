@@ -92,7 +92,7 @@ export function SessionSplit({
 
 	const column = (side: SplitSide, socket: Socket) => (
 		<div
-			className="session-split-pane"
+			className={`session-split-pane relative min-h-0 min-w-0 overflow-hidden ${focusedSide === side ? "session-split-pane-focused" : "after:pointer-events-none after:absolute after:inset-0 after:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--border)_75%,transparent)]"}`}
 			onPointerDownCapture={() => {
 				if (focusedSide !== side) onFocusSide(side);
 			}}
@@ -104,12 +104,12 @@ export function SessionSplit({
 	return (
 		<div
 			ref={rootRef}
-			className="session-split"
+			className="session-split grid min-h-0 min-w-0 flex-1 overflow-hidden"
 			style={{ gridTemplateColumns: splitColumns(draftRatio) }}
 		>
 			{column("left", leftSocket)}
 			<div
-				className="session-split-resize"
+				className="session-split-resize relative z-[5] cursor-col-resize touch-none"
 				role="separator"
 				aria-orientation="vertical"
 				aria-label="Resize split tabs"

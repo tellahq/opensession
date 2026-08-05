@@ -150,7 +150,7 @@ const INFO_SECTION_CLASS = "grid gap-[5px]";
 const INFO_LIST_CLASS =
 	"grid gap-px overflow-hidden rounded-lg bg-panel p-1";
 const INFO_MORE_BUTTON_CLASS =
-	"cursor-pointer bg-panel px-[9px] py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg";
+	"cursor-pointer bg-panel px-[9px] py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg focus-ring";
 
 function statusBadgeClass(status: DiffFile["status"]): string {
 	switch (statusClass(status)) {
@@ -171,6 +171,21 @@ const ACTION_BUTTON_CLASS =
 	"flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left text-supporting font-semibold text-fg outline-none transition-colors hover:bg-hover focus-visible:bg-hover disabled:cursor-default disabled:opacity-50";
 const ACTION_ICON_CLASS =
 	"inline-flex size-5 shrink-0 items-center justify-center text-faint [&_svg]:block";
+const GIT_ROW_CLASS = "pr-git-row flex min-h-7 items-center gap-2.5 py-2";
+const GIT_DOT_CLASS = "pr-git-dot size-[7px] shrink-0 rounded-full";
+const GIT_LABEL_CLASS = "pr-git-label text-control-label leading-[1.3] text-dim";
+const GIT_ACTION_CLASS = "pr-git-action ml-auto min-h-7 rounded-sm border border-line-strong px-3 py-1 text-control-label text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-50 focus-ring";
+
+function gitDotClass(tone: "green" | "purple" | "yellow" | "muted" | "red" | "blue"): string {
+	switch (tone) {
+		case "green": return `${GIT_DOT_CLASS} bg-green`;
+		case "purple": return `${GIT_DOT_CLASS} bg-purple`;
+		case "red": return `${GIT_DOT_CLASS} bg-red`;
+		case "blue": return `${GIT_DOT_CLASS} bg-blue`;
+		case "muted": return `${GIT_DOT_CLASS} bg-faint`;
+		default: return `${GIT_DOT_CLASS} bg-yellow`;
+	}
+}
 
 function initial(name: string): string {
 	return (name.trim()[0] || "?").toUpperCase();
@@ -280,7 +295,7 @@ function CommentAvatar({ author }: { author: string }) {
 	}
 	return (
 		<span
-			className="grid size-6 shrink-0 place-items-center rounded-full border border-line bg-active text-[11px] font-semibold text-white"
+			className="grid size-6 shrink-0 place-items-center rounded-full border border-line bg-active text-meta font-semibold text-white"
 			style={{ background: `hsl(${hueFor(login || "?")} 52% 42%)` }}
 			aria-hidden
 		>
@@ -314,7 +329,7 @@ function CommentCard({
 	const addBtn = onAddToInput && (
 		<button
 			type="button"
-			className="absolute right-1.5 top-1/2 z-[1] -translate-y-1/2 rounded-md border border-line-strong bg-panel px-2 py-0.5 text-[11px] font-semibold text-dim opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:border-faint hover:bg-hover hover:text-fg"
+			className="absolute right-1.5 top-1/2 z-[1] -translate-y-1/2 rounded-md border border-line-strong bg-panel px-2 py-0.5 text-meta font-semibold text-dim opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:border-faint hover:bg-hover hover:text-fg"
 			onClick={(e) => {
 				e.stopPropagation();
 				onAddToInput(formatPrCommentPrompt(comment, pr));
@@ -420,7 +435,7 @@ function FileRow({
 		[theme],
 	);
 	const stats = (
-		<span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold tabular-nums">
+		<span className="inline-flex shrink-0 items-center gap-1 text-meta font-semibold tabular-nums">
 			{file.additions > 0 && (
 				<span className="text-green">+{file.additions}</span>
 			)}
@@ -449,7 +464,7 @@ function FileRow({
 			>
 				<span
 					className={cn(
-						"inline-flex size-[18px] shrink-0 items-center justify-center rounded-[calc(3px*var(--rf))] text-[11px] font-bold",
+						"inline-flex size-[18px] shrink-0 items-center justify-center rounded-[calc(3px*var(--rf))] text-meta font-bold",
 						statusBadgeClass(file.status),
 					)}
 				>
@@ -666,7 +681,7 @@ function ChecksChip({
 								>
 									<CheckStatusIcon kind={status.kind} />
 								</span>
-								<span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">
+								<span className="min-w-0 flex-1 truncate text-control-label font-medium text-fg">
 									{check.name}
 								</span>
 								<span className="shrink-0 text-label font-medium text-dim">
@@ -962,14 +977,14 @@ function MichaelReviewCard({
 								<div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
 									<CommentAvatar author={reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME} />
 									<div className="min-w-0 flex-1">
-										<div className="truncate text-[13px] font-semibold text-fg">
+										<div className="truncate text-control-label font-semibold text-fg">
 											{reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME}
 										</div>
 										<div className="text-meta text-faint">
 											Automated review{reviewedAgo ? ` · reviewed ${reviewedAgo} ago` : ""}
 										</div>
 									</div>
-									<span className={cn("shrink-0 text-[13px] font-semibold", scoreTone)}>
+									<span className={cn("shrink-0 text-control-label font-semibold", scoreTone)}>
 										{score ?? "–"}/5
 									</span>
 								</div>
@@ -994,7 +1009,7 @@ function MichaelReviewCard({
 				)}
 			</div>
 			{done && (
-				<div className="px-1 text-[11px] font-medium text-dim">
+				<div className="px-1 text-meta font-medium text-dim">
 					Started {done.label.toLowerCase()} — {AGENT_NAME} will post results on{" "}
 					{pr.url ? (
 						<a
@@ -1022,7 +1037,7 @@ function MichaelReviewCard({
 				</div>
 			)}
 			{error && (
-				<div className="px-1 text-[11px] font-medium text-red">
+				<div className="px-1 text-meta font-medium text-red">
 					{error}
 				</div>
 			)}
@@ -1374,17 +1389,17 @@ function GitStatusRows({
 			<div className={INFO_LABEL_CLASS}>Git status</div>
 			<div className={INFO_LIST_CLASS}>
 				{prStatus && (
-					<div className="pr-git-row py-2">
-						<span className={`pr-git-dot pr-git-dot-${prTone}`} aria-hidden />
-						<span className="pr-git-label">{prStatus}</span>
+					<div className={GIT_ROW_CLASS}>
+						<span className={gitDotClass(prTone)} aria-hidden />
+						<span className={GIT_LABEL_CLASS}>{prStatus}</span>
 						{pr?.mergeable === "CONFLICTING" && send ? (
-							<button type="button" className="pr-git-action" onClick={resolveConflicts}>
+							<button type="button" className={GIT_ACTION_CLASS} onClick={resolveConflicts}>
 								Resolve
 							</button>
 						) : pr?.state === "OPEN" && !pr.isDraft ? (
 							<button
 								type="button"
-								className="pr-git-action"
+								className={GIT_ACTION_CLASS}
 								disabled={!!busy}
 								onClick={() => void merge()}
 								title="Squash and merge this pull request"
@@ -1399,14 +1414,14 @@ function GitStatusRows({
 					</div>
 				)}
 				{ahead > 0 && (
-					<div className="pr-git-row py-2">
-						<span className="pr-git-dot pr-git-dot-blue" aria-hidden />
-						<span className="pr-git-label">
+					<div className={GIT_ROW_CLASS}>
+						<span className={gitDotClass("blue")} aria-hidden />
+						<span className={GIT_LABEL_CLASS}>
 							{ahead} commit{ahead === 1 ? "" : "s"} ahead of remote
 						</span>
 						<button
 							type="button"
-							className="pr-git-action"
+							className={GIT_ACTION_CLASS}
 							disabled={!!busy}
 							onClick={() => run("push", () => gitPushApi(sessionId, repo))}
 						>
@@ -1415,15 +1430,15 @@ function GitStatusRows({
 					</div>
 				)}
 				{behindCount > 0 && (
-					<div className="pr-git-row py-2">
-						<span className="pr-git-dot pr-git-dot-yellow" aria-hidden />
-						<span className="pr-git-label">
+					<div className={GIT_ROW_CLASS}>
+						<span className={gitDotClass("yellow")} aria-hidden />
+						<span className={GIT_LABEL_CLASS}>
 							{behindCount} commit{behindCount === 1 ? "" : "s"} behind{" "}
 							{behindWhat}
 						</span>
 						<button
 							type="button"
-							className="pr-git-action"
+							className={GIT_ACTION_CLASS}
 							disabled={!!busy}
 							title={
 								behindWhat === "remote"
@@ -1439,15 +1454,15 @@ function GitStatusRows({
 					</div>
 				)}
 				{dirty > 0 && (
-					<div className="pr-git-row py-2">
-						<span className="pr-git-dot pr-git-dot-yellow" aria-hidden />
-						<span className="pr-git-label">
+					<div className={GIT_ROW_CLASS}>
+						<span className={gitDotClass("yellow")} aria-hidden />
+						<span className={GIT_LABEL_CLASS}>
 							{dirty} uncommitted file{dirty === 1 ? "" : "s"}
 						</span>
 						{send && (
 							<button
 								type="button"
-								className="pr-git-action"
+								className={GIT_ACTION_CLASS}
 								onClick={commit}
 								title={`Ask ${AGENT_NAME} to commit the uncommitted changes and push`}
 							>
@@ -1457,8 +1472,8 @@ function GitStatusRows({
 					</div>
 				)}
 			</div>
-			{prompted && <div className="pr-git-note">Asked {AGENT_NAME} to {prompted} ✓</div>}
-			{error && <div className="pr-git-note pr-git-note-error">{error}</div>}
+			{prompted && <div className="pr-git-note text-meta text-dim">Asked {AGENT_NAME} to {prompted} ✓</div>}
+			{error && <div className="pr-git-note pr-git-note-error text-meta text-red">{error}</div>}
 		</div>
 	);
 }

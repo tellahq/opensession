@@ -107,14 +107,14 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
 					>
 						<path d="M7.5 2 3.5 6l4 4" />
 					</svg>
-					<span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
+					<span className="min-w-0 flex-1 truncate text-control-label font-medium text-fg">
 						{agent.label}
 					</span>
 					{agent.status === "running" && (
 						<span className="size-1.5 shrink-0 animate-pulse rounded-full bg-green" />
 					)}
 				</button>
-				<div className="mt-0.5 pl-[18px] text-[11px] text-faint tabular-nums">
+				<div className="mt-0.5 pl-[18px] text-meta text-faint tabular-nums">
 					{[
 						`agent ${agent.seq}`,
 						agent.status,
@@ -158,7 +158,7 @@ function Placeholder({
 	return (
 		<div
 			className={cn(
-				"px-1 py-3 text-xs leading-relaxed",
+				"px-1 py-3 text-label leading-relaxed",
 				tone === "error" ? "text-red" : "text-faint",
 			)}
 		>

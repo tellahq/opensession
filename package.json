@@ -16,6 +16,7 @@
     "app:dev": "bun scripts/app-dev.ts",
     "bench:memory": "bun scripts/memory-bench.ts",
     "dev": "bun --hot opensession.ts",
+    "frontend:check": "bun scripts/frontend-css-check.ts",
     "opensession": "bun scripts/cli.ts",
     "setup": "bun scripts/cli.ts onboard",
     "start": "bun opensession.ts",

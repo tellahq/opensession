@@ -239,19 +239,19 @@ export function RestartOverlay({ connected, addHandler }: Props) {
   if (phase !== "crashed") return null;
 
   return (
-    <div className="restart-overlay" role="alertdialog" aria-live="assertive">
-      <div className="restart-card">
-        <div className={`restart-spinner ${backOnline ? "restart-spinner-done" : ""}`} />
-        <div className="restart-title">
+    <div className="restart-overlay fixed inset-0 z-[10000] flex items-center justify-center bg-[#070506]/82 p-6 backdrop-blur-sm" role="alertdialog" aria-live="assertive">
+      <div className="restart-card flex max-w-[340px] flex-col items-center gap-3.5 rounded-panel border border-line bg-panel px-[26px] py-7 text-center">
+        <div className={`restart-spinner size-[30px] animate-spin rounded-full border-[2.5px] border-line-strong border-t-accent ${backOnline ? "restart-spinner-done !animate-none !border-green !border-t-green" : ""}`} />
+        <div className="restart-title text-item-title font-semibold text-fg">
           {backOnline ? "Back online" : `${PRODUCT_NAME} is restarting`}
         </div>
-        <div className="restart-sub">
+        <div className="restart-sub text-supporting leading-normal text-dim">
           {backOnline
             ? "Refreshing…"
             : "Hang tight. The page will refresh automatically once it's back up."}
         </div>
         {!backOnline && restartBy && (
-          <div className="restart-by">Triggered by {restartBy}</div>
+          <div className="restart-by mt-1.5 max-w-full truncate text-label font-medium leading-normal text-dim opacity-80">Triggered by {restartBy}</div>
         )}
       </div>
     </div>

@@ -92,7 +92,7 @@ function ReactionPills({ reactions }: { reactions?: MessageReaction[] }) {
 					{r.url ? (
 						<img src={r.url} alt={r.name} className="h-[14px] w-[14px]" />
 					) : (
-						<span className="text-[13px]">{r.emoji || `:${r.name}:`}</span>
+						<span className="text-control-label">{r.emoji || `:${r.name}:`}</span>
 					)}
 					<span className="font-medium">{r.count}</span>
 				</span>
@@ -150,7 +150,7 @@ function MessageRow({
 					className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-md"
 				/>
 			) : (
-				<span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-active text-xs font-semibold text-dim">
+				<span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-active text-label font-semibold text-dim">
 					{m.userName.charAt(0).toUpperCase()}
 				</span>
 			)}
@@ -176,7 +176,7 @@ function MessageRow({
 				{expanded && (
 					<div className="mt-1 border-l-2 border-line pl-3">
 						{loadingReplies ? (
-							<div className="py-1 text-xs text-faint">Loading thread…</div>
+							<div className="py-1 text-label text-faint">Loading thread…</div>
 						) : (
 							(replies || []).map((r) => (
 								<MessageRow
@@ -356,11 +356,11 @@ export function SlackChannelPane({
 						</div>
 					)}
 					{loading ? (
-						<div className="py-8 text-center text-sm text-faint">
+						<div className="py-8 text-center text-control-label text-faint">
 							Loading channel…
 						</div>
 					) : messages.length === 0 ? (
-						<div className="py-8 text-center text-sm text-faint">
+						<div className="py-8 text-center text-control-label text-faint">
 							No recent messages.
 						</div>
 					) : (
@@ -371,12 +371,12 @@ export function SlackChannelPane({
 				</div>
 			</div>
 			{error && (
-				<div className="mx-auto w-full max-w-[760px] px-5 py-2 text-xs text-red">
+				<div className="mx-auto w-full max-w-[760px] px-5 py-2 text-label text-red">
 					{error}
 				</div>
 			)}
 			{/* Same visual family as the sessions Composer (.composer classes from
-			    global.css) — rounded card, borderless textarea, circular accent
+			    foundation adapter) — rounded card, borderless textarea, circular accent
 			    send — sized down for a chat channel. */}
 			<div className="composer-wrap shrink-0 px-5 pb-4 pt-1">
 				<div className={`composer ${!asUser ? "composer-disabled" : ""}`}>

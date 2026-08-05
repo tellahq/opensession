@@ -90,38 +90,38 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="subagent-head">
-        <div className="subagent-head-top">
-          <span className="subagent-chip">sub-agent</span>
-          <span className="subagent-title" title={meta?.description || current.label}>
+      <div className="subagent-head border-b border-line bg-raised px-2.5 pb-2.5 pt-2">
+        <div className="subagent-head-top flex items-center gap-2">
+          <span className="subagent-chip whitespace-nowrap rounded-sm bg-accent-soft px-1.5 py-0.5 text-meta font-semibold tracking-[-0.01em] text-accent">sub-agent</span>
+          <span className="subagent-title min-w-0 flex-1 truncate text-control-label font-semibold text-fg" title={meta?.description || current.label}>
             {title}
           </span>
           {modelLabel && (
             <span
-              className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-[11px] text-dim"
+              className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-meta text-dim"
               title={meta?.model}
             >
               {modelLabel}
             </span>
           )}
           {/* No close button: the tab's × owns that, like Review and Assets. */}
-          {data?.sessionRunning && <span className="subagent-live-dot" title="Session running" />}
+          {data?.sessionRunning && <span className="subagent-live-dot size-[7px] shrink-0 animate-pulse rounded-full bg-green" title="Session running" />}
         </div>
         {stack.length > 1 && (
-          <button className="subagent-back" onClick={onBack}>
+          <button className="subagent-back mt-2 block max-w-full truncate bg-transparent p-0 text-label text-dim hover:text-fg focus-ring" onClick={onBack}>
             ← {stack[stack.length - 2].label}
           </button>
         )}
-        {meta?.description && <div className="subagent-desc">{meta.description}</div>}
+        {meta?.description && <div className="subagent-desc mt-1.5 text-label leading-[1.4] text-dim">{meta.description}</div>}
       </div>
 
-      <div className="panel-body subagent-body" ref={bodyRef} onScroll={onScroll}>
+      <div className="panel-body subagent-body min-h-0 flex-1 overflow-y-auto px-3.5 py-3" ref={bodyRef} onScroll={onScroll}>
         {loading ? (
-          <div className="panel-placeholder">Loading sub-agent…</div>
+          <div className="panel-placeholder px-4 py-12 text-center text-control-label text-faint">Loading sub-agent…</div>
         ) : error ? (
-          <div className="panel-placeholder panel-error">{error}</div>
+          <div className="panel-placeholder panel-error px-4 py-12 text-center text-control-label text-red">{error}</div>
         ) : data && data.entries.length > 0 ? (
-          <div className="subagent-messages">
+          <div className="subagent-messages min-w-0">
             <TranscriptBlocks
               entries={data.entries}
               live={data.sessionRunning}
@@ -129,7 +129,7 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
             />
           </div>
         ) : (
-          <div className="panel-placeholder">No transcript yet for this sub-agent.</div>
+          <div className="panel-placeholder px-4 py-12 text-center text-control-label text-faint">No transcript yet for this sub-agent.</div>
         )}
       </div>
     </div>

@@ -3,6 +3,7 @@ import { transcribeClip } from "../lib/api";
 import { IconCheck, IconMic, IconPlus, IconX } from "./icons";
 import { Tooltip } from "../ui/tooltip";
 import { PRODUCT_NAME } from "../lib/brand";
+import { cn } from "../ui/cn";
 
 type Phase = "idle" | "recording" | "transcribing";
 
@@ -167,24 +168,24 @@ export function VoiceInput({
           <IconMic size={20} />
         </button>
       </Tooltip>
-      {error && phase === "idle" && <div className="voice-error">{error}</div>}
+      {error && phase === "idle" && <div className="voice-error absolute right-0 bottom-[calc(100%+8px)] z-[7] whitespace-nowrap rounded-[calc(10px*var(--rf))] border border-[color-mix(in_srgb,var(--red)_40%,transparent)] bg-red-soft px-[11px] py-[7px] text-supporting font-medium text-red [corner-shape:var(--cs)]">{error}</div>}
       {phase !== "idle" && (
-        <div className="voice-overlay">
-          <span className="voice-lead" aria-hidden="true">
+        <div className="voice-overlay absolute inset-x-0 bottom-0 z-[6] flex h-[54px] items-center gap-2.5 rounded-b-[calc(16px*var(--rf))] border-t border-line bg-raised pr-3.5 pl-3 [corner-shape:var(--cs)]">
+          <span className="voice-lead inline-flex shrink-0 items-center text-faint" aria-hidden="true">
             <IconPlus size={22} />
           </span>
           {phase === "recording" ? (
             <>
               {/* Full-width track: baseline dots on the quiet/older left, live
                   bars accumulating on the right by the accept button. */}
-              <div className="voice-wave" aria-hidden="true">
+              <div className="voice-wave flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-hidden" aria-hidden="true">
                 {Array.from({ length: BAR_COUNT }, (_, i) => {
                   const l = levels[levels.length - BAR_COUNT + i];
                   const active = l !== undefined;
                   return (
                     <span
                       key={i}
-                      className={active ? "is-live" : ""}
+                      className={cn("mx-auto h-0.5 w-0.5 min-w-0 max-w-0.5 flex-[1_1_0] rounded-[calc(2px*var(--rf))] bg-faint [corner-shape:var(--cs)]", active && "is-live bg-dim transition-[height] duration-[90ms] ease-linear")}
                       style={{ height: active ? `${16 + l * 84}%` : undefined }}
                     />
                   );
@@ -193,7 +194,7 @@ export function VoiceInput({
               <Tooltip label="Cancel">
                 <button
                   type="button"
-                  className="voice-glyph voice-cancel"
+                  className="voice-glyph voice-cancel inline-flex size-[34px] shrink-0 items-center justify-center rounded-[calc(8px*var(--rf))] bg-transparent text-dim transition-[color,background] duration-150 [corner-shape:var(--cs)] hover:bg-hover hover:text-fg"
                   onClick={() => stop(false)}
                   aria-label="Cancel dictation"
                 >
@@ -203,7 +204,7 @@ export function VoiceInput({
               <Tooltip label="Stop and transcribe">
                 <button
                   type="button"
-                  className="voice-glyph voice-accept"
+                  className="voice-glyph voice-accept inline-flex size-[34px] shrink-0 items-center justify-center rounded-[calc(8px*var(--rf))] bg-transparent text-fg transition-[color,background] duration-150 [corner-shape:var(--cs)] hover:bg-hover hover:text-accent"
                   onClick={() => stop(true)}
                   aria-label="Stop and transcribe"
                 >
@@ -213,9 +214,9 @@ export function VoiceInput({
             </>
           ) : (
             <>
-              <span className="voice-spinner" aria-hidden="true" />
-              <span className="voice-status">Transcribing…</span>
-              <span className="voice-wave-spacer" />
+              <span className="voice-spinner size-4 shrink-0 animate-spin rounded-full border-2 border-line-strong border-t-dim motion-reduce:animate-none" aria-hidden="true" />
+              <span className="voice-status shrink-0 text-control-label font-medium text-dim">Transcribing…</span>
+              <span className="voice-wave-spacer flex-1" />
             </>
           )}
         </div>

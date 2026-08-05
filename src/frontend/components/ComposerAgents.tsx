@@ -95,10 +95,10 @@ export function ComposerAgents({ runs, subagents, onOpenPanel }: Props) {
 	} = stats;
 
 	return (
-		<div className="composer-agents" data-open={open ? "" : undefined}>
+		<div className="composer-agents relative -mb-3.5 ml-[18px] flex w-[calc(100%-36px)] flex-col gap-2.5 rounded-t-lg border border-b-0 border-line bg-panel px-3.5 pt-2.5 pb-[22px] text-control-label font-medium text-fg" data-open={open ? "" : undefined}>
 			{open && (
-				<div className="composer-agents-detail">
-					<div className="composer-agents-name">
+				<div className="composer-agents-detail flex flex-col gap-2.5">
+					<div className="composer-agents-name truncate text-label font-semibold text-dim">
 						{single
 							? single.name
 							: runs.length > 0
@@ -107,17 +107,17 @@ export function ComposerAgents({ runs, subagents, onOpenPanel }: Props) {
 					</div>
 
 					{steps.length > 1 && (
-						<ol className="composer-agents-steps">
+						<ol className="composer-agents-steps m-0 flex list-none flex-col gap-1.5 p-0">
 							{steps.map((s, i) => (
 								<li
 									key={s}
 									className={cn(
-										"composer-agents-step",
-										i < curIdx && "is-done",
-										i === curIdx && "is-current",
+										"composer-agents-step flex items-center gap-2 font-medium text-faint",
+										i < curIdx && "is-done text-dim",
+										i === curIdx && "is-current font-semibold text-fg",
 									)}
 								>
-									<span className="composer-agents-step-mark">
+									<span className={cn("composer-agents-step-mark inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-line text-meta font-semibold", i === curIdx && "border-green text-green", i < curIdx && "border-transparent bg-green-soft text-green")}>
 										{i < curIdx ? "✓" : i + 1}
 									</span>
 									<span className="composer-agents-step-label">{s}</span>
@@ -126,40 +126,40 @@ export function ComposerAgents({ runs, subagents, onOpenPanel }: Props) {
 						</ol>
 					)}
 
-					<div className="composer-agents-tallies">
+					<div className="composer-agents-tallies flex flex-wrap gap-x-3 gap-y-1 text-label font-medium">
 						<span>
-							<i className="composer-agents-dot" />
+							<i className="composer-agents-dot size-2 shrink-0 rounded-full bg-green motion-safe:animate-[pulse_1.4s_ease-in-out_infinite]" />
 							{runningCount} running
 						</span>
 						{done > 0 && (
-							<span className="is-done">
+							<span className="is-done text-dim">
 								{done}/{total} done
 							</span>
 						)}
-						{pending > 0 && <span className="is-dim">{pending} queued</span>}
-						{error > 0 && <span className="is-error">{error} failed</span>}
+						{pending > 0 && <span className="is-dim text-faint">{pending} queued</span>}
+						{error > 0 && <span className="is-error text-red">{error} failed</span>}
 					</div>
 
 					{running.length > 0 && (
-						<ul className="composer-agents-list">
+						<ul className="composer-agents-list m-0 flex max-h-[108px] list-none flex-col gap-[5px] overflow-y-auto p-0 text-label font-medium">
 							{running.slice(0, 4).map((a) => (
-								<li key={a.key}>
-									<i className="composer-agents-dot sm" />
-									<span className="composer-agents-list-label">{a.label}</span>
+								<li key={a.key} className="flex min-w-0 items-center gap-[7px]">
+									<i className="composer-agents-dot sm size-1.5 shrink-0 rounded-full bg-green motion-safe:animate-[pulse_1.4s_ease-in-out_infinite]" />
+									<span className="composer-agents-list-label truncate">{a.label}</span>
 									{a.phase && single?.phases?.length !== 1 ? (
-										<span className="is-dim"> · {a.phase}</span>
+										<span className="is-dim shrink-0 text-faint"> · {a.phase}</span>
 									) : null}
 								</li>
 							))}
 							{running.length > 4 && (
-								<li className="is-dim">+{running.length - 4} more</li>
+								<li className="is-dim text-faint">+{running.length - 4} more</li>
 							)}
 						</ul>
 					)}
 
 					<button
 						type="button"
-						className="composer-agents-open"
+						className="composer-agents-open inline-flex self-start items-center gap-0.5 rounded-full border border-line bg-hover py-[5px] pr-2.5 pl-3 text-label font-semibold text-fg active:bg-pressed"
 						onClick={onOpenPanel}
 					>
 						Open full panel
@@ -170,22 +170,22 @@ export function ComposerAgents({ runs, subagents, onOpenPanel }: Props) {
 
 			<button
 				type="button"
-				className="composer-agents-summary"
+				className="composer-agents-summary flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left text-inherit font-medium"
 				aria-expanded={open}
 				aria-label={open ? "Collapse running agents" : "Show running agents"}
 				onClick={() => setOpen((v) => !v)}
 			>
-				<span className="composer-agents-dot" />
-				<span className="composer-agents-label">
+				<span className="composer-agents-dot size-2 shrink-0 rounded-full bg-green motion-safe:animate-[pulse_1.4s_ease-in-out_infinite]" />
+				<span className="composer-agents-label min-w-0 flex-1 truncate">
 					<strong>{runningCount} running</strong>
 					{total > runningCount ? (
-						<span className="is-dim"> · {done}/{total} done</span>
+						<span className="is-dim font-medium text-faint"> · {done}/{total} done</span>
 					) : null}
-					{!open && phase ? <span className="is-dim"> · {phase}</span> : null}
+					{!open && phase ? <span className="is-dim font-medium text-faint"> · {phase}</span> : null}
 				</span>
 				<IconChevronDown
 					size={16}
-					className={cn("composer-agents-caret", open && "is-open")}
+					className={cn("composer-agents-caret shrink-0 text-faint motion-safe:transition-transform motion-safe:duration-180", open && "is-open rotate-180")}
 				/>
 			</button>
 		</div>

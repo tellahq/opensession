@@ -3,6 +3,11 @@ import { UserAvatar } from "./UserAvatar";
 import { BASE_PATH } from "../lib/base";
 import { usePeople } from "../lib/people";
 
+const GATE_OVERLAY = "user-gate-overlay flex h-dvh items-center justify-center bg-bg";
+const GATE_CARD = "user-gate-card w-[380px] max-w-[calc(100vw-32px)] rounded-[calc(14px*var(--rf))] border border-line bg-raised p-8 text-center [corner-shape:var(--cs)]";
+const GATE_TITLE = "m-0 mb-5 text-[17px] font-semibold";
+const GATE_BUTTON = "user-gate-btn flex flex-col items-center gap-2 rounded-[calc(8px*var(--rf))] border border-line-strong bg-panel p-3 text-control-label text-fg [corner-shape:var(--cs)] transition-[background,border-color] hover:border-accent hover:bg-accent-soft disabled:cursor-default disabled:opacity-50";
+
 /**
  * Mutable compatibility view for older consumers. `usePeople()` owns the
  * roster and updates this array in place after GET /api/people resolves.
@@ -140,15 +145,15 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   if (user !== "Anonymous") return <>{children}</>;
 
   return (
-    <div className="user-gate-overlay">
-      <div className="user-gate-card">
-        <h2>Who are you?</h2>
-        <div className="user-gate-grid">
+    <div className={GATE_OVERLAY}>
+      <div className={GATE_CARD}>
+        <h2 className={GATE_TITLE}>Who are you?</h2>
+        <div className="user-gate-grid grid grid-cols-2 gap-2.5">
           {roster.length ? (
             roster.map(({ name }) => (
               <button
                 key={name}
-                className="user-gate-btn"
+                className={GATE_BUTTON}
                 onClick={() => setStoredUser(name)}
               >
                 <UserAvatar name={name} size={36} />
@@ -157,7 +162,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
             ))
           ) : (
             <button
-              className="user-gate-btn"
+              className={GATE_BUTTON}
               onClick={() => setStoredUser("Local User")}
             >
               <UserAvatar name="Local User" size={36} />
@@ -172,10 +177,10 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 
 function LocalSessionExpired() {
   return (
-    <div className="user-gate-overlay">
-      <div className="user-gate-card">
-        <h2>GitHub sign-in expired</h2>
-        <p className="text-dim">
+    <div className={GATE_OVERLAY}>
+      <div className={GATE_CARD}>
+        <h2 className={GATE_TITLE}>GitHub sign-in expired</h2>
+        <p className="m-0 text-dim">
           Switch to cloud mode, sign in with GitHub, then restart local mode.
         </p>
       </div>
@@ -260,53 +265,43 @@ function GithubSignIn({
   }
 
   return (
-    <div className="user-gate-overlay">
-      <div className="user-gate-card" style={{ maxWidth: 380 }}>
-        <h2>Sign in</h2>
+    <div className={GATE_OVERLAY}>
+      <div className={GATE_CARD}>
+        <h2 className={GATE_TITLE}>Sign in</h2>
         {!flow ? (
           <>
-            <p style={{ margin: "10px 0 16px", fontSize: 13, opacity: 0.75 }}>
+            <p className="my-2.5 mb-4 text-control-label text-dim">
               This workspace uses GitHub sign-in. Your sessions will act as your
               own GitHub account (PRs are authored by you).
             </p>
             {redirect ? (
               <>
                 <button
-                  className="user-gate-btn"
+                  className={`${GATE_BUTTON} w-full`}
                   onClick={() => {
                     window.location.href = `${BASE_PATH}/api/auth/login`;
                   }}
-                  style={{ width: "100%" }}
                 >
                   Sign in with GitHub
                 </button>
                 <button
                   onClick={start}
                   disabled={starting}
-                  style={{
-                    marginTop: 10,
-                    width: "100%",
-                    background: "none",
-                    border: "none",
-                    fontSize: 13,
-                    opacity: 0.6,
-                    textDecoration: "underline",
-                    cursor: "pointer",
-                  }}
+                  className="mt-2.5 w-full bg-transparent text-control-label text-dim underline disabled:cursor-default disabled:opacity-50"
                 >
                   {starting ? "Starting…" : "Use a device code instead"}
                 </button>
               </>
             ) : (
-              <button className="user-gate-btn" onClick={start} disabled={starting} style={{ width: "100%" }}>
+              <button className={`${GATE_BUTTON} w-full`} onClick={start} disabled={starting}>
                 {starting ? "Starting…" : "Sign in with GitHub"}
               </button>
             )}
           </>
         ) : (
-          <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.7 }}>
+          <p className="mt-2.5 mb-0 text-control-label leading-[1.7]">
             Enter code{" "}
-            <strong style={{ fontFamily: "var(--mono, monospace)", letterSpacing: "0.12em" }}>
+            <strong className="font-mono tracking-[0.12em]">
               {flow.userCode}
             </strong>{" "}
             at{" "}
@@ -314,11 +309,11 @@ function GithubSignIn({
               {flow.verificationUri.replace(/^https:\/\//, "")}
             </a>
             <br />
-            <span style={{ fontSize: 13, opacity: 0.7 }}>Waiting for GitHub…</span>
+            <span className="text-control-label text-dim">Waiting for GitHub…</span>
           </p>
         )}
         {error && (
-          <p style={{ marginTop: 10, fontSize: 13, color: "var(--red)" }}>{error}</p>
+          <p className="mt-2.5 text-control-label text-red">{error}</p>
         )}
       </div>
     </div>

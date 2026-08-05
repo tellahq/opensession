@@ -154,7 +154,6 @@ import {
 import { copySessionTranscript } from "./lib/transcript-copy";
 import { effectiveTheme, setThemePref } from "./lib/theme";
 import type { UnifiedSession } from "./lib/types";
-import "./styles/global.css";
 
 type Route =
 	| { view: "home" }
@@ -3496,7 +3495,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					</div>
 
 					<div className="workspace-shell">
-						<main className="detail-pane" ref={detailPaneRef}>
+						<main className="detail-pane relative flex min-h-0 min-w-0 flex-1 flex-col" ref={detailPaneRef}>
 						{/* WCO back/forward fallback: the primary cluster lives in the
 						    sidebar's top chrome row, which vanishes when the sidebar is
 						    collapsed — this floating copy shows only then (CSS-gated). */}
@@ -3524,7 +3523,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						{!activeTabSplit && renderTabBar(null)}
 						{splitDropSide && (
 							<div
-								className={`tab-split-drop-preview tab-split-drop-preview-${splitDropSide}`}
+								className={`tab-split-drop-preview tab-split-drop-preview-${splitDropSide} pointer-events-none absolute bottom-2 z-20 w-[calc(var(--split-preview-share,50%)-12px)] rounded-md border-2 border-accent bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,white_16%,transparent)] ${splitDropSide === "left" ? "left-2" : "right-2"}`}
 								// Once there IS a split, the preview outlines the column the
 								// tab would join at its real width — the even halves it
 								// defaults to are only right for the drop that creates one.

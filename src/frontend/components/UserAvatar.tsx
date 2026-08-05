@@ -46,7 +46,10 @@ export function UserAvatar({
 	useEffect(() => setFailed(false), [login]);
 	return (
 		<span
-			className={cn("user-avatar", className)}
+			className={cn(
+				"user-avatar relative inline-flex shrink-0 select-none items-center justify-center rounded-[32%] border border-line-strong bg-active font-bold text-dim [&>img]:absolute [&>img]:inset-0 [&>img]:size-full [&>img]:rounded-[inherit] [&>img]:object-cover",
+				className,
+			)}
 			style={{
 				width: size,
 				height: size,

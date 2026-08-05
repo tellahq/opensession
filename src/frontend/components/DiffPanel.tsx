@@ -205,33 +205,33 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
   const d = cur.diff;
 
   return (
-    <div className="diff-panel">
+    <div className="diff-panel flex min-h-0 flex-col">
       {multi && (
-        <div className="diff-repo-tabs">
+        <div className="diff-repo-tabs sticky top-0 z-[2] flex gap-1 overflow-x-auto border-b border-line bg-raised px-2.5 py-1.5">
           {changed.map((r, i) => {
             const n = r.diff.totalAdditions + r.diff.totalDeletions;
             return (
               <button
                 key={r.repo}
-                className={`diff-repo-tab ${i === active ? "diff-repo-tab-active" : ""}`}
+                className={`diff-repo-tab inline-flex items-center gap-1.5 whitespace-nowrap rounded-sm border border-transparent bg-transparent px-2.5 py-[3px] text-label text-dim hover:text-fg ${i === active ? "diff-repo-tab-active border-line bg-panel text-fg" : ""}`}
                 onClick={() => setActive(i)}
                 title={r.primary ? "Primary repo" : "Attached repo"}
               >
                 {repoLabel(r.repo)}
-                <span className="diff-repo-tab-count">{r.diff.files.length}</span>
+                <span className="diff-repo-tab-count rounded-full bg-[color-mix(in_srgb,var(--text-faint)_20%,transparent)] px-1.5 text-meta text-faint">{r.diff.files.length}</span>
               </button>
             );
           })}
         </div>
       )}
 
-      <div className="diff-summary">
-        <span className="diff-summary-files">
+      <div className="diff-summary sticky top-0 z-[1] flex items-center gap-2.5 border-b border-line bg-raised px-3.5 py-2.5 text-supporting">
+        <span className="diff-summary-files text-dim">
           {d.files.length} file{d.files.length === 1 ? "" : "s"} changed
         </span>
-        <span className="diff-add">+{d.totalAdditions}</span>
-        <span className="diff-del">−{d.totalDeletions}</span>
-        {d.truncated && <span className="diff-truncated">truncated</span>}
+        <span className="diff-add font-semibold text-green">+{d.totalAdditions}</span>
+        <span className="diff-del font-semibold text-red">−{d.totalDeletions}</span>
+        {d.truncated && <span className="diff-truncated rounded-sm bg-yellow/15 px-1.5 py-px text-meta font-bold text-yellow">truncated</span>}
         {handEdited.length > 0 && canSend && (
           <Button
             variant="default"
@@ -248,7 +248,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
           <Button
             variant="ghost"
             size="xs"
-            className="ml-auto min-h-0 px-1.5 py-0.5 text-sm text-faint hover:text-fg"
+            className="ml-auto min-h-0 px-1.5 py-0.5 text-control-label text-faint hover:text-fg"
             onClick={reload}
             aria-label="Refresh diff"
           >
@@ -257,7 +257,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
         </Tooltip>
       </div>
 
-      <div className="diff-render">
+      <div className="diff-render p-2.5 pb-7 [&_[class*='pierre']]:max-w-full">
         <CommentableDiff
           key={cur.repo}
           patch={d.rawPatch || ""}
@@ -339,10 +339,10 @@ function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
       </svg>
       <div className="flex flex-col gap-1">
         <div className="text-item-title font-medium text-dim">No file changes yet</div>
-        <div className="text-sm text-faint">Changes appear here.</div>
+        <div className="text-control-label text-faint">Changes appear here.</div>
       </div>
       {isRunning && (
-        <div className="mt-1 flex items-center gap-2 text-xs text-faint">
+        <div className="mt-1 flex items-center gap-2 text-label text-faint">
           <PixelSpinner className="pixel-spinner-slow text-faint" interval={4000} />
           <span>Pulling latest…</span>
         </div>

@@ -201,7 +201,7 @@ export function AssetsPanel({
 	if (!files.length) {
 		return (
 			<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-				<div className="text-[13px] text-dim">No assets yet</div>
+				<div className="text-control-label text-dim">No assets yet</div>
 				<div className="max-w-[360px] text-label text-faint">
 					Ask the agent to save a visualization, report, or demo page here —
 					it writes files with opensession-assets' write_asset and they
@@ -216,7 +216,7 @@ export function AssetsPanel({
 			{showTree ? (
 			<div className="flex max-h-[38%] min-h-[88px] flex-col overflow-hidden border-b border-line">
 				<div className="flex items-center justify-between px-3 pt-2 pb-1">
-					<span className="text-[11px] font-medium uppercase tracking-wide text-faint">
+					<span className="text-meta font-medium uppercase tracking-wide text-faint">
 						Files · {files.length}
 					</span>
 					<Button
@@ -248,11 +248,11 @@ export function AssetsPanel({
 						>
 							{file.path}
 						</span>
-						<span className="shrink-0 text-[11px] text-faint">
+						<span className="shrink-0 text-meta text-faint">
 							{fmtSize(file.size)}
 						</span>
 						<a
-							className="shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] text-dim hover:bg-hover hover:text-fg"
+							className="shrink-0 rounded-sm px-1.5 py-0.5 text-meta text-dim hover:bg-hover hover:text-fg"
 							href={rawUrl}
 							target="_blank"
 							rel="noreferrer"
@@ -260,7 +260,7 @@ export function AssetsPanel({
 							Open
 						</a>
 						<a
-							className="shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] text-dim hover:bg-hover hover:text-fg"
+							className="shrink-0 rounded-sm px-1.5 py-0.5 text-meta text-dim hover:bg-hover hover:text-fg"
 							href={`${rawUrl}&download=1`}
 						>
 							Download
@@ -270,7 +270,7 @@ export function AssetsPanel({
 						<Button
 							variant="ghost"
 							size="xs"
-							className="min-h-0 shrink-0 rounded-sm border-0 px-1.5 py-0.5 text-[11px] font-medium hover:bg-hover hover:text-red"
+							className="min-h-0 shrink-0 rounded-sm border-0 px-1.5 py-0.5 text-meta font-medium hover:bg-hover hover:text-red"
 							onClick={onDelete}
 						>
 							Delete
@@ -327,7 +327,7 @@ export function AssetsPanel({
 								<div className="p-4 text-label text-faint">Loading…</div>
 							) : (
 								<MarkdownBody
-									className="markdown px-4 py-3 text-[13px]"
+								className="markdown px-4 py-3 text-control-label"
 									html={marked.parse(text, { async: false }) as string}
 								/>
 							)

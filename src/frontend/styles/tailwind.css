@@ -4,21 +4,22 @@
    Compiled by the @tailwindcss/cli step inside buildFrontend() (backstage.ts),
    NOT by Bun — do not import this file from App.tsx; Bun's bundler would ship
    the raw directives without running the Tailwind compiler. The compiled sheet
-   is linked AFTER global.css, and utilities are imported *unlayered* below, so
-   a utility class wins a tie against legacy unlayered global.css rules by
-   source order. (Preflight is deliberately not imported: global.css was
-   written against browser defaults and a global reset would reskin the app.)
+   includes foundation-adapters.css first, then imports utilities *unlayered*,
+   so a utility class wins a tie against residual authored rules by source
+   order. Preflight is deliberately not imported: the app foundation owns the
+   small reset it needs and a global Tailwind reset would reskin the app.
 
    BACKSTAGE_DEV=1 (HTML-import dev mode) doesn't run this compile step and
    gets no utilities — the prod path with in-process rebuilds is the dev loop.
    ───────────────────────────────────────────────────────────── */
+@import "./foundation-adapters.css";
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" source(none);
 
 /* Only scan the frontend tree for class names (not agents/server/prompts). */
 @source "../";
 
-/* Design tokens: map the existing global.css variables (which already carry
+/* Design tokens: map the foundation variables (which already carry
    dark/light theming via html[data-theme]) into Tailwind's namespace, so
    `bg-panel text-dim border-line` and legacy CSS read the same values and
    re-theme together. `inline` makes utilities emit var(--bg) directly. */
@@ -83,22 +84,22 @@
 	--font-sans: var(--sans);
 	--font-mono: var(--mono);
 	--radius-panel: calc(var(--radius) * var(--rf));
-	/* The corner every button and chip in the chrome shares. global.css authors
+	/* The corner every button and chip in the chrome shares. The foundation authors
 	   it as `calc(10px * var(--rf))` on .btn-viewer-pin / .btn-panel-toggle /
 	   .btn-viewer-newchat and friends; naming it here lets the Button primitive
 	   and any Tailwind-authored control land on the same corner instead of
 	   re-deriving it with an arbitrary value. Because it is built from --rf it
 	   tracks the squircle bump on its own (8.5px round → 13.5px squircle), and
-	   global.css gives every `rounded-*` class `corner-shape: squircle`, so it
-	   needs no entry in the @supports block below. */
+	   foundation gives every `rounded-*` class `corner-shape: squircle`, so it
+	   needs no separate support override. */
 	--radius-control: calc(10px * var(--rf));
 
-	/* global.css sets html { font-size: 14px }, which silently shrinks every
+	/* The foundation sets html { font-size: 14px }, which silently shrinks every
 	   rem-based utility to 87.5% of its px design value (p-3 → 10.5px). Anchor
 	   the scales this codebase designs in px so utilities mean what they say. */
 	--spacing: 4px;
-	/* Radii are authored the way global.css authors every corner in the app —
-	   `calc(<px> * var(--rf))` — so the one token flip at global.css's
+	/* Radii are authored the way the foundation authors every corner in the app —
+	   `calc(<px> * var(--rf))` — so the one token flip in the foundation's
 	   `@supports (corner-shape: squircle)` (0.85 round → 1.35 squircle) moves
 	   the legacy stylesheet and this scale together.
 
@@ -109,7 +110,7 @@
 	   so the two rendered different corners for what is meant to be one step, and
 	   any future --rf change had to be applied twice by hand. Deriving both from
 	   --rf is what makes a step here interchangeable with the same step in
-	   global.css. corner-shape itself needs no help: global.css already gives
+	   the foundation. corner-shape itself needs no help: it already gives
 	   every `rounded-*` class `corner-shape: squircle`. */
 	--radius-xs: calc(2px * var(--rf));
 	--radius-sm: calc(4px * var(--rf));

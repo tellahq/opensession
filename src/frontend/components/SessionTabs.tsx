@@ -432,7 +432,7 @@ export function SessionTabs({
 	const newTabButton = (
 		<button
 			type="button"
-			className="session-tab session-tab-new"
+			className="session-tab session-tab-new inline-flex max-w-[200px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 py-1.5 text-[15px] text-supporting text-dim shadow-none transition-[background,color] hover:bg-hover hover:text-fg min-[721px]:h-11 min-[721px]:self-center min-[721px]:rounded-none min-[721px]:border-0 min-[721px]:px-[5px] min-[721px]:py-[3px] min-[721px]:text-[22px]"
 			data-menu-open={newMenu ? "" : undefined}
 			aria-label="New chat in this workspace"
 			title="New chat. Shares this workspace's worktree (right-click for options)"
@@ -478,13 +478,13 @@ export function SessionTabs({
 	);
 
 	return (
-		<div className="session-tabs" role="tablist">
-			<div className="session-tabs-scroll" ref={scrollRef}>
+		<div className="session-tabs flex min-w-0 shrink-0 items-center gap-[3px] bg-[linear-gradient(to_bottom,var(--topbar-bg),var(--bg))] px-2 py-1.5 min-[721px]:-mt-px min-[721px]:h-11 min-[721px]:items-stretch min-[721px]:bg-bg min-[721px]:p-0 min-[721px]:shadow-[inset_0_1px_0_var(--border),inset_0_-1px_0_var(--border)] max-[720px]:absolute max-[720px]:left-0 max-[720px]:right-0 max-[720px]:top-[var(--pane-header-h)] max-[720px]:z-[6] max-[720px]:border-b max-[720px]:border-line max-[720px]:bg-bg max-[720px]:shadow-[0_6px_12px_-8px_rgba(0,0,0,0.22)]" role="tablist">
+			<div className="session-tabs-scroll flex min-w-0 flex-1 items-center gap-[3px] overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[721px]:flex-[0_1_auto] min-[721px]:items-stretch" ref={scrollRef}>
 				<Reorder.Group
 					as="div"
 					axis="x"
 					ref={groupRef}
-					className="session-tabs-chatgroup"
+					className="session-tabs-chatgroup inline-flex min-w-0 items-center gap-[3px] min-[721px]:self-stretch min-[721px]:items-stretch"
 					values={orderedKeys}
 					onReorder={reorderTabs}
 				>

@@ -150,7 +150,7 @@ export function SupportPreview({
 					onModelChange={setModel}
 					modelTitle="Model for this session"
 				/>
-				{startError && <div className="ask-error">{startError}</div>}
+				{startError && <div className="ask-error mt-2.5 rounded-md bg-red-soft px-2.5 py-1.5 text-center text-supporting text-red">{startError}</div>}
 			</div>
 		</div>
 	);

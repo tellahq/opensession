@@ -33,6 +33,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import spaEntry from "../src/frontend/index.html";
+import { compileTailwindCss } from "../src/server/frontend-css";
 
 const UPSTREAM = process.env.OS1_UPSTREAM || "http://127.0.0.1:3850";
 const WS_UPSTREAM = UPSTREAM.replace(/^http/, "ws") + "/ws";
@@ -103,6 +104,11 @@ function fetchTokenViaSsh(): string {
 const token = await loadToken();
 console.log(`Proxying as ${LOGIN} → ${UPSTREAM}`);
 
+// A dev server with no utilities masks migration breakage. Do the same minified
+// compiler validation as production before accepting requests, then retain this
+// sheet when an edit makes a later compile fail.
+let lastTailwindCss = await compileTailwindCss();
+
 async function proxy(req: Request): Promise<Response> {
 	const url = new URL(req.url);
 	const headers = new Headers(req.headers);
@@ -168,43 +174,34 @@ const proxied = [
 // (~50-100ms, fine per reload since utilities depend on class usage across all
 // source files) and inject the link by rewriting the shell HTML on the way out.
 async function tailwindCss(): Promise<Response> {
-	const out = "/tmp/os1-frontend-dev-tailwind.css";
-	const proc = Bun.spawn(
-		[
-			"node_modules/.bin/tailwindcss",
-			"-i",
-			"src/frontend/styles/tailwind.css",
-			"-o",
-			out,
-		],
-		{ stdout: "pipe", stderr: "pipe" },
-	);
-	if ((await proc.exited) !== 0) {
-		console.error("[tailwind]", await new Response(proc.stderr).text());
-		return new Response("/* tailwind compile failed */", {
-			headers: { "content-type": "text/css" },
-		});
+	try {
+		lastTailwindCss = await compileTailwindCss();
+	} catch (error) {
+		console.error("[tailwind] compile failed; serving last known good CSS:", error);
 	}
-	return new Response(Bun.file(out), {
+	return new Response(lastTailwindCss, {
 		headers: { "content-type": "text/css", "cache-control": "no-store" },
 	});
 }
 
 // Serve the SPA shell through a rewriter: fetch Bun's HTML-import output from
-// the internal /__shell route and add the Tailwind link (after the bundled
-// global.css so utilities keep winning source-order ties, as in prod), plus a
-// watcher that hot-swaps that link when the compiled output changes — Bun's
-// HMR covers the bundle (App.tsx, global.css) but knows nothing about our
-// injected stylesheet.
+// the internal /__shell route and add the compiled Tailwind/foundation link,
+// plus a watcher that hot-swaps it when the compiled output changes. Bun's HMR
+// covers component modules but knows nothing about this injected stylesheet.
 const TW_REFRESH = `<script>
 (() => {
 	let last = null;
+	const revision = (value) => {
+		let hash = 2166136261;
+		for (let i = 0; i < value.length; i++) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
+		return (hash >>> 0).toString(36);
+	};
 	setInterval(async () => {
 		try {
 			const css = await (await fetch("/tailwind-dev.css", { cache: "no-store" })).text();
 			if (last !== null && css !== last) {
 				const link = document.querySelector('link[href^="/tailwind-dev.css"]');
-				if (link) link.href = "/tailwind-dev.css?v=" + last.length;
+				if (link) link.href = "/tailwind-dev.css?v=" + revision(css);
 			}
 			last = css;
 		} catch {}
@@ -226,7 +223,7 @@ async function shell(req: Request): Promise<Response> {
 
 const server = Bun.serve<Bridge>({
 	port: PORT,
-	// hmr: edits to App.tsx/global.css hot-apply without a manual Cmd+R
+	// hmr: component edits hot-apply without a manual Cmd+R
 	// (React Fast Refresh through Bun's dev pipeline).
 	development: { hmr: true, console: true },
 	idleTimeout: 240,

@@ -159,7 +159,7 @@ export function PrChecksPopover({
 								<span className={`inline-flex size-4 shrink-0 ${checkToneClass(status.kind)}`}>
 									<CheckStatusIcon kind={status.kind} />
 								</span>
-								<span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">
+								<span className="min-w-0 flex-1 truncate text-control-label font-medium text-fg">
 									{check.name}
 								</span>
 								<span className="shrink-0 text-label font-medium text-dim">

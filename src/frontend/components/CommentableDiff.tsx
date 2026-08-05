@@ -454,15 +454,15 @@ export function CommentableDiff({
           ? `line ${comment.startLine}`
           : `lines ${comment.startLine}–${comment.endLine}`;
       return (
-        <div className="diff-pending-comment" onClick={(e) => e.stopPropagation()}>
-          <div className="diff-pending-head">
-            <span className="diff-comment-target">
+        <div className="diff-pending-comment m-2 flex flex-col gap-1.5 rounded-md border border-line-strong border-l-[3px] border-l-accent bg-panel px-2.5 py-[9px] font-sans" onClick={(e) => e.stopPropagation()}>
+          <div className="diff-pending-head flex items-center justify-between gap-2">
+            <span className="diff-comment-target font-mono text-meta text-faint">
               {comment.path} · {lineLabel}
               {comment.side === "deletions" ? " (removed)" : ""}
             </span>
             {onRemovePending && (
               <button
-                className="diff-pending-remove"
+                className="diff-pending-remove border-0 bg-transparent px-1 py-0.5 text-meta text-faint hover:text-red"
                 onClick={() => onRemovePending(comment.id)}
                 title="Remove this pending comment"
               >
@@ -470,7 +470,7 @@ export function CommentableDiff({
               </button>
             )}
           </div>
-          <div className="diff-pending-text">{comment.text}</div>
+          <div className="diff-pending-text whitespace-pre-wrap break-words text-control-label leading-[1.45] text-fg">{comment.text}</div>
         </div>
       );
     },
@@ -554,9 +554,9 @@ export function CommentableDiff({
       : pend;
 
     return (
-      <div className="diff-file" key={`${file.name}-${i}`} data-diff-file={file.name}>
+      <div className="diff-file overflow-hidden rounded-md border border-line bg-panel" key={`${file.name}-${i}`} data-diff-file={file.name}>
         <div
-          className="diff-file-header"
+          className="diff-file-header group relative flex w-full items-center gap-2 border-0 bg-transparent px-2.5 py-2 text-left text-fg hover:bg-hover"
           role="button"
           tabIndex={0}
           aria-expanded={isOpen}
@@ -574,11 +574,11 @@ export function CommentableDiff({
         >
           <IconChevronRight
             size={16}
-            className={`diff-file-caret ${isOpen ? "diff-file-caret-open" : ""}`}
+            className={`diff-file-caret shrink-0 text-faint transition-transform duration-100 ${isOpen ? "diff-file-caret-open rotate-90" : ""}`}
           />
-          <span className="diff-file-name" onClick={(e) => e.stopPropagation()}>
-            {dir && <span className="diff-file-dir">{dir}</span>}
-            <span className="diff-file-base">{base}</span>
+          <span className="diff-file-name flex min-w-0 flex-1 cursor-text select-text overflow-hidden font-mono text-supporting" onClick={(e) => e.stopPropagation()}>
+            {dir && <span className="diff-file-dir min-w-0 shrink overflow-hidden text-ellipsis whitespace-nowrap text-faint">{dir}</span>}
+            <span className="diff-file-base shrink-0 whitespace-nowrap font-semibold text-fg">{base}</span>
             <Tooltip label={copied === file.name ? "Copied" : "Copy path"}>
               <button
                 type="button"
@@ -593,7 +593,7 @@ export function CommentableDiff({
               </button>
             </Tooltip>
           </span>
-          {pend.length > 0 && <span className="diff-file-comments">{pend.length}</span>}
+          {pend.length > 0 && <span className="diff-file-comments inline-flex shrink-0 items-center gap-1 font-sans text-meta text-faint before:content-['💬']">{pend.length}</span>}
           {isEditing && (
             <span
               className="diff-file-edit-actions"
@@ -624,7 +624,7 @@ export function CommentableDiff({
             <Tooltip label="Edit file in place">
               <button
                 type="button"
-                className="diff-file-edit"
+                className="diff-file-edit rounded-sm border-0 bg-transparent p-0.5 text-faint hover:bg-hover hover:text-fg"
                 aria-label="Edit this file in place"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -647,7 +647,7 @@ export function CommentableDiff({
             >
               <button
                 type="button"
-                className={`diff-file-discard ${armed === file.name ? "diff-file-discard-armed" : ""}`}
+                className={`diff-file-discard peer absolute right-2 top-1/2 z-[1] inline-flex -translate-y-1/2 items-center justify-center rounded-sm border-0 bg-transparent p-0.5 text-faint opacity-0 pointer-events-none transition-[color,background,opacity] duration-100 hover:bg-hover hover:text-red focus-visible:pointer-events-auto focus-visible:opacity-100 disabled:pointer-events-auto disabled:cursor-default disabled:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 ${armed === file.name ? "diff-file-discard-armed pointer-events-auto text-red opacity-100" : ""}`}
                 disabled={discarding === file.name}
                 aria-label="Discard this file's changes (reset to base)"
                 onClick={(e) => {
@@ -659,9 +659,9 @@ export function CommentableDiff({
               </button>
             </Tooltip>
           )}
-          <span className="diff-file-stats">
-            {s.add > 0 && <span className="diff-add">+{s.add}</span>}
-            {s.del > 0 && <span className="diff-del">−{s.del}</span>}
+          <span className={`diff-file-stats ml-auto flex shrink-0 gap-2 font-mono text-label group-hover:invisible peer-focus-visible:invisible ${armed === file.name || discarding === file.name ? "invisible" : ""}`}>
+            {s.add > 0 && <span className="diff-add font-semibold text-green">+{s.add}</span>}
+            {s.del > 0 && <span className="diff-del font-semibold text-red">−{s.del}</span>}
           </span>
           {viewedEnabled && (
             <label
@@ -701,24 +701,24 @@ export function CommentableDiff({
   };
 
   return (
-    <div className="commentable-diff">
-      {confirmation && <div className="diff-comment-confirmation">{confirmation}</div>}
-      <div className="diff-file-toolbar">
+    <div className="commentable-diff flex flex-col gap-2.5">
+      {confirmation && <div className="diff-comment-confirmation rounded-sm bg-green-soft px-3 py-1.5 text-supporting font-semibold text-green">{confirmation}</div>}
+      <div className="diff-file-toolbar -mb-1 flex items-center justify-end">
         {groupsLoading && (
-          <span className="diff-groups-loading" role="status">
+          <span className="diff-groups-loading mr-auto flex items-center gap-2 text-label text-faint" role="status">
             <PixelSpinner cycling={false} className="text-faint" />
             Organizing files…
           </span>
         )}
         {!groupsLoading && groupedFiles && (
-          <span className="diff-groups-ready">AI organized</span>
+          <span className="diff-groups-ready mr-auto flex items-center gap-2 text-label text-faint before:size-1.5 before:rounded-full before:bg-accent before:content-['']">AI organized</span>
         )}
         {viewedEnabled && (
           <span className="diff-viewed-progress">
             {countViewed(viewed, files)} of {files.length} viewed
           </span>
         )}
-        <button type="button" className="diff-file-toggle-all" onClick={toggleAll}>
+        <button type="button" className="diff-file-toggle-all border-0 bg-transparent px-1 py-0.5 text-label font-medium text-faint hover:text-fg" onClick={toggleAll}>
           {allOpen ? "Collapse all" : "Expand all"}
         </button>
       </div>
@@ -734,10 +734,10 @@ export function CommentableDiff({
               { add: 0, del: 0 },
             );
             return (
-              <section className="diff-file-group" key={groupKey}>
+              <section className="diff-file-group flex flex-col gap-2 [&+&]:mt-1" key={groupKey}>
                 <button
                   type="button"
-                  className="diff-file-group-header"
+                  className="diff-file-group-header flex w-full items-center gap-2 border-0 bg-transparent px-1 py-1 text-left text-dim hover:text-fg"
                   data-diff-group-files={JSON.stringify(
                     group.indices.map((index) => files[index].name),
                   )}
@@ -753,17 +753,17 @@ export function CommentableDiff({
                 >
                   <IconChevronRight
                     size={16}
-                    className={`diff-file-caret ${collapsed ? "" : "diff-file-caret-open"}`}
+                    className={`diff-file-caret shrink-0 text-faint transition-transform duration-100 ${collapsed ? "" : "diff-file-caret-open rotate-90"}`}
                   />
-                  <span className="diff-file-group-title">{group.title}</span>
-                  <span className="diff-file-group-count">{group.indices.length}</span>
-                  <span className="diff-file-group-stats">
-                    {totals.add > 0 && <span className="diff-add">+{totals.add}</span>}
-                    {totals.del > 0 && <span className="diff-del">−{totals.del}</span>}
+                  <span className="diff-file-group-title text-control-label font-semibold">{group.title}</span>
+                  <span className="diff-file-group-count text-meta text-faint">{group.indices.length}</span>
+                  <span className="diff-file-group-stats ml-auto flex gap-2 font-mono text-meta">
+                    {totals.add > 0 && <span className="diff-add font-semibold text-green">+{totals.add}</span>}
+                    {totals.del > 0 && <span className="diff-del font-semibold text-red">−{totals.del}</span>}
                   </span>
                 </button>
                 {!collapsed && (
-                  <div className="diff-file-group-files">
+                  <div className="diff-file-group-files flex flex-col gap-2 border-l border-line pl-3">
                     {group.indices.map((index) => renderFile(files[index], index))}
                   </div>
                 )}
@@ -771,7 +771,7 @@ export function CommentableDiff({
             );
           })
         : files.map(renderFile)}
-      <div className="diff-comment-hint">
+      <div className="diff-comment-hint pb-2 text-center text-meta text-faint">
         {reviewMode
           ? "Click a line number (drag for a range) to add a comment. They stay pending until you finish the review."
           : "Click a line number (drag for a range) to comment."}
@@ -797,19 +797,19 @@ function ImageDiffRow({
   const showOld = !!srcs?.oldSrc && file.type !== "new" && !oldErr;
   const showNew = !!srcs?.newSrc && file.type !== "deleted" && !newErr;
   if (!showOld && !showNew)
-    return <div className="diff-image-empty">Image not available to preview</div>;
+    return <div className="diff-image-empty p-3 text-label text-dim">Image not available to preview</div>;
   return (
-    <div className="diff-image-row">
+    <div className="diff-image-row flex flex-wrap gap-3 p-3">
       {showOld && (
-        <figure className="diff-image-cell diff-image-old">
-          <img src={srcs!.oldSrc} alt="" loading="lazy" onError={() => setOldErr(true)} />
-          <figcaption>{file.type === "deleted" ? "Deleted" : "Before"}</figcaption>
+        <figure className="diff-image-cell diff-image-old m-0 min-w-0 max-w-full flex-[0_1_auto]">
+          <img className="block max-h-[360px] max-w-full rounded-sm border border-line bg-[repeating-conic-gradient(rgba(128,128,128,0.18)_0%_25%,transparent_0%_50%)_0_0/16px_16px] opacity-80" src={srcs!.oldSrc} alt="" loading="lazy" onError={() => setOldErr(true)} />
+          <figcaption className="mt-1 text-meta text-dim before:mr-1 before:text-red before:content-['−']">{file.type === "deleted" ? "Deleted" : "Before"}</figcaption>
         </figure>
       )}
       {showNew && (
-        <figure className="diff-image-cell diff-image-new">
-          <img src={srcs!.newSrc} alt="" loading="lazy" onError={() => setNewErr(true)} />
-          <figcaption>{file.type === "new" ? "Added" : "After"}</figcaption>
+        <figure className="diff-image-cell diff-image-new m-0 min-w-0 max-w-full flex-[0_1_auto]">
+          <img className="block max-h-[360px] max-w-full rounded-sm border border-line bg-[repeating-conic-gradient(rgba(128,128,128,0.18)_0%_25%,transparent_0%_50%)_0_0/16px_16px]" src={srcs!.newSrc} alt="" loading="lazy" onError={() => setNewErr(true)} />
+          <figcaption className="mt-1 text-meta text-dim before:mr-1 before:text-green before:content-['+']">{file.type === "new" ? "Added" : "After"}</figcaption>
         </figure>
       )}
     </div>
@@ -859,14 +859,14 @@ const CommentForm = React.memo(function CommentForm({
   }
 
   return (
-    <div className="diff-comment-form" onClick={(e) => e.stopPropagation()}>
-      <div className="diff-comment-target">{targetLabel}</div>
+    <div className="diff-comment-form m-2 flex flex-col gap-2 rounded-md border border-accent bg-panel p-2.5 font-sans" onClick={(e) => e.stopPropagation()}>
+      <div className="diff-comment-target font-mono text-meta text-faint">{targetLabel}</div>
       {disabled ? (
-        <div className="diff-comment-disabled">{disabledHint || "Unavailable right now"}</div>
+        <div className="diff-comment-disabled text-supporting text-faint">{disabledHint || "Unavailable right now"}</div>
       ) : (
         <>
           <textarea
-            className="diff-comment-input"
+            className="diff-comment-input resize-y rounded-sm border border-line-strong bg-raised px-2.5 py-2 text-control-label leading-[1.45] text-fg outline-none focus:border-accent"
             autoFocus
             rows={3}
             placeholder={placeholder}
@@ -882,12 +882,12 @@ const CommentForm = React.memo(function CommentForm({
               }
             }}
           />
-          {error && <div className="diff-comment-error">{error}</div>}
-          <div className="diff-comment-actions">
+          {error && <div className="diff-comment-error text-label text-red">{error}</div>}
+          <div className="diff-comment-actions flex justify-end gap-2">
             <Button
               variant="default"
               size="sm"
-              className="min-h-0 border-line-strong bg-transparent px-3 py-[5px] text-[13px] font-normal shadow-none"
+              className="min-h-0 border-line-strong bg-transparent px-3 py-[5px] text-control-label font-normal shadow-none"
               onClick={onCancel}
               disabled={sending}
             >

@@ -84,7 +84,7 @@ function StateIcon({ kind }: { kind: string }) {
 function ChecksCell({ s }: { s: UnifiedSession }) {
   const c = s.prChecks;
   if (!c || c.total === 0)
-    return <span className="rv-checks rv-checks-empty">—</span>;
+    return <span className="rv-checks rv-checks-empty inline-flex items-center gap-2 text-supporting text-faint">—</span>;
   const tone = c.failed > 0 ? "fail" : c.pending > 0 ? "pending" : "pass";
   const label =
     tone === "fail"
@@ -94,13 +94,13 @@ function ChecksCell({ s }: { s: UnifiedSession }) {
         : `${c.passed} passed`;
   const pct = (n: number) => `${(n / c.total) * 100}%`;
   return (
-    <span className={`rv-checks rv-checks-${tone}`} title={`${c.passed} passed · ${c.failed} failed · ${c.pending} pending · ${c.total} total`}>
-      <span className={`rv-check-dot rv-check-dot-${tone}`} />
-      <span className="rv-checks-label">{label}</span>
-      <span className="rv-checks-bar" aria-hidden>
-        <span className="rv-bar-seg rv-bar-pass" style={{ width: pct(c.passed) }} />
-        <span className="rv-bar-seg rv-bar-fail" style={{ width: pct(c.failed) }} />
-        <span className="rv-bar-seg rv-bar-pending" style={{ width: pct(c.pending) }} />
+    <span className={`rv-checks rv-checks-${tone} inline-flex items-center gap-2 text-supporting`} title={`${c.passed} passed · ${c.failed} failed · ${c.pending} pending · ${c.total} total`}>
+      <span className={`rv-check-dot rv-check-dot-${tone} size-2 shrink-0 rounded-full ${tone === "pass" ? "bg-green" : tone === "fail" ? "bg-red" : "animate-[rv-pulse_1.4s_ease-in-out_infinite] bg-[#d9a23a]"}`} />
+      <span className={`rv-checks-label whitespace-nowrap ${tone === "pass" ? "text-green" : tone === "fail" ? "text-red" : "text-[#d9a23a]"}`}>{label}</span>
+      <span className="rv-checks-bar inline-flex h-1 w-[46px] shrink-0 overflow-hidden rounded-full bg-active" aria-hidden>
+        <span className="rv-bar-seg rv-bar-pass h-full bg-green" style={{ width: pct(c.passed) }} />
+        <span className="rv-bar-seg rv-bar-fail h-full bg-red" style={{ width: pct(c.failed) }} />
+        <span className="rv-bar-seg rv-bar-pending h-full bg-[#d9a23a]" style={{ width: pct(c.pending) }} />
       </span>
     </span>
   );
@@ -108,7 +108,7 @@ function ChecksCell({ s }: { s: UnifiedSession }) {
 
 function ReviewCell({ s }: { s: UnifiedSession }) {
   const d = s.prReviewDecision || "";
-  if ((s.prState || "OPEN") !== "OPEN") return <span className="rv-dim">—</span>;
+  if ((s.prState || "OPEN") !== "OPEN") return <span className="rv-dim text-supporting text-faint">—</span>;
   if (d === "APPROVED")
     return <span className="rv-review rv-review-approved">Approved</span>;
   if (d === "CHANGES_REQUESTED")
@@ -128,20 +128,20 @@ function ChangesCell({ s }: { s: UnifiedSession }) {
   const reds = Math.max(del > 0 ? 1 : 0, Math.round((del / total) * blocks));
   const grays = Math.max(0, blocks - greens - reds);
   return (
-    <span className="rv-changes" title={`${files} file${files === 1 ? "" : "s"} changed`}>
-      <span className="rv-diffstat">
-        <span className="rv-add">+{add}</span>
-        <span className="rv-del">−{del}</span>
+    <span className="rv-changes inline-flex flex-col gap-1" title={`${files} file${files === 1 ? "" : "s"} changed`}>
+      <span className="rv-diffstat inline-flex gap-2 font-mono text-label tabular-nums">
+        <span className="rv-add text-green">+{add}</span>
+        <span className="rv-del text-red">−{del}</span>
       </span>
-      <span className="rv-diffsquares" aria-hidden>
+      <span className="rv-diffsquares inline-flex gap-0.5" aria-hidden>
         {Array.from({ length: greens }).map((_, i) => (
-          <span key={`g${i}`} className="rv-sq rv-sq-add" />
+          <span key={`g${i}`} className="rv-sq rv-sq-add size-2 rounded-xs bg-green" />
         ))}
         {Array.from({ length: reds }).map((_, i) => (
-          <span key={`r${i}`} className="rv-sq rv-sq-del" />
+          <span key={`r${i}`} className="rv-sq rv-sq-del size-2 rounded-xs bg-red" />
         ))}
         {Array.from({ length: grays }).map((_, i) => (
-          <span key={`n${i}`} className="rv-sq rv-sq-none" />
+          <span key={`n${i}`} className="rv-sq rv-sq-none size-2 rounded-xs bg-line-strong" />
         ))}
       </span>
     </span>
@@ -258,7 +258,7 @@ export function Reviews({
       <div className="flex h-full min-h-0 flex-col bg-surface">
         <div className="hidden shrink-0 items-center border-b border-line px-3 py-2 max-[720px]:flex">
           <button
-            className="inline-flex items-center gap-1.5 rounded-sm border-0 bg-transparent px-2 py-1.5 text-sm font-medium text-fg hover:bg-hover"
+            className="inline-flex items-center gap-1.5 rounded-sm border-0 bg-transparent px-2 py-1.5 text-control-label font-medium text-fg hover:bg-hover"
             onClick={() => onSelect("")}
           >
             <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
@@ -288,16 +288,16 @@ export function Reviews({
   }
 
   return (
-    <div className="reviews">
-      <div className="reviews-main">
-        <div className="reviews-header">
-          <div className="reviews-header-top">
-            <h1 className="reviews-title">Reviews</h1>
-            <div className="reviews-search">
+    <div className="reviews relative flex min-h-0 flex-1">
+      <div className="reviews-main flex min-w-0 flex-1 flex-col overflow-y-auto max-[720px]:overflow-x-hidden">
+        <div className="reviews-header sticky top-0 z-[3] bg-surface px-[22px] pt-4">
+          <div className="reviews-header-top mb-3 flex items-center justify-between gap-4">
+            <h1 className="reviews-title m-0 text-section-title font-semibold tracking-[-0.01em]">Reviews</h1>
+            <div className="reviews-search flex w-60 items-center gap-2 rounded-sm border border-line bg-raised px-2.5 py-1.5 text-faint transition-[border-color,background] duration-100 focus-within:border-line-strong focus-within:bg-panel">
               <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                 <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z" />
               </svg>
-              <input
+              <input className="min-w-0 flex-1 border-0 bg-transparent text-control-label text-fg outline-none placeholder:text-faint"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search pull requests…"
@@ -305,20 +305,20 @@ export function Reviews({
               />
             </div>
           </div>
-          <div className="reviews-tabs">
+          <div className="reviews-tabs -mx-[22px] flex gap-0.5 overflow-x-auto border-b border-line px-[22px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {TABS.map((t) => (
               <button
                 key={t.key}
-                className={`reviews-tab ${filter === t.key ? "active" : ""}`}
+                className={`reviews-tab mb-[-1px] flex shrink-0 items-center gap-2 whitespace-nowrap border-0 border-b-2 border-transparent bg-transparent px-3 py-2 pb-2.5 text-control-label font-medium text-dim transition-colors hover:text-fg ${filter === t.key ? "active border-accent text-fg" : ""}`}
                 onClick={() => setFilter(t.key)}
               >
                 {t.label}
-                <span className="reviews-tab-count">{t.count}</span>
+                <span className={`reviews-tab-count min-w-5 rounded-full bg-active px-1.5 py-px text-center text-meta font-semibold text-dim ${filter === t.key ? "bg-accent-soft text-accent" : ""}`}>{t.count}</span>
               </button>
             ))}
           </div>
           {filtered.length > 0 && (
-            <div className="reviews-row reviews-row-head" role="row">
+            <div className="reviews-row reviews-row-head -mx-[22px] grid grid-cols-[92px_minmax(0,1fr)_156px_132px_116px_132px_78px] items-center gap-3.5 border-b border-line bg-surface px-[22px] py-2 text-meta font-semibold tracking-[-0.01em] text-faint max-[1180px]:grid-cols-[88px_minmax(0,1fr)_150px_118px_78px] max-[720px]:hidden" role="row">
               <span className="rv-c-state">Status</span>
               <span className="rv-c-title">Pull request</span>
               <span className="rv-c-checks">Checks</span>
@@ -331,7 +331,7 @@ export function Reviews({
         </div>
 
         {filtered.length === 0 ? (
-          <div className="reviews-empty">
+          <div className="reviews-empty flex flex-1 items-center justify-center">
             <div className="detail-empty-inner">
               <div className="detail-empty-title">
                 {prSessions.length === 0 ? "No pull requests yet" : "Nothing here"}
@@ -346,27 +346,27 @@ export function Reviews({
             </div>
           </div>
         ) : (
-          <div className="reviews-table" role="table">
+          <div className="reviews-table flex flex-col" role="table">
             {filtered.map((s) => {
               const meta = stateMeta(s);
               return (
                 <button
                   key={s.prUrl}
-                  className="reviews-row"
+                  className="reviews-row group grid w-full grid-cols-[92px_minmax(0,1fr)_156px_132px_116px_132px_78px] items-center gap-3.5 border-0 border-b border-line bg-transparent px-[22px] py-2.5 text-left text-fg hover:bg-hover max-[1180px]:grid-cols-[88px_minmax(0,1fr)_150px_118px_78px] max-[1180px]:[&_.rv-c-review]:hidden max-[1180px]:[&_.rv-c-author]:hidden max-[720px]:flex max-[720px]:flex-wrap max-[720px]:gap-x-3 max-[720px]:gap-y-2 max-[720px]:px-4 max-[720px]:py-3.5"
                   onClick={() => onSelect(s.id)}
                   role="row"
                 >
-                  <span className={`rv-c-state rv-state-${meta.key}`} role="cell">
+                  <span className={`rv-c-state rv-state-${meta.key} flex items-center gap-2 text-supporting font-medium ${meta.key === "open" ? "text-green" : meta.key === "draft" ? "text-dim" : meta.key === "merged" ? "text-purple" : "text-red"} max-[720px]:order-1`} role="cell">
                     <StateIcon kind={meta.key} />
                     <span className="rv-state-label">{meta.label}</span>
                   </span>
-                  <span className="rv-c-title" role="cell">
-                    <span className="rv-title-line">
-                      <span className="rv-title-text">{cleanTitle(s)}</span>
-                      {prNum(s) && <span className="rv-num">{prNum(s)}</span>}
+                  <span className="rv-c-title flex min-w-0 flex-col gap-0.5 max-[720px]:order-2 max-[720px]:min-w-0 max-[720px]:flex-[1_1_calc(100%-90px)]" role="cell">
+                    <span className="rv-title-line flex min-w-0 items-baseline gap-2">
+                      <span className="rv-title-text overflow-hidden text-ellipsis whitespace-nowrap text-body font-medium leading-[1.3]">{cleanTitle(s)}</span>
+                      {prNum(s) && <span className="rv-num shrink-0 text-supporting tabular-nums text-faint">{prNum(s)}</span>}
                       {s.prUrl && (
                         <span
-                          className="rv-open-gh"
+                          className="rv-open-gh inline-flex shrink-0 items-center self-center rounded-xs p-0.5 text-faint opacity-0 transition-opacity hover:text-accent group-hover:opacity-100 focus-visible:opacity-100"
                           title={`Open on ${providerFromUrl(s.prUrl).name}`}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -379,12 +379,12 @@ export function Reviews({
                         </span>
                       )}
                     </span>
-                    <span className="rv-sub-line">
+                    <span className="rv-sub-line flex min-w-0 items-center gap-3 text-label text-faint">
                       {multiRepo && (
-                        <span className="rv-repo">{s.repo ? repoLabel(s.repo) : "repository"}</span>
+                        <span className="rv-repo shrink-0 rounded-sm bg-active px-1.5 py-px font-mono text-meta font-semibold text-dim">{s.repo ? repoLabel(s.repo) : "repository"}</span>
                       )}
                       {s.branch && (
-                        <span className="rv-branch">
+                        <span className="rv-branch inline-flex min-w-0 max-w-full items-center gap-1 overflow-hidden font-mono text-meta text-dim [&_svg]:shrink-0 [&_svg]:opacity-70">
                           <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                             <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z" />
                           </svg>
@@ -392,36 +392,36 @@ export function Reviews({
                         </span>
                       )}
                       {s.linearIssue && (
-                        <span className="rv-linear">{s.linearIssue.identifier}</span>
+                        <span className="rv-linear shrink-0 rounded-sm bg-active px-1.5 py-px text-meta font-semibold tracking-[0.02em] text-dim">{s.linearIssue.identifier}</span>
                       )}
                       {s.isRunning && <span className="rv-running">● running</span>}
                     </span>
                   </span>
-                  <span className="rv-c-checks" role="cell">
+                  <span className="rv-c-checks max-[720px]:order-3 max-[720px]:inline-flex" role="cell">
                     <ChecksCell s={s} />
                   </span>
-                  <span className="rv-c-review" role="cell">
+                  <span className="rv-c-review max-[720px]:order-5 max-[720px]:inline-flex" role="cell">
                     <ReviewCell s={s} />
                   </span>
-                  <span className="rv-c-changes" role="cell">
+                  <span className="rv-c-changes max-[720px]:order-4 max-[720px]:inline-flex max-[720px]:flex-row max-[720px]:items-center max-[720px]:gap-2" role="cell">
                     <ChangesCell s={s} />
                   </span>
-                  <span className="rv-c-author" role="cell">
+                  <span className="rv-c-author flex min-w-0 items-center gap-2 max-[720px]:order-6 max-[720px]:inline-flex" role="cell">
                     {s.prAuthor ? (
                       <>
                         <img
-                          className="rv-avatar"
+                          className="rv-avatar size-[22px] shrink-0 rounded-[32%] bg-active"
                           src={avatarUrl(s.prAuthor, providerFromUrl(s.prUrl), 40) || ""}
                           alt=""
                           loading="lazy"
                         />
-                        <span className="rv-author-name">{s.prAuthor}</span>
+                        <span className="rv-author-name overflow-hidden text-ellipsis whitespace-nowrap text-supporting text-dim">{s.prAuthor}</span>
                       </>
                     ) : (
                       <span className="rv-dim">—</span>
                     )}
                   </span>
-                  <span className="rv-c-updated" role="cell">
+                  <span className="rv-c-updated whitespace-nowrap text-supporting tabular-nums text-faint max-[720px]:order-7 max-[720px]:ml-auto" role="cell">
                     {relativeTime(s.prUpdatedAt || s.lastActivity)}
                   </span>
                 </button>

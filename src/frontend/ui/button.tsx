@@ -3,7 +3,7 @@ import { cn } from "./cn";
 
 /**
  * Button primitive — the shared optics for text, icon+label, and icon-only
- * buttons. New buttons go through this; legacy `.btn-*` classes in global.css
+ * buttons. New buttons go through this; residual `.btn-*` adapter classes
  * migrate here opportunistically when touched (strangler pattern).
  *
  * The icon/spacing rules are ported from tella-fusion's button system
@@ -40,7 +40,7 @@ const sizes: Record<Size, string> = {
 	// header buttons, 26px the chip/inline tier.
 	//
 	// One radius across every size: `rounded-control`, the corner the rest of
-	// the chrome already uses (global.css authors it as `calc(10px*var(--rf))`
+	// the chrome already uses (the foundation authors it as `calc(10px*var(--rf))`
 	// on .btn-viewer-pin / .btn-panel-toggle / .btn-viewer-newchat). The
 	// `rounded-xs`/`rounded-sm` this used to ship read visibly squarer than the
 	// buttons it sat beside — enough that call sites kept patching it back out

@@ -232,7 +232,7 @@ function PrBarButton({
 		<button
 			type="button"
 			className={cn(
-				"inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-lg border px-2.5 py-[5px] text-[13px] leading-none font-[650] whitespace-nowrap text-white shadow-control transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
+				"inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-lg border px-2.5 py-[5px] text-control-label leading-none font-[650] whitespace-nowrap text-white shadow-control transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
 				tones[tone],
 				confirm && "outline-2 outline-[color-mix(in_srgb,var(--green)_45%,transparent)] outline-offset-1",
 				className,

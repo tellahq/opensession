@@ -179,7 +179,7 @@ export function CodeHighlight({ code, lang, gutter, requireGutter }: Props) {
 	}, [code, gutter, lang, requireGutter, theme, visible]);
 
 	return (
-		<div ref={ref}>
+		<div ref={ref} className="[&_.tool-pre]:m-0 [&_.tool-pre]:max-h-80 [&_.tool-pre]:overflow-y-auto [&_.tool-pre]:break-words [&_.tool-pre]:whitespace-pre-wrap [&_.tool-pre]:font-mono [&_.tool-pre]:text-supporting [&_.tool-pre]:leading-normal [&_.tool-pre]:text-dim [&_.tool-pre]:[tab-size:2] [&_.tool-pre-code_pre.shiki]:m-0 [&_.tool-pre-code_pre.shiki]:bg-transparent! [&_.tool-pre-code_pre.shiki]:p-0 [&_.tool-pre-code_pre.shiki]:font-inherit [&_.tool-pre-code_pre.shiki]:text-inherit [&_.tool-pre-code_pre.shiki]:leading-inherit [&_.tool-pre-code_pre.shiki]:whitespace-pre-wrap [&_.tool-pre-code_pre.shiki]:break-words [&_.shiki-gutter]:select-none [&_.shiki-gutter]:text-faint">
 			{html === null ? (
 				<pre className="tool-pre">{code}</pre>
 			) : (

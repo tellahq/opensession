@@ -115,9 +115,9 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
   const itemCls =
     "flex-col items-start gap-0.5 rounded-none border-b border-line px-3.5 py-2.5 last:border-b-0";
 
-  const fieldLabelCls = "flex flex-col gap-1.5 text-sm font-medium text-fg";
+  const fieldLabelCls = "flex flex-col gap-1.5 text-control-label font-medium text-fg";
   const fieldCls =
-    "w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-fg outline-none placeholder:text-faint focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]";
+    "w-full rounded-md border border-line-strong bg-surface px-3 text-control-label text-fg outline-none placeholder:text-faint focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]";
 
   const flavorMeta: Record<Flavor, { title: string; description: string }> = {
     build: {
@@ -145,17 +145,17 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
         <Menu.Popup className="w-80 overflow-hidden p-0">
           {isAsk && (
             <Menu.Item closeOnClick={false} onClick={() => pick("build")} className={itemCls}>
-              <span className="text-[13px] font-semibold text-fg">Build this</span>
-              <span className="text-meta leading-[1.4] text-faint">Start a coding session with this conversation as context</span>
+              <span className="text-control-label font-semibold text-fg">Build this</span>
+              <span className="text-meta leading-snug text-faint">Start a coding session with this conversation as context</span>
             </Menu.Item>
           )}
           <Menu.Item closeOnClick={false} onClick={() => pick("learnings")} className={itemCls}>
-            <span className="text-[13px] font-semibold text-fg">Capture learnings → docs PR</span>
-            <span className="text-meta leading-[1.4] text-faint">{AGENT_NAME} adds what was learned here to {session.repo || "the repository"} docs</span>
+            <span className="text-control-label font-semibold text-fg">Capture learnings → docs PR</span>
+            <span className="text-meta leading-snug text-faint">{AGENT_NAME} adds what was learned here to {session.repo || "the repository"} docs</span>
           </Menu.Item>
           <Menu.Item closeOnClick={false} onClick={() => pick("analyze")} className={itemCls}>
-            <span className="text-[13px] font-semibold text-fg">Analyze session</span>
-            <span className="text-meta leading-[1.4] text-faint">What went well, what didn't, and a better prompt</span>
+            <span className="text-control-label font-semibold text-fg">Analyze session</span>
+            <span className="text-meta leading-snug text-faint">What went well, what didn't, and a better prompt</span>
           </Menu.Item>
         </Menu.Popup>
       </Menu.SubmenuRoot>

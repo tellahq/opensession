@@ -21,6 +21,7 @@ import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { InlineAlert } from "../ui/state";
+import { cn } from "../ui/cn";
 
 type GoalStatus = "active" | "paused" | "done" | "failed";
 
@@ -138,16 +139,16 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
   }
 
   return (
-    <div className={`automations-page ${sel ? "automations-page-has-detail" : ""}`}>
-    <div className="automations-page-main">
-    <div className="automations-page-inner">
+    <div className="relative flex min-h-0 min-w-0 flex-1">
+    <div className={cn("min-w-0 flex-1 overflow-y-auto px-6 pb-[60px] pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-5", sel && "basis-[340px] grow-0 border-r border-line px-3.5 pb-10 pt-4 max-[900px]:hidden")}>
+    <div className={cn("mx-auto max-w-[860px]", sel && "max-w-none")}>
       <PageHeader
         className={`max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5 ${
           sel ? "mb-3.5 items-center" : ""
         }`}
       >
         <div>
-          <PageTitle className={sel ? "text-item-title" : undefined}>Goals</PageTitle>
+			<PageTitle className={sel ? "text-item-title" : undefined}>Goals</PageTitle>
           <PageDescription className={sel ? "hidden" : undefined}>
             Long-running, self-pacing missions — one managed session that remembers its own
             progress, paces itself, and stops when done.
@@ -183,21 +184,21 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
       {loading ? (
         <div className="loading">Loading…</div>
       ) : goals.length === 0 && !showForm ? (
-        <div className="automations-empty">
+        <div className="px-4 py-12 text-center text-dim">
           <p>No goals yet.</p>
-          <p className="automations-empty-sub">
+          <p className="text-control-label text-faint">
             A goal pursues one mission over days/weeks — it wakes itself, reads its ledger,
             ships work via PRs, measures, and iterates until the objective is met.
           </p>
         </div>
       ) : (
-        <div className="automations-table">
+        <div className="flex flex-col border-t border-line">
           {goals.map((g) => {
             const running = g.isRunning || g.lastRunStatus === "running";
             return (
               <button
                 key={g.id}
-                className={`automations-row ${sel?.id === g.id ? "active" : ""} ${g.status === "active" ? "" : "automations-row-off"}`}
+                className={cn("flex w-full min-w-0 items-center gap-3 border-0 border-b border-line bg-transparent px-2.5 py-2.5 text-left text-fg hover:bg-hover max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3", sel?.id === g.id && "bg-active", g.status !== "active" && "[&_.goal-row-main]:opacity-55")}
                 onClick={() => onSelect(g.id)}
               >
                 <span
@@ -205,9 +206,9 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                   style={{ background: STATUS_COLOR[g.status] }}
                   title={g.pauseReason || g.doneReason || g.status}
                 />
-                <span className="automations-row-main">
-                  <span className="automations-row-name">{g.name}</span>
-                  <span className="automations-row-trigger">
+                <span className="goal-row-main flex min-w-0 flex-1 flex-col gap-px">
+                  <span className="truncate text-body font-semibold">{g.name}</span>
+                  <span className="truncate font-mono text-meta text-faint">
                     {g.status}
                     {g.phase ? ` · ${g.phase}` : ""}
                     {` · wake #${g.wakeCount}${g.maxWakes ? ` / ${g.maxWakes}` : ""}`}
@@ -219,17 +220,17 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                   </span>
                 ) : g.lastRunStatus === "ok" ? (
                   <span
-                    className="auto-status-ok"
+                    className="text-green"
                     title={`Last wake ok${g.lastRunAt ? ` — ${relativeTime(g.lastRunAt)}` : ""}`}
                   >
                     ✓
                   </span>
                 ) : g.lastRunStatus === "error" ? (
-                  <span className="auto-status-err" title={g.lastRunError || "Last wake failed"}>
+                  <span className="text-red" title={g.lastRunError || "Last wake failed"}>
                     ✗
                   </span>
                 ) : null}
-                <span className="automations-row-next">
+                <span className="w-[84px] shrink-0 text-right text-label text-faint max-[560px]:hidden">
                   {g.status === "active" && g.nextWakeAt
                     ? `next ${formatNext(g.nextWakeAt)}`
                     : g.status}
@@ -243,10 +244,10 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
     </div>
 
       {sel && (
-        <aside className="automations-drawer">
-          <div className="automations-drawer-head">
+        <aside className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-line bg-panel max-[900px]:border-l-0">
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
             <button
-              className="automations-drawer-back"
+              className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.5 border-0 bg-transparent px-1.5 py-1 text-body font-medium text-fg max-[900px]:inline-flex"
               onClick={() => onSelect("")}
               title="Back to goals"
             >
@@ -255,11 +256,11 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
               </svg>
               Goals
             </button>
-            <span className="automations-drawer-title">
+            <span className="min-w-0 truncate text-control-label font-semibold">
               {editMode ? `Edit — ${sel.name}` : sel.name}
             </span>
             {!editMode && (
-              <div className="automations-drawer-actions">
+              <div className="ml-auto flex shrink-0 gap-1.5">
                 {sel.status === "active" && (
                   <Button
                     size="sm"
@@ -288,7 +289,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
               </div>
             )}
             <button
-              className="automations-drawer-close"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-dim hover:bg-hover hover:text-fg max-[900px]:hidden"
               onClick={() => onSelect("")}
               title="Close"
             >
@@ -297,7 +298,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
               </svg>
             </button>
           </div>
-          <div className="automations-drawer-body">
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pb-10 pt-[18px]">
             {editMode ? (
               <GoalForm
                 key={sel.id}
@@ -341,15 +342,15 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                 )}
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Mission</div>
-                  <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim whitespace-pre-wrap">
+                  <div className="mb-1.5 text-label font-semibold text-faint">Mission</div>
+                  <div className="whitespace-pre-wrap rounded-panel border border-line bg-surface px-3.5 py-3 text-control-label leading-relaxed text-dim">
                     {sel.mission}
                   </div>
                 </div>
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Configuration</div>
-                  <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-[13px]">
+                  <div className="mb-1.5 text-label font-semibold text-faint">Configuration</div>
+                  <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-control-label">
                     <DetailKey>Mode</DetailKey>
                     <span className="text-dim">
                       {sel.mode === "ask"
@@ -393,7 +394,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                         <DetailKey>Session</DetailKey>
                         <span className="min-w-0">
                           <a
-                            className="automation-session-link"
+                            className="text-accent hover:underline"
                             onClick={(e) => {
                               e.preventDefault();
                               onOpenSession(sel.bksSessionId!);
@@ -412,17 +413,17 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                 </div>
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Activity</div>
-                  <div className="text-dim text-supporting mb-2">
+                  <div className="mb-1.5 text-label font-semibold text-faint">Activity</div>
+                  <div className="mb-2 text-supporting text-dim">
                     wake #{sel.wakeCount}
                     {sel.maxWakes ? ` of ${sel.maxWakes}` : ""}
                     {sel.lastRunAt && (
                       <>
                         {" · last wake "}
                         {relativeTime(sel.lastRunAt)}
-                        {sel.lastRunStatus === "ok" && <span className="auto-status-ok"> ✓</span>}
+                        {sel.lastRunStatus === "ok" && <span className="text-green"> ✓</span>}
                         {sel.lastRunStatus === "error" && (
-                          <span className="auto-status-err" title={sel.lastRunError}> ✗</span>
+                          <span className="text-red" title={sel.lastRunError}> ✗</span>
                         )}
                       </>
                     )}
@@ -460,23 +461,7 @@ function GoalLedger({ id }: { id: string }) {
     };
   }, [id]);
   return (
-    <pre
-      style={{
-        whiteSpace: "pre-wrap",
-        wordBreak: "break-word",
-        maxHeight: 360,
-        overflow: "auto",
-        margin: 0,
-        padding: "10px 12px",
-        background: "var(--bg-raised)",
-        color: "var(--text)",
-        border: "1px solid var(--border)",
-        borderRadius: 8,
-        fontFamily: "var(--mono)",
-        fontSize: 13,
-        lineHeight: 1.5,
-      }}
-    >
+    <pre className="m-0 max-h-[360px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-line bg-raised px-3 py-2.5 font-mono text-label leading-relaxed text-fg">
       {ledger === null ? "Loading ledger…" : ledger}
     </pre>
   );
@@ -565,9 +550,9 @@ function GoalForm({
   }
 
   return (
-    <div className={`automation-form ${inline ? "automation-form-inline" : ""}`}>
+    <div className={cn("flex flex-col gap-3.5", !inline && "rounded-panel border border-line-strong bg-panel p-[18px]", "[&_label]:flex [&_label]:flex-1 [&_label]:flex-col [&_label]:gap-1.5 [&_label]:text-supporting [&_label]:font-medium [&_label]:text-dim [&_input]:rounded-md [&_input]:border [&_input]:border-line-strong [&_input]:bg-raised [&_input]:px-3 [&_input]:py-2 [&_input]:text-control-label [&_input]:text-fg [&_select]:rounded-md [&_select]:border [&_select]:border-line-strong [&_select]:bg-raised [&_select]:px-3 [&_select]:py-2 [&_select]:text-control-label [&_select]:text-fg [&_textarea]:resize-y [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-line-strong [&_textarea]:bg-raised [&_textarea]:px-3 [&_textarea]:py-2 [&_textarea]:text-control-label [&_textarea]:leading-relaxed [&_textarea]:text-fg")}>
       {!inline && (
-        <div className="automation-form-title">
+          <div className="text-body font-semibold">
           {initial ? `Edit "${initial.name}"` : "New goal"}
         </div>
       )}
@@ -591,7 +576,7 @@ function GoalForm({
         />
       </label>
 
-      <div className="automation-form-row">
+        <div className="flex gap-3.5">
         <label>
           Mode
           <select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
@@ -636,7 +621,7 @@ function GoalForm({
         </label>
       </div>
 
-      <div className="automation-form-row">
+        <div className="flex gap-3.5">
         <label>
           MCP servers (comma-separated; blank = all)
           <input
@@ -670,7 +655,7 @@ function GoalForm({
 
       {error && <InlineAlert>{error}</InlineAlert>}
 
-      <div className="automation-form-actions">
+      <div className="flex justify-end gap-2.5">
         <Button size="md" onClick={onClose} disabled={saving}>
           Cancel
         </Button>

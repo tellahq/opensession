@@ -9,7 +9,7 @@ import { Tooltip } from "../ui/tooltip";
  * just the window-control buttons overlaid on our own content — which also
  * takes the browser's back/forward buttons with it. There is no dedicated
  * titlebar band: the window's first content row is the titlebar (drag regions
- * + traffic-light inset live in the `html.wco` rules in global.css). The
+ * + traffic-light inset live in the foundation's `html.wco` rules). The
  * cluster carries the in-app back/forward, wired to the same history the
  * router drives (pushState / popstate), and sits at the right edge of the
  * sidebar's top chrome row. The `pane` variant is a floating fallback in the

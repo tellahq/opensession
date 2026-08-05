@@ -1153,7 +1153,7 @@ export function SessionViewer({
 	}, [notes, session.id]);
 	const panelResizeHandle = (
 		<div
-			className="panel-resize"
+			className="panel-resize absolute -left-[3px] top-0 z-[6] h-full w-[7px] cursor-col-resize after:absolute after:left-[3px] after:top-0 after:h-full after:w-0.5 after:bg-transparent after:transition-colors hover:after:bg-line-strong max-[720px]:hidden"
 			onMouseDown={startPanelResize}
 			aria-hidden="true"
 		/>
@@ -3028,16 +3028,16 @@ export function SessionViewer({
 			? opts.human.body
 			: (worker?.body ?? workflow?.body ?? sessionNotice?.body ?? item.content);
 		return (
-			<div className="composer-queue-content">
+			<div className="composer-queue-content flex min-w-0 items-start gap-2 pr-28">
 				{firstImage && (
-					<div className="composer-queue-image">
-						<img src={firstImage} alt="" />
+					<div className="composer-queue-image relative mt-px h-[34px] w-[46px] shrink-0">
+						<img className="block size-full rounded-md border border-line object-cover" src={firstImage} alt="" />
 						{extraImages > 0 && (
-							<span className="composer-queue-image-count">+{extraImages}</span>
+							<span className="composer-queue-image-count absolute -bottom-1 -right-1 h-[18px] min-w-[18px] rounded-full border border-line bg-raised px-1 text-center text-meta font-bold leading-4 text-dim">+{extraImages}</span>
 						)}
 					</div>
 				)}
-				<div className="composer-queue-body">
+				<div className={cn("composer-queue-body min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-control-label leading-[1.45] text-fg", opts.human && "text-[color-mix(in_srgb,var(--text)_88%,#1f9e8a)]", opts.github && "text-dim")}>
 					{opts.human && (
 						<span className="composer-queue-from">💬 {opts.human.name}</span>
 					)}
@@ -3117,18 +3117,18 @@ export function SessionViewer({
 				: `${queuedOnlyCount} queued · ${visibleSteered.length} steered`;
 	const attachedQueue =
 		queueCount > 0 ? (
-			<div className="composer-queue" aria-label="Queued and steered messages">
-				<div className="composer-queue-title">{queueTitle}</div>
+			<div className="composer-queue relative -mb-3.5 mx-[18px] flex flex-col gap-2 rounded-t-lg border border-b-0 border-line bg-[color-mix(in_srgb,var(--bg-panel)_70%,var(--control-surface))] px-4 pb-[26px] pt-2.5" aria-label="Queued and steered messages">
+				<div className="composer-queue-title text-label font-semibold text-faint">{queueTitle}</div>
 				{visibleSteered.map((s, i) => {
 					const hr = parseHumanReply(s.content);
 					return (
 						<div
 							key={`steered-${i}`}
-							className={`composer-queue-item composer-queue-steered ${hr ? "is-human" : ""}`}
+							className={cn("composer-queue-item composer-queue-steered relative min-h-[18.85px]", hr && "is-human")}
 						>
-							<div className="composer-queue-actions">
+							<div className="composer-queue-actions absolute -top-2 right-0 z-[1] inline-flex items-center gap-0.5">
 								<Tooltip label="Already delivered into the running turn — shown here until the turn finishes">
-									<span className="composer-queue-pill">
+									<span className="composer-queue-pill inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-control-label font-semibold text-accent">
 										<IconCrosshair size={20} />
 										Steered
 									</span>
@@ -3161,7 +3161,7 @@ export function SessionViewer({
 					axis="y"
 					values={queued}
 					onReorder={handleQueueReorder}
-					className="composer-queue-list"
+					className="composer-queue-list flex flex-col gap-2"
 				>
 				{queued.map((q, i) => {
 					const hr = parseHumanReply(q.content);
@@ -3183,11 +3183,11 @@ export function SessionViewer({
 							}}
 							onDragEnd={commitQueueReorder}
 							whileDrag={{ scale: 1.01, zIndex: 2 }}
-							className={`composer-queue-item ${canReorder ? "is-draggable" : ""} ${hr ? "is-human" : ""} ${isGitHub ? "is-github" : ""}`}
+							className={cn("composer-queue-item relative min-h-[18.85px]", canReorder && "is-draggable cursor-grab touch-none active:cursor-grabbing", hr && "is-human", isGitHub && "is-github")}
 						>
-							<div className="composer-queue-actions">
+							<div className="composer-queue-actions absolute -top-2 right-0 z-[1] inline-flex items-center gap-0.5">
 								{isGitHub ? (
-									<span className="composer-queue-pill composer-queue-pill-github">
+									<span className="composer-queue-pill composer-queue-pill-github inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-raised px-[13px] text-control-label font-semibold text-dim">
 										<IconPullRequest size={20} />
 										FYI
 									</span>
@@ -3256,9 +3256,9 @@ export function SessionViewer({
 				{/* Just-sent while busy: already visually in the queue, awaiting the
 				    server's echo (which swaps in the real item with actions). */}
 				{pendingQueue.map((p) => (
-					<div key={p.id} className="composer-queue-item composer-queue-sending">
-						<div className="composer-queue-actions">
-							<span className="composer-queue-pill composer-queue-pill-sending">
+					<div key={p.id} className="composer-queue-item composer-queue-sending relative min-h-[18.85px]">
+						<div className="composer-queue-actions absolute -top-2 right-0 z-[1] inline-flex items-center gap-0.5">
+							<span className="composer-queue-pill composer-queue-pill-sending inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-raised px-[13px] text-control-label font-semibold text-faint">
 								{waitingForWorkspace ? "Queued" : "Queueing…"}
 							</span>
 						</div>
@@ -4067,10 +4067,10 @@ export function SessionViewer({
 				);
 				const header = (
 					<div
-						className={`viewer-header ${compactHeader ? "viewer-header-compact" : ""}`}
+						className={`viewer-header flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 border-b border-line bg-bg px-4 ${compactHeader ? "viewer-header-compact" : ""}`}
 						ref={headerRef}
 					>
-						<div className="viewer-title">
+						<div className="viewer-title flex min-w-0 items-center gap-2.5 font-medium">
 					{/* This slot says where a chat came FROM. Ask mode isn't an
 					    origin — it's a mode you can change — so it rides the composer
 					    toolbar next to the model pill instead, where the switch is one
@@ -4079,7 +4079,7 @@ export function SessionViewer({
 					    sessions it read as the repo said twice. Only the unusual
 					    origins (slack/linear/cli) surface here. */}
 					{session.source !== "backstage" && (
-						<span className={`source-chip source-${session.source}`}>
+						<span className={`source-chip source-${session.source} shrink-0 rounded-full px-2 py-0.5 text-meta font-bold tracking-[-0.01em] ${session.source === "slack" ? "bg-[rgba(74,21,75,0.55)] text-[#d9a8db]" : session.source === "linear" ? "bg-[rgba(94,106,210,0.25)] text-[#9da6ee]" : "bg-active text-dim"}`}>
 							{session.source}
 						</span>
 					)}
@@ -4090,7 +4090,7 @@ export function SessionViewer({
 						(session.mode === "scratch" ? (
 							<span className="flex min-w-0 items-center gap-1.5">
 								<span
-									className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-dim"
+									className="flex min-w-0 items-center gap-1.5 text-control-label font-medium text-dim"
 									title="Scratch session — no repo"
 								>
 									<RepoTile
@@ -4256,7 +4256,7 @@ export function SessionViewer({
 									/>
 								}
 								className={cn(
-									// global.css turns on the squircle via
+									// The foundation turns on the squircle via
 									// `[class*="rounded-"]:not([class*="rounded-full"])`. That
 									// `:not` is a substring test on the whole class attribute,
 									// so the mobile `rounded-full` below disqualifies this
@@ -4642,7 +4642,7 @@ export function SessionViewer({
 				)}
 
 			{(session.goal || session.loop || runErrorBanner) && (
-				<div className="session-banners">
+					<div className="session-banners flex flex-wrap gap-2 border-b border-line bg-raised px-4 py-[7px]">
 					{/* The last run died on a terminal failure (usage limits/credits
 					    exhausted, API errors) — say why the session stopped; the error
 					    itself was only ever a transient toast. Hidden while a retry
@@ -4880,9 +4880,9 @@ export function SessionViewer({
 						</div>
 					) : (
 					<>
-					<div className="viewer-messages-region">
+					<div className="viewer-messages-region relative min-h-0 flex-1">
 						<div
-							className="viewer-messages"
+							className="viewer-messages h-full min-h-0 overflow-y-auto px-4 pb-2 pt-[18px] max-[720px]:px-3 max-[720px]:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)]"
 							ref={messagesRef}
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
@@ -5127,7 +5127,7 @@ export function SessionViewer({
 								)}
 							</div>
 
-							<div className="viewer-input">
+					<div className="viewer-input">
 								{noEngine ? (
 									<div className="mx-auto max-w-[var(--chat-col)] text-[13px] text-faint">
 										No engine session to resume
@@ -5353,7 +5353,7 @@ export function SessionViewer({
 								}
 							/>
 						)}
-						<div className="panel-tabs">
+						<div className="panel-tabs flex items-center gap-0.5 overflow-x-auto px-2.5 pb-2 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 							<button
 								className={`panel-tab ${panelTab === "info" ? "active" : ""}`}
 								onClick={() => selectPanelTab("info")}
@@ -5417,7 +5417,7 @@ export function SessionViewer({
 								</button>
 							)}
 						</div>
-						<div className="panel-body">
+						<div className="panel-body min-h-0 flex-1 overflow-y-auto">
 							{/* Plain-only sessions (no code workspace) show just the timeline. */}
 							{panelTab === "info" ? (
 								<div className="px-1">

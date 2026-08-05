@@ -44,7 +44,7 @@ export const VirtualTranscriptBlock = React.memo(function VirtualTranscriptBlock
 		return (
 			<div
 				ref={ref}
-				className="transcript-window transcript-window-placeholder"
+				className="transcript-window transcript-window-placeholder pointer-events-none"
 				data-eid={anchorId}
 				aria-hidden
 				style={{ height: heightRef.current }}
@@ -55,7 +55,7 @@ export const VirtualTranscriptBlock = React.memo(function VirtualTranscriptBlock
 	return (
 		<div
 			ref={ref}
-			className={enabled ? "transcript-window transcript-settled" : "transcript-window"}
+			className={enabled ? "transcript-window transcript-settled [content-visibility:auto] [contain-intrinsic-size:auto_96px]" : "transcript-window"}
 		>
 			{children}
 		</div>

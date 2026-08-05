@@ -1,5 +1,5 @@
 /**
- * Colors, lifted from the web UI's dark palette (src/frontend/styles/global.css)
+ * Colors, lifted from the web UI's dark palette (src/frontend/styles/foundation-adapters.css)
  * so the two clients read as the same product. Warm charcoal, not blue-black.
  *
  * A terminal already has a background, so we deliberately do NOT paint one on

@@ -44,6 +44,9 @@ jobs:
       - name: Type-check
         run: bun run typecheck
 
+      - name: Frontend CSS migration gate
+        run: bun run frontend:check
+
       # The unit suite is NOT a gate yet, and that is a deliberate, temporary
       # call rather than laziness. Two separate problems:
       #

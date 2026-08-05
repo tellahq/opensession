@@ -111,7 +111,7 @@ export function PreviewWait({ sessionId }: { sessionId: string }) {
 
 	return (
 		<div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-surface px-6 text-center">
-			<div className="text-[13px] font-semibold tracking-wide text-faint select-none">
+			<div className="text-control-label font-semibold tracking-wide text-faint select-none">
 				{PRODUCT_NAME}
 			</div>
 			{state === "waiting" ? (
@@ -124,11 +124,11 @@ export function PreviewWait({ sessionId }: { sessionId: string }) {
 						Starting the dev server…
 					</div>
 					{who && (
-						<div className="max-w-sm truncate text-[13px] font-semibold text-dim">
+						<div className="max-w-sm truncate text-control-label font-semibold text-dim">
 							{who}
 						</div>
 					)}
-					<div className="max-w-sm text-[13px] font-medium leading-relaxed text-dim">
+					<div className="max-w-sm text-control-label font-medium leading-relaxed text-dim">
 						The first build can take a minute. This tab will open the app
 						automatically when it's ready — keep it in the background.
 					</div>
@@ -140,14 +140,14 @@ export function PreviewWait({ sessionId }: { sessionId: string }) {
 							? "Session not found"
 							: "The dev server didn't come up"}
 					</div>
-					<div className="max-w-sm text-[13px] font-medium leading-relaxed text-dim">
+					<div className="max-w-sm text-control-label font-medium leading-relaxed text-dim">
 						{state === "gone"
 							? "This preview link points at a session that no longer exists."
 							: "It's been a few minutes with nothing listening — the boot may have failed. Check the session's Preview services for details, or try starting it again."}
 					</div>
 					<a
 						href={backHref}
-						className="rounded-md border border-line-strong px-3.5 py-1.5 text-[13px] font-semibold text-fg no-underline hover:border-accent hover:bg-accent-soft"
+						className="rounded-md border border-line-strong px-3.5 py-1.5 text-control-label font-semibold text-fg no-underline hover:border-accent hover:bg-accent-soft"
 					>
 						{state === "gone" ? "Open " + PRODUCT_NAME : "Back to the session"}
 					</a>

@@ -96,11 +96,11 @@ export function useRowHoverCard(
 function CardRows({ rows }: { rows: Array<[string, React.ReactNode]> }) {
 	if (rows.length === 0) return null;
 	return (
-		<div className="hovercard-rows">
+		<div className="hovercard-rows mt-[9px] flex flex-col gap-[3px]">
 			{rows.map(([label, value], i) => (
-				<div className="hovercard-row" key={i}>
-					<span className="hovercard-label">{label}</span>
-					<span className="hovercard-value">{value}</span>
+				<div className="hovercard-row flex gap-2 text-meta leading-[1.35]" key={i}>
+					<span className="hovercard-label w-[74px] shrink-0 text-faint">{label}</span>
+					<span className="hovercard-value min-w-0 truncate text-dim">{value}</span>
 				</div>
 			))}
 		</div>
@@ -151,7 +151,7 @@ export function CardFooter({
 	return (
 		<div className="mt-2.5 flex min-w-0 items-center gap-2 border-t border-line pt-2">
 			{children}
-			<span className="ml-auto shrink-0 text-[11px] text-faint" title={timeTitle}>
+			<span className="ml-auto shrink-0 text-meta text-faint" title={timeTitle}>
 				{time}
 			</span>
 		</div>
@@ -265,10 +265,10 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 
 	return (
 		<>
-			<div className="hovercard-head">
-				<span className="hovercard-branch">{pr.branch}</span>
+			<div className="hovercard-head flex min-w-0 items-center gap-[7px]">
+				<span className="hovercard-branch min-w-0 flex-1 truncate text-meta text-dim">{pr.branch}</span>
 				{pr.isDraft && (
-					<span className="shrink-0 text-[11px] text-faint">draft</span>
+					<span className="shrink-0 text-meta text-faint">draft</span>
 				)}
 				<span className="flex shrink-0 items-center">
 					{item.bucket === "ready" ? (
@@ -283,20 +283,20 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 				</span>
 			</div>
 
-			<div className="hovercard-title">{pr.title}</div>
+			<div className="hovercard-title mt-[5px] text-control-label font-semibold leading-[1.3]">{pr.title}</div>
 
 			{problem ? (
-				<div className="hovercard-callout">{problem}</div>
+				<div className="hovercard-callout mt-[7px] rounded-sm bg-accent-soft px-2 py-[5px] text-meta text-dim">{problem}</div>
 			) : (
 				state && (
-					<div className={`hovercard-state hovercard-state-${state.tone}`}>
+					<div className={`hovercard-state mt-[3px] text-meta font-medium hovercard-state-${state.tone}`}>
 						{state.label}
 					</div>
 				)
 			)}
 
 			{pr.reviewActive && (
-				<div className="hovercard-callout">
+				<div className="hovercard-callout mt-[7px] rounded-sm bg-accent-soft px-2 py-[5px] text-meta text-dim">
 					An automated review is still running.
 				</div>
 			)}
@@ -360,17 +360,17 @@ export function SupportRowCard({
 
 	return (
 		<>
-			<div className="hovercard-head">
-				<span className="hovercard-branch">{customer}</span>
-				<span className={`shrink-0 text-[11px] ${priority.cls}`}>
+			<div className="hovercard-head flex min-w-0 items-center gap-[7px]">
+				<span className="hovercard-branch min-w-0 flex-1 truncate text-meta text-dim">{customer}</span>
+				<span className={`shrink-0 text-meta ${priority.cls}`}>
 					{priority.label}
 				</span>
 			</div>
 
-			<div className="hovercard-title">{t.title || customer}</div>
+			<div className="hovercard-title mt-[5px] text-control-label font-semibold leading-[1.3]">{t.title || customer}</div>
 
 			{preview && (
-				<div className="selectable mt-1 text-xs leading-snug text-dim line-clamp-3">
+				<div className="selectable mt-1 text-meta leading-snug text-dim line-clamp-3">
 					{preview}
 				</div>
 			)}

@@ -94,23 +94,23 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
   }, [send, sel, message, label, sessionId, dismiss]);
 
   return (
-    <div ref={hostRef} className="selection-host" onMouseUp={onMouseUp}>
+    <div ref={hostRef} className="selection-host contents" onMouseUp={onMouseUp}>
       {children}
       {sel && send && (
         <div
           ref={popRef}
-          className="selection-popover"
+          className="selection-popover fixed z-[1000] max-w-[min(340px,90vw)] -translate-x-1/2 rounded-md border border-accent bg-panel font-sans shadow-[0_6px_24px_rgba(0,0,0,0.4)]"
           style={{ left: sel.x, top: sel.y + 6 }}
           onMouseDown={(e) => e.stopPropagation()}
         >
           {sent ? (
-            <div className="selection-sent">Sent to session ✓</div>
+            <div className="selection-sent whitespace-nowrap px-3.5 py-2 text-supporting text-accent">Sent to session ✓</div>
           ) : composing ? (
-            <div className="selection-compose">
-              <div className="selection-quote">{sel.text}</div>
+            <div className="selection-compose flex flex-col gap-2 p-2.5">
+              <div className="selection-quote max-h-16 overflow-y-auto break-words whitespace-pre-wrap border-l-2 border-line-strong pl-2 text-meta text-faint">{sel.text}</div>
               <textarea
                 autoFocus
-                className="selection-input"
+                className="selection-input resize-y rounded-sm border border-line-strong bg-raised px-2.5 py-2 text-control-label leading-[1.45] text-fg outline-none focus:border-accent"
                 rows={2}
                 placeholder="Message to the session (optional)… ⌘↵ to send"
                 value={message}
@@ -122,11 +122,11 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
                   }
                 }}
               />
-              <div className="selection-actions">
+              <div className="selection-actions flex justify-end gap-2">
                 <Button
                   variant="default"
                   size="sm"
-                  className="min-h-0 border-line-strong bg-transparent px-3 py-[5px] text-[13px] font-normal shadow-none"
+                  className="min-h-0 border-line-strong bg-transparent px-3 py-[5px] text-control-label font-normal shadow-none"
                   onClick={dismiss}
                 >
                   Cancel
@@ -142,7 +142,7 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
               </div>
             </div>
           ) : (
-            <button className="selection-trigger" onClick={() => setComposing(true)}>
+            <button className="selection-trigger block whitespace-nowrap border-0 bg-transparent px-3 py-1.5 text-supporting text-fg hover:rounded-md hover:bg-hover" onClick={() => setComposing(true)}>
               💬 Send to session
             </button>
           )}

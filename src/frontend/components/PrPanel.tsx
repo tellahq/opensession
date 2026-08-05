@@ -1173,7 +1173,7 @@ export function PrPanel({
           {/* The row's bottom line is an inset shadow, not a border: the active tab
               covers it with its own surface-coloured bottom border while sitting
               flush inside the box, so nothing overflows vertically (a 1px overflow
-              here parks a scrollbar, since global.css opts Chrome out of overlay
+              here parks a scrollbar, since the foundation opts Chrome out of overlay
               scrollbars). Horizontal scrollbars are hidden for the same reason. */}
           <div
             className="sticky top-0 z-[8] flex h-[52px] shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden bg-surface px-6 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] max-[720px]:px-2 [&::-webkit-scrollbar]:hidden"

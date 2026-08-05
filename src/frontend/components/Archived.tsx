@@ -6,6 +6,7 @@ import { relativeTime, archiveSessionApi } from "../lib/api";
 import { useCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { PageLayout } from "../ui/page";
+import { cn } from "../ui/cn";
 
 interface Props {
   sessions: UnifiedSession[];
@@ -132,8 +133,7 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
       }
       actions={
         <input
-          className="sidebar-search"
-          style={{ maxWidth: 260 }}
+          className="w-full max-w-[260px] rounded-md border border-line bg-panel px-2.5 py-1.5 text-control-label text-fg outline-none placeholder:text-faint focus:border-accent"
           placeholder="Search archived…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -141,24 +141,24 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
       }
       filters={
         <>
-          <div className="seg-control" role="group" aria-label="Owner">
+          <div className="inline-flex gap-0.5 rounded-md bg-hover p-0.5" role="group" aria-label="Owner">
             <button
-              className={`seg-control-btn${owner === "mine" ? " active" : ""}`}
+              className={cn("whitespace-nowrap rounded-sm border-0 bg-transparent px-2.5 py-1 text-supporting font-medium text-faint hover:text-dim", owner === "mine" && "bg-active text-fg")}
               onClick={() => setOwner("mine")}
             >
               My archived
             </button>
             <button
-              className={`seg-control-btn${owner === "everyone" ? " active" : ""}`}
+              className={cn("whitespace-nowrap rounded-sm border-0 bg-transparent px-2.5 py-1 text-supporting font-medium text-faint hover:text-dim", owner === "everyone" && "bg-active text-fg")}
               onClick={() => setOwner("everyone")}
             >
               Everyone
             </button>
           </div>
           {repos.length > 1 && (
-            <div className="seg-control" role="group" aria-label="Repo">
+            <div className="inline-flex gap-0.5 rounded-md bg-hover p-0.5" role="group" aria-label="Repo">
               <button
-                className={`seg-control-btn${repo === "all" ? " active" : ""}`}
+                className={cn("whitespace-nowrap rounded-sm border-0 bg-transparent px-2.5 py-1 text-supporting font-medium text-faint hover:text-dim", repo === "all" && "bg-active text-fg")}
                 onClick={() => setRepo("all")}
               >
                 All repos
@@ -166,7 +166,7 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
               {repos.map((name) => (
                 <button
                   key={name}
-                  className={`seg-control-btn${repo === name ? " active" : ""}`}
+                  className={cn("whitespace-nowrap rounded-sm border-0 bg-transparent px-2.5 py-1 text-supporting font-medium text-faint hover:text-dim", repo === name && "bg-active text-fg")}
                   onClick={() => setRepo(name)}
                 >
                   {repoLabel(name)}
@@ -174,21 +174,21 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
               ))}
             </div>
           )}
-          <div className="seg-control" role="group" aria-label="Reason">
+          <div className="inline-flex gap-0.5 rounded-md bg-hover p-0.5" role="group" aria-label="Reason">
             <button
-              className={`seg-control-btn${reason === "all" ? " active" : ""}`}
+              className={cn("whitespace-nowrap rounded-sm border-0 bg-transparent px-2.5 py-1 text-supporting font-medium text-faint hover:text-dim", reason === "all" && "bg-active text-fg")}
               onClick={() => setReason("all")}
             >
               All
             </button>
             <button
-              className={`seg-control-btn${reason === "auto" ? " active" : ""}`}
+              className={cn("whitespace-nowrap rounded-sm border-0 bg-transparent px-2.5 py-1 text-supporting font-medium text-faint hover:text-dim", reason === "auto" && "bg-active text-fg")}
               onClick={() => setReason("auto")}
             >
               Auto-archived
             </button>
             <button
-              className={`seg-control-btn${reason === "manual" ? " active" : ""}`}
+              className={cn("whitespace-nowrap rounded-sm border-0 bg-transparent px-2.5 py-1 text-supporting font-medium text-faint hover:text-dim", reason === "manual" && "bg-active text-fg")}
               onClick={() => setReason("manual")}
             >
               Manual
@@ -198,7 +198,7 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
       }
     >
       {archived.length === 0 ? (
-        <div className="automations-empty">
+        <div className="px-4 py-12 text-center text-dim">
           <p>Nothing archived{search || owner === "mine" || repo !== "all" ? " matches" : " yet"}.</p>
         </div>
       ) : (
@@ -222,7 +222,7 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
                 </span>
               </span>
               <span
-                className="inline-flex cursor-pointer rounded-sm border border-line-strong px-2.5 py-[3px] text-xs text-dim hover:border-faint hover:text-fg"
+                className="inline-flex cursor-pointer rounded-sm border border-line-strong px-2.5 py-[3px] text-label text-dim hover:border-faint hover:text-fg"
                 role="button"
                 onClick={(e) => handleUnarchive(e, s.id)}
               >

@@ -131,11 +131,11 @@ export function Reports({
 					<div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-lg bg-surface text-dim">
 						<IconFile size={24} />
 					</div>
-					<h1 className="m-0 text-page-title font-semibold text-fg">Reports</h1>
-					<p className="mt-2 text-sm leading-6 text-dim">
+					<h1 className="m-0 text-section-title font-semibold text-fg">Reports</h1>
+					<p className="mt-2 text-body leading-relaxed text-dim">
 						Recurring automation reports will collect here, with the latest result and full history in one place.
 					</p>
-					{error && <p className="mt-3 text-sm text-red">{error}</p>}
+                    {error && <p className="mt-3 text-body text-red">{error}</p>}
 				</div>
 			</div>
 		);
@@ -151,7 +151,7 @@ export function Reports({
 				<aside className={`flex min-h-0 flex-col bg-panel ${isPhone ? "w-full flex-1" : "w-[300px] shrink-0 border-r border-line"}`}>
 					<div className="border-b border-line px-4 py-4">
 						<h1 className="m-0 text-section-title font-semibold tracking-[-0.02em] text-fg">Reports</h1>
-						<p className="m-0 mt-1 text-xs text-dim">Recurring intelligence, organized by automation</p>
+						<p className="m-0 mt-1 text-label text-dim">Recurring intelligence, organized by automation</p>
 					</div>
 					<div className="min-h-0 flex-1 overflow-y-auto p-2">
 						{groups.map((group) => (
@@ -163,8 +163,8 @@ export function Reports({
 							>
 								<span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-surface text-accent"><IconFile size={17} /></span>
 								<span className="min-w-0 flex-1">
-									<span className="block truncate text-sm font-medium text-fg">{group.automationName}</span>
-									<span className="mt-1 block truncate text-xs text-dim">{group.latest.title}</span>
+                                    <span className="block truncate text-control-label font-medium text-fg">{group.automationName}</span>
+                                    <span className="mt-1 block truncate text-label text-dim">{group.latest.title}</span>
 									<span className="mt-1.5 block text-meta text-faint">{formatDate(group.latest.createdAt)} · {group.count} {group.count === 1 ? "report" : "reports"}</span>
 								</span>
 								<IconChevronRight size={16} className="mt-2 shrink-0 text-faint" />
@@ -180,7 +180,7 @@ export function Reports({
 						<header className="shrink-0 border-b border-line px-3 pb-3 pt-2">
 							<button
 								type="button"
-								className="-ml-1 flex items-center gap-0.5 rounded-md border-0 bg-transparent py-1.5 pl-1 pr-2.5 text-sm font-medium text-accent cursor-pointer"
+                                className="-ml-1 flex items-center gap-0.5 rounded-md border-0 bg-transparent py-1.5 pl-1 pr-2.5 text-control-label font-medium text-accent cursor-pointer"
 								onClick={onBack}
 							>
 								<IconChevronLeft size={18} />
@@ -188,12 +188,12 @@ export function Reports({
 							</button>
 							{selected && (
 								<>
-									<h2 className="m-0 mt-1 px-1 text-base font-semibold leading-snug text-fg">{selected.title}</h2>
-									<p className="m-0 mt-1 px-1 text-xs leading-5 text-dim line-clamp-2">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
+                                    <h2 className="m-0 mt-1 px-1 text-body font-semibold leading-snug text-fg">{selected.title}</h2>
+                                    <p className="m-0 mt-1 px-1 text-label leading-5 text-dim line-clamp-2">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
 									<div className="mt-2.5 flex items-center gap-2 px-1">
 										<select
 											aria-label="Report history"
-											className="min-w-0 flex-1 rounded-md border border-line bg-panel px-2 py-1.5 text-xs text-fg"
+                                            className="min-w-0 flex-1 rounded-md border border-line bg-panel px-2 py-1.5 text-label text-fg"
 											value={selected.id}
 											onChange={(event) => onSelect(selected.automationId, event.target.value)}
 										>
@@ -209,14 +209,14 @@ export function Reports({
 						selected && (
 							<header className="flex shrink-0 items-start gap-4 border-b border-line px-5 py-3">
 								<div className="min-w-0 flex-1">
-									<h2 className="m-0 truncate text-base font-semibold text-fg">{selected.title}</h2>
-									<p className="m-0 mt-1 text-xs text-dim">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
+                                    <h2 className="m-0 truncate text-body font-semibold text-fg">{selected.title}</h2>
+                                    <p className="m-0 mt-1 text-label text-dim">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
 								</div>
 								<Button size="sm" className="min-h-[30px] w-[30px] shrink-0" icon={<CopyCheck copied={copied} size={15} idle={<IconLink size={15} />} />} aria-label="Share report" title="Share report" onClick={shareSelected} />
 								{selected.sessionId && <Button size="sm" className="min-h-[30px] shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
 								<select
 									aria-label="Report history"
-									className="max-w-[190px] shrink-0 rounded-md border border-line bg-panel px-2 py-1.5 text-xs text-fg"
+                                    className="max-w-[190px] shrink-0 rounded-md border border-line bg-panel px-2 py-1.5 text-label text-fg"
 									value={selected.id}
 									onChange={(event) => onSelect(selected.automationId, event.target.value)}
 								>

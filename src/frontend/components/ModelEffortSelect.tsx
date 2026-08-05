@@ -367,7 +367,7 @@ export function ModelEffortSelect({
 				{option.description ? (
 					<span className="flex min-w-0 flex-1 flex-col">
 						<span className="truncate">{option.label}</span>
-						<span className="truncate text-xs text-faint">{option.description}</span>
+						<span className="truncate text-label text-faint">{option.description}</span>
 					</span>
 				) : (
 					<span className="min-w-0 truncate">{option.label}</span>
@@ -390,7 +390,7 @@ export function ModelEffortSelect({
 				type="button"
 				// Quiet pill: no outline at rest, hover state only, no chevron.
 				className={cn(
-					"border-transparent hover:border-transparent hover:bg-hover",
+					"relative inline-flex min-w-0 items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-supporting font-medium text-dim transition-[border-color,color] hover:border-faint hover:text-fg disabled:cursor-default disabled:opacity-55",
 					className,
 				)}
 				title={title}
@@ -403,8 +403,8 @@ export function ModelEffortSelect({
 							: "Model"
 				}
 			>
-				<span className="palette-pill-label">{modelLabel}</span>
-				{hasEffort && <span className="palette-pill-effort flex-none text-faint">{effortLabel}</span>}
+				<span className="palette-pill-label truncate">{modelLabel}</span>
+				{hasEffort && <span className="palette-pill-effort flex-none text-faint max-[374px]:hidden">{effortLabel}</span>}
 				{hasFastMode && fastMode && (
 					<span className="palette-pill-effort flex-none text-faint">Fast</span>
 				)}

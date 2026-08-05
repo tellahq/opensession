@@ -122,20 +122,20 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 	const status = thread?.status;
 
 	return (
-		<div className="plain-panel">
-			<div className="plain-panel-head">
-				<div className="plain-head-info">
-					<span className="plain-customer" title={thread?.customer?.email || ""}>
+		<div className="plain-panel flex h-full min-h-0 flex-col bg-raised">
+			<div className="plain-panel-head flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+				<div className="plain-head-info flex min-w-0 items-center gap-2">
+					<span className="plain-customer truncate text-control-label font-semibold text-fg" title={thread?.customer?.email || ""}>
 						{thread?.customer?.name || thread?.customer?.email || "Plain thread"}
 					</span>
 					{status && (
-						<span className={`plain-status plain-status-${status.toLowerCase()}`}>
+						<span className={`plain-status plain-status-${status.toLowerCase()} shrink-0 rounded-full bg-active px-1.5 py-0.5 text-meta font-bold text-faint ${status === "TODO" ? "bg-accent-soft text-accent" : status === "DONE" ? "bg-green-soft text-green" : "bg-yellow/20 text-yellow"}`}>
 							{STATUS_LABEL[status] || status}
 						</span>
 					)}
 				</div>
 				<a
-					className="plain-open"
+					className="plain-open shrink-0 whitespace-nowrap text-meta font-semibold text-accent no-underline hover:underline"
 					href={plainUrl}
 					target="_blank"
 					rel="noreferrer"
@@ -161,15 +161,15 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 				/>
 			)}
 
-			{thread?.title && <div className="plain-title">{thread.title}</div>}
+			{thread?.title && <div className="plain-title shrink-0 border-b border-line px-3 py-2 text-control-label font-semibold text-fg">{thread.title}</div>}
 
-			<div className="plain-timeline" ref={bodyRef}>
+			<div className="plain-timeline flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3" ref={bodyRef}>
 				{loading && !thread ? (
-					<div className="plain-loading">Loading conversation…</div>
+					<div className="plain-loading mt-5 text-center text-control-label text-faint">Loading conversation…</div>
 				) : error && !thread ? (
-					<div className="plain-loading">Couldn't load Plain thread: {error}</div>
+					<div className="plain-loading mt-5 text-center text-control-label text-faint">Couldn't load Plain thread: {error}</div>
 				) : thread && thread.entries.length === 0 ? (
-					<div className="plain-loading">No messages in this thread yet.</div>
+					<div className="plain-loading mt-5 text-center text-control-label text-faint">No messages in this thread yet.</div>
 				) : (
 					thread?.entries.map((e) => (
 						<PlainEntryRow key={e.id} entry={e} threadId={threadId} />
@@ -591,7 +591,7 @@ export function PlainReplyBox({
 				)}
 			</div>
 			<textarea
-				className="plain-reply-textarea w-full min-h-[128px] resize-y rounded-md border border-line bg-surface text-fg text-[13px] leading-normal p-2 focus:outline-none focus:border-line-strong placeholder:text-faint"
+				className="plain-reply-textarea w-full min-h-[128px] resize-y rounded-md border border-line bg-surface p-2 text-control-label leading-normal text-fg placeholder:text-faint focus:border-line-strong focus:outline-none"
 				placeholder={
 					kind === "note"
 						? "Internal note for the team (English)…"
@@ -800,22 +800,22 @@ export function PlainEntryRow({
 	if (entry.kind === "note") {
 		const author = noteAuthor(entry);
 		return (
-			<div className="plain-entry plain-entry-note">
-				<div className="plain-entry-head">
-					<span className="plain-kind-badge plain-kind-note">note</span>
-					<span className="plain-actor">{author.name}</span>
+			<div className="plain-entry plain-entry-note flex max-w-full flex-col gap-1 rounded-lg border border-yellow/30 bg-yellow/10 px-3 py-2">
+				<div className="plain-entry-head flex flex-wrap items-baseline gap-1.5">
+					<span className="plain-kind-badge plain-kind-note rounded-sm border border-yellow/40 px-1 text-meta font-bold text-yellow">note</span>
+					<span className="plain-actor text-supporting font-bold text-fg">{author.name}</span>
 					{author.isAgent && (
 						<span
-							className="plain-kind-badge"
+							className="plain-kind-badge rounded-sm border border-line-strong px-1 text-meta font-bold text-faint"
 							title="Written by an agent run, not a teammate"
 						>
 							agent
 						</span>
 					)}
-					<span className="plain-time">{timeOf(entry.timestamp)}</span>
+					<span className="plain-time text-meta text-faint">{timeOf(entry.timestamp)}</span>
 					{author.isAgent && threadId && (
 						<a
-							className="plain-open ml-auto"
+							className="plain-open ml-auto shrink-0 whitespace-nowrap text-meta font-semibold text-accent no-underline hover:underline"
 							href={`${BASE_PATH}/plain-triage/${encodeURIComponent(threadId)}`}
 							target="_blank"
 							rel="noreferrer"
@@ -826,7 +826,7 @@ export function PlainEntryRow({
 					)}
 				</div>
 				<div
-					className="plain-note-body markdown"
+					className="plain-note-body markdown break-words text-control-label leading-relaxed text-fg [&>:first-child]:mt-0 [&>:last-child]:mb-0"
 					dangerouslySetInnerHTML={{ __html: renderMarkdown(author.text) }}
 				/>
 				{entry.attachments?.length ? (
@@ -838,14 +838,14 @@ export function PlainEntryRow({
 
 	const side = entry.actorType === "customer" ? "in" : "out";
 	return (
-		<div className={`plain-entry plain-entry-${side}`}>
-			<div className="plain-entry-head">
-				<span className="plain-actor">{entry.actorName}</span>
-				<span className="plain-kind-badge">{entry.kind}</span>
-				<span className="plain-time">{timeOf(entry.timestamp)}</span>
+		<div className={`plain-entry plain-entry-${side} flex max-w-[88%] flex-col gap-1 rounded-lg border border-line bg-panel px-3 py-2 ${side === "in" ? "self-start rounded-bl-sm" : "self-end rounded-br-sm border-accent/25 bg-accent-soft/50"}`}>
+			<div className="plain-entry-head flex flex-wrap items-baseline gap-1.5">
+				<span className="plain-actor text-supporting font-bold text-fg">{entry.actorName}</span>
+				<span className="plain-kind-badge rounded-sm border border-line-strong px-1 text-meta font-bold text-faint">{entry.kind}</span>
+				<span className="plain-time text-meta text-faint">{timeOf(entry.timestamp)}</span>
 			</div>
-			{entry.subject && <div className="plain-subject">{entry.subject}</div>}
-			{entry.text && <div className="plain-entry-text">{entry.text}</div>}
+			{entry.subject && <div className="plain-subject text-supporting font-semibold text-fg">{entry.subject}</div>}
+			{entry.text && <div className="plain-entry-text break-words whitespace-pre-wrap text-control-label leading-relaxed text-fg">{entry.text}</div>}
 			{entry.attachments?.length ? (
 				<PlainAttachments attachments={entry.attachments} />
 			) : null}

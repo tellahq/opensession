@@ -103,9 +103,9 @@ export function ConversationPane({
 		<div className={`flex-1 min-h-0 overflow-y-auto ${className || ""}`}>
 			<div className="w-full max-w-[760px] mx-auto px-5 py-6">
 				{loading && !thread ? (
-					<div className="panel-placeholder">Loading ticket…</div>
+					<div className="panel-placeholder px-4 py-12 text-center text-control-label text-faint">Loading ticket…</div>
 				) : error && !thread ? (
-					<div className="panel-placeholder">
+					<div className="panel-placeholder px-4 py-12 text-center text-control-label text-faint">
 						Couldn't load this Plain thread: {error}
 					</div>
 				) : (
@@ -124,13 +124,13 @@ export function ConversationPane({
 							)}
 							{status && (
 								<span
-									className={`plain-status plain-status-${status.toLowerCase()}`}
+									className={`plain-status plain-status-${status.toLowerCase()} shrink-0 rounded-full bg-active px-1.5 py-0.5 text-meta font-bold text-faint ${status === "TODO" ? "bg-accent-soft text-accent" : status === "DONE" ? "bg-green-soft text-green" : "bg-yellow/20 text-yellow"}`}
 								>
 									{STATUS_LABEL[status] || status}
 								</span>
 							)}
 							<a
-								className="plain-open ml-auto shrink-0"
+								className="plain-open ml-auto shrink-0 whitespace-nowrap text-meta font-semibold text-accent no-underline hover:underline"
 								href={plainThreadUrl(threadId)}
 								target="_blank"
 								rel="noreferrer"
@@ -193,7 +193,7 @@ export function ConversationPane({
 
 						<div className="flex flex-col gap-3 mt-5">
 							{thread && thread.entries.length === 0 ? (
-								<div className="plain-loading">
+								<div className="plain-loading mt-5 text-center text-control-label text-faint">
 									No messages in this thread yet.
 								</div>
 							) : (

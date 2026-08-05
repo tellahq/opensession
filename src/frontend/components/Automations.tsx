@@ -23,6 +23,7 @@ import { AGENT_NAME, PUBLIC_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib
 import { Button } from "../ui/button";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { InlineAlert } from "../ui/state";
+import { cn } from "../ui/cn";
 
 interface AutomationRun {
   at: string;
@@ -201,14 +202,14 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   }
 
   return (
-    <div className={`automations-page ${sel ? "automations-page-has-detail" : ""}`}>
-    <div className="automations-page-main">
-    <div className="automations-page-inner">
+    <div className="relative flex min-h-0 min-w-0 flex-1">
+    <div className={cn("min-w-0 flex-1 overflow-y-auto px-6 pb-[60px] pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-5", sel && "basis-[340px] grow-0 border-r border-line px-3.5 pb-10 pt-4 max-[900px]:hidden")}>
+    <div className={cn("mx-auto max-w-[860px]", sel && "max-w-none")}>
       <PageHeader
         className={`max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5 ${sel ? "mb-3.5 items-center" : ""}`}
       >
         <div>
-          <PageTitle className={sel ? "text-base" : undefined}>Automations</PageTitle>
+          <PageTitle className={sel ? "text-body" : undefined}>Automations</PageTitle>
           <PageDescription className={sel ? "hidden" : undefined}>
             Scheduled {AGENT_NAME} sessions — cron runs in UTC (server time).
           </PageDescription>
@@ -230,38 +231,38 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
       {loading ? (
         <div className="loading">Loading…</div>
       ) : automations.length === 0 && !showModal ? (
-        <div className="automations-empty">
+        <div className="px-4 py-12 text-center text-dim">
           <p>No automations yet.</p>
-          <p className="automations-empty-sub">
+          <p className="text-control-label text-faint">
             Schedule recurring work: daily PR-review sweeps, dependency checks, weekly
             changelog drafts, flaky-test hunts…
           </p>
         </div>
       ) : (
-        <div className="automations-table">
+        <div className="flex flex-col border-t border-line">
           {automations.map((a) => {
             const running = a.isRunning || a.lastRunStatus === "running";
             return (
               <button
                 key={a.id}
-                className={`automations-row ${sel?.id === a.id ? "active" : ""} ${a.enabled ? "" : "automations-row-off"}`}
+                className={cn("flex w-full min-w-0 items-center gap-3 border-0 border-b border-line bg-transparent px-2.5 py-2.5 text-left text-fg hover:bg-hover max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3", sel?.id === a.id && "bg-active", !a.enabled && "[&_.automation-row-main]:opacity-55")}
                 onClick={() => onSelect(a.id)}
               >
                 {/* Inner controls are spans — the row itself is a button. */}
                 <span
                   role="button"
-                  className={`auto-toggle ${a.enabled ? "auto-toggle-on" : ""}`}
+                  className={cn("relative h-[19px] w-[34px] shrink-0 rounded-full border border-line-strong bg-active p-0 transition-colors", a.enabled && "border-green bg-green-soft [&>span]:translate-x-[15px] [&>span]:bg-green")}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleToggle(a);
                   }}
                   title={a.enabled ? "Disable" : "Enable"}
                 >
-                  <span className="auto-toggle-knob" />
+                  <span className="absolute left-0.5 top-0.5 size-[13px] rounded-full bg-faint transition-[transform,background-color]" />
                 </span>
-                <span className="automations-row-main">
-                  <span className="automations-row-name">{a.name}</span>
-                  <span className="automations-row-trigger">{triggerSummary(a)}</span>
+                <span className="automation-row-main flex min-w-0 flex-1 flex-col gap-px">
+                  <span className="truncate text-body font-semibold">{a.name}</span>
+                  <span className="truncate font-mono text-meta text-faint">{triggerSummary(a)}</span>
                 </span>
                 {running ? (
                   <span className="working-pill">
@@ -269,20 +270,20 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                   </span>
                 ) : a.lastRunStatus === "ok" ? (
                   <span
-                    className="auto-status-ok"
+                    className="text-green"
                     title={`Last run ok${a.lastRunAt ? ` — ${relativeTime(a.lastRunAt)}` : ""}`}
                   >
                     ✓
                   </span>
                 ) : a.lastRunStatus === "error" ? (
-                  <span className="auto-status-err" title={a.lastRunError || "Last run failed"}>
+                  <span className="text-red" title={a.lastRunError || "Last run failed"}>
                     ✗
                   </span>
                 ) : null}
-                <span className="automations-row-graph">
+                <span className="flex shrink-0 max-[560px]:hidden">
                   {(a.runs?.length ?? 0) > 0 && <TriggerGraph runs={a.runs!} compact />}
                 </span>
-                <span className="automations-row-next">
+                <span className="w-[84px] shrink-0 text-right text-label text-faint max-[560px]:hidden">
                   {!a.enabled ? "off" : a.nextRunAt ? `next ${formatNext(a.nextRunAt)}` : ""}
                 </span>
               </button>
@@ -294,10 +295,10 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
     </div>
 
       {sel && (
-        <aside className="automations-drawer">
-          <div className="automations-drawer-head">
+        <aside className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-line bg-panel max-[900px]:border-l-0">
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
             <button
-              className="automations-drawer-back"
+              className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.5 border-0 bg-transparent px-1.5 py-1 text-body font-medium text-fg max-[900px]:inline-flex"
               onClick={() => onSelect("")}
               title="Back to automations"
             >
@@ -306,11 +307,11 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               </svg>
               Automations
             </button>
-            <span className="automations-drawer-title">
+            <span className="min-w-0 truncate text-control-label font-semibold">
               {editMode ? `Edit — ${sel.name}` : sel.name}
             </span>
             {!editMode && (
-              <div className="automations-drawer-actions">
+              <div className="ml-auto flex shrink-0 gap-1.5">
                 <Button
                   size="sm"
                   className="border-line-strong bg-transparent shadow-none hover:bg-transparent"
@@ -332,7 +333,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               </div>
             )}
             <button
-              className="automations-drawer-close"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-dim hover:bg-hover hover:text-fg max-[900px]:hidden"
               onClick={() => onSelect("")}
               title="Close"
             >
@@ -341,9 +342,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               </svg>
             </button>
           </div>
-          <div className="automations-drawer-body">
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pb-10 pt-[18px]">
             {editMode ? (
-              <div className="automation-form automation-form-inline">
+              <div>
                 <AutomationForm
                   key={sel.id}
                   kind={sel.slackWatch?.channel ? "watch" : "classic"}
@@ -362,13 +363,13 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               <>
                 <div className="flex items-center gap-2.5">
                   <button
-                    className={`auto-toggle ${sel.enabled ? "auto-toggle-on" : ""}`}
+                    className={cn("relative h-[19px] w-[34px] shrink-0 rounded-full border border-line-strong bg-active p-0 transition-colors", sel.enabled && "border-green bg-green-soft [&>span]:translate-x-[15px] [&>span]:bg-green")}
                     onClick={() => handleToggle(sel)}
                     title={sel.enabled ? "Disable" : "Enable"}
                   >
-                    <span className="auto-toggle-knob" />
+                    <span className="absolute left-0.5 top-0.5 size-[13px] rounded-full bg-faint transition-[transform,background-color]" />
                   </button>
-                  <span className="text-dim text-[13px]">
+                  <span className="text-dim text-control-label">
                     {sel.enabled ? "Enabled" : "Disabled"}
                   </span>
                   {(sel.isRunning || sel.lastRunStatus === "running") && (
@@ -384,21 +385,21 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 </div>
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Instructions</div>
-                  <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim whitespace-pre-wrap">
+                  <div className="mb-1.5 text-label font-semibold text-faint">Instructions</div>
+                  <div className="whitespace-pre-wrap rounded-panel border border-line bg-surface px-3.5 py-3 text-control-label leading-relaxed text-dim">
                     {sel.prompt}
                   </div>
                 </div>
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Configuration</div>
-                  <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-[13px]">
+                  <div className="mb-1.5 text-label font-semibold text-faint">Configuration</div>
+                  <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-control-label">
                     <DetailKey>Trigger</DetailKey>
                     <span className="text-dim min-w-0">
                       {sel.slackWatch?.channel ? (
                         <>
                           watches{" "}
-                          <span className="automation-cron automation-event">
+                            <span className="rounded-sm bg-active px-1.5 py-px font-mono text-meta">
                             #{sel.slackWatch.channel}
                           </span>{" "}
                           — one run per top-level message
@@ -409,7 +410,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                             <>
                               {scheduleLabel(sel.schedule) &&
                                 `${scheduleLabel(sel.schedule)} · `}
-                              <span className="automation-cron" title="Cron, UTC">
+                              <span className="rounded-sm bg-active px-1.5 py-px font-mono text-meta" title="Cron, UTC">
                                 {sel.schedule}
                               </span>
                             </>
@@ -487,20 +488,20 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 </div>
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Activity</div>
+                  <div className="mb-1.5 text-label font-semibold text-faint">Activity</div>
                   {sel.lastRunAt ? (
                     <div className="text-dim text-supporting">
                       last run {relativeTime(sel.lastRunAt)}
                       {sel.lastTrigger ? ` via ${sel.lastTrigger}` : ""}
-                      {sel.lastRunStatus === "ok" && <span className="auto-status-ok"> ✓</span>}
+                      {sel.lastRunStatus === "ok" && <span className="text-green"> ✓</span>}
                       {sel.lastRunStatus === "error" && (
-                        <span className="auto-status-err" title={sel.lastRunError}> ✗</span>
+                        <span className="text-red" title={sel.lastRunError}> ✗</span>
                       )}
                       {sel.lastRunSessionId && (
                         <>
                           {" · "}
                           <a
-                            className="automation-session-link"
+                            className="text-accent hover:underline"
                             onClick={(e) => {
                               e.preventDefault();
                               onOpenSession(sel.lastRunSessionId!);
@@ -634,7 +635,7 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
         })}
       </svg>
       {!compact && (
-        <span className="pb-px text-meta leading-none text-faint">
+		<span className="pb-px text-meta leading-none text-faint">
           {total} run{total === 1 ? "" : "s"} · last {GRAPH_DAYS}d
         </span>
       )}
@@ -684,7 +685,7 @@ function RunLedger({
             </span>
           )}
           <a
-            className="automation-session-link ml-auto shrink-0"
+            className="ml-auto shrink-0 text-accent hover:underline"
             href={`${BASE_PATH}/session/${r.sessionId}`}
             onClick={(e) => {
               e.preventDefault();
@@ -695,7 +696,7 @@ function RunLedger({
           </a>
           {r.status !== "running" && (
             <button
-              className="automation-session-link shrink-0 bg-transparent border-none p-0 font-[inherit] text-label"
+              className="shrink-0 border-0 bg-transparent p-0 font-[inherit] text-label text-accent hover:underline"
               title={
                 r.trigger === "event" || r.trigger === "webhook"
                   ? "Start a fresh run replaying this run's triggering event"
@@ -719,7 +720,7 @@ function WebhookUrl({ id, secret }: { id: string; secret: string }) {
 
   return (
     <span className="flex items-center gap-2 min-w-0">
-      <span className="automation-webhook-url" title={url}>
+      <span className="min-w-0 flex-1 truncate font-mono text-meta text-dim" title={url}>
         POST {url.replace(secret, secret.slice(0, 6) + "…")}
       </span>
       <Button
@@ -784,7 +785,7 @@ function CreateAutomationModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="automation-form w-full max-w-[680px] my-auto shadow-2xl">
+      <div className="w-full max-w-[680px] my-auto rounded-panel border border-line-strong bg-panel p-[18px] shadow-2xl">
         {step === "type" ? (
           <TypeChooser
             onPick={(draft, s) => {
@@ -838,10 +839,10 @@ function TypeChooser({
   }
 
   return (
-    <>
+    <div className="flex flex-col gap-3.5 [&_label]:flex [&_label]:flex-1 [&_label]:flex-col [&_label]:gap-1.5 [&_label]:text-supporting [&_label]:font-medium [&_label]:text-dim [&_input]:rounded-md [&_input]:border [&_input]:border-line-strong [&_input]:bg-raised [&_input]:px-3 [&_input]:py-2 [&_input]:text-control-label [&_input]:text-fg [&_input]:outline-none [&_input:focus]:border-accent [&_select]:rounded-md [&_select]:border [&_select]:border-line-strong [&_select]:bg-raised [&_select]:px-3 [&_select]:py-2 [&_select]:text-control-label [&_select]:text-fg [&_select]:outline-none [&_select:focus]:border-accent [&_textarea]:resize-y [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-line-strong [&_textarea]:bg-raised [&_textarea]:px-3 [&_textarea]:py-2 [&_textarea]:text-control-label [&_textarea]:leading-relaxed [&_textarea]:text-fg [&_textarea]:outline-none [&_textarea:focus]:border-accent">
       <div>
-        <div className="automation-form-title">Create automation</div>
-        <div className="text-dim text-[13px] mt-0.5">
+        <div className="text-body font-semibold">Create automation</div>
+        <div className="mt-0.5 text-control-label text-dim">
           Choose the type of automation you want to create.
         </div>
       </div>
@@ -851,7 +852,7 @@ function TypeChooser({
           className="text-left bg-surface border border-line rounded-panel px-4 py-3.5 cursor-pointer hover:border-line-strong hover:bg-hover transition-colors"
           onClick={() => onPick(null, "classic")}
         >
-          <div className="text-fg text-[14px] font-medium mb-1">Classical automation</div>
+          <div className="text-fg text-body font-medium mb-1">Classical automation</div>
           <div className="text-dim text-supporting leading-snug">
             Trigger {AGENT_NAME} sessions based on schedules, internal events, and webhooks.
           </div>
@@ -860,7 +861,7 @@ function TypeChooser({
           className="text-left bg-surface border border-line rounded-panel px-4 py-3.5 cursor-pointer hover:border-line-strong hover:bg-hover transition-colors"
           onClick={() => onPick(null, "watch")}
         >
-          <div className="text-fg text-[14px] font-medium mb-1">Watch a channel</div>
+          <div className="text-fg text-body font-medium mb-1">Watch a channel</div>
           <div className="text-dim text-supporting leading-snug">
             {AGENT_NAME} triages every incoming message in a Slack channel, using the
             channel's memory as standing context.
@@ -904,8 +905,8 @@ function TypeChooser({
                 onClick={() => onPick(t, "classic")}
               >
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-fg text-[13px] font-medium">{t.name}</span>
-                  <span className="ml-auto shrink-0 text-meta tracking-[-0.01em] text-faint">
+					<span className="text-control-label font-medium text-fg">{t.name}</span>
+					<span className="ml-auto shrink-0 text-meta tracking-[-0.01em] text-faint">
                     {CATEGORY_LABELS[t.category] || t.category}
                   </span>
                 </div>
@@ -916,12 +917,12 @@ function TypeChooser({
         </div>
       )}
 
-      <div className="automation-form-actions">
-        <Button size="sm" className="px-3 text-[13px]" onClick={onClose}>
+        <div className="flex justify-end gap-2.5">
+        <Button size="sm" className="px-3 text-control-label" onClick={onClose}>
           Cancel
         </Button>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -971,7 +972,7 @@ function McpPicker({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2">
-        <span className="text-fg text-[13px] font-medium">MCPs</span>
+        <span className="text-fg text-control-label font-medium">MCPs</span>
         <span className="text-dim text-label">
           Select which connectors this automation's runs can use
         </span>
@@ -988,7 +989,7 @@ function McpPicker({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search MCPs…"
-            className="flex-1 bg-transparent border-0 outline-none text-[13px] text-fg placeholder:text-faint"
+            className="flex-1 bg-transparent border-0 outline-none text-control-label text-fg placeholder:text-faint"
             style={{ border: "none", padding: 0, background: "transparent" }}
           />
           <span className="text-faint text-[11px] shrink-0">
@@ -1155,7 +1156,7 @@ function AutomationForm({
   }
 
   return (
-    <>
+    <div className="flex flex-col gap-3.5 [&_label]:flex [&_label]:flex-1 [&_label]:flex-col [&_label]:gap-1.5 [&_label]:text-supporting [&_label]:font-medium [&_label]:text-dim [&_input]:rounded-md [&_input]:border [&_input]:border-line-strong [&_input]:bg-raised [&_input]:px-3 [&_input]:py-2 [&_input]:text-control-label [&_input]:text-fg [&_input]:outline-none [&_input:focus]:border-accent [&_select]:rounded-md [&_select]:border [&_select]:border-line-strong [&_select]:bg-raised [&_select]:px-3 [&_select]:py-2 [&_select]:text-control-label [&_select]:text-fg [&_select]:outline-none [&_select:focus]:border-accent [&_textarea]:resize-y [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-line-strong [&_textarea]:bg-raised [&_textarea]:px-3 [&_textarea]:py-2 [&_textarea]:text-control-label [&_textarea]:leading-relaxed [&_textarea]:text-fg [&_textarea]:outline-none [&_textarea:focus]:border-accent">
       {!inline && (
         <div className="flex items-center gap-2">
           {onBack && (
@@ -1163,7 +1164,7 @@ function AutomationForm({
               ←
             </Button>
           )}
-          <div className="automation-form-title" style={{ marginBottom: 0 }}>
+          <div className="text-body font-semibold">
             {initial
               ? `Edit "${initial.name}"`
               : isWatch
@@ -1191,7 +1192,7 @@ function AutomationForm({
             placeholder="C0123456789 (channel id)"
             className="mono-input"
           />
-          <span className="mt-1 text-meta leading-snug text-faint">
+			<span className="mt-1 text-meta leading-snug text-faint">
             Invite @michael to the channel first — the bot only receives messages
             for channels it's a member of. One run per top-level message; thread
             replies don't re-trigger. Channel id is in the channel's “About” tab.
@@ -1200,7 +1201,7 @@ function AutomationForm({
       ) : (
         <div className="flex flex-col gap-1.5">
           <div>
-            <span className="text-fg text-[13px] font-medium">Triggers</span>
+            <span className="text-fg text-control-label font-medium">Triggers</span>
             <span className="text-dim text-label ml-2">
               Run the automation when any of these conditions are met
             </span>
@@ -1238,7 +1239,7 @@ function AutomationForm({
                 ))}
               </select>
             </label>
-            <div className="text-meta text-faint">
+			<div className="text-meta text-faint">
               Every automation also gets a secret webhook URL you can POST to —
               shown on its card after creation.
             </div>
@@ -1273,7 +1274,7 @@ function AutomationForm({
       </div>
 
       {showAdvanced && (
-        <div className="automation-form-row">
+        <div className="flex gap-3.5">
           <label>
             Mode
             <select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
@@ -1347,8 +1348,8 @@ function AutomationForm({
 
       {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
-      <div className="automation-form-actions">
-        <Button size="sm" className="px-3 text-[13px]" onClick={onClose} disabled={saving}>
+      <div className="flex justify-end gap-2.5">
+        <Button size="sm" className="px-3 text-control-label" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button
@@ -1361,6 +1362,6 @@ function AutomationForm({
           {saving ? "Saving…" : initial ? "Save changes" : "Create automation"}
         </Button>
       </div>
-    </>
+    </div>
   );
 }

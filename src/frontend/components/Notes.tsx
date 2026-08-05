@@ -26,6 +26,7 @@ import {
 import type { WSClientMessage, WSServerMessage } from "../lib/types";
 import type { MentionKind } from "./NoteEditor";
 import { PRODUCT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
+import { cn } from "../ui/cn";
 
 const NoteEditor = lazy(() => import("./NoteEditor"));
 
@@ -239,14 +240,14 @@ export function Notes({
 	}
 
 	return (
-		<div className="notes">
-			<div className={`notes-nav wiki-nav ${navOpen ? "wiki-nav-open" : ""}`}>
+        <div className="flex min-h-0 flex-1">
+            <div className={cn("flex min-h-0 w-[300px] shrink-0 flex-col border-r border-line bg-raised max-[920px]:fixed max-[920px]:inset-y-[var(--header-h)] max-[920px]:left-0 max-[920px]:z-30 max-[920px]:w-[min(320px,88vw)] max-[920px]:-translate-x-full max-[920px]:shadow-[12px_0_32px_rgba(0,0,0,0.5)] max-[920px]:transition-transform", navOpen && "max-[920px]:translate-x-0")}>
 				{/* Notes section (writable, shared) */}
-				<div className="notes-section">
-					<div className="notes-section-head">
+                <div className="flex min-h-0 flex-col">
+                    <div className="flex items-center justify-between px-3.5 pb-1 pt-2.5 text-meta font-bold text-faint">
 						<span>Notes</span>
 						<button
-							className="notes-add"
+                            className="rounded-md border-0 bg-transparent px-1.5 py-0.5 text-body leading-none text-dim hover:bg-hover hover:text-fg"
 							title="New note"
 							onClick={() => setCreating((c) => !c)}
 						>
@@ -255,7 +256,7 @@ export function Notes({
 					</div>
 					{creating && (
 						<input
-							className="notes-new-input"
+                            className="mx-2.5 mb-1.5 mt-0.5 rounded-md border border-line-strong bg-panel px-2 py-1.5 text-control-label text-fg outline-none focus:border-accent"
 							autoFocus
 							placeholder="Note title…"
 							value={newTitle}
@@ -270,23 +271,23 @@ export function Notes({
 							onBlur={() => doCreate()}
 						/>
 					)}
-					<div className="notes-list">
+                    <div className="max-h-[38vh] overflow-y-auto px-1.5 pb-1.5">
 						{notes.length === 0 && !creating ? (
-							<div className="notes-empty">No notes yet</div>
+                            <div className="px-3.5 py-1.5 text-label text-faint">No notes yet</div>
 						) : (
 							notes.map((n) => (
 								<div
 									key={n.id}
-									className={`notes-item ${selNoteId === n.id ? "notes-item-active" : ""}`}
+                                    className={cn("group flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-dim hover:bg-hover hover:text-fg", selNoteId === n.id && "bg-active text-fg")}
 									onClick={() => {
 										setNavOpen(false);
 										onSelectNote(n.id);
 									}}
 									title={n.title}
 								>
-									<span className="notes-item-title">{n.title}</span>
+                                    <span className="flex-1 truncate text-control-label">{n.title}</span>
 									<span
-										className={`notes-item-pin ${pinnedNoteIds.has(n.id) ? "on" : ""}`}
+                                        className={cn("px-0.5 text-label text-faint opacity-0 group-hover:opacity-80", pinnedNoteIds.has(n.id) && "text-yellow opacity-100")}
 										title={pinnedNoteIds.has(n.id) ? "Unpin tab" : "Pin as tab"}
 										onClick={(e) => {
 											e.stopPropagation();
@@ -296,7 +297,7 @@ export function Notes({
 										{pinnedNoteIds.has(n.id) ? "★" : "☆"}
 									</span>
 									<span
-										className="notes-item-del"
+                                        className="px-0.5 text-label text-faint opacity-0 group-hover:opacity-80 hover:text-red"
 										title="Delete note"
 										onClick={(e) => doDelete(n.id, e)}
 									>
@@ -309,24 +310,24 @@ export function Notes({
 				</div>
 
 				{/* Docs section (read-only wiki) */}
-				<div className="notes-section notes-section-docs">
-					<div className="notes-section-head">
+                <div className="mt-1.5 flex min-h-0 flex-1 flex-col border-t border-line pt-1">
+                    <div className="flex items-center justify-between px-3.5 pb-1 pt-2.5 text-meta font-bold text-faint">
 						<span>Docs</span>
 					</div>
-					<div className="wiki-search-wrap">
+                    <div className="border-b border-line p-3">
 						<input
-							className="wiki-search"
+                            className="w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-control-label text-fg outline-none placeholder:text-faint focus:border-accent"
 							placeholder="Search notes + docs…"
 							value={query}
 							onChange={(e) => setQuery(e.target.value)}
 						/>
 					</div>
 					{hits !== null ? (
-						<div className="wiki-results">
+                        <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-6 pt-2">
 							{noteHits.map((h) => (
 								<button
 									key={`note-${h.id}`}
-									className="wiki-result"
+                                    className="flex w-full min-w-0 flex-col gap-px rounded-md border-0 bg-transparent px-2.5 py-2 text-left hover:bg-hover"
 									onClick={() => {
 										setQuery("");
 										setHits(null);
@@ -334,29 +335,29 @@ export function Notes({
 										onSelectNote(h.id);
 									}}
 								>
-									<span className="wiki-result-title">📝 {h.title}</span>
-									<span className="wiki-result-snippet">{h.snippet}</span>
-									<span className="wiki-result-path">note</span>
+                                    <span className="text-control-label font-semibold text-fg">📝 {h.title}</span>
+                                    <span className="truncate text-label text-dim">{h.snippet}</span>
+                                    <span className="truncate font-mono text-meta text-faint">note</span>
 								</button>
 							))}
 							{hits.length === 0 && noteHits.length === 0 ? (
-								<div className="wiki-empty">No results</div>
+                                <div className="px-0 py-6 text-center text-control-label text-faint">No results</div>
 							) : (
 								hits.map((h, i) => (
 									<button
 										key={i}
-										className="wiki-result"
+                                        className="flex w-full min-w-0 flex-col gap-px rounded-md border-0 bg-transparent px-2.5 py-2 text-left hover:bg-hover"
 										onClick={() => openDoc(h.path)}
 									>
-										<span className="wiki-result-title">{h.title}</span>
-										<span className="wiki-result-snippet">{h.snippet}</span>
-										<span className="wiki-result-path">{h.path}</span>
+                                        <span className="text-control-label font-semibold text-fg">{h.title}</span>
+                                        <span className="truncate text-label text-dim">{h.snippet}</span>
+                                        <span className="truncate font-mono text-meta text-faint">{h.path}</span>
 									</button>
 								))
 							)}
 						</div>
 					) : (
-						<div className="wiki-tree">
+                        <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-4 pt-1.5">
 							{paths.length > 0 && (
 								<WikiTree paths={paths} docPath={selDocPath} onOpen={openDoc} />
 							)}
@@ -366,10 +367,10 @@ export function Notes({
 			</div>
 
 			<div
-				className={`notes-content wiki-content ${selNoteId ? "notes-editing" : ""}`}
+                className={cn("min-w-0 flex-1 overflow-y-auto px-8 pb-20 pt-6 max-[920px]:px-4 max-[920px]:pb-[60px] max-[920px]:pt-4", selNoteId && "flex overflow-hidden p-0")}
 			>
 				<button
-					className="wiki-nav-toggle"
+                    className="mb-3.5 hidden rounded-md border border-line-strong bg-panel px-3 py-1.5 text-control-label text-dim max-[920px]:inline-block"
 					onClick={() => setNavOpen(!navOpen)}
 				>
 					☰ Browse
@@ -392,7 +393,7 @@ export function Notes({
 						<div className="loading">Loading…</div>
 					) : (
 						<>
-							<div className="wiki-doc-path">{selDocPath}</div>
+                            <div className="mb-4 font-mono text-meta text-faint">{selDocPath}</div>
 							<div
 								className="markdown wiki-doc"
 								dangerouslySetInnerHTML={{ __html: docHtml }}
@@ -400,7 +401,7 @@ export function Notes({
 						</>
 					)
 				) : (
-					<div className="wiki-welcome">
+                    <div className="mx-auto my-[60px] max-w-[560px] text-center text-dim">
 						<h2>Notes</h2>
 						<p>
 							Shared, real-time collaborative notes — todos and longer ideas,
@@ -408,7 +409,7 @@ export function Notes({
 							sessions/notes/docs, pin a note as a tab, or prompt Haiku to
 							update it.
 						</p>
-						<p className="wiki-welcome-hint">
+                        <p className="text-control-label text-faint">
 							The <b>Docs</b> section below is the read-only knowledge base from{" "}
 							<code>the default repository's docs</code>.
 						</p>
@@ -529,31 +530,31 @@ function NotePane({
 	}
 
 	return (
-		<div className="note-pane">
-			<div className="note-pane-bar">
-				<span className="note-pane-id">{noteId}</span>
+        <div className="flex h-full min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-3.5 py-2">
+                <span className="font-mono text-label text-faint">{noteId}</span>
 				{others.length > 0 && (
 					<span
-						className="note-presence"
+                        className="inline-flex items-center gap-1"
 						title={`Also here: ${others.join(", ")}`}
 					>
 						{others.slice(0, 4).map((v, i) => (
-							<span key={i} className="note-presence-dot">
+                            <span key={i} className="inline-flex size-[18px] items-center justify-center rounded-full bg-purple text-meta font-bold text-white">
 								{v.charAt(0).toUpperCase()}
 							</span>
 						))}
-						<span className="note-presence-label">editing</span>
+                        <span className="ml-0.5 text-meta text-dim">editing</span>
 					</span>
 				)}
 				<button
-					className="note-share"
+                    className="ml-auto whitespace-nowrap rounded-md border border-line-strong bg-panel px-2.5 py-1 text-label text-dim hover:bg-hover hover:text-fg"
 					onClick={togglePreview}
 					title={preview !== null ? "Back to editing" : "Preview the rendered markdown"}
 				>
 					{preview !== null ? "✎ Edit" : "◫ Preview"}
 				</button>
 				<button
-					className="note-share"
+                    className="whitespace-nowrap rounded-md border border-line-strong bg-panel px-2.5 py-1 text-label text-dim hover:bg-hover hover:text-fg"
 					onClick={discuss}
 					disabled={discussing}
 					title="Start an Ask session seeded with this note"
@@ -561,7 +562,7 @@ function NotePane({
 					{discussing ? "Starting…" : "💬 Discuss"}
 				</button>
 				<button
-					className="note-share"
+                    className="whitespace-nowrap rounded-md border border-line-strong bg-panel px-2.5 py-1 text-label text-dim hover:bg-hover hover:text-fg"
 					onClick={shareNote}
 					title="Copy a link to this note"
 				>
@@ -569,7 +570,7 @@ function NotePane({
 				</button>
 			</div>
 
-			<div className="note-editor-wrap">
+            <div className="flex min-h-0 flex-1 overflow-hidden">
 				{preview !== null ? (
 					<div
 						className="markdown wiki-doc overflow-y-auto px-[18px] py-4"
@@ -597,7 +598,7 @@ function NotePane({
 					{backlinks.map((b) => (
 						<button
 							key={b.id}
-							className="note-chip note-chip-note cursor-pointer border-0"
+                            className="inline-flex cursor-pointer items-center gap-px whitespace-nowrap rounded-full border border-green/30 bg-green-soft px-1.5 py-px text-label text-green hover:brightness-110"
 							onClick={() => onOpenMention("note", b.id)}
 							title={`Open “${b.title}”`}
 						>
@@ -608,28 +609,28 @@ function NotePane({
 			)}
 
 			<div
-				className={`note-prompt ${promptOpen ? "" : "note-prompt-collapsed"} ${running ? "note-prompt-running" : ""}`}
+                className="shrink-0 border-t border-line bg-raised px-2.5 pb-2 pt-1.5"
 			>
 				<button
-					className="note-prompt-toggle"
+                    className={cn("inline-flex items-center gap-1.5 border-0 bg-transparent py-px text-meta text-faint hover:text-dim", running && "text-accent")}
 					onClick={() => setPromptOpen((o) => !o)}
 					title={promptOpen ? "Collapse" : "Expand"}
 				>
-					<span className={`note-prompt-caret ${promptOpen ? "open" : ""}`}>
+                    <span className={cn("inline-block transition-transform", promptOpen && "rotate-90")}>
 						›
 					</span>
 					prompt
-					{running && <span className="note-spinner" />}
+                    {running && <span className="inline-block size-[11px] animate-spin rounded-full border-2 border-line-strong border-t-accent" />}
 				</button>
 				{promptOpen &&
 					(running ? (
-						<div className="note-prompt-loading">
-							<span className="note-spinner note-spinner-lg" />
+                        <div className="flex items-center gap-2 rounded-md border border-line-strong bg-panel px-3 py-2 text-control-label text-dim">
+                            <span className="inline-block size-[15px] animate-spin rounded-full border-2 border-line-strong border-t-accent" />
 							<span>Haiku is updating the note…</span>
 						</div>
 					) : (
 						<textarea
-							className="note-prompt-input"
+                            className="block h-[30px] min-h-[30px] max-h-[140px] w-full resize-none rounded-md border border-line-strong bg-panel px-2.5 py-1.5 text-control-label leading-snug text-fg outline-none focus:border-accent"
 							placeholder="Ask Haiku to update this note… (↵ to run)"
 							value={prompt}
 							onChange={(e) => {
@@ -648,7 +649,7 @@ function NotePane({
 							}}
 						/>
 					))}
-				{error && <div className="note-prompt-error">{error}</div>}
+                {error && <div className="mt-1 text-label text-red">{error}</div>}
 			</div>
 		</div>
 	);

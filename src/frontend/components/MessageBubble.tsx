@@ -53,6 +53,11 @@ export function ClampedBody({
 	entry?: TranscriptEntry;
 	sessionId?: string;
 }) {
+	const bubbleStyles = className.includes("msg-body-user")
+		? "inline-block max-w-[min(600px,90%)] self-end rounded-panel bg-panel px-3.5 py-2.5 text-fg"
+		: className.includes("msg-body-human")
+			? "inline-block max-w-[min(600px,90%)] self-end rounded-lg bg-[rgb(31_158_138_/_0.12)] px-3.5 py-[9px] text-fg"
+			: "text-fg";
 	const wireClamped = !!entry?.contentClamped;
 	const fullLength = entry?.contentLength ?? content.length;
 	const isLong = wireClamped || content.length > EAGER_MD_CHARS;
@@ -100,7 +105,7 @@ export function ClampedBody({
 	return (
 		<>
 			{asMarkdown ? (
-				<MarkdownBody className={className} html={html || ""} />
+				<MarkdownBody className={`flex flex-col items-stretch text-body leading-6 break-words ${bubbleStyles} ${className}`} html={html || ""} />
 			) : (
 				// A <pre> only for the preserved whitespace: this branch renders a
 				// message too long for the markdown pass, which is prose, not code.
@@ -149,11 +154,11 @@ function CollapsibleSystemNotice({
 }) {
 	const [open, setOpen] = useState(false);
 	return (
-		<div className="msg msg-system" data-eid={entry.id}>
+		<div className="msg msg-system mb-3 flex w-full max-w-[var(--chat-col)] flex-col text-center" data-eid={entry.id}>
 			<button
 				type="button"
 				onClick={() => setOpen((v) => !v)}
-				className="msg-system-text cursor-pointer [font-family:inherit]"
+				className="msg-system-text inline-block max-w-[min(560px,100%)] self-center rounded-lg bg-panel px-3.5 py-1.5 text-center text-supporting leading-[1.45] text-faint cursor-pointer [font-family:inherit]"
 			>
 				{label} ·{" "}
 				<span className="font-medium text-dim">
@@ -255,7 +260,7 @@ function BubbleHoverTime({ ts }: { ts?: string }) {
 	if (!ts) return null;
 	const label = fullTime(ts);
 	if (!label) return null;
-	return <span className="msg-hover-time">{label}</span>;
+	return <span className="msg-hover-time hidden select-none whitespace-nowrap text-meta font-medium text-faint [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity">{label}</span>;
 }
 
 interface Props {
@@ -283,7 +288,7 @@ function EntryImages({
 }) {
 	if (!images || images.length === 0) return null;
 	return (
-		<div className="msg-images">
+		<div className="msg-images mt-1.5 flex flex-wrap gap-2">
 			{images.map((raw, i) => {
 				const src = resolveEntryImageSrc(raw, sessionId);
 				return (
@@ -306,7 +311,7 @@ function EntryImages({
 function EntryVideos({ videos }: { videos?: string[] }) {
 	if (!videos || videos.length === 0) return null;
 	return (
-		<div className="msg-videos">
+		<div className="msg-videos mt-1.5 flex flex-wrap gap-2">
 			{videos.map((src, i) => (
 				<div key={i} className="md-video-wrap">
 					<video
@@ -333,7 +338,7 @@ function extBadge(name: string): string {
 function EntryFiles({ files }: { files?: TranscriptEntry["files"] }) {
 	if (!files || files.length === 0) return null;
 	return (
-		<div className="msg-files">
+		<div className="msg-files mt-1.5 flex flex-wrap gap-2">
 			{files.map((f, i) => (
 				<a
 					key={i}
@@ -446,13 +451,13 @@ export const MessageBubble = React.memo(function MessageBubble({
 						workerReportOpen ? "bg-panel" : "hover:bg-hover",
 					)}
 				>
-					<div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-dim">
+					<div className="flex items-center gap-2 px-2.5 py-1.5 text-label font-medium text-dim">
 						<Button
 							variant="ghost"
 							size="xs"
 							aria-expanded={workerReportOpen}
 							onClick={() => setWorkerReportOpen((open) => !open)}
-							className="min-h-0 min-w-0 flex-1 justify-start gap-1.5 whitespace-normal rounded-md border-0 px-1 py-0.5 text-left font-sans text-xs font-medium hover:bg-transparent"
+							className="min-h-0 min-w-0 flex-1 justify-start gap-1.5 whitespace-normal rounded-md border-0 px-1 py-0.5 text-left font-sans text-label font-medium hover:bg-transparent"
 						>
 							<span
 								className={cn(
@@ -529,13 +534,13 @@ export const MessageBubble = React.memo(function MessageBubble({
 						reviewHandoffOpen ? "bg-panel" : "hover:bg-hover",
 					)}
 				>
-					<div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-dim">
+					<div className="flex items-center gap-2 px-2.5 py-1.5 text-label font-medium text-dim">
 						<Button
 							variant="ghost"
 							size="xs"
 							aria-expanded={reviewHandoffOpen}
 							onClick={() => setReviewHandoffOpen((open) => !open)}
-							className="min-h-0 min-w-0 flex-1 justify-start gap-1.5 whitespace-normal rounded-md border-0 px-1 py-0.5 text-left font-sans text-xs font-medium hover:bg-transparent"
+							className="min-h-0 min-w-0 flex-1 justify-start gap-1.5 whitespace-normal rounded-md border-0 px-1 py-0.5 text-left font-sans text-label font-medium hover:bg-transparent"
 						>
 							<span
 								className={cn(
@@ -584,10 +589,10 @@ export const MessageBubble = React.memo(function MessageBubble({
 	if (entry.type === "user" && humanReply) {
 		return (
 			<div
-				className="msg msg-human"
+				className="msg msg-human mb-[18px] mt-1 flex w-full max-w-[var(--chat-col)] flex-col"
 				data-eid={entry.id}
 			>
-				<div className="msg-label msg-label-human">
+				<div className="msg-label msg-label-human mb-1.5 flex flex-row-reverse items-center gap-[7px] text-meta font-semibold tracking-[-0.01em] text-[#1f9e8a] before:size-[7px] before:shrink-0 before:rounded-full before:bg-[linear-gradient(135deg,#28d3b4,#0f8f7a)]">
 					💬 {humanReply.name} · via Slack
 					<MsgTime ts={entry.timestamp} />
 				</div>
@@ -630,17 +635,17 @@ export const MessageBubble = React.memo(function MessageBubble({
 		// attribution label.
 		return (
 			<div
-				className={cn("msg msg-user", !fromOther && "msg-user-own")}
+				className={cn("msg msg-user mb-[18px] mt-1 flex w-full max-w-[var(--chat-col)] flex-col", !fromOther && "msg-user-own [@media(hover:hover)]:mb-[35px]")}
 				data-eid={entry.id}
 			>
 				{fromOther && (
-					<div className="msg-label msg-label-user">
+					<div className="msg-label msg-label-user mb-1.5 flex flex-row-reverse items-center gap-[7px] text-meta font-semibold tracking-[-0.01em] text-faint before:size-[7px] before:shrink-0 before:rounded-xs before:bg-[#5b7cfa] before:opacity-90">
 						{fromOther}
 						<MsgTime ts={entry.timestamp} />
 					</div>
 				)}
 				{/* One stack anchors the hover time below both the bubble and attachments. */}
-				<div className="msg-user-row">
+				<div className="msg-user-row relative flex min-w-0 flex-col [&_.msg-hover-time]:absolute [&_.msg-hover-time]:right-0 [&_.msg-hover-time]:top-[calc(100%+8px)] [&_.msg-hover-time]:leading-none hover:[&_.msg-hover-time]:opacity-100">
 					{!fromOther && <BubbleHoverTime ts={entry.timestamp} />}
 					{displayContent && (
 						<ClampedBody
@@ -662,7 +667,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 	// the name row was pure noise above each answer.
 	return (
 		<div
-			className="msg msg-assistant"
+			className="msg msg-assistant mb-[18px] flex w-full max-w-[var(--chat-col)] flex-col"
 			data-eid={entry.id}
 		>
 			<ClampedBody

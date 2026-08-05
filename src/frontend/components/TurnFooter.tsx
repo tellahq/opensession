@@ -100,12 +100,12 @@ export const TurnFooter = React.memo(function TurnFooter({
           </Menu.Item>
           <Menu.Separator className="my-1" />
           {/* Touch has no hover, so the time also lives here — menus open on tap. */}
-          <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
+		  <div className="flex items-center gap-2 px-2.5 py-1.5 text-label font-medium text-faint">
             <IconClock size={20} />
             {fullTime(entry.timestamp)}
           </div>
           {entry.model && (
-            <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
+			<div className="flex items-center gap-2 px-2.5 py-1.5 text-label font-medium text-faint">
               <IconSparkle size={20} />
               Written by {messageModelLabel(entry.model)}
             </div>
@@ -147,7 +147,7 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
 }
 
 const BTN =
-  "flex size-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-dim";
+	"flex size-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint transition-colors hover:bg-hover hover:text-dim focus-ring";
 
 /** Friendly name for a per-message model id: opencode ids take their model
  * part, raw API ids drop the date suffix — "opencode/anthropic/claude-sonnet-5"
@@ -207,7 +207,7 @@ function FileChip({ file }: { file: TouchedFile }) {
         </div>
         <div className="max-h-[min(360px,55vh)] overflow-y-auto p-1.5">
           {file.edits.length === 0 ? (
-            <div className="px-1.5 py-2 text-xs text-faint">
+			<div className="px-1.5 py-2 text-label text-faint">
               No captured changes for this file.
             </div>
           ) : (

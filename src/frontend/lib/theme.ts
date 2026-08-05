@@ -1,7 +1,7 @@
 // Appearance theme: follow the OS ("system", the default) or force light/dark.
 // Stored per-browser in localStorage — it's an appearance/device preference, not
 // per-user cloud state like pins — and applied to <html data-theme>, which drives
-// the CSS-variable palette in styles/global.css. Kept in its own module so the
+// the CSS-variable palette in styles/foundation-adapters.css. Kept in its own module so the
 // pre-paint inline script in index.html and the React SettingsMenu share one
 // source of truth for the key and the resolution logic.
 

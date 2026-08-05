@@ -12,6 +12,7 @@ import {
 import { ContextMenu } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import { Tooltip } from "../ui/tooltip";
+import { cn } from "../ui/cn";
 import {
 	PrRowCard,
 	RowCardPopup,
@@ -80,7 +81,10 @@ export function PrRow({
 						render={
 							<button
 								type="button"
-								className={`sidebar-item sidebar-ws-row${selected ? " sidebar-item-selected" : ""}`}
+								className={cn(
+									"sidebar-item sidebar-ws-row group relative mt-0.5 flex w-full items-center gap-[9px] rounded-lg border-0 bg-transparent px-2 py-[9px] pl-2.5 text-left text-fg transition-colors hover:bg-hover max-[720px]:px-2 max-[720px]:py-[13px] max-[720px]:pl-2.5",
+									selected && "sidebar-item-selected !bg-hover-strong",
+								)}
 								onClick={onOpen}
 								onContextMenu={card.close}
 								aria-label={item.pr.title}
@@ -89,13 +93,13 @@ export function PrRow({
 					/>
 				}
 			>
-			<span className="sidebar-rail">
+			<span className="sidebar-rail relative flex size-[22px] shrink-0 items-center justify-center">
 				<PrStateMark item={item} size={18} />
 			</span>
-			<span className="sidebar-item-title">{item.pr.title}</span>
+			<span className="sidebar-item-title min-w-0 flex-1 truncate text-item-title font-medium leading-[1.35] text-dim max-[720px]:text-[16px]">{item.pr.title}</span>
 			{!isPhone && (
 				<span
-					className="sidebar-ws-time"
+					className="sidebar-ws-time ml-auto min-w-[34px] shrink-0 text-right text-meta text-faint"
 					aria-label={new Date(item.pr.updatedAt).toLocaleString()}
 				>
 					{shortTime(item.pr.updatedAt)}
@@ -106,12 +110,12 @@ export function PrRow({
 			    (confirmed). It deliberately does NOT wear the archive icon —
 			    this row sits beside workspace rows whose trailing icon archives
 			    locally, and a mis-click here closes someone's PR on GitHub. */}
-			<span className="sidebar-ws-actions">
+			<span className="sidebar-ws-actions absolute right-[7px] top-1/2 hidden -translate-y-1/2 items-center gap-1 rounded-sm bg-hover shadow-[-6px_0_5px_-2px_var(--bg-hover)] [@media(hover:hover)]:group-hover:inline-flex">
 				<Tooltip label={pinned ? "Unpin pull request" : "Pin pull request"}>
 					<span
 						role="button"
 						tabIndex={0}
-						className={`sidebar-ws-action${pinned ? " is-on" : ""}`}
+						className={cn("sidebar-ws-action inline-flex size-8 items-center justify-center rounded-sm text-faint hover:bg-hover hover:text-fg", pinned && "is-on text-accent")}
 						aria-label={pinned ? "Unpin pull request" : "Pin pull request"}
 						onMouseEnter={card.close}
 						onClick={(e) => {
@@ -132,7 +136,7 @@ export function PrRow({
 					<span
 						role="button"
 						tabIndex={0}
-						className="sidebar-ws-action"
+						className="sidebar-ws-action inline-flex size-8 items-center justify-center rounded-sm text-faint hover:bg-hover hover:text-fg"
 						aria-label="Close pull request"
 						onMouseEnter={card.close}
 						onClick={(e) => {

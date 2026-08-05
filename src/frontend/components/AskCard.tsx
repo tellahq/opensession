@@ -21,7 +21,7 @@ interface Props {
  *
  * Selection is NEUTRAL, not accent: the accent is red here, and filling a
  * chosen row with it read as an error/warning rather than a pick. Same reason
- * the composer keeps its resting border on focus (see .composer in global.css).
+ * the composer keeps its resting border on focus (see the .composer adapter).
  * It also doesn't tint the row at all — the filled indicator carries it, with
  * the hairline stepping up. The indicator is a circle for single-select and a
  * rounded square for multi-select, so the shape says how many answers are

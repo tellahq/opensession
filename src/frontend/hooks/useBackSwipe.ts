@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
  * iOS-style edge-swipe-to-go-back for the mobile page stack, plus a permanent
  * guard against the browser's own history-navigation gesture. On phones the
  * sidebar is the root page and a session/view is pushed over it (see the
- * `.mobile-detail` rules in global.css); overlays (the workspace/right panel,
+ * `.mobile-detail` foundation rules); overlays (the workspace/right panel,
  * the session info page) stack further layers on top. A drag that STARTS near
  * the left edge pulls the topmost active layer's pane to the right under the
  * finger and, past the halfway point, pops it (calls its `onBack`).

@@ -38,10 +38,10 @@ export function PaletteSelect({
 }: Props) {
 	if (isPhone) {
 		return (
-			<div className={className} title={title}>
+			<div className={cn("relative inline-flex min-w-0 items-center", className)} title={title}>
 				{children}
 				<select
-					className="palette-select-overlay"
+					className="palette-select-overlay absolute inset-0 h-full w-full cursor-pointer appearance-none border-0 opacity-0 disabled:cursor-default"
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
 					disabled={disabled}

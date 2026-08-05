@@ -79,7 +79,7 @@ export function SettingsGroupLabel({
  * quiet blocks rather than a stack of outlined boxes.
  *
  * The corner is authored in the chrome's own language — `calc(Npx * var(--rf))`,
- * which global.css bumps under `corner-shape: squircle` — rather than the flat
+ * which the foundation bumps under `corner-shape: squircle` — rather than the flat
  * `rounded-lg` Card ships. A squircle at a flat radius reads visibly squarer
  * than the panels around it; 12px × --rf lands these blocks on the same softness
  * as the rest of the app's large surfaces. */

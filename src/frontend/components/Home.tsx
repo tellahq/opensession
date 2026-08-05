@@ -638,12 +638,12 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
 
         {sections.length === 0 ? (
           <div className="px-2 py-16 text-center">
-            <div className="text-sm font-medium text-fg">
-              {query
-                ? "No matching worktrees"
-                : person === "all"
-                  ? "No pull request worktrees yet"
-                  : `Nothing open for ${personLabel(person)}`}
+			<div className="text-control-label font-medium text-fg">
+				{query
+					? "No matching worktrees"
+					: person === "all"
+						? "No pull request worktrees yet"
+						: `Nothing open for ${personLabel(person)}`}
             </div>
             <div className="mt-1 text-body text-faint">
               {query
@@ -659,11 +659,11 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
               <section key={section.state} className="mb-10">
                 <div className="mb-4 flex items-baseline gap-2 px-2 text-item-title font-semibold text-fg">
                   <span>{section.label}</span>
-                  <span className="text-label font-medium text-faint">{section.rows.length}</span>
-                </div>
-                {section.groups.map(([label, rows]) => (
-                  <div key={label} className="mb-5">
-                    <div className="mb-1.5 flex items-baseline gap-2 px-2 text-label font-medium text-dim">
+					<span className="text-label font-medium text-faint">{section.rows.length}</span>
+				</div>
+				{section.groups.map(([label, rows]) => (
+					<div key={label} className="mb-5">
+						<div className="mb-1.5 flex items-baseline gap-2 px-2 text-label font-medium text-dim">
                       <span>{label}</span>
                       <span className="text-faint">{rows.length}</span>
                     </div>
@@ -696,7 +696,7 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
                               <span className="truncate">{row.branch}</span>
                             </span>
                           </span>
-                          <span className="justify-self-end text-label max-[720px]:hidden">
+								<span className="justify-self-end text-label max-[720px]:hidden">
                             {row.additions !== undefined && (
                               <span className="text-green">+{compactDiff(row.additions)}</span>
                             )}
@@ -704,7 +704,7 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
                               <span className="ml-2 text-red">-{compactDiff(row.deletions)}</span>
                             )}
                           </span>
-                          <span className="justify-self-end text-label text-faint">{compactAge(row.updatedAt)}</span>
+								<span className="justify-self-end text-label text-faint">{compactAge(row.updatedAt)}</span>
                         </button>
                         );
                       })}

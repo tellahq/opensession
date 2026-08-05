@@ -59,12 +59,12 @@ export function MoveToCloudDialog({
 
 				{error && (
 					<div
-						className="rounded-md border border-red/30 bg-red-soft px-3 py-2.5 text-xs leading-relaxed text-red"
+						className="rounded-md border border-red/30 bg-red-soft px-3 py-2.5 text-label leading-relaxed text-red"
 						role="alert"
 					>
 						<div>{error}</div>
 						{uncommittedFiles.length > 0 && (
-							<ul className="mb-0 mt-2 max-h-40 overflow-y-auto pl-5 text-[11px]">
+							<ul className="mb-0 mt-2 max-h-40 overflow-y-auto pl-5 text-meta">
 								{uncommittedFiles.map((file) => (
 									<li key={file}>{file}</li>
 								))}

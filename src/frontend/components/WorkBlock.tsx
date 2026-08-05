@@ -50,12 +50,12 @@ export const WorkBlock = React.memo(function WorkBlock({
   ).length;
 
   return (
-    <div className="mx-auto mb-3 max-w-[var(--chat-col)]">
+	<div className="mx-auto mb-3 w-full max-w-[var(--chat-col)]">
       <button
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 py-1 text-left font-sans text-supporting text-dim hover:bg-hover"
+		className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 py-1 text-left font-sans text-supporting text-dim transition-colors hover:bg-hover focus-ring"
       >
         <span
           className={cn(
@@ -76,7 +76,7 @@ export const WorkBlock = React.memo(function WorkBlock({
           <span className="flex-shrink-0 text-meta text-red/80">· {failures} failed</span>
         )}
         {!expanded && last && (
-          <span className="min-w-0 truncate text-[11px] text-faint">
+          <span className="min-w-0 truncate text-meta text-faint">
             {toolDisplayName(last.toolName)}:{" "}
             {toolSummary(last.toolName || "Tool", last.toolInput, last.content, pathRoots)}
           </span>

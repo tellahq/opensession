@@ -205,6 +205,39 @@ const SWIPE_FULL_RATIO = 0.45;
 const SWIPE_COMMIT_MS = 210;
 const SWIPE_AXIS_LOCK_PX = 8;
 
+// Keep the semantic hooks below for sticky-state tracking, platform chrome and
+// test selectors. Their visual contract lives here instead of the foundation adapter.
+const SIDEBAR_ITEM_CLASS =
+	"sidebar-item relative mt-0.5 block w-full rounded-lg border-0 bg-transparent px-2 py-[9px] pl-2.5 text-left text-fg transition-colors hover:bg-hover max-[720px]:px-2 max-[720px]:py-[13px] max-[720px]:pl-2.5";
+const SIDEBAR_WS_ROW_CLASS =
+	"sidebar-ws-row group relative flex items-center gap-[9px]";
+const SIDEBAR_GROUP_HEADER_CLASS =
+	"sidebar-group-header group";
+const SIDEBAR_RAIL_CLASS =
+	"sidebar-rail relative flex size-[22px] shrink-0 items-center justify-center";
+const SIDEBAR_TITLE_CLASS =
+	"sidebar-item-title min-w-0 flex-1 truncate text-item-title font-medium leading-[1.35] text-dim max-[720px]:text-[16px]";
+const SIDEBAR_GROUP_NAME_CLASS = "sidebar-group-name";
+const SIDEBAR_GROUP_COUNT_CLASS =
+	"sidebar-group-count";
+const SIDEBAR_GROUP_CHEVRON_CLASS =
+	"sidebar-group-chevron ml-auto shrink-0 text-faint opacity-0 transition-[transform,opacity] duration-150 group-hover:opacity-100 group-hover:text-fg";
+const SIDEBAR_ACTION_CLASS =
+	"sidebar-ws-action inline-flex size-8 items-center justify-center rounded-sm text-faint transition-colors hover:bg-hover hover:text-fg";
+const SIDEBAR_ACTIONS_CLASS =
+	"sidebar-ws-actions absolute right-[7px] top-1/2 hidden -translate-y-1/2 items-center gap-1 rounded-sm bg-hover shadow-[-6px_0_5px_-2px_var(--bg-hover)] [@media(hover:hover)]:group-hover:inline-flex";
+const MOBILE_SHEET_ITEM_CLASS =
+	"mobile-sheet-item flex w-full items-center gap-[13px] rounded-md border-0 bg-transparent px-3.5 py-[15px] text-left text-[16px] text-fg active:bg-hover-strong [&_svg]:shrink-0 [&_svg]:text-faint";
+const HOVERCARD_HEAD_CLASS = "hovercard-head flex min-w-0 items-center gap-[7px]";
+const HOVERCARD_BRANCH_CLASS =
+	"hovercard-branch min-w-0 flex-1 truncate text-meta text-dim";
+const HOVERCARD_TITLE_CLASS =
+	"hovercard-title mt-[5px] text-control-label font-semibold leading-[1.3]";
+const HOVERCARD_CALLOUT_CLASS =
+	"hovercard-callout mt-[7px] rounded-sm bg-accent-soft px-2 py-[5px] text-meta text-dim";
+const HOVERCARD_ROWS_CLASS = "hovercard-rows mt-[9px] flex flex-col gap-[3px]";
+const HOVERCARD_ROW_CLASS = "hovercard-row flex gap-2 text-meta leading-[1.35]";
+
 type SwipeAction = "archive" | "star";
 type SwipeState = { key: string; offset: number; action?: SwipeAction };
 
@@ -225,45 +258,11 @@ function swipeCommitOffset(action: SwipeAction, rowWidth: number): number {
 	return action === "archive" ? -rowWidth : rowWidth;
 }
 
-// Inline styles for the right-click menus. Kept inline (not in a CSS file)
-// because component-imported CSS isn't linked into the served bundle — only
-// global.css is — so a separate stylesheet silently doesn't apply.
-const CTX_MENU_STYLE: React.CSSProperties = {
-	position: "fixed",
-	zIndex: 3000,
-	minWidth: 210,
-	maxWidth: 320,
-	maxHeight: "60vh",
-	overflowY: "auto",
-	padding: 4,
-	background: "var(--bg-panel)",
-	border: "1px solid var(--border-strong)",
-	borderRadius: 14,
-	boxShadow: "0 10px 30px rgba(0, 0, 0, 0.32)",
-	display: "flex",
-	flexDirection: "column",
-	gap: 1,
-};
-const CTX_ITEM_STYLE: React.CSSProperties = {
-	display: "block",
-	width: "100%",
-	textAlign: "left",
-	background: "none",
-	border: "none",
-	color: "var(--text)",
-	fontSize: 13,
-	padding: "6px 8px",
-	borderRadius: 6,
-	cursor: "pointer",
-	whiteSpace: "nowrap",
-	overflow: "hidden",
-	textOverflow: "ellipsis",
-};
-const CTX_SEP_STYLE: React.CSSProperties = {
-	height: 1,
-	background: "var(--border-strong)",
-	margin: "4px 3px",
-};
+const CTX_MENU_CLASS =
+	"sidebar-ctx-menu fixed z-[3000] flex max-h-[60vh] min-w-[210px] max-w-80 flex-col gap-px overflow-y-auto rounded-[14px] border border-line-strong bg-panel p-1 shadow-[0_10px_30px_rgba(0,0,0,0.32)]";
+const CTX_ITEM_CLASS =
+	"flex w-full items-center gap-[11px] overflow-hidden rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-control-label text-fg hover:bg-hover";
+const CTX_SEPARATOR_CLASS = "mx-[3px] my-1 h-px bg-line-strong";
 
 // Per-person group dots share the repo-tile swatch palette (RepoTile.tsx) —
 // the same deterministic hash keeps each teammate's color stable.
@@ -381,25 +380,27 @@ function SupportRow({
 				render={
 					<button
 						type="button"
-						className={`sidebar-item sidebar-ws-row${
-							active ? " sidebar-item-selected" : ""
-						}`}
+						className={cn(
+							SIDEBAR_ITEM_CLASS,
+							SIDEBAR_WS_ROW_CLASS,
+							active && "sidebar-item-selected !bg-hover-strong",
+						)}
 						onClick={onOpen}
 						onContextMenu={menu.onContextMenu}
 						aria-label={label}
 					/>
 				}
 			>
-				<span className="sidebar-rail">
+				<span className={SIDEBAR_RAIL_CLASS}>
 					<span
 						className="size-[7px] rounded-full"
 						style={{ backgroundColor: dot }}
 					/>
 				</span>
-				<span className="sidebar-item-title">{label}</span>
+				<span className={SIDEBAR_TITLE_CLASS}>{label}</span>
 				{!isPhone && t.statusChangedAt && (
 					<span
-						className="sidebar-ws-time"
+						className="sidebar-ws-time ml-auto min-w-[34px] shrink-0 text-right text-meta text-faint"
 						aria-label={new Date(t.statusChangedAt).toLocaleString()}
 					>
 						{shortTime(t.statusChangedAt)}
@@ -408,11 +409,11 @@ function SupportRow({
 				{/* Hover actions: the same pin + finish pair the workspace rows
 				    wear — pin keeps the ticket in the Pinned band, the check
 				    marks it done in Plain. */}
-				<span className="sidebar-ws-actions">
+				<span className={SIDEBAR_ACTIONS_CLASS}>
 					<span
 						role="button"
 						tabIndex={0}
-						className={`sidebar-ws-action${pinned ? " is-on" : ""}`}
+						className={cn(SIDEBAR_ACTION_CLASS, pinned && "is-on text-accent")}
 						aria-label={pinned ? "Unpin ticket" : "Pin ticket"}
 						onClick={(e) => {
 							e.stopPropagation();
@@ -431,7 +432,7 @@ function SupportRow({
 						<span
 							role="button"
 							tabIndex={0}
-							className="sidebar-ws-action sidebar-ws-action--done"
+							className={`${SIDEBAR_ACTION_CLASS} sidebar-ws-action--done hover:text-green`}
 							aria-label="Mark done in Plain"
 							onClick={(e) => {
 								e.stopPropagation();
@@ -527,39 +528,41 @@ function FeedRow({
 				render={
 					<button
 						type="button"
-						className={`sidebar-item sidebar-ws-row${
-							active ? " sidebar-item-selected" : ""
-						}`}
+						className={cn(
+							SIDEBAR_ITEM_CLASS,
+							SIDEBAR_WS_ROW_CLASS,
+							active && "sidebar-item-selected !bg-hover-strong",
+						)}
 						onClick={onOpen}
 						onContextMenu={menu.onContextMenu}
 						aria-label={item.title}
 					/>
 				}
 			>
-				<span className="sidebar-rail">
+				<span className={SIDEBAR_RAIL_CLASS}>
 					<span
 						className="size-[7px] rounded-full"
 						style={{ backgroundColor: dot }}
 					/>
 				</span>
 				<span
-					className={`sidebar-item-title${unread ? " font-semibold text-fg" : ""}`}
+					className={cn(SIDEBAR_TITLE_CLASS, unread && "font-semibold text-fg")}
 				>
 					{item.title}
 				</span>
 				{!isPhone && ts && (
 					<span
-						className="sidebar-ws-time"
+						className="sidebar-ws-time ml-auto min-w-[34px] shrink-0 text-right text-meta text-faint"
 						aria-label={new Date(ts).toLocaleString()}
 					>
 						{shortTime(ts)}
 					</span>
 				)}
-				<span className="sidebar-ws-actions">
+				<span className={SIDEBAR_ACTIONS_CLASS}>
 					<span
 						role="button"
 						tabIndex={0}
-						className={`sidebar-ws-action${pinned ? " is-on" : ""}`}
+						className={cn(SIDEBAR_ACTION_CLASS, pinned && "is-on text-accent")}
 						aria-label={pinned ? "Unpin" : "Pin"}
 						onClick={(e) => {
 							e.stopPropagation();
@@ -1028,41 +1031,20 @@ function CtxItem({
 	return (
 		<button
 			type="button"
-			style={{
-				...CTX_ITEM_STYLE,
-				display: "flex",
-				alignItems: "center",
-				gap: 11,
-				...(danger ? { color: "var(--red, #e5534b)" } : {}),
-			}}
+			className={cn(CTX_ITEM_CLASS, danger && "text-red")}
 			onClick={onClick}
 			onMouseEnter={onMouseEnter}
 		>
 			{icon !== undefined && (
-				<span
-					style={{
-						width: 20,
-						display: "inline-flex",
-						justifyContent: "center",
-						flexShrink: 0,
-						color: danger ? "inherit" : "var(--text-dim)",
-					}}
-				>
+				<span className={cn("inline-flex w-5 shrink-0 justify-center", !danger && "text-dim")}>
 					{icon}
 				</span>
 			)}
-			<span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
+			<span className="min-w-0 flex-1 truncate">
 				{label}
 			</span>
 			{shortcut && (
-				<span
-					style={{
-						color: "var(--text-faint)",
-						fontSize: 13,
-						flexShrink: 0,
-						marginLeft: 12,
-					}}
-				>
+				<span className="ml-3 shrink-0 text-control-label text-faint">
 					{shortcut}
 				</span>
 			)}
@@ -1121,24 +1103,19 @@ function SidebarCtxMenu({
 	return createPortal(
 		<>
 			<div
-				className="sidebar-ctx-menu"
-				style={{ ...CTX_MENU_STYLE, left: x, top: y }}
+				className={CTX_MENU_CLASS}
+				style={{ left: x, top: y }}
 				onClick={(e) => e.stopPropagation()}
 			>
 				{entries.map((entry, i) => {
 					if (entry.kind === "sep")
-						return <div key={i} style={CTX_SEP_STYLE} />;
+						return <div key={i} className={CTX_SEPARATOR_CLASS} />;
 					if (entry.kind === "status") {
 						return (
 							<button
 								key={i}
 								type="button"
-								style={{
-									...CTX_ITEM_STYLE,
-									display: "flex",
-									alignItems: "center",
-									gap: 11,
-								}}
+								className={CTX_ITEM_CLASS}
 								onMouseEnter={(e) => {
 									cancelClose();
 									setSub({
@@ -1155,21 +1132,13 @@ function SidebarCtxMenu({
 									});
 								}}
 							>
-								<span
-									style={{
-										width: 20,
-										display: "inline-flex",
-										justifyContent: "center",
-										flexShrink: 0,
-										color: "var(--text-dim)",
-									}}
-								>
+								<span className="inline-flex w-5 shrink-0 justify-center text-dim">
 									<IconStatusRing size={20} />
 								</span>
-								<span style={{ flex: 1 }}>Set status</span>
+								<span className="flex-1">Set status</span>
 								<IconChevronRight
 									size={16}
-									style={{ color: "var(--text-faint)", flexShrink: 0 }}
+									className="shrink-0 text-faint"
 								/>
 							</button>
 						);
@@ -1179,12 +1148,7 @@ function SidebarCtxMenu({
 							<button
 								key={i}
 								type="button"
-								style={{
-									...CTX_ITEM_STYLE,
-									display: "flex",
-									alignItems: "center",
-									gap: 11,
-								}}
+								className={CTX_ITEM_CLASS}
 								onMouseEnter={(e) => {
 									cancelClose();
 									setSub({
@@ -1201,21 +1165,13 @@ function SidebarCtxMenu({
 									});
 								}}
 							>
-								<span
-									style={{
-										width: 20,
-										display: "inline-flex",
-										justifyContent: "center",
-										flexShrink: 0,
-										color: "var(--text-dim)",
-									}}
-								>
+								<span className="inline-flex w-5 shrink-0 justify-center text-dim">
 									<IconMoon size={20} />
 								</span>
-								<span style={{ flex: 1 }}>Snooze</span>
+								<span className="flex-1">Snooze</span>
 								<IconChevronRight
 									size={16}
-									style={{ color: "var(--text-faint)", flexShrink: 0 }}
+									className="shrink-0 text-faint"
 								/>
 							</button>
 						);
@@ -1238,9 +1194,8 @@ function SidebarCtxMenu({
 			</div>
 			{sub?.kind === "status" && statusEntry && (
 				<div
-					className="sidebar-ctx-menu"
+					className={CTX_MENU_CLASS}
 					style={{
-						...CTX_MENU_STYLE,
 						left: subLeft,
 						top: subTop,
 						minWidth: SUB_W,
@@ -1263,7 +1218,7 @@ function SidebarCtxMenu({
 							}}
 						/>
 					))}
-					<div style={CTX_SEP_STYLE} />
+					<div className={CTX_SEPARATOR_CLASS} />
 					<CtxItem
 						icon={<span />}
 						label="Auto (default)"
@@ -1277,9 +1232,8 @@ function SidebarCtxMenu({
 			)}
 			{sub?.kind === "snooze" && snoozeEntry && (
 				<div
-					className="sidebar-ctx-menu"
+					className={CTX_MENU_CLASS}
 					style={{
-						...CTX_MENU_STYLE,
 						left: subLeft,
 						top: subTop,
 						minWidth: SUB_W,
@@ -1300,7 +1254,7 @@ function SidebarCtxMenu({
 					))}
 					{snoozeEntry.until && (
 						<>
-							<div style={CTX_SEP_STYLE} />
+							<div className={CTX_SEPARATOR_CLASS} />
 							<CtxItem
 								label="Unsnooze"
 								onClick={() => {
@@ -3729,7 +3683,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					return (
 						<div className="sidebar-status-group">
 							<button
-								className="sidebar-group-header flex w-full items-center gap-[9px] rounded-md px-[10px] py-1 text-[14px] font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
+								className={SIDEBAR_GROUP_HEADER_CLASS}
 								onClick={() => toggleGroup("archived")}
 							>
 								<span className="inline-flex shrink-0 items-center text-faint">
@@ -3746,10 +3700,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										<path d="M6.5 8.5h3" strokeLinecap="round" />
 									</svg>
 								</span>
-								<span className="sidebar-group-name">Archived</span>
-								<span className="sidebar-group-count">{archivedCount}</span>
+								<span className={SIDEBAR_GROUP_NAME_CLASS}>Archived</span>
+								<span className={SIDEBAR_GROUP_COUNT_CLASS}>{archivedCount}</span>
 								<IconChevronDown
-									className="sidebar-group-chevron"
+									className={SIDEBAR_GROUP_CHEVRON_CLASS}
 									size={22}
 									style={{ transform: open ? "none" : "rotate(-90deg)" }}
 								/>
@@ -3758,33 +3712,33 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								archivedRows.slice(0, ARCHIVED_INLINE_MAX).map((r) => (
 									<button
 										key={r.key}
-										className="sidebar-item sidebar-ws-row sidebar-archived-row"
+										className={cn(SIDEBAR_ITEM_CLASS, SIDEBAR_WS_ROW_CLASS, "sidebar-archived-row max-[720px]:pr-[72px]")}
 										onClick={() => onSelect(r.chats[0])}
 										aria-label={r.name}
 									>
-										<span className="sidebar-rail">
+										<span className={SIDEBAR_RAIL_CLASS}>
 											<span className="sidebar-item-status sidebar-status-idle" />
 										</span>
 										<span
-											className="sidebar-item-title"
+											className={SIDEBAR_TITLE_CLASS}
 											style={{ color: "var(--text-dim)" }}
 										>
 											{stripPrTitlePrefix(r.name)}
 										</span>
 										{!isPhone && r.lastActivity && (
-											<span className="sidebar-ws-time">
+											<span className="sidebar-ws-time ml-auto min-w-[34px] shrink-0 text-right text-meta text-faint">
 												{shortTime(r.lastActivity)}
 											</span>
 										)}
 										{/* Hover actions, mirroring a live row's pin + archive pair:
 										    here they bring the row back, with pin as the one-gesture
 										    "unarchive AND put it where I'll see it". */}
-										<span className="sidebar-ws-actions">
+										<span className="sidebar-ws-actions absolute right-[7px] top-1/2 flex -translate-y-1/2 items-center gap-1 max-[720px]:bg-transparent max-[720px]:shadow-none [@media(hover:hover)]:hidden [@media(hover:hover)]:group-hover:inline-flex">
 											<Tooltip label="Unarchive and pin">
 												<span
 													role="button"
 													tabIndex={0}
-													className="sidebar-ws-action"
+													className={SIDEBAR_ACTION_CLASS}
 													aria-label={
 														r.chats.length > 1
 															? `Unarchive workspace (${r.chats.length} chats) and pin`
@@ -3814,7 +3768,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												<span
 													role="button"
 													tabIndex={0}
-													className="sidebar-ws-action"
+													className={SIDEBAR_ACTION_CLASS}
 													aria-label="Unarchive"
 													onClick={(e) => {
 														e.stopPropagation();
@@ -3836,16 +3790,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							{open && (
 								<button
 									className={cn(
-										"sidebar-item",
-										"sidebar-ws-row",
+										SIDEBAR_ITEM_CLASS,
+										SIDEBAR_WS_ROW_CLASS,
 										archivedActive && "sidebar-item-selected",
 									)}
 									onClick={onOpenArchived}
 									title="View all archived sessions"
 								>
-									<span className="sidebar-rail" />
+									<span className={SIDEBAR_RAIL_CLASS} />
 									<span
-										className="sidebar-item-title"
+										className={SIDEBAR_TITLE_CLASS}
 										style={{ color: "var(--text-faint)" }}
 									>
 										{archivedCount > ARCHIVED_INLINE_MAX
@@ -3974,7 +3928,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</button>
 				)}
 				<button
-					className={`sidebar-item sidebar-ws-row ${active ? "sidebar-item-selected" : ""} ${waiting ? "sidebar-item-waiting" : ""} ${row.unread ? "sidebar-item-unread" : ""}`}
+					className={cn(
+						SIDEBAR_ITEM_CLASS,
+						SIDEBAR_WS_ROW_CLASS,
+						inbox && "sidebar-item--twoline flex-wrap gap-y-0.5 py-[7px]",
+						active && "sidebar-item-selected !bg-hover-strong",
+						waiting && "sidebar-item-waiting !bg-blue-soft",
+						row.unread && "sidebar-item-unread",
+					)}
 					style={
 						swipeOffset
 							? ({ "--swipe-x": `${swipeOffset}px` } as React.CSSProperties)
@@ -4033,7 +3994,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    adds a second leading mark: the row's accent wash and bold title
 				    already say it, and a green dot hanging off the rail collides with
 				    the glyph it precedes (green means "PR healthy" everywhere else). */}
-				<span className="sidebar-rail">
+				<span className={SIDEBAR_RAIL_CLASS}>
 					{flatRepoGrouping ? (
 						<WsStatusMark row={row} size={18} />
 					) : row.running ? (
@@ -4050,7 +4011,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				)}
 				{editing ? (
 					<input
-						className="min-w-0 flex-1 rounded-md border border-[var(--accent,#6b8afd)] bg-bg px-[3px] text-[14px] font-medium text-inherit outline-none"
+						className="min-w-0 flex-1 rounded-md border border-[var(--accent,#6b8afd)] bg-bg px-[3px] text-item-title font-medium text-inherit outline-none"
 						value={row.workspace ? projectDraft : chatDraft}
 						autoFocus
 						onChange={(e) =>
@@ -4082,7 +4043,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// Same class as a session row's title, so workspace rows pick up
 						// the shared type scale (incl. the phone bump) and the
 						// selected/waiting/unread emphasis from the row's own classes.
-						className="sidebar-item-title"
+						// Inbox rows flex-wrap, where an intrinsic-width title would push
+						// the trailing ticker/time onto a wrapped line instead of
+						// shrinking — flex-1 keeps the first line a single line.
+						className={cn(SIDEBAR_TITLE_CLASS, inbox && "flex-1")}
 						onDoubleClick={(e) => {
 							e.stopPropagation();
 							if (row.workspace) {
@@ -4172,11 +4136,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</span>
 				)}
 				{/* Hover actions: pin + archive, side by side. */}
-				<span className="sidebar-ws-actions">
+				<span className={SIDEBAR_ACTIONS_CLASS}>
 					<span
 						role="button"
 						tabIndex={0}
-						className={`sidebar-ws-action${pinned ? " is-on" : ""}`}
+						className={cn(SIDEBAR_ACTION_CLASS, pinned && "is-on text-accent")}
 						aria-label={pinned ? "Unpin workspace" : "Pin workspace"}
 						onClick={(e) => {
 							e.stopPropagation();
@@ -4212,7 +4176,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<span
 								role="button"
 								tabIndex={0}
-								className="sidebar-ws-action"
+								className={SIDEBAR_ACTION_CLASS}
 								aria-label="Archive workspace"
 								onClick={(e) => {
 									e.stopPropagation();
@@ -4318,13 +4282,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// Same bare .sidebar-group-header as the lanes: utilities here
 					// would out-specify its phone/nesting overrides and leave this
 					// one header out of line with the rest.
-					className="sidebar-group-header transition-colors"
+					className={SIDEBAR_GROUP_HEADER_CLASS}
 					onClick={() => toggleGroup(gkey)}
 				>
-					<span className="sidebar-group-name">Snoozed</span>
-					<span className="sidebar-group-count">{rows.length}</span>
+					<span className={SIDEBAR_GROUP_NAME_CLASS}>Snoozed</span>
+					<span className={SIDEBAR_GROUP_COUNT_CLASS}>{rows.length}</span>
 					<IconChevronDown
-						className="sidebar-group-chevron"
+						className={SIDEBAR_GROUP_CHEVRON_CLASS}
 						size={22}
 						style={{ transform: open ? "none" : "rotate(-90deg)" }}
 					/>
@@ -4379,16 +4343,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// Layout, padding and type all come from .sidebar-group-header —
 						// utilities here would out-specify its phone overrides and leave
 						// these two headers indented (and smaller) than the rest.
-						className="sidebar-group-header transition-colors"
+						className={SIDEBAR_GROUP_HEADER_CLASS}
 						onClick={() => toggleGroup(gkey)}
 					>
-						<span className="sidebar-group-name">{meta.label}</span>
+						<span className={SIDEBAR_GROUP_NAME_CLASS}>{meta.label}</span>
 						{/* Count rides directly behind the lane name, not pinned right. */}
-						<span className="sidebar-group-count">
+						<span className={SIDEBAR_GROUP_COUNT_CLASS}>
 							{items.length + prs.length}
 						</span>
 						<IconChevronDown
-							className="sidebar-group-chevron"
+							className={SIDEBAR_GROUP_CHEVRON_CLASS}
 							size={22}
 							style={{ transform: open ? "none" : "rotate(-90deg)" }}
 						/>
@@ -4484,15 +4448,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<button
 							// Bare .sidebar-group-header like the status lanes — see
 							// renderStatusLanes for why utilities stay off it.
-							className="sidebar-group-header transition-colors"
+							className={SIDEBAR_GROUP_HEADER_CLASS}
 							onClick={() => toggleGroup(gkey)}
 						>
-							<span className="sidebar-group-name">{b.label}</span>
-							<span className="sidebar-group-count">
+							<span className={SIDEBAR_GROUP_NAME_CLASS}>{b.label}</span>
+							<span className={SIDEBAR_GROUP_COUNT_CLASS}>
 								{b.rows.length + b.prs.length}
 							</span>
 							<IconChevronDown
-								className="sidebar-group-chevron"
+								className={SIDEBAR_GROUP_CHEVRON_CLASS}
 								size={22}
 								style={{ transform: open ? "none" : "rotate(-90deg)" }}
 							/>
@@ -4662,7 +4626,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						}}
 					>
 						<button
-							className="sidebar-group-header sidebar-repo-head group transition-colors"
+							className={`${SIDEBAR_GROUP_HEADER_CLASS} sidebar-repo-head`}
 							draggable={canReorder}
 							title={canReorder ? "Drag to reorder repositories" : undefined}
 							onDragStart={(event) => {
@@ -4679,12 +4643,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						>
 							{/* The tile is 18px; the rail holds it on the same column
 							    (and text rail) as every other header's mark. */}
-							<span className="sidebar-rail">
+							<span className={SIDEBAR_RAIL_CLASS}>
 								<RepoTile name={repo} />
 							</span>
-							<span className="sidebar-group-name">{repoLabel(repo)}</span>
+							<span className={SIDEBAR_GROUP_NAME_CLASS}>{repoLabel(repo)}</span>
 							{/* Count rides directly behind the repo name, not pinned right. */}
-							<span className="sidebar-group-count">
+							<span className={SIDEBAR_GROUP_COUNT_CLASS}>
 								{rows.length + snoozedRows.length + prs.length}
 							</span>
 							{/* Urgent rows must not vanish into a closed band — a collapsed
@@ -4698,7 +4662,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</span>
 							)}
 							<IconChevronDown
-								className="sidebar-group-chevron"
+								className={SIDEBAR_GROUP_CHEVRON_CLASS}
 								size={22}
 								style={{ transform: open ? "none" : "rotate(-90deg)" }}
 							/>
@@ -4789,7 +4753,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					key={`support-prio-${group.p}`}
 				>
 					<button
-						className="sidebar-group-header"
+						className={SIDEBAR_GROUP_HEADER_CLASS}
 						onClick={() => toggleGroup(gkey)}
 					>
 						<span
@@ -4801,7 +4765,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							{items.length}
 						</span>
 						<IconChevronDown
-							className="sidebar-group-chevron"
+							className={SIDEBAR_GROUP_CHEVRON_CLASS}
 							size={20}
 							style={{
 								transform: groupIsOpen ? "none" : "rotate(-90deg)",
@@ -4944,16 +4908,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<ContextMenu.Trigger
 						render={
 							<button
-								className="sidebar-group-header sidebar-repo-head group transition-colors"
+								className={`${SIDEBAR_GROUP_HEADER_CLASS} sidebar-repo-head`}
 								onClick={() => toggleGroup(gkey)}
 							/>
 						}
 					>
-						<span className="sidebar-rail">
+						<span className={SIDEBAR_RAIL_CLASS}>
 							<RepoTile name={feed.id} />
 						</span>
-						<span className="sidebar-group-name">{feed.title}</span>
-						<span className="sidebar-group-count">{count}</span>
+						<span className={SIDEBAR_GROUP_NAME_CLASS}>{feed.title}</span>
+						<span className={SIDEBAR_GROUP_COUNT_CLASS}>{count}</span>
 						{!open && attentionCount > 0 && (
 							<span
 								className="sidebar-repo-attn"
@@ -4963,7 +4927,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</span>
 						)}
 						<IconChevronDown
-							className="sidebar-group-chevron"
+							className={SIDEBAR_GROUP_CHEVRON_CLASS}
 							size={22}
 							style={{ transform: open ? "none" : "rotate(-90deg)" }}
 						/>
@@ -4991,7 +4955,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	return (
 		<div
-			className="sidebar"
+			className="sidebar flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[720px]:pt-[var(--header-h)] max-[720px]:pb-[max(24px,env(safe-area-inset-bottom))]"
 			ref={sidebarScrollRef}
 			onDragOver={handleRepoAutoScroll}
 			onDragLeave={(event) => {
@@ -5010,7 +4974,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				</div>
 			)}
 			<div
-				className="sidebar-sticky-section sidebar-tools-section"
+				className="sidebar-sticky-section sidebar-tools-section block min-w-0 max-w-full shrink-0"
 				style={{ order: 0 }}
 			>
 			{!isPhone && visibleTools.length > 0 && (
@@ -5073,13 +5037,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						const rowClass = cn(
 							// The desktop look lives in these utilities and MUST stay
 							// desktop-only: utilities win cascade ties against the phone
-							// card CSS (global.css @media), so an unconditional w-full/
+							// card adapter CSS (@media), so an unconditional w-full/
 							// py-* here is exactly the "full-width Home card on mobile"
 							// bug. Phones render the Slack-home style 132px card strip
 							// purely from .sidebar-nav-item's media rules.
 							"sidebar-nav-item group flex text-left transition-colors",
 							// `active` is what the phone card CSS keys its selected state
-							// off (.sidebar-nav-item.active in global.css's @media block);
+							// off (.sidebar-nav-item.active in the adapter's @media block);
 							// the desktop selected look comes from the utilities below.
 							// Dropping it in the Tailwind migration left the phone cards
 							// with no "you are here".
@@ -6990,7 +6954,14 @@ function SidebarItem({
 			render={
 				<button
 					ref={btnRef}
-					className={`sidebar-item ${!mine ? "sidebar-item--twoline" : ""} ${selected ? "sidebar-item-selected" : ""} ${waiting ? "sidebar-item-waiting" : ""} ${unread ? "sidebar-item-unread" : ""}`}
+					className={cn(
+						SIDEBAR_ITEM_CLASS,
+						"group",
+						!mine && "sidebar-item--twoline py-[7px]",
+						selected && "sidebar-item-selected !bg-hover-strong",
+						waiting && "sidebar-item-waiting !bg-blue-soft",
+						unread && "sidebar-item-unread",
+					)}
 					style={
 						visibleSwipeOffset
 							? ({ "--swipe-x": `${visibleSwipeOffset}px` } as React.CSSProperties)
@@ -7031,12 +7002,12 @@ function SidebarItem({
 				/>
 			}
 		>
-			<div className="sidebar-item-top">
+			<div className="sidebar-item-top flex min-w-0 items-center gap-[9px]">
 				{/* Match workspace rows: the rail holds the PR glyph alone — a blocked
 				    chat reads from its accent wash and bold title, not from a second
 				    dot wedged in beside it — and merged PRs keep the glyph itself
 				    purple instead of adding metadata. */}
-				<span className="sidebar-rail">
+				<span className={SIDEBAR_RAIL_CLASS}>
 					{waiting && <span className="sr-only">Needs your attention</span>}
 					{session.isRunning ? (
 						<PixelSpinner className="text-yellow sidebar-spinner" />
@@ -7046,7 +7017,7 @@ function SidebarItem({
 				</span>
 				{editing ? (
 					<input
-						className="sidebar-item-rename"
+						className="sidebar-item-rename min-w-0 flex-1 rounded-md border border-[var(--accent,#6b8afd)] bg-bg px-[3px] text-item-title font-medium text-inherit outline-none max-[720px]:text-[16px]"
 						value={draft}
 						autoFocus
 						onChange={(e) => setDraft(e.target.value)}
@@ -7062,7 +7033,7 @@ function SidebarItem({
 					/>
 				) : (
 					<span
-						className="sidebar-item-title"
+						className={cn(SIDEBAR_TITLE_CLASS, unread && "font-semibold text-fg", waiting && "font-semibold text-fg")}
 						onDoubleClick={(e) => {
 							e.stopPropagation();
 							setDraft(session.title);
@@ -7078,7 +7049,7 @@ function SidebarItem({
 					</span>
 				)}
 				{mine && !editing && metaParts.length > 0 && (
-					<span className="sidebar-item-inline-meta">
+					<span className="sidebar-item-inline-meta ml-auto flex min-w-[40px] shrink-0 items-center justify-end gap-1 pl-2.5 text-meta text-faint max-[720px]:text-[13px]">
 						{metaParts.map((part, i) => (
 							<React.Fragment key={i}>
 								{i > 0 && <span className="sidebar-meta-sep">·</span>}
@@ -7097,7 +7068,7 @@ function SidebarItem({
 				)}
 			</div>
 			{!mine && (
-				<div className="sidebar-item-meta pl-[28px]">
+				<div className="sidebar-item-meta mt-[3px] flex items-center gap-1 overflow-hidden whitespace-nowrap pl-7 text-meta text-faint max-[720px]:text-[13px]">
 					{metaParts.map((part, i) => (
 						<React.Fragment key={i}>
 							{i > 0 && <span className="sidebar-meta-sep">·</span>}
@@ -7111,7 +7082,7 @@ function SidebarItem({
 				shortcut={selected ? PIN_SHORTCUT_KEYS : undefined}
 			>
 				<span
-					className={`sidebar-item-pin${pinned ? " is-on" : ""}`}
+					className={cn("sidebar-item-pin absolute right-[35px] top-1/2 hidden size-[26px] -translate-y-1/2 items-center justify-center rounded-md bg-hover text-faint shadow-[-6px_0_5px_-2px_var(--bg-hover)] [@media(hover:hover)]:group-hover:flex hover:bg-active hover:text-fg", pinned && "is-on text-accent")}
 					role="button"
 					aria-label={pinned ? "Unpin session" : "Pin session"}
 					onMouseEnter={closeHover}
@@ -7128,7 +7099,7 @@ function SidebarItem({
 				shortcut={selected ? ARCHIVE_SHORTCUT_KEYS : undefined}
 			>
 				<span
-					className="sidebar-item-x"
+					className="sidebar-item-x absolute right-[7px] top-1/2 hidden size-[26px] -translate-y-1/2 items-center justify-center rounded-md bg-hover text-faint shadow-[-6px_0_5px_-2px_var(--bg-hover)] [@media(hover:hover)]:group-hover:flex hover:bg-active hover:text-fg"
 					role="button"
 					aria-label="Archive session"
 					onMouseEnter={closeHover}
@@ -7307,17 +7278,17 @@ function MobileActionSheet({
 		};
 	}, []);
 	return createPortal(
-		<div className="mobile-action-sheet-backdrop" onClick={onClose}>
+		<div className="mobile-action-sheet-backdrop fixed inset-0 z-[4000] bg-black/40" onClick={onClose}>
 			<div
-				className="mobile-action-sheet"
+				className="mobile-action-sheet fixed inset-x-0 bottom-0 z-[4001] rounded-t-[16px] bg-panel px-2.5 pt-1.5 pb-[calc(14px+env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.4)]"
 				style={drag.style}
 				{...drag.handlers}
 				onClick={(e) => e.stopPropagation()}
 			>
-				<div className="mobile-sheet-grip" />
-				<div className="mobile-sheet-title">{session.title}</div>
+				<div className="mobile-sheet-grip mx-auto my-2 h-1 w-9 rounded-sm bg-line-strong" />
+				<div className="mobile-sheet-title truncate px-3 py-1.5 pb-2 text-control-label text-faint">{session.title}</div>
 				<button
-					className="mobile-sheet-item"
+					className={MOBILE_SHEET_ITEM_CLASS}
 					onClick={() => {
 						onRename();
 						onClose();
@@ -7339,7 +7310,7 @@ function MobileActionSheet({
 				    state — the phone twin of the row's right-click action. */}
 				{onSetStatus && (!mine || isClaimed(session)) && (
 					<button
-						className="mobile-sheet-item"
+						className={MOBILE_SHEET_ITEM_CLASS}
 						onClick={() => {
 							onSetStatus(isClaimed(session) ? null : "mine");
 							onClose();
@@ -7356,7 +7327,7 @@ function MobileActionSheet({
 				    YOUR sidebar only. */}
 				{onSetStatus && (
 					<div className="px-4 py-2">
-						<div className="mb-1.5 text-[11px] font-semibold text-faint">
+						<div className="mb-1.5 text-label font-semibold text-faint">
 							Move to lane
 						</div>
 						<div className="flex flex-wrap gap-1.5">
@@ -7414,9 +7385,9 @@ function MobileActionSheet({
 						</div>
 					</div>
 				)}
-				<div className="mobile-sheet-sep" />
+				<div className="mobile-sheet-sep mx-2.5 my-1.5 h-px bg-line" />
 				<button
-					className="mobile-sheet-item mobile-sheet-item--danger"
+					className={`${MOBILE_SHEET_ITEM_CLASS} mobile-sheet-item--danger text-red [&_svg]:text-red`}
 					onClick={() => {
 						onArchive();
 						onClose();
@@ -7487,11 +7458,11 @@ function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 
 	return (
 		<>
-			<div className="hovercard-head">
+			<div className={HOVERCARD_HEAD_CLASS}>
 				<span
 					className={`sidebar-item-status hovercard-dot ${state.dotClass}`}
 				/>
-				<span className="hovercard-branch">
+				<span className={HOVERCARD_BRANCH_CLASS}>
 					{s.branch || s.title}
 				</span>
 				{s.prAdditions != null && s.prDeletions != null && (
@@ -7506,33 +7477,33 @@ function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 				)}
 			</div>
 
-			<div className="hovercard-title">{s.title}</div>
+			<div className={HOVERCARD_TITLE_CLASS}>{s.title}</div>
 
-			<div className={`hovercard-state hovercard-state-${state.tone}`}>
+			<div className={`hovercard-state mt-[3px] text-meta font-medium hovercard-state-${state.tone}`}>
 				{state.label}
 			</div>
 
 			{s.waitingForInput && (
-				<div className="hovercard-callout">
+				<div className={HOVERCARD_CALLOUT_CLASS}>
 					Blocked on a question — open the session to answer.
 				</div>
 			)}
 			{!s.waitingForInput && runNeedsAttention(s) && (
-				<div className="hovercard-callout">
+				<div className={HOVERCARD_CALLOUT_CLASS}>
 					Run failed: {s.lastRunError!.message.slice(0, 200)}
 				</div>
 			)}
 			{!s.waitingForInput && (s.queuedCount ?? 0) > 0 && (
-				<div className="hovercard-callout">
+				<div className={HOVERCARD_CALLOUT_CLASS}>
 					{s.queuedCount} prompt{s.queuedCount === 1 ? "" : "s"} queued.
 				</div>
 			)}
 
-			<div className="hovercard-rows">
+			<div className={HOVERCARD_ROWS_CLASS}>
 				{rows.map(([label, value], i) => (
-					<div className="hovercard-row" key={i}>
-						<span className="hovercard-label">{label}</span>
-						<span className="hovercard-value">{value}</span>
+					<div className={HOVERCARD_ROW_CLASS} key={i}>
+						<span className="hovercard-label w-[74px] shrink-0 text-faint">{label}</span>
+						<span className="hovercard-value min-w-0 truncate text-dim">{value}</span>
 					</div>
 				))}
 			</div>
@@ -7799,7 +7770,7 @@ function WsStatusMark({
 // Footer action button base — the color variant carries the status meaning
 // (green = ready to merge, purple = merged/archive, accent = needs an answer).
 const WS_ACTION =
-	"flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium no-underline";
+	"flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-control-label font-medium no-underline";
 
 // Overview (description + thumbnails) for a workspace row. Same cache (and
 // key) as the right panel's WorkspaceInfo block, so a workspace that's been
@@ -7908,8 +7879,8 @@ function WsOverviewInfo({
 	const media = ov?.media || [];
 	return (
 		<>
-			<div className="hovercard-head">
-				<span className="hovercard-branch">
+			<div className={HOVERCARD_HEAD_CLASS}>
+				<span className={HOVERCARD_BRANCH_CLASS}>
 					{branch || repoLabel(row.chats[0]?.repo || DEFAULT_REPO_ID)}
 				</span>
 				{prChat?.prAdditions != null && prChat?.prDeletions != null && (
@@ -7927,7 +7898,7 @@ function WsOverviewInfo({
 				</span>
 			</div>
 
-			<div className="hovercard-title">{row.name}</div>
+			<div className={HOVERCARD_TITLE_CLASS}>{row.name}</div>
 
 			{/* What os-review made of this PR — the question a Ready-to-merge row
 			    raises, answered without opening GitHub. */}
@@ -7940,11 +7911,11 @@ function WsOverviewInfo({
 
 			{row.status === "needsinput" &&
 				(row.chats.some((c) => c.waitingForInput) ? (
-					<div className="hovercard-callout">
+					<div className={HOVERCARD_CALLOUT_CLASS}>
 						Blocked on a question — open to answer.
 					</div>
 				) : (
-					<div className="hovercard-callout">
+					<div className={HOVERCARD_CALLOUT_CLASS}>
 						Run failed:{" "}
 						{row.chats
 							.find((c) => runNeedsAttention(c))
@@ -7953,7 +7924,7 @@ function WsOverviewInfo({
 				))}
 
 			{desc && (
-				<div className="selectable mt-1 text-xs leading-snug text-dim line-clamp-2">
+				<div className="selectable mt-1 text-meta leading-snug text-dim line-clamp-2">
 					{desc}
 				</div>
 			)}
@@ -7990,14 +7961,14 @@ function WsOverviewInfo({
 										preload="metadata"
 										className="h-full w-full object-contain"
 									/>
-									<span className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-white drop-shadow">
+									<span className="pointer-events-none absolute inset-0 grid place-items-center text-item-title text-white drop-shadow">
 										▶
 									</span>
 								</>
 							)}
 							{i === MAX_HOVERCARD_MEDIA - 1 &&
 								media.length > MAX_HOVERCARD_MEDIA && (
-									<span className="absolute inset-0 grid place-items-center bg-black/55 text-xs font-semibold text-white">
+									<span className="absolute inset-0 grid place-items-center bg-black/55 text-label font-semibold text-white">
 										+{media.length - MAX_HOVERCARD_MEDIA + 1}
 									</span>
 								)}
@@ -8096,7 +8067,7 @@ function WsCardBody({
 					</CardLink>
 				)}
 				{prStatusBits.length > 0 && (
-					<span className="min-w-0 truncate text-[11px] text-faint">
+					<span className="min-w-0 truncate text-meta text-faint">
 						{prStatusBits.join(" · ")}
 					</span>
 				)}
@@ -8182,18 +8153,18 @@ function WsMobileSheet({
 		</svg>
 	);
 	return createPortal(
-		<div className="mobile-action-sheet-backdrop" onClick={onClose}>
+		<div className="mobile-action-sheet-backdrop fixed inset-0 z-[4000] bg-black/40" onClick={onClose}>
 			<div
-				className="mobile-action-sheet"
+				className="mobile-action-sheet fixed inset-x-0 bottom-0 z-[4001] rounded-t-[16px] bg-panel px-2.5 pt-1.5 pb-[calc(14px+env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.4)]"
 				style={drag.style}
 				{...drag.handlers}
 				onClick={(e) => e.stopPropagation()}
 			>
-				<div className="mobile-sheet-grip" />
+				<div className="mobile-sheet-grip mx-auto my-2 h-1 w-9 rounded-sm bg-line-strong" />
 				<div className="px-2 pb-2.5 pt-1">
 					<WsOverviewInfo row={row} ov={ov} />
 					{(prStatusBits.length > 0 || row.lastActivity) && (
-						<div className="mt-2 flex min-w-0 items-center gap-2 text-[11px] text-faint">
+						<div className="mt-2 flex min-w-0 items-center gap-2 text-meta text-faint">
 							{prChat?.prNumber != null && (
 								<span
 									className={`hovercard-mono shrink-0 hovercard-pr-${prTone(prChat)}`}
@@ -8214,11 +8185,11 @@ function WsMobileSheet({
 						</div>
 					)}
 				</div>
-				<div className="mobile-sheet-sep" />
+				<div className="mobile-sheet-sep mx-2.5 my-1.5 h-px bg-line" />
 				{/* Main action, colored by what the workspace needs next. */}
 				{row.status === "needsinput" && row.chats.length > 0 && (
 					<button
-						className="mobile-sheet-item"
+						className={MOBILE_SHEET_ITEM_CLASS}
 						style={{ color: "var(--accent)", fontWeight: 600 }}
 						onClick={closing(() =>
 							onOpen(
@@ -8236,7 +8207,7 @@ function WsMobileSheet({
 				)}
 				{row.status === "review" && prChat?.prUrl && (
 					<button
-						className="mobile-sheet-item"
+						className={MOBILE_SHEET_ITEM_CLASS}
 						style={
 							prReady ? { color: "var(--green)", fontWeight: 600 } : undefined
 						}
@@ -8251,7 +8222,7 @@ function WsMobileSheet({
 				)}
 				{row.status === "merged" && row.chats.length > 0 && (
 					<button
-						className="mobile-sheet-item"
+						className={MOBILE_SHEET_ITEM_CLASS}
 						style={{ color: "var(--purple)", fontWeight: 600 }}
 						onClick={closing(onArchive)}
 					>
@@ -8261,7 +8232,7 @@ function WsMobileSheet({
 				)}
 				{prChat?.prUrl && row.status !== "review" && (
 					<button
-						className="mobile-sheet-item"
+						className={MOBILE_SHEET_ITEM_CLASS}
 						onClick={closing(() =>
 							window.open(prChat.prUrl, "_blank", "noopener"),
 						)}
@@ -8272,7 +8243,7 @@ function WsMobileSheet({
 				)}
 				{claimed !== null && (
 					<button
-						className="mobile-sheet-item"
+						className={MOBILE_SHEET_ITEM_CLASS}
 						onClick={closing(() => onSetStatus(claimed ? null : "mine"))}
 					>
 						<IconInbox size={22} />
@@ -8283,18 +8254,18 @@ function WsMobileSheet({
 				)}
 				{onToggleRead && (
 					<button
-						className="mobile-sheet-item"
+						className={MOBILE_SHEET_ITEM_CLASS}
 						onClick={closing(onToggleRead)}
 					>
 						<IconMail size={22} />
 						{unread ? "Mark as read" : "Mark as unread"}
 					</button>
 				)}
-				<button className="mobile-sheet-item" onClick={closing(onTogglePin)}>
+				<button className={MOBILE_SHEET_ITEM_CLASS} onClick={closing(onTogglePin)}>
 					<IconPin size={22} fill={pinned ? "currentColor" : "none"} />
 					{pinned ? "Unpin" : "Pin"}
 				</button>
-				<button className="mobile-sheet-item" onClick={closing(onRename)}>
+				<button className={MOBILE_SHEET_ITEM_CLASS} onClick={closing(onRename)}>
 					<svg
 						width="20"
 						height="20"
@@ -8308,7 +8279,7 @@ function WsMobileSheet({
 					Rename
 				</button>
 				{onCopyLink && (
-					<button className="mobile-sheet-item" onClick={closing(onCopyLink)}>
+					<button className={MOBILE_SHEET_ITEM_CLASS} onClick={closing(onCopyLink)}>
 						<IconLink size={22} />
 						Copy link
 					</button>

@@ -72,7 +72,7 @@ interface RepoOption {
 }
 
 // Light mode paints the Create split-button ink-on-paper instead of accent.
-// global.css scopes that override under `.palette-card`, which the shared Modal
+// Foundation adapters scope that override under `.palette-card`, which the shared Modal
 // shell no longer carries, so the two buttons opt in explicitly.
 const LIGHT_CREATE =
   "[html[data-theme=light]_&]:bg-fg [html[data-theme=light]_&]:text-bg";
@@ -672,12 +672,12 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         {/* Header: repo (left) · create-from (right). The repo picker is
             always visible — on phones the create-from picker hides until the
             options toggle in the footer opens it. */}
-        <div className="palette-header">
+        <div className="palette-header flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
           {mode === "scratch" ? (
             // Scratch sessions are repo-less — a picker here would imply the
             // choice matters. A muted chip holds the slot instead.
             <span
-              className="palette-trigger palette-trigger-strong pointer-events-none opacity-60"
+              className="palette-trigger palette-trigger-strong pointer-events-none inline-flex max-w-[46%] items-center gap-1.5 rounded-control border-0 bg-transparent px-2 py-1.5 text-body font-semibold text-fg opacity-60"
               title="Scratch sessions have no repository"
             >
               <RepoTile name="scratch" />
@@ -685,7 +685,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             </span>
           ) : (
           <PaletteSelect
-            className="palette-trigger palette-trigger-strong"
+            className="palette-trigger palette-trigger-strong relative inline-flex max-w-[46%] items-center gap-1.5 rounded-control border-0 bg-transparent px-2 py-1.5 text-body font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55"
             title="Repository"
             value={repo}
             options={[
@@ -717,16 +717,16 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             isPhone={isPhone}
           >
             <RepoTile name={repo} />
-            <span className="palette-trigger-label">
+            <span className="palette-trigger-label truncate">
               {repos.find((p) => p.id === repo)?.label || repo || "No repositories"}
             </span>
-            <IconChevronDown className="palette-chevron" size={22} />
+            <IconChevronDown className="palette-chevron -ml-0.5 shrink-0 text-faint" size={22} />
           </PaletteSelect>
           )}
 
           {optionsVisible && (
           <PaletteSelect
-            className="palette-trigger"
+            className="palette-trigger relative inline-flex max-w-[46%] items-center gap-1.5 rounded-control border-0 bg-transparent px-2 py-1.5 text-control-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-55"
             title="What to create from"
             value={createFromValue}
             options={createFromOptions}
@@ -742,8 +742,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               <circle cx="12" cy="5.5" r="1.7" stroke="currentColor" strokeWidth="1.3" />
               <path d="M4 5.7v4.6M4 8h4a4 4 0 004-4" stroke="currentColor" strokeWidth="1.3" />
             </svg>
-            <span className="palette-trigger-label">{createFromLabel}</span>
-            <IconChevronDown className="palette-chevron" size={22} />
+            <span className="palette-trigger-label truncate">{createFromLabel}</span>
+            <IconChevronDown className="palette-chevron -ml-0.5 shrink-0 text-faint" size={22} />
           </PaletteSelect>
           )}
         </div>
@@ -767,7 +767,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
 
         {/* Prompt */}
         <div
-          className="palette-body"
+          className="palette-body relative px-4 pt-3"
           style={planBody}
           onDrop={(e) => {
             if (e.dataTransfer?.files?.length) {
@@ -781,7 +781,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
           {mentions.popup}
           <textarea
             ref={promptRef}
-            className="palette-textarea"
+            className="palette-textarea block min-h-[132px] max-h-[62vh] w-full resize-none border-0 bg-transparent font-sans text-item-title leading-relaxed text-fg outline-none placeholder:text-faint disabled:opacity-60"
             value={prompt}
             onChange={(e) => {
               setPrompt(e.target.value);
@@ -818,20 +818,20 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
           <FileChips files={files} onRemove={(i) => setFiles((p) => p.filter((_, idx) => idx !== i))} disabled={creating} />
         </div>
 
-        {error && <div className="palette-error">{error}</div>}
+        {error && <div className="palette-error mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-1.5 text-supporting text-red">{error}</div>}
         {sandboxModelWarning && (
-          <div className="palette-error" role="alert">
+          <div className="palette-error mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-1.5 text-supporting text-red" role="alert">
             {sandboxModelWarning}
           </div>
         )}
 
         {/* Footer toolbar */}
-        <div className="palette-footer" style={planSurface}>
-          <div className="palette-footer-left">
+        <div className="palette-footer flex items-center justify-between gap-2 border-t border-line px-2.5 py-2" style={planSurface}>
+          <div className="palette-footer-left flex min-w-0 items-center gap-1.5">
             {isPhone && (
               <button
                 type="button"
-                className={`palette-icon-btn palette-options-btn ${showOptions ? "is-on" : ""}`}
+                className={`palette-icon-btn palette-options-btn relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control border border-transparent bg-transparent text-dim transition-colors hover:text-fg hover:before:bg-hover before:absolute before:inset-1 before:rounded-control before:transition-[background,box-shadow] [&>*]:relative [&>*]:z-10 disabled:cursor-default disabled:opacity-50 ${showOptions ? "is-on before:bg-accent-soft before:shadow-[inset_0_0_0_1px_var(--accent)]" : ""}`}
                 onClick={() => setShowOptions((v) => !v)}
                 disabled={creating}
                 aria-label="Advanced options — base branch, plan first, run environment"
@@ -843,7 +843,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             <Tooltip label="Attach a file">
               <button
                 type="button"
-                className="palette-icon-btn"
+                className="palette-icon-btn relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control border border-transparent bg-transparent text-dim transition-colors hover:text-fg hover:before:bg-hover before:absolute before:inset-1 before:rounded-control before:transition-[background,box-shadow] [&>*]:relative [&>*]:z-10 disabled:cursor-default disabled:opacity-50"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={creating}
                 aria-label="Attach a file"
@@ -870,13 +870,13 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 >
                   <Menu.Trigger
                     type="button"
-                    className={`palette-icon-btn palette-mcp-picker-btn ${selectedMcpServers.length ? "is-on" : ""}`}
+                    className={`palette-icon-btn palette-mcp-picker-btn relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control border border-transparent bg-transparent text-dim transition-colors hover:text-fg hover:before:bg-hover before:absolute before:inset-1 before:rounded-control before:transition-[background,box-shadow] [&>*]:relative [&>*]:z-10 disabled:cursor-default disabled:opacity-50 ${selectedMcpServers.length ? "is-on text-accent before:bg-accent-soft before:shadow-[inset_0_0_0_1px_var(--accent)]" : ""}`}
                     disabled={creating}
                     aria-label="Choose connected services"
                   >
                     <IconConnections size={20} />
                     {selectedMcpServers.length > 0 && (
-                      <span className="palette-mcp-picker-badge">{selectedMcpServers.length}</span>
+                      <span className="palette-mcp-picker-badge absolute -right-1 -top-1 z-20 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent text-meta font-semibold text-panel">{selectedMcpServers.length}</span>
                     )}
                   </Menu.Trigger>
                 </Tooltip>
@@ -905,10 +905,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 </Menu.Popup>
               </Menu.Root>
             ) : (
-            <div className="palette-mcp-picker-container" ref={mcpPickerRef}>
+            <div className="palette-mcp-picker-container relative shrink-0" ref={mcpPickerRef}>
               <button
                 type="button"
-                className={`palette-icon-btn palette-mcp-picker-btn ${selectedMcpServers.length ? "is-on" : ""}`}
+                className={`palette-icon-btn palette-mcp-picker-btn relative inline-flex h-10 w-10 items-center justify-center rounded-control border border-transparent bg-transparent text-dim transition-colors hover:text-fg hover:before:bg-hover before:absolute before:inset-1 before:rounded-control before:transition-[background,box-shadow] [&>*]:relative [&>*]:z-10 disabled:cursor-default disabled:opacity-50 ${selectedMcpServers.length ? "is-on text-accent before:bg-accent-soft before:shadow-[inset_0_0_0_1px_var(--accent)]" : ""}`}
                 onClick={() => setMcpPickerOpen((v) => !v)}
                 disabled={creating}
                 title={`Connected services${selectedMcpServers.length ? ` (${selectedMcpServers.length})` : ""}`}
@@ -917,15 +917,15 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               >
                 <IconConnections size={20} />
                 {selectedMcpServers.length > 0 && (
-                  <span className="palette-mcp-picker-badge">{selectedMcpServers.length}</span>
+                  <span className="palette-mcp-picker-badge absolute -right-1 -top-1 z-20 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent text-meta font-semibold text-panel">{selectedMcpServers.length}</span>
                 )}
               </button>
               {mcpPickerOpen && (
-                <div className="palette-mcp-picker-popover">
-                  <div className="palette-mcp-picker-header">Connected services</div>
-                  <div className="palette-mcp-picker-grid">
+                <div className="palette-mcp-picker-popover fixed bottom-15 left-3 right-3 z-[1000] max-h-[50vh] overflow-y-auto rounded-lg border border-line-strong bg-panel p-3 shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
+                  <div className="palette-mcp-picker-header mb-2 px-1 text-meta font-semibold text-dim">Connected services</div>
+                  <div className="palette-mcp-picker-grid grid grid-cols-1 gap-1">
                     {availableMcpServers.map((mcp) => (
-                      <label key={mcp} className="palette-mcp-checkbox-compact">
+                      <label key={mcp} className="palette-mcp-checkbox-compact flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-control-label text-dim transition-colors hover:bg-hover hover:text-fg">
                         <input
                           type="checkbox"
                           checked={selectedMcpServers.includes(mcp)}
@@ -947,7 +947,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               <Tooltip label={planFirst ? "Exit plan mode" : "Enter plan mode"}>
                 <button
                   type="button"
-                  className={`palette-icon-btn ${planFirst ? "is-on" : ""}`}
+                  className={`palette-icon-btn relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control border border-transparent bg-transparent text-dim transition-colors hover:text-fg hover:before:bg-hover before:absolute before:inset-1 before:rounded-control before:transition-[background,box-shadow] [&>*]:relative [&>*]:z-10 disabled:cursor-default disabled:opacity-50 ${planFirst ? "is-on before:bg-accent-soft before:shadow-[inset_0_0_0_1px_var(--accent)]" : ""}`}
                   onClick={() => setPlanFirst((v) => !v)}
                   disabled={creating}
                   aria-label={planFirst ? "Exit plan mode" : "Enter plan mode"}
@@ -968,7 +968,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 >
                   <Menu.Trigger
                     type="button"
-                    className={`palette-icon-btn ${sandboxProvider ? "is-on" : ""}`}
+                    className={`palette-icon-btn relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control border border-transparent bg-transparent text-dim transition-colors hover:text-fg hover:before:bg-hover before:absolute before:inset-1 before:rounded-control before:transition-[background,box-shadow] [&>*]:relative [&>*]:z-10 disabled:cursor-default disabled:opacity-50 ${sandboxProvider ? "is-on before:bg-accent-soft before:shadow-[inset_0_0_0_1px_var(--accent)]" : ""}`}
                     disabled={creating}
                     aria-label="Run environment"
                   >
@@ -1003,12 +1003,12 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                                 )}
                               </span>
                               {opt.note && (
-                                <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
+                                <span className="whitespace-normal text-meta font-medium leading-snug text-faint">
                                   {opt.note}
                                 </span>
                               )}
                               {hostEngineWorkspace && (
-                                <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
+                                <span className="whitespace-normal text-meta font-medium leading-snug text-faint">
                                   Model on Host · workspace isolated here
                                 </span>
                               )}
@@ -1023,11 +1023,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             )}
           </div>
 
-          <div className="palette-footer-right">
+          <div className="palette-footer-right flex min-w-0 items-center gap-1.5">
             {/* Always visible — on phones too, so a non-default (dumber) model
                 is never silently in effect behind the options toggle. */}
             <ModelEffortSelect
-              className="palette-pill"
+              className="palette-pill max-w-[180px] shrink min-w-0"
               title="Model and reasoning effort"
               models={models}
               defaultModel={defaultModel}
@@ -1050,12 +1050,12 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               }}
             />
 
-            <div className="palette-create-split" ref={createSplitRef}>
+            <div className="palette-create-split relative inline-flex shrink-0 items-stretch" ref={createSplitRef}>
               <button
                 // In light mode the Create button is ink-on-paper rather than
                 // accent — carried here since the shell no longer supplies the
                 // `.palette-card` that scoped that override.
-                className={`palette-create palette-create-main ${LIGHT_CREATE}`}
+                className={`palette-create palette-create-main inline-flex items-center gap-1.5 rounded-l-control rounded-r-none border-0 bg-accent px-3.5 py-1.5 text-control-label font-semibold text-white transition-[filter,opacity] hover:not-disabled:brightness-110 disabled:cursor-default disabled:opacity-40 ${LIGHT_CREATE}`}
                 onClick={handleCreate}
                 disabled={!canCreate}
               >
@@ -1076,12 +1076,12 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                     {MOD_ENTER_GLYPH}
                   </span>
                 ) : (
-                  <IconReturn className="palette-create-kbd" size={20} />
+                  <IconReturn className="palette-create-kbd -mx-0.5 opacity-70" size={20} />
                 )}
               </button>
               <button
                 type="button"
-                className={`palette-create palette-create-caret ${LIGHT_CREATE} ${createMenuOpen ? "is-open" : ""}`}
+                className={`palette-create palette-create-caret inline-flex items-center gap-1.5 rounded-l-none rounded-r-control border-0 bg-accent px-1.5 py-1.5 text-control-label font-semibold text-white shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[filter,opacity] hover:not-disabled:brightness-110 disabled:cursor-default disabled:opacity-40 [&>svg]:transition-transform ${LIGHT_CREATE} ${createMenuOpen ? "is-open opacity-100 [&>svg]:rotate-180" : ""}`}
                 onClick={() => setCreateMenuOpen((v) => !v)}
                 disabled={creating}
                 aria-haspopup="menu"
@@ -1091,7 +1091,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 <IconChevronDown size={22} />
               </button>
               {createMenuOpen && (
-                <div className="palette-create-menu" role="menu">
+                <div className="palette-create-menu absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-lg border border-line bg-raised p-1 shadow-[0_10px_30px_rgba(0,0,0,0.28)]" role="menu">
                   {auth?.local && (
                     <>
                       {[
@@ -1103,20 +1103,20 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                           type="button"
                           role="menuitemradio"
                           aria-checked={createTarget === opt.target}
-                          className={`palette-create-menu-item ${createTarget === opt.target ? "is-active" : ""}`}
+                          className={`palette-create-menu-item flex w-full items-start gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-fg transition-colors hover:bg-hover ${createTarget === opt.target ? "is-active" : ""}`}
                           onClick={() => {
                             setCreateTarget(opt.target);
                             setCreateMenuOpen(false);
                           }}
                         >
                           <IconCheck
-                            className="palette-create-menu-check"
+                            className="palette-create-menu-check mt-px shrink-0 text-dim"
                             size={22}
                             style={{ visibility: createTarget === opt.target ? "visible" : "hidden" }}
                           />
-                          <span className="palette-create-menu-text">
-                            <span className="palette-create-menu-title">{opt.title}</span>
-                            <span className="palette-create-menu-desc">{opt.desc}</span>
+                          <span className="palette-create-menu-text flex min-w-0 flex-col gap-px">
+                            <span className="palette-create-menu-title text-control-label font-semibold">{opt.title}</span>
+                            <span className="palette-create-menu-desc text-meta text-dim">{opt.desc}</span>
                           </span>
                         </button>
                       ))}
@@ -1132,20 +1132,20 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                       type="button"
                       role="menuitemradio"
                       aria-checked={createMore === opt.more}
-                      className={`palette-create-menu-item ${createMore === opt.more ? "is-active" : ""}`}
+                      className={`palette-create-menu-item flex w-full items-start gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-fg transition-colors hover:bg-hover ${createMore === opt.more ? "is-active" : ""}`}
                       onClick={() => {
                         setCreateMore(opt.more);
                         setCreateMenuOpen(false);
                       }}
                     >
                       <IconCheck
-                        className="palette-create-menu-check"
+                        className="palette-create-menu-check mt-px shrink-0 text-dim"
                         size={22}
                         style={{ visibility: createMore === opt.more ? "visible" : "hidden" }}
                       />
-                      <span className="palette-create-menu-text">
-                        <span className="palette-create-menu-title">{opt.title}</span>
-                        <span className="palette-create-menu-desc">{opt.desc}</span>
+                      <span className="palette-create-menu-text flex min-w-0 flex-col gap-px">
+                        <span className="palette-create-menu-title text-control-label font-semibold">{opt.title}</span>
+                        <span className="palette-create-menu-desc text-meta text-dim">{opt.desc}</span>
                       </span>
                     </button>
                   ))}

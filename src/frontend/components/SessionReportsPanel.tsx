@@ -80,15 +80,15 @@ export function SessionReportsPanel({
 			<div className="shrink-0 border-b border-line px-3 py-2.5">
 				<div className="flex items-start gap-2">
 					<div className="min-w-0 flex-1">
-						<div className="truncate text-[13px] font-semibold text-fg">
+						<div className="truncate text-control-label font-semibold text-fg">
 							{selected.title}
 						</div>
-						<div className="mt-0.5 text-[11px] text-faint">
+						<div className="mt-0.5 text-meta text-faint">
 							{formatDate(selected.createdAt)}
 						</div>
 					</div>
 					<a
-						className="shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] text-dim hover:bg-hover hover:text-fg"
+						className="shrink-0 rounded-sm px-1.5 py-0.5 text-meta text-dim hover:bg-hover hover:text-fg"
 						href={fullReportUrl}
 					>
 						Open full report
@@ -97,7 +97,7 @@ export function SessionReportsPanel({
 				{reports.length > 1 && (
 					<select
 						aria-label="Report from this session"
-						className="mt-2 w-full rounded-md border border-line bg-panel px-2 py-1.5 text-xs text-fg"
+						className="mt-2 w-full rounded-md border border-line bg-panel px-2 py-1.5 text-label text-fg"
 						value={reportKey(selected)}
 						onChange={(event) => setSelectedKey(event.target.value)}
 					>

@@ -7,6 +7,7 @@ import {
 } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { IconChevronDown, IconClock } from "./icons";
+import { cn } from "../ui/cn";
 
 /** "in 45m" / "in 3h" / "in 2d" for a future instant (short form). */
 function inTime(iso: string): string {
@@ -22,6 +23,7 @@ const fmtTime = (d: Date) =>
   d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 const toDateInput = (d: Date) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const menuItemClass = "composer-menu-item disabled:cursor-default disabled:opacity-45";
 
 /**
  * Composer "send later": schedules the *current composer draft* for this
@@ -174,14 +176,14 @@ export function SchedulePromptButton({
   return (
     <div
       ref={rootRef}
-      className={`composer-schedule-wrap ${variant === "menu-item" ? "composer-schedule-wrap-menu" : ""}`}
+      className={cn("composer-schedule-wrap relative inline-flex items-stretch", variant === "menu-item" && "composer-schedule-wrap-menu block w-full")}
     >
       <button
         type="button"
         className={
           variant === "menu-item"
-            ? "composer-menu-item composer-schedule-item"
-            : `composer-send-caret ${open ? "is-open" : ""}`
+            ? `${menuItemClass} composer-schedule-item relative justify-start disabled:hover:bg-transparent`
+            : cn("composer-send-caret relative inline-flex w-[30px] items-center justify-center rounded-r-lg border-0 bg-accent text-white transition-[filter] hover:not-disabled:brightness-110 disabled:cursor-default disabled:opacity-35 before:absolute before:left-0 before:top-1/2 before:h-4 before:w-px before:-translate-y-1/2 before:bg-white/45 [&>svg]:transition-transform", open && "is-open [&>svg]:rotate-180")
         }
         onClick={() => setOpen(!open)}
         disabled={disabled}
@@ -192,7 +194,7 @@ export function SchedulePromptButton({
       >
         {variant === "menu-item" ? (
           <>
-            <span className="composer-menu-icon">
+            <span className="composer-menu-icon inline-flex w-5 items-center justify-center text-control-label text-dim">
               <IconClock size={22} />
             </span>
             <span>Schedule message</span>
@@ -201,28 +203,28 @@ export function SchedulePromptButton({
           <IconChevronDown size={20} />
         )}
         {pending.length > 0 && (
-          <span className="composer-schedule-badge">{pending.length}</span>
+          <span className="composer-schedule-badge pointer-events-none absolute -top-[5px] -right-[5px] h-[15px] min-w-[15px] rounded-full bg-yellow px-[3px] text-center text-meta leading-[15px] font-bold text-white shadow-[0_0_0_2px_var(--bg)]">{pending.length}</span>
         )}
       </button>
 
       {open && (
-        <div className="composer-menu composer-schedule-menu" role="menu">
+        <div className="composer-menu composer-schedule-menu min-w-[236px]" role="menu">
           {pending.length > 0 && (
-            <div className="composer-schedule-pending">
+            <div className="composer-schedule-pending mb-0.5 flex flex-col gap-px border-b border-line pb-1">
               {pending.map((p) => (
-                <div key={p.id} className="composer-schedule-perow">
+                <div key={p.id} className="composer-schedule-perow flex min-w-0 items-baseline gap-2 px-[9px] py-[5px] text-label">
                   <span
-                    className="composer-schedule-pin"
+                    className="composer-schedule-pin shrink-0 font-semibold text-yellow"
                     title={new Date(p.at).toLocaleString()}
                   >
                     {inTime(p.at)}
                   </span>
-                  <span className="composer-schedule-ptext" title={p.prompt}>
+                  <span className="composer-schedule-ptext truncate text-dim" title={p.prompt}>
                     {p.prompt}
                   </span>
                   <button
                     type="button"
-                    className="composer-schedule-pcancel"
+                    className="composer-schedule-pcancel ml-auto shrink-0 border-0 bg-transparent p-0 text-label text-faint hover:text-red"
                     title="Cancel this scheduled message"
                     onClick={async () => {
                       try {
@@ -238,84 +240,84 @@ export function SchedulePromptButton({
             </div>
           )}
 
-          <div className="composer-schedule-head">Schedule message</div>
+          <div className="composer-schedule-head px-[9px] pt-1.5 pb-1 text-label font-medium text-faint">Schedule message</div>
           {quickOptions().map((o) => (
             <button
               key={o.at.toISOString()}
               type="button"
               role="menuitem"
-              className="composer-menu-item"
+              className={menuItemClass}
               onClick={() => schedule(o.at)}
               disabled={saving || !hasText}
             >
               {o.label}
             </button>
           ))}
-          <div className="composer-schedule-sep" />
+          <div className="composer-schedule-sep mx-1.5 my-1 h-px bg-line" />
           <button
             type="button"
             role="menuitem"
-            className="composer-menu-item"
+            className={menuItemClass}
             onClick={openCustom}
             disabled={!hasText}
           >
             Custom time
           </button>
           {error && !customOpen && (
-            <div className="composer-schedule-err">{error}</div>
+            <div className="composer-schedule-err px-[9px] pt-1 pb-0.5 text-label text-red">{error}</div>
           )}
         </div>
       )}
 
       {customOpen && (
         <div
-          className="composer-schedule-modal-backdrop"
+          className="composer-schedule-modal-backdrop fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-5"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setCustomOpen(false);
           }}
         >
-          <div className="composer-schedule-modal">
-            <div className="composer-schedule-modal-head">
+          <div className="composer-schedule-modal w-[420px] max-w-[92vw] rounded-xl border border-line-strong bg-raised p-5 shadow-[0_20px_60px_rgba(0,0,0,0.4)]">
+            <div className="composer-schedule-modal-head flex items-start justify-between gap-3">
               <div>
-                <div className="composer-schedule-modal-title">Schedule message</div>
-                <div className="composer-schedule-modal-tz">Time zone: {tz}</div>
+                <div className="composer-schedule-modal-title text-[17px] font-semibold text-fg">Schedule message</div>
+                <div className="composer-schedule-modal-tz mt-[3px] text-supporting text-dim">Time zone: {tz}</div>
               </div>
               <button
                 type="button"
-                className="composer-schedule-modal-close"
+                className="composer-schedule-modal-close border-0 bg-transparent px-1 py-0.5 text-[15px] leading-none text-faint hover:text-fg"
                 onClick={() => setCustomOpen(false)}
                 aria-label="Close"
               >
                 ✕
               </button>
             </div>
-            <div className="composer-schedule-modal-fields">
+            <div className="composer-schedule-modal-fields mt-4 flex gap-2">
               <input
                 type="date"
                 value={date}
                 min={toDateInput(new Date())}
                 onChange={(e) => setDate(e.target.value)}
-                className="composer-schedule-input"
+                className="composer-schedule-input min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-[9px] text-control-label font-medium text-fg outline-none focus:border-line-strong"
               />
               <input
                 type="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="composer-schedule-input composer-schedule-input-time"
+                className="composer-schedule-input composer-schedule-input-time min-w-0 flex-[0_0_130px] rounded-md border border-line bg-surface px-3 py-[9px] text-control-label font-medium text-fg outline-none focus:border-line-strong"
               />
             </div>
-            {error && <div className="composer-schedule-err">{error}</div>}
-            <div className="composer-schedule-modal-actions">
+            {error && <div className="composer-schedule-err px-[9px] pt-1 pb-0.5 text-label text-red">{error}</div>}
+            <div className="composer-schedule-modal-actions mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                className="composer-schedule-cancel"
+                className="composer-schedule-cancel rounded-md border border-line-strong bg-transparent px-4 py-[9px] text-control-label font-semibold text-fg hover:bg-surface"
                 onClick={() => setCustomOpen(false)}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="composer-schedule-submit"
+                className="composer-schedule-submit rounded-md border-0 bg-accent px-4 py-[9px] text-control-label font-semibold text-white transition-[filter] hover:not-disabled:brightness-110 disabled:cursor-default disabled:opacity-45"
                 onClick={scheduleCustom}
                 disabled={saving || !date || !time}
               >

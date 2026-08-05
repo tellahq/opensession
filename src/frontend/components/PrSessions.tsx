@@ -151,7 +151,7 @@ export function PrSessionsList({
 	return (
 		<div className="flex flex-col">
 			{sessions.length === 0 && (
-				<div className="px-2 py-1.5 -mx-2 text-xs text-faint">
+				<div className="px-2 py-1.5 -mx-2 text-label text-faint">
 					No sessions are linked to this PR yet.
 				</div>
 			)}
@@ -199,7 +199,7 @@ export function PrSessionsList({
 					}}
 				>
 					<input
-						className="min-w-0 flex-1 rounded-sm border border-line bg-surface px-2.5 py-2 text-xs text-fg outline-none placeholder:text-faint focus:border-line-strong"
+						className="min-w-0 flex-1 rounded-sm border border-line bg-surface px-2.5 py-2 text-label text-fg outline-none placeholder:text-faint focus:border-line-strong"
 						placeholder="Start a new session on this PR…"
 						value={prompt}
 						onChange={(e) => setPrompt(e.target.value)}
@@ -208,14 +208,14 @@ export function PrSessionsList({
 					<Button
 						type="submit"
 						variant="primary"
-						className="shrink-0 text-xs"
+						className="shrink-0 text-label"
 						disabled={starting || !prompt.trim()}
 					>
 						{starting ? "Starting…" : "Start"}
 					</Button>
 				</form>
 			)}
-			{error && <div className="mt-1.5 text-xs text-red">{error}</div>}
+			{error && <div className="mt-1.5 text-label text-red">{error}</div>}
 		</div>
 	);
 }

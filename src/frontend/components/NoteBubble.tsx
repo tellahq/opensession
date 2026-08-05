@@ -74,7 +74,7 @@ export function NoteBubble({ note }: { note: ChatMessage }) {
 				>
 					Note
 				</span>
-				<span className="text-[11px] text-faint">{noteTime(note.ts)}</span>
+				<span className="text-meta text-faint">{noteTime(note.ts)}</span>
 			</div>
 			{note.text && (
 				<div className="whitespace-pre-wrap text-body leading-relaxed text-fg">

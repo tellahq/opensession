@@ -100,7 +100,7 @@ export function StagingLink({
 	if (!staging) {
 		if (!deployPending) return null;
 		const shimmerGlobe = (size: number, className?: string) => (
-			<span className="staging-globe-wrap staging-shimmer" aria-hidden="true">
+			<span className="staging-globe-wrap staging-shimmer relative inline-flex animate-[staging-shimmer_1.4s_ease-in-out_infinite] items-center justify-center" aria-hidden="true">
 				<IconGlobe size={size} className={className} />
 			</span>
 		);
@@ -112,7 +112,7 @@ export function StagingLink({
 					multiline
 				>
 					<span
-						className="viewer-code-icon staging-icon is-pending"
+						className="viewer-code-icon staging-icon is-pending inline-flex cursor-default items-center justify-center rounded-md border border-transparent bg-transparent px-1 py-0.5 text-faint no-underline"
 						aria-disabled="true"
 					>
 						{shimmerGlobe(25)}
@@ -135,7 +135,7 @@ export function StagingLink({
 		}
 		return (
 			<span
-				className="staging-link staging-link-pending"
+				className="staging-link staging-link-pending inline-flex cursor-default items-center gap-1.5 whitespace-nowrap rounded-md border border-line px-2.5 py-1 text-control-label font-semibold text-dim no-underline"
 				title="Preview environment starting… the link appears once it's up"
 			>
 				{shimmerGlobe(15, "staging-globe")}
@@ -189,7 +189,7 @@ export function StagingLink({
 				idle={<IconGlobe size={size} className={className} />}
 			/>
 		) : (
-			<span className="staging-globe-wrap">
+			<span className="staging-globe-wrap relative inline-flex items-center justify-center">
 				{spinning && <span className="staging-spinner" aria-hidden="true" />}
 				<IconGlobe size={size} className={className} />
 			</span>
@@ -218,7 +218,7 @@ export function StagingLink({
 					rel="noopener"
 					onClick={onClick}
 					aria-disabled={building || undefined}
-					className={`viewer-code-icon staging-icon ${stateClass}`}
+					className={`viewer-code-icon staging-icon inline-flex items-center justify-center rounded-md border border-transparent bg-transparent px-1 py-0.5 text-faint no-underline transition-colors hover:bg-accent-soft hover:text-accent ${stateClass} ${building ? "cursor-default text-yellow opacity-70 hover:bg-[rgba(210,153,34,0.13)] hover:text-yellow hover:opacity-100" : rebuilding ? "text-yellow opacity-70 hover:bg-[rgba(210,153,34,0.13)] hover:text-yellow hover:opacity-100" : "text-green hover:bg-green-soft hover:text-green"}`}
 				>
 					{/* The globe glyph only fills ~60% of its box (thin circle in a 24
 					    viewBox), so it still needs a hair more than the play/sidebar
@@ -254,12 +254,12 @@ export function StagingLink({
 			rel="noopener"
 			onClick={onClick}
 			aria-disabled={building || undefined}
-			className={`staging-link ${building ? "staging-link-building" : ""}`}
+			className={`staging-link inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-[rgba(210,153,34,0.45)] px-2.5 py-1 text-control-label font-semibold text-yellow no-underline transition-colors hover:bg-[rgba(210,153,34,0.12)] ${building ? "staging-link-building cursor-default opacity-55" : ""}`}
 			title={`${tooltip("⌘-click to copy the link")} — ${href}`}
 		>
 			{globe(15, "staging-globe")}
 			Preview environment
-			<IconArrowUpRight size={15} className="staging-ext" />
+			<IconArrowUpRight size={15} className="staging-ext -ml-px opacity-80" />
 		</a>
 	);
 }
