@@ -92,6 +92,12 @@
 	   global.css gives every `rounded-*` class `corner-shape: squircle`, so it
 	   needs no entry in the @supports block below. */
 	--radius-control: calc(10px * var(--rf));
+	/* Floating surfaces have their own corners instead of borrowing button or
+	   generic scale radii. Browsers with corner-shape support render the larger
+	   squircle treatment (18.9px / 35.1px); Safari and Firefox intentionally use
+	   tighter circular fallbacks (11.9px / 22.1px). */
+	--radius-popup: calc(14px * var(--rf));
+	--radius-modal: calc(26px * var(--rf));
 
 	/* global.css sets html { font-size: 14px }, which silently shrinks every
 	   rem-based utility to 87.5% of its px design value (p-3 → 10.5px). Anchor

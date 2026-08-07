@@ -240,8 +240,8 @@ export function ResponsiveDialog({
 				className={cn(
 					"absolute flex flex-col overflow-hidden outline-none [corner-shape:squircle]",
 					phone
-						? "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(16.5px*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
-						: "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[calc(16.5px*var(--rf))] border border-line-strong bg-raised shadow-[0_24px_70px_rgba(0,0,0,0.45)]",
+						? "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-modal bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
+						: "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-modal border border-line-strong bg-raised shadow-[0_24px_70px_rgba(0,0,0,0.45)]",
 					animated &&
 						(phone
 							? [

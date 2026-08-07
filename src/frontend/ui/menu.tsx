@@ -27,19 +27,21 @@ function Trigger({
 // overflow-hidden keeps the inner scrollbar's ends clipped to the rounded corner
 // instead of poking past it; the transition rides Base UI's lifecycle attrs.
 const popupClasses =
-	"min-w-[180px] overflow-hidden rounded-control [corner-shape:squircle] border border-line-strong bg-panel shadow-[0_10px_30px_rgba(0,0,0,0.32)] outline-none origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0";
+	"min-w-[180px] overflow-hidden rounded-popup [corner-shape:squircle] border border-line-strong bg-panel shadow-[0_10px_30px_rgba(0,0,0,0.32)] outline-none origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0";
 
 const popupInnerClasses =
-	"max-h-[min(60vh,420px,var(--available-height))] overflow-y-auto overflow-x-hidden overscroll-contain p-1.5";
+	"max-h-[min(60vh,420px,var(--available-height))] overflow-y-auto overflow-x-hidden overscroll-contain p-2";
 
 function Popup({
 	className,
+	contentClassName,
 	side,
 	align,
 	sideOffset = 8,
 	children,
 }: {
 	className?: string;
+	contentClassName?: string;
 	side?: React.ComponentProps<typeof BaseMenu.Positioner>["side"];
 	align?: React.ComponentProps<typeof BaseMenu.Positioner>["align"];
 	sideOffset?: number;
@@ -55,7 +57,7 @@ function Popup({
 				className="z-[10001] outline-none"
 			>
 				<BaseMenu.Popup className={cn("app-menu-popup", popupClasses, className)}>
-					<div className={popupInnerClasses}>{children}</div>
+					<div className={cn(popupInnerClasses, contentClassName)}>{children}</div>
 				</BaseMenu.Popup>
 			</BaseMenu.Positioner>
 		</BaseMenu.Portal>
@@ -66,10 +68,12 @@ function Popup({
  * from the contextmenu event), reusing the same chrome + Item styling as Menu. */
 function ContextPopup({
 	className,
+	contentClassName,
 	finalFocus,
 	children,
 }: {
 	className?: string;
+	contentClassName?: string;
 	/** Where focus goes on close — pass `false` when the menu opens an inline
 	 * editor that autofocuses itself (default restores focus to the trigger). */
 	finalFocus?: React.ComponentProps<typeof BaseContextMenu.Popup>["finalFocus"];
@@ -85,7 +89,7 @@ function ContextPopup({
 					className={cn(popupClasses, className)}
 					finalFocus={finalFocus}
 				>
-					<div className={popupInnerClasses}>{children}</div>
+					<div className={cn(popupInnerClasses, contentClassName)}>{children}</div>
 				</BaseContextMenu.Popup>
 			</BaseContextMenu.Positioner>
 		</BaseContextMenu.Portal>
@@ -95,7 +99,7 @@ function ContextPopup({
 /** Shared row styling for anything that behaves like a menu item. Highlight
  * via Base UI's data-highlighted so keyboard navigation lights rows up too. */
 const itemClasses =
-	"flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-control-label text-fg outline-none data-[highlighted]:bg-hover";
+	"flex w-full cursor-pointer select-none items-center gap-2 rounded-[calc(8px*var(--rf))] px-2 py-1.5 text-left text-control-label text-fg outline-none data-[highlighted]:bg-hover";
 
 function Item({
 	className,
