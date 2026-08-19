@@ -87,6 +87,54 @@ function fieldMatches(spec: FieldSpec, value: number): boolean {
   return spec.any || spec.values.has(value);
 }
 
+/** How far back one scheduler tick will look for minutes that went by untick'd. */
+export const MAX_CATCHUP_MINUTES = 5;
+
+/** The minute key a scheduler records for `date`, e.g. "2026-08-17T14:00". */
+export function minuteKey(date: Date): string {
+  return date.toISOString().slice(0, 16);
+}
+
+/**
+ * The whole minutes a scheduler tick is responsible for: the minute containing
+ * `now`, plus any minute after `lastMinute` that no tick landed in, capped at
+ * the newest `max`.
+ *
+ * A tick-based scheduler only evaluates the minute it happens to wake up in, so
+ * a minute with no tick in it (event-loop stall, suspended host, tick drift)
+ * skips every automation scheduled for it until the cron's next occurrence,
+ * which for a daily is 24 hours later.
+ *
+ * A fresh scheduler (`lastMinute` empty) catches up NOTHING: it gets the
+ * current minute only. Replaying the minutes a process was down for would fire
+ * a burst of automations on every restart, which is worse than the miss it
+ * would paper over. The current minute is still included, exactly as before,
+ * so booting early in a minute does not itself skip that minute's slot.
+ *
+ * Returned oldest first; empty if the clock has not advanced past `lastMinute`.
+ */
+export function pendingMinutes(
+  lastMinute: string,
+  now: Date,
+  max: number = MAX_CATCHUP_MINUTES
+): Date[] {
+  const current = new Date(now.getTime());
+  current.setUTCSeconds(0, 0);
+  if (!lastMinute) return [current];
+
+  // Shape-check before parsing: Date.parse is lenient enough to turn a garbled
+  // key into a finite, very old timestamp, which would replay the full window.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(lastMinute)) return [current];
+  const last = Date.parse(`${lastMinute}:00Z`);
+  if (!Number.isFinite(last)) return [current];
+
+  const minutes: Date[] = [];
+  for (let t = current.getTime(); t > last && minutes.length < max; t -= 60_000) {
+    minutes.push(new Date(t));
+  }
+  return minutes.reverse();
+}
+
 /** Next matching minute strictly after `from`, scanning up to ~1 year. */
 export function nextRun(expr: string, from: Date = new Date()): Date | null {
   if (!parseCron(expr)) return null;

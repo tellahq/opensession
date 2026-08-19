@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { cronMatches, nextRun, parseCron } from "./cron";
+import {
+  MAX_CATCHUP_MINUTES,
+  cronMatches,
+  minuteKey,
+  nextRun,
+  parseCron,
+  pendingMinutes,
+} from "./cron";
 
 // Helper: build a UTC date. Month is 1-based here for readability.
 function utc(
@@ -243,5 +250,132 @@ describe("nextRun", () => {
     const copy = new Date(from.getTime());
     nextRun("* * * * *", from);
     expect(from.getTime()).toBe(copy.getTime());
+  });
+});
+
+describe("pendingMinutes", () => {
+  it("returns just the current minute when no minute was missed", () => {
+    const now = utc(2026, 8, 17, 14, 3, 12);
+    expect(pendingMinutes("2026-08-17T14:02", now)).toEqual([utc(2026, 8, 17, 14, 3)]);
+  });
+
+  it("returns every whole minute a tick missed, oldest first", () => {
+    // Last tick landed in 13:59, next one not until 14:02: 14:00 and 14:01 had
+    // no tick in them at all.
+    const minutes = pendingMinutes("2026-08-17T13:59", utc(2026, 8, 17, 14, 2, 6));
+    expect(minutes).toEqual([
+      utc(2026, 8, 17, 14, 0),
+      utc(2026, 8, 17, 14, 1),
+      utc(2026, 8, 17, 14, 2),
+    ]);
+  });
+
+  it("catches up nothing on a fresh scheduler", () => {
+    // lastMinute "" means "no history", not "replay the last five minutes":
+    // a restart must never fire a burst of backdated automations.
+    const minutes = pendingMinutes("", utc(2026, 8, 17, 14, 2, 6));
+    expect(minutes).toEqual([utc(2026, 8, 17, 14, 2)]);
+  });
+
+  it("clamps a long gap to MAX_CATCHUP_MINUTES, keeping the newest", () => {
+    const minutes = pendingMinutes("2026-08-17T13:30", utc(2026, 8, 17, 14, 2, 6));
+    expect(minutes.length).toBe(MAX_CATCHUP_MINUTES);
+    expect(minutes[0]).toEqual(utc(2026, 8, 17, 13, 58));
+    expect(minutes[minutes.length - 1]).toEqual(utc(2026, 8, 17, 14, 2));
+  });
+
+  it("returns nothing when the clock has not advanced past the last minute", () => {
+    expect(pendingMinutes("2026-08-17T14:02", utc(2026, 8, 17, 14, 2, 30))).toEqual([]);
+    expect(pendingMinutes("2026-08-17T14:05", utc(2026, 8, 17, 14, 2, 30))).toEqual([]);
+  });
+
+  it("falls back to the current minute for an unparseable last minute", () => {
+    expect(pendingMinutes("not-a-minute", utc(2026, 8, 17, 14, 2, 6))).toEqual([
+      utc(2026, 8, 17, 14, 2),
+    ]);
+  });
+
+  it("does not mutate `now`", () => {
+    const now = utc(2026, 8, 17, 14, 2, 6);
+    const copy = now.getTime();
+    pendingMinutes("2026-08-17T13:59", now);
+    expect(now.getTime()).toBe(copy);
+  });
+});
+
+// Mirrors the decision the automations scheduler makes on each 20s tick
+// (startScheduler in automations.ts): skip a repeat of the same minute, take
+// the minutes this tick owns, fire at most once per automation per tick.
+function runTicks(schedule: string, ticks: Date[], seed = ""): string[] {
+  let lastFiredMinute = seed;
+  const fired: string[] = [];
+  for (const now of ticks) {
+    const currentMinute = minuteKey(now);
+    if (currentMinute === lastFiredMinute) continue;
+    const minutes = pendingMinutes(lastFiredMinute, now);
+    lastFiredMinute = currentMinute;
+    if (minutes.some((minute) => cronMatches(schedule, minute))) fired.push(currentMinute);
+  }
+  return fired;
+}
+
+describe("scheduler catch-up", () => {
+  it("fires an hourly automation whose minute fell inside a tick gap", () => {
+    // The 2026-08-17 incident: ticks stop at 13:59:37 and resume at 14:01:42,
+    // so nothing ever woke up inside 14:00 and the hourly slot was lost.
+    const fired = runTicks(
+      "0 * * * *",
+      [utc(2026, 8, 17, 13, 59, 37), utc(2026, 8, 17, 14, 1, 42)],
+      "2026-08-17T13:59"
+    );
+    expect(fired).toEqual(["2026-08-17T14:01"]);
+  });
+
+  it("fires nothing retroactively on a fresh boot", () => {
+    // Booting at 14:01:46 with the first tick at 14:02:06 must NOT resurrect
+    // the 14:00 slot the dead process missed.
+    const fired = runTicks("0 * * * *", [
+      utc(2026, 8, 17, 14, 2, 6),
+      utc(2026, 8, 17, 14, 2, 26),
+      utc(2026, 8, 17, 14, 2, 46),
+    ]);
+    expect(fired).toEqual([]);
+  });
+
+  it("still fires the boot minute's own slot", () => {
+    // Booting at 14:00:03 with the first tick at 14:00:23: the current minute
+    // is always evaluated, so no-catch-up-on-boot does not itself skip a slot.
+    const fired = runTicks("0 * * * *", [utc(2026, 8, 17, 14, 0, 23)]);
+    expect(fired).toEqual(["2026-08-17T14:00"]);
+  });
+
+  it("does not fire every skipped occurrence after a long gap", () => {
+    // A per-minute schedule with a 30-minute gap: one catch-up run, not 30.
+    const fired = runTicks(
+      "* * * * *",
+      [utc(2026, 8, 17, 13, 30, 5), utc(2026, 8, 17, 14, 0, 5)],
+      "2026-08-17T13:29"
+    );
+    expect(fired).toEqual(["2026-08-17T13:30", "2026-08-17T14:00"]);
+  });
+
+  it("does not double-fire a slot covered by both catch-up and the next tick", () => {
+    // 14:00 is caught up by the 14:01 tick; the ticks that follow own only
+    // later minutes, so the hourly runs exactly once for the hour.
+    const ticks = [
+      utc(2026, 8, 17, 13, 59, 40),
+      utc(2026, 8, 17, 14, 1, 0),
+      utc(2026, 8, 17, 14, 1, 20),
+      utc(2026, 8, 17, 14, 1, 40),
+      utc(2026, 8, 17, 14, 2, 0),
+      utc(2026, 8, 17, 14, 2, 20),
+    ];
+    expect(runTicks("0 * * * *", ticks, "2026-08-17T13:59")).toEqual(["2026-08-17T14:01"]);
+  });
+
+  it("fires an hourly exactly once when ticks land normally", () => {
+    const ticks: Date[] = [];
+    for (let s = 0; s < 60 * 5; s += 20) ticks.push(new Date(utc(2026, 8, 17, 13, 58, 0).getTime() + s * 1000));
+    expect(runTicks("0 * * * *", ticks, "2026-08-17T13:57")).toEqual(["2026-08-17T14:00"]);
   });
 });

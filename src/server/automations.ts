@@ -13,7 +13,7 @@ import {
   webhookBodyTooLargeResponse,
 } from "./shared/bounded-body";
 import { labelIdentity } from "./shared/user-mappings";
-import { parseCron, cronMatches, nextRun } from "./cron";
+import { parseCron, cronMatches, nextRun, minuteKey, pendingMinutes } from "./cron";
 import {
   STRIPE_CONFIRM_TOOLS,
   declaredRunFailure,
@@ -1650,9 +1650,15 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
 
   schedulerInterval = setInterval(() => {
     const now = new Date();
-    const minuteKey = now.toISOString().slice(0, 16);
-    if (minuteKey === lastFiredMinute) return;
-    lastFiredMinute = minuteKey;
+    const currentMinute = minuteKey(now);
+    if (currentMinute === lastFiredMinute) return;
+
+    // Every whole minute this tick is responsible for, not just the one it woke
+    // up in: a minute that no tick lands in would otherwise skip its automations
+    // until the cron's next occurrence, 24 hours later for a daily. Bounded by
+    // MAX_CATCHUP_MINUTES, and a fresh scheduler catches up nothing.
+    const minutes = pendingMinutes(lastFiredMinute, now);
+    lastFiredMinute = currentMinute;
 
     for (const automation of listAutomations()) {
       if (!automation.enabled) continue;
@@ -1671,8 +1677,13 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
         continue;
       }
 
-      if (!automation.schedule) continue;
-      if (cronMatches(automation.schedule, now)) {
+      const schedule = automation.schedule;
+      if (!schedule) continue;
+      // `some`, not a loop over `minutes`: one tick is at most one run per
+      // automation, so a caught-up gap that spans several matching minutes
+      // (a "* * * * *" schedule, say) never fires a burst. Consecutive ticks
+      // own disjoint minute ranges, so no minute is ever evaluated twice.
+      if (minutes.some((minute) => cronMatches(schedule, minute))) {
         // Fire and forget — runner guards against overlap per automation
         void runAutomation(automation, onSessionCreated, { trigger: "cron" });
       }
