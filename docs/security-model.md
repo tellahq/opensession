@@ -116,6 +116,73 @@ two people who should see it.
   `allowedUsers` is neither enforced nor stripped — so restart after wiring a
   restricted server.
 
+## Personal MCP OAuth credentials
+
+Personal tool connections, including Slack user OAuth grants that can post as
+the connected person, are encrypted at rest in
+`~/.opensession-mcp-oauth.json` (AES-256-GCM with an authenticated header).
+The key is a systemd credential (`LoadCredential=mcp-oauth-key`) where an
+operator has set one up, and otherwise a 0600 file minted beside the store on
+first use. Nothing about it lives in the repository, the environment, engine
+configuration, command arguments, or session state.
+
+The coordinator mounts OAuth-connected MCP servers as run-rpc proxies and
+decrypts a token only when opening the upstream request or stdio transport.
+Engines and remote sandboxes receive the run-scoped RPC capability, never an
+access token, a refresh token, or a durable relay bearer. A grant is pinned to
+the server binding it was issued against (URL, or command plus arguments plus
+a canonicalized environment), so editing `mcp-config.json` to point a name
+somewhere else does not redirect the token to it.
+
+Personal grants follow the signed-in prompter, never the creator of a session
+someone else is steering, and never widen a server's `allowedUsers` gate.
+Anyone signed in can prompt anyone else's session, so this is the boundary
+that keeps one person's run from spending another person's token. Shared
+grants remain available to explicitly allowlisted automations through the same
+proxy. A run carrying a personal proxy uses a per-session engine server, since
+a provider tool must not join the shared server's union configuration.
+
+On the first read after upgrading, a legacy plaintext store is atomically
+replaced by an encrypted envelope, preserving grants and refresh state. Legacy
+relay bearers are deleted and their route is gone. Removing an MCP server also
+removes its OAuth registration and every grant under it.
+
+### What this does and does not protect against
+
+It keeps tokens out of the places a credential usually escapes from: engine
+configuration, process environments, command arguments, logs, transcripts and
+projected sandbox files. They are also unreadable to anything that gets the
+store without the key, which covers a stray copy of the file, a paste of its
+contents, and a partial sync. A grant is pinned to the server binding it was
+issued against, including the resolved absolute executable for stdio servers,
+so a redirected URL or a name shadowed on PATH cannot capture it.
+
+It does not make a whole-home backup safe: with the fallback key the key file
+sits in the same directory as the store, so a backup that takes both can be
+decrypted offline. Only a systemd credential (or a future broker) puts the key
+somewhere a copy of the home directory does not reach.
+
+It does not isolate the coordinator from the agents it runs. They share a Unix
+user, so a process running as that user can read the key exactly as the server
+does. Making that a real boundary needs the key held by a second uid, which
+needs root, which a rootless install deliberately does not have. The intended
+end state is a small privileged broker that holds the key and returns a
+short-lived, per-use grant, so a process at the coordinator's uid has nothing
+reusable to steal; the encrypted store is the substrate that sits under it.
+
+Two deployment shapes matter for how much the current state buys you. Where
+the coordinator runs a release artefact and sessions work in their own
+repositories, agents do not author the code the coordinator executes, and the
+remaining same-uid exposure is a real but narrow one. Where Open Session is
+self-hosted from a checkout that its own sessions edit and deploy, agents do
+author that code, and no confinement of the agent can close the gap; treat
+personal grants on such an instance as reachable by anything you run there.
+
+`OPENSESSION_PERSONAL_MCP=0` is the operator switch: reads degrade to no
+personal connections and the grant file is left byte-for-byte unchanged.
+Connecting an account requires a signed-in web identity, so the OAuth callback
+is bound to the person who started it.
+
 ## GitHub credential scoping (out-of-org writes fail server-side)
 
 The "public repositories require confirmation" rule in AGENTS.md is enforced

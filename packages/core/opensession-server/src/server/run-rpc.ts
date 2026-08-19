@@ -451,16 +451,6 @@ function jsonRpcError(id: unknown, code: number, message: string): Record<string
 
 async function handleMcpHttp(req: Request): Promise<Response> {
   const url = new URL(req.url);
-  // Fresh-auth relay for OAuth-connected EXTERNAL servers (mcp-relay.ts):
-  // per-request Authorization from the grant store, so short-lived tokens
-  // never 401 mid-turn. Gated by its own minted token.
-  const relay = url.pathname.match(/^\/relay\/([A-Za-z0-9_-]+)$/);
-  if (relay) {
-    const t = url.searchParams.get("t") || "";
-    if (!t) return json({ error: "missing relay token" }, 401);
-    const { handleMcpRelay } = await import("./mcp-relay");
-    return handleMcpRelay(req, decodeURIComponent(relay[1]), t);
-  }
   const m = url.pathname.match(/^\/mcp\/([A-Za-z0-9_-]+)$/);
   if (!m) return json({ error: "not found" }, 404);
   const server = canonicalMcpServerId(m[1]);

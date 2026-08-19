@@ -28,7 +28,10 @@ import { startCodexUsagePoller } from "./src/server/codex-accounts";
 import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
 import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
-import { interactiveMcpServers } from "./src/server/interactive-mcp";
+import {
+	interactiveMcpServers,
+	personalMcpScopeForSession,
+} from "./src/server/interactive-mcp";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./src/server/paths";
 import { startPlainArchiveSweep } from "./src/server/plain-archive";
 import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
@@ -818,12 +821,15 @@ if (!g.__opensessionBooted) {
 					// fail-closed automation fallback either way.
 					if (session.automation)
 						return automationResumeMcpForSession(session, bksSessionId);
+					// A resume rebuilds from the session file, so the scope comes
+					// from the same derivation the run-rpc fallback builder uses.
+					const scope = personalMcpScopeForSession(session);
 					const servers: Record<string, unknown> = session.goalId
 						? {
-								...interactiveMcpServers(user, bksSessionId),
+								...interactiveMcpServers(user, bksSessionId, scope),
 								"opensession-goal-self": createGoalSelfMcpServer(session.goalId),
 							}
-						: interactiveMcpServers(user, bksSessionId);
+						: interactiveMcpServers(user, bksSessionId, scope);
 					return servers;
 				} catch (e) {
 					console.error(

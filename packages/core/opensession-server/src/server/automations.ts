@@ -22,6 +22,7 @@ import {
 import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
 import { runAgent } from "./agent-runner";
+import { mcpOauthProxyServers } from "./mcp-oauth-proxy";
 import { runAgentHosted } from "./host-client";
 import {
   providerFor,
@@ -882,8 +883,10 @@ export function automationRunMcpForSession(
  * run) + papercuts (per-repo toggle) + workflows / self-improve pair (human-set
  * flags) + turn. One builder, two callers: runAutomation at dispatch, and the
  * boot-resume rebuild (automationResumeMcpForSession below). Everything here
- * is held to the automation bar: append-only, nothing sensitive readable, no
- * control surface — the admin/sessions siblings must never join this set.
+ * is held to the automation bar. The only non-append-only entries are
+ * coordinator-side proxies for shared OAuth grants already named in the
+ * automation's explicit MCP allowlist; provider credentials stay hidden.
+ * The admin/sessions siblings must never join this set.
  */
 function automationRunInProcessMcp(
   a: Automation,
@@ -898,6 +901,7 @@ function automationRunInProcessMcp(
   }
 ): Record<string, unknown> {
   return {
+    ...mcpOauthProxyServers(a.mcpServers ?? [], undefined, []),
     "opensession-report": createReportMcpServer({
       automationId: a.id,
       automationName: a.name,

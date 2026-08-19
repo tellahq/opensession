@@ -43,6 +43,8 @@ import { findSession, touchNativeSession } from "./session-cache";
 import { attachRepo, linkPr, resolveSessionRepoContext, sessionRepoIds, switchPrimaryRepo } from "./session-repos";
 import { makeAskHandler } from "./asks";
 import { activeSandboxFor } from "./session-sandbox";
+import { mcpOauthProxyServers } from "./mcp-oauth-proxy";
+import type { McpScope } from "./runner-shared";
 
 type PreviewAction = "start" | "status" | "stop";
 type PreviewModule = typeof import("./preview");
@@ -125,11 +127,42 @@ function papercutsServerFor(
 	};
 }
 
+/** The personal-proxy scope a session's own run should get, for launchers that
+ *  rebuild a run's servers from the session file rather than from live run
+ *  options (the run-rpc fallback builder, the resume path in opensession.ts).
+ *  Old feed sessions can predate the persisted allowlist, and this cannot
+ *  resolve their connectors, so those fail closed rather than widening. */
+export function personalMcpScopeForSession(
+	session: { mcpServers?: string[]; externalRefs?: unknown[] } | undefined,
+): McpScope {
+	if (session?.mcpServers?.length) return session.mcpServers;
+	if (session?.externalRefs?.length) return [];
+	return "all";
+}
+
 export function interactiveMcpServers(
-	user?: string,
-	sessionId?: string,
+	user: string | undefined,
+	sessionId: string | undefined,
+	/** Which external servers this run may see, so a personal proxy is never
+	 *  mounted wider than the run's own allowlist. REQUIRED, and deliberately
+	 *  not optional: every launcher has to make the choice, because forgetting
+	 *  it is silent — `buildOpencodeMcpConfig` drops a granted server on the
+	 *  assumption a proxy replaces it, so a launcher that omits the scope gets
+	 *  neither. Pass `undefined` only to mean "no personal tools at all"
+	 *  (Desk voice). */
+	personalMcpScope: McpScope | undefined,
 ): Record<string, unknown> {
 	const createdBy = user || productName();
+	const session = sessionId ? findSession(sessionId) : undefined;
+	// Personal provider tools are opt-in at the run launch sites. Other callers
+	// (notably Desk voice) deliberately consume a narrower interactive facade.
+	const personalMcp = session && personalMcpScope
+		? mcpOauthProxyServers(
+				personalMcpScope,
+				user,
+				[user],
+			)
+		: {};
 	return {
 		"opensession-sessions": createSessionsMcpServer({
 			createdBy,
@@ -144,6 +177,7 @@ export function interactiveMcpServers(
 			createdBy,
 			isAdmin: true,
 		}),
+		...personalMcp,
 		// Runners are deliberately trusted persistent machines for platform-locked
 		// work. Interactive-only: untrusted automation text must never reach one.
 		"opensession-runners": createRunnersMcpServer({ user, sessionId }),
@@ -352,7 +386,14 @@ registerInteractiveMcpBuilder((sessionId, user) => {
 	if (sessionId && session?.automation) {
 		return automationSessionMcp(session, sessionId);
 	}
-	const servers = interactiveMcpServers(user, sessionId);
+	// Old feed sessions can predate the persisted allowlist. The asynchronous
+	// launch path still resolves their external connectors, but this fallback
+	// builder cannot; fail closed for personal proxies rather than widening.
+	const servers = interactiveMcpServers(
+		user,
+		sessionId,
+		personalMcpScopeForSession(session),
+	);
 	const goalId = session?.goalId;
 	if (goalId)
 		(servers as Record<string, unknown>)["opensession-goal-self"] =

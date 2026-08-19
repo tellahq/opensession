@@ -79,6 +79,7 @@ import {
 } from "../../opencode-openai-auth";
 import { modelSupportsSteer, providerFor } from "../../models";
 import { filterMcpServers } from "../../runner-shared";
+import { hasMcpOauthGrantForUsers } from "../../mcp-oauth";
 import {
   appendOpencodeTranscript,
   ensureOpencodeTranscriptFile,
@@ -1407,8 +1408,13 @@ function makeRemoteLauncher(
       const projectedMcp = filterMcpServers(
         spec.mcpServers ?? "all",
         spec.user,
-        [spec.mcpGrantUser, spec.user],
-      );
+        [spec.user],
+      ) as Record<string, unknown>;
+      for (const name of Object.keys(projectedMcp)) {
+        if (hasMcpOauthGrantForUsers(name, [spec.user])) {
+          delete projectedMcp[name];
+        }
+      }
       const claudeAccountsPath = `${REMOTE_HOME}/.opensession-claude-accounts.json`;
       await Promise.all([
         driver.writeFile(

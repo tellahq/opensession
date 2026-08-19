@@ -7,7 +7,7 @@ import { homeDir } from "./paths";
 import { existsSync, readFileSync, copyFileSync, watchFile } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { configuredPaths } from "./config";
-import { mcpOauthStatus, mcpSharedGrantHeader, mcpUserGrantHeader, mcpUserGrantToken, oauthPresetFor } from "./mcp-oauth";
+import { mcpOauthStatus, removeAllMcpOauthGrants } from "./mcp-oauth";
 
 const HOME = homeDir();
 // mcp-config.json location. OPENSESSION_MCP_CONFIG env → config
@@ -78,52 +78,9 @@ export function withDynamicCredentials(
       }
     } catch {}
   }
-  // OAuth-connected HTTP servers (src/server/mcp-oauth.ts): inject the run
-  // user's own grant first (per-user MCP identity), else the shared grant.
-  // Servers with a static Authorization header keep it unless a grant exists.
-  try {
-    for (const [name, cfg] of Object.entries(out)) {
-      if (!cfg || typeof cfg !== "object") continue;
-      const c: any = cfg;
-      const isHttp = c.type === "http" || c.type === "sse" || !!c.url;
-      if (!isHttp) {
-        // Stdio servers with a preset OAuth (slack): inject the grant token
-        // as the preset's env var — the run then acts AS THE PERSON
-        // (creator-first order), falling back to the static bot token.
-        const preset = oauthPresetFor(name);
-        if (preset?.envVar && c.command) {
-          const candidates = (Array.isArray(user) ? user : [user]).filter(
-            (u): u is string => !!u,
-          );
-          const token =
-            candidates
-              .map((u) => mcpUserGrantToken(name, u))
-              .find((t) => !!t) ??
-            mcpSharedGrantHeader(name)?.replace(/^Bearer\s+/i, "");
-          if (token)
-            out = {
-              ...out,
-              [name]: { ...c, env: { ...c.env, [preset.envVar]: token } },
-            };
-        }
-        continue;
-      }
-      const candidates = (Array.isArray(user) ? user : [user]).filter(
-        (u): u is string => !!u,
-      );
-      const header =
-        candidates
-          .map((u) => mcpUserGrantHeader(name, u))
-          .find((h) => !!h) ?? mcpSharedGrantHeader(name);
-      if (!header) continue;
-      out = {
-        ...out,
-        [name]: { ...c, headers: { ...c.headers, Authorization: header } },
-      };
-    }
-  } catch (e) {
-    console.error("[connections] mcp-oauth header injection failed:", e);
-  }
+  // Personal OAuth credentials deliberately do not participate in this
+  // overlay. They are mounted as server-side MCP proxies (mcp-oauth-proxy.ts),
+  // so no provider token can enter engine config, env, argv, or sandbox files.
   return out;
 }
 
@@ -257,6 +214,15 @@ export function setMcpAllowedUsers(
 export function removeMcpServer(name: string): { ok: true } | { error: string } {
   const config = readMcpConfig();
   if (!config.mcpServers[name]) return { error: `Server "${name}" not found` };
+  try {
+    removeAllMcpOauthGrants(name);
+  } catch {
+    return {
+      error:
+        `Server "${name}" was not removed because its personal grants ` +
+        "could not be revoked. Restore the protected credential and try again.",
+    };
+  }
   delete config.mcpServers[name];
   writeMcpConfig(config);
   return { ok: true };

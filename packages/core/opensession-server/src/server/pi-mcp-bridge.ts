@@ -28,10 +28,9 @@
  *    in the host. Those mount through the ordinary external stdio path (see
  *    classifyInProcessMcp). Accepting only the instance shape is what silently
  *    stripped every opensession-* server from hosted pi runs until 2026-08-19.
- *  - OAuth-granted http servers ride the local mcp-relay
- *    (mcpRelayUrl + mintMcpRelayToken, exactly like buildOpencodeMcpConfig):
- *    a fresh Authorization is injected per REQUEST by the relay, so
- *    short-lived tokens never sit in bridge state and can't expire mid-turn.
+ *  - OAuth-granted servers are omitted here and mounted as coordinator-side
+ *    in-process proxies (mcp-oauth-proxy.ts), so provider tokens never enter
+ *    Pi state or a model-controlled process.
  *  - stdio servers spawn with getDefaultEnvironment() + the server's own
  *    configured env — never this process's env (it holds Open Session tokens).
  *
@@ -65,8 +64,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { filterMcpServers, type McpScope } from "./runner-shared";
 import { readCachedTools, toolsCacheKey, writeCachedTools } from "./mcp-tools-cache";
-import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
-import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
+import { hasMcpOauthGrantForUsers } from "./mcp-oauth";
 import type { InProcessMcpServer } from "./inprocess-mcp";
 
 const DEFAULT_CALL_TIMEOUT_MS = 120_000;
@@ -271,7 +269,7 @@ export async function createPiMcpBridge(opts: {
   callTimeoutMs?: number;
 }): Promise<PiMcpBridge> {
   const timeoutMs = opts.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
-  const grantUsers = [opts.mcpGrantUser, opts.user];
+  const grantUsers = [opts.user];
   let closed = false;
 
   // Every ServerConn ever built, memoized or not, so close() reaches clients
@@ -289,20 +287,8 @@ export async function createPiMcpBridge(opts: {
     live.add(rec);
     let transport: Transport;
     if (cfg.type === "http" || cfg.type === "sse" || cfg.url) {
-      // OAuth-granted servers route through the local fresh-auth relay
-      // (mcp-relay.ts) — same path as buildOpencodeMcpConfig: tokens are
-      // re-resolved per request and never appear in bridge state.
-      const candidates = grantUsers.filter((u): u is string => !!u);
-      const hasGrant =
-        candidates.some((u) => mcpUserGrantHeader(name, u)) ||
-        !!mcpSharedGrantHeader(name);
-      let url = String(cfg.url);
-      let headers = { ...((cfg.headers as Record<string, string>) || {}) };
-      if (hasGrant) {
-        url = mcpRelayUrl(name, mintMcpRelayToken(name, candidates));
-        const { Authorization: _drop, ...rest } = headers;
-        headers = rest;
-      }
+      const url = String(cfg.url);
+      const headers = { ...((cfg.headers as Record<string, string>) || {}) };
       const requestInit = Object.keys(headers).length ? { headers } : undefined;
       // sse: requestInit covers the POST side; the GET event stream can't
       // carry custom headers through EventSource — matches the engine-side
@@ -427,6 +413,10 @@ export async function createPiMcpBridge(opts: {
     opts.mcpGrantUser ? grantUsers : undefined,
   ) as Record<string, Record<string, unknown>>;
   for (const [name, cfg] of Object.entries(external)) {
+    // Personal OAuth servers arrive below as coordinator-side in-process
+    // proxies. Do not build a second connection whose config could contain or
+    // fall back to a provider credential.
+    if (hasMcpOauthGrantForUsers(name, grantUsers)) continue;
     entries.push({
       name,
       factory: () => connectExternal(name, cfg),

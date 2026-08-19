@@ -179,9 +179,16 @@ export async function handleConnectionsRoutes(
 				{ status: 400 },
 			);
 		try {
+			const initiatedBy =
+				ctx.authUser?.login || ctx.authUser?.name || undefined;
+			if (!initiatedBy)
+				return Response.json(
+					{ error: "Sign in before connecting a personal tool" },
+					{ status: 401 },
+				);
 			const forUser =
 				body.scope === "me"
-					? ctx.authUser?.login || ctx.authUser?.name || undefined
+					? initiatedBy
 					: undefined;
 			if (body.scope === "me" && !forUser)
 				return Response.json(
@@ -192,6 +199,7 @@ export async function handleConnectionsRoutes(
 				name,
 				oauthTarget || `stdio://${name}`,
 				forUser,
+				initiatedBy,
 			);
 			return Response.json({ url: authorizeUrl });
 		} catch (e: any) {

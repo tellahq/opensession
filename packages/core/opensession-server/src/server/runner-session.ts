@@ -75,7 +75,9 @@ export async function maybeLaunchRunnerRun(
 		accountId: session.accountId,
 		images: opts.images,
 		mcpServers: opts.mcpServers ?? "all",
-		proxyMcpServers: Object.keys(interactiveMcpServers(opts.user, session.id)),
+		proxyMcpServers: Object.keys(
+			interactiveMcpServers(opts.user, session.id, opts.mcpServers ?? "all"),
+		),
 		rpcToken,
 		wsToken,
 		reposNote: opts.reposNote,

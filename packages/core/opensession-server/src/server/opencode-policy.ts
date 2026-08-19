@@ -23,8 +23,7 @@ import { filterMcpServers, type McpScope } from "./runner-shared";
 import { userMatchesAny } from "./shared/user-mappings";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { BUN_BIN, MCP_PROXY_ENTRY, mcpHttpUrl, rpcSocketPath } from "./run-rpc-protocol";
-import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
-import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
+import { hasMcpOauthGrantForUsers } from "./mcp-oauth";
 import { mcpHttpServerActive } from "./run-rpc";
 
 export const OPENCODE_MODEL_PREFIX = "opencode/";
@@ -325,40 +324,22 @@ export function opencodeRunPolicy(opts: {
 export function buildOpencodeMcpConfig(
   scope: McpScope,
   user: string | undefined,
-  /** OAuth grant identities in priority order (session creator first — a
-   *  shared session's MCP calls run as its creator). */
+  /** Identities consulted only to decide whether a server is already supplied
+   *  by a coordinator-side proxy. It never selects a personal credential and
+   *  never widens `allowedUsers`: both of those are the prompter's alone, so
+   *  prompting someone else's session can never spend their token. */
   grantUsers?: Array<string | undefined>,
 ): { mcp: Record<string, Record<string, unknown>> } {
   const filtered = filterMcpServers(scope, user, grantUsers) as Record<string, any>;
   const mcp: Record<string, Record<string, unknown>> = {};
   for (const [name, cfg] of Object.entries(filtered)) {
+    // Granted HTTP and stdio servers are both supplied by the coordinator-side
+    // proxy. Never double-mount the workspace-configured connection.
+    if (hasMcpOauthGrantForUsers(name, grantUsers ?? [user])) continue;
     if (cfg.type === "http" || cfg.type === "sse" || cfg.url) {
-      // OAuth-granted servers route through the local fresh-auth relay
-      // (mcp-relay.ts): short-lived access tokens are re-resolved per
-      // REQUEST, so they can't expire mid-turn, never appear in engine
-      // config, and token rotation doesn't change the config hash.
-      const candidates = (grantUsers ?? [user]).filter(
-        (u): u is string => !!u,
-      );
-      const hasGrant =
-        candidates.some((u) => mcpUserGrantHeader(name, u)) ||
-        !!mcpSharedGrantHeader(name);
-      if (hasGrant) {
-        const token = mintMcpRelayToken(name, candidates);
-        const { Authorization: _drop, ...restHeaders } = (cfg.headers ||
-          {}) as Record<string, string>;
-        mcp[name] = {
-          type: "remote",
-          url: mcpRelayUrl(name, token),
-          ...(Object.keys(restHeaders).length
-            ? { headers: restHeaders }
-            : {}),
-          oauth: false,
-          enabled: true,
-          timeout: 30_000,
-        };
-        continue;
-      }
+      // OAuth-granted servers are mounted through run-rpc as server-side
+      // proxies (mcp-oauth-proxy.ts). Never put provider credentials or a
+      // durable relay bearer into the engine's model-visible config.
       mcp[name] = {
         type: "remote",
         url: cfg.url,

@@ -4215,7 +4215,11 @@ async function* runOpencodeAttempt(
     const dirQuery = shared ? { directory: cwd } : undefined;
     const q = dirQuery ? { query: dirQuery } : {};
 
-    const { mcp: externalMcp } = buildOpencodeMcpConfig(shared ? "all" : mcpServers, user, [opts.mcpGrantUser, user]);
+    const { mcp: externalMcp } = buildOpencodeMcpConfig(
+      shared ? "all" : mcpServers,
+      user,
+      [user],
+    );
 
     // Session context (ask guardrails, repos note, managing-the-agent notes).
     // Per-session servers deliver it via an instructions FILE in the config;

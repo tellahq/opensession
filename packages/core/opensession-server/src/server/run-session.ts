@@ -1311,7 +1311,13 @@ export async function maybeLaunchSandboxedRun(
 		// including opensession-goal-self for goal-driven sessions (the builder adds
 		// it from the session's goalId, mirroring the in-process path below).
 		const proxyMcpServers = [
-			...Object.keys(interactiveMcpServers(opts.user, session.id)),
+			...Object.keys(
+				interactiveMcpServers(
+					opts.user,
+					session.id,
+					opts.mcpServers ?? "all",
+				),
+			),
 			...(session.goalId ? ["opensession-goal-self"] : []),
 		];
 		rpcToken = crypto.randomUUID();
@@ -2103,7 +2109,9 @@ async function runSessionPromptInner(
 					proxyMcpServers: isAutomationSession
 						? Object.keys(automationSessionMcp(session, sessionId))
 						: [
-								...Object.keys(interactiveMcpServers(user, sessionId)),
+								...Object.keys(
+									interactiveMcpServers(user, sessionId, mcpServers ?? "all"),
+								),
 								...(session.goalId ? ["opensession-goal-self"] : []),
 							],
 					reposNote: isAutomationSession
@@ -2137,10 +2145,10 @@ async function runSessionPromptInner(
 							? automationSessionMcp(session, sessionId)
 							: session.goalId
 								? {
-										...interactiveMcpServers(user, sessionId),
+										...interactiveMcpServers(user, sessionId, mcpServers ?? "all"),
 										"opensession-goal-self": createGoalSelfMcpServer(session.goalId),
 									}
-								: interactiveMcpServers(user, sessionId),
+								: interactiveMcpServers(user, sessionId, mcpServers ?? "all"),
 				})
 			: null;
 
@@ -2205,10 +2213,10 @@ async function runSessionPromptInner(
 			? selfImproveMcpForSession(session, sessionId)
 			: session.goalId
 				? {
-						...interactiveMcpServers(user, sessionId),
+						...interactiveMcpServers(user, sessionId, mcpServers ?? "all"),
 						"opensession-goal-self": createGoalSelfMcpServer(session.goalId),
 					}
-				: interactiveMcpServers(user, sessionId),
+				: interactiveMcpServers(user, sessionId, mcpServers ?? "all"),
 		reposNote: isAutomationSession
 			? undefined
 			: await buildSessionNote(session, user),

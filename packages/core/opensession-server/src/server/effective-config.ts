@@ -26,7 +26,7 @@ import type { UnifiedSession } from "./types";
 import { resolveSessionRunInputs, type SessionRunInputs } from "./session-run-inputs";
 import { filterMcpServers, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { readMcpConfig } from "./connections";
-import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
+import { hasMcpOauthGrantForUsers } from "./mcp-oauth";
 import { userMatchesAny, commitAuthorFor } from "./shared/user-mappings";
 import { configuredPaths } from "./config";
 import {
@@ -213,17 +213,13 @@ export function describeMcpServers(
   user: string | undefined,
   grantUsers: Array<string | undefined>,
 ): McpServerRow[] {
-  const grantHolders = grantUsers.filter((u): u is string => !!u);
   return explainMcpServers({
     all: readMcpConfig().mcpServers || {},
     included: filterMcpServers(scope ?? "all", user, grantUsers),
     scope,
-    // The gate clears on any of these; de-duplicated so the reason reads as
-    // the set of identities tried, not as one name repeated.
-    gateUsers: [...new Set([user, ...grantUsers].filter((u): u is string => !!u))],
+    gateUsers: user ? [user] : [],
     configPath: configuredPaths().mcpConfig,
-    hasOauthGrant: (name) =>
-      grantHolders.some((u) => mcpUserGrantHeader(name, u)) || !!mcpSharedGrantHeader(name),
+    hasOauthGrant: (name) => hasMcpOauthGrantForUsers(name, [user]),
   });
 }
 
@@ -291,7 +287,7 @@ export async function inProcessServerNames(
   }
   const { interactiveMcpServers } = await import("./interactive-mcp");
   const servers: Record<string, unknown> = {
-    ...interactiveMcpServers(inputs.user, session.id),
+    ...interactiveMcpServers(inputs.user, session.id, inputs.mcpServers ?? "all"),
   };
   if (inputs.inProcessMcpBranch === "interactive+goal-self" && session.goalId) {
     servers["opensession-goal-self"] = createGoalSelfMcpServer(session.goalId);
