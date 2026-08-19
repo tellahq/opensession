@@ -15,7 +15,7 @@
  * Everything is read fresh; nothing is cached.
  */
 
-import { existsSync } from "fs";
+import { accessSync, constants, existsSync, statSync } from "fs";
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { configuredPaths } from "./config";
@@ -56,14 +56,60 @@ export interface EngineStatus {
   fixableInApp: boolean;
 }
 
-function findClaudeBin(): string | null {
+/** How to get the CLI when it is missing. One string, so the boot log, doctor
+ *  and the health endpoint all say the same thing. */
+export const CLAUDE_CLI_INSTALL_HINT =
+  "install Claude Code: curl -fsSL https://claude.ai/install.sh | bash";
+
+export interface ClaudeCliStatus {
+  /** What the runners exec (config.ts `configuredPaths().claudeBin`):
+   *  OPENSESSION_CLAUDE_BIN, config `paths.claudeBin`, a PATH lookup, or the
+   *  bare name when nothing resolved. */
+  path: string;
+  /** True when `path` names an existing executable file. */
+  ok: boolean;
+  /** Why not, ending in the install hint. Null when ok. */
+  error: string | null;
+}
+
+/**
+ * The installed `claude` CLI is the only Claude Code this instance has: the
+ * bundled Anthropic bridge hands the Agent SDK `pathToClaudeCodeExecutable`
+ * and Meridian gets MERIDIAN_CLAUDE_PATH, both pointing at this path, and the
+ * SDK's own platform binaries are pruned from the release tarball
+ * (scripts/build-release.ts). So the path has to be a real executable, not a
+ * bare name that may or may not be on PATH. Cheap enough to call per request;
+ * nothing is cached.
+ */
+export function claudeCliStatus(): ClaudeCliStatus {
   const configured = configuredPaths().claudeBin;
   // configuredPaths falls back to the bare name when nothing resolves; a bare
   // name is not evidence the CLI exists.
-  if (configured && configured !== "claude") {
-    return existsSync(configured) ? configured : null;
+  const path = configured && configured !== "claude" ? configured : Bun.which("claude");
+  if (!path) {
+    return {
+      path: configured || "claude",
+      ok: false,
+      error: `no \`claude\` CLI on PATH; set OPENSESSION_CLAUDE_BIN or paths.claudeBin, or ${CLAUDE_CLI_INSTALL_HINT}`,
+    };
   }
-  return Bun.which("claude");
+  if (!existsSync(path)) {
+    return { path, ok: false, error: `claude CLI ${path} does not exist; ${CLAUDE_CLI_INSTALL_HINT}` };
+  }
+  try {
+    if (!statSync(path).isFile()) {
+      return { path, ok: false, error: `claude CLI ${path} is not a file; ${CLAUDE_CLI_INSTALL_HINT}` };
+    }
+    accessSync(path, constants.X_OK);
+  } catch {
+    return { path, ok: false, error: `claude CLI ${path} is not executable; chmod +x it, or ${CLAUDE_CLI_INSTALL_HINT}` };
+  }
+  return { path, ok: true, error: null };
+}
+
+function findClaudeBin(): string | null {
+  const cli = claudeCliStatus();
+  return cli.ok ? cli.path : null;
 }
 
 export function engineStatus(): EngineStatus {
@@ -113,12 +159,12 @@ export function engineStatus(): EngineStatus {
     if (!claudeAccounts) {
       return blocked(
         "No Claude accounts in the pool — the default model has nothing to run on.",
-		"On a machine logged into a Claude Max account run `claude setup-token`, then add the token under Workspace → Models.",
+		"On a machine logged into a Claude Max account run `claude setup-token`, then add the token under Workspace → Usage.",
       );
     }
     if (!claudeBin) {
       return blocked(
-        "The `claude` CLI isn't installed — the bundled Anthropic bridge shells out to it.",
+        `The \`claude\` CLI isn't usable, the bundled Anthropic bridge shells out to it (${claudeCliStatus().error}).`,
         "Install it with `curl -fsSL https://claude.ai/install.sh | bash`, or switch the default model to a provider that doesn't need it.",
       );
     }
@@ -127,7 +173,7 @@ export function engineStatus(): EngineStatus {
   if (provider === "codex" && !codexAccounts) {
     return blocked(
       "No ChatGPT accounts in the pool — the default model has nothing to run on.",
-		"Add one under Workspace → Models with the ChatGPT device-code sign-in.",
+		"Add one under Workspace → Usage with the ChatGPT device-code sign-in.",
     );
   }
 
@@ -149,7 +195,7 @@ export function engineStatus(): EngineStatus {
   if (!provider && !claudeAccounts && !codexAccounts && !providerKeys.length) {
     return blocked(
       `No model capacity configured for "${defaultModel}".`,
-		"Add a Claude or ChatGPT account, or a provider API key, under Workspace → Models.",
+		"Add a Claude or ChatGPT account under Workspace → Usage, or a provider API key under Workspace → Models.",
     );
   }
 

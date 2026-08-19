@@ -38,7 +38,7 @@ function withScratchEnv<T>(fn: () => T): T {
   }
 }
 
-const { engineStatus, __resetModelCachesForTest } = await withScratchEnv(
+const mod = await withScratchEnv(
   async () => {
     const mod = await import("./engine-status");
     const { __setCodexAccountsPathForTest } = await import("./codex-accounts");
@@ -48,6 +48,7 @@ const { engineStatus, __resetModelCachesForTest } = await withScratchEnv(
     return { ...mod, __resetModelCachesForTest: models.__resetModelCachesForTest };
   },
 );
+const { engineStatus, __resetModelCachesForTest } = mod;
 
 /** Re-point the engine config at `cfg` (null = the file doesn't exist, which
  *  is the fresh-install state) and read the status. Both are read per call. */
@@ -82,6 +83,45 @@ describe("opencode binary lookup", () => {
     } finally {
       process.env.OPENSESSION_OPENCODE_BIN = prev;
     }
+  });
+});
+
+// The release ships no bundled Claude Code; the installed CLI is what every
+// Anthropic turn execs. The status has to reflect the file on disk, and it
+// must carry the install hint the boot log, doctor and /api/health all print.
+describe("claudeCliStatus", () => {
+  const { claudeCliStatus, CLAUDE_CLI_INSTALL_HINT } = mod;
+  const withBin = <T>(bin: string, fn: () => T): T => {
+    const prev = process.env.OPENSESSION_CLAUDE_BIN;
+    process.env.OPENSESSION_CLAUDE_BIN = bin;
+    try {
+      return withScratchEnv(fn);
+    } finally {
+      if (prev === undefined) delete process.env.OPENSESSION_CLAUDE_BIN;
+      else process.env.OPENSESSION_CLAUDE_BIN = prev;
+    }
+  };
+
+  test("a configured path that does not exist is not ok, and says how to install", () => {
+    const s = withBin(join(SCRATCH, "nope", "claude"), () => claudeCliStatus());
+    expect(s.ok).toBe(false);
+    expect(s.error).toContain("does not exist");
+    expect(s.error).toContain(CLAUDE_CLI_INSTALL_HINT);
+  });
+
+  test("a configured path that exists but is not executable is not ok", () => {
+    const bin = join(SCRATCH, "claude-noexec");
+    writeFileSync(bin, "#!/bin/sh\n", { mode: 0o644 });
+    const s = withBin(bin, () => claudeCliStatus());
+    expect(s.ok).toBe(false);
+    expect(s.error).toContain("not executable");
+  });
+
+  test("a configured executable is ok, with no error", () => {
+    const bin = join(SCRATCH, "claude-ok");
+    writeFileSync(bin, "#!/bin/sh\n", { mode: 0o755 });
+    const s = withBin(bin, () => claudeCliStatus());
+    expect(s).toEqual({ path: bin, ok: true, error: null });
   });
 });
 

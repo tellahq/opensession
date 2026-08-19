@@ -1,0 +1,49 @@
+# Fresh Ubuntu VM for the simple-mode install harness.
+#
+#   limactl start --name opensession-simple test/simple-mode/lima.yaml
+#
+# The driver (harness.test.ts) creates this VM and sets .mounts[0].location
+# to its work directory (the branch as a git bundle plus install.sh) with
+# --set; nothing from the host is mounted otherwise, so the guest is as
+# close to a stranger's box as a local VM gets.
+minimumLimaVersion: "1.0.0"
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.img"
+    arch: "x86_64"
+
+cpus: 4
+memory: "8GiB"
+disk: "40GiB"   # bun install of the server tree is multi-gigabyte today
+
+mounts:
+  - location: "/tmp/opensession-simple-mode"   # overridden by the driver
+    mountPoint: "/mnt/simple-mode"
+    writable: false
+
+containerd:
+  system: false
+  user: false
+
+# Only what the definition of done allows the box to already have.
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      set -eu
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -qq
+      apt-get install -y -qq git curl ca-certificates >/dev/null
+      # DoD 8 / R1.1: a second user with no sudo rights. The default Lima
+      # user has passwordless sudo, which would hide sudo prompts.
+      id nosudo >/dev/null 2>&1 || useradd -m -s /bin/bash nosudo
+      # R3.1: a user service must outlive the login session.
+      loginctl enable-linger nosudo || true
+
+probes:
+  - description: "git and curl present"
+    script: |
+      #!/bin/sh
+      command -v git >/dev/null && command -v curl >/dev/null

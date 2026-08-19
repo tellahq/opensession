@@ -23,6 +23,7 @@ import { dirname, join, resolve } from "path";
 import { OPENSESSION_HOME } from "./paths";
 import { bold, dim, fail, heading, info, ok, run, warn } from "./ui";
 import { localAutomationToken } from "./local-auth";
+import { isCompiledBinary, runnerHostArgv } from "../../src/runner-host/exe";
 
 const IDENTITY_PATH = join(OPENSESSION_HOME, "runner.json");
 const HEARTBEAT_MS = 60_000;
@@ -1001,7 +1002,10 @@ async function startRunHost(socket: WebSocket, persistent: Map<string, ReturnTyp
 	try {
 		const spec = msg.spec;
 		if (!spec || typeof spec !== "object" || typeof spec.hostId !== "string" || typeof spec.cwd !== "string" || !spec.wsToken) throw new Error("Invalid run-host request");
-		if (!existsSync(RUNNER_HOST_ENTRY)) throw new Error("This Runner installation does not include the run-host entrypoint");
+		// The compiled binary carries the run host as a subcommand, so there is
+		// no source entrypoint file to check for; only the source install ships
+		// host.ts on disk.
+		if (!isCompiledBinary() && !existsSync(RUNNER_HOST_ENTRY)) throw new Error("This Runner installation does not include the run-host entrypoint");
 		const stateDir = join(spec.cwd, ".opensession-run-hosts", spec.hostId);
 		mkdirSync(stateDir, { recursive: true });
 		const specPath = join(stateDir, "spec.json");
@@ -1017,7 +1021,8 @@ async function startRunHost(socket: WebSocket, persistent: Map<string, ReturnTyp
 			OPENSESSION_RPC_WS_AUTH: String(spec.wsToken),
 		};
 		const bun = Bun.which("bun") || process.execPath;
-		const command = platform() === "win32" ? [bun, "run", RUNNER_HOST_ENTRY, specPath] : ["setsid", bun, "run", RUNNER_HOST_ENTRY, specPath];
+		const launch = runnerHostArgv(bun, RUNNER_HOST_ENTRY, specPath);
+		const command = platform() === "win32" ? launch : ["setsid", ...launch];
 		const proc = Bun.spawn(command, { cwd: spec.cwd, env, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
 		proc.unref();
 		await Bun.write(join(stateDir, "pid"), `${proc.pid}\n`);

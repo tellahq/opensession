@@ -1,0 +1,28 @@
+# After `install.sh --uninstall --yes`: nothing left but the user's repos.
+file:
+  {{.Vars.home}}/.opensession:
+    exists: false
+  {{.Vars.home}}/.opensession.env:
+    exists: false
+port:
+  tcp:{{.Vars.port}}:
+    listening: false
+command:
+  no-user-service:
+    # list-unit-files exits 1 when nothing matches; the count is the assertion.
+    exec: "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user list-unit-files opensession.service; true"
+    exit-status: 0
+    stdout: ["0 unit files"]
+  no-instance-state:
+    # ~/.opensession-* (sessions, accounts, audit) goes with --yes.
+    exec: "ls -d {{.Vars.home}}/.opensession-* 2>/dev/null | wc -l"
+    exit-status: 0
+    stdout: ["0"]
+  no-path-block:
+    exec: "grep -c '^# opensession$' {{.Vars.home}}/.bashrc {{.Vars.home}}/.profile; true"
+    exit-status: 0
+    stdout: ["/.bashrc:0", "/.profile:0"]
+  no-dangling-skill-links:
+    exec: "find {{.Vars.home}}/.config/opencode/skills -xtype l 2>/dev/null | wc -l"
+    exit-status: 0
+    stdout: ["0"]

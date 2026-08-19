@@ -126,7 +126,8 @@ describe("session social card", () => {
 
 	test("renders a 1200 by 630 PNG", async () => {
 		const png = await renderSessionSocialCard(sessionSocialCardData(session()));
-		const metadata = await sharp(png).metadata();
+		expect(png).not.toBeNull();
+		const metadata = await sharp(png!).metadata();
 		expect(metadata.format).toBe("png");
 		expect(metadata.width).toBe(1200);
 		expect(metadata.height).toBe(630);

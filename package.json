@@ -9,6 +9,9 @@
     "url": "git+https://github.com/tellahq/opensession.git"
   },
   "homepage": "https://opensession.com",
+  "opensession": {
+    "opencodeVersion": "1.18.18"
+  },
   "workspaces": ["packages/*"],
   "bin": {
     "opensession": "scripts/cli.ts"

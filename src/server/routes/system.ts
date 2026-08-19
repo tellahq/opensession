@@ -12,7 +12,8 @@ import { type RouteContext, requestUser } from "./context";
 import { activeAgentRunCount } from "../agent-runner";
 import { getAgents } from "../agents-registry";
 import { configuredServer } from "../config";
-import { IS_DEV, buildFrontend, frontend, sharedCheckoutEditors } from "../frontend-build";
+import { claudeCliStatus } from "../engine-status";
+import { IS_DEV, buildFrontend, frontend, isPrebuiltFrontend, sharedCheckoutEditors } from "../frontend-build";
 import { getPins } from "../pins";
 import { getReads, isUnread } from "../reads";
 import { runErrors } from "../session-cache";
@@ -245,6 +246,10 @@ export async function handleSystemRoutes(
 			// restart kills as few in-flight runs/background tasks as possible.
 			activeRuns: activeAgentRunCount(),
 			agents: agentHealth,
+			// The `claude` CLI every Anthropic turn execs (the release ships no
+			// bundled Claude Code). Missing here means turns fail; ok stays true
+			// because the server itself is up.
+			engine: { claudeCli: claudeCliStatus() },
 			system: systemStats(),
 		});
 	}
@@ -318,6 +323,12 @@ export async function handleSystemRoutes(
 		if (IS_DEV || !frontend) {
 			return Response.json(
 				{ ok: false, error: "not available in dev mode" },
+				{ status: 400 },
+			);
+		}
+		if (isPrebuiltFrontend()) {
+			return Response.json(
+				{ ok: false, error: "not available for a prebuilt release" },
 				{ status: 400 },
 			);
 		}

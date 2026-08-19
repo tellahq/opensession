@@ -14,12 +14,13 @@
  */
 
 import { existsSync } from "fs";
+import { isCompiledBinary } from "../src/runner-host/exe";
 import { bind } from "./lib/bind";
 import { doctor } from "./lib/doctor";
 import { onboard } from "./lib/onboard";
 import { repos } from "./lib/repos";
 import { team } from "./lib/team";
-import { ENV_PATH, REPO_ROOT, STAGED_UNIT_PATH } from "./lib/paths";
+import { ENV_PATH, REPO_ROOT } from "./lib/paths";
 import * as service from "./lib/service";
 import { update } from "./lib/update";
 import { bold, dim, fail, green, heading, info, ok, run, runInherit, warn } from "./lib/ui";
@@ -44,13 +45,15 @@ function usage(): void {
 ${bold("opensession")} — self-hosted agent infrastructure
 
 ${bold("Setup")}
-  onboard [--force]        configure this box (writes config + env + unit)
+  onboard [--force]        configure this box (writes config + env + service)
+                           --defaults: no questions, the installer's path
   bind [address]           move the server to a new bind address and restart
                            (no address: this box's tailnet IP)
   team [add|remove]        manage the identity roster (attribution, sign-in)
   repos [add <spec>]       register repositories; owner/name clones via gh
   doctor                   check tooling, config, integrations and the server
-  service install          install and enable the systemd unit
+  service install          install and start the user service (--system: root unit)
+  service uninstall        stop and remove it
   sandbox enable docker    install, configure and qualify local Docker
   sandbox enable microvm   install, configure and qualify Local MicroVM
   sandbox test <provider>  re-run a connection qualification
@@ -98,7 +101,19 @@ Docs: docs/setup/README.md
 }
 
 async function version(): Promise<number> {
-  const pkg = JSON.parse(await Bun.file(`${REPO_ROOT}/package.json`).text());
+  // A release install (binary or tarball) carries release.json; a source
+  // checkout has package.json + a live git tree. Neither read may throw.
+  const rel = await Bun.file(`${REPO_ROOT}/release.json`)
+    .json()
+    .catch(() => null as { version?: string; commit?: string } | null);
+  if (rel?.version) {
+    console.log(`opensession ${rel.version}${rel.commit ? ` (${rel.commit})` : ""}`);
+    console.log(dim(`  ${REPO_ROOT}`));
+    return 0;
+  }
+  const pkg = await Bun.file(`${REPO_ROOT}/package.json`)
+    .json()
+    .catch(() => ({ version: "unknown" }) as { version?: string });
   const { stdout: sha } = await run(["git", "rev-parse", "--short", "HEAD"], { cwd: REPO_ROOT });
   const { stdout: branch } = await run(["git", "rev-parse", "--abbrev-ref", "HEAD"], {
     cwd: REPO_ROOT,
@@ -111,7 +126,12 @@ async function version(): Promise<number> {
 async function start(): Promise<number> {
   if (flags.has("--foreground") || flags.has("-f") || !(await service.isInstalled())) {
     info(dim(`starting in the foreground — ${REPO_ROOT}`));
-    return await runInherit(["bun", "run", "opensession.ts"], REPO_ROOT);
+    // Compiled binary: re-exec ourselves as the server subcommand (there is no
+    // `bun`/opensession.ts on disk). From source: run the entry under bun.
+    const command = isCompiledBinary()
+      ? [process.execPath, "server"]
+      : ["bun", "run", "opensession.ts"];
+    return await runInherit(command, REPO_ROOT);
   }
   return await service.control("start");
 }
@@ -253,7 +273,7 @@ async function main(): Promise<number> {
   switch (command) {
     case "onboard":
     case "setup":
-      return await onboard({ force: flags.has("--force") });
+      return await onboard({ force: flags.has("--force"), defaults: flags.has("--defaults") });
 
     case "bind":
       return await bind(positional[0]);
@@ -288,12 +308,10 @@ async function main(): Promise<number> {
 
     case "service":
       if (positional[0] === "install") {
-        if (service.supervisor() === "systemd") {
-          await Bun.write(STAGED_UNIT_PATH, await service.renderUnit());
-        }
-        return (await service.install(STAGED_UNIT_PATH)) ? 0 : 1;
+        return (await service.install({ scope: flags.has("--system") ? "system" : "user" })) ? 0 : 1;
       }
-      fail("usage: opensession service install");
+      if (positional[0] === "uninstall") return (await service.uninstall()) ? 0 : 1;
+      fail("usage: opensession service install [--system] | uninstall");
       return 1;
 
     case "update":

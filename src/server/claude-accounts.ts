@@ -13,7 +13,8 @@
  */
 
 import { homeDir } from "./paths";
-import { chmodSync, existsSync, readFileSync } from "fs";
+import { chmodSync, existsSync, readFileSync, rmSync } from "fs";
+import { join } from "path";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { userMatchesAny } from "./shared/user-mappings";
 import { stateDir } from "./paths";
@@ -923,6 +924,38 @@ export async function addAccount(
     `[claude-accounts] Added account ${trimmedName} (${profile.email || "unknown email"})${trimmedOwner ? ` — personal sub of ${trimmedOwner}` : " — shared pool"}`
   );
   return toPublic(account);
+}
+
+/**
+ * Seed the pool from the environment or a staged file, for unattended
+ * installs (cloud-init, the install harness, "paste this into an agent").
+ * Order: OPENSESSION_CLAUDE_TOKEN, then ~/.opensession-claude-token (one
+ * line, written 0600 by the installer). A token already in the store is
+ * left alone; the file is removed once imported so the secret lives in one
+ * place. Called from the boot block, never at import.
+ */
+export async function seedAccountFromEnvOrFile(): Promise<void> {
+  const filePath = join(homeDir(), ".opensession-claude-token");
+  let token = (process.env.OPENSESSION_CLAUDE_TOKEN || "").replace(/\s+/g, "");
+  let source = token ? "OPENSESSION_CLAUDE_TOKEN" : "";
+  if (!token && existsSync(filePath)) {
+    try {
+      token = readFileSync(filePath, "utf8").replace(/\s+/g, "");
+      source = filePath;
+    } catch {}
+  }
+  if (!token) return;
+  if (readStore().some((a) => a.token === token)) {
+    if (source === filePath) rmSync(filePath, { force: true });
+    return;
+  }
+  const result = await addAccount("default", token);
+  if ("error" in result) {
+    console.error(`[claude-accounts] could not import the token from ${source}: ${result.error}`);
+    return;
+  }
+  console.log(`[claude-accounts] imported the Claude token from ${source} into the shared pool`);
+  if (source === filePath) rmSync(filePath, { force: true });
 }
 
 /** Set or clear (empty/undefined) an account's personal owner. */

@@ -8,6 +8,7 @@ import {
 	activeDetachedAgentRunCount,
 	resumeInterruptedRuns,
 } from "./src/server/agent-runner";
+import { claudeCliStatus } from "./src/server/engine-status";
 import { enableOpencodeServerDetach } from "./src/server/opencode-detach";
 import { adoptDetachedOpencodeServers } from "./src/server/opencode-runner";
 import { startAccountHealthMonitor } from "./src/server/account-health";
@@ -23,9 +24,9 @@ import { kickTranscriptBackfillOnce } from "./src/server/transcript-backfill";
 import { kickOrphanTranscriptSweep } from "./src/server/transcript-orphan-sweep";
 import { makeAskHandler, restorePendingAsks } from "./src/server/asks";
 import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
-import { startUsagePoller } from "./src/server/claude-accounts";
+import { seedAccountFromEnvOrFile, startUsagePoller } from "./src/server/claude-accounts";
 import { startCodexUsagePoller } from "./src/server/codex-accounts";
-import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
+import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, isPrebuiltFrontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
 import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
 import { interactiveMcpServers } from "./src/server/interactive-mcp";
@@ -50,7 +51,6 @@ import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-rel
 import { handleWorkloadIdentityRequest } from "./src/server/workload-identity";
 import {
 	findSession,
-	findSessionAsync,
 	invalidateSessionsCache,
 	recordRunOutcome,
 } from "./src/server/session-cache";
@@ -211,7 +211,7 @@ const sessionSpaEntry = (() => {
 			return new Response("Frontend is still building", { status: 503 });
 		const pathname = new URL(req.url).pathname;
 		const id = socialSessionIdFromPath(pathname);
-		const session = id ? await findSessionAsync(id) : undefined;
+		const session = id ? await findSession(id) : undefined;
 		return new Response(
 			session
 				? sessionHtmlWithSocialMeta(bundle.indexHtml, session, pathname)
@@ -551,6 +551,22 @@ async function loadAgents(): Promise<AgentModule[]> {
 // any of it — the already-running agents/timers keep going untouched (only a
 // real restart reloads their code, and that restart is now graceful, below).
 if (!g.__opensessionBooted) {
+	// The `claude` CLI is what every Anthropic turn execs (the Agent SDK gets
+	// pathToClaudeCodeExecutable, Meridian gets MERIDIAN_CLAUDE_PATH); nothing
+	// bundled stands in for it. Say so at boot, loudly, but keep serving: the
+	// UI, doctor and /api/health carry the same status, and the operator fixes
+	// it by installing the CLI, not by restarting a dead server.
+	{
+		const cli = claudeCliStatus();
+		if (!cli.ok) {
+			console.error(
+				`[engine] Anthropic turns cannot run: ${cli.error}\n` +
+					`[engine] (opensession doctor and /api/health report the same until it is fixed)`,
+			);
+		} else {
+			console.log(`[engine] claude CLI ${cli.path}`);
+		}
+	}
 	// Dev instances (src/server/dev-mode.ts) skip background work here:
 	// no agents, no webhook intake, no schedulers/sweeps, no detached-server
 	// adoption — a second instance next to production must never double-send
@@ -655,6 +671,9 @@ if (!g.__opensessionBooted) {
 		invalidateSessionsCache();
 	});
 
+	// Unattended installs stage a Claude token in the env or a file; import it
+	// into the pool before anything can ask for an account.
+	await seedAccountFromEnvOrFile();
 	// Poll per-account Claude usage (drives account picking + the Connections UI)
 	startUsagePoller();
 	// Poll supported ChatGPT/Codex rate-limit windows per registered CODEX_HOME.
@@ -1030,7 +1049,11 @@ if (!g.__opensessionBooted) {
 	// for restart in a deploy script). Guarded by __opensessionBooted so a hot
 	// reload doesn't stack watchers/handlers. recursive watch needs Linux ≥ 6.x
 	// (we're on 6.17) — fine here.
-	if (!IS_DEV && frontend) {
+	// A prebuilt bundle (compiled binary's embedded assets, or a release
+	// tarball's .frontend-dist) has no src/frontend tree to watch.
+	if (!IS_DEV && frontend && isPrebuiltFrontend()) {
+		console.log("[frontend] Prebuilt bundle: source watch and SIGUSR2 rebuilds are off");
+	} else if (!IS_DEV && frontend) {
 		try {
 			const watcher = watch(FRONTEND_SRC, { recursive: true }, (_evt, file) => {
 				if (file && /\.(tsx?|css|html)$/.test(file.toString())) {

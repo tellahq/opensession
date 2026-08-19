@@ -1,32 +1,83 @@
 /**
  * Short-lived AWS credentials for agent runs.
  *
- * The opensession service cgroup denies the EC2 metadata endpoint
- * (IPAddressDeny in opensession.service), so neither the main process nor any
- * agent child can reach IMDS directly — that's the per-child isolation that
- * keeps untrusted ticket text from minting the instance role itself.
+ * Opt-in. The mint stays inert unless an operator configures it, because it
+ * only makes sense on an EC2 host whose service account has passwordless sudo.
+ * Off, it does nothing: no subprocess, no sudo, no IMDS curls, no log noise.
+ * `agentAwsCredsEnabled` holds the exact gate.
+ *
+ * When enabled, the opensession service cgroup denies the EC2 metadata
+ * endpoint (IPAddressDeny in opensession.service), so neither the main process
+ * nor any agent child can reach IMDS directly. That is the per-child isolation
+ * that keeps untrusted ticket text from minting the instance role itself.
  *
  * To still hand AWS to runs that need it, the *main* process mints a bounded
  * snapshot of the instance-role's temporary credentials and injects them into
  * the child's env. The mint escapes the cgroup via a transient systemd unit
- * (`systemd-run --pipe`, run as ubuntu via passwordless sudo) so it — and only
- * it — can reach IMDS. The child receives a fixed, expiring copy in its env; it
- * cannot refresh them or read any other instance metadata.
+ * (`systemd-run --pipe`) that runs as an unprivileged account through
+ * passwordless sudo, so it and only it can reach IMDS. The child receives a
+ * fixed, expiring copy in its env; it cannot refresh them or read any other
+ * instance metadata. That account comes from `AGENT_AWS_MINT_USER` or
+ * `integrations.aws.mintUser`, defaulting to the account the server runs as.
  *
- * Scope today == the instance role (AWS-managed ReadOnlyAccess):
- * account-wide read, no writes. To narrow this, point the helper at an
- * sts:AssumeRole of a tighter role instead of vending the instance creds.
+ * Scope on an instance-role deploy == the instance role (for example the
+ * AWS-managed ReadOnlyAccess): account-wide read, no writes. To narrow this,
+ * point the helper at an sts:AssumeRole of a tighter role instead of vending
+ * the instance creds.
  */
 
 import { homeDir } from "./paths";
 import { mkdirSync, renameSync, writeFileSync } from "fs";
+import { userInfo } from "os";
 import { configuredIntegration } from "./config";
 
-const configuredRegion = configuredIntegration("aws").region;
-const REGION =
-  process.env.AGENT_AWS_REGION ||
-  process.env.AWS_REGION ||
-  (typeof configuredRegion === "string" ? configuredRegion : "us-east-1");
+const str = (v: unknown): string | undefined =>
+  typeof v === "string" && v.trim() ? v.trim() : undefined;
+
+/**
+ * Is the IMDS mint configured? Resolution, first hit wins:
+ *
+ * 1. `AGENT_AWS_CREDS` in env, where only the literal string `true` enables
+ *    (the boot-guard convention: anything unrecognised means off),
+ * 2. `integrations.aws.enabled` in config.json,
+ * 3. otherwise a region pinned for agent runs (`AGENT_AWS_REGION` or
+ *    `integrations.aws.region`) counts as the signal.
+ *
+ * A bare `AWS_REGION` does not enable it. That variable is set on plenty of
+ * laptops and VPSes with no instance role to mint, where turning the helper on
+ * costs a sudo attempt and three curl timeouts per session start.
+ */
+export function agentAwsCredsEnabled(): boolean {
+  const flag = process.env.AGENT_AWS_CREDS?.trim();
+  if (flag) return flag === "true";
+  const cfg = configuredIntegration("aws");
+  if (typeof cfg.enabled === "boolean") return cfg.enabled;
+  return Boolean(process.env.AGENT_AWS_REGION?.trim() || str(cfg.region));
+}
+
+/** Region stamped into the vended env. */
+function awsRegion(): string {
+  return (
+    process.env.AGENT_AWS_REGION?.trim() ||
+    process.env.AWS_REGION?.trim() ||
+    str(configuredIntegration("aws").region) ||
+    "us-east-1"
+  );
+}
+
+/**
+ * The unprivileged account the transient mint unit runs as. It is there so the
+ * unit cannot inherit root, not to name a particular deploy, so the server's
+ * own account is the right default: it already owns the process and the state
+ * directory, and it is the account a sudoers rule is written for.
+ */
+export function agentAwsMintUser(): string {
+  return (
+    process.env.AGENT_AWS_MINT_USER?.trim() ||
+    str(configuredIntegration("aws").mintUser) ||
+    userInfo().username
+  );
+}
 
 export const AWS_HUMAN_AUTH_DENIAL =
   "AWS device login is not a human gate in Open Session. Do not run `aws login` or " +
@@ -77,21 +128,33 @@ const FETCH_SCRIPT = [
 let cache: { env: Record<string, string>; expiresAt: number } | null = null;
 const REFRESH_SKEW_MS = 5 * 60_000; // refresh 5 min before expiry
 
-async function fetchInstanceCreds(): Promise<ImdsCreds | null> {
+/** The command that reaches IMDS, as the mint runs it. */
+export function mintCommand(user = agentAwsMintUser()): string[] {
+  return [
+    "sudo", "-n", "systemd-run", "--pipe", "--collect", "--quiet",
+    `--uid=${user}`, `--gid=${user}`,
+    "/bin/bash", "-c", FETCH_SCRIPT,
+  ];
+}
+
+/** Test seam: run the mint command without a real sudo/systemd on the box. */
+export type MintSpawn = (
+  argv: string[],
+) => Promise<{ code: number | null; stdout: string; stderr: string }>;
+
+const systemdMint: MintSpawn = async (argv) => {
+  const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { code, stdout, stderr };
+};
+
+async function fetchInstanceCreds(spawn: MintSpawn): Promise<ImdsCreds | null> {
   try {
-    const proc = Bun.spawn(
-      [
-        "sudo", "-n", "systemd-run", "--pipe", "--collect", "--quiet",
-        "--uid=ubuntu", "--gid=ubuntu",
-        "/bin/bash", "-c", FETCH_SCRIPT,
-      ],
-      { stdout: "pipe", stderr: "pipe" }
-    );
-    const [out, err, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
+    const { code, stdout: out, stderr: err } = await spawn(mintCommand());
     if (code !== 0) {
       console.error(`[aws-creds] mint helper exited ${code}: ${err.trim().slice(0, 200)}`);
       return null;
@@ -108,23 +171,45 @@ async function fetchInstanceCreds(): Promise<ImdsCreds | null> {
   }
 }
 
+// One line per process, the first time a run asks for AWS on an instance that
+// has not configured the mint. Repeating it per session start is the noise
+// this gate exists to remove.
+let announcedOff = false;
+
+function noteDisabled() {
+  if (announcedOff) return;
+  announcedOff = true;
+  console.log(
+    "[aws-creds] agent AWS credentials are off. Set AGENT_AWS_REGION " +
+      "(or integrations.aws.region) on an EC2 host to enable the mint.",
+  );
+}
+
 /**
- * AWS env vars to inject into an agent child, or {} if minting failed (the run
- * still proceeds — it just has no AWS, and `aws` calls will error visibly
- * rather than us swallowing the problem). Cached until shortly before expiry.
+ * AWS env vars to inject into an agent child. {} when the mint is off, and {}
+ * when it is on but minting failed: the run proceeds either way, it just has
+ * no AWS, and `aws` calls error visibly rather than us swallowing the problem.
+ * Cached until shortly before expiry.
  */
-export async function getAgentAwsEnv(): Promise<Record<string, string>> {
+export async function getAgentAwsEnv(
+  spawn: MintSpawn = systemdMint,
+): Promise<Record<string, string>> {
+  if (!agentAwsCredsEnabled()) {
+    noteDisabled();
+    return {};
+  }
   if (cache && Date.now() < cache.expiresAt - REFRESH_SKEW_MS) return cache.env;
 
-  const creds = await fetchInstanceCreds();
+  const creds = await fetchInstanceCreds(spawn);
   if (!creds) return cache?.env ?? {}; // fall back to a still-valid cache if any
 
+  const region = awsRegion();
   const env = {
     AWS_ACCESS_KEY_ID: creds.AccessKeyId,
     AWS_SECRET_ACCESS_KEY: creds.SecretAccessKey,
     AWS_SESSION_TOKEN: creds.Token,
-    AWS_REGION: REGION,
-    AWS_DEFAULT_REGION: REGION,
+    AWS_REGION: region,
+    AWS_DEFAULT_REGION: region,
   };
   cache = { env, expiresAt: new Date(creds.Expiration).getTime() };
   console.log(`[aws-creds] minted agent credentials, expire ${creds.Expiration}`);
@@ -133,30 +218,34 @@ export async function getAgentAwsEnv(): Promise<Record<string, string>> {
 
 /**
  * File-vended credentials for opencode runs. An opencode server is a
- * long-lived (often shared) process whose env is fixed at spawn — injecting
- * the raw keys there would go stale at expiry, and rotating them through
- * `extraEnv` would churn the server config hash (= drain-respawn) on every
- * refresh. Instead the main process keeps an ini credentials file fresh and
- * the run gets a STATIC pointer env (AWS_SHARED_CREDENTIALS_FILE): the file
- * contents rotate underneath while the env — and the hash — stay put.
+ * long-lived (often shared) process whose env is fixed at spawn, so raw keys
+ * there would go stale at expiry, and rotating them through `extraEnv` would
+ * churn the server config hash (= drain-respawn) on every refresh. Instead the
+ * main process keeps an ini credentials file fresh and the run gets a STATIC
+ * pointer env (AWS_SHARED_CREDENTIALS_FILE): the file contents rotate
+ * underneath while the env, and the hash, stay put.
  *
- * Returns {} when minting fails (e.g. inside a docker sandbox, where IMDS is
- * blocked for the mint helper too) — the run proceeds without AWS and `aws`
- * calls error visibly, same contract as getAgentAwsEnv.
+ * Returns {} when the mint is off, and when it is on but minting fails (e.g.
+ * inside a docker sandbox, where IMDS is blocked for the mint helper too). The
+ * run proceeds without AWS and `aws` calls error visibly, same contract as
+ * getAgentAwsEnv.
  */
 const CREDS_DIR = `${homeDir()}/.opensession-aws`;
 const CREDS_FILE = `${CREDS_DIR}/agent-credentials`;
 const FILE_REFRESH_MS = 10 * 60_000;
 
-export async function ensureAgentAwsCredsFile(): Promise<Record<string, string>> {
-  const env = await getAgentAwsEnv();
+export async function ensureAgentAwsCredsFile(
+  spawn: MintSpawn = systemdMint,
+): Promise<Record<string, string>> {
+  const env = await getAgentAwsEnv(spawn);
   if (!env.AWS_ACCESS_KEY_ID) return {};
   writeCredsFile(env);
   startCredsFileRefresh();
+  const region = awsRegion();
   return {
     AWS_SHARED_CREDENTIALS_FILE: CREDS_FILE,
-    AWS_REGION: REGION,
-    AWS_DEFAULT_REGION: REGION,
+    AWS_REGION: region,
+    AWS_DEFAULT_REGION: region,
   };
 }
 

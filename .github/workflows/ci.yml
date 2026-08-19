@@ -107,9 +107,13 @@ jobs:
       # Deliberately NOT pre-installing Bun: bootstrapping it is part of what
       # the installer is being tested for.
       - name: Install from this checkout
+        # OPENSESSION_ALLOW_IMDS: hosted runners answer on 169.254.169.254
+        # (Azure metadata) with no role attached; without the override the
+        # installer would rightly refuse the user service on such a box.
         run: |
           OPENSESSION_REPO="file://$GITHUB_WORKSPACE" \
           OPENSESSION_HOME="$HOME/.opensession" \
+          OPENSESSION_ALLOW_IMDS=1 \
             bash install.sh --yes --no-engine
 
       - name: Put the command and bun on PATH for later steps

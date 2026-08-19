@@ -23,6 +23,7 @@ import { filterMcpServers, type McpScope } from "./runner-shared";
 import { userMatchesAny } from "./shared/user-mappings";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { BUN_BIN, MCP_PROXY_ENTRY, mcpHttpUrl, rpcSocketPath } from "./run-rpc-protocol";
+import { mcpProxyArgv } from "../runner-host/exe";
 import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
 import { mcpHttpServerActive } from "./run-rpc";
@@ -410,7 +411,7 @@ export function proxyOpencodeMcpConfigs(
       // profile roughly halves its RSS, and hundreds of these run at once
       // (16 opensession-* servers × every session instance — 664 processes /
       // 42GB RSS on 2026-07-27).
-      command: [BUN_BIN, "--smol", "run", MCP_PROXY_ENTRY],
+      command: mcpProxyArgv(BUN_BIN, MCP_PROXY_ENTRY, { smol: true }),
       environment: {
         OPENSESSION_RPC_SOCKET: rpcSocketPath(OPENSESSION_SESSIONS_DIR),
         OPENSESSION_RPC_TOKEN: rpcToken,

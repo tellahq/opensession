@@ -1,0 +1,61 @@
+# Publish the release artefacts the default install downloads.
+#
+# `install.sh` with no flags fetches
+#   https://github.com/tellahq/opensession/releases/latest/download/opensession-<os>-<arch>.tar.gz
+# so every release carries, beside its versioned tarballs, one stable alias per
+# target. scripts/build-compile.ts cross-compiles per target (bun --target, nothing executes target
+# binaries), so one Linux runner builds all four; npm is needed for the engine
+# seed (an npm lockfile is what opencode's arborist checks) and ubuntu-latest
+# has it.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build and upload assets for"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  artefacts:
+    name: Build and upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build artefacts
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/release"
+          mkdir -p "$out/assets"
+          for target in linux/x64 linux/arm64 darwin/x64 darwin/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            # The default artefact is the compiled single-executable
+            # (build-compile.ts, cross-compiled per target). The source install
+            # path is a git checkout, so no tarball is published for it.
+            bun scripts/build-compile.ts --os "$os" --arch "$arch" --out "$out"
+            versioned="$(ls "$out"/opensession-*-"$os"-"$arch".tar.gz)"
+            cp "$versioned" "$out/assets/"
+            cp "$versioned" "$out/assets/opensession-$os-$arch.tar.gz"
+          done
+          ls -la "$out/assets"
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release upload "$TAG" "$RUNNER_TEMP"/release/assets/* --clobber

@@ -64,3 +64,10 @@ deploy/sandbox/microvm/.cache-busybox
 skills-lock.json
 .css-shots/
 .css-ab/
+
+# simple-mode harness work dir
+test/simple-mode/.work/
+test/simple-mode/.work-run.log
+
+# Compiled single-executable build (scripts/build-compile.ts)
+/opensession

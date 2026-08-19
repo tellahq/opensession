@@ -64,6 +64,7 @@ import {
   BUN_BIN,
   REPO_ROOT,
   HOST_ENTRY,
+  runnerHostArgv,
   type RunHostSpec,
   type RunHostMeta,
   type HostToClientMsg,
@@ -378,7 +379,7 @@ async function launchHostUnit(hostId: string, dir: string): Promise<void> {
     "-p", "IPAddressDeny=169.254.169.254/32",
     "-p", `StandardOutput=append:${dir}/${HOST_LOG_NAME}`,
     "-p", `StandardError=append:${dir}/${HOST_LOG_NAME}`,
-    BUN_BIN, "run", HOST_ENTRY, `${dir}/${HOST_SPEC_NAME}`,
+    ...runnerHostArgv(BUN_BIN, HOST_ENTRY, `${dir}/${HOST_SPEC_NAME}`),
   ];
   const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
   const [err, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);

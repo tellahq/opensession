@@ -65,8 +65,8 @@ UI and API at the root of your instance URL.
   it for Anthropic models (`OPENSESSION_CLAUDE_BIN`, default: `claude` found
   on `PATH`).
 - **Tailscale** — the recommended way to expose the UI at all. The installer
-  installs it by default (`--no-tailscale` opts out); joining a network is a
-  separate step that needs your account.
+  installs it with `--tailscale` (the default install binds loopback only);
+  joining a network is a separate step that needs your account.
 - Optional: **Docker** (sandboxed sessions —
   [self-hosting-sandboxes](../self-hosting-sandboxes.md)), **Caddy** (TLS for
   live previews), `whisper.cpp`/Groq/OpenAI key (voice dictation).

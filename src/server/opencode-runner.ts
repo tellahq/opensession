@@ -144,6 +144,7 @@ import {
   writeFileSync,
 } from "fs";
 import { dirname, join } from "path";
+import { isCompiledBinary, pluginsRoot } from "../runner-host/exe";
 import type { Subprocess } from "bun";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk";
 import type { RunAgentOpts } from "./agent-runner";
@@ -428,10 +429,14 @@ const SHARED_CWD = `${OPENCODE_STATE_DIR}/shared-cwd`;
 /** Plugin that tags michael-* / opensession-* tool calls with the opencode
  *  session id so run-rpc can route them to the right opensession session on a
  *  shared server (see opencode-plugin-session-tag.js). */
-const SESSION_TAG_PLUGIN_PATH = join(import.meta.dir, "opencode-plugin-session-tag.js");
+// Where the external opencode/meridian processes load plugins from on disk.
+// Source mode: this module's dir. Compiled binary: the sidecar in the release
+// dir (import.meta.dir is /$bunfs, unreadable by those processes).
+const PLUGINS_ROOT = pluginsRoot(import.meta.dir);
+const SESSION_TAG_PLUGIN_PATH = join(PLUGINS_ROOT, "opencode-plugin-session-tag.js");
 /** Repairs model-stringified object args on MCP tool calls (see the plugin's
  *  module doc; upstream closed coercion as not-planned). */
-const ARG_COERCE_PLUGIN_PATH = join(import.meta.dir, "opencode-plugin-arg-coerce.js");
+const ARG_COERCE_PLUGIN_PATH = join(PLUGINS_ROOT, "opencode-plugin-arg-coerce.js");
 
 const PROVIDER = "opencode" as const;
 
@@ -556,6 +561,34 @@ function isCompactionMessageInfo(info: unknown): boolean {
 
 let cachedMeridianStack: MeridianStackInfo | undefined;
 
+/**
+ * Resolve a package's entry FILE that the external opencode/meridian process
+ * loads. Source mode uses `Bun.resolveSync` against PLUGINS_ROOT (walks the
+ * checkout's node_modules). A compiled binary cannot: `Bun.resolveSync` there
+ * resolves against the embedded module graph, never the on-disk sidecar, so
+ * read the sidecar package's package.json and join its entry by hand.
+ */
+/**
+ * The plugin package's entry file, as a real path on disk for the external
+ * opencode/meridian processes to load. Source mode uses the normal resolver.
+ * A compiled binary cannot resolve a disk node_modules at runtime (neither
+ * Bun.resolveSync nor createRequire see the filesystem, only the embedded
+ * graph), so the build resolved the entries with the real resolver and wrote
+ * `opencode-plugins/plugins.json`; here we just read that path.
+ */
+let cachedPluginManifest: Record<string, string> | undefined;
+function resolvePluginPackage(pkg: string): string {
+  if (!isCompiledBinary()) return Bun.resolveSync(pkg, PLUGINS_ROOT);
+  if (!cachedPluginManifest) {
+    cachedPluginManifest = JSON.parse(readFileSync(join(PLUGINS_ROOT, "plugins.json"), "utf-8"));
+  }
+  const rel = cachedPluginManifest![pkg];
+  if (!rel) {
+    throw new Error(`plugin ${pkg} is not in the compiled-binary plugins manifest`);
+  }
+  return join(PLUGINS_ROOT, rel);
+}
+
 function pkgVersionNear(entryPath: string): string {
   try {
     // dist/index.js → ../package.json (both packages ship dist/ at the root).
@@ -572,8 +605,8 @@ export function meridianStackInfo(): MeridianStackInfo {
   let pluginPath: string;
   let meridianEntry: string;
   try {
-    pluginPath = Bun.resolveSync("opencode-with-claude", import.meta.dir);
-    meridianEntry = Bun.resolveSync("@rynfar/meridian", import.meta.dir);
+    pluginPath = resolvePluginPackage("opencode-with-claude");
+    meridianEntry = resolvePluginPackage("@rynfar/meridian");
   } catch (e: any) {
     throw new Error(
       "The meridian bridge packages are not installed (opencode-with-claude / @rynfar/meridian) — " +
@@ -675,10 +708,7 @@ function ensureMeridianProxyScrub(): void {
   if (meridianProxyScrubInstalled) return;
   meridianProxyScrubInstalled = true;
   try {
-    const scrubPkg = Bun.resolveSync(
-      "@rynfar/meridian-plugin-opencode-scrub",
-      import.meta.dir,
-    );
+    const scrubPkg = resolvePluginPackage("@rynfar/meridian-plugin-opencode-scrub");
     // Meridian's proxy resolves the plugin dir via os.homedir(); with HOME set
     // (systemd unit + opencodeEnv both pass it) that equals this HOME. The
     // proxy runs in-process in the opencode server, which inherits it.
@@ -713,9 +743,21 @@ export function meridianAccountEnv(
 ): Record<string, string> {
   const cfgDir = `${MERIDIAN_CFG_ROOT}/${account.id}`;
   mkdirSync(cfgDir, { recursive: true, mode: 0o700 });
+  // Isolate opencode's OWN data store (auth.json lives at
+  // $XDG_DATA_HOME/opencode/auth.json). Without this, an `opencode/anthropic/*`
+  // run reads the host ~/.local/share/opencode/auth.json, and a stale
+  // `anthropic` oauth entry there (a lapsed `opencode auth login`) outranks the
+  // provider apiKey — opencode refreshes the dead token and fails the whole run
+  // with `invalid_grant` before the request ever reaches the Meridian proxy or
+  // this account's CLAUDE_CODE_OAUTH_TOKEN. The OpenAI path already isolates
+  // XDG_DATA_HOME; the anthropic path needs the same. Per-account and
+  // deterministic, so it rides the server config hash like CLAUDE_CONFIG_DIR.
+  const dataDir = `${cfgDir}/xdg-data`;
+  mkdirSync(`${dataDir}/opencode`, { recursive: true, mode: 0o700 });
   return {
     CLAUDE_CODE_OAUTH_TOKEN: account.token,
     CLAUDE_CONFIG_DIR: cfgDir,
+    XDG_DATA_HOME: dataDir,
     // Loopback-only is Meridian's default bind; MERIDIAN_API_KEY additionally
     // requires x-api-key on every /v1/* request (verified live: 401 without
     // it), so another local process can't ride the proxy. The same key is set
@@ -4111,13 +4153,14 @@ async function* runOpencodeAttempt(
       serverExtraEnv = { ...(serverExtraEnv || {}), ...gitIdentityEnv(author) };
     }
     // AWS read creds (aws-creds.ts): `aws: true` runs get a STATIC pointer
-    // env to a credentials file the main process keeps fresh — raw keys in
-    // the spawn env would expire under a long-lived server, and rotating
+    // env to a credentials file the main process keeps fresh, because raw keys
+    // in the spawn env would expire under a long-lived server, and rotating
     // them would churn the config hash. Every shared-eligible kind passes
     // aws:true (run-session / slack / linear), so shared servers hash
     // identically; per-session unattended runs gate at their call site
-    // (automations/github yes, plain no). In sandboxes the mint fails (IMDS
-    // blocked) and the run proceeds without AWS — documented docker caveat.
+    // (automations/github yes, plain no). The mint itself is opt-in and
+    // returns {} where it is off or cannot reach IMDS (a docker sandbox, or
+    // any host that is not EC2); the run then proceeds without AWS.
     if (opts.aws) {
       const awsPointerEnv = await ensureAgentAwsCredsFile();
       if (Object.keys(awsPointerEnv).length) {

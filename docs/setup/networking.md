@@ -30,9 +30,11 @@ small team.
 
 ### 1. Install it on the box
 
-**The Open Session installer already did this** unless you passed
-`--no-tailscale`. Check with `tailscale ip -4`; if it prints a `100.x` address
-you are already on a tailnet and can skip to step 3.
+**The Open Session installer does this with `--tailscale`** (it is off by
+default: the default install binds loopback only). Otherwise
+`curl -fsSL https://tailscale.com/install.sh | sh`. Check with `tailscale ip
+-4`; if it prints a `100.x` address you are already on a tailnet and can skip
+to step 3.
 
 To install it by hand:
 

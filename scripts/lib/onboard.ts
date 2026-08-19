@@ -12,17 +12,48 @@
  * leaning on that, so the file says what is running instead of implying it.
  */
 
-import { chmodSync, existsSync, mkdirSync } from "fs";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { INTEGRATIONS } from "../../src/server/integrations/registry";
 import { configPath as engineConfigPath, setBridgeEnabled } from "../../src/server/opencode-config";
 import { backup, tailnetIp } from "./config-edit";
-import { CONFIG_PATH, ENV_PATH, HOME, OPENSESSION_HOME, REPO_ROOT, STAGED_UNIT_PATH } from "./paths";
+import { CONFIG_PATH, ENV_PATH, HOME, OPENSESSION_HOME, REPO_ROOT } from "./paths";
+
+/** Where a release install keeps its first, throwaway repo. */
+const SCRATCH_REPO = join(OPENSESSION_HOME, "scratch");
+
+/**
+ * Create the scratch repo when it does not exist: `git init`, a README, one
+ * commit on main. Sessions need a repo with at least one commit to cut a
+ * worktree from; an empty directory fails at `git worktree add`.
+ */
+function ensureScratchRepo(): void {
+  if (existsSync(join(SCRATCH_REPO, ".git"))) return;
+  mkdirSync(SCRATCH_REPO, { recursive: true });
+  const git = (...args: string[]) => {
+    const r = Bun.spawnSync(["git", "-C", SCRATCH_REPO, ...args], { stdout: "pipe", stderr: "pipe" });
+    if (r.exitCode !== 0) throw new Error(`git ${args[0]} failed: ${r.stderr.toString().trim()}`);
+  };
+  git("init", "-q", "-b", "main");
+  git("config", "user.email", "opensession@localhost");
+  git("config", "user.name", "Open Session");
+  writeFileSync(
+    join(SCRATCH_REPO, "README.md"),
+    "# Scratch\n\nA throwaway repo for trying Open Session. Register your own under Settings → Repositories.\n",
+  );
+  git("add", "README.md");
+  git("commit", "-q", "-m", "Scratch repo for a first session");
+  info(dim(`  created a scratch repo at ${SCRATCH_REPO}`));
+}
 import { installRecipe, listRecipes } from "./recipes";
 import * as service from "./service";
 import { ask, askYesNo, bold, canPrompt, dim, heading, info, warn, wrote, yellow } from "./ui";
 
-export type OnboardOptions = { force?: boolean };
+export type OnboardOptions = {
+  force?: boolean;
+  /** Write every default and ask nothing (the installer's default path). */
+  defaults?: boolean;
+};
 
 /** "Open Session" -> "OS". Falls back to the first two characters. */
 function deriveMark(name: string): string {
@@ -59,7 +90,13 @@ function collect(): Answers {
   // Defaulting to the tailnet address when there is one is the whole point of
   // installing Tailscale up front: the alternative default, 127.0.0.1, works
   // until someone else needs to reach it and then gets "fixed" with 0.0.0.0.
-  const tailnet = tailnetIp();
+  // Loopback is the default, always. Offering the tailnet address as the bind
+  // default only makes sense when a person is there to weigh sharing against
+  // exposure; on the defaults path (`--defaults`, no prompt) picking it up
+  // silently would put the UI on the tailnet — and on macOS trip the "accept
+  // incoming connections" firewall prompt — on a box the installer was told to
+  // keep simple. So only prefer the tailnet address when we can actually ask.
+  const tailnet = canPrompt() ? tailnetIp() : undefined;
   const host = tailnet
     ? ask(`Bind address (${tailnet} is this box's tailnet address)`, tailnet)
     : ask("Bind address (a Tailscale IP shares it with your team)", "127.0.0.1");
@@ -71,10 +108,16 @@ function collect(): Answers {
 
   heading("Your first repository");
   info(dim("Sessions run in git worktrees cut from the repos you register here."));
-  const repoPath = ask("Repo checkout path", REPO_ROOT);
+  // A source checkout can be its own first repo. A release install has no
+  // .git under REPO_ROOT, so offer a scratch repo instead: a real git repo
+  // with one commit, enough for a first session to get a worktree and run.
+  const selfIsRepo = existsSync(join(REPO_ROOT, ".git"));
+  const defaultRepoPath = selfIsRepo ? REPO_ROOT : SCRATCH_REPO;
+  const repoPath = ask("Repo checkout path", defaultRepoPath);
+  if (repoPath === SCRATCH_REPO) ensureScratchRepo();
   const repoId = ask(
     "Repo id",
-    repoPath === REPO_ROOT ? "opensession" : repoPath.split("/").pop() || "app",
+    repoPath === REPO_ROOT ? "opensession" : repoPath === SCRATCH_REPO ? "scratch" : repoPath.split("/").pop() || "app",
   );
   const repoBranch = ask("Default branch", "main");
   // Same default the server falls back to when `paths.worktreesDir` is unset
@@ -152,7 +195,10 @@ function buildConfig(a: Answers): Record<string, unknown> {
     },
     repos: {
       [a.repoId]: {
-        label: a.productName,
+        // The self checkout carries the product's name; anything else is
+        // labelled by what it is, so a scratch repo does not show up in the UI
+        // as "Open Session".
+        label: a.repoId === "scratch" ? "Scratch" : a.repoPath === REPO_ROOT ? a.productName : a.repoId,
         repo: a.repoPath,
         wtPrefix: a.repoId,
         defaultBranch: a.repoBranch,
@@ -213,6 +259,13 @@ function buildEnv(a: Answers): string {
 }
 
 export async function onboard(opts: OnboardOptions = {}): Promise<number> {
+  // Defaults mode is the same wizard with every prompt answered by its
+  // fallback: one code path, and the answers are exactly what `--advanced`
+  // shows as the suggested value.
+  if (opts.defaults) {
+    process.env.NO_PROMPT = "1";
+    info(dim("writing defaults (127.0.0.1:3850, scratch repo, no integrations); `opensession onboard --force` to change them"));
+  }
   // Re-running against a live install would replace a working config with
   // defaults. Backups make that recoverable, not harmless.
   if (existsSync(CONFIG_PATH) && !opts.force) {
@@ -278,23 +331,21 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
     info(dim("\n  More: `opensession automations`"));
   }
 
+  // Both supervisors run per-user, without root, so installing is the default
+  // answer: an install that ends without a running server is the single most
+  // common way a first run stalls. `--system` on `service install` is the
+  // operator path for a root unit.
+  let serviceUp = false;
   try {
     const kind = service.supervisor();
-    if (kind === "systemd") {
-      // Staged rather than installed: putting it in /etc needs root, so that
-      // stays an explicit choice.
-      await Bun.write(STAGED_UNIT_PATH, await service.renderUnit());
-      wrote(STAGED_UNIT_PATH, "(templated for this box)");
-    }
     if (kind !== "none") {
-      const what = kind === "launchd" ? "LaunchAgent" : "systemd service";
-      const needsRoot = kind === "systemd" ? " (needs sudo)" : "";
-      if (askYesNo(`\n  Install and start it as a ${what} now?${needsRoot}`, false)) {
-        await service.install(STAGED_UNIT_PATH);
+      const what = kind === "launchd" ? "LaunchAgent" : "user service";
+      if (askYesNo(`\n  Install and start it as a ${what} now?`, true)) {
+        serviceUp = await service.install();
       }
     }
   } catch (err) {
-    warn(`could not prepare the service definition: ${(err as Error).message}`);
+    warn(`could not install the service: ${(err as Error).message}`);
   }
 
   // Self-development needs a writable origin: sessions on the self repo commit
@@ -326,13 +377,22 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   } catch {}
 
   heading("Next steps");
-  info(`1. ${bold("opensession start")}      start the server`);
-  info(`2. ${bold("opensession doctor")}     check everything is wired up`);
-  info(`   ${dim(`then open ${answers.publicBaseUrl}`)}`);
+  if (serviceUp) {
+    // The URL is the deliverable of an install; wait for it to actually answer
+    // rather than printing an address that 404s for the next thirty seconds.
+    const healthy = await service.waitHealthy(answers.publicBaseUrl);
+    if (healthy) info(`1. ${bold(`open ${answers.publicBaseUrl}`)}`);
+    else info(`1. ${bold(`open ${answers.publicBaseUrl}`)}   ${dim("(still starting; `opensession logs` if it does not come up)")}`);
+    info(`2. ${bold("opensession doctor")}     check everything is wired up`);
+  } else {
+    info(`1. ${bold("opensession start")}      start the server`);
+    info(`2. ${bold("opensession doctor")}     check everything is wired up`);
+    info(`   ${dim(`then open ${answers.publicBaseUrl}`)}`);
+  }
   // The engine is the only step that can't be skipped: without model capacity
   // every session fails its first turn. Name the subscription path first —
   // it's what the default model uses — with the API-key route as the alternative.
-  info(`3. ${bold("add model capacity")}     Workspace → Models: paste a`);
+  info(`3. ${bold("add model capacity")}     Workspace → Usage: paste a`);
   info(`   ${dim("`claude setup-token` token, or sign in to ChatGPT by device code.")}`);
   info(`   ${dim("Using API keys instead? `opencode auth login`, or Workspace → Models.")}`);
   info(`4. ${bold("create a session")}       a completed turn is the real proof`);

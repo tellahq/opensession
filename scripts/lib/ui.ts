@@ -74,10 +74,11 @@ export function askYesNo(question: string, fallback: boolean): boolean {
 /** Run a command, returning its exit code and captured output. */
 export async function run(
   cmd: string[],
-  opts: { cwd?: string; quiet?: boolean } = {},
+  opts: { cwd?: string; quiet?: boolean; env?: Record<string, string> } = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const proc = Bun.spawn(cmd, {
     cwd: opts.cwd,
+    env: opts.env ? { ...process.env, ...opts.env } : undefined,
     stdout: opts.quiet ? "pipe" : "pipe",
     stderr: "pipe",
   });
@@ -90,7 +91,16 @@ export async function run(
 }
 
 /** Run a command with output streamed straight through to the terminal. */
-export async function runInherit(cmd: string[], cwd?: string): Promise<number> {
-  const proc = Bun.spawn(cmd, { cwd, stdout: "inherit", stderr: "inherit" });
+export async function runInherit(
+  cmd: string[],
+  cwd?: string,
+  env?: Record<string, string>,
+): Promise<number> {
+  const proc = Bun.spawn(cmd, {
+    cwd,
+    env: env ? { ...process.env, ...env } : undefined,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
   return await proc.exited;
 }

@@ -14,6 +14,7 @@
 import { existsSync, statSync } from "fs";
 import { tailnetIp } from "./config-edit";
 import { CONFIG_PATH, ENV_PATH, REPO_ROOT } from "./paths";
+import { isCompiledBinary } from "../../src/runner-host/exe";
 import { INTEGRATIONS } from "../../src/server/integrations/registry";
 import * as service from "./service";
 import { dim, fail, heading, info, ok, run, warn } from "./ui";
@@ -54,6 +55,12 @@ const TOOLS = [
 async function checkTools(t: Tally): Promise<void> {
   heading("Tooling");
   for (const tool of TOOLS) {
+    // A compiled-binary install has no `bun` on the box; the runtime is baked
+    // into the release binary. Report it as such rather than running `bun`.
+    if (tool.bin === "bun" && isCompiledBinary()) {
+      ok("Bun", "embedded in the release binary");
+      continue;
+    }
     // This CLI is itself running under Bun, so a PATH lookup failing does not
     // mean Bun is missing — it means PATH is thin (a non-login shell, cron,
     // systemd). Trust the running interpreter over the lookup.
@@ -253,8 +260,19 @@ async function checkService(t: Tally, config?: Record<string, unknown>): Promise
  */
 async function checkEngine(t: Tally): Promise<void> {
   heading("Engine");
-  const { engineStatus } = await import("../../src/server/engine-status");
+  const { engineStatus, claudeCliStatus } = await import("../../src/server/engine-status");
   const e = engineStatus();
+
+  // Nothing bundled stands in for the `claude` CLI: the Anthropic bridge and
+  // Meridian both exec the installed one. Checked on its own so a box whose
+  // default model is not Anthropic still hears about it before the first
+  // Claude turn dies.
+  const cli = claudeCliStatus();
+  if (cli.ok) ok("claude CLI", cli.path);
+  else {
+    fail("claude CLI missing", cli.error || undefined);
+    t.errors++;
+  }
 
   info(dim(`default model ${e.defaultModel}`));
   const pool = `${e.claudeAccounts} Claude, ${e.codexAccounts} ChatGPT`;

@@ -1,0 +1,85 @@
+# What must hold on a box right after `install.sh` (no flags) and
+# `opensession start`, today. Templated: HOME and PORT come from --vars.
+# Run inside the box:  goss --vars vars.yaml validate --format tap
+file:
+  {{.Vars.home}}/.opensession/bin/opensession:
+    # A binary install symlinks this at the release binary; a source install
+    # writes a shell shim. `opensession-shim-executable` below asserts -x.
+    exists: true
+  {{.Vars.home}}/.opensession/config.json:
+    exists: true
+    mode: "0600"
+  {{.Vars.home}}/.opensession.env:
+    exists: true
+    mode: "0600"
+command:
+  opensession-on-path:
+    exec: "bash -lc 'command -v opensession'"
+    exit-status: 0
+  opensession-version:
+    exec: "bash -lc 'opensession --version'"
+    exit-status: 0
+  doctor-runs:
+    # Non-zero is allowed today (no accounts, no service); the point is that
+    # it runs and names the install. goss.dod.yaml tightens this.
+    exec: "bash -lc 'opensession doctor; true'"
+    exit-status: 0
+    stdout:
+      - "Tooling"
+      - "Server"
+  opensession-shim-executable:
+    exec: "test -x {{.Vars.home}}/.opensession/bin/opensession"
+    exit-status: 0
+  # The engine binaries live where their installers put them; the shim
+  # exports that PATH itself, so check locations rather than a login shell.
+{{if .Vars.source}}
+  bun-installed:
+    exec: "{{.Vars.home}}/.bun/bin/bun --version"
+    exit-status: 0
+{{else}}
+  # Compiled-binary artefact: one executable that embeds the Bun runtime and the
+  # frontend; sharp travels beside it as a small node_modules sidecar.
+  release-binary:
+    exec: "test -x {{.Vars.home}}/.opensession/src/opensession"
+    exit-status: 0
+  release-manifest:
+    exec: "cat {{.Vars.home}}/.opensession/src/release.json"
+    exit-status: 0
+    stdout: ["version", "commit", "binary"]
+  sharp-sidecar:
+    exec: "ls {{.Vars.home}}/.opensession/src/node_modules/@img | grep -c sharp"
+    exit-status: 0
+  no-release-bun:
+    exec: "test ! -e {{.Vars.home}}/.opensession/src/bin/bun"
+    exit-status: 0
+  no-user-bun:
+    # ~/.bun/install/cache is Bun's transpile cache, written by any Bun run;
+    # what must not exist is an installed Bun binary.
+    exec: "test ! -e {{.Vars.home}}/.bun/bin/bun"
+    exit-status: 0
+  no-git-checkout:
+    exec: "test ! -e {{.Vars.home}}/.opensession/src/.git"
+    exit-status: 0
+  no-bun-on-path:
+    exec: "bash -lc 'command -v bun'"
+    exit-status: 1
+{{end}}
+  opencode-installed:
+    exec: "test -x {{.Vars.home}}/.opencode/bin/opencode"
+    exit-status: 0
+  claude-installed:
+    exec: "test -x {{.Vars.home}}/.local/bin/claude"
+    exit-status: 0
+port:
+  tcp:{{.Vars.port}}:
+    listening: true
+    ip: ["127.0.0.1"]
+  tcp:{{.Vars.webhookPort}}:
+    listening: true
+    ip: ["127.0.0.1"]
+http:
+  http://127.0.0.1:{{.Vars.port}}/api/health:
+    status: 200
+    timeout: 5000
+    body:
+      - '"ok"'

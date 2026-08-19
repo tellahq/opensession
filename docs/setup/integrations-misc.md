@@ -127,8 +127,53 @@ temporary keys into the child env. It exists because the service cgroup
 blocks the EC2 metadata endpoint (`IPAddressDeny=169.254.169.254/32` in
 `opensession.service`) so untrusted agent code can't mint the role itself; the
 main process escapes via a transient systemd unit (`sudo -n systemd-run`) to
-fetch read-only creds. EC2-specific; off AWS, mint failure returns `{}` and
-runs proceed without AWS.
+fetch read-only creds.
+
+Two limits of that block, worth knowing on a cloud box:
+
+- The `IPAddressDeny=` directive covers only processes inside the unit's own
+  cgroup, and the engine deliberately detaches each session into its own
+  `systemd --user` scope outside it (`opencode-detach.ts`, so a restart does
+  not kill in-flight turns). So the agent's shell tools run in the engine
+  scope, which the unit's filter never reaches — under the **user** unit and
+  the **system** unit alike. The unit directive is defense-in-depth for the
+  non-detached path, not the boundary.
+- The boundary on a cloud box is a **host firewall rule**, which applies to
+  every process a uid runs regardless of cgroup:
+  `sudo iptables -I OUTPUT -d 169.254.169.254 -m owner --uid-owner <uid> -j REJECT`
+  (drop `--uid-owner` to block the whole host). `OPENSESSION_OC_DETACH=0`
+  keeps engines inside the system unit's cgroup instead, trading detached-run
+  survival across restarts for the unit filter covering them.
+- Because of this, `opensession service install` (user scope, the default)
+  probes 169.254.169.254 and refuses when anything answers, printing the host
+  rule, the detach kill switch, and `OPENSESSION_ALLOW_IMDS=1` for a box with
+  no role to protect. A per-user manager additionally cannot apply
+  `IPAddressDeny=` at all on stock Ubuntu (it needs `PrivateUsers=`, which the
+  apparmor unprivileged-userns restriction denies, silently), so the user
+  unit could not carry even the defense-in-depth copy.
+
+**Off by default.** The mint is EC2-specific and needs passwordless sudo, so it
+only runs when you turn it on:
+
+| Setting | Meaning |
+| --- | --- |
+| `AGENT_AWS_CREDS` | Only the literal `true` enables, any other value disables. Checked first, so it is also the off switch on a host that pins a region. |
+| `integrations.aws.enabled` | Used when `AGENT_AWS_CREDS` is unset. |
+| `AGENT_AWS_REGION` / `integrations.aws.region` | With neither of the above set, pinning a region for agent runs enables the mint. |
+| `AGENT_AWS_MINT_USER` / `integrations.aws.mintUser` | The unprivileged account the transient unit runs as. Defaults to the account the server runs as, which is what a sudoers rule is written for. The separate uid is what keeps the mint out of root, so keep it unprivileged. |
+
+A bare `AWS_REGION` does not enable anything: it names the region for a run
+that already has credentials, and it is set on plenty of machines with no
+instance role to mint.
+
+With the mint off, `getAgentAwsEnv` / `ensureAgentAwsCredsFile` return `{}`
+without spawning anything, and runs proceed without AWS. That is the state a
+laptop or a plain VPS wants, including every simple-mode install: the enabled
+path would otherwise cost a sudo attempt and up to three 3-second IMDS curl
+timeouts on every session start. With the mint on but failing (no instance
+role, no sudo rule, or inside a docker sandbox where IMDS is blocked for the
+helper too) the result is the same `{}`, logged so the misconfiguration is
+visible.
 
 ## Account health (`integrations.accountHealth`)
 

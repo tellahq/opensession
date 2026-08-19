@@ -47,6 +47,7 @@ const {
   HOST_SOCK_NAME,
   HOST_META_NAME,
   MCP_PROXY_ENTRY,
+  mcpProxyArgv,
   rpcSocketPath,
 } = await import("./protocol");
 const { WsFrameBuffer, replayStartFor } = await import("./ws-buffer");
@@ -434,13 +435,15 @@ function proxyMcpConfigs(): Record<string, unknown> | undefined {
       }
     : { OPENSESSION_RPC_SOCKET: rpcSocketPath(OPENSESSION_SESSIONS_DIR) };
   const out: Record<string, unknown> = {};
+  // The interpreter running THIS process re-launches the proxy: from source
+  // that is `bun run <mcp-proxy.ts>` (process.execPath is bun — resolves both
+  // on the host and inside a sandbox container where protocol.ts's BUN_BIN host
+  // path doesn't exist); as a compiled binary it is `<exe> mcp-proxy`.
+  const [proxyCommand, ...proxyArgs] = mcpProxyArgv(process.execPath, MCP_PROXY_ENTRY);
   for (const name of names) {
     out[name] = {
-      // The bun running THIS process — resolves correctly both on the host
-      // (~/.bun/bin/bun) and inside a sandbox container (/usr/local/bin/bun),
-      // where protocol.ts's BUN_BIN host path doesn't exist.
-      command: process.execPath,
-      args: ["run", MCP_PROXY_ENTRY],
+      command: proxyCommand,
+      args: proxyArgs,
       env: {
         ...transportEnv,
         OPENSESSION_RPC_TOKEN: spec.rpcToken,

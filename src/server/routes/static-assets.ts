@@ -9,7 +9,7 @@
 import { existsSync, readFileSync, statSync } from "fs";
 import type { RouteContext } from "./context";
 import { configuredIntegration, configuredRepos, productMark, productName } from "../config";
-import { FRONTEND_DIST, FRONTEND_SRC, devTailwindCss, frontend } from "../frontend-build";
+import { FRONTEND_DIST, FRONTEND_SRC, devTailwindCss, frontend, frontendDistFile } from "../frontend-build";
 import { trimIconMargin } from "../png-trim";
 import { resolveRepoIcon } from "../repo-appearance";
 import { organizationIconBytes } from "../organization-settings";
@@ -240,8 +240,8 @@ export async function handleStaticAssetsRoutes(
 	// WebAssembly.instantiateStreaming happy. Stable (unhashed) name — the
 	// shell requests a fixed path — so revalidate instead of immutable.
 	if (path === "/ghostty-vt.wasm") {
-		const wasm = Bun.file(`${FRONTEND_DIST}/ghostty-vt.wasm`);
-		if (await wasm.exists()) {
+		const wasm = frontendDistFile("ghostty-vt.wasm");
+		if (wasm && await wasm.exists()) {
 			return new Response(wasm, {
 				headers: {
 					"Content-Type": "application/wasm",
@@ -257,8 +257,8 @@ export async function handleStaticAssetsRoutes(
 		frontend && path.match(/^\/([\w.-]+\.(?:js|css|map))$/);
 	if (assetMatch && frontend) {
 		const name = assetMatch[1];
-		const file = Bun.file(`${FRONTEND_DIST}/${name}`);
-		if (await file.exists()) {
+		const file = frontendDistFile(name);
+		if (file && await file.exists()) {
 			const type = name.endsWith(".css")
 				? "text/css"
 				: name.endsWith(".map")

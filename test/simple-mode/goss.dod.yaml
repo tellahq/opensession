@@ -1,0 +1,30 @@
+# The simple-mode definition of done (adrs/simple-mode.md). Run by the driver
+# only with SIMPLE_MODE_STRICT=1. Templated: HOME, user, PORT come from --vars.
+command:
+  user-service-active:
+    # R3.1: user-level supervisor, no root.
+    exec: "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-active opensession"
+    exit-status: 0
+    stdout: ["active"]
+  linger-enabled:
+    # R3.1: the user manager (and so the service) outlives the login session.
+    # The linger flag is a file; asking logind over dbus (loginctl) can take
+    # longer than goss's 10s right after a turn has spawned engine scopes.
+    exec: "test -e /var/lib/systemd/linger/{{.Vars.user}}"
+    exit-status: 0
+  doctor-clean-except-accounts:
+    # Every check passes but "no model account" (added in the UI). With a
+    # token seeded, doctor must be fully clean.
+    exec: "bash -lc 'opensession doctor' | grep -c fail | grep -qx {{if .Vars.token}}0{{else}}1{{end}}"
+    exit-status: 0
+  no-tailscale-on-critical-path:
+    # R1.2: not installed unless asked for.
+    exec: "! command -v tailscale"
+    exit-status: 0
+  no-codex-on-critical-path:
+    exec: "! command -v codex"
+    exit-status: 0
+  no-source-checkout:
+    # R1.3: an artefact install, not a clone.
+    exec: "test ! -d {{.Vars.home}}/.opensession/src/.git"
+    exit-status: 0

@@ -363,7 +363,8 @@ export async function handleConnectionsRoutes(
 	// default-model turn failed pointing at a file the operator had never seen.
 	if (path === "/api/settings/opencode-engine" && req.method === "GET") {
 		const { engineStatus } = await import("../engine-status");
-		return Response.json(engineStatus());
+		const status = engineStatus();
+		return Response.json({ ...status, enabled: status.bridgeEnabled });
 	}
 
 	if (path === "/api/settings/opencode-engine" && req.method === "PUT") {
@@ -381,7 +382,8 @@ export async function handleConnectionsRoutes(
 			// Enabling is what makes a configured provider's models resolvable,
 			// so refresh the picker rather than making the user re-save a provider.
 			refreshOpencodePickerModels();
-			return Response.json(engineStatus());
+			const status = engineStatus();
+			return Response.json({ ...status, enabled: status.bridgeEnabled });
 		} catch (e: any) {
 			return Response.json(
 				{ error: e?.message || "Failed to update the engine config" },
@@ -395,35 +397,6 @@ export async function handleConnectionsRoutes(
 	// accounts in ~/.opensession-pi.json. GET returns the raw-file view (not the
 	// enabled-gated getters — an editor needs to see the ids while the engine is
 	// off); no secrets in this file, so nothing to mask.
-	// ── OpenCode engine (the default engine's on/off switch) ──
-	if (path === "/api/settings/opencode-engine" && req.method === "GET") {
-		return Response.json({
-			enabled: readOpencodeBridgeConfig()?.enabled === true,
-		});
-	}
-	if (path === "/api/settings/opencode-engine" && req.method === "PUT") {
-		const body = await req.json().catch(() => null);
-		if (!body || typeof body.enabled !== "boolean") {
-			return Response.json(
-				{ error: "enabled must be a boolean" },
-				{ status: 400 },
-			);
-		}
-		try {
-			setBridgeEnabled(body.enabled);
-			// The picker fold gates opencode/* entries on `enabled`.
-			refreshOpencodePickerModels();
-			return Response.json({
-				enabled: readOpencodeBridgeConfig()?.enabled === true,
-			});
-		} catch (e: any) {
-			return Response.json(
-				{ error: e?.message || "Failed to save opencode engine config" },
-				{ status: 400 },
-			);
-		}
-	}
-
 	if (path === "/api/settings/pi-engine" && req.method === "GET") {
 		return Response.json(
 			readPiEngineConfig() ?? { enabled: false, pickerModels: [] },

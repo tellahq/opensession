@@ -199,7 +199,7 @@ model id remains routable by typing it in).
 
 Pools only work if you can see them. Two mechanisms:
 
-**Workspace → Models** shows every account in both pools
+**Workspace → Usage** shows every account in both pools
 with its live usage: the 5-hour and 7-day windows, plan, and extra-usage
 credit spend where enabled. For Claude accounts this polling needs a full
 login-scoped credential — a bare `claude setup-token` lacks the

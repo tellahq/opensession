@@ -146,6 +146,18 @@ export function startDeviceLogin(
   };
   logins.set(l.id, l);
 
+  // The installer leaves codex off the critical path (it is only needed for
+  // this flow), so a missing binary is the expected first failure here. Say
+  // what to run rather than surfacing ENOENT from spawn.
+  if (!Bun.which("codex")) {
+    finish(
+      l,
+      "error",
+      "The codex CLI is not installed. Run `curl -fsSL https://chatgpt.com/codex/install.sh | sh` on the server, then try again.",
+    );
+    return toPublic(l);
+  }
+
   let proc: ChildProcess;
   try {
     proc = spawn("codex", ["login", "--device-auth"], {

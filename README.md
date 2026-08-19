@@ -48,9 +48,11 @@ bun run setup                             # same wizard, without the installer
 > Fork, clone the fork, and keep us as an `upstream` remote for pulling
 > updates. Config-only use (your repos, your integrations) needs no fork.
 
-The installer accepts `--dir`, `--channel <ref>`, `--no-engine`,
-`--no-tailscale`, `--no-modify-path`, `--yes` and `--uninstall`; `--help`
-lists them all.
+With no flags it writes a default configuration, installs and starts the
+service, and ends with the URL; `--advanced` runs the full onboarding wizard.
+It also accepts `--dir`, `--channel <ref>`, `--tailscale`, `--codex`,
+`--no-engine`, `--no-modify-path`, `--yes` and `--uninstall`; `--help` lists
+them all.
 
 ### Or paste this into an agent
 
@@ -63,9 +65,9 @@ for me. Go step by step and ask me one question at a time before acting.
 
 1. Check the basics: OS, git, whether ~/.opensession already exists.
 2. Install:
-   curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
-   Ask first whether I want Tailscale (--no-tailscale to skip).
-3. Run `opensession onboard` and walk me through it: a product name, the bind
+   curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --advanced
+   Ask first whether I want Tailscale (--tailscale to add it).
+3. Walk me through the onboarding wizard it starts: a product name, the bind
    address and port, which git repo I want agent sessions on, and which
    integrations to enable (Slack, GitHub, Linear, Plain, Stripe — all
    optional, all can wait).

@@ -6,7 +6,6 @@
  * origin and is also linked from the session page for clients that can crawl it.
  */
 
-import sharp from "sharp";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { chmodSync, readFileSync, writeFileSync } from "fs";
 import {
@@ -21,9 +20,37 @@ import {
 } from "./config";
 import { teamDirectory, type DirectoryPerson } from "./people";
 import { stateDir } from "./paths";
-import { findSessionAsync } from "./session-cache";
+import { findSession } from "./session-cache";
 import type { UnifiedSession } from "./types";
 import { getUiPrefs } from "./ui-prefs";
+
+/**
+ * sharp is loaded lazily and treated as optional. Its platform `@img/sharp-*`
+ * native cannot be embedded into a `bun build --compile` executable (it's
+ * resolved at runtime, not bundled), so the top-level import would crash boot
+ * there. Load it on first use instead: when it (or its native) is missing, the
+ * PNG social-card endpoint degrades to a 501 and the Open Graph meta tags still
+ * emit — the server boots and serves the UI either way.
+ */
+type SharpFactory = typeof import("sharp");
+let sharpFactory: SharpFactory | null | undefined; // undefined = not tried yet
+
+async function loadSharp(): Promise<SharpFactory | null> {
+	if (sharpFactory !== undefined) return sharpFactory;
+	try {
+		const mod = await import("sharp");
+		// sharp ships as `export = sharp` (a callable). esModuleInterop surfaces
+		// it on `.default`; fall back to the namespace for non-interop resolvers.
+		sharpFactory = ((mod as { default?: SharpFactory }).default ?? mod) as SharpFactory;
+	} catch (e) {
+		console.warn(
+			"[social-card] sharp unavailable — PNG social cards disabled (Open Graph tags still emit):",
+			e instanceof Error ? e.message : e,
+		);
+		sharpFactory = null;
+	}
+	return sharpFactory;
+}
 
 export const SESSION_CARD_WIDTH = 1200;
 export const SESSION_CARD_HEIGHT = 630;
@@ -111,7 +138,7 @@ function initials(name: string): string {
 		.toUpperCase();
 }
 
-async function titleWidth(title: string): Promise<number> {
+async function titleWidth(sharp: SharpFactory, title: string): Promise<number> {
 	const metadata = await sharp({
 		text: {
 			text: `<span letter_spacing="${TITLE_LETTER_SPACING}">${xml(title)}</span>`,
@@ -123,10 +150,13 @@ async function titleWidth(title: string): Promise<number> {
 	return metadata.width ?? 0;
 }
 
-/** Fit one 56 px Inter Semi Bold line inside the card's 1088 px measure. */
+/** Fit one 56 px Inter Semi Bold line inside the card's 1088 px measure.
+ *  Without sharp the title can't be measured, so it's returned untrimmed. */
 export async function fitSocialCardTitle(title: string): Promise<string> {
 	const value = clean(title) || productName();
-	if ((await titleWidth(value)) <= TITLE_MAX_WIDTH) return value;
+	const sharp = await loadSharp();
+	if (!sharp) return value;
+	if ((await titleWidth(sharp, value)) <= TITLE_MAX_WIDTH) return value;
 
 	const characters = Array.from(value);
 	let low = 1;
@@ -134,7 +164,7 @@ export async function fitSocialCardTitle(title: string): Promise<string> {
 	while (low < high) {
 		const middle = Math.ceil((low + high) / 2);
 		const candidate = `${characters.slice(0, middle).join("").trimEnd()}...`;
-		if ((await titleWidth(candidate)) <= TITLE_MAX_WIDTH) low = middle;
+		if ((await titleWidth(sharp, candidate)) <= TITLE_MAX_WIDTH) low = middle;
 		else high = middle - 1;
 	}
 	return `${characters.slice(0, low).join("").trimEnd()}...`;
@@ -152,6 +182,8 @@ function rememberAvatar(key: string, data: string): void {
 }
 
 async function compactAvatar(bytes: ArrayBuffer): Promise<string> {
+	const sharp = await loadSharp();
+	if (!sharp) return "";
 	const png = await sharp(Buffer.from(bytes), { limitInputPixels: 16_000_000 })
 		.resize(160, 160, { fit: "cover" })
 		.png()
@@ -243,9 +275,13 @@ async function socialCardMonoFont(): Promise<string> {
 	return jetBrainsMonoDataUrl;
 }
 
+/** The rasterised card, or null when sharp is unavailable (the route answers
+ *  501 in that case; the meta-tag path never needs the bitmap). */
 export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
-): Promise<Buffer> {
+): Promise<Buffer | null> {
+	const sharp = await loadSharp();
+	if (!sharp) return null;
 	const [avatar, monoFont, title] = await Promise.all([
 		avatarDataUrl(data.person),
 		socialCardMonoFont(),
@@ -384,7 +420,7 @@ export function sessionSocialCardPublicRoutes(): Map<
 		}
 		if (!validCardToken(sessionId, match[2]))
 			return Response.json({ error: "Not found" }, { status: 404 });
-		const session = await findSessionAsync(sessionId);
+		const session = await findSession(sessionId);
 		if (!session) return Response.json({ error: "Not found" }, { status: 404 });
 		const data = sessionSocialCardData(session);
 		const fingerprint = JSON.stringify(data, (key, value) => (key === "person" ? data.person?.image || data.person?.github : value));
@@ -394,7 +430,13 @@ export function sessionSocialCardPublicRoutes(): Map<
 		if (cached && cached.fingerprint === fingerprint && now - cached.at < CARD_CACHE_MS) {
 			bytes = cached.bytes;
 		} else {
-			bytes = await renderSessionSocialCard(data);
+			const rendered = await renderSessionSocialCard(data);
+			if (!rendered)
+				return Response.json(
+					{ error: "Social card rendering unavailable (sharp not installed)" },
+					{ status: 501 },
+				);
+			bytes = rendered;
 			rememberCard(session.id, { fingerprint, bytes, at: now });
 		}
 		return new Response(bytes.slice().buffer as ArrayBuffer, {

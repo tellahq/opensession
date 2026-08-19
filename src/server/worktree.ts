@@ -746,9 +746,17 @@ async function resolveStartPoint(
   return `origin/${defaultBranch}`;
 }
 
+/**
+ * Where a new branch starts: `origin/<defaultBranch>` when the repo has that
+ * remote ref, else the local `<defaultBranch>`. A repo with no remote (the
+ * scratch repo a release install starts with, or any local-only checkout)
+ * still gets worktrees instead of "invalid reference: origin/main".
+ */
 async function defaultStartPoint(repo: Repo): Promise<string> {
   const remote = `origin/${repo.defaultBranch}`;
-  return remote;
+  const hasRemote =
+    (await $`git -C ${repo.repo} show-ref --verify --quiet refs/remotes/${remote}`.nothrow()).exitCode === 0;
+  return hasRemote ? remote : repo.defaultBranch;
 }
 
 /**

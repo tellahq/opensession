@@ -26,13 +26,237 @@
  * already moved HEAD. Otherwise it falls back to a plain service restart.
  */
 
-import { existsSync } from "fs";
-import { join } from "path";
-import { REPO_ROOT } from "./paths";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, renameSync } from "fs";
+import { tmpdir } from "os";
+import { dirname, join } from "path";
+import { OPENSESSION_HOME, REPO_ROOT } from "./paths";
 import * as service from "./service";
 import { bold, dim, fail, heading, info, ok, run, runInherit, warn } from "./ui";
 
 export type UpdateOptions = { channel?: string; restart?: boolean; check?: boolean };
+
+/** Where published releases are downloaded from (mirrors install.sh). */
+const RELEASE_BASE =
+  process.env.OPENSESSION_RELEASE_BASE ||
+  "https://github.com/tellahq/opensession/releases/latest/download";
+
+interface ReleaseManifest {
+  version: string;
+  commit?: string;
+  os: string;
+  arch: string;
+}
+
+/**
+ * A release install, not a checkout: `release.json` at the root and a `src`
+ * symlink into `releases/<name>`. Its update path is a download-and-swap, not
+ * a git pull — there is no `.git`, and the tree is immutable by design.
+ */
+function releaseInstall(): { manifest: ReleaseManifest; srcLink: string } | undefined {
+  const manifestPath = join(REPO_ROOT, "release.json");
+  const srcLink = join(OPENSESSION_HOME, "src");
+  if (!existsSync(manifestPath)) return undefined;
+  let isLink = false;
+  try {
+    isLink = lstatSync(srcLink).isSymbolicLink();
+  } catch {}
+  if (!isLink) return undefined;
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as ReleaseManifest;
+    if (manifest.os && manifest.arch) return { manifest, srcLink };
+  } catch {}
+  return undefined;
+}
+
+/** Read the `@opencode-ai/plugin` version from a dir's package.json. */
+function seededPluginVersion(dir: string): string | undefined {
+  try {
+    const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+    };
+    return pkg.dependencies?.["@opencode-ai/plugin"];
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * After a release swap the app tree is new but the engine on the box is not:
+ * the pinned `opencode` binary and the seeded plugin runtime in
+ * `~/.config/opencode` were placed by install.sh and a version bump leaves
+ * them stale, which breaks turns (the engine, its plugin and the bundled SDK
+ * are one compatibility set). Reconcile both to the new release's pin. Every
+ * step is non-fatal: a failure here leaves the box running, and `opensession
+ * doctor` names a broken engine.
+ */
+async function reconcileEngine(newRoot: string): Promise<boolean> {
+  const manifestPath = join(newRoot, "release.json");
+  let pinned: string | undefined;
+  try {
+    pinned = (JSON.parse(readFileSync(manifestPath, "utf8")) as { opencode?: string }).opencode;
+  } catch {}
+  // No pin recorded (an older or hand-built artefact): nothing to enforce.
+  if (!pinned) return true;
+
+  heading("Engine");
+  const opencodeBin =
+    Bun.which("opencode") ??
+    (existsSync(join(process.env.HOME || "~", ".opencode", "bin", "opencode"))
+      ? join(process.env.HOME || "~", ".opencode", "bin", "opencode")
+      : undefined);
+  const have = opencodeBin ? (await run([opencodeBin, "--version"])).stdout.split("\n")[0]?.trim() : undefined;
+  if (opencodeBin && have && have !== pinned) {
+    info(dim(`opencode ${have} installed, release pins ${pinned} — reinstalling ...`));
+    const code = await runInherit([
+      "bash",
+      "-c",
+      `curl -fsSL https://opencode.ai/install | bash -s -- --version ${pinned}`,
+    ]);
+    // A failed reinstall (offline, say) means the box would run the new release
+    // against an incompatible engine. Refuse rather than activate it.
+    const now = (await run([opencodeBin, "--version"])).stdout.split("\n")[0]?.trim();
+    if (code !== 0 || now !== pinned) {
+      fail(`could not bring opencode to ${pinned} (have ${now ?? "?"})`);
+      return false;
+    }
+    ok(`opencode ${pinned}`);
+  } else if (have) {
+    ok(`opencode ${have}`);
+  }
+
+  // The seeded plugin runtime: replace the three files the seed owns when its
+  // version differs (user config in ~/.config/opencode is left alone).
+  const seedSrc = join(newRoot, "engine-seed", "opencode-config");
+  const ocConfig = join(
+    process.env.XDG_CONFIG_HOME || join(process.env.HOME || "~", ".config"),
+    "opencode",
+  );
+  if (existsSync(join(seedSrc, "node_modules"))) {
+    const want = seededPluginVersion(seedSrc);
+    const has = seededPluginVersion(ocConfig);
+    if (want && has !== want) {
+      try {
+        mkdirSync(ocConfig, { recursive: true });
+        for (const f of ["node_modules", "package.json", "package-lock.json"]) {
+          rmSync(join(ocConfig, f), { recursive: true, force: true });
+        }
+        cpSync(seedSrc, ocConfig, { recursive: true });
+        ok(`plugin runtime ${want}`);
+      } catch (e) {
+        fail(`could not refresh the plugin runtime: ${(e as Error).message}`);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * Update a release install: download the latest artefact for this OS/arch,
+ * unpack it beside the current one, swap the `src` symlink atomically (rename
+ * over a symlink is atomic on POSIX, so the running server never sees a
+ * half-unpacked tree), and reconcile the engine to the new pin. The old
+ * release is kept for rollback. Restart is the caller's, through the service.
+ */
+async function updateRelease(
+  rel: { manifest: ReleaseManifest; srcLink: string },
+  opts: UpdateOptions,
+): Promise<number> {
+  const url = opts.channel
+    ? opts.channel
+    : `${RELEASE_BASE}/opensession-${rel.manifest.os}-${rel.manifest.arch}.tar.gz`;
+  info(dim(`current ${rel.manifest.version} (${rel.manifest.commit ?? "?"})`));
+  info(dim(`fetching ${url} ...`));
+
+  const tmp = mkdtempSync(join(tmpdir(), "opensession-update-"));
+  const tarball = join(tmp, "release.tar.gz");
+  try {
+    if ((await run(["curl", "-fsSL", "--retry", "3", "-o", tarball, url])).code !== 0) {
+      fail("could not download the release", url);
+      return 1;
+    }
+    // The tarball's single top dir is the release name. Take the first top
+    // component that is not an AppleDouble sibling (`._name`, which a macOS
+    // tar can emit as the first entry) or a dotfile.
+    const listing = await run(["tar", "-tzf", tarball]);
+    const relName =
+      listing.stdout
+        .split("\n")
+        .map((l) => l.split("/")[0])
+        .find((n) => n && !n.startsWith("._") && !n.startsWith(".")) ?? "";
+    if (!relName) {
+      fail("could not read the downloaded tarball");
+      return 1;
+    }
+
+    const releasesDir = join(OPENSESSION_HOME, "releases");
+    mkdirSync(releasesDir, { recursive: true });
+    const dest = join(releasesDir, relName);
+    const current = existsSync(rel.srcLink) ? realpathSync(rel.srcLink) : "";
+    if (existsSync(dest) && realpathSync(dest) === current && current) {
+      ok("already up to date", rel.manifest.version);
+      return 0;
+    }
+    // A complete unpack has a release.json at its root; anything else (a dir
+    // left behind by a tar that died partway, e.g. a full disk) is treated as
+    // absent and redone. Extract into a sibling staging dir and rename the
+    // unpacked tree into place only on success, so `dest` is never a partial
+    // tree a later run would trust — the rename is atomic on one filesystem.
+    if (existsSync(dest) && existsSync(join(dest, "release.json"))) {
+      ok(`${relName} already unpacked`);
+    } else {
+      rmSync(dest, { recursive: true, force: true });
+      const staging = join(releasesDir, `.incoming.${process.pid}`);
+      rmSync(staging, { recursive: true, force: true });
+      mkdirSync(staging, { recursive: true });
+      try {
+        if ((await run(["tar", "-xzf", tarball, "-C", staging])).code !== 0) {
+          fail("could not unpack the release");
+          return 1;
+        }
+        const unpacked = join(staging, relName);
+        if (!existsSync(join(unpacked, "release.json"))) {
+          fail("the unpacked release is missing release.json");
+          return 1;
+        }
+        renameSync(unpacked, dest);
+        ok(`unpacked ${relName}`);
+      } finally {
+        rmSync(staging, { recursive: true, force: true });
+      }
+    }
+
+    // Reconcile the engine to the new release's pin BEFORE activating it: the
+    // engine, its plugin and the bundled SDK are one compatibility set, so a
+    // release that runs against a stale engine can fail every turn while
+    // update reports success. If a required component cannot be brought to the
+    // pin, leave the current release active (the src link is untouched) and
+    // return nonzero; the downloaded tree stays on disk for a later retry.
+    let reconciled = false;
+    try {
+      reconciled = await reconcileEngine(dest);
+    } catch (e) {
+      fail(`engine reconcile failed: ${(e as Error).message}`);
+    }
+    if (!reconciled) {
+      fail("keeping the current release", "engine could not be reconciled to the new one");
+      return 1;
+    }
+
+    // Atomic swap: write the new link next to the target and rename over it,
+    // so a reader either sees the old tree or the new one, never neither.
+    const staging = join(dirname(rel.srcLink), `.src.next.${process.pid}`);
+    try {
+      rmSync(staging, { force: true });
+    } catch {}
+    symlinkSync(dest, staging);
+    renameSync(staging, rel.srcLink);
+    ok(`switched src -> releases/${relName}`, current ? `was ${current.split("/").pop()}` : undefined);
+    return 0;
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
 
 /** The upstream project this source came from. */
 const UPSTREAM_URL_RE = /github\.com[/:]tellahq\/opensession(\.git)?$/;
@@ -90,6 +314,19 @@ async function passwordlessRoot(): Promise<boolean> {
 
 export async function update(opts: UpdateOptions = {}): Promise<number> {
   heading("Update");
+
+  // Release install (no .git, immutable tree): download-and-swap, then restart
+  // through the same health-gated path as the source update below.
+  const rel = releaseInstall();
+  if (rel) {
+    if (opts.check) {
+      info(dim(`release install ${rel.manifest.version}; \`opensession update\` swaps to the latest artefact`));
+      return 0;
+    }
+    const swapped = await updateRelease(rel, opts);
+    if (swapped !== 0) return swapped;
+    return await restartAfterUpdate(opts, undefined);
+  }
 
   const { code: isRepo } = await git(["rev-parse", "--git-dir"]);
   if (isRepo !== 0) {
@@ -210,20 +447,26 @@ export async function update(opts: UpdateOptions = {}): Promise<number> {
   }
   ok("dependencies installed");
 
-  // Backend changes never take effect without a real restart — the frontend
-  // watcher only rebuilds the SPA. Prefer the health-gated deploy script: it
-  // pins the PRE-update commit as last-known-good, gates the restart on a
-  // bootId-stable /api/health streak, and opens the watchdog window.
+  return await restartAfterUpdate(opts, beforeFull);
+}
+
+/**
+ * Backend changes never take effect without a real restart — the frontend
+ * watcher only rebuilds the SPA. Prefer the health-gated deploy script (source
+ * installs, which carry deploy/ and a pin commit): it pins the pre-update
+ * commit as last-known-good, gates on a bootId-stable /api/health streak, and
+ * opens the watchdog window. A release install has no pin and no deploy/, so it
+ * takes the plain service restart — the previous release stays on disk for a
+ * manual rollback (repoint src and restart).
+ */
+async function restartAfterUpdate(opts: UpdateOptions, pin: string | undefined): Promise<number> {
   if (opts.restart === false) return 0;
   const selfDeploy = join(REPO_ROOT, "deploy", "self-deploy.sh");
-  if ((await service.isInstalled()) && existsSync(selfDeploy) && (await passwordlessRoot())) {
+  if (pin && (await service.isInstalled()) && existsSync(selfDeploy) && (await passwordlessRoot())) {
     heading("Deploy (health-gated)");
-    const code = await runInherit(
-      [selfDeploy, "--sha", "HEAD", "--pin", beforeFull],
-      REPO_ROOT,
-    );
+    const code = await runInherit([selfDeploy, "--sha", "HEAD", "--pin", pin], REPO_ROOT);
     if (code === 0) {
-      ok("restarted and healthy", `rollback pin ${before}`);
+      ok("restarted and healthy", `rollback pin ${pin.slice(0, 8)}`);
     } else {
       fail(
         "deploy did not come back healthy",
@@ -238,6 +481,5 @@ export async function update(opts: UpdateOptions = {}): Promise<number> {
   } else {
     warn("no service installed", "restart your foreground server to pick this up");
   }
-
   return 0;
 }
