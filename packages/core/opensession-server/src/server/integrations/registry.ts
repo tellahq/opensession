@@ -40,8 +40,18 @@ export type IntegrationEnv = {
   example?: string;
   /** Without this the integration cannot function at all. */
   required?: boolean;
+  /** Required only when another credential is absent. */
+  requiredWhen?: (present: (name: string) => boolean) => boolean;
   description: string;
 };
+
+/** Resolve conditional and unconditional credential requirements consistently. */
+export function envRequired(
+  env: IntegrationEnv,
+  present: (name: string) => boolean,
+): boolean {
+  return env.requiredWhen ? env.requiredWhen(present) : !!env.required;
+}
 
 export type IntegrationLink = {
   label: string;
@@ -121,13 +131,12 @@ export const INTEGRATIONS: IntegrationSpec[] = [
       {
         name: "SLACK_APP_TOKEN",
         example: "xapp-",
-        description:
-          "app-level token with connections:write. When set, the agent runs Socket Mode (outbound WebSocket, no public URL or signing secret) instead of the HTTP event routes",
+        description: "app-level token with connections:write for Socket Mode",
       },
       {
         name: "SLACK_SIGNING_SECRET",
-        description:
-          "verifies inbound event signatures for the HTTP transport; required unless SLACK_APP_TOKEN enables Socket Mode, where it is unused",
+        requiredWhen: (present) => !present("SLACK_APP_TOKEN"),
+        description: "signing secret for HTTP event requests",
       },
       { name: "ALLOWED_SLACK_USER_ID", description: "restricts admin tools to one user" },
       { name: "WORKTREE_HOOK_SECRET", description: "shared secret for worktree hooks" },

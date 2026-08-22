@@ -22,7 +22,7 @@
  */
 
 import { audit } from "../audit";
-import type { IntegrationSpec } from "../integrations/registry";
+import { envRequired, type IntegrationSpec } from "../integrations/registry";
 import { requireWorkspaceAdmin } from "../workspace-auth";
 import type { RouteContext } from "./context";
 import { handleSetupCodestorageRoutes } from "./setup-codestorage";
@@ -44,7 +44,7 @@ async function integrationSnapshot(
       : !!process.env[name];
   const env = spec.env.map((e) => ({
     name: e.name,
-    required: !!e.required,
+    required: envRequired(e, present),
     description: e.description,
     present: present(e.name),
   }));

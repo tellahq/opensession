@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { activeIntegrations, isEnabled } from "./load";
-import { findIntegration, INTEGRATIONS } from "./registry";
+import { envRequired, findIntegration, INTEGRATIONS } from "./registry";
 
 const FLAGS = INTEGRATIONS.map((i) => i.enableFlag);
 const saved = new Map(FLAGS.map((f) => [f, process.env[f]]));
@@ -89,5 +89,24 @@ describe("activeIntegrations", () => {
     process.env.ENABLE_GITHUB_AGENT = "true";
     process.env.ENABLE_PLAIN_AGENT = "true";
     expect(activeIntegrations().map((i) => i.id)).toEqual(["plain", "github"]);
+  });
+});
+
+describe("envRequired", () => {
+  const slack = findIntegration("slack")!;
+  const signingSecret = slack.env.find((e) => e.name === "SLACK_SIGNING_SECRET")!;
+  const botToken = slack.env.find((e) => e.name === "SLACK_BOT_TOKEN")!;
+
+  test("Socket Mode does not require the HTTP signing secret", () => {
+    expect(envRequired(signingSecret, (name) => name === "SLACK_APP_TOKEN")).toBe(false);
+  });
+
+  test("the HTTP transport requires its signing secret", () => {
+    expect(envRequired(signingSecret, () => false)).toBe(true);
+  });
+
+  test("unconditional credentials stay required", () => {
+    expect(envRequired(botToken, () => true)).toBe(true);
+    expect(envRequired(botToken, () => false)).toBe(true);
   });
 });

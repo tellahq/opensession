@@ -15,7 +15,10 @@ import { existsSync, statSync } from "fs";
 import { tailnetIp } from "./config-edit";
 import { CONFIG_PATH, ENV_PATH, REPO_ROOT } from "./paths";
 import { isCompiledBinary } from "../../packages/core/opensession-server/src/runner-host/exe";
-import { INTEGRATIONS } from "../../packages/core/opensession-server/src/server/integrations/registry";
+import {
+  envRequired,
+  INTEGRATIONS,
+} from "../../packages/core/opensession-server/src/server/integrations/registry";
 import * as service from "./service";
 import { dim, fail, heading, info, ok, run, warn } from "./ui";
 
@@ -170,7 +173,9 @@ async function checkIntegrations(t: Tally, config?: Record<string, unknown>): Pr
     if (!enabled(spec)) continue;
     anyEnabled = true;
 
-    const missing = spec.env.filter((e) => e.required && !value(e.name));
+    const missing = spec.env.filter(
+      (e) => envRequired(e, (name) => !!value(name)) && !value(e.name),
+    );
     if (missing.length) {
       fail(
         `${spec.label} is enabled but missing ${missing.map((m) => m.name).join(", ")}`,
