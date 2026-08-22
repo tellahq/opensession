@@ -33,6 +33,6 @@ enum SidebarNext {
         }
 
         return candidates.first { isUnread($0) && !$0.isRunning }
-            ?? candidates.first
+            ?? candidates.first { !$0.isRunning }
     }
 }

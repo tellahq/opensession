@@ -56,6 +56,21 @@ final class SidebarNextTests: XCTestCase {
         )
     }
 
+    func testFallbackSkipsRunningWork() {
+        let rows = [row("current"), row("running", running: true), row("ready")]
+
+        XCTAssertEqual(
+            SidebarNext.workspace(after: "current", in: rows) { _ in false }?.id,
+            "ready"
+        )
+    }
+
+    func testFallbackReturnsNilWhenEveryOtherChatIsRunning() {
+        let rows = [row("current"), row("running", running: true)]
+
+        XCTAssertNil(SidebarNext.workspace(after: "current", in: rows) { _ in false })
+    }
+
     func testPinnedCopiesAndDraftRowsDoNotBecomeExtraChats() {
         let current = row("current")
         let next = row("next")
