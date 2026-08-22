@@ -5,8 +5,11 @@ import {
   getTurn,
   isCheckedKind,
   isReachTool,
+  observeToolCall,
+  observedToolCall,
   recordDeclaration,
   recordEffect,
+  silenceToolFor,
   verdictFor,
 } from "./turn-outcome";
 
@@ -141,5 +144,204 @@ describe("ledger", () => {
 
     beginTurn({ key: "bks-reused", kind: "automation" });
     expect(endTurn("bks-reused")!.verdict).toBe("silent-drop");
+  });
+});
+
+describe("observedToolCall", () => {
+  test("unwraps pi's mcp_call dispatcher to the tool that was really called", () => {
+    expect(
+      observedToolCall({
+        toolName: "mcp_call",
+        toolInput: {
+          name: "plain_create_note",
+          arguments: { threadId: "th_1", text: "triage" },
+        },
+      })
+    ).toEqual({
+      name: "plain_create_note",
+      args: { threadId: "th_1", text: "triage" },
+    });
+  });
+
+  test("passes a directly-named tool through unchanged", () => {
+    expect(observedToolCall({ toolName: "bash", toolInput: { cmd: "ls" } })).toEqual({
+      name: "bash",
+      args: { cmd: "ls" },
+    });
+    expect(
+      observedToolCall({ toolName: "opensession-report_publish_report", toolInput: {} })
+    ).toEqual({ name: "opensession-report_publish_report", args: {} });
+  });
+
+  test("a dispatcher call naming no tool names nothing", () => {
+    expect(observedToolCall({ toolName: "mcp_call", toolInput: {} })).toBeUndefined();
+    expect(
+      observedToolCall({ toolName: "mcp_call", toolInput: { name: 42 } })
+    ).toBeUndefined();
+    expect(observedToolCall({ toolName: undefined })).toBeUndefined();
+  });
+
+  test("survives a missing or non-object input", () => {
+    expect(observedToolCall({ toolName: "bash" })).toEqual({ name: "bash", args: {} });
+    expect(observedToolCall({ toolName: "bash", toolInput: "nope" })).toEqual({
+      name: "bash",
+      args: {},
+    });
+    expect(
+      observedToolCall({ toolName: "mcp_call", toolInput: { name: "x", arguments: 7 } })
+    ).toEqual({ name: "x", args: {} });
+  });
+});
+
+describe("silenceToolFor", () => {
+  test("knows both opensession-turn tools in both spellings", () => {
+    expect(silenceToolFor("opensession-turn_finish_silently")).toBe("finish_silently");
+    expect(silenceToolFor("mcp__opensession-turn__finish_silently")).toBe(
+      "finish_silently"
+    );
+    expect(silenceToolFor("opensession-turn_stay_silent")).toBe("stay_silent");
+    expect(silenceToolFor("mcp__opensession-turn__stay_silent")).toBe("stay_silent");
+  });
+
+  test("is not fooled by a lookalike or by nothing", () => {
+    expect(silenceToolFor("finish_silently")).toBeUndefined();
+    expect(silenceToolFor("plain_create_note")).toBeUndefined();
+    expect(silenceToolFor(undefined)).toBeUndefined();
+  });
+});
+
+describe("observeToolCall — the cross-process, dispatcher-wrapped run", () => {
+  // Both halves of the 2026-08-19 regression, in the exact event shapes a
+  // hosted pi automation emits (measured from the transcript store).
+  test("an outward effect made through mcp_call still counts as reaching someone", () => {
+    beginTurn({ key: "bks-wrapped-reach", kind: "automation" });
+    observeToolCall("bks-wrapped-reach", {
+      toolName: "mcp_call",
+      toolInput: {
+        name: "plain_create_note",
+        arguments: { threadId: "th_1", text: "triaged" },
+      },
+    });
+    const outcome = endTurn("bks-wrapped-reach")!;
+    expect(outcome.verdict).toBe("reached");
+    expect(outcome.effects).toEqual(["plain_create_note"]);
+  });
+
+  test("finish_silently through mcp_call is recorded even though the tool body ran in another process", () => {
+    beginTurn({ key: "bks-wrapped-declare", kind: "automation" });
+    observeToolCall("bks-wrapped-declare", {
+      toolName: "mcp_call",
+      toolInput: {
+        name: "opensession-turn_finish_silently",
+        arguments: { reason: "health check nominal" },
+      },
+    });
+    const outcome = endTurn("bks-wrapped-declare")!;
+    expect(outcome.verdict).toBe("declared");
+    expect(outcome.declaration).toEqual({
+      tool: "finish_silently",
+      reason: "health check nominal",
+    });
+  });
+
+  test("stay_silent through mcp_call declares too", () => {
+    beginTurn({ key: "bks-wrapped-stay", kind: "automation" });
+    observeToolCall("bks-wrapped-stay", {
+      toolName: "mcp_call",
+      toolInput: {
+        name: "opensession-turn_stay_silent",
+        arguments: { reason: "already answered upthread" },
+      },
+    });
+    expect(endTurn("bks-wrapped-stay")!.declaration).toEqual({
+      tool: "stay_silent",
+      reason: "already answered upthread",
+    });
+  });
+
+  test("a declaration with no reason still declares", () => {
+    beginTurn({ key: "bks-wrapped-noreason", kind: "automation" });
+    observeToolCall("bks-wrapped-noreason", {
+      toolName: "mcp_call",
+      toolInput: { name: "opensession-turn_finish_silently", arguments: {} },
+    });
+    const outcome = endTurn("bks-wrapped-noreason")!;
+    expect(outcome.verdict).toBe("declared");
+    expect(outcome.declaration).toEqual({ tool: "finish_silently" });
+  });
+
+  test("a directly-named effect keeps working — the in-process and fallback paths still report one", () => {
+    beginTurn({ key: "bks-direct", kind: "automation" });
+    observeToolCall("bks-direct", {
+      toolName: "opensession-report_publish_report",
+      toolInput: {},
+    });
+    expect(endTurn("bks-direct")!.effects).toEqual([
+      "opensession-report_publish_report",
+    ]);
+  });
+
+  test("the in-process tool recording the same declaration is a harmless duplicate", () => {
+    beginTurn({ key: "bks-both", kind: "automation" });
+    observeToolCall("bks-both", {
+      toolName: "mcp_call",
+      toolInput: {
+        name: "opensession-turn_finish_silently",
+        arguments: { reason: "quiet day" },
+      },
+    });
+    // What createTurnMcpServer does when the ledger IS in this process.
+    recordDeclaration("bks-both", { tool: "finish_silently", reason: "quiet day" });
+    const outcome = endTurn("bks-both")!;
+    expect(outcome.verdict).toBe("declared");
+    expect(outcome.declaration).toEqual({
+      tool: "finish_silently",
+      reason: "quiet day",
+    });
+  });
+
+  test("an effect outranks a declaration made earlier in the same wrapped turn", () => {
+    beginTurn({ key: "bks-wrapped-both", kind: "automation" });
+    observeToolCall("bks-wrapped-both", {
+      toolName: "mcp_call",
+      toolInput: { name: "opensession-turn_finish_silently", arguments: {} },
+    });
+    observeToolCall("bks-wrapped-both", {
+      toolName: "mcp_call",
+      toolInput: { name: "plain_create_note", arguments: {} },
+    });
+    expect(endTurn("bks-wrapped-both")!.verdict).toBe("reached");
+  });
+
+  test("reads and searches through the dispatcher are still not effects", () => {
+    beginTurn({ key: "bks-wrapped-read", kind: "automation" });
+    observeToolCall("bks-wrapped-read", {
+      toolName: "mcp_search",
+      toolInput: { query: "post a note" },
+    });
+    observeToolCall("bks-wrapped-read", {
+      toolName: "mcp_call",
+      toolInput: { name: "plain_get_thread", arguments: { threadId: "th_1" } },
+    });
+    observeToolCall("bks-wrapped-read", {
+      toolName: "mcp_call",
+      toolInput: { name: "opensession-papercuts_log_papercut", arguments: {} },
+    });
+    expect(endTurn("bks-wrapped-read")!.verdict).toBe("silent-drop");
+  });
+
+  test("a malformed dispatcher call cannot manufacture an effect", () => {
+    beginTurn({ key: "bks-wrapped-bad", kind: "automation" });
+    observeToolCall("bks-wrapped-bad", { toolName: "mcp_call", toolInput: {} });
+    expect(endTurn("bks-wrapped-bad")!.verdict).toBe("silent-drop");
+  });
+
+  test("no key is no ledger — an unchecked kind records nothing", () => {
+    expect(() =>
+      observeToolCall(undefined, {
+        toolName: "mcp_call",
+        toolInput: { name: "plain_create_note", arguments: {} },
+      })
+    ).not.toThrow();
   });
 });

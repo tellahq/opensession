@@ -93,6 +93,106 @@ export function isReachTool(toolName: string | undefined): boolean {
   return !!toolName && REACH_TOOL_IDS.has(toolName.toLowerCase());
 }
 
+/** The `opensession-turn` server's two tools, in the spellings a run reports. */
+const SILENCE_TOOL_IDS: ReadonlyMap<string, SilenceTool> = new Map(
+  (["finish_silently", "stay_silent"] as SilenceTool[]).flatMap(
+    (tool) =>
+      [
+        [`mcp__opensession-turn__${tool}`, tool],
+        [`opensession-turn_${tool}`, tool],
+      ] as Array<[string, SilenceTool]>
+  )
+);
+
+export function silenceToolFor(toolName: string | undefined): SilenceTool | undefined {
+  return toolName ? SILENCE_TOOL_IDS.get(toolName.toLowerCase()) : undefined;
+}
+
+export interface ObservedToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * The tool a `tool_use` event is really about.
+ *
+ * Pi does not hand the model one tool per bridged MCP tool. The catalog is
+ * kept server-side and reached through two dispatcher tools, `mcp_search` and
+ * `mcp_call` (createPiMcpBridge, src/server/pi-mcp-bridge.ts) — so a Slack
+ * post arrives as `mcp_call` with `{name: "slack_...", arguments: {...}}`,
+ * and the tool that was actually called sits one level down.
+ *
+ * The ledger read the envelope. That was harmless while unattended runs used
+ * an engine that named the tool directly, and became total the day automations
+ * moved to Pi (2026-08-19): 214 turn_outcome rows the following day, every one
+ * a silent-drop, not one carrying an effect, against 8 successful
+ * `finish_silently` calls that same day.
+ *
+ * Unwrapping here rather than widening REACH_TOOLS is the point. The reach
+ * list stays exactly as explicit as it was; it is simply asked about the tool
+ * the run called instead of the dispatcher it called it through.
+ */
+export function observedToolCall(event: {
+  toolName?: string;
+  toolInput?: unknown;
+}): ObservedToolCall | undefined {
+  const outer = event.toolName;
+  if (!outer) return undefined;
+  const input = asRecord(event.toolInput);
+  if (outer.toLowerCase() !== "mcp_call") return { name: outer, args: input };
+  // A dispatcher call with no resolvable target names no tool at all — a
+  // malformed call, not something the run reached anybody with.
+  const inner = input.name;
+  if (typeof inner !== "string" || !inner) return undefined;
+  return { name: inner, args: asRecord(input.arguments) };
+}
+
+/**
+ * Fold one observed tool call into the ledger: an outward effect, a declared
+ * silence, or neither.
+ *
+ * Declarations are recorded here as well as by the tool itself
+ * (src/agents/slack/turn-tools.ts), because since 2026-08-19 those two things
+ * happen in DIFFERENT PROCESSES. An automation's turn runs in a detached run
+ * host (host-client.ts -> src/runner-host/host.ts), which is where beginTurn
+ * and endTurn run; the opensession-turn MCP server is built in the server
+ * process (automations.ts, interactive-mcp.ts) and reached from the host
+ * through the run-rpc proxy, so its recordDeclaration writes into a `ledgers`
+ * map the turn's ledger does not live in, finds nothing, and returns. The host
+ * sees the call in its own event stream, which is the one place both halves of
+ * the turn are already together — no new frame, no second ledger.
+ *
+ * The duplicate on an in-process run is free: the last declaration wins and
+ * both carry the same value. An attended turn, where `finish_silently` is a
+ * no-op the tool refuses, cannot be affected — attended runs are interactive
+ * kinds and never carry a ledger at all (CHECKED_KINDS above).
+ */
+export function observeToolCall(
+  key: string | undefined,
+  event: { toolName?: string; toolInput?: unknown }
+): void {
+  if (!key) return;
+  const call = observedToolCall(event);
+  if (!call) return;
+  if (isReachTool(call.name)) {
+    recordEffect(key, call.name);
+    return;
+  }
+  const silence = silenceToolFor(call.name);
+  if (!silence) return;
+  const reason = call.args.reason;
+  recordDeclaration(key, {
+    tool: silence,
+    ...(typeof reason === "string" && reason ? { reason } : {}),
+  });
+}
+
 /**
  * Run kinds whose whole point is to reach somebody, so ending without an
  * effect is worth a look. Interactive kinds are excluded because the reply

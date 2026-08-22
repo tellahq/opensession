@@ -72,8 +72,7 @@ import {
   beginTurn,
   endTurn,
   isCheckedKind,
-  isReachTool,
-  recordEffect,
+  observeToolCall,
   turnKeyFor,
 } from "./turn-outcome";
 import { readEngineTranscriptAsync } from "./sessions";
@@ -435,8 +434,14 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<StreamEvent>
     try {
       for await (const event of runAgentInner(effectiveOpts)) {
         observe(event);
-        if (event.type === "tool_use" && isReachTool(event.toolName)) {
-          recordEffect(key, event.toolName!);
+        // Pi reports every bridged MCP call as the `mcp_call` dispatcher with
+        // the real tool inside its input, so the ledger is fed the unwrapped
+        // call rather than the envelope (observeToolCall, turn-outcome.ts).
+        // It also picks up a declared silence here, because on a hosted run
+        // the opensession-turn tool body executes in the SERVER process and
+        // cannot reach this host's ledger.
+        if (event.type === "tool_use") {
+          observeToolCall(key, event);
         }
         yield event;
       }
