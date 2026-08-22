@@ -6,6 +6,10 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import {
+  postSlackFiles,
+  slackUploadPermalink,
+} from "../packages/core/opensession-server/src/agents/slack/slack-api";
 
 type ToolArguments = Record<string, unknown>;
 
@@ -25,7 +29,7 @@ const booleanUnfurlProperties = {
   },
 } as const;
 
-const tools = [
+export const tools = [
   {
     name: "slack_list_channels",
     description: "List public or pre-defined channels in the workspace with pagination",
@@ -52,6 +56,26 @@ const tools = [
         ...booleanUnfurlProperties,
       },
       required: ["channel_id", "text"],
+    },
+  },
+  {
+    name: "slack_post_files",
+    description: "Upload local files and post them to a Slack channel using the session owner's Slack identity",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channel_id: { type: "string", description: "The ID of the channel to post to" },
+        file_paths: {
+          type: "array",
+          items: { type: "string" },
+          description: "Absolute paths of local files to upload (maximum 10)",
+        },
+        initial_comment: { type: "string", description: "Message shown with the files" },
+        title: { type: "string", description: "Optional title for the uploaded file or file set" },
+        alt_text: { type: "string", description: "Optional accessible description of the files" },
+        thread_ts: { type: "string", description: "Optional thread timestamp to reply under" },
+      },
+      required: ["channel_id", "file_paths", "initial_comment"],
     },
   },
   {
@@ -139,6 +163,35 @@ function requiredString(args: ToolArguments, name: string): string {
   return value;
 }
 
+function requiredStringArray(args: ToolArguments, name: string): string[] {
+  const value = args[name];
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > 10 ||
+    value.some((item) => typeof item !== "string" || !item)
+  ) {
+    throw new Error(`${name} must contain between 1 and 10 paths`);
+  }
+  return value;
+}
+
+export function attributedSlackText(
+  text: string,
+  actor = process.env.OPENSESSION_SLACK_ACTOR,
+  personal = process.env.OPENSESSION_SLACK_PERSONAL === "1",
+): string {
+  if (personal || !actor) return text;
+  return `${text}\n\nSent by ${actor} via Open Session`;
+}
+
+function optionalString(args: ToolArguments, name: string): string | undefined {
+  const value = args[name];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw new Error(`${name} must be a string`);
+  return value;
+}
+
 function optionalBoolean(args: ToolArguments, name: string): boolean | undefined {
   const value = args[name];
   if (value === undefined) return undefined;
@@ -207,11 +260,17 @@ class SlackClient {
   }
 
   postMessage(channel: string, text: string, options: UnfurlOptions): Promise<unknown> {
-    return this.post("chat.postMessage", buildSlackMessageBody(channel, text, options));
+    return this.post(
+      "chat.postMessage",
+      buildSlackMessageBody(channel, attributedSlackText(text), options),
+    );
   }
 
   postReply(channel: string, threadTs: string, text: string, options: UnfurlOptions): Promise<unknown> {
-    return this.post("chat.postMessage", buildSlackMessageBody(channel, text, options, threadTs));
+    return this.post(
+      "chat.postMessage",
+      buildSlackMessageBody(channel, attributedSlackText(text), options, threadTs),
+    );
   }
 
   addReaction(channel: string, timestamp: string, reaction: string): Promise<unknown> {
@@ -268,6 +327,25 @@ async function main(): Promise<void> {
         case "slack_post_message":
           result = await client.postMessage(requiredString(args, "channel_id"), requiredString(args, "text"), options);
           break;
+        case "slack_post_files": {
+          const channel = requiredString(args, "channel_id");
+          const completed = await postSlackFiles(
+            channel,
+            requiredStringArray(args, "file_paths"),
+            attributedSlackText(requiredString(args, "initial_comment")),
+            {
+              title: optionalString(args, "title"),
+              altText: optionalString(args, "alt_text"),
+              threadTs: optionalString(args, "thread_ts"),
+            },
+            botToken,
+          );
+          result = {
+            ok: true,
+            permalink: await slackUploadPermalink(completed, channel, botToken),
+          };
+          break;
+        }
         case "slack_reply_to_thread":
           result = await client.postReply(
             requiredString(args, "channel_id"),

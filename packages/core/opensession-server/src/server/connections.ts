@@ -8,6 +8,7 @@ import { existsSync, readFileSync, copyFileSync, watchFile } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { configuredPaths } from "./config";
 import { mcpOauthStatus, mcpSharedGrantHeader, mcpUserGrantHeader, mcpUserGrantToken, oauthPresetFor } from "./mcp-oauth";
+import { resolveTeammate } from "./shared/user-mappings";
 
 const HOME = homeDir();
 // mcp-config.json location. OPENSESSION_MCP_CONFIG env → config
@@ -95,15 +96,37 @@ export function withDynamicCredentials(
           const candidates = (Array.isArray(user) ? user : [user]).filter(
             (u): u is string => !!u,
           );
+          const personal = candidates
+            .map((identity) => ({
+              identity,
+              token: mcpUserGrantToken(name, identity),
+            }))
+            .find(({ token }) => !!token);
           const token =
-            candidates
-              .map((u) => mcpUserGrantToken(name, u))
-              .find((t) => !!t) ??
+            personal?.token ??
             mcpSharedGrantHeader(name)?.replace(/^Bearer\s+/i, "");
-          if (token)
+          const actorIdentity = personal?.identity ?? candidates[0];
+          const actor = actorIdentity
+            ? resolveTeammate(actorIdentity)?.name ?? actorIdentity
+            : undefined;
+          const attributionEnv =
+            name === "slack" && actor
+              ? {
+                  OPENSESSION_SLACK_ACTOR: actor,
+                  OPENSESSION_SLACK_PERSONAL: personal ? "1" : "0",
+                }
+              : {};
+          if (token || Object.keys(attributionEnv).length)
             out = {
               ...out,
-              [name]: { ...c, env: { ...c.env, [preset.envVar]: token } },
+              [name]: {
+                ...c,
+                env: {
+                  ...c.env,
+                  ...(token ? { [preset.envVar]: token } : {}),
+                  ...attributionEnv,
+                },
+              },
             };
         }
         continue;

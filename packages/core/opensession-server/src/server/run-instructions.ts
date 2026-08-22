@@ -104,6 +104,15 @@ export function buildRunInstructions(input: {
       "in a private repo. If every controlled channel fails, stop and report the failure " +
       "instead of escalating to a third-party host."
   );
+  parts.push(
+    "## Slack identity and attribution\nWhen an Open Session user asks you to post a Slack " +
+      "message or file, use the configured `slack` MCP tools. They use the session owner's " +
+      "personal Slack connection when available, and bot fallbacks add the requester's name. " +
+      "Never call Slack with `curl`, import the internal Slack API helpers from shell code, or " +
+      "reuse a bot token from the host. Those paths bypass personal attribution. If the Slack " +
+      "MCP cannot complete the post, report the failure instead of switching to an unattributed " +
+      "route. Use the editable Slack composer when the human has not explicitly told you to send."
+  );
   // Open Session vends bounded instance-role credentials to eligible runs.
   // Interactive SSO was both unnecessary and noisy: models started `aws sso
   // login`, then blocked the UI and pinged teammates with expiring device
