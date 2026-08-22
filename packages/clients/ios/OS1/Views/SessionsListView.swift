@@ -151,7 +151,8 @@ struct SessionsListView: View {
     /// the list re-groups when the first `/api/repos` of a launch lands.
     @AppStorage(RepoCount.storageKey) private var knownRepoCount = RepoCount.unknown
     @AppStorage("os1.list.repo") private var repoFilter = "all"
-    @State private var registeredRepoIDs: [String] = []
+    @State private var registeredProjects: [OS1API.RepoInfo] =
+        SettingsCache.value("repos") ?? []
     @AppStorage("os1.list.sort") private var sortByRaw = SidebarSortBy.updated.rawValue
     // Default to the signed-in person's own sessions, like the web sidebar —
     // the server also hosts hundreds of automation runs and teammates' sessions.
@@ -356,8 +357,9 @@ struct SessionsListView: View {
                 // list. The repo list carries each repo's assigned tile
                 // color, and without it every tile falls back to its own
                 // hash, which is exactly where two repos can collide.
-                if let repos = try? await OS1API.repos() {
-                    registeredRepoIDs = repos.map(\.id)
+                if let projects = try? await OS1API.repos() {
+                    registeredProjects = projects
+                    SettingsCache.save("repos", projects)
                 }
             }
             // Keyed on the shared location so turning Support off stops the
@@ -1462,7 +1464,7 @@ struct SessionsListView: View {
     private var availableRepos: [String] {
         SessionsListViewModel.repositoryOrder(
             in: viewModel.sessions,
-            workspaceRepos: registeredRepoIDs + viewModel.workspaces.compactMap {
+            workspaceRepos: registeredProjects.map(\.id) + viewModel.workspaces.compactMap {
                 $0.draft == nil ? nil : $0.repo
             },
             preferredOrderJSON: preferredRepoOrder
@@ -2085,6 +2087,15 @@ struct SessionsListView: View {
         return workspace.effectiveRepo
     }
 
+    private func shipsDirectlyToMain(_ workspace: SidebarWorkspace) -> Bool {
+        let repo = workspace.effectiveRepo
+        return SessionsListViewModel.shipsDirectlyToMain(
+            repo: repo,
+            branch: workspace.sessions.first { $0.repo == repo }?.branch,
+            projects: registeredProjects
+        )
+    }
+
     #if os(iOS)
     /// Matched across the whole workspace, not just its main session: the
     /// strip's sibling tabs all live behind one row, so returning from a tab
@@ -2115,6 +2126,7 @@ struct SessionsListView: View {
             searchSnippet: workspaceSearchSnippet(workspace),
             isWorkspaceDraft: workspace.isDraftWorkspace,
             snoozeValue: snoozeValue,
+            shipsDirectlyToMain: shipsDirectlyToMain(workspace),
             pinned: pinned,
             onTogglePin: canArchive ? { PinStore.shared.toggle(workspace) } : nil,
             onToggleSnooze: canArchive ? { toggleSnooze(workspace) } : nil,
@@ -2147,7 +2159,8 @@ struct SessionsListView: View {
                 searchSnippet: workspaceSearchSnippet(workspace),
                 highlighted: isLastOpened(workspace),
                 isWorkspaceDraft: workspace.isDraftWorkspace,
-                snoozeValue: snoozeValue
+                snoozeValue: snoozeValue,
+                shipsDirectlyToMain: shipsDirectlyToMain(workspace)
             )
         }
         .buttonStyle(.plain)
@@ -2199,7 +2212,12 @@ struct SessionsListView: View {
                 repo: repoFilter == "all" && availableRepos.count > 1
                     ? session.effectiveRepo
                     : nil,
-                searchSnippet: archivedSearchSnippet(session)
+                searchSnippet: archivedSearchSnippet(session),
+                shipsDirectlyToMain: SessionsListViewModel.shipsDirectlyToMain(
+                    repo: session.repo,
+                    branch: session.branch,
+                    projects: registeredProjects
+                )
             )
         }
         .buttonStyle(.plain)
@@ -3927,6 +3945,8 @@ struct SessionRow: View {
     var isWorkspaceDraft = false
     /// Active snooze value: an ISO wake time or Someday.
     var snoozeValue: String? = nil
+    /// This shared checkout lands on its default branch, so no PR is expected.
+    var shipsDirectlyToMain = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Settings → Appearance → Show last used time. Off by default, like the
     /// web's resting sidebar, and per device like the web's own copy of it.
@@ -4252,14 +4272,16 @@ struct SessionRow: View {
             PulsingDot(color: OS1VisualStyle.blue, active: animatesStatus)
         } else if session.lane == .inProgress {
             PulsingDot(color: OS1VisualStyle.yellow, active: animatesStatus)
-        } else if session.prState == "MERGED" {
+        } else if session.pullRequestState == .merged {
             WebIcon(kind: .gitMerge, size: markSize, color: OS1VisualStyle.purple)
-        } else if session.prState == "OPEN" {
+        } else if session.pullRequestState == .open {
             WebIcon(kind: .pullRequest, size: markSize, color: OS1VisualStyle.green)
-        } else if session.prState == "CLOSED" {
+        } else if session.pullRequestState == .closed {
             WebIcon(kind: .pullRequest, size: markSize, color: OS1VisualStyle.red)
-        } else {
+        } else if session.repoLess == true || shipsDirectlyToMain {
             PulsingDot(color: OS1VisualStyle.textFaint, active: false)
+        } else {
+            WebIcon(kind: .pullRequest, size: markSize, color: OS1VisualStyle.textFaint)
         }
     }
 
@@ -4311,8 +4333,11 @@ struct SessionRow: View {
         if let mention { parts.insert("\(mention.by) mentioned you", at: 0) }
         // Same for the plate: colour alone never carries meaning.
         if highlighted { parts.insert("last opened", at: 0) }
-        if let prState = session.prState?.lowercased() {
-            parts.append("pull request \(prState)")
+        switch session.pullRequestState {
+        case .open: parts.append("pull request open")
+        case .merged: parts.append("pull request merged")
+        case .closed: parts.append("pull request closed")
+        case nil: break
         }
         // The faces are the only cue that someone else is viewing this row.
         if !rowViewers.isEmpty {

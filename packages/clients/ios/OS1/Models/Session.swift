@@ -243,12 +243,80 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
         }
     }
 
+    /// One authoritative projection of this session's pull requests. New
+    /// `prs[]` data wins, while legacy flat fields fill missing primary values
+    /// or supply the primary entry for older sessions.
+    var projectedPrs: [SessionPrRef] {
+        let refs = prs ?? []
+        guard prNumber != nil || prUrl != nil else { return refs }
+        let legacy = SessionPrRef(
+            repo: repo ?? "repository",
+            branch: branch ?? "",
+            source: "primary",
+            state: prState,
+            number: prNumber,
+            url: prUrl
+        )
+        var foundPrimary = false
+        let projected = refs.map { ref -> SessionPrRef in
+            let isPrimary = ref.source == "primary"
+                || (legacy.url != nil && ref.url == legacy.url)
+                || (ref.repo == legacy.repo && ref.branch == legacy.branch)
+            guard isPrimary else { return ref }
+            foundPrimary = true
+            var merged = ref
+            merged.source = "primary"
+            merged.state = ref.state ?? legacy.state
+            merged.number = ref.number ?? legacy.number
+            merged.url = ref.url ?? legacy.url
+            return merged
+        }
+        return foundPrimary ? projected : [legacy] + projected
+    }
+
+    /// Bare attached branches are targets, not pull requests. Every explicit
+    /// PR and every non-attached ref still counts.
+    private var pullRequestRefs: [SessionPrRef] {
+        projectedPrs.filter {
+            $0.source != "attached"
+                || $0.number != nil
+                || $0.url != nil
+                || $0.state != nil
+        }
+    }
+
+    enum PullRequestState: Equatable {
+        case open, merged, closed
+    }
+
+    /// The PR lifecycle used by both lane derivation and the row mark. The
+    /// authoritative multi-PR projection is considered before flat fields, so
+    /// discovered PRs cannot be left behind in Backlog.
+    var pullRequestState: PullRequestState? {
+        let refs = pullRequestRefs
+        if refs.isEmpty {
+            switch prState {
+            case "OPEN": return .open
+            case "MERGED": return .merged
+            case "CLOSED": return .closed
+            default: return nil
+            }
+        }
+        if refs.allSatisfy({ $0.state == "MERGED" || $0.state == "CLOSED" }),
+           refs.contains(where: { $0.state == "MERGED" }) {
+            return .merged
+        }
+        if refs.contains(where: { $0.state == "OPEN" }) { return .open }
+        if refs.allSatisfy({ $0.state == "CLOSED" }) { return .closed }
+        return nil
+    }
+
     var lane: Lane {
         if waitingForInput == true { return .needsInput }
         if runNeedsAttention { return .needsInput }
         if isRunning == true { return .inProgress }
-        if prState == "OPEN" { return .inReview }
-        if prState == "MERGED" { return .done }
+        if pullRequestState == .open { return .inReview }
+        if pullRequestState == .merged { return .done }
         return .backlog
     }
 
@@ -378,12 +446,18 @@ struct AttachedRepo: Decodable, Equatable, Hashable, Identifiable {
     var id: String { repo }
 }
 
-/// The identity fields of one PR associated with a session. The server sends
-/// richer state too; tolerant decoding keeps only what live refresh matching
-/// needs and ignores the rest.
+/// One PR associated with a session: its own branch's, an attached repo's,
+/// or one found by link or discovery. The server sends richer state than this;
+/// tolerant decoding keeps what live refresh matching and list status need.
 struct SessionPrRef: Decodable, Equatable, Hashable {
     let repo: String
     let branch: String
+    /// "primary", "attached", "linked", or "discovered". Older servers omit it.
+    var source: String? = nil
+    /// GitHub's OPEN, MERGED, or CLOSED state. Older servers omit it.
+    var state: String? = nil
+    var number: Int? = nil
+    var url: String? = nil
 }
 
 extension Session {

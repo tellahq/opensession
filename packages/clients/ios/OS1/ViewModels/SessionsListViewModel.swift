@@ -257,6 +257,22 @@ final class SessionsListViewModel {
         return ordered + discovered.filter { seen.insert($0).inserted }
     }
 
+    /// Shared-checkout projects ship on their default branch without a pull
+    /// request. A missing branch is the default checkout before its first commit.
+    nonisolated static func shipsDirectlyToMain(
+        repo: String?,
+        branch: String?,
+        projects: [OS1API.RepoInfo]
+    ) -> Bool {
+        guard let repo,
+              let project = projects.first(where: { $0.id == repo }),
+              project.sharedCheckout == true,
+              let defaultBranch = project.defaultBranch,
+              !defaultBranch.isEmpty
+        else { return false }
+        return branch?.isEmpty != false || branch == defaultBranch
+    }
+
     /// Live sibling sessions shown in the conversation tab strip. This mirrors
     /// the web client: workspace membership wins, with isolated worktrees as
     /// the fallback for legacy rows, and the natural order is oldest first.

@@ -160,6 +160,61 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(merged.pullRequestContextState, .merged)
     }
 
+    func testDiscoveredMergedPullRequestMovesToDone() throws {
+        let value = try session(
+            #"{"id":"merged","prs":[{"repo":"opensession","branch":"fix","source":"discovered","state":"MERGED","number":128}]}"#
+        )
+
+        XCTAssertEqual(value.prs?.first?.number, 128)
+        XCTAssertEqual(value.prs?.first?.state, "MERGED")
+        XCTAssertEqual(value.pullRequestState, .merged)
+        XCTAssertEqual(value.lane, .done)
+    }
+
+    func testDiscoveredOpenPullRequestMovesToReview() throws {
+        let value = try session(
+            #"{"id":"open","prs":[{"repo":"opensession","branch":"fix","source":"discovered","state":"OPEN","number":129}]}"#
+        )
+
+        XCTAssertEqual(value.pullRequestState, .open)
+        XCTAssertEqual(value.lane, .inReview)
+    }
+
+    func testLegacyPullRequestFieldsRemainTheFallback() throws {
+        let open = try session(#"{"id":"open","prNumber":42,"prState":"OPEN"}"#)
+        let merged = try session(#"{"id":"merged","prNumber":43,"prState":"MERGED"}"#)
+
+        XCTAssertEqual(open.pullRequestState, .open)
+        XCTAssertEqual(open.lane, .inReview)
+        XCTAssertEqual(merged.pullRequestState, .merged)
+        XCTAssertEqual(merged.lane, .done)
+    }
+
+    func testSharedCheckoutDefaultBranchesShipDirectlyToMain() throws {
+        let projects = try JSONDecoder().decode(
+            [OS1API.RepoInfo].self,
+            from: Data(
+                #"[{"id":"opensession","defaultBranch":"main","sharedCheckout":true},{"id":"api","defaultBranch":"trunk","sharedCheckout":true},{"id":"web","defaultBranch":"main","sharedCheckout":false}]"#.utf8
+            )
+        )
+
+        XCTAssertTrue(SessionsListViewModel.shipsDirectlyToMain(
+            repo: "opensession", branch: "main", projects: projects
+        ))
+        XCTAssertTrue(SessionsListViewModel.shipsDirectlyToMain(
+            repo: "api", branch: "trunk", projects: projects
+        ))
+        XCTAssertTrue(SessionsListViewModel.shipsDirectlyToMain(
+            repo: "opensession", branch: nil, projects: projects
+        ))
+        XCTAssertFalse(SessionsListViewModel.shipsDirectlyToMain(
+            repo: "opensession", branch: "feature", projects: projects
+        ))
+        XCTAssertFalse(SessionsListViewModel.shipsDirectlyToMain(
+            repo: "web", branch: "main", projects: projects
+        ))
+    }
+
     func testRepositoryOrderUsesFrequencyThenName() throws {
         let sessions = try JSONDecoder().decode(
             [Session].self,
