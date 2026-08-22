@@ -583,21 +583,11 @@ export async function handleConnectionsRoutes(
 	// Device-flow connect per teammate; tokens live server-side (0600) and are
 	// never returned here. See src/server/github-auth.ts.
 	if (path === "/api/connections/github" && req.method === "GET") {
-		const {
-			githubUserAuthSettings,
-			connectedGithubAccount,
-			connectedGithubAccounts,
-			githubConnectAvailable,
-			githubAppConfigSource,
-			githubAppInstallUrl,
-			githubAppOrg,
-			githubAuthOnConnect,
-			soleGithubLogin,
-		} = await import("../github-auth");
-		const { webAuthRequired } = await import("../web-auth");
+		const { connectedGithubAccount } = await import("../github-auth");
+		const { githubConnectionState } = await import("../github-connection-state");
 		const { configuredIdentity } = await import("../config");
-		const settings = githubUserAuthSettings();
-		const all = connectedGithubAccounts();
+		const state = githubConnectionState();
+		const { settings, accounts: all, simpleMode } = state;
 		const connected = new Set(all.map((a) => a.login.toLowerCase()));
 		const stale = new Set(
 			all.filter((a) => a.needsReconnect).map((a) => a.login.toLowerCase()),
@@ -605,22 +595,20 @@ export async function handleConnectionsRoutes(
 		const ownLogin = ctx.authUser?.login || "";
 		const ownAccount = ownLogin ? connectedGithubAccount(ownLogin) : null;
 		// Simple mode (no web sign-in): there is no authUser to scope by, so the
-		// card shows the single connected account directly and drives connect off
-		// githubConnectAvailable() rather than the userPrAuth switch.
-		const simpleMode = !webAuthRequired();
+		// card shows the single connected account directly.
 		return Response.json({
 			enabled: settings.enabled,
 			clientIdConfigured: !!settings.clientId,
-			connectAvailable: githubConnectAvailable(),
-			appConfigSource: githubAppConfigSource(),
+			connectAvailable: state.connectAvailable,
+			appConfigSource: state.appConfigSource,
 			webAuthRequired: !simpleMode,
-			appInstallUrl: githubAppInstallUrl(),
+			appInstallUrl: state.appInstallUrl,
 			// Captured install/app-setup intent, so the wizard can prefill the org
 			// owner and show it is finishing sign-in setup. Inert until a connect
 			// consumes authOnConnect.
-			appOrg: githubAppOrg(),
-			authOnConnect: githubAuthOnConnect(),
-			soleLogin: simpleMode ? soleGithubLogin() : null,
+			appOrg: state.appOrg,
+			authOnConnect: state.authOnConnect,
+			soleLogin: state.soleLogin,
 			accounts: simpleMode ? all : ownAccount ? [ownAccount] : [],
 			team: configuredIdentity()
 				.team.filter((m) => m.github)

@@ -1,13 +1,12 @@
 import { useSetupStatus } from "../../hooks/useSetupStatus";
 import {
 	SettingCardSkeleton,
-	SettingsGroupLabel,
 	SettingsHeader,
-	SettingsHint,
 	SettingsPanel,
 } from "../../ui/settings";
 import { InlineAlert } from "../../ui/state";
-import { GithubAuthCard, IntegrationsList } from "../SetupIntegrations";
+import { GithubAccounts } from "../Connections";
+import { IntegrationsList } from "../SetupIntegrations";
 import { SetupRestart } from "../SetupRestart";
 
 // Workspace → Integrations: the credentials the agent reaches other tools
@@ -41,11 +40,7 @@ export function IntegrationsPanel() {
 						onSaved={setup.applyIntegration}
 					/>
 
-					<SettingsGroupLabel>GitHub sign-in</SettingsGroupLabel>
-					<GithubAuthCard github={status.github} onSaved={setup.applyGithub} />
-					<SettingsHint>
-						After setup, teammates connect their own accounts under Team → Account.
-					</SettingsHint>
+					<GithubAccounts onChanged={setup.refetch} />
 				</>
 			)}
 			<SetupRestart setup={setup} />

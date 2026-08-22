@@ -37,9 +37,12 @@ export interface SetupIntegration {
 export interface SetupGithub {
 	userPrAuth: boolean;
 	clientIdConfigured: boolean;
-	clientSecretConfigured: boolean;
-	botTokenPresent: boolean;
-	appCreateUrl: string;
+	connectAvailable: boolean;
+	webAuthRequired: boolean;
+	connectedLogin: string | null;
+	needsReconnect: boolean;
+	appOrg: string | null;
+	authOnConnect: boolean;
 }
 
 /** Whether a repo commits the lifecycle scripts that let sessions provision
@@ -166,9 +169,13 @@ export function integrationState(i: SetupIntegration): {
 }
 
 export function githubAuthState(g: SetupGithub): { tone: ChipTone; label: string } {
+	if (g.needsReconnect) return { tone: "warn", label: "Reconnect needed" };
+	if (g.connectedLogin) return { tone: "on", label: "Connected" };
+	if (!g.webAuthRequired && g.connectAvailable)
+		return { tone: "warn", label: "Ready to connect" };
 	if (g.userPrAuth && g.clientIdConfigured) return { tone: "on", label: "Active" };
 	if (g.userPrAuth) return { tone: "warn", label: "Missing client id" };
-	return { tone: "off", label: "Off" };
+	return { tone: "off", label: "Not connected" };
 }
 
 /** Whether a public base URL is configured, for the setup chip. A blank value

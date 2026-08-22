@@ -256,6 +256,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				"/index.html",
 				// Client-side routes must serve the SPA shell, not the raw file
 				"/new",
+				"/welcome",
 				"/session/*",
 				"/workspace/*",
 				"/pr/*",

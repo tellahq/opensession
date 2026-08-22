@@ -619,6 +619,7 @@ function GithubAppWizard({
   onCancelFlow,
   intentOrg,
   onClearIntent,
+  inline = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -642,6 +643,8 @@ function GithubAppWizard({
   intentOrg?: string | null;
   /** Clear the captured org intent (switch the owner back to single-user). */
   onClearIntent: () => void;
+  /** Onboarding keeps setup in the page instead of opening a dialog. */
+  inline?: boolean;
 }) {
   const [step, setStep] = useState(1);
   // A likely-unique app name, minted once per open so the pre-filled name and
@@ -704,37 +707,64 @@ function GithubAppWizard({
   const createReady = appOwner === "you" || !!appOrg.trim();
   const previewSlug = deriveGithubAppSlug(appName);
   const canSave = !!clientId.trim() && !!slug.trim() && !!secret.trim();
-  const titles = ["Create the app", "Paste the details", "Install on your repos", "Connect"];
+  const stepMeta = [
+    {
+      title: "Create the app",
+      description:
+        appOwner === "org"
+          ? `Create one private app under ${appOrg.trim() || "your organization"}.`
+          : "Create one private app for this GitHub account.",
+    },
+    {
+      title: "Paste the details",
+      description: "Copy the three values from the app settings page.",
+    },
+    {
+      title: "Install on your repos",
+      description: "Choose which repositories Open Session can use.",
+    },
+    {
+      title: "Connect",
+      description: "Authorize the GitHub account every session will use.",
+    },
+  ];
+  const currentStep = stepMeta[step - 1]!;
 
-  return (
-    <Modal.Root open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
-      <Modal.Content widthClassName="max-w-[34rem]" initialFocus={stepFocusRef}>
-        <Modal.Header
-          title="Set up a GitHub App"
-          description={`Step ${step} of 4 · ${titles[step - 1]}`}
-        />
+  function changeAppOwner(next: "you" | "org") {
+    if (next === "you" && intentOrg) {
+      if (!confirm("Stays single-user, no sign-in.")) return;
+      onClearIntent();
+    }
+    setAppOwner(next);
+  }
 
+  const content = (
+    <>
         {step === 1 && (
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <span className="text-supporting text-dim">Create under</span>
-              <Segmented
-                label="Create under"
-                size="sm"
-                value={appOwner}
-                onValueChange={(next) => {
-                  // Switching back to single-user drops the captured org intent:
-                  // no org App, no sign-in. Confirm it, then clear it upstream.
-                  if (next === "you" && intentOrg) {
-                    if (!confirm("Stays single-user, no sign-in.")) return;
-                    onClearIntent();
-                  }
-                  setAppOwner(next as "you" | "org");
-                }}
-              >
-                <SegmentedOption value="you">You</SegmentedOption>
-                <SegmentedOption value="org">Organization</SegmentedOption>
-              </Segmented>
+              {inline ? (
+                <OptionSelect
+                  label="Create under"
+                  value={appOwner}
+                  options={[
+                    { value: "you", label: "My GitHub account" },
+                    { value: "org", label: "A GitHub organization" },
+                  ]}
+                  onChange={changeAppOwner}
+                />
+              ) : (
+                <Segmented
+                  label="Create under"
+                  size="sm"
+                  value={appOwner}
+                  onValueChange={(next) => changeAppOwner(next as "you" | "org")}
+                >
+                  <SegmentedOption value="you">You</SegmentedOption>
+                  <SegmentedOption value="org">Organization</SegmentedOption>
+                </Segmented>
+              )}
               {appOwner === "org" && (
                 <>
                   <input
@@ -748,16 +778,18 @@ function GithubAppWizard({
                     spellCheck={false}
                     aria-label="Organization login"
                   />
-                  {intentOrg && (
+                  {!inline && intentOrg && (
                     <div className="text-meta leading-snug text-dim">
                       Finishing sign-in setup for {intentOrg}.
                     </div>
                   )}
-                  <div className="text-meta leading-snug text-faint">
-                    For a team, create it in your organization so the org owns
-                    the app and it can reach org repos. You need permission to
-                    create apps in the org.
-                  </div>
+                  {!inline && (
+                    <div className="text-meta leading-snug text-faint">
+                      For a team, create it in your organization so the org owns
+                      the app and it can reach org repos. You need permission to
+                      create apps in the org.
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -793,13 +825,14 @@ function GithubAppWizard({
                 Click <span className="text-fg">Create GitHub App</span>.
               </WizardCheck>
             </ul>
-            <div className="text-meta leading-snug text-faint">
-              Pre-filled: name{" "}
-              <span className="font-mono text-dim">{appName}</span>, permissions
-              (Contents + Pull requests, read &amp; write; Members, read), private,
-              no webhook.
-              Names are unique on GitHub, so tweak it if it's taken.
-            </div>
+            {!inline && (
+              <div className="text-meta leading-snug text-faint">
+                Pre-filled: name{" "}
+                <span className="font-mono text-dim">{appName}</span>, permissions
+                (Contents + Pull requests, read &amp; write; Members, read), private,
+                no webhook. Names are unique on GitHub, so tweak it if it's taken.
+              </div>
+            )}
             <Modal.Footer>
               <button
                 type="button"
@@ -808,9 +841,11 @@ function GithubAppWizard({
               >
                 I already have an app
               </button>
-              <Button variant="ghost" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
+              {!inline && (
+                <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                  Cancel
+                </Button>
+              )}
               <Button
                 variant="primary"
                 onClick={() => {
@@ -1003,6 +1038,36 @@ function GithubAppWizard({
             </Modal.Footer>
           </div>
         )}
+    </>
+  );
+
+  if (inline && !open) return null;
+
+  if (inline) {
+    return (
+      <div className="mt-3 grid grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] items-start gap-3 phone:grid-cols-1">
+        <div className="px-2 py-4 phone:px-1 phone:pb-0">
+          <div className="text-meta font-semibold text-faint">Step {step} of 4</div>
+          <h2 className="m-0 mt-1 text-section-title font-title tracking-[-0.02em] text-fg">
+            {currentStep.title}
+          </h2>
+          <p className="m-0 mt-2 max-w-[28ch] text-supporting leading-relaxed text-dim">
+            {currentStep.description}
+          </p>
+        </div>
+        <SettingsSection className="p-4">{content}</SettingsSection>
+      </div>
+    );
+  }
+
+  return (
+    <Modal.Root open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
+      <Modal.Content widthClassName="max-w-[34rem]" initialFocus={stepFocusRef}>
+        <Modal.Header
+          title="Set up a GitHub App"
+          description={`Step ${step} of 4 · ${currentStep.title}`}
+        />
+        {content}
       </Modal.Content>
     </Modal.Root>
   );
@@ -1010,7 +1075,15 @@ function GithubAppWizard({
 
 /** `personal`: only the signed-in user's own row (the Account page);
  *  default shows the whole team roster (admin overview). */
-export function GithubAccounts({ personal = false }: { personal?: boolean } = {}) {
+export function GithubAccounts({
+  personal = false,
+  onboarding = false,
+  onChanged,
+}: {
+  personal?: boolean;
+  onboarding?: boolean;
+  onChanged?: () => void;
+} = {}) {
   const [data, setData] = useState<GithubAuthData | null>(null);
   const [flow, setFlow] = useState<DeviceFlow | null>(null);
   const [flowState, setFlowState] = useState<"idle" | "starting" | "waiting">("idle");
@@ -1064,6 +1137,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
             return;
           }
           load();
+          onChanged?.();
           return;
         }
         if (body.status === "slow_down") intervalMs = Math.max(body.interval, 5) * 1000;
@@ -1081,7 +1155,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [flow, load]);
+  }, [flow, load, onChanged]);
 
   async function startConnect() {
     setError(null);
@@ -1123,6 +1197,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
       // getConfig() re-reads on the file change, so the reload shows the App as
       // configured and switches the card to its device-flow connect.
       load();
+      onChanged?.();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -1145,6 +1220,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       load();
+      onChanged?.();
     } catch (e: any) {
       setError(e.message);
     }
@@ -1163,6 +1239,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         throw new Error(body?.error || `Failed: ${res.status}`);
       }
       load();
+      onChanged?.();
     } catch (e: any) {
       setError(e.message);
     }
@@ -1178,6 +1255,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       load();
+      onChanged?.();
     } catch (e: any) {
       setError(e.message);
     }
@@ -1247,7 +1325,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
     const connected = !!account;
     return (
       <>
-        <SectionHeading>GitHub</SectionHeading>
+        {!onboarding && <SectionHeading>GitHub</SectionHeading>}
         {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
         <SettingCard>
           <SettingRow className="items-start gap-x-3">
@@ -1320,7 +1398,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
               appears once an app client id is configured (data.connectAvailable,
               set by the wizard or an env var); before that the setup wizard is
               the entry point. */}
-          {!connected &&
+          {!onboarding && !connected &&
             (data.connectAvailable
               ? flowState !== "waiting" && (
                   <div className="flex flex-col gap-2.5 px-5 py-3.5">
@@ -1395,7 +1473,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
                   </div>
                 ))}
 
-          {deviceFlowWell}
+          {!onboarding && deviceFlowWell}
 
           {/* A configured App's user-to-server token reaches only repos the App
               is installed on, so managing the install is ongoing. A quiet link
@@ -1417,7 +1495,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         {/* Rendered outside the card so it survives the card re-rendering from
             "no app" to "app configured" the moment the client id is saved. */}
         <GithubAppWizard
-          open={wizardOpen}
+          open={onboarding ? !connected : wizardOpen}
           onOpenChange={setWizardOpen}
           clientId={appClientId}
           setClientId={setAppClientId}
@@ -1439,6 +1517,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
           }}
           intentOrg={data.appOrg}
           onClearIntent={clearOrgIntent}
+          inline={onboarding}
         />
       </>
     );
@@ -1463,7 +1542,9 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
 
   return (
     <>
-      <SectionHeading>{personal ? "GitHub" : "GitHub accounts"}</SectionHeading>
+      {!onboarding && (
+        <SectionHeading>{personal ? "GitHub" : "GitHub accounts"}</SectionHeading>
+      )}
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
@@ -1658,7 +1739,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
             );
           })}
       </SettingCard>
-      {personal && (
+      {personal && !onboarding && (
         <SettingsHint>
           {active
             ? "Connect GitHub to open pull requests as yourself in interactive sessions. Automations and unconnected teammates use the workspace bot."

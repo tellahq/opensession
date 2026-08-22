@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	setupRequest,
-	type SetupGithub,
 	type SetupIntegration,
 	type SetupStatus,
 } from "../components/setup-shared";
@@ -9,11 +8,9 @@ import { BASE_PATH } from "../lib/base";
 import { toast } from "../ui/toast";
 
 // GET /api/setup/status, plus the restart choreography every page built on it
-// needs: credentials and enable flags are read on boot, so whichever page took
-// the edit has to be the one that offers the restart. The Setup wizard and the
-// Workspace settings pages that hold the same sections (Repositories, Members,
-// Integrations, Identity) share this one controller, so they can't drift on
-// what "saved" means or on which of them can bring the change into effect.
+// needs: credentials and enable flags are read on boot, so the Integrations
+// page that took the edit offers the restart. Setup and the settings pages also
+// share this status controller for repositories, members, and identity.
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -31,7 +28,6 @@ export interface SetupController {
 	restartServer: (post?: boolean) => Promise<void>;
 	/** Fold a saved integration back into the cached status. */
 	applyIntegration: (updated: SetupIntegration, restartRequired: boolean) => void;
-	applyGithub: (updated: SetupGithub, restartRequired: boolean) => void;
 }
 
 export function useSetupStatus(): SetupController {
@@ -75,13 +71,6 @@ export function useSetupStatus(): SetupController {
 		[],
 	);
 
-	const applyGithub = useCallback(
-		(updated: SetupGithub, restartRequired: boolean) => {
-			setStatus((s) => (s ? { ...s, github: updated } : s));
-			if (restartRequired) setRestartNeeded(true);
-		},
-		[],
-	);
 
 	const restartServer = useCallback(
 		async (post = true) => {
@@ -134,6 +123,5 @@ export function useSetupStatus(): SetupController {
 		restartState,
 		restartServer,
 		applyIntegration,
-		applyGithub,
 	};
 }

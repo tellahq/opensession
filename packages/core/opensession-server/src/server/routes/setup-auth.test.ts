@@ -7,6 +7,7 @@ import type { RouteContext } from "./context";
 
 const savedConfig = process.env.OPENSESSION_CONFIG;
 const savedClientId = process.env.OPENSESSION_GITHUB_CLIENT_ID;
+const savedAuthStore = process.env.OPENSESSION_GITHUB_AUTH_STORE;
 const dirs: string[] = [];
 
 function context(login: string): RouteContext {
@@ -34,6 +35,7 @@ function roleAwareConfig(): void {
 		},
 	}));
 	process.env.OPENSESSION_CONFIG = path;
+	process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
 	process.env.OPENSESSION_GITHUB_CLIENT_ID = "test-client";
 }
 
@@ -42,6 +44,8 @@ afterEach(() => {
 	else process.env.OPENSESSION_CONFIG = savedConfig;
 	if (savedClientId === undefined) delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
 	else process.env.OPENSESSION_GITHUB_CLIENT_ID = savedClientId;
+	if (savedAuthStore === undefined) delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
+	else process.env.OPENSESSION_GITHUB_AUTH_STORE = savedAuthStore;
 	for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -71,6 +75,7 @@ function orgIntentConfig(): void {
 		}),
 	);
 	process.env.OPENSESSION_CONFIG = path;
+	process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
 	delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
 }
 
@@ -80,6 +85,7 @@ function singleUserConfig(): void {
 	const path = join(dir, "config.json");
 	writeFileSync(path, JSON.stringify({ integrations: {} }));
 	process.env.OPENSESSION_CONFIG = path;
+	process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
 	delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
 }
 
@@ -93,6 +99,9 @@ describe("setup status github snapshot exposes install intent", () => {
 		expect(body.github.authOnConnect).toBe(true);
 		// The intent is inert: it must not have flipped the sign-in gate.
 		expect(body.github.userPrAuth).toBe(false);
+		expect(body.github.webAuthRequired).toBe(false);
+		expect(body.github.connectedLogin).toBeNull();
+		expect(body.github.needsReconnect).toBe(false);
 	});
 
 	test("a single-user install exposes no intent", async () => {
@@ -102,5 +111,9 @@ describe("setup status github snapshot exposes install intent", () => {
 		expect(body.github.appOrg).toBe(null);
 		expect(body.github.authOnConnect).toBe(false);
 		expect(body.github.userPrAuth).toBe(false);
+		expect(body.github.webAuthRequired).toBe(false);
+		expect(body.github.connectAvailable).toBe(false);
+		expect(body.github.connectedLogin).toBeNull();
+		expect(body.github.needsReconnect).toBe(false);
 	});
 });

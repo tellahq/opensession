@@ -8,9 +8,8 @@ import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
 import { LoadingState } from "../ui/state";
 import { SettingCard, SettingRow, SettingRowTitle } from "../ui/settings";
-import { GithubAuthCard } from "./SetupIntegrations";
+import { GithubAccounts } from "./Connections";
 import { ReposSection } from "./SetupRepos";
-import { SetupRestart } from "./SetupRestart";
 import { TeamSection } from "./SetupTeam";
 import { OrganizationProfileSection } from "./settings/GeneralPanel";
 import {
@@ -35,8 +34,15 @@ const STEPS: FirstMileStep[] = [
 	{ id: "team", label: "People", title: "Add team members" },
 	{ id: "ready", label: "Ready", title: "You’re ready" },
 ];
+const PERSONAL_STEPS = STEPS.filter((step) => step.id !== "team");
 
-function FirstMileSummary({ status }: { status: SetupStatus }) {
+function FirstMileSummary({
+	status,
+	teamSetupEnabled,
+}: {
+	status: SetupStatus;
+	teamSetupEnabled: boolean;
+}) {
 	const github = githubAuthState(status.github);
 	const rows = [
 		{ title: "GitHub", tone: github.tone, label: github.label },
@@ -50,14 +56,18 @@ function FirstMileSummary({ status }: { status: SetupStatus }) {
 			tone: status.repos.length > 0 ? ("on" as const) : ("warn" as const),
 			label: status.repos.length > 0 ? `${status.repos.length} added` : "None",
 		},
-		{
-			title: "Team",
-			tone: status.team.count > 0 ? ("on" as const) : ("warn" as const),
-			label:
-				status.team.count > 0
-					? `${status.team.count} ${status.team.count === 1 ? "member" : "members"}`
-					: "None",
-		},
+		...(teamSetupEnabled
+			? [
+					{
+						title: "Team",
+						tone: status.team.count > 0 ? ("on" as const) : ("warn" as const),
+						label:
+							status.team.count > 0
+								? `${status.team.count} ${status.team.count === 1 ? "member" : "members"}`
+								: "None",
+					},
+				]
+			: []),
 	];
 
 	return (
@@ -83,7 +93,10 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 	const headingRef = useRef<HTMLHeadingElement>(null);
 	const mainRef = useRef<HTMLElement>(null);
 	const reducedMotion = useReducedMotion();
-	const step = STEPS[index]!;
+	const teamSetupEnabled =
+		!!status && (status.github.webAuthRequired || status.github.authOnConnect);
+	const steps = status && !teamSetupEnabled ? PERSONAL_STEPS : STEPS;
+	const step = steps[index]!;
 
 	useEffect(() => {
 		document.title = `Welcome to ${PRODUCT_NAME}`;
@@ -117,7 +130,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 	}, [index, status]);
 
 	function goTo(next: number) {
-		const nextIndex = Math.min(Math.max(next, 0), STEPS.length - 1);
+		const nextIndex = Math.min(Math.max(next, 0), steps.length - 1);
 		if (nextIndex === index) return;
 		setDirection(nextIndex > index ? 1 : -1);
 		setIndex(nextIndex);
@@ -166,7 +179,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					)}
 					aria-label="Onboarding progress"
 				>
-					{STEPS.slice(1).map((item, itemIndex) => {
+					{steps.slice(1).map((item, itemIndex) => {
 						const stepIndex = itemIndex + 1;
 						return (
 							<button
@@ -188,7 +201,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					})}
 				</nav>
 
-				{index > 0 && index < STEPS.length - 1 ? (
+				{index > 0 && index < steps.length - 1 ? (
 					<button
 						type="button"
 						onClick={() => goTo(index + 1)}
@@ -284,11 +297,11 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 										)}
 									>
 										{step.id === "github" && (
-											<GithubAuthCard
-												github={status.github}
-												onSaved={setup.applyGithub}
+											<GithubAccounts
+												personal
 												onboarding
-											/>
+												onChanged={refetch}
+												/>
 										)}
 										{step.id === "organization" && <OrganizationProfileSection />}
 										{step.id === "team" && (
@@ -314,7 +327,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 												<div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-full bg-green-soft text-green">
 													<IconCheck size={30} />
 												</div>
-												<FirstMileSummary status={status} />
+												<FirstMileSummary status={status} teamSetupEnabled={teamSetupEnabled} />
 											</>
 										)}
 									</div>
@@ -351,24 +364,26 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 						variant="primary"
 						size="lg"
 						onClick={() => {
-							if (index === STEPS.length - 1) onDone();
+							if (index === steps.length - 1) onDone();
 							else goTo(index + 1);
 						}}
 						disabled={!status}
-						className="justify-self-end phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
+						className={cn(
+							"justify-self-end phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg",
+							step.id === "github" && status && githubAuthState(status.github).tone !== "on" && "invisible",
+						)}
 					>
 						{index === 0
 							? "Continue"
-							: index === STEPS.length - 1
+							: index === steps.length - 1
 								? `Enter ${PRODUCT_NAME}`
-								: index === STEPS.length - 2
+								: index === steps.length - 2
 									? "Review"
 									: "Next"}
 					</Button>
 				</div>
 			</footer>
 
-			<SetupRestart setup={setup} />
 		</div>
 	);
 }
