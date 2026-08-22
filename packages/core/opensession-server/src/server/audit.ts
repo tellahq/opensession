@@ -225,7 +225,14 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
   ensureAuditDir();
   const path = `${AUDIT_DIR}/audit-${date}.jsonl`;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !existsSync(path)) return null;
+  return buildAuditDigestFromLines(date, readFileSync(path, "utf-8"));
+}
 
+/** Pure digest builder used by focused mixed-format fixtures. */
+export function buildAuditDigestFromLines(
+  date: string,
+  contents: string,
+): Record<string, unknown> {
   interface SessionAgg {
     id: string;
     runKind: string;
@@ -241,15 +248,22 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
     costUsd: number;
   }
   const sessions = new Map<string, SessionAgg>();
+  const eventSessionId = (e: Record<string, unknown>): string =>
+    String(
+      e.session_id ||
+        e.bks_session_id ||
+        (e.msg === "pi_turn" ? e.session : "") ||
+        "",
+    );
   const sessionOf = (e: Record<string, unknown>): SessionAgg | null => {
-    const id = String(e.session_id || e.bks_session_id || "");
+    const id = eventSessionId(e);
     if (!id) return null;
     let s = sessions.get(id);
     if (!s) {
       s = {
         id,
-        runKind: String(e.run_kind || "?"),
-        mode: String(e.mode || "?"),
+        runKind: "?",
+        mode: "?",
         models: new Set(),
         firstPrompt: "",
         turns: 0,
@@ -262,6 +276,10 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
       };
       sessions.set(id, s);
     }
+    // Session creation and queue events often arrive before runner metadata.
+    // Keep the first useful identity rather than freezing those early blanks.
+    if (s.runKind === "?" && e.run_kind) s.runKind = String(e.run_kind);
+    if (s.mode === "?" && e.mode) s.mode = String(e.mode);
     if (e.model) s.models.add(String(e.model));
     return s;
   };
@@ -302,14 +320,56 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
   let engineRetries = 0;
   let costUsd = 0;
 
-  for (const line of readFileSync(path, "utf-8").split("\n")) {
+  const parsedEvents: Array<Record<string, unknown>> = [];
+  for (const line of contents.split("\n")) {
     if (!line) continue;
-    let e: Record<string, unknown>;
     try {
-      e = JSON.parse(line);
+      parsedEvents.push(JSON.parse(line));
     } catch {
-      continue;
+      // A partially-written final line must not discard the rest of the day.
     }
+  }
+
+  interface PiLogicalTurn {
+    attempts: Array<Record<string, unknown>>;
+  }
+  const piTurns = new Map<Record<string, unknown>, PiLogicalTurn>();
+  const genericTerminalsToSkip = new Set<Record<string, unknown>>();
+  const pendingPi = new Map<string, Array<Record<string, unknown>>>();
+  const pendingGeneric = new Map<string, Array<Record<string, unknown>>>();
+
+  // `pi_turn` is an attempt, not a person's turn: account retries and model
+  // fallbacks each close one, and continuation/utility runs may use the same
+  // shape. `session_turn_metric` is emitted once, after the outer runner walk
+  // settles. Pair only session-bearing attempts with that terminal marker.
+  // This excludes one-shots and lets mixed-format deployments prefer Pi's
+  // logical terminal without also counting their mirrored generic terminal.
+  for (const e of parsedEvents) {
+    const id = eventSessionId(e);
+    if (!id) continue;
+    if (e.msg === "pi_turn" && e.direction === "out" && !e.kind) {
+      const attempts = pendingPi.get(id) || [];
+      attempts.push(e);
+      pendingPi.set(id, attempts);
+    }
+    if ((e.kind === "result" || e.kind === "error") && pendingPi.has(id)) {
+      const terminals = pendingGeneric.get(id) || [];
+      terminals.push(e);
+      pendingGeneric.set(id, terminals);
+    }
+    if (e.kind === "session_turn_metric") {
+      const attempts = pendingPi.get(id) || [];
+      const genericTerminals = pendingGeneric.get(id) || [];
+      if (attempts.length) {
+        piTurns.set(e, { attempts });
+        for (const terminal of genericTerminals) genericTerminalsToSkip.add(terminal);
+      }
+      pendingPi.delete(id);
+      pendingGeneric.delete(id);
+    }
+  }
+
+  for (const e of parsedEvents) {
     events++;
     if (e.msg === "pi_oneshot") {
       oneshots.total++;
@@ -321,6 +381,45 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
       continue;
     }
     const s = sessionOf(e);
+    const piTurn = piTurns.get(e);
+    if (piTurn) {
+      turns++;
+      const failed = e.outcome === "failed";
+      const cost = piTurn.attempts.reduce(
+        (sum, attempt) => sum + (Number(attempt.total_cost_usd) || 0),
+        0,
+      );
+      costUsd += cost;
+      if (s) {
+        s.turns++;
+        s.durationMs += Number(e.duration_ms) || 0;
+        s.costUsd += cost;
+      }
+      const terminalModel = [...piTurn.attempts].reverse().find((attempt) => attempt.model)?.model;
+      if (terminalModel) {
+        models.set(String(terminalModel), (models.get(String(terminalModel)) || 0) + 1);
+      }
+      if (failed) {
+        errors++;
+        if (s) s.errors++;
+        const failedAttempt = [...piTurn.attempts]
+          .reverse()
+          .find((attempt) => attempt.ok === false || attempt.error);
+        const raw = String(failedAttempt?.error || "Pi turn failed");
+        const g = errorGroups.get(normalize(raw)) || {
+          count: 0,
+          runKinds: new Set<string>(),
+          sample: raw.slice(0, 300),
+          sampleSession: s?.id || "",
+        };
+        g.count++;
+        g.runKinds.add(s?.runKind || "?");
+        errorGroups.set(normalize(raw), g);
+      }
+      continue;
+    }
+    if (genericTerminalsToSkip.has(e)) continue;
+
     switch (String(e.kind || "")) {
       case "user_prompt":
         if (e.model) models.set(String(e.model), (models.get(String(e.model)) || 0) + 1);
