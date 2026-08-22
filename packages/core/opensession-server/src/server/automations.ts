@@ -42,6 +42,7 @@ import { createPapercutsMcpServer } from "../agents/slack/papercuts-tools";
 import { createReportMcpServer } from "../agents/slack/report-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createTurnMcpServer } from "../agents/slack/turn-tools";
+import { createAuditMcpServer } from "./audit-mcp";
 import { createHealthMcpServer } from "./health-mcp";
 import { papercutsEnabledForRepo } from "./papercuts";
 import {
@@ -942,6 +943,14 @@ function automationRunInProcessMcp(
     // refuses loopback, and an unattended ask run has no shell on either
     // engine (src/server/health-mcp.ts).
     "opensession-health": createHealthMcpServer(),
+    // And once more: one read of a single day's rolled-up audit log, whose
+    // only argument is a date validated as YYYY-MM-DD before it becomes a
+    // filename component. Nothing to steer, nothing to escalate with. Here
+    // for the same reason as its neighbour, and it is the nightly reflection
+    // that cannot read the log any other way: web-fetch.ts refuses loopback,
+    // and Pi's ask tools are sandboxed to the session workspace, so
+    // ~/.opensession-audit is unreachable (src/server/audit-mcp.ts).
+    "opensession-audit": createAuditMcpServer(),
   };
 }
 
