@@ -708,21 +708,44 @@ struct WorktreeInfoView: View {
 
     @ViewBuilder
     private var pullRequestSection: some View {
-        if let number = viewModel.prDetails?.number ?? currentSession.prNumber {
+        let rows = SessionPrSeries.rows(for: currentSession)
+        let primaryNumber = viewModel.prDetails?.number ?? currentSession.prNumber
+        if !rows.isEmpty || primaryNumber != nil {
             InfoSection(
-                title: "Pull request",
-                trailing: viewModel.prDetails.map { AnyView(prNumberLabel(number, summary: $0.summary)) }
+                title: rows.count == 1 ? "Pull request" : "Pull requests",
+                trailing: primaryNumber.flatMap { number in
+                    viewModel.prDetails.map { AnyView(prNumberLabel(number, summary: $0.summary)) }
+                }
             ) {
-                Button {
-                    panel = .review(sessionId: currentSession.id)
-                } label: {
-                    if let pr = viewModel.prDetails {
-                        prSummary(pr)
+                if let number = primaryNumber {
+                    Button {
+                        panel = .review(sessionId: currentSession.id)
+                    } label: {
+                        if let pr = viewModel.prDetails {
+                            prSummary(pr)
+                        } else {
+                            prLoadingSummary(number)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    if rows.contains(where: { !$0.isPrimary }) { Divider() }
+                }
+                SessionPrSeriesRows(
+                    session: currentSession,
+                    includePrimary: primaryNumber == nil
+                ) { row in
+                    if row.isPrimary {
+                        panel = .review(sessionId: currentSession.id)
                     } else {
-                        prLoadingSummary(number)
+                        Task {
+                            guard let url = await SessionPrSeries.destination(
+                                for: row,
+                                sessionId: currentSession.id
+                            ) else { return }
+                            openURL(url)
+                        }
                     }
                 }
-                .buttonStyle(.plain)
             }
         }
     }

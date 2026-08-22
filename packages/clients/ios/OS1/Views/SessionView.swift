@@ -180,6 +180,7 @@ struct SessionView: View {
     /// Workspace-scoped archived summaries. Kept out of the global archived
     /// index so opening one session never downloads the whole server history.
     @State private var workspaceArchiveRows: [Session] = []
+    @Environment(\.openURL) private var macOpenURL
     #endif
 
     #if os(iOS)
@@ -700,15 +701,49 @@ struct SessionView: View {
             }
             #if os(macOS)
             // macOS retains the PR chip in its roomier toolbar; on iOS the
-            // same panel lives in the title-opened workspace sheet.
-            if let prNumber = viewModel.prDetails?.number ?? viewModel.session.prNumber {
+            // same series lives in the title-opened workspace sheet.
+            let prRows = SessionPrSeries.rows(for: viewModel.session)
+            let primaryPrNumber = viewModel.prDetails?.number ?? viewModel.session.prNumber
+            if let chipRow = prRows.first {
                 ToolbarItem(placement: .topTrailingCompat) {
-                    Button {
-                        showPrPanel = true
-                    } label: {
-                        PrChipLabel(number: prNumber, summary: viewModel.prDetails?.summary)
+                    if prRows.count == 1, let primaryPrNumber, chipRow.isPrimary {
+                        Button {
+                            showPrPanel = true
+                        } label: {
+                            PrChipLabel(
+                                number: primaryPrNumber,
+                                summary: viewModel.prDetails?.summary
+                            )
+                        }
+                        .accessibilityLabel(Text(verbatim: "Pull request #\(primaryPrNumber)"))
+                    } else {
+                        Menu {
+                            if let primaryPrNumber {
+                                Button {
+                                    showPrPanel = true
+                                } label: {
+                                    Text(verbatim: "Open pull request #\(primaryPrNumber)")
+                                }
+                            }
+                            ForEach(prRows.filter { primaryPrNumber == nil || !$0.isPrimary }) { row in
+                                Button {
+                                    openRelatedPr(row)
+                                } label: {
+                                    Text(verbatim: "\(row.identityLabel) · \(row.title ?? row.state)")
+                                }
+                            }
+                        } label: {
+                            if let number = chipRow.number {
+                                PrChipLabel(
+                                    number: number,
+                                    summary: chipRow.isPrimary ? viewModel.prDetails?.summary : nil
+                                )
+                            } else {
+                                Image(systemName: "arrow.trianglehead.pull")
+                            }
+                        }
+                        .accessibilityLabel(Text("Pull requests"))
                     }
-                    .accessibilityLabel(Text(verbatim: "Pull request #\(prNumber)"))
                 }
             }
             #endif
@@ -1028,6 +1063,16 @@ struct SessionView: View {
         guard let onRestoreArchivedSession else { return }
         workspaceArchiveRows.removeAll { $0.id == session.id }
         Task { await onRestoreArchivedSession(session) }
+    }
+
+    private func openRelatedPr(_ row: SessionPrRow) {
+        Task {
+            guard let url = await SessionPrSeries.destination(
+                for: row,
+                sessionId: viewModel.session.id
+            ) else { return }
+            macOpenURL(url)
+        }
     }
 
     /// Own the detail title instead of accepting NavigationSplitView's

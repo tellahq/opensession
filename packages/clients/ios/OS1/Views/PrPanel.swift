@@ -44,6 +44,173 @@ extension PrDetails.Summary {
     }
 }
 
+/// The exact server target for one PR in a multi-repo or stacked session.
+struct SessionPrTarget: Equatable, Hashable {
+    let repo: String
+    let branch: String
+}
+
+/// A display row derived from the session snapshot. Keeping ordering and target
+/// selection outside SwiftUI makes the primary-plus-additional contract easy
+/// to verify without rendering a view.
+struct SessionPrRow: Identifiable, Equatable {
+    let target: SessionPrTarget
+    let number: Int?
+    let title: String?
+    let state: String
+    let url: URL?
+    let isPrimary: Bool
+
+    var id: SessionPrTarget { target }
+
+    @MainActor
+    var identityLabel: String {
+        let repo = RepoTile.label(for: target.repo)
+        return number.map { "\(repo) #\($0)" } ?? "\(repo) · \(target.branch)"
+    }
+}
+
+@MainActor
+enum SessionPrSeries {
+    static func rows(for session: Session) -> [SessionPrRow] {
+        let refs = session.prs ?? []
+        let primaryIndex = refs.firstIndex { ref in
+            ref.source == "primary"
+                || (ref.repo == session.effectiveRepo && ref.branch == session.branch)
+        }
+        var ordered = refs
+        if let primaryIndex, primaryIndex != 0 {
+            ordered.insert(ordered.remove(at: primaryIndex), at: 0)
+        }
+
+        if primaryIndex == nil,
+           let number = session.prNumber,
+           let branch = session.branch,
+           !branch.isEmpty {
+            ordered.insert(
+                SessionPrRef(
+                    repo: session.effectiveRepo,
+                    branch: branch,
+                    source: "primary",
+                    url: session.prUrl,
+                    state: session.prState,
+                    number: number,
+                    isDraft: session.prIsDraft,
+                    reviewDecision: session.prReviewDecision,
+                    additions: session.prAdditions,
+                    deletions: session.prDeletions,
+                    checks: session.prChecks
+                ),
+                at: 0
+            )
+        }
+
+        var seen: Set<SessionPrTarget> = []
+        return ordered.compactMap { ref in
+            let target = SessionPrTarget(repo: ref.repo, branch: ref.branch)
+            guard seen.insert(target).inserted else { return nil }
+            return SessionPrRow(
+                target: target,
+                number: ref.number,
+                title: ref.title,
+                state: stateLabel(for: ref),
+                url: ref.url.flatMap(URL.init(string:))
+                    ?? ref.number.flatMap {
+                        PrLinks.githubURL(for: .init(repo: ref.repo, number: $0))
+                    },
+                isPrimary: ref.source == "primary"
+                    || (ref.repo == session.effectiveRepo && ref.branch == session.branch)
+            )
+        }
+    }
+
+    static func destination(for row: SessionPrRow, sessionId: String) async -> URL? {
+        if let url = row.url { return url }
+        let details = try? await OS1API.pr(
+            sessionId: sessionId,
+            repo: row.target.repo,
+            branch: row.target.branch
+        )
+        return details?.url.flatMap(URL.init(string:))
+    }
+
+    private static func stateLabel(for ref: SessionPrRef) -> String {
+        if ref.state == "MERGED" { return "Merged" }
+        if ref.state == "CLOSED" { return "Closed" }
+        if ref.isDraft == true { return "Draft" }
+        if (ref.checks?.failed ?? 0) > 0 { return "Checks failed" }
+        if ref.reviewDecision == "CHANGES_REQUESTED" { return "Changes requested" }
+        let pending = ref.checks?.pending ?? 0
+        if pending > 0 { return "\(pending) check\(pending == 1 ? "" : "s") pending" }
+        if ref.reviewDecision == "APPROVED" { return "Approved" }
+        return "Open"
+    }
+}
+
+/// Compact native rows for the PRs beyond the primary panel target.
+struct SessionPrSeriesRows: View {
+    let session: Session
+    var includePrimary = false
+    let open: (SessionPrRow) -> Void
+
+    private var rows: [SessionPrRow] {
+        SessionPrSeries.rows(for: session).filter { includePrimary || !$0.isPrimary }
+    }
+
+    var body: some View {
+        ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+            if index > 0 { Divider().padding(.leading, 44) }
+            Button { open(row) } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: row.state == "Merged"
+                        ? "arrow.triangle.merge"
+                        : "arrow.triangle.pull")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(tint(for: row.state))
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: row.identityLabel)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(OS1VisualStyle.text)
+                        if let title = row.title, !title.isEmpty {
+                            Text(title)
+                                .font(.caption)
+                                .foregroundStyle(OS1VisualStyle.textDim)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    Text(row.state)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(tint(for: row.state))
+                        .multilineTextAlignment(.trailing)
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.textFaint)
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 52)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                Text(verbatim: "\(row.identityLabel), \(row.state)")
+            )
+        }
+    }
+
+    private func tint(for state: String) -> Color {
+        switch state {
+        case "Merged": OS1VisualStyle.purple
+        case "Closed", "Draft": OS1VisualStyle.textDim
+        case "Checks failed", "Changes requested": OS1VisualStyle.red
+        case let value where value.contains("pending"): OS1VisualStyle.yellow
+        default: OS1VisualStyle.green
+        }
+    }
+}
+
 /// The PR details sheet: title, state and review badges, branch/line stats,
 /// conflict warning, every check with its status, the reviewer list — and,
 /// while the PR is open, the same three actions the web panel offers: submit a
@@ -55,6 +222,7 @@ struct PrPanelView: View {
     /// the edge swipe) rather than a Done button.
     var chrome: Chrome = .sheet
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     /// The action in flight, if any. One at a time: the section disables while
     /// it runs, so this doubles as "which row shows the spinner". Reviewing has
@@ -118,7 +286,14 @@ struct PrPanelView: View {
             }
         }
         // Checks move fast while CI runs; re-fetch on open (server-cached).
-        .task { await viewModel.refreshPr() }
+        .task {
+            await viewModel.refreshPr()
+            #if DEBUG && os(iOS)
+            if ProcessInfo.processInfo.environment["OS1_OPEN_PR_INFO"] == "1" {
+                page = .info
+            }
+            #endif
+        }
         .sheet(item: $slackShare) { request in
             PrSlackShareSheet(request: request)
         }
@@ -234,8 +409,34 @@ struct PrPanelView: View {
                 Button("Retry") { viewModel.loadPr() }
             }
         } else {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            let rows = SessionPrSeries.rows(for: viewModel.session)
+            if rows.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Pull requests")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .padding(.horizontal, 4)
+                        VStack(spacing: 0) {
+                            SessionPrSeriesRows(
+                                session: viewModel.session,
+                                includePrimary: true
+                            ) { row in
+                                openPrRow(row)
+                            }
+                        }
+                        .background(
+                            OS1VisualStyle.raised,
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
+                    }
+                    .padding(16)
+                }
+                .background(OS1VisualStyle.background)
+            }
         }
     }
 
@@ -291,6 +492,7 @@ struct PrPanelView: View {
     private func infoPage(_ pr: PrDetails) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                pullRequestsGroup
                 statusGroup(pr)
                 reviewersGroup(pr)
                 checksGroup(pr)
@@ -301,6 +503,31 @@ struct PrPanelView: View {
         }
         .background(OS1VisualStyle.background)
         .refreshable { await viewModel.refreshPr() }
+    }
+
+    @ViewBuilder
+    private var pullRequestsGroup: some View {
+        let rows = SessionPrSeries.rows(for: viewModel.session).filter { !$0.isPrimary }
+        if !rows.isEmpty {
+            infoGroup(
+                "Related pull requests",
+                answer: Text("\(rows.count)").foregroundColor(OS1VisualStyle.textDim)
+            ) {
+                SessionPrSeriesRows(session: viewModel.session) { row in
+                    openPrRow(row)
+                }
+            }
+        }
+    }
+
+    private func openPrRow(_ row: SessionPrRow) {
+        Task {
+            guard let url = await SessionPrSeries.destination(
+                for: row,
+                sessionId: viewModel.session.id
+            ) else { return }
+            openURL(url)
+        }
     }
 
     /// One group: its label and answer, then a card of rows.

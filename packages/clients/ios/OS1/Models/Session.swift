@@ -107,9 +107,8 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var automation: AutomationFlag?
     var attachedRepos: [AttachedRepo]?
     /// Every pull-request branch associated with this session, including
-    /// attached, linked, and discovered branches. The native PR panel still
-    /// presents the primary PR; this list makes app-wide webhook refreshes
-    /// reach every branch the session owns.
+    /// attached, linked, and discovered branches. The native workspace and PR
+    /// surfaces use the enriched refs to show the complete series.
     var prs: [SessionPrRef]?
     /// The requested sandbox provider and materialized sandbox id. This is a
     /// reference only; Workspace details resolves its live state on demand.
@@ -378,12 +377,21 @@ struct AttachedRepo: Decodable, Equatable, Hashable, Identifiable {
     var id: String { repo }
 }
 
-/// The identity fields of one PR associated with a session. The server sends
-/// richer state too; tolerant decoding keeps only what live refresh matching
-/// needs and ignores the rest.
+/// One pull request associated with a session. Every enriched field remains
+/// optional so older servers and unresolved branches still decode safely.
 struct SessionPrRef: Decodable, Equatable, Hashable {
     let repo: String
     let branch: String
+    var source: String? = nil
+    var url: String? = nil
+    var state: String? = nil
+    var number: Int? = nil
+    var title: String? = nil
+    var isDraft: Bool? = nil
+    var reviewDecision: String? = nil
+    var additions: Int? = nil
+    var deletions: Int? = nil
+    var checks: PrChecksSummary? = nil
 }
 
 extension Session {

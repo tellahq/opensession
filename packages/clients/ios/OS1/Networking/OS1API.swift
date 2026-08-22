@@ -601,11 +601,21 @@ enum OS1API {
         return try await responseData(for: request)
     }
 
-    /// PR details for the session's branch, or nil when it has no PR — the
-    /// route answers a bare JSON `null` in that case (a real answer, not an
-    /// error), so probe the raw body before decoding.
-    static func pr(sessionId: String) async throws -> PrDetails? {
-        let data = try await getData("/api/sessions/\(sessionId)/pr")
+    /// PR details for the primary branch or an explicit repo and branch target.
+    /// The route answers a bare JSON `null` when that target has no PR, so
+    /// probe the raw body before decoding.
+    static func pr(
+        sessionId: String,
+        repo: String? = nil,
+        branch: String? = nil
+    ) async throws -> PrDetails? {
+        var components = URLComponents()
+        components.path = "/api/sessions/\(sessionId)/pr"
+        components.queryItems = [
+            repo.map { URLQueryItem(name: "repo", value: $0) },
+            branch.map { URLQueryItem(name: "branch", value: $0) },
+        ].compactMap { $0 }
+        let data = try await getData(components.string ?? components.path)
         let body = String(decoding: data, as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if body.isEmpty || body == "null" { return nil }
