@@ -13,11 +13,18 @@ import {
 describe("isReachTool", () => {
   test("matches the mcp__server__tool spelling", () => {
     expect(isReachTool("mcp__plain__create_note")).toBe(true);
-    expect(isReachTool("mcp__slack__conversations_add_message")).toBe(true);
+    expect(isReachTool("mcp__slack__slack_post_message")).toBe(true);
+    expect(isReachTool("mcp__slack__slack_reply_to_thread")).toBe(true);
+    expect(isReachTool("mcp__linear__save_comment")).toBe(true);
+    expect(isReachTool("mcp__linear__save_issue")).toBe(true);
   });
 
   test("matches the pi <server>_<tool> spelling the engine reports", () => {
     expect(isReachTool("plain_create_note")).toBe(true);
+    expect(isReachTool("slack_slack_post_message")).toBe(true);
+    expect(isReachTool("slack_slack_reply_to_thread")).toBe(true);
+    expect(isReachTool("linear_save_comment")).toBe(true);
+    expect(isReachTool("linear_save_issue")).toBe(true);
     expect(isReachTool("opensession-report_publish_report")).toBe(true);
   });
 
@@ -27,6 +34,9 @@ describe("isReachTool", () => {
 
   test("does not match reads, unrelated tools, or nothing at all", () => {
     expect(isReachTool("mcp__plain__get_thread")).toBe(false);
+    expect(isReachTool("slack_slack_get_thread_replies")).toBe(false);
+    expect(isReachTool("linear_get_issue")).toBe(false);
+    expect(isReachTool("linear_save_customer")).toBe(false);
     expect(isReachTool("bash")).toBe(false);
     expect(isReachTool("mcp__gmail__draft_email")).toBe(false);
     expect(isReachTool(undefined)).toBe(false);
@@ -97,10 +107,10 @@ describe("ledger", () => {
     beginTurn({ key: "bks-effects", kind: "automation" });
     recordEffect("bks-effects", "mcp__plain__create_note");
     recordEffect("bks-effects", "mcp__plain__create_note");
-    recordEffect("bks-effects", "mcp__linear__create_issue");
+    recordEffect("bks-effects", "mcp__linear__save_issue");
     expect(getTurn("bks-effects")!.effects).toEqual([
       "mcp__plain__create_note",
-      "mcp__linear__create_issue",
+      "mcp__linear__save_issue",
     ]);
     expect(endTurn("bks-effects")!.verdict).toBe("reached");
   });

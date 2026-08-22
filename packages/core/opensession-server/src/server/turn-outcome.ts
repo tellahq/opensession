@@ -70,10 +70,11 @@ const REACH_TOOLS = [
   "mcp__plain__create_note",
   "mcp__plain__reply_to_thread",
   // Slack — a message in a channel or DM.
-  "mcp__slack__conversations_add_message",
-  // Linear — a comment or a new issue on the team's board.
-  "mcp__linear__create_comment",
-  "mcp__linear__create_issue",
+  "mcp__slack__slack_post_message",
+  "mcp__slack__slack_reply_to_thread",
+  // Linear — a comment or an issue created or updated on the team's board.
+  "mcp__linear__save_comment",
+  "mcp__linear__save_issue",
   // Gmail — outbound mail (a draft is not delivery; sending is).
   "mcp__gmail__send_email",
   // Our own in-process servers: a published report, and asking a teammate.
