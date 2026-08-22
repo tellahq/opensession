@@ -13,7 +13,9 @@
  */
 
 import { readFileSync, readdirSync, statfsSync } from "node:fs";
-import { cpus, loadavg } from "node:os";
+import { cpus, loadavg, totalmem } from "node:os";
+
+const isLinux = process.platform === "linux";
 
 /** Host metrics for /api/health and the `read_host_metrics` tool. The
  *  health-monitor automation reads these numbers through the tool: it runs
@@ -22,37 +24,60 @@ import { cpus, loadavg } from "node:os";
  *  these fields stable, and keep both readers on this one builder. */
 export function systemStats(): Record<string, unknown> {
 	try {
-		const mem: Record<string, number> = {};
-		for (const line of readFileSync("/proc/meminfo", "utf-8").split("\n")) {
-			const m = line.match(/^(\w+):\s+(\d+) kB/);
-			if (m) mem[m[1]] = Number(m[2]) * 1024;
-		}
 		const s = statfsSync("/");
 		const totalBytes = s.blocks * s.bsize;
 		const availBytes = s.bavail * s.bsize;
 		const [load1, load5, load15] = loadavg();
-		return {
+		const stats: Record<string, unknown> = {
 			disk: {
 				mount: "/",
 				totalGb: +(totalBytes / 1e9).toFixed(1),
 				availGb: +(availBytes / 1e9).toFixed(1),
 				usedPct: +((1 - availBytes / totalBytes) * 100).toFixed(1),
 			},
-			memory: {
-				totalGb: +((mem.MemTotal || 0) / 1e9).toFixed(2),
-				availableGb: +((mem.MemAvailable || 0) / 1e9).toFixed(2),
-				availablePct: mem.MemTotal
-					? +(((mem.MemAvailable || 0) / mem.MemTotal) * 100).toFixed(1)
-					: null,
-				swapUsedGb: +(((mem.SwapTotal || 0) - (mem.SwapFree || 0)) / 1e9).toFixed(2),
-			},
+			memory: memoryStats(),
 			load: { "1m": load1, "5m": load5, "15m": load15, cores: cpus().length },
 			processes: processCensus(),
-			cgroups: cgroupCensus(),
 		};
+		// The /proc census and the cgroup v2 tree are Linux-only. On macOS and
+		// elsewhere the process census returns {} and the cgroup fleet is omitted,
+		// so the host still reports disk, memory, and load instead of nothing.
+		if (isLinux) stats.cgroups = cgroupCensus();
+		return stats;
 	} catch (e) {
 		return { error: String((e as Error)?.message || e) };
 	}
+}
+
+/**
+ * Memory totals, portable across platforms. Linux reads /proc/meminfo for the
+ * kernel's own "available" estimate and swap accounting. Other platforms
+ * expose only the total: os.freemem() is strictly unused RAM and excludes
+ * reclaimable cache, so labelling it "available" would produce false low-memory
+ * alarms on macOS. Null keeps "not measured" distinct from real zero pressure.
+ */
+function memoryStats(): Record<string, unknown> {
+	if (isLinux) {
+		const mem: Record<string, number> = {};
+		for (const line of readFileSync("/proc/meminfo", "utf-8").split("\n")) {
+			const m = line.match(/^(\w+):\s+(\d+) kB/);
+			if (m) mem[m[1]] = Number(m[2]) * 1024;
+		}
+		return {
+			totalGb: +((mem.MemTotal || 0) / 1e9).toFixed(2),
+			availableGb: +((mem.MemAvailable || 0) / 1e9).toFixed(2),
+			availablePct: mem.MemTotal
+				? +(((mem.MemAvailable || 0) / mem.MemTotal) * 100).toFixed(1)
+				: null,
+			swapUsedGb: +(((mem.SwapTotal || 0) - (mem.SwapFree || 0)) / 1e9).toFixed(2),
+		};
+	}
+	return {
+		totalGb: +(totalmem() / 1e9).toFixed(2),
+		availableGb: null,
+		availablePct: null,
+		swapUsedGb: null,
+	};
 }
 
 interface CgroupMemorySnapshot {
@@ -185,6 +210,7 @@ function cgroupCensus(): Record<string, unknown> {
  *  incidents. */
 let censusCache: { at: number; data: Record<string, number> } | null = null;
 function processCensus(): Record<string, number> {
+	if (!isLinux) return {}; // the fleet census scans /proc, which is Linux-only
 	if (censusCache && Date.now() - censusCache.at < 60_000) return censusCache.data;
 	const counts = {
 		mcpProxies: 0,

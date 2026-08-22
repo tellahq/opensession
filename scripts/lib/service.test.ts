@@ -14,9 +14,11 @@
 
 import { describe, expect, test } from "bun:test";
 import { platform } from "os";
+import { join } from "path";
 import {
   LAUNCHD_LABEL,
   LAUNCHD_LAUNCHER,
+  persistedHomeEnv,
   renderExecutorUnit,
   renderLauncher,
   renderPlist,
@@ -174,5 +176,47 @@ describe.skipIf(!onServiceHost)("launchd plist", () => {
     const plist = renderPlist();
     expect(plist).toMatch(/<key>RunAtLoad<\/key>\s*<true\/>/);
     expect(plist).toMatch(/<key>KeepAlive<\/key>\s*<true\/>/);
+  });
+});
+
+describe("custom OPENSESSION_HOME", () => {
+  test("persistedHomeEnv keeps a moved home and drops the default", () => {
+    // A default install ($HOME/.opensession) needs no entry; a moved home does,
+    // or the server's runtime opensessionHome() tends ~/.opensession instead.
+    const homeRoot = join("/", "home", "bob");
+    const movedHome = join("/", "srv", "os-home");
+    expect(persistedHomeEnv(movedHome, homeRoot)).toBe(movedHome);
+    expect(persistedHomeEnv(join(homeRoot, ".opensession"), homeRoot)).toBeNull();
+  });
+
+  // OPENSESSION_HOME is read once at import, so exercise the rendered output in
+  // a child process with the env set, and confirm a default install omits it.
+  function renderInChild(home: string | undefined): { unit: string; plist: string } {
+    const mod = join(import.meta.dir, "service.ts");
+    const script =
+      `const s = await import(${JSON.stringify(mod)});` +
+      `process.stdout.write(await s.renderUnit("system"));` +
+      `process.stdout.write("\\n@@PLIST@@\\n");` +
+      `process.stdout.write(s.renderPlist());`;
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
+    if (home === undefined) delete env.OPENSESSION_HOME;
+    else env.OPENSESSION_HOME = home;
+    const proc = Bun.spawnSync(["bun", "-e", script], { env });
+    const [unit, plist] = proc.stdout.toString().split("@@PLIST@@");
+    return { unit, plist };
+  }
+
+  test.skipIf(platform() === "win32")("a moved home is stamped into the unit and plist", () => {
+    const home = "/tmp/opensession-custom-home-test";
+    const { unit, plist } = renderInChild(home);
+    expect(unit).toContain(`Environment="OPENSESSION_HOME=${home}"`);
+    expect(plist).toContain(`<key>OPENSESSION_HOME</key><string>${home}</string>`);
+  });
+
+  test.skipIf(platform() === "win32")("a default home leaves no OPENSESSION_HOME entry", () => {
+    const { unit, plist } = renderInChild(undefined);
+    expect(unit).not.toContain("OPENSESSION_HOME");
+    expect(plist).not.toContain("OPENSESSION_HOME");
   });
 });

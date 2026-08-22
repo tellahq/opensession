@@ -12,10 +12,13 @@
  */
 
 import { existsSync, statSync } from "fs";
+import { join } from "path";
 import { tailnetIp } from "./config-edit";
 import { CONFIG_PATH, ENV_PATH, REPO_ROOT } from "./paths";
 import { isCompiledBinary } from "../../packages/core/opensession-server/src/runner-host/exe";
 import { INTEGRATIONS } from "../../packages/core/opensession-server/src/server/integrations/registry";
+import { diskUsagePct } from "../../packages/core/opensession-server/src/server/disk-gc";
+import { diskProbePath, serviceLogDir } from "../../packages/core/opensession-server/src/server/maintenance";
 import * as service from "./service";
 import { dim, fail, heading, info, ok, run, warn } from "./ui";
 
@@ -272,6 +275,41 @@ async function checkEngine(t: Tally): Promise<void> {
   if (e.piEnabled) info(dim(`Pi enabled, ${pool}`));
 }
 
+/**
+ * Disk headroom and the one piece of state that grows without a bound of its
+ * own: the service logs. Maintenance rotates them at a cap, but surface the
+ * numbers here so "why did my laptop fill up" has an answer before it bites.
+ */
+function checkDisk(t: Tally): void {
+  heading("Disk");
+  const pct = diskUsagePct(diskProbePath());
+  if (pct >= 95) {
+    fail(`disk ${pct.toFixed(0)}% full`, "free space now — old sessions and worktrees are the usual cause");
+    t.errors++;
+  } else if (pct >= 90) {
+    warn(`disk ${pct.toFixed(0)}% full`, "getting tight; prune old sessions/worktrees");
+    t.warnings++;
+  } else {
+    ok(`disk ${pct.toFixed(0)}% used`);
+  }
+  const dir = serviceLogDir();
+  for (const name of ["server.log", "server.err.log"]) {
+    let size = 0;
+    try {
+      size = statSync(join(dir, name)).size;
+    } catch {
+      continue; // no log yet (foreground run, or fresh install)
+    }
+    const mb = size / (1024 * 1024);
+    if (mb > 100) {
+      warn(`${name} is ${mb.toFixed(0)}MB`, "maintenance rotates it; this is unusually large");
+      t.warnings++;
+    } else if (size > 0) {
+      ok(name, `${mb.toFixed(0)}MB`);
+    }
+  }
+}
+
 export async function doctor(): Promise<number> {
   const t: Tally = { errors: 0, warnings: 0 };
 
@@ -281,6 +319,7 @@ export async function doctor(): Promise<number> {
   await checkEngine(t);
   await checkIntegrations(t, config);
   await checkService(t, config);
+  checkDisk(t);
 
   heading("Summary");
   if (!t.errors && !t.warnings) ok("everything looks healthy");

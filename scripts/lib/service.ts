@@ -111,6 +111,23 @@ export function serviceWorkdir(): string {
   return existsSync(link) ? link : REPO_ROOT;
 }
 
+/**
+ * The OPENSESSION_HOME to persist into a rendered service, or null when it is
+ * the default. A custom home (install.sh OPENSESSION_HOME=…) bakes the unit's
+ * log and state paths under itself, but the launched server reads
+ * OPENSESSION_HOME from its own env to resolve that same home at runtime (log
+ * rotation, disk probe). Without carrying it, the server falls back to
+ * ~/.opensession and tends the wrong tree, so stamp it into the unit and plist.
+ * A default install needs no entry. Args default to the frozen module paths and
+ * are injectable for tests.
+ */
+export function persistedHomeEnv(
+  home: string = OPENSESSION_HOME,
+  homeRoot: string = HOME,
+): string | null {
+  return home !== join(homeRoot, ".opensession") ? home : null;
+}
+
 export function supervisor(): Supervisor {
   if (process.platform === "darwin") return "launchd";
   if (Bun.which("systemctl") && existsSync("/run/systemd/system"))
@@ -331,6 +348,13 @@ export async function renderUnit(
     "# EXECUTOR_CREDENTIAL: rendered installs replace this marker. Keeping the\n" +
     "# source template optional lets the previous deploy script introduce this\n" +
     "# release without failing before it knows how to install the credential.\n";
+  const home = persistedHomeEnv();
+  if (home) {
+    unit = unit.replace(
+      /^Environment="PATH=.*"$/m,
+      (m) => `${m}\nEnvironment="OPENSESSION_HOME=${home}"`,
+    );
+  }
   if (scope === "system") {
     return unit
       .replace(/^User=.*$/m, `User=${await resolveUsername()}`)
@@ -510,6 +534,10 @@ export function renderLauncher(): string {
 
 export function renderPlist(): string {
   const exec = serverExec();
+  const home = persistedHomeEnv();
+  const homeVar = home
+    ? `\n    <key>OPENSESSION_HOME</key><string>${xml(home)}</string>`
+    : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -523,7 +551,7 @@ export function renderPlist(): string {
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>${xml(servicePath(exec.binDir))}</string>
-    <key>NODE_ENV</key><string>production</string>
+    <key>NODE_ENV</key><string>production</string>${homeVar}
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>

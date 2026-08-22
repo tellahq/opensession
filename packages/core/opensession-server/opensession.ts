@@ -11,6 +11,7 @@ import {
 import { startAccountHealthMonitor } from "./src/server/account-health";
 import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
+import { startMaintenance } from "./src/server/maintenance";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startPortalReaper } from "./src/server/portal-supervisor";
 import { startRunnerPortalReaper } from "./src/server/runner-portals";
@@ -690,6 +691,11 @@ if (!g.__opensessionBooted) {
 
 	// Reclaim rust target/ build caches from idle worktrees we keep (disk-gc.ts)
 	startDiskGc();
+
+	// Rotate the unbounded service logs and warn on low disk (maintenance.ts) —
+	// launchd/systemd never rotate their redirected stdout, so a long-running
+	// simple-mode install grows server.log until the disk fills.
+	startMaintenance();
 
 	// Keep the Analytics presets' summaries warm so the view opens instantly
 	// (analytics.ts — gh fetches + composed summaries are disk-cached too)
