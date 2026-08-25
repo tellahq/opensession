@@ -111,6 +111,43 @@ Fresh installs keep dedup state in
 `~/.opensession-grafana-poll` exists and the new path does not, Open Session
 continues using the legacy path.
 
+## Fathom Analytics
+
+Open Session includes a read-only local Fathom MCP. Create a site-specific API
+token in [Fathom's API settings](https://app.usefathom.com/api), then add the
+server to the effective `mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "fathom": {
+      "command": "opensession",
+      "args": ["fathom-mcp"],
+      "env": {
+        "FATHOM_API_TOKEN": "<site-specific-read-only-token>",
+        "FATHOM_SITE_ID": "<site-id>"
+      },
+      "allowedUsers": ["Grant"]
+    }
+  }
+}
+```
+
+This command works in compiled and source installations. Source contributors
+can also run `bun scripts/mcp-fathom.ts` directly.
+
+Put credentials only in the local, gitignored config and keep it mode `0600`.
+Do not put them in chat, a commit, or `mcp-config.example.json`. The site ID is
+pinned at process startup; tools cannot select another site. The server permits
+only fixed Fathom `GET` endpoints and exposes `list_sites`, `traffic_summary`,
+`traffic_breakdown`, and `current_visitors`. Open Session watches MCP config,
+so no service restart is needed. Start a new session after saving the entry.
+
+Reports use the site's configured timezone and inclusive calendar dates. The
+server currently sends the final date as `23:59:59`; cross-check the first live
+report against the Fathom dashboard because Fathom does not explicitly document
+the `date_to` boundary resolution.
+
 ## Sentry, Tinybird, and Braintrust
 
 MCP-only, with no integration agent or dedicated server env vars. Configure
