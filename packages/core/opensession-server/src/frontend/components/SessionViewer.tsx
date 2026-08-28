@@ -300,7 +300,7 @@ import {
 	IconArrowUpRight,
 	IconStack,
 } from "./icons";
-import { KeepInSidebarIcon } from "./sidebar/KeepInSidebarMark";
+import { SessionSidebarAction } from "./SessionSidebarAction";
 import { SessionRelations, type RelatedSession } from "./SessionRelations";
 import {
 	SOURCE_CHIP,
@@ -524,6 +524,8 @@ interface Props {
 	/** Claim this workspace into your own per-user sidebar lanes ("mine"), or
 	    release it (null) — the ⋯ menu's twin of the sidebar row's action. */
 	onSetStatus?: (sessions: UnifiedSession[], status: Lane | null) => void;
+	/** Restore the currently viewed archived session to the normal sidebar. */
+	onUnarchive?: (session: UnifiedSession) => void;
 	/** Every session — the pool the workspace-context picker and the PR panel
 	    draw their sibling sessions from. */
 	allSessions?: UnifiedSession[];
@@ -779,6 +781,7 @@ export function SessionViewer({
 	onDeleteWorkspace,
 	workspaceSessions,
 	onSetStatus,
+	onUnarchive,
 	allSessions,
 	onNewSession,
 	onNewWorkspace,
@@ -5850,26 +5853,15 @@ export function SessionViewer({
 			</Modal.Root>
 			{!hideHeader && (() => {
 				const workspaceScopedMenu = Boolean(session.workspaceId);
-				const keepInSidebarAction = (inMenu: boolean) =>
-					canKeepInSidebar &&
-					(inMenu ? (
-						<Menu.Item onClick={keepInSidebar} title="Add to sidebar">
-							<KeepInSidebarIcon className={MENU_ICON} />
-							<span className="grow">Add to sidebar</span>
-						</Menu.Item>
-					) : (
-						<Button
-							size="md"
-							variant="default"
-							className="mr-1.5 text-fg"
-							icon={<KeepInSidebarIcon />}
-							iconTone="full"
-							onClick={keepInSidebar}
-							title="Add to sidebar"
-						>
-							Add to sidebar
-						</Button>
-					));
+				const keepInSidebarAction = (inMenu: boolean) => (
+					<SessionSidebarAction
+						archived={Boolean(session.archived)}
+						canKeepInSidebar={canKeepInSidebar}
+						inMenu={inMenu}
+						onKeepInSidebar={keepInSidebar}
+						onUnarchive={onUnarchive ? () => onUnarchive(session) : undefined}
+					/>
+				);
 				// Share rides inline on a wide header but tucks into the ⋯ overflow
 				// menu when it gets narrow. Both spellings use the link glyph, since
 				// the action copies a link rather than opening a share sheet. Inline
@@ -6332,7 +6324,9 @@ export function SessionViewer({
 									? workspaceLifecycleActions
 									: (
 										<>
-											{(!isPhone || session.archived) && archiveAction}
+											{((!isPhone && !session.archived) ||
+												(session.archived && !onUnarchive)) &&
+												archiveAction}
 											{deleteAction}
 										</>
 									)}

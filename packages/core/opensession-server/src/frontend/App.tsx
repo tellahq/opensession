@@ -4884,6 +4884,7 @@ if (siblingCreateRef.current === optimisticId)
 					// this can't double-record.
 					rememberArchived([viewerSession.id]);
 				}}
+				onUnarchive={unarchiveSession}
 				send={socket.send}
 				setTyping={socket.setTyping}
 				addHandler={socket.addHandler}
