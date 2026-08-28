@@ -182,7 +182,7 @@ export function SpinOffMenu({
           <span className="grow">Spin off</span>
           <IconChevronRight size={16} className="text-faint" />
         </Menu.SubmenuTrigger>
-        <Menu.Popup className="w-80 overflow-hidden p-0">
+        <Menu.Popup className="w-80 overflow-hidden" contentClassName="p-0">
           {isAsk && (
             <Menu.Item closeOnClick={false} onClick={() => pick("build")} className={itemCls}>
               <span className="text-label font-semibold text-fg">Build this</span>

@@ -34,9 +34,9 @@ export const popupSurfaceClasses =
 
 /** The scroller inside the surface: a long list scrolls, the padding stays. */
 export const popupScrollClasses =
-	"max-h-[min(60vh,420px,var(--available-height))] overflow-y-auto overflow-x-hidden overscroll-contain p-1.5";
+	"max-h-[min(60vh,420px,var(--available-height))] overflow-y-auto overflow-x-hidden overscroll-contain p-2";
 
 /** One row. Highlight via Base UI's `data-highlighted` so keyboard navigation
  *  lights rows up the same way the pointer does. */
 export const popupItemClasses =
-	"flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-control-label text-fg no-underline outline-none data-[highlighted]:bg-hover";
+	"flex w-full cursor-pointer select-none items-center gap-2 rounded-[calc(8px*var(--rf))] px-2 py-1.5 text-left text-control-label text-fg no-underline outline-none data-[highlighted]:bg-hover";

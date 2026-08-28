@@ -37,6 +37,7 @@ function Trigger({
 
 function Popup({
 	className,
+	contentClassName,
 	positionerClassName,
 	side,
 	align,
@@ -47,6 +48,8 @@ function Popup({
 	children,
 }: {
 	className?: string;
+	/** Override the inner scroller without changing the popup surface. */
+	contentClassName?: string;
 	/** Override the portal layer when this menu opens inside a higher popup. */
 	positionerClassName?: string;
 	side?: React.ComponentProps<typeof BaseMenu.Positioner>["side"];
@@ -80,7 +83,7 @@ function Popup({
 					className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
 					finalFocus={finalFocus}
 				>
-					<div className={popupScrollClasses}>{children}</div>
+					<div className={cn(popupScrollClasses, contentClassName)}>{children}</div>
 				</BaseMenu.Popup>
 			</BaseMenu.Positioner>
 		</BaseMenu.Portal>
@@ -91,10 +94,13 @@ function Popup({
  * from the contextmenu event), reusing the same chrome + Item styling as Menu. */
 function ContextPopup({
 	className,
+	contentClassName,
 	finalFocus,
 	children,
 }: {
 	className?: string;
+	/** Override the inner scroller without changing the popup surface. */
+	contentClassName?: string;
 	/** Where focus goes on close — pass `false` when the menu opens an inline
 	 * editor that autofocuses itself (default restores focus to the trigger). */
 	finalFocus?: React.ComponentProps<typeof BaseContextMenu.Popup>["finalFocus"];
@@ -115,7 +121,7 @@ function ContextPopup({
 					className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
 					finalFocus={finalFocus}
 				>
-					<div className={popupScrollClasses}>{children}</div>
+					<div className={cn(popupScrollClasses, contentClassName)}>{children}</div>
 				</BaseContextMenu.Popup>
 			</BaseContextMenu.Positioner>
 		</BaseContextMenu.Portal>

@@ -35,14 +35,15 @@ const twMerge = extendTailwindMerge({
 	extend: {
 		classGroups: {
 			"font-size": [{ text: [...semanticFontSizes] }],
-			// `rounded-control` (the chrome corner, styles/tailwind.css) has the
-			// same problem in the radius group: unregistered, tailwind-merge
+			// Semantic radius tokens (styles/tailwind.css) have the same problem in
+			// the radius group: unregistered, tailwind-merge
 			// cannot tell it conflicts with `rounded-full`, so a caller's
 			// override lands *alongside* the primitive's corner instead of
 			// replacing it and the winner is decided by stylesheet order. That
 			// currently favours the override by luck — reordering the theme
 			// tokens would silently square off AskCard's pill.
-			rounded: [{ rounded: ["control"] }],
+			rounded: [{ rounded: ["control", "popup", "modal"] }],
+			"rounded-t": [{ "rounded-t": ["modal"] }],
 		},
 	},
 });

@@ -105,7 +105,7 @@ function Content({
 							// overlay this size carries a rounder corner than the
 							// controls inside it. Same corner as the centered dialog,
 							// one step up from the 18px it used to carry.
-							"rounded-[calc(22px*var(--rf))]",
+							"rounded-modal",
 							// The same glass the menus and hover cards are made of
 							// (ui/menu.tsx), so the palette reads as one more floating
 							// surface rather than an opaque card — just denser, because
@@ -133,7 +133,7 @@ function Content({
 							// The edge is --dialog-ring rather than the shared hairline: on
 							// a scrim the fill's step above the page all but disappears, so
 							// the line is what holds the shape (base.css).
-							"rounded-[calc(22px*var(--rf))] bg-raised",
+							"rounded-modal bg-raised",
 							"[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
 							"p-6",
 							"flex flex-col gap-4",
