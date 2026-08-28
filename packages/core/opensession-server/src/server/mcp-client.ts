@@ -14,7 +14,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { readMcpConfig } from "./connections";
-import { mcpAuthHeader } from "./mcp-oauth";
+import { mcpBoundAuthHeader } from "./mcp-oauth";
 
 export class McpToolError extends Error {}
 
@@ -28,7 +28,7 @@ export async function listMcpTools(
     | { url?: string; headers?: Record<string, string> }
     | undefined;
   if (!cfg?.url) throw new McpToolError(`No HTTP MCP server "${serverName}"`);
-  const oauth = mcpAuthHeader(serverName, user);
+  const oauth = mcpBoundAuthHeader(serverName, cfg, user);
   const auth = oauth || cfg.headers?.Authorization;
   const transport = new StreamableHTTPClientTransport(new URL(cfg.url), {
     requestInit: {
@@ -66,7 +66,7 @@ export async function callMcpTool<T = unknown>(
     | { url?: string; headers?: Record<string, string> }
     | undefined;
   if (!cfg?.url) throw new McpToolError(`No HTTP MCP server "${serverName}"`);
-  const oauth = mcpAuthHeader(serverName, user);
+  const oauth = mcpBoundAuthHeader(serverName, cfg, user);
   const auth = oauth || cfg.headers?.Authorization;
   const transport = new StreamableHTTPClientTransport(new URL(cfg.url), {
     requestInit: {

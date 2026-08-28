@@ -164,7 +164,9 @@ async function voiceMcpServers(
 	sessionId: string,
 ): Promise<Array<{ name: string; server: InProcessMcpServer }>> {
 	const { interactiveMcpServers } = await import("./interactive-mcp");
-	return Object.entries(interactiveMcpServers(user, sessionId))
+	// Desk voice is a narrow spoken facade, not a full run: no personal
+	// provider tools, so pass no scope.
+	return Object.entries(interactiveMcpServers(user, sessionId, undefined))
 		.filter((entry): entry is [string, InProcessMcpServer] =>
 			Boolean((entry[1] as InProcessMcpServer | undefined)?.instance),
 		)

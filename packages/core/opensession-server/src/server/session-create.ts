@@ -1439,7 +1439,11 @@ export async function openCreatedSession(
 							resumeSessionAt: spec.fork.resumeAt,
 						}
 					: {}),
-				inProcessMcp: interactiveMcpServers(spec.user, bksId),
+				inProcessMcp: interactiveMcpServers(
+					spec.user,
+					bksId,
+					spec.runMcpServers ?? "all",
+				),
 				confirmTools: STRIPE_CONFIRM_TOOLS,
 				aws: true, // interactive sessions keep AWS read access (via injected creds)
 				// Whose commits these are. Passing `user` alone is not enough:

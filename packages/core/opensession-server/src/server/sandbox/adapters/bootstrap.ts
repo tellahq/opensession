@@ -84,6 +84,7 @@ import {
   toPiModel,
 } from "../../models";
 import { filterMcpServers } from "../../runner-shared";
+import { hasMcpOauthProxyGrantForUsers } from "../../mcp-oauth";
 import {
   GITHUB_RUN_AUTH_FILE_ENV,
   githubAuthEnv,
@@ -1659,8 +1660,13 @@ function makeRemoteLauncher(
       const projectedMcp = filterMcpServers(
         spec.mcpServers ?? "all",
         spec.user,
-        [spec.mcpGrantUser, spec.user],
-      );
+        [spec.user],
+      ) as Record<string, unknown>;
+      for (const name of Object.keys(projectedMcp)) {
+        if (hasMcpOauthProxyGrantForUsers(name, [spec.user])) {
+          delete projectedMcp[name];
+        }
+      }
       const claudeAccountsPath = `${REMOTE_HOME}/.opensession-claude-accounts.json`;
       await Promise.all([
         driver.writeFile(

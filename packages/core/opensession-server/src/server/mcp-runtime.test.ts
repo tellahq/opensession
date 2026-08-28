@@ -9,6 +9,7 @@ import {
   MAX_MCP_SAFE_JSON_BYTES,
   splitMcpMigrationBoundary,
   type McpRuntime,
+  withoutInProcessMcpShadows,
 } from "./mcp-runtime";
 
 let lastMeta: unknown;
@@ -119,5 +120,15 @@ describe("legacy migration boundary", () => {
     expect(legacyProxyToolsCacheKey(proxy("one"))).not.toBe(
       legacyProxyToolsCacheKey({ ...proxy("one"), command: "/other" }),
     );
+  });
+
+  test("in-process mounts shadow same-named external servers", () => {
+    const external = {
+      tella: { url: "https://workspace.example.test/mcp" },
+      plain: { url: "https://plain.example.test/mcp" },
+    };
+    expect(
+      withoutInProcessMcpShadows(external, { tella: server() }),
+    ).toEqual({ plain: external.plain });
   });
 });

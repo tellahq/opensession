@@ -129,6 +129,41 @@ addresses, GitHub logins, and Slack ids resolve to the configured person.
   Adding, removing, or re-scoping a server in `mcp-config.json` is picked up on
   the next run/message and does not require a restart.
 
+## Personal MCP OAuth grants
+
+Browser-connected MCP grants are stored as authenticated AES-256-GCM
+ciphertext. Open Session prefers an operator-supplied systemd credential for
+the 32-byte key. A rootless simple-mode install instead mints a `0600` key next
+to the store on first use, so the feature works without a root step. That
+fallback protects a stray copy of the grant file. It does not protect a whole
+state-directory backup, or defend against another process already running as
+the same Unix user, because that process can read both files.
+
+Remote HTTP MCP grants are mounted as coordinator-side in-process proxies. The
+provider token is resolved immediately before the upstream connection and does
+not enter engine config, process environment, command arguments, projected
+sandbox files, or the run transcript. The grant is bound to the configured
+upstream URL; repointing the same server name makes the connection fail closed
+until it is reconnected.
+
+Personal tokens are never injected into local stdio MCP processes. On a normal
+rootless install those executables and their package entrypoints can be changed
+by the same Unix identity as an agent run, so pinning a pathname would not make
+the token handoff safe. A stdio MCP keeps its configured workspace credential.
+Provider-specific personal grants such as Slack may still be used by
+coordinator-owned UI actions that call the provider API directly.
+
+On an operator install, per-user grants and `allowedUsers` visibility follow the
+verified **prompter**, never the session creator. A teammate steering somebody
+else's session therefore cannot spend or reveal the owner's personal grant. A
+simple-mode install has no web identity gate and creates shared grants, which
+matches its single-user trust model. The OAuth callback is tied to the same
+verified account that started it whenever web sign-in is enabled.
+
+Encryption at rest and coordinator proxying are useful reductions, not a
+same-UID sandbox. Full isolation requires a small broker under a separate OS
+identity that holds the key and issues narrow per-use capabilities.
+
 ## GitHub webhook actor trust (public repositories)
 
 A valid webhook signature proves that GitHub sent an event. It does **not**

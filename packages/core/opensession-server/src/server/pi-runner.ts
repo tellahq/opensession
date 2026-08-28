@@ -1834,7 +1834,6 @@ async function* runPiAttempt(
     mcpRuntime = await createMcpRuntime({
       mcpServers,
       user,
-      mcpGrantUser: opts.mcpGrantUser,
       deniedToolIds: new Set(Object.keys(policy.disables)),
       inProcessMcp: mcpMounts.sdk,
       legacyProxyMcp: mcpMounts.legacyProxy,

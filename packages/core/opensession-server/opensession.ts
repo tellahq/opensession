@@ -28,7 +28,10 @@ import { startCodexUsagePoller } from "./src/server/codex-accounts";
 import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, isPrebuiltFrontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
 import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
-import { interactiveMcpServers } from "./src/server/interactive-mcp";
+import {
+	interactiveMcpServers,
+	personalMcpScopeForSession,
+} from "./src/server/interactive-mcp";
 import { homeDir, OPENSESSION_SESSIONS_DIR, stateDir } from "./src/server/paths";
 import { shouldRedirectLegacyPublicPath } from "./src/server/legacy-public-prefix";
 import { startPlainArchiveSweep } from "./src/server/plain-archive";
@@ -881,10 +884,18 @@ if (!g.__opensessionBooted) {
 						return automationResumeMcpForSession(session, bksSessionId);
 					const servers: Record<string, unknown> = session.goalId
 						? {
-								...interactiveMcpServers(user, bksSessionId),
+								...interactiveMcpServers(
+									user,
+									bksSessionId,
+									personalMcpScopeForSession(session),
+								),
 								"opensession-goal-self": createGoalSelfMcpServer(session.goalId),
 							}
-						: interactiveMcpServers(user, bksSessionId);
+						: interactiveMcpServers(
+							user,
+							bksSessionId,
+							personalMcpScopeForSession(session),
+						);
 					return servers;
 				} catch (e) {
 					console.error(

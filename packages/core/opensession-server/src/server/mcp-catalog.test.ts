@@ -21,7 +21,7 @@ function find(name: string): McpServerCatalogEntry | undefined {
 }
 
 function wiredInteractive(): string[] {
-  return Object.keys(interactiveMcpServers("You", SESSION_ID));
+  return Object.keys(interactiveMcpServers("You", SESSION_ID, "all"));
 }
 
 /** Read the two object literals that compose the complete automation surface.

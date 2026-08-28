@@ -41,6 +41,17 @@ export function filterMcpServers(
     readMcpConfig().mcpServers,
     grantUsers ?? user,
   );
+  return filterMcpServerCatalog(all, scope, user, grantUsers);
+}
+
+/** Apply only visibility + metadata stripping. Server-side credential proxies
+ * use this path so provider tokens are never materialized in an engine config. */
+export function filterMcpServerCatalog(
+  all: Record<string, unknown>,
+  scope: McpScope,
+  user?: string,
+  grantUsers?: Array<string | undefined>,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const allowlist = scope === "all" ? undefined : scope;
   const names = allowlist ?? Object.keys(all);
@@ -52,12 +63,9 @@ export function filterMcpServers(
     }
     const { allowedUsers, oauthUrl, ...entry } = cfg;
     if (Array.isArray(allowedUsers) && allowedUsers.length) {
-      // Cleared when the prompter OR the session creator (grantUsers[0]) is
-      // on the list — anyone with access to a cleared person's session can
-      // use it there (per-session invites = future).
-      const gateUsers = [user, ...(grantUsers || [])].filter(
-        (u): u is string => !!u,
-      );
+      // Visibility is always the prompter's. Credential-preference identities
+      // must never widen a server's allowedUsers boundary.
+      const gateUsers = [user].filter((u): u is string => !!u);
       if (!gateUsers.some((u) => userMatchesAny(u, allowedUsers))) continue;
     }
     out[name] = entry;

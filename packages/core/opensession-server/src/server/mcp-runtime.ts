@@ -13,8 +13,6 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { filterMcpServers, type McpScope } from "./runner-shared";
 import { readCachedTools, toolsCacheKey, writeCachedTools } from "./mcp-tools-cache";
-import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
-import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import type { InProcessMcpServer } from "./inprocess-mcp";
 
 const DEFAULT_CALL_TIMEOUT_MS = 120_000;
@@ -121,6 +119,19 @@ export function splitMcpMigrationBoundary(inProcessMcp?: Record<string, unknown>
     sdk,
     ...(Object.keys(configs).length ? { legacyProxy: { configs } } : {}),
   };
+}
+
+/** In-process mounts are coordinator-owned replacements for same-named external
+ * servers. Resolve that ownership before any external connection can open. */
+export function withoutInProcessMcpShadows<T>(
+  external: Readonly<Record<string, T>>,
+  inProcess: Readonly<Record<string, unknown>>,
+): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [name, cfg] of Object.entries(external)) {
+    if (!Object.hasOwn(inProcess, name)) out[name] = cfg;
+  }
+  return out;
 }
 
 function abortError(): Error {
@@ -235,7 +246,6 @@ function validListedTools(value: unknown): Array<Record<string, unknown>> | unde
 export async function createMcpRuntime(opts: {
   mcpServers: McpScope;
   user?: string;
-  mcpGrantUser?: string;
   deniedToolIds: ReadonlySet<string>;
   inProcessMcp?: Readonly<Record<string, InProcessMcpServer>>;
   legacyProxyMcp?: LegacyProxyMcpBoundary;
@@ -243,7 +253,6 @@ export async function createMcpRuntime(opts: {
   callTimeoutMs?: number;
 }): Promise<McpRuntime> {
   const timeoutMs = opts.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
-  const grantUsers = [opts.mcpGrantUser, opts.user];
   let closed = false;
   const live = new Set<ServerConn>();
   const conns = new Map<string, Promise<ServerConn>>();
@@ -254,19 +263,11 @@ export async function createMcpRuntime(opts: {
     live.add(record);
     let transport: Transport;
     if (cfg.type === "http" || cfg.type === "sse" || cfg.url) {
-      const candidates = grantUsers.filter((user): user is string => !!user);
-      const hasGrant = candidates.some((user) => mcpUserGrantHeader(name, user)) || !!mcpSharedGrantHeader(name);
-      let url = String(cfg.url);
-      let headers = { ...((cfg.headers as Record<string, string>) || {}) };
-      if (hasGrant) {
-        url = mcpRelayUrl(name, mintMcpRelayToken(name, candidates));
-        const { Authorization: _drop, ...rest } = headers;
-        headers = rest;
-      }
+      const headers = { ...((cfg.headers as Record<string, string>) || {}) };
       const requestInit = Object.keys(headers).length ? { headers } : undefined;
       transport = cfg.type === "sse"
-        ? new SSEClientTransport(new URL(url), { requestInit })
-        : new StreamableHTTPClientTransport(new URL(url), { requestInit });
+        ? new SSEClientTransport(new URL(String(cfg.url)), { requestInit })
+        : new StreamableHTTPClientTransport(new URL(String(cfg.url)), { requestInit });
     } else if (cfg.command) {
       transport = new StdioClientTransport({
         command: String(cfg.command),
@@ -309,21 +310,23 @@ export async function createMcpRuntime(opts: {
   };
 
   const entries: Entry[] = [];
-  const external = filterMcpServers(
-    opts.mcpServers,
-    opts.user,
-    opts.mcpGrantUser ? grantUsers : undefined,
-  ) as Record<string, Record<string, unknown>>;
+  const inProcess = opts.inProcessMcp ?? {};
+  const external = withoutInProcessMcpShadows(
+    filterMcpServers(opts.mcpServers, opts.user) as Record<string, Record<string, unknown>>,
+    inProcess,
+  );
   for (const [name, cfg] of Object.entries(external)) {
     entries.push({ name, factory: () => connectExternal(name, cfg), cacheKey: toolsCacheKey(cfg) });
   }
   const taken = new Set(entries.map((entry) => entry.name));
-  for (const [name, server] of Object.entries(opts.inProcessMcp ?? {})) {
-    if (!taken.has(name)) entries.push({ name, factory: () => connectInProcess(server) });
+  for (const [name, server] of Object.entries(inProcess)) {
+    entries.push({ name, factory: () => connectInProcess(server) });
+    taken.add(name);
   }
   for (const [name, value] of Object.entries(opts.legacyProxyMcp?.configs ?? {})) {
     if (taken.has(name) || !isProxyMcpConfig(value)) continue;
     entries.push({ name, factory: () => connectExternal(name, value), cacheKey: legacyProxyToolsCacheKey(value) });
+    taken.add(name);
   }
 
   const tools: RegisteredTool[] = [];
