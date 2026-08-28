@@ -1,0 +1,50 @@
+# Production-unactivated Agent Host generation service template.
+# Placeholder values are rendered by deploy/install-agent-host-topology.sh.
+[Unit]
+Description=Open Session Agent Host generation %i
+Requires=opensession-agent-host@%i.socket
+After=opensession-agent-host@%i.socket
+StartLimitIntervalSec=86400
+StartLimitBurst=2
+
+[Service]
+Type=simple
+User=opensession-agent-host
+Group=opensession-agent-host
+WorkingDirectory=@@WORKING_DIRECTORY@@
+StateDirectory=opensession/agent-host/%i
+StateDirectoryMode=0700
+LoadCredential=agent-host-ledger-keyring:/etc/opensession/credentials/agent-host/%i/ledger-keyring.json
+LoadCredential=agent-host-supervision-keyring:/etc/opensession/credentials/agent-host/%i/supervision-keyring.json
+ExecStartPre=@@BUN@@ run packages/core/opensession-server/src/agent-host/main.ts --doctor --generation %i --expected-gateway-uid @@GATEWAY_UID@@ --expected-host-uid @@HOST_UID@@
+ExecStart=@@BUN@@ run packages/core/opensession-server/src/agent-host/main.ts --generation %i --expected-gateway-uid @@GATEWAY_UID@@ --expected-host-uid @@HOST_UID@@
+RuntimeMaxSec=24h
+TimeoutStopSec=20s
+KillMode=mixed
+Restart=no
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+IPAddressDeny=any
+SystemCallArchitectures=native
+
+# Deliberately no [Install]. Generations are activated only by an explicitly
+# enabled socket after the future gateway cutover is approved.

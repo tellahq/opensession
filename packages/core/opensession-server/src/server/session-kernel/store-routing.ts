@@ -62,6 +62,7 @@ const SESSION_FIRST_METHODS = new Set([
 ]);
 
 const SESSION_INPUT_METHODS = new Set([
+  "agentOperationCancellationIntent",
   "acceptCommand",
   "completeCommandDecision",
   "setRunState",

@@ -321,6 +321,103 @@ never enter actor payloads. Removing the remaining create-plan compatibility
 authority is the next creation cutover; the presence or absence of a plan file
 is not actor lifecycle evidence.
 
+## Agent operation receipts (unwired foundation)
+
+Schema 28 adds actor-owned Agent operation admission, transcript barriers, and
+terminal receipts to the existing Agent operation v1 protocol and import-inert
+gateway ledger. The internal facade is deliberately not composed at boot and
+has no Host transport, provider/MCP adapter, credential resolution, live key,
+or production operation route. It therefore performs no provider, MCP, socket,
+executor, or transcript I/O and creates no executable production authority.
+
+Each admit, settle, indeterminate, or exact query is one synchronous actor
+reduction and one short SQLite transaction. Admission binds the exact turn
+fence, operation identity and kind, descriptor and payload digests, adapter
+identity, transcript input anchor, registered plan, and the current active
+schema-27 signed supervision receipt. A caller-supplied authority hash is never
+accepted independently of that stored signed row. Legacy unsigned receipts do
+not authorize operations.
+
+A turn has at most one admitted nonterminal operation. A model terminal declares
+an ordered, bounded, unique set of pending tool-use entry IDs contained in its
+terminal transcript receipts. MCP admission binds the exact next declared entry,
+so distinct calls may proceed model, MCP, MCP. A successor anchor must
+cumulatively cover every required transcript entry and change sequence, and the
+next model is blocked until every declared MCP operation has settled. Physical
+prepared and executing phases remain gateway-ledger state. Actor state
+is only admitted, settled, or indeterminate. Indeterminate is visible terminal
+state and blocks continuation until a future explicit actor-owned recovery
+policy exists. Exact duplicate requests replay their original durable receipt;
+identity or terminal crossover quarantines the session.
+
+Terminal receipts and active operations are retained for at least seven days.
+Expiry-aware pruning never removes an active operation or the latest dependency
+for a turn. Per-turn and per-session receipt limits bound storage without a
+fixed session or turn count, while a separate monotonic operation high-water
+survives pruning and restart. Session deletion removes receipts and high-water
+in the same tombstone transaction.
+
+The shared gateway ledger requires an exact session/operation primary key plus
+kind, full turn fence, plan and authority hashes, descriptor and physical
+payload digests, and adapter ID/version. A mismatch is atomically quarantined
+without replacing the original identity. Exact terminal replay returns the
+canonical durable receipt. `prepared` means no physical invocation was allowed
+to start and may be reauthorized after recovery. Once `executing` commits,
+recovery requires explicit adapter proof; the default and initial adapter
+contract is reconciliation unsupported and settles the row visibly as
+`indeterminate`, never as a retry. The SessionKernel now admits and settles only these durable authority facts.
+Gateway execution remains unwired. No actor mailbox is held across physical
+provider, MCP, gateway-ledger, or transcript work.
+
+## Detached Agent Host supervision
+
+Schema 26 is an additive migration from live schemas 24 and 25 and raises the
+normal `user_version` rollback floor, so an older actor refuses the migrated
+store. Its receipt and plan backfill is transactional, crash-resumable, and
+validates every canonical authority before raising that floor.
+It adds a v2 Agent Host supervision authority consumed by the exact
+production-unwired Agent Host wire protocol v3. Before any claim, a short typed SessionKernel
+reduction registers the exact current run/generation, turn ID, and canonical
+plan hash once. Exact registration replays and any mismatch fails closed. A
+second short claim reduction must match that actor-owned plan, consumes a Host
+challenge and nonce once, and monotonically advances a per-session supervisor
+high-water mark. It binds the stable Host ID, Host generation and process
+incarnation to the current kernel service epoch. Exact retries return the same
+canonical immutable payload and bytes. A fresh challenge lets the same Host
+generation recover after either its process incarnation or the kernel service
+epoch changes; the higher supervisor epoch fences old control. Lower Host
+generations and changed Host IDs remain stale.
+
+The actor stores only bounded supervision metadata. It does not store prompts,
+transcripts, provider/model configuration, MCP payloads, or credentials, and it
+performs no provider, executor, model, socket, or signing work. Superseded and settled receipts remain replayable through their lease and clock
+skew. The actor prunes only expired non-active receipts before enforcing its
+fixed capacity; active and unexpired receipts are never pruned, and the separate
+supervisor and Host-generation high-water marks survive terminal runs, pruning,
+and restart. Legacy migrated payloads remain deliberately unsigned and provide no Host
+authentication. New schema-27 receipts are signed atomically. The import-inert
+wire-v3 Host consumes a fresh one-use challenge and strict V2 public keyring,
+then verifies the signed envelope against the exact actor-issued attachment
+descriptor before admitting one fenced turn. It is not referenced by boot or
+existing Pi routing. Separate Host and gateway service identities, peer
+credentials, keyring provisioning, and detached service deployment must land
+before production wiring. The current shared Ubuntu identity is not a security
+boundary.
+
+The hardened detached-host target keeps provider and MCP access gateway-proxied;
+ambiguous proxy outcomes are visible `indeterminate` failures rather than
+silent retries. Host workers use blue/green replacement with a 24-hour maximum
+worker lifetime. Kernel and Host services run as separate service users. Host
+ledger admission has no fixed concurrent-turn count. A turn may accumulate at
+most 32 MiB of actual worst-case physical charge. Ordinary growth stops at
+448 MiB and a protected 64 MiB remains inside, not beyond, the same 512 MiB
+physical ceiling for emergency-class transitions. The import-inert encrypted
+ledger v1 and conservative page/WAL accounting prototype are present but remain
+production-unwired. Bun SQLite cannot expose exact dirty-page/checkpoint-peak
+attribution, so production composition remains blocked on calibration and
+ENOSPC/checkpoint proof. Signed challenge leases are required before use, and
+same-UID processes are explicitly not treated as a security boundary.
+
 ## Run ownership
 
 Run state is durable and explicit. Run events are typed actor messages. The

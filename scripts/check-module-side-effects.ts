@@ -71,7 +71,7 @@ export const EXECUTABLE_ENTRYPOINT_EXEMPTIONS = new Set([
  *  helpers are excluded: they are not on any live import chain. */
 export function serverModules(root = REPO_ROOT): string[] {
 	const glob = new Bun.Glob(
-		"packages/core/opensession-server/src/{server,executor,runner-host}/**/*.ts",
+		"packages/core/opensession-server/src/{server,executor,runner-host,agent-host}/**/*.ts",
 	);
 	return [...glob.scanSync({ cwd: root }),
 		"packages/core/opensession-server/src/session-kernel-worker.ts"]

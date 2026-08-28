@@ -1,4 +1,10 @@
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
+import type {
+  AgentHostPlanRegistration,
+  AgentHostPlanRegistrationResult,
+  AgentHostSupervisionRequest,
+  AgentHostSupervisionResult,
+} from "./agent-host-supervision-protocol";
 import {
   type CreationEventDecision,
   type CreationEventDecisionResult,
@@ -21,6 +27,14 @@ import type {
   DeliveryMutationReply,
 } from "./delivery-protocol";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
+import type {
+  AgentOperationCancel,
+  AgentOperationCancellationIntent,
+  AgentOperationCancellationResult,
+  AgentOperationIdentity,
+  AgentOperationRequest,
+  AgentOperationResult,
+} from "./agent-operation-protocol";
 import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
 import type { TimerActorRequest, TimerActorResult } from "./timer-protocol";
 import type { GatewayCommandRequest, GatewayCommandResult } from "./gateway-command-protocol";
@@ -327,6 +341,43 @@ export class SessionKernelActorClient {
     );
   }
 
+  decideAgentOperationAsync<T extends AgentOperationRequest>(
+    request: T,
+  ): Promise<
+    T extends AgentOperationCancel
+      ? AgentOperationCancellationResult
+      : AgentOperationResult
+  > {
+    return this.callAsync<
+      T extends AgentOperationCancel
+        ? AgentOperationCancellationResult
+        : AgentOperationResult
+    >(
+      {
+        t: "reduce",
+        command: {
+          kind: "agent_operation",
+          commandId: request.identity.operationId,
+          request,
+        },
+      },
+      `Agent operation ${request.op}`,
+    );
+  }
+
+  agentOperationCancellationIntentAsync(
+    identity: AgentOperationIdentity,
+  ): Promise<AgentOperationCancellationIntent | undefined> {
+    return this.callAsync<AgentOperationCancellationIntent | undefined>(
+      {
+        t: "store",
+        method: "agentOperationCancellationIntent",
+        args: [identity],
+      },
+      "Agent operation cancellation intent query",
+    );
+  }
+
   async decideAskAsync<T extends AskActorRequest>(
     request: T,
   ): Promise<AskActorResult<T>> {
@@ -455,6 +506,31 @@ export class SessionKernelActorClient {
     if (request.op === "snapshot" || request.op === "entries")
       return response as DeliveryActorResult<T>;
     return (response as DeliveryMutationReply<DeliveryActorResult<T>>).result;
+  }
+
+  async decideAgentHostSupervisionAsync<T extends AgentHostSupervisionRequest>(
+    request: T,
+  ): Promise<T extends AgentHostPlanRegistration
+    ? AgentHostPlanRegistrationResult
+    : AgentHostSupervisionResult> {
+    return this.callAsync<
+      AgentHostPlanRegistrationResult | AgentHostSupervisionResult
+    >(
+      {
+        t: "reduce",
+        command: {
+          kind: "agent_host_supervision",
+          commandId:
+            request.op === "register_plan"
+              ? request.registrationId
+              : request.claimId,
+          request,
+        },
+      },
+      "Agent Host supervision claim",
+    ) as Promise<T extends AgentHostPlanRegistration
+      ? AgentHostPlanRegistrationResult
+      : AgentHostSupervisionResult>;
   }
 
   async decideCreationEventAsync(

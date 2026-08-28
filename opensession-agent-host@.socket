@@ -1,0 +1,19 @@
+# Production-unactivated Agent Host generation socket template.
+# Installed disabled by deploy/install-agent-host-topology.sh.
+[Unit]
+Description=Open Session Agent Host generation %i socket
+PartOf=opensession-agent-host@%i.service
+
+[Socket]
+ListenStream=/run/opensession/agent-host-%i.sock
+FileDescriptorName=agent-host
+Service=opensession-agent-host@%i.service
+Accept=no
+SocketUser=root
+SocketGroup=opensession-gateway
+SocketMode=0660
+DirectoryMode=0755
+RemoveOnStop=true
+
+[Install]
+WantedBy=sockets.target

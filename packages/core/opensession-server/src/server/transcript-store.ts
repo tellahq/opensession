@@ -61,6 +61,11 @@ import type { TranscriptEntry } from "./types";
 import { sanitizeTranscriptMediaEntry } from "./transcript-media";
 import { v2SnapshotEntryWeight } from "./transcript-wire";
 import { classifyEntry, dropContextInjections } from "@tellahq/opensession-protocol/notices";
+import {
+  decodeAgentTranscriptReceiptRefV1,
+  type AgentTranscriptAnchorV1,
+  type AgentTranscriptReceiptRefV1,
+} from "@tellahq/opensession-protocol/agent-operation";
 import type {
   TranscriptIndexEntry,
   TranscriptIndexRole,
@@ -68,9 +73,6 @@ import type {
 import {
   assertTranscriptActorRequest,
   assertTranscriptActorResponse,
-  decodeAgentTranscriptReceiptRefV1,
-  type AgentTranscriptAnchorV1,
-  type AgentTranscriptReceiptRefV1,
   type TranscriptActorRequest,
   type TranscriptMutationResult,
   type TranscriptWake,

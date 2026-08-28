@@ -94,6 +94,8 @@ export type KernelActorRunEventResult = RunEventDecisionResult;
 export function isCriticalSettlementCommand(
   command: SessionActorReducerCommand,
 ): boolean {
+  if (command.kind === "agent_operation")
+    return command.request.op === "settle" || command.request.op === "indeterminate";
   if (command.kind === "gateway")
     return command.request.op === "complete" || command.request.op === "fail";
   if (command.kind === "core")

@@ -3,6 +3,40 @@ import {
   GATEWAY_COMMAND_OPERATIONS,
 } from "./gateway-command-protocol";
 import { decodeExecutorId } from "@tellahq/opensession-protocol/executor";
+import {
+  MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS,
+  decodeAgentHostSupervisionAuthorityV2,
+  serializeAgentHostSupervisionAuthorityV2,
+} from "@tellahq/opensession-protocol/agent-host";
+import {
+  authorityFromAgentHostSupervisionClaim,
+  decodeAgentHostPlanRegistration,
+  decodeAgentHostSupervisionClaim,
+  type AgentHostPlanRegistration,
+  type AgentHostPlanRegistrationResult,
+  type AgentHostSupervisionClaim,
+  type AgentHostSupervisionIssuerContext,
+  type AgentHostSupervisionReceipt,
+  type AgentHostSupervisionResult,
+} from "./agent-host-supervision-protocol";
+import { decodeSignedAgentHostSupervisionEnvelopeV1 } from "@tellahq/opensession-protocol/agent-host-supervision";
+import {
+  AGENT_OPERATION_EVIDENCE_HORIZON_MS,
+  SESSION_KERNEL_MAX_AGENT_OPERATIONS_PER_SESSION,
+  SESSION_KERNEL_MAX_AGENT_OPERATIONS_PER_TURN,
+  canonicalAgentOperationIdentity,
+  canonicalAgentOperationTerminal,
+  decodeAgentOperationCancellationIntent,
+  decodeAgentOperationReceipt,
+  decodeAgentOperationRequest,
+  type AgentOperationCancel,
+  type AgentOperationCancellationIntent,
+  type AgentOperationCancellationResult,
+  type AgentOperationIdentity,
+  type AgentOperationReceipt,
+  type AgentOperationRequest,
+  type AgentOperationResult,
+} from "./agent-operation-protocol";
 /**
  * Durable state for the session actor boundary.
  *
@@ -240,6 +274,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
 export const SESSION_KERNEL_SCHEMA_VERSION = 32;
+export const SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS = 64;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -314,59 +349,6 @@ export function sessionKernelSessionDbPath(
 	return `${root}/${key.slice(0, 2)}/${key}.sqlite`;
 }
 
-/**
- * Transcript-destination fence surface, retained after the Agent Host program
- * revert because live per-session kernel DBs and the surviving transcript
- * actor destination-append path still use the plan fence.
- */
-export type AgentHostPlanRegistration = {
-  op: "register_plan";
-  registrationId: string;
-  sessionId: string;
-  runId: string;
-  turnId: string;
-  generation: number;
-  planHash: string;
-};
-export type AgentHostPlanRegistrationResult =
-  | { accepted: true; replayed: boolean }
-  | {
-      accepted: false;
-      reason: "stale_run" | "terminal_run" | "invalid_plan" | "plan_mismatch";
-    };
-const PLAN_KEYS = [
-  "op",
-  "registrationId",
-  "sessionId",
-  "runId",
-  "turnId",
-  "generation",
-  "planHash",
-] as const;
-const PLAN_HASH_RE = /^sha256:[a-f0-9]{64}$/;
-export function decodeAgentHostPlanRegistration(
-  value: unknown,
-): AgentHostPlanRegistration | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return undefined;
-  const plan = value as Record<string, unknown>;
-  if (
-    Object.keys(plan).length !== PLAN_KEYS.length ||
-    Object.keys(plan).some((key) => !PLAN_KEYS.includes(key as never)) ||
-    plan.op !== "register_plan" ||
-    !decodeExecutorId(plan.registrationId) ||
-    !decodeExecutorId(plan.sessionId) ||
-    !decodeExecutorId(plan.runId) ||
-    !decodeExecutorId(plan.turnId) ||
-    !Number.isSafeInteger(plan.generation) ||
-    (plan.generation as number) < 0 ||
-    typeof plan.planHash !== "string" ||
-    !PLAN_HASH_RE.test(plan.planHash)
-  )
-    return undefined;
-  return plan as AgentHostPlanRegistration;
-}
-
 type DurableAgentHostPlan = AgentHostPlanRegistration & {
   hostId?: string;
   hostGenerationHighWater: number;
@@ -406,6 +388,49 @@ function decodeDurableAgentHostPlan(
   };
 }
 
+type DurableAgentHostSupervisionRow = {
+  session_id: string;
+  supervisor_epoch: number;
+  run_id: string;
+  run_generation: number;
+  host_id: string;
+  host_generation: number;
+  host_incarnation: string;
+  kernel_service_epoch: string;
+  challenge: string;
+  nonce: string;
+  status: "active" | "superseded" | "settled";
+  authority: string;
+  authority_bytes: string;
+  authority_hash: string;
+  expires_at: number;
+};
+
+function decodeDurableAgentHostAuthority(
+  row: DurableAgentHostSupervisionRow,
+) {
+  const authority = decodeAgentHostSupervisionAuthorityV2(parsed(row.authority));
+  if (!authority)
+    throw new Error("Invalid durable Agent Host authority during migration");
+  const bytes = serializeAgentHostSupervisionAuthorityV2(authority);
+  const text = Buffer.from(bytes).toString("utf8");
+  if (
+    authority.fence.sessionId !== row.session_id ||
+    authority.fence.runId !== row.run_id ||
+    authority.fence.generation !== row.run_generation ||
+    authority.supervisorEpoch !== row.supervisor_epoch ||
+    authority.hostId !== row.host_id ||
+    authority.hostGeneration !== row.host_generation ||
+    authority.hostIncarnation !== row.host_incarnation ||
+    authority.kernelServiceEpoch !== row.kernel_service_epoch ||
+    authority.hostChallenge !== row.challenge ||
+    authority.nonce !== row.nonce ||
+    Buffer.from(bytes).toString("base64") !== row.authority_bytes ||
+    `sha256:${digest(text)}` !== row.authority_hash
+  ) throw new Error("Contradictory durable Agent Host authority during migration");
+  return authority;
+}
+
 function migrateAgentHostSupervisionSchema(
   db: Database,
   schemaVersion: number,
@@ -430,6 +455,102 @@ function migrateAgentHostSupervisionSchema(
       db.exec(
         "ALTER TABLE session_kernel_agent_host_plan ADD COLUMN host_generation_high_water INTEGER NOT NULL DEFAULT 0",
       );
+
+    const rows = db.query(
+      `SELECT session_id, supervisor_epoch, run_id, run_generation, host_id,
+              host_generation, host_incarnation, kernel_service_epoch,
+              challenge, nonce, status, authority, authority_bytes,
+              authority_hash, expires_at
+       FROM session_kernel_agent_host_supervision
+       ORDER BY session_id, supervisor_epoch`,
+    ).all() as DurableAgentHostSupervisionRow[];
+    const bySession = new Map<string, Array<{
+      row: DurableAgentHostSupervisionRow;
+      authority: ReturnType<typeof decodeDurableAgentHostAuthority>;
+    }>>();
+    for (const row of rows) {
+      const authority = decodeDurableAgentHostAuthority(row);
+      if (row.expires_at !== authority.expiresAtMs)
+        db.run(
+          `UPDATE session_kernel_agent_host_supervision SET expires_at = ?
+           WHERE session_id = ? AND supervisor_epoch = ?`,
+          [authority.expiresAtMs, row.session_id, row.supervisor_epoch],
+        );
+      const entries = bySession.get(row.session_id) ?? [];
+      entries.push({ row, authority });
+      bySession.set(row.session_id, entries);
+    }
+
+    for (const [sessionId, entries] of bySession) {
+      const hostIds = new Set(entries.map(({ authority }) => authority.hostId));
+      if (hostIds.size !== 1)
+        throw new Error("Contradictory durable Agent Host IDs during migration");
+      const active = entries.filter(({ row }) => row.status === "active");
+      if (active.length > 1)
+        throw new Error("Multiple active Agent Host authorities during migration");
+      const selected = active[0] ?? entries.at(-1)!;
+      const supervisorHighWater = Math.max(
+        ...entries.map(({ authority }) => authority.supervisorEpoch),
+      );
+      const hostGenerationHighWater = Math.max(
+        ...entries.map(({ authority }) => authority.hostGeneration),
+      );
+      const hostId = selected.authority.hostId;
+      const prior = decodeDurableAgentHostPlan(
+        sessionId,
+        db.query(
+          `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
+                  host_id, host_generation_high_water, supervisor_high_water
+           FROM session_kernel_agent_host_plan WHERE session_id = ?`,
+        ).get(sessionId) as Record<string, unknown> | null,
+      );
+      if (prior) {
+        if (prior.hostId && prior.hostId !== hostId)
+          throw new Error("Agent Host plan ID contradicted receipts during migration");
+        const sameFence =
+          prior.runId === selected.authority.fence.runId &&
+          prior.generation === selected.authority.fence.generation;
+        if (
+          (active.length > 0 || sameFence) &&
+          (!sameFence ||
+            prior.turnId !== selected.authority.fence.turnId ||
+            prior.planHash !== selected.authority.planHash)
+        ) throw new Error("Agent Host plan contradicted receipts during migration");
+        db.run(
+          `UPDATE session_kernel_agent_host_plan
+           SET host_id = ?, host_generation_high_water = ?,
+               supervisor_high_water = ?, updated_at = ?
+           WHERE session_id = ?`,
+          [
+            hostId,
+            Math.max(prior.hostGenerationHighWater, hostGenerationHighWater),
+            Math.max(prior.supervisorHighWater, supervisorHighWater),
+            Date.now(),
+            sessionId,
+          ],
+        );
+      } else {
+        db.run(
+          `INSERT INTO session_kernel_agent_host_plan
+           (session_id, registration_id, run_id, run_generation, turn_id,
+            plan_hash, host_id, host_generation_high_water,
+            supervisor_high_water, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            sessionId,
+            `migration:${selected.authority.supervisorEpoch}`,
+            selected.authority.fence.runId,
+            selected.authority.fence.generation,
+            selected.authority.fence.turnId,
+            selected.authority.planHash,
+            hostId,
+            hostGenerationHighWater,
+            supervisorHighWater,
+            Date.now(),
+          ],
+        );
+      }
+    }
     db.exec("PRAGMA user_version = 26");
   });
   tx.immediate();
@@ -478,6 +599,46 @@ function assertAgentOperationSchema28(db: Database): void {
   if(JSON.stringify(indexes.map(({name,sql})=>[name,normalize(sql)]))!==JSON.stringify(wantedIndexes)) throw new Error("Agent operation schema indexes do not match exact schema 28");
   const integrity=db.query("PRAGMA quick_check").get() as Record<string,unknown>;
   if(!Object.values(integrity).includes("ok")) throw new Error("Agent operation schema integrity check failed");
+}
+
+type DurableAgentOperationCancellationRow = {
+  session_id: string;
+  operation_id: string;
+  identity_hash: string;
+  identity: string;
+  cancel_id: string;
+  reason: string;
+  disposition: "requested" | "too_late";
+  requested_at: number;
+  intent: string;
+};
+
+function decodeDurableAgentOperationCancellationRow(
+  row: DurableAgentOperationCancellationRow,
+  operation?: AgentOperationReceipt,
+): AgentOperationCancellationIntent {
+  const intent = decodeAgentOperationCancellationIntent(
+    parseStrictJson(row.intent),
+  );
+  if (!intent)
+    throw new Error("Agent operation cancellation row has invalid intent");
+  const identityText = canonicalAgentOperationIdentity(intent.identity);
+  const identityHash = `sha256:${digest(identityText)}`;
+  if (
+    row.session_id !== intent.identity.sessionId ||
+    row.operation_id !== intent.identity.operationId ||
+    row.identity_hash !== identityHash ||
+    row.identity !== identityText ||
+    row.cancel_id !== intent.cancelId ||
+    row.reason !== intent.reason ||
+    row.disposition !== intent.disposition ||
+    Number(row.requested_at) !== intent.requestedAtMs ||
+    row.intent !== json(intent) ||
+    (operation &&
+      canonicalAgentOperationIdentity(operation.identity) !== identityText)
+  )
+    throw new Error("Agent operation cancellation row contradicts its intent");
+  return intent;
 }
 
 function assertAgentOperationCancellationSchema32(db: Database): void {
@@ -540,6 +701,34 @@ function assertAgentOperationCancellationSchema32(db: Database): void {
     throw new Error(
       "Agent operation cancellation schema integrity check failed",
     );
+}
+
+function assertAgentOperationCancellationRows32(
+  db: Database,
+  sessionId?: string,
+): void {
+  const rows = db
+    .query(
+      `SELECT cancel.* FROM session_kernel_agent_operation_cancellations AS cancel
+     WHERE ? IS NULL OR cancel.session_id=?`,
+    )
+    .all(
+      sessionId ?? null,
+      sessionId ?? null,
+    ) as DurableAgentOperationCancellationRow[];
+  for (const row of rows) {
+    const operationRow = db
+      .query(
+        "SELECT * FROM session_kernel_agent_operations WHERE session_id=? AND operation_id=?",
+      )
+      .get(row.session_id, row.operation_id) as DurableAgentOperationRow | null;
+    if (!operationRow)
+      throw new Error("Agent operation cancellation has no durable operation");
+    decodeDurableAgentOperationCancellationRow(
+      row,
+      decodeDurableAgentOperationRow(operationRow),
+    );
+  }
 }
 
 function migrateAgentOperationCancellationSchema32(
@@ -630,6 +819,167 @@ function migrateQuarantineProjectionSchema30(
     `);
   });
   tx.immediate();
+}
+
+type DurableAgentOperationRow = {
+  session_id: string;
+  operation_id: string;
+  semantic_hash: string;
+  identity_hash: string;
+  identity: string;
+  operation_sequence: number;
+  run_id: string;
+  turn_id: string;
+  run_generation: number;
+  kind: "model" | "mcp";
+  state: "admitted" | "settled" | "indeterminate";
+  anchor_change_seq: number;
+  terminal_change_seq: number | null;
+  terminal_entry_ids: string | null;
+  terminal_request: string | null;
+  receipt: string;
+  admitted_at: number;
+  terminal_at: number | null;
+};
+
+function parseStrictJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new Error("Agent operation row contains invalid JSON");
+  }
+}
+
+function decodeDurableAgentOperationRow(
+  row: DurableAgentOperationRow,
+): AgentOperationReceipt {
+  const receipt = decodeAgentOperationReceipt(parseStrictJson(row.receipt));
+  if (!receipt) throw new Error("Agent operation row has an invalid receipt");
+  const identityText = canonicalAgentOperationIdentity(receipt.identity);
+  const identityHash = `sha256:${digest(identityText)}`;
+  const { operationId: _operationId, ...semanticIdentity } = receipt.identity;
+  const semanticHash = `sha256:${digest(JSON.stringify(semanticIdentity))}`;
+  if (
+    row.session_id !== receipt.identity.sessionId ||
+    row.operation_id !== receipt.identity.operationId ||
+    row.identity !== identityText ||
+    row.identity_hash !== identityHash ||
+    row.semantic_hash !== semanticHash ||
+    Number(row.operation_sequence) !== receipt.sequence ||
+    row.run_id !== receipt.identity.runId ||
+    row.turn_id !== receipt.identity.turnId ||
+    Number(row.run_generation) !== receipt.identity.generation ||
+    row.kind !== receipt.identity.kind ||
+    row.state !== receipt.state ||
+    Number(row.anchor_change_seq) !==
+      receipt.identity.transcriptAnchor.throughChangeSeq ||
+    Number(row.admitted_at) !== receipt.admittedAtMs
+  )
+    throw new Error("Agent operation row contradicts its receipt identity");
+
+  if (receipt.state === "admitted") {
+    if (
+      row.terminal_change_seq !== null ||
+      row.terminal_entry_ids !== null ||
+      row.terminal_request !== null ||
+      row.terminal_at !== null
+    )
+      throw new Error("Admitted Agent operation row contains terminal fields");
+    return receipt;
+  }
+  if (row.terminal_request === null || row.terminal_entry_ids === null) {
+    throw new Error("Terminal Agent operation row is incomplete");
+  }
+  const request = decodeAgentOperationRequest(
+    parseStrictJson(row.terminal_request),
+  );
+  if (!request || (request.op !== "settle" && request.op !== "indeterminate")) {
+    throw new Error("Agent operation terminal request is invalid");
+  }
+  const entryIds = [
+    ...new Set(request.transcriptReceipts.flatMap((ref) => ref.entryIds)),
+  ];
+  const storedEntryIds = parseStrictJson(row.terminal_entry_ids);
+  const terminalChangeSeq = Math.max(
+    ...request.transcriptReceipts.map((ref) => ref.throughChangeSeq),
+  );
+  if (
+    canonicalAgentOperationTerminal(request) !== row.terminal_request ||
+    canonicalAgentOperationIdentity(request.identity) !== identityText ||
+    (request.op === "settle" ? "settled" : "indeterminate") !== receipt.state ||
+    JSON.stringify(storedEntryIds) !== JSON.stringify(entryIds) ||
+    Number(row.terminal_change_seq) !== terminalChangeSeq ||
+    Number(row.terminal_at) !== receipt.terminalAtMs ||
+    request.gatewayReceiptDigest !== receipt.gatewayReceiptDigest ||
+    request.outputDigest !== receipt.outputDigest ||
+    request.outcomeCode !== receipt.outcomeCode ||
+    JSON.stringify(request.transcriptReceipts) !==
+      JSON.stringify(receipt.transcriptReceipts) ||
+    JSON.stringify(request.pendingToolUseEntryIds) !==
+      JSON.stringify(receipt.pendingToolUseEntryIds)
+  )
+    throw new Error("Agent operation row contradicts its terminal receipt");
+  return receipt;
+}
+
+function assertAgentOperationRows28(db: Database, sessionId?: string): void {
+  const rows = db
+    .query(
+      `SELECT * FROM session_kernel_agent_operations
+       WHERE ? IS NULL OR session_id=?`,
+    )
+    .all(sessionId ?? null, sessionId ?? null) as DurableAgentOperationRow[];
+  for (const row of rows) decodeDurableAgentOperationRow(row);
+  const allHighs = db
+    .query(
+      `SELECT session_id,operation_sequence,updated_at
+       FROM session_kernel_agent_operation_high_water
+       WHERE ? IS NULL OR session_id=?`,
+    )
+    .all(sessionId ?? null, sessionId ?? null) as Array<{
+    session_id: string;
+    operation_sequence: number;
+    updated_at: number;
+  }>;
+  for (const high of allHighs) {
+    if (
+      typeof high.session_id !== "string" ||
+      high.session_id.length === 0 ||
+      !Number.isSafeInteger(high.operation_sequence) ||
+      high.operation_sequence < 0 ||
+      high.operation_sequence >= Number.MAX_SAFE_INTEGER ||
+      !Number.isSafeInteger(high.updated_at) ||
+      high.updated_at < 0
+    )
+      throw new Error(
+        `Invalid Agent operation high-water for ${high.session_id}`,
+      );
+  }
+  const highs = db
+    .query(
+      `SELECT op.session_id,MAX(op.operation_sequence) AS actual,
+              high.operation_sequence
+       FROM session_kernel_agent_operations AS op
+       LEFT JOIN session_kernel_agent_operation_high_water AS high
+         ON high.session_id=op.session_id
+       WHERE ? IS NULL OR op.session_id=?
+       GROUP BY op.session_id`,
+    )
+    .all(sessionId ?? null, sessionId ?? null) as Array<{
+    session_id: string;
+    operation_sequence: number | null;
+    actual: number;
+  }>;
+  for (const high of highs) {
+    if (
+      high.operation_sequence === null ||
+      Number(high.operation_sequence) < Number(high.actual)
+    ) {
+      throw new Error(
+        `Agent operation high-water contradicts receipts for ${high.session_id}`,
+      );
+    }
+  }
 }
 
 function migrateAgentOperationSchema28(
@@ -794,6 +1144,86 @@ function migrateAgentHostSupervisionSchema27(
 ): void {
   if (schemaVersion >= 27) return;
   const tx = db.transaction(() => {
+    const rows = db
+      .query(
+        `SELECT session_id, supervisor_epoch, claim_id, request_hash, run_id,
+              run_generation, host_id, host_generation, host_incarnation,
+              kernel_service_epoch, challenge, nonce, status, authority,
+              authority_bytes, authority_hash, expires_at, created_at
+       FROM session_kernel_agent_host_supervision
+       ORDER BY session_id, supervisor_epoch`,
+      )
+      .all() as Array<
+      DurableAgentHostSupervisionRow & {
+        claim_id: string;
+        request_hash: string;
+        created_at: number;
+      }
+    >;
+    const sessionState = new Map<
+      string,
+      {
+        active: number;
+        hostId: string;
+        supervisor: number;
+        hostGeneration: number;
+        activeAuthority?: ReturnType<typeof decodeDurableAgentHostAuthority>;
+      }
+    >();
+    for (const row of rows) {
+      const authority = decodeDurableAgentHostAuthority(row);
+      if (row.expires_at !== authority.expiresAtMs)
+        throw new Error(
+          "Contradictory Agent Host expiry during schema 27 migration",
+        );
+      const state = sessionState.get(row.session_id) ?? {
+        active: 0,
+        hostId: row.host_id,
+        supervisor: 0,
+        hostGeneration: 0,
+      };
+      if (state.hostId !== row.host_id)
+        throw new Error("Mixed Agent Host IDs during schema 27 migration");
+      if (row.status === "active") {
+        if (++state.active > 1)
+          throw new Error(
+            "Multiple active Agent Host receipts during schema 27 migration",
+          );
+        state.activeAuthority = authority;
+      }
+      state.supervisor = Math.max(state.supervisor, authority.supervisorEpoch);
+      state.hostGeneration = Math.max(
+        state.hostGeneration,
+        authority.hostGeneration,
+      );
+      sessionState.set(row.session_id, state);
+    }
+    for (const [sessionId, state] of sessionState) {
+      const plan = decodeDurableAgentHostPlan(
+        sessionId,
+        db
+          .query(
+            `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
+                host_id, host_generation_high_water, supervisor_high_water
+         FROM session_kernel_agent_host_plan WHERE session_id = ?`,
+          )
+          .get(sessionId) as Record<string, unknown> | null,
+      );
+      if (
+        !plan ||
+        plan.hostId !== state.hostId ||
+        plan.supervisorHighWater < state.supervisor ||
+        plan.hostGenerationHighWater < state.hostGeneration ||
+        (state.activeAuthority != null &&
+          (plan.runId !== state.activeAuthority.fence.runId ||
+            plan.generation !== state.activeAuthority.fence.generation ||
+            plan.turnId !== state.activeAuthority.fence.turnId ||
+            plan.planHash !== state.activeAuthority.planHash))
+      )
+        throw new Error(
+          "Agent Host plan high-water regression during schema 27 migration",
+        );
+    }
     db.exec(`
       DROP INDEX IF EXISTS idx_skahs_active;
       ALTER TABLE session_kernel_agent_host_supervision RENAME TO session_kernel_agent_host_supervision_v26;
@@ -912,6 +1342,8 @@ export type SessionKernelStoreOptions = {
 	allocateOutboxId?: (sessionId: string) => number;
   busyTimeoutMs?: number;
   hydrateRunStateCache?: boolean;
+  /** Trusted non-wire issuer. Production deliberately leaves this absent. */
+  agentHostSupervisionIssuer?: AgentHostSupervisionIssuerContext;
 };
 
 const SESSION_KERNEL_SESSION_TABLES = [
@@ -953,10 +1385,12 @@ export class SessionKernelStore {
 	private readonly dirtyChangeSessions = new Set<string>();
 	private readonly path: string;
 	private readonly allocateOutboxId?: (sessionId: string) => number;
+  private readonly agentHostSupervisionIssuer?: AgentHostSupervisionIssuerContext;
 
 	constructor(path = sessionKernelDbPath(), options: SessionKernelStoreOptions = {}) {
 		this.path = path;
 		this.allocateOutboxId = options.allocateOutboxId;
+    this.agentHostSupervisionIssuer = options.agentHostSupervisionIssuer;
     const busyTimeoutMs = options.busyTimeoutMs ?? 5_000;
     if (!Number.isInteger(busyTimeoutMs) || busyTimeoutMs < 0 || busyTimeoutMs > 60_000)
       throw new Error("Invalid session kernel SQLite busy timeout");
@@ -1450,7 +1884,9 @@ export class SessionKernelStore {
     migrateTranscriptAuthoritySchema31(this.db, schemaVersion);
     migrateAgentOperationCancellationSchema32(this.db, schemaVersion);
     assertAgentOperationSchema28(this.db);
+    assertAgentOperationRows28(this.db);
     assertAgentOperationCancellationSchema32(this.db);
+    assertAgentOperationCancellationRows32(this.db);
 		if (path !== ":memory:") {
 			try {
 				chmodSync(path, 0o600);
@@ -1682,6 +2118,14 @@ export class SessionKernelStore {
 			pendingEffects.length > 0 &&
 			pendingEffects.every((effect) => recoverableLifecycleEffects.has(effect.kind));
 		if (pendingEffects.length > 0 && !onlyRecoverableLifecycleEffects) return false;
+		if (commandKind === "agent_operation") {
+			try {
+				assertAgentOperationRows28(this.db, sessionId);
+        assertAgentOperationCancellationRows32(this.db, sessionId);
+			} catch {
+				return false;
+			}
+		}
 		return true;
 	}
 
@@ -2402,6 +2846,757 @@ export class SessionKernelStore {
     return { accepted: true, replayed: false };
   }
 
+  claimAgentHostSupervision(input: AgentHostSupervisionClaim): AgentHostSupervisionResult {
+    if (!decodeAgentHostSupervisionClaim(input))
+      return { accepted: false, reason: "invalid_claim" };
+    if (this.isTombstoned(input.sessionId))
+      throw new Error(`Session ${input.sessionId} was deleted`);
+    const issuer = this.agentHostSupervisionIssuer;
+    const requestText = JSON.stringify([
+      input.op, input.claimId, input.sessionId, input.runId, input.turnId,
+      input.generation, input.planHash, input.hostId, input.hostGeneration,
+      input.hostIncarnation, input.hostChallenge,
+    ]);
+    const requestHash = `sha256:${digest(requestText)}`;
+    let result!: AgentHostSupervisionResult;
+    const tx = this.db.transaction(() => {
+      const existing = this.db.query(
+        `SELECT request_hash, receipt_format, key_id, signature, envelope,
+                authority, authority_bytes, authority_hash
+         FROM session_kernel_agent_host_supervision
+         WHERE session_id = ? AND claim_id = ?`,
+      ).get(input.sessionId, input.claimId) as Record<string, unknown> | null;
+      if (existing) {
+        if (existing.request_hash !== requestHash) {
+          result = { accepted: false, reason: "claim_mismatch" };
+          return;
+        }
+        if (existing.receipt_format !== "signed_v1") {
+          result = { accepted: false, reason: "issuer_unavailable" };
+          return;
+        }
+        const authority = decodeAgentHostSupervisionAuthorityV2(parsed(existing.authority as string));
+        const envelope = decodeSignedAgentHostSupervisionEnvelopeV1(parsed(existing.envelope as string));
+        if (!authority || !envelope) throw new Error("Corrupt durable signed Agent Host receipt");
+        const bytes = Buffer.from(serializeAgentHostSupervisionAuthorityV2(authority));
+        const standard = bytes.toString("base64");
+        const hash = `sha256:${digest(bytes.toString("utf8"))}`;
+        if (existing.authority !== json(authority) || existing.envelope !== json(envelope) ||
+            existing.authority_bytes !== standard || existing.authority_hash !== hash ||
+            existing.key_id !== authority.keyId || existing.signature !== envelope.signature ||
+            !Buffer.from(envelope.authorityBytes, "base64url").equals(bytes))
+          throw new Error("Contradictory durable signed Agent Host receipt");
+        result = { accepted: true, replayed: true, receipt: {
+          format: "signed_v1", authority, authorityBytes: standard,
+          authorityHash: hash, keyId: authority.keyId, envelope,
+        }};
+        return;
+      }
+
+      if (!issuer) {
+        result = { accepted: false, reason: "issuer_unavailable" };
+        return;
+      }
+      const now = issuer.now();
+      if (!Number.isSafeInteger(now) || now < 0 || !Number.isSafeInteger(issuer.leaseMs) ||
+          issuer.leaseMs <= 0 || issuer.leaseMs > 5 * 60_000)
+        throw new Error("Invalid trusted Agent Host issuer context");
+      const run = this.runState(input.sessionId);
+      if (run.currentRunId !== input.runId || run.generation !== input.generation) {
+        result = { accepted: false, reason: "stale_run" }; return;
+      }
+      if (!["starting", "running", "ask_blocked", "interrupted", "reattaching"].includes(run.state)) {
+        result = { accepted: false, reason: "terminal_run" }; return;
+      }
+      const plan = decodeDurableAgentHostPlan(input.sessionId, this.db.query(
+        `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
+                host_id, host_generation_high_water, supervisor_high_water
+         FROM session_kernel_agent_host_plan WHERE session_id = ?`,
+      ).get(input.sessionId) as Record<string, unknown> | null);
+      if (!plan) { result = { accepted: false, reason: "plan_unregistered" }; return; }
+      if (plan.runId !== input.runId || plan.generation !== input.generation ||
+          plan.turnId !== input.turnId || plan.planHash !== input.planHash) {
+        result = { accepted: false, reason: "plan_mismatch" }; return;
+      }
+      if ((plan.hostId != null && plan.hostId !== input.hostId) ||
+          input.hostGeneration < plan.hostGenerationHighWater) {
+        result = { accepted: false, reason: "stale_host" }; return;
+      }
+      const current = this.db.query(
+        `SELECT host_id, host_generation, authority FROM session_kernel_agent_host_supervision
+         WHERE session_id = ? AND status = 'active'`,
+      ).get(input.sessionId) as Record<string, unknown> | null;
+      if (current && !decodeAgentHostSupervisionAuthorityV2(parsed(current.authority as string)))
+        throw new Error("Invalid durable active Agent Host authority");
+      if (current && (input.hostId !== current.host_id || input.hostGeneration < Number(current.host_generation))) {
+        result = { accepted: false, reason: "stale_host" }; return;
+      }
+      if (this.db.query("SELECT 1 FROM session_kernel_agent_host_supervision WHERE session_id=? AND challenge=?")
+          .get(input.sessionId, input.hostChallenge)) {
+        result = { accepted: false, reason: "challenge_reused" }; return;
+      }
+      const nonce = issuer.nonce();
+      if (typeof nonce !== "string" || !/^[A-Za-z0-9_-]{16,256}$/.test(nonce))
+        throw new Error("Invalid trusted Agent Host nonce");
+      if (this.db.query("SELECT 1 FROM session_kernel_agent_host_supervision WHERE session_id=? AND nonce=?")
+          .get(input.sessionId, nonce)) {
+        result = { accepted: false, reason: "nonce_reused" }; return;
+      }
+      this.db.run(
+        `DELETE FROM session_kernel_agent_host_supervision
+         WHERE session_id=? AND status!='active' AND expires_at + ? <= ?`,
+        [input.sessionId, MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS, now],
+      );
+      const count = Number((this.db.query(
+        "SELECT COUNT(*) AS count FROM session_kernel_agent_host_supervision WHERE session_id=?",
+      ).get(input.sessionId) as { count: number }).count);
+      if (count >= SESSION_KERNEL_MAX_AGENT_HOST_SUPERVISION_RECEIPTS) {
+        result = { accepted: false, reason: "receipt_capacity" }; return;
+      }
+      const supervisorEpoch = plan.supervisorHighWater + 1;
+      const authority = authorityFromAgentHostSupervisionClaim(input, {
+        supervisorEpoch, kernelServiceEpoch: issuer.kernelServiceEpoch,
+        issuedAtMs: now, expiresAtMs: now + issuer.leaseMs,
+        nonce, keyId: issuer.keyId,
+      });
+      if (!authority) throw new Error("Trusted issuer constructed invalid Agent Host authority");
+      const bytes = Buffer.from(serializeAgentHostSupervisionAuthorityV2(authority));
+      const envelope = issuer.sign(bytes, now);
+      const decodedEnvelope = decodeSignedAgentHostSupervisionEnvelopeV1(envelope);
+      if (!decodedEnvelope || decodedEnvelope.authorityBytes !== bytes.toString("base64url"))
+        throw new Error("Agent Host signer returned a contradictory envelope");
+      const receipt: AgentHostSupervisionReceipt = {
+        format: "signed_v1", authority, authorityBytes: bytes.toString("base64"),
+        authorityHash: `sha256:${digest(bytes.toString("utf8"))}`,
+        keyId: authority.keyId, envelope: decodedEnvelope,
+      };
+      this.db.run("UPDATE session_kernel_agent_host_supervision SET status='superseded' WHERE session_id=? AND status='active'", [input.sessionId]);
+      this.db.run(
+        `INSERT INTO session_kernel_agent_host_supervision
+         (session_id,supervisor_epoch,claim_id,request_hash,run_id,run_generation,
+          host_id,host_generation,host_incarnation,kernel_service_epoch,challenge,nonce,
+          status,receipt_format,key_id,signature,envelope,authority,authority_bytes,
+          authority_hash,expires_at,created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'active','signed_v1',?,?,?,?,?,?,?,?)`,
+        [input.sessionId, supervisorEpoch, input.claimId, requestHash, input.runId,
+         input.generation, input.hostId, input.hostGeneration, input.hostIncarnation,
+         authority.kernelServiceEpoch, input.hostChallenge, nonce, authority.keyId,
+         decodedEnvelope.signature, json(decodedEnvelope), json(authority),
+         receipt.authorityBytes, receipt.authorityHash, authority.expiresAtMs, now],
+      );
+      const update = this.db.run(
+        `UPDATE session_kernel_agent_host_plan SET host_id=COALESCE(host_id,?),
+          host_generation_high_water=?, supervisor_high_water=?, updated_at=?
+         WHERE session_id=? AND run_id=? AND run_generation=?`,
+        [input.hostId, Math.max(plan.hostGenerationHighWater, input.hostGeneration),
+         supervisorEpoch, now, input.sessionId, input.runId, input.generation],
+      );
+      if (update.changes !== 1) throw new Error("Agent Host plan changed during signed receipt transaction");
+      result = { accepted: true, replayed: false, receipt };
+    });
+    tx.immediate();
+    return result;
+  }
+
+  decideAgentOperation<T extends AgentOperationRequest>(
+    raw: T,
+  ): T extends AgentOperationCancel
+    ? AgentOperationCancellationResult
+    : AgentOperationResult;
+  decideAgentOperation(
+    raw: AgentOperationRequest,
+  ): AgentOperationResult | AgentOperationCancellationResult {
+    const request = decodeAgentOperationRequest(raw);
+    if (!request) return { accepted: false, reason: "invalid_request" };
+    const identity = request.identity;
+    if (this.isTombstoned(identity.sessionId))
+      throw new Error(`Session ${identity.sessionId} was deleted`);
+    const identityText = canonicalAgentOperationIdentity(identity);
+    const identityHash = `sha256:${digest(identityText)}`;
+    const { operationId: _operationId, ...semanticIdentity } = identity;
+    const semanticHash = `sha256:${digest(JSON.stringify(semanticIdentity))}`;
+    const now = Date.now();
+    let result!: AgentOperationResult | AgentOperationCancellationResult;
+    const tx = this.db.transaction(() => {
+      const existingQuarantine = this.db
+        .query(
+          "SELECT 1 AS quarantined FROM session_kernel_quarantine WHERE session_id=?",
+        )
+        .get(identity.sessionId);
+      if (existingQuarantine) {
+        result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      const quarantine = (reason: string): void => {
+        this.db.run(
+          `INSERT INTO session_kernel_quarantine(session_id,reason,command_kind,quarantined_at)
+           VALUES (?,?,'agent_operation',?) ON CONFLICT(session_id) DO UPDATE SET
+           reason=excluded.reason,command_kind=excluded.command_kind,quarantined_at=excluded.quarantined_at`,
+          [identity.sessionId, reason, now],
+        );
+      };
+      const decodeRow = (
+        row: DurableAgentOperationRow | null,
+      ): AgentOperationReceipt | undefined => {
+        if (!row) return;
+        try {
+          return decodeDurableAgentOperationRow(row);
+        } catch {
+          quarantine("Corrupt or contradictory Agent operation receipt");
+          return;
+        }
+      };
+      const rawRow = this.db
+        .query(
+          `SELECT * FROM session_kernel_agent_operations WHERE session_id=? AND operation_id=?`,
+        )
+        .get(
+          identity.sessionId,
+          identity.operationId,
+        ) as DurableAgentOperationRow | null;
+      const rowReceipt = decodeRow(rawRow);
+      if (rawRow && !rowReceipt) {
+        result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      const rawSemantic = this.db
+        .query(
+          `SELECT * FROM session_kernel_agent_operations WHERE session_id=? AND semantic_hash=?`,
+        )
+        .get(
+          identity.sessionId,
+          semanticHash,
+        ) as DurableAgentOperationRow | null;
+      const semanticReceipt = decodeRow(rawSemantic);
+      if (rawSemantic && !semanticReceipt) {
+        result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      if (
+        (rawRow &&
+          (rawRow.identity_hash !== identityHash ||
+            rawRow.identity !== identityText)) ||
+        (rawSemantic && rawSemantic.operation_id !== identity.operationId)
+      ) {
+        quarantine("Agent operation identity crossover");
+        result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      if (request.op === "cancel") {
+        if (!rawRow || !rowReceipt) {
+          result = { accepted: false, reason: "not_found" };
+          return;
+        }
+        const durableCancellation = this.db
+          .query(
+            `SELECT * FROM session_kernel_agent_operation_cancellations
+           WHERE session_id=? AND operation_id=?`,
+          )
+          .get(
+            identity.sessionId,
+            identity.operationId,
+          ) as DurableAgentOperationCancellationRow | null;
+        if (durableCancellation) {
+          let intent: AgentOperationCancellationIntent;
+          try {
+            intent = decodeDurableAgentOperationCancellationRow(
+              durableCancellation,
+              rowReceipt,
+            );
+          } catch {
+            quarantine(
+              "Corrupt or contradictory Agent operation cancellation intent",
+            );
+            result = { accepted: false, reason: "operation_barrier" };
+            return;
+          }
+          if (
+            intent.cancelId !== request.cancelId ||
+            intent.reason !== request.reason
+          ) {
+            quarantine("Agent operation cancellation intent crossover");
+            result = { accepted: false, reason: "operation_barrier" };
+            return;
+          }
+          result = { accepted: true, replayed: true, intent };
+          return;
+        }
+        const intent: AgentOperationCancellationIntent = {
+          identity,
+          cancelId: request.cancelId,
+          reason: request.reason,
+          disposition:
+            rowReceipt.state === "admitted" ? "requested" : "too_late",
+          requestedAtMs: now,
+        };
+        this.db.run(
+          `INSERT INTO session_kernel_agent_operation_cancellations
+           (session_id,operation_id,identity_hash,identity,cancel_id,reason,
+            disposition,requested_at,intent) VALUES (?,?,?,?,?,?,?,?,?)`,
+          [
+            identity.sessionId,
+            identity.operationId,
+            identityHash,
+            identityText,
+            request.cancelId,
+            request.reason,
+            intent.disposition,
+            now,
+            json(intent),
+          ],
+        );
+        result = { accepted: true, replayed: false, intent };
+        return;
+      }
+      if (request.op === "query") {
+        result = rowReceipt
+          ? { accepted: true, replayed: true, receipt: rowReceipt }
+          : { accepted: false, reason: "not_found" };
+        return;
+      }
+      if (request.op !== "admit") {
+        if (!rawRow || !rowReceipt) {
+          result = { accepted: false, reason: "not_found" };
+          return;
+        }
+        const terminalText = canonicalAgentOperationTerminal(request);
+        if (rowReceipt.state !== "admitted") {
+          if (rawRow.terminal_request === terminalText) {
+            result = { accepted: true, replayed: true, receipt: rowReceipt };
+          } else {
+            quarantine("Agent operation terminal receipt crossover");
+            result = { accepted: false, reason: "operation_barrier" };
+          }
+          return;
+        }
+        const refs = request.transcriptReceipts;
+        if (
+          refs.some(
+            (ref, index) =>
+              ref.throughChangeSeq <=
+                identity.transcriptAnchor.throughChangeSeq ||
+              (index > 0 &&
+                ref.throughChangeSeq < refs[index - 1]!.throughChangeSeq),
+          )
+        ) {
+          result = { accepted: false, reason: "transcript_barrier" };
+          return;
+        }
+        const terminalChangeSeq = Math.max(
+          ...refs.map((ref) => ref.throughChangeSeq),
+        );
+        const entryIds = [...new Set(refs.flatMap((ref) => [...ref.entryIds]))];
+        const receipt: AgentOperationReceipt = {
+          identity,
+          sequence: rowReceipt.sequence,
+          state: request.op === "settle" ? "settled" : "indeterminate",
+          admittedAtMs: rowReceipt.admittedAtMs,
+          terminalAtMs: now,
+          gatewayReceiptDigest: request.gatewayReceiptDigest,
+          outputDigest: request.outputDigest,
+          outcomeCode: request.outcomeCode,
+          transcriptReceipts: refs,
+          ...(identity.kind === "model"
+            ? { pendingToolUseEntryIds: request.pendingToolUseEntryIds }
+            : {}),
+        };
+        const update = this.db.run(
+          `UPDATE session_kernel_agent_operations SET state=?,terminal_change_seq=?,
+           terminal_entry_ids=?,terminal_request=?,receipt=?,terminal_at=?
+           WHERE session_id=? AND operation_id=? AND state='admitted'`,
+          [
+            receipt.state,
+            terminalChangeSeq,
+            json(entryIds),
+            terminalText,
+            json(receipt),
+            now,
+            identity.sessionId,
+            identity.operationId,
+          ],
+        );
+        if (update.changes !== 1)
+          throw new Error("Agent operation settlement lost serialization");
+        result = { accepted: true, replayed: false, receipt };
+        return;
+      }
+      if (rowReceipt) {
+        result = { accepted: true, replayed: true, receipt: rowReceipt };
+        return;
+      }
+      const run = this.runState(identity.sessionId);
+      if (
+        run.currentRunId !== identity.runId ||
+        run.generation !== identity.generation
+      ) {
+        result = { accepted: false, reason: "stale_run" };
+        return;
+      }
+      if (
+        ![
+          "starting",
+          "running",
+          "ask_blocked",
+          "interrupted",
+          "reattaching",
+        ].includes(run.state)
+      ) {
+        result = { accepted: false, reason: "terminal_run" };
+        return;
+      }
+      const plan = decodeDurableAgentHostPlan(
+        identity.sessionId,
+        this.db
+          .query(
+            `SELECT registration_id,run_id,run_generation,turn_id,plan_hash,host_id,
+                  host_generation_high_water,supervisor_high_water
+           FROM session_kernel_agent_host_plan WHERE session_id=?`,
+          )
+          .get(identity.sessionId) as Record<string, unknown> | null,
+      );
+      if (!plan) {
+        result = { accepted: false, reason: "plan_unregistered" };
+        return;
+      }
+      if (
+        plan.runId !== identity.runId ||
+        plan.generation !== identity.generation ||
+        plan.turnId !== identity.turnId ||
+        plan.planHash !== identity.planHash
+      ) {
+        result = { accepted: false, reason: "plan_mismatch" };
+        return;
+      }
+      const authorityRow = this.db
+        .query(
+          `SELECT session_id,supervisor_epoch,run_id,run_generation,host_id,
+                  host_generation,host_incarnation,kernel_service_epoch,challenge,
+                  nonce,status,receipt_format,key_id,signature,envelope,authority,
+                  authority_bytes,authority_hash,expires_at
+           FROM session_kernel_agent_host_supervision
+           WHERE session_id=? AND status='active'`,
+        )
+        .get(identity.sessionId) as Record<string, unknown> | null;
+      if (
+        !authorityRow ||
+        authorityRow.receipt_format !== "signed_v1" ||
+        !authorityRow.envelope
+      ) {
+        result = { accepted: false, reason: "authority_inactive" };
+        return;
+      }
+      const authority = decodeDurableAgentHostAuthority(
+        authorityRow as unknown as DurableAgentHostSupervisionRow,
+      );
+      const envelope = decodeSignedAgentHostSupervisionEnvelopeV1(
+        parsed(authorityRow.envelope as string),
+      );
+      const authorityBytes = Buffer.from(
+        serializeAgentHostSupervisionAuthorityV2(authority),
+      );
+      if (
+        !envelope ||
+        authorityRow.authority !== json(authority) ||
+        authorityRow.envelope !== json(envelope) ||
+        authorityRow.key_id !== authority.keyId ||
+        authorityRow.signature !== envelope.signature ||
+        Number(authorityRow.expires_at) !== authority.expiresAtMs ||
+        !Buffer.from(envelope.authorityBytes, "base64url").equals(
+          authorityBytes,
+        )
+      )
+        throw new Error("Contradictory active signed Agent Host authority");
+      if (
+        Number(authorityRow.expires_at) +
+          MAX_AGENT_HOST_SUPERVISION_CLOCK_SKEW_MS <=
+        now
+      ) {
+        result = { accepted: false, reason: "authority_inactive" };
+        return;
+      }
+      if (
+        authorityRow.authority_hash !== identity.authorityHash ||
+        Number(authorityRow.supervisor_epoch) !== identity.supervisorEpoch ||
+        authority.supervisorEpoch !== identity.supervisorEpoch ||
+        authority.planHash !== identity.planHash ||
+        authority.fence.sessionId !== identity.sessionId ||
+        authority.fence.runId !== identity.runId ||
+        authority.fence.turnId !== identity.turnId ||
+        authority.fence.generation !== identity.generation ||
+        authority.hostId !== identity.hostId ||
+        authority.hostGeneration !== identity.hostGeneration ||
+        authority.hostIncarnation !== identity.hostIncarnation ||
+        plan.supervisorHighWater !== identity.supervisorEpoch
+      ) {
+        result = { accepted: false, reason: "authority_mismatch" };
+        return;
+      }
+
+      const rawPriorRows = this.db
+        .query(
+          `SELECT * FROM session_kernel_agent_operations
+         WHERE session_id=? AND run_id=? AND run_generation=? AND turn_id=?
+         ORDER BY operation_sequence`,
+        )
+        .all(
+          identity.sessionId,
+          identity.runId,
+          identity.generation,
+          identity.turnId,
+        ) as DurableAgentOperationRow[];
+      const priorReceipts: AgentOperationReceipt[] = [];
+      for (const priorRow of rawPriorRows) {
+        const priorReceipt = decodeRow(priorRow);
+        if (!priorReceipt) {
+          result = { accepted: false, reason: "operation_barrier" };
+          return;
+        }
+        priorReceipts.push(priorReceipt);
+      }
+      const prior = priorReceipts.at(-1);
+      if (prior?.state === "admitted") {
+        result = { accepted: false, reason: "operation_barrier" };
+        return;
+      }
+      if (priorReceipts.some((receipt) => receipt.state === "indeterminate")) {
+        result = { accepted: false, reason: "indeterminate_turn" };
+        return;
+      }
+      if (!prior) {
+        if (identity.kind !== "model") {
+          result = { accepted: false, reason: "operation_order" };
+          return;
+        }
+      } else {
+        let lastModelIndex = -1;
+        for (let index = priorReceipts.length - 1; index >= 0; index--) {
+          if (priorReceipts[index]!.identity.kind === "model") {
+            lastModelIndex = index;
+            break;
+          }
+        }
+        if (lastModelIndex < 0) {
+          quarantine("Agent operation turn has no model root");
+          result = { accepted: false, reason: "operation_barrier" };
+          return;
+        }
+        const modelReceipt = priorReceipts[lastModelIndex]!;
+        const pending = modelReceipt.pendingToolUseEntryIds ?? [];
+        const mcpReceipts = priorReceipts.slice(lastModelIndex + 1);
+        if (
+          mcpReceipts.some((receipt) => receipt.identity.kind !== "mcp") ||
+          mcpReceipts.length > pending.length
+        ) {
+          quarantine(
+            "Agent operation tool-use sequence contradicts model declaration",
+          );
+          result = { accepted: false, reason: "operation_barrier" };
+          return;
+        }
+        for (let index = 0; index < mcpReceipts.length; index++) {
+          if (mcpReceipts[index]!.identity.toolUseEntryId !== pending[index]) {
+            quarantine("Agent operation tool-use identity crossover");
+            result = { accepted: false, reason: "operation_barrier" };
+            return;
+          }
+        }
+        const nextToolUseEntryId = pending[mcpReceipts.length];
+        if (nextToolUseEntryId !== undefined) {
+          if (
+            identity.kind !== "mcp" ||
+            identity.toolUseEntryId !== nextToolUseEntryId
+          ) {
+            result = { accepted: false, reason: "operation_order" };
+            return;
+          }
+        } else if (pending.length === 0 || identity.kind !== "model") {
+          result = { accepted: false, reason: "operation_order" };
+          return;
+        }
+        const dependencyReceipts = priorReceipts.slice(lastModelIndex);
+        const requiredEntryIds = new Set<string>();
+        let requiredChangeSeq = 0;
+        for (const dependency of dependencyReceipts) {
+          for (const ref of dependency.transcriptReceipts ?? []) {
+            requiredChangeSeq = Math.max(
+              requiredChangeSeq,
+              ref.throughChangeSeq,
+            );
+            for (const entryId of ref.entryIds) requiredEntryIds.add(entryId);
+          }
+        }
+        if (
+          identity.transcriptAnchor.throughChangeSeq < requiredChangeSeq ||
+          [...requiredEntryIds].some(
+            (entryId) => !identity.transcriptAnchor.entryIds.includes(entryId),
+          )
+        ) {
+          result = { accepted: false, reason: "transcript_barrier" };
+          return;
+        }
+      }
+
+      const cutoff = now - AGENT_OPERATION_EVIDENCE_HORIZON_MS;
+      this.db.run(
+        `DELETE FROM session_kernel_agent_operations AS old
+         WHERE old.session_id=? AND old.state IN ('settled','indeterminate') AND old.terminal_at < ?
+           AND NOT (old.run_id=? AND old.run_generation=? AND old.turn_id=?)
+           AND NOT EXISTS (
+             SELECT 1 FROM session_kernel_agent_operations AS live
+             WHERE live.session_id=old.session_id AND live.run_id=old.run_id
+               AND live.run_generation=old.run_generation AND live.turn_id=old.turn_id
+               AND live.state='admitted'
+           )`,
+        [
+          identity.sessionId,
+          cutoff,
+          identity.runId,
+          identity.generation,
+          identity.turnId,
+        ],
+      );
+      this.db.run(
+        `DELETE FROM session_kernel_agent_operation_cancellations AS cancel
+         WHERE cancel.session_id=? AND NOT EXISTS (
+           SELECT 1 FROM session_kernel_agent_operations AS operation
+           WHERE operation.session_id=cancel.session_id
+             AND operation.operation_id=cancel.operation_id
+         )`,
+        [identity.sessionId],
+      );
+      const counts = this.db
+        .query(
+          `SELECT COUNT(*) AS session_count,
+                SUM(CASE WHEN run_id=? AND run_generation=? AND turn_id=? THEN 1 ELSE 0 END) AS turn_count
+         FROM session_kernel_agent_operations WHERE session_id=?`,
+        )
+        .get(
+          identity.runId,
+          identity.generation,
+          identity.turnId,
+          identity.sessionId,
+        ) as { session_count: number; turn_count: number | null };
+      if (
+        Number(counts.session_count) >=
+          SESSION_KERNEL_MAX_AGENT_OPERATIONS_PER_SESSION ||
+        Number(counts.turn_count ?? 0) >=
+          SESSION_KERNEL_MAX_AGENT_OPERATIONS_PER_TURN
+      ) {
+        result = { accepted: false, reason: "receipt_capacity" };
+        return;
+      }
+      const high = this.db
+        .query(
+          "SELECT operation_sequence FROM session_kernel_agent_operation_high_water WHERE session_id=?",
+        )
+        .get(identity.sessionId) as { operation_sequence: number } | null;
+      const sequence = Number(high?.operation_sequence ?? 0) + 1;
+      if (!Number.isSafeInteger(sequence))
+        throw new Error("Agent operation sequence high-water overflow");
+      this.db.run(
+        `INSERT INTO session_kernel_agent_operation_high_water(session_id,operation_sequence,updated_at)
+         VALUES (?,?,?) ON CONFLICT(session_id) DO UPDATE SET
+         operation_sequence=excluded.operation_sequence,updated_at=excluded.updated_at`,
+        [identity.sessionId, sequence, now],
+      );
+      const receipt: AgentOperationReceipt = {
+        identity,
+        sequence,
+        state: "admitted",
+        admittedAtMs: now,
+      };
+      this.db.run(
+        `INSERT INTO session_kernel_agent_operations(session_id,operation_id,semantic_hash,identity_hash,identity,
+         operation_sequence,run_id,turn_id,run_generation,kind,state,anchor_change_seq,receipt,admitted_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,'admitted',?,?,?)`,
+        [
+          identity.sessionId,
+          identity.operationId,
+          semanticHash,
+          identityHash,
+          identityText,
+          sequence,
+          identity.runId,
+          identity.turnId,
+          identity.generation,
+          identity.kind,
+          identity.transcriptAnchor.throughChangeSeq,
+          json(receipt),
+          now,
+        ],
+      );
+      result = { accepted: true, replayed: false, receipt };
+    });
+    tx.immediate();
+    return result;
+  }
+  agentOperationCancellationIntent(
+    raw: AgentOperationIdentity,
+  ): AgentOperationCancellationIntent | undefined {
+    const query = decodeAgentOperationRequest({ op: "query", identity: raw });
+    if (!query || query.op !== "query")
+      throw new Error("Invalid Agent operation cancellation query identity");
+    const identity = query.identity;
+    const identityText = canonicalAgentOperationIdentity(identity);
+    let result: AgentOperationCancellationIntent | undefined;
+    const tx = this.db.transaction(() => {
+      const quarantine = (reason: string): void => {
+        this.db.run(
+          `INSERT INTO session_kernel_quarantine(session_id,reason,command_kind,quarantined_at)
+           VALUES (?,?,'agent_operation',?) ON CONFLICT(session_id) DO UPDATE SET
+           reason=excluded.reason,command_kind=excluded.command_kind,quarantined_at=excluded.quarantined_at`,
+          [identity.sessionId, reason, Date.now()],
+        );
+      };
+      const operationRow = this.db
+        .query(
+          "SELECT * FROM session_kernel_agent_operations WHERE session_id=? AND operation_id=?",
+        )
+        .get(
+          identity.sessionId,
+          identity.operationId,
+        ) as DurableAgentOperationRow | null;
+      const cancellationRow = this.db
+        .query(
+          `SELECT * FROM session_kernel_agent_operation_cancellations
+         WHERE session_id=? AND operation_id=?`,
+        )
+        .get(
+          identity.sessionId,
+          identity.operationId,
+        ) as DurableAgentOperationCancellationRow | null;
+      if (!operationRow) {
+        if (cancellationRow)
+          quarantine("Agent operation cancellation has no durable operation");
+        return;
+      }
+      let receipt: AgentOperationReceipt;
+      try {
+        receipt = decodeDurableAgentOperationRow(operationRow);
+      } catch {
+        quarantine("Corrupt or contradictory Agent operation receipt");
+        return;
+      }
+      if (canonicalAgentOperationIdentity(receipt.identity) !== identityText) {
+        quarantine("Agent operation cancellation query identity crossover");
+        return;
+      }
+      if (!cancellationRow) return;
+      try {
+        result = decodeDurableAgentOperationCancellationRow(
+          cancellationRow,
+          receipt,
+        );
+      } catch {
+        quarantine(
+          "Corrupt or contradictory Agent operation cancellation intent",
+        );
+      }
+    });
+    tx.immediate();
+    return result;
+  }
+
 	applyRunEvent(input: RunEventDecision): RunEventDecisionResult {
 		const now = Date.now();
 		const since = new Date(now).toISOString();
@@ -2499,6 +3694,12 @@ export class SessionKernelStore {
           ? input.runKey
           : prior.currentRunId;
 			const changeSeq = prior.changeSeq + 1;
+      if (["idle", "stopped", "failed"].includes(to))
+        this.db.run(
+          `UPDATE session_kernel_agent_host_supervision SET status = 'settled'
+           WHERE session_id = ? AND status = 'active'`,
+          [input.sessionId],
+        );
 			this.db.run(
 				`INSERT INTO session_kernel_state
 					(session_id, run_state, run_since, last_event, generation,

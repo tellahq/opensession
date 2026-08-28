@@ -7,6 +7,7 @@
  *                 durably, so a reply never renders twice
  * - `./runner`  — the run-host wire contract (`RunHostSpec`, host/client
  *                 messages, NDJSON framing): what "bring your own runner" means
+ * - `./agent-host` — the local control-plane turn contract
  * - `./executor` — the tool/workspace-only execution wire contract
  * - `./session` — the client↔server session contract (`TranscriptEntry`,
  *                 asks, usage, core WebSocket frames): "bring your own UI"
@@ -28,3 +29,7 @@ export * from "./todo-plan";
 export * from "./tool-presentation";
 export * from "./identity";
 export * from "./executor";
+export * from "./agent-host-fence";
+export * from "./agent-host";
+export * from "./agent-host-supervision";
+export * from "./agent-operation";

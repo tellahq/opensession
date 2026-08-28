@@ -115,6 +115,11 @@ if [ -z "$PREVIOUS_HEAD" ]; then
   run_release switch "$TARGET_COMMIT"
 fi
 
+# Install only the disabled, production-unwired Agent Host topology. This
+# creates future service identities and root-owned directories but deliberately
+# does not change the users of any currently active service or enable a socket.
+"$REPO_DIR/deploy/install-agent-host-topology.sh" "$CURRENT_LINK" "$SERVICE_BUN"
+
 # (Re)install the shared-checkout tripwire hook: warns loudly if this live
 # checkout ever gets switched off main (branch work must use a worktree).
 if [ -f "$REPO_DIR/deploy/git-hooks/post-checkout" ]; then

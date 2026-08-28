@@ -7,6 +7,13 @@
  */
 import { audit } from "../audit";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
+import { decodeAgentOperationRequest, type AgentOperationRequest, type AgentOperationResult } from "./agent-operation-protocol";
+import type {
+  AgentHostPlanRegistration,
+  AgentHostPlanRegistrationResult,
+  AgentHostSupervisionClaim,
+  AgentHostSupervisionResult,
+} from "./agent-host-supervision-protocol";
 import {
 	type SessionActorEffectFor,
 	type SessionActorEffectKind,
@@ -78,6 +85,20 @@ function compatibilityStoreForTest(
 			`Session ${domain} mutation requires the authoritative actor`,
 		);
 	return __sessionKernelStoreForTest();
+}
+
+export async function registerAgentHostPlan(
+  request: AgentHostPlanRegistration,
+): Promise<AgentHostPlanRegistrationResult> {
+  if (state.actor) return state.actor.decideAgentHostSupervisionAsync(request);
+  return compatibilityStoreForTest("core").registerAgentHostPlan(request);
+}
+
+export async function claimAgentHostSupervision(
+  request: AgentHostSupervisionClaim,
+): Promise<AgentHostSupervisionResult> {
+  if (state.actor) return state.actor.decideAgentHostSupervisionAsync(request);
+  return compatibilityStoreForTest("core").claimAgentHostSupervision(request);
 }
 
 export async function sessionAsk<T extends AskActorRequest>(

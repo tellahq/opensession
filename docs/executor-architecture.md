@@ -156,6 +156,31 @@ development.
 Active hosts are still controlled directly through their private host protocol;
 the executor is not their parent and does not own session lifecycle.
 
+### Agent Host execution binding
+
+An Agent Host turn carries an immutable Executor binding: executor and root IDs,
+generation, deadline, and an opaque Agent Host access capability. That access
+capability authorizes only bounded control-plane dispatch requests. It is
+branded separately from an `ExecutorGrant` and is never valid at an
+`ExecutorBroker` or Executor daemon. The control plane must issue a fresh,
+exact operation-scoped `ExecutorGrant` for each eventual dispatch.
+
+A separate additive Agent operation v1 foundation now defines a distinctly
+branded `AgentGatewayDispatchGrant`, non-secret model and MCP descriptors, and a
+gateway receipt ledger. It remains production-unwired: the gateway does not
+issue the grant, route Host operation messages, resolve provider/MCP access, or
+open the ledger at boot. The grant is never persisted. Recovery must reacquire
+short-lived authority while durable identity remains bound to the exact turn
+fence and domain-separated descriptor/payload digests. This foundation does
+not make an Agent operation an Executor operation and never accepts an
+`ExecutorGrant` in its place.
+
+The Agent Host contracts define these boundaries but do not route production
+turns or wire boot. The disabled detached process and systemd socket-activation
+foundation is documented in [Agent Host deployment](agent-host-deployment.md).
+Installing its privileged templates requires a full root deploy; installation
+does not enable or start them.
+
 ## Rollback compatibility
 
 The session-kernel schema has a tracked compatibility version. Before restarting

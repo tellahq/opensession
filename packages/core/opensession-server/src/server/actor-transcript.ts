@@ -1,7 +1,7 @@
 import type {
   AgentTranscriptAnchorV1,
   AgentTranscriptReceiptRefV1,
-} from "./session-kernel/transcript-protocol";
+} from "@tellahq/opensession-protocol/agent-operation";
 import type { TranscriptEntry } from "./types";
 import { publishTranscript } from "./transcript-bus";
 import { v2SnapshotEntryWeight } from "./transcript-wire";

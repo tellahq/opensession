@@ -7,6 +7,214 @@ rule is guidance, a stripped tool or scoped token is a guarantee. This
 document is the full reference behind the invariant summary in
 [AGENTS.md](../AGENTS.md).
 
+## Detached Agent Host boundary
+
+The detached Agent Host design keeps provider and MCP traffic behind the
+gateway and surfaces ambiguous proxy outcomes as visible `indeterminate`
+failures. Hosts and the SessionKernel use separate service users. Blue/green
+Host workers have a 24-hour maximum lifetime. Capacity is dynamically admitted
+with no fixed concurrent-turn count. Each turn may accumulate at most 32 MiB of
+actual worst-case physical charge. Ordinary ledger growth stops at 448 MiB; the
+protected 64 MiB for cancel, deletion, indeterminate, quarantine, minimal
+terminal, recovery, and checkpoint work is inside the same 512 MiB physical
+ceiling, not additional capacity.
+
+SessionKernel schema 27 provides transactional `signed_v1` supervision receipt
+storage and a Node-only synchronous Ed25519 signing primitive. The untrusted V3
+claim contains only the exact fence, plan and Host identity plus a fresh Host
+challenge. A trusted non-wire issuer owns service epoch, fixed lease, clock,
+nonce and the single active key. Existing schema-26 receipts migrate as
+`legacy_unsigned_v2`; they are never retro-signed and cannot authorize or be
+replayed as signed authority. Production deliberately injects no issuer
+credential, so new signed claims fail closed without affecting readiness.
+
+Protocol v3 now implements the production-unwired signed attach foundation.
+Each physical Host connection receives a fresh one-use challenge and may attach
+only after public-key-only verification of the schema-27 envelope and every
+actor-issued binding. The envelope alone and operation IDs are never authority.
+This is not composed into production boot or existing Pi routing. Deployment
+still requires separate Host and gateway service identities and peer
+credentials, private signing-key provisioning only to SessionKernel, strict
+public keyring provisioning to Hosts, and a detached Host service deployment.
+The current shared Ubuntu identity is explicitly not that boundary.
+
+An additive Linux-only Unix-socket peer-credential foundation lives under
+`src/server/security/transport/`. It explicitly loads and closes libc, checks
+the exact accepted socket immediately around `SO_PEERCRED`, and gates protocol
+readers behind an exact numeric UID policy. Its private server wrapper can adopt
+an already-listening inherited Unix descriptor without unlinking, binding,
+chmodding, validating, or replacing its filesystem path. Inherited listeners
+require an exact expected non-root peer UID, and production composition can fail
+closed in inherited-FD-only mode. The legacy owned-path mode remains for tests
+and unwired callers; it requires protected, non-symlink path components plus
+exact parent/socket owner and mode policies before listening. A crash-safe
+exclusive Linux `flock` must be held across stale-socket proof, removal, and
+bind, preventing concurrent service instances from displacing each other's
+socket inode. Importing the transport performs no work, and it has no production
+boot wiring.
+Future Host and SessionKernel Unix transports must reject the physical socket
+before parsing bytes or allocating session state. Production cross-user
+endpoints must use root-owned systemd `.socket` units and inherited listener
+FDs, never service-writable socket parents. UID is the principal; PID is
+audit/fencing metadata and never reusable authorization. Socket owner and mode
+checks are defense in depth, not an identity substitute. Activation must use
+separate service users and an exact expected non-root UID; bearer tokens,
+loopback, filesystem modes, and caller names are not fallbacks when peer
+verification fails.
+
+An import-inert encrypted Host recovery ledger v1 and conservative physical
+accounting prototype now exist under `src/agent-host/`. The disabled detached
+Agent Host entrypoint opens only its generation-isolated ledger after its
+ExecStartPre doctor; boot, gateway routing, drivers, providers, and MCP routing
+remain production-unwired and no socket instance is enabled. Recovery-bearing values use application-level
+AES-256-GCM and HMAC-derived opaque lookup keys; this does not encrypt SQLite
+schema, phases, bounded counters, timestamps, key IDs, or opaque keys. It does
+not use SQLCipher or a custom VFS. Bun SQLite does not expose dirty-page or
+checkpoint-peak attribution, so the prototype uses a deliberately conservative
+page/WAL/B-tree bound and post-commit assertions rather than claiming exact
+per-turn measurement. Production wiring remains blocked on calibration and a
+proven checkpoint/ENOSPC emergency implementation. Processes sharing a UID can
+inspect or interfere with each other and are not a security boundary.
+
+### Agent operation receipt foundation
+
+The additive Agent operation v1 protocol, gateway SQLite ledger, and schema-28
+SessionKernel admission/barrier receipts are a production-unwired foundation.
+They do not execute model or MCP work, open a route, resolve credentials, or
+compose the ledger at boot. The actor authorizes only a bounded durable identity
+after matching the exact active signed schema-27 supervision row and registered
+plan. Legacy unsigned receipts cannot authorize admission, and an authority
+hash supplied without that stored signed row fails closed. A future gateway
+caller must also verify the signed supervision envelope and separately branded
+`AgentGatewayDispatchGrant`, recompute every domain-separated digest, and pass
+kind-specific policy before physical work can begin.
+
+Requests and status queries bind the operation ID to the exact turn fence,
+descriptor and payload digests. An operation ID alone is never authority. Model
+descriptors carry only a transcript anchor and policy hash. MCP descriptors
+carry only a durable tool-use reference and arguments digest. Strict decoders
+reject bodies, prompts, arguments, credentials, URLs, headers, environment and
+provider/account configuration recursively. Durable receipts contain bounded
+identity, timestamps, normalized outcome codes, transcript destination receipt
+references and digests only. Neither actor storage nor the operation ledger has
+a body or arbitrary metadata column. Schema-28 actor state is strictly
+`admitted -> settled | indeterminate`; gateway-only physical state remains
+`prepared -> executing -> settled | indeterminate`.
+
+Transcript destination receipts have an import-inert exact query and Agent
+reference-validation layer. Generic destination appends retain their existing
+upsert semantics and reject Agent anchors, so a generic receipt cannot later be
+upgraded into an Agent proof. The narrower Agent API requires an authenticated
+anchor identity whose change sequence is the current transcript high-water and
+whose named entries are visible at that boundary. It atomically permits only a
+fresh, unique, dense, request-ordered output append. The anchor digest remains
+opaque to this store; the future gateway must construct and authenticate its
+canonical transcript meaning before calling this API. Recovery binds the
+session, run, turn, generation, append ID, request digest and anchor, then
+revalidates each referenced output row's ID, sequence, change sequence and
+canonical content against the durable request digest. Later unrelated
+transcript entries do not invalidate that historical proof, but changed,
+missing, reordered or malformed referenced output fails closed. Receipt
+queries do not write, publish, invoke hooks or change access timestamps. This
+layer remains production-unwired.
+
+The import-inert gateway dispatch registry stores only domain-separated grant
+hashes and bounded exact bindings in memory. A grant binds one operation to the
+complete run fence, signed-authority identity, Host incarnation, descriptor and
+payload digests, transcript anchor, adapter version, deadline and opaque gateway
+policy handle. Runtime-domain crossover, expiry, capacity overflow and every
+identity mismatch fail closed. A backwards clock jump clears the registry and
+fails closed. Raw bearer grants and provider or MCP policy values are never
+retained, persisted or exposed as doctor evidence. Expiry is pruned
+synchronously on registry access, so importing the module starts no timer. This
+registry is not composed into production routing yet.
+
+Every gateway-ledger receipt durably binds the actor-required supervisor epoch,
+Host identity/generation/incarnation, exact transcript anchor and MCP tool-use
+entry identity. Every terminal receipt also carries the exact bounded
+SessionKernel replay material: output digest, outcome code, ordered transcript
+receipt references and, for model operations, ordered pending tool-use entry
+IDs. Settled and indeterminate receipts lacking this material fail strict
+decoding. Recovery must first durably reserve indeterminate terminal ownership,
+then re-read and authenticate that reservation from the durable row before
+appending a visible entry whose destination identity is derived from it, and
+finally mark the receipt indeterminate. Settlement cannot
+commit after the reservation. The reservation survives restart, so recovery can
+repair the actor terminal without retrying physical provider or MCP work or
+leaving a false indeterminate entry after a competing settlement.
+
+The receipt state progression is `prepared -> executing -> settled |
+indeterminate`; an executing row may additionally carry the durable terminal
+reservation while transcript proof is being committed. A recovered `prepared`
+operation may be reauthorized later.
+A recovered `executing` operation is never retried by default. Initial
+production model and MCP adapters must use unsupported reconciliation, which
+produces a durable visible `indeterminate` receipt unless a later adapter
+supplies exact, tested reconciliation proof. Provider request or response IDs
+alone are not idempotency proof. Abort, timeout, cancellation and disconnect
+also do not prove settlement.
+
+The production-unwired Agent Host turn socket uses exact protocol v3 with no v2 compatibility. Agent-to-gateway dispatch
+capabilities and Executor operation grants have distinct canonical wire domains
+and are cross-rejected at runtime, not merely separated with TypeScript brands.
+Hosts receive a root descriptor rather than a raw gateway filesystem path.
+
+A prerequisite destination API for future Host recovery now exists only inside
+the gateway. It accepts transcript destination payloads, not credentials,
+provider/model/MCP configuration, or arbitrary prompts, and has no public HTTP
+route or production Host routing. It rejects non-plain or non-JSON values,
+unknown request keys, non-finite numbers, malformed transcript entries, and
+bounded-count/byte overflows before writing. Canonical hashing uses an explicit
+versioned domain and binds the exact turn fence and entries. Only the new
+`transcript_destination_append` gateway operation is replay-safe; broadening the
+legacy transcript operation would make ambiguous old callbacks unsafe.
+
+### Agent Host readiness and doctor contract
+
+The import-inert readiness checker in
+`src/server/agent-operation/readiness.ts` is a production-unwired policy over
+injected observations. It does not inspect the filesystem, open ledgers, bind a
+route, start a timer, or mutate recovery state. A future doctor collector may
+supply observations, but its machine response is deliberately bounded to a
+contract version, admission decision, normalized route mode, fixed-vocabulary
+failing check codes, and deletion, recovery, and stream-ACK capability flags.
+It must not expose paths, observed UIDs, digests, key material, secrets, policy
+handles, or registry contents.
+
+The contract fails closed unless all four gateway, Agent Host, Executor, and
+SessionKernel service UIDs are distinct and non-root, and both directions of
+the gateway-to-Host and Host-to-Executor Unix peer UID gates match exactly. The
+active generation must have valid manifest, protocol, release, and keyring
+digests that match its manifest. Activation cannot be in the future, its
+deadline can be at most 24 hours after activation, and the deadline must still
+be current. The retained prior observation time must be no later than the
+current observation. This means a backwards clock jump, stale generation, or
+stale or not-yet-valid signing public key blocks readiness. The signing public
+key must be verified by the active keyring, and Host ledger encryption key
+availability is mandatory.
+
+Before readiness can pass, the exact Host ledger schema must be open with Host
+recovery complete, the exact gateway operation-ledger schema must be open with
+`recoverActive` complete, and SessionKernel schema must be at least 32 with
+cancellation available. Deletion, recovery, and cumulative operation stream ACK
+capabilities must all be available. `routeMode` accepts exactly `legacy` or
+`agent_host_only`. In `agent_host_only`, the active Host generation must be
+healthy and accepting new work, never draining-only; every named grant,
+operation, turn, and stream registry must report a hard bound; and
+`infrastructureFallback` must be the literal boolean `false`.
+
+A future production boot sequence must establish keys and the verified active
+generation first, then open and recover SessionKernel and its cancellation
+surface, open and recover the Host ledger, run gateway operation-ledger
+`recoverActive`, and only then mark the Host active and healthy. The gateway may
+publish `agent_host_only` admission only after the checker passes. A failing
+readiness result blocks **new admission only**. It never reroutes, falls back,
+reattaches, drains, cancels, or otherwise steers an existing session. Existing
+sessions remain owned by the generation and route that admitted them.
+
+This contract does not wire that sequence, the doctor route, Agent Host boot,
+or production routing.
+
 ## Automation least-privilege
 
 Automation runs (especially event-triggered ones like support-ticket triage)
