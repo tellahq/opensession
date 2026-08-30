@@ -120,27 +120,8 @@ struct NewSessionView: View {
                 header
                 #endif
                 editor
-                if !images.isEmpty || !files.isEmpty {
-                    VStack(spacing: 6) {
-                        if !images.isEmpty {
-                            AttachedImagesRow(images: images) { image in
-                                images.removeAll { $0.id == image.id }
-                            }
-                        }
-                        if !files.isEmpty {
-                            AttachedFilesRow(
-                                files: files,
-                                staging: stagingFileIDs,
-                                failed: failedFileIDs,
-                                onRetry: { file in Task { await stage(file) } },
-                                onRemove: remove
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 6)
-                }
                 #if os(macOS)
+                if !images.isEmpty || !files.isEmpty { attachments }
                 Divider()
                 controls
                 #endif
@@ -220,6 +201,21 @@ struct NewSessionView: View {
                 ToolbarItem(placement: .cancellationAction) { cancelButton }
                 #endif
             }
+            #if os(iOS)
+            // Keep staged files above both forms of the composer toolbar: the
+            // bottom bar at rest and its keyboard accessory while editing.
+            // As a sibling of the editor, this shelf ended at the sheet edge
+            // and the bottom toolbar floated over it.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !images.isEmpty || !files.isEmpty {
+                    VStack(spacing: 0) {
+                        Divider()
+                        attachments
+                    }
+                    .background(OS1VisualStyle.background)
+                }
+            }
+            #endif
             .task { await load() }
             .task { await stagePendingFiles() }
             // The library is a detail of composing this session, so it pushes
@@ -274,6 +270,27 @@ struct NewSessionView: View {
     }
 
     // ── Prompt editor ─────────────────────────────────────────────────────
+
+    private var attachments: some View {
+        VStack(spacing: 6) {
+            if !images.isEmpty {
+                AttachedImagesRow(images: images) { image in
+                    images.removeAll { $0.id == image.id }
+                }
+            }
+            if !files.isEmpty {
+                AttachedFilesRow(
+                    files: files,
+                    staging: stagingFileIDs,
+                    failed: failedFileIDs,
+                    onRetry: { file in Task { await stage(file) } },
+                    onRemove: remove
+                )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
+    }
 
     private var startDisabled: Bool {
         savingDraft

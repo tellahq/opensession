@@ -58,8 +58,7 @@ enum TranscriptBlock: Identifiable, Equatable {
         switch self {
         case .message(let entry): [entry.id]
         case .tool(let item): [item.use?.id, item.result?.id].compactMap { $0 }
-        case .work(let turn):
-            turn.reasoningSummaries.map(\.id) + turn.items.flatMap(\.entryIds)
+        case .work(let turn): turn.items.flatMap(\.entryIds)
         case .footer(let footer): [footer.entryId]
         // A walkthrough is not a transcript entry, so it can never be a
         // scroll anchor.
@@ -273,9 +272,6 @@ enum TurnItem: Identifiable, Equatable {
 struct WorkTurn: Identifiable, Equatable {
     var id: String
     var anchorId: String
-    /// Reasoning summaries stay visible above the fold. They describe the
-    /// work, but hiding them would make durable provider output disappear.
-    var reasoningSummaries: [TranscriptEntry] = []
     var items: [TurnItem]
     /// The turn is still producing output — the header says "Working".
     var isLive: Bool
@@ -297,13 +293,6 @@ struct WorkTurn: Identifiable, Equatable {
 
     var hasFailure: Bool { failureCount > 0 }
     var hasNarration: Bool
-
-    /// At most one summary moves: the newest reasoning update in the trailing
-    /// live turn. Once the turn settles this becomes nil without changing the
-    /// durable summaries themselves.
-    var activeReasoningId: String? {
-        isLive ? reasoningSummaries.last?.id : nil
-    }
 
     /// How the fold should start out, before any manual toggle.
     func defaultExpanded(preference: TurnActivity) -> Bool {
@@ -472,16 +461,20 @@ enum TranscriptGrouping {
             defer { turn = [] }
             guard !turn.isEmpty else { return }
 
-            // Before the protocol carried `isReasoning`, providers persisted
-            // intermediate summaries as one bold-only assistant row. The last
-            // row remains an answer because a real final answer can be short
-            // and bold; only an intermediate row has enough context to infer.
-            let lastMessageIndex = turn.lastIndex {
-                if case .message = $0 { return true }
-                return false
-            }
+            // A plain final assistant row is the only answer candidate. Before
+            // `isReasoning`, providers persisted intermediate summaries as a
+            // bold-only row; every such row in the work is activity, including
+            // the last assistant message when later tools prove it was not the
+            // answer. A bold final answer stays ordinary answer markdown.
+            let finalIndex: Int? = {
+                guard let index = turn.indices.last,
+                      case .message(let entry) = turn[index],
+                      entry.isReasoning != true
+                else { return nil }
+                return index
+            }()
             var normalized = turn
-            for index in normalized.indices where index != lastMessageIndex {
+            for index in normalized.indices where index != finalIndex {
                 guard case .message(var entry) = normalized[index],
                       entry.isReasoning == nil,
                       ReasoningSummaryDisplay.isLegacyHeading(entry.text)
@@ -504,33 +497,24 @@ enum TranscriptGrouping {
                 })
                 return
             }
-            // An explicit reasoning summary is activity even at the tail. It
-            // must never acquire answer metadata or answer hierarchy.
-            var final: TranscriptEntry?
-            if case .message(let entry)? = normalized.last,
-               entry.isReasoning != true {
-                final = entry
+            // Explicit and inferred reasoning stays interleaved with the tools
+            // it describes, matching the web transcript. It is work even at
+            // the tail and must never acquire answer metadata or hierarchy.
+            let final: TranscriptEntry? = if let finalIndex,
+                                             case .message(let entry) = normalized[finalIndex] {
+                entry
+            } else {
+                nil
             }
             let folded = final == nil ? normalized : Array(normalized.dropLast())
-            let reasoning = folded.compactMap { item -> TranscriptEntry? in
-                guard case .message(let entry) = item, entry.isReasoning == true else {
-                    return nil
-                }
-                return entry
-            }
-            let foldedWork = folded.filter { item in
-                if case .message(let entry) = item { return entry.isReasoning != true }
-                return true
-            }
             let isLive = live && isTrailing
 
             if let first = folded.first, let last = folded.last {
                 blocks.append(.work(makeTurn(
-                    items: foldedWork,
-                    reasoningSummaries: reasoning,
+                    items: folded,
                     firstId: first.id,
                     lastId: last.id,
-                    tools: tools.filter { call in foldedWork.contains { $0.id == call.id } },
+                    tools: tools.filter { call in folded.contains { $0.id == call.id } },
                     isLive: isLive
                 )))
             }
@@ -792,7 +776,6 @@ enum TranscriptGrouping {
 
     private static func makeTurn(
         items: [TurnItem],
-        reasoningSummaries: [TranscriptEntry] = [],
         firstId: String,
         lastId: String,
         tools: [ToolCallItem],
@@ -818,7 +801,6 @@ enum TranscriptGrouping {
         return WorkTurn(
             id: firstId,
             anchorId: lastId,
-            reasoningSummaries: reasoningSummaries,
             items: items,
             isLive: isLive,
             duration: isLive ? nil : duration(from: start, to: end),

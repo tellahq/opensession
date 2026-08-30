@@ -29,14 +29,6 @@ struct TurnBlockView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(turn.reasoningSummaries) { entry in
-                ReasoningSummaryRow(
-                    entry: entry,
-                    isActive: entry.id == turn.activeReasoningId
-                )
-                .padding(.bottom, 4)
-            }
-
             Button {
                 withAnimation(.snappy(duration: 0.22, extraBounce: 0)) {
                     state.toggle()
@@ -443,8 +435,11 @@ struct TurnStepsView: View {
                 switch section {
                 case .message(let entry):
                     if entry.isReasoning == true {
-                        ReasoningSummaryRow(entry: entry)
-                            .padding(.trailing, 16)
+                        ReasoningSummaryRow(
+                            entry: entry,
+                            isActive: entry.id == activeReasoningId
+                        )
+                        .padding(.trailing, 16)
                     } else {
                         // Narration is prose to read, just like the final answer.
                         // The fold and its indent distinguish it; only tool rows
@@ -484,6 +479,16 @@ struct TurnStepsView: View {
                 }
             }
         }
+    }
+
+    private var activeReasoningId: String? {
+        guard isLive else { return nil }
+        return items.reversed().compactMap { item in
+            guard case .message(let entry) = item, entry.isReasoning == true else {
+                return nil
+            }
+            return entry.id
+        }.first
     }
 
     private var sections: [TurnSection] {
