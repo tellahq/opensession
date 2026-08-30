@@ -141,6 +141,17 @@ extension View {
         #endif
     }
 
+    /// Immediate dismissal keeps a bottom safe-area bar from being parked
+    /// behind a still-visible keyboard during an interrupted swipe.
+    @ViewBuilder
+    func scrollDismissesKeyboardImmediatelyCompat() -> some View {
+        #if os(iOS)
+        scrollDismissesKeyboard(.immediately)
+        #else
+        self
+        #endif
+    }
+
     /// `.insetGrouped` is iOS-only; `.inset` is the closest Mac list style.
     @ViewBuilder
     func insetGroupedListCompat() -> some View {

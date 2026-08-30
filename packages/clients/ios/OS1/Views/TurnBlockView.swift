@@ -178,7 +178,7 @@ struct TurnBlockView: View {
         // “Worked” is subheadline-sized while its counts are footnotes. Align
         // their baselines rather than the tops of two different font boxes.
         FlowLayout(spacing: 6, alignment: .firstTextBaseline) {
-            HStack(spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 chevron
                 Text(turn.isLive ? "Working" : "Worked")
                     .font(.subheadline.weight(.medium))

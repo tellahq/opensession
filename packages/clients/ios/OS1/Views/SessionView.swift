@@ -1498,9 +1498,10 @@ struct SessionView: View {
             showingEmptyContent ? .top : .bottom,
             for: .sizeChanges
         )
-        // Let the transcript track a downward swipe so the keyboard can be
-        // dismissed without leaving the conversation.
-        .scrollDismissesKeyboardCompat()
+        // A transcript swipe dismisses the keyboard immediately. Interactive
+        // dismissal can park the safe-area bar partly behind the keyboard,
+        // hiding the composer while the keyboard still looks open.
+        .scrollDismissesKeyboardImmediatelyCompat()
         .scrollPosition($scrollPosition)
     }
 

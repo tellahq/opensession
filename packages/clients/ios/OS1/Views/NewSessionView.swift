@@ -197,16 +197,23 @@ struct NewSessionView: View {
                 // iOS hides the bottom bar while the software keyboard is up.
                 // Repeat the same controls in its accessory so composing never
                 // makes attachments, run options, model, or dictation vanish.
+                // The accessory otherwise seats its glass directly on the
+                // keyboard edge, so each control leaves the same 8pt breathing
+                // room the session composer keeps there.
                 ToolbarItemGroup(placement: .keyboard) {
                     AttachImagesButton(images: $images, usesSystemButtonStyle: true)
+                        .padding(.bottom, 8)
                     moreOptionsMenu
+                        .padding(.bottom, 8)
                     Spacer()
                     modelChip
+                        .padding(.bottom, 8)
                     ComposerDictationButton(
                         dictation: dictation,
                         draft: $prompt,
                         usesSystemButtonStyle: true
                     )
+                    .padding(.bottom, 8)
                 }
                 #else
                 ToolbarItem(placement: .confirmationAction) { startButton }
