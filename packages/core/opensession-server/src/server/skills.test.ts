@@ -114,6 +114,7 @@ describe("searchSkills", () => {
       "simplify",
       "deslop",
       "control-ui",
+      "workflow-authoring",
       "poteto-mode",
       "vercel-react-best-practices",
       "vercel-composition-patterns",

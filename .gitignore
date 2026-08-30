@@ -109,6 +109,8 @@ deploy/sandbox/microvm/.cache-busybox-source.tar.bz2
 !.agents/skills/vercel-react-best-practices/**
 !.agents/skills/vercel-composition-patterns/
 !.agents/skills/vercel-composition-patterns/**
+!.agents/skills/workflow-authoring/
+!.agents/skills/workflow-authoring/**
 .claude/skills
 skills-lock.json
 .css-shots/
