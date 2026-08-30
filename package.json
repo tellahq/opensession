@@ -15,7 +15,8 @@
   "workspaces": [
     "packages/clients/website",
     "packages/core/opensession-server",
-    "packages/core/protocol"
+    "packages/core/protocol",
+    "packages/integrations/apple-mobile"
   ],
   "scripts": {
     "app:dev": "bun scripts/app-dev.ts",

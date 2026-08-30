@@ -494,6 +494,15 @@ async function main(): Promise<number> {
         return await runnersRemove(positional[1] ?? "");
       return await runnersList();
 
+    // First-party stdio MCP entry point. Keeping it behind the installed
+    // command gives Connections a stable target across release worktrees.
+    case "apple-mobile-mcp": {
+      const { startAppleMobileServer } =
+        await import("../packages/integrations/apple-mobile/src/server");
+      await startAppleMobileServer(argv.slice(1));
+      await new Promise<never>(() => {});
+    }
+
     // Internal git credential-helper entrypoint. It stays out of --help, but is
     // routed through the installed command so compiled releases need no Bun or
     // source-tree sidecar.

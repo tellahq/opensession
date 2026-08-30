@@ -18,23 +18,24 @@
  *   automation    recipes/automations/*.json          a config seed
  *                 AUTOMATION_TEMPLATES                a pre-filled create form
  *   integration   integrations/registry.ts            credentials + a restart
+ *   connection    curated first-party MCP servers     guided setup
  *   package       ~/.opensession-plugins.json         `opensession plugins add`
  *
- * The entries are DERIVED, never copied: adding a recipe file or a registry
- * entry puts it in the library with no edit here. That is the property worth
- * protecting — a catalog maintained by hand drifts from the thing it lists
- * within a month, and this repo already has one instance of that drift
+ * Most entries are derived: adding a recipe file or integration registry
+ * entry puts it in the library with no edit here. Core tools and curated
+ * first-party connections are the two hand-maintained exceptions because
+ * neither has another registry to derive from. Keeping that exception narrow
+ * matters: a catalog maintained by hand drifts from the thing it lists, and
+ * this repo already has one instance of that drift
  * (recipes/ and automation-templates.ts describe overlapping jobs in two
  * formats; the library shows both and marks how each installs, which is the
  * honest presentation until they are merged).
  *
  * What is NOT here yet, and why:
  *
- * - **Connections (MCP servers).** The biggest gap — the Connections UI has no
- *   catalog at all, just a blank form — but a catalog entry for a server is
- *   only useful if its command/URL is verified to work, so the curated list
- *   has to be assembled deliberately rather than guessed. The install path
- *   (`addMcpServer`) is already tested and needs no restart.
+ * - **Third-party connections.** Connections still has no general catalog.
+ *   Curated first-party servers can be listed here once their command, setup,
+ *   and permission boundary are maintained in this repository.
  * - **Skills.** `.agents/skills/` and `skills-lock.json` are instance-local
  *   and gitignored, so there is nothing in the repository to catalogue. The
  *   lock file's `{source, sourceType, skillPath, computedHash}` shape is the
@@ -64,11 +65,13 @@ import { listAutomations } from "./automations";
 import { INTEGRATIONS } from "./integrations/registry";
 import { isEnabled } from "./integrations/load";
 import { listInstalledPackages } from "./plugins";
+import { readMcpConfig } from "./connections";
 
 export type LibraryEntryType =
   | "tool"
   | "automation"
   | "integration"
+  | "connection"
   | "package";
 
 /**
@@ -283,6 +286,29 @@ function integrationDescription(id: string): string {
  * this a library rather than four settings pages with a search box, so the
  * card names the package rather than listing its pieces separately.
  */
+function connectionEntries(): LibraryEntry[] {
+  const servers = readMcpConfig().mcpServers;
+  return [
+    {
+      id: "connection:apple-mobile",
+      type: "connection" as const,
+      slug: "apple-mobile",
+      name: "Apple mobile",
+      description:
+        "Build Swift apps and prepare approved ad-hoc or TestFlight releases.",
+      category: "Developer tools",
+      install: "guided" as const,
+      installed: Boolean(
+        servers["apple-build"] &&
+        Array.isArray(servers["apple-release"]?.allowedUsers) &&
+        servers["apple-release"].allowedUsers.length,
+      ),
+      href: "https://github.com/tellahq/opensession/blob/main/docs/setup/apple-mobile.md",
+      source: "builtin" as const,
+    },
+  ];
+}
+
 function packageEntries(): LibraryEntry[] {
   try {
     return listInstalledPackages().map((pkg) => ({
@@ -309,6 +335,7 @@ export function listLibrary(): LibraryEntry[] {
     ...toolEntries(),
     ...automationEntries(installedNames),
     ...integrationEntries(),
+    ...connectionEntries(),
     ...packageEntries(),
   ];
 }

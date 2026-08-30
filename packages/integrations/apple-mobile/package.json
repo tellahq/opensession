@@ -1,0 +1,16 @@
+{
+  "name": "@tellahq/opensession-apple-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "opensession-apple-mobile-mcp": "src/server.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  }
+}
