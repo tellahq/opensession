@@ -7,6 +7,7 @@ import {
 import { InlineAlert } from "../../ui/state";
 import { IntegrationsList } from "../SetupIntegrations";
 import { SetupRestart } from "../SetupRestart";
+import { AppleMobileIntegration } from "../AppleMobileIntegration";
 
 // Organization → Integrations: credentials used by tools and automation.
 // Workspace authentication lives on its own page beside Members.
@@ -42,6 +43,9 @@ export function IntegrationsPanel() {
           onGithubSaved={setup.applyGithub}
         />
       )}
+      <div className="mt-3">
+        <AppleMobileIntegration teamNames={status?.team.names ?? []} />
+      </div>
       <SetupRestart setup={setup} />
     </SettingsPanel>
   );

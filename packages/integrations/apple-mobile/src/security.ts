@@ -76,7 +76,10 @@ export function resolveProjectPath(
   return unresolved;
 }
 
-export function resolvePrivateKeyPath(input: string): string {
+export function resolvePrivateKeyPath(
+  input: string,
+  roots = allowedRoots(),
+): string {
   if (!input) throw new Error("APPLE_ASC_PRIVATE_KEY_PATH is required");
   const path = realpathSync(resolve(input));
   const stat = statSync(path);
@@ -87,7 +90,7 @@ export function resolvePrivateKeyPath(input: string): string {
       "APPLE_ASC_PRIVATE_KEY_PATH must not be accessible by group or others",
     );
   }
-  if (allowedRoots().some((root) => isWithin(root, path))) {
+  if (roots.some((root) => isWithin(root, path))) {
     throw new Error(
       "APPLE_ASC_PRIVATE_KEY_PATH must be outside APPLE_MOBILE_ALLOWED_ROOTS",
     );

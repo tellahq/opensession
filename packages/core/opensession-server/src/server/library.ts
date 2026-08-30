@@ -303,7 +303,7 @@ function connectionEntries(): LibraryEntry[] {
         Array.isArray(servers["apple-release"]?.allowedUsers) &&
         servers["apple-release"].allowedUsers.length,
       ),
-      href: "https://github.com/tellahq/opensession/blob/main/docs/setup/apple-mobile.md",
+      href: "/settings/integrations",
       source: "builtin" as const,
     },
   ];

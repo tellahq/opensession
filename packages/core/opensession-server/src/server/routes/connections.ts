@@ -17,6 +17,10 @@ import {
 } from "../connections";
 import { refreshPickerModels } from "../models";
 import {
+  appleMobileSetupStatus,
+  configureAppleMobileConnections,
+} from "../apple-mobile-connections";
+import {
   BRIDGE_PROVIDER_IDS,
   PROVIDER_ID_RE,
   addPickerModel,
@@ -196,6 +200,25 @@ export async function handleConnectionsRoutes(
       agents: agentHealth,
       engines: piEngineEnabled() ? ["pi"] : [],
     });
+  }
+
+  if (path === "/api/connections/apple-mobile" && req.method === "GET") {
+    return Response.json(appleMobileSetupStatus());
+  }
+
+  if (path === "/api/connections/apple-mobile" && req.method === "PUT") {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return Response.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+    try {
+      return Response.json(configureAppleMobileConnections(body));
+    } catch (error) {
+      return Response.json(
+        { error: error instanceof Error ? error.message : String(error) },
+        { status: 400 },
+      );
+    }
   }
 
   if (path === "/api/connections/mcp" && req.method === "POST") {
