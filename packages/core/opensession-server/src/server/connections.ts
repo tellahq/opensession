@@ -4,7 +4,13 @@
  * query strings (they can embed tokens) or env values.
  */
 import { homeDir } from "./paths";
-import { existsSync, readFileSync, copyFileSync, watchFile } from "fs";
+import {
+  existsSync,
+  readFileSync,
+  copyFileSync,
+  unwatchFile,
+  watchFile,
+} from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { configuredPaths } from "./config";
 import {
@@ -17,38 +23,43 @@ import {
 } from "./mcp-oauth";
 
 const HOME = homeDir();
-// mcp-config.json location. OPENSESSION_MCP_CONFIG env → config
-// `paths.mcpConfig` → this repo's checkout — unchanged when neither is set.
-const CONFIG_PATH = configuredPaths().mcpConfig;
 
-// Cache the parsed MCP config with file-watcher invalidation
+// Cache the parsed MCP config with file-watcher invalidation. Resolve the path
+// per access so a live config reload cannot retain the watcher or cached value
+// for a previously configured path.
 let cachedMcpConfig: { mcpServers: Record<string, any> } | null = null;
-let cacheWatcherSetUp = false;
+let cachedMcpConfigPath: string | null = null;
+let watchedMcpConfigPath: string | null = null;
 
-function setupCacheWatcher() {
-  if (cacheWatcherSetUp) return;
-  cacheWatcherSetUp = true;
+function setupCacheWatcher(configPath: string) {
+  if (watchedMcpConfigPath === configPath) return;
+  if (watchedMcpConfigPath) unwatchFile(watchedMcpConfigPath);
+  watchedMcpConfigPath = configPath;
   try {
-    watchFile(CONFIG_PATH, () => {
+    watchFile(configPath, () => {
       cachedMcpConfig = null;
       console.log("[mcp-cache] config changed, invalidating cache");
     });
   } catch (e) {
+    watchedMcpConfigPath = null;
     console.warn("[mcp-cache] failed to set up file watcher:", e);
   }
 }
 
 export function readMcpConfig(): { mcpServers: Record<string, any> } {
-  if (!cacheWatcherSetUp) setupCacheWatcher();
-  if (cachedMcpConfig) return cachedMcpConfig;
+  const configPath = configuredPaths().mcpConfig;
+  setupCacheWatcher(configPath);
+  if (cachedMcpConfig && cachedMcpConfigPath === configPath)
+    return cachedMcpConfig;
 
   try {
-    cachedMcpConfig = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as {
+    cachedMcpConfig = JSON.parse(readFileSync(configPath, "utf-8")) as {
       mcpServers: Record<string, any>;
     };
   } catch {
     cachedMcpConfig = { mcpServers: {} };
   }
+  cachedMcpConfigPath = configPath;
   return cachedMcpConfig;
 }
 
@@ -142,11 +153,14 @@ export function withDynamicCredentials(
 }
 
 function writeMcpConfig(config: { mcpServers: Record<string, any> }): void {
+  const configPath = configuredPaths().mcpConfig;
   // Keep one backup so a bad edit is always recoverable
   try {
-    copyFileSync(CONFIG_PATH, `${CONFIG_PATH}.bak`);
+    copyFileSync(configPath, `${configPath}.bak`);
   } catch {}
-  writeFileAtomic(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
+  writeFileAtomic(configPath, JSON.stringify(config, null, 2) + "\n");
+  cachedMcpConfig = config;
+  cachedMcpConfigPath = configPath;
   cache = null;
 }
 

@@ -75,6 +75,61 @@ function enableOperatorMode(): void {
   process.env.OPENSESSION_CONFIG = path;
 }
 
+function enableRoleAwareConnections(): string {
+  const mcpConfig = join(dir, "mcp-config.json");
+  writeFileSync(
+    mcpConfig,
+    JSON.stringify({
+      mcpServers: {
+        "apple-build": {
+          command: "opensession",
+          args: ["apple-mobile-mcp", "--mode", "build"],
+        },
+        "apple-release": {
+          command: "opensession",
+          args: ["apple-mobile-mcp", "--mode", "release"],
+          env: {
+            APPLE_TEAM_ID: "TEAM123456",
+            APPLE_ASC_KEY_ID: "KEY1234567",
+            APPLE_ASC_ISSUER_ID: "00000000-0000-0000-0000-000000000000",
+            APPLE_ASC_PRIVATE_KEY_PATH: "/protected/AuthKey.p8",
+          },
+          allowedUsers: ["admin"],
+        },
+        ordinary: {
+          command: "ordinary-mcp",
+          allowedUsers: ["admin"],
+        },
+      },
+    }),
+  );
+  const config = join(
+    dir,
+    `role-aware-${Math.random().toString(36).slice(2)}.json`,
+  );
+  writeFileSync(
+    config,
+    JSON.stringify({
+      integrations: {
+        github: { userPrAuth: true, oauthClientId: "test-client-id" },
+      },
+      identity: {
+        team: [
+          { name: "Admin", github: "admin", admin: true },
+          { name: "Member", github: "member", admin: false },
+        ],
+      },
+      paths: { mcpConfig },
+    }),
+  );
+  process.env.OPENSESSION_CONFIG = config;
+  return mcpConfig;
+}
+
+function storedMcpServers(path: string): Record<string, any> {
+  return JSON.parse(readFileSync(path, "utf-8")).mcpServers;
+}
+
 function context(
   path: string,
   method: string,
@@ -100,6 +155,114 @@ function context(
 }
 
 const DEVICE = "/api/connections/github/device";
+
+const MEMBER = { login: "member", name: "Member" };
+const ADMIN = { login: "admin", name: "Admin" };
+
+describe("Apple release connection authorization", () => {
+  test("rejects a non-admin self-add through Apple mobile setup", async () => {
+    const mcpConfig = enableRoleAwareConnections();
+
+    const response = await handleConnectionsRoutes(
+      context("/api/connections/apple-mobile", "PUT", MEMBER, {
+        buildEnabled: true,
+        releaseEnabled: true,
+        teamId: "TEAM123456",
+        allowedUsers: ["member"],
+      }),
+    );
+
+    expect(response?.status).toBe(403);
+    expect(await response?.json()).toEqual({
+      error: "Workspace administrator access is required",
+    });
+    expect(storedMcpServers(mcpConfig)["apple-release"]).toMatchObject({
+      env: { APPLE_ASC_KEY_ID: "KEY1234567" },
+      allowedUsers: ["admin"],
+    });
+  });
+
+  test("rejects non-admin generic Apple release mutations", async () => {
+    const mcpConfig = enableRoleAwareConnections();
+
+    for (const [method, body] of [
+      ["PUT", { allowedUsers: ["member"] }],
+      ["DELETE", undefined],
+    ] as const) {
+      const response = await handleConnectionsRoutes(
+        context("/api/connections/mcp/apple-release", method, MEMBER, body),
+      );
+      expect(response?.status).toBe(403);
+    }
+
+    const create = await handleConnectionsRoutes(
+      context("/api/connections/mcp", "POST", MEMBER, {
+        name: "apple-release",
+        transport: "stdio",
+        command: "malicious-release",
+        allowedUsers: ["member"],
+      }),
+    );
+    expect(create?.status).toBe(403);
+    expect(storedMcpServers(mcpConfig)["apple-release"]).toMatchObject({
+      command: "opensession",
+      env: { APPLE_ASC_KEY_ID: "KEY1234567" },
+      allowedUsers: ["admin"],
+    });
+  });
+
+  test("keeps ordinary MCP mutations available to non-admin teammates", async () => {
+    const mcpConfig = enableRoleAwareConnections();
+
+    const update = await handleConnectionsRoutes(
+      context("/api/connections/mcp/ordinary", "PUT", MEMBER, {
+        allowedUsers: ["member"],
+      }),
+    );
+    expect(update?.status).toBe(200);
+    expect(storedMcpServers(mcpConfig).ordinary.allowedUsers).toEqual([
+      "member",
+    ]);
+
+    const remove = await handleConnectionsRoutes(
+      context("/api/connections/mcp/ordinary", "DELETE", MEMBER),
+    );
+    expect(remove?.status).toBe(200);
+    expect(storedMcpServers(mcpConfig).ordinary).toBeUndefined();
+  });
+
+  test("allows admins to update, remove, and reconfigure Apple release", async () => {
+    const mcpConfig = enableRoleAwareConnections();
+
+    const update = await handleConnectionsRoutes(
+      context("/api/connections/mcp/apple-release", "PUT", ADMIN, {
+        allowedUsers: ["member"],
+      }),
+    );
+    expect(update?.status).toBe(200);
+    expect(storedMcpServers(mcpConfig)["apple-release"]).toMatchObject({
+      env: { APPLE_ASC_KEY_ID: "KEY1234567" },
+      allowedUsers: ["member"],
+    });
+
+    const remove = await handleConnectionsRoutes(
+      context("/api/connections/mcp/apple-release", "DELETE", ADMIN),
+    );
+    expect(remove?.status).toBe(200);
+    expect(storedMcpServers(mcpConfig)["apple-release"]).toBeUndefined();
+
+    enableRoleAwareConnections();
+    const setup = await handleConnectionsRoutes(
+      context("/api/connections/apple-mobile", "PUT", ADMIN, {
+        buildEnabled: false,
+        releaseEnabled: false,
+      }),
+    );
+    expect(setup?.status).toBe(200);
+    expect(storedMcpServers(mcpConfig)["apple-build"]).toBeUndefined();
+    expect(storedMcpServers(mcpConfig)["apple-release"]).toBeUndefined();
+  });
+});
 
 describe("GitHub App key transaction", () => {
   test("restores the previous key when config persistence fails", async () => {
