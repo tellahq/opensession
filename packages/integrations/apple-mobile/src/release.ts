@@ -2,7 +2,13 @@ import { chmodSync, readdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { ensureDirectory } from "./build";
 import { findExecutable, runChecked } from "./exec";
-import { CREDENTIAL_REFS, credentials, exportOptions, loadPlan } from "./plans";
+import {
+  CREDENTIAL_REFS,
+  consumeReleaseApproval,
+  credentials,
+  exportOptions,
+  loadPlan,
+} from "./plans";
 import type { CommandResult, CommandSpec, ReleasePlan } from "./types";
 
 async function writePlist(
@@ -69,6 +75,7 @@ export async function executePlan(
       "TestFlight upload requires Xcode command-line tools on macOS",
     );
   }
+  const approval = consumeReleaseApproval(plan);
   ensureDirectory(plan.outputDirectory);
   const results: CommandResult[] = [];
   let artifact = plan.sourceArtifact;
@@ -123,6 +130,8 @@ export async function executePlan(
     planId: plan.id,
     action: plan.action,
     commit: plan.commit,
+    approvedBy: approval.approvedBy,
+    approvedAt: approval.approvedAt,
     artifact: artifact ? relative(plan.projectDir, artifact) : undefined,
     sha256,
     results,

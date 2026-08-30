@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { delimiter } from "node:path";
-import { buildAppleMobileUpdates } from "./apple-mobile-connections";
+import {
+  appleReleaseApprover,
+  buildAppleMobileUpdates,
+} from "./apple-mobile-connections";
 
 const releaseInput = {
   buildEnabled: true,
@@ -68,6 +71,16 @@ describe("Apple mobile connection setup", () => {
         },
       ),
     ).toThrow("Release tools require Xcode on this Mac");
+  });
+
+  test("approves only an authenticated identity on the release allowlist", () => {
+    expect(appleReleaseApprover({ login: "alice" }, ["Alice", "Bob"])).toBe(
+      "alice",
+    );
+    expect(
+      appleReleaseApprover({ login: "mallory" }, ["Alice"]),
+    ).toBeUndefined();
+    expect(appleReleaseApprover(null, ["Alice"])).toBeUndefined();
   });
 
   test("can install credential-free build tools by themselves", () => {

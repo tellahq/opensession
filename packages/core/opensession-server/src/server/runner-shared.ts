@@ -25,10 +25,25 @@ import { GH_CHECKS_CLI_PATH } from "./run-instructions";
 
 /**
  * Resolve the MCP servers for a run: all configured, or just the allowlist,
- * minus any server whose per-user `allowedUsers` list excludes `user`. The
- * `allowedUsers` field is stripped from every entry before it reaches an
- * engine (it's our metadata, not MCP config).
+ * minus any server whose per-user `allowedUsers` list excludes the run. Most
+ * servers accept the prompter or session creator; `apple-release` is stricter
+ * and accepts only the current prompter. The metadata is stripped before the
+ * entry reaches an engine.
  */
+export function mcpServerAllowedForRun(
+  name: string,
+  allowedUsers: unknown,
+  user?: string,
+  grantUsers?: Array<string | undefined>,
+): boolean {
+  if (!Array.isArray(allowedUsers) || allowedUsers.length === 0) return true;
+  const gateUsers =
+    name === "apple-release" ? [user] : [user, ...(grantUsers || [])];
+  return gateUsers
+    .filter((candidate): candidate is string => !!candidate)
+    .some((candidate) => userMatchesAny(candidate, allowedUsers));
+}
+
 export function filterMcpServers(
   scope: McpScope,
   user?: string,
@@ -54,14 +69,8 @@ export function filterMcpServers(
       continue;
     }
     const { allowedUsers, oauthUrl, ...entry } = cfg;
-    if (Array.isArray(allowedUsers) && allowedUsers.length) {
-      // Cleared when the prompter OR the session creator (grantUsers[0]) is
-      // on the list — anyone with access to a cleared person's session can
-      // use it there (per-session invites = future).
-      const gateUsers = [user, ...(grantUsers || [])].filter(
-        (u): u is string => !!u,
-      );
-      if (!gateUsers.some((u) => userMatchesAny(u, allowedUsers))) continue;
+    if (!mcpServerAllowedForRun(name, allowedUsers, user, grantUsers)) {
+      continue;
     }
     out[name] = entry;
   }

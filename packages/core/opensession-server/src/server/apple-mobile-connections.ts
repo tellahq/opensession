@@ -3,6 +3,8 @@ import { delimiter, isAbsolute, resolve } from "node:path";
 import { findExecutable } from "../../../../integrations/apple-mobile/src/exec";
 import { resolvePrivateKeyPath } from "../../../../integrations/apple-mobile/src/security";
 import { readMcpConfig, replaceMcpServerEntries } from "./connections";
+import { stateDir } from "./paths";
+import { userMatchesAny } from "./shared/user-mappings";
 
 const BUILD_SERVER = "apple-build";
 const RELEASE_SERVER = "apple-release";
@@ -80,6 +82,15 @@ function configured(entry: AppleMcpEntry, mode: "build" | "release"): boolean {
   );
 }
 
+export function appleReleaseApprover(
+  authUser: { login?: string; name?: string } | null | undefined,
+  allowedUsers: string[],
+): string | undefined {
+  return [authUser?.login, authUser?.name]
+    .filter((identity): identity is string => !!identity)
+    .find((identity) => userMatchesAny(identity, allowedUsers));
+}
+
 export function appleMobileSetupStatus(): AppleMobileSetupStatus {
   const servers = readMcpConfig().mcpServers;
   const build = entry(servers[BUILD_SERVER]);
@@ -145,6 +156,7 @@ export function buildAppleMobileUpdates(
   options: {
     releaseCapable?: boolean;
     validatePrivateKey?: (path: string, roots: string[]) => void;
+    stateDir?: string;
   } = {},
 ): AppleMobileUpdates {
   const buildEnabled = boolean(input.buildEnabled, "buildEnabled");
@@ -186,7 +198,12 @@ export function buildAppleMobileUpdates(
       ? {
           command: COMMAND,
           args: ["apple-mobile-mcp", "--mode", "build"],
-          env: { APPLE_MOBILE_ALLOWED_ROOTS: rootsValue },
+          env: {
+            APPLE_MOBILE_ALLOWED_ROOTS: rootsValue,
+            ...(options.stateDir
+              ? { APPLE_MOBILE_STATE_DIR: options.stateDir }
+              : {}),
+          },
         }
       : undefined,
     [RELEASE_SERVER]: releaseEnabled
@@ -195,6 +212,9 @@ export function buildAppleMobileUpdates(
           args: ["apple-mobile-mcp", "--mode", "release"],
           env: {
             APPLE_MOBILE_ALLOWED_ROOTS: rootsValue,
+            ...(options.stateDir
+              ? { APPLE_MOBILE_STATE_DIR: options.stateDir }
+              : {}),
             APPLE_DEVELOPER_TEAM_ID: teamId,
             APPLE_ASC_KEY_ID: String(keyId),
             APPLE_ASC_ISSUER_ID: String(issuerId),
@@ -213,6 +233,7 @@ export function configureAppleMobileConnections(
     process.platform === "darwin" && Boolean(findExecutable("xcodebuild"));
   const updates = buildAppleMobileUpdates(input, existingEnv(RELEASE_SERVER), {
     releaseCapable,
+    stateDir: stateDir("apple-mobile"),
   });
   const result = replaceMcpServerEntries(updates);
   if ("error" in result) throw new Error(result.error);

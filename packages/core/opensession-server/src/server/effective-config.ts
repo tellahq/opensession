@@ -139,15 +139,17 @@ export function explainMcpServers(input: {
       : undefined;
     const inAllowlist = !scope || scope.includes(name);
     const isIncluded = name in included;
+    const effectiveGateUsers =
+      name === "apple-release" ? gateUsers.slice(0, 1) : gateUsers;
     const oauthGrant = !!cfg && !!input.hasOauthGrant?.(name);
     const reason = !cfg
       ? `not configured — the allowlist names a server ${configPath} does not define`
       : !inAllowlist
         ? "outside this run's MCP allowlist"
         : allowedUsers?.length && !isIncluded
-          ? `allowedUsers gate: none of [${gateUsers.join(", ") || "no user"}] matches [${allowedUsers.join(", ")}]`
+          ? `allowedUsers gate: none of [${effectiveGateUsers.join(", ") || "no user"}] matches [${allowedUsers.join(", ")}]`
           : allowedUsers?.length
-            ? `allowedUsers gate cleared by [${gateUsers.join(", ")}]`
+            ? `allowedUsers gate cleared by [${effectiveGateUsers.join(", ")}]`
             : scope
               ? "named by this run's MCP allowlist"
               : "no allowlist — every configured server this user may see";

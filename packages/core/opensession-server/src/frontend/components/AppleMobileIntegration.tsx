@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import {
+  approveAppleRelease,
   fetchAppleMobileSetup,
+  fetchAppleReleaseApprovals,
   saveAppleMobileSetup,
   type AppleMobileSetupStatus,
+  type AppleReleaseApprovals,
 } from "../lib/api/apple-mobile";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
@@ -66,6 +69,10 @@ function AppleMobileSetupDialog({
     status.allowedUsers.join(", "),
   );
   const [saving, setSaving] = useState(false);
+  const [approvals, setApprovals] = useState<AppleReleaseApprovals | null>(
+    null,
+  );
+  const [approving, setApproving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,8 +85,37 @@ function AppleMobileSetupDialog({
     setIssuerId("");
     setPrivateKeyPath("");
     setAllowedUsers(status.allowedUsers.join(", "));
+    setApprovals(null);
+    setApproving(null);
     setError(null);
+    void fetchAppleReleaseApprovals()
+      .then(setApprovals)
+      .catch((cause) =>
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Could not load Apple release approvals",
+        ),
+      );
   }, [open, status]);
+
+  async function approve(planId: string) {
+    if (approving) return;
+    setApproving(planId);
+    setError(null);
+    try {
+      await approveAppleRelease(planId);
+      setApprovals(await fetchAppleReleaseApprovals());
+      toast("Apple release approved");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not approve Apple release",
+      );
+    }
+    setApproving(null);
+  }
 
   async function save() {
     if (saving) return;
@@ -264,6 +300,82 @@ function AppleMobileSetupDialog({
                 </SettingsField>
               </div>
             ) : null}
+          </SettingsSection>
+
+          <SettingsSection className="border-0 bg-panel p-4">
+            <div className="text-item-title font-medium text-fg">
+              Release approvals
+            </div>
+            <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+              Planning never authorizes execution. An allowed, signed-in person
+              must approve the exact plan here in a later step.
+            </p>
+            {approvals ? (
+              !approvals.authenticated ? (
+                <InlineAlert className="mt-3">
+                  Sign in with GitHub to approve Apple releases.
+                </InlineAlert>
+              ) : !approvals.allowed ? (
+                <InlineAlert className="mt-3">
+                  Your account is not in the release allowlist.
+                </InlineAlert>
+              ) : approvals.requests.length === 0 ? (
+                <div className="mt-3 text-supporting text-faint">
+                  No release plans are waiting for approval.
+                </div>
+              ) : (
+                <div className="mt-3 grid gap-2">
+                  {approvals.requests.map((request) => (
+                    <div
+                      key={request.planId}
+                      className="rounded-control bg-surface p-3"
+                    >
+                      <div className="flex flex-wrap items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-item-title font-medium text-fg">
+                            {request.action === "adhoc"
+                              ? "Ad-hoc export"
+                              : request.action === "testflight"
+                                ? "TestFlight upload"
+                                : "IPA upload"}
+                          </div>
+                          <div className="mt-1 text-meta text-dim">
+                            {request.projectDir
+                              .split("/")
+                              .filter(Boolean)
+                              .pop()}
+                            {request.marketingVersion
+                              ? ` · ${request.marketingVersion}`
+                              : ""}
+                            {request.buildNumber
+                              ? ` (${request.buildNumber})`
+                              : ""}
+                          </div>
+                          <code className="mt-1 block break-all text-meta text-faint">
+                            {request.commit}
+                          </code>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="phone:min-h-11"
+                          variant="primary"
+                          disabled={approving !== null}
+                          onClick={() => void approve(request.planId)}
+                        >
+                          {approving === request.planId
+                            ? "Approving…"
+                            : "Approve"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : (
+              <div className="mt-3 text-supporting text-faint">
+                Checking for release plans…
+              </div>
+            )}
           </SettingsSection>
 
           <SettingsSection className="border-0 bg-panel p-4">

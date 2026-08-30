@@ -160,7 +160,7 @@ const releaseTools: Tool[] = [
   {
     name: "apple_release_execute",
     description:
-      "Execute a previously reviewed plan. confirmation must exactly equal its full commit SHA.",
+      "Execute a plan after a later authenticated human approval in Settings → Integrations → Apple mobile. confirmation must exactly equal its full commit SHA.",
     inputSchema: {
       type: "object",
       properties: {
@@ -175,6 +175,17 @@ const releaseTools: Tool[] = [
     },
   },
 ];
+
+function reviewablePlan<T extends { plan: Parameters<typeof safePlanView>[0] }>(
+  result: T,
+) {
+  return {
+    ...result,
+    plan: safePlanView(result.plan),
+    approvalRequired: true,
+    approvalLocation: "Settings → Integrations → Apple mobile",
+  };
+}
 
 async function call(name: string, args: Args): Promise<unknown> {
   switch (name) {
@@ -205,7 +216,7 @@ async function call(name: string, args: Args): Promise<unknown> {
           buildNumber: string(args, "buildNumber", false),
         },
       );
-      return { ...result, plan: safePlanView(result.plan) };
+      return reviewablePlan(result);
     }
     case "apple_release_plan_testflight": {
       const result = await createBuildPlan(
@@ -216,14 +227,14 @@ async function call(name: string, args: Args): Promise<unknown> {
           buildNumber: string(args, "buildNumber", false),
         },
       );
-      return { ...result, plan: safePlanView(result.plan) };
+      return reviewablePlan(result);
     }
     case "apple_release_plan_upload": {
       const result = await createUploadPlan(
         string(args, "projectDir")!,
         string(args, "artifactPath")!,
       );
-      return { ...result, plan: safePlanView(result.plan) };
+      return reviewablePlan(result);
     }
     case "apple_release_execute":
       return executePlan(

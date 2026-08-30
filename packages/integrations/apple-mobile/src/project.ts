@@ -60,7 +60,7 @@ export async function inspectProject(projectDirInput: string) {
 export async function enforceReleasePolicy(projectDir: string) {
   const loaded = await loadConfig(projectDir);
   const git = await gitSnapshot(projectDir);
-  if ((loaded.config.release?.requireClean ?? true) && !git.clean) {
+  if (!git.clean) {
     throw new Error(
       `Release requires a clean worktree; changes: ${git.changes.join(", ")}`,
     );

@@ -3,7 +3,13 @@ import { chmodSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
-import { createBuildPlan, loadPlan } from "../src/plans";
+import {
+  approveReleasePlan,
+  consumeReleaseApproval,
+  createBuildPlan,
+  listReleaseApprovalRequests,
+  loadPlan,
+} from "../src/plans";
 import { resolveProjectDir, resolveProjectPath } from "../src/security";
 import { runChecked } from "../src/exec";
 
@@ -76,6 +82,16 @@ describe("configuration and path boundary", () => {
     expect(loaded.hash).toHaveLength(64);
   });
 
+  test("rejects repository config that disables clean releases", async () => {
+    const configPath = join(project, ".opensession/apple-mobile.json");
+    const config = JSON.parse(await Bun.file(configPath).text());
+    config.release.requireClean = false;
+    await Bun.write(configPath, JSON.stringify(config));
+    expect(loadConfig(project)).rejects.toThrow(
+      "release.requireClean cannot be false",
+    );
+  });
+
   test("rejects paths outside the project", () => {
     expect(() => resolveProjectPath(project, "../AuthKey_TEST.p8")).toThrow(
       "escapes project",
@@ -102,6 +118,17 @@ describe("release plans", () => {
     expect(result.plan.commands[0]!.args).toContain("MARKETING_VERSION=1.2.3");
     const loaded = await loadPlan(project, result.plan.id);
     expect(loaded.plan.id).toBe(result.plan.id);
+  });
+
+  test("requires and consumes a later approval grant", async () => {
+    const result = await createBuildPlan(project, "adhoc");
+    expect(listReleaseApprovalRequests()).toHaveLength(1);
+    expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
+
+    approveReleasePlan(result.plan.id, "alice");
+    expect(listReleaseApprovalRequests()).toHaveLength(0);
+    expect(consumeReleaseApproval(result.plan).approvedBy).toBe("alice");
+    expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
   });
 
   test("rejects a release key stored in an allowed worktree", async () => {

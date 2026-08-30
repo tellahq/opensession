@@ -23,7 +23,7 @@ Building a repository can execute repository-controlled SwiftPM plugins and buil
 
 Before an ad-hoc build, the operator must also arrange an Apple Distribution certificate and private key in the Mac's Keychain, register each target device UDID in the Apple Developer portal, and grant the App Store Connect API key access to certificates, identifiers, and profiles. The agent cannot enroll in Apple's program, accept agreements, obtain device UDIDs, or create private credentials for the operator.
 
-Open Session's `allowedUsers` gate keeps `apple-release` out of other users' sessions and unattended automations. The setup route refuses to create or unrestrict that release connection without at least one allowed person.
+Open Session checks `apple-release` against the current prompter only. An allowed session creator does not grant release access to someone else steering that shared session. The setup route refuses to create or unrestrict the connection without at least one allowed person, and execution still needs the separate authenticated approval grant.
 
 ## Configure an app
 
@@ -69,7 +69,9 @@ Add the artifact directory to `.gitignore`.
 
 ## Release approval
 
-Release plans expire after one hour. A plan is authenticated and bound to the clean git commit, branch, project config, and, for an existing IPA upload, the artifact SHA-256. Execution requires the exact full commit SHA shown in the plan.
+Release plans expire after one hour. A plan is authenticated and bound to the clean git commit, branch, project config, and, for an existing IPA upload, the artifact SHA-256. Repository config cannot disable the clean-worktree check.
+
+Planning creates a pending request but never authorizes execution. In a later step, a signed-in person on the release allowlist reviews the exact commit and effects under **Settings → Integrations → Apple mobile → Release approvals** and clicks **Approve**. Execution then requires the same full commit SHA and atomically consumes that one-time approval grant. Echoing the plan ID or commit from the planning response is not approval.
 
 The shipped skill requires a separate user turn between planning and execution. Review the commit, version, build number, destination, and effects before approving. TestFlight upload only hands the build to Apple for processing. It does not submit for review or make the app public.
 

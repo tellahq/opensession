@@ -103,6 +103,9 @@ export async function loadConfig(projectDir: string): Promise<{
     ) {
       throw new Error("release.requireClean must be boolean");
     }
+    if (release.requireClean === false) {
+      throw new Error("release.requireClean cannot be false");
+    }
     const artifactDirectory = optionalString(
       release.artifactDirectory,
       "release.artifactDirectory",
@@ -110,7 +113,7 @@ export async function loadConfig(projectDir: string): Promise<{
     if (artifactDirectory)
       resolveProjectPath(projectDir, artifactDirectory, { mustExist: false });
     config.release = {
-      requireClean: release.requireClean as boolean | undefined,
+      requireClean: release.requireClean === true ? true : undefined,
       allowedBranches: allowedBranches as string[] | undefined,
       artifactDirectory,
     };
