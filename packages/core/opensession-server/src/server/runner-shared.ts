@@ -11,6 +11,7 @@
  * - CLAUDE_CODE_BIN: the Claude Code CLI path (the Meridian bridge's motor).
  */
 import {
+  hasValidRequiredAllowedUsers,
   readMcpConfig,
   requiresAllowedUsers,
   withDynamicCredentials,
@@ -40,10 +41,12 @@ export function mcpServerAllowedForRun(
   user?: string,
   grantUsers?: Array<string | undefined>,
 ): boolean {
+  const protectedServer = requiresAllowedUsers(name);
+  if (protectedServer && !hasValidRequiredAllowedUsers(allowedUsers)) {
+    return false;
+  }
   if (!Array.isArray(allowedUsers) || allowedUsers.length === 0) return true;
-  const gateUsers = requiresAllowedUsers(name)
-    ? [user]
-    : [user, ...(grantUsers || [])];
+  const gateUsers = protectedServer ? [user] : [user, ...(grantUsers || [])];
   return gateUsers
     .filter((candidate): candidate is string => !!candidate)
     .some((candidate) => userMatchesAny(candidate, allowedUsers));

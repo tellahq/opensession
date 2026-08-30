@@ -195,6 +195,16 @@ export function requiresAllowedUsers(name: string): boolean {
   return name.trim().toLowerCase() === "apple-release";
 }
 
+export function hasValidRequiredAllowedUsers(
+  value: unknown,
+): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((user) => typeof user === "string" && Boolean(user.trim()))
+  );
+}
+
 export function addMcpServer(
   input: AddMcpInput,
 ): { ok: true } | { error: string } {

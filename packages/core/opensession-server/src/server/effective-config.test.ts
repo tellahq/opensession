@@ -100,12 +100,54 @@ describe("explainMcpServers", () => {
     }
   });
 
+  test("explains invalid protected allowlists as fail-closed", () => {
+    for (const allowedUsers of [
+      undefined,
+      [],
+      "Alice",
+      [123],
+      [""],
+      ["Alice", 123],
+    ]) {
+      const [apple] = explainMcpServers({
+        all: {
+          "apple-release": {
+            command: "opensession",
+            allowedUsers,
+          },
+        },
+        included: {},
+        scope: undefined,
+        gateUsers: ["Alice"],
+        configPath: "/tmp/mcp-config.json",
+      });
+      expect(apple.included).toBe(false);
+      expect(apple.reason).toContain("missing, empty, or malformed");
+      expect(apple.reason).toContain("denied");
+      expect(apple.reason).not.toContain("every configured server");
+    }
+  });
+
   test("an automation run (no user at all) reads as a gate miss, not an omission", () => {
     const rows = explain({
       included: { slack: {}, linear: {} },
       gateUsers: [],
     });
     expect(byName(rows, "brex").reason).toContain("no user");
+
+    const [apple] = explainMcpServers({
+      all: {
+        "APPLE-RELEASE": {
+          command: "opensession",
+          allowedUsers: ["Alice"],
+        },
+      },
+      included: {},
+      scope: undefined,
+      gateUsers: [],
+      configPath: "/tmp/mcp-config.json",
+    });
+    expect(apple.reason).toContain("none of [no user]");
   });
 
   test("an allowlist naming an unconfigured server is reported, not silently dropped", () => {

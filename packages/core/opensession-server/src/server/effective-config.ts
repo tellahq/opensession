@@ -5,7 +5,11 @@ import {
   type SessionRunInputs,
 } from "./session-run-inputs";
 import { filterMcpServers, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
-import { readMcpConfig, requiresAllowedUsers } from "./connections";
+import {
+  hasValidRequiredAllowedUsers,
+  readMcpConfig,
+  requiresAllowedUsers,
+} from "./connections";
 import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
 import { userMatchesAny, commitAuthorFor } from "./shared/user-mappings";
 import { configuredPaths } from "./config";
@@ -134,12 +138,16 @@ export function explainMcpServers(input: {
   const names = [...new Set([...Object.keys(all), ...(scope ?? [])])].sort();
   return names.map((name) => {
     const cfg = all[name];
-    const allowedUsers = Array.isArray(cfg?.allowedUsers)
-      ? (cfg!.allowedUsers as string[])
+    const rawAllowedUsers = cfg?.allowedUsers;
+    const allowedUsers = Array.isArray(rawAllowedUsers)
+      ? (rawAllowedUsers as string[])
       : undefined;
     const inAllowlist = !scope || scope.includes(name);
     const isIncluded = name in included;
-    const effectiveGateUsers = requiresAllowedUsers(name)
+    const protectedServer = requiresAllowedUsers(name);
+    const invalidRequiredAllowlist =
+      protectedServer && !hasValidRequiredAllowedUsers(rawAllowedUsers);
+    const effectiveGateUsers = protectedServer
       ? gateUsers.slice(0, 1)
       : gateUsers;
     const oauthGrant = !!cfg && !!input.hasOauthGrant?.(name);
@@ -147,20 +155,22 @@ export function explainMcpServers(input: {
       ? `not configured — the allowlist names a server ${configPath} does not define`
       : !inAllowlist
         ? "outside this run's MCP allowlist"
-        : allowedUsers?.length && !isIncluded
-          ? `allowedUsers gate: none of [${effectiveGateUsers.join(", ") || "no user"}] matches [${allowedUsers.join(", ")}]`
-          : allowedUsers?.length
-            ? `allowedUsers gate cleared by [${effectiveGateUsers.join(", ")}]`
-            : scope
-              ? "named by this run's MCP allowlist"
-              : "no allowlist — every configured server this user may see";
+        : invalidRequiredAllowlist
+          ? "required allowedUsers gate is missing, empty, or malformed; server denied"
+          : allowedUsers?.length && !isIncluded
+            ? `allowedUsers gate: none of [${effectiveGateUsers.join(", ") || "no user"}] matches [${allowedUsers.join(", ")}]`
+            : allowedUsers?.length
+              ? `allowedUsers gate cleared by [${effectiveGateUsers.join(", ")}]`
+              : scope
+                ? "named by this run's MCP allowlist"
+                : "no allowlist — every configured server this user may see";
     return {
       name,
       included: isIncluded,
       reason,
       source: !cfg
         ? "run MCP allowlist"
-        : allowedUsers?.length
+        : invalidRequiredAllowlist || allowedUsers?.length
           ? `${source} → allowedUsers (runner-shared.ts filterMcpServers)`
           : source,
       transport:
