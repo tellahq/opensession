@@ -176,12 +176,24 @@ function cleanAllowedUsers(users?: string[]): string[] | undefined {
   return out.length ? out : undefined;
 }
 
+/** Credentialed first-party release tools must never become fleet-wide. */
+export function requiresAllowedUsers(name: string): boolean {
+  return name.toLowerCase() === "apple-release";
+}
+
 export function addMcpServer(
   input: AddMcpInput,
 ): { ok: true } | { error: string } {
   const name = (input.name || "").trim();
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(name)) {
     return { error: "Name must be alphanumeric (dashes/underscores allowed)" };
+  }
+
+  const allowedUsers = cleanAllowedUsers(input.allowedUsers);
+  if (requiresAllowedUsers(name) && !allowedUsers) {
+    return {
+      error: 'Server "apple-release" requires at least one allowed user',
+    };
   }
 
   const config = readMcpConfig();
@@ -211,7 +223,6 @@ export function addMcpServer(
     if (Object.keys(env).length > 0) entry.env = env;
   }
 
-  const allowedUsers = cleanAllowedUsers(input.allowedUsers);
   if (allowedUsers) entry.allowedUsers = allowedUsers;
 
   config.mcpServers[name] = entry;
@@ -240,12 +251,17 @@ export function addMcpServerEntry(
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(clean)) {
     return { error: "Name must be alphanumeric (dashes/underscores allowed)" };
   }
+  const allowedUsers = cleanAllowedUsers(opts.allowedUsers);
+  if (requiresAllowedUsers(clean) && !allowedUsers) {
+    return {
+      error: 'Server "apple-release" requires at least one allowed user',
+    };
+  }
   const config = readMcpConfig();
   if (config.mcpServers[clean]) {
     return { error: `Server "${clean}" already exists, remove it first` };
   }
   const { allowedUsers: _ignored, ...rest } = entry;
-  const allowedUsers = cleanAllowedUsers(opts.allowedUsers);
   config.mcpServers[clean] = allowedUsers ? { ...rest, allowedUsers } : rest;
   writeMcpConfig(config);
   return { ok: true };
@@ -264,6 +280,11 @@ export function setMcpAllowedUsers(
   const entry = config.mcpServers[name];
   if (!entry) return { error: `Server "${name}" not found` };
   const cleaned = cleanAllowedUsers(allowedUsers);
+  if (requiresAllowedUsers(name) && !cleaned) {
+    return {
+      error: 'Server "apple-release" requires at least one allowed user',
+    };
+  }
   if (cleaned) entry.allowedUsers = cleaned;
   else delete entry.allowedUsers;
   writeMcpConfig(config);

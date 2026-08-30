@@ -135,6 +135,16 @@
       "name": "@tellahq/opensession-protocol",
       "version": "0.1.0",
     },
+    "packages/integrations/apple-mobile": {
+      "name": "@tellahq/opensession-apple-mobile",
+      "version": "0.1.0",
+      "bin": {
+        "opensession-apple-mobile-mcp": "src/server.ts",
+      },
+      "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.30.0",
+      },
+    },
   },
   "patchedDependencies": {
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
@@ -774,6 +784,8 @@
     "@tanstack/virtual-core": ["@tanstack/virtual-core@3.17.8", "", {}, "sha512-BfEvehNpOT75r5Ksc5xW6NZuXujTfb7nlSEyVu4XHG3gdxNg1KqXruWbDewXOUaUYIo4oRbSfkjIajz4MAT8tA=="],
 
     "@team-plain/typescript-sdk": ["@team-plain/typescript-sdk@5.12.1", "", { "dependencies": { "@graphql-typed-document-node/core": "^3.2.0", "ajv": "^8.12.0", "ajv-formats": "^2.1.1", "graphql": "^16.6.0", "lodash.get": "^4.4.2", "zod": "3.22.4" } }, "sha512-EgCzFDsRkFcexuOWJMFh99w86E86U5/1VN26Q6Dogtmi2ln5wFHeoJ8/0PQQmDj9GWRI/y63ltlE6I4KN0fvLA=="],
+
+    "@tellahq/opensession-apple-mobile": ["@tellahq/opensession-apple-mobile@workspace:packages/integrations/apple-mobile"],
 
     "@tellahq/opensession-protocol": ["@tellahq/opensession-protocol@workspace:packages/core/protocol"],
 

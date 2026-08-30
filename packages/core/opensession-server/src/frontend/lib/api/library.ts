@@ -6,6 +6,7 @@ export type LibraryEntryType =
   | "tool"
   | "automation"
   | "integration"
+  | "connection"
   | "package";
 export type LibraryInstallKind = "one-click" | "draft" | "guided" | "client";
 

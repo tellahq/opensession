@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "backend": "xtool",
+  "bundleId": "com.example.MySwiftUIApp",
+  "teamId": "YOUR_TEAM_ID",
+  "xtool": {
+    "configuration": "debug"
+  },
+  "release": {
+    "requireClean": true,
+    "allowedBranches": ["main"],
+    "artifactDirectory": ".build/apple-mobile"
+  }
+}

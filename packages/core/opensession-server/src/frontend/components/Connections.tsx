@@ -102,6 +102,8 @@ const MCP_BLURBS: Record<string, string> = {
   ahrefs: "SEO, keywords & backlink data",
   github: "Repos, issues & pull requests",
   circle: "Community & support workspace",
+  "apple-build": "Credential-free Swift and unsigned iOS builds",
+  "apple-release": "Restricted ad-hoc and TestFlight release tools",
   vercel: "Projects, deployments & logs",
   vero: "Broadcasts and customer journeys",
 };

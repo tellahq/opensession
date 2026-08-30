@@ -64,6 +64,7 @@ const TYPE_ORDER: LibraryEntryType[] = [
   "tool",
   "automation",
   "integration",
+  "connection",
   "package",
 ];
 
@@ -71,6 +72,7 @@ const TYPE_LABELS: Record<LibraryEntryType, string> = {
   tool: "Tools",
   automation: "Automations",
   integration: "Integrations",
+  connection: "Connections",
   package: "Packages",
 };
 
@@ -78,6 +80,7 @@ const TYPE_BLURB: Record<LibraryEntryType, string> = {
   tool: "Tools appear in your sidebar.",
   automation: "A prompt and a trigger: a schedule, an event, or a webhook.",
   integration: "Outside systems this instance can listen to and act in.",
+  connection: "First-party MCP servers maintained with Open Session.",
   // Listed once installed rather than browsed: installing a package mounts an
   // MCP server and adds text an agent reads, so the review that gates it
   // lives in the terminal. `opensession plugins add <owner/repo>`.
@@ -89,6 +92,7 @@ const FILTERS: { key: "all" | LibraryEntryType; label: string }[] = [
   { key: "tool", label: "Tools" },
   { key: "automation", label: "Automations" },
   { key: "integration", label: "Integrations" },
+  { key: "connection", label: "Connections" },
   { key: "package", label: "Packages" },
 ];
 
@@ -148,6 +152,7 @@ const TYPE_GLYPHS: Record<LibraryEntryType, Glyph> = {
   tool: { icon: IconStack, tone: "sky" },
   automation: { icon: IconBolt, tone: "orange" },
   integration: { icon: IconPlug, tone: "green" },
+  connection: { icon: IconPlug, tone: "sky" },
   package: { icon: IconStack, tone: "indigo" },
 };
 
@@ -214,6 +219,12 @@ function EntryIcon({
 const installLinkClass =
   "inline-flex min-h-[26px] shrink-0 items-center rounded-control border border-line bg-button px-2.5 text-xs font-medium text-dim no-underline smooth-shadow-xs transition-colors hover:border-line-strong hover:text-fg";
 
+function entryHref(entry: LibraryEntry): string {
+  return /^https?:\/\//.test(entry.href)
+    ? entry.href
+    : `${BASE_PATH}${entry.href}`;
+}
+
 function EntryControl({
   entry,
   toolVisible,
@@ -240,7 +251,7 @@ function EntryControl({
     );
 
   return (
-    <a className={installLinkClass} href={`${BASE_PATH}${entry.href}`}>
+    <a className={installLinkClass} href={entryHref(entry)}>
       {entry.install === "guided"
         ? "Set up"
         : entry.install === "draft"
@@ -462,7 +473,7 @@ export function LibraryPanel() {
             {installed.map((entry) => (
               <a
                 key={entry.id}
-                href={`${BASE_PATH}${entry.href}`}
+                href={entryHref(entry)}
                 title={entry.name}
                 aria-label={entry.name}
                 // The tile's own corner, so the focus ring traces the mark
