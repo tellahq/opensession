@@ -1,13 +1,17 @@
-import { chmodSync, readdirSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { chmodSync, copyFileSync, readdirSync } from "node:fs";
+import { basename, dirname, join, relative } from "node:path";
 import { ensureDirectory } from "./build";
 import { findExecutable, runChecked } from "./exec";
+import { resolveProjectPath } from "./security";
 import {
   CREDENTIAL_REFS,
+  cleanupReleaseExecution,
   consumeReleaseApproval,
   credentials,
+  discardReleasePlan,
   exportOptions,
   loadPlan,
+  prepareReleaseExecution,
 } from "./plans";
 import type { CommandResult, CommandSpec, ReleasePlan } from "./types";
 
@@ -45,6 +49,24 @@ function withCredentials(command: CommandSpec): CommandSpec {
   };
 }
 
+function publishArtifact(
+  projectDir: string,
+  artifactDirectory: string | undefined,
+  planId: string,
+  artifact: string,
+): string {
+  const root = resolveProjectPath(
+    projectDir,
+    artifactDirectory ?? ".build/apple-mobile",
+    { mustExist: false },
+  );
+  const destinationDir = join(root, planId);
+  ensureDirectory(destinationDir);
+  const destination = join(destinationDir, basename(artifact));
+  copyFileSync(artifact, destination);
+  return destination;
+}
+
 function findExportedIpa(exportPath: string): string {
   const ipas = readdirSync(exportPath, { recursive: true })
     .map(String)
@@ -60,7 +82,7 @@ export async function executePlan(
   planId: string,
   confirmation: string,
 ) {
-  const { plan, config } = await loadPlan(projectDir, planId);
+  const { plan } = await loadPlan(projectDir, planId);
   if (confirmation !== plan.commit) {
     throw new Error("confirmation must exactly match the planned commit SHA");
   }
@@ -76,72 +98,117 @@ export async function executePlan(
       "TestFlight upload requires Xcode command-line tools on macOS",
     );
   }
-  const approval = consumeReleaseApproval(plan);
-  ensureDirectory(plan.outputDirectory);
-  const results: CommandResult[] = [];
-  let artifact = plan.sourceArtifact;
+  const prepared = await prepareReleaseExecution(plan);
+  let approvalConsumed = false;
+  try {
+    const approval = consumeReleaseApproval(plan);
+    approvalConsumed = true;
+    ensureDirectory(plan.outputDirectory);
+    const results: CommandResult[] = [];
+    let artifact: string | undefined;
+    let reportedArtifact: string | undefined;
 
-  if (plan.action === "upload") {
-    results.push(
-      await runChecked(withCredentials(plan.commands[0]!), {
-        timeoutMs: 45 * 60_000,
-        extraEnv: privateKeyEnv(),
-      }),
-    );
-  } else {
-    const exportPath = join(plan.outputDirectory, "export");
-    const plistPath = join(plan.outputDirectory, "ExportOptions.plist");
-    ensureDirectory(exportPath);
-    await writePlist(
-      plistPath,
-      exportOptions(config, plan.action),
-      plan.projectDir,
-    );
-    results.push(
-      await runChecked(withCredentials(plan.commands[0]!), {
-        timeoutMs: 60 * 60_000,
-      }),
-    );
-    results.push(
-      await runChecked(withCredentials(plan.commands[1]!), {
-        timeoutMs: 45 * 60_000,
-      }),
-    );
-    artifact = findExportedIpa(exportPath);
-    if (plan.action === "testflight") {
-      const upload = structuredClone(plan.commands[2]!);
-      upload.args = upload.args.map((arg) =>
-        arg === "<exported-ipa>" ? artifact! : arg,
-      );
+    if (plan.action === "upload") {
       results.push(
-        await runChecked(withCredentials(upload), {
+        await runChecked(withCredentials(prepared.commands[0]!), {
           timeoutMs: 45 * 60_000,
           extraEnv: privateKeyEnv(),
         }),
       );
+    } else {
+      const exportPath = join(plan.outputDirectory, "export");
+      const plistPath = join(plan.outputDirectory, "ExportOptions.plist");
+      ensureDirectory(exportPath);
+      await writePlist(
+        plistPath,
+        exportOptions(prepared.config, plan.action),
+        prepared.checkoutDir,
+      );
+      results.push(
+        await runChecked(withCredentials(prepared.commands[0]!), {
+          timeoutMs: 60 * 60_000,
+        }),
+      );
+      results.push(
+        await runChecked(withCredentials(prepared.commands[1]!), {
+          timeoutMs: 45 * 60_000,
+        }),
+      );
+      artifact = findExportedIpa(exportPath);
+      reportedArtifact = publishArtifact(
+        plan.projectDir,
+        prepared.config.release?.artifactDirectory,
+        plan.id,
+        artifact,
+      );
+      if (plan.action === "testflight") {
+        const upload = structuredClone(prepared.commands[2]!);
+        upload.args = upload.args.map((arg) =>
+          arg === "<exported-ipa>" ? artifact! : arg,
+        );
+        results.push(
+          await runChecked(withCredentials(upload), {
+            timeoutMs: 45 * 60_000,
+            extraEnv: privateKeyEnv(),
+          }),
+        );
+      }
+    }
+
+    const sha256 =
+      plan.action === "upload"
+        ? plan.sourceArtifactSha256
+        : artifact
+          ? new Bun.CryptoHasher("sha256")
+              .update(await Bun.file(artifact).arrayBuffer())
+              .digest("hex")
+          : undefined;
+    return {
+      planId: plan.id,
+      action: plan.action,
+      commit: plan.commit,
+      approvedBy: approval.approvedBy,
+      approvedAt: approval.approvedAt,
+      artifact:
+        plan.action === "upload"
+          ? plan.sourceArtifactName
+          : reportedArtifact
+            ? relative(plan.projectDir, reportedArtifact)
+            : undefined,
+      sha256,
+      results,
+    };
+  } finally {
+    try {
+      await cleanupReleaseExecution({
+        checkoutDir: prepared.checkoutDir,
+        executionDir: prepared.executionDir,
+        projectDir: plan.projectDir,
+      });
+    } finally {
+      if (approvalConsumed) discardReleasePlan(plan.id);
     }
   }
-
-  const sha256 = artifact
-    ? new Bun.CryptoHasher("sha256")
-        .update(await Bun.file(artifact).arrayBuffer())
-        .digest("hex")
-    : undefined;
-  return {
-    planId: plan.id,
-    action: plan.action,
-    commit: plan.commit,
-    approvedBy: approval.approvedBy,
-    approvedAt: approval.approvedAt,
-    artifact: artifact ? relative(plan.projectDir, artifact) : undefined,
-    sha256,
-    results,
-  };
 }
 
 export function safePlanView(plan: ReleasePlan) {
+  const controlledPaths = [plan.sourceArtifact, plan.outputDirectory].filter(
+    (value): value is string => Boolean(value),
+  );
+  const redactControlledPath = (value: string) => {
+    const root = controlledPaths.find(
+      (path) => value === path || value.startsWith(`${path}/`),
+    );
+    if (!root) return value;
+    const suffix = value.slice(root.length);
+    return root === plan.sourceArtifact
+      ? `<approved-ipa:${plan.sourceArtifactName}>${suffix}`
+      : `<controlled-release-output>${suffix}`;
+  };
   return {
     ...plan,
+    sourceArtifact: plan.sourceArtifact ? plan.sourceArtifactName : undefined,
+    outputDirectory: "<controlled-release-output>",
     commands: plan.commands.map((command) => ({
       ...command,
       args: command.args.map((arg) => {
@@ -149,7 +216,7 @@ export function safePlanView(plan: ReleasePlan) {
           return "<private-key-path>";
         if (arg === process.env.APPLE_ASC_KEY_ID) return "<key-id>";
         if (arg === process.env.APPLE_ASC_ISSUER_ID) return "<issuer-id>";
-        return arg;
+        return redactControlledPath(arg);
       }),
     })),
   };

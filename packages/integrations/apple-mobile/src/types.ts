@@ -44,6 +44,7 @@ export interface ReleasePlan {
   marketingVersion?: string;
   buildNumber?: string;
   sourceArtifact?: string;
+  sourceArtifactName?: string;
   sourceArtifactSha256?: string;
   outputDirectory: string;
   commands: CommandSpec[];

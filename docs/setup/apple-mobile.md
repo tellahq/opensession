@@ -69,9 +69,9 @@ Add the artifact directory to `.gitignore`.
 
 ## Release approval
 
-Release plans expire after one hour. A plan is authenticated and bound to the clean git commit, branch, project config, and, for an existing IPA upload, the artifact SHA-256. Repository config cannot disable the clean-worktree check.
+Release plans expire after one hour. A plan is authenticated and bound to the clean git commit, branch, project config, and, for an existing IPA upload, the artifact filename and SHA-256. Repository config cannot disable the clean-worktree check. Planning copies an existing IPA into private controlled storage, and execution uploads that exact approved copy. Build releases execute from a fresh detached checkout at the planned commit, not from the selected worktree.
 
-Planning creates a pending request but never authorizes execution. In a later step, a signed-in person on the release allowlist reviews the exact commit and effects under **Settings → Integrations → Apple mobile → Release approvals** and clicks **Approve**. Execution then requires the same full commit SHA and atomically consumes that one-time approval grant. Echoing the plan ID or commit from the planning response is not approval.
+Planning creates a pending request but never authorizes execution. In a later step, a signed-in person on the release allowlist reviews the full project path, plan ID, commit, and any IPA filename and SHA-256 under **Settings → Integrations → Apple mobile → Release approvals**, then clicks **Approve**. Execution requires the same full commit SHA and atomically consumes that one-time approval grant. Echoing the plan ID or commit from the planning response is not approval.
 
 The shipped skill requires a separate user turn between planning and execution. Review the commit, version, build number, destination, and effects before approving. TestFlight upload only hands the build to Apple for processing. It does not submit for review or make the app public.
 

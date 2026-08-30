@@ -28,6 +28,7 @@ export interface AppleReleaseApprovalRequest {
   expiresAt: string;
   marketingVersion?: string;
   buildNumber?: string;
+  sourceArtifactName?: string;
   sourceArtifactSha256?: string;
 }
 

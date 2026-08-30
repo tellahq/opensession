@@ -314,21 +314,63 @@ function AppleMobileSetupDialog({
                                   ? "TestFlight upload"
                                   : "IPA upload"}
                             </div>
-                            <div className="mt-1 text-meta text-dim">
-                              {request.projectDir
-                                .split("/")
-                                .filter(Boolean)
-                                .pop()}
-                              {request.marketingVersion
-                                ? ` · ${request.marketingVersion}`
-                                : ""}
-                              {request.buildNumber
-                                ? ` (${request.buildNumber})`
-                                : ""}
-                            </div>
-                            <code className="mt-1 block break-all text-meta text-faint">
-                              {request.commit}
-                            </code>
+                            {request.marketingVersion || request.buildNumber ? (
+                              <div className="mt-1 text-meta text-dim">
+                                {request.marketingVersion ??
+                                  "Version unchanged"}
+                                {request.buildNumber
+                                  ? ` (${request.buildNumber})`
+                                  : ""}
+                              </div>
+                            ) : null}
+                            <dl className="m-0 mt-2 grid gap-1.5 text-meta">
+                              <div>
+                                <dt className="text-faint">Project</dt>
+                                <dd className="m-0">
+                                  <code className="block break-all text-dim">
+                                    {request.projectDir}
+                                  </code>
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-faint">Plan ID</dt>
+                                <dd className="m-0">
+                                  <code className="block break-all text-dim">
+                                    {request.planId}
+                                  </code>
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-faint">Commit</dt>
+                                <dd className="m-0">
+                                  <code className="block break-all text-dim">
+                                    {request.commit}
+                                  </code>
+                                </dd>
+                              </div>
+                              {request.action === "upload" ? (
+                                <>
+                                  <div>
+                                    <dt className="text-faint">Artifact</dt>
+                                    <dd className="m-0">
+                                      <code className="block break-all text-dim">
+                                        {request.sourceArtifactName ??
+                                          "Missing artifact name"}
+                                      </code>
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-faint">SHA-256</dt>
+                                    <dd className="m-0">
+                                      <code className="block break-all text-dim">
+                                        {request.sourceArtifactSha256 ??
+                                          "Missing artifact hash"}
+                                      </code>
+                                    </dd>
+                                  </div>
+                                </>
+                              ) : null}
+                            </dl>
                           </div>
                           <Button
                             size="sm"

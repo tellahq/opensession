@@ -1,14 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
 import {
   approveReleasePlan,
+  cleanupReleaseExecution,
   consumeReleaseApproval,
   createBuildPlan,
+  createUploadPlan,
   listReleaseApprovalRequests,
   loadPlan,
+  planPath,
+  prepareReleaseExecution,
 } from "../src/plans";
 import { resolveProjectDir, resolveProjectPath } from "../src/security";
 import { runChecked } from "../src/exec";
@@ -23,9 +27,14 @@ beforeEach(async () => {
   project = join(root, "app");
   mkdirSync(join(project, ".opensession"), { recursive: true });
   mkdirSync(join(project, "App.xcworkspace"));
+  await Bun.write(
+    join(project, "App.xcworkspace", "contents.xcworkspacedata"),
+    '<Workspace version="1.0"/>\n',
+  );
   key = join(root, "AuthKey_TEST.p8");
   await Bun.write(key, "test-key");
   chmodSync(key, 0o600);
+  delete process.env.APPLE_MOBILE_STATE_DIR;
   process.env.OPENSESSION_STATE_DIR = join(root, "state");
   process.env.APPLE_ASC_KEY_ID = "TESTKEY";
   process.env.APPLE_ASC_ISSUER_ID = "00000000-0000-0000-0000-000000000000";
@@ -46,6 +55,7 @@ beforeEach(async () => {
     }),
   );
   await Bun.write(join(project, ".gitignore"), ".build\n");
+  await Bun.write(join(project, "App.swift"), "let planned = true\n");
   await runChecked({
     executable: "git",
     args: ["init", "-b", "main"],
@@ -100,6 +110,13 @@ describe("configuration and path boundary", () => {
   test("accepts a project without host allowlist configuration", () => {
     expect(resolveProjectDir(project)).toBe(project);
   });
+
+  test("keeps controlled release storage outside the project", async () => {
+    process.env.OPENSESSION_STATE_DIR = join(project, "state");
+    expect(createBuildPlan(project, "adhoc")).rejects.toThrow(
+      "APPLE_MOBILE_STATE_DIR must be outside the app project",
+    );
+  });
 });
 
 describe("release plans", () => {
@@ -114,6 +131,112 @@ describe("release plans", () => {
     expect(result.plan.commands[0]!.args).toContain("MARKETING_VERSION=1.2.3");
     const loaded = await loadPlan(project, result.plan.id);
     expect(loaded.plan.id).toBe(result.plan.id);
+  });
+
+  test("prepares build execution from the planned commit", async () => {
+    const result = await createBuildPlan(project, "adhoc");
+    await Bun.write(join(project, "App.swift"), "let changed = true\n");
+
+    const prepared = await prepareReleaseExecution(result.plan);
+    try {
+      expect(
+        await Bun.file(join(prepared.checkoutDir, "App.swift")).text(),
+      ).toBe("let planned = true\n");
+      expect(
+        prepared.commands.every(
+          (command) => command.cwd === prepared.checkoutDir,
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(prepared.commands)).not.toContain(project);
+    } finally {
+      await cleanupReleaseExecution({
+        checkoutDir: prepared.checkoutDir,
+        executionDir: prepared.executionDir,
+        projectDir: project,
+      });
+    }
+  });
+
+  test("copies and identifies the exact IPA approved for upload", async () => {
+    mkdirSync(join(project, ".build"));
+    const ipa = join(project, ".build", "reviewed.ipa");
+    await Bun.write(ipa, "approved bytes");
+    const result = await createUploadPlan(project, ".build/reviewed.ipa");
+    const [request] = listReleaseApprovalRequests();
+
+    expect(request?.planId).toBe(result.plan.id);
+    expect(request?.projectDir).toBe(project);
+    expect(request?.sourceArtifactName).toBe("reviewed.ipa");
+    expect(request?.sourceArtifactSha256).toBe(
+      result.plan.sourceArtifactSha256,
+    );
+    expect(result.plan.sourceArtifact).not.toBe(ipa);
+
+    await Bun.write(ipa, "changed after planning");
+    const prepared = await prepareReleaseExecution(result.plan);
+    try {
+      const command = prepared.commands[0]!;
+      const file = command.args[command.args.indexOf("--file") + 1]!;
+      expect(await Bun.file(file).text()).toBe("approved bytes");
+      expect(file).not.toBe(result.plan.sourceArtifact);
+    } finally {
+      await cleanupReleaseExecution({
+        checkoutDir: prepared.checkoutDir,
+        executionDir: prepared.executionDir,
+        projectDir: project,
+      });
+    }
+  });
+
+  test("filters pending requests before sorting and limiting", async () => {
+    const realNow = Date.now;
+    let now = Date.parse("2026-01-01T00:00:00.000Z");
+    Date.now = () => now++;
+    try {
+      const plans = [];
+      for (let index = 0; index < 101; index++) {
+        plans.push((await createBuildPlan(project, "adhoc")).plan);
+      }
+      for (const plan of plans.slice(0, 50)) {
+        approveReleasePlan(plan.id, "alice");
+      }
+      expect(
+        listReleaseApprovalRequests().map((request) => request.planId),
+      ).toEqual(
+        plans
+          .slice(50)
+          .toReversed()
+          .map((plan) => plan.id),
+      );
+    } finally {
+      Date.now = realNow;
+    }
+  }, 20_000);
+
+  test("removes expired approval requests and grants", async () => {
+    const realNow = Date.now;
+    const plannedAt = Date.parse("2026-01-01T00:00:00.000Z");
+    Date.now = () => plannedAt;
+    try {
+      const result = await createBuildPlan(project, "adhoc");
+      approveReleasePlan(result.plan.id, "alice");
+      Date.now = () => plannedAt + 2 * 60 * 60_000;
+      expect(listReleaseApprovalRequests()).toEqual([]);
+      const approvals = join(
+        process.env.OPENSESSION_STATE_DIR!,
+        "apple-mobile",
+        "approvals",
+      );
+      expect(
+        existsSync(join(approvals, `${result.plan.id}.request.json`)),
+      ).toBe(false);
+      expect(existsSync(join(approvals, `${result.plan.id}.grant.json`))).toBe(
+        false,
+      );
+      expect(existsSync(planPath(result.plan.id))).toBe(false);
+    } finally {
+      Date.now = realNow;
+    }
   });
 
   test("requires and consumes a later approval grant", async () => {
@@ -142,7 +265,7 @@ describe("release plans", () => {
 
   test("rejects a tampered plan even when the commit is unchanged", async () => {
     const result = await createBuildPlan(project, "adhoc");
-    const planFile = join(project, result.planFile);
+    const planFile = planPath(result.plan.id);
     const stored = JSON.parse(await Bun.file(planFile).text());
     stored.plan.commands[0].executable = "malicious-command";
     await Bun.write(planFile, JSON.stringify(stored));
@@ -151,12 +274,25 @@ describe("release plans", () => {
     );
   });
 
-  test("invalidates a plan when configuration changes", async () => {
+  test("uses configuration from the planned commit", async () => {
     const result = await createBuildPlan(project, "adhoc");
     const configPath = join(project, ".opensession/apple-mobile.json");
     const config = JSON.parse(await Bun.file(configPath).text());
     config.bundleId = "com.example.Changed";
     await Bun.write(configPath, JSON.stringify(config));
-    expect(loadPlan(project, result.plan.id)).rejects.toThrow();
+
+    expect((await loadPlan(project, result.plan.id)).plan.id).toBe(
+      result.plan.id,
+    );
+    const prepared = await prepareReleaseExecution(result.plan);
+    try {
+      expect(prepared.config.bundleId).toBe("com.example.App");
+    } finally {
+      await cleanupReleaseExecution({
+        checkoutDir: prepared.checkoutDir,
+        executionDir: prepared.executionDir,
+        projectDir: project,
+      });
+    }
   });
 });
