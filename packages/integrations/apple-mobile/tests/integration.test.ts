@@ -243,10 +243,48 @@ describe("release plans", () => {
     const result = await createBuildPlan(project, "adhoc");
     expect(listReleaseApprovalRequests()).toHaveLength(1);
     expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
+    expect(listReleaseApprovalRequests()).toHaveLength(1);
 
     approveReleasePlan(result.plan.id, "alice");
     expect(listReleaseApprovalRequests()).toHaveLength(0);
     expect(consumeReleaseApproval(result.plan).approvedBy).toBe("alice");
+    expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
+  });
+
+  test("blocks concurrent reapproval and duplicate approval consumption", async () => {
+    const result = await createBuildPlan(project, "adhoc");
+    approveReleasePlan(result.plan.id, "alice");
+
+    const consumed = consumeReleaseApproval(result.plan, undefined, {
+      afterRequestClaimed: () => {
+        expect(listReleaseApprovalRequests()).toEqual([]);
+        expect(() => approveReleasePlan(result.plan.id, "bob")).toThrow(
+          "not pending",
+        );
+        expect(() => consumeReleaseApproval(result.plan)).toThrow(
+          "needs approval",
+        );
+      },
+    });
+
+    expect(consumed.approvedBy).toBe("alice");
+    expect(() => approveReleasePlan(result.plan.id, "bob")).toThrow(
+      "not pending",
+    );
+    expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
+  });
+
+  test("burns both claims when a consumed approval is invalid", async () => {
+    const result = await createBuildPlan(project, "adhoc");
+    approveReleasePlan(result.plan.id, "alice");
+
+    expect(() =>
+      consumeReleaseApproval({ ...result.plan, commit: "0".repeat(40) }),
+    ).toThrow("does not match");
+    expect(listReleaseApprovalRequests()).toEqual([]);
+    expect(() => approveReleasePlan(result.plan.id, "bob")).toThrow(
+      "not pending",
+    );
     expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
   });
 

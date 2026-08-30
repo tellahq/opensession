@@ -299,13 +299,19 @@ export function discardReleasePlan(planId: string, root?: string): void {
 
 function writeSigned<T>(path: string, value: T, root?: string): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  writeFileSync(
-    path,
-    JSON.stringify({ value, signature: signature(value, root) }, null, 2) +
-      "\n",
-    { mode: 0o600 },
-  );
-  chmodSync(path, 0o600);
+  const temporary = `${path}.tmp-${crypto.randomUUID()}`;
+  try {
+    writeFileSync(
+      temporary,
+      JSON.stringify({ value, signature: signature(value, root) }, null, 2) +
+        "\n",
+      { mode: 0o600, flag: "wx" },
+    );
+    renameSync(temporary, path);
+    chmodSync(path, 0o600);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
 }
 
 function readSigned<T>(path: string, root?: string): T {
@@ -409,10 +415,18 @@ export function approveReleasePlan(
 ): ReleaseApprovalRequest {
   if (!approvedBy.trim())
     throw new Error("An authenticated approver is required");
-  const request = readSigned<ReleaseApprovalRequest>(
-    approvalPath(planId, "request", root),
-    root,
-  );
+  let request: ReleaseApprovalRequest;
+  try {
+    request = readSigned<ReleaseApprovalRequest>(
+      approvalPath(planId, "request", root),
+      root,
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error("Release approval request is not pending");
+    }
+    throw error;
+  }
   if (!validApprovalRequest(request, planId)) {
     throw new Error("Release approval request is invalid");
   }
@@ -438,19 +452,47 @@ export function approveReleasePlan(
 export function consumeReleaseApproval(
   plan: ReleasePlan,
   root?: string,
+  hooks: { afterRequestClaimed?: () => void } = {},
 ): { approvedBy: string; approvedAt: string } {
-  const grantPath = approvalPath(plan.id, "grant", root);
-  const claimPath = `${grantPath}.claimed-${crypto.randomUUID()}`;
+  const requestPath = approvalPath(plan.id, "request", root);
+  const requestClaimPath = `${requestPath}.claimed-${crypto.randomUUID()}`;
   try {
-    renameSync(grantPath, claimPath);
+    renameSync(requestPath, requestClaimPath);
   } catch {
     throw new Error(
       "Release plan needs approval in Settings → Integrations → Apple mobile",
     );
   }
+
+  hooks.afterRequestClaimed?.();
+  const grantPath = approvalPath(plan.id, "grant", root);
+  const grantClaimPath = `${grantPath}.claimed-${crypto.randomUUID()}`;
   try {
-    const grant = readSigned<ReleaseApprovalGrant>(claimPath, root);
+    renameSync(grantPath, grantClaimPath);
+  } catch {
+    try {
+      renameSync(requestClaimPath, requestPath);
+    } catch (error) {
+      throw new Error(
+        "Release approval request could not be restored after grant claim failed",
+        { cause: error },
+      );
+    }
+    throw new Error(
+      "Release plan needs approval in Settings → Integrations → Apple mobile",
+    );
+  }
+
+  try {
+    const request = readSigned<ReleaseApprovalRequest>(requestClaimPath, root);
+    const grant = readSigned<ReleaseApprovalGrant>(grantClaimPath, root);
     if (
+      !validApprovalRequest(request, plan.id) ||
+      request.projectDir !== plan.projectDir ||
+      request.commit !== plan.commit ||
+      request.action !== plan.action ||
+      request.sourceArtifactName !== plan.sourceArtifactName ||
+      request.sourceArtifactSha256 !== plan.sourceArtifactSha256 ||
       grant.schemaVersion !== 1 ||
       grant.planId !== plan.id ||
       grant.projectDir !== plan.projectDir ||
@@ -466,10 +508,10 @@ export function consumeReleaseApproval(
     return { approvedBy: grant.approvedBy, approvedAt: grant.approvedAt };
   } finally {
     try {
-      unlinkSync(claimPath);
+      unlinkSync(grantClaimPath);
     } catch {}
     try {
-      unlinkSync(approvalPath(plan.id, "request", root));
+      unlinkSync(requestClaimPath);
     } catch {}
   }
 }

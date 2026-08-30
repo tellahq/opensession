@@ -10,7 +10,11 @@
  *   detection driving account rotation and model fallback.
  * - CLAUDE_CODE_BIN: the Claude Code CLI path (the Meridian bridge's motor).
  */
-import { readMcpConfig, withDynamicCredentials } from "./connections";
+import {
+  readMcpConfig,
+  requiresAllowedUsers,
+  withDynamicCredentials,
+} from "./connections";
 import { userMatchesAny } from "./shared/user-mappings";
 import { configuredPaths } from "./config";
 
@@ -37,8 +41,9 @@ export function mcpServerAllowedForRun(
   grantUsers?: Array<string | undefined>,
 ): boolean {
   if (!Array.isArray(allowedUsers) || allowedUsers.length === 0) return true;
-  const gateUsers =
-    name === "apple-release" ? [user] : [user, ...(grantUsers || [])];
+  const gateUsers = requiresAllowedUsers(name)
+    ? [user]
+    : [user, ...(grantUsers || [])];
   return gateUsers
     .filter((candidate): candidate is string => !!candidate)
     .some((candidate) => userMatchesAny(candidate, allowedUsers));

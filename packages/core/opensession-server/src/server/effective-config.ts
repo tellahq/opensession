@@ -5,7 +5,7 @@ import {
   type SessionRunInputs,
 } from "./session-run-inputs";
 import { filterMcpServers, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
-import { readMcpConfig } from "./connections";
+import { readMcpConfig, requiresAllowedUsers } from "./connections";
 import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
 import { userMatchesAny, commitAuthorFor } from "./shared/user-mappings";
 import { configuredPaths } from "./config";
@@ -139,8 +139,9 @@ export function explainMcpServers(input: {
       : undefined;
     const inAllowlist = !scope || scope.includes(name);
     const isIncluded = name in included;
-    const effectiveGateUsers =
-      name === "apple-release" ? gateUsers.slice(0, 1) : gateUsers;
+    const effectiveGateUsers = requiresAllowedUsers(name)
+      ? gateUsers.slice(0, 1)
+      : gateUsers;
     const oauthGrant = !!cfg && !!input.hasOauthGrant?.(name);
     const reason = !cfg
       ? `not configured — the allowlist names a server ${configPath} does not define`

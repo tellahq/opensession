@@ -186,6 +186,9 @@ export async function executePlan(
         projectDir: plan.projectDir,
       });
     } finally {
+      // Once execution starts, a failed command may already have signed or
+      // uploaded externally. Burn the approval and plan on both success and
+      // failure; preflight failures before consumption remain retryable.
       if (approvalConsumed) discardReleasePlan(plan.id);
     }
   }

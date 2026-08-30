@@ -78,20 +78,26 @@ describe("explainMcpServers", () => {
   });
 
   test("Apple release explains its current-prompter-only gate", () => {
-    const [apple] = explainMcpServers({
-      all: {
-        "apple-release": {
-          command: "opensession",
-          allowedUsers: ["Alice"],
+    for (const name of [
+      "apple-release",
+      "APPLE-RELEASE",
+      "  Apple-Release  ",
+    ]) {
+      const [apple] = explainMcpServers({
+        all: {
+          [name]: {
+            command: "opensession",
+            allowedUsers: ["Alice"],
+          },
         },
-      },
-      included: {},
-      scope: undefined,
-      gateUsers: ["Bob", "Alice"],
-      configPath: "/tmp/mcp-config.json",
-    });
-    expect(apple.reason).toContain("none of [Bob]");
-    expect(apple.reason).not.toContain("Bob, Alice");
+        included: {},
+        scope: undefined,
+        gateUsers: ["Bob", "Alice"],
+        configPath: "/tmp/mcp-config.json",
+      });
+      expect(apple.reason).toContain("none of [Bob]");
+      expect(apple.reason).not.toContain("Bob, Alice");
+    }
   });
 
   test("an automation run (no user at all) reads as a gate miss, not an omission", () => {
