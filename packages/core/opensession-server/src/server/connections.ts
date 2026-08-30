@@ -291,6 +291,30 @@ export function setMcpAllowedUsers(
   return { ok: true, allowedUsers: cleaned };
 }
 
+export function replaceMcpServerEntries(
+  updates: Record<string, Record<string, unknown> | undefined>,
+): { ok: true } | { error: string } {
+  const config = readMcpConfig();
+  for (const [name, entry] of Object.entries(updates)) {
+    const allowedUsers = cleanAllowedUsers(
+      Array.isArray(entry?.allowedUsers)
+        ? (entry.allowedUsers as string[])
+        : undefined,
+    );
+    if (entry && requiresAllowedUsers(name) && !allowedUsers) {
+      return {
+        error: `Server "${name}" requires at least one allowed user`,
+      };
+    }
+  }
+  for (const [name, entry] of Object.entries(updates)) {
+    if (entry) config.mcpServers[name] = entry;
+    else delete config.mcpServers[name];
+  }
+  writeMcpConfig(config);
+  return { ok: true };
+}
+
 export function removeMcpServer(
   name: string,
 ): { ok: true } | { error: string } {
