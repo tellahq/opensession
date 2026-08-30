@@ -1,30 +1,5 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-
-function defaultRoots(): string[] {
-  const home = homedir();
-  return [
-    resolve(home, "dev"),
-    resolve(home, ".opensession/worktrees"),
-    resolve(home, ".opensession-worktrees"),
-    resolve(home, ".opensession-scratch"),
-    resolve(home, ".opensession-session-scratch"),
-  ];
-}
-
-export function allowedRoots(): string[] {
-  const configured = process.env.APPLE_MOBILE_ALLOWED_ROOTS;
-  const roots = configured
-    ? configured
-        .split(":")
-        .map((entry) => entry.trim())
-        .filter(Boolean)
-    : defaultRoots();
-  return roots.map((root) =>
-    existsSync(root) ? realpathSync(root) : resolve(root),
-  );
-}
 
 export function isWithin(root: string, candidate: string): boolean {
   const rel = relative(root, candidate);
@@ -37,13 +12,7 @@ export function isWithin(root: string, candidate: string): boolean {
 export function resolveProjectDir(input: string): string {
   if (!input || typeof input !== "string")
     throw new Error("projectDir is required");
-  const candidate = realpathSync(resolve(input));
-  if (!allowedRoots().some((root) => isWithin(root, candidate))) {
-    throw new Error(
-      `Project is outside APPLE_MOBILE_ALLOWED_ROOTS: ${candidate}`,
-    );
-  }
-  return candidate;
+  return realpathSync(resolve(input));
 }
 
 export function resolveProjectPath(
@@ -78,7 +47,7 @@ export function resolveProjectPath(
 
 export function resolvePrivateKeyPath(
   input: string,
-  roots = allowedRoots(),
+  projectDir?: string,
 ): string {
   if (!input) throw new Error("APPLE_ASC_PRIVATE_KEY_PATH is required");
   const path = realpathSync(resolve(input));
@@ -90,9 +59,9 @@ export function resolvePrivateKeyPath(
       "APPLE_ASC_PRIVATE_KEY_PATH must not be accessible by group or others",
     );
   }
-  if (roots.some((root) => isWithin(root, path))) {
+  if (projectDir && isWithin(projectDir, path)) {
     throw new Error(
-      "APPLE_ASC_PRIVATE_KEY_PATH must be outside APPLE_MOBILE_ALLOWED_ROOTS",
+      "APPLE_ASC_PRIVATE_KEY_PATH must be outside the project being released",
     );
   }
   return path;

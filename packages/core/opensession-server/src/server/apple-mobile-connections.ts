@@ -1,5 +1,3 @@
-import { existsSync, realpathSync } from "node:fs";
-import { delimiter, isAbsolute, resolve } from "node:path";
 import { findExecutable } from "../../../../integrations/apple-mobile/src/exec";
 import { resolvePrivateKeyPath } from "../../../../integrations/apple-mobile/src/security";
 import { readMcpConfig, replaceMcpServerEntries } from "./connections";
@@ -20,7 +18,6 @@ interface AppleMcpEntry {
 export interface AppleMobileSetupStatus {
   buildEnabled: boolean;
   releaseEnabled: boolean;
-  allowedRoots: string[];
   teamId: string;
   allowedUsers: string[];
   credentials: {
@@ -38,7 +35,6 @@ export interface AppleMobileSetupStatus {
 export interface AppleMobileSetupInput {
   buildEnabled?: unknown;
   releaseEnabled?: unknown;
-  allowedRoots?: unknown;
   teamId?: unknown;
   keyId?: unknown;
   issuerId?: unknown;
@@ -62,16 +58,6 @@ function strings(value: unknown): string[] {
         .filter(Boolean),
     ),
   );
-}
-
-function currentRoots(build: AppleMcpEntry, release: AppleMcpEntry): string[] {
-  const value = build.env?.APPLE_MOBILE_ALLOWED_ROOTS;
-  const fallback = release.env?.APPLE_MOBILE_ALLOWED_ROOTS;
-  return typeof value === "string"
-    ? value.split(delimiter).filter(Boolean)
-    : typeof fallback === "string"
-      ? fallback.split(delimiter).filter(Boolean)
-      : [];
 }
 
 function configured(entry: AppleMcpEntry, mode: "build" | "release"): boolean {
@@ -100,7 +86,6 @@ export function appleMobileSetupStatus(): AppleMobileSetupStatus {
   return {
     buildEnabled: configured(build, "build"),
     releaseEnabled: configured(release, "release"),
-    allowedRoots: currentRoots(build, release),
     teamId:
       typeof release.env?.APPLE_DEVELOPER_TEAM_ID === "string"
         ? release.env.APPLE_DEVELOPER_TEAM_ID
@@ -128,22 +113,6 @@ function optional(value: unknown, label: string): string | undefined {
   return value.trim();
 }
 
-function roots(value: unknown): string[] {
-  const values = strings(value);
-  if (values.length === 0)
-    throw new Error("Add at least one allowed project root");
-  for (const path of values) {
-    if (!isAbsolute(path))
-      throw new Error(`Project root must be absolute: ${path}`);
-    if (path.includes("\0") || path.includes("\n")) {
-      throw new Error("Project roots must not contain control characters");
-    }
-  }
-  return values.map((path) =>
-    existsSync(path) ? realpathSync(path) : resolve(path),
-  );
-}
-
 function existingEnv(name: string): Record<string, unknown> {
   return entry(readMcpConfig().mcpServers[name]).env ?? {};
 }
@@ -155,14 +124,12 @@ export function buildAppleMobileUpdates(
   releaseEnv: Record<string, unknown> = {},
   options: {
     releaseCapable?: boolean;
-    validatePrivateKey?: (path: string, roots: string[]) => void;
+    validatePrivateKey?: (path: string) => void;
     stateDir?: string;
   } = {},
 ): AppleMobileUpdates {
   const buildEnabled = boolean(input.buildEnabled, "buildEnabled");
   const releaseEnabled = boolean(input.releaseEnabled, "releaseEnabled");
-  const allowedRoots = roots(input.allowedRoots);
-  const rootsValue = allowedRoots.join(delimiter);
   const teamId =
     optional(input.teamId, "teamId") ??
     (typeof releaseEnv.APPLE_DEVELOPER_TEAM_ID === "string"
@@ -189,7 +156,6 @@ export function buildAppleMobileUpdates(
     }
     (options.validatePrivateKey ?? resolvePrivateKeyPath)(
       String(privateKeyPath),
-      allowedRoots,
     );
   }
 
@@ -199,7 +165,6 @@ export function buildAppleMobileUpdates(
           command: COMMAND,
           args: ["apple-mobile-mcp", "--mode", "build"],
           env: {
-            APPLE_MOBILE_ALLOWED_ROOTS: rootsValue,
             ...(options.stateDir
               ? { APPLE_MOBILE_STATE_DIR: options.stateDir }
               : {}),
@@ -211,7 +176,6 @@ export function buildAppleMobileUpdates(
           command: COMMAND,
           args: ["apple-mobile-mcp", "--mode", "release"],
           env: {
-            APPLE_MOBILE_ALLOWED_ROOTS: rootsValue,
             ...(options.stateDir
               ? { APPLE_MOBILE_STATE_DIR: options.stateDir }
               : {}),

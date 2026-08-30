@@ -42,7 +42,7 @@ const boolean = (args: Args, key: string, fallback = false): boolean => {
 const projectProperty = {
   projectDir: {
     type: "string",
-    description: "Absolute path to an allowed OpenSession app worktree",
+    description: "Absolute path to the app project or worktree",
   },
 };
 const buildTools: Tool[] = [

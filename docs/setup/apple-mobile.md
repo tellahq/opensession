@@ -14,12 +14,12 @@ xtool can download and use Apple SDK material on Linux. Apple licenses may restr
 
 Open **Settings → Integrations → Apple mobile**. The setup flow manages two local MCP connections without a restart:
 
-1. Enable **Development builds** and add each allowed project or worktree root on its own line. This creates the credential-free `apple-build` connection.
+1. Enable **Development builds**. This creates the credential-free `apple-build` connection for projects you open in Open Session.
 2. On a Mac with Xcode, enable **Ad-hoc and TestFlight releases**.
 3. Enter the Apple Developer Team ID, App Store Connect key ID and issuer ID, and the path to its `.p8` private key.
 4. Choose the configured Open Session people allowed to release. This creates `apple-release` with a mandatory `allowedUsers` gate.
 
-Building a repository can execute repository-controlled SwiftPM plugins and build scripts, so keep the allowed roots narrow. Store the private key outside every allowed project root and worktree with mode `0600`. Put credentials in the setup flow or protected instance configuration, not a repository, project config, or chat.
+Store the private key outside the app project with mode `0600`. Put credentials in the setup flow or protected instance configuration, not a repository, project config, or chat.
 
 Before an ad-hoc build, the operator must also arrange an Apple Distribution certificate and private key in the Mac's Keychain, register each target device UDID in the Apple Developer portal, and grant the App Store Connect API key access to certificates, identifiers, and profiles. The agent cannot enroll in Apple's program, accept agreements, obtain device UDIDs, or create private credentials for the operator.
 

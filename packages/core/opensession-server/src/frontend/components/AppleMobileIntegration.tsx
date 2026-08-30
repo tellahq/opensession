@@ -15,7 +15,6 @@ import {
   SettingsField,
   SettingsSection,
   settingsInputClass,
-  settingsTextareaClass,
 } from "../ui/settings";
 import { InlineAlert } from "../ui/state";
 import { Switch } from "../ui/switch";
@@ -58,9 +57,6 @@ function AppleMobileSetupDialog({
 }) {
   const [buildEnabled, setBuildEnabled] = useState(status.buildEnabled);
   const [releaseEnabled, setReleaseEnabled] = useState(status.releaseEnabled);
-  const [allowedRoots, setAllowedRoots] = useState(
-    status.allowedRoots.join("\n"),
-  );
   const [teamId, setTeamId] = useState(status.teamId);
   const [keyId, setKeyId] = useState("");
   const [issuerId, setIssuerId] = useState("");
@@ -79,7 +75,6 @@ function AppleMobileSetupDialog({
     if (!open) return;
     setBuildEnabled(status.buildEnabled);
     setReleaseEnabled(status.releaseEnabled);
-    setAllowedRoots(status.allowedRoots.join("\n"));
     setTeamId(status.teamId);
     setKeyId("");
     setIssuerId("");
@@ -125,10 +120,6 @@ function AppleMobileSetupDialog({
       const updated = await saveAppleMobileSetup({
         buildEnabled,
         releaseEnabled,
-        allowedRoots: allowedRoots
-          .split("\n")
-          .map((root) => root.trim())
-          .filter(Boolean),
         teamId: teamId.trim(),
         ...(keyId.trim() ? { keyId: keyId.trim() } : {}),
         ...(issuerId.trim() ? { issuerId: issuerId.trim() } : {}),
@@ -195,23 +186,6 @@ function AppleMobileSetupDialog({
                 aria-label="Enable Apple mobile development builds"
               />
             </div>
-            <SettingsField>
-              Allowed project roots, one per line
-              <textarea
-                className={settingsTextareaClass}
-                rows={3}
-                value={allowedRoots}
-                onChange={(event) => setAllowedRoots(event.target.value)}
-                placeholder={
-                  "/Users/you/dev\n/Users/you/.opensession/worktrees"
-                }
-                disabled={saving}
-              />
-            </SettingsField>
-            <p className="m-0 text-meta leading-relaxed text-faint">
-              Builds can run repository build scripts. Keep this list narrow.
-              xtool signing is development-only.
-            </p>
           </SettingsSection>
 
           <SettingsSection className="flex flex-col gap-4 border-0 bg-panel p-4">
@@ -421,10 +395,9 @@ function AppleMobileSetupDialog({
               ]}
             />
             <p className="m-0 mt-3 text-meta leading-relaxed text-faint">
-              The private key must be mode 0600 and outside every allowed
-              project root. Release execution still waits for explicit approval
-              of the full commit SHA. It cannot submit for App Review or publish
-              an app.
+              The private key must be mode 0600 and outside the app project.
+              Release execution still waits for explicit approval of the full
+              commit SHA. It cannot submit for App Review or publish an app.
             </p>
           </SettingsSection>
         </div>

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { delimiter } from "node:path";
 import {
   appleReleaseApprover,
   buildAppleMobileUpdates,
@@ -8,7 +7,6 @@ import {
 const releaseInput = {
   buildEnabled: true,
   releaseEnabled: true,
-  allowedRoots: ["/work/apps", "/work/sessions"],
   teamId: "TEAM123456",
   keyId: "KEY1234567",
   issuerId: "00000000-0000-0000-0000-000000000000",
@@ -18,36 +16,27 @@ const releaseInput = {
 
 describe("Apple mobile connection setup", () => {
   test("keeps build credentials separate from user-restricted release tools", () => {
-    const checked: Array<{ path: string; roots: string[] }> = [];
+    const checked: string[] = [];
     const updates = buildAppleMobileUpdates(
       releaseInput,
       {},
       {
         releaseCapable: true,
-        validatePrivateKey: (path, roots) => checked.push({ path, roots }),
+        validatePrivateKey: (path) => checked.push(path),
       },
     );
 
     expect(updates["apple-build"]).toEqual({
       command: "opensession",
       args: ["apple-mobile-mcp", "--mode", "build"],
-      env: {
-        APPLE_MOBILE_ALLOWED_ROOTS: ["/work/apps", "/work/sessions"].join(
-          delimiter,
-        ),
-      },
+      env: {},
     });
     expect(updates["apple-release"]?.allowedUsers).toEqual(["Jaap", "Alice"]);
     expect(updates["apple-release"]?.env).toMatchObject({
       APPLE_ASC_KEY_ID: "KEY1234567",
       APPLE_ASC_PRIVATE_KEY_PATH: "/protected/apple/AuthKey_KEY1234567.p8",
     });
-    expect(checked).toEqual([
-      {
-        path: "/protected/apple/AuthKey_KEY1234567.p8",
-        roots: ["/work/apps", "/work/sessions"],
-      },
-    ]);
+    expect(checked).toEqual(["/protected/apple/AuthKey_KEY1234567.p8"]);
   });
 
   test("refuses release without an allowed user", () => {
@@ -87,7 +76,6 @@ describe("Apple mobile connection setup", () => {
     const updates = buildAppleMobileUpdates({
       buildEnabled: true,
       releaseEnabled: false,
-      allowedRoots: ["/work/apps"],
     });
     expect(updates["apple-build"]).toBeDefined();
     expect(updates["apple-release"]).toBeUndefined();

@@ -36,4 +36,4 @@ Use `apple_mobile_doctor` and `apple_mobile_inspect_project` before any build.
 
 ## Repository contract
 
-Each app must commit `.opensession/apple-mobile.json`. Paths are relative to the project and must remain under an administrator-configured allowed root. Distribution operations require the `xcode` backend; xtool is intentionally rejected for distribution.
+Each app must commit `.opensession/apple-mobile.json`. Configured paths are relative to the project and cannot escape it. Distribution operations require the `xcode` backend; xtool is intentionally rejected for distribution.

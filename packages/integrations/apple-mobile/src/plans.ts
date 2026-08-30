@@ -32,7 +32,7 @@ export const CREDENTIAL_REFS = {
   keyPath: "<APPLE_ASC_PRIVATE_KEY_PATH>",
 } as const;
 
-export function credentials(required: boolean) {
+export function credentials(required: boolean, projectDir?: string) {
   const keyId = process.env.APPLE_ASC_KEY_ID;
   const issuerId = process.env.APPLE_ASC_ISSUER_ID;
   const keyPath = process.env.APPLE_ASC_PRIVATE_KEY_PATH;
@@ -41,7 +41,9 @@ export function credentials(required: boolean) {
       "APPLE_ASC_KEY_ID, APPLE_ASC_ISSUER_ID, and APPLE_ASC_PRIVATE_KEY_PATH are required",
     );
   }
-  const resolvedKeyPath = keyPath ? resolvePrivateKeyPath(keyPath) : undefined;
+  const resolvedKeyPath = keyPath
+    ? resolvePrivateKeyPath(keyPath, projectDir)
+    : undefined;
   return { keyId, issuerId, keyPath: resolvedKeyPath };
 }
 
@@ -402,7 +404,7 @@ export async function createBuildPlan(
 ) {
   const projectDir = resolveProjectDir(projectDirInput);
   const { config, hash, git } = await enforceReleasePolicy(projectDir);
-  credentials(true);
+  credentials(true, projectDir);
   const id = crypto.randomUUID();
   const outputDirectory = join(artifactRoot(projectDir, config), id);
   const archivePath = join(
@@ -448,7 +450,7 @@ export async function createUploadPlan(
 ) {
   const projectDir = resolveProjectDir(projectDirInput);
   const { config, hash, git } = await enforceReleasePolicy(projectDir);
-  credentials(true);
+  credentials(true, projectDir);
   const artifact = resolveProjectPath(projectDir, artifactPath);
   if (!artifact.endsWith(".ipa"))
     throw new Error("Only .ipa uploads are supported");

@@ -26,7 +26,6 @@ beforeEach(async () => {
   key = join(root, "AuthKey_TEST.p8");
   await Bun.write(key, "test-key");
   chmodSync(key, 0o600);
-  process.env.APPLE_MOBILE_ALLOWED_ROOTS = project;
   process.env.OPENSESSION_STATE_DIR = join(root, "state");
   process.env.APPLE_ASC_KEY_ID = "TESTKEY";
   process.env.APPLE_ASC_ISSUER_ID = "00000000-0000-0000-0000-000000000000";
@@ -98,11 +97,8 @@ describe("configuration and path boundary", () => {
     );
   });
 
-  test("rejects projects outside configured roots", () => {
-    process.env.APPLE_MOBILE_ALLOWED_ROOTS = join(root, "other");
-    expect(() => resolveProjectDir(project)).toThrow(
-      "outside APPLE_MOBILE_ALLOWED_ROOTS",
-    );
+  test("accepts a project without host allowlist configuration", () => {
+    expect(resolveProjectDir(project)).toBe(project);
   });
 });
 
@@ -131,7 +127,7 @@ describe("release plans", () => {
     expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
   });
 
-  test("rejects a release key stored in an allowed worktree", async () => {
+  test("rejects a release key stored in the project", async () => {
     process.env.APPLE_ASC_PRIVATE_KEY_PATH = join(
       project,
       ".build/AuthKey_TEST.p8",
@@ -140,7 +136,7 @@ describe("release plans", () => {
     await Bun.write(process.env.APPLE_ASC_PRIVATE_KEY_PATH, "test-key");
     chmodSync(process.env.APPLE_ASC_PRIVATE_KEY_PATH, 0o600);
     expect(createBuildPlan(project, "adhoc")).rejects.toThrow(
-      "must be outside APPLE_MOBILE_ALLOWED_ROOTS",
+      "must be outside the project being released",
     );
   });
 

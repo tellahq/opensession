@@ -64,6 +64,7 @@ export async function executePlan(
   if (confirmation !== plan.commit) {
     throw new Error("confirmation must exactly match the planned commit SHA");
   }
+  credentials(true, plan.projectDir);
   if (process.platform !== "darwin" || !findExecutable("xcodebuild")) {
     throw new Error("Release execution requires Xcode on macOS");
   }

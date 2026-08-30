@@ -54,8 +54,6 @@ export async function doctor(projectDirInput?: string) {
     platform,
     mode: process.env.APPLE_MOBILE_MCP_MODE ?? "build",
     tools,
-    allowedRoots:
-      process.env.APPLE_MOBILE_ALLOWED_ROOTS?.split(":") ?? "defaults",
     appleCredentialsConfigured: {
       keyId: Boolean(process.env.APPLE_ASC_KEY_ID),
       issuerId: Boolean(process.env.APPLE_ASC_ISSUER_ID),

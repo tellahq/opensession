@@ -3,7 +3,6 @@ import { request } from "./request";
 export interface AppleMobileSetupStatus {
   buildEnabled: boolean;
   releaseEnabled: boolean;
-  allowedRoots: string[];
   teamId: string;
   allowedUsers: string[];
   credentials: {
@@ -41,7 +40,6 @@ export interface AppleReleaseApprovals {
 export interface AppleMobileSetupInput {
   buildEnabled: boolean;
   releaseEnabled: boolean;
-  allowedRoots: string[];
   teamId: string;
   keyId?: string;
   issuerId?: string;
