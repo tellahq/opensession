@@ -192,7 +192,7 @@ function cleanAllowedUsers(users?: string[]): string[] | undefined {
 
 /** Credentialed first-party release tools must never become fleet-wide. */
 export function requiresAllowedUsers(name: string): boolean {
-  return name.toLowerCase() === "apple-release";
+  return name.trim().toLowerCase() === "apple-release";
 }
 
 export function addMcpServer(

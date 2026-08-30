@@ -185,25 +185,37 @@ describe("Apple release connection authorization", () => {
   test("rejects non-admin generic Apple release mutations", async () => {
     const mcpConfig = enableRoleAwareConnections();
 
-    for (const [method, body] of [
-      ["PUT", { allowedUsers: ["member"] }],
-      ["DELETE", undefined],
-    ] as const) {
-      const response = await handleConnectionsRoutes(
-        context("/api/connections/mcp/apple-release", method, MEMBER, body),
-      );
-      expect(response?.status).toBe(403);
+    for (const path of [
+      "/api/connections/mcp/apple-release",
+      "/api/connections/mcp/APPLE-RELEASE",
+      "/api/connections/mcp/%20apple-release%20",
+    ]) {
+      for (const [method, body] of [
+        ["PUT", { allowedUsers: ["member"] }],
+        ["DELETE", undefined],
+      ] as const) {
+        const response = await handleConnectionsRoutes(
+          context(path, method, MEMBER, body),
+        );
+        expect(response?.status).toBe(403);
+      }
     }
 
-    const create = await handleConnectionsRoutes(
-      context("/api/connections/mcp", "POST", MEMBER, {
-        name: "apple-release",
-        transport: "stdio",
-        command: "malicious-release",
-        allowedUsers: ["member"],
-      }),
-    );
-    expect(create?.status).toBe(403);
+    for (const name of [
+      "apple-release",
+      "APPLE-RELEASE",
+      "  apple-release  ",
+    ]) {
+      const create = await handleConnectionsRoutes(
+        context("/api/connections/mcp", "POST", MEMBER, {
+          name,
+          transport: "stdio",
+          command: "malicious-release",
+          allowedUsers: ["member"],
+        }),
+      );
+      expect(create?.status).toBe(403);
+    }
     expect(storedMcpServers(mcpConfig)["apple-release"]).toMatchObject({
       command: "opensession",
       env: { APPLE_ASC_KEY_ID: "KEY1234567" },
