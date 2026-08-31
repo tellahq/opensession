@@ -65,6 +65,8 @@ Options:
 
 A successful unstructured call resolves to final text. A schema call resolves to the parsed value. An errored call resolves to `null`, so filter nulls before synthesis. Unsupported effort levels are ignored rather than failing the call.
 
+Agents are deadline-aware. An agent explores until a soft deadline, then its session is resumed once with a "stop and answer now" instruction funded by the rest of its budget, so a long call returns a real verdict instead of dying mid-thought. Write prompts whose output contract still makes sense for a partial answer. Only the hard deadline fails the call, and that row keeps the tail of the partial reply and the tool-call count for the run's own diagnostics.
+
 Agents are read-only by default. Use `write` only when a lightweight branch-producing agent is sufficient. A successful write call returns an object containing `text`, `structured`, `seq`, `branch`, `worktreeDir`, `changed`, `files`, `insertions`, and `deletions`. Use a durable child session when work needs an inspectable transcript, steering, a worktree, or a pull request.
 
 ### `merge(writeResults)`
