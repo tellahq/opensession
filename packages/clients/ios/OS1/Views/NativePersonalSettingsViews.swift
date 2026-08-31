@@ -788,7 +788,7 @@ struct AppearanceSettingsView: View {
                 } header: {
                     Text("Support tickets")
                 } footer: {
-                    Text("Choose where the Plain queue lives. This setting follows your account across the web and native apps.")
+                    Text("Choose where the Support queue lives. This setting follows your account across the web and native apps.")
                 }
             }
 
