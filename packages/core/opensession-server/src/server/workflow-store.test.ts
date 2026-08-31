@@ -31,7 +31,11 @@ import {
   unregisterLiveWorkflow,
   updateWorkflowRun,
 } from "./workflow-store";
-import { WORKFLOW_LIMITS, type WorkflowJournalEntry } from "./workflow-types";
+import {
+  WORKFLOW_LIMITS,
+  WORKFLOW_RESTART_PAUSE_REASON,
+  type WorkflowJournalEntry,
+} from "./workflow-types";
 import { hasSessionRunningHold } from "./session-state-events";
 
 const savedEnv = process.env.OPENSESSION_WORKFLOWS_DIR;
@@ -245,5 +249,36 @@ describe("workflow store", () => {
     expect(recoverableWorkflowRunIds()).toContain(dead.runId);
     expect(getWorkflowRun(live.runId)?.status).toBe("running");
     expect(getWorkflowRun(finished.runId)?.status).toBe("done");
+  });
+
+  test("markInterruptedWorkflows resumes a restart pause but not a human pause", () => {
+    const humanPaused = makeRun({ recovery: { autoResume: true } });
+    updateWorkflowRun(humanPaused.runId, (s) => {
+      s.status = "paused";
+      s.pauseReason = "paused by the operator";
+    });
+    unregisterLiveWorkflow(humanPaused.runId);
+
+    const restartPaused = makeRun({ recovery: { autoResume: true } });
+    updateWorkflowRun(restartPaused.runId, (s) => {
+      s.status = "paused";
+      s.pauseReason = WORKFLOW_RESTART_PAUSE_REASON;
+    });
+    unregisterLiveWorkflow(restartPaused.runId);
+
+    markInterruptedWorkflows();
+
+    // A human halted this one on purpose: a restart must not undo that.
+    const human = getWorkflowRun(humanPaused.runId)!;
+    expect(human.status).toBe("paused");
+    expect(human.pauseReason).toBe("paused by the operator");
+    expect(human.interruptedByRestart).toBeUndefined();
+    expect(recoverableWorkflowRunIds()).not.toContain(humanPaused.runId);
+
+    // We paused this one to shut down, so it is ours to pick back up.
+    const restart = getWorkflowRun(restartPaused.runId)!;
+    expect(restart.status).toBe("interrupted");
+    expect(restart.interruptedByRestart).toBe(true);
+    expect(recoverableWorkflowRunIds()).toContain(restartPaused.runId);
   });
 });

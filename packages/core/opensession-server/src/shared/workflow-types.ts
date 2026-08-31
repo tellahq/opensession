@@ -419,6 +419,13 @@ export type WorkflowRunStatus =
   /** Marked on boot for runs that were live when the process died. */
   | "interrupted";
 
+/**
+ * Pause reason recorded when the service pauses live runs during its own
+ * shutdown. Only runs paused for this reason are eligible for automatic resume
+ * on the next boot: a pause a human asked for must survive a restart.
+ */
+export const WORKFLOW_RESTART_PAUSE_REASON = "server restart";
+
 export interface WorkflowRecoverySnapshot {
   /** Only active runs carrying this descriptor are replayed after restart. */
   autoResume: boolean;
@@ -477,6 +484,12 @@ export interface WorkflowRunSnapshot {
   /** New run that replayed this interrupted run after a process restart. */
   recoveredAsRunId?: string;
   recoveryError?: string;
+  /**
+   * True when this run was marked `interrupted` because the service stopped
+   * under it, rather than because a human paused it. Human pauses are never
+   * marked interrupted, so this stays unset for them.
+   */
+  interruptedByRestart?: boolean;
   pausedAt?: string;
   pauseReason?: string;
   totalPausedMs?: number;

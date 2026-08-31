@@ -32,6 +32,7 @@ import {
 } from "./session-state-events";
 import {
   WORKFLOW_LIMITS,
+  WORKFLOW_RESTART_PAUSE_REASON,
   type WorkflowJournalRecord,
   type WorkflowRecoverySnapshot,
   type WorkflowRunSnapshot,
@@ -354,7 +355,7 @@ export function controlLiveWorkflowAgent(
 export function pauseWorkflowsForShutdown(): number {
   let paused = 0;
   for (const live of liveWorkflows.values()) {
-    if (live.controls.pause("server restart")) paused++;
+    if (live.controls.pause(WORKFLOW_RESTART_PAUSE_REASON)) paused++;
   }
   return paused;
 }
@@ -379,12 +380,18 @@ export function markInterruptedWorkflows(): void {
   for (const runId of runIdsOnDisk()) {
     if (liveWorkflows.has(runId)) continue;
     const snapshot = readRunJson(runId);
-    if (
-      !snapshot ||
-      (snapshot.status !== "running" && snapshot.status !== "paused")
-    )
-      continue;
+    if (!snapshot) continue;
+    // Only runs the service itself stopped are interrupted. A "running" run died
+    // with the previous process; a "paused" run counts only when we paused it for
+    // shutdown. A pause a human asked for must survive the restart untouched, or
+    // recoverableWorkflowRunIds() would auto-resume work they deliberately halted.
+    const stoppedByService =
+      snapshot.status === "running" ||
+      (snapshot.status === "paused" &&
+        snapshot.pauseReason === WORKFLOW_RESTART_PAUSE_REASON);
+    if (!stoppedByService) continue;
     snapshot.status = "interrupted";
+    snapshot.interruptedByRestart = true;
     snapshot.endedAt = new Date().toISOString();
     for (const agent of snapshot.agents) {
       if (agent.status === "pending" || agent.status === "running") {
