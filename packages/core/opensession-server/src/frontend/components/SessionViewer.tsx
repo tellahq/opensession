@@ -42,7 +42,6 @@ import type {
   SessionNote,
   SessionSlackShare,
   TranscriptEntry,
-  AskQuestion,
 } from "../lib/types";
 import {
   mergeTranscriptEntries,
@@ -143,6 +142,7 @@ import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { useNavigation } from "../hooks/useNavigation";
 import { useSessionSocket } from "../hooks/useSessionSocket";
+import { useSessionRuntime } from "../hooks/useSessionRuntime";
 import {
   dedupeViewers,
   facepileAvatarStyle,
@@ -1281,13 +1281,28 @@ export function SessionViewer({
     const messageId = takePendingSessionFork(session.id);
     if (messageId) setForkFrom(messageId);
   }, [session.id]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [isRunningLive, setIsRunningLive] = useState(session.isRunning);
-  const [safety, setSafety] = useState(session.safety);
+  const [
+    {
+      isStreaming,
+      isRunningLive,
+      safety,
+      queued,
+      steered,
+      pendingDeliveryIds,
+      ask,
+      model,
+      usage,
+    },
+    dispatchSessionRuntime,
+  ] = useSessionRuntime({
+    isRunning: session.isRunning,
+    safety: session.safety,
+    model: session.model || "",
+    usage: session.usage,
+  });
   useEffect(() => {
-    setSafety(session.safety);
-    if (session.safety) setIsRunningLive(false);
-  }, [session.id, session.safety]);
+    dispatchSessionRuntime({ type: "sync_safety", safety: session.safety });
+  }, [dispatchSessionRuntime, session.id, session.safety]);
   // Bumped on git pushes and matching GitHub webhook events so every mounted PR
   // surface revalidates immediately.
   const [gitRefreshTick, setGitRefreshTick] = useState(0);
@@ -1314,7 +1329,6 @@ export function SessionViewer({
   useEffect(() => {
     setWorkspacePreparing(!!session.workspacePreparing);
   }, [session.workspacePreparing]);
-  const [queued, setQueued] = useState<QueueReceipt[]>([]);
   // Drag-to-reorder bookkeeping. onReorder fires continuously during a drag, so
   // we only reorder locally then flush the final order to the server on drop —
   // broadcasting mid-drag would swap the item references out from under Motion
@@ -1325,8 +1339,6 @@ export function SessionViewer({
   // Delivery ownership stays server-side, but sent steering messages live in
   // the conversation. These ids only give their bubbles a quiet pending
   // treatment until the engine confirms it has read them.
-  const [steered, setSteered] = useState<QueueReceipt[]>([]);
-  const [pendingDeliveryIds, setPendingDeliveryIds] = useState<string[]>([]);
   // One-shot draft injection into the Composer (bump seq to apply) — how
   // "edit queued message" puts the text back into the input.
   const [composerPrefill, setComposerPrefill] = useState<{
@@ -1409,7 +1421,7 @@ export function SessionViewer({
         // The server started a turn, so this is an optimistic transcript bubble,
         // not a queued row.
         setPending((current) => markPendingStarted(current, deliveredPrompt));
-        setIsRunningLive(true);
+        dispatchSessionRuntime({ type: "mark_running" });
         return;
       }
       if (result.status === "queued" || result.status === "steered") {
@@ -1422,7 +1434,7 @@ export function SessionViewer({
             result.status === "queued" ? "queue" : "steer",
           ),
         );
-        setIsRunningLive(true);
+        dispatchSessionRuntime({ type: "mark_running" });
         return;
       }
       if (result.status !== "handled") return;
@@ -1467,7 +1479,7 @@ export function SessionViewer({
       unsubscribe();
       stopObserving();
     };
-  }, [session.id, setEntries]);
+  }, [dispatchSessionRuntime, session.id, setEntries]);
   useEffect(() => {
     if (connected) void promptOutbox.flush();
   }, [connected]);
@@ -1495,10 +1507,6 @@ export function SessionViewer({
       ];
     });
   }, [entries, initialPending, session.id, setEntries]);
-  const [ask, setAsk] = useState<{
-    questionId: string;
-    questions: AskQuestion[];
-  } | null>(null);
   const [slackComposer, setSlackComposer] = useState<{
     id: string;
     message: string;
@@ -2326,15 +2334,13 @@ export function SessionViewer({
   }, [messagesRef, session.id]);
 
   // Per-session model (switchable from the composer; "" = default)
-  const [model, setModel] = useState(session.model || "");
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   // Pinnable Claude/Codex accounts + this session's pin ("" = auto pool).
   const [accounts, setAccounts] = useState<ProviderAccountOption[]>([]);
   const [accountId, setAccountId] = useState(session.accountId || "");
-  // Live token/cost accounting — seeded from the session, updated per run via
-  // the `usage_update` broadcast. Powers the phone header's cost/context pill.
-  const [usage, setUsage] = useState(session.usage);
+  // Live token/cost accounting is seeded from the session and updated per run
+  // through the `usage_update` broadcast in useSessionRuntime.
   // Reasoning effort — a composer control mirroring the new-session palette.
   // Persisted on the session server-side and enforced per run (Claude effort /
   // Codex modelReasoningEffort), so seed from the session's stored value.
@@ -2362,8 +2368,11 @@ export function SessionViewer({
       .catch(() => {});
   }, [session.workspaceId]);
   useEffect(() => {
-    setModel(session.model || "");
-  }, [session.id, session.model]);
+    dispatchSessionRuntime({
+      type: "sync_model",
+      model: session.model || "",
+    });
+  }, [dispatchSessionRuntime, session.id, session.model]);
   useEffect(() => {
     setAccountId(session.accountId || "");
   }, [session.id, session.accountId]);
@@ -2374,8 +2383,8 @@ export function SessionViewer({
     setFastMode(session.fastMode || false);
   }, [session.id, session.fastMode]);
   useEffect(() => {
-    setUsage(session.usage);
-  }, [session.id, session.usage]);
+    dispatchSessionRuntime({ type: "sync_usage", usage: session.usage });
+  }, [dispatchSessionRuntime, session.id, session.usage]);
 
   // Dynamic workflow runs (opensession-workflows MCP): seeded by a fetch on
   // open/session switch, then kept live by workflow_update broadcasts. Powers
@@ -3208,19 +3217,17 @@ export function SessionViewer({
             // Don't let a broadcast rewrite the list mid-drag (see
             // draggingQueueRef) — the drop will send our order and the
             // server's echo reconciles it right after.
-            if (!draggingQueueRef.current) setQueued(msg.queued);
-            setSteered(msg.steered || []);
-            setPendingDeliveryIds(msg.pendingDeliveryIds || []);
+            dispatchSessionRuntime({
+              type: "frame",
+              frame: msg,
+              acceptQueueUpdate: !draggingQueueRef.current,
+            });
           }
           break;
         case "queued_prompt_taken": {
           if (msg.sessionId !== session.id) break;
           if (!msg.item) {
-            setSteered((current) =>
-              current.map((item) =>
-                item.id === msg.queueId ? { ...item, editing: false } : item,
-              ),
-            );
+            dispatchSessionRuntime({ type: "frame", frame: msg });
             toast(msg.message || "That queued message could not be edited");
             break;
           }
@@ -3261,16 +3268,9 @@ export function SessionViewer({
           break;
         }
         case "ask_question":
-          if (msg.sessionId === session.id) {
-            setAsk({ questionId: msg.questionId, questions: msg.questions });
-          }
-          break;
         case "ask_resolved":
-          if (msg.sessionId === session.id) {
-            setAsk((prev) =>
-              prev?.questionId === msg.questionId ? null : prev,
-            );
-          }
+          if (msg.sessionId === session.id)
+            dispatchSessionRuntime({ type: "frame", frame: msg });
           break;
         case "reply_suggestions":
           // Null retires the row (the turn they answered has been answered).
@@ -3303,15 +3303,13 @@ export function SessionViewer({
           break;
         case "session_status": {
           const running = !!msg.isRunning && !msg.safety;
-          setSafety(msg.safety);
-          setIsRunningLive(running);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           if (!running) {
             // Every isRunning:false broadcast follows its run's stream_done,
             // so a live turn never gets cut here. This clears the stale case:
             // a socket that died mid-stream (server restart) reconnects, the
             // re-watch hello reports the turn already over, and the spinner
             // from the dead stream would otherwise stay up forever.
-            setIsStreaming(false);
             liveTurnStore.finish();
           }
           onRunningChange?.(session.id, running);
@@ -3330,7 +3328,7 @@ export function SessionViewer({
           if (msg.sessionId === session.id) setWorkspacePreparing(!msg.ready);
           break;
         case "stream_start":
-          setIsStreaming(true);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           // A new turn is never the stopped one: clear the pending stop so
           // its label can't bleed into the run that follows it.
           setStopRequestedAt(null);
@@ -3356,13 +3354,13 @@ export function SessionViewer({
           transcriptViewStore.merge([msg.entry]);
           break;
         case "stream_done": {
-          setIsStreaming(false);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           liveTurnStore.finish();
           break;
         }
         case "model_changed":
           if (msg.sessionId !== session.id) break;
-          setModel(msg.model);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           if (msg.by && msg.by !== getCurrentUser()) {
             setEntries((prev) => [
               ...prev,
@@ -3383,7 +3381,7 @@ export function SessionViewer({
           break;
         case "usage_update":
           if (msg.sessionId !== session.id) break;
-          setUsage(msg.usage);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           break;
         case "cache_warning":
           if (msg.sessionId !== session.id) break;
@@ -3401,7 +3399,7 @@ export function SessionViewer({
           ]);
           break;
         case "error":
-          setIsStreaming(false);
+          dispatchSessionRuntime({ type: "frame", frame: msg });
           liveTurnStore.finish();
           // Show the failure where the reply would have been — otherwise a
           // failed run looks like a send that silently went nowhere.
@@ -3494,10 +3492,11 @@ export function SessionViewer({
           ]
         : [],
     );
-    setIsRunningLive(session.isRunning);
-    setPendingDeliveryIds([]);
+    dispatchSessionRuntime({
+      type: "reset_live",
+      isRunning: session.isRunning,
+    });
     liveTurnStore.clear();
-    setIsStreaming(false);
   });
   useLayoutEffect(() => {
     resetOptimisticState();
@@ -4139,11 +4138,10 @@ export function SessionViewer({
 
   const repairSafetyPause = useCallback(async () => {
     await repairPausedSession(session.id);
-    setSafety(undefined);
-    setIsRunningLive(false);
+    dispatchSessionRuntime({ type: "repair_safety" });
     onRunningChange?.(session.id, false);
     toast("Session repaired");
-  }, [onRunningChange, session.id]);
+  }, [dispatchSessionRuntime, onRunningChange, session.id]);
 
   // Session and asset links navigate on a delegated click. markdown.ts renders
   // them into dangerouslySetInnerHTML, where they cannot carry React handlers;
@@ -4413,7 +4411,7 @@ export function SessionViewer({
     unhideForSession(session);
     if (!isBusy || steerNow) {
       if (!isBusy) {
-        setIsRunningLive(true);
+        dispatchSessionRuntime({ type: "mark_running" });
         onRunningChange?.(session.id, true);
       }
       // Sent messages always enter the conversation immediately. A busy steer
@@ -4521,11 +4519,11 @@ export function SessionViewer({
     }
     if (!q.id) return;
     if (steering) {
-      setSteered((current) =>
-        current.map((item) =>
-          item.id === q.id ? { ...item, editing: true } : item,
-        ),
-      );
+      dispatchSessionRuntime({
+        type: "set_steered_editing",
+        queueId: q.id,
+        editing: true,
+      });
     }
     send({
       type: steering ? "take_steered_prompt" : "take_queued_prompt",
@@ -4560,7 +4558,7 @@ export function SessionViewer({
 
   function handleQueueReorder(next: QueueReceipt[]) {
     pendingReorderRef.current = next;
-    setQueued(next);
+    dispatchSessionRuntime({ type: "reorder_queue", queued: next });
   }
 
   function commitQueueReorder() {
@@ -4734,7 +4732,7 @@ export function SessionViewer({
   function handleModelChange(next: string) {
     const target = next || defaultModel;
     if (!target || target === (model || defaultModel)) return;
-    setModel(next);
+    dispatchSessionRuntime({ type: "select_model", model: next });
     // Routed through the /model slash command so it persists, notices, and
     // broadcasts to other viewers.
     send({
