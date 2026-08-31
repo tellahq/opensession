@@ -4,6 +4,25 @@ import {
   sortInboxByCreation,
   type InboxRow,
 } from "./sidebar-inbox";
+import type { UnifiedSession, Workspace } from "./types";
+
+function workspace(id: string, createdAt: string): Workspace {
+  return { id, name: id, createdBy: "test", createdAt };
+}
+
+function session(id: string, createdAt: string): UnifiedSession {
+  return {
+    id,
+    source: "opensession",
+    branch: null,
+    worktreeDir: null,
+    startedBy: null,
+    title: id,
+    lastActivity: createdAt,
+    createdAt,
+    isRunning: false,
+  };
+}
 
 function row(
   key: string,
@@ -12,11 +31,9 @@ function row(
 ): InboxRow {
   return {
     key,
-    workspace: createdAt
-      ? ({ id: key, createdAt } as InboxRow["workspace"])
-      : null,
+    workspace: createdAt ? workspace(key, createdAt) : null,
     createdAt: sessionCreatedAt,
-    sessions: [{ id: `${key}:session`, createdAt: sessionCreatedAt } as any],
+    sessions: [session(`${key}:session`, sessionCreatedAt)],
   };
 }
 

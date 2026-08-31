@@ -1,8 +1,26 @@
 import { expect, test, beforeEach, afterEach } from "bun:test";
 
+interface WindowStub {
+  addEventListener?: (type: string, handler: (event: unknown) => void) => void;
+  removeEventListener?: (
+    type: string,
+    handler: (event: unknown) => void,
+  ) => boolean | undefined;
+  dispatchEvent?: (event: { type: string }) => boolean;
+  setInterval?: () => number;
+}
+
+interface BrowserGlobals {
+  window?: WindowStub;
+  Event?: new (type: string) => { type: string };
+  document?: { visibilityState: string };
+  localStorage?: ReturnType<typeof memoryStorage>;
+  sessionStorage?: ReturnType<typeof memoryStorage>;
+}
+
 // These browser-facing stores need a small DOM/storage surface in Bun.
-const globals = globalThis as Record<string, any>;
-if (!globals.window) globals.window = {};
+const globals = globalThis as unknown as BrowserGlobals;
+globals.window ??= {};
 const win = globals.window;
 const handlers = new Map<string, Set<(event: unknown) => void>>();
 if (typeof win.addEventListener !== "function")
@@ -44,7 +62,7 @@ function memoryStorage() {
   };
 }
 if (!globals.localStorage) globals.localStorage = memoryStorage();
-if (!globals.sessionStorage) globals.sessionStorage = memoryStorage();
+const sessionStorage = (globals.sessionStorage ??= memoryStorage());
 
 const {
   attachToDraft,
@@ -65,11 +83,16 @@ function stagingServer() {
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
-  globalThis.fetch = (async (input: any, init: any) => {
+  const fetchStub = async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
     const url = String(input);
     if (url.includes("/api/upload")) {
       await held;
-      const name = decodeURIComponent(init?.headers?.["x-file-name"] ?? "file");
+      const name = decodeURIComponent(
+        new Headers(init?.headers).get("x-file-name") ?? "file",
+      );
       return new Response(
         JSON.stringify({ ok: true, name, path: `/uploads/staged/${name}` }),
         { headers: { "content-type": "application/json" } },
@@ -78,7 +101,10 @@ function stagingServer() {
     return new Response("{}", {
       headers: { "content-type": "application/json" },
     });
-  }) as typeof fetch;
+  };
+  globalThis.fetch = Object.assign(fetchStub, {
+    preconnect: realFetch.preconnect,
+  });
   return { release };
 }
 
@@ -173,7 +199,7 @@ test("an inline image too big for the mirror does not take the text with it", as
   await new Promise((resolve) => setTimeout(resolve, 500));
 
   const mirrored = JSON.parse(
-    globals.sessionStorage.getItem(`backstage-draft:${KEY}`)!,
+    sessionStorage.getItem(`backstage-draft:${KEY}`)!,
   );
   expect(mirrored.text).toBe("keep me");
   expect(mirrored.images).toEqual([]);

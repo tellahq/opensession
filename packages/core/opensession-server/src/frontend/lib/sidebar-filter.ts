@@ -42,12 +42,16 @@ export function readFeedFilters(): Record<string, FeedFilterValues> {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 /** `a.b` getter over item meta / option objects. */
 export function dget(obj: unknown, path?: string): unknown {
   if (!path) return obj;
-  let cur: any = obj;
+  let cur: unknown = obj;
   for (const seg of path.split(".")) {
-    if (cur == null) return undefined;
+    if (!isRecord(cur) || !(seg in cur)) return undefined;
     cur = cur[seg];
   }
   return cur;
@@ -112,6 +116,10 @@ export const FILTER_KEY = "opensession-sidebar-filter";
 export const FILTER_VERSION = 8;
 
 const GROUP_BYS: GroupBy[] = ["inbox", "activity", "status"];
+
+function isGroupBy(value: unknown): value is GroupBy {
+  return GROUP_BYS.some((groupBy) => groupBy === value);
+}
 
 /** Nobody choosing a section mode gets Active and Snoozed inbox sections. */
 export function defaultGroupBy(): GroupBy {
@@ -282,25 +290,26 @@ interface StoredGrouping {
 }
 
 /** Resolve every historical shape into the two independent v8 axes. */
-function storedGrouping(v: any): StoredGrouping {
-  if (v?.v === FILTER_VERSION) {
+function storedGrouping(value: unknown): StoredGrouping {
+  const v = isRecord(value) ? value : {};
+  if (v.v === FILTER_VERSION) {
     return {
-      groupBy: GROUP_BYS.includes(v.groupBy) ? v.groupBy : "auto",
+      groupBy: isGroupBy(v.groupBy) ? v.groupBy : "auto",
       byProject: typeof v.byProject === "boolean" ? v.byProject : "auto",
     };
   }
-  if (v?.v === 7) {
+  if (v.v === 7) {
     return {
       groupBy:
         v.groupBy === "settled"
           ? "inbox"
-          : GROUP_BYS.includes(v.groupBy)
+          : isGroupBy(v.groupBy)
             ? v.groupBy
             : "auto",
       byProject: typeof v.byProject === "boolean" ? v.byProject : "auto",
     };
   }
-  if (v?.v === 6) {
+  if (v.v === 6) {
     switch (v.groupBy) {
       case "none":
         return { groupBy: "inbox", byProject: false };
@@ -312,7 +321,7 @@ function storedGrouping(v: any): StoredGrouping {
         return { groupBy: "auto", byProject: "auto" };
     }
   }
-  if (v?.v === 4 || v?.v === 5) {
+  if (v.v === 4 || v.v === 5) {
     const sections = v.sections ?? v.lanes;
     const groupBy: StoredGroupBy =
       sections === "status"
@@ -333,7 +342,7 @@ function storedGrouping(v: any): StoredGrouping {
     "repo-inbox": { groupBy: "activity", byProject: true },
     inbox: { groupBy: "activity", byProject: false },
   };
-  const mapped = legacy[v?.groupBy];
+  const mapped = typeof v.groupBy === "string" ? legacy[v.groupBy] : undefined;
   if (!mapped) return { groupBy: "auto", byProject: "auto" };
   if (v.v === 3) return mapped;
   if (v.groupBy === "repo-status")
@@ -345,7 +354,10 @@ function storedGrouping(v: any): StoredGrouping {
 
 export function readStoredFilter(): StoredFilterState {
   try {
-    const v = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");
+    const parsed: unknown = JSON.parse(
+      localStorage.getItem(FILTER_KEY) || "{}",
+    );
+    const v = isRecord(parsed) ? parsed : {};
     const grouping = storedGrouping(v);
     return {
       groupBy: grouping.groupBy,

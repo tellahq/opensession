@@ -15,7 +15,7 @@ const base = {
 
 describe("buildSlackManifest", () => {
   test("HTTP transport carries both request URLs", () => {
-    const manifest = buildSlackManifest({ ...base, transport: "http" }) as any;
+    const manifest = buildSlackManifest({ ...base, transport: "http" });
     expect(manifest.settings.event_subscriptions.request_url).toBe(
       "https://hooks.example.ts.net/slack/events",
     );
@@ -31,7 +31,7 @@ describe("buildSlackManifest", () => {
     const manifest = buildSlackManifest({
       ...base,
       transport: "socket",
-    }) as any;
+    });
     expect(manifest.settings.socket_mode_enabled).toBe(true);
     expect(manifest.settings.event_subscriptions.request_url).toBeUndefined();
     expect(manifest.settings.interactivity.request_url).toBeUndefined();
@@ -43,14 +43,14 @@ describe("buildSlackManifest", () => {
       ...base,
       webhookBaseUrl: "https://hooks.example.ts.net/",
       transport: "http",
-    }) as any;
+    });
     expect(manifest.settings.event_subscriptions.request_url).toBe(
       "https://hooks.example.ts.net/slack/events",
     );
   });
 
   test("scopes and events match the documented sets", () => {
-    const manifest = buildSlackManifest({ ...base, transport: "http" }) as any;
+    const manifest = buildSlackManifest({ ...base, transport: "http" });
     expect(manifest.oauth_config.scopes.bot).toEqual(SLACK_BOT_SCOPES);
     expect(manifest.settings.event_subscriptions.bot_events).toEqual(
       SLACK_BOT_EVENTS,
@@ -76,7 +76,7 @@ describe("buildSlackManifest", () => {
       ...base,
       publicBaseUrl: "https://app.example.com:8443/sessions",
       transport: "socket",
-    }) as any;
+    });
     expect(SLACK_BOT_EVENTS).toContain("link_shared");
     expect(SLACK_BOT_SCOPES).toContain("links:read");
     expect(SLACK_BOT_SCOPES).toContain("links:write");
@@ -88,7 +88,7 @@ describe("buildSlackManifest", () => {
       ...base,
       appName: "An Extremely Long Instance Product Name That Slack Will Reject",
       transport: "socket",
-    }) as any;
+    });
     expect(manifest.display_information.name.length).toBeLessThanOrEqual(35);
   });
 
@@ -97,7 +97,7 @@ describe("buildSlackManifest", () => {
       ...base,
       appName: "   ",
       transport: "socket",
-    }) as any;
+    });
     expect(manifest.display_information.name).toBe("Open Session");
   });
 });

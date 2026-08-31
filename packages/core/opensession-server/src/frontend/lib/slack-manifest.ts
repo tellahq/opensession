@@ -111,9 +111,7 @@ function publicHostname(publicBaseUrl: string): string {
  * do not use is left out rather than written as a default, so the generated
  * JSON reads as "what this app needs" instead of a filled-in template.
  */
-export function buildSlackManifest(
-  options: SlackManifestOptions,
-): Record<string, unknown> {
+export function buildSlackManifest(options: SlackManifestOptions) {
   const { publicBaseUrl, webhookBaseUrl, transport } = options;
   const appName = clampName(options.appName, 35);
   const socket = transport === "socket";

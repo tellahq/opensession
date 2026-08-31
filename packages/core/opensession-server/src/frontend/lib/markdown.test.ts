@@ -275,8 +275,9 @@ describe("session chip labels", () => {
       title: `Open session ${id}`,
       querySelector: () => label,
     };
-    const previousDocument = globalThis.document;
-    (globalThis as any).document = {
+    const globals = globalThis as unknown as Record<string, unknown>;
+    const previousDocument = globals.document;
+    globals.document = {
       querySelectorAll: () => [anchor],
     };
     try {
@@ -285,8 +286,8 @@ describe("session chip labels", () => {
       expect(anchor.dataset.sessionLabel).toBeUndefined();
       expect(anchor.title).toBe(`Open Fix the sidebar hover states (${id})`);
     } finally {
-      if (previousDocument === undefined) delete (globalThis as any).document;
-      else (globalThis as any).document = previousDocument;
+      if (previousDocument === undefined) delete globals.document;
+      else globals.document = previousDocument;
     }
   });
 
