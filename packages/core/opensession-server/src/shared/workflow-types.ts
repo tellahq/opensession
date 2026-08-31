@@ -40,6 +40,12 @@ export const WORKFLOW_LIMITS = {
   /** Per-agent wall clock before the run is failed. An agent may use the
    * workflow's full active-time budget instead of being cut off early. */
   agentTimeoutMs: 60 * 60_000,
+  /** Fraction of agentTimeoutMs an agent may spend exploring before it is told
+   *  to stop and hand back its verdict. The remainder funds that wrap-up turn,
+   *  so a long agent returns a usable answer instead of dying mid-thought. */
+  agentWrapUpAtFraction: 0.8,
+  /** Cap on the partial reply retained as diagnostics when an agent times out. */
+  timeoutTailChars: 2_000,
   /** Whole-workflow active wall clock before the worker is terminated. Time
    * spent paused does not consume this allowance. */
   workflowTimeoutMs: 60 * 60_000,
@@ -280,6 +286,16 @@ export interface WorkflowAgentOutcome {
   engineSessionId?: string;
   /** Where it ran (the session's worktree, or a write agent's own one). */
   cwd?: string;
+  /** Present only when the agent hit its hard wall clock. Keeps what it had
+   *  already produced so a timeout is inspectable instead of an opaque null. */
+  timeoutDiagnostics?: {
+    /** Tail of the reply streamed before the deadline (timeoutTailChars). */
+    partialText?: string;
+    /** Tool calls the agent made across the whole attempt. */
+    toolCalls: number;
+    /** True when it got the wrap-up turn and still ran out of time. */
+    warned: boolean;
+  };
   // ── write agents ──
   /** Set exactly when a branch was retained, whether the turn succeeded or
    *  failed. Read this (never `ok`) to decide whether there is anything to
@@ -419,6 +435,13 @@ export type WorkflowRunStatus =
   /** Marked on boot for runs that were live when the process died. */
   | "interrupted";
 
+/**
+ * Pause reason recorded when the service pauses live runs during its own
+ * shutdown. Only runs paused for this reason are eligible for automatic resume
+ * on the next boot: a pause a human asked for must survive a restart.
+ */
+export const WORKFLOW_RESTART_PAUSE_REASON = "server restart";
+
 export interface WorkflowRecoverySnapshot {
   /** Only active runs carrying this descriptor are replayed after restart. */
   autoResume: boolean;
@@ -477,6 +500,12 @@ export interface WorkflowRunSnapshot {
   /** New run that replayed this interrupted run after a process restart. */
   recoveredAsRunId?: string;
   recoveryError?: string;
+  /**
+   * True when this run was marked `interrupted` because the service stopped
+   * under it, rather than because a human paused it. Human pauses are never
+   * marked interrupted, so this stays unset for them.
+   */
+  interruptedByRestart?: boolean;
   pausedAt?: string;
   pauseReason?: string;
   totalPausedMs?: number;
