@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { RunAgentOpts } from "./agent-runner";
 import type { StreamEvent } from "./run-events";
 import {
+  _setAgentDeadlinesForTests,
   _setRunAgentForTests,
   extractLastFencedJson,
   runAgentCollect,
@@ -13,6 +14,7 @@ import { WORKFLOW_LIMITS, type WorkflowExecCtx } from "./workflow-types";
 
 afterEach(() => {
   _setRunAgentForTests(null);
+  _setAgentDeadlinesForTests(null);
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -661,5 +663,82 @@ describe("workflowExecutor", () => {
     ]);
     expect(a.text).toBe("result-A");
     expect(b.text).toBe("result-B");
+  });
+});
+
+// ── Deadlines ────────────────────────────────────────────────────────────────
+
+describe("workflowExecutor deadlines", () => {
+  test("soft deadline asks the agent to wrap up and returns that verdict", async () => {
+    const calls: RunAgentOpts[] = [];
+    _setAgentDeadlinesForTests({ softMs: 20, hardMs: 5_000 });
+    _setRunAgentForTests(async function* (opts: RunAgentOpts) {
+      calls.push(opts);
+      yield { type: "init", sessionId: "oc-1" } as StreamEvent;
+      if (calls.length === 1) {
+        yield { type: "tool_use", name: "Read" } as StreamEvent;
+        yield { type: "text_chunk", text: "still exploring" } as StreamEvent;
+        await new Promise(() => {}); // hang until the soft deadline aborts us
+      }
+      yield { type: "text_chunk", text: "VERDICT: ship it" } as StreamEvent;
+      yield { type: "done" } as StreamEvent;
+    });
+
+    const out = await workflowExecutor.execute(
+      { prompt: "review this", opts: {}, seq: 0 },
+      makeCtx(),
+    );
+
+    expect(out.ok).toBe(true);
+    expect(out.text).toBe("VERDICT: ship it");
+    expect(calls).toHaveLength(2);
+    expect(calls[1].prompt).toContain("STOP.");
+    // Resumed, so the task and everything it read are still in context.
+    expect(calls[1].sessionId).toBe("oc-1");
+    // The exploring turn's spend is carried into the final row.
+    expect(out.toolCalls).toBe(1);
+    expect(out.timeoutDiagnostics).toBeUndefined();
+  });
+
+  test("hard deadline keeps the partial reply as diagnostics", async () => {
+    const calls: RunAgentOpts[] = [];
+    _setAgentDeadlinesForTests({ softMs: 20, hardMs: 150 });
+    _setRunAgentForTests(async function* (opts: RunAgentOpts) {
+      calls.push(opts);
+      yield { type: "init", sessionId: "oc-1" } as StreamEvent;
+      yield { type: "tool_use", name: "Read" } as StreamEvent;
+      yield { type: "text_chunk", text: "half an answer" } as StreamEvent;
+      await new Promise(() => {}); // never finishes, wrap-up turn included
+    });
+
+    const out = await workflowExecutor.execute(
+      { prompt: "review this", opts: {}, seq: 0 },
+      makeCtx(),
+    );
+
+    expect(out.ok).toBe(false);
+    expect(out.error).toContain("timed out");
+    expect(out.timeoutDiagnostics?.warned).toBe(true);
+    expect(out.timeoutDiagnostics?.partialText).toContain("half an answer");
+    expect(out.timeoutDiagnostics?.toolCalls).toBeGreaterThanOrEqual(1);
+  });
+
+  test("a plain workflow cancel is not reported as a timeout", async () => {
+    _setAgentDeadlinesForTests({ softMs: 5_000, hardMs: 10_000 });
+    const controller = new AbortController();
+    _setRunAgentForTests(async function* () {
+      yield { type: "init", sessionId: "oc-1" } as StreamEvent;
+      controller.abort();
+      await new Promise(() => {});
+    });
+
+    const out = await workflowExecutor.execute(
+      { prompt: "review this", opts: {}, seq: 0 },
+      makeCtx({ signal: controller.signal }),
+    );
+
+    expect(out.ok).toBe(false);
+    expect(out.error).toBe("workflow cancelled");
+    expect(out.timeoutDiagnostics).toBeUndefined();
   });
 });

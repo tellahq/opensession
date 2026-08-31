@@ -97,6 +97,26 @@ export function _setWorktreeOpsForTests(ops: WorkflowWorktreeOps | null): void {
   worktreeOps = ops ?? realWorktreeOps;
 }
 
+// ── deadline seam (tests shrink the 15-minute budget) ───────────────────────
+
+let deadlineOverride: { hardMs: number; softMs: number } | null = null;
+
+/** Test seam: shrink the per-agent deadlines (null restores the real ones). */
+export function _setAgentDeadlinesForTests(
+  deadlines: { hardMs: number; softMs: number } | null,
+): void {
+  deadlineOverride = deadlines;
+}
+
+function agentDeadlines(): { hardMs: number; softMs: number } {
+  if (deadlineOverride) return deadlineOverride;
+  const hardMs = WORKFLOW_LIMITS.agentTimeoutMs;
+  return {
+    hardMs,
+    softMs: Math.round(hardMs * WORKFLOW_LIMITS.agentWrapUpAtFraction),
+  };
+}
+
 // ── runAgentCollect ──────────────────────────────────────────────────────────
 
 export interface RunAgentCollectResult {
@@ -477,6 +497,15 @@ const WRITE_PREAMBLE =
   "sibling worktrees in parallel. Your final message is a short report of what " +
   "you changed — no greeting, preamble or sign-off.";
 
+/** Sent when the soft deadline stops an exploring turn. It resumes the agent's
+ *  own session, so the task and everything it has read are still in context. */
+const WRAP_UP_PROMPT =
+  "STOP. You are out of time on this task. Do not read, search, or call any " +
+  "more tools. Reply now with your final answer in exactly the format the task " +
+  "asked for, based only on what you already know. If you are not fully " +
+  "confident, still give your best current verdict and say briefly what is " +
+  "unresolved — a partial answer now is worth far more than none.";
+
 function capResult(text: string): string {
   return text.length > WORKFLOW_LIMITS.maxResultChars
     ? text.slice(0, WORKFLOW_LIMITS.maxResultChars)
@@ -572,16 +601,31 @@ export const workflowExecutor: WorkflowExecutor = {
     const effort = agentEffort(model, req.opts.effort);
     const write = req.opts.write === true;
 
-    // Per-agent timeout + the workflow's cancel signal fold into one signal.
+    // Deadline shape: the agent explores until the SOFT deadline, then gets one
+    // short wrap-up turn ("stop and answer now") funded by the rest of the
+    // budget. Only the HARD deadline fails the call. `inner` carries the
+    // exploring turn, `wrapUp` the final one, and the workflow's own cancel
+    // aborts both.
+    const { hardMs: hardDeadlineMs, softMs: softDeadlineMs } = agentDeadlines();
     const inner = new AbortController();
+    const wrapUp = new AbortController();
+    let softExpired = false;
     let timedOut = false;
-    const onCancel = () => inner.abort();
-    if (ctx.signal.aborted) inner.abort();
-    else ctx.signal.addEventListener("abort", onCancel, { once: true });
-    const timer = setTimeout(() => {
-      timedOut = true;
+    let warned = false;
+    const onCancel = () => {
       inner.abort();
-    }, WORKFLOW_LIMITS.agentTimeoutMs);
+      wrapUp.abort();
+    };
+    if (ctx.signal.aborted) onCancel();
+    else ctx.signal.addEventListener("abort", onCancel, { once: true });
+    const softTimer = setTimeout(() => {
+      softExpired = true;
+      inner.abort();
+    }, softDeadlineMs);
+    const hardTimer = setTimeout(() => {
+      timedOut = true;
+      onCancel();
+    }, hardDeadlineMs);
 
     // Set once a write agent's worktree exists — the finally block cleans it
     // up when the agent produced no commit of its own.
@@ -623,7 +667,10 @@ export const workflowExecutor: WorkflowExecutor = {
 
       const cancelError = () =>
         timedOut
-          ? `agent timed out after ${Math.round(WORKFLOW_LIMITS.agentTimeoutMs / 60_000)}m`
+          ? `agent timed out after ${Math.round(hardDeadlineMs / 60_000)}m` +
+            (warned
+              ? " (it was asked to wrap up and still did not finish)"
+              : "")
           : "workflow cancelled";
 
       let engineSessionId: string | undefined;
@@ -631,7 +678,74 @@ export const workflowExecutor: WorkflowExecutor = {
         engineSessionId = id;
         ctx.onEngineSession?.(id);
       };
-      const runner = runAgentImpl ?? detachedWorkflowRunner(ctx, inner.signal);
+      // One runner per turn: the detached host binds to the signal it was built
+      // with, so the wrap-up turn needs its own or it dies on the already-
+      // aborted exploring signal.
+      const runnerFor = (signal: AbortSignal): RunAgentFn =>
+        runAgentImpl ?? detachedWorkflowRunner(ctx, signal);
+
+      /**
+       * Run one agent turn under the deadline policy. When the soft deadline
+       * stops an exploring turn, resume the SAME engine session once with a
+       * terse "answer now" instruction and return that reply instead. Spend from
+       * both turns is summed so per-agent accounting stays whole.
+       */
+      const collect = async (
+        opts: RunAgentOpts,
+        wrapUpSuffix = "",
+      ): Promise<RunAgentCollectResult> => {
+        const first = await runAgentCollect(
+          opts,
+          inner.signal,
+          onEngineSession,
+          runnerFor(inner.signal),
+        );
+        const resumeId = first.engineSessionId || engineSessionId;
+        const softStopped =
+          first.error === "cancelled" &&
+          softExpired &&
+          !timedOut &&
+          !ctx.signal.aborted;
+        // Without a session to resume, a wrap-up turn would start cold with no
+        // task context — worth nothing, so keep the partial result instead.
+        if (!softStopped || !resumeId) return first;
+        warned = true;
+        const wrap = await runAgentCollect(
+          {
+            ...opts,
+            prompt: WRAP_UP_PROMPT + wrapUpSuffix,
+            sessionId: resumeId,
+          },
+          wrapUp.signal,
+          onEngineSession,
+          runnerFor(wrapUp.signal),
+        );
+        return {
+          ...wrap,
+          text: wrap.text || first.text,
+          model: wrap.model || first.model,
+          tokens: addTokens(first.tokens, wrap.tokens),
+          toolCalls: first.toolCalls + wrap.toolCalls,
+          engineSessionId: wrap.engineSessionId || resumeId,
+        };
+      };
+
+      /** What a timed-out agent had already produced. Without this a 15-minute
+       *  agent that died one sentence short reports nothing at all. */
+      const timeoutDiagnostics = (
+        res: RunAgentCollectResult,
+        totalToolCalls = res.toolCalls,
+      ): Pick<WorkflowAgentOutcome, "timeoutDiagnostics"> => {
+        if (!timedOut) return {};
+        const tail = res.text.trim().slice(-WORKFLOW_LIMITS.timeoutTailChars);
+        return {
+          timeoutDiagnostics: {
+            ...(tail ? { partialText: tail } : {}),
+            toolCalls: totalToolCalls,
+            warned,
+          },
+        };
+      };
 
       /** Everything a write agent adds on top of a finished run: commit its
        *  work, diffstat it, and drop the worktree when it changed nothing. */
@@ -679,12 +793,7 @@ export const workflowExecutor: WorkflowExecutor = {
       };
 
       if (req.opts.schema === undefined) {
-        const res = await runAgentCollect(
-          { ...baseOpts, prompt },
-          inner.signal,
-          onEngineSession,
-          runner,
-        );
+        const res = await collect({ ...baseOpts, prompt });
         if (res.error) {
           return await withWriteResult({
             ok: false,
@@ -693,6 +802,7 @@ export const workflowExecutor: WorkflowExecutor = {
             model: res.model || model,
             tokens: res.tokens,
             toolCalls: res.toolCalls,
+            ...timeoutDiagnostics(res),
           });
         }
         return await withWriteResult({
@@ -707,9 +817,10 @@ export const workflowExecutor: WorkflowExecutor = {
 
       // Schema mode: demand a fenced json block, validate, retry by
       // resuming the same engine session with the validation errors.
-      prompt +=
+      const schemaReminder =
         "\n\nReply with ONLY a fenced ```json block matching this JSON Schema:\n" +
         JSON.stringify(req.opts.schema);
+      prompt += schemaReminder;
       let tokens: { input: number; output: number } | undefined;
       let toolCalls = 0;
       let lastModel: string | undefined;
@@ -731,11 +842,9 @@ export const workflowExecutor: WorkflowExecutor = {
               "Reply again with ONLY a fenced ```json block matching the schema — no other " +
               "text. In case earlier context was lost, the original task follows.\n\n" +
               prompt;
-        const res = await runAgentCollect(
+        const res = await collect(
           { ...baseOpts, prompt: attemptPrompt, sessionId: engineSessionId },
-          inner.signal,
-          onEngineSession,
-          runner,
+          schemaReminder,
         );
         engineSessionId = res.engineSessionId || engineSessionId;
         tokens = addTokens(tokens, res.tokens);
@@ -749,6 +858,7 @@ export const workflowExecutor: WorkflowExecutor = {
             model: lastModel || model,
             tokens,
             toolCalls,
+            ...timeoutDiagnostics(res, toolCalls),
           });
         }
         const raw = extractLastFencedJson(res.text) ?? res.text.trim();
@@ -782,7 +892,8 @@ export const workflowExecutor: WorkflowExecutor = {
         toolCalls,
       });
     } finally {
-      clearTimeout(timer);
+      clearTimeout(softTimer);
+      clearTimeout(hardTimer);
       ctx.signal.removeEventListener("abort", onCancel);
       // A write agent with nothing to show for itself (no changes, an error,
       // a cancel, or a throw on the way) leaves no worktree or branch behind.
