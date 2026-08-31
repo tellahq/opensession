@@ -361,6 +361,30 @@ describe("spawnTaskImpl", () => {
     );
     expect(inferred.ok).toBe(true);
   });
+
+  it("accepts isolatedWorktree: a branchless code task gets its own worktree instead of sharing the parent's", async () => {
+    const h = makeHarness();
+    const parent = `bks-test-parent-${++uniq}`;
+    h.files.set(parent, { id: parent });
+    h.sessions.set(parent, {
+      id: parent,
+      mode: "code",
+      worktreeDir: "/home/ubuntu/projects/opensession",
+      repo: "opensession",
+    });
+
+    const res = await spawnTaskImpl(
+      { prompt: "Fan out: fix module B.", isolatedWorktree: true },
+      ctx(parent),
+      h.deps,
+    );
+    expect(res.ok).toBe(true);
+    // Forwarded so the wiring mints a per-branch worktree (branch generated
+    // from the prompt by the durable create plan) while keeping child linkage.
+    expect(h.created[0].isolatedWorktree).toBe(true);
+    expect(h.created[0].branch).toBeUndefined();
+    expect(h.created[0].parentSessionId).toBe(parent);
+  });
 });
 
 describe("session creator metadata", () => {
@@ -490,6 +514,48 @@ describe("session creator metadata", () => {
       ).content[0].text;
       expect(h.created[0].branch).toBeUndefined();
       expect(output).toContain("code session");
+    } finally {
+      await client.close();
+      await server.instance.close();
+    }
+  });
+
+  it("exposes isolatedWorktree on create_session and forwards it to createSession", async () => {
+    const h = makeHarness();
+    registerSessionControl(h.deps.control);
+    const server = createSessionsMcpServer(ctx("bks-parent"));
+    const client = new Client({
+      name: "sessions-tools-test",
+      version: "1.0.0",
+    });
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      const listedTools = await client.listTools();
+      const createTool = listedTools.tools.find(
+        (tool) => tool.name === "create_session",
+      );
+      // The server capability exists (SessionControlCreateInput); the MCP
+      // adapter must expose it or matching-repo children always share the
+      // parent worktree from the agent's perspective.
+      expect(createTool?.inputSchema.properties).toHaveProperty(
+        "isolatedWorktree",
+      );
+
+      await client.callTool({
+        name: "create_session",
+        arguments: {
+          prompt: "Fan out: fix the lint errors in module A.",
+          mode: "code",
+          isolatedWorktree: true,
+        },
+      });
+      // Forwarded to SessionControl.createSession, with child linkage intact.
+      expect(h.created[0].isolatedWorktree).toBe(true);
+      expect(h.created[0].parentSessionId).toBe("bks-parent");
+      expect(h.created[0].reportBack).toBe(true);
     } finally {
       await client.close();
       await server.instance.close();
