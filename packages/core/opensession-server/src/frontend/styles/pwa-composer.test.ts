@@ -7,6 +7,10 @@ const SHIPPED = new URL(
   import.meta.url,
 );
 const COMPOSER = new URL("../components/Composer.tsx", import.meta.url);
+const COMPOSER_CONTROLS = new URL(
+  "../components/composer/ComposerControls.tsx",
+  import.meta.url,
+);
 const MODEL_ROW = new URL(
   "../components/composer/ModelRow.tsx",
   import.meta.url,
@@ -42,6 +46,7 @@ test("the installed phone composer restores model selection when expanded", asyn
   const css = await Bun.file(CSS).text();
   const shipped = await Bun.file(SHIPPED).text();
   const composer = await Bun.file(COMPOSER).text();
+  const composerControls = await Bun.file(COMPOSER_CONTROLS).text();
   const modelRow = await Bun.file(MODEL_ROW).text();
   const voiceControl = await Bun.file(VOICE_CONTROL).text();
   const mediaStart = css.indexOf(
@@ -64,7 +69,7 @@ test("the installed phone composer restores model selection when expanded", asyn
   expect(composer).not.toContain("pwa-note-option");
   expect(modelRow).toContain("className={composerToolbarSelect}");
   expect(modelRow).toContain("{!minimized && (");
-  expect(composer).toContain(
+  expect(composerControls).toContain(
     '"composer-pop-wrap relative inline-flex shrink-0"',
   );
 });
