@@ -1,4 +1,4 @@
-import React, { useEffect, useEffectEvent, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type {
   PlainEntryAttachment,
   PlainLabelType,
@@ -126,34 +126,36 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
       aliveRef.current = false;
     };
   }, []);
-  const load = () =>
-    fetchPlainThreadApi(sessionId)
-      .then((t) => {
-        if (!aliveRef.current) return;
-        setThread(t);
-        setError(null);
-      })
-      .catch((error: unknown) => {
-        if (aliveRef.current) {
-          // Record every failure so a later successful poll can clear it.
-          // The error renders only when no valid thread is available.
-          setError(errorMessage(error, "Failed to load Plain thread"));
-        }
-      })
-      .finally(() => {
-        if (aliveRef.current) setLoading(false);
-      });
-  const loadForEffect = useEffectEvent(() => load());
+  const load = useCallback(
+    () =>
+      fetchPlainThreadApi(sessionId)
+        .then((t) => {
+          if (!aliveRef.current) return;
+          setThread(t);
+          setError(null);
+        })
+        .catch((error: unknown) => {
+          if (aliveRef.current) {
+            // Record every failure so a later successful poll can clear it.
+            // The error renders only when no valid thread is available.
+            setError(errorMessage(error, "Failed to load Plain thread"));
+          }
+        })
+        .finally(() => {
+          if (aliveRef.current) setLoading(false);
+        }),
+    [sessionId],
+  );
   useEffect(() => {
     setLoading(true);
     setError(null);
-    void loadForEffect();
+    load();
     const poll = setInterval(() => {
       if (document.visibilityState === "hidden") return;
-      void loadForEffect();
+      load();
     }, 20000);
     return () => clearInterval(poll);
-  }, [sessionId, threadId]);
+  }, [threadId, load]);
 
   // Keep the newest message in view, but only when the reader is already near the
   // bottom — a poll refresh shouldn't yank them out of scrollback.

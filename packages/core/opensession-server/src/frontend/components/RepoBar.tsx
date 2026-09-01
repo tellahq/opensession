@@ -1,4 +1,4 @@
-import React, { useEffect, useEffectEvent, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   cachedRepos,
   fetchRepos,
@@ -55,9 +55,9 @@ export function RepoBar({
   // drawing a single row spent a request on a menu that was already right.
   const [repos, setRepos] = useState<RepoInfo[]>(cachedRepos);
   const [open, setOpen] = useState(false);
-  const [switchable, setSwitchable] = useState(false);
-  const [hasWork, setHasWork] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [switchable, setSwitchable] = useState(false); // false only for ask sessions
+  const [hasWork, setHasWork] = useState(false); // already has edits/commits → confirm on switch
+  const [busy, setBusy] = useState<string | null>(null); // trigger label while an action runs
   const [error, setError] = useState<string | null>(null);
   const [controlsLoadError, setControlsLoadError] = useState<string | null>(
     null,
@@ -73,8 +73,11 @@ export function RepoBar({
   // switch landed and the parent re-fetched). Compared by content: the parent
   // rebuilds the array each fetch.
   const initialAttachedKey = JSON.stringify(initialAttached);
-  const syncAttached = useEffectEvent(() => setAttached(initialAttached));
-  useEffect(() => syncAttached(), [initialAttachedKey]);
+  const initialAttachedValue = useMemo(
+    () => JSON.parse(initialAttachedKey) as AttachedRepo[],
+    [initialAttachedKey],
+  );
+  useEffect(() => setAttached(initialAttachedValue), [initialAttachedValue]);
   useEffect(() => setPrimary(primaryRepo), [primaryRepo]);
 
   // Can this session's primary repo be switched, and does it already have work?
@@ -361,18 +364,20 @@ export function RepoBar({
                   </div>
                 )}
               </Menu.Group>
-              {!switchable && !controlsLoadError && (
+              {!switchable && !controlsLoadError ? (
                 <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-supporting leading-snug text-faint">
                   Ask sessions read the shared checkout, so there's no primary
                   repo to switch.
                 </div>
-              )}
-              {switchable && hasWork && (
-                <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-supporting leading-snug text-faint">
-                  Switching keeps your current changes in the{" "}
-                  {repoLabel(primary)} worktree. They won't move to the new
-                  repo.
-                </div>
+              ) : (
+                switchable &&
+                hasWork && (
+                  <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-supporting leading-snug text-faint">
+                    Switching keeps your current changes in the{" "}
+                    {repoLabel(primary)} worktree. They won't move to the new
+                    repo.
+                  </div>
+                )
               )}
             </>
           )}
