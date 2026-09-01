@@ -184,7 +184,14 @@ describe("interactive opensession-preview MCP lifecycle", () => {
 });
 
 describe("editor fixture grant identity", () => {
-  test("uses the persisted creator before the legacy starter", () => {
+  test("uses the verified creator login before display-name fields", () => {
+    expect(
+      editorFixtureGrantUser({
+        createdByLogin: "kentdebruin",
+        createdBy: "Kent",
+        startedBy: "Michael",
+      }),
+    ).toBe("kentdebruin");
     expect(
       editorFixtureGrantUser({ createdBy: "Kent", startedBy: "Michael" }),
     ).toBe("Kent");
