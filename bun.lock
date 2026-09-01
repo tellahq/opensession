@@ -139,6 +139,10 @@
       "name": "@tellahq/opensession-protocol",
       "version": "0.1.0",
     },
+    "packages/core/subscription-gateway": {
+      "name": "@tellahq/subscription-gateway",
+      "version": "0.0.0",
+    },
     "packages/integrations/apple-mobile": {
       "name": "@tellahq/opensession-apple-mobile",
       "version": "0.1.0",
@@ -812,6 +816,8 @@
     "@tellahq/opensession-server": ["@tellahq/opensession-server@workspace:packages/core/opensession-server"],
 
     "@tellahq/opensession-website": ["@tellahq/opensession-website@workspace:packages/clients/website"],
+
+    "@tellahq/subscription-gateway": ["@tellahq/subscription-gateway@workspace:packages/core/subscription-gateway"],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 

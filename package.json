@@ -16,6 +16,7 @@
     "packages/clients/website",
     "packages/core/opensession-server",
     "packages/core/protocol",
+    "packages/core/subscription-gateway",
     "packages/integrations/apple-mobile"
   ],
   "scripts": {
