@@ -396,18 +396,15 @@ export function useSessions({
     });
   }, [addHandler]);
 
-  // A disconnected socket may miss list invalidations. The first connection
-  // races the initial list load and needs no extra fetch; later reconnects do.
-  const webSocketConnectedOnceRef = useRef(false);
-  const onReconnected = useEffectEvent(() => {
-    refresh();
-  });
+  // A disconnected socket may miss list invalidations. Refresh on every
+  // connection, including the first: the initial list request may have read an
+  // older snapshot before the socket handler was ready. The invalidation
+  // revision fences an initial request that is still in flight.
+  const onConnected = useEffectEvent(() => refreshInvalidated());
   const socketConnected = socket?.connected ?? false;
   useEffect(() => {
-    if (!socketConnected) return;
-    if (webSocketConnectedOnceRef.current) onReconnected();
-    else webSocketConnectedOnceRef.current = true;
-    // Refresh only when connectivity changes. Changes to refresh's captured
+    if (socketConnected) onConnected();
+    // Refresh only when connectivity changes. Changes to the current list or
     // archived state are not reconnects and must not re-arm this effect.
   }, [socketConnected]);
 

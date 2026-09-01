@@ -29,6 +29,11 @@ describe("session feed socket ownership", () => {
     expect(hookSource).toContain(
       "const onInvalidated = useEffectEvent(() => refreshInvalidated())",
     );
+    expect(hookSource).toContain(
+      "const onConnected = useEffectEvent(() => refreshInvalidated())",
+    );
+    expect(hookSource).toContain("if (socketConnected) onConnected()");
+    expect(hookSource).not.toContain("webSocketConnectedOnceRef");
     expect(hookSource).toContain("}, [addHandler]);");
     expect(hookSource).toContain("}, [socketConnected]);");
     expect(hookSource).not.toContain("    refreshInvalidated,\n    inject,");

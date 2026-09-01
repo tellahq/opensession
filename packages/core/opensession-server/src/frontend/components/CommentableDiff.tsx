@@ -72,26 +72,33 @@ const STICKY_FILE_HEADER =
 const STICKY_FILE_HEADER_SURFACE =
   "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
 
+/* Review headers stay neutral while Pierre's omitted-context rows carry the
+   blue cue. Both follow the selected code theme, not the app theme. */
 type DiffSurfaceStyle = React.CSSProperties & {
   "--diffs-bg": string;
+  "--diffs-bg-separator-override": string;
   "--review-file-header-bg": string;
   "--review-file-header-hover": string;
 };
 const DIFF_SURFACE_STYLE: Record<"light" | "dark", DiffSurfaceStyle> = {
   light: {
     "--diffs-bg": "var(--review-code-light)",
-    "--review-file-header-bg":
+    "--diffs-bg-separator-override":
       "color-mix(in srgb, var(--blue) 12%, var(--review-code-light))",
+    "--review-file-header-bg":
+      "color-mix(in srgb, var(--review-code-light) 96%, var(--review-code-dark))",
     "--review-file-header-hover":
-      "color-mix(in srgb, var(--blue) 17%, var(--review-code-light))",
+      "color-mix(in srgb, var(--review-code-light) 92%, var(--review-code-dark))",
     backgroundColor: "var(--review-code-light)",
   },
   dark: {
     "--diffs-bg": "var(--review-code-dark)",
-    "--review-file-header-bg":
+    "--diffs-bg-separator-override":
       "color-mix(in srgb, var(--blue) 12%, var(--review-code-dark))",
+    "--review-file-header-bg":
+      "color-mix(in srgb, var(--review-code-dark) 94%, var(--review-code-light))",
     "--review-file-header-hover":
-      "color-mix(in srgb, var(--blue) 17%, var(--review-code-dark))",
+      "color-mix(in srgb, var(--review-code-dark) 90%, var(--review-code-light))",
     backgroundColor: "var(--review-code-dark)",
   },
 };

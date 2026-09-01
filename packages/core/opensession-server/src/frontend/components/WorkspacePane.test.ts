@@ -213,9 +213,12 @@ test("sidebar Changes shares Review's code display options", () => {
   expect(commentableDiffSource).toContain(
     'backgroundColor: "var(--review-code-light)"',
   );
-  expect(commentableDiffSource).toContain('"--review-file-header-bg":');
+  expect(commentableDiffSource).toContain('"--diffs-bg-separator-override":');
   expect(commentableDiffSource).toContain(
     '"color-mix(in srgb, var(--blue) 12%, var(--review-code-light))"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--review-code-light) 96%, var(--review-code-dark))"',
   );
   expect(commentableDiffSource).toContain(
     '"--diffs-bg": "var(--review-code-dark)"',
@@ -225,6 +228,9 @@ test("sidebar Changes shares Review's code display options", () => {
   );
   expect(commentableDiffSource).toContain(
     '"color-mix(in srgb, var(--blue) 12%, var(--review-code-dark))"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--review-code-dark) 94%, var(--review-code-light))"',
   );
   expect(commentableDiffSource).toContain("style={DIFF_SURFACE_STYLE[theme]}");
   expect(baseCssSource).toContain("--review-code-light: #ffffff");
