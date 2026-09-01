@@ -650,9 +650,9 @@ Restart one supervised Portal using its registered command and port. Repository-
 
 ### `set_editor_preview_path`
 
-`mcp__opensession-portals__set_editor_preview_path` · input: `path` (string, required), `videoId` (string, required), `fixtureLeaseId` (string, required), `fixtureExpiresAt` (string, required)
+`mcp__opensession-portals__set_editor_preview_path` · input: `fixtureLeaseId` (string, required)
 
-Set and exclusively reserve the route returned by Tella's stage-only lease_editor_fixture tool. Self-reported fixture evidence and local video IDs are not accepted.
+Verify a Tella editor fixture lease server-side, then set and exclusively reserve its authoritative editor route. Invented, expired, mismatched, or inaccessible fixtures are rejected.
 
 ### `set_portal_path`
 

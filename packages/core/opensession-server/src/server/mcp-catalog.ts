@@ -306,6 +306,9 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
       createPortalsMcpServer({
         sessionId: SESSION_ID,
         worktreeDir: () => undefined,
+        verifyEditorFixture: async () => {
+          throw new Error("catalog-only fixture verifier");
+        },
         setDefaultPath: async () => ({}),
         sandbox: async () => null,
         hasSandbox: () => false,
