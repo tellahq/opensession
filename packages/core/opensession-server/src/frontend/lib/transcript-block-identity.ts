@@ -9,15 +9,6 @@ type TranscriptArrivalItem = {
   animateArrival?: boolean;
 };
 
-/** Model switches are timeline decorations, not rows whose later displacement
- * carries meaning. Their immediate arrival may fade in, but transcript
- * hydration must never glide an already-settled divider vertically. */
-export function shouldAnimateTranscriptEntryPosition(entry: {
-  id: string;
-}): boolean {
-  return !entry.id.startsWith("model-switch-");
-}
-
 /** Keep one React/virtualizer identity while a locally-created user row receives
  * its durable transcript id. For a batched row, the first source owns the
  * mounted bubble that survives the merge. */

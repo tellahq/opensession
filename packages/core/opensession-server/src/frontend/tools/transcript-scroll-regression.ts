@@ -124,13 +124,25 @@ try {
           ? [...root.querySelectorAll("[data-eid]:not([data-transcript-key])")]
               .find(node => node.getAttribute("data-eid") === expectedId)
           : null;
-        const visible = [...root.querySelectorAll("[data-eid]:not([data-transcript-key])")]
-          .map(node => ({ node, rect: node.getBoundingClientRect() }))
-          .filter(({ rect }) => rect.height > 0 && rect.bottom > box.top + 1 && rect.top < box.bottom - 1)
-          .sort((left, right) => right.rect.bottom - left.rect.bottom || right.rect.top - left.rect.top);
+        // The entry at the viewport top, descended to its innermost [data-eid]:
+        // the node browser scroll anchoring would hold still.
+        const intersects = (rect) => rect.height > 0 && rect.bottom > box.top + 1;
+        let picked = null;
+        for (const row of root.children) {
+          const rowRect = row.getBoundingClientRect();
+          if (!intersects(rowRect)) continue;
+          picked = row.hasAttribute("data-eid") ? { node: row, rect: rowRect } : null;
+          for (const node of row.querySelectorAll("[data-eid]")) {
+            const rect = node.getBoundingClientRect();
+            if (!intersects(rect)) continue;
+            if (picked && !picked.node.contains(node)) break;
+            picked = { node, rect };
+          }
+          break;
+        }
         const anchor = expected
           ? { node: expected, rect: expected.getBoundingClientRect() }
-          : visible[0];
+          : picked;
         return {
           event: Number(player.dataset.transcriptMotionEvent || 0),
           totalEvents: Number(lab.dataset.transcriptMotionEvents || 0),
@@ -298,8 +310,9 @@ try {
       );
 
       // A small upward gesture must disengage following even inside TanStack's
-      // former 120px geometry threshold. Growing the tail must not move the
-      // reader or change the viewport height.
+      // former 120px geometry threshold. Growing the tail below the reader
+      // must not move what they are reading, must not write scrollTop, and
+      // must not change the viewport height: new text appears beneath them.
       await evaluate<void>(`window.__transcriptMotionControl.followLatest()`);
       await settle();
       await send("Input.dispatchMouseEvent", {
@@ -331,13 +344,13 @@ try {
         `near-end reader moved during tail growth (${tailDrift.toFixed(1)}px): ${JSON.stringify({ beforeTail, afterTail })}`,
       );
       assert(
-        Math.abs(afterTail.scrollTop - beforeTail.scrollTop - tailGrowth) <=
-          1.5,
-        `near-end scrollTop did not track ${tailGrowth}px of growth above the anchor`,
+        Math.abs(afterTail.scrollTop - beforeTail.scrollTop) <= 1.5,
+        `near-end scrollTop was written during tail growth: ${beforeTail.scrollTop} -> ${afterTail.scrollTop}`,
       );
       assert(
-        Math.abs(afterTail.bottomGap - beforeTail.bottomGap) <= 1.5,
-        `near-end bottom gap changed ${Math.abs(afterTail.bottomGap - beforeTail.bottomGap).toFixed(1)}px`,
+        Math.abs(afterTail.bottomGap - beforeTail.bottomGap - tailGrowth) <=
+          1.5,
+        `tail growth of ${tailGrowth}px did not appear below the reader (gap ${beforeTail.bottomGap} -> ${afterTail.bottomGap})`,
       );
 
       results.push({

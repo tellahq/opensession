@@ -8,6 +8,7 @@ import {
   type VirtualizerOptions,
 } from "@tanstack/react-virtual";
 import React from "react";
+import { flushSync } from "react-dom";
 import { PHONE_QUERY } from "../lib/breakpoints";
 import {
   loadTranscriptSizes,
@@ -19,10 +20,7 @@ import {
   newTailBlockKeys,
   shouldAnimateTranscriptItemArrival,
 } from "../lib/transcript-block-identity";
-import {
-  TRANSCRIPT_ARRIVING_POSITION_CLASS,
-  transcriptEnterClass,
-} from "../lib/transcript-motion";
+import { transcriptEnterClass } from "../lib/transcript-motion";
 import { TranscriptTopApproachGate } from "../lib/transcript-top-approach";
 import {
   registerTranscriptVirtualNavigation,
@@ -44,9 +42,6 @@ export interface VirtualTranscriptItem {
   /** False for indexed ranges whose payload arrives in read-only hydration
    * slices. Those rows are appearing from history, not arriving live. */
   animateArrival?: boolean;
-  /** False when position changes represent hydration rather than a live
-   * semantic insert. */
-  animatePositionChanges?: boolean;
   estimateSize: number;
   /** Keep the estimate until sparse payload content is available to measure. */
   measure?: boolean;
@@ -82,10 +77,6 @@ interface Props {
   onTopApproach?: () => boolean;
   /** Re-evaluate visible demand after the caller enables or retries loading. */
   topApproachGeneration?: number;
-  /** Head range whose missing prefix is hydrating into an existing row. */
-  topGrowthKey?: string | null;
-  /** Loaded-row count while that head range is a partial suffix. */
-  topGrowthVersion?: number;
   /** Range children reuse the renderer without nesting another virtualizer. */
   enabled?: boolean;
   /** Session identity for the measured-height cache. */
@@ -125,6 +116,17 @@ export function VirtualTranscriptList({ enabled = true, ...props }: Props) {
 
 type AdapterState = { revision: number };
 
+/** The entry the reader is looking at and where it sat in the viewport. */
+interface ReaderAnchor {
+  node: HTMLElement;
+  id: string;
+  top: number;
+}
+
+/** How long after the last touch a momentum scroll may still be in flight.
+ * Writing scrollTop inside that window cancels the fling on touch browsers. */
+const TOUCH_SETTLE_MS = 150;
+
 /** Imperative adapter for TanStack Virtual core. Class components are outside
  * the React Compiler's function-component transform, so no compiler bailout or
  * opt-out is involved. Its lifecycle mirrors TanStack's official React hook. */
@@ -149,11 +151,21 @@ class TranscriptVirtualizer extends React.Component<
   private containerFor: HTMLDivElement | null = null;
   private explicitContainerFor: HTMLDivElement | null | undefined;
   private container: HTMLDivElement | null = null;
-  private innerAnchorContainer: HTMLDivElement | null = null;
-  private innerAnchor:
-    | { node: HTMLElement; id: string; top: number }
-    | undefined;
-  private innerAnchorFrame: number | undefined;
+  /** Captured immediately before a commit mutates the DOM. Held across a
+   * nested virtualizer commit until the rows and scrollTop agree again. */
+  private heldAnchor: ReaderAnchor | undefined;
+  /** The virtualizer wrote scrollTop since the last consistent commit. Rows
+   * may not have re-rendered against that write yet, so the DOM cannot be
+   * measured as a reader viewport until they do. */
+  private virtualizerWrote = false;
+  /** A virtualizer scroll write whose row transforms have not been rendered.
+   * Consumed by the notification that immediately follows the write. */
+  private writeAwaitingRender = false;
+  private readerInputContainer: HTMLDivElement | null = null;
+  private touching = false;
+  private touchEndedAt = Number.NEGATIVE_INFINITY;
+  private deferredDelta = 0;
+  private deferredFlushTimer: number | undefined;
   private topApproachContainer: HTMLDivElement | null = null;
   private topApproachCallback: (() => boolean) | undefined;
   private topApproachTimer: number | undefined;
@@ -163,16 +175,6 @@ class TranscriptVirtualizer extends React.Component<
   private topApproachGate = new TranscriptTopApproachGate();
   private rowObserver: ResizeObserver | null = null;
   private rowRefs = new Map<string, (node: HTMLDivElement | null) => void>();
-  /** A bounded opening payload can be a suffix of its structural row. When
-   * older payload joins that row's start, preserve the point inside the row;
-   * ordinary pages append at the end and native keyed anchoring owns them. */
-  private headGrowthKeys = new Set<string>();
-  private headGrowthGeneration = 0;
-  private scheduledHeadGrowthGeneration = 0;
-  private headGrowthTimer: number | undefined;
-  private renderedGrowth:
-    | { key: string; version: number | undefined }
-    | undefined;
   /** Every block key this adapter instance has ever mounted. The first build
    *  seeds it (opening a session is not an arrival); afterwards, a tail key
    *  missing from the set just arrived live and plays the entrance fade. Keys
@@ -188,6 +190,9 @@ class TranscriptVirtualizer extends React.Component<
     super(props);
     this.syncSeeded(props.sizeCacheKey);
     this.virtualizer = new Virtualizer(this.options(props));
+    // Row refs measure during React's commit, before componentDidMount. A
+    // notification raised there must wait for the lifecycle, not flush.
+    this.committing = true;
   }
 
   componentDidMount() {
@@ -195,31 +200,43 @@ class TranscriptVirtualizer extends React.Component<
     this.runCommitLifecycle(() => {
       this.mountCleanup = this.virtualizer._didMount();
       this.virtualizer._willUpdate();
+      this.settleReaderAnchor();
       this.syncTopApproach();
+      this.syncReaderInput();
       this.scheduleUnderfilledHistory();
       this.syncNavigation();
-      this.syncInnerAnchor();
       this.scheduleVisibleItems();
       this.notifyLayout();
     });
+  }
+
+  getSnapshotBeforeUpdate() {
+    // Ref callbacks run between here and componentDidUpdate.
+    this.committing = true;
+    if (
+      shouldCaptureReaderAnchor({
+        held: this.heldAnchor !== undefined,
+        virtualizerWrote: this.virtualizerWrote,
+        following: Boolean(this.props.shouldMaintainEnd?.()),
+      })
+    )
+      this.heldAnchor = this.captureReaderAnchor();
+    return null;
   }
 
   componentDidUpdate(prevProps: Omit<Props, "enabled">) {
     this.runCommitLifecycle(() => {
       this.measureCommittedRows(prevProps);
       this.virtualizer._willUpdate();
-      this.restoreInnerAnchor();
-      this.scheduleHeadGrowthClear();
+      this.settleReaderAnchor();
       this.syncTopApproach();
+      this.syncReaderInput();
       if (
         prevProps.items.length !== this.props.items.length ||
-        prevProps.topGrowthKey !== this.props.topGrowthKey ||
-        prevProps.topGrowthVersion !== this.props.topGrowthVersion ||
         prevProps.topApproachGeneration !== this.props.topApproachGeneration
       )
         this.scheduleUnderfilledHistory();
       this.syncNavigation();
-      this.syncInnerAnchor();
       this.scheduleVisibleItems();
       this.notifyLayout();
     });
@@ -229,13 +246,11 @@ class TranscriptVirtualizer extends React.Component<
     this.mounted = false;
     this.mountCleanup?.();
     this.navigationCleanup?.();
-    this.clearInnerAnchor();
+    this.clearReaderInput();
     this.clearTopApproach();
     if (this.underfilledHistoryTimer !== undefined)
       window.clearTimeout(this.underfilledHistoryTimer);
     if (this.visibleTimer !== undefined) window.clearTimeout(this.visibleTimer);
-    if (this.headGrowthTimer !== undefined)
-      window.clearTimeout(this.headGrowthTimer);
     this.rowObserver?.disconnect();
   }
 
@@ -243,41 +258,6 @@ class TranscriptVirtualizer extends React.Component<
     if (this.renderedTotalSize === this.notifiedTotalSize) return;
     this.notifiedTotalSize = this.renderedTotalSize;
     this.props.onLayout?.();
-  }
-
-  private prepareHeadGrowth(props: Omit<Props, "enabled">) {
-    const key = props.topGrowthKey ?? "";
-    const next = { key, version: props.topGrowthVersion };
-    const previous = this.renderedGrowth;
-    this.renderedGrowth = next;
-    if (
-      !previous ||
-      !key ||
-      key !== previous.key ||
-      next.version === previous.version
-    )
-      return;
-    // This is the one hydration shape that is not a keyed insertion: the
-    // opening payload was a suffix of the row, and older content joined its
-    // start. Ordinary range pages append at the end and must not use this path.
-    this.headGrowthKeys.add(key);
-    this.headGrowthGeneration++;
-  }
-
-  private scheduleHeadGrowthClear() {
-    if (
-      this.headGrowthKeys.size === 0 ||
-      this.scheduledHeadGrowthGeneration === this.headGrowthGeneration
-    )
-      return;
-    this.scheduledHeadGrowthGeneration = this.headGrowthGeneration;
-    if (this.headGrowthTimer !== undefined)
-      window.clearTimeout(this.headGrowthTimer);
-    const generation = this.headGrowthGeneration;
-    this.headGrowthTimer = window.setTimeout(() => {
-      this.headGrowthTimer = undefined;
-      if (this.headGrowthGeneration === generation) this.headGrowthKeys.clear();
-    }, 750);
   }
 
   private syncSeeded(sizeCacheKey?: string) {
@@ -313,18 +293,37 @@ class TranscriptVirtualizer extends React.Component<
       this.renderAfterCommit = true;
       return;
     }
-    // setOptions can notify while render is deriving the next range, and DOM
-    // observers can notify while React is committing a different subtree.
-    // A microtask still lands before the next paint without forcing React to
-    // flush from inside a lifecycle. Coalesce same-turn geometry notifications
-    // so a theme-wide style change costs one render rather than one per row.
-    if (this.rendering || sync) this.queueRender();
+    // setOptions can notify while render is deriving the next range. A
+    // microtask still lands before the next paint without forcing React to
+    // flush from inside render.
+    if (this.rendering) {
+      this.queueRender();
+      return;
+    }
+    // The virtualizer just wrote scrollTop to compensate a row measured above
+    // the reader (its ResizeObserver path runs in an animation frame, outside
+    // any React work). The moved rows must commit in this same frame, or one
+    // paint shows the new scrollTop against the old transforms: a visible
+    // jump that then snaps back.
+    if (this.writeAwaitingRender) {
+      this.writeAwaitingRender = false;
+      flushSync(() =>
+        this.setState(({ revision }) => ({ revision: revision + 1 })),
+      );
+      return;
+    }
+    // Scroll-driven range changes also arrive as "sync" notifications. A
+    // microtask still lands before paint and coalesces same-turn geometry
+    // notifications, so a theme-wide style change costs one render.
+    if (sync) this.queueRender();
     else this.setState(({ revision }) => ({ revision: revision + 1 }));
   };
 
   private runCommitLifecycle(work: () => void) {
+    // `renderAfterCommit` is deliberately not reset here: ref callbacks run
+    // before this lifecycle with `committing` already set, and a measurement
+    // that wrote scrollTop there must still get its nested render.
     this.committing = true;
-    this.renderAfterCommit = false;
     try {
       work();
     } finally {
@@ -372,7 +371,7 @@ class TranscriptVirtualizer extends React.Component<
         ),
       observeElementRect,
       observeElementOffset,
-      scrollToFn: elementScroll,
+      scrollToFn: this.scrollToFn,
       measureElement: measureTranscriptElement,
       // Semantic transcript revisions are measured synchronously in
       // componentDidUpdate. ResizeObserver is only the fallback for external
@@ -386,6 +385,15 @@ class TranscriptVirtualizer extends React.Component<
 
   private setRoot = (node: HTMLDivElement | null) => {
     this.root = node;
+  };
+
+  private scrollToFn: VirtualizerOptions<
+    HTMLDivElement,
+    HTMLDivElement
+  >["scrollToFn"] = (offset, options, instance) => {
+    this.virtualizerWrote = true;
+    this.writeAwaitingRender = true;
+    elementScroll(offset, options, instance);
   };
 
   private measureCommittedRows(prevProps: Omit<Props, "enabled">) {
@@ -425,102 +433,125 @@ class TranscriptVirtualizer extends React.Component<
     return this.container;
   }
 
-  private captureInnerAnchor = () => {
-    const container = this.innerAnchorContainer;
-    const root = this.root;
-    if (!container || !root) return;
-    const viewport = container.getBoundingClientRect();
-    let deepest:
-      | { node: HTMLElement; id: string; top: number; bottom: number }
-      | undefined;
-    for (const node of root.querySelectorAll<HTMLElement>(
-      "[data-eid]:not([data-transcript-key])",
-    )) {
-      const id = node.dataset.eid;
-      if (!id) continue;
-      const rect = node.getBoundingClientRect();
-      if (
-        rect.height <= 0 ||
-        rect.bottom <= viewport.top + 1 ||
-        rect.top >= viewport.bottom - 1 ||
-        (deepest && rect.bottom <= deepest.bottom)
-      )
-        continue;
-      deepest = {
-        node,
-        id,
-        top: rect.top - viewport.top,
-        bottom: rect.bottom,
-      };
-    }
-    this.innerAnchor = deepest;
-  };
-
-  private onInnerAnchorScroll = () => {
-    if (this.props.shouldMaintainEnd?.()) return;
-    if (!this.innerAnchor) {
-      this.captureInnerAnchor();
-      return;
-    }
-    if (this.innerAnchorFrame !== undefined) return;
-    this.innerAnchorFrame = requestAnimationFrame(() => {
-      this.innerAnchorFrame = undefined;
-      this.captureInnerAnchor();
-    });
-  };
-
-  private clearInnerAnchor() {
-    this.innerAnchorContainer?.removeEventListener(
-      "scroll",
-      this.onInnerAnchorScroll,
-      true,
-    );
-    if (this.innerAnchorFrame !== undefined)
-      cancelAnimationFrame(this.innerAnchorFrame);
-    this.innerAnchorFrame = undefined;
-    this.innerAnchorContainer = null;
-    this.innerAnchor = undefined;
-  }
-
-  private syncInnerAnchor() {
-    const container = this.scrollContainer();
-    if (container !== this.innerAnchorContainer) {
-      this.clearInnerAnchor();
-      this.innerAnchorContainer = container;
-      container?.addEventListener("scroll", this.onInnerAnchorScroll, {
-        passive: true,
-        capture: true,
-      });
-    }
-    this.captureInnerAnchor();
-  }
-
-  /** Native keyed anchoring owns the structural move first. Grouped rows can
-   * still change internally, and estimate-to-measurement correction may leave
-   * a small residual. Preserve the deepest entry the reader could actually
-   * see, then yield again until the next committed item revision. */
-  private restoreInnerAnchor() {
+  private captureReaderAnchor(): ReaderAnchor | undefined {
     const container = this.scrollContainer();
     const root = this.root;
-    const anchor = this.innerAnchor;
-    if (
-      !container ||
-      !root ||
-      !anchor ||
-      this.props.shouldMaintainEnd?.() ||
-      !shouldRestoreTranscriptInnerAnchor(this.innerAnchorFrame !== undefined)
-    )
-      return;
+    if (!container || !root) return undefined;
+    return pickReaderAnchor(root, container.getBoundingClientRect().top);
+  }
+
+  /** Native keyed anchoring owns structural prepends. Grouped rows can still
+   * change internally, estimates resolve to measurements, and a partial row
+   * can grow at its start. Whatever moved, the entry the reader was looking at
+   * goes back where it was before this commit, as a delta on the current
+   * scroll position: the snapshot was taken synchronously before the DOM
+   * changed, so no reader movement can hide inside it. */
+  private settleReaderAnchor() {
+    // A virtualizer scroll write raised a nested render. Until it commits,
+    // scrollTop and the row transforms describe different layouts, so hold
+    // the anchor and measure after that commit instead.
+    if (this.renderAfterCommit) return;
+    const anchor = this.heldAnchor;
+    this.heldAnchor = undefined;
+    this.virtualizerWrote = false;
+    if (!anchor) return;
+    const container = this.scrollContainer();
+    const root = this.root;
+    if (!container || !root || this.props.shouldMaintainEnd?.()) return;
     const node = anchor.node.isConnected
       ? anchor.node
-      : [...root.querySelectorAll<HTMLElement>("[data-eid]")].find(
-          (candidate) => candidate.dataset.eid === anchor.id,
-        );
+      : findTranscriptEntry(root, anchor.id);
     if (!node) return;
-    const top =
-      node.getBoundingClientRect().top - container.getBoundingClientRect().top;
-    const delta = top - anchor.top;
-    if (Math.abs(delta) > 0.5) container.scrollTop += delta;
+    const delta =
+      node.getBoundingClientRect().top -
+      container.getBoundingClientRect().top -
+      anchor.top;
+    if (Math.abs(delta) <= 0.5) return;
+    this.correctReader(container, delta);
+  }
+
+  private correctReader(container: HTMLDivElement, delta: number) {
+    if (
+      shouldDeferReaderCorrection({
+        touching: this.touching,
+        sinceTouchEnd: performance.now() - this.touchEndedAt,
+      })
+    ) {
+      this.deferredDelta += delta;
+      this.scheduleDeferredFlush();
+      return;
+    }
+    container.scrollTop += delta;
+  }
+
+  private scheduleDeferredFlush() {
+    if (this.deferredFlushTimer !== undefined)
+      window.clearTimeout(this.deferredFlushTimer);
+    this.deferredFlushTimer = window.setTimeout(() => {
+      this.deferredFlushTimer = undefined;
+      const container = this.readerInputContainer;
+      const delta = this.deferredDelta;
+      if (!container || delta === 0) return;
+      if (
+        shouldDeferReaderCorrection({
+          touching: this.touching,
+          sinceTouchEnd: performance.now() - this.touchEndedAt,
+        })
+      ) {
+        this.scheduleDeferredFlush();
+        return;
+      }
+      this.deferredDelta = 0;
+      container.scrollTop += delta;
+    }, TOUCH_SETTLE_MS);
+  }
+
+  private onReaderTouchStart = () => {
+    this.touching = true;
+  };
+
+  private onReaderTouchEnd = () => {
+    this.touching = false;
+    this.touchEndedAt = performance.now();
+    if (this.deferredDelta !== 0) this.scheduleDeferredFlush();
+  };
+
+  private onReaderScroll = () => {
+    // Momentum keeps scrolling after the finger lifts. Restart the settle
+    // window on every scroll event so the flush lands once movement stops.
+    if (this.deferredDelta !== 0) this.scheduleDeferredFlush();
+  };
+
+  private clearReaderInput() {
+    const container = this.readerInputContainer;
+    if (container) {
+      container.removeEventListener("touchstart", this.onReaderTouchStart);
+      container.removeEventListener("touchend", this.onReaderTouchEnd);
+      container.removeEventListener("touchcancel", this.onReaderTouchEnd);
+      container.removeEventListener("scroll", this.onReaderScroll, true);
+    }
+    if (this.deferredFlushTimer !== undefined)
+      window.clearTimeout(this.deferredFlushTimer);
+    this.deferredFlushTimer = undefined;
+    this.deferredDelta = 0;
+    this.touching = false;
+    this.readerInputContainer = null;
+  }
+
+  private syncReaderInput() {
+    const container = this.scrollContainer();
+    if (container === this.readerInputContainer) return;
+    this.clearReaderInput();
+    this.readerInputContainer = container;
+    if (!container) return;
+    const passive = { passive: true } as const;
+    container.addEventListener("touchstart", this.onReaderTouchStart, passive);
+    container.addEventListener("touchend", this.onReaderTouchEnd, passive);
+    container.addEventListener("touchcancel", this.onReaderTouchEnd, passive);
+    container.addEventListener("scroll", this.onReaderScroll, {
+      passive: true,
+      capture: true,
+    });
   }
 
   private observeRowNode(key: string, node: HTMLElement) {
@@ -775,8 +806,10 @@ class TranscriptVirtualizer extends React.Component<
 
   render() {
     this.rendering = true;
+    // Any render lays the rows out against the latest virtualizer offsets, so
+    // a write that reached here through a lifecycle render needs no flush.
+    this.writeAwaitingRender = false;
     this.syncSeeded(this.props.sizeCacheKey);
-    this.prepareHeadGrowth(this.props);
     this.virtualizer.setOptions(this.options(this.props));
     this.virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
       item,
@@ -798,7 +831,6 @@ class TranscriptVirtualizer extends React.Component<
         scrollOffset: instance.scrollOffset ?? 0,
         firstMeasurement: !instance.itemSizeCache.has(item.key),
         scrollingBackward: instance.scrollDirection === "backward",
-        growsAtStart: this.headGrowthKeys.has(String(item.key)),
         liveEdgeDelta,
       });
     };
@@ -846,19 +878,11 @@ class TranscriptVirtualizer extends React.Component<
               data-index={virtualItem.index}
               data-eid={item.anchorId}
               data-transcript-key={item.key}
-              className={cn(
-                "absolute left-0 top-0 w-full",
-                item.className,
-                // Live machine rows glide when their measured position moves.
-                // Indexed transcript slices opt out: hydration is not arrival.
-                virtualItem.index >=
-                  Math.max(
-                    0,
-                    this.props.items.length - this.props.trailingMounted,
-                  ) &&
-                  shouldTransitionTranscriptItemPosition(item) &&
-                  TRANSCRIPT_ARRIVING_POSITION_CLASS,
-              )}
+              // Never transition transform here. A row's position is
+              // compensated by instant scrollTop writes (the virtualizer's
+              // and this adapter's), and a 200ms glide against an instant
+              // scroll reads as the transcript wobbling on its own.
+              className={cn("absolute left-0 top-0 w-full", item.className)}
               style={{ transform: `translateY(${virtualItem.start}px)` }}
             >
               <EnterRow enter={enteringSet.has(item.key)}>
@@ -901,13 +925,79 @@ export function committedTranscriptMeasureKeys(
   return changed;
 }
 
-export function shouldTransitionTranscriptItemPosition(
-  item: VirtualTranscriptItem,
-): boolean {
-  // A prompt may move when its optimistic row becomes a durable transcript
-  // range. That identity handoff must be visually inert, not a delayed glide.
-  // Indexed range payload slices likewise fill history rather than arrive live.
-  return item.animatePositionChanges !== false && !item.arrivalAliases?.length;
+/**
+ * The entry the reader is looking at: the first entry-level node at or
+ * straddling the viewport top, descended to its innermost `[data-eid]`. That
+ * is the choice browser scroll anchoring makes, which Chrome cannot make for
+ * transform-positioned rows (measured: 0px compensation in every case). The
+ * innermost node matters because a grouped row keeps its outer identity while
+ * older steps hydrate into it above the reader.
+ */
+export function pickReaderAnchor(
+  root: HTMLElement,
+  viewportTop: number,
+): ReaderAnchor | undefined {
+  const intersects = (rect: DOMRect) =>
+    rect.height > 0 && rect.bottom > viewportTop + 1;
+  for (const row of root.children) {
+    if (!(row instanceof HTMLElement)) continue;
+    const rowRect = row.getBoundingClientRect();
+    if (!intersects(rowRect)) continue;
+    const rowId = row.dataset.eid;
+    let anchor: ReaderAnchor | undefined = rowId
+      ? { node: row, id: rowId, top: rowRect.top - viewportTop }
+      : undefined;
+    for (const node of row.querySelectorAll<HTMLElement>("[data-eid]")) {
+      const id = node.dataset.eid;
+      if (!id) continue;
+      const rect = node.getBoundingClientRect();
+      if (!intersects(rect)) continue;
+      // Doc order lists a node's interior right after it: keep descending
+      // while the qualifying node is inside the current pick, and stop at the
+      // first qualifying node that is not.
+      if (anchor && !anchor.node.contains(node)) break;
+      anchor = { node, id, top: rect.top - viewportTop };
+    }
+    return anchor;
+  }
+  return undefined;
+}
+
+function findTranscriptEntry(
+  root: HTMLElement,
+  id: string,
+): HTMLElement | null {
+  return typeof CSS !== "undefined"
+    ? root.querySelector<HTMLElement>(`[data-eid="${CSS.escape(id)}"]`)
+    : null;
+}
+
+export function shouldCaptureReaderAnchor({
+  held,
+  virtualizerWrote,
+  following,
+}: {
+  held: boolean;
+  virtualizerWrote: boolean;
+  following: boolean;
+}): boolean {
+  // A following reader is owned by the host's live-edge glue. A held anchor
+  // predates a virtualizer write whose rows have not committed; the DOM in
+  // between describes no viewport a reader ever saw, so keep the earlier one.
+  return !following && !held && !virtualizerWrote;
+}
+
+export function shouldDeferReaderCorrection({
+  touching,
+  sinceTouchEnd,
+}: {
+  touching: boolean;
+  sinceTouchEnd: number;
+}): boolean {
+  // Touch browsers cancel an in-flight fling on any programmatic scroll
+  // write. A wheel animation survives one (measured in Chrome), so only touch
+  // input defers. The residual is applied once movement settles.
+  return touching || sinceTouchEnd < TOUCH_SETTLE_MS;
 }
 
 export function transcriptViewportNeedsHistory(
@@ -935,24 +1025,12 @@ export function didScrollTranscriptTowardHistory(
   );
 }
 
-export function shouldRestoreTranscriptInnerAnchor(
-  readerAnchorCapturePending: boolean,
-): boolean {
-  // A pending frame means a scroll event moved the reader after this child
-  // coordinate was captured. Let that frame record the new viewport instead
-  // of restoring the stale one over the gesture. TanStack's synchronous keyed
-  // compensation does not schedule this reader-capture frame, so prepend
-  // residuals still get corrected before paint.
-  return !readerAnchorCapturePending;
-}
-
 export function shouldAdjustTranscriptScroll({
   itemStart,
   itemEnd,
   scrollOffset,
   firstMeasurement = false,
   scrollingBackward = false,
-  growsAtStart = false,
   liveEdgeDelta,
 }: {
   itemStart: number;
@@ -960,17 +1038,14 @@ export function shouldAdjustTranscriptScroll({
   scrollOffset: number;
   firstMeasurement?: boolean;
   scrollingBackward?: boolean;
-  growsAtStart?: boolean;
   liveEdgeDelta?: number;
 }): boolean {
   if (liveEdgeDelta !== undefined) return liveEdgeDelta > 0;
-  // Preserve the point inside a partial opening suffix as older content joins
-  // its start. A continuation page grows at the end and should not move a
-  // reader whose viewport intersects that row.
-  if (growsAtStart) return itemStart < scrollOffset + 1;
   // Match TanStack's native measurement predicate everywhere else. Supplying
-  // the transcript exception above replaces the core callback, so its default
-  // behavior needs to remain intact here.
+  // the live-edge exception above replaces the core callback, so its default
+  // behavior needs to remain intact here. A row that spans the fold and grows
+  // (a partial opening suffix hydrating at its start, a streaming step) is
+  // not compensated here; the reader anchor settles it after the commit.
   if (firstMeasurement) return itemStart < scrollOffset;
   return itemEnd <= scrollOffset + 1 && !scrollingBackward;
 }

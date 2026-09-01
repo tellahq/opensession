@@ -7,8 +7,8 @@ import {
   measureTranscriptElement,
   VirtualTranscriptList,
   shouldAdjustTranscriptScroll,
-  shouldRestoreTranscriptInnerAnchor,
-  shouldTransitionTranscriptItemPosition,
+  shouldCaptureReaderAnchor,
+  shouldDeferReaderCorrection,
   transcriptOverscan,
   transcriptViewportNeedsHistory,
   type VirtualTranscriptItem,
@@ -40,8 +40,7 @@ describe("VirtualTranscriptList", () => {
     expect(source).toMatch(
       /if \(this\.committing\) \{[\s\S]*this\.renderAfterCommit = true;/,
     );
-    expect(source).toContain("if (this.rendering || sync) this.queueRender()");
-    expect(source).not.toContain("flushSync");
+    expect(source).toContain("if (sync) this.queueRender()");
   });
 
   test("captures history intent before scroll-driven rerenders", () => {
@@ -85,9 +84,51 @@ describe("VirtualTranscriptList", () => {
     expect(didScrollTranscriptTowardHistory(0, 0, 745, 900)).toBe(false);
   });
 
-  test("does not restore while reader movement awaits a fresh anchor", () => {
-    expect(shouldRestoreTranscriptInnerAnchor(false)).toBe(true);
-    expect(shouldRestoreTranscriptInnerAnchor(true)).toBe(false);
+  test("captures the reader anchor only from a consistent, non-following DOM", () => {
+    const base = { held: false, virtualizerWrote: false, following: false };
+    expect(shouldCaptureReaderAnchor(base)).toBe(true);
+    // The host's live-edge glue owns a following reader.
+    expect(shouldCaptureReaderAnchor({ ...base, following: true })).toBe(false);
+    // Rows have not re-rendered against a virtualizer scroll write: that DOM
+    // is no viewport a reader ever saw. Keep the earlier anchor instead.
+    expect(shouldCaptureReaderAnchor({ ...base, virtualizerWrote: true })).toBe(
+      false,
+    );
+    expect(shouldCaptureReaderAnchor({ ...base, held: true })).toBe(false);
+  });
+
+  test("captures before the DOM mutates and settles only deltas", () => {
+    expect(source).toContain("getSnapshotBeforeUpdate()");
+    expect(source).toContain("this.heldAnchor = this.captureReaderAnchor()");
+    expect(source).toContain("container.scrollTop += delta");
+    expect(source).not.toContain("container.scrollTop = ");
+    // A nested virtualizer render is pending: measure after it commits.
+    expect(source).toContain("if (this.renderAfterCommit) return;");
+  });
+
+  test("defers corrections while touch momentum may be in flight", () => {
+    expect(
+      shouldDeferReaderCorrection({ touching: true, sinceTouchEnd: 5_000 }),
+    ).toBe(true);
+    expect(
+      shouldDeferReaderCorrection({ touching: false, sinceTouchEnd: 40 }),
+    ).toBe(true);
+    expect(
+      shouldDeferReaderCorrection({ touching: false, sinceTouchEnd: 400 }),
+    ).toBe(false);
+  });
+
+  test("never transitions row position against instant scroll compensation", () => {
+    expect(source).not.toContain("transition:transform");
+    expect(source).not.toContain("ARRIVING_POSITION");
+  });
+
+  test("commits a virtualizer scroll write with its rows in one frame", () => {
+    expect(source).toContain("scrollToFn: this.scrollToFn");
+    expect(source).toContain("this.writeAwaitingRender = true;");
+    expect(source).toMatch(
+      /if \(this\.writeAwaitingRender\) \{[\s\S]*flushSync/,
+    );
   });
 
   test("keeps TanStack's ordinary measurement anchoring semantics", () => {
@@ -123,38 +164,10 @@ describe("VirtualTranscriptList", () => {
     ).toBe(false);
   });
 
-  test("compensates only hydration that grows at the row start", () => {
-    expect(
-      shouldAdjustTranscriptScroll({
-        itemStart: 200,
-        itemEnd: 1_200,
-        scrollOffset: 600,
-        growsAtStart: true,
-      }),
-    ).toBe(true);
-    expect(
-      shouldAdjustTranscriptScroll({
-        itemStart: 700,
-        itemEnd: 1_200,
-        scrollOffset: 600,
-        growsAtStart: true,
-      }),
-    ).toBe(false);
-    // A continuation page appends below the point being read inside this row.
-    expect(
-      shouldAdjustTranscriptScroll({
-        itemStart: 200,
-        itemEnd: 1_200,
-        scrollOffset: 600,
-      }),
-    ).toBe(false);
-  });
-
   test("uses native keyed prepend anchoring without a competing end owner", () => {
     expect(source).toContain('anchorTo: "end"');
     expect(source).toContain("scrollEndThreshold: -1");
     expect(source).toContain("this.props.shouldMaintainEnd?.()");
-    expect(source).not.toContain("getSnapshotBeforeUpdate");
   });
 
   test("remeasures semantic changes through the observed measurement path", () => {
@@ -200,22 +213,6 @@ describe("VirtualTranscriptList", () => {
         itemEnd: 1_200,
         scrollOffset: 600,
         liveEdgeDelta: -140,
-      }),
-    ).toBe(false);
-  });
-
-  test("keeps prompt reconciliation out of position transitions", () => {
-    expect(shouldTransitionTranscriptItemPosition(item(0))).toBe(true);
-    expect(
-      shouldTransitionTranscriptItemPosition({
-        ...item(0),
-        arrivalAliases: ["outbox-prompt"],
-      }),
-    ).toBe(false);
-    expect(
-      shouldTransitionTranscriptItemPosition({
-        ...item(0),
-        animatePositionChanges: false,
       }),
     ).toBe(false);
   });
