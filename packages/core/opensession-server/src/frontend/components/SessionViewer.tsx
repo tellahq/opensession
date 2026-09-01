@@ -153,6 +153,7 @@ import {
 import { BrandMark } from "./BrandMark";
 import { SessionHeader } from "./session/SessionHeader";
 import { SidePanelHost } from "./session/SidePanelHost";
+import { SessionPreviewSurface } from "./session/SessionPreviewSurface";
 import { TranscriptView } from "./session/TranscriptView";
 import { splitAttachments, type FileAttachment } from "../lib/images";
 import { cropImageRegionFile } from "../lib/image-region-comment";
@@ -236,8 +237,6 @@ import { AssetOverlay } from "./AssetView";
 import { SessionReportsPanel, useSessionReports } from "./SessionReportsPanel";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
-import { PreviewPane } from "./PreviewPane";
-import { PortalPane } from "./PortalPane";
 import { PortalsPage } from "./PortalsPanel";
 import { portalTargetFor } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
@@ -271,7 +270,6 @@ import {
   IconGlobe,
   IconRobot,
   IconMessage,
-  IconArrowUpRight,
 } from "./icons";
 import { KeepInSidebarIcon } from "./sidebar/KeepInSidebarMark";
 import { Button } from "../ui/button";
@@ -6193,114 +6191,27 @@ export function SessionViewer({
           )}
         >
           {showPortal && portalTarget ? (
-            <div className={VIEWER_REVIEW_MAIN}>
-              <PortalPane target={portalTarget} />
-            </div>
+            <SessionPreviewSurface
+              surface={{ kind: "portal", target: portalTarget }}
+            />
           ) : showPreviewTab ? (
-            <div className={VIEWER_REVIEW_MAIN}>
-              <PreviewPane
-                session={session}
-                status={previewStatus}
-                onClose={() => onClosePreviewTab?.()}
-              />
-            </div>
+            <SessionPreviewSurface
+              surface={{
+                kind: "preview",
+                session,
+                status: previewStatus,
+                onClose: () => onClosePreviewTab?.(),
+              }}
+            />
           ) : showStaging && stagingUrl ? (
-            staging?.embeddable ? (
-              // This deploy opts into being framed by this app (its CSP
-              // frame-ancestors names our origin), so we embed it inline.
-              // When the deploy's session cookie is scoped to a parent
-              // domain this app also sits under (SameSite=None; Secure), it
-              // rides into the frame on every device, iOS included, so a
-              // logged-in reviewer sees the deploy directly. A
-              // logged-OUT one gets a blank frame (staging redirects to
-              // WorkOS AuthKit, which refuses framing), so the header keeps a
-              // first-party "Open" break-out to log in, then come back.
-              <div className={VIEWER_REVIEW_MAIN}>
-                <div className="flex h-full flex-col">
-                  <div className="flex items-center gap-2 border-b border-divider bg-panel px-3 py-1.5 text-xs text-dim">
-                    <IconGlobe size={14} />
-                    <span className="truncate">
-                      Preview environment
-                      {staging.status !== "Ready"
-                        ? ` · ${staging.status.toLowerCase()}…`
-                        : ""}
-                    </span>
-                    <div className="ml-auto flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          shareLink(stagingUrl, { toast: "Link copied" })
-                        }
-                        className="inline-flex items-center gap-1 transition-colors hover:text-fg"
-                      >
-                        <IconCopy size={13} />
-                        Copy link
-                      </button>
-                      <a
-                        href={stagingUrl}
-                        target="_blank"
-                        rel="noopener"
-                        title="Open first-party in a new tab. Needed if the frame is blank because you aren't logged in to the preview environment yet."
-                        className="inline-flex items-center gap-1 transition-colors hover:text-fg"
-                      >
-                        Open
-                        <IconArrowUpRight size={13} />
-                      </a>
-                    </div>
-                  </div>
-                  <iframe
-                    key={stagingUrl}
-                    src={stagingUrl}
-                    title="Preview environment"
-                    className="min-h-0 flex-1 border-0 bg-surface"
-                    allow="camera; microphone; display-capture; fullscreen; autoplay; clipboard-write"
-                  />
-                </div>
-              </div>
-            ) : (
-              // Deploy hasn't opted into being framed (older preview, or the
-              // fusion CSP change hasn't reached it yet) — open it
-              // first-party in a new tab rather than show a blocked frame.
-              <div className={VIEWER_REVIEW_MAIN}>
-                <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-                  <IconGlobe size={40} className="text-dim" />
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="text-base font-medium text-fg">
-                      Preview environment
-                    </div>
-                    <div className="text-xs text-dim">
-                      {staging?.status === "Ready"
-                        ? "Test this PR on real infra"
-                        : `Deploy is ${(staging?.status ?? "building").toLowerCase()}…`}
-                    </div>
-                  </div>
-                  <a
-                    href={stagingUrl}
-                    target="_blank"
-                    rel="noopener"
-                    className="inline-flex items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium text-fg transition-colors hover:bg-panel"
-                  >
-                    <IconGlobe size={16} />
-                    Open staging
-                    <IconArrowUpRight size={16} />
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      shareLink(stagingUrl, { toast: "Link copied" })
-                    }
-                    className="inline-flex items-center gap-1.5 text-xs text-dim transition-colors hover:text-fg"
-                  >
-                    <IconCopy size={14} />
-                    Copy link
-                  </button>
-                  <div className="max-w-xs text-xs leading-relaxed text-dim">
-                    Opens in a new tab. This deploy isn&apos;t set up to embed
-                    here yet.
-                  </div>
-                </div>
-              </div>
-            )
+            <SessionPreviewSurface
+              surface={{
+                kind: "staging",
+                deployment: staging,
+                url: stagingUrl,
+                shareLink,
+              }}
+            />
           ) : showAssets ? (
             // The session's scratch assets, full-width (same component
             // the Info panel's Assets button opens). AssetsPanel is
