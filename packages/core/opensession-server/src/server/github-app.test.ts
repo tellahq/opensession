@@ -8,6 +8,7 @@ import {
   githubAppCredentialHealth,
   githubAppInstallationToken,
   githubRepositoryMatchesInstallation,
+  listGithubAppInstallations,
   updateGithubAppWebhook,
 } from "./github-app";
 
@@ -29,6 +30,7 @@ afterEach(() => {
   cache.__ghAppTokenCacheWrite = null;
   cache.__ghAppLastMintOk = undefined;
   cache.__ghAppLastMintIdentity = undefined;
+  cache.__ghAppInstallationsCache = null;
   for (const dir of dirs.splice(0))
     rmSync(dir, { recursive: true, force: true });
 });
@@ -73,6 +75,73 @@ describe("GitHub App webhook", () => {
       "https://ingress.example.test",
       "shared-secret",
     );
+  });
+});
+
+function writeAppIdentity(prefix: string, clientId: string): void {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  dirs.push(dir);
+  const config = join(dir, "config.json");
+  const keyPath = join(dir, "github-app.pem");
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
+  writeFileSync(
+    config,
+    JSON.stringify({
+      integrations: { github: { oauthClientId: clientId } },
+    }),
+  );
+  process.env.OPENSESSION_CONFIG = config;
+  delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
+  __setGithubAppKeyPathForTest(keyPath);
+}
+
+describe("App installation directory", () => {
+  test("lists every account the App is installed on", async () => {
+    writeAppIdentity(
+      "opensession-github-installations-",
+      "Iv-installations-test",
+    );
+    let calls = 0;
+    globalThis.fetch = (async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      calls++;
+      expect(String(input)).toBe(
+        "https://api.github.com/app/installations?per_page=100",
+      );
+      expect(
+        String((init?.headers as Record<string, string>).Authorization),
+      ).toMatch(/^Bearer /);
+      return Response.json([
+        { id: 1, account: { login: "solo-dev", type: "User" } },
+        { id: 2, account: { login: "acme-org", type: "Organization" } },
+        // No account: dropped rather than listed as an empty login.
+        { id: 3 },
+      ]);
+    }) as typeof fetch;
+
+    const expected = [
+      { login: "solo-dev", type: "User" },
+      { login: "acme-org", type: "Organization" },
+    ];
+    expect(await listGithubAppInstallations()).toEqual(expected);
+    // Briefly cached: the picker refetches on every open.
+    expect(await listGithubAppInstallations()).toEqual(expected);
+    expect(calls).toBe(1);
+  });
+
+  test("answers null rather than none when GitHub cannot be reached", async () => {
+    writeAppIdentity(
+      "opensession-github-installations-",
+      "Iv-installations-down",
+    );
+    globalThis.fetch = (async () => {
+      throw new Error("network down");
+    }) as unknown as typeof fetch;
+
+    expect(await listGithubAppInstallations()).toBeNull();
   });
 });
 

@@ -891,6 +891,11 @@ export async function handleSetupRepoRoutes(
     // Browse the repositories selected for the workspace App installation.
     // A connected teammate is only a compatibility path when no App service
     // credential is configured; ambient credentials are never consulted.
+    const {
+      configuredGithubInstallationOwner,
+      githubConfiguredCredential,
+      listGithubAppInstallations,
+    } = await import("../github-app");
     const credential = await setupGithubCredential(ctx);
     const token = credential?.env.GH_TOKEN;
     const source: "user" | "app" | null = credential
@@ -898,19 +903,42 @@ export async function handleSetupRepoRoutes(
         ? "user"
         : "app"
       : null;
+    const configuredOwner = configuredGithubInstallationOwner();
+    // The App's installation list rides along whenever the App identity can
+    // produce one, so the picker can name the selectable owners. An empty repo
+    // list alone cannot reveal that the App is installed elsewhere (say, on an
+    // organization while the pinned owner is the repo-less personal account
+    // that created the App).
+    const appInstallations = githubConfiguredCredential()
+      ? await listGithubAppInstallations()
+      : null;
+    const installationContext = appInstallations
+      ? {
+          installationOwner: configuredOwner || null,
+          installations: appInstallations.map((installation) => ({
+            ...installation,
+            selected:
+              installation.login.toLowerCase() ===
+              configuredOwner.toLowerCase(),
+          })),
+        }
+      : {};
     if (!token || !source) {
-      const { githubConfiguredCredential } = await import("../github-app");
       return Response.json({
         source: null,
         repos: [],
         appConfigured: githubConfiguredCredential(),
         appInstallUrl: githubAppInstallUrl(),
+        ...installationContext,
       });
     }
-    const cacheKey = credential.principal;
+    // The service credential's repo horizon follows the pinned installation
+    // owner, so the owner is part of the cache identity. Switching owners must
+    // not serve the previous installation's list for the TTL.
+    const cacheKey = `${credential.principal}:${configuredOwner.toLowerCase()}`;
     const cached = repoListCache.get(cacheKey);
     if (cached && Date.now() - cached.at < REPO_CACHE_TTL_MS) {
-      return Response.json(cached.payload);
+      return Response.json({ ...cached.payload, ...installationContext });
     }
     try {
       // Installation tokens have a direct repository list. App user tokens list
@@ -927,7 +955,7 @@ export async function handleSetupRepoRoutes(
         repos: repos.map(({ pushedAt: _pushedAt, ...repo }) => repo),
       };
       repoListCache.set(cacheKey, { at: Date.now(), payload });
-      return Response.json(payload);
+      return Response.json({ ...payload, ...installationContext });
     } catch (e) {
       return Response.json(
         { error: e instanceof Error ? e.message : String(e) },
