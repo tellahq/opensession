@@ -1025,10 +1025,22 @@ const RETIRED_CODEX_REROUTE: Record<string, string> = {
   "gpt-5.3-codex-spark": "gpt-5.6-luna",
 };
 
-/** Route a model or preset to Pi. */
+function isAppRoutedPiProvider(provider: string): boolean {
+  return (
+    provider === "dial" ||
+    provider === "orchestrator" ||
+    provider === "workspace-preset"
+  );
+}
+
+/** Route a model or preset to Pi. Explicit Pi ids keep the model suffix's
+ * casing because OpenAI-compatible gateways may treat model ids as
+ * case-sensitive; only the provider and app-owned routing ids are normalized. */
 export function toPiModel(model?: string | null): string | undefined {
-  let requested = (model || "").trim().toLowerCase();
+  const raw = (model || "").trim();
+  let requested = raw.toLowerCase();
   if (!requested) return model ?? undefined;
+  const inputLower = requested;
   if (requested.startsWith("claude/") || requested.startsWith("codex/")) {
     requested = requested.slice(requested.indexOf("/") + 1);
   }
@@ -1046,7 +1058,24 @@ export function toPiModel(model?: string | null): string | undefined {
   if (requested.startsWith("pi/")) {
     const match = requested.match(/^pi\/openai\/(.+)$/);
     const replacement = match && RETIRED_CODEX_REROUTE[match[1]];
-    return replacement ? `pi/openai/${replacement}` : requested;
+    if (replacement) return `pi/openai/${replacement}`;
+
+    const explicitSource = requested !== inputLower ? requested : raw;
+    const explicit = explicitSource.match(/^pi\/([^/]+)\/(.+)$/i);
+    if (explicit) {
+      const provider = explicit[1]!.toLowerCase();
+      const suffix = explicit[2]!;
+      // App-owned preset ids are case-insensitive routing keys. Provider model
+      // ids are not, so prefer the picker/catalog's exact casing when known
+      // and otherwise preserve what the caller supplied.
+      if (isAppRoutedPiProvider(provider)) return requested;
+      const lowerId = `pi/${provider}/${suffix.toLowerCase()}`;
+      const known = KNOWN_MODELS.find(
+        (candidate) => candidate.id.toLowerCase() === lowerId,
+      );
+      return known?.id ?? `pi/${provider}/${suffix}`;
+    }
+    return requested;
   }
   if (requested.startsWith("openai/")) {
     const native = requested.slice("openai/".length);
@@ -1260,10 +1289,11 @@ export function fallbackPlan(
  * registry bump; anything else is rejected.
  */
 export function resolveModel(input: string): ModelInfo | null {
-  const value = input.trim().toLowerCase();
+  const raw = input.trim();
+  const value = raw.toLowerCase();
   if (!value) return null;
   for (const model of KNOWN_MODELS) {
-    if (model.id === value || model.aliases.includes(value)) {
+    if (model.id.toLowerCase() === value || model.aliases.includes(value)) {
       const replacement =
         RETIRED_CLAUDE_REROUTE[model.id] || RETIRED_CODEX_REROUTE[model.id];
       return replacement
@@ -1279,7 +1309,8 @@ export function resolveModel(input: string): ModelInfo | null {
   const pickerAlias = value.replace(/\s+/g, "-");
   const pickerMatches = KNOWN_MODELS.filter(
     (model) =>
-      model.provider === "pi" && model.id.split("/").at(-1) === pickerAlias,
+      model.provider === "pi" &&
+      model.id.split("/").at(-1)?.toLowerCase() === pickerAlias,
   );
   if (pickerMatches.length === 1) return pickerMatches[0];
   if (value.startsWith("dial/") || value.startsWith("orchestrator/")) {
@@ -1296,7 +1327,7 @@ export function resolveModel(input: string): ModelInfo | null {
       : null;
   }
   if (value.startsWith("pi/")) {
-    const routed = toPiModel(value) || value;
+    const routed = toPiModel(raw) || raw;
     return routed.slice("pi/".length).includes("/")
       ? { id: routed, provider: "pi", label: piModelLabel(routed), aliases: [] }
       : null;
@@ -1310,7 +1341,7 @@ export function resolveModel(input: string): ModelInfo | null {
     return resolveModel(value.slice(value.indexOf("/") + 1));
   }
   if (value.includes("/")) {
-    const id = toPiModel(value);
+    const id = toPiModel(raw);
     return id
       ? { id, provider: "pi", label: piModelLabel(id), aliases: [] }
       : null;

@@ -188,6 +188,29 @@ describe("buildPiThirdPartyProviderPlan with configured providers", () => {
     ]);
   });
 
+  test("keeps a case-sensitive catalog model id in the provider plan", () => {
+    const modelID = "Qwen/Qwen3-Coder";
+    const plan = buildPiThirdPartyProviderPlan({
+      providerID: "my-gateway",
+      modelID,
+      apiKey: "k",
+      baseURL: "https://gateway.example/v1",
+      configured: {
+        apiKey: "k",
+        baseURL: "https://gateway.example/v1",
+        api: "openai-completions",
+        catalog: {
+          [modelID]: { id: modelID, contextWindow: 262_144 },
+        },
+      },
+      builtinModelIds: [],
+    });
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.config.models).toEqual([
+      expect.objectContaining({ id: modelID, contextWindow: 262_144 }),
+    ]);
+  });
+
   test("a declared api without a base URL is refused", () => {
     const plan = buildPiThirdPartyProviderPlan({
       providerID: "my-gateway",
