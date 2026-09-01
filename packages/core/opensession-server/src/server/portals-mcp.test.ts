@@ -11,7 +11,11 @@ afterEach(async () => {
 async function harness() {
   const calls: Array<{
     path: string | null;
-    options?: { exclusiveKey?: string; leaseMinutes?: number };
+    options?: {
+      exclusiveKey?: string;
+      sourceLeaseId?: string;
+      leaseMinutes?: number;
+    };
   }> = [];
   const server = createPortalsMcpServer({
     sessionId: "session-a",
@@ -34,17 +38,18 @@ async function harness() {
 }
 
 describe("Portals MCP staging routes", () => {
-  test("normalizes and reserves a proven editor staging record", async () => {
+  test("normalizes and reserves a server-proven Tella fixture", async () => {
     const { calls, runtime } = await harness();
+    const fixtureExpiresAt = new Date(
+      Date.now() + 120.5 * 60_000,
+    ).toISOString();
     const response = await runtime.callExact(
       "opensession-portals_set_editor_preview_path",
       {
         path: " /video/vid_fixture/edit?status=Subtitles ",
-        exclusiveKey: "video:vid_fixture",
-        durationSeconds: 90,
-        clipCount: 3,
-        transcriptWordCount: 240,
-        leaseMinutes: 120,
+        videoId: "vid_fixture",
+        fixtureLeaseId: "epfl_fixturelease",
+        fixtureExpiresAt,
       },
       { toolCallId: "reserve" },
     );
@@ -54,29 +59,29 @@ describe("Portals MCP staging routes", () => {
         path: "/video/vid_fixture/edit?status=Subtitles",
         options: {
           exclusiveKey: "video:vid_fixture",
+          sourceLeaseId: "epfl_fixturelease",
           leaseMinutes: 120,
         },
       },
     ]);
     expect(response.content[0]).toMatchObject({
       type: "text",
-      text: expect.stringContaining("90s, 3 clips, 240 transcript words"),
+      text: expect.stringContaining("epfl_fixturelease"),
     });
   });
 
-  test("rejects editor records without the required content", async () => {
+  test("rejects self-reported or invented fixture evidence", async () => {
     const { calls, runtime } = await harness();
     await expect(
       runtime.callExact(
         "opensession-portals_set_editor_preview_path",
         {
           path: "/video/vid_fixture/edit",
-          exclusiveKey: "video:vid_fixture",
-          durationSeconds: 20,
-          clipCount: 1,
-          transcriptWordCount: 0,
+          videoId: "vid_fixture",
+          fixtureLeaseId: "local-fixture",
+          fixtureExpiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
         },
-        { toolCallId: "too-small" },
+        { toolCallId: "invented" },
       ),
     ).rejects.toThrow();
     expect(calls).toEqual([]);
@@ -88,10 +93,9 @@ describe("Portals MCP staging routes", () => {
       "opensession-portals_set_editor_preview_path",
       {
         path: "/video/vid_route/edit",
-        exclusiveKey: "video:vid_other",
-        durationSeconds: 90,
-        clipCount: 2,
-        transcriptWordCount: 100,
+        videoId: "vid_other",
+        fixtureLeaseId: "epfl_fixturelease",
+        fixtureExpiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
       },
       { toolCallId: "mismatch" },
     );
@@ -103,11 +107,31 @@ describe("Portals MCP staging routes", () => {
     });
   });
 
+  test("rejects expired Tella fixture leases", async () => {
+    const { calls, runtime } = await harness();
+    const response = await runtime.callExact(
+      "opensession-portals_set_editor_preview_path",
+      {
+        path: "/video/vid_fixture/edit",
+        videoId: "vid_fixture",
+        fixtureLeaseId: "epfl_fixturelease",
+        fixtureExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+      { toolCallId: "expired" },
+    );
+
+    expect(calls).toEqual([]);
+    expect(response.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("between 10 minutes and 7 days"),
+    });
+  });
+
   test("rejects malformed routes before persistence", async () => {
     const { calls, runtime } = await harness();
     const response = await runtime.callExact(
       "opensession-portals_set_portal_path",
-      { path: "https://example.com/video", exclusiveKey: "video:fixture" },
+      { path: "https://example.com/video" },
       { toolCallId: "invalid" },
     );
 
