@@ -19,6 +19,7 @@ const plain: RunInputsSession = {
   externalRefs: undefined,
   goalId: undefined,
   startedBy: "Michiel",
+  createdByLogin: "michiel",
 };
 
 describe("sessionMcpScopeSource", () => {
@@ -100,8 +101,16 @@ describe("resolveSessionRunInputs", () => {
     expect(inputs.mcpServersSource).toBe("all");
     expect(inputs.deniedTools).toBeUndefined();
     expect(inputs.user).toBe("Kent");
-    expect(inputs.mcpGrantUser).toBe("Michiel");
+    expect(inputs.mcpGrantUser).toBe("michiel");
     expect(inputs.sessionNote).toBe(true);
+  });
+
+  test("falls back to the legacy starter when no verified login exists", async () => {
+    const inputs = await resolveSessionRunInputs(
+      { ...plain, createdByLogin: undefined },
+      { user: "Kent" },
+    );
+    expect(inputs.mcpGrantUser).toBe("Michiel");
   });
 
   test("a stamped allowlist rides through verbatim", async () => {
