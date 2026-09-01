@@ -169,13 +169,13 @@ export function buildRunInstructions(input: {
   }
   if (!input.isAsk && inproc["opensession-portals"]) {
     parts.push(
-      "## Preview links\nBefore finishing a user-facing web change, set its exact " +
-        "root-relative route, query included. For editors, call `opensession-portals` " +
-        "`set_editor_preview_path` with a dedicated or fresh staging record: at least 60 " +
-        "seconds, 2+ clips, and a ready non-empty transcript. Pass a stable `exclusiveKey` " +
-        "such as `video:<id>` to prevent reuse by another active session. Never use a local " +
-        "fixture. For other web changes, call `set_portal_path` without a name. Open the " +
-        "resulting staging URL and verify it shows the changed feature.",
+      "## Preview links\nFor user-facing web changes, set the exact root-relative route, " +
+        "query included. For editors, call `tella-stage` `lease_editor_fixture` with " +
+        "fixture `multi_clip_transcript_v1` and this Open Session id as `leaseKey`. Pass its " +
+        "`editorPath`, `videoId`, `leaseId`, and `expiresAt` to `opensession-portals` " +
+        "`set_editor_preview_path`. Never construct a video id or report fixture evidence " +
+        "yourself. Otherwise call `set_portal_path` without a name. Open the staging URL and " +
+        "verify the changed feature.",
     );
   }
 

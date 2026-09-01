@@ -11,6 +11,7 @@ interface PreviewPathLease {
   key: string;
   sessionId: string;
   path: string;
+  sourceLeaseId?: string;
   acquiredAt: string;
   expiresAt: string;
 }
@@ -45,6 +46,7 @@ function parseLease(value: unknown): PreviewPathLease {
     typeof value.sessionId !== "string" ||
     !("path" in value) ||
     typeof value.path !== "string" ||
+    ("sourceLeaseId" in value && typeof value.sourceLeaseId !== "string") ||
     !("acquiredAt" in value) ||
     typeof value.acquiredAt !== "string" ||
     !("expiresAt" in value) ||
@@ -56,6 +58,10 @@ function parseLease(value: unknown): PreviewPathLease {
     key: value.key,
     sessionId: value.sessionId,
     path: value.path,
+    sourceLeaseId:
+      "sourceLeaseId" in value && typeof value.sourceLeaseId === "string"
+        ? value.sourceLeaseId
+        : undefined,
     acquiredAt: value.acquiredAt,
     expiresAt: value.expiresAt,
   };
@@ -106,6 +112,7 @@ export function claimPreviewPathLease(
     key: string;
     sessionId: string;
     path: string;
+    sourceLeaseId?: string;
     ttlMinutes?: number;
   },
   options: LeaseStoreOptions = {},
@@ -133,6 +140,7 @@ export function claimPreviewPathLease(
     key,
     sessionId: input.sessionId,
     path: input.path,
+    sourceLeaseId: input.sourceLeaseId,
     acquiredAt: existing?.acquiredAt ?? new Date(now).toISOString(),
     expiresAt: new Date(now + ttlMs(input.ttlMinutes)).toISOString(),
   };
