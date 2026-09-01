@@ -34,9 +34,20 @@ import type { Sandbox } from "./sandbox/provider";
 import { createWorkloadIdentityEnv } from "./workload-identity";
 import { getRepo } from "./worktree";
 
+const verifiedEditorFixtureSchema = z.object({
+  leaseId: z.string().regex(/^epfl_[A-Za-z0-9]+$/),
+  videoId: z.string().regex(/^vid_[A-Za-z0-9]+$/),
+  editorPath: z.string(),
+  expiresAt: z.string().datetime(),
+  editorAccessVerified: z.literal(true),
+});
+
+type VerifiedEditorFixture = z.infer<typeof verifiedEditorFixtureSchema>;
+
 export interface PortalsMcpContext {
   sessionId: string;
   worktreeDir: () => string | undefined;
+  verifyEditorFixture: (leaseId: string) => Promise<VerifiedEditorFixture>;
   setDefaultPath: (
     path: string | null,
     options?: {
@@ -387,52 +398,44 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
       ),
       tool(
         "set_editor_preview_path",
-        "Set and exclusively reserve the route returned by Tella's stage-only lease_editor_fixture tool. Self-reported fixture evidence and local video IDs are not accepted.",
+        "Verify a Tella editor fixture lease server-side, then set and exclusively reserve its authoritative editor route. Invented, expired, mismatched, or inaccessible fixtures are rejected.",
         {
-          path: z.string(),
-          videoId: z.string().regex(/^vid_[A-Za-z0-9]+$/),
           fixtureLeaseId: z.string().regex(/^epfl_[A-Za-z0-9]+$/),
-          fixtureExpiresAt: z.string().datetime(),
         },
-        async ({
-          path,
-          videoId,
-          fixtureLeaseId,
-          fixtureExpiresAt,
-        }: {
-          path: string;
-          videoId: string;
-          fixtureLeaseId: string;
-          fixtureExpiresAt: string;
-        }) => {
+        async ({ fixtureLeaseId }: { fixtureLeaseId: string }) => {
           const dir = workspace(ctx);
           if (dir instanceof Error) return result(dir.message);
           try {
-            const normalized = normalizePortalPath(path);
+            const fixture = verifiedEditorFixtureSchema.parse(
+              await ctx.verifyEditorFixture(fixtureLeaseId),
+            );
+            if (fixture.leaseId !== fixtureLeaseId)
+              throw new Error("Tella returned a different fixture lease.");
+            const normalized = normalizePortalPath(fixture.editorPath);
             if (!normalized)
-              throw new Error("An editor staging route cannot be empty.");
+              throw new Error("Tella returned an empty editor staging route.");
             const pathname = new URL(normalized, "https://preview.invalid")
               .pathname;
-            if (!pathname.split("/").includes(videoId))
+            if (!pathname.split("/").includes(fixture.videoId))
               throw new Error(
-                "The leased video ID must match the video ID in the route.",
+                "Tella's leased video ID does not match its editor route.",
               );
             const remainingMinutes = Math.floor(
-              (Date.parse(fixtureExpiresAt) - Date.now()) / 60_000,
+              (Date.parse(fixture.expiresAt) - Date.now()) / 60_000,
             );
             if (remainingMinutes < 10 || remainingMinutes > 7 * 24 * 60)
               throw new Error(
-                "The editor fixture lease must have between 10 minutes and 7 days remaining.",
+                "Tella's editor fixture lease must have between 10 minutes and 7 days remaining.",
               );
             const reservation = await ctx.setDefaultPath(normalized, {
-              exclusiveKey: `video:${videoId}`,
-              sourceLeaseId: fixtureLeaseId,
+              exclusiveKey: `video:${fixture.videoId}`,
+              sourceLeaseId: fixture.leaseId,
               leaseMinutes: remainingMinutes,
             });
             if (!reservation.leaseId)
               throw new Error("The staging record could not be reserved.");
             return result(
-              `Reserved Tella fixture ${fixtureLeaseId} at ${normalized} for this session.`,
+              `Verified and reserved Tella fixture ${fixture.leaseId} at ${normalized} for this session.`,
             );
           } catch (error) {
             return result(
