@@ -308,7 +308,6 @@ import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
 import { TURN_SPACER } from "../lib/app-shell-classes";
 import {
-  SESSION_BANNERS,
   SESSION_DELETE_LABEL,
   SESSION_LINK,
   SESSION_LINK_LINEAR,
@@ -376,6 +375,7 @@ import {
 } from "../lib/session-viewer-derive";
 import { SessionShellTiming } from "./session-viewer/shell-timing";
 import { SessionViewerAssetOverlay } from "./session-viewer/SessionViewerAssetOverlay";
+import { SessionViewerBanners } from "./session-viewer/SessionViewerBanners";
 import { SessionViewerChrome } from "./session-viewer/SessionViewerChrome";
 import { SessionViewerDialogs } from "./session-viewer/SessionViewerDialogs";
 import { SessionViewerMainRegion } from "./session-viewer/SessionViewerMainRegion";
@@ -2738,28 +2738,7 @@ export function SessionViewer({
         conversation={{ others, entries }}
       />
 
-      {(session.goal || session.loop) && (
-        <div className={SESSION_BANNERS}>
-          {session.goal && (
-            <span
-              className="inline-flex max-w-full items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-line bg-panel px-3 py-[3px] text-label text-dim"
-              title="Cleared with /goal clear"
-            >
-              🎯 {session.goal}
-            </span>
-          )}
-          {session.loop && (
-            <span
-              className="inline-flex max-w-full items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-line bg-panel px-3 py-[3px] text-label text-dim"
-              title={`"${session.loop.prompt}" · stop with /loop stop`}
-            >
-              ⟳ every {session.loop.intervalMinutes}m ·{" "}
-              {session.loop.prompt.slice(0, 60)}
-              {session.loop.prompt.length > 60 ? "…" : ""}
-            </span>
-          )}
-        </div>
-      )}
+      <SessionViewerBanners goal={session.goal} loop={session.loop} />
 
       <div className="flex min-h-0 flex-1">
         <SessionViewerMainRegion

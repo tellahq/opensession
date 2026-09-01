@@ -26,6 +26,7 @@ test("SessionViewer decomposition files stay below the source line limit", async
     "lib/transcript-history-controller.ts",
     "components/session/SessionPreviewSurface.tsx",
     "components/session-viewer/SessionViewerMainRegion.tsx",
+    "components/session-viewer/SessionViewerBanners.tsx",
     "components/session-viewer/shell-timing.ts",
     "components/session-viewer/SessionViewerChrome.tsx",
     "components/session-viewer/SessionViewerAssetOverlay.tsx",
@@ -89,6 +90,19 @@ test("the main conversation region owns its complete bounded JSX contract", asyn
   }
   expect(region).not.toMatch(/\buse(?:Memo|Callback)\(/);
   expect(region).not.toMatch(/\b(?:any|ts-ignore|ts-expect-error)\b/);
+});
+
+test("session banners keep their complete component-only contract", async () => {
+  const [viewer, banners] = await Promise.all([
+    source("components/SessionViewer.tsx"),
+    source("components/session-viewer/SessionViewerBanners.tsx"),
+  ]);
+
+  expect(viewer).toContain("<SessionViewerBanners");
+  expect(viewer).not.toContain("SESSION_BANNERS");
+  expect(banners).toContain("SESSION_BANNERS");
+  expect(interfaceMemberCount(banners, "SessionViewerBannersProps")).toBe(2);
+  expect(banners).not.toMatch(/\buse(?:Memo|Callback)\(/);
 });
 
 test("transcript reader lifecycle stays grouped and out of SessionViewer", async () => {
