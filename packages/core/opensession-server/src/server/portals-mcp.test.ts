@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createMcpRuntime, type McpRuntime } from "./mcp-runtime";
-import { createPortalsMcpServer } from "./portals-mcp";
+import { createPortalsMcpServer, type PortalsMcpContext } from "./portals-mcp";
 
 const open: McpRuntime[] = [];
 
@@ -8,7 +8,25 @@ afterEach(async () => {
   for (const runtime of open.splice(0)) await runtime.close();
 });
 
-async function harness() {
+type VerifiedFixture = Awaited<
+  ReturnType<PortalsMcpContext["verifyEditorFixture"]>
+>;
+
+function fixture(overrides: Partial<VerifiedFixture> = {}): VerifiedFixture {
+  return {
+    leaseId: "epfl_fixturelease",
+    videoId: "vid_fixture",
+    editorPath: "/video/vid_fixture/edit?status=Subtitles",
+    expiresAt: new Date(Date.now() + 120.5 * 60_000).toISOString(),
+    editorAccessVerified: true,
+    ...overrides,
+  };
+}
+
+async function harness(
+  verifyEditorFixture: PortalsMcpContext["verifyEditorFixture"] = async () =>
+    fixture(),
+) {
   const calls: Array<{
     path: string | null;
     options?: {
@@ -17,9 +35,14 @@ async function harness() {
       leaseMinutes?: number;
     };
   }> = [];
+  const verificationCalls: string[] = [];
   const server = createPortalsMcpServer({
     sessionId: "session-a",
     worktreeDir: () => "/tmp",
+    verifyEditorFixture: async (leaseId) => {
+      verificationCalls.push(leaseId);
+      return verifyEditorFixture(leaseId);
+    },
     setDefaultPath: async (path, options) => {
       calls.push({ path, options });
       return options?.exclusiveKey ? { leaseId: "lease-a" } : {};
@@ -34,26 +57,19 @@ async function harness() {
     inProcessMcp: { "opensession-portals": server },
   });
   open.push(runtime);
-  return { calls, runtime };
+  return { calls, runtime, verificationCalls };
 }
 
 describe("Portals MCP staging routes", () => {
-  test("normalizes and reserves a server-proven Tella fixture", async () => {
-    const { calls, runtime } = await harness();
-    const fixtureExpiresAt = new Date(
-      Date.now() + 120.5 * 60_000,
-    ).toISOString();
+  test("uses Tella's authoritative fixture fields", async () => {
+    const { calls, runtime, verificationCalls } = await harness();
     const response = await runtime.callExact(
       "opensession-portals_set_editor_preview_path",
-      {
-        path: " /video/vid_fixture/edit?status=Subtitles ",
-        videoId: "vid_fixture",
-        fixtureLeaseId: "epfl_fixturelease",
-        fixtureExpiresAt,
-      },
+      { fixtureLeaseId: "epfl_fixturelease" },
       { toolCallId: "reserve" },
     );
 
+    expect(verificationCalls).toEqual(["epfl_fixturelease"]);
     expect(calls).toEqual([
       {
         path: "/video/vid_fixture/edit?status=Subtitles",
@@ -66,57 +82,68 @@ describe("Portals MCP staging routes", () => {
     ]);
     expect(response.content[0]).toMatchObject({
       type: "text",
-      text: expect.stringContaining("epfl_fixturelease"),
+      text: expect.stringContaining("Verified and reserved"),
     });
   });
 
-  test("rejects self-reported or invented fixture evidence", async () => {
-    const { calls, runtime } = await harness();
-    await expect(
-      runtime.callExact(
-        "opensession-portals_set_editor_preview_path",
-        {
-          path: "/video/vid_fixture/edit",
-          videoId: "vid_fixture",
-          fixtureLeaseId: "local-fixture",
-          fixtureExpiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
-        },
-        { toolCallId: "invented" },
-      ),
-    ).rejects.toThrow();
-    expect(calls).toEqual([]);
-  });
-
-  test("rejects a reservation key for another video", async () => {
-    const { calls, runtime } = await harness();
+  test("rejects an invented lease that Tella does not recognize", async () => {
+    const { calls, runtime } = await harness(async () => {
+      throw new Error("The editor preview fixture lease is not active");
+    });
     const response = await runtime.callExact(
       "opensession-portals_set_editor_preview_path",
-      {
-        path: "/video/vid_route/edit",
-        videoId: "vid_other",
-        fixtureLeaseId: "epfl_fixturelease",
-        fixtureExpiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
-      },
-      { toolCallId: "mismatch" },
+      { fixtureLeaseId: "epfl_invented" },
+      { toolCallId: "invented" },
     );
 
     expect(calls).toEqual([]);
     expect(response.content[0]).toMatchObject({
       type: "text",
-      text: expect.stringContaining("must match the video ID"),
+      text: expect.stringContaining("not active"),
     });
   });
 
-  test("rejects expired Tella fixture leases", async () => {
-    const { calls, runtime } = await harness();
+  test("rejects a different lease returned by Tella", async () => {
+    const { calls, runtime } = await harness(async () =>
+      fixture({ leaseId: "epfl_otherlease" }),
+    );
     const response = await runtime.callExact(
       "opensession-portals_set_editor_preview_path",
-      {
-        path: "/video/vid_fixture/edit",
-        videoId: "vid_fixture",
-        fixtureLeaseId: "epfl_fixturelease",
-        fixtureExpiresAt: new Date(Date.now() - 60_000).toISOString(),
-      },
+      { fixtureLeaseId: "epfl_fixturelease" },
+      { toolCallId: "lease-mismatch" },
+    );
+
+    expect(calls).toEqual([]);
+    expect(response.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("different fixture lease"),
+    });
+  });
+
+  test("rejects a Tella route for another video", async () => {
+    const { calls, runtime } = await harness(async () =>
+      fixture({ editorPath: "/video/vid_other/edit" }),
+    );
+    const response = await runtime.callExact(
+      "opensession-portals_set_editor_preview_path",
+      { fixtureLeaseId: "epfl_fixturelease" },
+      { toolCallId: "video-mismatch" },
+    );
+
+    expect(calls).toEqual([]);
+    expect(response.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("does not match"),
+    });
+  });
+
+  test("rejects an expired Tella lease", async () => {
+    const { calls, runtime } = await harness(async () =>
+      fixture({ expiresAt: new Date(Date.now() - 60_000).toISOString() }),
+    );
+    const response = await runtime.callExact(
+      "opensession-portals_set_editor_preview_path",
+      { fixtureLeaseId: "epfl_fixturelease" },
       { toolCallId: "expired" },
     );
 
@@ -127,7 +154,7 @@ describe("Portals MCP staging routes", () => {
     });
   });
 
-  test("rejects malformed routes before persistence", async () => {
+  test("rejects malformed ordinary routes before persistence", async () => {
     const { calls, runtime } = await harness();
     const response = await runtime.callExact(
       "opensession-portals_set_portal_path",
@@ -143,13 +170,14 @@ describe("Portals MCP staging routes", () => {
   });
 
   test("keeps ordinary web routes outside the exclusive editor flow", async () => {
-    const { calls, runtime } = await harness();
+    const { calls, runtime, verificationCalls } = await harness();
     const response = await runtime.callExact(
       "opensession-portals_set_portal_path",
       { path: "/settings/tags" },
       { toolCallId: "ordinary" },
     );
 
+    expect(verificationCalls).toEqual([]);
     expect(calls).toEqual([{ path: "/settings/tags", options: undefined }]);
     expect(response.content[0]).toMatchObject({
       type: "text",

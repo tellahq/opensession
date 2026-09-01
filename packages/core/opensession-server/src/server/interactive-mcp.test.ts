@@ -7,7 +7,10 @@ import {
   registerRunToken,
   unregisterRunToken,
 } from "./run-rpc";
-import { runSessionPreviewAction } from "./interactive-mcp";
+import {
+  editorFixtureGrantUser,
+  runSessionPreviewAction,
+} from "./interactive-mcp";
 
 function session(
   id: string,
@@ -177,5 +180,15 @@ describe("interactive opensession-preview MCP lifecycle", () => {
       runSessionPreviewAction("os-preview", "start", injected),
     ).rejects.toThrow("daytona sandbox is not available");
     expect(calls).toEqual([]);
+  });
+});
+
+describe("editor fixture grant identity", () => {
+  test("uses the persisted creator before the legacy starter", () => {
+    expect(
+      editorFixtureGrantUser({ createdBy: "Kent", startedBy: "Michael" }),
+    ).toBe("Kent");
+    expect(editorFixtureGrantUser({ startedBy: "Michael" })).toBe("Michael");
+    expect(editorFixtureGrantUser(undefined)).toBeUndefined();
   });
 });
