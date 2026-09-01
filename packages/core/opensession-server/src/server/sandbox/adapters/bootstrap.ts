@@ -8,7 +8,9 @@
  *    opensession-runner image, so first ensure installs the runner payload
  *    in-sandbox — bun, the opensession repo bundle (config `runnerBundleUrl`
  *    tarball, or a git clone of `runnerRepoUrl`/this checkout's origin at
- *    `runnerSha`), `bun install`, and the Claude Code CLI — all under
+ *    `runnerSha`; a release install with no checkout clones the public
+ *    tellahq/opensession repo at its release tag, see resolveRunnerPayload),
+ *    `bun install`, and the Claude Code CLI — all under
  *    /home/ubuntu so the runner's hardcoded absolute paths (claude CLI, repo
  *    bundle, HOST_ENTRY) resolve exactly like they do on the host and in the
  *    docker image (path parity is the contract; see deploy/sandbox/README.md).
@@ -56,6 +58,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   unlinkSync,
 } from "fs";
@@ -128,6 +131,7 @@ import {
   HOST_JOURNAL_NAME,
   HOST_ENTRY,
   REPO_ROOT,
+  isCompiledBinary,
   type RunHostMeta,
   type RunHostSpec,
 } from "../../../runner-host/protocol";
@@ -734,6 +738,157 @@ export async function remoteCloneUrl(
     : await injectCloneCredential(https);
 }
 
+// ── Runner payload resolution ─────────────────────────────────────────────────
+
+/** Public clone URL of the Open Session repo: the runner payload a release
+ *  install (no git checkout, so no origin) bootstraps remote sandboxes from. */
+export const DEFAULT_RUNNER_REPO_URL =
+  "https://github.com/tellahq/opensession.git";
+
+/** What a remote sandbox installs as its Open Session runner. */
+export interface RunnerPayload {
+  /** Tarball URL (`runnerBundleUrl`): extracted, never cloned. */
+  bundleUrl?: string;
+  /** Credential-free https clone URL when there is no bundle. */
+  repoUrl?: string;
+  /** Sha/ref the checkout is reconciled to; undefined = default branch. */
+  pin?: string;
+  /** `pin` names a tag: fetched as `tag <pin>` so the name resolves after a
+   *  shallow fetch into an already-cloned sandbox. */
+  pinIsTag?: boolean;
+  /** Where the payload came from, for the bootstrap log. */
+  source: "bundle" | "config" | "origin" | "release";
+}
+
+export interface RunnerPayloadInputs {
+  runnerBundleUrl?: string;
+  runnerRepoUrl?: string;
+  runnerSha?: string;
+  /** `git remote get-url origin` of the host source tree, "" when none. */
+  origin: string;
+  /** `release.json` of a release install, null for a source checkout. */
+  release: { version?: string; commit?: string } | null;
+}
+
+/** `v<version>` for a published release version (`0.4.55`); undefined for an
+ *  ad-hoc build (`0.1.0+abc1234`) that no tag was pushed for. */
+export function releaseTag(version: string | undefined): string | undefined {
+  if (!version || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version))
+    return undefined;
+  return `v${version}`;
+}
+
+/**
+ * Resolve the runner payload: `runnerBundleUrl`, then `runnerRepoUrl`, then
+ * the host checkout's origin (a contributor install), then the public
+ * tellahq/opensession repo pinned at the installed release's tag (a stock
+ * `install.sh` release install, which is not a git checkout and has no
+ * origin). Pure so the fallback order is unit-testable without a git tree.
+ */
+export function resolveRunnerPayload(
+  input: RunnerPayloadInputs,
+): RunnerPayload {
+  const pin = input.runnerSha || undefined;
+  if (input.runnerBundleUrl) {
+    return { bundleUrl: input.runnerBundleUrl, pin, source: "bundle" };
+  }
+  const configured = input.runnerRepoUrl && toHttpsUrl(input.runnerRepoUrl);
+  if (configured) {
+    return {
+      repoUrl: credentialFreeHttpsUrl(configured),
+      pin,
+      source: "config",
+    };
+  }
+  const origin = input.origin && toHttpsUrl(input.origin);
+  if (origin) {
+    return { repoUrl: credentialFreeHttpsUrl(origin), pin, source: "origin" };
+  }
+  if (input.release) {
+    const tag = pin ? undefined : releaseTag(input.release.version);
+    return {
+      repoUrl: DEFAULT_RUNNER_REPO_URL,
+      pin: pin || tag,
+      pinIsTag: Boolean(tag),
+      source: "release",
+    };
+  }
+  throw new Error(
+    `runner repo has no https-reachable origin (origin="${redactUrl(input.origin) || "none"}") and this is not a release install — remote sandboxes clone the runner over https; set runnerRepoUrl or runnerBundleUrl in sandbox.json`,
+  );
+}
+
+/** Root of the install this server runs from. In the compiled binary,
+ *  REPO_ROOT is a virtual in-bundle path; the release dir is where the
+ *  executable lives (following the shim symlink). */
+function installRoot(): string {
+  if (!isCompiledBinary()) return REPO_ROOT;
+  try {
+    return dirname(realpathSync(process.execPath));
+  } catch {
+    return dirname(process.execPath);
+  }
+}
+
+let hostRunnerSourceCache:
+  | { origin: string; release: RunnerPayloadInputs["release"] }
+  | undefined;
+
+/** Origin and release manifest of the host install. Neither changes while
+ *  the process lives (a release tree is immutable, and a checkout's origin is
+ *  not something the server edits), so read once. */
+function hostRunnerSource(): {
+  origin: string;
+  release: RunnerPayloadInputs["release"];
+} {
+  if (hostRunnerSourceCache) return hostRunnerSourceCache;
+  let release: RunnerPayloadInputs["release"] = null;
+  try {
+    const parsed = JSON.parse(
+      readFileSync(resolve(installRoot(), "release.json"), "utf8"),
+    );
+    if (parsed && typeof parsed === "object") {
+      release = {
+        version:
+          typeof parsed.version === "string" ? parsed.version : undefined,
+        commit: typeof parsed.commit === "string" ? parsed.commit : undefined,
+      };
+    }
+  } catch {}
+  let origin = "";
+  if (!isCompiledBinary()) {
+    const proc = Bun.spawnSync({
+      cmd: ["git", "-C", REPO_ROOT, "remote", "get-url", "origin"],
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    origin = proc.exitCode === 0 ? proc.stdout.toString().trim() : "";
+  }
+  hostRunnerSourceCache = { origin, release };
+  return hostRunnerSourceCache;
+}
+
+/** The runner payload for this host and the current sandbox config. */
+export function hostRunnerPayload(): RunnerPayload {
+  const cfg = sandboxConfig();
+  return resolveRunnerPayload({
+    runnerBundleUrl: cfg.runnerBundleUrl,
+    runnerRepoUrl: cfg.runnerRepoUrl,
+    runnerSha: cfg.runnerSha,
+    ...hostRunnerSource(),
+  });
+}
+
+/** Same, but never throws: signatures are computed off the hot path where an
+ *  unresolvable payload must degrade to "unpinned", not crash the caller. */
+function hostRunnerPayloadOrNull(): RunnerPayload | null {
+  try {
+    return hostRunnerPayload();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Fast dial-back preflight for remote sandboxes: before the multi-second
  * (cold: multi-minute) bootstrap, prove the sandbox can reach the URL runs
@@ -785,8 +940,8 @@ function need(r: ExecResult, what: string): void {
  *  was in the payload (or on an older pin) re-bootstrap instead of failing
  *  every pi/* run with a missing binary. */
 export function bootstrapSignature(): string {
-  const cfg = sandboxConfig();
-  const base = cfg.runnerSha || cfg.runnerBundleUrl || "unpinned";
+  const payload = hostRunnerPayloadOrNull();
+  const base = payload?.pin || payload?.bundleUrl || "unpinned";
   return (
     `${base}+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
     `+gh@${REMOTE_GH_VERSION}+${REMOTE_RUNTIME_REVISION}`
@@ -805,10 +960,10 @@ export function bootstrapSignature(): string {
  * payload: templates survive code-only runner bumps and still rotate when
  * the dependency set actually moves. */
 export function runnerToolchainSignature(): string {
-  const cfg = sandboxConfig();
-  const base = cfg.runnerSha
-    ? runnerLockfileOid(cfg.runnerSha)
-    : cfg.runnerBundleUrl || "unpinned";
+  const payload = hostRunnerPayloadOrNull();
+  const base = payload?.pin
+    ? runnerLockfileOid(payload.pin)
+    : payload?.bundleUrl || "unpinned";
   return (
     `${base}+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
     `+gh@${REMOTE_GH_VERSION}+${REMOTE_RUNTIME_REVISION}`
@@ -1030,7 +1185,6 @@ export async function bootstrapRemoteSandbox(
   driver: RemoteDriver,
   label: string,
 ): Promise<void> {
-  const cfg = sandboxConfig();
   const signature = bootstrapSignature();
   const marker = await driver.exec(`cat ${BOOTSTRAP_MARKER} 2>/dev/null`);
   if (marker.exitCode === 0 && marker.stdout.trim() === signature) {
@@ -1055,22 +1209,29 @@ export async function bootstrapRemoteSandbox(
 
   await bootstrapRemoteBaseRuntime(driver, label);
 
-  // Runner bundle: tarball if configured, else git clone at the pinned sha.
-  // Resolve the authenticated runner URL per bootstrap, use it only for the
-  // bounded clone/fetch commands, then leave a credential-free origin behind.
-  const runnerRepo = { id: "opensession", repo: REPO_ROOT, ghRepo: undefined };
-  const runnerCloneUrl = cfg.runnerBundleUrl
-    ? undefined
-    : cfg.runnerRepoUrl && toHttpsUrl(cfg.runnerRepoUrl)
-      ? await injectCloneCredential(toHttpsUrl(cfg.runnerRepoUrl)!)
-      : await remoteCloneUrl(runnerRepo);
+  // Runner bundle: tarball if configured, else git clone at the pinned sha
+  // (see resolveRunnerPayload for the fallback order). Resolve the
+  // authenticated runner URL per bootstrap, use it only for the bounded
+  // clone/fetch commands, then leave a credential-free origin behind.
+  const payload = hostRunnerPayload();
+  const runnerCloneUrl = payload.repoUrl
+    ? await injectCloneCredential(payload.repoUrl)
+    : undefined;
+  if (payload.source === "release") {
+    log(
+      `release install without a git origin — runner payload is ${redactUrl(payload.repoUrl!)}` +
+        (payload.pin
+          ? ` at ${payload.pin}`
+          : " at its default branch (unpinned)"),
+    );
+  }
   const hasRepo = await driver.exec(`test -f ${REMOTE_REPO}/package.json`);
   if (hasRepo.exitCode !== 0) {
-    if (cfg.runnerBundleUrl) {
-      log(`fetching runner bundle from ${redactUrl(cfg.runnerBundleUrl)}…`);
+    if (payload.bundleUrl) {
+      log(`fetching runner bundle from ${redactUrl(payload.bundleUrl)}…`);
       need(
         await driver.exec(
-          `mkdir -p ${REMOTE_REPO} && curl -fsSL ${shellQuoteWord(cfg.runnerBundleUrl)} | tar -xz --strip-components=1 -C ${REMOTE_REPO}`,
+          `mkdir -p ${REMOTE_REPO} && curl -fsSL ${shellQuoteWord(payload.bundleUrl)} | tar -xz --strip-components=1 -C ${REMOTE_REPO}`,
           { timeoutMs: 600_000 },
         ),
         "runner bundle download",
@@ -1093,14 +1254,15 @@ export async function bootstrapRemoteSandbox(
   // package.json` guard short-circuited the fetch/checkout, yet the signature
   // marker below was rewritten, freezing the old code forever.) The marker is
   // only written after the checkout verifiably matches the pin.
-  if (cfg.runnerSha) {
+  if (payload.pin) {
+    const runnerSha = payload.pin;
     const isGit = await driver.exec(`test -d ${REMOTE_REPO}/.git`);
     if (isGit.exitCode !== 0) {
       // Tarball payload (runnerBundleUrl) — no git history to reconcile; the
       // signature marker keys on the sha, so a bump with a stale bundle keeps
       // re-running bootstrap loudly instead of pretending it applied.
       log(
-        `runnerSha ${cfg.runnerSha} pinned but ${REMOTE_REPO} is not a git checkout — skipping reconcile`,
+        `runnerSha ${runnerSha} pinned but ${REMOTE_REPO} is not a git checkout — skipping reconcile`,
       );
     } else {
       const head = async () =>
@@ -1110,24 +1272,29 @@ export async function bootstrapRemoteSandbox(
       const resolvePin = async () =>
         (
           await driver.exec(
-            `git -C ${REMOTE_REPO} rev-parse --verify --quiet ${shellQuoteWord(`${cfg.runnerSha}^{commit}`)}`,
+            `git -C ${REMOTE_REPO} rev-parse --verify --quiet ${shellQuoteWord(`${runnerSha}^{commit}`)}`,
           )
         ).stdout.trim();
       let pin = await resolvePin();
       if (!pin || (await head()) !== pin) {
-        log(`checking out pinned runnerSha ${cfg.runnerSha}…`);
+        log(`checking out pinned runnerSha ${runnerSha}…`);
+        // A shallow fetch of a bare tag name lands only in FETCH_HEAD; `tag
+        // <name>` fetches it into refs/tags so the checkout below resolves it.
+        const fetchRef = payload.pinIsTag
+          ? `tag ${shellQuoteWord(runnerSha)}`
+          : shellQuoteWord(runnerSha);
         need(
           await driver.exec(
-            `git -C ${REMOTE_REPO} fetch --depth 1 ${shellQuoteWord(runnerCloneUrl!)} ${shellQuoteWord(cfg.runnerSha)} 2>/dev/null; git -C ${REMOTE_REPO} checkout --detach ${shellQuoteWord(cfg.runnerSha)}`,
+            `git -C ${REMOTE_REPO} fetch --depth 1 ${shellQuoteWord(runnerCloneUrl!)} ${fetchRef} 2>/dev/null; git -C ${REMOTE_REPO} checkout --detach ${shellQuoteWord(runnerSha)}`,
             { timeoutMs: 300_000 },
           ),
-          `checkout of pinned runnerSha ${cfg.runnerSha}`,
+          `checkout of pinned runnerSha ${runnerSha}`,
         );
         pin = await resolvePin();
         const now = await head();
         if (!pin || now !== pin) {
           throw new Error(
-            `remote sandbox bootstrap failed: checkout landed on ${now || "unknown"}, not pinned runnerSha ${cfg.runnerSha}`,
+            `remote sandbox bootstrap failed: checkout landed on ${now || "unknown"}, not pinned runnerSha ${runnerSha}`,
           );
         }
       }

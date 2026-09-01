@@ -230,9 +230,11 @@ export interface SandboxConfig {
    *  precedence over the git-clone fallback). */
   runnerBundleUrl?: string;
   /** Git URL of the opensession repo for remote bootstrap (default: this
-   *  checkout's origin). */
+   *  checkout's origin; a release install with no checkout falls back to the
+   *  public tellahq/opensession repo). */
   runnerRepoUrl?: string;
-  /** Pinned sha/ref the remote bootstrap checks out (default: origin default). */
+  /** Pinned sha/ref the remote bootstrap checks out (default: origin default
+   *  branch, or the installed release's tag for a release install). */
   runnerSha?: string;
 }
 
