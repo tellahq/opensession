@@ -1,3 +1,4 @@
+import Observation
 import SwiftUI
 
 struct PrSlackShareRequest: Identifiable {
@@ -135,6 +136,158 @@ enum ShippedChangeMedia {
     }
 }
 
+struct SlackComposerDraftImage: Equatable, Sendable {
+    let id: String
+    let image: AttachedImage?
+    var uploadedPath: String?
+
+    init(image: AttachedImage, uploadedPath: String?) {
+        id = image.id
+        self.image = image
+        self.uploadedPath = uploadedPath
+    }
+
+    init(uploadedPath: String) {
+        id = "path:\(uploadedPath)"
+        image = nil
+        self.uploadedPath = uploadedPath
+    }
+}
+
+/// Serializes draft saves so a slow image upload or request cannot overwrite a
+/// newer edit. The sheet owns presentation state; this object owns save order.
+@MainActor
+@Observable
+final class SlackComposerDraftPersistence {
+    typealias Upload = @MainActor (AttachedImage, Int) async throws -> String
+    typealias Update = @MainActor (String, String, [String]) async throws -> Void
+
+    private struct Snapshot: Equatable {
+        var message: String
+        var channel: String
+        var images: [SlackComposerDraftImage]
+    }
+
+    private let enabled: Bool
+    private let upload: Upload
+    private let update: Update
+    @ObservationIgnored private var latest: Snapshot?
+    @ObservationIgnored private var revision = 0
+    @ObservationIgnored private var savedRevision = 0
+    @ObservationIgnored private var debounceTask: Task<Void, Never>?
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var stopped = false
+
+    var debounceDelay: Duration = .milliseconds(400)
+    private(set) var errorMessage: String?
+
+    init(
+        enabled: Bool,
+        upload: @escaping Upload,
+        update: @escaping Update
+    ) {
+        self.enabled = enabled
+        self.upload = upload
+        self.update = update
+    }
+
+    func edited(
+        message: String,
+        channel: String,
+        images: [SlackComposerDraftImage]
+    ) {
+        guard enabled, !stopped else { return }
+        latest = normalized(Snapshot(message: message, channel: channel, images: images))
+        revision += 1
+        debounceTask?.cancel()
+        debounceTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: debounceDelay)
+            guard !Task.isCancelled else { return }
+            await saveNow()
+        }
+    }
+
+    func flush(
+        message: String,
+        channel: String,
+        images: [SlackComposerDraftImage]
+    ) async {
+        guard enabled, !stopped, revision > savedRevision else { return }
+        let current = normalized(Snapshot(message: message, channel: channel, images: images))
+        if current != latest {
+            latest = current
+            revision += 1
+        }
+        debounceTask?.cancel()
+        await saveNow()
+    }
+
+    func stop() {
+        stopped = true
+        debounceTask?.cancel()
+        saveTask?.cancel()
+    }
+
+    func resume() {
+        stopped = false
+    }
+
+    private func normalized(_ snapshot: Snapshot) -> Snapshot {
+        guard let latest else { return snapshot }
+        var result = snapshot
+        for index in result.images.indices where result.images[index].uploadedPath == nil {
+            result.images[index].uploadedPath = latest.images.first {
+                $0.id == result.images[index].id
+            }?.uploadedPath
+        }
+        return result
+    }
+
+    private func saveNow() async {
+        if let saveTask {
+            await saveTask.value
+            return
+        }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await saveLatest()
+        }
+        saveTask = task
+        await task.value
+        saveTask = nil
+    }
+
+    private func saveLatest() async {
+        while !stopped, !Task.isCancelled,
+              savedRevision < revision, var snapshot = latest {
+            do {
+                let startingRevision = revision
+                for index in snapshot.images.indices where snapshot.images[index].uploadedPath == nil {
+                    guard let image = snapshot.images[index].image else { continue }
+                    let path = try await upload(image, index + 1)
+                    snapshot.images[index].uploadedPath = path
+                    if let latestIndex = latest?.images.firstIndex(where: { $0.id == image.id }),
+                       latest?.images[latestIndex].uploadedPath == nil {
+                        latest?.images[latestIndex].uploadedPath = path
+                    }
+                }
+                guard !stopped, !Task.isCancelled else { return }
+                guard startingRevision == revision else { continue }
+                let screenshots = snapshot.images.compactMap(\.uploadedPath)
+                try await update(snapshot.message, snapshot.channel, screenshots)
+                savedRevision = startingRevision
+                errorMessage = nil
+            } catch {
+                let detail = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+                errorMessage = "Couldn't save this Slack draft. \(detail) Keep editing to retry."
+                return
+            }
+        }
+    }
+}
+
 /// A deliberate Slack post: the description stays editable while the pull
 /// request URL is fixed, so the shared message cannot lose its destination.
 struct PrSlackShareSheet: View {
@@ -142,10 +295,16 @@ struct PrSlackShareSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var description: String
     @State private var images: [AttachedImage] = []
+    @State private var uploadedImagePaths: [String: String] = [:]
+    @State private var unloadedImagePaths: [String]
+    @State private var imagesEdited = false
     @State private var channels: [SlackAPI.Channel] = []
     @State private var selectedChannel = ""
+    @State private var channelEdited = false
+    @State private var draftPersistence: SlackComposerDraftPersistence
     @State private var loading = true
     @State private var sending = false
     @State private var canUploadImages = true
@@ -164,6 +323,30 @@ struct PrSlackShareSheet: View {
                 summary: request.walkthroughSummary
             )
             : request.title)
+        let imagePaths = (
+            [request.suggestedScreenshot].compactMap { $0 } + request.initialImages
+        ).reduce(into: [String]()) { paths, path in
+            if !paths.contains(path) { paths.append(path) }
+        }
+        _unloadedImagePaths = State(initialValue: Array(imagePaths.prefix(10)))
+        let composerRequestId = request.composerRequestId
+        let sessionId = request.sessionId
+        _draftPersistence = State(initialValue: SlackComposerDraftPersistence(
+            enabled: composerRequestId != nil,
+            upload: { image, index in
+                try await SlackAPI.uploadImage(image, index: index)
+            },
+            update: { message, channel, screenshots in
+                guard let composerRequestId else { return }
+                try await SlackAPI.updateComposer(
+                    sessionId: sessionId,
+                    requestId: composerRequestId,
+                    channelId: channel,
+                    message: message,
+                    screenshots: screenshots
+                )
+            }
+        ))
     }
 
     private var trimmedDescription: String {
@@ -189,14 +372,9 @@ struct PrSlackShareSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextEditor(text: $description)
+                    TextEditor(text: descriptionBinding)
                         .frame(minHeight: 110)
                         .focused($descriptionFocused)
-                        .onChange(of: description) {
-                            if description.count > 500 {
-                                description = String(description.prefix(500))
-                            }
-                        }
                 } header: {
                     Text("Description")
                 } footer: {
@@ -209,10 +387,10 @@ struct PrSlackShareSheet: View {
                     Section("Images") {
                         if !images.isEmpty {
                             AttachedImagesRow(images: images) { image in
-                                images.removeAll { $0.id == image.id }
+                                setImages(images.filter { $0.id != image.id })
                             }
                         }
-                        AttachImagesButton(images: $images, maxCount: 10, systemImage: "plus")
+                        AttachImagesButton(images: imagesBinding, maxCount: 10, systemImage: "plus")
                             .accessibilityLabel("Add images")
                     }
                 }
@@ -228,7 +406,7 @@ struct PrSlackShareSheet: View {
                         Text("No Slack channels are configured.")
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("Send to", selection: $selectedChannel) {
+                        Picker("Send to", selection: channelBinding) {
                             ForEach(channels) { channel in
                                 Text("#\(channel.name)").tag(channel.id)
                             }
@@ -245,9 +423,9 @@ struct PrSlackShareSheet: View {
                     }
                 }
 
-                if let errorText {
+                if let visibleError = errorText ?? draftPersistence.errorMessage {
                     Section {
-                        Text(errorText).foregroundStyle(.red)
+                        Text(visibleError).foregroundStyle(.red)
                     }
                 }
             }
@@ -255,7 +433,7 @@ struct PrSlackShareSheet: View {
             // to write this message, so Cmd+V attaches it rather than pasting
             // nothing into the description. On iOS the same modifier puts
             // Paste in the text field's own edit menu.
-            .pastesImages(into: $images, maxCount: 10, when: acceptsImages)
+            .pastesImages(into: imagesBinding, maxCount: 10, when: acceptsImages)
             .navigationTitle("Share to Slack")
             .inlineTitleBarCompat()
             .toolbar {
@@ -297,14 +475,80 @@ struct PrSlackShareSheet: View {
                 awaitingSlack = false
                 errorText = "Slack access is still waiting for approval."
             }
+            .onChange(of: scenePhase) {
+                if scenePhase != .active { flushDraft() }
+            }
+            .onDisappear { flushDraft() }
         }
-        .interactiveDismissDisabled(sending || request.composerRequestId != nil)
+        .interactiveDismissDisabled(sending)
         #if os(iOS)
         .sheet(item: $consent) { link in SafariSheet(url: link.url) }
         #endif
         #if os(macOS)
         .frame(minWidth: 420, minHeight: 440)
         #endif
+    }
+
+    private var descriptionBinding: Binding<String> {
+        Binding(
+            get: { description },
+            set: { value in
+                description = String(value.prefix(500))
+                draftEdited()
+            }
+        )
+    }
+
+    private var channelBinding: Binding<String> {
+        Binding(
+            get: { selectedChannel },
+            set: { value in
+                selectedChannel = value
+                channelEdited = true
+                draftEdited()
+            }
+        )
+    }
+
+    private var imagesBinding: Binding<[AttachedImage]> {
+        Binding(get: { images }, set: { setImages($0) })
+    }
+
+    private var draftImages: [SlackComposerDraftImage] {
+        let visible = images.map {
+            SlackComposerDraftImage(image: $0, uploadedPath: uploadedImagePaths[$0.id])
+        }
+        return visible + unloadedImagePaths.map(SlackComposerDraftImage.init(uploadedPath:))
+    }
+
+    private func setImages(_ value: [AttachedImage]) {
+        images = value
+        imagesEdited = true
+        uploadedImagePaths = uploadedImagePaths.filter { id, _ in
+            value.contains { $0.id == id }
+        }
+        draftEdited()
+    }
+
+    private func draftEdited() {
+        draftPersistence.edited(
+            message: description,
+            channel: selectedChannel,
+            images: draftImages
+        )
+    }
+
+    private func flushDraft() {
+        let message = description
+        let channel = selectedChannel
+        let draftImages = draftImages
+        Task {
+            await draftPersistence.flush(
+                message: message,
+                channel: channel,
+                images: draftImages
+            )
+        }
     }
 
     private func loadChannels(focusDescription: Bool = true) async {
@@ -317,7 +561,7 @@ struct PrSlackShareSheet: View {
             }
             channels = response.channels
             canUploadImages = response.canUploadImages ?? true
-            if !response.channels.contains(where: { $0.id == selectedChannel }) {
+            if !channelEdited {
                 let preferred = request.preferredChannel?.trimmingCharacters(in: .whitespacesAndNewlines)
                     .replacingOccurrences(of: "#", with: "")
                 selectedChannel = response.channels.first {
@@ -336,13 +580,17 @@ struct PrSlackShareSheet: View {
     private func loadSuggestedImage() async {
         guard acceptsImages else { return }
         let paths = [request.suggestedScreenshot].compactMap { $0 } + request.initialImages
-        var loaded: [AttachedImage] = []
+        var loaded: [(AttachedImage, String)] = []
         for path in paths.prefix(10) {
             guard let data = try? await OS1API.media(path: path),
                   let image = AttachedImage(rawData: data) else { continue }
-            loaded.append(image)
+            loaded.append((image, path))
         }
-        images = loaded
+        guard !imagesEdited else { return }
+        images = loaded.map(\.0)
+        uploadedImagePaths = Dictionary(uniqueKeysWithValues: loaded.map { ($0.0.id, $0.1) })
+        let loadedPaths = Set(loaded.map(\.1))
+        unloadedImagePaths.removeAll { loadedPaths.contains($0) }
     }
 
     private func send() {
@@ -352,6 +600,14 @@ struct PrSlackShareSheet: View {
         errorText = nil
         descriptionFocused = false
         Task {
+            if request.composerRequestId != nil {
+                await draftPersistence.flush(
+                    message: description,
+                    channel: selectedChannel,
+                    images: draftImages
+                )
+                draftPersistence.stop()
+            }
             do {
                 if let composerRequestId = request.composerRequestId {
                     var screenshots: [String] = []
@@ -396,6 +652,7 @@ struct PrSlackShareSheet: View {
                 Haptics.play(.commit)
                 dismiss()
             } catch {
+                draftPersistence.resume()
                 let message = (error as? LocalizedError)?.errorDescription
                     ?? error.localizedDescription
                 errorText = message
@@ -435,6 +692,7 @@ struct PrSlackShareSheet: View {
             return
         }
         sending = true
+        draftPersistence.stop()
         Task {
             do {
                 try await SlackAPI.cancelComposer(
@@ -449,6 +707,7 @@ struct PrSlackShareSheet: View {
                 ))
                 dismiss()
             } catch {
+                draftPersistence.resume()
                 sending = false
                 errorText = (error as? LocalizedError)?.errorDescription
                     ?? error.localizedDescription
