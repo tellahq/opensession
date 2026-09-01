@@ -210,6 +210,10 @@ if (!gatewayOwnership.__opensessionGatewayActivationLease) {
   gatewayOwnership.__opensessionGatewayActivationLease =
     await acquireGatewayActivationLease();
 }
+// Standby describes only the preload phase. After the nonce and ownership
+// fences release, this child owns ingress and later frontend promotions must
+// be allowed to replace the stable shell served by the supervisor.
+process.env.OPENSESSION_GATEWAY_ROLE = "active";
 
 // A dev instance (OPENSESSION_DEV=1, src/server/dev-mode.ts) sharing the live
 // state is the fleet-outage class bug: the run-rpc unix socket lives under the

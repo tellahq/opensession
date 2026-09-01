@@ -72,12 +72,10 @@ const STICKY_FILE_HEADER =
 const STICKY_FILE_HEADER_SURFACE =
   "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
 
-const DIFF_SURFACE_STYLE: React.CSSProperties & {
-  "--diffs-light-bg": string;
-  "--diffs-dark-bg": string;
-} = {
-  "--diffs-light-bg": "var(--code-well-light)",
-  "--diffs-dark-bg": "var(--code-well-dark)",
+type DiffSurfaceStyle = React.CSSProperties & { "--diffs-bg": string };
+const DIFF_SURFACE_STYLE: Record<"light" | "dark", DiffSurfaceStyle> = {
+  light: { "--diffs-bg": "var(--code-well-light)" },
+  dark: { "--diffs-bg": "var(--code-well-dark)" },
 };
 const FILE_TOGGLE =
   "focus-ring flex min-w-0 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
@@ -1353,7 +1351,7 @@ const FileDiffRow = function FileDiffRow({
       lineAnnotations={annotations}
       selectedLines={selectedLines}
       renderAnnotation={renderAnnotation}
-      style={DIFF_SURFACE_STYLE}
+      style={DIFF_SURFACE_STYLE[theme]}
       // Not the lever it looks like: the prop only decides whether to pass the
       // pool down from @pierre/diffs' WorkerPoolContext, and nothing in this
       // app mounts that provider, so highlighting is on the main thread either

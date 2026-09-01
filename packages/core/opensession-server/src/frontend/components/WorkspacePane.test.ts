@@ -189,12 +189,12 @@ test("sidebar Changes shares Review's code display options", () => {
     "mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well",
   );
   expect(commentableDiffSource).toContain(
-    '"--diffs-light-bg": "var(--code-well-light)"',
+    'light: { "--diffs-bg": "var(--code-well-light)" }',
   );
   expect(commentableDiffSource).toContain(
-    '"--diffs-dark-bg": "var(--code-well-dark)"',
+    'dark: { "--diffs-bg": "var(--code-well-dark)" }',
   );
-  expect(commentableDiffSource).not.toContain('"--diffs-bg":');
+  expect(commentableDiffSource).toContain("style={DIFF_SURFACE_STYLE[theme]}");
   expect(baseCssSource).toContain("--code-well-light: #f6f8fa");
   expect(baseCssSource).toContain("--code-well-dark: #0d0f13");
   expect(commentableDiffSource).not.toContain("border border-line bg-bg");
