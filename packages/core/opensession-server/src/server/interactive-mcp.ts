@@ -37,6 +37,7 @@ import { createAssetsMcpServer } from "../agents/slack/assets-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createSelfDeployMcpServer } from "./self-deploy";
 import { createWebMcpServer } from "./web-mcp";
+import { callMcpTool } from "./mcp-client";
 import { papercutsEnabledForRepo } from "./papercuts";
 import { defaultRepo, productName } from "./config";
 import { githubCredentialForRun } from "./github-auth";
@@ -147,6 +148,17 @@ function papercutsServerFor(
       },
     }),
   };
+}
+
+export function editorFixtureGrantUser(
+  session:
+    | {
+        createdBy?: string | null;
+        startedBy?: string | null;
+      }
+    | undefined,
+): string | undefined {
+  return session?.createdBy || session?.startedBy || undefined;
 }
 
 export function interactiveMcpServers(
@@ -288,6 +300,21 @@ export function interactiveMcpServers(
             hasSandbox: () =>
               Boolean(findSession(sessionId)?.sandbox?.sandboxId),
             runner: () => findSession(sessionId),
+            verifyEditorFixture: (leaseId) => {
+              const session = findSession(sessionId);
+              const grantUser = editorFixtureGrantUser(session);
+              if (!grantUser)
+                throw new Error(
+                  "This session has no creator identity for Tella verification.",
+                );
+              return callMcpTool(
+                "tella-stage",
+                "verify_editor_fixture",
+                { leaseKey: sessionId, leaseId },
+                grantUser,
+                { requireUserGrant: true },
+              );
+            },
             setDefaultPath: async (path, options) => {
               const session = findSession(sessionId);
               if (!session) throw new Error("Session not found.");
