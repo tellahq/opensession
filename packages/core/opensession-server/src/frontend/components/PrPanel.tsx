@@ -8,6 +8,7 @@ import React, {
   useState,
   useRef,
 } from "react";
+import { createPortal } from "react-dom";
 import type {
   PrCheck,
   PrDetails,
@@ -186,6 +187,9 @@ interface Props {
   sessions?: UnifiedSession[];
   /** Navigate to a session picked from the linked-sessions list. */
   onOpenSessionById?: (id: string) => void;
+  /** Host the session action in surrounding workspace chrome. `undefined`
+   * keeps it in this PR toolbar for standalone review views. */
+  sessionActionTarget?: HTMLElement | null;
   /** Open another PR in this panel — used by the stack map to move between
    *  layers in-app. Without it the layer rows still link, just via a full
    *  page load. */
@@ -230,6 +234,7 @@ export function PrPanel({
   previewTarget,
   sessions,
   onOpenSessionById,
+  sessionActionTarget,
   onOpenPr,
   addHandler: addHandlerProp,
   hideWideOverviewRail = false,
@@ -907,6 +912,20 @@ export function PrPanel({
     sessions && active
       ? prRelatedSessions(sessions, active.repo, active.branch, pr)
       : [];
+  const sessionActionButton = sessions ? (
+    <Button
+      variant="default"
+      size={sessionActionTarget === undefined ? "sm" : "md"}
+      icon={<IconMessages size={18} />}
+      onClick={() => setSessionsOpen(true)}
+    >
+      {relatedSessions.length === 0
+        ? "Start session"
+        : relatedSessions.length === 1
+          ? "Open session"
+          : `${relatedSessions.length} sessions`}
+    </Button>
+  ) : null;
 
   const files = pr?.files ?? NO_PR_FILES;
   const reviewedFiles =
@@ -1425,6 +1444,9 @@ export function PrPanel({
       data-review-canvas="true"
       ref={setRoot}
     >
+      {sessionActionTarget && sessionActionButton
+        ? createPortal(sessionActionButton, sessionActionTarget)
+        : null}
       {/* Desktop keeps page navigation and file controls in the identity row.
           Phone keeps one edge-to-edge navigation and controls row below it. */}
       <ReviewToolbar compact={compactToolbar}>
@@ -1538,20 +1560,9 @@ export function PrPanel({
                 Review
               </Button>
             )}
-          {sessions && !headerCompact && (
-            <Button
-              variant="default"
-              size="sm"
-              icon={<IconMessages size={18} />}
-              onClick={() => setSessionsOpen(true)}
-            >
-              {relatedSessions.length === 0
-                ? "Start session"
-                : relatedSessions.length === 1
-                  ? "Open session"
-                  : `${relatedSessions.length} sessions`}
-            </Button>
-          )}
+          {sessionActionTarget === undefined &&
+            !headerCompact &&
+            sessionActionButton}
           <Menu.Root>
             <Tooltip label="Pull request actions">
               <Menu.Trigger
@@ -1585,18 +1596,20 @@ export function PrPanel({
                     </span>
                   </Menu.Item>
                 )}
-              {sessions && headerCompact && (
-                <Menu.Item onClick={() => setSessionsOpen(true)}>
-                  <IconMessages size={18} className={MENU_ICON} />
-                  <span className="min-w-0 flex-1 truncate">
-                    {relatedSessions.length === 0
-                      ? "Start a session"
-                      : relatedSessions.length === 1
-                        ? "Open session"
-                        : `Open ${relatedSessions.length} sessions`}
-                  </span>
-                </Menu.Item>
-              )}
+              {sessions &&
+                sessionActionTarget === undefined &&
+                headerCompact && (
+                  <Menu.Item onClick={() => setSessionsOpen(true)}>
+                    <IconMessages size={18} className={MENU_ICON} />
+                    <span className="min-w-0 flex-1 truncate">
+                      {relatedSessions.length === 0
+                        ? "Start a session"
+                        : relatedSessions.length === 1
+                          ? "Open session"
+                          : `Open ${relatedSessions.length} sessions`}
+                    </span>
+                  </Menu.Item>
+                )}
               <Menu.Item
                 render={<a href={pr.url} target="_blank" rel="noopener" />}
               >

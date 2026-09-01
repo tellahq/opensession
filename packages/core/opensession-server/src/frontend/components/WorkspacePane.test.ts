@@ -36,6 +36,9 @@ const reviewToolbarSource = await Bun.file(
 const summarySource = await Bun.file(
   new URL("./WorkspaceSummary.tsx", import.meta.url),
 ).text();
+const baseCssSource = await Bun.file(
+  new URL("../styles/base.css", import.meta.url),
+).text();
 
 test("workspace draft composers accept and persist attachments", () => {
   const composerStart = source.lastIndexOf("<Composer");
@@ -185,7 +188,15 @@ test("sidebar Changes shares Review's code display options", () => {
   expect(commentableDiffSource).toContain(
     "mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well",
   );
-  expect(commentableDiffSource).toContain('"--diffs-bg": "var(--code-well)"');
+  expect(commentableDiffSource).toContain(
+    '"--diffs-light-bg": "var(--code-well-light)"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"--diffs-dark-bg": "var(--code-well-dark)"',
+  );
+  expect(commentableDiffSource).not.toContain('"--diffs-bg":');
+  expect(baseCssSource).toContain("--code-well-light: #f6f8fa");
+  expect(baseCssSource).toContain("--code-well-dark: #0d0f13");
   expect(commentableDiffSource).not.toContain("border border-line bg-bg");
   expect(commentableDiffSource).not.toContain("data-[stuck]:overflow-visible");
   expect(commentableDiffSource).not.toContain("-inset-x-px");

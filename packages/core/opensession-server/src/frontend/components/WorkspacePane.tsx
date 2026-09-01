@@ -598,6 +598,8 @@ export function WorkspacePane({
   // session's header does — beside the pane, not across the panel.
   const headerRef = useRef<HTMLDivElement>(null);
   const headerActionsRef = useRef<HTMLDivElement>(null);
+  const [reviewSessionActionTarget, setReviewSessionActionTarget] =
+    useState<HTMLDivElement | null>(null);
   const [headerW, setHeaderW] = useState(0);
   const [reviewSummaryOpen, setReviewSummaryOpen] =
     useState(workspaceSummaryOpen);
@@ -821,6 +823,9 @@ export function WorkspacePane({
         )}
       </TopBarLeading>
       <TopBarActions ref={headerActionsRef} className={VIEWER_HEADER_ACTIONS}>
+        {tab === "review" && (
+          <div ref={setReviewSessionActionTarget} className="contents" />
+        )}
         {tab === "review" && presentationSession && !panelOpen && (
           <WorkspaceSummary
             session={presentationSession}
@@ -881,6 +886,7 @@ export function WorkspacePane({
           addHandler={addHandler}
           sessions={sessions}
           onOpenSessionById={onOpenSession}
+          sessionActionTarget={isPhone ? undefined : reviewSessionActionTarget}
           onOpenSession={
             reviewSession ? () => onOpenSession(reviewSession.id) : undefined
           }

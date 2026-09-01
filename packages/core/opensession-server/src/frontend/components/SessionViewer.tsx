@@ -4305,6 +4305,8 @@ export function SessionViewer({
   // of the surrounding chrome.
   const headerRef = useRef<HTMLDivElement>(null);
   const headerActionsRef = useRef<HTMLDivElement>(null);
+  const [reviewSessionActionTarget, setReviewSessionActionTarget] =
+    useState<HTMLDivElement | null>(null);
   const desktopChangesRef = useRef<HTMLDivElement>(null);
   const [headerW, setHeaderW] = useState(0);
   // Whether the header's workspace-summary card is up. The transcript and
@@ -5617,6 +5619,12 @@ export function SessionViewer({
               headerActionsEl={headerActionsEl}
               actions={
                 <>
+                  {!isPhone && showReview && (
+                    <div
+                      ref={setReviewSessionActionTarget}
+                      className="contents"
+                    />
+                  )}
                   {!isPhone && secondaryActions(false)}
                   {!isPhone && keepInSidebarAction(false)}
                   {/* Whoever ELSE has the session open, right before Share. Your
@@ -6345,6 +6353,9 @@ export function SessionViewer({
                 sessionId={session.id}
                 sessions={allSessions || workspaceSessions || []}
                 onOpenSessionById={openSession}
+                sessionActionTarget={
+                  isPhone ? undefined : reviewSessionActionTarget
+                }
                 editGate={connected && !isBusy && !noEngine}
                 onOpenSession={openCurrentWorkspace}
                 onAddToInput={(text) =>

@@ -72,9 +72,12 @@ const STICKY_FILE_HEADER =
 const STICKY_FILE_HEADER_SURFACE =
   "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
 
-const DIFF_SURFACE_STYLE: React.CSSProperties & { "--diffs-bg": string } = {
-  "--diffs-bg": "var(--code-well)",
-  backgroundColor: "var(--code-well)",
+const DIFF_SURFACE_STYLE: React.CSSProperties & {
+  "--diffs-light-bg": string;
+  "--diffs-dark-bg": string;
+} = {
+  "--diffs-light-bg": "var(--code-well-light)",
+  "--diffs-dark-bg": "var(--code-well-dark)",
 };
 const FILE_TOGGLE =
   "focus-ring flex min-w-0 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
