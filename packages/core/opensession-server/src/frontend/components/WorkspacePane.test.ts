@@ -185,13 +185,21 @@ test("sidebar Changes shares Review's code display options", () => {
   );
   expect(commentableDiffSource).toContain("z-[6] bg-surface");
   expect(commentableDiffSource).toContain("rounded-md bg-surface");
-  expect(commentableDiffSource).toContain(': "mx-2 w-auto bg-transparent"');
+  expect(commentableDiffSource).toContain(
+    ': "w-auto rounded-none bg-[var(--review-file-header-bg)] hover:bg-[var(--review-file-header-hover)]"',
+  );
   expect(commentableDiffSource).toContain(
     "mt-1.5 max-w-full overflow-clip rounded-lg",
   );
   expect(commentableDiffSource).not.toContain("rounded-lg bg-code-well");
   expect(commentableDiffSource).toContain(
-    '!stickyFileHeaders && "mx-2 mt-0.5"',
+    '!stickyFileHeaders && "mx-2 overflow-clip rounded-lg"',
+  );
+  expect(commentableDiffSource).toContain(
+    '!stickyFileHeaders && "mt-0 rounded-none"',
+  );
+  expect(commentableDiffSource).toContain(
+    "style={stickyFileHeaders ? undefined : DIFF_SURFACE_STYLE[theme]}",
   );
   expect(commentableDiffSource).toContain(
     'stickyFileHeaders ? "gap-2.5" : "gap-4"',
@@ -205,11 +213,18 @@ test("sidebar Changes shares Review's code display options", () => {
   expect(commentableDiffSource).toContain(
     'backgroundColor: "var(--review-code-light)"',
   );
+  expect(commentableDiffSource).toContain('"--review-file-header-bg":');
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--blue) 12%, var(--review-code-light))"',
+  );
   expect(commentableDiffSource).toContain(
     '"--diffs-bg": "var(--review-code-dark)"',
   );
   expect(commentableDiffSource).toContain(
     'backgroundColor: "var(--review-code-dark)"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--blue) 12%, var(--review-code-dark))"',
   );
   expect(commentableDiffSource).toContain("style={DIFF_SURFACE_STYLE[theme]}");
   expect(baseCssSource).toContain("--review-code-light: #ffffff");

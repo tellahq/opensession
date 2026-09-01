@@ -41,7 +41,45 @@ export function sessionPatchNeedsAcknowledgement(
   patch: Partial<UnifiedSession>,
 ): boolean {
   // Runtime state can arrive over the socket before the indexed list sees it.
-  return "archived" in patch || "isRunning" in patch;
+  // Review writes can spend several seconds mirroring the assignment to GitHub
+  // before the list projection changes, so an older poll must not undo them.
+  return (
+    "archived" in patch || "isRunning" in patch || "reviewRequest" in patch
+  );
+}
+
+function timestampAcknowledges(current: string, pending: string): boolean {
+  const currentTime = Date.parse(current);
+  const pendingTime = Date.parse(pending);
+  return Number.isFinite(currentTime) && Number.isFinite(pendingTime)
+    ? currentTime >= pendingTime
+    : current === pending;
+}
+
+function reviewRequestAcknowledged(
+  current: UnifiedSession["reviewRequest"],
+  pending: UnifiedSession["reviewRequest"],
+): boolean {
+  if (!current || !pending) return current === pending;
+  const currentRecipients = current.recipients ?? [];
+  const pendingRecipients = pending.recipients ?? [];
+  const acceptedMatches =
+    !current.accepted && !pending.accepted
+      ? true
+      : !!current.accepted &&
+        !!pending.accepted &&
+        current.accepted.by === pending.accepted.by &&
+        timestampAcknowledges(current.accepted.at, pending.accepted.at);
+  return (
+    current.to === pending.to &&
+    current.by === pending.by &&
+    timestampAcknowledges(current.at, pending.at) &&
+    currentRecipients.length === pendingRecipients.length &&
+    currentRecipients.every(
+      (recipient, index) => recipient === pendingRecipients[index],
+    ) &&
+    acceptedMatches
+  );
 }
 
 /** Fence responses to the selected-session projection that requested them. */
@@ -129,8 +167,13 @@ export function reconcilePendingSessionPatches(
       pendingPatches.delete(session.id);
       return session;
     }
-    const acknowledged = Object.entries(pending.values).every(
-      ([key, value]) => session[key as keyof UnifiedSession] === value,
+    const acknowledged = Object.entries(pending.values).every(([key, value]) =>
+      key === "reviewRequest"
+        ? reviewRequestAcknowledged(
+            session.reviewRequest,
+            pending.values.reviewRequest,
+          )
+        : session[key as keyof UnifiedSession] === value,
     );
     if (acknowledged) {
       pendingPatches.delete(session.id);

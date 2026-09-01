@@ -59,8 +59,8 @@ import { cn } from "../ui/cn";
 const DIFF_ADD = "font-semibold text-green";
 const DIFF_DEL = "font-semibold text-red";
 
-/* Each filename stays on the canvas while its code owns the quieter inset
-   well. Spacing and that fill separate files without nesting bordered cards. */
+/* Review joins each filename and its code in one inset well. Sidebar Changes
+   keeps its sticky filename and code as separate surfaces. */
 const FILE_ROW = "min-w-0 max-w-full";
 const FILE_HEADER =
   "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip rounded-md px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
@@ -72,14 +72,26 @@ const STICKY_FILE_HEADER =
 const STICKY_FILE_HEADER_SURFACE =
   "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
 
-type DiffSurfaceStyle = React.CSSProperties & { "--diffs-bg": string };
+type DiffSurfaceStyle = React.CSSProperties & {
+  "--diffs-bg": string;
+  "--review-file-header-bg": string;
+  "--review-file-header-hover": string;
+};
 const DIFF_SURFACE_STYLE: Record<"light" | "dark", DiffSurfaceStyle> = {
   light: {
     "--diffs-bg": "var(--review-code-light)",
+    "--review-file-header-bg":
+      "color-mix(in srgb, var(--blue) 12%, var(--review-code-light))",
+    "--review-file-header-hover":
+      "color-mix(in srgb, var(--blue) 17%, var(--review-code-light))",
     backgroundColor: "var(--review-code-light)",
   },
   dark: {
     "--diffs-bg": "var(--review-code-dark)",
+    "--review-file-header-bg":
+      "color-mix(in srgb, var(--blue) 12%, var(--review-code-dark))",
+    "--review-file-header-hover":
+      "color-mix(in srgb, var(--blue) 17%, var(--review-code-dark))",
     backgroundColor: "var(--review-code-dark)",
   },
 };
@@ -654,9 +666,13 @@ export function CommentableDiff({ patch, options }: Props) {
 
     return (
       <div
-        className={FILE_ROW}
+        className={cn(
+          FILE_ROW,
+          !stickyFileHeaders && "mx-2 overflow-clip rounded-lg",
+        )}
         key={`${file.name}-${i}`}
         data-diff-file={file.name}
+        style={stickyFileHeaders ? undefined : DIFF_SURFACE_STYLE[theme]}
       >
         <div
           className={`group ${stickyFileHeaders ? STICKY_FILE_HEADER : ""}`}
@@ -670,7 +686,7 @@ export function CommentableDiff({ patch, options }: Props) {
               FILE_HEADER,
               stickyFileHeaders
                 ? STICKY_FILE_HEADER_SURFACE
-                : "mx-2 w-auto bg-transparent",
+                : "w-auto rounded-none bg-[var(--review-file-header-bg)] hover:bg-[var(--review-file-header-hover)]",
             )}
           >
             <button
@@ -903,7 +919,7 @@ export function CommentableDiff({ patch, options }: Props) {
         </div>
         {(isOpen || resolved.length > 0) && (
           <div
-            className={cn(FILE_BODY, !stickyFileHeaders && "mx-2 mt-0.5")}
+            className={cn(FILE_BODY, !stickyFileHeaders && "mt-0 rounded-none")}
             style={DIFF_SURFACE_STYLE[theme]}
           >
             {isOpen &&

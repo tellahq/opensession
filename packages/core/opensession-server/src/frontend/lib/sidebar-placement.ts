@@ -142,10 +142,6 @@ export function classifySidebarPlacement(
   context: SidebarPlacementContext,
 ): SidebarPlacement {
   if (context.snoozed) return "snoozed";
-  // “Keep in sidebar” writes a personal lane. That direct instruction wins
-  // over derived review placement, so keeping a teammate's workspace puts it
-  // in Active rather than merely moving it between team and review sections.
-  if (context.claimed) return context.inStatusScope ? "status" : "outside";
 
   const me = context.currentUser.toLowerCase();
   const githubAsksMe =
@@ -204,6 +200,11 @@ export function classifySidebarPlacement(
       );
     if (mineRequest && reviewCompleted) return "completed-review";
   }
+
+  // A personal lane keeps ordinary work in Active, but a live review handoff
+  // is more specific: the asker tracks it in Awaiting review and the reviewer
+  // gets it in Needs review. Once that flow ends, the personal lane applies again.
+  if (context.claimed) return context.inStatusScope ? "status" : "outside";
 
   // Auto-created work has no band of its own: it files into the ordinary
   // lanes with everything else and identifies itself with a robot beside the
