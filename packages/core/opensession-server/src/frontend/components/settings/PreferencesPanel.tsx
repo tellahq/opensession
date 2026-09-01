@@ -1,6 +1,6 @@
 import {
-  useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
@@ -337,9 +337,7 @@ function PersonalPromptPanel() {
     latest.current = { prompt, savedPrompt, user };
   });
 
-  // Stable identity: reads the latest-values ref, so the unmount effect can
-  // list it and still only run its cleanup once.
-  const commit = useCallback(async () => {
+  const commit = async () => {
     const { prompt: draft, savedPrompt: saved, user: who } = latest.current;
     if (draft === null || draft === saved) return;
     setStatus("saving");
@@ -347,18 +345,19 @@ function PersonalPromptPanel() {
       const result = await savePersonalPrompt(who, draft);
       setSavedPrompt(result.prompt);
       setStatus("saved");
-    } catch (error) {
+    } catch (error: unknown) {
       setStatus("idle");
       toast(errorMessage(error, "Failed to save personal prompt"), {
         variant: "error",
       });
     }
-  }, []);
+  };
+  const commitOnUnmount = useEffectEvent(() => commit());
 
   useEffect(() => {
     // Fire-and-forget on the way out — nothing is left to render a result to.
-    return () => void commit();
-  }, [commit]);
+    return () => void commitOnUnmount();
+  }, []);
 
   const label = <SettingsGroupLabel>Personal prompt</SettingsGroupLabel>;
 

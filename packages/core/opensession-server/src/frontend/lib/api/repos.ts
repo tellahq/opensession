@@ -256,15 +256,11 @@ export async function detachRepoApi(
 export async function fetchRepoSwitchable(
   sessionId: string,
 ): Promise<{ switchable: boolean; hasWork: boolean }> {
-  try {
-    const body = await request<{ switchable?: boolean; hasWork?: boolean }>(
-      `/sessions/${encodeURIComponent(sessionId)}/repo-switchable`,
-    );
-    return { switchable: !!body?.switchable, hasWork: !!body?.hasWork };
-  } catch (e) {
-    console.warn("fetchRepoSwitchable failed:", e);
-    return { switchable: false, hasWork: false };
-  }
+  const body = await request<{ switchable?: boolean; hasWork?: boolean }>(
+    `/sessions/${encodeURIComponent(sessionId)}/repo-switchable`,
+    { label: "Failed to load repository controls" },
+  );
+  return { switchable: !!body?.switchable, hasWork: !!body?.hasWork };
 }
 
 // Switch the session's PRIMARY repo (wrong repo picked at creation). Returns the

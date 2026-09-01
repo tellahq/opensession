@@ -32,6 +32,7 @@ import { duration, ease } from "../ui/motion";
 import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import { foregroundFileComposerOwns, hasDraggedFiles } from "../lib/file-drag";
 import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
+import { errorMessage } from "../lib/error-message";
 
 interface DeskConversationProps {
   sessionId: string;
@@ -243,7 +244,11 @@ export function DeskConversation({
         setModels(m.models);
         setDefaultModel(m.default);
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        // The catalog only populates the picker. The Desk keeps its stored
+        // model id and remains usable when this optional lookup fails.
+        console.warn(errorMessage(error, "Could not load models"));
+      });
   }, []);
 
   // Watch the Desk only and tear the socket down on unmount / id change.
