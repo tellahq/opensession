@@ -16,13 +16,10 @@ test("pinned work remains in its primary Active placement", async () => {
 
 test("feed polling depends on stable source state", async () => {
   const source = await Bun.file(
-    new URL("./Sidebar.tsx", import.meta.url),
+    new URL("../hooks/useSidebarSources.ts", import.meta.url),
   ).text();
   const pollStart = source.indexOf("// Items use the same gentle 60s cadence");
-  const pollEnd = source.indexOf(
-    "// Newest live session per Plain thread",
-    pollStart,
-  );
+  const pollEnd = source.indexOf("\n  return {", pollStart);
   const pollEffect = source.slice(pollStart, pollEnd);
 
   expect(pollEffect).toContain("}, [feeds, hiddenFeeds]);");

@@ -30,6 +30,18 @@ test("Sidebar navigation comes from NavigationContext", async () => {
   const automationBandSource = await Bun.file(
     new URL("./sidebar/AutomationsBand.tsx", import.meta.url),
   ).text();
+  const extractedNavigationSources = await Promise.all(
+    [
+      "../hooks/useSidebarWorkspaceController.tsx",
+      "../lib/sidebar-feed-renderers.tsx",
+      "../lib/sidebar-support-renderer.tsx",
+      "../lib/sidebar-tools-model.tsx",
+      "./sidebar/SidebarChrome.tsx",
+    ].map((path) => Bun.file(new URL(path, import.meta.url)).text()),
+  );
+  const navigationSource = [sidebarSource, ...extractedNavigationSources].join(
+    "\n",
+  );
   const typesSource = await Bun.file(
     new URL("../lib/sidebar-types.ts", import.meta.url),
   ).text();
@@ -48,23 +60,27 @@ test("Sidebar navigation comes from NavigationContext", async () => {
   }
 
   expect(sidebarSource).toContain("const navigation = useNavigation();");
-  expect(sidebarSource).toContain("navigation.openSession(session.id);");
-  expect(sidebarSource).toContain(
+  expect(navigationSource).toContain("navigation.openSession(session.id);");
+  expect(navigationSource).toContain(
     "navigation.openWorkspace(row.workspace.id, unreadSession.id);",
   );
-  expect(sidebarSource).toContain("onClick: () => navigation.openReports(),");
-  expect(sidebarSource).toContain(
+  expect(navigationSource).toContain(
+    "onClick: () => navigation.openReports(),",
+  );
+  expect(navigationSource).toContain(
     "navigation.openReports({ automationId, reportId })",
   );
   expect(automationBandSource).toContain(
     "onOpenReport(overview.id, overview.latestReport.id);",
   );
-  expect(sidebarSource).toContain("onOpen={() => navigation.openPrItem(item)}");
-  expect(sidebarSource).toContain("onOpen={() => navigation.openTicket(t)}");
-  expect(sidebarSource).toContain(
+  expect(navigationSource).toContain(
+    "onOpen={() => navigation.openPrItem(item)}",
+  );
+  expect(navigationSource).toContain("onOpen={() => navigation.openTicket(t)}");
+  expect(navigationSource).toContain(
     "onOpen={() => navigation.openFeedItem(feed, item)}",
   );
-  expect(sidebarSource).toContain("onClick={navigation.openNewWorkspace}");
+  expect(navigationSource).toContain("onClick={navigation.openNewWorkspace}");
   expect(sidebarSource).toContain("onNewSession={navigation.openNewWorkspace}");
 });
 
