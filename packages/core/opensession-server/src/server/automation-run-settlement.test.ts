@@ -493,6 +493,27 @@ describe("automation run settlement", () => {
     expect(loopStart).toBeGreaterThan(backendDispatch);
   });
 
+  test("intent recovery persists the replacement Executor id", () => {
+    const source = readFileSync(
+      resolve(import.meta.dir, "automations.ts"),
+      "utf8",
+    );
+    const persistDefinition = source.indexOf("const persistSession = (");
+    const existingFields = source.indexOf("...existing,", persistDefinition);
+    const authoritativeSandbox = source.indexOf(
+      "Intent recovery reuses the session id",
+      existingFields,
+    );
+    const prelaunchPersist = source.indexOf(
+      'await persistSession("");',
+      authoritativeSandbox,
+    );
+
+    expect(existingFields).toBeGreaterThan(persistDefinition);
+    expect(authoritativeSandbox).toBeGreaterThan(existingFields);
+    expect(prelaunchPersist).toBeGreaterThan(authoritativeSandbox);
+  });
+
   test("a terminal event before init persists its error before immediate projection", async () => {
     const id = sid();
     created.push(id);

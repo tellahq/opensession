@@ -179,7 +179,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
       ),
       tool(
         "create_automation",
-        "Create a new automation (routine). Provide a clear prompt describing the task. Set `repo` to the repository it works in, or it runs against the instance default. Use a 5-field UTC cron `schedule` for recurring jobs (omit for manual/webhook only). Pick mode 'ask' for read-only or 'code' if it must edit and commit files. Ordinary automations receive no GitHub credential, so code mode alone cannot push or open a GitHub PR. Optionally restrict tools with mcpServers and set a model.",
+        "Create a new automation (routine). Provide a clear prompt describing the task. Set `repo` to the repository it works in, or it runs against the instance default. Use a 5-field UTC cron `schedule` for recurring jobs (omit for manual/webhook only). Pick mode 'ask' for read-only or 'code' if it must edit and commit files. Ordinary automations receive no GitHub credential, so code mode alone cannot push or open a GitHub PR. Set sandbox true to use a fresh disposable Executor. Sandboxed automations require an explicit mcpServers list, a pinned accountId, a supported model, and a configured qualified provider.",
         {
           name: z.string().describe("Short display name."),
           prompt: z
@@ -202,7 +202,13 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .array(z.string())
             .optional()
             .describe(
-              "Optional allowlist of MCP server names this run may use.",
+              "Optional allowlist of MCP server names this run may use. Required with sandbox true; use [] for none.",
+            ),
+          sandbox: z
+            .boolean()
+            .optional()
+            .describe(
+              "Run in a fresh disposable sandbox Executor. Requires a pinned accountId and explicit mcpServers allowlist. Fails closed when no qualified provider is configured.",
             ),
           model: z
             .string()
@@ -254,6 +260,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           mode?: "ask" | "code";
           repo?: string;
           mcpServers?: string[];
+          sandbox?: boolean;
           model?: string;
           accountId?: string;
           accountStrict?: boolean;
@@ -270,6 +277,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             createdBy: ctx.createdBy,
             repo: args.repo,
             mcpServers: args.mcpServers,
+            sandbox: args.sandbox,
             model: args.model,
             accountId: args.accountId,
             accountStrict: args.accountStrict,
@@ -314,12 +322,29 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               `${repoParamHelp()} '' resets it to the instance default.`,
             ),
-          mcpServers: z.array(z.string()).optional(),
+          mcpServers: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Explicit MCP allowlist. Required when enabling sandbox; use [] for none.",
+            ),
+          sandbox: z
+            .boolean()
+            .optional()
+            .describe(
+              "Use a fresh disposable sandbox Executor. Set false to return to host runs.",
+            ),
           model: z
             .string()
             .optional()
             .describe(
               "Model id — a tier ('claude-opus-5', 'gpt-5.6-sol') or an engine-prefixed id ('pi/anthropic/claude-opus-5'); '' resets to the default.",
+            ),
+          fallbackModel: z
+            .string()
+            .optional()
+            .describe(
+              "Fallback model id. Sandboxed automations require 'none'.",
             ),
           accountId: z
             .string()
@@ -365,7 +390,9 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           enabled?: boolean;
           repo?: string;
           mcpServers?: string[];
+          sandbox?: boolean;
           model?: string;
+          fallbackModel?: string;
           accountId?: string;
           accountStrict?: boolean;
           usageCredits?: boolean;
