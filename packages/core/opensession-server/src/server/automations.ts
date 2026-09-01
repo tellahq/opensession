@@ -1870,6 +1870,17 @@ export async function runAutomation(
         engineSessionId = event.sessionId || engineSessionId;
         if (event.provider) effectiveProvider = event.provider;
         if (event.model) effectiveModel = event.model;
+        // Dying on usage limits with no account left to rotate to reports as
+        // a `done` whose result is the limit notice, not an `error` — but it
+        // still needs a human. An automation with `fallbackModel: "none"`
+        // reaches the caller unfiltered, because runAgentInner yields
+        // runOnModel directly on that path instead of routing the event into
+        // its fallback walk. run-session.ts and session-create.ts both
+        // convert this shape into a failure; without the same conversion the
+        // ledger would record `ok`, outputs would be delivered for a turn
+        // that never ran, and the session would settle `turn_end`.
+        if (event.usageLimitExhausted)
+          errorMsg = event.result || "Usage limit reached on every account";
       }
       if (event.type === "text_chunk" && event.text) {
         textTail = (textTail + event.text).slice(-16384);
