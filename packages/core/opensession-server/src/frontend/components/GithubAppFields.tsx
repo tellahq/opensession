@@ -1,6 +1,42 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { Field, FieldGrid, Input } from "../ui/input";
 import { GithubPrivateKeyField } from "./GithubPrivateKeyField";
 import { SecretField, type SetupGithub } from "./setup-shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  fontMono: {
+    fontFamily: "var(--mono)",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  phoneTextInputPhone: {
+    "@media (max-width: 720px)": {
+      fontSize: "var(--type-input-phone)",
+    },
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+});
 
 export function GithubAppFields({
   github,
@@ -40,7 +76,7 @@ export function GithubAppFields({
   onPrivateKeyChange: (value: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div {...stylex.props(sx.flex, sx.flexCol, sx.gap4)}>
       <SecretField
         name="Client id"
         type="text"
@@ -53,11 +89,20 @@ export function GithubAppFields({
         onChange={onClientIdChange}
         onToggleClear={onToggleClientIdClear}
       />
-      <FieldGrid className={showInstallationOwner ? undefined : "grid-cols-1"}>
+      <FieldGrid
+        className={
+          showInstallationOwner ? undefined : utilityClassName("grid-cols-1")
+        }
+      >
         <Field label="App slug">
           <Input
             type="text"
-            className="font-mono phone:min-h-11 phone:text-input-phone"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.fontMono,
+              sx.phoneMinH11,
+              sx.phoneTextInputPhone,
+            )}
             value={appSlug}
             onChange={(event) => onAppSlugChange(event.target.value)}
             placeholder="open-session-example"
@@ -67,7 +112,9 @@ export function GithubAppFields({
             autoComplete="off"
             spellCheck={false}
           />
-          <span className="text-meta leading-snug text-faint">
+          <span
+            {...stylex.props(sx.leadingSnug, sx.textFaint, typography.meta)}
+          >
             From github.com/apps/&lt;slug&gt;. Identifies App-authored activity.
           </span>
         </Field>
@@ -75,7 +122,12 @@ export function GithubAppFields({
           <Field label="Installation owner">
             <Input
               type="text"
-              className="font-mono phone:min-h-11 phone:text-input-phone"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.fontMono,
+                sx.phoneMinH11,
+                sx.phoneTextInputPhone,
+              )}
               value={installationOwner}
               onChange={(event) =>
                 onInstallationOwnerChange(event.target.value)
@@ -87,7 +139,9 @@ export function GithubAppFields({
               autoComplete="off"
               spellCheck={false}
             />
-            <span className="text-meta leading-snug text-faint">
+            <span
+              {...stylex.props(sx.leadingSnug, sx.textFaint, typography.meta)}
+            >
               The GitHub account or organization where the App is installed.
             </span>
           </Field>

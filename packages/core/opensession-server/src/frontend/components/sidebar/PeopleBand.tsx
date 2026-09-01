@@ -1,3 +1,4 @@
+import { utilityClassName } from "../../ui/cn";
 import React from "react";
 import {
   SIDEBAR_AUTOMATION_RUNS,
@@ -25,6 +26,19 @@ import type { UnifiedSession } from "../../lib/types";
 import { cn } from "../../ui/cn";
 import { UserAvatar } from "../UserAvatar";
 import { IconChevronDown } from "../icons";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  minW0: {
+    minWidth: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+});
 
 /**
  * Teammates with a running or just-finished session. Each member is an
@@ -49,11 +63,13 @@ export function PeopleBand({
   if (groups.length === 0) return null;
 
   return (
-    <div className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2 pb-7")}>
+    <div
+      className={cn(SIDEBAR_INDEPENDENT_SECTION, utilityClassName("mt-2 pb-7"))}
+    >
       <div
         className={cn(
           SIDEBAR_BAND_LABEL,
-          "py-0 pl-0 pr-2 desktop:pr-0",
+          utilityClassName("py-0 pl-0 pr-2 desktop:pr-0"),
           SIDEBAR_STICKY_BAND,
           SIDEBAR_STICKY_BAND_ROW,
           SIDEBAR_STUCK_BACKING,
@@ -66,7 +82,7 @@ export function PeopleBand({
           title={open ? "Collapse team" : "Expand team"}
           aria-expanded={open}
         >
-          <span className="min-w-0 truncate">Team</span>
+          <span {...stylex.props(sx.minW0, sx.truncate)}>Team</span>
           <span className={SIDEBAR_GROUP_COUNT}>
             {groups.reduce(
               (count, group) => count + group.activeSessions.length,
@@ -115,7 +131,12 @@ export function PeopleBand({
                     <UserAvatar name={group.label} size={20} />
                   </span>
                   <span className={SIDEBAR_GROUP_NAME}>{group.label}</span>
-                  <span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
+                  <span
+                    className={cn(
+                      SIDEBAR_GROUP_COUNT,
+                      utilityClassName("shrink-0"),
+                    )}
+                  >
                     {group.activeSessions.length}
                   </span>
                   <IconChevronDown

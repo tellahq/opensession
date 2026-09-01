@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import { cn } from "./cn";
 
 /**
@@ -39,8 +40,10 @@ import { cn } from "./cn";
 // and hands specific liveness signals back by class, so a rename silently
 // freezes the indicator. This one cannot be orphaned by a rename.
 const PULSE =
-  "animate-[pulse_1.4s_ease-in-out_infinite] " +
-  "motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!";
+  utilityClassName("animate-[pulse_1.4s_ease-in-out_infinite] ") +
+  utilityClassName(
+    "motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!",
+  );
 
 export function PulseDot({
   size = 8,
@@ -54,8 +57,10 @@ export function PulseDot({
     <span
       aria-hidden
       className={cn(
-        "shrink-0 rounded-full bg-yellow",
-        size === 8 ? "size-2" : "size-[7px]",
+        utilityClassName("shrink-0 rounded-full bg-yellow"),
+        size === 8
+          ? utilityClassName("size-2")
+          : utilityClassName("size-[7px]"),
         PULSE,
         className,
       )}
@@ -73,7 +78,9 @@ export function WorkingPill({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-yellow-soft px-2.5 py-[3px] text-meta font-semibold text-yellow",
+        utilityClassName(
+          "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-yellow-soft px-2.5 py-[3px] text-meta font-semibold text-yellow",
+        ),
         className,
       )}
     >

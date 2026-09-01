@@ -29,10 +29,21 @@
  * - Big working-tree churn (rebase/checkout) can leave the watcher serving a
  *   stale build with no error — restart this server after git surgery.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  watch,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import spaEntry from "../packages/core/opensession-server/src/frontend/index.html";
+import {
+  compileAssets,
+  FRONTEND_DIST,
+  FRONTEND_SRC,
+  renderIndexHtml,
+} from "../packages/core/opensession-server/src/server/frontend-build";
 
 const UPSTREAM = process.env.OS1_UPSTREAM || "http://127.0.0.1:3850";
 const WS_UPSTREAM = UPSTREAM.replace(/^http/, "ws") + "/ws";
@@ -172,84 +183,71 @@ const proxied = [
   "/splash/*",
 ];
 
-// Tailwind isn't bundleable by Bun (see frontend-build.ts) — prod compiles it
-// with the real CLI and injects a <link>. Mirror that here: compile on demand
-// (~50-100ms, fine per reload since utilities depend on class usage across all
-// source files) and inject the link by rewriting the shell HTML on the way out.
-async function tailwindCss(): Promise<Response> {
-  const out = "/tmp/os1-frontend-dev-tailwind.css";
-  const proc = Bun.spawn(
-    [
-      "node_modules/.bin/tailwindcss",
-      "-i",
-      "packages/core/opensession-server/src/frontend/styles/tailwind.css",
-      "-o",
-      out,
-    ],
-    { stdout: "pipe", stderr: "pipe" },
-  );
-  if ((await proc.exited) !== 0) {
-    console.error("[tailwind]", await new Response(proc.stderr).text());
-    return new Response("/* tailwind compile failed */", {
-      headers: { "content-type": "text/css" },
-    });
-  }
-  return new Response(Bun.file(out), {
-    headers: { "content-type": "text/css", "cache-control": "no-store" },
-  });
-}
-
-// Serve the SPA shell through a rewriter: fetch Bun's HTML-import output from
-// the internal /__shell route and add the Tailwind link (after the bundled
-// base.css + legacy.css so utilities keep winning source-order ties, as in
-// prod), plus a
-// watcher that hot-swaps that link when the compiled output changes — Bun's
-// HMR covers the bundle (App.tsx, the stylesheets) but knows nothing about our
-// injected stylesheet.
-const TW_REFRESH = `<script>
+const DEV_REFRESH = `<script>
 (() => {
-	let last = null;
-	setInterval(async () => {
-		try {
-			const css = await (await fetch("/tailwind-dev.css", { cache: "no-store" })).text();
-			if (last !== null && css !== last) {
-				const link = document.querySelector('link[href^="/tailwind-dev.css"]');
-				if (link) link.href = "/tailwind-dev.css?v=" + last.length;
-			}
-			last = css;
-		} catch {}
-	}, 3000);
+  let version = null;
+  setInterval(async () => {
+    try {
+      const next = await (await fetch("/__version", { cache: "no-store" })).text();
+      if (version !== null && next !== version) location.reload();
+      version = next;
+    } catch {}
+  }, 1000);
 })();
 </script>`;
 
-async function shell(req: Request): Promise<Response> {
-  const res = await fetch(new URL("/__shell", req.url));
-  const html = (await res.text()).replace(
-    "</head>",
-    `  <link rel="stylesheet" href="/tailwind-dev.css">\n${TW_REFRESH}\n</head>`,
-  );
-  return new Response(html, {
-    status: res.status,
-    headers: { "content-type": "text/html; charset=utf-8" },
+let meta = await compileAssets();
+let shellHtml = renderIndexHtml(meta).replace(
+  "</head>",
+  `${DEV_REFRESH}\n</head>`,
+);
+let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
+let rebuilding: Promise<void> | null = null;
+watch(FRONTEND_SRC, { recursive: true }, (_event, file) => {
+  if (!file || !/\.(tsx?|css|html)$/.test(file.toString())) return;
+  if (rebuildTimer) clearTimeout(rebuildTimer);
+  rebuildTimer = setTimeout(() => {
+    if (rebuilding) return;
+    rebuilding = (async () => {
+      try {
+        const next = await compileAssets();
+        meta = next;
+        shellHtml = renderIndexHtml(next).replace(
+          "</head>",
+          `${DEV_REFRESH}\n</head>`,
+        );
+        console.log(`[frontend] rebuilt ${file}`);
+      } catch (error) {
+        console.error("[frontend] rebuild failed", error);
+      } finally {
+        rebuilding = null;
+      }
+    })();
+  }, 200);
+});
+
+function shell(): Response {
+  return new Response(shellHtml, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+    },
   });
 }
 
 const server = Bun.serve<Bridge>({
   port: PORT,
-  // hmr: edits to App.tsx or the stylesheets hot-apply without a manual Cmd+R
-  // (React Fast Refresh through Bun's dev pipeline).
-  development: { hmr: true, console: true },
+  development: false,
   idleTimeout: 240,
   routes: {
-    "/__shell": spaEntry,
-    "/tailwind-dev.css": tailwindCss,
+    "/__version": () => new Response(`${meta.entryName}|${meta.sxName}`),
     ...Object.fromEntries(spaRoutes.map((p) => [p, shell])),
     ...Object.fromEntries(proxied.map((p) => [p, proxy])),
   },
   // The WS upgrade lives in the fetch fallback (not routes): Bun's router
   // tries to send a response after a route handler, which tears down an
   // upgraded socket.
-  fetch(req) {
+  async fetch(req) {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
       if (
@@ -261,6 +259,11 @@ const server = Bun.serve<Bridge>({
       }
       return new Response("upgrade failed", { status: 400 });
     }
+    const asset = url.pathname.slice(1);
+    if (meta.assets.includes(asset) || asset === "ghostty-vt.wasm") {
+      const file = Bun.file(join(FRONTEND_DIST, asset));
+      if (await file.exists()) return new Response(file);
+    }
     // SPA fallback, like prod's: any other extension-less GET is a client
     // route (e.g. /workspace/*) — serve the rewritten shell. Bun-internal
     // paths (/_bun/* — HMR socket, dev assets) must never hit this.
@@ -269,7 +272,7 @@ const server = Bun.serve<Bridge>({
       !url.pathname.includes(".") &&
       !url.pathname.startsWith("/_bun")
     ) {
-      return shell(req);
+      return shell();
     }
     return new Response("not found", { status: 404 });
   },

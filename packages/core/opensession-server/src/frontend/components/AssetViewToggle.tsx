@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import type { AssetViewMode } from "../lib/asset-view-mode";
 import { cn } from "../ui/cn";
 import { IconViewGrid, IconViewList } from "./icons";
@@ -34,8 +35,12 @@ export function AssetViewToggle({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center gap-px opacity-0 transition-opacity",
-        "focus-within:opacity-100 group-hover/assets:opacity-100 phone:opacity-100",
+        utilityClassName(
+          "flex shrink-0 items-center gap-px opacity-0 transition-opacity",
+        ),
+        utilityClassName(
+          "focus-within:opacity-100 group-hover/assets:opacity-100 phone:opacity-100",
+        ),
         className,
       )}
     >
@@ -55,8 +60,12 @@ export function AssetViewToggle({
               onChange(option.mode);
             }}
             className={cn(
-              "focus-ring grid size-5 place-items-center rounded-control transition-colors",
-              active ? "bg-hover text-fg" : "text-faint hover:text-dim",
+              utilityClassName(
+                "focus-ring grid size-5 place-items-center rounded-control transition-colors",
+              ),
+              active
+                ? utilityClassName("bg-hover text-fg")
+                : utilityClassName("text-faint hover:text-dim"),
             )}
           >
             <option.icon size={16} />

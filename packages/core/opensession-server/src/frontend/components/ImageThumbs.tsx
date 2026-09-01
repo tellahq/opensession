@@ -6,6 +6,110 @@ import {
   type ImageRegionAnnotation,
 } from "../lib/media-lightbox";
 import { IconX } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { motionStyles } from "../styles/animations.stylex";
+import { mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  mb2: {
+    marginBottom: "8px",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gap2: {
+    gap: "8px",
+  },
+  relative: {
+    position: "relative",
+  },
+  leading0: {
+    lineHeight: "0",
+  },
+  focusRing: {
+    ":focus-visible": {
+      outline: "2px solid var(--accent-ink)",
+      outlineOffset: "2px",
+    },
+  },
+  block: {
+    display: "block",
+  },
+  cursorZoomIn: {
+    cursor: "zoom-in",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  h14: {
+    height: "56px",
+  },
+  wAuto: {
+    width: "auto",
+  },
+  maxW120px: {
+    maxWidth: "120px",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine60: {
+    borderColor: "var(--border)",
+  },
+  objectCover: {
+    objectFit: "cover",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  Top15: {
+    top: "-6px",
+  },
+  Right15: {
+    right: "-6px",
+  },
+  size18px: {
+    width: "18px",
+    height: "18px",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgFg: {
+    backgroundColor: "var(--text)",
+  },
+  p0: {
+    padding: "0",
+  },
+  textPanel: {
+    color: "var(--bg-panel)",
+  },
+  w100px: {
+    width: "100px",
+  },
+  animatePulse: {
+    animation: "var(--animate-pulse)",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  bgHover: {
+    backgroundColor: "var(--hover)",
+  },
+});
 
 interface Props {
   /** Attached images as `data:` URLs. */
@@ -48,14 +152,20 @@ export function ImageThumbs({
 }: Props) {
   if (images.length === 0 && pending < 1) return null;
   return (
-    <div className="mb-2 flex flex-wrap gap-2">
+    <div {...stylex.props(sx.mb2, sx.flex, sx.flexWrap, sx.gap2)}>
       {images.map((src, i) => (
-        <div key={i} className="relative leading-[0]">
+        <div key={i} {...stylex.props(sx.relative, sx.leading0)}>
           <button
             type="button"
             // The radius is only visible through the focus ring, which has to
             // follow the thumbnail's corner rather than cut across it.
-            className="focus-ring block cursor-zoom-in rounded-control leading-[0]"
+            {...stylex.props(
+              sx.focusRing,
+              sx.block,
+              sx.cursorZoomIn,
+              sx.roundedControl,
+              sx.leading0,
+            )}
             onClick={(event) =>
               openLightbox(
                 images.map((image, imageIndex) => ({
@@ -103,17 +213,41 @@ export function ImageThumbs({
             <img
               src={src}
               alt=""
-              className="h-14 w-auto max-w-[120px] rounded-control border border-line/60 object-cover"
+              {...stylex.props(
+                sx.h14,
+                sx.wAuto,
+                sx.maxW120px,
+                sx.roundedControl,
+                sx.border,
+                sx.borderLine60,
+                sx.objectCover,
+              )}
             />
           </button>
           <button
             type="button"
-            className="absolute -top-1.5 -right-1.5 flex size-[18px] items-center justify-center rounded-full bg-fg p-0 text-panel"
+            {...stylex.props(
+              sx.absolute,
+              sx.Top15,
+              sx.Right15,
+              sx.flex,
+              sx.size18px,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.roundedFull,
+              sx.bgFg,
+              sx.p0,
+              sx.textPanel,
+            )}
             onClick={() => onRemove(i)}
             disabled={disabled}
             title="Remove image"
           >
-            <IconX className="block" size={12} dense />
+            <IconX
+              className={mergeStylexOverrideClassName("", sx.block)}
+              size={12}
+              dense
+            />
           </button>
         </div>
       ))}
@@ -123,18 +257,44 @@ export function ImageThumbs({
           a 16:9 screenshot at this height, so the common paste barely moves
           when the real thumbnail lands. */}
       {Array.from({ length: pending }, (_, i) => (
-        <div key={`staging-${i}`} className="relative">
-          <div className="h-14 w-[100px] animate-pulse rounded-control border border-line-strong bg-hover" />
+        <div key={`staging-${i}`} {...stylex.props(sx.relative)}>
+          <div
+            {...stylex.props(
+              sx.h14,
+              sx.w100px,
+              motionStyles.pulse,
+              sx.roundedControl,
+              sx.border,
+              sx.borderLineStrong,
+              sx.bgHover,
+            )}
+          />
           {onRemovePending && (
             <button
               type="button"
-              className="absolute -top-1.5 -right-1.5 flex size-[18px] items-center justify-center rounded-full bg-fg p-0 text-panel"
+              {...stylex.props(
+                sx.absolute,
+                sx.Top15,
+                sx.Right15,
+                sx.flex,
+                sx.size18px,
+                sx.itemsCenter,
+                sx.justifyCenter,
+                sx.roundedFull,
+                sx.bgFg,
+                sx.p0,
+                sx.textPanel,
+              )}
               onClick={() => onRemovePending(i)}
               disabled={disabled}
               aria-label="Cancel image upload"
               title="Cancel image upload"
             >
-              <IconX className="block" size={12} dense />
+              <IconX
+                className={mergeStylexOverrideClassName("", sx.block)}
+                size={12}
+                dense
+              />
             </button>
           )}
         </div>

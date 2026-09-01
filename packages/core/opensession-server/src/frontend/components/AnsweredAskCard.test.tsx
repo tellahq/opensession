@@ -49,7 +49,8 @@ test("renders a compact receipt with the question and exact answer", () => {
   );
 
   expect(html).toContain('data-answered-ask=""');
-  expect(html).toContain("self-end");
+  // StyleX: the card's own side lands as an inline align-self declaration.
+  expect(html).toContain("align-self:flex-end");
   expect(html).toContain("Answer sent");
   expect(html).toContain("Demo choice");
   expect(html).toContain("Which <strong>version</strong>");

@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import type {
   FilterState,
   GroupBy,
@@ -42,6 +44,90 @@ import {
 } from "./filter-options";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexNone: {
+    flex: "none",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  grow: {
+    flexGrow: "1",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  Mr05: {
+    marginRight: "calc(4px * -0.5)",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  size19px: {
+    width: "19px",
+    height: "19px",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  leadingNone: {
+    lineHeight: "1",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+});
 
 // ── Filter popover ─────────────────────────────────────────────────────────
 // A small floating panel (anchored under the filter button) holding the view
@@ -52,7 +138,7 @@ import { createPortal } from "react-dom";
 /** Full-screen transparent catcher that closes the popover on outside click.
  *  The row menus portal above it (Base UI positions them at z-10001), so a
  *  press inside an open menu never reaches this. */
-const BACKDROP = "fixed inset-0 z-[300]";
+const BACKDROP = utilityClassName("fixed inset-0 z-[300]");
 
 /** The panel itself, portalled and fixed-positioned at the anchor: the app's
  *  popup surface, so it reads as the same object as every menu it opens.
@@ -61,8 +147,12 @@ const BACKDROP = "fixed inset-0 z-[300]";
  *  crowding its `rounded-popup` corners. `gap-0.5` keeps two adjacent hover
  *  washes from fusing into one block. */
 const FILTER_POPOVER =
-  "fixed z-[301] flex flex-col gap-0.5 rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] " +
-  "p-2 smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
+  utilityClassName(
+    "fixed z-[301] flex flex-col gap-0.5 rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] ",
+  ) +
+  utilityClassName(
+    "p-2 smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]",
+  );
 
 /** The same control as a row inside the Advanced menu: label, current value,
  *  and its options one level in. Reads as a menu row rather than a panel row,
@@ -81,14 +171,31 @@ function FilterSubmenu({
   const current = options.find((option) => option.value === value);
   return (
     <Menu.SubmenuRoot>
-      <Menu.SubmenuTrigger className="justify-between gap-3">
-        <span className="truncate">{label}</span>
-        <span className="flex flex-none items-center gap-2 text-dim">
+      <Menu.SubmenuTrigger
+        className={mergeStylexOverrideClassName("", sx.justifyBetween, sx.gap3)}
+      >
+        <span {...stylex.props(sx.truncate)}>{label}</span>
+        <span
+          {...stylex.props(
+            sx.flex,
+            sx.flexNone,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.textDim,
+          )}
+        >
           {current?.icon && (
             <span className={SETTING_GLYPH}>{current.icon}</span>
           )}
-          <span className="truncate">{current?.label ?? value}</span>
-          <IconChevronRight className="shrink-0 text-faint" size={17} />
+          <span {...stylex.props(sx.truncate)}>{current?.label ?? value}</span>
+          <IconChevronRight
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.shrink0,
+              sx.textFaint,
+            )}
+            size={17}
+          />
         </span>
       </Menu.SubmenuTrigger>
       <Menu.Popup>
@@ -165,8 +272,10 @@ export function FilterPopover({
           className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE)}
           onClick={() => onChange({ byProject: !filter.byProject })}
         >
-          <span className="shrink-0 text-dim">Group by project</span>
-          <span className="ml-auto">
+          <span {...stylex.props(sx.shrink0, sx.textDim)}>
+            Group by project
+          </span>
+          <span {...stylex.props(sx.mlAuto)}>
             <SwitchIndicator on={filter.byProject} />
           </span>
         </button>
@@ -188,7 +297,9 @@ export function FilterPopover({
                 onChange({ emptyProjects: hide ? "hide" : "show" })
               }
             >
-              <span className="grow truncate">Hide when empty</span>
+              <span {...stylex.props(sx.grow, sx.truncate)}>
+                Hide when empty
+              </span>
               <SwitchIndicator on={filter.emptyProjects === "hide"} />
             </Menu.CheckboxItem>
           }
@@ -211,18 +322,36 @@ export function FilterPopover({
 				    part of that count. */}
         <Menu.Root>
           <Menu.Trigger
-            className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE, "mt-1")}
+            className={cn(
+              SETTING_ROW,
+              SETTING_ROW_PRESSABLE,
+              utilityClassName("mt-1"),
+            )}
           >
-            <span className="shrink-0 text-dim">Advanced</span>
-            <span className="ml-auto flex min-w-0 items-center gap-2 text-fg">
+            <span {...stylex.props(sx.shrink0, sx.textDim)}>Advanced</span>
+            <span
+              {...stylex.props(
+                sx.mlAuto,
+                sx.flex,
+                sx.minW0,
+                sx.itemsCenter,
+                sx.gap2,
+                sx.textFg,
+              )}
+            >
               {advancedChanged > 0 && (
-                <span className="truncate text-dim">
+                <span {...stylex.props(sx.truncate, sx.textDim)}>
                   {advancedChanged} changed
                 </span>
               )}
               <IconChevronRight
                 size={16}
-                className="-mr-0.5 shrink-0 text-faint"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.Mr05,
+                  sx.shrink0,
+                  sx.textFaint,
+                )}
               />
             </span>
           </Menu.Trigger>
@@ -276,7 +405,9 @@ export function FilterPopover({
                 onChange({ autoCreated: shown ? "show" : "hide" })
               }
             >
-              <span className="grow truncate">Show auto created</span>
+              <span {...stylex.props(sx.grow, sx.truncate)}>
+                Show auto created
+              </span>
               <SwitchIndicator on={filter.autoCreated === "show"} />
             </Menu.CheckboxItem>
             {/* A registered project with no work in it still draws a band,
@@ -294,7 +425,9 @@ export function FilterPopover({
                 onChange({ emptyProjects: hide ? "hide" : "show" })
               }
             >
-              <span className="grow truncate">Hide empty projects</span>
+              <span {...stylex.props(sx.grow, sx.truncate)}>
+                Hide empty projects
+              </span>
               <SwitchIndicator on={filter.emptyProjects === "hide"} />
             </Menu.CheckboxItem>
             {/* Display preferences stay beside the filters they affect and also
@@ -351,20 +484,28 @@ export const RepoFilterChip = React.forwardRef<
   const body = (
     <>
       <RepoTile name={repo} size={17} />
-      <span className="min-w-0 truncate text-dim">{repoLabel(repo)}</span>
+      <span {...stylex.props(sx.minW0, sx.truncate, sx.textDim)}>
+        {repoLabel(repo)}
+      </span>
     </>
   );
-  const bodyClass =
-    "inline-flex min-w-0 items-center gap-[7px] rounded-full px-[3px] py-0.5 text-label leading-[1.15] hover:bg-hover data-[popup-open]:bg-hover";
+  const bodyClass = utilityClassName(
+    "inline-flex min-w-0 items-center gap-[7px] rounded-full px-[3px] py-0.5 text-label leading-[1.15] hover:bg-hover data-[popup-open]:bg-hover",
+  );
 
   return (
     <span
       ref={ref}
       className={cn(
-        "inline-flex min-w-0 max-w-full items-center gap-px rounded-full border border-line bg-panel px-1 py-[3px] text-label leading-[1.15]",
-        variant === "inline" && "shrink-0 max-w-none",
+        utilityClassName(
+          "inline-flex min-w-0 max-w-full items-center gap-px rounded-full border border-line bg-panel px-1 py-[3px] text-label leading-[1.15]",
+        ),
+        variant === utilityClassName("inline") &&
+          utilityClassName("shrink-0 max-w-none"),
         variant === "probe" &&
-          "pointer-events-none absolute left-[-9999px] top-0 max-w-none invisible",
+          utilityClassName(
+            "pointer-events-none absolute left-[-9999px] top-0 max-w-none invisible",
+          ),
       )}
       aria-hidden={probe || undefined}
     >
@@ -385,13 +526,21 @@ export const RepoFilterChip = React.forwardRef<
               <Menu.RadioItem
                 value="all"
                 closeOnClick
-                className="justify-between gap-3"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.justifyBetween,
+                  sx.gap3,
+                )}
               >
-                <span className="flex min-w-0 items-center gap-2">
+                <span
+                  {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}
+                >
                   <span className={SETTING_GLYPH}>
                     <IconRepo size={16} />
                   </span>
-                  <span className="min-w-0 truncate">All repos</span>
+                  <span {...stylex.props(sx.minW0, sx.truncate)}>
+                    All repos
+                  </span>
                 </span>
                 <Menu.Check on={repo === "all"} />
               </Menu.RadioItem>
@@ -400,13 +549,26 @@ export const RepoFilterChip = React.forwardRef<
                   key={name}
                   value={name}
                   closeOnClick
-                  className="justify-between gap-3"
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.justifyBetween,
+                    sx.gap3,
+                  )}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
+                  <span
+                    {...stylex.props(
+                      sx.flex,
+                      sx.minW0,
+                      sx.itemsCenter,
+                      sx.gap2,
+                    )}
+                  >
                     <span className={SETTING_GLYPH}>
                       <RepoTile name={name} size={16} />
                     </span>
-                    <span className="min-w-0 truncate">{repoLabel(name)}</span>
+                    <span {...stylex.props(sx.minW0, sx.truncate)}>
+                      {repoLabel(name)}
+                    </span>
                   </span>
                   <Menu.Check on={name === repo} />
                 </Menu.RadioItem>
@@ -417,7 +579,19 @@ export const RepoFilterChip = React.forwardRef<
       )}
       <button
         type="button"
-        className="inline-flex size-[19px] shrink-0 items-center justify-center rounded-full text-item-title leading-none text-faint hover:bg-hover hover:text-fg"
+        {...stylex.props(
+          sx.inlineFlex,
+          sx.size19px,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.justifyCenter,
+          sx.roundedFull,
+          sx.leadingNone,
+          sx.textFaint,
+          sx.hoverBgHover,
+          sx.hoverTextFg,
+          typography.itemTitle,
+        )}
         title="Clear repo filter"
         tabIndex={probe ? -1 : undefined}
         onClick={probe ? undefined : onClear}

@@ -1,8 +1,49 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import type { ModelOption } from "../lib/api";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { IconArrowDownRight } from "./icons";
 import { shortModelLabel } from "./ModelEffortSelect";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  maxW300px: {
+    maxWidth: "300px",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  pl2: {
+    paddingLeft: "calc(4px * 2)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+});
 
 /**
  * The DOWNWARD half of a session's orchestrator/executor tree: the workers this
@@ -31,8 +72,9 @@ function shortModel(
   return shortModelLabel(model, models);
 }
 
-const chip =
-  "inline-flex max-w-[220px] items-center gap-1 rounded-control px-1.5 py-[2px] text-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg";
+const chip = utilityClassName(
+  "inline-flex max-w-[220px] items-center gap-1 rounded-control px-1.5 py-[2px] text-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg",
+);
 
 export function SessionRelations({
   workers,
@@ -48,7 +90,7 @@ export function SessionRelations({
   const workerLabel = `${workers!.length} delegated worker${workers!.length > 1 ? "s" : ""}`;
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15)}>
       {hasWorkers && (
         <Menu.Root>
           {/* Count only: the arrow already says "delegated to", so the word
@@ -63,10 +105,15 @@ export function SessionRelations({
             aria-label={workerLabel}
             title={workerLabel}
           >
-            <IconArrowDownRight className="size-5 shrink-0" />
+            <IconArrowDownRight
+              className={mergeStylexOverrideClassName("", sx.size5, sx.shrink0)}
+            />
             <span className="tabular-nums">{workers!.length}</span>
           </Menu.Trigger>
-          <Menu.Popup align="start" className="max-w-[300px]">
+          <Menu.Popup
+            align="start"
+            className={mergeStylexOverrideClassName("", sx.maxW300px)}
+          >
             {/* GroupLabel MUST live inside a Group — bare it throws Base UI
 						    error #31 and white-screens the app on open. */}
             <Menu.Group>
@@ -75,13 +122,23 @@ export function SessionRelations({
                 <Menu.Item key={w.id} onClick={() => onOpen(w.id)}>
                   <span
                     className={cn(
-                      "h-1.5 w-1.5 shrink-0 rounded-full",
-                      w.isRunning ? "bg-yellow" : "bg-line-strong",
+                      utilityClassName("h-1.5 w-1.5 shrink-0 rounded-full"),
+                      w.isRunning
+                        ? utilityClassName("bg-yellow")
+                        : utilityClassName("bg-line-strong"),
                     )}
                   />
-                  <span className="truncate">{w.title}</span>
+                  <span {...stylex.props(sx.truncate)}>{w.title}</span>
                   {shortModel(w.model, models) && (
-                    <span className="ml-auto shrink-0 pl-2 text-meta text-faint">
+                    <span
+                      {...stylex.props(
+                        sx.mlAuto,
+                        sx.shrink0,
+                        sx.pl2,
+                        sx.textFaint,
+                        typography.meta,
+                      )}
+                    >
                       {shortModel(w.model, models)}
                     </span>
                   )}

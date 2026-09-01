@@ -6,6 +6,32 @@ import { Menu } from "../ui/menu";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SettingRow, SwitchRow, ValueRow } from "../ui/setting-row";
 import { IconArrowDown, IconArrowUp } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  shrink0: {
+    flexShrink: "0",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap3: {
+    gap: "12px",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  truncate: {
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+  },
+});
 
 export function DiffSourceSetting({
   value,
@@ -102,9 +128,23 @@ export function CodeOrganizationSettings({
         }
         trailing={
           sortDirection === "asc" ? (
-            <IconArrowUp size={15} className="shrink-0 text-dim" />
+            <IconArrowUp
+              size={15}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.shrink0,
+                sx.textDim,
+              )}
+            />
           ) : (
-            <IconArrowDown size={15} className="shrink-0 text-dim" />
+            <IconArrowDown
+              size={15}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.shrink0,
+                sx.textDim,
+              )}
+            />
           )
         }
         footer={
@@ -124,9 +164,13 @@ export function CodeOrganizationSettings({
                 key={value}
                 value={value}
                 closeOnClick
-                className="justify-between gap-3"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.justifyBetween,
+                  sx.gap3,
+                )}
               >
-                <span className="min-w-0 truncate">{label}</span>
+                <span {...stylex.props(sx.minW0, sx.truncate)}>{label}</span>
                 <Menu.Check on={sortDirection === value} />
               </Menu.RadioItem>
             ))}

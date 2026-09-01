@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useState } from "react";
 import type { Workspace } from "../lib/types";
 import { randomUUID } from "../lib/random-uuid";
@@ -28,6 +30,173 @@ import {
 } from "../ui/settings";
 import { EFFORTS, shortModelLabel } from "./ModelEffortSelect";
 import { IconChevronDown, IconPlus, IconTrash } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  wFull: {
+    width: "100%",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py3: {
+    paddingBlock: "calc(4px * 3)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  block: {
+    display: "block",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  pb4: {
+    paddingBottom: "calc(4px * 4)",
+  },
+  mb0: {
+    marginBottom: "0",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  itemsEnd: {
+    alignItems: "flex-end",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  minW13rem: {
+    minWidth: "13rem",
+  },
+  w32: {
+    width: "calc(4px * 32)",
+  },
+  grid: {
+    display: "grid",
+  },
+  gridColsMinmax01frAuto: {
+    gridTemplateColumns: "minmax(0,1fr) auto",
+  },
+  desktopGridColsMinmax01fr10rem8remAuto: {
+    "@media (min-width: 721px)": {
+      gridTemplateColumns: "minmax(0,1fr) 10rem 8rem auto",
+    },
+  },
+  colStart1: {
+    gridColumnStart: "1",
+  },
+  rowStart1: {
+    gridRowStart: "1",
+  },
+  colSpan2: {
+    gridColumn: "span 2 / span 2",
+  },
+  desktopColSpan1: {
+    "@media (min-width: 721px)": {
+      gridColumn: "span 1 / span 1",
+    },
+  },
+  desktopColStart3: {
+    "@media (min-width: 721px)": {
+      gridColumnStart: "3",
+    },
+  },
+  desktopRowStart1: {
+    "@media (min-width: 721px)": {
+      gridRowStart: "1",
+    },
+  },
+  wFit: {
+    width: "fit-content",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  hoverBgRedSoft: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--red-soft)",
+      },
+    },
+  },
+  hoverTextRed: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--red)",
+      },
+    },
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  roundedXl: {
+    borderRadius: "calc(18px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py6: {
+    paddingBlock: "calc(4px * 6)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+});
 
 type Settings = NonNullable<Workspace["modelSettings"]>;
 type Preset = NonNullable<Settings["presets"]>[number];
@@ -125,13 +294,39 @@ function PresetRow({
         type="button"
         aria-expanded={open}
         onClick={onToggle}
-        className="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-hover"
+        {...stylex.props(
+          sx.flex,
+          sx.wFull,
+          sx.itemsCenter,
+          sx.gap3,
+          sx.px5,
+          sx.py3,
+          sx.textLeft,
+          sx.transitionColors,
+          sx.hoverBgHover,
+        )}
       >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-item-title font-medium text-fg">
+        <span {...stylex.props(sx.minW0, sx.flex1)}>
+          <span
+            {...stylex.props(
+              sx.block,
+              sx.truncate,
+              sx.fontMedium,
+              sx.textFg,
+              typography.itemTitle,
+            )}
+          >
             {preset.label.trim() || "Untitled preset"}
           </span>
-          <span className="mt-0.5 block truncate text-supporting text-dim">
+          <span
+            {...stylex.props(
+              sx.mt05,
+              sx.block,
+              sx.truncate,
+              sx.textDim,
+              typography.supporting,
+            )}
+          >
             {preset.lead.model
               ? [
                   labelFor(preset.lead.model),
@@ -147,14 +342,14 @@ function PresetRow({
         <IconChevronDown
           size={18}
           className={cn(
-            "shrink-0 text-faint transition-transform",
-            open && "rotate-180",
+            utilityClassName("shrink-0 text-faint transition-transform"),
+            open && utilityClassName("rotate-180"),
           )}
         />
       </button>
       {open && (
-        <div className="flex flex-col gap-3 px-5 pb-4">
-          <SettingsField className="mb-0">
+        <div {...stylex.props(sx.flex, sx.flexCol, sx.gap3, sx.px5, sx.pb4)}>
+          <SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
             Name
             <input
               className={settingsInputClass}
@@ -163,8 +358,15 @@ function PresetRow({
               placeholder="Preset name"
             />
           </SettingsField>
-          <div className="flex flex-wrap items-end gap-2">
-            <SettingsField className="mb-0 min-w-[13rem] flex-1">
+          <div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsEnd, sx.gap2)}>
+            <SettingsField
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.mb0,
+                sx.minW13rem,
+                sx.flex1,
+              )}
+            >
               Lead model
               <ModelSelect
                 items={modelItems("Choose a lead model")}
@@ -176,7 +378,9 @@ function PresetRow({
               />
             </SettingsField>
             {leadEfforts.length > 0 && (
-              <SettingsField className="mb-0 w-32">
+              <SettingsField
+                className={mergeStylexOverrideClassName("", sx.mb0, sx.w32)}
+              >
                 Effort
                 <ModelSelect
                   items={leadEfforts.map((effort) => ({
@@ -192,8 +396,10 @@ function PresetRow({
               </SettingsField>
             )}
           </div>
-          <div className="flex flex-col gap-2">
-            <span className="text-label font-medium text-dim">
+          <div {...stylex.props(sx.flex, sx.flexCol, sx.gap2)}>
+            <span
+              {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}
+            >
               Supporting models
             </span>
             {supporting.map((member, index) => {
@@ -204,10 +410,20 @@ function PresetRow({
                 // effort under them, instead of four fields fighting over 200px.
                 <div
                   key={index}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 desktop:grid-cols-[minmax(0,1fr)_10rem_8rem_auto]"
+                  {...stylex.props(
+                    sx.grid,
+                    sx.gridColsMinmax01frAuto,
+                    sx.itemsCenter,
+                    sx.gap2,
+                    sx.desktopGridColsMinmax01fr10rem8remAuto,
+                  )}
                 >
                   <ModelSelect
-                    className="col-start-1 row-start-1"
+                    className={mergeStylexOverrideClassName(
+                      "",
+                      sx.colStart1,
+                      sx.rowStart1,
+                    )}
                     items={modelItems("Choose a supporting model")}
                     value={member.model}
                     label="Supporting model"
@@ -217,7 +433,9 @@ function PresetRow({
                     type="button"
                     className={cn(
                       rowMenuTriggerClasses,
-                      "col-start-2 row-start-1 desktop:col-start-4",
+                      utilityClassName(
+                        "col-start-2 row-start-1 desktop:col-start-4",
+                      ),
                     )}
                     aria-label="Remove supporting model"
                     onClick={() =>
@@ -231,7 +449,9 @@ function PresetRow({
                   <input
                     className={cn(
                       settingsInputClass,
-                      "col-span-2 desktop:col-span-1 desktop:col-start-2 desktop:row-start-1",
+                      utilityClassName(
+                        "col-span-2 desktop:col-span-1 desktop:col-start-2 desktop:row-start-1",
+                      ),
                     )}
                     value={member.role || ""}
                     aria-label="What this model does"
@@ -242,7 +462,13 @@ function PresetRow({
                   />
                   {memberEfforts.length > 0 && (
                     <ModelSelect
-                      className="col-span-2 desktop:col-span-1 desktop:col-start-3 desktop:row-start-1"
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.colSpan2,
+                        sx.desktopColSpan1,
+                        sx.desktopColStart3,
+                        sx.desktopRowStart1,
+                      )}
                       items={memberEfforts.map((effort) => ({
                         value: effort.id,
                         label: effort.label,
@@ -258,7 +484,7 @@ function PresetRow({
             <Button
               size="sm"
               icon={<IconPlus size={16} />}
-              className="w-fit"
+              className={mergeStylexOverrideClassName("", sx.wFit)}
               onClick={() =>
                 onPatch({ supporting: [...supporting, { model: "" }] })
               }
@@ -266,10 +492,13 @@ function PresetRow({
               Add supporting model
             </Button>
           </div>
-          <SettingsField className="mb-0">
+          <SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
             Instructions
             <textarea
-              className={cn(settingsTextareaClass, "min-h-18")}
+              className={cn(
+                settingsTextareaClass,
+                utilityClassName("min-h-18"),
+              )}
               value={preset.instructions || ""}
               onChange={(event) =>
                 onPatch({ instructions: event.target.value })
@@ -277,12 +506,17 @@ function PresetRow({
               placeholder="When to use supporting models and how to integrate their work."
             />
           </SettingsField>
-          <div className="flex justify-end">
+          <div {...stylex.props(sx.flex, sx.justifyEnd)}>
             <Button
               size="sm"
               variant="ghost"
               icon={<IconTrash size={16} />}
-              className="text-red hover:bg-red-soft hover:text-red"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.textRed,
+                sx.hoverBgRedSoft,
+                sx.hoverTextRed,
+              )}
               onClick={onRemove}
             >
               Remove preset
@@ -381,12 +615,12 @@ export function WorkspaceModelPresets({
   };
   return (
     <Modal.Root open={open} onOpenChange={onOpenChange}>
-      <Modal.Content widthClassName="max-w-[42rem]">
+      <Modal.Content widthClassName={utilityClassName("max-w-[42rem]")}>
         <Modal.Header
           title="Model presets"
           description="A lead model, the supporting models it can delegate to, and how to use them. Sessions in this workspace pick one from the model menu."
         />
-        <div className="flex flex-col gap-2.5">
+        <div {...stylex.props(sx.flex, sx.flexCol, sx.gap25)}>
           {presets.length > 0 ? (
             <CardList>
               {presets.map((preset, index) => (
@@ -413,13 +647,23 @@ export function WorkspaceModelPresets({
               ))}
             </CardList>
           ) : (
-            <div className="rounded-xl bg-panel px-4 py-6 text-center text-supporting text-dim">
+            <div
+              {...stylex.props(
+                sx.roundedXl,
+                sx.bgPanel,
+                sx.px4,
+                sx.py6,
+                sx.textCenter,
+                sx.textDim,
+                typography.supporting,
+              )}
+            >
               No presets yet.
             </div>
           )}
           <Button
             icon={<IconPlus size={16} />}
-            className="w-fit"
+            className={mergeStylexOverrideClassName("", sx.wFit)}
             onClick={addPreset}
           >
             Add preset

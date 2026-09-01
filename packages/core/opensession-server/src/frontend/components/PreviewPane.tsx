@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useEffect, useRef, useState } from "react";
 import type { PreviewStatus } from "../lib/api";
 import { startPreviewApi, stopPreviewApi } from "../lib/api";
@@ -5,6 +7,111 @@ import type { UnifiedSession } from "../lib/types";
 import { withPreviewPath } from "../lib/preview-url";
 import { Button } from "../ui/button";
 import { PageLoader } from "../ui/page-loader";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  hFull: {
+    height: "100%",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  hoverBgRedSoft: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--red-soft)",
+      },
+    },
+  },
+  hoverTextRed: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--red)",
+      },
+    },
+  },
+  block: {
+    display: "block",
+  },
+  wFull: {
+    width: "100%",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgWhite: {
+    backgroundColor: "var(--color-white)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  maxWSm: {
+    maxWidth: "var(--container-sm)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+});
 
 /**
  * Full-width Preview view-tab (a sibling of Review/Preview environment/Assets): the
@@ -60,13 +167,35 @@ export function PreviewPane({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 border-b border-divider bg-panel px-3 py-1.5">
+    <div {...stylex.props(sx.flex, sx.hFull, sx.minH0, sx.flexCol)}>
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.itemsCenter,
+          sx.gap2,
+          sx.borderB,
+          sx.borderDivider,
+          sx.bgPanel,
+          sx.px3,
+          sx.py15,
+        )}
+      >
         <span
-          className={`h-2 w-2 shrink-0 rounded-full ${url ? "bg-green-500" : "animate-pulse bg-amber-400"}`}
+          className={utilityClassName(
+            `h-2 w-2 shrink-0 rounded-full ${url ? "bg-green-500" : "animate-pulse bg-amber-400"}`,
+          )}
           aria-hidden="true"
         />
-        <div className="min-w-0 flex-1 truncate text-supporting font-medium text-dim">
+        <div
+          {...stylex.props(
+            sx.minW0,
+            sx.flex1,
+            sx.truncate,
+            sx.fontMedium,
+            sx.textDim,
+            typography.supporting,
+          )}
+        >
           {url ??
             (status?.starting || !status
               ? "Starting the dev server…"
@@ -94,7 +223,11 @@ export function PreviewPane({
         <Button
           size="sm"
           variant="soft"
-          className="hover:bg-red-soft hover:text-red"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.hoverBgRedSoft,
+            sx.hoverTextRed,
+          )}
           disabled={stopping || (!status?.running && !status?.starting)}
           onClick={stop}
           title="Stop the dev server and release its container"
@@ -105,21 +238,50 @@ export function PreviewPane({
       {url ? (
         <iframe
           key={`${url}#${reloadNonce}`}
-          className="block min-h-0 w-full flex-1 border-0 bg-white"
+          {...stylex.props(
+            sx.block,
+            sx.minH0,
+            sx.wFull,
+            sx.flex1,
+            sx.border0,
+            sx.bgWhite,
+          )}
           src={url}
           title={`Preview · ${session.title || session.id}`}
           allow="clipboard-read; clipboard-write; fullscreen"
           sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
         />
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-          <PageLoader className="text-dim" />
-          <div className="text-item-title font-semibold text-fg">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.flex1,
+            sx.flexCol,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.gap3,
+            sx.textCenter,
+          )}
+        >
+          <PageLoader
+            className={mergeStylexOverrideClassName("", sx.textDim)}
+          />
+          <div
+            {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}
+          >
             {status?.starting || !status
               ? "Starting the dev server…"
               : "Preview is not running"}
           </div>
-          <div className="max-w-sm text-supporting font-medium leading-relaxed text-dim">
+          <div
+            {...stylex.props(
+              sx.maxWSm,
+              sx.fontMedium,
+              sx.leadingRelaxed,
+              sx.textDim,
+              typography.supporting,
+            )}
+          >
             {status?.starting || !status
               ? "Warm claims serve in seconds; a big branch jump can take a minute to compile."
               : "It may have been stopped or released. Close and reopen this tab to start it again."}

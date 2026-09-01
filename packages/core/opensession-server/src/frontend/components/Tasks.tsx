@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useCallback, useEffect, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import { DEFAULT_DOC_TITLE, docTitle } from "../lib/brand";
@@ -10,6 +12,156 @@ import { EmptyState } from "../ui/state";
 import { getCurrentUser } from "./UserPicker";
 import { IconCheck, IconListCircles, IconPlus, IconX } from "./icons";
 import { Input } from "../ui/input";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minH11: {
+    minHeight: "calc(4px * 11)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  smPx4: {
+    "@media (min-width: 40rem)": {
+      paddingInline: "calc(4px * 4)",
+    },
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gapX25: {
+    columnGap: "calc(4px * 2.5)",
+  },
+  gapY1: {
+    rowGap: "4px",
+  },
+  underline: {
+    textDecorationLine: "underline",
+  },
+  decorationDotted: {
+    textDecorationStyle: "dotted",
+  },
+  underlineOffset2: {
+    textUnderlineOffset: "2px",
+  },
+  hoverTextDim: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text-dim)",
+      },
+    },
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  hFull: {
+    height: "100%",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py5: {
+    paddingBlock: "calc(4px * 5)",
+  },
+  smPx7: {
+    "@media (min-width: 40rem)": {
+      paddingInline: "calc(4px * 7)",
+    },
+  },
+  smPy7: {
+    "@media (min-width: 40rem)": {
+      paddingBlock: "calc(4px * 7)",
+    },
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  maxW760px: {
+    maxWidth: "760px",
+  },
+  mb5: {
+    marginBottom: "calc(4px * 5)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  py8: {
+    paddingBlock: "calc(4px * 8)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  roundedXl: {
+    borderRadius: "calc(18px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgRaised: {
+    backgroundColor: "var(--bg-raised)",
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  minH10: {
+    minHeight: "calc(4px * 10)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+});
 
 interface TasksProps {
   addHandler: (handler: (message: WSServerMessage) => void) => () => void;
@@ -43,37 +195,69 @@ function TaskRow({
 }) {
   const done = task.status === "done";
   return (
-    <li className="group flex min-h-11 items-center gap-3 px-3 py-2.5 sm:px-4">
+    <li
+      {...mergeStylexProps(
+        "group",
+        sx.flex,
+        sx.minH11,
+        sx.itemsCenter,
+        sx.gap3,
+        sx.px3,
+        sx.py25,
+        sx.smPx4,
+      )}
+    >
       <button
         type="button"
         className={cn(
-          "flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors active:scale-[0.96]",
+          utilityClassName(
+            "flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors active:scale-[0.96]",
+          ),
           done
-            ? "border-green bg-green text-panel"
-            : "border-line-strong text-transparent hover:border-fg/50",
+            ? utilityClassName("border-green bg-green text-panel")
+            : utilityClassName(
+                "border-line-strong text-transparent hover:border-fg/50",
+              ),
         )}
         onClick={() => onToggle(task)}
         aria-label={done ? `Reopen ${task.text}` : `Mark ${task.text} done`}
       >
         <IconCheck size={14} />
       </button>
-      <div className="min-w-0 flex-1">
+      <div {...stylex.props(sx.minW0, sx.flex1)}>
         <div
           className={cn(
-            "text-item-title font-medium text-fg",
-            done && "text-dim line-through",
+            utilityClassName("text-item-title font-medium text-fg"),
+            done && utilityClassName("text-dim line-through"),
           )}
         >
           {task.text}
         </div>
         {task.note && (
-          <div className="mt-0.5 text-label text-faint">{task.note}</div>
+          <div {...stylex.props(sx.mt05, sx.textFaint, typography.label)}>
+            {task.note}
+          </div>
         )}
         {(task.due || (task.remindAt && !done) || task.source.sessionId) && (
-          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-label text-faint">
+          <div
+            {...stylex.props(
+              sx.mt1,
+              sx.flex,
+              sx.flexWrap,
+              sx.itemsCenter,
+              sx.gapX25,
+              sx.gapY1,
+              sx.textFaint,
+              typography.label,
+            )}
+          >
             {task.due && <span>Due {task.due}</span>}
             {task.remindAt && !done && (
-              <span className={cn(task.remindedAt && "line-through")}>
+              <span
+                className={cn(
+                  task.remindedAt && utilityClassName("line-through"),
+                )}
+              >
                 {task.remindedAt ? "Reminded" : "Reminder"}{" "}
                 {formatReminder(task.remindAt)}
               </span>
@@ -81,7 +265,12 @@ function TaskRow({
             {task.source.sessionId && (
               <button
                 type="button"
-                className="underline decoration-dotted underline-offset-2 hover:text-dim"
+                {...stylex.props(
+                  sx.underline,
+                  sx.decorationDotted,
+                  sx.underlineOffset2,
+                  sx.hoverTextDim,
+                )}
                 onClick={() => onOpenSession(task.source.sessionId!)}
               >
                 Open source
@@ -94,7 +283,7 @@ function TaskRow({
         <Button
           variant="ghost"
           size="md"
-          className="shrink-0 text-faint"
+          className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
           onClick={() => onDrop(task)}
           aria-label={`Drop ${task.text}`}
           title="Drop task"
@@ -212,9 +401,16 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
   return (
     <div
       data-page-scroll
-      className="h-full overflow-y-auto px-4 py-5 sm:px-7 sm:py-7"
+      {...stylex.props(
+        sx.hFull,
+        sx.overflowYAuto,
+        sx.px4,
+        sx.py5,
+        sx.smPx7,
+        sx.smPy7,
+      )}
     >
-      <div className="mx-auto max-w-[760px]">
+      <div {...stylex.props(sx.mxAuto, sx.maxW760px)}>
         <PageHeader>
           <div>
             <PageTitle>Tasks</PageTitle>
@@ -225,7 +421,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
         </PageHeader>
 
         <form
-          className="mb-5 flex gap-2"
+          {...stylex.props(sx.mb5, sx.flex, sx.gap2)}
           onSubmit={(event) => {
             event.preventDefault();
             void addTask();
@@ -233,7 +429,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
         >
           <Input
             size="lg"
-            className="min-w-0 flex-1"
+            className={mergeStylexOverrideClassName("", sx.minW0, sx.flex1)}
             value={draft}
             placeholder="Add a task"
             onChange={(event) => setDraft(event.target.value)}
@@ -249,11 +445,23 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
           </Button>
         </form>
 
-        {error && <div className="mb-3 text-body text-red">{error}</div>}
+        {error && (
+          <div {...stylex.props(sx.mb3, sx.textRed, typography.body)}>
+            {error}
+          </div>
+        )}
 
         {tasks === null ? (
           <Card>
-            <div className="px-4 py-8 text-center text-body text-dim">
+            <div
+              {...stylex.props(
+                sx.px4,
+                sx.py8,
+                sx.textCenter,
+                sx.textDim,
+                typography.body,
+              )}
+            >
               Loading…
             </div>
           </Card>
@@ -273,7 +481,12 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
           <div
             // Empty reads as a soft, borderless well rather than a card with
             // nothing in it: rounder, one step lighter, no outline.
-            className="overflow-hidden rounded-xl bg-raised px-4"
+            {...stylex.props(
+              sx.overflowHidden,
+              sx.roundedXl,
+              sx.bgRaised,
+              sx.px4,
+            )}
           >
             <EmptyState
               icon={<IconListCircles size={22} />}
@@ -285,15 +498,25 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
         )}
 
         {done.length > 0 && (
-          <div className="mt-5">
+          <div {...stylex.props(sx.mt5)}>
             <button
               type="button"
-              className="mb-2 flex min-h-10 items-center gap-2 text-control-label font-medium text-dim hover:text-fg"
+              {...stylex.props(
+                sx.mb2,
+                sx.flex,
+                sx.minH10,
+                sx.itemsCenter,
+                sx.gap2,
+                sx.fontMedium,
+                sx.textDim,
+                sx.hoverTextFg,
+                typography.controlLabel,
+              )}
               onClick={() => setShowDone((current) => !current)}
               aria-expanded={showDone}
             >
               <span>{showDone ? "Hide" : "Show"} completed</span>
-              <span className="text-faint">{done.length}</span>
+              <span {...stylex.props(sx.textFaint)}>{done.length}</span>
             </button>
             {showDone && (
               <CardList as="ul">

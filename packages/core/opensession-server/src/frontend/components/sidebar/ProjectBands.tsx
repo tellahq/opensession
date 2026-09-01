@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import React from "react";
 import type { ReviewQueueItem } from "../../lib/review-queue";
 import {
@@ -19,6 +21,146 @@ import type { WsRow } from "../../lib/sidebar-types";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
 import { IconChevronDown, IconEye, IconPlus } from "../icons";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex01Auto: {
+    flex: "0 1 auto",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  desktopGap9px: {
+    "@media (min-width: 721px)": {
+      gap: "9px",
+    },
+  },
+  relative: {
+    position: "relative",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  size7: {
+    width: "calc(4px * 7)",
+    height: "calc(4px * 7)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  opacity100: {
+    opacity: "100%",
+  },
+  transitionOpacityColor: {
+    transitionProperty: "opacity,color",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  duration150: {
+    transitionDuration: "150ms",
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  focusVisibleOpacity100: {
+    ":focus-visible": {
+      opacity: "100%",
+    },
+  },
+  mdOpacity0: {
+    "@media (min-width: 48rem)": {
+      opacity: "0%",
+    },
+  },
+  beforeAbsolute: {
+    "::before": {
+      content: '""',
+      position: "absolute",
+    },
+  },
+  beforeInset05: {
+    "::before": {
+      content: '""',
+      inset: "calc(4px * 0.5)",
+    },
+  },
+  beforeZ0: {
+    "::before": {
+      content: '""',
+      zIndex: "0",
+    },
+  },
+  beforeRoundedSm: {
+    "::before": {
+      content: '""',
+      borderRadius: "calc(4px * var(--rf))",
+      cornerShape: "var(--cs)",
+    },
+  },
+  beforeCornerShapeVarCs: {
+    "::before": {
+      content: '""',
+      cornerShape: "var(--cs)",
+    },
+  },
+  beforeTransitionBackground: {
+    "::before": {
+      content: '""',
+      transitionProperty: "background",
+      transitionTimingFunction: "var(--tw-ease, var(--ease))",
+      transitionDuration: "var(--tw-duration, var(--dur-micro))",
+    },
+  },
+  beforeContent: {
+    "::before": {
+      content: "''",
+    },
+  },
+  hoverBeforeBgHover: {
+    "@media (hover: hover)": {
+      "::before": {
+        content: '""',
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+});
 
 interface ProjectBandRenderers {
   workspaceGrouping: (
@@ -89,7 +231,7 @@ export function ProjectBands({
     <>
       {(projects.scratchRows.length > 0 ||
         projects.scratchSnoozedRows.length > 0) && (
-        <div className="mb-2" data-sidebar-scratch-workspaces>
+        <div {...stylex.props(sx.mb2)} data-sidebar-scratch-workspaces>
           {renderers.workspaceGrouping(
             projects.scratchRows,
             "scratch::",
@@ -132,7 +274,8 @@ export function ProjectBands({
             <div
               className={cn(
                 "[&:not(:first-child)]:mt-4",
-                projects.canReorder && "cursor-grab active:cursor-grabbing",
+                projects.canReorder &&
+                  utilityClassName("cursor-grab active:cursor-grabbing"),
                 drag.repoKey === project.repo &&
                   "[&>[data-sticky-head]]:rounded-md [&>[data-sticky-head]]:bg-hover [&>[data-sticky-head]]:opacity-50 [&>[data-sticky-head]]:ring-1 [&>[data-sticky-head]]:ring-inset [&>[data-sticky-head]]:ring-line-strong",
               )}
@@ -157,7 +300,7 @@ export function ProjectBands({
                   SIDEBAR_GROUP_HEADER,
                   SIDEBAR_GROUP_HEADER_INSET,
                   SIDEBAR_HEADER_ROW,
-                  "group transition-colors",
+                  utilityClassName("group transition-colors"),
                   SIDEBAR_STICKY_LANE,
                   SIDEBAR_STUCK_BACKING,
                 )}
@@ -185,7 +328,10 @@ export function ProjectBands({
                     the band reads as Ask sessions rather than a project named Ask. */}
                 <span className={SIDEBAR_RAIL}>
                   {project.repo === askBand ? (
-                    <IconEye size={16} className="text-faint" />
+                    <IconEye
+                      size={16}
+                      className={mergeStylexOverrideClassName("", sx.textFaint)}
+                    />
                   ) : (
                     <RepoTile
                       name={project.repo}
@@ -195,16 +341,30 @@ export function ProjectBands({
                 </span>
                 {/* The differently sized name and count share a baseline while
                     the pair stays vertically centred against the tile. */}
-                <span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5 desktop:gap-[9px]">
+                <span
+                  {...stylex.props(
+                    sx.flex,
+                    sx.minW0,
+                    sx.flex01Auto,
+                    sx.itemsBaseline,
+                    sx.gap15,
+                    sx.desktopGap9px,
+                  )}
+                >
                   <span
                     className={cn(
                       SIDEBAR_GROUP_NAME,
-                      "flex-[0_1_auto] font-semibold",
+                      utilityClassName("flex-[0_1_auto] font-semibold"),
                     )}
                   >
                     {project.repo === askBand ? "Ask" : repoLabel(project.repo)}
                   </span>
-                  <span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
+                  <span
+                    className={cn(
+                      SIDEBAR_GROUP_COUNT,
+                      utilityClassName("shrink-0"),
+                    )}
+                  >
                     {project.rows.length +
                       project.snoozedRows.length +
                       project.needsReviewRows.length +
@@ -219,7 +379,10 @@ export function ProjectBands({
                     reviews being asked of you. */}
                 {!open && project.urgent > 0 && (
                   <span
-                    className={cn(SIDEBAR_ATTN_COUNT, "bg-blue")}
+                    className={cn(
+                      SIDEBAR_ATTN_COUNT,
+                      utilityClassName("bg-blue"),
+                    )}
                     aria-label={`${project.urgent} waiting on you`}
                   >
                     {project.urgent}
@@ -243,7 +406,32 @@ export function ProjectBands({
                   <span
                     role="button"
                     tabIndex={0}
-                    className="relative ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color] duration-150 hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 before:absolute before:inset-0.5 before:z-0 before:rounded-sm before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-hover [&>*]:relative [&>*]:z-[1]"
+                    {...mergeStylexProps(
+                      "md:group-hover:opacity-100 [&>*]:relative [&>*]:z-[1]",
+                      sx.relative,
+                      sx.mlAuto,
+                      sx.inlineFlex,
+                      sx.size7,
+                      sx.shrink0,
+                      sx.itemsCenter,
+                      sx.justifyCenter,
+                      sx.roundedMd,
+                      sx.textFaint,
+                      sx.opacity100,
+                      sx.transitionOpacityColor,
+                      sx.duration150,
+                      sx.hoverTextFg,
+                      sx.focusVisibleOpacity100,
+                      sx.mdOpacity0,
+                      sx.beforeAbsolute,
+                      sx.beforeInset05,
+                      sx.beforeZ0,
+                      sx.beforeRoundedSm,
+                      sx.beforeCornerShapeVarCs,
+                      sx.beforeTransitionBackground,
+                      sx.beforeContent,
+                      sx.hoverBeforeBgHover,
+                    )}
                     title={
                       project.repo === askBand
                         ? "New Ask session, no repo"
@@ -265,7 +453,7 @@ export function ProjectBands({
                 )}
               </button>
               {open ? (
-                <div className="mt-0.5">
+                <div {...stylex.props(sx.mt05)}>
                   {renderers.labeledLane({
                     label: "Needs review",
                     name: "needsreview",
@@ -299,7 +487,7 @@ export function ProjectBands({
                 (selectedReviewRows.length > 0 ||
                   selectedRows.length > 0 ||
                   selectedPrs.length > 0) && (
-                  <div className="mt-0.5">
+                  <div {...stylex.props(sx.mt05)}>
                     {selectedReviewRows.map(renderers.reviewWorkspaceRow)}
                     {selectedRows.map(renderers.workspaceRow)}
                     {selectedPrs.map(renderers.prRow)}

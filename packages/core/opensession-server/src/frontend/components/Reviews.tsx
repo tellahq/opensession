@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import { cleanSessionTitle } from "../lib/session-title";
 import { AGENT_NAME } from "../lib/brand";
@@ -12,6 +14,335 @@ import { PrPanel } from "./PrPanel";
 import { providerFromUrl, avatarUrl } from "../lib/provider";
 import { EmptyState } from "../ui/state";
 import { Badge } from "../ui/badge";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap7px: {
+    gap: "7px",
+  },
+  h1: {
+    height: "4px",
+  },
+  w46px: {
+    width: "46px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
+  hFull: {
+    height: "100%",
+  },
+  bgGreen: {
+    backgroundColor: "var(--green)",
+  },
+  bgRed: {
+    backgroundColor: "var(--red)",
+  },
+  bgYellow: {
+    backgroundColor: "var(--yellow)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  size2: {
+    width: "calc(4px * 2)",
+    height: "calc(4px * 2)",
+  },
+  roundedXs: {
+    borderRadius: "calc(2px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgLineStrong: {
+    backgroundColor: "var(--border-strong)",
+  },
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  hidden: {
+    display: "none",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  phoneFlex: {
+    "@media (max-width: 720px)": {
+      display: "flex",
+    },
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  flex1: {
+    flex: "1",
+  },
+  relative: {
+    position: "relative",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  phoneOverflowXHidden: {
+    "@media (max-width: 720px)": {
+      overflowX: "hidden",
+    },
+  },
+  sticky: {
+    position: "sticky",
+  },
+  top0: {
+    top: "0",
+  },
+  z3: {
+    zIndex: "3",
+  },
+  px22px: {
+    paddingInline: "22px",
+  },
+  pt4: {
+    paddingTop: "calc(4px * 4)",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  m0: {
+    margin: "0",
+  },
+  fontTitle: {
+    fontWeight: "var(--title-weight)",
+  },
+  tracking001em: {
+    letterSpacing: "-0.01em",
+  },
+  w60: {
+    width: "calc(4px * 60)",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgRaised: {
+    backgroundColor: "var(--bg-raised)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  transitionBorderColorBackgroundColor: {
+    transitionProperty: "border-color,background-color",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  focusWithinBorderLineStrong: {
+    ":focus-within": {
+      borderColor: "var(--border-strong)",
+    },
+  },
+  focusWithinBgPanel: {
+    ":focus-within": {
+      backgroundColor: "var(--bg-panel)",
+    },
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  placeholderTextFaint: {
+    "::placeholder": {
+      color: "var(--text-faint)",
+    },
+  },
+  Mx22px: {
+    marginInline: "calc(22px * -1)",
+  },
+  phoneOverflowXAuto: {
+    "@media (max-width: 720px)": {
+      overflowX: "auto",
+    },
+  },
+  phoneScrollbarWidthNone: {
+    "@media (max-width: 720px)": {
+      scrollbarWidth: "none",
+    },
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  leading13: {
+    lineHeight: "1.3",
+  },
+  selfCenter: {
+    alignSelf: "center",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  p05: {
+    padding: "calc(4px * 0.5)",
+  },
+  opacity0: {
+    opacity: "0%",
+  },
+  transitionOpacity: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  focusVisibleOpacity100: {
+    ":focus-visible": {
+      opacity: "100%",
+    },
+  },
+  hoverTextLink: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--link)",
+      },
+    },
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  tracking002em: {
+    letterSpacing: "0.02em",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  size22px: {
+    width: "22px",
+    height: "22px",
+  },
+  roundedAvatar: {
+    borderRadius: "calc(32% * var(--rp))",
+    cornerShape: "var(--cs)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+});
 
 interface Props {
   sessions: UnifiedSession[];
@@ -42,21 +373,28 @@ const STATE_RANK: Record<string, number> = { OPEN: 0, CLOSED: 1, MERGED: 2 };
 const ROW =
   "grid w-full grid-cols-[92px_minmax(0,1fr)_156px_132px_116px_132px_78px] items-center gap-3.5 border-b border-line px-[22px] text-left max-[1180px]:grid-cols-[88px_minmax(0,1fr)_150px_118px_78px]";
 
-const C_STATE =
-  "flex items-center gap-[7px] text-meta font-medium phone:order-1";
-const C_TITLE =
-  "flex min-w-0 flex-col gap-[3px] phone:order-2 phone:flex-[1_1_calc(100%-90px)]";
-const C_CHECKS = "phone:order-3 phone:inline-flex";
-const C_CHANGES =
-  "phone:order-4 phone:inline-flex phone:flex-row phone:items-center phone:gap-2";
-const C_REVIEW = "desktop:max-[1180px]:hidden phone:order-5 phone:inline-flex";
-const C_AUTHOR =
-  "flex min-w-0 items-center gap-2 desktop:max-[1180px]:hidden phone:order-6 phone:inline-flex";
-const C_UPDATED =
-  "text-meta whitespace-nowrap text-faint tabular-nums phone:order-7 phone:ml-auto";
+const C_STATE = utilityClassName(
+  "flex items-center gap-[7px] text-meta font-medium phone:order-1",
+);
+const C_TITLE = utilityClassName(
+  "flex min-w-0 flex-col gap-[3px] phone:order-2 phone:flex-[1_1_calc(100%-90px)]",
+);
+const C_CHECKS = utilityClassName("phone:order-3 phone:inline-flex");
+const C_CHANGES = utilityClassName(
+  "phone:order-4 phone:inline-flex phone:flex-row phone:items-center phone:gap-2",
+);
+const C_REVIEW = utilityClassName(
+  "desktop:max-[1180px]:hidden phone:order-5 phone:inline-flex",
+);
+const C_AUTHOR = utilityClassName(
+  "flex min-w-0 items-center gap-2 desktop:max-[1180px]:hidden phone:order-6 phone:inline-flex",
+);
+const C_UPDATED = utilityClassName(
+  "text-meta whitespace-nowrap text-faint tabular-nums phone:order-7 phone:ml-auto",
+);
 
 /** "—" and other absent values, wherever a cell has nothing to say. */
-const DIM = "text-meta text-faint";
+const DIM = utilityClassName("text-meta text-faint");
 
 /** Ink per PR state — replaces the render-time `rv-state-${key}`. */
 const STATE_TONE: Record<string, string> = {
@@ -156,22 +494,51 @@ function ChecksCell({ s }: { s: UnifiedSession }) {
   const pct = (n: number) => `${(n / c.total) * 100}%`;
   return (
     <span
-      className="inline-flex items-center gap-[7px] text-meta"
+      {...stylex.props(
+        sx.inlineFlex,
+        sx.itemsCenter,
+        sx.gap7px,
+        typography.meta,
+      )}
       title={`${c.passed} passed · ${c.failed} failed · ${c.pending} pending · ${c.total} total`}
     >
       <span
-        className={`size-2 shrink-0 rounded-full ${CHECKS_TONE[tone].dot}`}
+        className={utilityClassName(
+          `size-2 shrink-0 rounded-full ${CHECKS_TONE[tone].dot}`,
+        )}
       />
-      <span className={`whitespace-nowrap ${CHECKS_TONE[tone].label}`}>
+      <span
+        className={utilityClassName(
+          `whitespace-nowrap ${CHECKS_TONE[tone].label}`,
+        )}
+      >
         {label}
       </span>
       <span
-        className="inline-flex h-1 w-[46px] shrink-0 overflow-hidden rounded-full bg-active phone:hidden"
+        {...stylex.props(
+          sx.inlineFlex,
+          sx.h1,
+          sx.w46px,
+          sx.shrink0,
+          sx.overflowHidden,
+          sx.roundedFull,
+          sx.bgActive,
+          sx.phoneHidden,
+        )}
         aria-hidden
       >
-        <span className="h-full bg-green" style={{ width: pct(c.passed) }} />
-        <span className="h-full bg-red" style={{ width: pct(c.failed) }} />
-        <span className="h-full bg-yellow" style={{ width: pct(c.pending) }} />
+        <span
+          {...stylex.props(sx.hFull, sx.bgGreen)}
+          style={{ width: pct(c.passed) }}
+        />
+        <span
+          {...stylex.props(sx.hFull, sx.bgRed)}
+          style={{ width: pct(c.failed) }}
+        />
+        <span
+          {...stylex.props(sx.hFull, sx.bgYellow)}
+          style={{ width: pct(c.pending) }}
+        />
       </span>
     </span>
   );
@@ -182,11 +549,22 @@ function ReviewCell({ s }: { s: UnifiedSession }) {
   const review = "text-meta font-medium whitespace-nowrap";
   if ((s.prState || "OPEN") !== "OPEN") return <span className={DIM}>–</span>;
   if (d === "APPROVED")
-    return <span className={`${review} text-green`}>Approved</span>;
+    return (
+      <span className={utilityClassName(`${review} text-green`)}>Approved</span>
+    );
   if (d === "CHANGES_REQUESTED")
-    return <span className={`${review} text-yellow`}>Changes</span>;
-  if (s.prIsDraft) return <span className={`${review} text-faint`}>Draft</span>;
-  return <span className={`${review} text-faint`}>Review required</span>;
+    return (
+      <span className={utilityClassName(`${review} text-yellow`)}>Changes</span>
+    );
+  if (s.prIsDraft)
+    return (
+      <span className={utilityClassName(`${review} text-faint`)}>Draft</span>
+    );
+  return (
+    <span className={utilityClassName(`${review} text-faint`)}>
+      Review required
+    </span>
+  );
 }
 
 function ChangesCell({ s }: { s: UnifiedSession }) {
@@ -201,22 +579,38 @@ function ChangesCell({ s }: { s: UnifiedSession }) {
   const grays = Math.max(0, blocks - greens - reds);
   return (
     <span
-      className="inline-flex flex-col gap-1"
+      {...stylex.props(sx.inlineFlex, sx.flexCol, sx.gap1)}
       title={`${files} file${files === 1 ? "" : "s"} changed`}
     >
-      <span className="inline-flex gap-[7px] text-meta tabular-nums">
-        <span className="text-green">+{add}</span>
-        <span className="text-red">−{del}</span>
+      <span
+        {...mergeStylexProps(
+          "tabular-nums",
+          sx.inlineFlex,
+          sx.gap7px,
+          typography.meta,
+        )}
+      >
+        <span {...stylex.props(sx.textGreen)}>+{add}</span>
+        <span {...stylex.props(sx.textRed)}>−{del}</span>
       </span>
-      <span className="inline-flex gap-0.5" aria-hidden>
+      <span {...stylex.props(sx.inlineFlex, sx.gap05)} aria-hidden>
         {Array.from({ length: greens }).map((_, i) => (
-          <span key={`g${i}`} className="size-2 rounded-xs bg-green" />
+          <span
+            key={`g${i}`}
+            {...stylex.props(sx.size2, sx.roundedXs, sx.bgGreen)}
+          />
         ))}
         {Array.from({ length: reds }).map((_, i) => (
-          <span key={`r${i}`} className="size-2 rounded-xs bg-red" />
+          <span
+            key={`r${i}`}
+            {...stylex.props(sx.size2, sx.roundedXs, sx.bgRed)}
+          />
         ))}
         {Array.from({ length: grays }).map((_, i) => (
-          <span key={`n${i}`} className="size-2 rounded-xs bg-line-strong" />
+          <span
+            key={`n${i}`}
+            {...stylex.props(sx.size2, sx.roundedXs, sx.bgLineStrong)}
+          />
         ))}
       </span>
     </span>
@@ -347,10 +741,36 @@ export function Reviews({
   // the app sidebar.
   if (selected) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-surface">
-        <div className="hidden shrink-0 items-center border-b border-divider px-3 py-2 phone:flex">
+      <div
+        {...stylex.props(sx.flex, sx.hFull, sx.minH0, sx.flexCol, sx.bgSurface)}
+      >
+        <div
+          {...stylex.props(
+            sx.hidden,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px3,
+            sx.py2,
+            sx.phoneFlex,
+          )}
+        >
           <button
-            className="inline-flex items-center gap-1.5 rounded-control border-0 bg-transparent px-2 py-1.5 text-sm font-medium text-fg hover:bg-hover"
+            {...stylex.props(
+              sx.inlineFlex,
+              sx.itemsCenter,
+              sx.gap15,
+              sx.roundedControl,
+              sx.border0,
+              sx.bgTransparent,
+              sx.px2,
+              sx.py15,
+              sx.textSm,
+              sx.fontMedium,
+              sx.textFg,
+              sx.hoverBgHover,
+            )}
             onClick={() => onSelect("")}
           >
             <svg
@@ -365,7 +785,7 @@ export function Reviews({
             Pull requests
           </button>
         </div>
-        <div className="min-h-0 flex-1">
+        <div {...stylex.props(sx.minH0, sx.flex1)}>
           <PrPanel
             onOpenPr={onOpenPr}
             key={selected.id}
@@ -384,14 +804,64 @@ export function Reviews({
   }
 
   return (
-    <div className="relative flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto phone:overflow-x-hidden">
-        <div className="sticky top-0 z-[3] bg-surface px-[22px] pt-4">
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <h1 className="m-0 text-section-title font-title tracking-[-0.01em]">
+    <div {...stylex.props(sx.relative, sx.flex, sx.minH0, sx.flex1)}>
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.minW0,
+          sx.flex1,
+          sx.flexCol,
+          sx.overflowYAuto,
+          sx.phoneOverflowXHidden,
+        )}
+      >
+        <div
+          {...stylex.props(
+            sx.sticky,
+            sx.top0,
+            sx.z3,
+            sx.bgSurface,
+            sx.px22px,
+            sx.pt4,
+          )}
+        >
+          <div
+            {...stylex.props(
+              sx.mb3,
+              sx.flex,
+              sx.itemsCenter,
+              sx.justifyBetween,
+              sx.gap4,
+            )}
+          >
+            <h1
+              {...stylex.props(
+                sx.m0,
+                sx.fontTitle,
+                sx.tracking001em,
+                typography.sectionTitle,
+              )}
+            >
               Reviews
             </h1>
-            <div className="flex w-60 items-center gap-[7px] rounded-md border border-line bg-raised px-2.5 py-1.5 text-faint transition-[border-color,background-color] focus-within:border-line-strong focus-within:bg-panel">
+            <div
+              {...stylex.props(
+                sx.flex,
+                sx.w60,
+                sx.itemsCenter,
+                sx.gap7px,
+                sx.roundedMd,
+                sx.border,
+                sx.borderLine,
+                sx.bgRaised,
+                sx.px25,
+                sx.py15,
+                sx.textFaint,
+                sx.transitionBorderColorBackgroundColor,
+                sx.focusWithinBorderLineStrong,
+                sx.focusWithinBgPanel,
+              )}
+            >
               <svg
                 width="19"
                 height="19"
@@ -402,7 +872,16 @@ export function Reviews({
                 <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z" />
               </svg>
               <input
-                className="min-w-0 flex-1 border-0 bg-transparent text-label text-fg outline-none placeholder:text-faint"
+                {...stylex.props(
+                  sx.minW0,
+                  sx.flex1,
+                  sx.border0,
+                  sx.bgTransparent,
+                  sx.textFg,
+                  sx.outlineNone,
+                  sx.placeholderTextFaint,
+                  typography.label,
+                )}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search pull requests…"
@@ -414,24 +893,40 @@ export function Reviews({
               underline sits on top of it. The negative margin cancels the
               header's 22px padding. Five tabs + counts don't fit a phone, so
               below 720px the strip scrolls edge to edge instead. */}
-          <div className="-mx-[22px] flex gap-0.5 border-b border-divider px-[22px] phone:overflow-x-auto phone:[scrollbar-width:none] phone:[&::-webkit-scrollbar]:hidden">
+          <div
+            {...mergeStylexProps(
+              "phone:[&::-webkit-scrollbar]:hidden",
+              sx.Mx22px,
+              sx.flex,
+              sx.gap05,
+              sx.borderB,
+              sx.borderDivider,
+              sx.px22px,
+              sx.phoneOverflowXAuto,
+              sx.phoneScrollbarWidthNone,
+            )}
+          >
             {TABS.map((t) => {
               const on = filter === t.key;
               return (
                 <button
                   key={t.key}
-                  className={`-mb-px flex items-center gap-[7px] border-b-2 px-[13px] pt-2 pb-[11px] text-label font-medium transition-colors phone:shrink-0 phone:px-3.5 phone:pt-[11px] phone:pb-[13px] phone:text-item-title phone:whitespace-nowrap ${
-                    on
-                      ? "border-b-accent text-fg"
-                      : "border-b-transparent text-dim hover:text-fg"
-                  }`}
+                  className={utilityClassName(
+                    `-mb-px flex items-center gap-[7px] border-b-2 px-[13px] pt-2 pb-[11px] text-label font-medium transition-colors phone:shrink-0 phone:px-3.5 phone:pt-[11px] phone:pb-[13px] phone:text-item-title phone:whitespace-nowrap ${
+                      on
+                        ? "border-b-accent text-fg"
+                        : "border-b-transparent text-dim hover:text-fg"
+                    }`,
+                  )}
                   onClick={() => setFilter(t.key)}
                 >
                   {t.label}
                   <span
-                    className={`min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold ${
-                      on ? "bg-accent-soft text-accent" : "bg-active text-dim"
-                    }`}
+                    className={utilityClassName(
+                      `min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold ${
+                        on ? "bg-accent-soft text-accent" : "bg-active text-dim"
+                      }`,
+                    )}
                   >
                     {t.count}
                   </span>
@@ -444,7 +939,9 @@ export function Reviews({
               divider spans the full width. */}
           {filtered.length > 0 && (
             <div
-              className={`${ROW} -mx-[22px] bg-surface py-[9px] text-meta font-semibold tracking-[-0.01em] text-faint phone:hidden`}
+              className={utilityClassName(
+                `${ROW} -mx-[22px] bg-surface py-[9px] text-meta font-semibold tracking-[-0.01em] text-faint phone:hidden`,
+              )}
               role="row"
             >
               <span className={C_STATE}>Status</span>
@@ -459,7 +956,14 @@ export function Reviews({
         </div>
 
         {filtered.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center">
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.flex1,
+              sx.itemsCenter,
+              sx.justifyCenter,
+            )}
+          >
             <EmptyState
               title={
                 prSessions.length === 0
@@ -475,13 +979,15 @@ export function Reviews({
             </EmptyState>
           </div>
         ) : (
-          <div className="flex flex-col" role="table">
+          <div {...stylex.props(sx.flex, sx.flexCol)} role="table">
             {filtered.map((s) => {
               const meta = stateMeta(s);
               return (
                 <button
                   key={s.prUrl}
-                  className={`${ROW} group cursor-pointer py-[11px] text-item-title text-fg hover:bg-hover phone:flex phone:flex-wrap phone:items-center phone:gap-x-3 phone:gap-y-[9px] phone:px-4 phone:py-3.5`}
+                  className={utilityClassName(
+                    `${ROW} group cursor-pointer py-[11px] text-item-title text-fg hover:bg-hover phone:flex phone:flex-wrap phone:items-center phone:gap-x-3 phone:gap-y-[9px] phone:px-4 phone:py-3.5`,
+                  )}
                   onClick={() => onSelect(s.id)}
                   role="row"
                 >
@@ -490,21 +996,57 @@ export function Reviews({
                     role="cell"
                   >
                     <StateIcon kind={meta.key} />
-                    <span className="whitespace-nowrap">{meta.label}</span>
+                    <span {...stylex.props(sx.whitespaceNowrap)}>
+                      {meta.label}
+                    </span>
                   </span>
                   <span className={C_TITLE} role="cell">
-                    <span className="flex min-w-0 items-baseline gap-2">
-                      <span className="truncate text-item-title leading-[1.3] font-medium">
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.minW0,
+                        sx.itemsBaseline,
+                        sx.gap2,
+                      )}
+                    >
+                      <span
+                        {...stylex.props(
+                          sx.truncate,
+                          sx.leading13,
+                          sx.fontMedium,
+                          typography.itemTitle,
+                        )}
+                      >
                         {cleanTitle(s)}
                       </span>
                       {prNum(s) && (
-                        <span className="shrink-0 text-meta text-faint tabular-nums">
+                        <span
+                          {...mergeStylexProps(
+                            "tabular-nums",
+                            sx.shrink0,
+                            sx.textFaint,
+                            typography.meta,
+                          )}
+                        >
                           {prNum(s)}
                         </span>
                       )}
                       {s.prUrl && (
                         <span
-                          className="inline-flex shrink-0 items-center self-center rounded-sm p-0.5 text-faint opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-link"
+                          {...mergeStylexProps(
+                            "group-hover:opacity-100",
+                            sx.inlineFlex,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.selfCenter,
+                            sx.roundedSm,
+                            sx.p05,
+                            sx.textFaint,
+                            sx.opacity0,
+                            sx.transitionOpacity,
+                            sx.focusVisibleOpacity100,
+                            sx.hoverTextLink,
+                          )}
                           title={`Open on ${providerFromUrl(s.prUrl).name}`}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -523,14 +1065,35 @@ export function Reviews({
                         </span>
                       )}
                     </span>
-                    <span className="flex min-w-0 items-center gap-3 text-meta text-faint">
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.minW0,
+                        sx.itemsCenter,
+                        sx.gap3,
+                        sx.textFaint,
+                        typography.meta,
+                      )}
+                    >
                       {multiRepo && (
                         <Badge>
                           {s.repo ? repoLabel(s.repo) : "repository"}
                         </Badge>
                       )}
                       {s.branch && (
-                        <span className="inline-flex min-w-0 max-w-full items-center gap-1 overflow-hidden text-meta text-dim [&>svg]:shrink-0 [&>svg]:opacity-70">
+                        <span
+                          {...mergeStylexProps(
+                            "[&>svg]:shrink-0 [&>svg]:opacity-70",
+                            sx.inlineFlex,
+                            sx.minW0,
+                            sx.maxWFull,
+                            sx.itemsCenter,
+                            sx.gap1,
+                            sx.overflowHidden,
+                            sx.textDim,
+                            typography.meta,
+                          )}
+                        >
                           <svg
                             width="17"
                             height="17"
@@ -540,16 +1103,27 @@ export function Reviews({
                           >
                             <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z" />
                           </svg>
-                          <span className="truncate">{s.branch}</span>
+                          <span {...stylex.props(sx.truncate)}>{s.branch}</span>
                         </span>
                       )}
                       {s.linearIssue && (
-                        <Badge className="tracking-[0.02em]">
+                        <Badge
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.tracking002em,
+                          )}
+                        >
                           {s.linearIssue.identifier}
                         </Badge>
                       )}
                       {s.isRunning && (
-                        <span className="shrink-0 text-meta text-yellow">
+                        <span
+                          {...stylex.props(
+                            sx.shrink0,
+                            sx.textYellow,
+                            typography.meta,
+                          )}
+                        >
                           ● running
                         </span>
                       )}
@@ -577,21 +1151,43 @@ export function Reviews({
                           );
                           return src ? (
                             <img
-                              className="size-[22px] shrink-0 rounded-avatar bg-active"
+                              {...stylex.props(
+                                sx.size22px,
+                                sx.shrink0,
+                                sx.roundedAvatar,
+                                sx.bgActive,
+                              )}
                               src={src}
                               alt=""
                               loading="lazy"
                             />
                           ) : (
                             <span
-                              className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-avatar bg-active text-meta font-semibold text-faint"
+                              {...stylex.props(
+                                sx.inlineFlex,
+                                sx.size22px,
+                                sx.shrink0,
+                                sx.itemsCenter,
+                                sx.justifyCenter,
+                                sx.roundedAvatar,
+                                sx.bgActive,
+                                sx.fontSemibold,
+                                sx.textFaint,
+                                typography.meta,
+                              )}
                               aria-hidden
                             >
                               {s.prAuthor.charAt(0).toUpperCase()}
                             </span>
                           );
                         })()}
-                        <span className="truncate text-meta text-dim">
+                        <span
+                          {...stylex.props(
+                            sx.truncate,
+                            sx.textDim,
+                            typography.meta,
+                          )}
+                        >
                           {s.prAuthor}
                         </span>
                       </>

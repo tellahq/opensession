@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Reorder } from "motion/react";
 import { useIsPhone } from "../../hooks/useIsPhone";
@@ -7,6 +9,193 @@ import { ResponsiveDialog, SheetBody, SheetIconButton } from "../../ui/sheet";
 import { Switch } from "../../ui/switch";
 import { IconGripVertical, IconX } from "../icons";
 import { RepoTile, repoLabel } from "../RepoTile";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  Mx2: {
+    marginInline: "calc(4px * -2)",
+  },
+  m0: {
+    margin: "0",
+  },
+  mb15: {
+    marginBottom: "calc(4px * 1.5)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  roundedLg: {
+    borderRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  phoneBgSettingsPlate: {
+    "@media (max-width: 720px)": {
+      backgroundColor: "var(--settings-plate)",
+    },
+  },
+  p05: {
+    padding: "calc(4px * 0.5)",
+  },
+  flex: {
+    display: "flex",
+  },
+  minH9: {
+    minHeight: "calc(4px * 9)",
+  },
+  cursorGrab: {
+    cursor: "grab",
+  },
+  selectNone: {
+    WebkitUserSelect: "none",
+    userSelect: "none",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  activeCursorGrabbing: {
+    ":active": {
+      cursor: "grabbing",
+    },
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  phoneAfterAbsolute: {
+    "@media (max-width: 720px)": {
+      "::after": {
+        content: '""',
+        position: "absolute",
+      },
+    },
+  },
+  phoneAfterInsetX0: {
+    "@media (max-width: 720px)": {
+      "::after": {
+        content: '""',
+        insetInline: "0",
+      },
+    },
+  },
+  phoneAfterInsetY3: {
+    "@media (max-width: 720px)": {
+      "::after": {
+        content: '""',
+        insetBlock: "calc(4px * -3)",
+      },
+    },
+  },
+  phoneAfterContent: {
+    "@media (max-width: 720px)": {
+      "::after": {
+        content: "''",
+      },
+    },
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  pb4: {
+    paddingBottom: "calc(4px * 4)",
+  },
+  pt05: {
+    paddingTop: "calc(4px * 0.5)",
+  },
+  leadingTight: {
+    lineHeight: "var(--leading-tight)",
+  },
+  tracking001em: {
+    letterSpacing: "-0.01em",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap5: {
+    gap: "calc(4px * 5)",
+  },
+  pb6: {
+    paddingBottom: "calc(4px * 6)",
+  },
+  maxH80dvh: {
+    maxHeight: "80dvh",
+  },
+});
 
 type OrderItem<T extends string> = {
   id: T;
@@ -70,18 +259,36 @@ function OrderSection<T extends string>({
 
   return (
     <section
-      className="-mx-2"
+      {...stylex.props(sx.Mx2)}
       aria-labelledby={`sidebar-order-${label.toLowerCase()}`}
     >
       <h3
         id={`sidebar-order-${label.toLowerCase()}`}
-        className="m-0 mb-1.5 px-2 text-label font-semibold text-faint"
+        {...stylex.props(
+          sx.m0,
+          sx.mb15,
+          sx.px2,
+          sx.fontSemibold,
+          sx.textFaint,
+          typography.label,
+        )}
       >
         {label}
       </h3>
       {order.length === 0 ? (
         // Left-aligned like the rows it stands in for.
-        <p className="m-0 rounded-lg bg-panel px-2 py-4 text-label text-faint phone:bg-settings-plate">
+        <p
+          {...stylex.props(
+            sx.m0,
+            sx.roundedLg,
+            sx.bgPanel,
+            sx.px2,
+            sx.py4,
+            sx.textFaint,
+            sx.phoneBgSettingsPlate,
+            typography.label,
+          )}
+        >
           No {label.toLowerCase()} available.
         </p>
       ) : (
@@ -90,7 +297,13 @@ function OrderSection<T extends string>({
           axis="y"
           values={order}
           onReorder={setDraft}
-          className="rounded-lg bg-panel p-0.5 phone:bg-settings-plate"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.roundedLg,
+            sx.bgPanel,
+            sx.p05,
+            sx.phoneBgSettingsPlate,
+          )}
           role="list"
         >
           {order.map((id, index) => {
@@ -103,7 +316,25 @@ function OrderSection<T extends string>({
                 value={id}
                 onDragEnd={commit}
                 whileDrag={{ scale: 1.015, zIndex: 2 }}
-                className="focus-ring group flex min-h-9 cursor-grab select-none items-center gap-2 rounded-control bg-panel px-1.5 py-1.5 text-item-title text-fg active:cursor-grabbing hover:bg-hover phone:min-h-11 phone:bg-settings-plate"
+                className={mergeStylexOverrideClassName(
+                  "focus-ring group",
+                  sx.flex,
+                  sx.minH9,
+                  sx.cursorGrab,
+                  sx.selectNone,
+                  sx.itemsCenter,
+                  sx.gap2,
+                  sx.roundedControl,
+                  sx.bgPanel,
+                  sx.px15,
+                  sx.py15,
+                  sx.textFg,
+                  sx.activeCursorGrabbing,
+                  sx.hoverBgHover,
+                  sx.phoneMinH11,
+                  sx.phoneBgSettingsPlate,
+                  typography.itemTitle,
+                )}
                 role="listitem"
                 tabIndex={0}
                 aria-label={`${item.label}, position ${index + 1} of ${order.length}. Use the up and down arrow keys to move it.`}
@@ -115,18 +346,40 @@ function OrderSection<T extends string>({
                   move(id, event.key === "ArrowUp" ? -1 : 1);
                 }}
               >
-                <span className="flex size-5 shrink-0 items-center justify-center text-faint group-hover:text-dim">
+                <span
+                  {...mergeStylexProps(
+                    "group-hover:text-dim",
+                    sx.flex,
+                    sx.size5,
+                    sx.shrink0,
+                    sx.itemsCenter,
+                    sx.justifyCenter,
+                    sx.textFaint,
+                  )}
+                >
                   <IconGripVertical size={18} />
                 </span>
                 {/* Shared geometry keeps every tool and repository label
 								    on the same vertical line. */}
-                <span className="flex size-5 shrink-0 items-center justify-center text-dim [&_svg]:size-[20px]">
+                <span
+                  {...mergeStylexProps(
+                    "[&_svg]:size-[20px]",
+                    sx.flex,
+                    sx.size5,
+                    sx.shrink0,
+                    sx.itemsCenter,
+                    sx.justifyCenter,
+                    sx.textDim,
+                  )}
+                >
                   {item.icon}
                 </span>
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                  {item.label}
+                </span>
                 {item.action && (
                   <span
-                    className="shrink-0"
+                    {...stylex.props(sx.shrink0)}
                     onPointerDown={(event) => event.stopPropagation()}
                   >
                     {item.action}
@@ -137,7 +390,7 @@ function OrderSection<T extends string>({
           })}
         </Reorder.Group>
       )}
-      <div className="sr-only" aria-live="polite">
+      <div {...stylex.props(sx.srOnly)} aria-live="polite">
         {announcement}
       </div>
     </section>
@@ -174,7 +427,13 @@ export function SidebarCustomizeDialog({
           action: (
             <Switch
               size="sm"
-              className="phone:after:absolute phone:after:inset-x-0 phone:after:-inset-y-3 phone:after:content-['']"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.phoneAfterAbsolute,
+                sx.phoneAfterInsetX0,
+                sx.phoneAfterInsetY3,
+                sx.phoneAfterContent,
+              )}
               checked={tool.shown}
               onCheckedChange={tool.onShownChange}
               aria-label={`${tool.shown ? "Hide" : "Show"} ${tool.label} in sidebar`}
@@ -202,10 +461,31 @@ export function SidebarCustomizeDialog({
         onClose={() => onOpenChange(false)}
         phone
         label="Customize sidebar"
-        sheetClassName="max-h-[88dvh]"
+        sheetClassName={utilityClassName("max-h-[88dvh]")}
       >
-        <div className="flex shrink-0 items-center gap-3 px-6 pb-4 pt-0.5">
-          <h2 className="m-0 min-w-0 flex-1 text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.gap3,
+            sx.px6,
+            sx.pb4,
+            sx.pt05,
+          )}
+        >
+          <h2
+            {...stylex.props(
+              sx.m0,
+              sx.minW0,
+              sx.flex1,
+              sx.fontSemibold,
+              sx.leadingTight,
+              sx.tracking001em,
+              sx.textFg,
+              typography.dialogTitle,
+            )}
+          >
             Customize sidebar
           </h2>
           <SheetIconButton
@@ -215,7 +495,17 @@ export function SidebarCustomizeDialog({
             <IconX />
           </SheetIconButton>
         </div>
-        <SheetBody className="flex flex-1 flex-col gap-5 px-6 pb-6">
+        <SheetBody
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.flex,
+            sx.flex1,
+            sx.flexCol,
+            sx.gap5,
+            sx.px6,
+            sx.pb6,
+          )}
+        >
           {sections}
         </SheetBody>
       </ResponsiveDialog>
@@ -225,8 +515,8 @@ export function SidebarCustomizeDialog({
   return (
     <Modal.Root open={open} onOpenChange={onOpenChange}>
       <Modal.Content
-        widthClassName="max-w-[32rem]"
-        className="max-h-[80dvh] gap-3"
+        widthClassName={utilityClassName("max-w-[32rem]")}
+        className={mergeStylexOverrideClassName("", sx.maxH80dvh, sx.gap3)}
       >
         <Modal.Header title="Customize sidebar" />
         {sections}

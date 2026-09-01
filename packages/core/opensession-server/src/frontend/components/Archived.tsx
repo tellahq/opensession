@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import { cn } from "../ui/cn";
 import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
@@ -39,6 +41,147 @@ import { EmptyState, ListSkeleton } from "../ui/state";
 import { IconChevronRight, IconFilter, IconUnarchive } from "./icons";
 import { RepoTile } from "./RepoTile";
 import { UserAvatar } from "./UserAvatar";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  w200px: {
+    width: "200px",
+  },
+  minW90px: {
+    minWidth: "90px",
+  },
+  shrink100: {
+    flexShrink: "100",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  phoneWFull: {
+    "@media (max-width: 720px)": {
+      width: "100%",
+    },
+  },
+  phonePx35: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 3.5)",
+    },
+  },
+  phoneTextInputPhone: {
+    "@media (max-width: 720px)": {
+      fontSize: "var(--type-input-phone)",
+    },
+  },
+  minW220px: {
+    minWidth: "220px",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  size18px: {
+    width: "18px",
+    height: "18px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  wFull: {
+    width: "100%",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  maxW860px: {
+    maxWidth: "860px",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  pb60px: {
+    paddingBottom: "60px",
+  },
+  pt7: {
+    paddingTop: "calc(4px * 7)",
+  },
+  phonePbCalc55remEnvSafeAreaInsetBottom0px: {
+    "@media (max-width: 720px)": {
+      paddingBottom: "calc(5.5rem + env(safe-area-inset-bottom,0px))",
+    },
+  },
+  phonePt2: {
+    "@media (max-width: 720px)": {
+      paddingTop: "calc(4px * 2)",
+    },
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  m0: {
+    margin: "0",
+  },
+  mb18px: {
+    marginBottom: "18px",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  phoneMb35: {
+    "@media (max-width: 720px)": {
+      marginBottom: "calc(4px * 3.5)",
+    },
+  },
+  hidden: {
+    display: "none",
+  },
+  phoneInline: {
+    "@media (max-width: 720px)": {
+      display: "inline",
+    },
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  phoneBlock: {
+    "@media (max-width: 720px)": {
+      display: "block",
+    },
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  pt4: {
+    paddingTop: "calc(4px * 4)",
+  },
+});
 
 interface Props {
   sessions: UnifiedSession[];
@@ -386,7 +529,16 @@ export function Archived({
   // top bar, while Search floats at the thumb edge below the list.
   const searchAction = (
     <Input
-      className="w-[200px] min-w-[90px] shrink-[100] phone:min-h-11 phone:w-full phone:px-3.5 phone:text-input-phone"
+      className={mergeStylexOverrideClassName(
+        "",
+        sx.w200px,
+        sx.minW90px,
+        sx.shrink100,
+        sx.phoneMinH11,
+        sx.phoneWFull,
+        sx.phonePx35,
+        sx.phoneTextInputPhone,
+      )}
       type="search"
       aria-label="Search archived sessions"
       placeholder="Search archived…"
@@ -405,14 +557,19 @@ export function Archived({
               icon={<IconFilter size={18} />}
               aria-label={`Filters, ${activeFilterCount} active`}
               className={
-                activeFilterCount > 0 ? "shrink-0 text-fg" : "shrink-0"
+                activeFilterCount > 0
+                  ? utilityClassName("shrink-0 text-fg")
+                  : utilityClassName("shrink-0")
               }
             >
               Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
             </Button>
           }
         />
-        <Menu.Popup align="end" className="min-w-[220px]">
+        <Menu.Popup
+          align="end"
+          className={mergeStylexOverrideClassName("", sx.minW220px)}
+        >
           <Menu.Group>
             <Menu.GroupLabel>Owner</Menu.GroupLabel>
             <Menu.RadioGroup
@@ -421,19 +578,21 @@ export function Archived({
             >
               <Menu.RadioItem value="mine" closeOnClick>
                 <UserAvatar name={currentUser} size={18} />
-                <span className="min-w-0 flex-1">My archived</span>
+                <span {...stylex.props(sx.minW0, sx.flex1)}>My archived</span>
                 <Menu.Check on={owner === "mine"} />
               </Menu.RadioItem>
               {people.map(({ key, label }) => (
                 <Menu.RadioItem key={key} value={key} closeOnClick>
                   <UserAvatar name={label} size={18} />
-                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                    {label}
+                  </span>
                   <Menu.Check on={owner === key} />
                 </Menu.RadioItem>
               ))}
               <Menu.RadioItem value="everyone" closeOnClick>
-                <span className="size-[18px] shrink-0" />
-                <span className="min-w-0 flex-1">Everyone</span>
+                <span {...stylex.props(sx.size18px, sx.shrink0)} />
+                <span {...stylex.props(sx.minW0, sx.flex1)}>Everyone</span>
                 <Menu.Check on={owner === "everyone"} />
               </Menu.RadioItem>
             </Menu.RadioGroup>
@@ -448,14 +607,14 @@ export function Archived({
                   onValueChange={(value) => setRepo(String(value))}
                 >
                   <Menu.RadioItem value="all" closeOnClick>
-                    <span className="size-[18px] shrink-0" />
-                    <span className="min-w-0 flex-1">All repos</span>
+                    <span {...stylex.props(sx.size18px, sx.shrink0)} />
+                    <span {...stylex.props(sx.minW0, sx.flex1)}>All repos</span>
                     <Menu.Check on={repo === "all"} />
                   </Menu.RadioItem>
                   {repos.map((name) => (
                     <Menu.RadioItem key={name} value={name} closeOnClick>
                       <RepoTile name={name} size={18} />
-                      <span className="min-w-0 flex-1 truncate">
+                      <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                         {repoLabel(name)}
                       </span>
                       <Menu.Check on={repo === name} />
@@ -476,7 +635,7 @@ export function Archived({
                 >
                   {(["all", "auto", "manual"] as const).map((value) => (
                     <Menu.RadioItem key={value} value={value} closeOnClick>
-                      <span className="min-w-0 flex-1">
+                      <span {...stylex.props(sx.minW0, sx.flex1)}>
                         {
                           {
                             all: "All",
@@ -527,16 +686,42 @@ export function Archived({
   const mobileFilterPortaled = !!mobileActionsEl && isPhone;
 
   return (
-    <div data-page-scroll className="min-h-0 w-full flex-1 overflow-y-auto">
+    <div
+      data-page-scroll
+      {...stylex.props(sx.minH0, sx.wFull, sx.flex1, sx.overflowYAuto)}
+    >
       {desktopPortaled ? createPortal(actions, topbarActionsEl) : null}
       {mobileFilterPortaled
         ? createPortal(filterAction, mobileActionsEl)
         : null}
-      <div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 phone:px-3.5 phone:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] phone:pt-2 phone:[body.kb-open_&]:pb-[5rem] phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]">
+      <div
+        {...mergeStylexProps(
+          "phone:[body.kb-open_&]:pb-[5rem] phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]",
+          sx.mxAuto,
+          sx.wFull,
+          sx.maxW860px,
+          sx.px6,
+          sx.pb60px,
+          sx.pt7,
+          sx.phonePx35,
+          sx.phonePbCalc55remEnvSafeAreaInsetBottom0px,
+          sx.phonePt2,
+        )}
+      >
         {!isPhone && !desktopPortaled ? (
-          <div className="mb-3 flex items-center gap-2">{actions}</div>
+          <div {...stylex.props(sx.mb3, sx.flex, sx.itemsCenter, sx.gap2)}>
+            {actions}
+          </div>
         ) : null}
-        <p className="m-0 mb-[18px] text-supporting text-dim phone:mb-3.5">
+        <p
+          {...stylex.props(
+            sx.m0,
+            sx.mb18px,
+            sx.textDim,
+            sx.phoneMb35,
+            typography.supporting,
+          )}
+        >
           {count}
         </p>
         {archived.length === 0 && !loaded ? (
@@ -549,7 +734,7 @@ export function Archived({
             rows={8}
             label="Loading archived sessions"
             className={ARCHIVED_LIST}
-            rowClassName="px-3"
+            rowClassName={utilityClassName("px-3")}
           />
         ) : archived.length === 0 ? (
           <Card>
@@ -566,7 +751,9 @@ export function Archived({
             {sections.map((section, sectionIndex) => (
               <section
                 key={section.key}
-                className={sectionIndex > 0 ? "mt-4" : undefined}
+                className={
+                  sectionIndex > 0 ? utilityClassName("mt-4") : undefined
+                }
               >
                 <h2 className={ARCHIVED_SECTION_LABEL}>{section.label}</h2>
                 <ul className={ARCHIVED_SECTION_ROWS}>
@@ -583,14 +770,17 @@ export function Archived({
                         </span>
                       ),
                       owner === "everyone" && s.startedBy && (
-                        <span key="by" className="truncate">
+                        <span key="by" {...stylex.props(sx.truncate)}>
                           {s.startedBy}
                         </span>
                       ),
                       reason === "all" && isAutoReason(s) && (
                         <span
                           key="auto"
-                          className={cn(SOURCE_CHIP, "bg-active text-dim")}
+                          className={cn(
+                            SOURCE_CHIP,
+                            utilityClassName("bg-active text-dim"),
+                          )}
                           title={`Auto-archived (${s.archivedReason})`}
                         >
                           auto
@@ -636,8 +826,13 @@ export function Archived({
                                 className={cn(
                                   ARCHIVED_ROW,
                                   dragging &&
-                                    "phone:transition-none phone:will-change-transform",
-                                  swipeOffset && "phone:will-change-transform",
+                                    utilityClassName(
+                                      "phone:transition-none phone:will-change-transform",
+                                    ),
+                                  swipeOffset &&
+                                    utilityClassName(
+                                      "phone:will-change-transform",
+                                    ),
                                 )}
                                 style={
                                   swipeOffset
@@ -671,12 +866,26 @@ export function Archived({
                               {meta.length > 0 ? (
                                 <span className={ARCHIVED_ROW_META}>
                                   {meta}
-                                  <span className="hidden shrink-0 phone:inline">
+                                  <span
+                                    {...stylex.props(
+                                      sx.hidden,
+                                      sx.shrink0,
+                                      sx.phoneInline,
+                                    )}
+                                  >
                                     {relativeTime(s.lastActivity)}
                                   </span>
                                 </span>
                               ) : (
-                                <span className="mt-1 hidden text-meta text-faint phone:block">
+                                <span
+                                  {...stylex.props(
+                                    sx.mt1,
+                                    sx.hidden,
+                                    sx.textFaint,
+                                    sx.phoneBlock,
+                                    typography.meta,
+                                  )}
+                                >
                                   {relativeTime(s.lastActivity)}
                                 </span>
                               )}
@@ -687,7 +896,10 @@ export function Archived({
                               </span>
                               <IconChevronRight
                                 size={16}
-                                className="shrink-0"
+                                className={mergeStylexOverrideClassName(
+                                  "",
+                                  sx.shrink0,
+                                )}
                               />
                             </span>
                             <Button
@@ -718,7 +930,15 @@ export function Archived({
               </section>
             ))}
             {archived.length > PAGE_SIZE && (
-              <p className="m-0 px-3 pt-4 text-meta text-faint">
+              <p
+                {...stylex.props(
+                  sx.m0,
+                  sx.px3,
+                  sx.pt4,
+                  sx.textFaint,
+                  typography.meta,
+                )}
+              >
                 Showing the first {PAGE_SIZE} of {archived.length}. Search to
                 reach the older ones.
               </p>

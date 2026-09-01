@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React from "react";
 import type { ModelOption } from "../lib/api";
 import {
@@ -19,6 +21,126 @@ import { IconBolt, IconChevronRight, IconSparkle, IconUndo } from "./icons";
 import { ModelMark } from "./ModelMark";
 import type { ModelEffortSelectProps } from "../lib/model-effort-select-types";
 import { UsageCost, UsageDetails } from "./UsageMeter";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  pt05: {
+    paddingTop: "calc(4px * 0.5)",
+  },
+  pb15: {
+    paddingBottom: "calc(4px * 1.5)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  size4: {
+    width: "calc(4px * 4)",
+    height: "calc(4px * 4)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  leadingNone: {
+    lineHeight: "1",
+  },
+  leading12: {
+    lineHeight: "1.2",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  flexNone: {
+    flex: "none",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  w64: {
+    width: "calc(4px * 64)",
+  },
+  maxWMin360pxCalc100vw1rem: {
+    maxWidth: "min(360px, calc(100vw - 1rem))",
+  },
+  p15: {
+    padding: "calc(4px * 1.5)",
+  },
+  my1: {
+    marginBlock: "4px",
+  },
+});
 
 export const EFFORTS = [
   { id: "none", label: "None" },
@@ -265,7 +387,17 @@ export function splitModelOptions(models: ModelOption[]): {
  */
 function MenuHint({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-2 pt-0.5 pb-1.5 text-supporting text-faint">{children}</p>
+    <p
+      {...stylex.props(
+        sx.px2,
+        sx.pt05,
+        sx.pb15,
+        sx.textFaint,
+        typography.supporting,
+      )}
+    >
+      {children}
+    </p>
   );
 }
 
@@ -284,7 +416,7 @@ type ModelMenuOption = {
   description?: string;
 };
 
-const PICKER_ROW_GAP = "mb-0.5 last:mb-0";
+const PICKER_ROW_GAP = utilityClassName("mb-0.5 last:mb-0");
 
 /**
  * Combined model + reasoning-effort menu: one trigger opens a short list of
@@ -673,15 +805,32 @@ export function ModelEffortSelect({
         }
         className={cn(
           PICKER_ROW_GAP,
-          "justify-between gap-3",
-          selected && "bg-hover",
-          disabled && "opacity-55",
+          utilityClassName("justify-between gap-3"),
+          selected && utilityClassName("bg-hover"),
+          disabled && utilityClassName("opacity-55"),
         )}
       >
-        <span className="flex min-w-0 flex-1 items-center gap-2">
+        <span
+          {...stylex.props(
+            sx.flex,
+            sx.minW0,
+            sx.flex1,
+            sx.itemsCenter,
+            sx.gap2,
+          )}
+        >
           {/* The slot stays fixed so paired marks can overhang into the gap
 					    without shifting any row labels. */}
-          <span className="flex size-4 shrink-0 items-center justify-center text-dim">
+          <span
+            {...stylex.props(
+              sx.flex,
+              sx.size4,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.textDim,
+            )}
+          >
             <ModelMark
               id={option.id}
               provider={option.engine}
@@ -689,22 +838,48 @@ export function ModelEffortSelect({
             />
           </span>
           {optionDescription ? (
-            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-              <span className="shrink-0">{optionLabel}</span>
-              <span className="min-w-0 flex-1 truncate text-xs text-faint">
+            <span
+              {...stylex.props(
+                sx.flex,
+                sx.minW0,
+                sx.flex1,
+                sx.itemsBaseline,
+                sx.gap15,
+              )}
+            >
+              <span {...stylex.props(sx.shrink0)}>{optionLabel}</span>
+              <span
+                {...stylex.props(
+                  sx.minW0,
+                  sx.flex1,
+                  sx.truncate,
+                  sx.textXs,
+                  sx.textFaint,
+                )}
+              >
                 {optionDescription}
               </span>
             </span>
           ) : (
-            <span className="min-w-0 truncate">{optionLabel}</span>
+            <span {...stylex.props(sx.minW0, sx.truncate)}>{optionLabel}</span>
           )}
         </span>
         {recentSettings.length > 0 && (
-          <span className="ml-auto shrink-0 text-supporting text-faint">
+          <span
+            {...stylex.props(
+              sx.mlAuto,
+              sx.shrink0,
+              sx.textFaint,
+              typography.supporting,
+            )}
+          >
             {recentSettings.join(" · ")}
           </span>
         )}
-        <Menu.Check on={selected} className="text-dim" />
+        <Menu.Check
+          on={selected}
+          className={mergeStylexOverrideClassName("", sx.textDim)}
+        />
       </Menu.Item>
     );
     return optionDescription ? (
@@ -730,10 +905,16 @@ export function ModelEffortSelect({
         type="button"
         className={cn(
           menuRowTrigger
-            ? "flex w-full cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-control border border-line-strong bg-transparent px-3 py-[7px] text-control-label font-medium text-faint hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+            ? utilityClassName(
+                "flex w-full cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-control border border-line-strong bg-transparent px-3 py-[7px] text-control-label font-medium text-faint hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+              )
             : heroTrigger
-              ? "inline-flex min-h-11 min-w-0 max-w-full cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-label font-medium text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] data-[popup-open]:bg-hover data-[popup-open]:text-fg"
-              : "border-transparent hover:border-transparent hover:bg-hover",
+              ? utilityClassName(
+                  "inline-flex min-h-11 min-w-0 max-w-full cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-label font-medium text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+                )
+              : utilityClassName(
+                  "border-transparent hover:border-transparent hover:bg-hover",
+                ),
           className,
         )}
         title={title}
@@ -751,19 +932,56 @@ export function ModelEffortSelect({
       >
         {menuRowTrigger ? (
           <>
-            <IconSparkle size={18} className="shrink-0 text-faint" />
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
-              <span className="text-meta font-semibold leading-none text-faint">
+            <IconSparkle
+              size={18}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.shrink0,
+                sx.textFaint,
+              )}
+            />
+            <span
+              {...stylex.props(
+                sx.flex,
+                sx.minW0,
+                sx.flex1,
+                sx.flexCol,
+                sx.gap05,
+                sx.textLeft,
+              )}
+            >
+              <span
+                {...stylex.props(
+                  sx.fontSemibold,
+                  sx.leadingNone,
+                  sx.textFaint,
+                  typography.meta,
+                )}
+              >
                 Model
               </span>
-              <span className="truncate text-control-label leading-[1.2] text-fg">
+              <span
+                {...stylex.props(
+                  sx.truncate,
+                  sx.leading12,
+                  sx.textFg,
+                  typography.controlLabel,
+                )}
+              >
                 {modelLabel}
               </span>
             </span>
-            <IconChevronRight size={16} className="shrink-0 text-faint" />
+            <IconChevronRight
+              size={16}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.shrink0,
+                sx.textFaint,
+              )}
+            />
           </>
         ) : heroTrigger ? (
-          <span className="truncate">{modelLabel}</span>
+          <span {...stylex.props(sx.truncate)}>{modelLabel}</span>
         ) : (
           <>
             {/* `data-effort` is a styling hook for the caller, not state: the
@@ -771,13 +989,20 @@ export function ModelEffortSelect({
 						    model name keeps the room, and the composer toolbar does not. */}
             {hasFastMode && effectiveFastMode && (
               <>
-                <IconBolt className="flex-none text-faint" size={20} />
-                <span className="sr-only">Fast mode</span>
+                <IconBolt
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.flexNone,
+                    sx.textFaint,
+                  )}
+                  size={20}
+                />
+                <span {...stylex.props(sx.srOnly)}>Fast mode</span>
               </>
             )}
-            <span className="truncate">{modelLabel}</span>
+            <span {...stylex.props(sx.truncate)}>{modelLabel}</span>
             {hasEffort && (
-              <span data-effort className="flex-none text-faint">
+              <span data-effort {...stylex.props(sx.flexNone, sx.textFaint)}>
                 {effortLabel}
               </span>
             )}
@@ -788,25 +1013,55 @@ export function ModelEffortSelect({
         align={menuRowTrigger ? "start" : heroTrigger ? "center" : "end"}
         sideOffset={6}
         className={cn(
-          "max-w-[min(360px,calc(100vw-1rem))]",
-          menuRowTrigger && "min-w-[220px]",
+          utilityClassName("max-w-[min(360px,calc(100vw-1rem))]"),
+          menuRowTrigger && utilityClassName("min-w-[220px]"),
         )}
       >
         {showUsage && (
           <>
             <Menu.SubmenuRoot>
-              <Menu.SubmenuTrigger className="justify-between gap-3">
-                <span className="min-w-0 truncate">Conversation usage</span>
-                <span className="flex flex-none items-center gap-1 text-dim">
+              <Menu.SubmenuTrigger
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.justifyBetween,
+                  sx.gap3,
+                )}
+              >
+                <span {...stylex.props(sx.minW0, sx.truncate)}>
+                  Conversation usage
+                </span>
+                <span
+                  {...stylex.props(
+                    sx.flex,
+                    sx.flexNone,
+                    sx.itemsCenter,
+                    sx.gap1,
+                    sx.textDim,
+                  )}
+                >
                   <UsageCost usage={usage} />
-                  <IconChevronRight className="shrink-0" size={17} />
+                  <IconChevronRight
+                    className={mergeStylexOverrideClassName("", sx.shrink0)}
+                    size={17}
+                  />
                 </span>
               </Menu.SubmenuTrigger>
-              <Menu.Popup className="w-64 max-w-[min(360px,calc(100vw-1rem))]">
-                <UsageDetails usage={usage} className="p-1.5" />
+              <Menu.Popup
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.w64,
+                  sx.maxWMin360pxCalc100vw1rem,
+                )}
+              >
+                <UsageDetails
+                  usage={usage}
+                  className={mergeStylexOverrideClassName("", sx.p15)}
+                />
               </Menu.Popup>
             </Menu.SubmenuRoot>
-            <Menu.Separator className="my-1" />
+            <Menu.Separator
+              className={mergeStylexOverrideClassName("", sx.my1)}
+            />
           </>
         )}
         {recentOptions.length > 0 && (
@@ -815,23 +1070,52 @@ export function ModelEffortSelect({
               <Menu.GroupLabel>Recent models</Menu.GroupLabel>
               {recentOptions.map((option) => renderModelOption(option, true))}
             </Menu.Group>
-            <Menu.Separator className="my-1" />
+            <Menu.Separator
+              className={mergeStylexOverrideClassName("", sx.my1)}
+            />
           </>
         )}
         <Menu.SubmenuRoot>
-          <Menu.SubmenuTrigger className="justify-between gap-3">
-            <span className="min-w-0 truncate">Model</span>
-            <span className="flex min-w-0 flex-none items-center gap-1 text-dim">
-              <span className="truncate">{modelLabel}</span>
-              <IconChevronRight className="shrink-0" size={17} />
+          <Menu.SubmenuTrigger
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.justifyBetween,
+              sx.gap3,
+            )}
+          >
+            <span {...stylex.props(sx.minW0, sx.truncate)}>Model</span>
+            <span
+              {...stylex.props(
+                sx.flex,
+                sx.minW0,
+                sx.flexNone,
+                sx.itemsCenter,
+                sx.gap1,
+                sx.textDim,
+              )}
+            >
+              <span {...stylex.props(sx.truncate)}>{modelLabel}</span>
+              <IconChevronRight
+                className={mergeStylexOverrideClassName("", sx.shrink0)}
+                size={17}
+              />
             </span>
           </Menu.SubmenuTrigger>
-          <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+          <Menu.Popup
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.maxWMin360pxCalc100vw1rem,
+            )}
+          >
             {reuploadHint && <MenuHint>{reuploadHint}</MenuHint>}
             {groupedPrimary
               ? providerGroups.map((g, i) => (
                   <React.Fragment key={g.provider}>
-                    {i > 0 && <Menu.Separator className="my-1" />}
+                    {i > 0 && (
+                      <Menu.Separator
+                        className={mergeStylexOverrideClassName("", sx.my1)}
+                      />
+                    )}
                     <Menu.Group>
                       <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
                       {g.options.map((option) => renderModelOption(option))}
@@ -843,25 +1127,50 @@ export function ModelEffortSelect({
               <Menu.SubmenuRoot>
                 <Menu.SubmenuTrigger
                   className={cn(
-                    "justify-between gap-3",
-                    primaryFirst && "text-dim",
+                    utilityClassName("justify-between gap-3"),
+                    primaryFirst && utilityClassName("text-dim"),
                   )}
                 >
-                  <span className="min-w-0 truncate">
+                  <span {...stylex.props(sx.minW0, sx.truncate)}>
                     {primaryFirst ? LEGACY_GROUP_LABEL : "Other models"}
                   </span>
-                  <span className="flex flex-none items-center gap-1 text-dim">
-                    {selectedLegacyLabel && (
-                      <span className="text-faint">{selectedLegacyLabel}</span>
+                  <span
+                    {...stylex.props(
+                      sx.flex,
+                      sx.flexNone,
+                      sx.itemsCenter,
+                      sx.gap1,
+                      sx.textDim,
                     )}
-                    <IconChevronRight className="shrink-0" size={17} />
+                  >
+                    {selectedLegacyLabel && (
+                      <span {...stylex.props(sx.textFaint)}>
+                        {selectedLegacyLabel}
+                      </span>
+                    )}
+                    <IconChevronRight
+                      className={mergeStylexOverrideClassName("", sx.shrink0)}
+                      size={17}
+                    />
                   </span>
                 </Menu.SubmenuTrigger>
-                <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+                <Menu.Popup
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.maxWMin360pxCalc100vw1rem,
+                  )}
+                >
                   {!primaryFirst && otherGroups.length > 1
                     ? otherGroups.map((g, i) => (
                         <React.Fragment key={g.engine}>
-                          {i > 0 && <Menu.Separator className="my-1" />}
+                          {i > 0 && (
+                            <Menu.Separator
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.my1,
+                              )}
+                            />
+                          )}
                           <Menu.Group>
                             <Menu.GroupLabel>{g.label}</Menu.GroupLabel>
                             {g.options.map((option) =>
@@ -884,14 +1193,40 @@ export function ModelEffortSelect({
         </Menu.SubmenuRoot>
         {hasEffort && (
           <Menu.SubmenuRoot>
-            <Menu.SubmenuTrigger className="justify-between gap-3">
-              <span className="min-w-0 truncate">Effort</span>
-              <span className="flex flex-none items-center gap-1 text-dim">
+            <Menu.SubmenuTrigger
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.justifyBetween,
+                sx.gap3,
+              )}
+            >
+              <span {...stylex.props(sx.minW0, sx.truncate)}>Effort</span>
+              <span
+                {...stylex.props(
+                  sx.flex,
+                  sx.flexNone,
+                  sx.itemsCenter,
+                  sx.gap1,
+                  sx.textDim,
+                )}
+              >
                 {effortLabel}
-                <IconChevronRight className="shrink-0 text-dim" size={17} />
+                <IconChevronRight
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.shrink0,
+                    sx.textDim,
+                  )}
+                  size={17}
+                />
               </span>
             </Menu.SubmenuTrigger>
-            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+            <Menu.Popup
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.maxWMin360pxCalc100vw1rem,
+              )}
+            >
               {effortReuploadHint && <MenuHint>{effortReuploadHint}</MenuHint>}
               {effortOptions.map((e) => {
                 const selected = effectiveEffort === e.id;
@@ -901,12 +1236,17 @@ export function ModelEffortSelect({
                     onClick={() => onEffortChange!(e.id)}
                     className={cn(
                       PICKER_ROW_GAP,
-                      "justify-between gap-3",
-                      selected && "bg-hover",
+                      utilityClassName("justify-between gap-3"),
+                      selected && utilityClassName("bg-hover"),
                     )}
                   >
-                    <span className="min-w-0 truncate">{e.label}</span>
-                    <Menu.Check on={selected} className="text-dim" />
+                    <span {...stylex.props(sx.minW0, sx.truncate)}>
+                      {e.label}
+                    </span>
+                    <Menu.Check
+                      on={selected}
+                      className={mergeStylexOverrideClassName("", sx.textDim)}
+                    />
                   </Menu.Item>
                 );
               })}
@@ -915,14 +1255,40 @@ export function ModelEffortSelect({
         )}
         {hasFastMode && (
           <Menu.SubmenuRoot>
-            <Menu.SubmenuTrigger className="justify-between gap-3">
-              <span className="min-w-0 truncate">Speed</span>
-              <span className="flex flex-none items-center gap-1 text-dim">
+            <Menu.SubmenuTrigger
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.justifyBetween,
+                sx.gap3,
+              )}
+            >
+              <span {...stylex.props(sx.minW0, sx.truncate)}>Speed</span>
+              <span
+                {...stylex.props(
+                  sx.flex,
+                  sx.flexNone,
+                  sx.itemsCenter,
+                  sx.gap1,
+                  sx.textDim,
+                )}
+              >
                 {effectiveFastMode ? "Fast" : "Standard"}
-                <IconChevronRight className="shrink-0 text-dim" size={17} />
+                <IconChevronRight
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.shrink0,
+                    sx.textDim,
+                  )}
+                  size={17}
+                />
               </span>
             </Menu.SubmenuTrigger>
-            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+            <Menu.Popup
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.maxWMin360pxCalc100vw1rem,
+              )}
+            >
               {speedOptions.map((o) => {
                 const selected = effectiveFastMode === o.fast;
                 return (
@@ -937,12 +1303,17 @@ export function ModelEffortSelect({
                       onFastModeChange!(o.fast);
                     }}
                     className={cn(
-                      "justify-between gap-3",
-                      selected && "bg-hover",
+                      utilityClassName("justify-between gap-3"),
+                      selected && utilityClassName("bg-hover"),
                     )}
                   >
-                    <span className="min-w-0 truncate">{o.label}</span>
-                    <Menu.Check on={selected} className="text-dim" />
+                    <span {...stylex.props(sx.minW0, sx.truncate)}>
+                      {o.label}
+                    </span>
+                    <Menu.Check
+                      on={selected}
+                      className={mergeStylexOverrideClassName("", sx.textDim)}
+                    />
                   </Menu.Item>
                 );
               })}
@@ -951,24 +1322,53 @@ export function ModelEffortSelect({
         )}
         {hasAccount && (
           <Menu.SubmenuRoot>
-            <Menu.SubmenuTrigger className="justify-between gap-3">
-              <span className="min-w-0 truncate">Account</span>
-              <span className="flex flex-none items-center gap-1 text-dim">
+            <Menu.SubmenuTrigger
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.justifyBetween,
+                sx.gap3,
+              )}
+            >
+              <span {...stylex.props(sx.minW0, sx.truncate)}>Account</span>
+              <span
+                {...stylex.props(
+                  sx.flex,
+                  sx.flexNone,
+                  sx.itemsCenter,
+                  sx.gap1,
+                  sx.textDim,
+                )}
+              >
                 {accountLabel}
-                <IconChevronRight className="shrink-0 text-dim" size={17} />
+                <IconChevronRight
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.shrink0,
+                    sx.textDim,
+                  )}
+                  size={17}
+                />
               </span>
             </Menu.SubmenuTrigger>
-            <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+            <Menu.Popup
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.maxWMin360pxCalc100vw1rem,
+              )}
+            >
               <Menu.Item
                 onClick={() => onAccountChange!("")}
                 className={cn(
                   PICKER_ROW_GAP,
-                  "justify-between gap-3",
-                  !accountId && "bg-hover",
+                  utilityClassName("justify-between gap-3"),
+                  !accountId && utilityClassName("bg-hover"),
                 )}
               >
-                <span className="min-w-0 truncate">Auto</span>
-                <Menu.Check on={!accountId} className="text-dim" />
+                <span {...stylex.props(sx.minW0, sx.truncate)}>Auto</span>
+                <Menu.Check
+                  on={!accountId}
+                  className={mergeStylexOverrideClassName("", sx.textDim)}
+                />
               </Menu.Item>
               {providerAccounts.map((a) => {
                 const selected = a.id === accountId;
@@ -978,44 +1378,56 @@ export function ModelEffortSelect({
                     onClick={() => onAccountChange!(a.id)}
                     className={cn(
                       PICKER_ROW_GAP,
-                      "justify-between gap-3",
-                      selected && "bg-hover",
+                      utilityClassName("justify-between gap-3"),
+                      selected && utilityClassName("bg-hover"),
                     )}
                   >
-                    <span className="min-w-0 truncate">
+                    <span {...stylex.props(sx.minW0, sx.truncate)}>
                       {providerAccountLabel(a)}
                       {a.owner ? ` · ${a.owner}` : ""}
                       {a.usable ? "" : " · exhausted"}
                     </span>
-                    <Menu.Check on={selected} className="text-dim" />
+                    <Menu.Check
+                      on={selected}
+                      className={mergeStylexOverrideClassName("", sx.textDim)}
+                    />
                   </Menu.Item>
                 );
               })}
             </Menu.Popup>
           </Menu.SubmenuRoot>
         )}
-        <Menu.Separator className="my-1" />
+        <Menu.Separator className={mergeStylexOverrideClassName("", sx.my1)} />
         {onSetAsDefault && (
           <Menu.Item
             onClick={() => onSetAsDefault(effectiveModel)}
             disabled={isPreferredDefault}
             title={`Use ${modelLabel} for new sessions`}
             className={cn(
-              "justify-between gap-3",
-              isPreferredDefault && "opacity-55",
+              utilityClassName("justify-between gap-3"),
+              isPreferredDefault && utilityClassName("opacity-55"),
             )}
           >
-            <span className="min-w-0 truncate">Set as default</span>
-            <Menu.Check on={isPreferredDefault} className="text-dim" />
+            <span {...stylex.props(sx.minW0, sx.truncate)}>Set as default</span>
+            <Menu.Check
+              on={isPreferredDefault}
+              className={mergeStylexOverrideClassName("", sx.textDim)}
+            />
           </Menu.Item>
         )}
         <Menu.Item
           onClick={resetToDefault}
           disabled={atDefault}
-          className={cn("justify-between gap-3", atDefault && "opacity-55")}
+          className={cn(
+            utilityClassName("justify-between gap-3"),
+            atDefault && utilityClassName("opacity-55"),
+          )}
         >
-          <span className="min-w-0 truncate">Reset to default</span>
-          <IconUndo className="shrink-0 text-dim" size={17} />
+          <span {...stylex.props(sx.minW0, sx.truncate)}>Reset to default</span>
+          <IconUndo
+            className={mergeStylexOverrideClassName("", sx.shrink0, sx.textDim)}
+            size={17}
+          />
         </Menu.Item>
       </Menu.Popup>
     </Menu.Root>

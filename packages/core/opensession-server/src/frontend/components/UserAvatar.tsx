@@ -1,5 +1,32 @@
+import { mergeStylexProps } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useState } from "react";
 import { cn } from "../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  sizeFull: {
+    width: "100%",
+    height: "100%",
+  },
+  roundedInherit: {
+    borderRadius: "inherit",
+    cornerShape: "var(--cs)",
+  },
+  CornerShapeInherit: {
+    cornerShape: "inherit",
+  },
+  objectCover: {
+    objectFit: "cover",
+  },
+});
 
 /**
  * GitHub logins for the team, keyed by lowercased first name — the shape of
@@ -99,8 +126,12 @@ export function UserAvatar({
         picture && edge
           ? "[--avatar-edge:inset_0_0_0_1px_color-mix(in_srgb,var(--text)_14%,transparent)]"
           : "[--avatar-edge:0_0_0_0_transparent]",
-        "relative inline-flex shrink-0 items-center justify-center",
-        "rounded-avatar bg-active font-bold text-dim shadow-[var(--avatar-edge)] select-none",
+        utilityClassName(
+          "relative inline-flex shrink-0 items-center justify-center",
+        ),
+        utilityClassName(
+          "rounded-avatar bg-active font-bold text-dim shadow-[var(--avatar-edge)] select-none",
+        ),
         className,
       )}
       style={{
@@ -124,7 +155,15 @@ export function UserAvatar({
           // took the radius but kept the squircle, and only the frame's
           // clip hid it. Inheriting the shape as well as the radius is
           // what makes the picture the frame's shape, always.
-          className="absolute inset-0 size-full rounded-[inherit] [corner-shape:inherit] object-cover shadow-[var(--avatar-edge)]"
+          {...mergeStylexProps(
+            "shadow-[var(--avatar-edge)]",
+            sx.absolute,
+            sx.inset0,
+            sx.sizeFull,
+            sx.roundedInherit,
+            sx.CornerShapeInherit,
+            sx.objectCover,
+          )}
           loading="lazy"
           draggable={false}
           onError={() => setFailed(true)}

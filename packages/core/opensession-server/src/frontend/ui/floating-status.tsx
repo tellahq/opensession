@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import { motion, type HTMLMotionProps } from "motion/react";
 import { cn } from "./cn";
 
@@ -9,9 +10,15 @@ export function FloatingStatus({
   return (
     <motion.div
       className={cn(
-        "flex items-center gap-2 whitespace-nowrap rounded-[999px] bg-popup-glass",
-        "px-3 py-1.5 text-supporting font-medium leading-tight text-fg",
-        "[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
+        utilityClassName(
+          "flex items-center gap-2 whitespace-nowrap rounded-[999px] bg-popup-glass",
+        ),
+        utilityClassName(
+          "px-3 py-1.5 text-supporting font-medium leading-tight text-fg",
+        ),
+        utilityClassName(
+          "[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
+        ),
         className,
       )}
       {...props}

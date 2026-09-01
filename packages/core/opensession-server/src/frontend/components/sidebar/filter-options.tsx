@@ -5,6 +5,37 @@ import type { SettingOption } from "../../ui/setting-row";
 import { RepoTile, repoLabel } from "../RepoTile";
 import { UserAvatar } from "../UserAvatar";
 import { IconRepo, IconRobot } from "../icons";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  size4: {
+    width: "calc(4px * 4)",
+    height: "calc(4px * 4)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedAvatar: {
+    borderRadius: "calc(32% * var(--rp))",
+    cornerShape: "var(--cs)",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+});
 
 export const GROUP_BY_OPTIONS: Array<SettingOption & { value: GroupBy }> = [
   { value: "inbox", label: "Inbox" },
@@ -50,7 +81,18 @@ export function personFilterOptions({
   const avatar = (name: string) => <UserAvatar name={name} size={16} />;
   const icon = (key: string, label: string) =>
     key === AGENT_PERSON_KEY ? (
-      <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-avatar bg-active text-dim">
+      <span
+        {...stylex.props(
+          sx.inlineFlex,
+          sx.size4,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.justifyCenter,
+          sx.roundedAvatar,
+          sx.bgActive,
+          sx.textDim,
+        )}
+      >
         <IconRobot size={13} />
       </span>
     ) : (

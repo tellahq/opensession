@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useState } from "react";
 import {
   fetchInstanceIdentity,
@@ -16,11 +18,45 @@ import {
   settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  textFg: {
+    color: "var(--text)",
+  },
+  h12: {
+    height: "calc(4px * 12) !important",
+  },
+  minH12: {
+    minHeight: "calc(4px * 12) !important",
+  },
+  wFull: {
+    width: "100% !important",
+  },
+  px35: {
+    paddingInline: "calc(4px * 3.5) !important",
+  },
+  textBase: {
+    fontSize: "var(--type-body) !important",
+    lineHeight: "var(--tw-leading, var(--text-base--line-height)) !important",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+});
 
 // What this instance and its agent are called. These rows sit inside the
 // organization card, so Setup and Workspace > General both show one section.
 
-const IDENTITY_INPUT_CLASS = cn(settingsInputClass, "w-[140px] max-w-full");
+const IDENTITY_INPUT_CLASS = cn(
+  settingsInputClass,
+  utilityClassName("w-[140px] max-w-full"),
+);
 
 /** One identity field: saves on blur or Enter, reverts on Escape or failure. */
 function IdentityInput({
@@ -125,17 +161,24 @@ export function IdentityRows({
 
   if (compact) {
     return (
-      <Field label={<span className="text-fg">Agent name</span>}>
+      <Field label={<span {...stylex.props(sx.textFg)}>Agent name</span>}>
         <IdentityInput
           label="Agent name"
           value={identity?.personaName ?? AGENT_NAME}
           placeholder="Assistant"
           onSave={(next) => save({ personaName: next })}
-          className="h-12! min-h-12! w-full! px-3.5! text-base!"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.h12,
+            sx.minH12,
+            sx.wFull,
+            sx.px35,
+            sx.textBase,
+          )}
         />
         <span
           data-onboarding-caption=""
-          className="text-supporting font-normal text-dim"
+          {...stylex.props(sx.fontNormal, sx.textDim, typography.supporting)}
         >
           Shown in prompts, Slack messages, and the app.
         </span>

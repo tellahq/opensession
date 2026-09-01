@@ -1,9 +1,21 @@
+import { utilityClassName } from "../ui/cn";
 import React from "react";
 import { motion } from "motion/react";
 import type { ReplySuggestion } from "../lib/reply-suggestions";
 import { duration, ease } from "../ui/motion";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  pointerEventsAuto: {
+    pointerEvents: "auto",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+});
 
 /**
  * Quick-reply chips above the session composer: the two or three replies the
@@ -59,19 +71,33 @@ import { cn } from "../ui/cn";
  * otherwise decide how much of the answer the row covers.
  */
 const chip =
-  "relative inline-flex h-7 w-full items-center whitespace-nowrap rounded-[999px] px-3 " +
-  "bg-[var(--composer-surface)] " +
-  "[--smooth-ring-color:var(--composer-border)] smooth-shadow-ring-md " +
-  "text-label font-medium text-dim transition-[color,scale] " +
-  "hover:text-fg focus-visible:text-fg active:scale-[0.96] " +
+  utilityClassName(
+    "relative inline-flex h-7 w-full items-center whitespace-nowrap rounded-[999px] px-3 ",
+  ) +
+  utilityClassName("bg-[var(--composer-surface)] ") +
+  utilityClassName(
+    "[--smooth-ring-color:var(--composer-border)] smooth-shadow-ring-md ",
+  ) +
+  utilityClassName(
+    "text-label font-medium text-dim transition-[color,scale] ",
+  ) +
+  utilityClassName("hover:text-fg focus-visible:text-fg active:scale-[0.96] ") +
   // The hover wash layers over the lid rather than replacing it, so it paints
   // on a pseudo-element, which needs the pill's corner treatment of its own:
   // base.css grants `corner-shape` by matching `rounded-*` on an ELEMENT, and
   // a pseudo-element matches no selector.
-  "before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] " +
-  "before:[corner-shape:inherit] before:bg-transparent before:transition-colors " +
-  "before:content-[''] hover:before:bg-hover focus-visible:before:bg-hover " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg";
+  utilityClassName(
+    "before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] ",
+  ) +
+  utilityClassName(
+    "before:[corner-shape:inherit] before:bg-transparent before:transition-colors ",
+  ) +
+  utilityClassName(
+    "before:content-[''] hover:before:bg-hover focus-visible:before:bg-hover ",
+  ) +
+  utilityClassName(
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg",
+  );
 
 interface Props {
   suggestions: ReplySuggestion[];
@@ -115,18 +141,24 @@ export function ReplySuggestions({ suggestions, onPick, className }: Props) {
       className={cn(
         // One row that scrolls sideways rather than wrapping: a second line
         // costs the transcript real height, and these are optional.
-        "flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        utilityClassName(
+          "flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        ),
         // Fade only the edge with more content. A hard clip beside Next made
         // a complete chip look broken, while the fade says the row scrolls.
         "[--reply-fade-start:#000] [--reply-fade-end:#000] " +
           "data-[overflow-start]:[--reply-fade-start:transparent] data-[overflow-end]:[--reply-fade-end:transparent] " +
-          "[-webkit-mask-image:linear-gradient(to_right,var(--reply-fade-start)_0,#000_16px,#000_calc(100%_-_16px),var(--reply-fade-end)_100%)] " +
-          "[mask-image:linear-gradient(to_right,var(--reply-fade-start)_0,#000_16px,#000_calc(100%_-_16px),var(--reply-fade-end)_100%)]",
+          utilityClassName(
+            "[-webkit-mask-image:linear-gradient(to_right,var(--reply-fade-start)_0,#000_16px,#000_calc(100%_-_16px),var(--reply-fade-end)_100%)] ",
+          ) +
+          utilityClassName(
+            "[mask-image:linear-gradient(to_right,var(--reply-fade-start)_0,#000_16px,#000_calc(100%_-_16px),var(--reply-fade-end)_100%)]",
+          ),
         // The caller floats this over the transcript, so the row spans the
         // whole column while the chips fill only part of it. Nothing but the
         // chips may take a click: the rest of that band is transcript you
         // should still be able to select and reach.
-        "pointer-events-none",
+        utilityClassName("pointer-events-none"),
         className,
       )}
     >
@@ -137,7 +169,7 @@ export function ReplySuggestions({ suggestions, onPick, className }: Props) {
         // injected props are known to get lost.
         <motion.div
           key={`${s.label}-${i}`}
-          className="pointer-events-auto shrink-0"
+          {...stylex.props(sx.pointerEventsAuto, sx.shrink0)}
           // The row arrives seconds after the turn ends, so it fades in from
           // its own size rather than sliding: something appearing above the
           // composer while you are reading should not also move. The small

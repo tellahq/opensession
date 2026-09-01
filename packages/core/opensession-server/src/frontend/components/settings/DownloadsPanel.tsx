@@ -3,6 +3,14 @@ import { Button } from "../../ui/button";
 import { SettingsHeader, SettingsPanel } from "../../ui/settings";
 import { IconChevronLeft } from "../icons";
 import { DownloadAppsBody } from "../DownloadAppsDialog";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+});
 
 // ── Downloads: the same two app cards the account menu opens as a modal, shown
 // inline so Settings has a permanent home for "how do I install this". ──
@@ -30,7 +38,7 @@ export function DownloadsPanel() {
           ) : undefined
         }
       />
-      <div className="px-5">
+      <div {...stylex.props(sx.px5)}>
         <DownloadAppsBody
           showInstallHelp={showInstallHelp}
           onShowInstallHelp={() => setShowInstallHelp(true)}

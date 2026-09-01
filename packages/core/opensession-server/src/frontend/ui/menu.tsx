@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
@@ -78,7 +79,7 @@ function Popup({
         collisionPadding={8}
         className={cn(
           FLOATING_OVERLAY_LAYER,
-          "outline-none",
+          utilityClassName("outline-none"),
           positionerClassName,
         )}
       >
@@ -115,7 +116,7 @@ function ContextPopup({
     >
       <BaseContextMenu.Positioner
         collisionPadding={8}
-        className={cn(FLOATING_OVERLAY_LAYER, "outline-none")}
+        className={cn(FLOATING_OVERLAY_LAYER, utilityClassName("outline-none"))}
       >
         <BaseContextMenu.Popup
           className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
@@ -203,7 +204,12 @@ export function MenuShortcut({
   children: React.ReactNode;
 }) {
   return (
-    <span className={cn("shrink-0 pl-4 text-label text-faint", className)}>
+    <span
+      className={cn(
+        utilityClassName("shrink-0 pl-4 text-label text-faint"),
+        className,
+      )}
+    >
       {children}
     </span>
   );
@@ -235,7 +241,11 @@ export function MenuCheck({
     <IconCheck
       size={size}
       aria-hidden
-      className={cn("shrink-0 text-accent", !on && "invisible", className)}
+      className={cn(
+        utilityClassName("shrink-0 text-accent"),
+        !on && utilityClassName("invisible"),
+        className,
+      )}
     />
   );
 }
@@ -243,7 +253,7 @@ export function MenuCheck({
 function Separator({ className }: { className?: string }) {
   return (
     <BaseMenu.Separator
-      className={cn("-mx-1.5 my-1.5 h-px bg-line", className)}
+      className={cn(utilityClassName("-mx-1.5 my-1.5 h-px bg-line"), className)}
     />
   );
 }
@@ -259,7 +269,9 @@ function GroupLabel({
     <BaseMenu.GroupLabel
       {...props}
       className={cn(
-        "px-2 pb-1 text-meta font-semibold tracking-[-0.01em] text-faint",
+        utilityClassName(
+          "px-2 pb-1 text-meta font-semibold tracking-[-0.01em] text-faint",
+        ),
         className,
       )}
     />

@@ -43,12 +43,27 @@ test("Electron titlebar drag regions do not depend on WCO visibility", async () 
     "[html.desktop-shell_&]:[-webkit-app-region:drag]",
   );
   expect(appShell).toContain('className="wco-collapsed-drag-handle"');
+  // main:is formatting wraps the selector across lines.
   expect(css).toMatch(
-    /\.app-body\.sidebar-collapsed\s+\.wco-collapsed-drag-handle/,
+    /\.app-body\.sidebar-collapsed\s+\.wco-collapsed-drag-handle\s+\{/,
   );
-  expect(firstMile).toContain(
-    'className="wco-chrome relative z-20 flex h-11 shrink-0 items-start justify-center"',
-  );
+  // Converted to StyleX: the drag region keeps its `wco-chrome` hook and composes
+  // the geometry (relative, z-20, flex, h-11, shrink-0, items-start, center)
+  // through mergeStylexProps.
+  const chromeAt = firstMile.indexOf('"wco-chrome"');
+  const dragRegion = firstMile.slice(chromeAt - 60, chromeAt + 300);
+  expect(dragRegion).toContain("mergeStylexProps(");
+  for (const arg of [
+    "sx.relative",
+    "sx.z20",
+    "sx.flex",
+    "sx.h11",
+    "sx.shrink0",
+    "sx.itemsStart",
+    "sx.justifyCenter",
+  ]) {
+    expect(dragRegion).toContain(arg);
+  }
   expect(settings).toContain("!TOOL_SECTIONS.has(active) && (");
   expect(settings).toContain("className={SETTINGS_DRAG_HANDLE}");
   expect(settingsClasses).toContain(

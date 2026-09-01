@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { Popover as BasePopover } from "@base-ui/react/popover";
 import { cn } from "./cn";
@@ -150,7 +151,7 @@ function Popup({
         arrowPadding={14}
         className={cn(
           FLOATING_OVERLAY_LAYER,
-          "outline-none",
+          utilityClassName("outline-none"),
           positionerClassName,
         )}
       >
@@ -159,17 +160,23 @@ function Popup({
           className={cn(
             // The ring override rides on the popup so the arrow, which
             // continues that hairline, inherits the same value.
-            "rounded-popup [corner-shape:squircle] outline-none",
-            "bg-popup-glass [backdrop-filter:var(--popup-blur)]",
+            utilityClassName(
+              "rounded-popup [corner-shape:squircle] outline-none",
+            ),
+            utilityClassName(
+              "bg-popup-glass [backdrop-filter:var(--popup-blur)]",
+            ),
             ring === "soft"
               ? "[--smooth-ring-color:color-mix(in_srgb,var(--popup-ring)_65%,var(--popup-surface))]"
               : "[--smooth-ring-color:var(--popup-ring)]",
             elevation === "lg"
-              ? "smooth-shadow-ring-lg"
+              ? utilityClassName("smooth-shadow-ring-lg")
               : elevation === "sm"
-                ? "smooth-shadow-ring-sm"
-                : "smooth-shadow-ring-md",
-            "origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out",
+                ? utilityClassName("smooth-shadow-ring-sm")
+                : utilityClassName("smooth-shadow-ring-md"),
+            utilityClassName(
+              "origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out",
+            ),
             "data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0",
             "data-[ending-style]:opacity-0 data-[ending-style]:transition-none",
             className,
@@ -193,8 +200,12 @@ function Popup({
             // across the arrow's base.
             <BasePopover.Arrow
               className={cn(
-                "size-[10px] rotate-45 [border-color:var(--smooth-ring-color)]",
-                "bg-popup-glass [backdrop-filter:var(--popup-blur)]",
+                utilityClassName(
+                  "size-[10px] rotate-45 [border-color:var(--smooth-ring-color)]",
+                ),
+                utilityClassName(
+                  "bg-popup-glass [backdrop-filter:var(--popup-blur)]",
+                ),
                 "data-[side=right]:left-[-5px] data-[side=right]:border-b data-[side=right]:border-l",
                 "data-[side=right]:[clip-path:polygon(14%_0,0_0,0_100%,100%_100%,100%_86%)]",
                 "data-[side=left]:right-[-6px] data-[side=left]:border-t data-[side=left]:border-r",

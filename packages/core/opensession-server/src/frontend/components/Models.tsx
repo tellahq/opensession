@@ -1,3 +1,4 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
 import { BASE_PATH } from "../lib/base";
 import { errorMessage } from "../lib/error-message";
 import { useEffect, useState } from "react";
@@ -15,6 +16,14 @@ import {
   SettingsHint,
 } from "../ui/settings";
 import { Switch } from "../ui/switch";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  mt0: {
+    marginTop: "0",
+  },
+});
 
 // The default-model half of Settings → Providers: which model a run starts on
 // and which engine carries it. The subscription accounts those runs draw from,
@@ -41,7 +50,9 @@ export function ModelDefaultsSection({
 } = {}) {
   return (
     <>
-      <SettingsGroupLabel className="mt-0">Default model</SettingsGroupLabel>
+      <SettingsGroupLabel className={mergeStylexOverrideClassName("", sx.mt0)}>
+        Default model
+      </SettingsGroupLabel>
       <SettingCard>
         <DefaultModelRow onChanged={onChanged} />
         <AutoFallbackRow />

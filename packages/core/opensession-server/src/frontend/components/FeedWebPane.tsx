@@ -1,6 +1,82 @@
+import { utilityClassName } from "../ui/cn";
 import React from "react";
 import type { ExternalRef } from "../lib/types";
 import { feedForRefKind } from "../lib/feeds-meta";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  wFull: {
+    width: "100%",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgBlack: {
+    backgroundColor: "var(--color-black)",
+  },
+});
 
 /**
  * The generic web panel for feed-item workspaces (the feeds design): a
@@ -67,9 +143,32 @@ export function FeedWebPane({
   className?: string;
 }) {
   return (
-    <div className={`flex h-full min-h-0 flex-col ${className || ""}`}>
-      <div className="flex items-center gap-3 border-b border-divider px-3 py-2">
-        <span className="min-w-0 flex-1 truncate text-label font-medium text-fg">
+    <div
+      className={utilityClassName(
+        `flex h-full min-h-0 flex-col ${className || ""}`,
+      )}
+    >
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.itemsCenter,
+          sx.gap3,
+          sx.borderB,
+          sx.borderDivider,
+          sx.px3,
+          sx.py2,
+        )}
+      >
+        <span
+          {...stylex.props(
+            sx.minW0,
+            sx.flex1,
+            sx.truncate,
+            sx.fontMedium,
+            sx.textFg,
+            typography.label,
+          )}
+        >
           {title || panel.label}
         </span>
         {panel.links.map((l) => (
@@ -78,7 +177,13 @@ export function FeedWebPane({
             href={l.href}
             target="_blank"
             rel="noreferrer"
-            className="whitespace-nowrap text-xs font-medium text-dim hover:text-fg"
+            {...stylex.props(
+              sx.whitespaceNowrap,
+              sx.textXs,
+              sx.fontMedium,
+              sx.textDim,
+              sx.hoverTextFg,
+            )}
           >
             {l.label} ↗
           </a>
@@ -87,7 +192,7 @@ export function FeedWebPane({
       <iframe
         src={panel.embedUrl || "about:blank"}
         title={title || panel.label}
-        className="min-h-0 w-full flex-1 border-0 bg-black"
+        {...stylex.props(sx.minH0, sx.wFull, sx.flex1, sx.border0, sx.bgBlack)}
         allow="fullscreen; autoplay; clipboard-write"
       />
     </div>

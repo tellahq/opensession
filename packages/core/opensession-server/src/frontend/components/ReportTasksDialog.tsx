@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 /**
  * Fix each: one session per task a report proposes.
  *
@@ -21,6 +23,108 @@ import { Modal, useEnterOnMount } from "../ui/modal";
 import { Spinner } from "../ui/spinner";
 import { InlineAlert } from "../ui/state";
 import { toast } from "../ui/toast";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  Mx1: {
+    marginInline: "calc(4px * -1)",
+  },
+  flex: {
+    display: "flex",
+  },
+  maxH46dvh: {
+    maxHeight: "46dvh",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  overscrollContain: {
+    overscrollBehavior: "contain",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  roundedRow: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  block: {
+    display: "block",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  lineClamp2: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "2",
+  },
+  leadingNormal: {
+    lineHeight: "var(--leading-normal)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  mrAuto: {
+    marginRight: "auto",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+});
 
 export function ReportTasksDialog({
   report,
@@ -88,7 +192,7 @@ export function ReportTasksDialog({
       }}
       disablePointerDismissal={starting}
     >
-      <Modal.Content widthClassName="max-w-[34rem]">
+      <Modal.Content widthClassName={utilityClassName("max-w-[34rem]")}>
         <Modal.Header
           title="Fix each"
           description="Every task starts its own session, workspace and branch, so you can review and test them one at a time."
@@ -96,25 +200,61 @@ export function ReportTasksDialog({
 
         {/* The list scrolls inside the dialog rather than growing it, so a
 				    report with twenty tasks still leaves the footer on screen. */}
-        <div className="-mx-1 flex max-h-[46dvh] min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain px-1">
+        <div
+          {...stylex.props(
+            sx.Mx1,
+            sx.flex,
+            sx.maxH46dvh,
+            sx.minH0,
+            sx.flexCol,
+            sx.gap05,
+            sx.overflowYAuto,
+            sx.overscrollContain,
+            sx.px1,
+          )}
+        >
           {tasks.map((task, index) => (
             <label
               key={index}
-              className="flex cursor-pointer items-start gap-2.5 rounded-row px-2 py-2 hover:bg-hover"
+              {...stylex.props(
+                sx.flex,
+                sx.cursorPointer,
+                sx.itemsStart,
+                sx.gap25,
+                sx.roundedRow,
+                sx.px2,
+                sx.py2,
+                sx.hoverBgHover,
+              )}
             >
               <Checkbox
-                className="mt-0.5"
+                className={mergeStylexOverrideClassName("", sx.mt05)}
                 checked={picked.has(index)}
                 onCheckedChange={() => toggle(index)}
                 disabled={starting}
               />
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm leading-snug text-fg">
+              <span {...stylex.props(sx.minW0, sx.flex1)}>
+                <span
+                  {...stylex.props(
+                    sx.block,
+                    sx.textSm,
+                    sx.leadingSnug,
+                    sx.textFg,
+                  )}
+                >
                   {task.title}
                 </span>
                 {/* No `block` beside the clamp: both set `display`, and the
 								    plain one wins, which silently unclamps the preview. */}
-                <span className="mt-0.5 line-clamp-2 text-supporting leading-normal text-faint">
+                <span
+                  {...stylex.props(
+                    sx.mt05,
+                    sx.lineClamp2,
+                    sx.leadingNormal,
+                    sx.textFaint,
+                    typography.supporting,
+                  )}
+                >
                   {task.prompt}
                 </span>
               </span>
@@ -133,9 +273,9 @@ export function ReportTasksDialog({
         )}
 
         <Modal.Footer>
-          <span className="mr-auto text-meta text-faint">
+          <span {...stylex.props(sx.mrAuto, sx.textFaint, typography.meta)}>
             {starting ? (
-              <span className="flex items-center gap-2">
+              <span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
                 <Spinner size="sm" />
                 Starting {picked.size} session{picked.size === 1 ? "" : "s"}
               </span>

@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { duration, ease } from "../../ui/motion";
@@ -10,6 +12,106 @@ import { TextShimmer } from "../../ui/text-shimmer";
 import { busyActivityStatus } from "../../lib/busy-activity";
 import { msgActivityShimmer, msgRow } from "../../lib/msg-classes";
 import type { LiveTurnStore } from "../../lib/live-turn-store";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minHFull: {
+    minHeight: "100%",
+  },
+  wFull: {
+    width: "100%",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  relative: {
+    position: "relative",
+  },
+  hFull: {
+    height: "100%",
+  },
+  minH240px: {
+    minHeight: "240px",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  maxW340px: {
+    maxWidth: "340px",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  opacity70: {
+    opacity: "70%",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  Ml2: {
+    marginLeft: "calc(4px * -2)",
+  },
+  grid: {
+    display: "grid",
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+});
 
 /** The chat canvas while a new session's worktree is being prepared. The
  * opening message stays visible in the composer queue until it can move into
@@ -23,14 +125,35 @@ export function WorkspaceSetup() {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, y: -12 }}
       transition={{ type: "tween", duration: duration.base, ease }}
-      className="flex min-h-full w-full items-center justify-center px-6"
+      {...stylex.props(
+        sx.flex,
+        sx.minHFull,
+        sx.wFull,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.px6,
+      )}
     >
-      <div className="flex flex-col items-center text-center">
-        <Spinner size="md" className="mb-3 text-faint" />
-        <div className="text-item-title font-semibold text-fg">
+      <div
+        {...stylex.props(sx.flex, sx.flexCol, sx.itemsCenter, sx.textCenter)}
+      >
+        <Spinner
+          size="md"
+          className={mergeStylexOverrideClassName("", sx.mb3, sx.textFaint)}
+        />
+        <div
+          {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}
+        >
           Setting up workspace
         </div>
-        <div className="mt-1.5 text-label font-medium text-faint">
+        <div
+          {...stylex.props(
+            sx.mt15,
+            sx.fontMedium,
+            sx.textFaint,
+            typography.label,
+          )}
+        >
           Your message will send when it’s ready.
         </div>
       </div>
@@ -42,12 +165,35 @@ export function WorkspaceSetup() {
 // review side).
 export function WorkspaceWaiting({ detail }: { detail: string }) {
   return (
-    <div className="relative flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-      <PageLoader className="mb-2 text-dim" />
-      <div className="text-item-title font-semibold text-fg">
+    <div
+      {...stylex.props(
+        sx.relative,
+        sx.flex,
+        sx.hFull,
+        sx.minH240px,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.gap1,
+        sx.px6,
+        sx.textCenter,
+      )}
+    >
+      <PageLoader
+        className={mergeStylexOverrideClassName("", sx.mb2, sx.textDim)}
+      />
+      <div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>
         Creating your workspace
       </div>
-      <div className="max-w-[340px] text-label font-medium leading-relaxed text-dim">
+      <div
+        {...stylex.props(
+          sx.maxW340px,
+          sx.fontMedium,
+          sx.leadingRelaxed,
+          sx.textDim,
+          typography.label,
+        )}
+      >
         {detail}
       </div>
     </div>
@@ -63,7 +209,7 @@ export function ConversationLoading() {
     const t = setTimeout(() => setVisible(true), 180);
     return () => clearTimeout(t);
   }, []);
-  if (!visible) return <div className="min-h-full" />;
+  if (!visible) return <div {...stylex.props(sx.minHFull)} />;
   // The fade sits on the wrapper, not on the skeleton: Motion writes inline
   // opacity, which the ghosts' own breathing animation would overwrite.
   return (
@@ -93,15 +239,21 @@ function BusyWorking({ since }: { since: number | null }) {
   const status = busyActivityStatus(since == null ? 0 : now - since);
   return (
     <>
-      <span role="status" aria-live="polite" className="inline-flex">
+      <span role="status" aria-live="polite" {...stylex.props(sx.inlineFlex)}>
         <TextShimmer
-          className={cn("text-meta font-medium", msgActivityShimmer)}
+          className={cn(
+            utilityClassName("text-meta font-medium"),
+            msgActivityShimmer,
+          )}
         >
           {status.label}
         </TextShimmer>
       </span>
       {status.elapsed && (
-        <span aria-hidden="true" className="text-meta text-faint tabular-nums">
+        <span
+          aria-hidden="true"
+          {...mergeStylexProps("tabular-nums", sx.textFaint, typography.meta)}
+        >
           · {status.elapsed}
         </span>
       )}
@@ -142,7 +294,11 @@ export function SteerWaiting({ since }: { since?: number }) {
     s < 60
       ? `${s}s`
       : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
-  return <span className="font-normal tabular-nums opacity-70">{label}</span>;
+  return (
+    <span {...mergeStylexProps("tabular-nums", sx.fontNormal, sx.opacity70)}>
+      {label}
+    </span>
+  );
 }
 
 // How long a stop may sit there before the label stops sounding confident.
@@ -167,7 +323,7 @@ function BusyStopping({ since }: { since: number }) {
     return () => clearTimeout(t);
   }, [since]);
   return (
-    <span className="text-meta text-faint">
+    <span {...stylex.props(sx.textFaint, typography.meta)}>
       {slow ? "Still stopping…" : "Stopping…"}
     </span>
   );
@@ -209,12 +365,14 @@ export function BusyInline({
         ease,
       }}
       onUpdate={onLayout}
-      className="overflow-hidden"
+      {...stylex.props(sx.overflowHidden)}
     >
       <div
         className={cn(
           msgRow,
-          "mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
+          utilityClassName(
+            "mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
+          ),
         )}
       >
         {/* The 8px pull hangs off the DOT, not off the row: msgRow centres
@@ -224,7 +382,15 @@ export function BusyInline({
 				    row against the scroller's left gutter. Here it lands the dot's
 				    centre on the work fold's chevron, which hangs out by the same
 				    8px from a box that stays centred. */}
-        <span className="-ml-2 grid size-5 shrink-0 place-items-center">
+        <span
+          {...stylex.props(
+            sx.Ml2,
+            sx.grid,
+            sx.size5,
+            sx.shrink0,
+            sx.placeItemsCenter,
+          )}
+        >
           <PulseDot size={7} />
         </span>
         {stoppingSince != null ? (

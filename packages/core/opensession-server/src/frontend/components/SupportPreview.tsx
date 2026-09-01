@@ -1,3 +1,4 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
 import { AGENT_NAME } from "../lib/brand";
 import React, { useEffect, useRef, useState } from "react";
 import type { WSClientMessage, WSServerMessage } from "../lib/types";
@@ -12,6 +13,44 @@ import { ConversationPane } from "./ConversationPane";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { resolveNewSessionModel } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  hFull: {
+    height: "100%",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxW760px: {
+    maxWidth: "760px",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  pb5: {
+    paddingBottom: "calc(4px * 5)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  mt25: {
+    marginTop: "calc(4px * 2.5)",
+  },
+});
 
 interface Props {
   /** The Plain thread id — the preview's key. */
@@ -139,10 +178,19 @@ export function SupportPreview({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div {...stylex.props(sx.flex, sx.flexCol, sx.hFull, sx.minH0)}>
       <ConversationPane threadId={threadId} onOpenSession={onOpenSession} />
 
-      <div className="w-full max-w-[760px] mx-auto px-5 pb-5 shrink-0">
+      <div
+        {...stylex.props(
+          sx.wFull,
+          sx.maxW760px,
+          sx.mxAuto,
+          sx.px5,
+          sx.pb5,
+          sx.shrink0,
+        )}
+      >
         <Composer
           value={prompt}
           onChange={setPrompt}
@@ -164,7 +212,9 @@ export function SupportPreview({
           }}
         />
         {startError && (
-          <InlineAlert className="mt-2.5">{startError}</InlineAlert>
+          <InlineAlert className={mergeStylexOverrideClassName("", sx.mt25)}>
+            {startError}
+          </InlineAlert>
         )}
       </div>
     </div>

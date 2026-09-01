@@ -1,6 +1,63 @@
+import { mergeStylexOverrideClassName } from "./cn";
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { Modal } from "./modal";
 import { Button } from "./button";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  m0: {
+    margin: "0",
+  },
+  textBalance: {
+    textWrap: "balance",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  leadingTight: {
+    lineHeight: "var(--leading-tight)",
+  },
+  tracking001em: {
+    letterSpacing: "-0.01em",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textPretty: {
+    textWrap: "pretty",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  phoneFlex1: {
+    "@media (max-width: 720px)": {
+      flex: "1",
+    },
+  },
+});
 
 /**
  * The app's confirmation alert: a title, an optional one-sentence
@@ -69,17 +126,38 @@ export function ConfirmDialog({
     <Modal.Root open={open} onOpenChange={onOpenChange}>
       <Modal.Content
         role="alertdialog"
-        widthClassName="max-w-[25rem]"
+        widthClassName={utilityClassName("max-w-[25rem]")}
         initialFocus={destructive ? cancelRef : confirmRef}
       >
         {/* 6px between title and consequence, the same step Modal.Header
 				    holds, so an alert and a full dialog open on one rhythm. */}
-        <div className="flex flex-col gap-1.5">
-          <Modal.Title className="m-0 text-balance text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+        <div {...stylex.props(sx.flex, sx.flexCol, sx.gap15)}>
+          <Modal.Title
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.m0,
+              sx.textBalance,
+              sx.fontSemibold,
+              sx.leadingTight,
+              sx.tracking001em,
+              sx.textFg,
+              typography.dialogTitle,
+            )}
+          >
             {title}
           </Modal.Title>
           {description && (
-            <Modal.Description className="m-0 text-pretty text-supporting font-normal leading-relaxed text-dim">
+            <Modal.Description
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.m0,
+                sx.textPretty,
+                sx.fontNormal,
+                sx.leadingRelaxed,
+                sx.textDim,
+                typography.supporting,
+              )}
+            >
               {description}
             </Modal.Description>
           )}
@@ -90,7 +168,11 @@ export function ConfirmDialog({
             type="button"
             size="lg"
             variant="soft"
-            className="phone:min-h-11 phone:flex-1"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.phoneMinH11,
+              sx.phoneFlex1,
+            )}
             onClick={() => onOpenChange(false)}
           >
             {cancelLabel}
@@ -100,7 +182,11 @@ export function ConfirmDialog({
             type="button"
             size="lg"
             variant={destructive ? "danger-strong" : "primary"}
-            className="phone:min-h-11 phone:flex-1"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.phoneMinH11,
+              sx.phoneFlex1,
+            )}
             onClick={() => {
               onOpenChange(false);
               onConfirm();

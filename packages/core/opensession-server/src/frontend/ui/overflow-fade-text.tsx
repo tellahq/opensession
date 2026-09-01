@@ -1,8 +1,9 @@
+import { utilityClassName } from "./cn";
 import React, { useEffect, useRef } from "react";
 import { cn } from "./cn";
 
 const OVERFLOW_FADE =
-  "min-w-0 overflow-hidden whitespace-nowrap text-clip " +
+  utilityClassName("min-w-0 overflow-hidden whitespace-nowrap text-clip ") +
   "data-[overflow]:[-webkit-mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_24px),transparent_100%)] " +
   "data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_24px),transparent_100%)] " +
   "rtl:data-[overflow]:[-webkit-mask-image:linear-gradient(to_left,#000_0,#000_calc(100%_-_24px),transparent_100%)] " +

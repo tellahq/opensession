@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "./cn";
+import { utilityClassName } from "./cn";
 import { Toast as BaseToast } from "@base-ui/react/toast";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import {
@@ -31,6 +33,193 @@ import {
   undoLatestAction,
   type UndoHandle,
 } from "../lib/undo";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  my0: {
+    marginBlock: "0",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  lineClamp2: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "2",
+  },
+  relative: {
+    position: "relative",
+  },
+  My1: {
+    marginBlock: "calc(4px * -1)",
+  },
+  ml1: {
+    marginLeft: "4px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  transitionBackgroundColorTransform: {
+    transitionProperty: "background-color,transform",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  duration150: {
+    transitionDuration: "150ms",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  activeScale096: {
+    ":active": {
+      scale: "0.96",
+    },
+  },
+  phoneMy15: {
+    "@media (max-width: 720px)": {
+      marginBlock: "calc(4px * -1.5)",
+    },
+  },
+  phoneMl05: {
+    "@media (max-width: 720px)": {
+      marginLeft: "calc(4px * 0.5)",
+    },
+  },
+  phoneGrid: {
+    "@media (max-width: 720px)": {
+      display: "grid",
+    },
+  },
+  phoneMinH7: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 7)",
+    },
+  },
+  phonePlaceItemsCenter: {
+    "@media (max-width: 720px)": {
+      placeItems: "center",
+    },
+  },
+  phoneRounded999px: {
+    "@media (max-width: 720px)": {
+      borderRadius: "999px",
+      cornerShape: "var(--cs)",
+    },
+  },
+  phonePx25: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 2.5)",
+    },
+  },
+  phoneAfterAbsolute: {
+    "@media (max-width: 720px)": {
+      "::after": {
+        content: '""',
+        position: "absolute",
+      },
+    },
+  },
+  phoneAfterInsetX0: {
+    "@media (max-width: 720px)": {
+      "::after": {
+        content: '""',
+        insetInline: "0",
+      },
+    },
+  },
+  phoneAfterTop12: {
+    "@media (max-width: 720px)": {
+      "::after": {
+        content: '""',
+        top: "calc(1 / 2 * 100%)",
+      },
+    },
+  },
+  phoneAfterH11: {
+    "@media (max-width: 720px)": {
+      "::after": {
+        content: '""',
+        height: "calc(4px * 11)",
+      },
+    },
+  },
+  phoneAfterTranslateY12: {
+    "@media (max-width: 720px)": {
+      "::after": {
+        content: '""',
+        translate: "0 calc(calc(1 / 2 * 100%) * -1)",
+      },
+    },
+  },
+  phoneAfterContent: {
+    "@media (max-width: 720px)": {
+      "::after": {
+        content: "''",
+      },
+    },
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  grid: {
+    display: "grid",
+  },
+  size35: {
+    width: "calc(4px * 3.5)",
+    height: "calc(4px * 3.5)",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  insetX0: {
+    insetInline: "0",
+  },
+  bottom0: {
+    bottom: "0",
+  },
+  h05: {
+    height: "calc(4px * 0.5)",
+  },
+  originLeft: {
+    transformOrigin: "0",
+  },
+  bgDim35: {
+    backgroundColor: "color-mix(in oklab, var(--text-dim) 35%, transparent)",
+  },
+});
 
 export type ToastVariant = "default" | "success" | "error";
 
@@ -257,7 +446,9 @@ function ToastViewport({ container }: { container?: HTMLElement | null }) {
     <BaseToast.Portal container={container ?? undefined}>
       <BaseToast.Viewport
         ref={viewportRef}
-        className={`${TOAST_NOTICE_LANE} ${container ? "absolute" : "fixed"} toast-viewport mx-auto h-[var(--toast-frontmost-height)] w-[min(480px,calc(100vw-32px))] outline-none phone:w-full phone:px-3`}
+        className={utilityClassName(
+          `${TOAST_NOTICE_LANE} ${container ? "absolute" : "fixed"} toast-viewport mx-auto h-[var(--toast-frontmost-height)] w-[min(480px,calc(100vw-32px))] outline-none phone:w-full phone:px-3`,
+        )}
       >
         {items.map((item) => (
           <ToastCard key={item.id} toast={item} />
@@ -306,7 +497,12 @@ function ToastCard({
         {/* Description renders a <p>; remove its browser margins so the
 				    visible height comes from the pill padding alone. */}
         <BaseToast.Description
-          className="my-0 min-w-0 line-clamp-2"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.my0,
+            sx.minW0,
+            sx.lineClamp2,
+          )}
           title={data.message}
         >
           {data.message}
@@ -320,7 +516,36 @@ function ToastCard({
               }}
               // The pill stays tight, so the action carries the finger
               // target on its own: 28px of box inside a 44px tap area.
-              className="focus-ring relative -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-supporting font-semibold text-accent transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.96] phone:-my-1.5 phone:ml-0.5 phone:grid phone:min-h-7 phone:place-items-center phone:rounded-[999px] phone:px-2.5 phone:after:absolute phone:after:inset-x-0 phone:after:top-1/2 phone:after:h-11 phone:after:-translate-y-1/2 phone:after:content-['']"
+              className={mergeStylexOverrideClassName(
+                "focus-ring text-accent",
+                sx.relative,
+                sx.My1,
+                sx.ml1,
+                sx.shrink0,
+                sx.cursorPointer,
+                sx.roundedMd,
+                sx.px2,
+                sx.py1,
+                sx.fontSemibold,
+                sx.transitionBackgroundColorTransform,
+                sx.duration150,
+                sx.hoverBgHover,
+                sx.activeScale096,
+                sx.phoneMy15,
+                sx.phoneMl05,
+                sx.phoneGrid,
+                sx.phoneMinH7,
+                sx.phonePlaceItemsCenter,
+                sx.phoneRounded999px,
+                sx.phonePx25,
+                sx.phoneAfterAbsolute,
+                sx.phoneAfterInsetX0,
+                sx.phoneAfterTop12,
+                sx.phoneAfterH11,
+                sx.phoneAfterTranslateY12,
+                sx.phoneAfterContent,
+                typography.supporting,
+              )}
             >
               {data.action.label}
             </BaseToast.Action>
@@ -341,8 +566,9 @@ function ToastStatusIcon({
   name: ToastIconName | null;
   ongoing?: boolean;
 }) {
-  const className = "shrink-0 text-dim";
-  if (ongoing) return <Spinner className="text-dim" />;
+  const className = utilityClassName("shrink-0 text-dim");
+  if (ongoing)
+    return <Spinner className={mergeStylexOverrideClassName("", sx.textDim)} />;
 
   switch (name) {
     case "archive":
@@ -373,7 +599,16 @@ function ToastStatusIcon({
       return (
         <span
           aria-hidden
-          className="grid size-3.5 shrink-0 place-items-center rounded-full text-meta font-semibold text-dim"
+          {...stylex.props(
+            sx.grid,
+            sx.size35,
+            sx.shrink0,
+            sx.placeItemsCenter,
+            sx.roundedFull,
+            sx.fontSemibold,
+            sx.textDim,
+            typography.meta,
+          )}
         >
           !
         </span>
@@ -424,7 +659,15 @@ function ToastProgress({ duration }: { duration: number }) {
     <span
       ref={lineRef}
       aria-hidden
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left bg-dim/35"
+      {...stylex.props(
+        sx.pointerEventsNone,
+        sx.absolute,
+        sx.insetX0,
+        sx.bottom0,
+        sx.h05,
+        sx.originLeft,
+        sx.bgDim35,
+      )}
     />
   );
 }

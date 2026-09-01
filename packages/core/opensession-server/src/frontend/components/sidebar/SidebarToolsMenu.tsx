@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import React from "react";
 import type { SidebarToolId } from "../../lib/sidebar-tools";
 import {
@@ -9,6 +11,73 @@ import {
 import { ContextMenu, Menu, MENU_ICON } from "../../ui/menu";
 import { cn } from "../../ui/cn";
 import { IconDotsHorizontal, IconSliders } from "../icons";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  relative: {
+    position: "relative",
+  },
+  grow: {
+    flexGrow: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  w7: {
+    width: "calc(4px * 7)",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  top12: {
+    top: "calc(1 / 2 * 100%)",
+  },
+  right9: {
+    right: "calc(4px * 9)",
+  },
+  flex: {
+    display: "flex",
+  },
+  size7: {
+    width: "calc(4px * 7)",
+    height: "calc(4px * 7)",
+  },
+  TranslateY12: {
+    translate: "0 calc(calc(1 / 2 * 100%) * -1)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  p0: {
+    padding: "0",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+});
 
 /**
  * The sidebar's own right-click menu: every tool and every source, ticked when
@@ -29,7 +98,7 @@ import { IconDotsHorizontal, IconSliders } from "../icons";
  * own parent, which closes the parent the moment you reach for it.
  */
 
-const ICON_SLOT = "inline-flex shrink-0 [&_svg]:size-[20px]";
+const ICON_SLOT = utilityClassName("inline-flex shrink-0 [&_svg]:size-[20px]");
 
 export type SidebarMenuTool = {
   id: SidebarToolId;
@@ -50,7 +119,11 @@ export type SidebarMenuSource = {
 };
 
 const check = (on: boolean) => (
-  <Menu.Check on={on} size={20} className="text-dim" />
+  <Menu.Check
+    on={on}
+    size={20}
+    className={mergeStylexOverrideClassName("", sx.textDim)}
+  />
 );
 
 /**
@@ -82,7 +155,7 @@ export function SidebarToolRows({
           // the same click. Out here each is its own target, and the row
           // keeps its tick at the trailing edge, in the column every other
           // row ticks in.
-          <div key={tool.id} className="relative">
+          <div key={tool.id} {...stylex.props(sx.relative)}>
             <ContextMenu.CheckboxItem
               checked={tool.surface !== "off"}
               onCheckedChange={(shown) =>
@@ -90,9 +163,9 @@ export function SidebarToolRows({
               }
             >
               <span className={cn(ICON_SLOT, MENU_ICON)}>{tool.icon}</span>
-              <span className="grow truncate">{tool.label}</span>
+              <span {...stylex.props(sx.grow, sx.truncate)}>{tool.label}</span>
               {tool.surface !== "off" && (
-                <span className="shrink-0 truncate text-faint">
+                <span {...stylex.props(sx.shrink0, sx.truncate, sx.textFaint)}>
                   {
                     SUPPORT_SURFACE_OPTIONS.find(
                       (option) => option.value === tool.surface,
@@ -104,7 +177,7 @@ export function SidebarToolRows({
 								    a control inside a menu item eats that item's click — so
 								    the row holds a place for it, and the tick keeps the
 								    trailing edge, in the column every other row ticks in. */}
-              <span className="w-7 shrink-0" aria-hidden="true" />
+              <span {...stylex.props(sx.w7, sx.shrink0)} aria-hidden="true" />
               {check(tool.surface !== "off")}
             </ContextMenu.CheckboxItem>
             {/* A menu of its own rather than a submenu of this row: Base UI
@@ -121,7 +194,21 @@ export function SidebarToolRows({
                 // an inline SVG is 4px taller than it is wide, because the
                 // line box keeps room under the glyph for a descender, and
                 // the dots then sit 2px high of the box they light up.
-                className="absolute top-1/2 right-9 flex size-7 -translate-y-1/2 items-center justify-center rounded-sm p-0 text-faint hover:bg-hover data-[popup-open]:bg-hover"
+                className={mergeStylexOverrideClassName(
+                  "data-[popup-open]:bg-hover",
+                  sx.absolute,
+                  sx.top12,
+                  sx.right9,
+                  sx.flex,
+                  sx.size7,
+                  sx.TranslateY12,
+                  sx.itemsCenter,
+                  sx.justifyCenter,
+                  sx.roundedSm,
+                  sx.p0,
+                  sx.textFaint,
+                  sx.hoverBgHover,
+                )}
                 aria-label="Where support tickets live"
               >
                 <IconDotsHorizontal size={20} />
@@ -143,7 +230,9 @@ export function SidebarToolRows({
                 >
                   {SUPPORT_PLACEMENT_OPTIONS.map((option) => (
                     <Menu.RadioItem key={option.value} value={option.value}>
-                      <span className="grow truncate">{option.label}</span>
+                      <span {...stylex.props(sx.grow, sx.truncate)}>
+                        {option.label}
+                      </span>
                       {check(tool.surface === option.value)}
                     </Menu.RadioItem>
                   ))}
@@ -160,7 +249,7 @@ export function SidebarToolRows({
             {/* The glyphs are drawn at the sidebar's 22px rail size; the
 							    menu's icon column is 20, the size every other row uses. */}
             <span className={cn(ICON_SLOT, MENU_ICON)}>{tool.icon}</span>
-            <span className="grow truncate">{tool.label}</span>
+            <span {...stylex.props(sx.grow, sx.truncate)}>{tool.label}</span>
             {check(tool.shown)}
           </ContextMenu.CheckboxItem>
         ),
@@ -206,7 +295,9 @@ export function SidebarToolsMenu({
                 onCheckedChange={(shown) => onToggleSource(source.id, shown)}
               >
                 <span className={ICON_SLOT}>{source.icon}</span>
-                <span className="grow truncate">{source.label}</span>
+                <span {...stylex.props(sx.grow, sx.truncate)}>
+                  {source.label}
+                </span>
                 {check(source.shown)}
               </ContextMenu.CheckboxItem>
             ))}
@@ -216,7 +307,7 @@ export function SidebarToolsMenu({
       <ContextMenu.Separator />
       <ContextMenu.Item onClick={onCustomize}>
         <IconSliders size={20} className={MENU_ICON} />
-        <span className="grow truncate">Customize sidebar</span>
+        <span {...stylex.props(sx.grow, sx.truncate)}>Customize sidebar</span>
       </ContextMenu.Item>
     </ContextMenu.Popup>
   );

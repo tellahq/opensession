@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import type {
@@ -22,6 +24,305 @@ import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
 import { WorkflowAgentTranscript } from "./WorkflowAgentTranscript";
 import { Badge } from "../ui/badge";
 import { workflowPhaseStats } from "../../shared/workflow-observability";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  size3: {
+    width: "calc(4px * 3)",
+    height: "calc(4px * 3)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  maxW120px: {
+    maxWidth: "120px",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  pl5: {
+    paddingLeft: "calc(4px * 5)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  maxW84px: {
+    maxWidth: "84px",
+  },
+  shrink: {
+    flexShrink: "1",
+  },
+  w46px: {
+    width: "46px",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  textRight: {
+    textAlign: "right",
+  },
+  w11: {
+    width: "calc(4px * 11)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  flex1: {
+    flex: "1",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  maxH56: {
+    maxHeight: "calc(4px * 56)",
+  },
+  overflowAuto: {
+    overflow: "auto",
+  },
+  whitespacePreWrap: {
+    whiteSpace: "pre-wrap",
+  },
+  breakWords: {
+    overflowWrap: "break-word",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgHover: {
+    backgroundColor: "var(--hover)",
+  },
+  p2: {
+    padding: "calc(4px * 2)",
+  },
+  fontMono: {
+    fontFamily: "var(--mono)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mr1: {
+    marginRight: "4px",
+  },
+  animatePulse: {
+    animation: "var(--animate-pulse)",
+  },
+  grid: {
+    display: "grid",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  pt1: {
+    paddingTop: "4px",
+  },
+  pb22px: {
+    paddingBottom: "22px",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  size15: {
+    width: "calc(4px * 1.5)",
+    height: "calc(4px * 1.5)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgCurrent: {
+    backgroundColor: "currentcolor",
+  },
+  pb25: {
+    paddingBottom: "calc(4px * 2.5)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  py7: {
+    paddingBlock: "calc(4px * 7)",
+  },
+  gap5px: {
+    gap: "5px",
+  },
+  roundedLg: {
+    borderRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  pb2: {
+    paddingBottom: "calc(4px * 2)",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  pbPx: {
+    paddingBottom: "1px",
+  },
+  pt05: {
+    paddingTop: "calc(4px * 0.5)",
+  },
+  pt2: {
+    paddingTop: "calc(4px * 2)",
+  },
+  phoneFlexCol: {
+    "@media (max-width: 720px)": {
+      flexDirection: "column",
+    },
+  },
+  phoneItemsStretch: {
+    "@media (max-width: 720px)": {
+      alignItems: "stretch",
+    },
+  },
+  phoneGap0: {
+    "@media (max-width: 720px)": {
+      gap: "0",
+    },
+  },
+  phoneTruncate: {
+    "@media (max-width: 720px)": {
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+    },
+  },
+  mx2: {
+    marginInline: "calc(4px * 2)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  pb15: {
+    paddingBottom: "calc(4px * 1.5)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  mx1: {
+    marginInline: "4px",
+  },
+  mb15: {
+    marginBottom: "calc(4px * 1.5)",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  selfStart: {
+    alignSelf: "flex-start",
+  },
+  textLink: {
+    color: "var(--link)",
+  },
+  hoverUnderline: {
+    "@media (hover: hover)": {
+      ":hover": {
+        textDecorationLine: "underline",
+      },
+    },
+  },
+});
 
 /**
  * Agents tab: live view of a session's dynamic workflow runs (the
@@ -84,14 +385,19 @@ const RUN_TONE: Record<
 /** The card's plate and the rows inside it: the Info panel's list grammar
  *  (INFO_LIST_CLASS), so an agent row lines up with a portal or a changed
  *  file rather than inventing a third row shape. */
-const CARD_CLASS = "overflow-hidden rounded-lg bg-panel p-1";
-const ROW_CLASS =
-  "flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left transition-colors";
+const CARD_CLASS = utilityClassName("overflow-hidden rounded-lg bg-panel p-1");
+const ROW_CLASS = utilityClassName(
+  "flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left transition-colors",
+);
 /** A toggle under the agent rows (tool calls, the result): the same row, in
  *  the quieter ink a reading gets. */
 const FOOTER_ROW =
-  "flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-meta " +
-  "font-medium text-dim transition-colors hover:bg-hover hover:text-fg";
+  utilityClassName(
+    "flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-meta ",
+  ) +
+  utilityClassName(
+    "font-medium text-dim transition-colors hover:bg-hover hover:text-fg",
+  );
 
 /** Status mark: glyphs for the terminal states (✓/✕ stay legible at a glance
  *  — a red accent dot and an error dot would read the same), pulsing yellow
@@ -103,7 +409,10 @@ function StatusMark({ status }: { status: WorkflowAgentSnapshot["status"] }) {
     return (
       <svg
         viewBox="0 0 12 12"
-        className={cn("size-3 shrink-0", ok ? "text-green" : "text-red")}
+        className={cn(
+          utilityClassName("size-3 shrink-0"),
+          ok ? utilityClassName("text-green") : utilityClassName("text-red"),
+        )}
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
@@ -115,11 +424,21 @@ function StatusMark({ status }: { status: WorkflowAgentSnapshot["status"] }) {
     );
   }
   return (
-    <span className="flex size-3 shrink-0 items-center justify-center">
+    <span
+      {...stylex.props(
+        sx.flex,
+        sx.size3,
+        sx.shrink0,
+        sx.itemsCenter,
+        sx.justifyCenter,
+      )}
+    >
       <span
         className={cn(
-          "size-2 rounded-full",
-          status === "running" ? "bg-yellow animate-pulse" : "bg-line-strong",
+          utilityClassName("size-2 rounded-full"),
+          status === "running"
+            ? utilityClassName("bg-yellow animate-pulse")
+            : utilityClassName("bg-line-strong"),
         )}
       />
     </span>
@@ -177,7 +496,7 @@ function Chip({
         tone === "green" ? "success" : tone === "red" ? "danger" : "neutral"
       }
       variant={tone ? "soft" : "outline"}
-      className="max-w-[120px] truncate"
+      className={mergeStylexOverrideClassName("", sx.maxW120px, sx.truncate)}
     >
       {children}
     </Badge>
@@ -191,16 +510,26 @@ function Chip({
 function WriteLine({ a }: { a: WorkflowAgentSnapshot }) {
   const files = a.filesChanged ?? 0;
   return (
-    <div className="flex min-w-0 items-center gap-1.5 pl-5 text-meta text-faint">
+    <div
+      {...stylex.props(
+        sx.flex,
+        sx.minW0,
+        sx.itemsCenter,
+        sx.gap15,
+        sx.pl5,
+        sx.textFaint,
+        typography.meta,
+      )}
+    >
       {a.branch && (
-        <span className="min-w-0 truncate" title={a.branch}>
+        <span {...stylex.props(sx.minW0, sx.truncate)} title={a.branch}>
           ⑂ {a.branch}
         </span>
       )}
       {a.changed ? (
-        <span className="shrink-0 tabular-nums">
-          <span className="text-green">+{a.insertions ?? 0}</span>{" "}
-          <span className="text-red">−{a.deletions ?? 0}</span>
+        <span {...mergeStylexProps("tabular-nums", sx.shrink0)}>
+          <span {...stylex.props(sx.textGreen)}>+{a.insertions ?? 0}</span>{" "}
+          <span {...stylex.props(sx.textRed)}>−{a.deletions ?? 0}</span>
           {files > 0 && (
             <span>
               {" "}
@@ -209,13 +538,19 @@ function WriteLine({ a }: { a: WorkflowAgentSnapshot }) {
           )}
         </span>
       ) : (
-        a.status === "done" && <span className="shrink-0">no changes</span>
+        a.status === "done" && (
+          <span {...stylex.props(sx.shrink0)}>no changes</span>
+        )
       )}
       {a.merged === "merged" && (
-        <span className="shrink-0 font-medium text-green">merged</span>
+        <span {...stylex.props(sx.shrink0, sx.fontMedium, sx.textGreen)}>
+          merged
+        </span>
       )}
       {a.merged === "conflict" && (
-        <span className="shrink-0 font-medium text-red">conflict</span>
+        <span {...stylex.props(sx.shrink0, sx.fontMedium, sx.textRed)}>
+          conflict
+        </span>
       )}
     </div>
   );
@@ -236,14 +571,43 @@ function AgentRail({
   return (
     <>
       {model && (
-        <span className="min-w-0 max-w-[84px] shrink truncate text-meta text-faint">
+        <span
+          {...stylex.props(
+            sx.minW0,
+            sx.maxW84px,
+            sx.shrink,
+            sx.truncate,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
           {shortModel(model)}
         </span>
       )}
-      <span className="w-[46px] shrink-0 whitespace-nowrap text-right text-meta text-faint tabular-nums">
+      <span
+        {...mergeStylexProps(
+          "tabular-nums",
+          sx.w46px,
+          sx.shrink0,
+          sx.whitespaceNowrap,
+          sx.textRight,
+          sx.textFaint,
+          typography.meta,
+        )}
+      >
         {tokens ? `${fmtTokens(tokens)} tok` : ""}
       </span>
-      <span className="w-11 shrink-0 whitespace-nowrap text-right text-meta text-faint tabular-nums">
+      <span
+        {...mergeStylexProps(
+          "tabular-nums",
+          sx.w11,
+          sx.shrink0,
+          sx.whitespaceNowrap,
+          sx.textRight,
+          sx.textFaint,
+          typography.meta,
+        )}
+      >
         {duration}
       </span>
     </>
@@ -287,25 +651,52 @@ function NestedSessionRow({
       }}
       className={cn(
         ROW_CLASS,
-        "min-h-11 flex-col items-stretch gap-0.5 no-underline hover:bg-hover desktop:min-h-0",
+        utilityClassName(
+          "min-h-11 flex-col items-stretch gap-0.5 no-underline hover:bg-hover desktop:min-h-0",
+        ),
       )}
       title={`Open ${session.id}`}
     >
-      <span className="flex min-w-0 items-center gap-2">
+      <span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
         <StatusMark status={markStatus} />
-        <span className="min-w-0 flex-1 truncate text-label text-fg">
+        <span
+          {...stylex.props(
+            sx.minW0,
+            sx.flex1,
+            sx.truncate,
+            sx.textFg,
+            typography.label,
+          )}
+        >
           {session.label}
         </span>
-        <span className="shrink-0 text-meta text-faint">
+        <span {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>
           {session.status.replace("_", " ")}
         </span>
       </span>
-      <span className="flex min-w-0 items-center gap-1.5 pl-5 text-meta text-faint">
-        <span className="min-w-0 truncate" title={details.join(" · ")}>
+      <span
+        {...stylex.props(
+          sx.flex,
+          sx.minW0,
+          sx.itemsCenter,
+          sx.gap15,
+          sx.pl5,
+          sx.textFaint,
+          typography.meta,
+        )}
+      >
+        <span
+          {...stylex.props(sx.minW0, sx.truncate)}
+          title={details.join(" · ")}
+        >
           {details.join(" · ")}
         </span>
         {session.prUrl && (
-          <Badge tone="success" variant="soft" className="ml-auto shrink-0">
+          <Badge
+            tone="success"
+            variant="soft"
+            className={mergeStylexOverrideClassName("", sx.mlAuto, sx.shrink0)}
+          >
             PR
           </Badge>
         )}
@@ -316,7 +707,21 @@ function NestedSessionRow({
 
 function DetailPre({ text }: { text: string }) {
   return (
-    <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-hover p-2 font-mono text-meta leading-relaxed text-dim">
+    <pre
+      {...stylex.props(
+        sx.maxH56,
+        sx.overflowAuto,
+        sx.whitespacePreWrap,
+        sx.breakWords,
+        sx.roundedSm,
+        sx.bgHover,
+        sx.p2,
+        sx.fontMono,
+        sx.leadingRelaxed,
+        sx.textDim,
+        typography.meta,
+      )}
+    >
       {text}
     </pre>
   );
@@ -405,18 +810,26 @@ export function WorkflowPanel({
             onBack={onBack}
             trailing={
               anyRunning && (
-                <Badge tone="warning" dot className="mr-1 animate-pulse">
+                <Badge
+                  tone="warning"
+                  dot
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.mr1,
+                    sx.animatePulse,
+                  )}
+                >
                   running
                 </Badge>
               )
             }
           />
         )}
-        <div className="grid gap-4 px-2 pt-1 pb-[22px]">
+        <div {...stylex.props(sx.grid, sx.gap4, sx.px2, sx.pt1, sx.pb22px)}>
           {empty ? (
             <WorkflowsEmptyState />
           ) : (
-            <div className="grid gap-3">{cards}</div>
+            <div {...stylex.props(sx.grid, sx.gap3)}>{cards}</div>
           )}
         </div>
       </>
@@ -431,13 +844,28 @@ export function WorkflowPanel({
       <div
         className={cn(
           INFO_LABEL_CLASS,
-          "flex items-center justify-between gap-2",
+          utilityClassName("flex items-center justify-between gap-2"),
         )}
       >
         <span>Agents</span>
         {anyRunning && (
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-yellow">
-            <span className="size-1.5 animate-pulse rounded-full bg-current" />
+          <span
+            {...stylex.props(
+              sx.inlineFlex,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.gap15,
+              sx.textYellow,
+            )}
+          >
+            <span
+              {...stylex.props(
+                sx.size15,
+                sx.animatePulse,
+                sx.roundedFull,
+                sx.bgCurrent,
+              )}
+            />
             running
           </span>
         )}
@@ -472,22 +900,43 @@ function SubagentsCard({
   if (tokens) meta.push(`${fmtTokens(tokens)} tok`);
   return (
     <div className={CARD_CLASS}>
-      <div className="px-2 pb-2.5 pt-1">
-        <div className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-label font-semibold text-fg">
+      <div {...stylex.props(sx.px2, sx.pb25, sx.pt1)}>
+        <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
+          <span
+            {...stylex.props(
+              sx.minW0,
+              sx.flex1,
+              sx.truncate,
+              sx.fontSemibold,
+              sx.textFg,
+              typography.label,
+            )}
+          >
             Sub-agents
           </span>
           {runningN > 0 && (
-            <Badge tone="warning" dot className="animate-pulse">
+            <Badge
+              tone="warning"
+              dot
+              className={mergeStylexOverrideClassName("", sx.animatePulse)}
+            >
               running
             </Badge>
           )}
         </div>
-        <div className="mt-0.5 truncate text-meta text-faint tabular-nums">
+        <div
+          {...mergeStylexProps(
+            "tabular-nums",
+            sx.mt05,
+            sx.truncate,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
           {meta.join(" · ")}
         </div>
       </div>
-      <div className="flex flex-col">
+      <div {...stylex.props(sx.flex, sx.flexCol)}>
         {subagents.map((s, i) => {
           const openable = Boolean(s.id && onOpen);
           const durMs =
@@ -502,8 +951,10 @@ function SubagentsCard({
               key={s.id ?? `pending-${i}`}
               className={cn(
                 ROW_CLASS,
-                "flex-col items-stretch gap-0.5",
-                openable ? "hover:bg-hover" : "cursor-default",
+                utilityClassName("flex-col items-stretch gap-0.5"),
+                openable
+                  ? utilityClassName("hover:bg-hover")
+                  : utilityClassName("cursor-default"),
               )}
               onClick={() => {
                 if (s.id && onOpen) onOpen(s.id, s.label);
@@ -512,9 +963,19 @@ function SubagentsCard({
                 openable ? "Open this sub-agent's conversation" : undefined
               }
             >
-              <span className="flex min-w-0 items-center gap-2">
+              <span
+                {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}
+              >
                 <StatusMark status={s.status} />
-                <span className="min-w-0 flex-1 truncate text-label text-fg">
+                <span
+                  {...stylex.props(
+                    sx.minW0,
+                    sx.flex1,
+                    sx.truncate,
+                    sx.textFg,
+                    typography.label,
+                  )}
+                >
                   {s.label}
                 </span>
                 <AgentRail
@@ -526,7 +987,14 @@ function SubagentsCard({
 							    the whole line. What kind it is and what it runs on go
 							    under it, the same second line a write agent gets. */}
               {(s.agentType || s.model) && (
-                <span className="truncate pl-5 text-meta text-faint">
+                <span
+                  {...stylex.props(
+                    sx.truncate,
+                    sx.pl5,
+                    sx.textFaint,
+                    typography.meta,
+                  )}
+                >
                   {[s.agentType, s.model && shortModel(s.model)]
                     .filter(Boolean)
                     .join(" · ")}
@@ -546,18 +1014,22 @@ function SubagentsCard({
  *  to read in a panel column. */
 function WorkflowsEmptyState() {
   return (
-    <div className="grid gap-4">
+    <div {...stylex.props(sx.grid, sx.gap4)}>
       <EmptyState
         icon={<IconStack size={22} />}
         title="No agents yet"
-        className="px-2 py-7"
+        className={mergeStylexOverrideClassName("", sx.px2, sx.py7)}
       >
-        Ask this session to <span className="text-fg">use a workflow</span> and
-        it fans out many small agents at once, then combines what they find.
+        Ask this session to{" "}
+        <span {...stylex.props(sx.textFg)}>use a workflow</span> and it fans out
+        many small agents at once, then combines what they find.
       </EmptyState>
-      <div className="grid gap-[5px]">
+      <div {...stylex.props(sx.grid, sx.gap5px)}>
         <div className={INFO_LABEL_CLASS}>Try</div>
-        <CardList as="ul" className="rounded-lg">
+        <CardList
+          as="ul"
+          className={mergeStylexOverrideClassName("", sx.roundedLg)}
+        >
           {[
             "Use a workflow to audit every route for missing auth checks.",
             "Use a workflow to compare 3 approaches and pick a winner.",
@@ -565,14 +1037,27 @@ function WorkflowsEmptyState() {
           ].map((s) => (
             <li
               key={s}
-              className="px-3 py-2.5 text-label leading-snug text-dim"
+              {...stylex.props(
+                sx.px3,
+                sx.py25,
+                sx.leadingSnug,
+                sx.textDim,
+                typography.label,
+              )}
             >
               {s}
             </li>
           ))}
         </CardList>
       </div>
-      <p className="px-2 text-supporting leading-snug text-faint">
+      <p
+        {...stylex.props(
+          sx.px2,
+          sx.leadingSnug,
+          sx.textFaint,
+          typography.supporting,
+        )}
+      >
         Agents read this worktree. Write agents each get their own branch, and
         merging back is explicit.
       </p>
@@ -736,32 +1221,59 @@ function RunCard({
   const tone = RUN_TONE[run.status];
   return (
     <div className={CARD_CLASS}>
-      <div className="flex items-center justify-between gap-2 px-2 pb-2.5 pt-1">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-label font-semibold text-fg">
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.itemsCenter,
+          sx.justifyBetween,
+          sx.gap2,
+          sx.px2,
+          sx.pb25,
+          sx.pt1,
+        )}
+      >
+        <div {...stylex.props(sx.minW0)}>
+          <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15)}>
+            <span
+              {...stylex.props(
+                sx.truncate,
+                sx.fontSemibold,
+                sx.textFg,
+                typography.label,
+              )}
+            >
               {run.name}
             </span>
             {tone && (
               <Badge
                 tone={tone}
                 dot={run.status === "running"}
-                className={cn(run.status === "running" && "animate-pulse")}
+                className={cn(
+                  run.status === "running" && utilityClassName("animate-pulse"),
+                )}
               >
                 {run.status}
               </Badge>
             )}
           </div>
-          <div className="mt-0.5 truncate text-meta text-faint tabular-nums">
+          <div
+            {...mergeStylexProps(
+              "tabular-nums",
+              sx.mt05,
+              sx.truncate,
+              sx.textFaint,
+              typography.meta,
+            )}
+          >
             {meta.join(" · ")}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap1)}>
           {run.status === "running" && (
             <Button
               variant="soft"
               size="sm"
-              className="phone:min-h-11"
+              className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
               onClick={() => onAction(run.runId, "pause")}
             >
               Pause
@@ -771,7 +1283,7 @@ function RunCard({
             <Button
               variant="default"
               size="sm"
-              className="phone:min-h-11"
+              className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
               onClick={() => onAction(run.runId, "resume")}
             >
               Resume
@@ -781,7 +1293,7 @@ function RunCard({
             <Button
               variant="default"
               size="sm"
-              className="phone:min-h-11"
+              className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
               onClick={() => onAction(run.runId, "cancel")}
             >
               Stop
@@ -792,18 +1304,49 @@ function RunCard({
       {run.warnings?.map((warning) => (
         <div
           key={warning.kind}
-          className="px-2 pb-2 text-meta leading-snug text-yellow"
+          {...stylex.props(
+            sx.px2,
+            sx.pb2,
+            sx.leadingSnug,
+            sx.textYellow,
+            typography.meta,
+          )}
         >
           {warning.message}
         </div>
       ))}
       {!!run.sessions?.length && (
-        <div className="flex flex-col">
-          <div className="flex items-baseline gap-2 px-2 pb-px pt-0.5">
-            <span className="min-w-0 flex-1 truncate text-meta font-medium text-faint">
+        <div {...stylex.props(sx.flex, sx.flexCol)}>
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.itemsBaseline,
+              sx.gap2,
+              sx.px2,
+              sx.pbPx,
+              sx.pt05,
+            )}
+          >
+            <span
+              {...stylex.props(
+                sx.minW0,
+                sx.flex1,
+                sx.truncate,
+                sx.fontMedium,
+                sx.textFaint,
+                typography.meta,
+              )}
+            >
               Sessions
             </span>
-            <span className="shrink-0 text-meta text-faint tabular-nums">
+            <span
+              {...mergeStylexProps(
+                "tabular-nums",
+                sx.shrink0,
+                sx.textFaint,
+                typography.meta,
+              )}
+            >
               {run.sessions.length}
             </span>
           </div>
@@ -819,7 +1362,7 @@ function RunCard({
       {(hasPhaseActivity ||
         ((run.status === "running" || run.status === "paused") &&
           groups.order.length > 0)) && (
-        <div className="flex flex-col">
+        <div {...stylex.props(sx.flex, sx.flexCol)}>
           {groups.loose.map(agentRow)}
           {groups.order.map((title) => {
             const agents = groups.byPhase.get(title)!;
@@ -848,18 +1391,41 @@ function RunCard({
                 {/* The phase label sits quieter than the agent names under
 								    it, and its count holds the rail's right edge, so a
 								    group reads as a heading over rows. */}
-                <div className="flex items-baseline gap-2 px-2 pb-px pt-2 first:pt-0.5 phone:flex-col phone:items-stretch phone:gap-0">
+                <div
+                  {...mergeStylexProps(
+                    "first:pt-0.5",
+                    sx.flex,
+                    sx.itemsBaseline,
+                    sx.gap2,
+                    sx.px2,
+                    sx.pbPx,
+                    sx.pt2,
+                    sx.phoneFlexCol,
+                    sx.phoneItemsStretch,
+                    sx.phoneGap0,
+                  )}
+                >
                   <span
                     className={cn(
-                      "min-w-0 flex-1 truncate text-meta font-medium",
+                      utilityClassName(
+                        "min-w-0 flex-1 truncate text-meta font-medium",
+                      ),
                       run.status === "running" && title === run.currentPhase
-                        ? "text-dim"
-                        : "text-faint",
+                        ? utilityClassName("text-dim")
+                        : utilityClassName("text-faint"),
                     )}
                   >
                     {title}
                   </span>
-                  <span className="shrink-0 text-meta text-faint tabular-nums phone:truncate">
+                  <span
+                    {...mergeStylexProps(
+                      "tabular-nums",
+                      sx.shrink0,
+                      sx.textFaint,
+                      sx.phoneTruncate,
+                      typography.meta,
+                    )}
+                  >
                     {phaseMeta.join(" · ")}
                   </span>
                 </div>
@@ -877,32 +1443,67 @@ function RunCard({
         run.logs.length > 0 ||
         (run.status === "error" && run.error) ||
         (run.status === "done" && run.result !== undefined)) && (
-        <div className="mx-2 mt-1 border-t border-divider" />
+        <div {...stylex.props(sx.mx2, sx.mt1, sx.borderT, sx.borderDivider)} />
       )}
       {!!run.mcpCalls?.length && (
         <div>
           <button className={FOOTER_ROW} onClick={() => setShowMcp((v) => !v)}>
             {showMcp ? "Hide" : "Show"} tool calls
-            <span className="ml-auto shrink-0 tabular-nums text-faint">
+            <span
+              {...mergeStylexProps(
+                "tabular-nums",
+                sx.mlAuto,
+                sx.shrink0,
+                sx.textFaint,
+              )}
+            >
               {run.totals.mcpCalls ?? run.mcpCalls.length}
             </span>
           </button>
           {showMcp && (
-            <div className="flex flex-col gap-0.5 px-2 pb-1.5 pt-0.5">
+            <div
+              {...stylex.props(
+                sx.flex,
+                sx.flexCol,
+                sx.gap05,
+                sx.px2,
+                sx.pb15,
+                sx.pt05,
+              )}
+            >
               {run.mcpCalls.map((c, i) => (
                 <div
                   key={`${c.seq}-${i}`}
-                  className="flex items-baseline gap-2 text-meta leading-snug"
+                  {...stylex.props(
+                    sx.flex,
+                    sx.itemsBaseline,
+                    sx.gap2,
+                    sx.leadingSnug,
+                    typography.meta,
+                  )}
                 >
                   <span
-                    className={cn("shrink-0", c.ok ? "text-faint" : "text-red")}
+                    className={cn(
+                      utilityClassName("shrink-0"),
+                      c.ok
+                        ? utilityClassName("text-faint")
+                        : utilityClassName("text-red"),
+                    )}
                   >
                     {c.ok ? "·" : "✗"}
                   </span>
-                  <span className="truncate text-dim">
+                  <span {...stylex.props(sx.truncate, sx.textDim)}>
                     {c.server}.{c.tool}
                   </span>
-                  <span className="ml-auto shrink-0 text-meta text-faint tabular-nums">
+                  <span
+                    {...mergeStylexProps(
+                      "tabular-nums",
+                      sx.mlAuto,
+                      sx.shrink0,
+                      sx.textFaint,
+                      typography.meta,
+                    )}
+                  >
                     {c.cached ? "cached" : `${c.ms}ms`}
                   </span>
                 </div>
@@ -912,12 +1513,12 @@ function RunCard({
         </div>
       )}
       {run.logs.length > 0 && (
-        <div className="px-2 py-1.5">
-          <div className="flex flex-col gap-0.5">
+        <div {...stylex.props(sx.px2, sx.py15)}>
+          <div {...stylex.props(sx.flex, sx.flexCol, sx.gap05)}>
             {(allLogs ? run.logs : run.logs.slice(-20)).map((l, i) => (
               <div
                 key={`${l.ts}-${i}`}
-                className="text-meta leading-snug text-faint"
+                {...stylex.props(sx.leadingSnug, sx.textFaint, typography.meta)}
               >
                 {l.message}
               </div>
@@ -925,7 +1526,14 @@ function RunCard({
           </div>
           {run.logs.length > 20 && (
             <button
-              className="mt-1 text-meta font-medium text-dim transition-colors hover:text-fg"
+              {...stylex.props(
+                sx.mt1,
+                sx.fontMedium,
+                sx.textDim,
+                sx.transitionColors,
+                sx.hoverTextFg,
+                typography.meta,
+              )}
               onClick={() => setAllLogs((v) => !v)}
             >
               {allLogs ? "Show recent" : `Show all ${run.logs.length}`}
@@ -934,7 +1542,15 @@ function RunCard({
         </div>
       )}
       {run.status === "error" && run.error && (
-        <div className="px-2 py-1.5 text-meta leading-snug text-red">
+        <div
+          {...stylex.props(
+            sx.px2,
+            sx.py15,
+            sx.leadingSnug,
+            sx.textRed,
+            typography.meta,
+          )}
+        >
           {run.error}
         </div>
       )}
@@ -947,7 +1563,7 @@ function RunCard({
             {showResult ? "Hide result" : "Show result"}
           </button>
           {showResult && (
-            <div className="px-2 pb-1.5 pt-0.5">
+            <div {...stylex.props(sx.px2, sx.pb15, sx.pt05)}>
               <DetailPre
                 text={
                   typeof run.result === "string"
@@ -1001,17 +1617,19 @@ const AgentRow = function AgentRow({
       <button
         className={cn(
           ROW_CLASS,
-          "flex-col items-stretch gap-0.5 hover:bg-hover",
+          utilityClassName("flex-col items-stretch gap-0.5 hover:bg-hover"),
         )}
         aria-expanded={open}
         onClick={() => onToggle(a.seq)}
       >
-        <span className="flex min-w-0 items-center gap-2">
+        <span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
           <StatusMark status={a.status} />
           <span
             className={cn(
-              "min-w-0 flex-1 truncate text-label",
-              a.status === "cancelled" ? "text-faint line-through" : "text-fg",
+              utilityClassName("min-w-0 flex-1 truncate text-label"),
+              a.status === "cancelled"
+                ? utilityClassName("text-faint line-through")
+                : utilityClassName("text-fg"),
             )}
           >
             {a.label}
@@ -1032,32 +1650,50 @@ const AgentRow = function AgentRow({
       </button>
       <div
         className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out",
-          open ? "[grid-template-rows:1fr]" : "[grid-template-rows:0fr]",
+          utilityClassName(
+            "grid transition-[grid-template-rows] duration-200 ease-out",
+          ),
+          open
+            ? utilityClassName("[grid-template-rows:1fr]")
+            : utilityClassName("[grid-template-rows:0fr]"),
         )}
       >
-        <div className="min-h-0 overflow-hidden">
+        <div {...stylex.props(sx.minH0, sx.overflowHidden)}>
           {open && (
-            <div className="mx-1 mb-1.5 mt-0.5 flex flex-col gap-1.5 rounded-md bg-hover p-2">
+            <div
+              {...stylex.props(
+                sx.mx1,
+                sx.mb15,
+                sx.mt05,
+                sx.flex,
+                sx.flexCol,
+                sx.gap15,
+                sx.roundedMd,
+                sx.bgHover,
+                sx.p2,
+              )}
+            >
               {/* The headline affordance: what the agent actually DID, not
 							    just what it said at the end. Available even while it runs
 							    (the transcript view polls). */}
-              <div className="flex flex-wrap items-center gap-1">
+              <div
+                {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap1)}
+              >
                 {a.status !== "pending" && (
                   <Button
                     size="sm"
-                    className="phone:min-h-11"
+                    className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                     onClick={() => onOpenConversation(a.seq)}
                   >
                     View conversation
-                    <span className="text-faint">→</span>
+                    <span {...stylex.props(sx.textFaint)}>→</span>
                   </Button>
                 )}
                 {a.status === "running" && (
                   <Button
                     variant="soft"
                     size="sm"
-                    className="phone:min-h-11"
+                    className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                     onClick={() => onAction(a.seq, "retry")}
                   >
                     Retry
@@ -1067,23 +1703,27 @@ const AgentRow = function AgentRow({
                   <Button
                     variant="soft"
                     size="sm"
-                    className="phone:min-h-11"
+                    className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                     onClick={() => onAction(a.seq, "skip")}
                   >
                     Stop agent
                   </Button>
                 )}
               </div>
-              <div className="text-meta font-medium text-faint">Prompt</div>
+              <div
+                {...stylex.props(sx.fontMedium, sx.textFaint, typography.meta)}
+              >
+                Prompt
+              </div>
               <DetailPre text={promptText} />
               {(resultText || a.status === "error") && (
                 <>
                   <div
                     className={cn(
-                      "text-meta font-medium",
+                      utilityClassName("text-meta font-medium"),
                       a.status === "error" || full?.outcome.error
-                        ? "text-red"
-                        : "text-faint",
+                        ? utilityClassName("text-red")
+                        : utilityClassName("text-faint"),
                     )}
                   >
                     {a.status === "error" || full?.outcome.error
@@ -1096,20 +1736,34 @@ const AgentRow = function AgentRow({
               {detail === undefined &&
                 (a.status === "done" || a.status === "error") && (
                   <button
-                    className="self-start text-meta font-medium text-link hover:underline"
+                    {...stylex.props(
+                      sx.selfStart,
+                      sx.fontMedium,
+                      sx.textLink,
+                      sx.hoverUnderline,
+                      typography.meta,
+                    )}
                     onClick={() => onLoadDetail(a.seq)}
                   >
                     Show full prompt & result
                   </button>
                 )}
               {detail === "loading" && (
-                <span className="text-meta text-faint">Loading…</span>
+                <span {...stylex.props(sx.textFaint, typography.meta)}>
+                  Loading…
+                </span>
               )}
               {detail === "missing" && (
                 // Transient failures happen (the snapshot flips done before
                 // the journal entry lands) — keep the miss retryable.
                 <button
-                  className="self-start text-meta font-medium text-link hover:underline"
+                  {...stylex.props(
+                    sx.selfStart,
+                    sx.fontMedium,
+                    sx.textLink,
+                    sx.hoverUnderline,
+                    typography.meta,
+                  )}
                   onClick={() => onLoadDetail(a.seq)}
                 >
                   Couldn't load the full record. Retry

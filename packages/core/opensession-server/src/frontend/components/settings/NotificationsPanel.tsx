@@ -26,6 +26,20 @@ import {
 import { Switch } from "../../ui/switch";
 import { getCurrentUser } from "../UserPicker";
 import { Select, SettingRow } from "./shared";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+});
 
 // ── Notifications ──────────────────────────────────────────────────────────
 
@@ -107,7 +121,7 @@ export function NotificationsPanel() {
         <SettingRow
           title="Completion sound"
           control={
-            <div className="flex items-center gap-2">
+            <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
               <Select
                 label="Completion sound"
                 value={s.sound}

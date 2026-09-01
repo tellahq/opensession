@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useState } from "react";
 import { useSetupStatus } from "../hooks/useSetupStatus";
 import { DEFAULT_DOC_TITLE, docTitle } from "../lib/brand";
@@ -17,6 +19,104 @@ import { ModelProvidersPanel } from "./ModelProviders";
 import { ModelDefaultsSection } from "./Models";
 import { IconCheck } from "./icons";
 import { integrationState, type SetupStatus } from "./setup-shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  mt10: {
+    marginTop: "calc(4px * 10)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  flex: {
+    display: "flex",
+  },
+  wFull: {
+    width: "100%",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  py3: {
+    paddingBlock: "calc(4px * 3)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  fontTitle: {
+    fontWeight: "var(--title-weight)",
+  },
+  tracking0015em: {
+    letterSpacing: "-0.015em",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  maxW62ch: {
+    maxWidth: "62ch",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  relative: {
+    position: "relative",
+  },
+  maxW980px: {
+    maxWidth: "980px",
+  },
+  grid: {
+    display: "grid",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  mt0: {
+    marginTop: "0",
+  },
+});
 
 // Settings → Setup: every part of a new instance, in the order someone fills
 // it in, with a summary rail that jumps to the section that still needs work.
@@ -83,11 +183,21 @@ function SetupSummary({
   return (
     <aside
       aria-labelledby="setup-summary-title"
-      className="mt-10 desktop:sticky desktop:top-0 desktop:col-start-2 desktop:row-start-1 desktop:mt-0"
+      {...mergeStylexProps(
+        "desktop:sticky desktop:top-0 desktop:col-start-2 desktop:row-start-1 desktop:mt-0",
+        sx.mt10,
+      )}
     >
       <h2
         id="setup-summary-title"
-        className="m-0 mb-2 px-4 text-label font-semibold text-faint"
+        {...mergeStylexProps(
+          "m-0",
+          sx.mb2,
+          sx.px4,
+          sx.fontSemibold,
+          sx.textFaint,
+          typography.label,
+        )}
       >
         Summary
       </h2>
@@ -97,14 +207,26 @@ function SetupSummary({
             key={step.id}
             type="button"
             onClick={() => onSelect(step.id)}
-            className="focus-ring flex w-full cursor-pointer items-center gap-2.5 px-4 py-3 text-left hover:bg-hover"
+            {...mergeStylexProps(
+              "focus-ring hover:bg-hover",
+              sx.flex,
+              sx.wFull,
+              sx.cursorPointer,
+              sx.itemsCenter,
+              sx.gap25,
+              sx.px4,
+              sx.py3,
+              sx.textLeft,
+            )}
           >
             <span
               className={cn(
-                "flex size-5 shrink-0 items-center justify-center rounded-full",
+                utilityClassName(
+                  "flex size-5 shrink-0 items-center justify-center rounded-full",
+                ),
                 step.complete
-                  ? "bg-green-soft text-green"
-                  : "bg-hover text-faint",
+                  ? utilityClassName("bg-green-soft text-green")
+                  : utilityClassName("bg-hover text-faint"),
               )}
               aria-hidden="true"
             >
@@ -112,13 +234,15 @@ function SetupSummary({
             </span>
             <span
               className={cn(
-                "min-w-0 text-label",
-                step.complete ? "font-medium text-fg" : "text-dim",
+                utilityClassName("min-w-0 text-label"),
+                step.complete
+                  ? utilityClassName("font-medium text-fg")
+                  : utilityClassName("text-dim"),
               )}
             >
               {step.label}
             </span>
-            <span className="sr-only">
+            <span {...stylex.props(sx.srOnly)}>
               {step.complete ? ", complete" : ", needs setup"}
             </span>
           </button>
@@ -142,12 +266,32 @@ function SetupPageSection({
   className?: string;
 }) {
   return (
-    <section id={sectionAnchor(id)} className={cn("scroll-mt-4", className)}>
-      <div className="mb-3 px-5">
-        <h2 className="m-0 text-section-title font-title tracking-[-0.015em] text-fg">
+    <section
+      id={sectionAnchor(id)}
+      className={cn(utilityClassName("scroll-mt-4"), className)}
+    >
+      <div {...stylex.props(sx.mb3, sx.px5)}>
+        <h2
+          {...mergeStylexProps(
+            "m-0",
+            sx.fontTitle,
+            sx.tracking0015em,
+            sx.textFg,
+            typography.sectionTitle,
+          )}
+        >
           {title}
         </h2>
-        <p className="m-0 mt-1.5 max-w-[62ch] text-supporting leading-relaxed text-dim">
+        <p
+          {...mergeStylexProps(
+            "m-0",
+            sx.mt15,
+            sx.maxW62ch,
+            sx.leadingRelaxed,
+            sx.textDim,
+            typography.supporting,
+          )}
+        >
           {description}
         </p>
       </div>
@@ -179,7 +323,13 @@ export function SetupPanel({
   }
 
   return (
-    <SettingsPanel className="relative max-w-[980px] [&_input]:phone:text-input-phone">
+    <SettingsPanel
+      className={mergeStylexOverrideClassName(
+        "[&_input]:phone:text-input-phone",
+        sx.relative,
+        sx.maxW980px,
+      )}
+    >
       <SettingsHeader
         title="Workspace setup"
         actions={
@@ -193,13 +343,24 @@ export function SetupPanel({
           {failed ? "Couldn't load setup status." : "Loading…"}
         </LoadingState>
       ) : (
-        <div className="grid items-start desktop:grid-cols-[minmax(0,720px)_220px] desktop:gap-10">
-          <div className="min-w-0 desktop:col-start-1 desktop:row-start-1">
+        <div
+          {...mergeStylexProps(
+            "desktop:grid-cols-[minmax(0,720px)_220px] desktop:gap-10",
+            sx.grid,
+            sx.itemsStart,
+          )}
+        >
+          <div
+            {...mergeStylexProps(
+              "desktop:col-start-1 desktop:row-start-1",
+              sx.minW0,
+            )}
+          >
             <SetupPageSection
               id="github"
               title="Connect GitHub"
               description="The GitHub App controls repository access. PR automation is optional."
-              className="mt-0"
+              className={mergeStylexOverrideClassName("", sx.mt0)}
             >
               <IntegrationsList
                 integrations={status.integrations.filter(

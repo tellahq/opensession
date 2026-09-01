@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useEffect, useState, type ReactNode } from "react";
 import { useReducedMotion } from "motion/react";
 import { BASE_PATH } from "../lib/base";
@@ -28,6 +30,212 @@ import {
   type ChipTone,
   type SetupGithub,
 } from "./setup-shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  minH11: {
+    minHeight: "calc(4px * 11)",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  z10: {
+    zIndex: "10",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  px35: {
+    paddingInline: "calc(4px * 3.5)",
+  },
+  textBase: {
+    fontSize: "var(--type-body)",
+    lineHeight: "var(--tw-leading, var(--text-base--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  TextBoxTrimBothCapAlphabetic: {
+    textBox: "trim-both cap alphabetic",
+  },
+  block: {
+    display: "block",
+  },
+  w400px: {
+    width: "400px",
+  },
+  maxWCalc100vw32px: {
+    maxWidth: "calc(100vw - 32px)",
+  },
+  whitespaceNormal: {
+    whiteSpace: "normal",
+  },
+  hAuto: {
+    height: "auto",
+  },
+  wFull: {
+    width: "100%",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderVarTooltipRing: {
+    borderColor: "var(--tooltip-ring)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  pt2: {
+    paddingTop: "calc(4px * 2)",
+  },
+  pb1: {
+    paddingBottom: "4px",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  textTooltipFg75: {
+    color: "color-mix(in oklab, var(--tooltip-fg) 75%, transparent)",
+  },
+  pointerEventsAuto: {
+    pointerEvents: "auto",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  size6: {
+    width: "calc(4px * 6)",
+    height: "calc(4px * 6)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  durationVarDurMicro: {
+    transitionDuration: "var(--dur-micro)",
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  phoneSize8: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 8)",
+      height: "calc(4px * 8)",
+    },
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  pb5: {
+    paddingBottom: "calc(4px * 5)",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  size1: {
+    width: "4px",
+    height: "4px",
+  },
+  bgLineStrong: {
+    backgroundColor: "var(--border-strong)",
+  },
+  size12: {
+    width: "calc(4px * 12)",
+    height: "calc(4px * 12)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  flex1: {
+    flex: "1",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  phoneTextInputPhone: {
+    "@media (max-width: 720px)": {
+      fontSize: "var(--type-input-phone)",
+    },
+  },
+  textTooltipFg: {
+    color: "var(--tooltip-fg)",
+  },
+  m0: {
+    margin: "0",
+  },
+});
 
 function GithubSetupStep({
   label,
@@ -49,12 +257,12 @@ function GithubSetupStep({
   const actionDisabled = disabled || (!href && !onClick);
 
   return (
-    <div className="group relative min-h-11">
+    <div {...mergeStylexProps("group", sx.relative, sx.minH11)}>
       <Button
         size="lg"
         className={cn(
-          "absolute inset-0 min-h-11 w-full",
-          complete && "disabled:opacity-100",
+          utilityClassName("absolute inset-0 min-h-11 w-full"),
+          complete && utilityClassName("disabled:opacity-100"),
         )}
         disabled={actionDisabled}
         onClick={onClick}
@@ -62,36 +270,85 @@ function GithubSetupStep({
           ? { render: <a href={href} target="_blank" rel="noreferrer" /> }
           : {})}
       >
-        <span className="sr-only">{label}</span>
+        <span {...stylex.props(sx.srOnly)}>{label}</span>
       </Button>
-      <div className="pointer-events-none relative z-10 flex min-h-11 items-center px-3.5 text-base font-medium text-dim">
+      <div
+        {...stylex.props(
+          sx.pointerEventsNone,
+          sx.relative,
+          sx.z10,
+          sx.flex,
+          sx.minH11,
+          sx.itemsCenter,
+          sx.px35,
+          sx.textBase,
+          sx.fontMedium,
+          sx.textDim,
+        )}
+      >
         <span
           aria-hidden="true"
           className={cn(
-            "flex items-center gap-2 transition-colors duration-[var(--dur-micro)] group-hover:text-fg",
-            actionDisabled && !complete && "opacity-40 group-hover:text-dim",
+            utilityClassName(
+              "flex items-center gap-2 transition-colors duration-[var(--dur-micro)] group-hover:text-fg",
+            ),
+            actionDisabled &&
+              !complete &&
+              utilityClassName("opacity-40 group-hover:text-dim"),
           )}
         >
           <IconCheckCircleFilled
             size={20}
-            className={complete ? "text-green" : "text-faint"}
+            className={
+              complete
+                ? utilityClassName("text-green")
+                : utilityClassName("text-faint")
+            }
           />
-          <span className="[text-box:trim-both_cap_alphabetic]">{label}</span>
+          <span {...stylex.props(sx.TextBoxTrimBothCapAlphabetic)}>
+            {label}
+          </span>
         </span>
         <Tooltip
           side="top"
           align="center"
           offset={6}
           multiline
-          popupClassName="max-w-[424px]! p-2!"
+          popupClassName={utilityClassName("max-w-[424px]! p-2!")}
           label={
-            <span className="block w-[400px] max-w-[calc(100vw-32px)] whitespace-normal">
+            <span
+              {...stylex.props(
+                sx.block,
+                sx.w400px,
+                sx.maxWCalc100vw32px,
+                sx.whitespaceNormal,
+              )}
+            >
               <img
                 src={guide}
                 alt=""
-                className="block h-auto w-full rounded-md border border-[var(--tooltip-ring)]"
+                {...stylex.props(
+                  sx.block,
+                  sx.hAuto,
+                  sx.wFull,
+                  sx.roundedMd,
+                  sx.border,
+                  sx.borderVarTooltipRing,
+                )}
               />
-              <span className="block px-1 pt-2 pb-1 text-left text-supporting leading-snug font-normal text-tooltip-fg/75">
+              <span
+                {...stylex.props(
+                  sx.block,
+                  sx.px1,
+                  sx.pt2,
+                  sx.pb1,
+                  sx.textLeft,
+                  sx.leadingSnug,
+                  sx.fontNormal,
+                  sx.textTooltipFg75,
+                  typography.supporting,
+                )}
+              >
                 {caption}
               </span>
             </span>
@@ -100,7 +357,21 @@ function GithubSetupStep({
           <button
             type="button"
             aria-label={`Show help for ${label.toLowerCase()}`}
-            className="focus-ring pointer-events-auto ml-auto flex size-6 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] hover:text-fg phone:size-8"
+            {...mergeStylexProps(
+              "focus-ring",
+              sx.pointerEventsAuto,
+              sx.mlAuto,
+              sx.flex,
+              sx.size6,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.roundedControl,
+              sx.textFaint,
+              sx.transitionColors,
+              sx.durationVarDurMicro,
+              sx.hoverTextFg,
+              sx.phoneSize8,
+            )}
           >
             <IconQuestionCircle size={18} />
           </button>
@@ -221,22 +492,44 @@ export function GithubManifestSetup({
     <>
       {connectionStatus ? (
         <>
-          <div className="flex items-center justify-center gap-2 pb-5">
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.gap2,
+              sx.pb5,
+            )}
+          >
             <IconTile name="github" size={48} />
-            <span aria-hidden="true" className="flex gap-1">
-              <span className="size-1 bg-line-strong" />
-              <span className="size-1 bg-line-strong" />
-              <span className="size-1 bg-line-strong" />
-              <span className="size-1 bg-line-strong" />
+            <span aria-hidden="true" {...stylex.props(sx.flex, sx.gap1)}>
+              <span {...stylex.props(sx.size1, sx.bgLineStrong)} />
+              <span {...stylex.props(sx.size1, sx.bgLineStrong)} />
+              <span {...stylex.props(sx.size1, sx.bgLineStrong)} />
+              <span {...stylex.props(sx.size1, sx.bgLineStrong)} />
             </span>
             <img
               src={`${BASE_PATH}/mac-app-icon.png`}
               alt=""
-              className="size-12 shrink-0"
+              {...stylex.props(sx.size12, sx.shrink0)}
             />
           </div>
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0 text-dialog-title font-semibold text-fg">
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.itemsCenter,
+              sx.justifyBetween,
+              sx.gap4,
+            )}
+          >
+            <div
+              {...stylex.props(
+                sx.minW0,
+                sx.fontSemibold,
+                sx.textFg,
+                typography.dialogTitle,
+              )}
+            >
               Install Open Session for GitHub
             </div>
             <StateChip
@@ -246,38 +539,54 @@ export function GithubManifestSetup({
           </div>
         </>
       ) : (
-        <div className="text-dialog-title font-semibold text-fg">
+        <div
+          {...stylex.props(sx.fontSemibold, sx.textFg, typography.dialogTitle)}
+        >
           Install Open Session for GitHub
         </div>
       )}
       <div
         className={cn(
-          "flex flex-col",
-          formOwner === "organization" ? "gap-5" : "gap-2",
+          utilityClassName("flex flex-col"),
+          formOwner === "organization"
+            ? utilityClassName("gap-5")
+            : utilityClassName("gap-2"),
         )}
       >
         <Segmented
           label="GitHub App owner"
           value={owner}
           onValueChange={(value) => setOwner(value as GithubAppOwnerType)}
-          className="w-full"
+          className={mergeStylexOverrideClassName("", sx.wFull)}
         >
           <SegmentedOption
             value="personal"
-            className="flex-1 text-center phone:min-h-11 [&>span:last-child]:justify-center"
+            className={mergeStylexOverrideClassName(
+              "[&>span:last-child]:justify-center",
+              sx.flex1,
+              sx.textCenter,
+              sx.phoneMinH11,
+            )}
           >
             Personal account
           </SegmentedOption>
           <SegmentedOption
             value="organization"
-            className="flex-1 text-center phone:min-h-11 [&>span:last-child]:justify-center"
+            className={mergeStylexOverrideClassName(
+              "[&>span:last-child]:justify-center",
+              sx.flex1,
+              sx.textCenter,
+              sx.phoneMinH11,
+            )}
           >
             Organization
           </SegmentedOption>
         </Segmented>
         {formOwner === "organization" && (
-          <label className="flex flex-col gap-1">
-            <span className="text-label font-medium text-dim">
+          <label {...stylex.props(sx.flex, sx.flexCol, sx.gap1)}>
+            <span
+              {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}
+            >
               Organization ID
             </span>
             <Input
@@ -289,7 +598,11 @@ export function GithubManifestSetup({
                 }))
               }
               placeholder="my-organization"
-              className="phone:min-h-11 phone:text-input-phone"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.phoneMinH11,
+                sx.phoneTextInputPhone,
+              )}
               disabled={starting}
               autoCapitalize="none"
               autoComplete="off"
@@ -298,7 +611,7 @@ export function GithubManifestSetup({
           </label>
         )}
       </div>
-      <div className="flex flex-col gap-2">
+      <div {...stylex.props(sx.flex, sx.flexCol, sx.gap2)}>
         <GithubSetupStep
           label="Create GitHub app"
           guide={githubCreateAppGuide}
@@ -319,7 +632,7 @@ export function GithubManifestSetup({
             <>
               Leave OAuth during installation off, then turn on Enable Device
               Flow. Click “
-              <strong className="font-semibold text-tooltip-fg">
+              <strong {...stylex.props(sx.fontSemibold, sx.textTooltipFg)}>
                 Save changes
               </strong>
               ” to finish.
@@ -335,7 +648,7 @@ export function GithubManifestSetup({
         />
       </div>
       {result === "created" && (
-        <SettingsHint className="m-0">
+        <SettingsHint className={mergeStylexOverrideClassName("", sx.m0)}>
           GitHub App created. Enable Device Flow before you install it.
         </SettingsHint>
       )}

@@ -1,4 +1,55 @@
 import type { SessionSource } from "./types";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexClassName } from "../ui/cn";
+import { type as typography } from "../styles/typography.stylex";
+
+const sx = stylex.create({
+  shrink0: {
+    flexShrink: "0",
+  },
+  roundedFull: {
+    borderRadius: "3.40282e38px",
+    cornerShape: "round",
+  },
+  px2: {
+    paddingInline: "8px",
+  },
+  py05: {
+    paddingBlock: "2px",
+  },
+  fontBold: {
+    "--tw-font-weight": "var(--font-weight-bold)",
+    fontWeight: "var(--font-weight-bold)",
+  },
+  tracking001em: {
+    "--tw-tracking": "-.01em",
+    letterSpacing: "-.01em",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  bgVarChipSlackBg: {
+    backgroundColor: "var(--chip-slack-bg)",
+  },
+  textVarChipSlackFg: {
+    color: "var(--chip-slack-fg)",
+  },
+  bgVarChipLinearBg: {
+    backgroundColor: "var(--chip-linear-bg)",
+  },
+  textVarChipLinearFg: {
+    color: "var(--chip-linear-fg)",
+  },
+  bgVarChipAskBg: {
+    backgroundColor: "var(--chip-ask-bg)",
+  },
+  textVarChipAskFg: {
+    color: "var(--chip-ask-fg)",
+  },
+});
 
 /**
  * Source chips — the small pill naming where a session came from (slack,
@@ -14,16 +65,28 @@ import type { SessionSource } from "./types";
  * The tints themselves are tokens in base.css (`--chip-*`), so they re-tone
  * for the light theme on their own; see the note there.
  */
-export const SOURCE_CHIP =
-  "shrink-0 rounded-full px-2 py-0.5 text-meta font-bold tracking-[-0.01em]";
+export const SOURCE_CHIP = mergeStylexClassName(
+  "",
+  sx.shrink0,
+  sx.roundedFull,
+  sx.px2,
+  sx.py05,
+  typography.meta,
+  sx.fontBold,
+  sx.tracking001em,
+);
 
 /** Neutral pill — the origins that get no hue of their own. */
-const NEUTRAL = "bg-active text-dim";
+const NEUTRAL = mergeStylexClassName("", sx.bgActive, sx.textDim);
 
 const TONE: Record<string, string> = {
-  slack: "bg-[var(--chip-slack-bg)] text-[var(--chip-slack-fg)]",
-  linear: "bg-[var(--chip-linear-bg)] text-[var(--chip-linear-fg)]",
-  ask: "bg-[var(--chip-ask-bg)] text-[var(--chip-ask-fg)]",
+  slack: mergeStylexClassName("", sx.bgVarChipSlackBg, sx.textVarChipSlackFg),
+  linear: mergeStylexClassName(
+    "",
+    sx.bgVarChipLinearBg,
+    sx.textVarChipLinearFg,
+  ),
+  ask: mergeStylexClassName("", sx.bgVarChipAskBg, sx.textVarChipAskFg),
   cli: NEUTRAL,
 };
 

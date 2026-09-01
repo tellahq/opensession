@@ -1,5 +1,23 @@
+import { utilityClassName } from "../ui/cn";
 import type { PlanItem } from "@tellahq/opensession-protocol/todo-plan";
 import { cn } from "../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  pl22px: {
+    paddingLeft: "22px",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+});
 
 /**
  * The model's plan rendered as a checklist — shared by the status flap above
@@ -22,7 +40,9 @@ export function PlanChecklist({ items, max, live = false, className }: Props) {
   return (
     <ol
       className={cn(
-        "m-0 flex list-none flex-col gap-1.5 p-0 text-label leading-4",
+        utilityClassName(
+          "m-0 flex list-none flex-col gap-1.5 p-0 text-label leading-4",
+        ),
         className,
       )}
     >
@@ -30,17 +50,20 @@ export function PlanChecklist({ items, max, live = false, className }: Props) {
         <li
           key={`${i}-${item.content}`}
           className={cn(
-            "flex min-w-0 items-start gap-2",
-            item.status === "in_progress" && "font-medium text-fg",
-            item.status === "completed" && "text-dim",
-            item.status === "pending" && "text-faint",
+            utilityClassName("flex min-w-0 items-start gap-2"),
+            item.status === "in_progress" &&
+              utilityClassName("font-medium text-fg"),
+            item.status === "completed" && utilityClassName("text-dim"),
+            item.status === "pending" && utilityClassName("text-faint"),
           )}
         >
           <PlanMark status={item.status} live={live} />
-          <span className="min-w-0 flex-1">{item.content}</span>
+          <span {...stylex.props(sx.minW0, sx.flex1)}>{item.content}</span>
         </li>
       ))}
-      {hidden > 0 && <li className="pl-[22px] text-faint">+{hidden} more</li>}
+      {hidden > 0 && (
+        <li {...stylex.props(sx.pl22px, sx.textFaint)}>+{hidden} more</li>
+      )}
     </ol>
   );
 }
@@ -57,13 +80,16 @@ function PlanMark({
   return (
     <span
       className={cn(
-        "mt-1 size-2 flex-none rounded-full",
-        status === "completed" && "bg-green",
+        utilityClassName("mt-1 size-2 flex-none rounded-full"),
+        status === "completed" && utilityClassName("bg-green"),
         status === "in_progress" && [
-          "bg-yellow",
-          live && "animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]",
+          utilityClassName("bg-yellow"),
+          live &&
+            utilityClassName(
+              "animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]",
+            ),
         ],
-        status === "pending" && "border border-line",
+        status === "pending" && utilityClassName("border border-line"),
       )}
     />
   );

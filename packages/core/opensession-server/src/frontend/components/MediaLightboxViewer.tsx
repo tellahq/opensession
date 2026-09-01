@@ -1,3 +1,5 @@
+import { mergeStylexProps } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { cn } from "../ui/cn";
 import {
   REGION_HANDLES,
@@ -5,6 +7,173 @@ import {
 } from "../lib/media-lightbox-viewer";
 import { useMediaZoomGesture } from "../hooks/useMediaZoomGesture";
 import { IconPencil, IconTrash } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  boxBorder: {
+    boxSizing: "border-box",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  rounded2xl: {
+    borderRadius: "calc(22px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderWhite20: {
+    borderColor: "color-mix(in oklab, var(--color-white) 20%, transparent)",
+  },
+  bgVarDiagramCanvas: {
+    backgroundColor: "var(--diagram-canvas)",
+  },
+  p4: {
+    padding: "calc(4px * 4)",
+  },
+  TransformOrigin00: {
+    transformOrigin: "0 0",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  maxHFull: {
+    maxHeight: "100%",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  objectContain: {
+    objectFit: "contain",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  z3: {
+    zIndex: "3",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  grid: {
+    display: "grid",
+  },
+  size10: {
+    width: "calc(4px * 10)",
+    height: "calc(4px * 10)",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  p0: {
+    padding: "0",
+  },
+  phoneSize11: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 11)",
+      height: "calc(4px * 11)",
+    },
+  },
+  size25: {
+    width: "calc(4px * 2.5)",
+    height: "calc(4px * 2.5)",
+  },
+  bgAccent: {
+    backgroundColor: "var(--accent)",
+  },
+  transitionTransform: {
+    transitionProperty: "transform, translate, scale, rotate",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  durationVarDurMicro: {
+    transitionDuration: "var(--dur-micro)",
+  },
+  easeVarEase: {
+    transitionTimingFunction: "var(--ease)",
+  },
+  motionReduceTransitionNone: {
+    "@media (prefers-reduced-motion: reduce)": {
+      "@media (prefers-reduced-motion:reduce)": {
+        transitionProperty: "none",
+      },
+    },
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textWhite70: {
+    color: "color-mix(in oklab, var(--color-white) 70%, transparent)",
+  },
+  hoverBgWhite10: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor:
+          "color-mix(in oklab, var(--color-white) 10%, transparent)",
+      },
+    },
+  },
+  hoverTextWhite: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--color-white)",
+      },
+    },
+  },
+  activeScale096: {
+    ":active": {
+      scale: "0.96",
+    },
+  },
+  cursorMove: {
+    cursor: "move",
+  },
+  touchNone: {
+    touchAction: "none",
+  },
+  rounded3px: {
+    borderRadius: "3px",
+    cornerShape: "var(--cs)",
+  },
+  borderWhite: {
+    borderColor: "var(--color-white)",
+  },
+});
 
 /**
  * Pinch, pan, and zoom surface for one image or diagram. The wrapper owns the
@@ -68,13 +237,15 @@ export function MediaLightboxViewer({
   return (
     <div
       ref={wrapRef}
-      className={`relative flex min-h-0 min-w-0 flex-1 touch-none select-none items-center justify-center self-stretch ${
-        commentMode
-          ? "cursor-crosshair"
-          : zoomed
-            ? "cursor-grab"
-            : "cursor-zoom-in"
-      }`}
+      className={utilityClassName(
+        `relative flex min-h-0 min-w-0 flex-1 touch-none select-none items-center justify-center self-stretch ${
+          commentMode
+            ? "cursor-crosshair"
+            : zoomed
+              ? "cursor-grab"
+              : "cursor-zoom-in"
+        }`,
+      )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
@@ -89,7 +260,17 @@ export function MediaLightboxViewer({
           // the diagram is drawn on in the transcript: a light-theme
           // chart is near-black ink, which would be unreadable straight
           // on the scrim.
-          className="box-border shrink-0 rounded-2xl border border-white/20 bg-[var(--diagram-canvas)] p-4 [transform-origin:0_0] [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+          {...mergeStylexProps(
+            "[&>svg]:block [&>svg]:h-full [&>svg]:w-full",
+            sx.boxBorder,
+            sx.shrink0,
+            sx.rounded2xl,
+            sx.border,
+            sx.borderWhite20,
+            sx.bgVarDiagramCanvas,
+            sx.p4,
+            sx.TransformOrigin00,
+          )}
           style={{ width: fit?.w, height: fit?.h, viewTransitionName }}
           // The markup is mermaid's own output, already rendered into the
           // transcript by MarkdownBody; this is the same SVG, resized.
@@ -114,7 +295,17 @@ export function MediaLightboxViewer({
             // screen-sized photo reads as a crop rather than a shape.
             // Anything rounder would leave the scale, and it starts
             // clipping content that sits in a screenshot's own corner.
-            className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20 object-contain [transform-origin:0_0]"
+            {...stylex.props(
+              sx.minH0,
+              sx.minW0,
+              sx.maxHFull,
+              sx.maxWFull,
+              sx.rounded2xl,
+              sx.border,
+              sx.borderWhite20,
+              sx.objectContain,
+              sx.TransformOrigin00,
+            )}
             style={{ viewTransitionName }}
           />
           {commentMode && shownRegionBox && imageBox && (
@@ -124,7 +315,12 @@ export function MediaLightboxViewer({
 						   it to the picture's own rounded box so it cannot leak over the
 						   scrim and the chrome. */
             <div
-              className="pointer-events-none absolute overflow-hidden rounded-2xl"
+              {...stylex.props(
+                sx.pointerEventsNone,
+                sx.absolute,
+                sx.overflowHidden,
+                sx.rounded2xl,
+              )}
               style={{
                 left: imageBox.left,
                 top: imageBox.top,
@@ -134,7 +330,10 @@ export function MediaLightboxViewer({
               aria-hidden="true"
             >
               <div
-                className="absolute shadow-[0_0_0_9999px_rgb(0_0_0/0.5)]"
+                {...mergeStylexProps(
+                  "shadow-[0_0_0_9999px_rgb(0_0_0/0.5)]",
+                  sx.absolute,
+                )}
                 style={{
                   left: shownRegionBox.left - imageBox.left,
                   top: shownRegionBox.top - imageBox.top,
@@ -155,7 +354,13 @@ export function MediaLightboxViewer({
               return (
                 <div
                   key={annotation.id}
-                  className="group/annotation absolute z-[3] flex items-center"
+                  {...mergeStylexProps(
+                    "group/annotation",
+                    sx.absolute,
+                    sx.z3,
+                    sx.flex,
+                    sx.itemsCenter,
+                  )}
                   style={{
                     left: imageBox.left + centerX * imageBox.width,
                     top: imageBox.top + centerY * imageBox.height,
@@ -165,33 +370,83 @@ export function MediaLightboxViewer({
                 >
                   <button
                     type="button"
-                    className="focus-ring grid size-10 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 phone:size-11"
+                    {...mergeStylexProps(
+                      "focus-ring",
+                      sx.grid,
+                      sx.size10,
+                      sx.shrink0,
+                      sx.placeItemsCenter,
+                      sx.roundedFull,
+                      sx.border0,
+                      sx.bgTransparent,
+                      sx.p0,
+                      sx.phoneSize11,
+                    )}
                     onClick={() =>
                       setOpenAnnotation(open ? null : annotation.id)
                     }
                     aria-label={`Show annotation: ${annotation.text}`}
                     aria-expanded={open}
                   >
-                    <span className="size-2.5 rounded-full bg-accent shadow-[0_1px_4px_rgb(0_0_0/0.28),0_0_0_1px_rgb(255_255_255/0.18)] transition-transform duration-[var(--dur-micro)] ease-[var(--ease)] group-hover/annotation:scale-[1.22] group-focus-within/annotation:scale-[1.22] motion-reduce:transition-none" />
+                    <span
+                      {...mergeStylexProps(
+                        "shadow-[0_1px_4px_rgb(0_0_0/0.28),0_0_0_1px_rgb(255_255_255/0.18)] group-hover/annotation:scale-[1.22] group-focus-within/annotation:scale-[1.22]",
+                        sx.size25,
+                        sx.roundedFull,
+                        sx.bgAccent,
+                        sx.transitionTransform,
+                        sx.durationVarDurMicro,
+                        sx.easeVarEase,
+                        sx.motionReduceTransitionNone,
+                      )}
+                    />
                   </button>
                   <div
                     className={cn(
-                      "absolute top-1/2 flex w-[min(260px,56vw)] -translate-y-1/2 items-center gap-1 rounded-popup bg-black/70 p-1.5 pl-3 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_10px_30px_rgb(0_0_0/0.38)] backdrop-blur-xl transition-[opacity,scale] duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
+                      utilityClassName(
+                        "absolute top-1/2 flex w-[min(260px,56vw)] -translate-y-1/2 items-center gap-1 rounded-popup bg-black/70 p-1.5 pl-3 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_10px_30px_rgb(0_0_0/0.38)] backdrop-blur-xl transition-[opacity,scale] duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
+                      ),
                       opensLeft
-                        ? "right-full mr-1 origin-right"
-                        : "left-full ml-1 origin-left",
+                        ? utilityClassName("right-full mr-1 origin-right")
+                        : utilityClassName("left-full ml-1 origin-left"),
                       open
-                        ? "pointer-events-auto scale-100 opacity-100"
-                        : "pointer-events-none scale-[0.96] opacity-0 group-hover/annotation:pointer-events-auto group-hover/annotation:scale-100 group-hover/annotation:opacity-100 group-focus-within/annotation:pointer-events-auto group-focus-within/annotation:scale-100 group-focus-within/annotation:opacity-100",
+                        ? utilityClassName(
+                            "pointer-events-auto scale-100 opacity-100",
+                          )
+                        : utilityClassName(
+                            "pointer-events-none scale-[0.96] opacity-0 group-hover/annotation:pointer-events-auto group-hover/annotation:scale-100 group-hover/annotation:opacity-100 group-focus-within/annotation:pointer-events-auto group-focus-within/annotation:scale-100 group-focus-within/annotation:opacity-100",
+                          ),
                     )}
                   >
-                    <span className="min-w-0 flex-1 truncate text-label font-medium">
+                    <span
+                      {...stylex.props(
+                        sx.minW0,
+                        sx.flex1,
+                        sx.truncate,
+                        sx.fontMedium,
+                        typography.label,
+                      )}
+                    >
                       {annotation.text}
                     </span>
                     {onEditAnnotation && (
                       <button
                         type="button"
-                        className="grid size-10 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white/70 hover:bg-white/10 hover:text-white active:scale-[0.96] phone:size-11"
+                        {...stylex.props(
+                          sx.grid,
+                          sx.size10,
+                          sx.shrink0,
+                          sx.placeItemsCenter,
+                          sx.roundedFull,
+                          sx.border0,
+                          sx.bgTransparent,
+                          sx.p0,
+                          sx.textWhite70,
+                          sx.hoverBgWhite10,
+                          sx.hoverTextWhite,
+                          sx.activeScale096,
+                          sx.phoneSize11,
+                        )}
                         onClick={() => onEditAnnotation(annotation)}
                         aria-label="Edit annotation"
                       >
@@ -201,7 +456,21 @@ export function MediaLightboxViewer({
                     {onDeleteAnnotation && (
                       <button
                         type="button"
-                        className="grid size-10 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white/70 hover:bg-white/10 hover:text-white active:scale-[0.96] phone:size-11"
+                        {...stylex.props(
+                          sx.grid,
+                          sx.size10,
+                          sx.shrink0,
+                          sx.placeItemsCenter,
+                          sx.roundedFull,
+                          sx.border0,
+                          sx.bgTransparent,
+                          sx.p0,
+                          sx.textWhite70,
+                          sx.hoverBgWhite10,
+                          sx.hoverTextWhite,
+                          sx.activeScale096,
+                          sx.phoneSize11,
+                        )}
                         onClick={() => onDeleteAnnotation(annotation)}
                         aria-label="Delete annotation"
                       >
@@ -222,7 +491,15 @@ export function MediaLightboxViewer({
               // what says where the selection is, so the line only has to
               // trace it. The dark hairline under it keeps the white edge
               // legible on a white screenshot.
-              className="absolute cursor-move touch-none rounded-[3px] border border-white shadow-[0_0_0_1px_rgb(0_0_0/0.22)]"
+              {...mergeStylexProps(
+                "shadow-[0_0_0_1px_rgb(0_0_0/0.22)]",
+                sx.absolute,
+                sx.cursorMove,
+                sx.touchNone,
+                sx.rounded3px,
+                sx.border,
+                sx.borderWhite,
+              )}
               style={shownRegionBox}
               aria-hidden="true"
             >
@@ -248,7 +525,9 @@ export function MediaLightboxViewer({
                     // region; the square around it is what the finger
                     // gets.
                     className={cn(
-                      "absolute grid touch-none place-items-center",
+                      utilityClassName(
+                        "absolute grid touch-none place-items-center",
+                      ),
                       handle.position,
                       handle.cursor,
                     )}
@@ -260,7 +539,9 @@ export function MediaLightboxViewer({
                   >
                     <span
                       className={cn(
-                        "block border-white drop-shadow-[0_0_2px_rgb(0_0_0/0.5)]",
+                        utilityClassName(
+                          "block border-white drop-shadow-[0_0_2px_rgb(0_0_0/0.5)]",
+                        ),
                         handle.mark,
                       )}
                     />

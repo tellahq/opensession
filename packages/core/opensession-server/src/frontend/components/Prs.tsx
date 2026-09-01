@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -59,6 +61,229 @@ import {
   IconSidebarLeft,
   IconX,
 } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  minW0: {
+    minWidth: "0",
+  },
+  roundedXl: {
+    borderRadius: "calc(18px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgRaised: {
+    backgroundColor: "var(--bg-raised)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  block: {
+    display: "block",
+  },
+  h6: {
+    height: "calc(4px * 6)",
+  },
+  w16: {
+    width: "calc(4px * 16)",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgLine: {
+    backgroundColor: "var(--border)",
+  },
+  motionSafeAnimatePulse: {
+    "@media (prefers-reduced-motion: no-preference)": {
+      animation: "var(--animate-pulse)",
+    },
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  grid: {
+    display: "grid",
+  },
+  wFull: {
+    width: "100%",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  gridCols2: {
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  },
+  itemsStretch: {
+    alignItems: "stretch",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  desktopGridCols4: {
+    "@media (min-width: 721px)": {
+      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    },
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  maxW150px: {
+    maxWidth: "150px",
+  },
+  minW200px: {
+    minWidth: "200px",
+  },
+  maxW320px: {
+    maxWidth: "320px",
+  },
+  size18px: {
+    width: "18px",
+    height: "18px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  mb6: {
+    marginBottom: "calc(4px * 6)",
+  },
+  max560pxMb4: {
+    "@media (max-width: 559px)": {
+      marginBottom: "calc(4px * 4)",
+    },
+  },
+  mb8: {
+    marginBottom: "calc(4px * 8)",
+  },
+  mb5: {
+    marginBottom: "calc(4px * 5)",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  leading13: {
+    lineHeight: "1.3",
+  },
+  justifySelfEnd: {
+    justifySelf: "flex-end",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  ml2: {
+    marginLeft: "calc(4px * 2)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  pb4: {
+    paddingBottom: "calc(4px * 4)",
+  },
+  minH13: {
+    minHeight: "calc(4px * 13)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  phoneMinH14: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 14)",
+    },
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  minH10: {
+    minHeight: "calc(4px * 10)",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  size10: {
+    width: "calc(4px * 10)",
+    height: "calc(4px * 10)",
+  },
+  phoneSize11: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 11)",
+      height: "calc(4px * 11)",
+    },
+  },
+});
 
 interface Props {
   sessions: UnifiedSession[];
@@ -168,29 +393,69 @@ function OverviewTile({
   loading?: boolean;
 }) {
   return (
-    <span className="min-w-0 rounded-xl bg-raised px-5 py-4">
-      <span className="flex items-center gap-2 text-label font-medium text-dim">
+    <span
+      {...stylex.props(sx.minW0, sx.roundedXl, sx.bgRaised, sx.px5, sx.py4)}
+    >
+      <span
+        {...stylex.props(
+          sx.flex,
+          sx.itemsCenter,
+          sx.gap2,
+          sx.fontMedium,
+          sx.textDim,
+          typography.label,
+        )}
+      >
         {live !== undefined ? (
           <span
             aria-hidden="true"
             className={
               live
-                ? "size-1.5 shrink-0 rounded-full bg-green motion-safe:animate-pulse"
-                : "size-1.5 shrink-0 rounded-full bg-line"
+                ? utilityClassName(
+                    "size-1.5 shrink-0 rounded-full bg-green motion-safe:animate-pulse",
+                  )
+                : utilityClassName("size-1.5 shrink-0 rounded-full bg-line")
             }
           />
         ) : null}
         {label}
       </span>
       {loading ? (
-        <span className="mt-2 block h-6 w-16 rounded-sm bg-line motion-safe:animate-pulse" />
+        <span
+          {...stylex.props(
+            sx.mt2,
+            sx.block,
+            sx.h6,
+            sx.w16,
+            sx.roundedSm,
+            sx.bgLine,
+            sx.motionSafeAnimatePulse,
+          )}
+        />
       ) : (
-        <span className="mt-1 block truncate text-stat font-semibold text-fg">
+        <span
+          {...stylex.props(
+            sx.mt1,
+            sx.block,
+            sx.truncate,
+            sx.fontSemibold,
+            sx.textFg,
+            typography.stat,
+          )}
+        >
           {value}
         </span>
       )}
       {detail ? (
-        <span className="mt-1 block truncate text-meta text-faint">
+        <span
+          {...stylex.props(
+            sx.mt1,
+            sx.block,
+            sx.truncate,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
           {detail}
         </span>
       ) : null}
@@ -228,7 +493,18 @@ function OverviewStats({
       }
       aria-label="Open Analytics"
       aria-busy={!stats}
-      className="focus-ring grid w-full cursor-pointer grid-cols-2 items-stretch gap-3 rounded-xl text-left tabular-nums desktop:grid-cols-4"
+      {...mergeStylexProps(
+        "focus-ring tabular-nums",
+        sx.grid,
+        sx.wFull,
+        sx.cursorPointer,
+        sx.gridCols2,
+        sx.itemsStretch,
+        sx.gap3,
+        sx.roundedXl,
+        sx.textLeft,
+        sx.desktopGridCols4,
+      )}
     >
       <OverviewTile
         label="Agents running"
@@ -462,16 +738,26 @@ export function Prs({
           so the active filter remains visible. */}
       <div
         className={cn(
-          "relative h-8 shrink-0 transition-[width] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
-          searchExpanded ? "w-[200px] min-w-[90px] shrink-[100]" : "w-8",
+          utilityClassName(
+            "relative h-8 shrink-0 transition-[width] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+          ),
+          searchExpanded
+            ? utilityClassName("w-[200px] min-w-[90px] shrink-[100]")
+            : utilityClassName("w-8"),
         )}
       >
         <Input
           ref={searchInputRef}
           className={cn(
-            "absolute inset-0 h-8 pl-8 [&::-webkit-search-cancel-button]:hidden",
-            "transition-opacity duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
-            searchExpanded ? "opacity-100" : "pointer-events-none opacity-0",
+            utilityClassName(
+              "absolute inset-0 h-8 pl-8 [&::-webkit-search-cancel-button]:hidden",
+            ),
+            utilityClassName(
+              "transition-opacity duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
+            ),
+            searchExpanded
+              ? utilityClassName("opacity-100")
+              : utilityClassName("pointer-events-none opacity-0"),
           )}
           type="search"
           aria-label="Search pull requests"
@@ -495,8 +781,9 @@ export function Prs({
             variant="ghost"
             icon={<IconSearch size={18} />}
             className={cn(
-              "absolute inset-y-0 left-0 z-10",
-              searchExpanded && "pointer-events-none text-faint",
+              utilityClassName("absolute inset-y-0 left-0 z-10"),
+              searchExpanded &&
+                utilityClassName("pointer-events-none text-faint"),
             )}
             aria-label="Search pull requests"
             aria-expanded={searchExpanded}
@@ -510,32 +797,43 @@ export function Prs({
       {/* Search sits with the page name. The scopes and CTA remain a trailing
           group, so widening the pane grows the quiet space between the two
           jobs instead of separating the field from its heading. */}
-      <div className="ml-auto flex min-w-0 items-center gap-2">
+      <div
+        {...stylex.props(sx.mlAuto, sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}
+      >
         {people.length > 0 && (
           <Menu.Root>
             <Menu.Trigger
               render={
                 <Button
                   variant="ghost"
-                  className="min-w-0"
+                  className={mergeStylexOverrideClassName("", sx.minW0)}
                   icon={<IconPeople size={18} />}
                   caret
                 >
-                  <span className="max-w-[150px] truncate">
+                  <span {...stylex.props(sx.maxW150px, sx.truncate)}>
                     {person === "all" ? "Anyone" : personLabel(person)}
                   </span>
                 </Button>
               }
             />
-            <Menu.Popup align="end" className="min-w-[200px] max-w-[320px]">
+            <Menu.Popup
+              align="end"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.minW200px,
+                sx.maxW320px,
+              )}
+            >
               <Menu.RadioGroup
                 value={person}
                 onValueChange={(value) => setPerson(String(value))}
               >
                 <Menu.RadioItem value="all" closeOnClick>
                   {/* Sized to the faces below so every label shares one edge. */}
-                  <span className="size-[18px] shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">Anyone</span>
+                  <span {...stylex.props(sx.size18px, sx.shrink0)} />
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                    Anyone
+                  </span>
                   <Menu.Check on={person === "all"} />
                 </Menu.RadioItem>
                 {people.map((who) => {
@@ -543,7 +841,7 @@ export function Prs({
                   return (
                     <Menu.RadioItem key={key} value={key} closeOnClick>
                       <UserAvatar name={who.name} size={18} />
-                      <span className="min-w-0 flex-1 truncate">
+                      <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                         {key === currentUser.toLowerCase()
                           ? `${who.fullName} (you)`
                           : who.fullName}
@@ -563,31 +861,40 @@ export function Prs({
               render={
                 <Button
                   variant="ghost"
-                  className="min-w-0"
+                  className={mergeStylexOverrideClassName("", sx.minW0)}
                   icon={<IconRepo size={18} />}
                   caret
                 >
-                  <span className="max-w-[150px] truncate">
+                  <span {...stylex.props(sx.maxW150px, sx.truncate)}>
                     {repo === "all" ? "All repos" : repoLabel(repo)}
                   </span>
                 </Button>
               }
             />
-            <Menu.Popup align="end" className="min-w-[200px] max-w-[320px]">
+            <Menu.Popup
+              align="end"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.minW200px,
+                sx.maxW320px,
+              )}
+            >
               <Menu.RadioGroup
                 value={repo}
                 onValueChange={(value) => setRepo(String(value))}
               >
                 <Menu.RadioItem value="all" closeOnClick>
                   {/* Sized to the tiles below so every label shares one edge. */}
-                  <span className="size-[18px] shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">All repos</span>
+                  <span {...stylex.props(sx.size18px, sx.shrink0)} />
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                    All repos
+                  </span>
                   <Menu.Check on={repo === "all"} />
                 </Menu.RadioItem>
                 {repoOptions.map((name) => (
                   <Menu.RadioItem key={name} value={name} closeOnClick>
                     <RepoTile name={name} size={18} />
-                    <span className="min-w-0 flex-1 truncate">
+                    <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                       {repoLabel(name)}
                     </span>
                     <Menu.Check on={repo === name} />
@@ -607,7 +914,11 @@ export function Prs({
               render={
                 <Button
                   variant="ghost"
-                  className={showArchived ? "shrink-0 text-fg" : "shrink-0"}
+                  className={
+                    showArchived
+                      ? utilityClassName("shrink-0 text-fg")
+                      : utilityClassName("shrink-0")
+                  }
                   aria-label="More filters"
                   icon={<IconDotsHorizontal size={18} />}
                 />
@@ -624,7 +935,9 @@ export function Prs({
               closeOnClick
             >
               <IconArchive size={18} />
-              <span className="min-w-0 flex-1 truncate">Show archived</span>
+              <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                Show archived
+              </span>
               <Menu.Check on={showArchived} />
             </Menu.CheckboxItem>
           </Menu.Popup>
@@ -635,7 +948,7 @@ export function Prs({
           is what makes it scan as the button that makes something. */}
         <Button
           variant="primary"
-          className="shrink-0"
+          className={mergeStylexOverrideClassName("", sx.shrink0)}
           icon={<IconPlus size={18} />}
           onClick={onNewSession}
         >
@@ -650,19 +963,27 @@ export function Prs({
     // column at the shared width and padding, a PageHeader on top.
     <div
       data-page-scroll
-      className="min-h-0 w-full flex-1 overflow-y-auto bg-surface"
+      {...stylex.props(
+        sx.minH0,
+        sx.wFull,
+        sx.flex1,
+        sx.overflowYAuto,
+        sx.bgSurface,
+      )}
     >
       {topbarActionsEl ? createPortal(actions, topbarActionsEl) : null}
       <div
         className={cn(
           PR_PAGE_COLUMN,
-          "pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]",
+          utilityClassName(
+            "pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]",
+          ),
         )}
       >
         {/* The page name and search live together in the top bar. The day's
             orientation figures take the same card row Analytics uses, while
             the pull-request sections remain the page's primary content. */}
-        <div className="mb-6 max-[560px]:mb-4">
+        <div {...stylex.props(sx.mb6, sx.max560pxMb4)}>
           <OverviewStats
             running={running}
             stats={stats}
@@ -688,18 +1009,26 @@ export function Prs({
         ) : (
           <div className={PR_LIST}>
             {sections.map((section) => (
-              <section key={section.state} className="mb-8">
+              <section key={section.state} {...stylex.props(sx.mb8)}>
                 <h2 className={PR_SECTION_LABEL}>
                   {section.label}
-                  <span className="text-label font-medium text-faint">
+                  <span
+                    {...stylex.props(
+                      sx.fontMedium,
+                      sx.textFaint,
+                      typography.label,
+                    )}
+                  >
                     {section.total}
                   </span>
                 </h2>
                 {section.groups.map(([label, rows]) => (
-                  <div key={label} className="mb-5">
+                  <div key={label} {...stylex.props(sx.mb5)}>
                     <h3 className={PR_GROUP_LABEL}>
                       {label}
-                      <span className="font-medium">{rows.length}</span>
+                      <span {...stylex.props(sx.fontMedium)}>
+                        {rows.length}
+                      </span>
                     </h3>
                     <div>
                       {rows.map((row) => {
@@ -716,7 +1045,9 @@ export function Prs({
                                 healthy, so the resting mark is drawn as
                                 structure and green now means approved. */}
                             <span
-                              className={`${status.quiet ? "text-dim" : status.className} flex items-center`}
+                              className={utilityClassName(
+                                `${status.quiet ? "text-dim" : status.className} flex items-center`,
+                              )}
                               title={status.label}
                             >
                               <StateIcon state={row.state} />
@@ -734,12 +1065,34 @@ export function Prs({
                                 in kebab case on most rows and cost the list
                                 half its height; it stays in the row's tooltip,
                                 in search, and in the panel the row opens. */}
-                            <span className="flex min-w-0 items-baseline gap-2">
-                              <span className="truncate text-item-title font-medium leading-[1.3] text-fg">
+                            <span
+                              {...stylex.props(
+                                sx.flex,
+                                sx.minW0,
+                                sx.itemsBaseline,
+                                sx.gap2,
+                              )}
+                            >
+                              <span
+                                {...stylex.props(
+                                  sx.truncate,
+                                  sx.fontMedium,
+                                  sx.leading13,
+                                  sx.textFg,
+                                  typography.itemTitle,
+                                )}
+                              >
                                 {row.title}
                               </span>
                               {row.number && (
-                                <span className="shrink-0 text-meta tabular-nums text-faint">
+                                <span
+                                  {...mergeStylexProps(
+                                    "tabular-nums",
+                                    sx.shrink0,
+                                    sx.textFaint,
+                                    typography.meta,
+                                  )}
+                                >
                                   #{row.number}
                                 </span>
                               )}
@@ -749,19 +1102,33 @@ export function Prs({
                                 is the convention rather than a status, and it
                                 reads at a glance in a way a neutral pair of
                                 numbers does not. */}
-                            <span className="justify-self-end text-meta tabular-nums phone:hidden">
+                            <span
+                              {...mergeStylexProps(
+                                "tabular-nums",
+                                sx.justifySelfEnd,
+                                sx.phoneHidden,
+                                typography.meta,
+                              )}
+                            >
                               {row.additions !== undefined && (
-                                <span className="text-green">
+                                <span {...stylex.props(sx.textGreen)}>
                                   +{compactDiff(row.additions)}
                                 </span>
                               )}
                               {row.deletions !== undefined && (
-                                <span className="ml-2 text-red">
+                                <span {...stylex.props(sx.ml2, sx.textRed)}>
                                   −{compactDiff(row.deletions)}
                                 </span>
                               )}
                             </span>
-                            <span className="justify-self-end text-meta tabular-nums text-faint">
+                            <span
+                              {...mergeStylexProps(
+                                "tabular-nums",
+                                sx.justifySelfEnd,
+                                sx.textFaint,
+                                typography.meta,
+                              )}
+                            >
                               {compactAge(row.updatedAt)}
                             </span>
                           </button>
@@ -773,7 +1140,7 @@ export function Prs({
               </section>
             ))}
             {remainingRows > 0 && (
-              <div className="flex justify-center pb-4">
+              <div {...stylex.props(sx.flex, sx.justifyCenter, sx.pb4)}>
                 <Button
                   variant="ghost"
                   onClick={() =>
@@ -794,17 +1161,62 @@ export function Prs({
         phone={isPhone}
         label={preview ? `Pull request: ${preview.title}` : "Pull request"}
         showPhoneGrabber={false}
-        modalClassName="h-[min(820px,85vh)] w-[min(1280px,92vw)] max-w-none bg-surface"
-        sheetClassName="top-0 h-[100dvh] max-h-none bg-surface [border-radius:0]! [box-shadow:none]!"
+        modalClassName={utilityClassName(
+          "h-[min(820px,85vh)] w-[min(1280px,92vw)] max-w-none bg-surface",
+        )}
+        sheetClassName={utilityClassName(
+          "top-0 h-[100dvh] max-h-none bg-surface [border-radius:0]! [box-shadow:none]!",
+        )}
       >
         {preview && (
           <>
-            <div className="flex min-h-13 shrink-0 items-center gap-2 border-b border-line bg-panel px-3 phone:min-h-14">
-              <div className="flex min-w-0 flex-1 items-center gap-2 px-1 text-item-title font-medium text-fg">
-                <IconPullRequest size={19} className="shrink-0 text-dim" />
-                <span className="truncate">{repoLabel(preview.repo)}</span>
+            <div
+              {...stylex.props(
+                sx.flex,
+                sx.minH13,
+                sx.shrink0,
+                sx.itemsCenter,
+                sx.gap2,
+                sx.borderB,
+                sx.borderLine,
+                sx.bgPanel,
+                sx.px3,
+                sx.phoneMinH14,
+              )}
+            >
+              <div
+                {...stylex.props(
+                  sx.flex,
+                  sx.minW0,
+                  sx.flex1,
+                  sx.itemsCenter,
+                  sx.gap2,
+                  sx.px1,
+                  sx.fontMedium,
+                  sx.textFg,
+                  typography.itemTitle,
+                )}
+              >
+                <IconPullRequest
+                  size={19}
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.shrink0,
+                    sx.textDim,
+                  )}
+                />
+                <span {...stylex.props(sx.truncate)}>
+                  {repoLabel(preview.repo)}
+                </span>
                 {preview.number && (
-                  <span className="shrink-0 font-normal tabular-nums text-faint">
+                  <span
+                    {...mergeStylexProps(
+                      "tabular-nums",
+                      sx.shrink0,
+                      sx.fontNormal,
+                      sx.textFaint,
+                    )}
+                  >
                     #{preview.number}
                   </span>
                 )}
@@ -812,7 +1224,12 @@ export function Prs({
               {preview.workspaceId ? (
                 <Button
                   variant="default"
-                  className="min-h-10 shrink-0 phone:min-h-11"
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.minH10,
+                    sx.shrink0,
+                    sx.phoneMinH11,
+                  )}
                   icon={<IconSidebarLeft size={18} />}
                   onClick={() => {
                     onOpenWorkspace(preview.workspaceId!, preview);
@@ -824,7 +1241,12 @@ export function Prs({
               ) : preview.state === "OPEN" ? (
                 <Button
                   variant="default"
-                  className="min-h-10 shrink-0 phone:min-h-11"
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.minH10,
+                    sx.shrink0,
+                    sx.phoneMinH11,
+                  )}
                   icon={<IconSidebarLeft size={18} />}
                   disabled={addingToSidebar}
                   onClick={() => void addPreviewToSidebar()}
@@ -834,13 +1256,18 @@ export function Prs({
               ) : null}
               <Button
                 variant="ghost"
-                className="size-10 shrink-0 phone:size-11"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.size10,
+                  sx.shrink0,
+                  sx.phoneSize11,
+                )}
                 icon={<IconX size={20} />}
                 aria-label="Close pull request"
                 onClick={() => setPreview(null)}
               />
             </div>
-            <div className="min-h-0 flex-1">
+            <div {...stylex.props(sx.minH0, sx.flex1)}>
               <PrQueuePreview
                 key={`${preview.repo}:${preview.branch}`}
                 repo={preview.repo}

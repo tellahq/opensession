@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useEffect, useState } from "react";
 import {
   approveAppleRelease,
@@ -21,6 +23,149 @@ import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
 import { IconTile } from "./BrandTile";
 import { LinkChips, StateChip } from "./setup-shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  p4: {
+    padding: "calc(4px * 4)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  grid: {
+    display: "grid",
+  },
+  gridCols2: {
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  phoneGridCols1: {
+    "@media (max-width: 720px)": {
+      gridTemplateColumns: "repeat(1, minmax(0, 1fr))",
+    },
+  },
+  colSpan2: {
+    gridColumn: "span 2 / span 2",
+  },
+  phoneColSpan1: {
+    "@media (max-width: 720px)": {
+      gridColumn: "span 1 / span 1",
+    },
+  },
+  m0: {
+    margin: "0",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  mt3: {
+    marginTop: "calc(4px * 3)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  block: {
+    display: "block",
+  },
+  breakAll: {
+    wordBreak: "break-all",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  listNone: {
+    listStyleType: "none",
+  },
+  p0: {
+    padding: "0",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  minW14rem: {
+    minWidth: "14rem",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+});
 
 function ReadinessRow({
   ready,
@@ -30,9 +175,22 @@ function ReadinessRow({
   children: string;
 }) {
   return (
-    <li className="flex items-start gap-2 text-supporting leading-relaxed text-dim">
+    <li
+      {...stylex.props(
+        sx.flex,
+        sx.itemsStart,
+        sx.gap2,
+        sx.leadingRelaxed,
+        sx.textDim,
+        typography.supporting,
+      )}
+    >
       <span
-        className={ready === true ? "text-green" : "text-faint"}
+        className={
+          ready === true
+            ? utilityClassName("text-green")
+            : utilityClassName("text-faint")
+        }
         aria-hidden="true"
       >
         {ready === true ? "✓" : "•"}
@@ -154,10 +312,10 @@ function AppleMobileSetupDialog({
 
   return (
     <Modal.Root open={open} onOpenChange={onOpenChange}>
-      <Modal.Content widthClassName="max-w-[42rem]">
+      <Modal.Content widthClassName={utilityClassName("max-w-[42rem]")}>
         <Modal.Header
           title={
-            <span className="flex items-center gap-2.5">
+            <span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap25)}>
               <IconTile name="apple-mobile" size={28} />
               Apple mobile
             </span>
@@ -165,16 +323,34 @@ function AppleMobileSetupDialog({
           description="Build Swift apps without credentials, then add a tightly restricted release connection when this Mac is ready."
         />
 
-        <div className="flex flex-col gap-4">
+        <div {...stylex.props(sx.flex, sx.flexCol, sx.gap4)}>
           {error ? <InlineAlert>{error}</InlineAlert> : null}
 
-          <SettingsSection className="flex flex-col gap-4 border-0 bg-panel p-4">
-            <div className="flex items-center gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="text-item-title font-medium text-fg">
+          <SettingsSection
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.flex,
+              sx.flexCol,
+              sx.gap4,
+              sx.border0,
+              sx.bgPanel,
+              sx.p4,
+            )}
+          >
+            <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap4)}>
+              <div {...stylex.props(sx.minW0, sx.flex1)}>
+                <div
+                  {...stylex.props(
+                    sx.fontMedium,
+                    sx.textFg,
+                    typography.itemTitle,
+                  )}
+                >
                   Development builds
                 </div>
-                <div className="mt-0.5 text-supporting text-dim">
+                <div
+                  {...stylex.props(sx.mt05, sx.textDim, typography.supporting)}
+                >
                   Credential-free tests, unsigned builds, and xtool development
                   IPAs.
                 </div>
@@ -188,13 +364,31 @@ function AppleMobileSetupDialog({
             </div>
           </SettingsSection>
 
-          <SettingsSection className="flex flex-col gap-4 border-0 bg-panel p-4">
-            <div className="flex items-center gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="text-item-title font-medium text-fg">
+          <SettingsSection
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.flex,
+              sx.flexCol,
+              sx.gap4,
+              sx.border0,
+              sx.bgPanel,
+              sx.p4,
+            )}
+          >
+            <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap4)}>
+              <div {...stylex.props(sx.minW0, sx.flex1)}>
+                <div
+                  {...stylex.props(
+                    sx.fontMedium,
+                    sx.textFg,
+                    typography.itemTitle,
+                  )}
+                >
                   Ad-hoc and TestFlight releases
                 </div>
-                <div className="mt-0.5 text-supporting text-dim">
+                <div
+                  {...stylex.props(sx.mt05, sx.textDim, typography.supporting)}
+                >
                   Xcode signing behind a reviewed, commit-bound release plan.
                 </div>
               </div>
@@ -214,7 +408,14 @@ function AppleMobileSetupDialog({
             ) : null}
 
             {releaseEnabled ? (
-              <div className="grid grid-cols-2 gap-3 phone:grid-cols-1">
+              <div
+                {...stylex.props(
+                  sx.grid,
+                  sx.gridCols2,
+                  sx.gap3,
+                  sx.phoneGridCols1,
+                )}
+              >
                 <SettingsField>
                   Apple Developer Team ID
                   <input
@@ -259,7 +460,13 @@ function AppleMobileSetupDialog({
                     autoComplete="off"
                   />
                 </SettingsField>
-                <SettingsField className="col-span-2 phone:col-span-1">
+                <SettingsField
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.colSpan2,
+                    sx.phoneColSpan1,
+                  )}
+                >
                   People allowed to release
                   <input
                     className={settingsInputClass}
@@ -277,37 +484,85 @@ function AppleMobileSetupDialog({
           </SettingsSection>
 
           {status.releaseEnabled ? (
-            <SettingsSection className="border-0 bg-panel p-4">
-              <div className="text-item-title font-medium text-fg">
+            <SettingsSection
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.border0,
+                sx.bgPanel,
+                sx.p4,
+              )}
+            >
+              <div
+                {...stylex.props(
+                  sx.fontMedium,
+                  sx.textFg,
+                  typography.itemTitle,
+                )}
+              >
                 Release approvals
               </div>
-              <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+              <p
+                {...stylex.props(
+                  sx.m0,
+                  sx.mt1,
+                  sx.leadingRelaxed,
+                  sx.textDim,
+                  typography.supporting,
+                )}
+              >
                 Planning never authorizes execution. An allowed, signed-in
                 person must approve the exact plan here in a later step.
               </p>
               {approvals ? (
                 !approvals.authenticated ? (
-                  <InlineAlert className="mt-3">
+                  <InlineAlert
+                    className={mergeStylexOverrideClassName("", sx.mt3)}
+                  >
                     Sign in with GitHub to approve Apple releases.
                   </InlineAlert>
                 ) : !approvals.allowed ? (
-                  <InlineAlert className="mt-3">
+                  <InlineAlert
+                    className={mergeStylexOverrideClassName("", sx.mt3)}
+                  >
                     Your account is not in the release allowlist.
                   </InlineAlert>
                 ) : approvals.requests.length === 0 ? (
-                  <div className="mt-3 text-supporting text-faint">
+                  <div
+                    {...stylex.props(
+                      sx.mt3,
+                      sx.textFaint,
+                      typography.supporting,
+                    )}
+                  >
                     No release plans are waiting for approval.
                   </div>
                 ) : (
-                  <div className="mt-3 grid gap-2">
+                  <div {...stylex.props(sx.mt3, sx.grid, sx.gap2)}>
                     {approvals.requests.map((request) => (
                       <div
                         key={request.planId}
-                        className="rounded-control bg-surface p-3"
+                        {...stylex.props(
+                          sx.roundedControl,
+                          sx.bgSurface,
+                          sx.p3,
+                        )}
                       >
-                        <div className="flex flex-wrap items-start gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-item-title font-medium text-fg">
+                        <div
+                          {...stylex.props(
+                            sx.flex,
+                            sx.flexWrap,
+                            sx.itemsStart,
+                            sx.gap3,
+                          )}
+                        >
+                          <div {...stylex.props(sx.minW0, sx.flex1)}>
+                            <div
+                              {...stylex.props(
+                                sx.fontMedium,
+                                sx.textFg,
+                                typography.itemTitle,
+                              )}
+                            >
                               {request.action === "adhoc"
                                 ? "Ad-hoc export"
                                 : request.action === "testflight"
@@ -315,7 +570,13 @@ function AppleMobileSetupDialog({
                                   : "IPA upload"}
                             </div>
                             {request.marketingVersion || request.buildNumber ? (
-                              <div className="mt-1 text-meta text-dim">
+                              <div
+                                {...stylex.props(
+                                  sx.mt1,
+                                  sx.textDim,
+                                  typography.meta,
+                                )}
+                              >
                                 {request.marketingVersion ??
                                   "Version unchanged"}
                                 {request.buildNumber
@@ -323,27 +584,53 @@ function AppleMobileSetupDialog({
                                   : ""}
                               </div>
                             ) : null}
-                            <dl className="m-0 mt-2 grid gap-1.5 text-meta">
+                            <dl
+                              {...stylex.props(
+                                sx.m0,
+                                sx.mt2,
+                                sx.grid,
+                                sx.gap15,
+                                typography.meta,
+                              )}
+                            >
                               <div>
-                                <dt className="text-faint">Project</dt>
-                                <dd className="m-0">
-                                  <code className="block break-all text-dim">
+                                <dt {...stylex.props(sx.textFaint)}>Project</dt>
+                                <dd {...stylex.props(sx.m0)}>
+                                  <code
+                                    {...stylex.props(
+                                      sx.block,
+                                      sx.breakAll,
+                                      sx.textDim,
+                                    )}
+                                  >
                                     {request.projectDir}
                                   </code>
                                 </dd>
                               </div>
                               <div>
-                                <dt className="text-faint">Plan ID</dt>
-                                <dd className="m-0">
-                                  <code className="block break-all text-dim">
+                                <dt {...stylex.props(sx.textFaint)}>Plan ID</dt>
+                                <dd {...stylex.props(sx.m0)}>
+                                  <code
+                                    {...stylex.props(
+                                      sx.block,
+                                      sx.breakAll,
+                                      sx.textDim,
+                                    )}
+                                  >
                                     {request.planId}
                                   </code>
                                 </dd>
                               </div>
                               <div>
-                                <dt className="text-faint">Commit</dt>
-                                <dd className="m-0">
-                                  <code className="block break-all text-dim">
+                                <dt {...stylex.props(sx.textFaint)}>Commit</dt>
+                                <dd {...stylex.props(sx.m0)}>
+                                  <code
+                                    {...stylex.props(
+                                      sx.block,
+                                      sx.breakAll,
+                                      sx.textDim,
+                                    )}
+                                  >
                                     {request.commit}
                                   </code>
                                 </dd>
@@ -351,18 +638,34 @@ function AppleMobileSetupDialog({
                               {request.action === "upload" ? (
                                 <>
                                   <div>
-                                    <dt className="text-faint">Artifact</dt>
-                                    <dd className="m-0">
-                                      <code className="block break-all text-dim">
+                                    <dt {...stylex.props(sx.textFaint)}>
+                                      Artifact
+                                    </dt>
+                                    <dd {...stylex.props(sx.m0)}>
+                                      <code
+                                        {...stylex.props(
+                                          sx.block,
+                                          sx.breakAll,
+                                          sx.textDim,
+                                        )}
+                                      >
                                         {request.sourceArtifactName ??
                                           "Missing artifact name"}
                                       </code>
                                     </dd>
                                   </div>
                                   <div>
-                                    <dt className="text-faint">SHA-256</dt>
-                                    <dd className="m-0">
-                                      <code className="block break-all text-dim">
+                                    <dt {...stylex.props(sx.textFaint)}>
+                                      SHA-256
+                                    </dt>
+                                    <dd {...stylex.props(sx.m0)}>
+                                      <code
+                                        {...stylex.props(
+                                          sx.block,
+                                          sx.breakAll,
+                                          sx.textDim,
+                                        )}
+                                      >
                                         {request.sourceArtifactSha256 ??
                                           "Missing artifact hash"}
                                       </code>
@@ -374,7 +677,10 @@ function AppleMobileSetupDialog({
                           </div>
                           <Button
                             size="sm"
-                            className="phone:min-h-11"
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.phoneMinH11,
+                            )}
                             variant="primary"
                             disabled={approving !== null}
                             onClick={() => void approve(request.planId)}
@@ -389,18 +695,38 @@ function AppleMobileSetupDialog({
                   </div>
                 )
               ) : (
-                <div className="mt-3 text-supporting text-faint">
+                <div
+                  {...stylex.props(sx.mt3, sx.textFaint, typography.supporting)}
+                >
                   Checking for release plans…
                 </div>
               )}
             </SettingsSection>
           ) : null}
 
-          <SettingsSection className="border-0 bg-panel p-4">
-            <div className="text-item-title font-medium text-fg">
+          <SettingsSection
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.border0,
+              sx.bgPanel,
+              sx.p4,
+            )}
+          >
+            <div
+              {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}
+            >
               Before the first ad-hoc build
             </div>
-            <ul className="m-0 mt-2 grid list-none gap-2 p-0">
+            <ul
+              {...stylex.props(
+                sx.m0,
+                sx.mt2,
+                sx.grid,
+                sx.listNone,
+                sx.gap2,
+                sx.p0,
+              )}
+            >
               <ReadinessRow ready={status.host.releaseCapable}>
                 Xcode and its command-line tools are installed on this Mac.
               </ReadinessRow>
@@ -436,7 +762,15 @@ function AppleMobileSetupDialog({
                 },
               ]}
             />
-            <p className="m-0 mt-3 text-meta leading-relaxed text-faint">
+            <p
+              {...stylex.props(
+                sx.m0,
+                sx.mt3,
+                sx.leadingRelaxed,
+                sx.textFaint,
+                typography.meta,
+              )}
+            >
               The private key must be mode 0600 and outside the app project.
               Release execution still waits for explicit approval of the full
               commit SHA. It cannot submit for App Review or publish an app.
@@ -447,13 +781,16 @@ function AppleMobileSetupDialog({
         <Modal.Footer>
           <Modal.Close
             render={
-              <Button className="phone:min-h-11" disabled={saving}>
+              <Button
+                className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
+                disabled={saving}
+              >
                 Cancel
               </Button>
             }
           />
           <Button
-            className="phone:min-h-11"
+            className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
             variant="primary"
             onClick={() => void save()}
             disabled={saving}
@@ -507,23 +844,52 @@ export function AppleMobileIntegration({ teamNames }: { teamNames: string[] }) {
   return (
     <>
       <SettingCard>
-        <div className="flex flex-wrap items-start gap-3 px-5 py-4">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.flexWrap,
+            sx.itemsStart,
+            sx.gap3,
+            sx.px5,
+            sx.py4,
+          )}
+        >
           <IconTile name="apple-mobile" size={40} />
-          <div className="min-w-[14rem] flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="text-item-title font-semibold text-fg">
+          <div {...stylex.props(sx.minW14rem, sx.flex1)}>
+            <div
+              {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap2)}
+            >
+              <div
+                {...stylex.props(
+                  sx.fontSemibold,
+                  sx.textFg,
+                  typography.itemTitle,
+                )}
+              >
                 Apple mobile
               </div>
               <StateChip tone={tone} label={label} />
             </div>
-            <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+            <p
+              {...stylex.props(
+                sx.m0,
+                sx.mt1,
+                sx.leadingRelaxed,
+                sx.textDim,
+                typography.supporting,
+              )}
+            >
               SwiftPM and xtool development builds with restricted Xcode
               releases.
             </p>
           </div>
           <Button
             size="sm"
-            className="ml-auto phone:min-h-11"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.mlAuto,
+              sx.phoneMinH11,
+            )}
             variant={tone === "off" ? "primary" : "default"}
             onClick={() => setOpen(true)}
           >

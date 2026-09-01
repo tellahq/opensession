@@ -1,3 +1,4 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
 import React, {
   useEffect,
   useEffectEvent,
@@ -20,6 +21,103 @@ import { useSessionScroll } from "../hooks/useSessionScroll";
 import { Button } from "../ui/button";
 import { SessionTranscript } from "./SessionTranscript";
 import { BusyInline } from "./session-viewer/busy-indicators";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  hDvh: {
+    height: "100dvh",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  minH14: {
+    minHeight: "calc(4px * 14)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  desktopPx6: {
+    "@media (min-width: 721px)": {
+      paddingInline: "calc(4px * 6)",
+    },
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  flex1: {
+    flex: "1",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  minH16: {
+    minHeight: "calc(4px * 16)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxWVarSessionCol: {
+    maxWidth: "var(--session-col)",
+  },
+  minH11: {
+    minHeight: "calc(4px * 11)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px35: {
+    paddingInline: "calc(4px * 3.5)",
+  },
+});
 
 type TranscriptMotionControl = {
   paused: boolean;
@@ -64,19 +162,43 @@ export function TranscriptMotionLab({
 
   return (
     <main
-      className="flex h-dvh min-h-0 flex-col bg-surface text-fg"
+      {...stylex.props(
+        sx.flex,
+        sx.hDvh,
+        sx.minH0,
+        sx.flexCol,
+        sx.bgSurface,
+        sx.textFg,
+      )}
       data-transcript-motion-state={status}
       data-transcript-motion-seed={seed}
       data-transcript-motion-speed={speed}
       data-transcript-motion-profile={profile}
       data-transcript-motion-events={scenario.events.length}
     >
-      <header className="flex min-h-14 shrink-0 items-center justify-between gap-4 px-4 desktop:px-6">
-        <div className="min-w-0">
-          <h1 className="truncate text-item-title font-semibold">
+      <header
+        {...stylex.props(
+          sx.flex,
+          sx.minH14,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.justifyBetween,
+          sx.gap4,
+          sx.px4,
+          sx.desktopPx6,
+        )}
+      >
+        <div {...stylex.props(sx.minW0)}>
+          <h1
+            {...stylex.props(
+              sx.truncate,
+              sx.fontSemibold,
+              typography.itemTitle,
+            )}
+          >
             Transcript motion lab
           </h1>
-          <p className="truncate text-label text-faint">
+          <p {...stylex.props(sx.truncate, sx.textFaint, typography.label)}>
             No network ·{" "}
             {profile === "stream"
               ? "10k · 100 deltas/s"
@@ -86,10 +208,10 @@ export function TranscriptMotionLab({
             · {speed}×
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2)}>
           <Button
             variant="soft"
-            className="phone:min-h-11"
+            className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
             onClick={() => {
               setStatus("running");
               setRun((value) => value + 1);
@@ -100,7 +222,7 @@ export function TranscriptMotionLab({
           {profile === "motion" && (
             <Button
               variant="soft"
-              className="phone:min-h-11"
+              className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
               onClick={() => {
                 setStatus("running");
                 setSeed((value) => value + 1);
@@ -241,7 +363,7 @@ function TranscriptMotionPlayer({
 
   return (
     <section
-      className="flex min-h-0 flex-1 flex-col"
+      {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}
       data-transcript-motion-event={eventIndex}
       style={
         {
@@ -280,8 +402,31 @@ function TranscriptMotionPlayer({
         </AnimatePresence>
         <div ref={spacerRef} aria-hidden="true" />
       </div>
-      <div className="mx-auto flex min-h-16 w-full max-w-[var(--session-col)] shrink-0 items-center px-4">
-        <div className="flex min-h-11 w-full items-center rounded-control bg-panel px-3.5 text-input text-faint shadow-sm">
+      <div
+        {...stylex.props(
+          sx.mxAuto,
+          sx.flex,
+          sx.minH16,
+          sx.wFull,
+          sx.maxWVarSessionCol,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.px4,
+        )}
+      >
+        <div
+          {...mergeStylexProps(
+            "text-input shadow-sm",
+            sx.flex,
+            sx.minH11,
+            sx.wFull,
+            sx.itemsCenter,
+            sx.roundedControl,
+            sx.bgPanel,
+            sx.px35,
+            sx.textFaint,
+          )}
+        >
           Synthetic composer
         </div>
       </div>

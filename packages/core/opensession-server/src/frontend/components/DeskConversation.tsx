@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, {
   useEffect,
   useEffectEvent,
@@ -33,6 +35,113 @@ import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import { foregroundFileComposerOwns, hasDraggedFiles } from "../lib/file-drag";
 import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  hFull: {
+    height: "100%",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  z1: {
+    zIndex: "1",
+  },
+  mtCalc1VarDeskUnder: {
+    marginTop: "calc(-1 * var(--desk-under))",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  pb2: {
+    paddingBottom: "calc(4px * 2)",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  pb3: {
+    paddingBottom: "calc(4px * 3)",
+  },
+  pr8: {
+    paddingRight: "calc(4px * 8)",
+  },
+  WebkitMaskImageLinearGradientToRight0000000Calc10032pxTransparent100: {
+    WebkitMaskImage:
+      "linear-gradient(to right,#000 0,#000 calc(100% - 32px),transparent 100%)",
+  },
+  MaskImageLinearGradientToRight0000000Calc10032pxTransparent100: {
+    maskImage:
+      "linear-gradient(to right,#000 0,#000 calc(100% - 32px),transparent 100%)",
+  },
+  ScrollbarWidthNone: {
+    scrollbarWidth: "none",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgHover: {
+    backgroundColor: "var(--hover)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  hoverBgActive: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--bg-active)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  mb1: {
+    marginBottom: "4px",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+});
 
 interface DeskConversationProps {
   sessionId: string;
@@ -489,15 +598,30 @@ export function DeskConversation({
     // under it instead of stopping above it. The session view does the same
     // (VIEWER_INPUT), fading the overlap into its own opaque fill — the Desk
     // sits on the palette's glass, so the rows dissolve into a mask instead.
-    <div className="relative flex h-full min-h-0 flex-col [--desk-under:18px]">
+    <div
+      {...mergeStylexProps(
+        "[--desk-under:18px]",
+        sx.relative,
+        sx.flex,
+        sx.hFull,
+        sx.minH0,
+        sx.flexCol,
+      )}
+    >
       {/* The shared transcript virtualizer and lazy markdown/code renderers
 			    resolve their scroll root through this marker, as in SessionViewer. */}
       <div
         className={cn(
-          "viewer-messages min-h-0 flex-1 overflow-y-auto px-3 pt-2",
-          "pb-[calc(var(--desk-under)_+_12px)]",
-          "[-webkit-mask-image:linear-gradient(to_bottom,#000_calc(100%_-_var(--desk-under)),transparent_100%)]",
-          "[mask-image:linear-gradient(to_bottom,#000_calc(100%_-_var(--desk-under)),transparent_100%)]",
+          utilityClassName(
+            "viewer-messages min-h-0 flex-1 overflow-y-auto px-3 pt-2",
+          ),
+          utilityClassName("pb-[calc(var(--desk-under)_+_12px)]"),
+          utilityClassName(
+            "[-webkit-mask-image:linear-gradient(to_bottom,#000_calc(100%_-_var(--desk-under)),transparent_100%)]",
+          ),
+          utilityClassName(
+            "[mask-image:linear-gradient(to_bottom,#000_calc(100%_-_var(--desk-under)),transparent_100%)]",
+          ),
         )}
         ref={bodyRef}
         onScroll={onScroll}
@@ -545,12 +669,21 @@ export function DeskConversation({
         )}
       </div>
 
-      <div className="relative z-[1] mt-[calc(-1*var(--desk-under))] shrink-0 px-2 pb-2">
+      <div
+        {...stylex.props(
+          sx.relative,
+          sx.z1,
+          sx.mtCalc1VarDeskUnder,
+          sx.shrink0,
+          sx.px2,
+          sx.pb2,
+        )}
+      >
         {/* Starter pills stay attached to the composer and disappear once the
 				    conversation starts. Picking one fills the draft rather than
 				    sending: some name actions with side effects, and all of them are
 				    openings you'd want to finish in your own words. */}
-        <div className="overflow-hidden">
+        <div {...stylex.props(sx.overflowHidden)}>
           <AnimatePresence initial={false}>
             {!hasContent &&
               !!suggestions?.length &&
@@ -561,13 +694,36 @@ export function DeskConversation({
                   animate={{ y: 0 }}
                   exit={{ y: 40 }}
                   transition={{ type: "tween", duration: duration.base, ease }}
-                  className="flex gap-1.5 overflow-x-auto px-1 pb-3 pr-8 [-webkit-mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)] [mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  {...mergeStylexProps(
+                    "[&::-webkit-scrollbar]:hidden",
+                    sx.flex,
+                    sx.gap15,
+                    sx.overflowXAuto,
+                    sx.px1,
+                    sx.pb3,
+                    sx.pr8,
+                    sx.WebkitMaskImageLinearGradientToRight0000000Calc10032pxTransparent100,
+                    sx.MaskImageLinearGradientToRight0000000Calc10032pxTransparent100,
+                    sx.ScrollbarWidthNone,
+                  )}
                 >
                   {suggestions.map((s) => (
                     <button
                       type="button"
                       key={s}
-                      className="shrink-0 whitespace-nowrap rounded-full bg-hover px-3 py-1.5 text-label font-medium text-dim hover:bg-active hover:text-fg"
+                      {...stylex.props(
+                        sx.shrink0,
+                        sx.whitespaceNowrap,
+                        sx.roundedFull,
+                        sx.bgHover,
+                        sx.px3,
+                        sx.py15,
+                        sx.fontMedium,
+                        sx.textDim,
+                        sx.hoverBgActive,
+                        sx.hoverTextFg,
+                        typography.label,
+                      )}
                       onClick={() => {
                         setPrefill((current) => ({
                           seq: (current?.seq ?? 0) + 1,
@@ -585,11 +741,14 @@ export function DeskConversation({
           </AnimatePresence>
         </div>
 
-        <TypingIndicator users={typingUsers} className="mb-1 px-5" />
+        <TypingIndicator
+          users={typingUsers}
+          className={mergeStylexOverrideClassName("", sx.mb1, sx.px5)}
+        />
         {/* The open Desk owns the app-wide drop over the session underneath. */}
         <div
           ref={globalFileComposerRef}
-          className="relative"
+          {...stylex.props(sx.relative)}
           data-global-file-composer={
             presenceActive && connected ? "" : undefined
           }

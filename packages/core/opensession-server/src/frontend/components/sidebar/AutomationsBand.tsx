@@ -1,3 +1,5 @@
+import { mergeStylexProps } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import React from "react";
 import type { AutomationOverviewByName } from "../../lib/automation-overview";
 import {
@@ -28,6 +30,32 @@ import type { UnifiedSession } from "../../lib/types";
 import { cn } from "../../ui/cn";
 import { IconChevronDown, IconSliders } from "../icons";
 import { AutomationReportRow } from "./AutomationReportRow";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  minW0: {
+    minWidth: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  pb1: {
+    paddingBottom: "4px",
+  },
+  pt05: {
+    paddingTop: "calc(4px * 0.5)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+});
 
 export function AutomationsBand({
   groups,
@@ -58,8 +86,8 @@ export function AutomationsBand({
     <div
       className={cn(
         SIDEBAR_INDEPENDENT_SECTION,
-        "mt-2",
-        hasPeople ? "pb-2" : "pb-7",
+        utilityClassName("mt-2"),
+        hasPeople ? utilityClassName("pb-2") : utilityClassName("pb-7"),
       )}
     >
       <div
@@ -67,7 +95,7 @@ export function AutomationsBand({
           SIDEBAR_BAND_LABEL,
           // A band heading carries no leading mark, so on phones it takes the
           // 8px a 22px glyph spends on its own padding before the ink starts.
-          "py-0 pl-0 pr-2 desktop:pr-0",
+          utilityClassName("py-0 pl-0 pr-2 desktop:pr-0"),
           SIDEBAR_STICKY_BAND,
           SIDEBAR_STICKY_BAND_ROW,
           SIDEBAR_STUCK_BACKING,
@@ -79,7 +107,7 @@ export function AutomationsBand({
           onClick={onToggleBand}
           title={open ? "Collapse automations" : "Expand automations"}
         >
-          <span className="min-w-0 truncate">Automations</span>
+          <span {...stylex.props(sx.minW0, sx.truncate)}>Automations</span>
           {/* The count sits right after the heading, not pinned to the far
               right; any future action can still be pushed there with ml-auto. */}
           <span className={SIDEBAR_GROUP_COUNT}>
@@ -130,7 +158,12 @@ export function AutomationsBand({
                   {/* The count belongs to the name, not the row's far edge. An
                       automation heading titles the runs under it, so this reads
                       “iOS parity check, 5” like every band above it. */}
-                  <span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
+                  <span
+                    className={cn(
+                      SIDEBAR_GROUP_COUNT,
+                      utilityClassName("shrink-0"),
+                    )}
+                  >
                     {group.totalItems || group.items.length}
                   </span>
                   {/* Collapsed, the chevron shows at rest. A closed automation
@@ -182,7 +215,16 @@ export function AutomationsBand({
                   {groupOpen &&
                     (group.totalItems || group.items.length) >
                       group.items.length && (
-                      <div className="px-4 pb-1 pt-0.5 text-meta tabular-nums text-faint">
+                      <div
+                        {...mergeStylexProps(
+                          "tabular-nums",
+                          sx.px4,
+                          sx.pb1,
+                          sx.pt05,
+                          sx.textFaint,
+                          typography.meta,
+                        )}
+                      >
                         Latest {group.items.length} of {group.totalItems} runs
                       </div>
                     )}

@@ -1,9 +1,113 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
 import { useEffect, useState } from "react";
 import { ApiError, fetchPreview } from "../lib/api";
 import { BASE_PATH, stripBasePath } from "../lib/base";
 import { PRODUCT_NAME, docTitle } from "../lib/brand";
 import { withPreviewPath } from "../lib/preview-url";
 import { PageLoader } from "../ui/page-loader";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  fixed: {
+    position: "fixed",
+  },
+  inset0: {
+    inset: "0",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  trackingWide: {
+    letterSpacing: "var(--tracking-wide)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  selectNone: {
+    WebkitUserSelect: "none",
+    userSelect: "none",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  maxWSm: {
+    maxWidth: "var(--container-sm)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  px35: {
+    paddingInline: "calc(4px * 3.5)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  noUnderline: {
+    textDecorationLine: "none",
+  },
+  hoverBorderAccent: {
+    "@media (hover: hover)": {
+      ":hover": {
+        borderColor: "var(--accent)",
+      },
+    },
+  },
+  hoverBgAccentSoft: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--accent-soft)",
+      },
+    },
+  },
+});
 
 /**
  * Preview interstitial — the page a "Start preview" click opens in a new tab
@@ -111,41 +215,104 @@ export function PreviewWait({ sessionId }: { sessionId: string }) {
       : `${BASE_PATH}/session/${encodeURIComponent(sessionId)}`;
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-surface px-6 text-center">
-      <div className="text-label font-semibold tracking-wide text-faint select-none">
+    <div
+      {...stylex.props(
+        sx.fixed,
+        sx.inset0,
+        sx.flex,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.gap4,
+        sx.bgSurface,
+        sx.px6,
+        sx.textCenter,
+      )}
+    >
+      <div
+        {...stylex.props(
+          sx.fontSemibold,
+          sx.trackingWide,
+          sx.textFaint,
+          sx.selectNone,
+          typography.label,
+        )}
+      >
         {PRODUCT_NAME}
       </div>
       {state === "waiting" ? (
         <>
-          <PageLoader className="text-dim" />
-          <div className="text-item-title font-semibold text-fg">
+          <PageLoader
+            className={mergeStylexOverrideClassName("", sx.textDim)}
+          />
+          <div
+            {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}
+          >
             Starting the dev server…
           </div>
           {who && (
-            <div className="max-w-sm truncate text-label font-semibold text-dim">
+            <div
+              {...stylex.props(
+                sx.maxWSm,
+                sx.truncate,
+                sx.fontSemibold,
+                sx.textDim,
+                typography.label,
+              )}
+            >
               {who}
             </div>
           )}
-          <div className="max-w-sm text-label font-medium leading-relaxed text-dim">
+          <div
+            {...stylex.props(
+              sx.maxWSm,
+              sx.fontMedium,
+              sx.leadingRelaxed,
+              sx.textDim,
+              typography.label,
+            )}
+          >
             The first build can take a minute. This tab will open the app
             automatically when it's ready, so keep it in the background.
           </div>
         </>
       ) : (
         <>
-          <div className="text-item-title font-semibold text-fg">
+          <div
+            {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}
+          >
             {state === "gone"
               ? "Session not found"
               : "The dev server didn't come up"}
           </div>
-          <div className="max-w-sm text-label font-medium leading-relaxed text-dim">
+          <div
+            {...stylex.props(
+              sx.maxWSm,
+              sx.fontMedium,
+              sx.leadingRelaxed,
+              sx.textDim,
+              typography.label,
+            )}
+          >
             {state === "gone"
               ? "This preview link points at a session that no longer exists."
               : "It's been a few minutes with nothing listening, so the boot may have failed. Check the session's Preview services for details, or try starting it again."}
           </div>
           <a
             href={backHref}
-            className="rounded-control border border-line-strong px-3.5 py-1.5 text-label font-semibold text-fg no-underline hover:border-accent hover:bg-accent-soft"
+            {...stylex.props(
+              sx.roundedControl,
+              sx.border,
+              sx.borderLineStrong,
+              sx.px35,
+              sx.py15,
+              sx.fontSemibold,
+              sx.textFg,
+              sx.noUnderline,
+              sx.hoverBorderAccent,
+              sx.hoverBgAccentSoft,
+              typography.label,
+            )}
           >
             {state === "gone" ? "Open " + PRODUCT_NAME : "Back to the session"}
           </a>

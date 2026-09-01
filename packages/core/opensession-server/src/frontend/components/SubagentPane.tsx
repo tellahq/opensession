@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { fetchSubagent, type SubagentTranscript } from "../lib/api";
 import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
@@ -6,6 +8,117 @@ import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { PANEL_BODY } from "../lib/session-panel-classes";
 import { Badge } from "../ui/badge";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  bgRaised: {
+    backgroundColor: "var(--bg-raised)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  pt2: {
+    paddingTop: "calc(4px * 2)",
+  },
+  pb25: {
+    paddingBottom: "calc(4px * 2.5)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  textEllipsis: {
+    textOverflow: "ellipsis",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  py05: {
+    paddingBlock: "calc(4px * 0.5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  borderNone: {
+    borderStyle: "none",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  p0: {
+    padding: "0",
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  leading14: {
+    lineHeight: "1.4",
+  },
+  m4: {
+    margin: "calc(4px * 4)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+});
 
 export interface SubagentRef {
   agentId: string;
@@ -40,8 +153,12 @@ interface Props {
  * and a name in that list stops matching the moment a migration renames the
  * element. */
 const LIVE_DOT =
-  "size-[7px] shrink-0 rounded-full bg-green animate-[pulse_1.6s_ease-in-out_infinite] " +
-  "motion-reduce:[animation-duration:1.6s]! motion-reduce:[animation-iteration-count:infinite]!";
+  utilityClassName(
+    "size-[7px] shrink-0 rounded-full bg-green animate-[pulse_1.6s_ease-in-out_infinite] ",
+  ) +
+  utilityClassName(
+    "motion-reduce:[animation-duration:1.6s]! motion-reduce:[animation-iteration-count:infinite]!",
+  );
 
 export function SubagentPane({
   sessionId,
@@ -123,19 +240,43 @@ export function SubagentPane({
     : null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-divider bg-raised px-2.5 pt-2 pb-2.5">
-        <div className="flex items-center gap-2">
+    <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
+      <div
+        {...stylex.props(
+          sx.borderB,
+          sx.borderDivider,
+          sx.bgRaised,
+          sx.px25,
+          sx.pt2,
+          sx.pb25,
+        )}
+      >
+        <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
           <Badge tone="accent">sub-agent</Badge>
           <span
-            className="overflow-hidden text-ellipsis whitespace-nowrap text-label font-semibold text-fg"
+            {...stylex.props(
+              sx.overflowHidden,
+              sx.textEllipsis,
+              sx.whitespaceNowrap,
+              sx.fontSemibold,
+              sx.textFg,
+              typography.label,
+            )}
             title={meta?.description || current.label}
           >
             {title}
           </span>
           {modelLabel && (
             <span
-              className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-meta text-dim"
+              {...stylex.props(
+                sx.shrink0,
+                sx.roundedSm,
+                sx.bgSurface,
+                sx.px15,
+                sx.py05,
+                sx.textDim,
+                typography.meta,
+              )}
               title={meta?.model}
             >
               {modelLabel}
@@ -148,30 +289,51 @@ export function SubagentPane({
         </div>
         {stack.length > 1 && (
           <button
-            className="mt-2 max-w-full overflow-hidden border-none bg-transparent p-0 text-ellipsis whitespace-nowrap text-supporting text-dim hover:text-fg"
+            {...stylex.props(
+              sx.mt2,
+              sx.maxWFull,
+              sx.overflowHidden,
+              sx.borderNone,
+              sx.bgTransparent,
+              sx.p0,
+              sx.textEllipsis,
+              sx.whitespaceNowrap,
+              sx.textDim,
+              sx.hoverTextFg,
+              typography.supporting,
+            )}
             onClick={onBack}
           >
             ← {stack[stack.length - 2].label}
           </button>
         )}
         {meta?.description && (
-          <div className="mt-1.5 text-supporting leading-[1.4] text-dim">
+          <div
+            {...stylex.props(
+              sx.mt15,
+              sx.leading14,
+              sx.textDim,
+              typography.supporting,
+            )}
+          >
             {meta.description}
           </div>
         )}
       </div>
 
       <div
-        className={`${PANEL_BODY} px-3.5 py-3`}
+        className={utilityClassName(`${PANEL_BODY} px-3.5 py-3`)}
         ref={setBodyRef}
         onScroll={onScroll}
       >
         {loading ? (
           <LoadingState>Loading sub-agent…</LoadingState>
         ) : error ? (
-          <InlineAlert className="m-4">{error}</InlineAlert>
+          <InlineAlert className={mergeStylexOverrideClassName("", sx.m4)}>
+            {error}
+          </InlineAlert>
         ) : data && data.entries.length > 0 ? (
-          <div className="min-w-0">
+          <div {...stylex.props(sx.minW0)}>
             <TranscriptBlocks
               entries={data.entries}
               scrollElement={bodyElement}

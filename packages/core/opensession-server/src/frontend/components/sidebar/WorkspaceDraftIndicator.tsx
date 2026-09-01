@@ -1,3 +1,4 @@
+import { utilityClassName } from "../../ui/cn";
 import { useEffect, useState } from "react";
 import { hasDraft, onDraftsChanged } from "../../lib/drafts";
 import { SIDEBAR_WS_DRAFT } from "../../lib/sidebar-classes";
@@ -36,7 +37,7 @@ export function WorkspaceDraftIndicator({
     <span
       className={cn(
         SIDEBAR_WS_DRAFT,
-        pushed ? "ml-1.5" : "ml-auto",
+        pushed ? utilityClassName("ml-1.5") : utilityClassName("ml-auto"),
         "group-hover:hidden",
       )}
       data-ws-draft=""

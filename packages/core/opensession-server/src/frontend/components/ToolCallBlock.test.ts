@@ -104,7 +104,8 @@ test("path summaries truncate the complete left-aligned path", () => {
       path: "packages/core/protocol/src/tool-presentation.ts",
     }),
   );
-  expect(markup).toContain("truncate");
+  expect(markup).toContain("text-overflow:ellipsis");
+  expect(markup).toContain("white-space:nowrap");
   expect(markup).not.toContain("w-full");
 });
 

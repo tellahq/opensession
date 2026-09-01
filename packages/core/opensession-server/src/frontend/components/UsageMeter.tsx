@@ -1,7 +1,63 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import * as React from "react";
 import type { SessionUsage } from "../lib/types";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  Rotate90: {
+    rotate: "calc(90deg * -1)",
+  },
+  strokeLine: {
+    stroke: "var(--border)",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap6: {
+    gap: "calc(4px * 6)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  my2: {
+    marginBlock: "calc(4px * 2)",
+  },
+  hPx: {
+    height: "1px",
+  },
+  bgLine: {
+    backgroundColor: "var(--border)",
+  },
+  w64: {
+    width: "calc(4px * 64)",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+});
 
 /**
  * Compact live cost + context readout for the mobile session bar. Shows the
@@ -30,8 +86,15 @@ function fmtTokens(n: number): string {
 
 /** Fill-level color: neutral under 85%, red once the window is nearly full. */
 function fillTone(frac: number): { stroke: string; text: string } {
-  if (frac >= 0.85) return { stroke: "stroke-red", text: "text-red" };
-  return { stroke: "stroke-accent", text: "text-dim" };
+  if (frac >= 0.85)
+    return {
+      stroke: utilityClassName("stroke-red"),
+      text: utilityClassName("text-red"),
+    };
+  return {
+    stroke: utilityClassName("stroke-accent"),
+    text: utilityClassName("text-dim"),
+  };
 }
 
 /** SVG progress ring for how full the context window is. */
@@ -53,7 +116,7 @@ function ContextRing({
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}
-      className="-rotate-90"
+      {...stylex.props(sx.Rotate90)}
       aria-hidden
     >
       <circle
@@ -62,7 +125,7 @@ function ContextRing({
         r={r}
         fill="none"
         strokeWidth={sw}
-        className="stroke-line"
+        {...stylex.props(sx.strokeLine)}
       />
       <circle
         cx={size / 2}
@@ -73,7 +136,10 @@ function ContextRing({
         strokeLinecap="round"
         strokeDasharray={circ}
         strokeDashoffset={offset}
-        className={cn("transition-[stroke-dashoffset] duration-300", tone)}
+        className={cn(
+          utilityClassName("transition-[stroke-dashoffset] duration-300"),
+          tone,
+        )}
       />
     </svg>
   );
@@ -89,9 +155,15 @@ function Row({
   strong?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-6">
-      <span className="text-dim">{label}</span>
-      <span className={cn("tabular-nums", strong && "text-fg")}>{value}</span>
+    <div
+      {...stylex.props(sx.flex, sx.itemsBaseline, sx.justifyBetween, sx.gap6)}
+    >
+      <span {...stylex.props(sx.textDim)}>{label}</span>
+      <span
+        className={cn("tabular-nums", strong && utilityClassName("text-fg"))}
+      >
+        {value}
+      </span>
     </div>
   );
 }
@@ -132,10 +204,14 @@ export function UsageDetails({
   const turns = usage?.turns ?? 0;
 
   return (
-    <div className={cn("text-xs", className)}>
-      <div className="mb-2 flex items-baseline justify-between">
-        <span className="font-medium text-fg">This conversation</span>
-        <span className="text-dim">
+    <div className={cn(utilityClassName("text-xs"), className)}>
+      <div
+        {...stylex.props(sx.mb2, sx.flex, sx.itemsBaseline, sx.justifyBetween)}
+      >
+        <span {...stylex.props(sx.fontMedium, sx.textFg)}>
+          This conversation
+        </span>
+        <span {...stylex.props(sx.textDim)}>
           {turns} turn{turns === 1 ? "" : "s"}
         </span>
       </div>
@@ -153,7 +229,7 @@ export function UsageDetails({
           />
         )}
       </div>
-      <div className="my-2 h-px bg-line" />
+      <div {...stylex.props(sx.my2, sx.hPx, sx.bgLine)} />
       <div className="space-y-1.5">
         <Row label="Input" value={fmtTokens(usage?.inputTokens ?? 0)} />
         <Row label="Output" value={fmtTokens(usage?.outputTokens ?? 0)} />
@@ -199,14 +275,23 @@ export function UsageMeter({
         className={cn(
           // A quiet pill in the session subtitle: this is a readout you can
           // open, not a plate you press.
-          "group flex min-h-8 items-center gap-1.5 rounded-full px-1.5 py-1 text-xs font-medium",
-          "text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
-          "cursor-pointer select-none outline-none transition-colors",
+          utilityClassName(
+            "group flex min-h-8 items-center gap-1.5 rounded-full px-1.5 py-1 text-xs font-medium",
+          ),
+          utilityClassName(
+            "text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+          ),
+          utilityClassName(
+            "cursor-pointer select-none outline-none transition-colors",
+          ),
           className,
         )}
         aria-label="Conversation cost & context"
       >
-        <UsageCost usage={usage} className="text-fg" />
+        <UsageCost
+          usage={usage}
+          className={mergeStylexOverrideClassName("", sx.textFg)}
+        />
         {window > 0 && <ContextRing frac={frac} tone={tone.stroke} />}
         {showCacheRate && (
           // Off by default, and the phone header's meter leaves it off: there
@@ -214,10 +299,16 @@ export function UsageMeter({
           // name, and the cache rate is the one thing on that line nobody
           // navigates by — it was pushing "Opus 5 + Fable oracle" down to
           // "Opus 5 + …".
-          <span className="tabular-nums text-dim">{cacheHit}% cached</span>
+          <span {...mergeStylexProps("tabular-nums", sx.textDim)}>
+            {cacheHit}% cached
+          </span>
         )}
       </Popover.Trigger>
-      <Popover.Popup side="top" align="end" className="w-64 p-3 text-xs">
+      <Popover.Popup
+        side="top"
+        align="end"
+        className={mergeStylexOverrideClassName("", sx.w64, sx.p3, sx.textXs)}
+      >
         <UsageDetails usage={usage} />
       </Popover.Popup>
     </Popover.Root>

@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useState } from "react";
 import { useOrganizationName } from "../hooks/useOrganizationIcon";
 import { APP_LOGO_STATUS } from "../lib/app-header-classes";
@@ -23,6 +25,161 @@ import {
   IconServer,
 } from "./icons";
 import { OrganizationAppIcon } from "./OrganizationAppIcon";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  size11: {
+    width: "calc(4px * 11)",
+    height: "calc(4px * 11)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  p0: {
+    padding: "0",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  transitionBackgroundColorScale: {
+    transitionProperty: "background-color,scale",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  activeScale096: {
+    ":active": {
+      scale: "0.96",
+    },
+  },
+  activeBgHover: {
+    ":active": {
+      backgroundColor: "var(--hover)",
+    },
+  },
+  motionReduceTransformNone: {
+    "@media (prefers-reduced-motion: reduce)": {
+      "@media (prefers-reduced-motion:reduce)": {
+        transform: "none",
+      },
+    },
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  size10: {
+    width: "calc(4px * 10)",
+    height: "calc(4px * 10)",
+  },
+  objectCover: {
+    objectFit: "cover",
+  },
+  size22px: {
+    width: "22px",
+    height: "22px",
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  transitionColorRotate: {
+    transitionProperty: "color,rotate",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  w290px: {
+    width: "290px",
+  },
+  maxWCalc100vw16px: {
+    maxWidth: "calc(100vw - 16px)",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  size9: {
+    width: "calc(4px * 9)",
+    height: "calc(4px * 9)",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  block: {
+    display: "block",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgAccent: {
+    backgroundColor: "var(--accent)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  textOnAccent: {
+    color: "var(--on-accent)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+});
 
 type OrganizationAccount = {
   id: string;
@@ -100,7 +257,7 @@ export function OrganizationSwitcher({
   }
 
   const subtitle = `${status}${memberCount === null ? "" : ` · ${memberCount} ${memberCount === 1 ? "member" : "members"}`}`;
-  const itemClass = "phone:min-h-11";
+  const itemClass = utilityClassName("phone:min-h-11");
   const organizationUrl = `${window.location.origin}${BASE_PATH}/`;
 
   function openAddOrganization() {
@@ -148,11 +305,42 @@ export function OrganizationSwitcher({
       <Menu.Root onOpenChange={(open) => open && loadMenu()}>
         {variant === "topbar" ? (
           <Menu.Trigger
-            className="focus-ring relative flex size-11 shrink-0 items-center justify-center rounded-control bg-transparent p-0 text-fg transition-[background-color,scale] active:scale-[0.96] active:bg-hover motion-reduce:transform-none"
+            className={mergeStylexOverrideClassName(
+              "focus-ring",
+              sx.relative,
+              sx.flex,
+              sx.size11,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.roundedControl,
+              sx.bgTransparent,
+              sx.p0,
+              sx.textFg,
+              sx.transitionBackgroundColorScale,
+              sx.activeScale096,
+              sx.activeBgHover,
+              sx.motionReduceTransformNone,
+            )}
             aria-label={`Open organization menu, current: ${name}`}
           >
-            <span className="relative inline-flex size-10 items-center justify-center">
-              <OrganizationAppIcon className="size-10 rounded-control object-cover" />
+            <span
+              {...stylex.props(
+                sx.relative,
+                sx.inlineFlex,
+                sx.size10,
+                sx.itemsCenter,
+                sx.justifyCenter,
+              )}
+            >
+              <OrganizationAppIcon
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.size10,
+                  sx.roundedControl,
+                  sx.objectCover,
+                )}
+              />
               <span
                 className={APP_LOGO_STATUS}
                 style={{
@@ -164,11 +352,29 @@ export function OrganizationSwitcher({
           </Menu.Trigger>
         ) : (
           <Menu.Trigger
-            className={`group flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-left text-body font-medium text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:py-[13px] desktop:text-item-title motion-reduce:transform-none`}
+            className={utilityClassName(
+              `group flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-left text-body font-medium text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:py-[13px] desktop:text-item-title motion-reduce:transform-none`,
+            )}
             aria-label={`Open organization menu, current: ${name}`}
           >
-            <span className="relative inline-flex size-[22px] shrink-0 items-center justify-center">
-              <OrganizationAppIcon className="size-5 rounded-sm object-cover" />
+            <span
+              {...stylex.props(
+                sx.relative,
+                sx.inlineFlex,
+                sx.size22px,
+                sx.shrink0,
+                sx.itemsCenter,
+                sx.justifyCenter,
+              )}
+            >
+              <OrganizationAppIcon
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.size5,
+                  sx.roundedSm,
+                  sx.objectCover,
+                )}
+              />
               <span
                 className={APP_LOGO_STATUS}
                 style={{
@@ -177,10 +383,17 @@ export function OrganizationSwitcher({
                 title={status}
               />
             </span>
-            <span className="min-w-0 flex-1 truncate">{name}</span>
+            <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+              {name}
+            </span>
             <IconChevronDown
               size={16}
-              className="shrink-0 text-faint transition-[color,rotate] group-hover:text-dim group-data-[popup-open]:rotate-180"
+              className={mergeStylexOverrideClassName(
+                "group-hover:text-dim group-data-[popup-open]:rotate-180",
+                sx.shrink0,
+                sx.textFaint,
+                sx.transitionColorRotate,
+              )}
               aria-hidden="true"
             />
           </Menu.Trigger>
@@ -190,11 +403,33 @@ export function OrganizationSwitcher({
           side="bottom"
           align="start"
           sideOffset={5}
-          className="w-[290px] max-w-[calc(100vw-16px)]"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.w290px,
+            sx.maxWCalc100vw16px,
+          )}
         >
-          <div className="flex items-center gap-3 px-2 py-2">
-            <span className="relative inline-flex size-9 shrink-0 items-center justify-center">
-              <OrganizationAppIcon className="size-9 rounded-md object-cover" />
+          <div
+            {...stylex.props(sx.flex, sx.itemsCenter, sx.gap3, sx.px2, sx.py2)}
+          >
+            <span
+              {...stylex.props(
+                sx.relative,
+                sx.inlineFlex,
+                sx.size9,
+                sx.shrink0,
+                sx.itemsCenter,
+                sx.justifyCenter,
+              )}
+            >
+              <OrganizationAppIcon
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.size9,
+                  sx.roundedMd,
+                  sx.objectCover,
+                )}
+              />
               <span
                 className={APP_LOGO_STATUS}
                 style={{
@@ -203,11 +438,26 @@ export function OrganizationSwitcher({
                 aria-hidden="true"
               />
             </span>
-            <span className="min-w-0">
-              <span className="block truncate text-body font-semibold text-fg">
+            <span {...stylex.props(sx.minW0)}>
+              <span
+                {...stylex.props(
+                  sx.block,
+                  sx.truncate,
+                  sx.fontSemibold,
+                  sx.textFg,
+                  typography.body,
+                )}
+              >
                 {name}
               </span>
-              <span className="block truncate text-supporting text-faint">
+              <span
+                {...stylex.props(
+                  sx.block,
+                  sx.truncate,
+                  sx.textFaint,
+                  typography.supporting,
+                )}
+              >
                 {subtitle}
               </span>
             </span>
@@ -215,16 +465,26 @@ export function OrganizationSwitcher({
           <Menu.Separator />
           <Menu.Item className={itemClass} onClick={() => onOpenSettings()}>
             <IconGear size={19} className={MENU_ICON} />
-            <span className="min-w-0 flex-1 truncate">Settings</span>
+            <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+              Settings
+            </span>
           </Menu.Item>
           <Menu.Item
             className={itemClass}
             onClick={() => onOpenSettings("members")}
           >
             <IconPeople size={19} className={MENU_ICON} />
-            <span className="min-w-0 flex-1 truncate">Members</span>
+            <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+              Members
+            </span>
             {memberCount !== null && (
-              <span className="text-label tabular-nums text-faint">
+              <span
+                {...mergeStylexProps(
+                  "tabular-nums",
+                  sx.textFaint,
+                  typography.label,
+                )}
+              >
                 {memberCount}
               </span>
             )}
@@ -234,14 +494,18 @@ export function OrganizationSwitcher({
             onClick={() => setDownloadOpen(true)}
           >
             <IconArrowDown size={19} className={MENU_ICON} />
-            <span className="min-w-0 flex-1 truncate">Download apps</span>
+            <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+              Download apps
+            </span>
           </Menu.Item>
           <Menu.Item
             className={`${itemClass} text-accent`}
             onClick={() => setInviteOpen(true)}
           >
             <IconPlus size={19} className="text-accent" />
-            <span className="min-w-0 flex-1 truncate">Invite member</span>
+            <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+              Invite member
+            </span>
           </Menu.Item>
           <Menu.Separator />
           <Menu.Group>
@@ -259,25 +523,53 @@ export function OrganizationSwitcher({
                       if (!active) bridge?.switch?.(account.id);
                     }}
                   >
-                    <span className="flex size-[22px] shrink-0 items-center justify-center">
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.size22px,
+                        sx.shrink0,
+                        sx.itemsCenter,
+                        sx.justifyCenter,
+                      )}
+                    >
                       {active ? (
-                        <OrganizationAppIcon className="size-[22px] rounded-sm object-cover" />
+                        <OrganizationAppIcon
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.size22px,
+                            sx.roundedSm,
+                            sx.objectCover,
+                          )}
+                        />
                       ) : (
                         <IconTile name={account.label} size={22} />
                       )}
                     </span>
-                    <span className="min-w-0 flex-1 truncate">
+                    <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                       {active ? name : account.label}
                     </span>
                     {account.unread > 0 && (
-                      <span className="rounded-full bg-accent px-1.5 text-meta font-semibold tabular-nums text-on-accent">
+                      <span
+                        {...mergeStylexProps(
+                          "tabular-nums",
+                          sx.roundedFull,
+                          sx.bgAccent,
+                          sx.px15,
+                          sx.fontSemibold,
+                          sx.textOnAccent,
+                          typography.meta,
+                        )}
+                      >
                         {account.unread}
                       </span>
                     )}
                     {account.shortcut !== null && (
                       <Menu.Shortcut>⌘⇧{account.shortcut}</Menu.Shortcut>
                     )}
-                    <Menu.Check on={active} className="text-dim" />
+                    <Menu.Check
+                      on={active}
+                      className={mergeStylexOverrideClassName("", sx.textDim)}
+                    />
                   </Menu.RadioItem>
                 );
               })}
@@ -288,7 +580,7 @@ export function OrganizationSwitcher({
                 onClick={openAddOrganization}
               >
                 <IconPlus size={19} className="text-accent" />
-                <span className="min-w-0 flex-1 truncate">
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                   Add organization
                 </span>
               </Menu.Item>
@@ -299,7 +591,7 @@ export function OrganizationSwitcher({
                 onClick={() => bridge.manage?.()}
               >
                 <IconServer size={19} className={MENU_ICON} />
-                <span className="min-w-0 flex-1 truncate">
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                   Manage organizations
                 </span>
               </Menu.Item>
@@ -320,7 +612,7 @@ export function OrganizationSwitcher({
             description="Connect another Open Session server."
           />
           <form
-            className="flex flex-col gap-3"
+            {...stylex.props(sx.flex, sx.flexCol, sx.gap3)}
             onSubmit={(event) => {
               event.preventDefault();
               void addOrganization(true);
@@ -397,7 +689,17 @@ export function OrganizationSwitcher({
             title="Member added"
             description={`@${invitedLogin || "member"} can now sign in to ${name} with GitHub.`}
           />
-          <div className="truncate rounded-control bg-panel px-3 py-2 text-control-label text-dim">
+          <div
+            {...stylex.props(
+              sx.truncate,
+              sx.roundedControl,
+              sx.bgPanel,
+              sx.px3,
+              sx.py2,
+              sx.textDim,
+              typography.controlLabel,
+            )}
+          >
             {organizationUrl}
           </div>
           <Modal.Footer>

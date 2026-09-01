@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import { BASE_PATH } from "../lib/base";
 import React, { useCallback, useEffect, useState } from "react";
@@ -41,6 +43,160 @@ import {
   rowMenuTriggerClasses,
 } from "../ui/settings";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  px8: {
+    paddingInline: "calc(4px * 8)",
+  },
+  pt11: {
+    paddingTop: "calc(4px * 11)",
+  },
+  pb22: {
+    paddingBottom: "calc(4px * 22)",
+  },
+  phonePx4: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 4)",
+    },
+  },
+  phonePt5: {
+    "@media (max-width: 720px)": {
+      paddingTop: "calc(4px * 5)",
+    },
+  },
+  phonePb12: {
+    "@media (max-width: 720px)": {
+      paddingBottom: "calc(4px * 12)",
+    },
+  },
+  selfStart: {
+    alignSelf: "flex-start",
+  },
+  phoneFlexCol: {
+    "@media (max-width: 720px)": {
+      flexDirection: "column",
+    },
+  },
+  phoneItemsStart: {
+    "@media (max-width: 720px)": {
+      alignItems: "flex-start",
+    },
+  },
+  phoneGap3: {
+    "@media (max-width: 720px)": {
+      gap: "calc(4px * 3)",
+    },
+  },
+  mb4: {
+    marginBottom: "calc(4px * 4)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  lineClamp2: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "2",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  mt0: {
+    marginTop: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  size2: {
+    width: "calc(4px * 2)",
+    height: "calc(4px * 2)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  gap35: {
+    gap: "calc(4px * 3.5)",
+  },
+  mt3px: {
+    marginTop: "3px",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  block: {
+    display: "block",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+});
 
 /* Security is a tool surface hosted inside Settings, so it reads as one of its
    pages: the settings reading column, a SettingsHeader on top, and each group
@@ -52,7 +208,9 @@ import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 const FORM_FIELDS =
   "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
 /** A link inside a row: the session an entry points at, the page that owns it. */
-const LINK = "cursor-pointer text-link no-underline hover:underline";
+const LINK = utilityClassName(
+  "cursor-pointer text-link no-underline hover:underline",
+);
 
 interface Props {
   onOpenSession: (sessionId: string) => void;
@@ -87,8 +245,10 @@ function RunGlyph({ ok, title }: { ok: boolean; title?: string }) {
   return (
     <span
       className={cn(
-        "flex size-5 shrink-0 items-center justify-center [&_svg]:size-3.5",
-        ok ? "text-green" : "text-red",
+        utilityClassName(
+          "flex size-5 shrink-0 items-center justify-center [&_svg]:size-3.5",
+        ),
+        ok ? utilityClassName("text-green") : utilityClassName("text-red"),
       )}
       title={title}
     >
@@ -164,12 +324,31 @@ export function Security({ onOpenSession }: Props) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 justify-center overflow-y-auto px-8 pt-11 pb-22 phone:px-4 phone:pt-5 phone:pb-12">
-      <SettingsPanel className="self-start">
+    <div
+      {...stylex.props(
+        sx.flex,
+        sx.minH0,
+        sx.flex1,
+        sx.justifyCenter,
+        sx.overflowYAuto,
+        sx.px8,
+        sx.pt11,
+        sx.pb22,
+        sx.phonePx4,
+        sx.phonePt5,
+        sx.phonePb12,
+      )}
+    >
+      <SettingsPanel className={mergeStylexOverrideClassName("", sx.selfStart)}>
         <SettingsHeader
           title="Security"
           description="deepsec scans across your repos. Every confirmed finding lands as its own PR."
-          className="phone:flex-col phone:items-start phone:gap-3"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.phoneFlexCol,
+            sx.phoneItemsStart,
+            sx.phoneGap3,
+          )}
           actions={
             tab === "profiles" ? (
               <Button
@@ -193,7 +372,7 @@ export function Security({ onOpenSession }: Props) {
 
         {/* The tab bar takes the card's own inset, so it sits over the rows it
             switches rather than over the page. */}
-        <div className="mb-4 px-5">
+        <div {...stylex.props(sx.mb4, sx.px5)}>
           <Segmented
             label="Security view"
             value={tab}
@@ -209,7 +388,10 @@ export function Security({ onOpenSession }: Props) {
         </div>
 
         {error && (
-          <InlineAlert className="mb-3" onDismiss={() => setError(null)}>
+          <InlineAlert
+            className={mergeStylexOverrideClassName("", sx.mb3)}
+            onDismiss={() => setError(null)}
+          >
             {error}
           </InlineAlert>
         )}
@@ -226,13 +408,23 @@ export function Security({ onOpenSession }: Props) {
               </EmptyState>
             ) : (
               profiles.map((p) => (
-                <SettingRow key={p.id} className="items-start">
+                <SettingRow
+                  key={p.id}
+                  className={mergeStylexOverrideClassName("", sx.itemsStart)}
+                >
                   <SettingRowText>
                     <SettingRowTitle>{p.name}</SettingRowTitle>
-                    <SettingRowDescription className="line-clamp-2">
+                    <SettingRowDescription
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.lineClamp2,
+                      )}
+                    >
                       {p.prompt}
                     </SettingRowDescription>
-                    <div className="mt-1 text-meta text-faint">
+                    <div
+                      {...stylex.props(sx.mt1, sx.textFaint, typography.meta)}
+                    >
                       by {p.createdBy}
                     </div>
                   </SettingRowText>
@@ -251,7 +443,10 @@ export function Security({ onOpenSession }: Props) {
                         </Menu.Item>
                         <Menu.Item
                           onClick={() => handleDeleteProfile(p)}
-                          className="text-red data-[highlighted]:bg-red-soft"
+                          className={mergeStylexOverrideClassName(
+                            "data-[highlighted]:bg-red-soft",
+                            sx.textRed,
+                          )}
                         >
                           <IconTrash size={16} />
                           Delete profile
@@ -267,7 +462,9 @@ export function Security({ onOpenSession }: Props) {
           <>
             {recurring.length > 0 && (
               <>
-                <SettingsGroupLabel className="mt-0">
+                <SettingsGroupLabel
+                  className={mergeStylexOverrideClassName("", sx.mt0)}
+                >
                   Recurring
                 </SettingsGroupLabel>
                 <SettingCard>
@@ -282,7 +479,14 @@ export function Security({ onOpenSession }: Props) {
                             : ""}
                         </SettingRowDescription>
                       </SettingRowText>
-                      <SettingRowControl className="flex items-center gap-3">
+                      <SettingRowControl
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.flex,
+                          sx.itemsCenter,
+                          sx.gap3,
+                        )}
+                      >
                         {r.lastRunStatus === "ok" ||
                         r.lastRunStatus === "error" ? (
                           <RunGlyph
@@ -316,9 +520,19 @@ export function Security({ onOpenSession }: Props) {
                 </EmptyState>
               ) : (
                 scans.map((s) => (
-                  <SettingRow key={s.id} className="items-start">
+                  <SettingRow
+                    key={s.id}
+                    className={mergeStylexOverrideClassName("", sx.itemsStart)}
+                  >
                     <SettingRowText>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div
+                        {...stylex.props(
+                          sx.flex,
+                          sx.flexWrap,
+                          sx.itemsCenter,
+                          sx.gap2,
+                        )}
+                      >
                         <SettingRowTitle>
                           {s.interactive ? "Interactive scan" : "Scan"} ·{" "}
                           {s.repos.map(repoLabel).join(", ")}
@@ -331,20 +545,38 @@ export function Security({ onOpenSession }: Props) {
                       </div>
 
                       {s.instructions && (
-                        <SettingRowDescription className="line-clamp-2">
+                        <SettingRowDescription
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.lineClamp2,
+                          )}
+                        >
                           {s.instructions}
                         </SettingRowDescription>
                       )}
 
-                      <div className="mt-2 flex flex-col gap-1">
+                      <div
+                        {...stylex.props(sx.mt2, sx.flex, sx.flexCol, sx.gap1)}
+                      >
                         {s.sessions.map((ref) => (
                           <div
                             key={ref.repo + ref.sessionId}
-                            className="flex min-w-0 items-center gap-2 text-label text-dim"
+                            {...stylex.props(
+                              sx.flex,
+                              sx.minW0,
+                              sx.itemsCenter,
+                              sx.gap2,
+                              sx.textDim,
+                              typography.label,
+                            )}
                           >
                             {ref.status === "running" ? (
                               <span
-                                className="size-2 shrink-0 rounded-full"
+                                {...stylex.props(
+                                  sx.size2,
+                                  sx.shrink0,
+                                  sx.roundedFull,
+                                )}
                                 style={{ background: "var(--yellow)" }}
                                 title="Running"
                               />
@@ -354,12 +586,12 @@ export function Security({ onOpenSession }: Props) {
                                 title={ref.error}
                               />
                             )}
-                            <span className="shrink-0 text-fg">
+                            <span {...stylex.props(sx.shrink0, sx.textFg)}>
                               {repoLabel(ref.repo)}
                             </span>
                             {ref.error && (
                               <span
-                                className="truncate text-red"
+                                {...stylex.props(sx.truncate, sx.textRed)}
                                 title={ref.error}
                               >
                                 {ref.error}
@@ -367,7 +599,10 @@ export function Security({ onOpenSession }: Props) {
                             )}
                             {ref.sessionId && (
                               <a
-                                className={cn(LINK, "ml-auto shrink-0")}
+                                className={cn(
+                                  LINK,
+                                  utilityClassName("ml-auto shrink-0"),
+                                )}
                                 href={`${BASE_PATH}/session/${ref.sessionId}`}
                                 onClick={(e) => {
                                   e.preventDefault();
@@ -381,14 +616,23 @@ export function Security({ onOpenSession }: Props) {
                         ))}
                       </div>
 
-                      <div className="mt-2 text-meta text-faint">
+                      <div
+                        {...stylex.props(sx.mt2, sx.textFaint, typography.meta)}
+                      >
                         started {relativeTime(s.createdAt)}
                         {s.finishedAt &&
                           ` · finished ${relativeTime(s.finishedAt)}`}
                         {` · by ${s.createdBy}`}
                       </div>
                     </SettingRowText>
-                    <SettingRowControl className="flex items-center gap-2">
+                    <SettingRowControl
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.flex,
+                        sx.itemsCenter,
+                        sx.gap2,
+                      )}
+                    >
                       <StatusChip {...scanStatus(s.status)} />
                       <Menu.Root>
                         <Menu.Trigger
@@ -400,7 +644,10 @@ export function Security({ onOpenSession }: Props) {
                         <Menu.Popup align="end" sideOffset={4}>
                           <Menu.Item
                             onClick={() => handleDeleteScan(s)}
-                            className="text-red data-[highlighted]:bg-red-soft"
+                            className={mergeStylexOverrideClassName(
+                              "data-[highlighted]:bg-red-soft",
+                              sx.textRed,
+                            )}
                           >
                             <IconTrash size={16} />
                             Remove scan
@@ -517,7 +764,7 @@ function NewScanModal({
       }}
     >
       <Modal.Content
-        widthClassName="max-w-[34rem]"
+        widthClassName={utilityClassName("max-w-[34rem]")}
         className={FORM_FIELDS}
         initialFocus={repoRef}
       >
@@ -526,12 +773,12 @@ function NewScanModal({
           description="Start a search for findings across your repositories."
         />
 
-        <div className="flex flex-col gap-3.5">
+        <div {...stylex.props(sx.flex, sx.flexCol, sx.gap35)}>
           {/* self-start: the track hugs its two options. A flex column stretches
               its children, and a stretched segmented control is a full-width
               well with a knob sitting in one corner of it. */}
           <Segmented
-            className="self-start"
+            className={mergeStylexOverrideClassName("", sx.selfStart)}
             label="Scan scope"
             value={scope}
             onValueChange={(next) => {
@@ -571,7 +818,7 @@ function NewScanModal({
               onChange={setProfileId}
             />
             {profiles.length === 0 && (
-              <span className="text-supporting text-faint">
+              <span {...stylex.props(sx.textFaint, typography.supporting)}>
                 No profiles yet. A profile tells a scan how to read your code.
               </span>
             )}
@@ -601,7 +848,7 @@ function NewScanModal({
               disabled={!canRecur}
             />
             {!singleRepo && (
-              <span className="text-supporting text-faint">
+              <span {...stylex.props(sx.textFaint, typography.supporting)}>
                 Recurring and interactive scans take one repository at a time.
               </span>
             )}
@@ -609,19 +856,31 @@ function NewScanModal({
 
           <label
             className={cn(
-              "flex flex-row items-start gap-2.5 text-label font-medium text-dim",
-              canInteractive ? "cursor-pointer" : "opacity-50",
+              utilityClassName(
+                "flex flex-row items-start gap-2.5 text-label font-medium text-dim",
+              ),
+              canInteractive
+                ? utilityClassName("cursor-pointer")
+                : utilityClassName("opacity-50"),
             )}
           >
             <Checkbox
-              className="mt-[3px]"
+              className={mergeStylexOverrideClassName("", sx.mt3px)}
               checked={canInteractive && interactive}
               disabled={!canInteractive}
               onCheckedChange={setInteractive}
             />
             <span>
               Interactive mode
-              <span className="mt-0.5 block text-label font-normal text-faint">
+              <span
+                {...stylex.props(
+                  sx.mt05,
+                  sx.block,
+                  sx.fontNormal,
+                  sx.textFaint,
+                  typography.label,
+                )}
+              >
                 Instead of scanning end to end, {AGENT_NAME} shapes the threat
                 model with you in a session first.
               </span>
@@ -711,7 +970,7 @@ function ProfileModal({
       }}
     >
       <Modal.Content
-        widthClassName="max-w-[34rem]"
+        widthClassName={utilityClassName("max-w-[34rem]")}
         className={FORM_FIELDS}
         initialFocus={nameRef}
       >
@@ -720,7 +979,7 @@ function ProfileModal({
           description="A profile tells every scan that uses it how to read your code."
         />
 
-        <div className="flex flex-col gap-3.5">
+        <div {...stylex.props(sx.flex, sx.flexCol, sx.gap35)}>
           <Field label="Name">
             <Input
               ref={nameRef}

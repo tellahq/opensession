@@ -1,3 +1,4 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import type {
@@ -34,6 +35,227 @@ import {
 } from "../ui/top-bar";
 import { IconChevronLeft, IconPlus } from "./icons";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  isolate: {
+    isolation: "isolate",
+  },
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  relative: {
+    position: "relative",
+  },
+  z10: {
+    zIndex: "10",
+  },
+  wFull: {
+    width: "100%",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  pb3: {
+    paddingBottom: "calc(4px * 3)",
+  },
+  ptMax12pxEnvSafeAreaInsetTop: {
+    paddingTop: "max(12px, env(safe-area-inset-top))",
+  },
+  phoneHAuto: {
+    "@media (max-width: 720px)": {
+      height: "auto",
+    },
+  },
+  hidden: {
+    display: "none",
+  },
+  phoneInlineFlex: {
+    "@media (max-width: 720px)": {
+      display: "inline-flex",
+    },
+  },
+  absolute: {
+    position: "absolute",
+  },
+  left12: {
+    left: "calc(1 / 2 * 100%)",
+  },
+  TranslateX12: {
+    translate: "calc(calc(1 / 2 * 100%) * -1) 0",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  maxW860px: {
+    maxWidth: "860px",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  pb4: {
+    paddingBottom: "calc(4px * 4)",
+  },
+  insetX4: {
+    insetInline: "calc(4px * 4)",
+  },
+  top1: {
+    top: "4px",
+  },
+  bottom5: {
+    bottom: "calc(4px * 5)",
+  },
+  scale097: {
+    scale: "0.97",
+  },
+  roundedXl: {
+    borderRadius: "calc(18px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  opacity60: {
+    opacity: "60%",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsStretch: {
+    alignItems: "stretch",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  pbMax16pxEnvSafeAreaInsetBottom: {
+    paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+  },
+  py3: {
+    paddingBlock: "calc(4px * 3)",
+  },
+  bgRedSoft: {
+    backgroundColor: "var(--red-soft)",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py35: {
+    paddingBlock: "calc(4px * 3.5)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  lineClamp1: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "1",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  h3: {
+    height: "calc(4px * 3)",
+  },
+  w13: {
+    width: "calc(1 / 3 * 100%)",
+  },
+  animatePulse: {
+    animation: "var(--animate-pulse)",
+  },
+  rounded: {
+    borderRadius: "var(--radius-xs)",
+    cornerShape: "var(--cs)",
+  },
+  w45: {
+    width: "calc(4 / 5 * 100%)",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  p25: {
+    padding: "calc(4px * 2.5)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  text4xl: {
+    fontSize: "var(--text-4xl)",
+    lineHeight: "var(--tw-leading, var(--text-4xl--line-height))",
+  },
+  maxWXs: {
+    maxWidth: "var(--container-xs)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+});
 
 /**
  * Catch-up deck — a Slack-style "swipe through your unread" card stack. Each
@@ -254,7 +476,17 @@ export function CatchUpDeck({
   return (
     // `isolate` scopes the z-indexes the two bars use to hold the card stack
     // under them, so they cannot climb over the app's own chrome.
-    <div className="isolate flex min-h-0 flex-1 flex-col items-center bg-surface">
+    <div
+      {...stylex.props(
+        sx.isolate,
+        sx.flex,
+        sx.minH0,
+        sx.flex1,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.bgSurface,
+      )}
+    >
       {/* Header: back + "N Left" counter + new-workspace (Slack-style). This is
 			    the deck's only top bar — the app's mobile back bar is suppressed for
 			    the catch-up view — so it carries the safe-area top inset itself.
@@ -268,21 +500,46 @@ export function CatchUpDeck({
 			    a desktop-width card), and the up-fling of Keep Unread crosses the
 			    whole row. Cards pass UNDER the bar instead of over it, so the
 			    counter stays readable through every swipe. */}
-      <PhoneTopBar className="relative z-10 w-full bg-surface px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] phone:h-auto">
+      <PhoneTopBar
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.relative,
+          sx.z10,
+          sx.wFull,
+          sx.bgSurface,
+          sx.px4,
+          sx.pb3,
+          sx.ptMax12pxEnvSafeAreaInsetTop,
+          sx.phoneHAuto,
+        )}
+      >
         <PhoneTopBarAction
-          className="hidden phone:inline-flex"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.hidden,
+            sx.phoneInlineFlex,
+          )}
           onClick={onExit}
           title="Back"
           aria-label="Back"
           icon={<IconChevronLeft size={24} />}
         />
-        <PhoneTopBarTitle className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold">
+        <PhoneTopBarTitle
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.absolute,
+            sx.left12,
+            sx.TranslateX12,
+            sx.textSm,
+            sx.fontSemibold,
+          )}
+        >
           {done ? "All caught up" : `${remaining} Left`}
         </PhoneTopBarTitle>
         {/* ml-auto, not just justify-between: with Back hidden this is the
 				    row's only in-flow child on desktop. */}
         <PhoneTopBarAction
-          className="ml-auto"
+          className={mergeStylexOverrideClassName("", sx.mlAuto)}
           onClick={onNewWorkspace}
           title="New workspace"
           aria-label="New workspace"
@@ -291,7 +548,16 @@ export function CatchUpDeck({
       </PhoneTopBar>
 
       {!done && (modelLoadError || accountLoadError) && (
-        <div className="flex w-full max-w-[860px] flex-col gap-2 px-4">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.wFull,
+            sx.maxW860px,
+            sx.flexCol,
+            sx.gap2,
+            sx.px4,
+          )}
+        >
           {modelLoadError && (
             <InlineAlert onDismiss={() => setModelLoadError(null)}>
               {modelLoadError}
@@ -308,11 +574,32 @@ export function CatchUpDeck({
       {done ? (
         <CaughtUp total={total} onExit={onExit} />
       ) : (
-        <div className="relative flex w-full max-w-[860px] flex-1 items-center justify-center px-4 pb-4">
+        <div
+          {...stylex.props(
+            sx.relative,
+            sx.flex,
+            sx.wFull,
+            sx.maxW860px,
+            sx.flex1,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.px4,
+            sx.pb4,
+          )}
+        >
           {/* Peek of the next card behind the top one, for depth. */}
           {next && (
             <div
-              className="absolute inset-x-4 top-1 bottom-5 scale-[0.97] rounded-xl bg-panel opacity-60"
+              {...stylex.props(
+                sx.absolute,
+                sx.insetX4,
+                sx.top1,
+                sx.bottom5,
+                sx.scale097,
+                sx.roundedXl,
+                sx.bgPanel,
+                sx.opacity60,
+              )}
               aria-hidden
             />
           )}
@@ -321,7 +608,13 @@ export function CatchUpDeck({
 						    the card is already absolutely positioned, so no popOnExit. */}
             <SwipeCard
               key={card.key}
-              className="absolute inset-x-4 top-1 bottom-5"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.absolute,
+                sx.insetX4,
+                sx.top1,
+                sx.bottom5,
+              )}
               custom={dir}
               exitFor={(a) =>
                 a === "archive"
@@ -358,10 +651,29 @@ export function CatchUpDeck({
 			    the card stack for the same reason the header is: a tilted card
 			    reaches past its own box at both ends. */}
       {!done && (
-        <div className="relative z-10 flex w-full max-w-[860px] shrink-0 items-stretch gap-2.5 bg-surface px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+        <div
+          {...stylex.props(
+            sx.relative,
+            sx.z10,
+            sx.flex,
+            sx.wFull,
+            sx.maxW860px,
+            sx.shrink0,
+            sx.itemsStretch,
+            sx.gap25,
+            sx.bgSurface,
+            sx.px4,
+            sx.pbMax16pxEnvSafeAreaInsetBottom,
+          )}
+        >
           <Button
             size="lg"
-            className="flex-1 py-3 text-sm"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.flex1,
+              sx.py3,
+              sx.textSm,
+            )}
             onClick={() => act("keep")}
             title="Keep unread (↑)"
           >
@@ -373,7 +685,12 @@ export function CatchUpDeck({
             /* The soft fill is always on here rather than only on hover:
 						   this is a standing choice in a triage deck, not a
 						   warning you hover into. */
-            className="bg-red-soft py-3 text-sm"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.bgRedSoft,
+              sx.py3,
+              sx.textSm,
+            )}
             onClick={() => act("archive")}
             title="Archive (←)"
             aria-label="Archive"
@@ -397,7 +714,12 @@ export function CatchUpDeck({
 						   than proposes, because it's the deck's dominant action. */
             variant="success-strong"
             size="lg"
-            className="flex-1 py-3 text-sm"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.flex1,
+              sx.py3,
+              sx.textSm,
+            )}
             onClick={() => act("read")}
             title="Mark as read (→)"
           >
@@ -527,14 +849,34 @@ function CardBody({
   return (
     <>
       <button
-        className="flex w-full shrink-0 flex-col items-start gap-0.5 border-b border-line bg-transparent px-5 py-3.5 text-left"
+        {...stylex.props(
+          sx.flex,
+          sx.wFull,
+          sx.shrink0,
+          sx.flexCol,
+          sx.itemsStart,
+          sx.gap05,
+          sx.borderB,
+          sx.borderLine,
+          sx.bgTransparent,
+          sx.px5,
+          sx.py35,
+          sx.textLeft,
+        )}
         onClick={onOpen}
         title="Open the full session"
       >
-        <span className="line-clamp-1 text-item-title font-semibold text-fg">
+        <span
+          {...stylex.props(
+            sx.lineClamp1,
+            sx.fontSemibold,
+            sx.textFg,
+            typography.itemTitle,
+          )}
+        >
           {card.name}
         </span>
-        <span className="text-xs text-faint">{meta}</span>
+        <span {...stylex.props(sx.textXs, sx.textFaint)}>{meta}</span>
       </button>
 
       {/* touch-pan-y so vertical gestures scroll the transcript but horizontal
@@ -542,7 +884,14 @@ function CardBody({
 			    container eats the swipe on touch devices). */}
       <div
         ref={setScrollEl}
-        className="catchup-scroll min-h-0 flex-1 touch-pan-y overflow-y-auto px-4 py-3"
+        {...mergeStylexProps(
+          "catchup-scroll touch-pan-y",
+          sx.minH0,
+          sx.flex1,
+          sx.overflowYAuto,
+          sx.px4,
+          sx.py3,
+        )}
       >
         {/* One wrapper so the bottom-pin has a single box to measure: a
 				    ResizeObserver on the scroll container itself never sees its
@@ -554,12 +903,38 @@ function CardBody({
             </InlineAlert>
           ) : entries === null ? (
             <div className="space-y-2">
-              <div className="h-3 w-1/3 animate-pulse rounded bg-surface" />
-              <div className="h-3 w-full animate-pulse rounded bg-surface" />
-              <div className="h-3 w-4/5 animate-pulse rounded bg-surface" />
+              <div
+                {...stylex.props(
+                  sx.h3,
+                  sx.w13,
+                  sx.animatePulse,
+                  sx.rounded,
+                  sx.bgSurface,
+                )}
+              />
+              <div
+                {...stylex.props(
+                  sx.h3,
+                  sx.wFull,
+                  sx.animatePulse,
+                  sx.rounded,
+                  sx.bgSurface,
+                )}
+              />
+              <div
+                {...stylex.props(
+                  sx.h3,
+                  sx.w45,
+                  sx.animatePulse,
+                  sx.rounded,
+                  sx.bgSurface,
+                )}
+              />
             </div>
           ) : entries.length === 0 ? (
-            <div className="text-sm text-faint">No messages yet.</div>
+            <div {...stylex.props(sx.textSm, sx.textFaint)}>
+              No messages yet.
+            </div>
           ) : (
             <TranscriptBlocks
               entries={entries}
@@ -710,7 +1085,7 @@ function CatchUpComposer({
     // Stop pointerdown from reaching the card's drag handler so typing, the
     // menus and text selection in the composer never start a swipe.
     <div
-      className="shrink-0 border-t border-line p-2.5"
+      {...stylex.props(sx.shrink0, sx.borderT, sx.borderLine, sx.p25)}
       onPointerDownCapture={(e) => e.stopPropagation()}
     >
       <Composer
@@ -769,7 +1144,17 @@ function CatchupWorking({ target }: { target: UnifiedSession }) {
     return () => clearInterval(id);
   }, []);
   return (
-    <div className="mt-2 flex items-center gap-2 px-1 text-xs text-faint">
+    <div
+      {...stylex.props(
+        sx.mt2,
+        sx.flex,
+        sx.itemsCenter,
+        sx.gap2,
+        sx.px1,
+        sx.textXs,
+        sx.textFaint,
+      )}
+    >
       <PulseDot />
       <span>Working</span>
       <span className="tabular-nums">{elapsedSince(since, now)}</span>
@@ -779,15 +1164,32 @@ function CatchupWorking({ target }: { target: UnifiedSession }) {
 
 function CaughtUp({ total, onExit }: { total: number; onExit: () => void }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-      <div className="text-4xl">✨</div>
-      <div className="text-item-title font-semibold text-fg">All caught up</div>
-      <div className="max-w-xs text-sm text-dim">
+    <div
+      {...stylex.props(
+        sx.flex,
+        sx.flex1,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.gap3,
+        sx.px6,
+        sx.textCenter,
+      )}
+    >
+      <div {...stylex.props(sx.text4xl)}>✨</div>
+      <div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>
+        All caught up
+      </div>
+      <div {...stylex.props(sx.maxWXs, sx.textSm, sx.textDim)}>
         {total > 0
           ? `You went through ${total} workspace${total === 1 ? "" : "s"}.`
           : "Nothing unread right now."}
       </div>
-      <Button size="lg" className="mt-2 text-sm" onClick={onExit}>
+      <Button
+        size="lg"
+        className={mergeStylexOverrideClassName("", sx.mt2, sx.textSm)}
+        onClick={onExit}
+      >
         Done
       </Button>
     </div>

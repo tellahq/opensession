@@ -100,7 +100,10 @@ test("an image still being staged holds its place", () => {
   const { html } = field({ staging: { images: 1, files: 0 } });
 
   // The tile itself, in the row the picture will land in.
-  expect(html).toContain("animate-pulse");
+  // StyleX: the pulse renders as inline animation declarations at test time.
+  expect(html).toContain(
+    "animation-name:__stylex_test_keyframes;animation-duration:2s;animation-timing-function:cubic-bezier(0.4, 0, 0.6, 1);animation-iteration-count:infinite",
+  );
   expect(html).toContain('aria-label="Cancel image upload"');
   // And the same news for a reader who cannot see it.
   expect(html).toContain("Attaching 1 image…");
@@ -110,7 +113,9 @@ test("an image still being staged holds its place", () => {
 test("a staged file holds its place too", () => {
   const { html } = field({ staging: { images: 0, files: 1 } });
 
-  expect(html).toContain("animate-pulse");
+  // The file placeholder is a static skeleton holding the row's height
+  // (StyleX renders the bars inline).
+  expect(html).toContain("width:92px");
   expect(html).toContain('aria-label="Cancel file upload"');
   expect(html).toContain("Attaching 1 file…");
 });
@@ -121,7 +126,7 @@ test("a staged image's ghost does not survive its arrival", () => {
     staging: { images: 0, files: 0 },
   });
 
-  expect(html).not.toContain("animate-pulse");
+  expect(html).not.toContain("animation-name:__stylex_test_keyframes");
   expect(html).not.toContain("Attaching");
 });
 

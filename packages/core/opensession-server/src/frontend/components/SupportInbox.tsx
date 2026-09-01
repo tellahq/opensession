@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useState } from "react";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { fetchSupportThreads } from "../lib/api";
@@ -25,6 +27,59 @@ import { cn } from "../ui/cn";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { ConversationPane } from "./ConversationPane";
 import { IconMail } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  size7px: {
+    width: "7px",
+    height: "7px",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py6: {
+    paddingBlock: "calc(4px * 6)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  p8: {
+    padding: "calc(4px * 8)",
+  },
+});
 
 /**
  * The Plain queue as a place of its own: the tickets in a column beside the
@@ -47,39 +102,51 @@ import { IconMail } from "./icons";
  *  the Reports page's list column, whose doc argues that shape at length. On a
  *  phone the two panes are separate pages, so it is the whole width there. */
 const COLUMN =
-  "flex min-h-0 flex-col " +
-  "phone:w-full phone:flex-1 " +
-  "desktop:w-[320px] desktop:shrink-0 desktop:border-r desktop:border-divider";
+  utilityClassName("flex min-h-0 flex-col ") +
+  utilityClassName("phone:w-full phone:flex-1 ") +
+  utilityClassName(
+    "desktop:w-[320px] desktop:shrink-0 desktop:border-r desktop:border-divider",
+  );
 
-const COLUMN_TITLE =
-  "m-0 text-item-title font-semibold text-fg phone:text-section-title";
+const COLUMN_TITLE = utilityClassName(
+  "m-0 text-item-title font-semibold text-fg phone:text-section-title",
+);
 
-const COLUMN_COUNT =
-  "ml-auto shrink-0 text-meta font-medium tabular-nums text-faint";
+const COLUMN_COUNT = utilityClassName(
+  "ml-auto shrink-0 text-meta font-medium tabular-nums text-faint",
+);
 
 const LIST =
-  "min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-3 " +
-  "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  utilityClassName("min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-3 ") +
+  utilityClassName("[scrollbar-width:none] [&::-webkit-scrollbar]:hidden");
 
 /** A ticket. Two lines, so it sets its own vertical rhythm rather than taking
  *  the sidebar's one-line row padding; everything else — corner, rail gap,
  *  hover layer, `bg-selected` for the open one — is the shared row grammar. */
 const ROW =
-  "group mt-0.5 flex w-full cursor-pointer items-start rounded-row border-0 " +
-  "bg-transparent py-2.5 pr-3 pl-2.5 text-left data-active:bg-selected " +
+  utilityClassName(
+    "group mt-0.5 flex w-full cursor-pointer items-start rounded-row border-0 ",
+  ) +
+  utilityClassName(
+    "bg-transparent py-2.5 pr-3 pl-2.5 text-left data-active:bg-selected ",
+  ) +
   `${SIDEBAR_RAIL_GAP} ${SIDEBAR_HOVER_LAYER}`;
 
-const ROW_HEAD = "flex min-w-0 items-baseline gap-2";
+const ROW_HEAD = utilityClassName("flex min-w-0 items-baseline gap-2");
 
 const ROW_NAME =
-  "min-w-0 flex-1 truncate text-label font-medium text-dim " +
-  "group-hover:text-fg group-data-active:text-fg phone:text-[15px]";
+  utilityClassName("min-w-0 flex-1 truncate text-label font-medium text-dim ") +
+  utilityClassName(
+    "group-hover:text-fg group-data-active:text-fg phone:text-[15px]",
+  );
 
-const ROW_TIME = "shrink-0 text-right text-meta tabular-nums text-faint";
+const ROW_TIME = utilityClassName(
+  "shrink-0 text-right text-meta tabular-nums text-faint",
+);
 
 const ROW_SUBJECT =
-  "mt-1 block truncate text-label text-faint " +
-  "group-data-active:text-dim phone:text-[14px]";
+  utilityClassName("mt-1 block truncate text-label text-faint ") +
+  utilityClassName("group-data-active:text-dim phone:text-[14px]");
 
 interface Props {
   /** The open ticket, or null for the list on its own. */
@@ -164,11 +231,11 @@ export function SupportInbox({
       >
         <span className={SIDEBAR_RAIL}>
           <span
-            className="size-[7px] rounded-full"
+            {...stylex.props(sx.size7px, sx.roundedFull)}
             style={{ backgroundColor: dot }}
           />
         </span>
-        <span className="min-w-0 flex-1">
+        <span {...stylex.props(sx.minW0, sx.flex1)}>
           <span className={ROW_HEAD}>
             <span className={ROW_NAME}>{customer}</span>
             {stamp && (
@@ -189,7 +256,7 @@ export function SupportInbox({
   }
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div {...stylex.props(sx.flex, sx.minH0, sx.flex1)}>
       {showList && (
         <aside className={COLUMN}>
           <div className={SUPPORT_COLUMN_BAR}>
@@ -200,9 +267,19 @@ export function SupportInbox({
             {threads === null ? (
               <LoadingState>Loading tickets…</LoadingState>
             ) : error && threads.length === 0 ? (
-              <InlineAlert className="mt-2">{error}</InlineAlert>
+              <InlineAlert className={mergeStylexOverrideClassName("", sx.mt2)}>
+                {error}
+              </InlineAlert>
             ) : threads.length === 0 ? (
-              <div className="px-3 py-6 text-center text-label text-faint">
+              <div
+                {...stylex.props(
+                  sx.px3,
+                  sx.py6,
+                  sx.textCenter,
+                  sx.textFaint,
+                  typography.label,
+                )}
+              >
                 Nothing waiting in Plain.
               </div>
             ) : (
@@ -220,7 +297,7 @@ export function SupportInbox({
                         SIDEBAR_GROUP_HEADER,
                         SIDEBAR_GROUP_HEADER_INSET,
                         SIDEBAR_LANE_HEADER,
-                        "cursor-default hover:text-dim",
+                        utilityClassName("cursor-default hover:text-dim"),
                       )}
                     >
                       <span
@@ -246,7 +323,7 @@ export function SupportInbox({
       )}
 
       {showTicket && (
-        <section className="flex min-w-0 flex-1 flex-col">
+        <section {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol)}>
           {/* An open ticket brings its own bar, with its subject and
 					    customer in it. This is the one for when nothing is open, and
 					    for phones, where the app's floating back control sits here
@@ -263,7 +340,16 @@ export function SupportInbox({
               headerInBar
             />
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+            <div
+              {...stylex.props(
+                sx.flex,
+                sx.minH0,
+                sx.flex1,
+                sx.itemsCenter,
+                sx.justifyCenter,
+                sx.p8,
+              )}
+            >
               <EmptyState
                 icon={<IconMail size={22} />}
                 title="No ticket selected"

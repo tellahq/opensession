@@ -119,7 +119,11 @@ describe("accent theme", () => {
     const panel = await Bun.file(
       new URL("../components/settings/AppearancePanel.tsx", import.meta.url),
     ).text();
-    expect(panel).toContain("flex w-fit max-w-full flex-wrap gap-y-1");
+    // Converted to StyleX: the compact wrap group is now a stylex.props
+    // composition (flex, w-fit, max-w-full, flex-wrap, gap-y-1).
+    expect(panel).toMatch(
+      /sx\.flex,\s*sx\.wFit,\s*sx\.maxWFull,\s*sx\.flexWrap,\s*sx\.gapY1/,
+    );
     expect(panel).toContain("<Tooltip label={option.label}>");
     expect(panel).not.toContain("title={option.label}");
   });

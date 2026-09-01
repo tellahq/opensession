@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { fetchFeedFilterOptions, relativeTime } from "../../lib/api";
 import {
@@ -46,6 +48,81 @@ import { IconCheck, IconFilter, IconPin } from "../icons";
 import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
 import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "../sidebar/SidebarItem";
 import React, { useEffect, useEffectEvent, useState } from "react";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  size7px: {
+    width: "7px",
+    height: "7px",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  mt5px: {
+    marginTop: "5px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  leading13: {
+    lineHeight: "1.3",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  lineClamp4: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "4",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  flex: {
+    display: "flex",
+  },
+  size4: {
+    width: "calc(4px * 4)",
+    height: "calc(4px * 4)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  minW230px: {
+    minWidth: "230px",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+});
 
 // A Support row: one TODO Plain ticket, single-line in the workspace rows'
 // exact shape. The rail dot wears the linked session's status (the ticket's
@@ -95,7 +172,7 @@ export function SupportRow({
               SIDEBAR_ROW,
               SIDEBAR_WS_ROW,
               SIDEBAR_HOVER_LAYER,
-              active && "bg-selected",
+              active && utilityClassName("bg-selected"),
             )}
             data-sidebar-row=""
             data-ws-row=""
@@ -108,7 +185,7 @@ export function SupportRow({
       >
         <span className={SIDEBAR_RAIL}>
           <span
-            className="size-[7px] rounded-full"
+            {...stylex.props(sx.size7px, sx.roundedFull)}
             style={{ backgroundColor: dot }}
           />
         </span>
@@ -133,7 +210,9 @@ export function SupportRow({
               // One colour, picked here: a pinned action keeps its accent
               // under the pointer, where two `text-*` utilities would leave
               // the winner to Tailwind's ordering.
-              pinned ? "text-accent" : "text-faint hover:text-fg",
+              pinned
+                ? "text-accent"
+                : utilityClassName("text-faint hover:text-fg"),
             )}
             aria-label={pinned ? "Unpin ticket" : "Pin ticket"}
             onClick={(e) => {
@@ -153,7 +232,10 @@ export function SupportRow({
             <span
               role="button"
               tabIndex={0}
-              className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-green")}
+              className={cn(
+                SIDEBAR_WS_ACTION,
+                utilityClassName("text-faint hover:text-green"),
+              )}
               aria-label="Mark done in Plain"
               onClick={(e) => {
                 e.stopPropagation();
@@ -252,7 +334,7 @@ export function FeedRow({
               SIDEBAR_ROW,
               SIDEBAR_WS_ROW,
               SIDEBAR_HOVER_LAYER,
-              active && "bg-selected",
+              active && utilityClassName("bg-selected"),
             )}
             data-sidebar-row=""
             data-ws-row=""
@@ -265,12 +347,15 @@ export function FeedRow({
       >
         <span className={SIDEBAR_RAIL}>
           <span
-            className="size-[7px] rounded-full"
+            {...stylex.props(sx.size7px, sx.roundedFull)}
             style={{ backgroundColor: dot }}
           />
         </span>
         <span
-          className={cn(SIDEBAR_ROW_TITLE, unread && "font-semibold text-fg")}
+          className={cn(
+            SIDEBAR_ROW_TITLE,
+            unread && utilityClassName("font-semibold text-fg"),
+          )}
         >
           {item.title}
         </span>
@@ -291,7 +376,9 @@ export function FeedRow({
               // One colour, picked here: a pinned action keeps its accent
               // under the pointer, where two `text-*` utilities would leave
               // the winner to Tailwind's ordering.
-              pinned ? "text-accent" : "text-faint hover:text-fg",
+              pinned
+                ? "text-accent"
+                : utilityClassName("text-faint hover:text-fg"),
             )}
             aria-label={pinned ? "Unpin" : "Pin"}
             onClick={(e) => {
@@ -310,11 +397,27 @@ export function FeedRow({
         </span>
       </Popover.Trigger>
       <RowCardPopup>
-        <div className="mt-[5px] text-label font-semibold leading-[1.3]">
+        <div
+          {...stylex.props(
+            sx.mt5px,
+            sx.fontSemibold,
+            sx.leading13,
+            typography.label,
+          )}
+        >
           {item.title}
         </div>
         {item.preview && (
-          <div className="selectable mt-1 line-clamp-4 text-xs leading-snug text-dim">
+          <div
+            {...mergeStylexProps(
+              "selectable",
+              sx.mt1,
+              sx.lineClamp4,
+              sx.textXs,
+              sx.leadingSnug,
+              sx.textDim,
+            )}
+          >
             {item.preview}
           </div>
         )}
@@ -323,7 +426,9 @@ export function FeedRow({
           timeTitle={ts ? new Date(ts).toLocaleString() : undefined}
         >
           {session && (
-            <span className="shrink-0 text-xs text-dim">Linked session</span>
+            <span {...stylex.props(sx.shrink0, sx.textXs, sx.textDim)}>
+              Linked session
+            </span>
           )}
         </CardFooter>
       </RowCardPopup>
@@ -398,10 +503,18 @@ export function FeedFilterMenu({
       key={`${key}:${value}`}
       onClick={() => onSet(key, selected ? "" : value)}
     >
-      <span className="flex size-4 shrink-0 items-center justify-center">
+      <span
+        {...stylex.props(
+          sx.flex,
+          sx.size4,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.justifyCenter,
+        )}
+      >
         {selected && <IconCheck size={13} />}
       </span>
-      <span className="truncate">{label}</span>
+      <span {...stylex.props(sx.truncate)}>{label}</span>
     </Menu.Item>
   );
   // meta options derived from the current items (plus static prepends);
@@ -435,7 +548,7 @@ export function FeedFilterMenu({
               // Unlike the workspace header's filter, this one's hover beat
               // its filtered tint in the old sheet's source order — so the
               // accent is a resting colour here, not a sticky one.
-              active ? "text-accent" : "text-dim",
+              active ? "text-accent" : utilityClassName("text-dim"),
               active && SIDEBAR_FILTER_DOT,
             )}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
@@ -444,7 +557,11 @@ export function FeedFilterMenu({
       >
         <IconFilter size={19} />
       </Menu.Trigger>
-      <Menu.Popup align="end" sideOffset={5} className="min-w-[230px]">
+      <Menu.Popup
+        align="end"
+        sideOffset={5}
+        className={mergeStylexOverrideClassName("", sx.minW230px)}
+      >
         {metaSpecs.map((spec) => {
           const options = metaOptions(spec);
           const me = options.find(
@@ -470,7 +587,9 @@ export function FeedFilterMenu({
               <Menu.GroupLabel>{spec.label}</Menu.GroupLabel>
               {item(spec.key, "Any", "", sel === "")}
               {options === undefined ? (
-                <div className="px-3 py-1 text-xs text-faint">Loading…</div>
+                <div {...stylex.props(sx.px3, sx.py1, sx.textXs, sx.textFaint)}>
+                  Loading…
+                </div>
               ) : (
                 options.map((o) =>
                   item(spec.key, o.label, o.value, sel === o.value),

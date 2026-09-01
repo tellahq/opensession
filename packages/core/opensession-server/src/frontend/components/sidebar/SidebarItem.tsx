@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { useShortcutKeys } from "../../hooks/useShortcutBindings";
 import { hasDraft } from "../../lib/drafts";
@@ -72,6 +74,147 @@ import { SessionCardBody, WsPrStatusMark } from "../sidebar/HoverCards";
 import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
 import { UserAvatar } from "../UserAvatar";
 import React, { useEffect, useRef, useState } from "react";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  text7b86e8: {
+    color: "#7b86e8",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderAccent: {
+    borderColor: "var(--accent)",
+  },
+  bgBg: {
+    backgroundColor: "var(--bg)",
+  },
+  px3px: {
+    paddingInline: "3px",
+  },
+  py0: {
+    paddingBlock: "0",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textInherit: {
+    color: "inherit",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  desktopTextItemTitle: {
+    "@media (min-width: 721px)": {
+      fontSize: "var(--type-item-title)",
+    },
+  },
+  phoneTextInputPhone: {
+    "@media (max-width: 720px)": {
+      fontSize: "var(--type-input-phone)",
+    },
+  },
+  relative: {
+    position: "relative",
+  },
+  ml1: {
+    marginLeft: "4px",
+  },
+  flex: {
+    display: "flex",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  Right1: {
+    right: "calc(4px * -1)",
+  },
+  Bottom1: {
+    bottom: "calc(4px * -1)",
+  },
+  size3: {
+    width: "calc(4px * 3)",
+    height: "calc(4px * 3)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgAccent: {
+    backgroundColor: "var(--accent)",
+  },
+  text8px: {
+    fontSize: "8px",
+  },
+  fontBold: {
+    fontWeight: "var(--font-weight-bold)",
+  },
+  leadingNone: {
+    lineHeight: "1",
+  },
+  textOnAccent: {
+    color: "var(--on-accent)",
+  },
+  opacity50: {
+    opacity: "50%",
+  },
+  mt3px: {
+    marginTop: "3px",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  pl7: {
+    paddingLeft: "calc(4px * 7)",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  phoneTextLabel: {
+    "@media (max-width: 720px)": {
+      fontSize: "var(--type-label)",
+    },
+  },
+});
 
 /** The sidebar's selectable row — the shape every list family wears: session,
  *  workspace, PR, support, feed and archived rows. Migrated off the
@@ -97,7 +240,9 @@ import React, { useEffect, useRef, useState } from "react";
  *  same kind of thing.
  *  Phones keep `py-[13px]` at both densities: 36px is a reading height, not a
  *  tap target, so the compact values are gated to desktop where they are set. */
-export const SIDEBAR_ROW = `group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-2 ${SIDEBAR_RAIL_PAD} text-left text-fg phone:pr-2 phone:pl-[calc(var(--sidebar-icon-left,16px)-12px)] phone:py-[13px]`;
+export const SIDEBAR_ROW = utilityClassName(
+  `group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-2 ${SIDEBAR_RAIL_PAD} text-left text-fg phone:pr-2 phone:pl-[calc(var(--sidebar-icon-left,16px)-12px)] phone:py-[13px]`,
+);
 
 /** A row's title: one line that fades smoothly at the available edge instead
  *  of ending in an ellipsis. Read conversations stay quiet; unread ones
@@ -115,13 +260,16 @@ export const SIDEBAR_ROW = `group relative mt-0.5 w-full rounded-row border-0 bg
    us. Team's add action is the exception: it stays visible with a 44px touch
    target because every row there is waiting to be added. */
 const ROW_ACTION = cn(
-  "absolute top-1/2 hidden size-[var(--sidebar-row-action,26px)] -translate-y-1/2 items-center justify-center rounded-md text-[15px] leading-none text-faint group-hover:flex hover:text-fg",
+  utilityClassName(
+    "absolute top-1/2 hidden size-[var(--sidebar-row-action,26px)] -translate-y-1/2 items-center justify-center rounded-md text-[15px] leading-none text-faint group-hover:flex hover:text-fg",
+  ),
   // Not a wash — a lid. See SIDEBAR_ROW_CHIP.
   SIDEBAR_ROW_CHIP,
 );
 
-export const SIDEBAR_ROW_TITLE =
-  "min-w-0 flex-1 overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] text-body font-medium leading-[1.35] text-dim desktop:text-item-title group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[finished-unread]:font-semibold group-data-[unread]:text-fg";
+export const SIDEBAR_ROW_TITLE = utilityClassName(
+  "min-w-0 flex-1 overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] text-body font-medium leading-[1.35] text-dim desktop:text-item-title group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[finished-unread]:font-semibold group-data-[unread]:text-fg",
+);
 
 export function SidebarItem({
   session,
@@ -356,7 +504,7 @@ export function SidebarItem({
   // tab is where an exact last-activity stamp belongs.
   if (session.linearIssue) {
     metaParts.push(
-      <span key="lin" className="text-[#7b86e8]">
+      <span key="lin" {...stylex.props(sx.text7b86e8)}>
         {session.linearIssue.identifier}
       </span>,
     );
@@ -399,7 +547,9 @@ export function SidebarItem({
               SIDEBAR_SWIPE_ACTION,
               SIDEBAR_SWIPE_ACTION_ARCHIVE,
               openSide === "archive" && SIDEBAR_SWIPE_ACTION_OPEN,
-              dragging ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
+              dragging
+                ? utilityClassName("transition-none")
+                : SIDEBAR_SWIPE_ACTION_TRANSITION,
             )}
             data-swipe-action="archive"
             onClick={(e) => {
@@ -419,7 +569,9 @@ export function SidebarItem({
               SIDEBAR_SWIPE_ACTION,
               pinned ? SIDEBAR_SWIPE_ACTION_STAR_ON : SIDEBAR_SWIPE_ACTION_STAR,
               openSide === "star" && SIDEBAR_SWIPE_ACTION_OPEN,
-              dragging ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
+              dragging
+                ? utilityClassName("transition-none")
+                : SIDEBAR_SWIPE_ACTION_TRANSITION,
             )}
             data-swipe-action="star"
             onClick={(e) => {
@@ -444,7 +596,7 @@ export function SidebarItem({
                 // slide. Hover paints over selected/waiting here, as it always
                 // has — as a layer now, so it lifts those states rather than
                 // replacing them (see SIDEBAR_HOVER_LAYER).
-                "z-1 mt-0 block touch-pan-y",
+                utilityClassName("z-1 mt-0 block touch-pan-y"),
                 SIDEBAR_HOVER_LAYER,
                 // The row gives up its right end to the pin plus one trailing
                 // action, the same reserve workspace rows make (SIDEBAR_WS_ROW).
@@ -453,11 +605,13 @@ export function SidebarItem({
                 // `group-hover:` — this element is the group itself.
                 alwaysShowAddToSidebar
                   ? pinned
-                    ? "pr-[38px] hover:pr-[68px] phone:pr-[52px]"
-                    : "pr-[38px] phone:pr-[52px]"
+                    ? utilityClassName(
+                        "pr-[38px] hover:pr-[68px] phone:pr-[52px]",
+                      )
+                    : utilityClassName("pr-[38px] phone:pr-[52px]")
                   : pinned
-                    ? "hover:pr-[68px]"
-                    : "hover:pr-[38px]",
+                    ? utilityClassName("hover:pr-[68px]")
+                    : utilityClassName("hover:pr-[38px]"),
                 // No trim here for other people's sessions, which stack a meta
                 // line under the title. That used to re-state `py-[7px]` against
                 // a 9px base; the base is now the shared `--sidebar-row-pad`, and
@@ -466,15 +620,18 @@ export function SidebarItem({
                 // No fill for "needs you" — the blue mark in the rail and the
                 // bold title carry it, and the row's one background slot stays
                 // with selection (see the workspace row, which matches).
-                selected && "bg-selected",
+                selected && utilityClassName("bg-selected"),
                 dragging
-                  ? "transition-none"
+                  ? utilityClassName("transition-none")
                   : swipeOpen
-                    ? "transition-transform duration-(--dur-micro)"
-                    : "transition-transform duration-(--dur)",
+                    ? utilityClassName(
+                        "transition-transform duration-(--dur-micro)",
+                      )
+                    : utilityClassName("transition-transform duration-(--dur)"),
                 // One compositor layer for the row under the finger, none for
                 // the idle list (dozens of retina-sized layers is a real tax).
-                (dragging || swipeOpen) && "will-change-transform",
+                (dragging || swipeOpen) &&
+                  utilityClassName("will-change-transform"),
               )}
               data-sidebar-row=""
               data-sidebar-item-key={`session:${session.id}`}
@@ -532,25 +689,38 @@ export function SidebarItem({
           {/* The shared rail gap, as every other family takes it: with the
 			    SIDEBAR_RAIL slot in front, that pair is what puts every title on
 			    one rail. */}
-          <div className={cn("flex min-w-0 items-center", SIDEBAR_RAIL_GAP)}>
+          <div
+            className={cn(
+              utilityClassName("flex min-w-0 items-center"),
+              SIDEBAR_RAIL_GAP,
+            )}
+          >
             {/* Questions stay blue. A stopped run is red, so it cannot look as
 				    though it is waiting for a reply. */}
             <span className={SIDEBAR_RAIL}>
               {waitingForInput && (
-                <span className="sr-only">Waiting for your input</span>
+                <span {...stylex.props(sx.srOnly)}>Waiting for your input</span>
               )}
-              {failed && <span className="sr-only">Last run failed</span>}
+              {failed && (
+                <span {...stylex.props(sx.srOnly)}>Last run failed</span>
+              )}
               {waitingForInput ? (
                 <span
-                  className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
+                  className={utilityClassName(
+                    `size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`,
+                  )}
                 />
               ) : failed ? (
                 <span
-                  className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.failed}`}
+                  className={utilityClassName(
+                    `size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.failed}`,
+                  )}
                 />
               ) : session.isRunning ? (
                 <span
-                  className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
+                  className={utilityClassName(
+                    `size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`,
+                  )}
                 />
               ) : (
                 <WsPrStatusMark
@@ -562,7 +732,22 @@ export function SidebarItem({
             </span>
             {editing ? (
               <input
-                className="min-w-0 flex-1 rounded-md border border-accent bg-bg px-[3px] py-0 text-body font-medium text-inherit outline-none desktop:text-item-title phone:text-input-phone"
+                {...stylex.props(
+                  sx.minW0,
+                  sx.flex1,
+                  sx.roundedMd,
+                  sx.border,
+                  sx.borderAccent,
+                  sx.bgBg,
+                  sx.px3px,
+                  sx.py0,
+                  sx.fontMedium,
+                  sx.textInherit,
+                  sx.outlineNone,
+                  sx.desktopTextItemTitle,
+                  sx.phoneTextInputPhone,
+                  typography.body,
+                )}
                 value={draft}
                 autoFocus
                 onChange={(e) => setDraft(e.target.value)}
@@ -601,14 +786,39 @@ export function SidebarItem({
                 // use and wins over it, because "you were asked" is the stronger
                 // signal — and it names who asked, which a dot cannot.
                 <span
-                  className="relative ml-1 flex shrink-0 items-center"
+                  {...stylex.props(
+                    sx.relative,
+                    sx.ml1,
+                    sx.flex,
+                    sx.shrink0,
+                    sx.itemsCenter,
+                  )}
                   title={`${mention} mentioned you`}
                   aria-label={`${mention} mentioned you`}
                 >
-                  <UserAvatar name={mention} size={16} className="shrink-0" />
+                  <UserAvatar
+                    name={mention}
+                    size={16}
+                    className={mergeStylexOverrideClassName("", sx.shrink0)}
+                  />
                   <span
                     aria-hidden="true"
-                    className="absolute -right-1 -bottom-1 flex size-3 items-center justify-center rounded-full bg-accent text-[8px] font-bold leading-none text-on-accent ring-2 ring-panel"
+                    {...mergeStylexProps(
+                      "ring-2 ring-panel",
+                      sx.absolute,
+                      sx.Right1,
+                      sx.Bottom1,
+                      sx.flex,
+                      sx.size3,
+                      sx.itemsCenter,
+                      sx.justifyCenter,
+                      sx.roundedFull,
+                      sx.bgAccent,
+                      sx.text8px,
+                      sx.fontBold,
+                      sx.leadingNone,
+                      sx.textOnAccent,
+                    )}
                   >
                     @
                   </span>
@@ -620,13 +830,15 @@ export function SidebarItem({
             {compactMeta && !editing && metaParts.length > 0 && (
               <span
                 className={cn(
-                  "ml-auto flex min-w-10 shrink-0 items-center justify-end gap-1 pl-2.5 whitespace-nowrap text-meta text-faint phone:text-label group-data-[unread]:text-dim",
+                  utilityClassName(
+                    "ml-auto flex min-w-10 shrink-0 items-center justify-end gap-1 pl-2.5 whitespace-nowrap text-meta text-faint phone:text-label group-data-[unread]:text-dim",
+                  ),
                   !isPhone && "group-hover:opacity-0",
                 )}
               >
                 {metaParts.map((part, i) => (
                   <React.Fragment key={i}>
-                    {i > 0 && <span className="opacity-50">·</span>}
+                    {i > 0 && <span {...stylex.props(sx.opacity50)}>·</span>}
                     {part}
                   </React.Fragment>
                 ))}
@@ -634,7 +846,7 @@ export function SidebarItem({
             )}
             {!editing && hasDraft(`session:${session.id}`) && (
               <span
-                className={cn(SIDEBAR_WS_DRAFT, "ml-1.5")}
+                className={cn(SIDEBAR_WS_DRAFT, utilityClassName("ml-1.5"))}
                 data-ws-draft=""
                 aria-label="Unsent draft. Return to finish it."
               >
@@ -646,10 +858,24 @@ export function SidebarItem({
 			    clears the hover-revealed buttons, so this line needs no reserve of
 			    its own. */}
           {!compactMeta && (
-            <div className="mt-[3px] flex items-center gap-1 overflow-hidden pl-7 whitespace-nowrap text-meta text-faint phone:text-label group-data-[unread]:text-dim">
+            <div
+              {...mergeStylexProps(
+                "group-data-[unread]:text-dim",
+                sx.mt3px,
+                sx.flex,
+                sx.itemsCenter,
+                sx.gap1,
+                sx.overflowHidden,
+                sx.pl7,
+                sx.whitespaceNowrap,
+                sx.textFaint,
+                sx.phoneTextLabel,
+                typography.meta,
+              )}
+            >
               {metaParts.map((part, i) => (
                 <React.Fragment key={i}>
-                  {i > 0 && <span className="opacity-50">·</span>}
+                  {i > 0 && <span {...stylex.props(sx.opacity50)}>·</span>}
                   {part}
                 </React.Fragment>
               ))}
@@ -671,7 +897,9 @@ export function SidebarItem({
                   // between them — the ws rows' `gap-1` cluster, spelled as an
                   // offset because these two are positioned rather than laid out.
                   // It has to be a calc: the chip narrows with the density.
-                  "right-[calc(var(--sidebar-row-action,26px)_+_11px)] data-[on]:bg-pressed data-[on]:text-fg",
+                  utilityClassName(
+                    "right-[calc(var(--sidebar-row-action,26px)_+_11px)] data-[on]:bg-pressed data-[on]:text-fg",
+                  ),
                 )}
                 data-on=""
                 role="button"
@@ -692,7 +920,7 @@ export function SidebarItem({
               shortcut={selected ? (archiveKeys ?? undefined) : undefined}
             >
               <span
-                className={cn(ROW_ACTION, "right-[7px]")}
+                className={cn(ROW_ACTION, utilityClassName("right-[7px]"))}
                 role="button"
                 aria-label="Archive session"
                 onMouseEnter={closeHover}
@@ -721,8 +949,9 @@ export function SidebarItem({
               label="Add to your sidebar"
               className={cn(
                 ROW_ACTION,
-                "right-[7px]",
-                alwaysShowAddToSidebar && "flex phone:right-0 phone:size-11",
+                utilityClassName("right-[7px]"),
+                alwaysShowAddToSidebar &&
+                  utilityClassName("flex phone:right-0 phone:size-11"),
               )}
               onMouseEnter={closeHover}
               onKeep={() => onSetStatus?.("mine")}

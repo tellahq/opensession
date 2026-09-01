@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useState } from "react";
 import { reportRawUrl } from "../lib/api";
 import {
@@ -95,7 +96,10 @@ export function ReportFrame({
       }}
       // Only ever seen for the moment before the document paints, so it
       // takes the app's page colour rather than a report's paper white.
-      className={cn("min-h-0 flex-1 border-0 bg-bg", className)}
+      className={cn(
+        utilityClassName("min-h-0 flex-1 border-0 bg-bg"),
+        className,
+      )}
     />
   );
 }

@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import React from "react";
 import { Reorder } from "motion/react";
 import {
@@ -20,6 +22,22 @@ import {
 import type { PersonalBandPinnedEntry } from "../../lib/sidebar-types";
 import { cn } from "../../ui/cn";
 import { IconChevronDown, IconRobot } from "../icons";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  shrink0: {
+    flexShrink: "0",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+});
 
 interface PersonalBandPinned {
   entries: PersonalBandPinnedEntry[];
@@ -164,14 +182,19 @@ export function PersonalBand({
       {autoCreatedRows > 0 && (
         <button
           className={cn(
-            "mb-1 flex w-full items-center gap-1.5 rounded-row px-4 py-1.5 text-left text-label text-faint",
+            utilityClassName(
+              "mb-1 flex w-full items-center gap-1.5 rounded-row px-4 py-1.5 text-left text-label text-faint",
+            ),
             SIDEBAR_HOVER_LAYER,
-            "hover:text-dim",
+            utilityClassName("hover:text-dim"),
           )}
           onClick={onToggleAutoCreated}
         >
-          <IconRobot size={20} className="shrink-0" />
-          <span className="min-w-0 truncate">
+          <IconRobot
+            size={20}
+            className={mergeStylexOverrideClassName("", sx.shrink0)}
+          />
+          <span {...stylex.props(sx.minW0, sx.truncate)}>
             {autoCreatedHidden ? "Show" : "Hide"} {autoCreatedRows} started by
             an agent
           </span>

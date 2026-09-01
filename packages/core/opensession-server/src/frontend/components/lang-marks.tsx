@@ -1,5 +1,31 @@
 import React from "react";
-import { cn } from "../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexProps } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  overflowVisible: {
+    overflow: "visible",
+  },
+  flex: {
+    display: "flex",
+  },
+  translateYPx: {
+    translate: "0 1px",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  h4: { height: "16px" },
+  minW4: { minWidth: "16px" },
+  flexShrink0: { flexShrink: "0" },
+  px05: { paddingInline: "2px" },
+  fontBold: { fontWeight: "var(--font-weight-bold)" },
+  leadingNone: { lineHeight: "1" },
+});
 
 /**
  * Brand marks for the file-type badge — a different family from the interface
@@ -51,7 +77,7 @@ function Mark({
       height={h * px}
       viewBox={viewBox}
       fill="currentColor"
-      className="overflow-visible"
+      {...stylex.props(sx.overflowVisible)}
       aria-hidden="true"
     >
       {children}
@@ -178,13 +204,28 @@ export function ExtBadge({
   const Glyph = LANG_MARKS[ext];
   return (
     <span
-      className={cn(
-        "flex h-4 min-w-4 flex-shrink-0 items-center justify-center px-0.5 text-meta font-bold leading-none",
+      {...mergeStylexProps(
         className,
+        sx.flex,
+        sx.h4,
+        sx.minW4,
+        sx.flexShrink0,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.px05,
+        sx.fontBold,
+        sx.leadingNone,
       )}
       style={{ color: `color-mix(in oklab, ${color} 75%, var(--text))` }}
     >
-      <span className="flex translate-y-px items-center justify-center">
+      <span
+        {...stylex.props(
+          sx.flex,
+          sx.translateYPx,
+          sx.itemsCenter,
+          sx.justifyCenter,
+        )}
+      >
         {Glyph ? <Glyph size={size} /> : extLabel(ext)}
       </span>
     </span>

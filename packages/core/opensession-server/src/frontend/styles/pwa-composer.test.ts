@@ -35,7 +35,9 @@ test("team note mode stays compact at rest and names itself when expanded", asyn
     "noteMode",
   );
   expect(composer).toContain("{noteMode && !minimized && (");
-  expect(composer).toContain('noteMode && "before:opacity-100"');
+  expect(composer).toContain(
+    'noteMode && utilityClassName("before:opacity-100")',
+  );
 });
 
 test("the installed phone composer restores model selection when expanded", async () => {

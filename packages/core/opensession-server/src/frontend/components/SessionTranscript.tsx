@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import React, { useLayoutEffect, useSyncExternalStore } from "react";
 import { renderMarkdown } from "../lib/markdown";
 import type { LiveTurnStore } from "../lib/live-turn-store";
@@ -73,7 +74,10 @@ function StreamingMessage({
   const reasoningHeading = liveReasoningHeading(snapshot.text);
   if (reasoningHeading) {
     return (
-      <div className={cn(msgRow, msgStreamingRow, "mb-2")} role="status">
+      <div
+        className={cn(msgRow, msgStreamingRow, utilityClassName("mb-2"))}
+        role="status"
+      >
         <TextShimmer className={cn(msgReasoningTitle, msgReasoningShimmer)}>
           {reasoningHeading}
         </TextShimmer>

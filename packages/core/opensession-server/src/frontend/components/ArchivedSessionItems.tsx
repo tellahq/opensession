@@ -1,8 +1,65 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
 import { relativeTime } from "../lib/api";
 import { isAutomationSession } from "../lib/landing-session";
 import type { UnifiedSession } from "../lib/types";
 import { Menu } from "../ui/menu";
 import { IconRestore, IconRobot } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  flex: {
+    display: "flex",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  p05: {
+    padding: "calc(4px * 0.5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+});
 
 interface Props {
   /** Closed sessions of one workspace, newest activity first. */
@@ -31,17 +88,34 @@ export function ArchivedSessionItems({ sessions, onSelect, onRestore }: Props) {
           {(isAutomationSession(s) || !!s.parentSessionId) && (
             <IconRobot
               size={14}
-              className="shrink-0 text-faint"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.shrink0,
+                sx.textFaint,
+              )}
               aria-label="Agent run"
             />
           )}
-          <span className="min-w-0 flex-1 truncate">{s.title}</span>
-          <span className="shrink-0 text-meta text-faint">
+          <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+            {s.title}
+          </span>
+          <span {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>
             {relativeTime(s.lastActivity)}
           </span>
           <button
             type="button"
-            className="flex shrink-0 cursor-pointer items-center rounded-control border-0 bg-transparent p-0.5 text-dim hover:text-fg"
+            {...stylex.props(
+              sx.flex,
+              sx.shrink0,
+              sx.cursorPointer,
+              sx.itemsCenter,
+              sx.roundedControl,
+              sx.border0,
+              sx.bgTransparent,
+              sx.p05,
+              sx.textDim,
+              sx.hoverTextFg,
+            )}
             aria-label="Restore session"
             title="Restore to tabs"
             onClick={(e) => {

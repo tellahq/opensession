@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { useSessionPrResource } from "../hooks/useApiResources";
 import type { PrCheck, UnifiedSession } from "../lib/types";
@@ -13,6 +15,85 @@ import { ContextMenu, MENU_ICON } from "../ui/menu";
 import { IconArrowUpRight, IconCheck, IconCopy, IconGlobe } from "./icons";
 import { checkClass, isDeployment } from "../lib/pr-status-derive";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  animateStagingShimmer14sEaseInOutInfinite: {
+    animation: "staging-shimmer 1.4s ease-in-out infinite",
+  },
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  noUnderline: {
+    textDecorationLine: "none",
+  },
+  grow: {
+    flexGrow: "1",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  MlPx: {
+    marginLeft: "-1px",
+  },
+  opacity80: {
+    opacity: "80%",
+  },
+});
 
 // The open-preview chord's handler lives in SessionViewer: this component
 // mounts once per layout variant, so a listener here would register several
@@ -63,18 +144,24 @@ const ICON_PENDING = "cursor-default text-dim";
    than reading as a disabled grey control. Its own ink supplies the hover and
    press washes, which makes the band darken under the pointer. */
 const SUMMARY_MARK =
-  "grid size-7 shrink-0 place-items-center rounded-md no-underline focus-ring " +
-  "transition-[background-color,scale] duration-150 ease-out";
+  utilityClassName(
+    "grid size-7 shrink-0 place-items-center rounded-md no-underline focus-ring ",
+  ) +
+  utilityClassName("transition-[background-color,scale] duration-150 ease-out");
 /** Pointer and press. The press step also takes a hair of scale, which is what
  *  makes a 28px target feel like it answered. */
 const SUMMARY_MARK_HOVER =
-  "hover:bg-[color-mix(in_srgb,currentColor_26%,transparent)] " +
-  "active:scale-[0.96] active:bg-[color-mix(in_srgb,currentColor_34%,transparent)]";
+  utilityClassName(
+    "hover:bg-[color-mix(in_srgb,currentColor_26%,transparent)] ",
+  ) +
+  utilityClassName(
+    "active:scale-[0.96] active:bg-[color-mix(in_srgb,currentColor_34%,transparent)]",
+  );
 /* The mark's 20px glyph sits inside a 28px target, so its visible edge already
    sits 4px inside the box. Push the box 2px off the following action to land a
    12px gap between the globe and Merge: the two are a pair, not one control,
    and at the row's bare 6px they read as a split button. */
-const SUMMARY_MARK_PAIR = "mr-0.5";
+const SUMMARY_MARK_PAIR = utilityClassName("mr-0.5");
 
 /* Spinning ring around the globe while the preview environment builds.
    border-t-current picks up the amber/green icon tone; the ring sits just
@@ -165,7 +252,13 @@ export function StagingLink({
     if (!deployPending) return null;
     const shimmerGlobe = (size: number) => (
       <span
-        className="relative inline-flex items-center justify-center animate-[staging-shimmer_1.4s_ease-in-out_infinite]"
+        {...stylex.props(
+          sx.relative,
+          sx.inlineFlex,
+          sx.itemsCenter,
+          sx.justifyCenter,
+          sx.animateStagingShimmer14sEaseInOutInfinite,
+        )}
         aria-hidden="true"
       >
         <IconGlobe size={size} />
@@ -192,13 +285,35 @@ export function StagingLink({
     if (variant === "action") {
       return (
         <span
-          className="flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left text-supporting font-semibold text-faint"
+          {...stylex.props(
+            sx.flex,
+            sx.minW0,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.roundedMd,
+            sx.px25,
+            sx.py2,
+            sx.textLeft,
+            sx.fontSemibold,
+            sx.textFaint,
+            typography.supporting,
+          )}
           title="Preview environment starting… the link appears once it's up"
         >
-          <span className="inline-flex size-5 shrink-0 items-center justify-center">
+          <span
+            {...stylex.props(
+              sx.inlineFlex,
+              sx.size5,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.justifyCenter,
+            )}
+          >
             {shimmerGlobe(17)}
           </span>
-          <span className="min-w-0 flex-1 truncate">Preview environment</span>
+          <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+            Preview environment
+          </span>
         </span>
       );
     }
@@ -219,7 +334,7 @@ export function StagingLink({
               SUMMARY_MARK,
               SUMMARY_MARK_PAIR,
               WS_SUMMARY_ICON,
-              "cursor-default",
+              utilityClassName("cursor-default"),
             )}
             aria-label="Preview environment starting"
           >
@@ -283,7 +398,14 @@ export function StagingLink({
     copied ? (
       <CopyCheck copied size={size} idle={restingIcon(size)} />
     ) : (
-      <span className="relative inline-flex items-center justify-center">
+      <span
+        {...stylex.props(
+          sx.relative,
+          sx.inlineFlex,
+          sx.itemsCenter,
+          sx.justifyCenter,
+        )}
+      >
         {spinning && (
           <span
             className={`${RING_BASE} ${RING_MOTION} ${ring}`}
@@ -324,7 +446,9 @@ export function StagingLink({
       {/* An inline-flex box, not `contents`: the popup positions from the
 			    cursor but Base UI still measures the trigger, and a box-less element
 			    measures as a zero rect at the origin. */}
-      <ContextMenu.Trigger render={<span className="inline-flex shrink-0" />}>
+      <ContextMenu.Trigger
+        render={<span {...stylex.props(sx.inlineFlex, sx.shrink0)} />}
+      >
         {trigger}
       </ContextMenu.Trigger>
       <ContextMenu.Popup>
@@ -334,22 +458,27 @@ export function StagingLink({
               href={href}
               target="_blank"
               rel="noopener"
-              className="no-underline"
+              {...stylex.props(sx.noUnderline)}
             />
           }
         >
           <IconArrowUpRight size={20} className={MENU_ICON} />
-          <span className="grow">Open preview</span>
+          <span {...stylex.props(sx.grow)}>Open preview</span>
         </ContextMenu.Item>
         {/* Keeps the popup open so the checkmark lands where it was clicked,
 				    matching the PR menu's copy rows. */}
         <ContextMenu.Item closeOnClick={false} onClick={() => copy(href)}>
           {copied ? (
-            <IconCheck size={20} className="text-green" />
+            <IconCheck
+              size={20}
+              className={mergeStylexOverrideClassName("", sx.textGreen)}
+            />
           ) : (
             <IconCopy size={20} className={MENU_ICON} />
           )}
-          <span className="grow">{copied ? "Copied" : "Copy link"}</span>
+          <span {...stylex.props(sx.grow)}>
+            {copied ? "Copied" : "Copy link"}
+          </span>
         </ContextMenu.Item>
       </ContextMenu.Popup>
     </ContextMenu.Root>
@@ -388,14 +517,27 @@ export function StagingLink({
         rel="noopener"
         onClick={onClick}
         aria-disabled={building || undefined}
-        className={`flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left text-supporting font-semibold no-underline outline-none transition-colors hover:bg-hover focus-visible:bg-hover ${building ? "cursor-default text-faint" : "text-fg"}`}
+        className={utilityClassName(
+          `flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left text-supporting font-semibold no-underline outline-none transition-colors hover:bg-hover focus-visible:bg-hover ${building ? "cursor-default text-faint" : "text-fg"}`,
+        )}
         /* A phone grid cell: no right-click, so no copy to advertise. */
         title={`${tooltip("")} · ${href}`}
       >
-        <span className="inline-flex size-5 shrink-0 items-center justify-center text-faint">
+        <span
+          {...stylex.props(
+            sx.inlineFlex,
+            sx.size5,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.textFaint,
+          )}
+        >
           {globe(17, RING_LG)}
         </span>
-        <span className="min-w-0 flex-1 truncate">Preview environment</span>
+        <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+          Preview environment
+        </span>
       </a>
     );
   }
@@ -427,8 +569,10 @@ export function StagingLink({
             // the same control moved into the card: green once the preview is
             // up and testable, amber while a deploy is in flight. "Up" is the
             // state you act on here, so it is not the state that goes quiet.
-            spinning ? "text-yellow" : "text-green",
-            building ? "cursor-default" : SUMMARY_MARK_HOVER,
+            spinning
+              ? utilityClassName("text-yellow")
+              : utilityClassName("text-green"),
+            building ? utilityClassName("cursor-default") : SUMMARY_MARK_HOVER,
           )}
         >
           {globe(20, RING_LG)}
@@ -449,7 +593,10 @@ export function StagingLink({
     >
       {globe(15, RING_SM)}
       Preview environment
-      <IconArrowUpRight size={15} className="-ml-px opacity-80" />
+      <IconArrowUpRight
+        size={15}
+        className={mergeStylexOverrideClassName("", sx.MlPx, sx.opacity80)}
+      />
     </a>,
   );
 }

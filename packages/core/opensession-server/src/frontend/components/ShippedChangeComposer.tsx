@@ -1,3 +1,4 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   fetchShippedChangeChannels,
@@ -14,6 +15,328 @@ import { BrandMark } from "./BrandMark";
 import { openLightbox } from "../lib/media-lightbox";
 import { IconPlus, IconUndo, IconX } from "./icons";
 import { Spinner } from "../ui/spinner";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  mxAuto: {
+    marginInline: "auto",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  mb6: {
+    marginBottom: "calc(4px * 6)",
+  },
+  flex: {
+    display: "flex",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxWVarSessionCol: {
+    maxWidth: "var(--session-col)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  leading5: {
+    lineHeight: "calc(4px * 5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  underline: {
+    textDecorationLine: "underline",
+  },
+  decorationLine: {
+    textDecorationColor: "var(--border)",
+  },
+  underlineOffset2: {
+    textUnderlineOffset: "2px",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  hoverDecorationCurrent: {
+    "@media (hover: hover)": {
+      ":hover": {
+        textDecorationColor: "currentcolor",
+      },
+    },
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  phoneSize10: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 10)",
+      height: "calc(4px * 10)",
+    },
+  },
+  phoneMinH10: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 10)",
+    },
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  roundedVarComposerRadius: {
+    borderRadius: "var(--composer-radius)",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderColorVarComposerBorder: {
+    borderColor: "var(--composer-border)",
+  },
+  bgVarComposerSurface: {
+    backgroundColor: "var(--composer-surface)",
+  },
+  px35: {
+    paddingInline: "calc(4px * 3.5)",
+  },
+  pt35: {
+    paddingTop: "calc(4px * 3.5)",
+  },
+  pb25: {
+    paddingBottom: "calc(4px * 2.5)",
+  },
+  transitionBorderColorBoxShadow: {
+    transitionProperty: "border-color,box-shadow",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  focusWithinBorderAccent: {
+    ":focus-within": {
+      borderColor: "var(--accent)",
+    },
+  },
+  desktopBorderTransparent: {
+    "@media (min-width: 721px)": {
+      borderColor: "transparent",
+    },
+  },
+  desktopSmoothRingColorVarComposerBorder: {
+    "@media (min-width: 721px)": {},
+  },
+  desktopSmoothShadowRingSoft: {
+    "@media (min-width: 721px)": {
+      boxShadow:
+        "0 3px 10px -3px color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent), 0 20px 56px -16px color-mix(in srgb, var(--smooth-shadow-color) 12%, transparent), 0 0 0 var(--smooth-ring-width, 1px) color-mix(in srgb, var(--smooth-ring-color) 35%, transparent)",
+    },
+  },
+  phonePx3: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 3)",
+    },
+  },
+  phonePt3: {
+    "@media (max-width: 720px)": {
+      paddingTop: "calc(4px * 3)",
+    },
+  },
+  phonePb2: {
+    "@media (max-width: 720px)": {
+      paddingBottom: "calc(4px * 2)",
+    },
+  },
+  block: {
+    display: "block",
+  },
+  minH14: {
+    minHeight: "calc(4px * 14)",
+  },
+  maxH32: {
+    maxHeight: "calc(4px * 32)",
+  },
+  resizeNone: {
+    resize: "none",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  p0: {
+    padding: "0",
+  },
+  leading155: {
+    lineHeight: "1.55",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  FieldSizingContent: {
+    fieldSizing: "content",
+  },
+  placeholderTextFaint: {
+    "::placeholder": {
+      color: "var(--text-faint)",
+    },
+  },
+  phoneTextInputPhone: {
+    "@media (max-width: 720px)": {
+      fontSize: "var(--type-input-phone)",
+    },
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  pt2: {
+    paddingTop: "calc(4px * 2)",
+  },
+  pr2: {
+    paddingRight: "calc(4px * 2)",
+  },
+  pb05: {
+    paddingBottom: "calc(4px * 0.5)",
+  },
+  ScrollbarWidthNone: {
+    scrollbarWidth: "none",
+  },
+  relative: {
+    position: "relative",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  h16: {
+    height: "calc(4px * 16)",
+  },
+  w24: {
+    width: "calc(4px * 24)",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  objectCover: {
+    objectFit: "cover",
+  },
+  objectTop: {
+    objectPosition: "top",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  mt25: {
+    marginTop: "calc(4px * 2.5)",
+  },
+  phoneMt2: {
+    "@media (max-width: 720px)": {
+      marginTop: "calc(4px * 2)",
+    },
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  size8: {
+    width: "calc(4px * 8)",
+    height: "calc(4px * 8)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  transitionBackgroundColorColorScale: {
+    transitionProperty: "background-color,color,scale",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  activeScale096: {
+    ":active": {
+      scale: "0.96",
+    },
+  },
+  disabledOpacity40: {
+    ":disabled": {
+      opacity: "40%",
+    },
+  },
+  flex1: {
+    flex: "1",
+  },
+  w28: {
+    width: "calc(4px * 28)",
+  },
+  phoneW32: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 32)",
+    },
+  },
+});
 
 const MAX_SLACK_IMAGE_BYTES = 20 * 1024 * 1024;
 
@@ -37,18 +360,46 @@ export function SlackSentNotice({
 }) {
   const [undoing, setUndoing] = useState(false);
   return (
-    <div className="mx-auto mt-2 mb-6 flex w-full max-w-[var(--session-col)] items-center gap-1.5 px-1 text-label leading-5 text-dim">
+    <div
+      {...stylex.props(
+        sx.mxAuto,
+        sx.mt2,
+        sx.mb6,
+        sx.flex,
+        sx.wFull,
+        sx.maxWVarSessionCol,
+        sx.itemsCenter,
+        sx.gap15,
+        sx.px1,
+        sx.leading5,
+        sx.textDim,
+        typography.label,
+      )}
+    >
       <BrandMark name="slack" size={12} />
       <span>
-        Sent to <span className="font-semibold text-fg">#{channelName}</span>
+        Sent to{" "}
+        <span {...stylex.props(sx.fontSemibold, sx.textFg)}>
+          #{channelName}
+        </span>
       </span>
       {permalink && (
         <>
-          <span aria-hidden className="text-faint">
+          <span aria-hidden {...stylex.props(sx.textFaint)}>
             ·
           </span>
           <a
-            className="focus-ring rounded-sm text-dim underline decoration-line underline-offset-2 transition-colors hover:text-fg hover:decoration-current"
+            {...mergeStylexProps(
+              "focus-ring",
+              sx.roundedSm,
+              sx.textDim,
+              sx.underline,
+              sx.decorationLine,
+              sx.underlineOffset2,
+              sx.transitionColors,
+              sx.hoverTextFg,
+              sx.hoverDecorationCurrent,
+            )}
             href={permalink}
             target="_blank"
             rel="noreferrer"
@@ -57,13 +408,13 @@ export function SlackSentNotice({
           </a>
         </>
       )}
-      <div className="ml-auto flex items-center gap-0.5">
+      <div {...stylex.props(sx.mlAuto, sx.flex, sx.itemsCenter, sx.gap05)}>
         {onUndo && (
           <Tooltip label="Undo" side="bottom">
             <Button
               variant="ghost"
               size="sm"
-              className="phone:size-10"
+              className={mergeStylexOverrideClassName("", sx.phoneSize10)}
               icon={undoing ? <Spinner size="sm" /> : <IconUndo size={16} />}
               aria-label="Undo"
               disabled={undoing}
@@ -81,7 +432,7 @@ export function SlackSentNotice({
         <Button
           variant="ghost"
           size="sm"
-          className="phone:min-h-10"
+          className={mergeStylexOverrideClassName("", sx.phoneMinH10)}
           onClick={onSendAnother}
         >
           Send another
@@ -338,16 +689,39 @@ export function ShippedChangeComposer({
   }
 
   return (
-    <div className="mx-auto mt-2 mb-6 w-full max-w-[var(--session-col)]">
-      <div className="mb-2 flex items-center gap-1.5 px-1 text-label leading-5 text-dim">
+    <div
+      {...stylex.props(
+        sx.mxAuto,
+        sx.mt2,
+        sx.mb6,
+        sx.wFull,
+        sx.maxWVarSessionCol,
+      )}
+    >
+      <div
+        {...stylex.props(
+          sx.mb2,
+          sx.flex,
+          sx.itemsCenter,
+          sx.gap15,
+          sx.px1,
+          sx.leading5,
+          sx.textDim,
+          typography.label,
+        )}
+      >
         <BrandMark name="slack" size={12} />
-        <span className="font-semibold">Send to Slack</span>
+        <span {...stylex.props(sx.fontSemibold)}>Send to Slack</span>
         {onCancel && (
           <Tooltip label="Close" side="bottom">
             <Button
               variant="ghost"
               size="md"
-              className="ml-auto phone:size-10"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.mlAuto,
+                sx.phoneSize10,
+              )}
               icon={<IconX size={18} />}
               aria-label="Close"
               disabled={status !== "idle"}
@@ -358,7 +732,24 @@ export function ShippedChangeComposer({
       </div>
       {/* `pwa-composer-edge` keeps this card aligned with the shared composer. */}
       <div
-        className="pwa-composer-edge rounded-[var(--composer-radius)] border border-[color:var(--composer-border)] bg-[var(--composer-surface)] px-3.5 pt-3.5 pb-2.5 shadow-[var(--composer-shadow)] transition-[border-color,box-shadow] focus-within:border-accent desktop:border-transparent desktop:[--smooth-ring-color:var(--composer-border)] desktop:smooth-shadow-ring-soft phone:px-3 phone:pt-3 phone:pb-2"
+        {...mergeStylexProps(
+          "pwa-composer-edge shadow-[var(--composer-shadow)]",
+          sx.roundedVarComposerRadius,
+          sx.border,
+          sx.borderColorVarComposerBorder,
+          sx.bgVarComposerSurface,
+          sx.px35,
+          sx.pt35,
+          sx.pb25,
+          sx.transitionBorderColorBoxShadow,
+          sx.focusWithinBorderAccent,
+          sx.desktopBorderTransparent,
+          sx.desktopSmoothRingColorVarComposerBorder,
+          sx.desktopSmoothShadowRingSoft,
+          sx.phonePx3,
+          sx.phonePt3,
+          sx.phonePb2,
+        )}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
@@ -367,7 +758,23 @@ export function ShippedChangeComposer({
         }}
       >
         <textarea
-          className="block min-h-14 max-h-32 w-full resize-none border-0 bg-transparent p-0 text-body leading-[1.55] text-fg outline-none [field-sizing:content] placeholder:text-faint phone:text-input-phone"
+          {...stylex.props(
+            sx.block,
+            sx.minH14,
+            sx.maxH32,
+            sx.wFull,
+            sx.resizeNone,
+            sx.border0,
+            sx.bgTransparent,
+            sx.p0,
+            sx.leading155,
+            sx.textFg,
+            sx.outlineNone,
+            sx.FieldSizingContent,
+            sx.placeholderTextFaint,
+            sx.phoneTextInputPhone,
+            typography.body,
+          )}
           aria-label="Slack message"
           {...noAutofill}
           value={message}
@@ -386,16 +793,37 @@ export function ShippedChangeComposer({
           }}
         />
         {screenshots.length > 0 && (
-          <div className="mt-0.5 flex gap-2 overflow-x-auto pt-2 pr-2 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div
+            {...mergeStylexProps(
+              "[&::-webkit-scrollbar]:hidden",
+              sx.mt05,
+              sx.flex,
+              sx.gap2,
+              sx.overflowXAuto,
+              sx.pt2,
+              sx.pr2,
+              sx.pb05,
+              sx.ScrollbarWidthNone,
+            )}
+          >
             {screenshots.map((path, index) => (
               <div
                 key={path}
-                className="group/overlay-action relative shrink-0"
+                {...mergeStylexProps(
+                  "group/overlay-action",
+                  sx.relative,
+                  sx.shrink0,
+                )}
               >
                 <button
                   type="button"
                   aria-label="Open screenshot preview"
-                  className="focus-ring block overflow-hidden rounded-md"
+                  {...mergeStylexProps(
+                    "focus-ring",
+                    sx.block,
+                    sx.overflowHidden,
+                    sx.roundedMd,
+                  )}
                   onClick={(event) =>
                     openLightbox(
                       screenshots.map((item) => ({
@@ -408,7 +836,15 @@ export function ShippedChangeComposer({
                   }
                 >
                   <img
-                    className="h-16 w-24 rounded-md border border-line-strong object-cover object-top"
+                    {...stylex.props(
+                      sx.h16,
+                      sx.w24,
+                      sx.roundedMd,
+                      sx.border,
+                      sx.borderLineStrong,
+                      sx.objectCover,
+                      sx.objectTop,
+                    )}
                     src={mediaUrl(path)}
                     alt=""
                   />
@@ -416,7 +852,12 @@ export function ShippedChangeComposer({
                 <OverlayAction
                   aria-label="Remove screenshot"
                   disabled={status !== "idle"}
-                  icon={<IconX className="text-red" size={16} />}
+                  icon={
+                    <IconX
+                      className={mergeStylexOverrideClassName("", sx.textRed)}
+                      size={16}
+                    />
+                  }
                   onClick={() => {
                     draftDirtyRef.current = true;
                     setScreenshots((current) =>
@@ -428,10 +869,18 @@ export function ShippedChangeComposer({
             ))}
           </div>
         )}
-        <div className="mt-2.5 flex items-center gap-1.5 phone:mt-2">
+        <div
+          {...stylex.props(
+            sx.mt25,
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap15,
+            sx.phoneMt2,
+          )}
+        >
           <input
             ref={fileInputRef}
-            className="sr-only"
+            {...stylex.props(sx.srOnly)}
             type="file"
             accept="image/*"
             multiple
@@ -444,7 +893,22 @@ export function ShippedChangeComposer({
             type="button"
             aria-label="Add images"
             title="Add images"
-            className="focus-ring inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim transition-[background-color,color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] disabled:opacity-40 phone:size-10"
+            {...mergeStylexProps(
+              "focus-ring",
+              sx.inlineFlex,
+              sx.size8,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.roundedControl,
+              sx.textDim,
+              sx.transitionBackgroundColorColorScale,
+              sx.hoverBgHover,
+              sx.hoverTextFg,
+              sx.activeScale096,
+              sx.disabledOpacity40,
+              sx.phoneSize10,
+            )}
             disabled={
               status !== "idle" || uploading || screenshots.length >= 10
             }
@@ -452,14 +916,14 @@ export function ShippedChangeComposer({
           >
             {uploading ? <Spinner size="md" /> : <IconPlus size={20} />}
           </button>
-          <div className="flex-1" />
+          <div {...stylex.props(sx.flex1)} />
           {/* The app's own select. This was the native one with
 					    `appearance-none`, a hand-placed chevron and a wrapper to
 					    position it, which is the primitive rebuilt by hand around a
 					    control it exists to replace. */}
           <OptionSelect
             label="Slack channel"
-            className="w-28 phone:w-32"
+            className={mergeStylexOverrideClassName("", sx.w28, sx.phoneW32)}
             value={channel}
             options={
               channels.length === 0

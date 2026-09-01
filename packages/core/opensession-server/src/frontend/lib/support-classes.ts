@@ -1,3 +1,62 @@
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexClassName } from "../ui/cn";
+
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  hVarDesktopHeaderH: {
+    height: "var(--desktop-header-h)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "8px",
+  },
+  borderB: {
+    borderBottomStyle: "var(--tw-border-style)",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px4: {
+    paddingInline: "16px",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  top3: {
+    top: "12px",
+  },
+  left12: {
+    left: "50%",
+  },
+  z5: {
+    zIndex: "5",
+  },
+  maxWCalc10032px: {
+    maxWidth: "calc(100% - 32px)",
+  },
+  TranslateX12: {
+    "--tw-translate-x": "calc(calc(1 / 2 * 100%) * -1)",
+    translate: "var(--tw-translate-x) var(--tw-translate-y)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap15: {
+    gap: "6px",
+  },
+});
+
 /**
  * The bar across the top of each Support inbox column.
  *
@@ -14,8 +73,16 @@
  * handed one.
  */
 export const SUPPORT_COLUMN_BAR =
-  "wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center gap-2 " +
-  "border-b border-divider px-4";
+  mergeStylexClassName(
+    "wco-chrome",
+    sx.flex,
+    sx.hVarDesktopHeaderH,
+    sx.shrink0,
+    sx.itemsCenter,
+    sx.gap2,
+  ) +
+  " " +
+  mergeStylexClassName("", sx.borderB, sx.borderDivider, sx.px4);
 
 /**
  * Where the ticket's agent affordance floats: the offer to triage it, or the
@@ -34,5 +101,21 @@ export const SUPPORT_COLUMN_BAR =
  * its own top padding, so nothing sits under the pill at rest.
  */
 export const SUPPORT_TOP_RAIL =
-  "pointer-events-none absolute top-3 left-1/2 z-[5] flex max-w-[calc(100%-32px)] " +
-  "-translate-x-1/2 flex-col items-center gap-1.5";
+  mergeStylexClassName(
+    "",
+    sx.pointerEventsNone,
+    sx.absolute,
+    sx.top3,
+    sx.left12,
+    sx.z5,
+    sx.flex,
+    sx.maxWCalc10032px,
+  ) +
+  " " +
+  mergeStylexClassName(
+    "",
+    sx.TranslateX12,
+    sx.flexCol,
+    sx.itemsCenter,
+    sx.gap15,
+  );

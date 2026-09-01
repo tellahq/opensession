@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import { AGENT_NAME } from "../lib/brand";
 import { randomUUID } from "../lib/random-uuid";
@@ -120,6 +122,463 @@ import {
   deferredMergeKey,
   scheduleDeferredMerge,
 } from "../lib/deferred-merge";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flexNone: {
+    flex: "none",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  maxW180px: {
+    maxWidth: "180px",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  phoneMinH9: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 9)",
+    },
+  },
+  phoneMaxW104px: {
+    "@media (max-width: 720px)": {
+      maxWidth: "104px",
+    },
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  w280px: {
+    width: "280px",
+  },
+  p15: {
+    padding: "calc(4px * 1.5)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  flex1: {
+    flex: "1",
+  },
+  block: {
+    display: "block",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  borderDividerSoft: {
+    borderColor: "var(--divider-soft)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  pt15: {
+    paddingTop: "calc(4px * 1.5)",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxW760px: {
+    maxWidth: "760px",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  pt4: {
+    paddingTop: "calc(4px * 4)",
+  },
+  smPx5: {
+    "@media (min-width: 40rem)": {
+      paddingInline: "calc(4px * 5)",
+    },
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  desktopMr15: {
+    "@media (min-width: 721px)": {
+      marginRight: "calc(4px * -1.5)",
+    },
+  },
+  w340px: {
+    width: "340px",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  mx2: {
+    marginInline: "calc(4px * 2)",
+  },
+  my15: {
+    marginBlock: "calc(4px * 1.5)",
+  },
+  hPx: {
+    height: "1px",
+  },
+  bgLine: {
+    backgroundColor: "var(--border)",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  phoneGap2: {
+    "@media (max-width: 720px)": {
+      gap: "calc(4px * 2)",
+    },
+  },
+  h11: {
+    height: "calc(4px * 11)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  overflowYHidden: {
+    overflowY: "hidden",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  ScrollbarWidthNone: {
+    scrollbarWidth: "none",
+  },
+  desktopHidden: {
+    "@media (min-width: 721px)": {
+      display: "none",
+    },
+  },
+  selfStretch: {
+    alignSelf: "stretch",
+  },
+  h10: {
+    height: "calc(4px * 10)",
+  },
+  phonePx3: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 3)",
+    },
+  },
+  gap7px: {
+    gap: "7px",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  leading12: {
+    lineHeight: "1.2",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  noUnderline: {
+    textDecorationLine: "none",
+  },
+  hoverTextLink: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--link)",
+      },
+    },
+  },
+  Mr15: {
+    marginRight: "calc(4px * -1.5)",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  pb3: {
+    paddingBottom: "calc(4px * 3)",
+  },
+  pt5: {
+    paddingTop: "calc(4px * 5)",
+  },
+  phonePt2: {
+    "@media (max-width: 720px)": {
+      paddingTop: "calc(4px * 2)",
+    },
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  size10: {
+    width: "calc(4px * 10)",
+    height: "calc(4px * 10)",
+  },
+  phoneSize11: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 11)",
+      height: "calc(4px * 11)",
+    },
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  pb5: {
+    paddingBottom: "calc(4px * 5)",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  bottom4: {
+    bottom: "calc(4px * 4)",
+  },
+  left4: {
+    left: "calc(4px * 4)",
+  },
+  right4: {
+    right: "calc(4px * 4)",
+  },
+  z10: {
+    zIndex: "10",
+  },
+  minH54px: {
+    minHeight: "54px",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  bgPanel95: {
+    backgroundColor: "color-mix(in oklab, var(--bg-panel) 95%, transparent)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  smoothShadowSoft: {
+    boxShadow:
+      "0 3px 10px -3px color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent), 0 20px 56px -16px color-mix(in srgb, var(--smooth-shadow-color) 12%, transparent)",
+  },
+  phoneFlexCol: {
+    "@media (max-width: 720px)": {
+      flexDirection: "column",
+    },
+  },
+  phoneItemsStretch: {
+    "@media (max-width: 720px)": {
+      alignItems: "stretch",
+    },
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  pointerEventsAuto: {
+    pointerEvents: "auto",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  bottomMax1remEnvSafeAreaInsetBottom: {
+    bottom: "max(1rem, env(safe-area-inset-bottom))",
+  },
+  leftAuto: {
+    left: "auto",
+  },
+  topAuto: {
+    top: "auto",
+  },
+  translateX0: {
+    translate: "0 0",
+  },
+  translateY0: {
+    translate: "0 0",
+  },
+  originBottomRight: {
+    transformOrigin: "100% 100%",
+  },
+  phoneLeft12: {
+    "@media (max-width: 720px)": {
+      left: "calc(1 / 2 * 100%)",
+    },
+  },
+  phoneRightAuto: {
+    "@media (max-width: 720px)": {
+      right: "auto",
+    },
+  },
+  phoneTranslateX12: {
+    "@media (max-width: 720px)": {
+      translate: "calc(calc(1 / 2 * 100%) * -1) 0",
+    },
+  },
+  phoneOriginBottom: {
+    "@media (max-width: 720px)": {
+      transformOrigin: "bottom",
+    },
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  roundedRow: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  transitionBackgroundColorBorderColor: {
+    transitionProperty: "background-color,border-color",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  mtPx: {
+    marginTop: "1px",
+  },
+  size4: {
+    width: "calc(4px * 4)",
+    height: "calc(4px * 4)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  size15: {
+    width: "calc(4px * 1.5)",
+    height: "calc(4px * 1.5)",
+  },
+  bgOnAccent: {
+    backgroundColor: "var(--on-accent)",
+  },
+  opacity0: {
+    opacity: "0%",
+  },
+  h20: {
+    height: "calc(4px * 20)",
+  },
+  resizeNone: {
+    resize: "none",
+  },
+  px05: {
+    paddingInline: "calc(4px * 0.5)",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  bgRedSoft: {
+    backgroundColor: "var(--red-soft)",
+  },
+});
 
 type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 
@@ -934,7 +1393,11 @@ export function PrPanel({
         <Button
           variant="ghost"
           size="md"
-          className="flex-none rounded-control"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.flexNone,
+            sx.roundedControl,
+          )}
           aria-label={sessionActionLabel}
           icon={<IconPlus size={22} />}
           onClick={() => setSessionsOpen(true)}
@@ -1018,13 +1481,21 @@ export function PrPanel({
             <Button
               variant="ghost"
               size="sm"
-              className="min-w-0 max-w-[180px] px-2 text-label phone:min-h-9 phone:max-w-[104px]"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.minW0,
+                sx.maxW180px,
+                sx.px2,
+                sx.phoneMinH9,
+                sx.phoneMaxW104px,
+                typography.label,
+              )}
               aria-label={`Switch review target. Current: ${active?.label || "repository"}`}
               caret
             >
-              <span className="truncate">{active?.label}</span>
+              <span {...stylex.props(sx.truncate)}>{active?.label}</span>
               {!headerCompact && (
-                <span className="shrink-0 text-faint">
+                <span {...stylex.props(sx.shrink0, sx.textFaint)}>
                   +{targets.length - 1}
                 </span>
               )}
@@ -1036,12 +1507,20 @@ export function PrPanel({
         side="bottom"
         align="start"
         initialFocus
-        className="w-[280px] p-1.5"
+        className={mergeStylexOverrideClassName("", sx.w280px, sx.p15)}
       >
-        <div className="px-2 py-1.5 text-meta font-medium text-faint">
+        <div
+          {...stylex.props(
+            sx.px2,
+            sx.py15,
+            sx.fontMedium,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
           Review target
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div {...stylex.props(sx.flex, sx.flexCol, sx.gap05)}>
           {targets.map((target) => {
             const selected = target.key === active?.key;
             const detail = target.linked
@@ -1055,31 +1534,70 @@ export function PrPanel({
               <button
                 key={target.key}
                 type="button"
-                className={`flex min-h-10 w-full items-center gap-2 rounded-md border-0 px-2 text-left hover:bg-hover phone:min-h-11 ${selected ? "bg-active" : "bg-transparent"}`}
+                className={utilityClassName(
+                  `flex min-h-10 w-full items-center gap-2 rounded-md border-0 px-2 text-left hover:bg-hover phone:min-h-11 ${selected ? "bg-active" : "bg-transparent"}`,
+                )}
                 aria-current={selected ? "page" : undefined}
                 onClick={() => {
                   setTargetPickerOpen(false);
                   setActiveKey(target.key);
                 }}
               >
-                <IconBranches size={17} className="shrink-0 text-dim" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-label font-medium text-fg">
+                <IconBranches
+                  size={17}
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.shrink0,
+                    sx.textDim,
+                  )}
+                />
+                <span {...stylex.props(sx.minW0, sx.flex1)}>
+                  <span
+                    {...stylex.props(
+                      sx.block,
+                      sx.truncate,
+                      sx.fontMedium,
+                      sx.textFg,
+                      typography.label,
+                    )}
+                  >
                     {target.label}
                   </span>
-                  <span className="block truncate text-meta text-faint">
+                  <span
+                    {...stylex.props(
+                      sx.block,
+                      sx.truncate,
+                      sx.textFaint,
+                      typography.meta,
+                    )}
+                  >
                     {detail}
                   </span>
                 </span>
                 {selected && (
-                  <IconCheck size={16} className="shrink-0 text-fg" />
+                  <IconCheck
+                    size={16}
+                    className={mergeStylexOverrideClassName(
+                      "",
+                      sx.shrink0,
+                      sx.textFg,
+                    )}
+                  />
                 )}
               </button>
             );
           })}
         </div>
         {linkable && (
-          <div className="mt-1.5 border-t border-divider-soft px-1 pt-1.5">
+          <div
+            {...stylex.props(
+              sx.mt15,
+              sx.borderT,
+              sx.borderDividerSoft,
+              sx.px1,
+              sx.pt15,
+            )}
+          >
             <LinkPrControl
               sessionId={sessionId}
               variant="action"
@@ -1094,14 +1612,20 @@ export function PrPanel({
     <div className={PR_REPO_TABS}>{targetPicker}</div>
   ) : null;
 
-  const reviewStateClass = `flex-1 ${compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE : ""}`;
+  const reviewStateClass = utilityClassName(
+    `flex-1 ${compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE : ""}`,
+  );
 
   if (loading)
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
         {switcher}
-        <LoadingState className={`${reviewStateClass} -translate-y-5`}>
-          <span className="text-control-label font-medium text-fg">
+        <LoadingState
+          className={utilityClassName(`${reviewStateClass} -translate-y-5`)}
+        >
+          <span
+            {...stylex.props(sx.fontMedium, sx.textFg, typography.controlLabel)}
+          >
             Loading pull request…
           </span>
         </LoadingState>
@@ -1110,12 +1634,17 @@ export function PrPanel({
 
   if (loadError && !pr)
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
         {switcher}
         <EmptyState
           className={reviewStateClass}
           role="alert"
-          icon={<IconX size={22} className="text-red" />}
+          icon={
+            <IconX
+              size={22}
+              className={mergeStylexOverrideClassName("", sx.textRed)}
+            />
+          }
           title="Couldn’t load pull request"
           action={
             <Button size="sm" onClick={retryPr}>
@@ -1146,7 +1675,9 @@ export function PrPanel({
     };
     return (
       <div
-        className={`selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`}
+        className={utilityClassName(
+          `selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`,
+        )}
         data-review-canvas="true"
       >
         <ReviewToolbar compact={compactToolbar}>
@@ -1158,7 +1689,7 @@ export function PrPanel({
               <Button
                 variant="primary"
                 size="sm"
-                className="phone:min-h-11"
+                className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                 icon={<IconPullRequest size={20} />}
                 disabled={prRequested}
                 onClick={createPr}
@@ -1176,7 +1707,14 @@ export function PrPanel({
             {showWorktreeDiff && (
               <div
                 ref={setWorktreeToolbarTarget}
-                className="ml-auto flex shrink-0 items-center gap-2.5 text-label"
+                {...stylex.props(
+                  sx.mlAuto,
+                  sx.flex,
+                  sx.shrink0,
+                  sx.itemsCenter,
+                  sx.gap25,
+                  typography.label,
+                )}
               />
             )}
           </div>
@@ -1185,16 +1723,29 @@ export function PrPanel({
             owns the scrollport and the toolbar stays outside it. With the
             summary, the shared outer scrollport lets its toolbar stick. */}
         <main
-          className={`min-h-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"}`}
+          className={utilityClassName(
+            `min-h-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"}`,
+          )}
         >
           {walkthrough && (
-            <div className="mx-auto w-full max-w-[760px] px-4 pt-4 sm:px-5">
+            <div
+              {...stylex.props(
+                sx.mxAuto,
+                sx.wFull,
+                sx.maxW760px,
+                sx.px4,
+                sx.pt4,
+                sx.smPx5,
+              )}
+            >
               <WalkthroughCard walkthrough={walkthrough} />
             </div>
           )}
           {showWorktreeDiff ? (
             <div
-              className={`max-w-[1500px] px-2 pb-2 phone:w-full phone:px-1 ${compactToolbar ? `w-auto pt-0 ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full pt-2"}`}
+              className={utilityClassName(
+                `max-w-[1500px] px-2 pb-2 phone:w-full phone:px-1 ${compactToolbar ? `w-auto pt-0 ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full pt-2"}`,
+              )}
               data-no-pr-worktree-diff
             >
               <DiffPanel
@@ -1206,7 +1757,19 @@ export function PrPanel({
               />
             </div>
           ) : (
-            <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-4 py-4 sm:px-5">
+            <div
+              {...stylex.props(
+                sx.mxAuto,
+                sx.flex,
+                sx.wFull,
+                sx.maxW760px,
+                sx.flexCol,
+                sx.gap4,
+                sx.px4,
+                sx.py4,
+                sx.smPx5,
+              )}
+            >
               <PrCard title="Git status">
                 <GitStatusRows
                   git={git}
@@ -1259,7 +1822,11 @@ export function PrPanel({
         : "Submit review";
   const rail = (
     <ReviewRail
-      className={railStacked ? "min-w-0" : "w-[264px] shrink-0"}
+      className={
+        railStacked
+          ? utilityClassName("min-w-0")
+          : utilityClassName("w-[264px] shrink-0")
+      }
       pr={pr}
       git={git}
       sessionId={sessionId}
@@ -1290,7 +1857,7 @@ export function PrPanel({
             <Button
               variant="ghost"
               size="sm"
-              className="desktop:-mr-1.5"
+              className={mergeStylexOverrideClassName("", sx.desktopMr15)}
               aria-label="Code view settings"
               icon={<IconSliders size={18} />}
             />
@@ -1305,7 +1872,14 @@ export function PrPanel({
         side="bottom"
         align="end"
         initialFocus
-        className="flex w-[340px] flex-col gap-0.5 p-3"
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.flex,
+          sx.w340px,
+          sx.flexCol,
+          sx.gap05,
+          sx.p3,
+        )}
       >
         {worktreeAvailable && (
           <>
@@ -1313,7 +1887,10 @@ export function PrPanel({
               value={diffSource}
               onValueChange={setDiffSource}
             />
-            <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+            <div
+              aria-hidden
+              {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+            />
           </>
         )}
         <SettingRow label="Code view">
@@ -1342,7 +1919,10 @@ export function PrPanel({
           </Segmented>
         </SettingRow>
 
-        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+        <div
+          aria-hidden
+          {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+        />
 
         <CodeOrganizationSettings
           settings={organizationSettings}
@@ -1350,7 +1930,10 @@ export function PrPanel({
           defaultOrderLabel="Pull request"
         />
 
-        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+        <div
+          aria-hidden
+          {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+        />
 
         <CodeDisplaySettings {...codeDisplaySettings} />
       </Popover.Popup>
@@ -1372,13 +1955,21 @@ export function PrPanel({
         if (next === "overview" || next === "files") setPage(next);
       }}
       size="sm"
-      className="shrink-0 phone:hidden"
+      className={mergeStylexOverrideClassName("", sx.shrink0, sx.phoneHidden)}
     >
       {pageOptions.map(([key, label, count]) => (
         <SegmentedOption key={key} value={key}>
           {label}
           {count !== undefined && (
-            <span className="text-meta text-faint tabular-nums">{count}</span>
+            <span
+              {...mergeStylexProps(
+                "tabular-nums",
+                sx.textFaint,
+                typography.meta,
+              )}
+            >
+              {count}
+            </span>
           )}
         </SegmentedOption>
       ))}
@@ -1390,17 +1981,21 @@ export function PrPanel({
       key={key}
       role="tab"
       aria-selected={page === key}
-      className={`flex h-11 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-control-label font-medium transition-colors ${
-        page === key ? "text-fg" : "text-dim hover:text-fg"
-      }`}
+      className={utilityClassName(
+        `flex h-11 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-control-label font-medium transition-colors ${
+          page === key ? "text-fg" : "text-dim hover:text-fg"
+        }`,
+      )}
       onClick={() => setPage(key)}
     >
       {label}
       {count !== undefined && (
         <span
-          className={`min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold tabular-nums ${
-            page === key ? "bg-accent-soft text-accent" : "bg-active text-dim"
-          }`}
+          className={utilityClassName(
+            `min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold tabular-nums ${
+              page === key ? "bg-accent-soft text-accent" : "bg-active text-dim"
+            }`,
+          )}
         >
           {count}
         </span>
@@ -1410,12 +2005,20 @@ export function PrPanel({
 
   const fileControls = page === "files" && (
     <div
-      className={`flex shrink-0 items-center gap-1.5 phone:gap-2 ${compactToolbar ? "" : "ml-auto"}`}
+      className={utilityClassName(
+        `flex shrink-0 items-center gap-1.5 phone:gap-2 ${compactToolbar ? "" : "ml-auto"}`,
+      )}
     >
       {diffSource === "worktree" ? (
         <div
           ref={setWorktreeToolbarTarget}
-          className="flex shrink-0 items-center gap-2.5 text-label"
+          {...stylex.props(
+            sx.flex,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.gap25,
+            typography.label,
+          )}
         />
       ) : (
         <>
@@ -1432,7 +2035,13 @@ export function PrPanel({
           )}
           <div
             ref={setDiffControlsTarget}
-            className="flex shrink-0 items-center gap-1.5 phone:gap-2"
+            {...stylex.props(
+              sx.flex,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.gap15,
+              sx.phoneGap2,
+            )}
           />
           {codeSettings}
         </>
@@ -1441,9 +2050,30 @@ export function PrPanel({
   );
 
   const reviewBar = (
-    <div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-2 [scrollbar-width:none] desktop:hidden [&::-webkit-scrollbar]:hidden">
+    <div
+      {...mergeStylexProps(
+        "[&::-webkit-scrollbar]:hidden",
+        sx.flex,
+        sx.h11,
+        sx.shrink0,
+        sx.itemsCenter,
+        sx.gap2,
+        sx.overflowXAuto,
+        sx.overflowYHidden,
+        sx.bgSurface,
+        sx.px2,
+        sx.ScrollbarWidthNone,
+        sx.desktopHidden,
+      )}
+    >
       <div
-        className="flex shrink-0 items-center gap-0.5 self-stretch"
+        {...stylex.props(
+          sx.flex,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.gap05,
+          sx.selfStretch,
+        )}
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Pull request pages"
@@ -1456,7 +2086,9 @@ export function PrPanel({
 
   return (
     <div
-      className={`selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`}
+      className={utilityClassName(
+        `selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`,
+      )}
       data-review-canvas="true"
       ref={setRoot}
     >
@@ -1466,18 +2098,32 @@ export function PrPanel({
       {/* Desktop keeps page navigation and file controls in the identity row.
           Phone keeps one edge-to-edge navigation and controls row below it. */}
       <ReviewToolbar compact={compactToolbar}>
-        <TopBar as="header" className="h-10 shrink-0 gap-2.5 px-4 phone:px-3">
+        <TopBar
+          as="header"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.h10,
+            sx.shrink0,
+            sx.gap25,
+            sx.px4,
+            sx.phonePx3,
+          )}
+        >
           {/* State, in the app's own PR language, filled rather than drawn: the
             tone washes the whole chip and the glyph and word share its ink.
             It is its own object, so it gets more air than the pieces of the
             identity line it precedes. */}
           <Tooltip label={statusMark.label}>
             <span
-              className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
+              className={utilityClassName(
+                `mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`,
+              )}
             >
               <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
               {!headerCompact && (
-                <span className="text-label font-medium">{stateLabel}</span>
+                <span {...stylex.props(sx.fontMedium, typography.label)}>
+                  {stateLabel}
+                </span>
               )}
             </span>
           </Tooltip>
@@ -1488,7 +2134,17 @@ export function PrPanel({
             `[icon] repo › title`, so the two headers read as one bar. */}
           {!headerCompact && (
             <>
-              <span className="flex shrink-0 items-center gap-[7px] text-item-title font-medium text-fg">
+              <span
+                {...stylex.props(
+                  sx.flex,
+                  sx.shrink0,
+                  sx.itemsCenter,
+                  sx.gap7px,
+                  sx.fontMedium,
+                  sx.textFg,
+                  typography.itemTitle,
+                )}
+              >
                 <UserAvatar
                   name={pr.author}
                   login={provider.key === "github" ? pr.author : null}
@@ -1496,9 +2152,18 @@ export function PrPanel({
                   edge={false}
                   title={pr.author}
                 />
-                <span className="max-w-[180px] truncate">{pr.author}</span>
+                <span {...stylex.props(sx.maxW180px, sx.truncate)}>
+                  {pr.author}
+                </span>
               </span>
-              <IconChevronRight size={18} className="shrink-0 text-faint" />
+              <IconChevronRight
+                size={18}
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.shrink0,
+                  sx.textFaint,
+                )}
+              />
             </>
           )}
           {/* Title only. Counts, commits and the sessions on this PR are the
@@ -1508,13 +2173,29 @@ export function PrPanel({
             inert. The outbound jump rides the number, which is the reference
             everywhere else in the app. */}
           <h1
-            className="flex min-w-0 flex-1 items-baseline gap-1 text-item-title font-medium leading-[1.2] text-fg"
+            {...stylex.props(
+              sx.flex,
+              sx.minW0,
+              sx.flex1,
+              sx.itemsBaseline,
+              sx.gap1,
+              sx.fontMedium,
+              sx.leading12,
+              sx.textFg,
+              typography.itemTitle,
+            )}
             title={`${pr.title} #${pr.number}`}
           >
-            <span className="truncate">{pr.title}</span>
+            <span {...stylex.props(sx.truncate)}>{pr.title}</span>
             <Tooltip label={`Open on ${provider.name}`}>
               <a
-                className="shrink-0 font-normal text-faint no-underline hover:text-link"
+                {...stylex.props(
+                  sx.shrink0,
+                  sx.fontNormal,
+                  sx.textFaint,
+                  sx.noUnderline,
+                  sx.hoverTextLink,
+                )}
                 href={pr.url}
                 target="_blank"
                 rel="noopener"
@@ -1545,7 +2226,9 @@ export function PrPanel({
                  so the last one in the row is outdented to put that glyph on
                  the row's content edge — where the view control below it
                  sits, since a bordered control is flush with its own box. */
-                className={`ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`}
+                className={utilityClassName(
+                  `ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`,
+                )}
                 href={pr.staging.url}
                 target="_blank"
                 rel="noopener"
@@ -1566,7 +2249,9 @@ export function PrPanel({
               <Button
                 variant="primary"
                 size="sm"
-                className={pr.staging?.url ? undefined : "ml-auto"}
+                className={
+                  pr.staging?.url ? undefined : utilityClassName("ml-auto")
+                }
                 onClick={() => {
                   setDiffSource("pull-request");
                   setReviewing(true);
@@ -1586,7 +2271,7 @@ export function PrPanel({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="-mr-1.5"
+                    className={mergeStylexOverrideClassName("", sx.Mr15)}
                     aria-label="Pull request actions"
                     icon={<IconDotsHorizontal size={18} />}
                   />
@@ -1607,7 +2292,7 @@ export function PrPanel({
                     }}
                   >
                     <IconMessage size={18} className={MENU_ICON} />
-                    <span className="min-w-0 flex-1 truncate">
+                    <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                       Start review
                     </span>
                   </Menu.Item>
@@ -1617,7 +2302,7 @@ export function PrPanel({
                 headerCompact && (
                   <Menu.Item onClick={() => setSessionsOpen(true)}>
                     <IconMessages size={18} className={MENU_ICON} />
-                    <span className="min-w-0 flex-1 truncate">
+                    <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                       {relatedSessions.length === 0
                         ? "Start a session"
                         : relatedSessions.length === 1
@@ -1634,7 +2319,7 @@ export function PrPanel({
                   size={16}
                   className={MENU_ICON}
                 />
-                <span className="min-w-0 flex-1 truncate">
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                   Open on {provider.name}
                 </span>
               </Menu.Item>
@@ -1645,7 +2330,9 @@ export function PrPanel({
                   }
                 >
                   <IconGlobe size={18} className={MENU_ICON} />
-                  <span className="min-w-0 flex-1 truncate">Open preview</span>
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                    Open preview
+                  </span>
                 </Menu.Item>
               )}
               <Menu.Item
@@ -1654,7 +2341,9 @@ export function PrPanel({
                 }
               >
                 <IconCopy size={18} className={MENU_ICON} />
-                <span className="min-w-0 flex-1 truncate">Copy PR link</span>
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                  Copy PR link
+                </span>
               </Menu.Item>
               {pr.state === "OPEN" && (
                 <>
@@ -1674,7 +2363,10 @@ export function PrPanel({
                     </Menu.Item>
                   )}
                   <Menu.Item
-                    className="text-red data-[highlighted]:bg-red-soft"
+                    className={mergeStylexOverrideClassName(
+                      "data-[highlighted]:bg-red-soft",
+                      sx.textRed,
+                    )}
                     onClick={handleClose}
                     closeOnClick={confirmClose}
                     disabled={closing}
@@ -1761,28 +2453,50 @@ export function PrPanel({
         onClose={() => setSessionsOpen(false)}
         phone={isPhone}
         label="Sessions on this pull request"
-        sheetClassName="max-h-[88dvh]"
-        modalClassName="w-[min(460px,calc(100vw-32px))]"
+        sheetClassName={utilityClassName("max-h-[88dvh]")}
+        modalClassName={utilityClassName("w-[min(460px,calc(100vw-32px))]")}
       >
-        <div className="flex min-h-0 flex-col">
-          <div className="flex shrink-0 items-center gap-3 px-5 pb-3 pt-5 phone:pt-2">
-            <div className="min-w-0 flex-1">
-              <h2 className="text-item-title font-semibold text-fg">
+        <div {...stylex.props(sx.flex, sx.minH0, sx.flexCol)}>
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.gap3,
+              sx.px5,
+              sx.pb3,
+              sx.pt5,
+              sx.phonePt2,
+            )}
+          >
+            <div {...stylex.props(sx.minW0, sx.flex1)}>
+              <h2
+                {...stylex.props(
+                  sx.fontSemibold,
+                  sx.textFg,
+                  typography.itemTitle,
+                )}
+              >
                 Sessions on this PR
               </h2>
-              <p className="mt-0.5 text-supporting text-dim">
+              <p {...stylex.props(sx.mt05, sx.textDim, typography.supporting)}>
                 Open existing work or start something new on this branch.
               </p>
             </div>
             <Button
               variant="ghost"
-              className="size-10 shrink-0 phone:size-11"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.size10,
+                sx.shrink0,
+                sx.phoneSize11,
+              )}
               icon={<IconX size={20} />}
               aria-label="Close sessions"
               onClick={() => setSessionsOpen(false)}
             />
           </div>
-          <div className="min-h-0 overflow-y-auto px-5 pb-5">
+          <div {...stylex.props(sx.minH0, sx.overflowYAuto, sx.px5, sx.pb5)}>
             <PrSessionsList
               sessions={relatedSessions}
               repo={active?.repo || ""}
@@ -1804,9 +2518,33 @@ export function PrPanel({
       {/* Review controls only exist while the person is actively reviewing.
           Passive PR browsing should not imply that a review is in progress. */}
       {reviewing && (
-        <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 flex min-h-[54px] items-center gap-3 rounded-md border border-line-strong bg-panel/95 px-3 py-2 smooth-shadow-soft backdrop-blur phone:flex-col phone:items-stretch phone:gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium text-fg">
+        <div
+          {...mergeStylexProps(
+            "backdrop-blur",
+            sx.pointerEventsNone,
+            sx.absolute,
+            sx.bottom4,
+            sx.left4,
+            sx.right4,
+            sx.z10,
+            sx.flex,
+            sx.minH54px,
+            sx.itemsCenter,
+            sx.gap3,
+            sx.roundedMd,
+            sx.border,
+            sx.borderLineStrong,
+            sx.bgPanel95,
+            sx.px3,
+            sx.py2,
+            sx.smoothShadowSoft,
+            sx.phoneFlexCol,
+            sx.phoneItemsStretch,
+            sx.phoneGap2,
+          )}
+        >
+          <div {...stylex.props(sx.minW0, sx.flex1)}>
+            <div {...stylex.props(sx.textXs, sx.fontMedium, sx.textFg)}>
               {reviewDone === "merged"
                 ? "Approved and merged"
                 : reviewDone
@@ -1818,7 +2556,9 @@ export function PrPanel({
                       : "No pending comments"}
             </div>
             <div
-              className={`mt-0.5 truncate text-supporting ${closeError ? "text-red" : "text-faint"}`}
+              className={utilityClassName(
+                `mt-0.5 truncate text-supporting ${closeError ? "text-red" : "text-faint"}`,
+              )}
               title={closeError || undefined}
             >
               {closeError ||
@@ -1827,11 +2567,20 @@ export function PrPanel({
                   : `${provider.name} has no reviews. Merge or close when you're done.`)}
             </div>
           </div>
-          <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2">
+          <div
+            {...stylex.props(
+              sx.pointerEventsAuto,
+              sx.flex,
+              sx.shrink0,
+              sx.flexWrap,
+              sx.justifyEnd,
+              sx.gap2,
+            )}
+          >
             {onOpenSession && (
               <Button
                 variant="soft"
-                className="text-xs"
+                className={mergeStylexOverrideClassName("", sx.textXs)}
                 onClick={onOpenSession}
               >
                 Open workspace
@@ -1839,7 +2588,7 @@ export function PrPanel({
             )}
             <Button
               variant="soft"
-              className="text-xs"
+              className={mergeStylexOverrideClassName("", sx.textXs)}
               onClick={() => setReviewing(false)}
             >
               Exit review
@@ -1847,7 +2596,7 @@ export function PrPanel({
             {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && (
               <Button
                 variant="success"
-                className="text-xs"
+                className={mergeStylexOverrideClassName("", sx.textXs)}
                 onClick={() => setReviewOpen(true)}
               >
                 Finish review
@@ -1950,8 +2699,21 @@ function FinishReviewDialog({
   return (
     <Modal.Root open={open} onOpenChange={(next) => !next && onClose(summary)}>
       <Modal.Content
-        widthClassName="max-w-[30rem]"
-        className="bottom-[max(1rem,env(safe-area-inset-bottom))] left-auto right-4 top-auto translate-x-0 translate-y-0 origin-bottom-right phone:left-1/2 phone:right-auto phone:-translate-x-1/2 phone:origin-bottom"
+        widthClassName={utilityClassName("max-w-[30rem]")}
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.bottomMax1remEnvSafeAreaInsetBottom,
+          sx.leftAuto,
+          sx.right4,
+          sx.topAuto,
+          sx.translateX0,
+          sx.translateY0,
+          sx.originBottomRight,
+          sx.phoneLeft12,
+          sx.phoneRightAuto,
+          sx.phoneTranslateX12,
+          sx.phoneOriginBottom,
+        )}
         initialFocus={summaryRef}
       >
         <Modal.Header
@@ -1963,7 +2725,7 @@ function FinishReviewDialog({
           }
         />
         <div
-          className="flex flex-col gap-1.5"
+          {...stylex.props(sx.flex, sx.flexCol, sx.gap15)}
           role="radiogroup"
           aria-label="Review verdict"
         >
@@ -1974,17 +2736,62 @@ function FinishReviewDialog({
               role="radio"
               aria-checked={event === verdict.event}
               data-active={event === verdict.event || undefined}
-              className="group focus-ring flex cursor-pointer items-start gap-2.5 rounded-row border border-line bg-surface px-3 py-2.5 text-left transition-[background-color,border-color] hover:bg-hover data-active:border-accent data-active:bg-accent-soft"
+              {...mergeStylexProps(
+                "group focus-ring data-active:border-accent data-active:bg-accent-soft",
+                sx.flex,
+                sx.cursorPointer,
+                sx.itemsStart,
+                sx.gap25,
+                sx.roundedRow,
+                sx.border,
+                sx.borderLine,
+                sx.bgSurface,
+                sx.px3,
+                sx.py25,
+                sx.textLeft,
+                sx.transitionBackgroundColorBorderColor,
+                sx.hoverBgHover,
+              )}
               onClick={() => onEventChange(verdict.event)}
             >
-              <span className="mt-px flex size-4 shrink-0 items-center justify-center rounded-full border border-line-strong transition-colors group-data-active:border-accent group-data-active:bg-accent">
-                <span className="size-1.5 rounded-full bg-on-accent opacity-0 group-data-active:opacity-100" />
+              <span
+                {...mergeStylexProps(
+                  "group-data-active:border-accent group-data-active:bg-accent",
+                  sx.mtPx,
+                  sx.flex,
+                  sx.size4,
+                  sx.shrink0,
+                  sx.itemsCenter,
+                  sx.justifyCenter,
+                  sx.roundedFull,
+                  sx.border,
+                  sx.borderLineStrong,
+                  sx.transitionColors,
+                )}
+              >
+                <span
+                  {...mergeStylexProps(
+                    "group-data-active:opacity-100",
+                    sx.size15,
+                    sx.roundedFull,
+                    sx.bgOnAccent,
+                    sx.opacity0,
+                  )}
+                />
               </span>
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-label font-semibold text-fg">
+              <span {...stylex.props(sx.flex, sx.minW0, sx.flexCol, sx.gap05)}>
+                <span
+                  {...stylex.props(
+                    sx.fontSemibold,
+                    sx.textFg,
+                    typography.label,
+                  )}
+                >
                   {verdict.label}
                 </span>
-                <span className="text-supporting text-dim">{verdict.hint}</span>
+                <span {...stylex.props(sx.textDim, typography.supporting)}>
+                  {verdict.hint}
+                </span>
               </span>
             </button>
           ))}
@@ -1992,7 +2799,7 @@ function FinishReviewDialog({
         <Textarea
           ref={summaryRef}
           size="sm"
-          className="h-20 resize-none"
+          className={mergeStylexOverrideClassName("", sx.h20, sx.resizeNone)}
           placeholder={
             event === "APPROVE" || pendingCount > 0
               ? "Summary (optional)"
@@ -2005,32 +2812,55 @@ function FinishReviewDialog({
           canMerge && (
             // Quieter than the verdict rows on purpose: merging is an extra you
             // opt into here, not a fourth thing to choose between.
-            <label className="flex cursor-pointer items-center gap-2.5 px-0.5">
+            <label
+              {...stylex.props(
+                sx.flex,
+                sx.cursorPointer,
+                sx.itemsCenter,
+                sx.gap25,
+                sx.px05,
+              )}
+            >
               <Checkbox
                 checked={mergeAfterReview}
                 onCheckedChange={onMergeAfterReviewChange}
               />
-              <span className="text-supporting text-dim">
+              <span {...stylex.props(sx.textDim, typography.supporting)}>
                 Squash and merge as well
               </span>
             </label>
           )}
         {event === "APPROVE" && !canMerge && onFixChecks && (
-          <div className="flex items-center justify-between gap-3 rounded-row bg-red-soft px-3 py-2">
-            <span className="text-supporting text-red">
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.itemsCenter,
+              sx.justifyBetween,
+              sx.gap3,
+              sx.roundedRow,
+              sx.bgRedSoft,
+              sx.px3,
+              sx.py2,
+            )}
+          >
+            <span {...stylex.props(sx.textRed, typography.supporting)}>
               Checks must pass before you can merge.
             </span>
             <Button
               variant="danger"
               size="sm"
-              className="shrink-0"
+              className={mergeStylexOverrideClassName("", sx.shrink0)}
               onClick={() => onFixChecks(summary)}
             >
               Fix checks
             </Button>
           </div>
         )}
-        {error && <div className="text-supporting text-red">{error}</div>}
+        {error && (
+          <div {...stylex.props(sx.textRed, typography.supporting)}>
+            {error}
+          </div>
+        )}
         <Modal.Footer>
           <Button onClick={() => onClose(summary)}>Cancel</Button>
           <Button

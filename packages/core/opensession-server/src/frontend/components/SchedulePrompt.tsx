@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchScheduledPrompts,
@@ -17,6 +19,224 @@ import {
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  Top5px: {
+    top: "calc(5px * -1)",
+  },
+  Right5px: {
+    right: "calc(5px * -1)",
+  },
+  h15px: {
+    height: "15px",
+  },
+  minW15px: {
+    minWidth: "15px",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgYellow: {
+    backgroundColor: "var(--yellow)",
+  },
+  px3px: {
+    paddingInline: "3px",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  text10px: {
+    fontSize: "10px",
+  },
+  leading15px: {
+    lineHeight: "15px",
+  },
+  fontBold: {
+    fontWeight: "var(--font-weight-bold)",
+  },
+  textWhite: {
+    color: "var(--color-white)",
+  },
+  mb05: {
+    marginBottom: "calc(4px * 0.5)",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gapPx: {
+    gap: "1px",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  pb1: {
+    paddingBottom: "4px",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  px9px: {
+    paddingInline: "9px",
+  },
+  py5px: {
+    paddingBlock: "5px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  hoverTextRed: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--red)",
+      },
+    },
+  },
+  pt15: {
+    paddingTop: "calc(4px * 1.5)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  mx15: {
+    marginInline: "calc(4px * 1.5)",
+  },
+  my1: {
+    marginBlock: "4px",
+  },
+  hPx: {
+    height: "1px",
+  },
+  bgLine: {
+    backgroundColor: "var(--border)",
+  },
+  pt1: {
+    paddingTop: "4px",
+  },
+  pb05: {
+    paddingBottom: "calc(4px * 0.5)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  fixed: {
+    position: "fixed",
+  },
+  inset0: {
+    inset: "0",
+  },
+  z300: {
+    zIndex: "300",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  bgBlack40: {
+    backgroundColor: "color-mix(in oklab, var(--color-black) 40%, transparent)",
+  },
+  p5: {
+    padding: "calc(4px * 5)",
+  },
+  w420px: {
+    width: "420px",
+  },
+  maxW92vw: {
+    maxWidth: "92vw",
+  },
+  roundedXl: {
+    borderRadius: "calc(18px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  bgRaised: {
+    backgroundColor: "var(--bg-raised)",
+  },
+  smoothShadowLg: {
+    boxShadow:
+      "0 4px 12px -4px color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent), 0 18px 48px -14px color-mix(in srgb, var(--smooth-shadow-color) 11%, transparent)",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt3px: {
+    marginTop: "3px",
+  },
+  Mt05: {
+    marginTop: "calc(4px * -0.5)",
+  },
+  Mr1: {
+    marginRight: "calc(4px * -1)",
+  },
+  mt4: {
+    marginTop: "calc(4px * 4)",
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+});
 
 /** "in 45m" / "in 3h" / "in 2d" for a future instant (short form). */
 function inTime(iso: string): string {
@@ -30,16 +250,18 @@ function inTime(iso: string): string {
 /** The caret half of a split send button: rounded on its outer edge only, with
  *  a thin inset divider (short of the top/bottom edges, Slack-style) rather
  *  than a full-height seam. */
-const caretButton =
-  "relative inline-flex w-[30px] items-center justify-center rounded-r-lg bg-accent text-on-accent transition-[background-color] before:absolute before:top-1/2 before:left-0 before:h-4 before:w-px before:-translate-y-1/2 before:bg-white/45 before:content-[''] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-35";
+const caretButton = utilityClassName(
+  "relative inline-flex w-[30px] items-center justify-center rounded-r-lg bg-accent text-on-accent transition-[background-color] before:absolute before:top-1/2 before:left-0 before:h-4 before:w-px before:-translate-y-1/2 before:bg-white/45 before:content-[''] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-35",
+);
 
 /** Date / time field in the custom-time dialog. `bg-transparent` is deliberate:
  *  the stylesheet asked for `var(--bg-surface)`, a token that has never been
  *  defined, so the declaration was invalid at computed-value time and the fill
  *  fell back to `transparent` — these fields have always shown the dialog's own
  *  surface. Without it they would pick up the UA's opaque field colour. */
-const scheduleField =
-  "min-w-0 rounded-control border border-line bg-transparent px-3 py-[9px] text-item-title font-medium text-fg outline-none focus:border-line-strong";
+const scheduleField = utilityClassName(
+  "min-w-0 rounded-control border border-line bg-transparent px-3 py-[9px] text-item-title font-medium text-fg outline-none focus:border-line-strong",
+);
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const fmtTime = (d: Date) =>
@@ -208,8 +430,8 @@ export function SchedulePromptButton({
       // Positioned: the send-later menu below hangs off it.
       className={
         variant === "menu-item"
-          ? "relative block w-full"
-          : "relative inline-flex items-stretch"
+          ? utilityClassName("relative block w-full")
+          : utilityClassName("relative inline-flex items-stretch")
       }
     >
       <button
@@ -221,7 +443,9 @@ export function SchedulePromptButton({
               // is what suppresses the row's own hover wash while disabled.
               cn(
                 composerMenuItem,
-                "relative justify-start disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent",
+                utilityClassName(
+                  "relative justify-start disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent",
+                ),
               )
             : caretButton
         }
@@ -242,11 +466,32 @@ export function SchedulePromptButton({
         ) : (
           <IconChevronDown
             size={20}
-            className={cn("transition-transform", open && "rotate-180")}
+            className={cn(
+              utilityClassName("transition-transform"),
+              open && utilityClassName("rotate-180"),
+            )}
           />
         )}
         {pending.length > 0 && (
-          <span className="pointer-events-none absolute -top-[5px] -right-[5px] h-[15px] min-w-[15px] rounded-full bg-yellow px-[3px] text-center text-[10px] leading-[15px] font-bold text-white shadow-[0_0_0_2px_var(--bg)]">
+          <span
+            {...mergeStylexProps(
+              "shadow-[0_0_0_2px_var(--bg)]",
+              sx.pointerEventsNone,
+              sx.absolute,
+              sx.Top5px,
+              sx.Right5px,
+              sx.h15px,
+              sx.minW15px,
+              sx.roundedFull,
+              sx.bgYellow,
+              sx.px3px,
+              sx.textCenter,
+              sx.text10px,
+              sx.leading15px,
+              sx.fontBold,
+              sx.textWhite,
+            )}
+          >
             {pending.length}
           </span>
         )}
@@ -267,24 +512,55 @@ export function SchedulePromptButton({
         >
           {/* Pending scheduled messages, listed above the picks with a cancel. */}
           {pending.length > 0 && (
-            <div className="mb-0.5 flex flex-col gap-px border-b border-line pb-1">
+            <div
+              {...stylex.props(
+                sx.mb05,
+                sx.flex,
+                sx.flexCol,
+                sx.gapPx,
+                sx.borderB,
+                sx.borderLine,
+                sx.pb1,
+              )}
+            >
               {pending.map((p) => (
                 <div
                   key={p.id}
-                  className="flex min-w-0 items-baseline gap-2 px-[9px] py-[5px] text-meta"
+                  {...stylex.props(
+                    sx.flex,
+                    sx.minW0,
+                    sx.itemsBaseline,
+                    sx.gap2,
+                    sx.px9px,
+                    sx.py5px,
+                    typography.meta,
+                  )}
                 >
                   <span
-                    className="shrink-0 font-semibold text-yellow"
+                    {...stylex.props(
+                      sx.shrink0,
+                      sx.fontSemibold,
+                      sx.textYellow,
+                    )}
                     title={new Date(p.at).toLocaleString()}
                   >
                     {inTime(p.at)}
                   </span>
-                  <span className="truncate text-dim" title={p.prompt}>
+                  <span
+                    {...stylex.props(sx.truncate, sx.textDim)}
+                    title={p.prompt}
+                  >
                     {p.prompt}
                   </span>
                   <button
                     type="button"
-                    className="ml-auto shrink-0 text-meta text-faint hover:text-red"
+                    {...stylex.props(
+                      sx.mlAuto,
+                      sx.shrink0,
+                      sx.textFaint,
+                      sx.hoverTextRed,
+                      typography.meta,
+                    )}
                     title="Cancel this scheduled message"
                     onClick={async () => {
                       await (async () => {
@@ -300,7 +576,16 @@ export function SchedulePromptButton({
             </div>
           )}
 
-          <div className="px-[9px] pt-1.5 pb-1 text-meta font-medium text-faint">
+          <div
+            {...stylex.props(
+              sx.px9px,
+              sx.pt15,
+              sx.pb1,
+              sx.fontMedium,
+              sx.textFaint,
+              typography.meta,
+            )}
+          >
             Schedule message
           </div>
           {quickOptions().map((o) => (
@@ -310,25 +595,33 @@ export function SchedulePromptButton({
               role="menuitem"
               // text-label: the picks read a step larger than the "+" menu's
               // rows, which is what .composer-schedule-menu used to say.
-              className={cn(composerMenuItem, "text-label")}
+              className={cn(composerMenuItem, utilityClassName("text-label"))}
               onClick={() => schedule(o.at)}
               disabled={saving || !hasText}
             >
               {o.label}
             </button>
           ))}
-          <div className="mx-1.5 my-1 h-px bg-line" />
+          <div {...stylex.props(sx.mx15, sx.my1, sx.hPx, sx.bgLine)} />
           <button
             type="button"
             role="menuitem"
-            className={cn(composerMenuItem, "text-label")}
+            className={cn(composerMenuItem, utilityClassName("text-label"))}
             onClick={openCustom}
             disabled={!hasText}
           >
             Custom time
           </button>
           {error && !customOpen && (
-            <div className="px-[9px] pt-1 pb-0.5 text-meta text-red">
+            <div
+              {...stylex.props(
+                sx.px9px,
+                sx.pt1,
+                sx.pb05,
+                sx.textRed,
+                typography.meta,
+              )}
+            >
               {error}
             </div>
           )}
@@ -339,51 +632,96 @@ export function SchedulePromptButton({
         // The class name stays: SessionViewer and Sidebar look for an open
         // overlay by this selector before taking a global key.
         <div
-          className="composer-schedule-modal-backdrop fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-5"
+          {...mergeStylexProps(
+            "composer-schedule-modal-backdrop",
+            sx.fixed,
+            sx.inset0,
+            sx.z300,
+            sx.flex,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.bgBlack40,
+            sx.p5,
+          )}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setCustomOpen(false);
           }}
         >
-          <div className="w-[420px] max-w-[92vw] rounded-xl border border-line-strong bg-raised p-5 smooth-shadow-lg">
-            <div className="flex items-start justify-between gap-3">
+          <div
+            {...stylex.props(
+              sx.w420px,
+              sx.maxW92vw,
+              sx.roundedXl,
+              sx.border,
+              sx.borderLineStrong,
+              sx.bgRaised,
+              sx.p5,
+              sx.smoothShadowLg,
+            )}
+          >
+            <div
+              {...stylex.props(
+                sx.flex,
+                sx.itemsStart,
+                sx.justifyBetween,
+                sx.gap3,
+              )}
+            >
               <div>
-                <div className="text-dialog-title font-semibold text-fg">
+                <div
+                  {...stylex.props(
+                    sx.fontSemibold,
+                    sx.textFg,
+                    typography.dialogTitle,
+                  )}
+                >
                   Schedule message
                 </div>
-                <div className="mt-[3px] text-meta text-dim">
+                <div {...stylex.props(sx.mt3px, sx.textDim, typography.meta)}>
                   Time zone: {tz}
                 </div>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
-                className="-mt-0.5 -mr-1"
+                className={mergeStylexOverrideClassName("", sx.Mt05, sx.Mr1)}
                 onClick={() => setCustomOpen(false)}
                 aria-label="Close"
                 icon={<IconX size={20} />}
               />
             </div>
-            <div className="mt-4 flex gap-2">
+            <div {...stylex.props(sx.mt4, sx.flex, sx.gap2)}>
               <input
                 type="date"
                 value={date}
                 min={toDateInput(new Date())}
                 onChange={(e) => setDate(e.target.value)}
-                className={cn(scheduleField, "flex-1")}
+                className={cn(scheduleField, utilityClassName("flex-1"))}
               />
               <input
                 type="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className={cn(scheduleField, "flex-none basis-[130px]")}
+                className={cn(
+                  scheduleField,
+                  utilityClassName("flex-none basis-[130px]"),
+                )}
               />
             </div>
             {error && (
-              <div className="px-[9px] pt-1 pb-0.5 text-meta text-red">
+              <div
+                {...stylex.props(
+                  sx.px9px,
+                  sx.pt1,
+                  sx.pb05,
+                  sx.textRed,
+                  typography.meta,
+                )}
+              >
                 {error}
               </div>
             )}
-            <div className="mt-5 flex justify-end gap-2">
+            <div {...stylex.props(sx.mt5, sx.flex, sx.justifyEnd, sx.gap2)}>
               <Button
                 variant="soft"
                 size="lg"

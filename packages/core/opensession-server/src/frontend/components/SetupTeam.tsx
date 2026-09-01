@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import { githubLoginFromInput } from "../lib/github-login";
@@ -34,6 +36,46 @@ import {
 import { setupRequest, type TeamMember } from "./setup-shared";
 import { UserAvatar } from "./UserAvatar";
 import { useAuthStatus } from "./UserPicker";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  fontMono: {
+    fontFamily: "var(--mono)",
+  },
+});
 
 // Settings → Setup → Team: the manageable roster. The identity table drives
 // commit attribution, `allowedUsers` MCP scoping, and GitHub sign-in, so each
@@ -128,13 +170,13 @@ export function TeamSection({
   return (
     <>
       <SettingsGroupLabel
-        className={title ? undefined : "mt-0"}
+        className={title ? undefined : utilityClassName("mt-0")}
         actions={
           githubAuth ? (
             <Button
               size="sm"
               variant="default"
-              className="phone:min-h-11"
+              className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
               icon={
                 inviteCopied ? <IconCheck size={16} /> : <IconLink size={16} />
               }
@@ -146,7 +188,9 @@ export function TeamSection({
             <Button
               size="sm"
               variant="default"
-              className={onboarding ? "phone:min-h-11" : undefined}
+              className={
+                onboarding ? utilityClassName("phone:min-h-11") : undefined
+              }
               icon={<IconPlus size={16} />}
               onClick={() => {
                 setEditing(null);
@@ -252,7 +296,9 @@ function MemberRow({
       <SettingRowText>
         <SettingRowTitle>{member.name}</SettingRowTitle>
         {!compact && details.length > 0 && (
-          <SettingRowDescription className="truncate">
+          <SettingRowDescription
+            className={mergeStylexOverrideClassName("", sx.truncate)}
+          >
             {details.join(" · ")}
           </SettingRowDescription>
         )}
@@ -311,7 +357,10 @@ function MemberActions({
             Edit member
           </Menu.Item>
           <Menu.Item
-            className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+            className={mergeStylexOverrideClassName(
+              "data-[highlighted]:bg-red-soft data-[highlighted]:text-red",
+              sx.textRed,
+            )}
             onClick={() => setConfirmOpen(true)}
           >
             <IconTrash size={16} />
@@ -417,7 +466,7 @@ export function GithubMemberDialog({
               : "They can sign in with this GitHub account."
           }
         />
-        <form className="flex flex-col gap-3" onSubmit={submit}>
+        <form {...stylex.props(sx.flex, sx.flexCol, sx.gap3)} onSubmit={submit}>
           <Field label="GitHub username or profile link">
             <Input
               ref={githubRef}
@@ -434,24 +483,40 @@ export function GithubMemberDialog({
           <Button
             variant="primary"
             type="submit"
-            className="w-full phone:min-h-11"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.wFull,
+              sx.phoneMinH11,
+            )}
             disabled={!github.trim() || saving}
           >
             {saving ? "Adding…" : actionLabel}
           </Button>
           {inviteUrl && (
             <>
-              <div className="text-center text-supporting text-faint">Or</div>
+              <div
+                {...stylex.props(
+                  sx.textCenter,
+                  sx.textFaint,
+                  typography.supporting,
+                )}
+              >
+                Or
+              </div>
               <Button
                 variant="primary"
                 type="button"
-                className="w-full phone:min-h-11"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.wFull,
+                  sx.phoneMinH11,
+                )}
                 icon={
                   <CopyCheck
                     copied={inviteCopy.copied}
                     idle={<IconLink size={16} />}
                     size={16}
-                    checkClassName="text-on-accent"
+                    checkClassName={utilityClassName("text-on-accent")}
                   />
                 }
                 onClick={() =>
@@ -577,7 +642,7 @@ function MemberDialog({
           title={member ? `Edit ${member.name}` : addLabel}
           description="Commits, sessions, and access grants resolve through this person."
         />
-        <form className="flex flex-col gap-3" onSubmit={submit}>
+        <form {...stylex.props(sx.flex, sx.flexCol, sx.gap3)} onSubmit={submit}>
           <Field label="Full name">
             <Input
               ref={nameRef}
@@ -611,7 +676,7 @@ function MemberDialog({
             </Field>
             <Field label="Slack member id">
               <Input
-                className="font-mono"
+                className={mergeStylexOverrideClassName("", sx.fontMono)}
                 value={slackId}
                 onChange={(e) => setSlackId(e.target.value)}
                 placeholder="U01ABCDEF"

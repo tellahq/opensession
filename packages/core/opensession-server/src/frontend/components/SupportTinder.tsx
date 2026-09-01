@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, {
   useEffect,
   useEffectEvent,
@@ -22,6 +24,191 @@ import { DeckDone, SwipeCard } from "../ui/swipe-deck";
 import { dismissToast, toast } from "../ui/toast";
 import { UNDO_MS, ageLabel, ageTone, shuffle } from "../lib/swipe-deck";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py3: {
+    paddingBlock: "calc(4px * 3)",
+  },
+  hidden: {
+    display: "none",
+  },
+  phoneInlineFlex: {
+    "@media (max-width: 720px)": {
+      display: "inline-flex",
+    },
+  },
+  absolute: {
+    position: "absolute",
+  },
+  left12: {
+    left: "calc(1 / 2 * 100%)",
+  },
+  TranslateX12: {
+    translate: "calc(calc(1 / 2 * 100%) * -1) 0",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  maxWSm: {
+    maxWidth: "var(--container-sm)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  pb4: {
+    paddingBottom: "calc(4px * 4)",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  maxW640px: {
+    maxWidth: "640px",
+  },
+  insetX0: {
+    insetInline: "0",
+  },
+  Bottom15: {
+    bottom: "calc(4px * -1.5)",
+  },
+  top3: {
+    top: "calc(4px * 3)",
+  },
+  scaleX097: {
+    scale: "0.97 1",
+  },
+  roundedXl: {
+    borderRadius: "calc(18px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  opacity60: {
+    opacity: "60%",
+  },
+  itemsStretch: {
+    alignItems: "stretch",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  pbMax16pxEnvSafeAreaInsetBottom: {
+    paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+  },
+  z10: {
+    zIndex: "10",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py35: {
+    paddingBlock: "calc(4px * 3.5)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  italic: {
+    fontStyle: "italic",
+  },
+});
 
 /**
  * Support Tinder — the swipe deck for the Plain Todo queue, one ticket at
@@ -64,7 +251,7 @@ const PRIORITY: Record<number, { label: string; cls: string }> = {
 
 /** The deck's action row keeps a 44px touch target: it is the phone's only
  * path through the queue, and `lg` alone is 36px. */
-const DECK_ACTION = "min-h-11";
+const DECK_ACTION = utilityClassName("min-h-11");
 
 export function SupportTinder({ onExit, onOpenSession }: Props) {
   const currentUser = useCurrentUser();
@@ -327,13 +514,37 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
   }, []);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col items-center bg-surface">
+    <div
+      {...stylex.props(
+        sx.relative,
+        sx.flex,
+        sx.minH0,
+        sx.flex1,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.bgSurface,
+      )}
+    >
       {/* Header: back + "N Left" counter, with the phone-only back chevron. */}
-      <div className="relative flex w-full items-center justify-between px-4 py-3">
+      <div
+        {...stylex.props(
+          sx.relative,
+          sx.flex,
+          sx.wFull,
+          sx.itemsCenter,
+          sx.justifyBetween,
+          sx.px4,
+          sx.py3,
+        )}
+      >
         <Button
           variant="ghost"
           size="md"
-          className="hidden phone:inline-flex"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.hidden,
+            sx.phoneInlineFlex,
+          )}
           onClick={onExit}
           title="Back (Esc)"
           aria-label="Back"
@@ -349,7 +560,16 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
             </svg>
           }
         />
-        <div className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-fg">
+        <div
+          {...stylex.props(
+            sx.absolute,
+            sx.left12,
+            sx.TranslateX12,
+            sx.textSm,
+            sx.fontSemibold,
+            sx.textFg,
+          )}
+        >
           {deck === null
             ? "Support Tinder"
             : done
@@ -361,7 +581,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
         <Button
           variant="ghost"
           size="md"
-          className="ml-auto"
+          className={mergeStylexOverrideClassName("", sx.mlAuto)}
           onClick={undoLast}
           disabled={historyLen === 0 || busy}
           title="Undo last action (z)"
@@ -381,14 +601,34 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
       </div>
 
       {error ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-          <div className="text-sm font-semibold text-red">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.flex1,
+            sx.flexCol,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.gap2,
+            sx.px6,
+            sx.textCenter,
+          )}
+        >
+          <div {...stylex.props(sx.textSm, sx.fontSemibold, sx.textRed)}>
             Couldn't load the queue
           </div>
-          <div className="max-w-sm text-sm text-dim">{error}</div>
+          <div {...stylex.props(sx.maxWSm, sx.textSm, sx.textDim)}>{error}</div>
         </div>
       ) : deck === null ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-faint">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.flex1,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.textSm,
+            sx.textFaint,
+          )}
+        >
           Dealing support tickets…
         </div>
       ) : done ? (
@@ -408,13 +648,31 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 				   just flow past the fold. */
         <div
           ref={deckScrollRef}
-          className="min-h-0 w-full flex-1 overflow-y-auto px-4 pb-4"
+          {...stylex.props(
+            sx.minH0,
+            sx.wFull,
+            sx.flex1,
+            sx.overflowYAuto,
+            sx.px4,
+            sx.pb4,
+          )}
         >
-          <div className="relative mx-auto w-full max-w-[640px]">
+          <div
+            {...stylex.props(sx.relative, sx.mxAuto, sx.wFull, sx.maxW640px)}
+          >
             {/* Peek of the next card behind the top one, for depth. */}
             {next && (
               <div
-                className="absolute inset-x-0 -bottom-1.5 top-3 scale-x-[0.97] rounded-xl bg-panel opacity-60"
+                {...stylex.props(
+                  sx.absolute,
+                  sx.insetX0,
+                  sx.Bottom15,
+                  sx.top3,
+                  sx.scaleX097,
+                  sx.roundedXl,
+                  sx.bgPanel,
+                  sx.opacity60,
+                )}
                 aria-hidden
               />
             )}
@@ -434,7 +692,17 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 
       {/* Action bar (works without gestures). */}
       {deck !== null && !done && !error && (
-        <div className="flex w-full max-w-[640px] items-stretch gap-2.5 px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.wFull,
+            sx.maxW640px,
+            sx.itemsStretch,
+            sx.gap25,
+            sx.px4,
+            sx.pbMax16pxEnvSafeAreaInsetBottom,
+          )}
+        >
           <Button
             variant="danger"
             size="lg"
@@ -447,7 +715,10 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
           </Button>
           <Button
             size="lg"
-            className={cn(DECK_ACTION, "flex-1 hover:text-green")}
+            className={cn(
+              DECK_ACTION,
+              utilityClassName("flex-1 hover:text-green"),
+            )}
             onClick={markDone}
             disabled={busy}
             title="Mark this thread Done (d). Undo available."
@@ -456,7 +727,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
           </Button>
           <Button
             size="lg"
-            className={cn(DECK_ACTION, "flex-1")}
+            className={cn(DECK_ACTION, utilityClassName("flex-1"))}
             onClick={openSession}
             disabled={opening}
             title="Open the ticket's opensession session, starting triage if none exists (e)"
@@ -465,7 +736,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
           </Button>
           <Button
             size="lg"
-            className={cn(DECK_ACTION, "flex-1")}
+            className={cn(DECK_ACTION, utilityClassName("flex-1"))}
             onClick={() =>
               card && window.open(plainThreadUrl(card.id), "_blank", "noopener")
             }
@@ -476,7 +747,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
           <Button
             variant="success-strong"
             size="lg"
-            className={cn(DECK_ACTION, "flex-1")}
+            className={cn(DECK_ACTION, utilityClassName("flex-1"))}
             onClick={skip}
             title="Skip, leaving the ticket as-is (→ or k)"
           >
@@ -507,7 +778,12 @@ function TicketCard({
     // Exit flings left for spam/done (dealt with and gone), right for skip;
     // the card lives in normal flow, hence popOnExit.
     <SwipeCard
-      className="relative z-10 w-full"
+      className={mergeStylexOverrideClassName(
+        "",
+        sx.relative,
+        sx.z10,
+        sx.wFull,
+      )}
       custom={custom}
       exitFor={(a) => (a === "spam" || a === "done" ? "left" : "right")}
       exitDistance={640}
@@ -518,15 +794,32 @@ function TicketCard({
       onSwipeRight={onSkip}
     >
       {/* Card head: customer, ages, priority, title. */}
-      <div className="shrink-0 border-b border-divider px-5 py-3.5">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-faint">
-          <span className="font-semibold text-dim">
+      <div
+        {...stylex.props(
+          sx.shrink0,
+          sx.borderB,
+          sx.borderDivider,
+          sx.px5,
+          sx.py35,
+        )}
+      >
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.flexWrap,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.textXs,
+            sx.textFaint,
+          )}
+        >
+          <span {...stylex.props(sx.fontSemibold, sx.textDim)}>
             {thread.customer.name ||
               thread.customer.email ||
               "Unknown customer"}
           </span>
           {thread.customer.name && thread.customer.email && (
-            <span className="truncate">{thread.customer.email}</span>
+            <span {...stylex.props(sx.truncate)}>{thread.customer.email}</span>
           )}
           {thread.createdAt && (
             <>
@@ -538,36 +831,48 @@ function TicketCard({
           )}
           {prio && (
             <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-meta font-bold tracking-[-0.01em] ${prio.cls}`}
+              className={utilityClassName(
+                `shrink-0 rounded-full px-2 py-0.5 text-meta font-bold tracking-[-0.01em] ${prio.cls}`,
+              )}
             >
               {prio.label}
             </span>
           )}
         </div>
-        <div className="mt-1 text-item-title font-semibold leading-snug text-fg">
+        <div
+          {...stylex.props(
+            sx.mt1,
+            sx.fontSemibold,
+            sx.leadingSnug,
+            sx.textFg,
+            typography.itemTitle,
+          )}
+        >
           {thread.title || "(no subject)"}
         </div>
       </div>
 
       {/* Full-height conversation: every message renders, no inner scroll —
 			    overflow flows into the deck's normal page scroll. */}
-      <div className="flex flex-col gap-3 px-5 py-4">
+      <div {...stylex.props(sx.flex, sx.flexCol, sx.gap3, sx.px5, sx.py4)}>
         {timeline === undefined ? (
           thread.previewText ? (
-            <div className="text-label leading-relaxed text-dim">
+            <div
+              {...stylex.props(sx.leadingRelaxed, sx.textDim, typography.label)}
+            >
               {thread.previewText}
             </div>
           ) : (
-            <div className="text-sm italic text-faint">
+            <div {...stylex.props(sx.textSm, sx.italic, sx.textFaint)}>
               Loading conversation…
             </div>
           )
         ) : timeline === "error" ? (
-          <div className="text-sm text-red">
+          <div {...stylex.props(sx.textSm, sx.textRed)}>
             Couldn't load the conversation. Open it in Plain.
           </div>
         ) : timeline.entries.length === 0 ? (
-          <div className="text-sm italic text-faint">
+          <div {...stylex.props(sx.textSm, sx.italic, sx.textFaint)}>
             No messages in this thread yet.
           </div>
         ) : (

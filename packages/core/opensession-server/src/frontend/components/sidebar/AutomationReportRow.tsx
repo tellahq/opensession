@@ -25,6 +25,42 @@ import { cn } from "../../ui/cn";
 import { Popover } from "../../ui/popover";
 import { CardFooter, RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
 import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./SidebarItem";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  size7px: {
+    width: "7px",
+    height: "7px",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  leading15: {
+    lineHeight: "1.5",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+});
 
 type Report = NonNullable<AutomationOverview["latestReport"]>;
 
@@ -53,7 +89,7 @@ export function AutomationReportRow({
       >
         <span className={SIDEBAR_RAIL}>
           <span
-            className="size-[7px] rounded-full"
+            {...stylex.props(sx.size7px, sx.roundedFull)}
             style={{ backgroundColor: reportUrgencyDot(report.urgency) }}
           />
         </span>
@@ -68,9 +104,11 @@ export function AutomationReportRow({
         )}
       </Popover.Trigger>
       <RowCardPopup>
-        <div className="text-sm font-medium text-fg">{report.title}</div>
+        <div {...stylex.props(sx.textSm, sx.fontMedium, sx.textFg)}>
+          {report.title}
+        </div>
         {report.summary && (
-          <p className="mt-1.5 text-xs leading-[1.5] text-dim">
+          <p {...stylex.props(sx.mt15, sx.textXs, sx.leading15, sx.textDim)}>
             {report.summary}
           </p>
         )}

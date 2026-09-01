@@ -1,3 +1,4 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
 import { BASE_PATH } from "../lib/base";
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "../ui/toast";
@@ -24,6 +25,66 @@ import { Menu } from "../ui/menu";
 import { IconTile } from "./BrandTile";
 import { IconDotsHorizontal, IconPlus, IconTrash } from "./icons";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gapX3: {
+    columnGap: "calc(4px * 3)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  pyPx: {
+    paddingBlock: "1px",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  Mt2: {
+    marginTop: "calc(4px * -2)",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+});
 
 // Settings → Model providers: third-party Pi providers (xai, openrouter,
 // groq, …) — API key + optional baseURL, stored server-side (0600, returned
@@ -136,20 +197,38 @@ export function ModelProvidersPanel() {
           </EmptyState>
         ) : (
           providers.map((p) => (
-            <SettingRow key={p.id} className="items-start gap-x-3">
+            <SettingRow
+              key={p.id}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.itemsStart,
+                sx.gapX3,
+              )}
+            >
               <IconTile name={p.id} size={28} />
               <SettingRowText>
                 <SettingRowTitle>{p.id}</SettingRowTitle>
-                <SettingRowDescription className="truncate">
+                <SettingRowDescription
+                  className={mergeStylexOverrideClassName("", sx.truncate)}
+                >
                   {p.apiKeyMasked || "no API key stored"}
                   {p.baseURL && ` · ${p.baseURL}`}
                 </SettingRowDescription>
                 {p.models.length > 0 ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
+                  <div
+                    {...stylex.props(sx.mt15, sx.flex, sx.flexWrap, sx.gap1)}
+                  >
                     {p.models.map((m) => (
                       <span
                         key={m}
-                        className="rounded-sm bg-active px-1.5 py-px text-meta text-dim"
+                        {...stylex.props(
+                          sx.roundedSm,
+                          sx.bgActive,
+                          sx.px15,
+                          sx.pyPx,
+                          sx.textDim,
+                          typography.meta,
+                        )}
                         title={m}
                       >
                         {m.split("/").slice(2).join("/")}
@@ -157,7 +236,13 @@ export function ModelProvidersPanel() {
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-1 text-supporting text-faint">
+                  <div
+                    {...stylex.props(
+                      sx.mt1,
+                      sx.textFaint,
+                      typography.supporting,
+                    )}
+                  >
                     No picker models, so its models are type-in only (pi/{p.id}
                     /&lt;model&gt;).
                   </div>
@@ -174,7 +259,10 @@ export function ModelProvidersPanel() {
                   <Menu.Popup align="end" sideOffset={4}>
                     <Menu.Item
                       onClick={() => handleRemove(p)}
-                      className="text-red data-[highlighted]:bg-red-soft"
+                      className={mergeStylexOverrideClassName(
+                        "data-[highlighted]:bg-red-soft",
+                        sx.textRed,
+                      )}
                     >
                       <IconTrash size={16} />
                       Remove provider
@@ -250,7 +338,9 @@ function AddProviderForm({
   return (
     <SettingsForm>
       <SettingsFormTitle>Add provider</SettingsFormTitle>
-      <SettingRowDescription className="-mt-2 mb-3">
+      <SettingRowDescription
+        className={mergeStylexOverrideClassName("", sx.Mt2, sx.mb3)}
+      >
         The provider id must match pi's slug for it (xai, openrouter, groq, …).
         Models are registered in the picker as{" "}
         <code>pi/&lt;provider&gt;/&lt;model&gt;</code>. List the provider's own

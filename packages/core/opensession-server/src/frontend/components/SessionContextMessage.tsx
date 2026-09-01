@@ -1,8 +1,113 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import { msgSystemInline, msgSystemRow } from "../lib/msg-classes";
 import { Button } from "../ui/button";
 import { Skeleton, SkeletonBar } from "../ui/state";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  mxAuto: {
+    marginInline: "auto",
+  },
+  h5: {
+    height: "calc(4px * 5)",
+  },
+  w44: {
+    width: "calc(4px * 44)",
+  },
+  maxW60: {
+    maxWidth: "60%",
+  },
+  hAuto: {
+    height: "auto",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  p0: {
+    padding: "0",
+  },
+  FontFamilyInherit: {
+    fontFamily: "inherit",
+  },
+  textInherit: {
+    color: "inherit",
+  },
+  hoverBgTransparent: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "transparent",
+      },
+    },
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxW560px: {
+    maxWidth: "560px",
+  },
+  roundedLg: {
+    borderRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py3: {
+    paddingBlock: "calc(4px * 3)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  m0: {
+    margin: "0",
+  },
+  maxH70vh: {
+    maxHeight: "70vh",
+  },
+  overflowAuto: {
+    overflow: "auto",
+  },
+  whitespacePreWrap: {
+    whiteSpace: "pre-wrap",
+  },
+  breakWords: {
+    overflowWrap: "break-word",
+  },
+  fontSans: {
+    fontFamily: "var(--sans)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  block: {
+    display: "block",
+  },
+});
 
 interface SessionContextMetadata {
   available: boolean;
@@ -108,7 +213,15 @@ export function SessionContextMessage({ sessionId }: { sessionId: string }) {
     <div ref={rowRef} className={msgSystemRow} data-session-context>
       {metadata === null ? (
         <Skeleton label="Loading session context" className={msgSystemInline}>
-          <SkeletonBar className="mx-auto h-5 w-44 max-w-[60%]" />
+          <SkeletonBar
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.mxAuto,
+              sx.h5,
+              sx.w44,
+              sx.maxW60,
+            )}
+          />
         </Skeleton>
       ) : available ? (
         <>
@@ -118,20 +231,56 @@ export function SessionContextMessage({ sessionId }: { sessionId: string }) {
               variant="ghost"
               aria-expanded={open}
               onClick={toggle}
-              className="h-auto min-h-0 cursor-pointer bg-transparent p-0 [font-family:inherit] text-inherit hover:bg-transparent"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.hAuto,
+                sx.minH0,
+                sx.cursorPointer,
+                sx.bgTransparent,
+                sx.p0,
+                sx.FontFamilyInherit,
+                sx.textInherit,
+                sx.hoverBgTransparent,
+              )}
             >
               {title} ·{" "}
-              <span className="font-medium text-dim">
+              <span {...stylex.props(sx.fontMedium, sx.textDim)}>
                 {open ? "hide" : "show"}
               </span>
             </Button>
           </span>
           {open && (
-            <div className="mx-auto mt-2 w-full max-w-[560px] rounded-lg bg-panel px-4 py-3 text-left">
+            <div
+              {...stylex.props(
+                sx.mxAuto,
+                sx.mt2,
+                sx.wFull,
+                sx.maxW560px,
+                sx.roundedLg,
+                sx.bgPanel,
+                sx.px4,
+                sx.py3,
+                sx.textLeft,
+              )}
+            >
               {loading ? (
-                <p className="m-0 text-label text-dim">Loading…</p>
+                <p {...stylex.props(sx.m0, sx.textDim, typography.label)}>
+                  Loading…
+                </p>
               ) : (
-                <pre className="m-0 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words font-sans text-label leading-relaxed text-fg">
+                <pre
+                  {...stylex.props(
+                    sx.m0,
+                    sx.maxH70vh,
+                    sx.overflowAuto,
+                    sx.whitespacePreWrap,
+                    sx.breakWords,
+                    sx.fontSans,
+                    sx.leadingRelaxed,
+                    sx.textFg,
+                    typography.label,
+                  )}
+                >
                   {content}
                 </pre>
               )}
@@ -140,7 +289,7 @@ export function SessionContextMessage({ sessionId }: { sessionId: string }) {
         </>
       ) : (
         <span className={msgSystemInline} aria-hidden>
-          <span className="block h-5" />
+          <span {...stylex.props(sx.block, sx.h5)} />
         </span>
       )}
     </div>

@@ -1,3 +1,4 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
 import { useEffect, useEffectEvent, useState } from "react";
 import { useShortcutsVersion } from "../../hooks/useShortcutBindings";
 import { isApple } from "../../lib/platform";
@@ -45,6 +46,130 @@ import {
   IconSearch,
   IconTrash,
 } from "../icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  minW6: {
+    minWidth: "calc(4px * 6)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  bgHover: {
+    backgroundColor: "var(--hover)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  py05: {
+    paddingBlock: "calc(4px * 0.5)",
+  },
+  fontSans: {
+    fontFamily: "var(--sans)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  flex: {
+    display: "flex",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gapX2: {
+    columnGap: "calc(4px * 2)",
+  },
+  gapY15: {
+    rowGap: "calc(4px * 1.5)",
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsEnd: {
+    alignItems: "flex-end",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  size7: {
+    width: "calc(4px * 7)",
+    height: "calc(4px * 7)",
+  },
+  relative: {
+    position: "relative",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  left8: {
+    left: "calc(4px * 8)",
+  },
+  top12: {
+    top: "calc(1 / 2 * 100%)",
+  },
+  TranslateY12: {
+    translate: "0 calc(calc(1 / 2 * 100%) * -1)",
+  },
+  pl11: {
+    paddingLeft: "calc(4px * 11)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgAccentSoft: {
+    backgroundColor: "var(--accent-soft)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+});
 
 /** How many chords one command may answer to. Two covers every default; the
  *  third is headroom for someone whose browser eats one of them. */
@@ -55,7 +180,23 @@ const MAX_BINDINGS = 3;
  *  page is a reference and hiding the chords would empty it. */
 function Keycap({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex min-w-6 items-center justify-center rounded-md border border-line-strong bg-hover px-1.5 py-0.5 font-sans text-meta text-dim">
+    <kbd
+      {...stylex.props(
+        sx.inlineFlex,
+        sx.minW6,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.roundedMd,
+        sx.border,
+        sx.borderLineStrong,
+        sx.bgHover,
+        sx.px15,
+        sx.py05,
+        sx.fontSans,
+        sx.textDim,
+        typography.meta,
+      )}
+    >
       {children}
     </kbd>
   );
@@ -63,7 +204,7 @@ function Keycap({ children }: { children: React.ReactNode }) {
 
 function ChordKeys({ keys }: { keys: string[] }) {
   return (
-    <span className="flex items-center gap-1">
+    <span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap1)}>
       {keys.map((key, i) => (
         <Keycap key={`${key}-${i}`}>{key}</Keycap>
       ))}
@@ -248,13 +389,25 @@ export function ShortcutsPanel() {
     const conflicted = conflict?.id === id ? conflict : null;
 
     return (
-      <SettingRow key={id} className="items-start">
+      <SettingRow
+        key={id}
+        className={mergeStylexOverrideClassName("", sx.itemsStart)}
+      >
         <SettingRowText>
           <SettingRowTitle>{command.title}</SettingRowTitle>
           <SettingRowDescription>{command.description}</SettingRowDescription>
           {conflicted && (
             <div
-              className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-supporting text-dim"
+              {...stylex.props(
+                sx.mt2,
+                sx.flex,
+                sx.flexWrap,
+                sx.itemsCenter,
+                sx.gapX2,
+                sx.gapY15,
+                sx.textDim,
+                typography.supporting,
+              )}
               role="alert"
             >
               <ChordKeys keys={glyphsFor(conflicted.chord)} />
@@ -274,15 +427,28 @@ export function ShortcutsPanel() {
             </div>
           )}
           {problem?.id === id && (
-            <div className="mt-1.5 text-supporting text-red" role="alert">
+            <div
+              {...stylex.props(sx.mt15, sx.textRed, typography.supporting)}
+              role="alert"
+            >
               {problem.message}
             </div>
           )}
         </SettingRowText>
-        <SettingRowControl className="flex flex-col items-end gap-1.5">
+        <SettingRowControl
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.flex,
+            sx.flexCol,
+            sx.itemsEnd,
+            sx.gap15,
+          )}
+        >
           {keys.length === 0 && recording?.id !== id && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-supporting text-faint">Unassigned</span>
+            <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15)}>
+              <span {...stylex.props(sx.textFaint, typography.supporting)}>
+                Unassigned
+              </span>
               <RowMenu label={`Manage the shortcut for ${command.title}`}>
                 <Menu.Item onClick={() => beginRecording(id, 0)}>
                   <IconPencil size={16} className={MENU_ICON} />
@@ -311,7 +477,7 @@ export function ShortcutsPanel() {
             return (
               <div
                 key={`${chordKeys.join("+")}-${i}`}
-                className="flex items-center gap-1.5"
+                {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15)}
               >
                 {capturing ? (
                   <RecordingPill held={recording.held} />
@@ -341,7 +507,10 @@ export function ShortcutsPanel() {
                     </Menu.Item>
                   )}
                   <Menu.Item
-                    className="text-red data-[highlighted]:bg-red-soft"
+                    className={mergeStylexOverrideClassName(
+                      "data-[highlighted]:bg-red-soft",
+                      sx.textRed,
+                    )}
                     onClick={() =>
                       setShortcutBindings(
                         id,
@@ -357,11 +526,11 @@ export function ShortcutsPanel() {
             );
           })}
           {recording?.id === id && recording.index >= keys.length && (
-            <div className="flex items-center gap-1.5">
+            <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15)}>
               <RecordingPill held={recording.held} />
               {/* The chord being added has no menu yet. Hold its place so
 							    the pill lines up with the ones on the chords above. */}
-              <span className="size-7" aria-hidden />
+              <span {...stylex.props(sx.size7)} aria-hidden />
             </div>
           )}
         </SettingRowControl>
@@ -382,13 +551,21 @@ export function ShortcutsPanel() {
         }
       />
 
-      <div className="relative px-5">
+      <div {...stylex.props(sx.relative, sx.px5)}>
         <IconSearch
           size={20}
-          className="pointer-events-none absolute left-8 top-1/2 -translate-y-1/2 text-faint"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.pointerEventsNone,
+            sx.absolute,
+            sx.left8,
+            sx.top12,
+            sx.TranslateY12,
+            sx.textFaint,
+          )}
         />
         <Input
-          className="pl-11"
+          className={mergeStylexOverrideClassName("", sx.pl11)}
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -469,12 +646,22 @@ function RowMenu({
 function RecordingPill({ held }: { held: string[] }) {
   return (
     <span
-      className="flex items-center gap-1.5 rounded-control bg-accent-soft px-2.5 py-1 text-meta text-accent"
+      {...mergeStylexProps(
+        "text-accent",
+        sx.flex,
+        sx.itemsCenter,
+        sx.gap15,
+        sx.roundedControl,
+        sx.bgAccentSoft,
+        sx.px25,
+        sx.py1,
+        typography.meta,
+      )}
       role="status"
       aria-live="polite"
     >
       {held.length > 0 ? (
-        <span className="flex items-center gap-1">
+        <span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap1)}>
           {held.map((key) => (
             <Keycap key={key}>{key}</Keycap>
           ))}

@@ -1,6 +1,88 @@
 import { checkClass, formatCheckDuration } from "../../lib/pr-status-derive";
 import { CHECK_TEXT } from "../../lib/pr-tone-classes";
 import type { PrCheck } from "../../lib/types";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName } from "../../ui/cn";
+import { motionStyles } from "../../styles/animations.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "8px",
+  },
+  roundedRow: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px15: {
+    paddingInline: "6px",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  transitionBackground: {
+    transitionProperty: "background",
+    transitionTimingFunction: "var(--tw-ease,var(--ease))",
+    transitionDuration: "var(--tw-duration,var(--dur-micro))",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  textInherit: {
+    color: "inherit",
+  },
+  noUnderline: {
+    textDecorationLine: "none",
+  },
+  truncate: {
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+
+  w35: {
+    width: "14px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+
+  animatePulse14sInfinite: {
+    animation: "1.4s infinite pulse",
+  },
+
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  tabularNums: {
+    "--tw-numeric-spacing": "tabular-nums",
+    fontVariantNumeric:
+      "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)",
+  },
+});
 
 /** `pr-check-mark-pending` styles nothing — it is base.css's hook for keeping
  *  this pulse alive under prefers-reduced-motion, which it does with
@@ -11,28 +93,78 @@ export function CheckRow({ check }: { check: PrCheck }) {
     cls === "check-success" ? "✓" : cls === "check-failure" ? "✕" : "●";
   const duration = formatCheckDuration(check);
   return (
-    <div className="group flex items-center gap-2 rounded-row px-1.5 py-1 text-label text-fg transition-[background] hover:bg-hover">
+    <div
+      {...mergeStylexProps(
+        "group",
+        sx.hoverBgHover,
+        sx.flex,
+        sx.itemsCenter,
+        sx.gap2,
+        sx.roundedRow,
+        sx.px15,
+        sx.py1,
+        sx.textFg,
+        sx.transitionBackground,
+        typography.label,
+      )}
+    >
       <a
-        className="flex min-w-0 flex-1 items-center gap-2 text-inherit no-underline"
+        {...stylex.props(
+          sx.flex,
+          sx.minW0,
+          sx.flex1,
+          sx.itemsCenter,
+          sx.gap2,
+          sx.textInherit,
+          sx.noUnderline,
+        )}
         href={check.url}
         target="_blank"
         rel="noopener"
       >
         <span
-          className={`w-3.5 shrink-0 text-center text-label ${CHECK_TEXT[cls]} ${
+          className={[
+            mergeStylexClassName(
+              "",
+              sx.w35,
+              sx.shrink0,
+              sx.textCenter,
+              typography.label,
+            ),
+            CHECK_TEXT[cls],
             cls === "check-pending"
-              ? "pr-check-mark-pending animate-[pulse_1.4s_infinite]"
-              : ""
-          }`}
+              ? mergeStylexClassName(
+                  "pr-check-mark-pending",
+                  sx.animatePulse14sInfinite,
+                )
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
         >
           {mark}
         </span>
-        <span className="flex-1 truncate">{check.name}</span>
+        <span {...stylex.props(sx.flex1, sx.truncate)}>{check.name}</span>
         {duration && (
-          <span className="text-meta tabular-nums text-faint">{duration}</span>
+          <span
+            {...mergeStylexProps(
+              "",
+              sx.tabularNums,
+              sx.textFaint,
+              typography.meta,
+            )}
+          >
+            {duration}
+          </span>
         )}
         {check.url && (
-          <span className="text-item-title text-faint group-hover:text-fg">
+          <span
+            {...mergeStylexProps(
+              "group-hover:text-fg",
+              sx.textFaint,
+              typography.itemTitle,
+            )}
+          >
             ↗
           </span>
         )}

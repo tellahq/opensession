@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useState, useEffect } from "react";
 import { BrandMark } from "./BrandMark";
 import { UserAvatar } from "./UserAvatar";
@@ -13,6 +15,200 @@ import { InlineAlert } from "../ui/state";
 import { PulseDot } from "../ui/status";
 import { AUTH_STATUS_EVENT, authGatesOut } from "../lib/auth-ready";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  selectNone: {
+    WebkitUserSelect: "none",
+    userSelect: "none",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  bgCover: {
+    backgroundSize: "cover",
+  },
+  bgCenter: {
+    backgroundPosition: "center",
+  },
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  hScreen: {
+    height: "100vh",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  p6: {
+    padding: "calc(4px * 6)",
+  },
+  w400px: {
+    width: "400px",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  rounded3xl: {
+    borderRadius: "calc(26px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgPopupGlass: {
+    backgroundColor: "var(--popup-glass)",
+  },
+  p8: {
+    padding: "calc(4px * 8)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  BackdropFilterVarPopupBlur: {
+    backdropFilter: "var(--popup-blur)",
+  },
+  phoneP6: {
+    "@media (max-width: 720px)": {
+      padding: "calc(4px * 6)",
+    },
+  },
+  m0: {
+    margin: "0",
+  },
+  fontTitle: {
+    fontWeight: "var(--title-weight)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  mb6: {
+    marginBottom: "calc(4px * 6)",
+  },
+  maxW32ch: {
+    maxWidth: "32ch",
+  },
+  leadingNormal: {
+    lineHeight: "var(--leading-normal)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  minH10: {
+    minHeight: "calc(4px * 10)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  roundedLg: {
+    borderRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgButton: {
+    backgroundColor: "var(--button-surface)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  smoothShadowXs: {
+    boxShadow:
+      "0 1px 2px -1px color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent), 0 2px 5px -3px color-mix(in srgb, var(--smooth-shadow-color) 7%, transparent)",
+  },
+  transitionBorderColorScale: {
+    transitionProperty: "border-color,scale",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBorderLineStrong: {
+    "@media (hover: hover)": {
+      ":hover": {
+        borderColor: "var(--border-strong)",
+      },
+    },
+  },
+  activeScale098: {
+    ":active": {
+      scale: "0.98",
+    },
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgSurface85: {
+    backgroundColor: "color-mix(in oklab, var(--bg) 85%, transparent)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  fontSans: {
+    fontFamily: "var(--sans)",
+  },
+  BoxShadowNone: {
+    boxShadow: "none !important",
+  },
+  hoverBgSurface85: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "color-mix(in oklab, var(--bg) 85%, transparent)",
+      },
+    },
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  mt35: {
+    marginTop: "calc(4px * 3.5)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+});
 
 /**
  * Mutable compatibility view for older consumers. `usePeople()` owns the
@@ -134,7 +330,15 @@ function AuthBackdrop() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 select-none bg-surface bg-cover bg-center"
+      {...stylex.props(
+        sx.pointerEventsNone,
+        sx.absolute,
+        sx.inset0,
+        sx.selectNone,
+        sx.bgSurface,
+        sx.bgCover,
+        sx.bgCenter,
+      )}
       style={{ backgroundImage: `url(${BASE_PATH}/${name}.webp)` }}
     />
   );
@@ -173,13 +377,46 @@ function AuthCard({
     // none of the rows it normally makes draggable. The backdrop is the handle
     // here; the card opts back out so its controls stay clickable. The durable
     // shell capability keeps this working if WCO geometry disappears.
-    <div className="relative flex h-screen items-center justify-center overflow-hidden p-6 [html.wco_&]:[-webkit-app-region:drag] [html.wco_&]:[app-region:drag] [html.desktop-shell_&]:[-webkit-app-region:drag] [html.desktop-shell_&]:[app-region:drag]">
+    <div
+      {...mergeStylexProps(
+        "[html.wco_&]:[-webkit-app-region:drag] [html.wco_&]:[app-region:drag] [html.desktop-shell_&]:[-webkit-app-region:drag] [html.desktop-shell_&]:[app-region:drag]",
+        sx.relative,
+        sx.flex,
+        sx.hScreen,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.overflowHidden,
+        sx.p6,
+      )}
+    >
       <AuthBackdrop />
-      <div className="relative w-[400px] max-w-full rounded-3xl bg-popup-glass p-8 text-center shadow-(--auth-card-edge) [backdrop-filter:var(--popup-blur)] phone:p-6 [html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] [html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]">
+      <div
+        {...mergeStylexProps(
+          "shadow-(--auth-card-edge) [html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] [html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]",
+          sx.relative,
+          sx.w400px,
+          sx.maxWFull,
+          sx.rounded3xl,
+          sx.bgPopupGlass,
+          sx.p8,
+          sx.textCenter,
+          sx.BackdropFilterVarPopupBlur,
+          sx.phoneP6,
+        )}
+      >
         <AuthMark />
         {/* Medium, not semibold: at 19px on the card's own paper the heavier
 				    step read as a slab rather than a heading. */}
-        <h1 className="m-0 text-section-title font-title text-fg">{title}</h1>
+        <h1
+          {...stylex.props(
+            sx.m0,
+            sx.fontTitle,
+            sx.textFg,
+            typography.sectionTitle,
+          )}
+        >
+          {title}
+        </h1>
         {children}
       </div>
     </div>
@@ -205,8 +442,8 @@ function AuthMark() {
       // a full-bleed square (Settings → General crops it to one), so it rounds
       // like it does in the OrganizationSwitcher.
       className={cn(
-        "mx-auto mb-5 block size-14",
-        custom ? "rounded-control object-cover" : "",
+        utilityClassName("mx-auto mb-5 block size-14"),
+        custom ? utilityClassName("rounded-control object-cover") : "",
       )}
       onError={() => {
         if (custom) setFailedSrc(src);
@@ -221,7 +458,18 @@ function AuthCopy({ children }: { children: React.ReactNode }) {
     // `last:mb-0` for the cards whose sentence IS the card (the expired
     // notice): the margin is air before whatever follows, and with nothing
     // following it just lands the card off-centre.
-    <p className="mx-auto mt-2 mb-6 max-w-[32ch] text-supporting leading-normal text-dim last:mb-0">
+    <p
+      {...mergeStylexProps(
+        "last:mb-0",
+        sx.mxAuto,
+        sx.mt2,
+        sx.mb6,
+        sx.maxW32ch,
+        sx.leadingNormal,
+        sx.textDim,
+        typography.supporting,
+      )}
+    >
       {children}
     </p>
   );
@@ -308,7 +556,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
           <Button
             variant="primary"
             size="lg"
-            className="min-h-10 w-full"
+            className={mergeStylexOverrideClassName("", sx.minH10, sx.wFull)}
             onClick={loadAuth}
           >
             Try again
@@ -351,10 +599,12 @@ export function UserGate({ children }: { children: React.ReactNode }) {
       </AuthCopy>
       <div
         className={cn(
-          "grid gap-2",
+          utilityClassName("grid gap-2"),
           // One tile has no column to pair with: a half-width button floating
           // in a card reads as a layout that lost its other half.
-          roster.length > 1 ? "grid-cols-2 phone:grid-cols-1" : "grid-cols-1",
+          roster.length > 1
+            ? utilityClassName("grid-cols-2 phone:grid-cols-1")
+            : utilityClassName("grid-cols-1"),
         )}
       >
         {(roster.length ? roster.map(({ name }) => name) : ["Local User"]).map(
@@ -364,7 +614,26 @@ export function UserGate({ children }: { children: React.ReactNode }) {
               // The raised-control optics of Button's `default` variant, at
               // tile proportions: a hairline is allowed here because the tile
               // is a control, not a card (see src/frontend/AGENTS.md).
-              className="flex flex-col items-center gap-2 rounded-lg border border-line bg-button px-3 py-4 text-item-title font-medium text-fg smooth-shadow-xs transition-[border-color,scale] hover:border-line-strong active:scale-[0.98] focus-ring"
+              {...mergeStylexProps(
+                "focus-ring",
+                sx.flex,
+                sx.flexCol,
+                sx.itemsCenter,
+                sx.gap2,
+                sx.roundedLg,
+                sx.border,
+                sx.borderLine,
+                sx.bgButton,
+                sx.px3,
+                sx.py4,
+                sx.fontMedium,
+                sx.textFg,
+                sx.smoothShadowXs,
+                sx.transitionBorderColorScale,
+                sx.hoverBorderLineStrong,
+                sx.activeScale098,
+                typography.itemTitle,
+              )}
               onClick={() => setStoredUser(name)}
             >
               <UserAvatar name={name} size={36} />
@@ -493,7 +762,7 @@ function GithubSignIn({
           <Button
             variant="primary"
             size="lg"
-            className="min-h-10 w-full"
+            className={mergeStylexOverrideClassName("", sx.minH10, sx.wFull)}
             icon={<BrandMark name="github" size={20} />}
             disabled={starting}
             onClick={() => void start()}
@@ -506,10 +775,10 @@ function GithubSignIn({
           </Button>
         </>
       ) : (
-        <div className="flex flex-col items-center">
+        <div {...stylex.props(sx.flex, sx.flexCol, sx.itemsCenter)}>
           <AuthCopy>
             GitHub will ask for it at{" "}
-            <span className="font-medium text-fg">
+            <span {...stylex.props(sx.fontMedium, sx.textFg)}>
               {flow.verificationUri.replace(/^https:\/\//, "")}
             </span>
             .
@@ -518,31 +787,53 @@ function GithubSignIn({
               step and a translucent paper block rather than the shared input chrome. */}
           <DeviceCode
             code={flow.userCode}
-            className="border-0 bg-surface/85 px-4 py-2.5 font-sans text-page-title [box-shadow:none]! hover:bg-surface/85"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.border0,
+              sx.bgSurface85,
+              sx.px4,
+              sx.py25,
+              sx.fontSans,
+              sx.BoxShadowNone,
+              sx.hoverBgSurface85,
+              typography.pageTitle,
+            )}
           />
           <a
             href={flow.verificationUri}
             target="_blank"
             rel="noreferrer"
-            className="mt-5 w-full"
+            {...stylex.props(sx.mt5, sx.wFull)}
           >
             <Button
               variant="primary"
               size="lg"
-              className="min-h-10 w-full"
+              className={mergeStylexOverrideClassName("", sx.minH10, sx.wFull)}
               icon={<IconArrowUpRight size={20} />}
             >
               Open GitHub
             </Button>
           </a>
-          <span className="mt-3.5 flex items-center gap-2 text-label text-dim">
+          <span
+            {...stylex.props(
+              sx.mt35,
+              sx.flex,
+              sx.itemsCenter,
+              sx.gap2,
+              sx.textDim,
+              typography.label,
+            )}
+          >
             <PulseDot size={7} />
             Waiting for GitHub…
           </span>
         </div>
       )}
       {error && (
-        <InlineAlert variant="error" className="mt-5 text-left">
+        <InlineAlert
+          variant="error"
+          className={mergeStylexOverrideClassName("", sx.mt5, sx.textLeft)}
+        >
           {error}
         </InlineAlert>
       )}

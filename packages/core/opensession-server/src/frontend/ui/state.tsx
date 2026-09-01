@@ -1,8 +1,143 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "./cn";
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { IconX } from "../components/icons";
 import { cn } from "./cn";
 import { PageLoader } from "./page-loader";
 import { Spinner } from "./spinner";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  AnimationGhostInVarDurVarEase180msBoth: {
+    animation: "ghost-in var(--dur) var(--ease) 180ms both",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  h25: {
+    height: "calc(4px * 2.5)",
+  },
+  w26: {
+    width: "26%",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  mb45: {
+    marginBottom: "calc(4px * 4.5)",
+  },
+  flex: {
+    display: "flex",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxWVarSessionCol: {
+    maxWidth: "var(--session-col)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  selfCenter: {
+    alignSelf: "center",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  underline: {
+    textDecorationLine: "underline",
+  },
+  underlineOffset2: {
+    textUnderlineOffset: "2px",
+  },
+  opacity80: {
+    opacity: "80%",
+  },
+  transitionOpacity: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverOpacity100: {
+    "@media (hover: hover)": {
+      ":hover": {
+        opacity: "100%",
+      },
+    },
+  },
+  relative: {
+    position: "relative",
+  },
+  Mr1: {
+    marginRight: "calc(4px * -1)",
+  },
+  size6: {
+    width: "calc(4px * 6)",
+    height: "calc(4px * 6)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  opacity60: {
+    opacity: "60%",
+  },
+  beforeAbsolute: {
+    "::before": {
+      content: '""',
+      position: "absolute",
+    },
+  },
+  beforeInset2: {
+    "::before": {
+      content: '""',
+      inset: "calc(4px * -2)",
+    },
+  },
+  beforeContent: {
+    "::before": {
+      content: "''",
+    },
+  },
+});
 
 /**
  * Async-state primitives — one language for "nothing here yet", "fetching"
@@ -48,13 +183,15 @@ export type StatePlacement = "block" | "card" | "row";
 const placements: Record<StatePlacement, string> = {
   // Stands in for a whole region: the `.loading`/`.empty` look (40px of air,
   // centred) so it reads as "this area is empty", not "this row is".
-  block: "flex flex-col items-center justify-center gap-2 py-10 text-center",
+  block: utilityClassName(
+    "flex flex-col items-center justify-center gap-2 py-10 text-center",
+  ),
   // Stands in for a card: borrows SettingCard's surface so the page's rhythm
   // survives the emptiness.
-  card: "rounded-2xl bg-raised px-5 py-4",
+  card: utilityClassName("rounded-2xl bg-raised px-5 py-4"),
   // Lives inside a card's row list: matches SettingRow's padding so it lands
   // on the same left edge as the rows it replaces.
-  row: "px-5 py-4",
+  row: utilityClassName("px-5 py-4"),
 };
 
 export function EmptyState({
@@ -77,21 +214,33 @@ export function EmptyState({
   const block = placement === "block";
   return (
     <div className={cn(placements[placement], className)} {...props}>
-      {block && icon && <span className="text-faint">{icon}</span>}
+      {block && icon && <span {...stylex.props(sx.textFaint)}>{icon}</span>}
       {title && (
-        <div className="text-control-label font-medium text-fg">{title}</div>
+        <div
+          {...stylex.props(sx.fontMedium, sx.textFg, typography.controlLabel)}
+        >
+          {title}
+        </div>
       )}
       {children && (
         <div
           className={cn(
-            "text-supporting leading-snug text-dim",
-            block && "max-w-[46ch]",
+            utilityClassName("text-supporting leading-snug text-dim"),
+            block && utilityClassName("max-w-[46ch]"),
           )}
         >
           {children}
         </div>
       )}
-      {action && <div className={cn(block ? "mt-1" : "mt-2")}>{action}</div>}
+      {action && (
+        <div
+          className={cn(
+            block ? utilityClassName("mt-1") : utilityClassName("mt-2"),
+          )}
+        >
+          {action}
+        </div>
+      )}
     </div>
   );
 }
@@ -113,7 +262,7 @@ export function LoadingState({
   // as a sentence with a mark in front of it. A `row` or a `card` is a small
   // thing working inside a page that has already arrived, so it keeps the ring
   // on the label's line, where bars would be illegible anyway.
-  const block = placement === "block";
+  const block = placement === utilityClassName("block");
   return (
     <div
       role="status"
@@ -121,8 +270,18 @@ export function LoadingState({
       className={cn(placements[placement], className)}
       {...props}
     >
-      {block && spinner && <PageLoader className="text-dim" />}
-      <div className="inline-flex items-center gap-2 text-supporting text-faint">
+      {block && spinner && (
+        <PageLoader className={mergeStylexOverrideClassName("", sx.textDim)} />
+      )}
+      <div
+        {...stylex.props(
+          sx.inlineFlex,
+          sx.itemsCenter,
+          sx.gap2,
+          sx.textFaint,
+          typography.supporting,
+        )}
+      >
         {!block && spinner && <Spinner />}
         {children}
       </div>
@@ -159,10 +318,12 @@ export function Skeleton({
       role="status"
       aria-live="polite"
       aria-label={label}
-      className="[animation:ghost-in_var(--dur)_var(--ease)_180ms_both]"
+      {...stylex.props(sx.AnimationGhostInVarDurVarEase180msBoth)}
       {...props}
     >
-      <div className={cn("animate-pulse", className)}>{children}</div>
+      <div className={cn(utilityClassName("animate-pulse"), className)}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -178,7 +339,10 @@ export function SkeletonBar({
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   return (
-    <div className={cn("h-3 rounded-sm bg-hover", className)} {...props} />
+    <div
+      className={cn(utilityClassName("h-3 rounded-sm bg-hover"), className)}
+      {...props}
+    />
   );
 }
 
@@ -189,14 +353,14 @@ export function SkeletonBar({
  * width: Tailwind only compiles class names it can find in the source.
  */
 const SKELETON_WIDTHS = [
-  "w-[62%]",
-  "w-[41%]",
-  "w-[73%]",
-  "w-[52%]",
-  "w-[35%]",
-  "w-[66%]",
-  "w-[47%]",
-  "w-[58%]",
+  utilityClassName("w-[62%]"),
+  utilityClassName("w-[41%]"),
+  utilityClassName("w-[73%]"),
+  utilityClassName("w-[52%]"),
+  utilityClassName("w-[35%]"),
+  utilityClassName("w-[66%]"),
+  utilityClassName("w-[47%]"),
+  utilityClassName("w-[58%]"),
 ];
 
 /**
@@ -237,12 +401,12 @@ export function ListSkeleton({
     <Skeleton
       label={label}
       className={cn(
-        "flex flex-col",
+        utilityClassName("flex flex-col"),
         cards
-          ? "gap-1.5"
+          ? utilityClassName("gap-1.5")
           : divided
             ? "[&>*+*]:border-t [&>*+*]:border-line"
-            : "gap-0.5",
+            : utilityClassName("gap-0.5"),
         className,
       )}
       {...props}
@@ -252,15 +416,26 @@ export function ListSkeleton({
           key={i}
           className={cn(
             cards
-              ? "rounded-control border border-line bg-panel px-3.5 py-[11px]"
-              : "px-3.5 py-[13px]",
+              ? utilityClassName(
+                  "rounded-control border border-line bg-panel px-3.5 py-[11px]",
+                )
+              : utilityClassName("px-3.5 py-[13px]"),
             rowClassName,
           )}
         >
           <SkeletonBar
             className={SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]}
           />
-          {cards && <SkeletonBar className="mt-2 h-2.5 w-[26%]" />}
+          {cards && (
+            <SkeletonBar
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.mt2,
+                sx.h25,
+                sx.w26,
+              )}
+            />
+          )}
         </div>
       ))}
     </Skeleton>
@@ -300,15 +475,39 @@ export function TranscriptSkeleton({
   return (
     <Skeleton
       label={label}
-      className={cn("flex flex-col", className)}
+      className={cn(utilityClassName("flex flex-col"), className)}
       {...props}
     >
       {TRANSCRIPT_GHOST_TURNS.map((turn) => (
         <React.Fragment key={turn.bubble}>
-          <div className="mx-auto mb-4.5 flex w-full max-w-[var(--session-col)] flex-col">
-            <SkeletonBar className={cn("self-end rounded-lg", turn.bubble)} />
+          <div
+            {...stylex.props(
+              sx.mxAuto,
+              sx.mb45,
+              sx.flex,
+              sx.wFull,
+              sx.maxWVarSessionCol,
+              sx.flexCol,
+            )}
+          >
+            <SkeletonBar
+              className={cn(
+                utilityClassName("self-end rounded-lg"),
+                turn.bubble,
+              )}
+            />
           </div>
-          <div className="mx-auto mb-4.5 flex w-full max-w-[var(--session-col)] flex-col gap-2.5">
+          <div
+            {...stylex.props(
+              sx.mxAuto,
+              sx.mb45,
+              sx.flex,
+              sx.wFull,
+              sx.maxWVarSessionCol,
+              sx.flexCol,
+              sx.gap25,
+            )}
+          >
             {turn.lines.map((width) => (
               <SkeletonBar key={width} className={width} />
             ))}
@@ -326,9 +525,9 @@ type AlertVariant = "error" | "warn" | "info";
 // spells it; a hand-written color-mix here is a second vocabulary for one
 // recipe.
 const alertVariants: Record<AlertVariant, string> = {
-  error: "border-red/40 bg-red-soft text-red",
-  warn: "border-yellow/40 bg-yellow-soft text-yellow",
-  info: "border-blue/40 bg-blue-soft text-blue",
+  error: utilityClassName("border-red/40 bg-red-soft text-red"),
+  warn: utilityClassName("border-yellow/40 bg-yellow-soft text-yellow"),
+  info: utilityClassName("border-blue/40 bg-blue-soft text-blue"),
 };
 
 export function InlineAlert({
@@ -355,9 +554,11 @@ export function InlineAlert({
     <div
       role="alert"
       className={cn(
-        "flex items-start gap-2 rounded-md border px-3 py-2.5 text-sm",
+        utilityClassName(
+          "flex items-start gap-2 rounded-md border px-3 py-2.5 text-sm",
+        ),
         alertVariants[variant],
-        onDismiss && "cursor-pointer",
+        onDismiss && utilityClassName("cursor-pointer"),
         className,
       )}
       onClick={(e) => {
@@ -366,16 +567,33 @@ export function InlineAlert({
       }}
       {...props}
     >
-      <div className="min-w-0 flex-1">
-        {title && <div className="font-medium">{title}</div>}
-        <div className={cn("min-w-0", title && "mt-0.5 opacity-90")}>
+      <div {...stylex.props(sx.minW0, sx.flex1)}>
+        {title && <div {...stylex.props(sx.fontMedium)}>{title}</div>}
+        <div
+          className={cn(
+            utilityClassName("min-w-0"),
+            title && utilityClassName("mt-0.5 opacity-90"),
+          )}
+        >
           {children}
         </div>
       </div>
       {onRetry && (
         <button
           type="button"
-          className="focus-ring shrink-0 self-center whitespace-nowrap text-supporting font-medium underline underline-offset-2 opacity-80 transition-opacity hover:opacity-100"
+          {...mergeStylexProps(
+            "focus-ring",
+            sx.shrink0,
+            sx.selfCenter,
+            sx.whitespaceNowrap,
+            sx.fontMedium,
+            sx.underline,
+            sx.underlineOffset2,
+            sx.opacity80,
+            sx.transitionOpacity,
+            sx.hoverOpacity100,
+            typography.supporting,
+          )}
           onClick={(e) => {
             e.stopPropagation();
             onRetry();
@@ -390,7 +608,23 @@ export function InlineAlert({
           aria-label="Dismiss"
           // Visually 24px so it sits inside the box's 10px padding; the
           // pseudo-element takes the hit area out to 40px.
-          className="focus-ring relative -mr-1 flex size-6 shrink-0 items-center justify-center rounded-control opacity-60 transition-opacity hover:opacity-100 before:absolute before:-inset-2 before:content-['']"
+          {...mergeStylexProps(
+            "focus-ring",
+            sx.relative,
+            sx.Mr1,
+            sx.flex,
+            sx.size6,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.roundedControl,
+            sx.opacity60,
+            sx.transitionOpacity,
+            sx.hoverOpacity100,
+            sx.beforeAbsolute,
+            sx.beforeInset2,
+            sx.beforeContent,
+          )}
           onClick={(e) => {
             e.stopPropagation();
             onDismiss();

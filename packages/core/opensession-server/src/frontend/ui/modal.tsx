@@ -1,7 +1,126 @@
+import { mergeStylexOverrideClassName } from "./cn";
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { cn } from "./cn";
 import { IconX } from "../components/icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  m0: {
+    margin: "0",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  textBalance: {
+    textWrap: "balance",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  leadingTight: {
+    lineHeight: "var(--leading-tight)",
+  },
+  tracking001em: {
+    letterSpacing: "-0.01em",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  relative: {
+    position: "relative",
+  },
+  Mr15: {
+    marginRight: "calc(4px * -1.5)",
+  },
+  Mt1: {
+    marginTop: "calc(4px * -1)",
+  },
+  flex: {
+    display: "flex",
+  },
+  size8: {
+    width: "calc(4px * 8)",
+    height: "calc(4px * 8)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  p0: {
+    padding: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  afterAbsolute: {
+    "::after": {
+      content: '""',
+      position: "absolute",
+    },
+  },
+  afterInset1: {
+    "::after": {
+      content: '""',
+      inset: "calc(4px * -1)",
+    },
+  },
+  afterContent: {
+    "::after": {
+      content: "''",
+    },
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  Mt05: {
+    marginTop: "calc(4px * -0.5)",
+  },
+  textPretty: {
+    textWrap: "pretty",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+});
 
 /**
  * Centered modal dialog on Base UI parts, styled with Tailwind tokens. The
@@ -100,44 +219,60 @@ function Content({
               // `relative` anchors overlays a palette draws inside itself
               // (the dictation HUD); `overflow-hidden` keeps the rows'
               // dividers inside the rounded shell.
-              "relative flex flex-col overflow-hidden outline-none",
+              utilityClassName(
+                "relative flex flex-col overflow-hidden outline-none",
+              ),
               // A 22px base rather than the scale's `rounded-xl`: an
               // overlay this size carries a rounder corner than the
               // controls inside it. Same corner as the centered dialog,
               // one step up from the 18px it used to carry.
-              "rounded-[calc(22px*var(--rf))]",
+              utilityClassName("rounded-[calc(22px*var(--rf))]"),
               // The same glass the menus and hover cards are made of
               // (ui/menu.tsx), so the palette reads as one more floating
               // surface rather than an opaque card — just denser, because
               // this one sits over a dimming backdrop. --palette-glass
               // falls back to the opaque fill without backdrop-filter and
               // under prefers-reduced-transparency (base.css).
-              "bg-palette-glass [backdrop-filter:var(--popup-blur)]",
+              utilityClassName(
+                "bg-palette-glass [backdrop-filter:var(--popup-blur)]",
+              ),
               // --dialog-ring, not --popup-ring: a shell on a scrim needs a
               // firmer hairline than a menu over the page (base.css). In
               // light the two resolve to the same line.
-              "[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
+              utilityClassName(
+                "[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
+              ),
               // Drops in from just above its resting place, the way a
               // palette summoned by a keystroke should.
-              "origin-top transition-[transform,opacity] duration-[var(--dur-micro)] ease-[var(--ease)]",
+              utilityClassName(
+                "origin-top transition-[transform,opacity] duration-[var(--dur-micro)] ease-[var(--ease)]",
+              ),
               "data-[starting-style]:-translate-y-1.5 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0",
               "data-[ending-style]:-translate-y-1.5 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0",
-              widthClassName ?? "w-[min(820px,100%)]",
+              widthClassName ?? utilityClassName("w-[min(820px,100%)]"),
             ]
           : [
-              "fixed left-1/2 top-1/2 z-[10001] w-[90vw] -translate-x-1/2 -translate-y-1/2",
-              widthClassName ?? "max-w-[28rem]",
-              "max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
+              utilityClassName(
+                "fixed left-1/2 top-1/2 z-[10001] w-[90vw] -translate-x-1/2 -translate-y-1/2",
+              ),
+              widthClassName ?? utilityClassName("max-w-[28rem]"),
+              utilityClassName(
+                "max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
+              ),
               // A restrained dialog shell: lifted surface, soft edge,
               // and enough radius to read as a modal without becoming a card.
               // The edge is --dialog-ring rather than the shared hairline: on
               // a scrim the fill's step above the page all but disappears, so
               // the line is what holds the shape (base.css).
-              "rounded-[calc(22px*var(--rf))] bg-raised",
-              "[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
-              "p-6",
-              "flex flex-col gap-4",
-              "origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
+              utilityClassName("rounded-[calc(22px*var(--rf))] bg-raised"),
+              utilityClassName(
+                "[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
+              ),
+              utilityClassName("p-6"),
+              utilityClassName("flex flex-col gap-4"),
+              utilityClassName(
+                "origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
+              ),
               "data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0",
               "data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0",
             ],
@@ -153,7 +288,7 @@ function Content({
     <BaseDialog.Portal keepMounted={keepMounted}>
       <BaseDialog.Backdrop
         className={cn(
-          "fixed inset-0 transition-opacity ease-out",
+          utilityClassName("fixed inset-0 transition-opacity ease-out"),
           "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
           // Palettes sit on their own, lower tier so anything that has
           // always floated above them (the caret-anchored mention popup at
@@ -163,8 +298,12 @@ function Content({
           // THROUGH it — at the old 42% the page's dimming showed up
           // inside the palette as a grey wash over its own fill.
           palette
-            ? "z-[6000] bg-black/22 backdrop-blur-[6px] duration-[var(--dur-micro)]"
-            : "z-[10000] bg-black/25 backdrop-blur-[1px] duration-[var(--dur)]",
+            ? utilityClassName(
+                "z-[6000] bg-black/22 backdrop-blur-[6px] duration-[var(--dur-micro)]",
+              )
+            : utilityClassName(
+                "z-[10000] bg-black/25 backdrop-blur-[1px] duration-[var(--dur)]",
+              ),
           // `palette-backdrop` rides along purely as a runtime marker, and
           // nothing styles it any more: the window-level chords (archive,
           // pin, tab switching, open pull request) decline a keystroke while
@@ -185,7 +324,9 @@ function Content({
       {palette ? (
         <BaseDialog.Viewport
           className={cn(
-            "fixed inset-0 z-[6001] flex items-start justify-center px-4 pb-4 pt-[11vh] max-[560px]:pt-[7vh] [&[hidden]]:hidden",
+            utilityClassName(
+              "fixed inset-0 z-[6001] flex items-start justify-center px-4 pb-4 pt-[11vh] max-[560px]:pt-[7vh] [&[hidden]]:hidden",
+            ),
             viewportClassName,
           )}
         >
@@ -285,17 +426,21 @@ function Header({
           // pins the MARGIN box, so with `top-0` the negative margin lands
           // the bar 24px down the shell and leaves a strip of content
           // sliding past above it (measured). Both are the shell's `p-6`.
-          "sticky -top-6 z-10 flex items-start gap-3 bg-raised",
+          utilityClassName(
+            "sticky -top-6 z-10 flex items-start gap-3 bg-raised",
+          ),
           // `pb-3` is the air the bar keeps under the title, so text
           // passing beneath disappears with a gap rather than touching it.
           // `-mb-3` hands it straight back, leaving the resting header the
           // height it has always had.
-          "-mx-6 -mb-3 -mt-6 px-6 pb-3 pt-6",
+          utilityClassName("-mx-6 -mb-3 -mt-6 px-6 pb-3 pt-6"),
           // The seam is an inset shadow rather than a border, the way the
           // other sticky bars in the app draw theirs (PrPanel's file strip):
           // it costs no layout, so a dialog that never scrolls is not 1px
           // taller than it was for the sake of a line it will never show.
-          "transition-[box-shadow] duration-[var(--dur-micro)]",
+          utilityClassName(
+            "transition-[box-shadow] duration-[var(--dur-micro)]",
+          ),
           scrolled && "shadow-[inset_0_-1px_0_var(--divider)]",
           className,
         )}
@@ -303,12 +448,44 @@ function Header({
         {/* Base UI renders Title as <h2> and Description as <p>; preflight
 				    isn't imported (base.css owns resets), so zero their UA margins
 				    or the <h2> top margin reads as phantom padding above the head. */}
-        <BaseDialog.Title className="m-0 min-w-0 flex-1 text-balance text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+        <BaseDialog.Title
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.m0,
+            sx.minW0,
+            sx.flex1,
+            sx.textBalance,
+            sx.fontSemibold,
+            sx.leadingTight,
+            sx.tracking001em,
+            sx.textFg,
+            typography.dialogTitle,
+          )}
+        >
           {title}
         </BaseDialog.Title>
         <BaseDialog.Close
           aria-label="Close"
-          className="focus-ring relative -mr-1.5 -mt-1 flex size-8 shrink-0 items-center justify-center rounded-control p-0 text-faint transition-colors after:absolute after:-inset-1 after:content-[''] hover:bg-hover hover:text-fg"
+          className={mergeStylexOverrideClassName(
+            "focus-ring",
+            sx.relative,
+            sx.Mr15,
+            sx.Mt1,
+            sx.flex,
+            sx.size8,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.roundedControl,
+            sx.p0,
+            sx.textFaint,
+            sx.transitionColors,
+            sx.afterAbsolute,
+            sx.afterInset1,
+            sx.afterContent,
+            sx.hoverBgHover,
+            sx.hoverTextFg,
+          )}
         >
           <IconX size={20} />
         </BaseDialog.Close>
@@ -321,7 +498,18 @@ function Header({
 			    edge; the old -mt-2.5 moved its first 6px behind that opaque bar and
 			    clipped the tops of every standard modal description. */}
       {description && (
-        <BaseDialog.Description className="m-0 -mt-0.5 text-pretty text-supporting font-normal leading-relaxed text-dim">
+        <BaseDialog.Description
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.m0,
+            sx.Mt05,
+            sx.textPretty,
+            sx.fontNormal,
+            sx.leadingRelaxed,
+            sx.textDim,
+            typography.supporting,
+          )}
+        >
           {description}
         </BaseDialog.Description>
       )}
@@ -333,7 +521,7 @@ function Header({
  *  shell's `gap-4` is what separates the actions from the body — 24px reads as
  *  its own zone, and the settings surfaces this borrows from deliberately have
  *  no dividers. A leading element (a destructive "Clear") sits left of the
- *  actions with `mr-auto`; the older `<div className="flex-1" />` spacer keeps
+ *  actions with `mr-auto`; the older `<div {...stylex.props(sx.flex1)} />` spacer keeps
  *  working under `justify-end`. */
 function Footer({
   className,
@@ -345,7 +533,9 @@ function Footer({
   return (
     <div
       className={cn(
-        "mt-2 flex flex-wrap items-center justify-end gap-2.5",
+        utilityClassName(
+          "mt-2 flex flex-wrap items-center justify-end gap-2.5",
+        ),
         className,
       )}
     >

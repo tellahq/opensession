@@ -28,9 +28,11 @@ const floatingPrimitiveSources = await Promise.all([
 ]);
 
 test("shared floating interactions paint above the workspace summary", () => {
-  expect(summarySource).toContain('positionerClassName="z-[2147483646]"');
+  expect(summarySource).toContain(
+    'positionerClassName={utilityClassName("z-[2147483646]")}',
+  );
   expect(popupClassesSource).toContain(
-    'export const FLOATING_OVERLAY_LAYER = "z-[2147483647]"',
+    'export const FLOATING_OVERLAY_LAYER = mergeStylexClassName("", sx.z2147483647);',
   );
   for (const source of floatingPrimitiveSources) {
     expect(source).toContain("FLOATING_OVERLAY_LAYER");

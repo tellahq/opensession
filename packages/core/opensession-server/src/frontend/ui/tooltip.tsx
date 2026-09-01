@@ -1,8 +1,55 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import { cn } from "./cn";
 import { ExclusivePopupProvider } from "./exclusive-popups";
 import { FLOATING_OVERLAY_LAYER } from "./popup-classes";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap3px: {
+    gap: "3px",
+  },
+  h4: {
+    height: "calc(4px * 4)",
+  },
+  minW4: {
+    minWidth: "calc(4px * 4)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px3px: {
+    paddingInline: "3px",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  FontFamilyInherit: {
+    fontFamily: "inherit",
+  },
+  bgWhite20: {
+    backgroundColor: "color-mix(in oklab, var(--color-white) 20%, transparent)",
+  },
+  textWhite75: {
+    color: "color-mix(in oklab, var(--color-white) 75%, transparent)",
+  },
+});
 
 /**
  * Tooltip on Base UI (Tooltip.Root/Trigger/Positioner/Popup), styled with
@@ -79,35 +126,54 @@ export function Tooltip({
         >
           <BaseTooltip.Popup
             className={cn(
-              "pointer-events-none flex items-center gap-2",
-              "origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out",
+              utilityClassName("pointer-events-none flex items-center gap-2"),
+              utilityClassName(
+                "origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out",
+              ),
               "data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0",
               "data-[ending-style]:opacity-0 data-[instant]:transition-none",
               // 13px medium text on a near-black chip with
               // its soft `shadow-popup` + our theme ring.
-              "rounded-panel bg-tooltip px-2 py-1 text-label leading-snug font-medium text-tooltip-fg",
+              utilityClassName(
+                "rounded-panel bg-tooltip px-2 py-1 text-label leading-snug font-medium text-tooltip-fg",
+              ),
               "shadow-[0px_10px_38px_-10px_rgba(14,18,22,0.35),0px_10px_20px_-15px_rgba(14,18,22,0.2),0_0_0_1px_var(--tooltip-ring)]",
               multiline
-                ? "max-w-[360px] items-start whitespace-pre-wrap"
-                : "max-w-[280px] whitespace-nowrap",
+                ? utilityClassName(
+                    "max-w-[360px] items-start whitespace-pre-wrap",
+                  )
+                : utilityClassName("max-w-[280px] whitespace-nowrap"),
               popupClassName,
             )}
           >
             <span
               className={cn(
                 multiline
-                  ? "max-h-[50vh] overflow-y-auto"
-                  : "overflow-hidden text-ellipsis",
+                  ? utilityClassName("max-h-[50vh] overflow-y-auto")
+                  : utilityClassName("overflow-hidden text-ellipsis"),
               )}
             >
               {label}
             </span>
             {shortcut && shortcut.length > 0 && (
-              <span className="inline-flex items-center gap-[3px]">
+              <span {...stylex.props(sx.inlineFlex, sx.itemsCenter, sx.gap3px)}>
                 {shortcut.map((k, i) => (
                   <kbd
                     key={i}
-                    className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm px-[3px] text-xs font-medium [font-family:inherit] bg-white/20 text-white/75"
+                    {...stylex.props(
+                      sx.inlineFlex,
+                      sx.h4,
+                      sx.minW4,
+                      sx.itemsCenter,
+                      sx.justifyCenter,
+                      sx.roundedSm,
+                      sx.px3px,
+                      sx.textXs,
+                      sx.fontMedium,
+                      sx.FontFamilyInherit,
+                      sx.bgWhite20,
+                      sx.textWhite75,
+                    )}
                   >
                     {k}
                   </kbd>

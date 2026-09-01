@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import React, { useState } from "react";
 import { cn } from "../ui/cn";
 import {
@@ -17,8 +18,8 @@ export function OrganizationAppIcon({ className }: { className?: string }) {
     <img
       className={cn(
         usesOrganizationIcon
-          ? "block size-11 rounded-control object-cover"
-          : "block size-11",
+          ? utilityClassName("block size-11 rounded-control object-cover")
+          : utilityClassName("block size-11"),
         className,
       )}
       src={src}

@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import React, { useEffect, useRef, useState } from "react";
 import {
   fetchProfile,
@@ -22,6 +24,141 @@ import { toast } from "../../ui/toast";
 import { IconImage, IconPencil, IconTrash } from "../icons";
 import { useCurrentUser } from "../UserPicker";
 import { UserAvatar } from "../UserAvatar";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  mt0: {
+    marginTop: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap0: {
+    gap: "0",
+  },
+  py7: {
+    paddingBlock: "calc(4px * 7)",
+  },
+  size20: {
+    width: "calc(4px * 20)",
+    height: "calc(4px * 20)",
+  },
+  roundedAvatar: {
+    borderRadius: "calc(32% * var(--rp))",
+    cornerShape: "var(--cs)",
+  },
+  mt4: {
+    marginTop: "calc(4px * 4)",
+  },
+  h3: {
+    height: "calc(4px * 3)",
+  },
+  w40: {
+    width: "calc(4px * 40)",
+  },
+  hidden: {
+    display: "none",
+  },
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  Bottom05: {
+    bottom: "calc(4px * -0.5)",
+  },
+  Right05: {
+    right: "calc(4px * -0.5)",
+  },
+  grid: {
+    display: "grid",
+  },
+  size8: {
+    width: "calc(4px * 8)",
+    height: "calc(4px * 8)",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgWhite: {
+    backgroundColor: "var(--color-white)",
+  },
+  textBlack: {
+    color: "var(--color-black)",
+  },
+  mt35: {
+    marginTop: "calc(4px * 3.5)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap35: {
+    gap: "calc(4px * 3.5)",
+  },
+  p5: {
+    padding: "calc(4px * 5)",
+  },
+  mb1: {
+    marginBottom: "4px",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  wMax: {
+    width: "max-content",
+  },
+  disabledPointerEventsNone: {
+    ":disabled": {
+      pointerEvents: "none",
+    },
+  },
+  text10px: {
+    fontSize: "10px",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  leadingNone: {
+    lineHeight: "1",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  m0: {
+    margin: "0",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+});
 
 /**
  * Settings > Personal > Account, first block: who you are on this instance.
@@ -60,7 +197,9 @@ export function ProfileSection() {
 
   return (
     <>
-      <SettingsGroupLabel className="mt-0">Profile</SettingsGroupLabel>
+      <SettingsGroupLabel className={mergeStylexOverrideClassName("", sx.mt0)}>
+        Profile
+      </SettingsGroupLabel>
       {loadError ? (
         <InlineAlert>{loadError}</InlineAlert>
       ) : !profile ? (
@@ -90,9 +229,24 @@ export function ProfileSection() {
 function ProfileSkeleton() {
   return (
     <Skeleton label="Loading your profile">
-      <SettingsForm className="items-center gap-0 py-7">
-        <SkeletonBar className="size-20 rounded-avatar" />
-        <SkeletonBar className="mt-4 h-3 w-40" />
+      <SettingsForm
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.itemsCenter,
+          sx.gap0,
+          sx.py7,
+        )}
+      >
+        <SkeletonBar
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.size20,
+            sx.roundedAvatar,
+          )}
+        />
+        <SkeletonBar
+          className={mergeStylexOverrideClassName("", sx.mt4, sx.h3, sx.w40)}
+        />
       </SettingsForm>
     </Skeleton>
   );
@@ -222,10 +376,17 @@ function ProfileCard({
         ref={fileRef}
         type="file"
         accept="image/png,image/jpeg,image/gif,image/webp"
-        className="hidden"
+        {...stylex.props(sx.hidden)}
         onChange={(e) => void pickPicture(e.target.files?.[0])}
       />
-      <SettingsForm className="items-center gap-0 py-7">
+      <SettingsForm
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.itemsCenter,
+          sx.gap0,
+          sx.py7,
+        )}
+      >
         {/* The whole portrait opens the editor, with the badge as the mark
 				    that says so. A badge that is the only target makes a 28px hit
 				    area out of a 80px one, and the picture is what the eye goes to
@@ -234,7 +395,12 @@ function ProfileCard({
           type="button"
           onClick={() => setEditing(true)}
           aria-label="Edit profile"
-          className="focus-ring relative flex rounded-avatar"
+          {...mergeStylexProps(
+            "focus-ring",
+            sx.relative,
+            sx.flex,
+            sx.roundedAvatar,
+          )}
         >
           <UserAvatar
             name={profile.name}
@@ -248,7 +414,18 @@ function ProfileCard({
 					    so it has to hold its own contrast in both themes instead of
 					    following the page. Same reason its ink is hard black. */}
           <span
-            className="absolute -bottom-0.5 -right-0.5 grid size-8 place-items-center rounded-full bg-white text-black shadow-sm"
+            {...mergeStylexProps(
+              "shadow-sm",
+              sx.absolute,
+              sx.Bottom05,
+              sx.Right05,
+              sx.grid,
+              sx.size8,
+              sx.placeItemsCenter,
+              sx.roundedFull,
+              sx.bgWhite,
+              sx.textBlack,
+            )}
             aria-hidden
           >
             {busy === "picture" ? (
@@ -261,7 +438,14 @@ function ProfileCard({
         {/* Your name and nothing under it. The GitHub login is already on
 				    the account row below, and a timezone is a setting rather than
 				    something you recognize yourself by. */}
-        <div className="mt-3.5 text-item-title font-semibold text-fg">
+        <div
+          {...stylex.props(
+            sx.mt35,
+            sx.fontSemibold,
+            sx.textFg,
+            typography.itemTitle,
+          )}
+        >
           {profile.name}
         </div>
       </SettingsForm>
@@ -276,11 +460,20 @@ function ProfileCard({
         onClose={() => setEditing(false)}
         phone={isPhone}
         label="Edit profile"
-        modalClassName="w-[min(420px,calc(100vw-32px))]"
+        modalClassName={utilityClassName("w-[min(420px,calc(100vw-32px))]")}
       >
         {(dismiss) => (
-          <form className="flex flex-col gap-3.5 p-5" onSubmit={submit}>
-            <div className="text-item-title font-semibold text-fg">
+          <form
+            {...stylex.props(sx.flex, sx.flexCol, sx.gap35, sx.p5)}
+            onSubmit={submit}
+          >
+            <div
+              {...stylex.props(
+                sx.fontSemibold,
+                sx.textFg,
+                typography.itemTitle,
+              )}
+            >
               Edit profile
             </div>
             {/* The picture is the control: the whole square picks a file,
@@ -301,14 +494,28 @@ function ProfileCard({
 
 						    A touch client has no hover, so there the overlay stays
 						    on. */}
-            <div className="group/overlay-action relative mb-1 mt-1 w-max">
+            <div
+              {...mergeStylexProps(
+                "group/overlay-action",
+                sx.relative,
+                sx.mb1,
+                sx.mt1,
+                sx.wMax,
+              )}
+            >
               <button
                 type="button"
                 disabled={busy !== null}
                 onClick={() => fileRef.current?.click()}
                 aria-label={pictureAction}
                 title={pictureAction}
-                className="focus-ring group relative flex rounded-avatar disabled:pointer-events-none"
+                {...mergeStylexProps(
+                  "focus-ring group",
+                  sx.relative,
+                  sx.flex,
+                  sx.roundedAvatar,
+                  sx.disabledPointerEventsNone,
+                )}
               >
                 <UserAvatar
                   name={name || profile.name}
@@ -322,10 +529,14 @@ function ProfileCard({
 								    page. */}
                 <span
                   className={cn(
-                    "absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-avatar bg-black/45 text-white transition-opacity",
+                    utilityClassName(
+                      "absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-avatar bg-black/45 text-white transition-opacity",
+                    ),
                     busy === "picture" || isTouchPrimary
-                      ? "opacity-100"
-                      : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+                      ? utilityClassName("opacity-100")
+                      : utilityClassName(
+                          "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+                        ),
                   )}
                   aria-hidden
                 >
@@ -337,7 +548,13 @@ function ProfileCard({
                       {/* One word: the button already carries the whole
 											    sentence as its accessible name, and 72px of
 											    picture cannot hold two. */}
-                      <span className="text-[10px] font-medium leading-none">
+                      <span
+                        {...stylex.props(
+                          sx.text10px,
+                          sx.fontMedium,
+                          sx.leadingNone,
+                        )}
+                      >
                         {profile.image ? "Change" : "Upload"}
                       </span>
                     </>
@@ -350,7 +567,12 @@ function ProfileCard({
                   onClick={() => void removePicture()}
                   aria-label="Remove picture"
                   title="Remove picture"
-                  icon={<IconTrash className="text-red" size={16} />}
+                  icon={
+                    <IconTrash
+                      className={mergeStylexOverrideClassName("", sx.textRed)}
+                      size={16}
+                    />
+                  }
                 />
               )}
             </div>
@@ -358,7 +580,7 @@ function ProfileCard({
 						    the `<label>`, so text inside it joins the input's accessible
 						    name. The wrapper gives it the gap the label already has
 						    above the input, rather than the form's row gap. */}
-            <div className="flex min-w-0 flex-col gap-1.5">
+            <div {...stylex.props(sx.flex, sx.minW0, sx.flexCol, sx.gap15)}>
               <Field label="Name">
                 <Input
                   value={name}
@@ -373,7 +595,7 @@ function ProfileCard({
 							    All they need is which name their teammates will see, and
 							    that the old one still finds them. */}
               {shortNameChanging && (
-                <p className="m-0 text-supporting text-dim">
+                <p {...stylex.props(sx.m0, sx.textDim, typography.supporting)}>
                   {profile.shortName} becomes {nextShort} in mentions and
                   attribution. {profile.shortName} keeps working.
                 </p>
@@ -404,17 +626,17 @@ function ProfileCard({
                 {error}
               </InlineAlert>
             )}
-            <div className="mt-1 flex justify-end gap-2">
+            <div {...stylex.props(sx.mt1, sx.flex, sx.justifyEnd, sx.gap2)}>
               <Button
                 variant="ghost"
-                className={isPhone ? "min-h-11" : undefined}
+                className={isPhone ? utilityClassName("min-h-11") : undefined}
                 onClick={dismiss}
               >
                 Cancel
               </Button>
               <Button
                 variant="primary"
-                className={isPhone ? "min-h-11" : undefined}
+                className={isPhone ? utilityClassName("min-h-11") : undefined}
                 type="submit"
                 disabled={!name.trim() || !dirty || busy !== null}
               >

@@ -1,3 +1,4 @@
+import { utilityClassName } from "../../ui/cn";
 import type { CSSProperties, RefObject } from "react";
 import { motion } from "motion/react";
 import { composerMorph } from "../../ui/motion";
@@ -39,8 +40,10 @@ export function VoiceControl({
       transition={composerMorph}
       layoutDependency={minimized}
       className={cn(
-        "pwa-composer-dictation inline-flex shrink-0 items-center",
-        minimized && "order-3",
+        utilityClassName(
+          "pwa-composer-dictation inline-flex shrink-0 items-center",
+        ),
+        minimized && utilityClassName("order-3"),
       )}
     >
       {/* The mic is one of the resting pill's circles, so it takes the
@@ -62,8 +65,10 @@ export function VoiceControl({
         // capsule rather than the expanded box's radius.
         overlayClassName={
           minimized
-            ? "rounded-[999px] phone:pl-2 phone:pr-0.5 phone:pb-1"
-            : "rounded-[var(--composer-radius)]"
+            ? utilityClassName(
+                "rounded-[999px] phone:pl-2 phone:pr-0.5 phone:pb-1",
+              )
+            : utilityClassName("rounded-[var(--composer-radius)]")
         }
         disabled={disabled}
       />

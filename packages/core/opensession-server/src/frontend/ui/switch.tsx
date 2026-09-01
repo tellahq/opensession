@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { Switch as BaseSwitch } from "@base-ui/react/switch";
 import { cn } from "./cn";
@@ -18,13 +19,17 @@ type SwitchSize = "md" | "sm";
  *  which Base UI sets on the real thing and the indicator sets by hand. */
 const trackClasses = (size: SwitchSize) =>
   cn(
-    "relative inline-flex shrink-0 rounded-full bg-active",
-    size === "sm" ? "h-5 w-11" : "h-6 w-[54px]",
+    utilityClassName("relative inline-flex shrink-0 rounded-full bg-active"),
+    size === "sm"
+      ? utilityClassName("h-5 w-11")
+      : utilityClassName("h-6 w-[54px]"),
     // The checked track is the selected app accent, matching native
     // controls, through --accent-control: Black and Honey swap it for
     // a blue in dark mode, where a white or yellow track stops reading
     // as "on". Every other accent resolves straight through.
-    "transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-accent-control",
+    utilityClassName(
+      "transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-accent-control",
+    ),
   );
 
 /** The knob is a 32×20 capsule, not a circle. That wider shape is most of
@@ -32,10 +37,12 @@ const trackClasses = (size: SwitchSize) =>
  *  and the capsule, at 26×16. */
 const thumbClasses = (size: SwitchSize) =>
   cn(
-    "absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[translate,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-on-accent-control",
+    utilityClassName(
+      "absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[translate,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-on-accent-control",
+    ),
     size === "sm"
-      ? "h-4 w-[26px] data-[checked]:translate-x-[14px]"
-      : "h-5 w-8 data-[checked]:translate-x-[18px]",
+      ? utilityClassName("h-4 w-[26px] data-[checked]:translate-x-[14px]")
+      : utilityClassName("h-5 w-8 data-[checked]:translate-x-[18px]"),
   );
 
 const STRETCH_ANIMATION_ID = "switch-thumb-stretch";
@@ -84,8 +91,10 @@ export function Switch({
     <BaseSwitch.Root
       className={cn(
         trackClasses(size),
-        "cursor-pointer outline-none",
-        "focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+        utilityClassName("cursor-pointer outline-none"),
+        utilityClassName(
+          "focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+        ),
         "data-[disabled]:cursor-default data-[disabled]:opacity-40",
         className,
       )}
@@ -125,7 +134,11 @@ export function SwitchIndicator({
     <span
       aria-hidden
       data-checked={checked}
-      className={cn(trackClasses(size), "pointer-events-none", className)}
+      className={cn(
+        trackClasses(size),
+        utilityClassName("pointer-events-none"),
+        className,
+      )}
     >
       <span data-checked={checked} className={thumbClasses(size)} />
     </span>

@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import React from "react";
 import type { TeamMember } from "../TeamPresence";
 import { TeamLensMenu } from "../TeamPresence";
@@ -12,6 +14,73 @@ import type { SupportSurface } from "../../lib/support-surface";
 import { cn } from "../../ui/cn";
 import { ContextMenu, MENU_ICON } from "../../ui/menu";
 import { SidebarToolRows, type SidebarMenuTool } from "./SidebarToolsMenu";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgAccent: {
+    backgroundColor: "var(--accent)",
+  },
+  px7px: {
+    paddingInline: "7px",
+  },
+  pyPx: {
+    paddingBlock: "1px",
+  },
+  leading15: {
+    lineHeight: "1.5",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textOnAccent: {
+    color: "var(--on-accent)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  relative: {
+    position: "relative",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  right2: {
+    right: "calc(4px * 2)",
+  },
+  top12: {
+    top: "calc(1 / 2 * 100%)",
+  },
+  TranslateY12: {
+    translate: "0 calc(calc(1 / 2 * 100%) * -1)",
+  },
+  phonePy25: {
+    "@media (max-width: 720px)": {
+      paddingBlock: "calc(4px * 2.5)",
+    },
+  },
+});
 
 export interface SidebarToolsNavItem {
   id: SidebarToolId;
@@ -66,10 +135,12 @@ export function SidebarToolsNav({
         // The organization row leads this rail on desktop now that the old
         // heading is gone. Pull it slightly closer to the fixed top bar there;
         // phones keep the original spacing because their first row is a tool.
-        "flex flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5 desktop:pt-0.5",
+        utilityClassName(
+          "flex flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5 desktop:pt-0.5",
+        ),
       )}
     >
-      <div className="phone:hidden">
+      <div {...stylex.props(sx.phoneHidden)}>
         <OrganizationSwitcher
           connected={connected}
           onOpenSettings={onOpenSettings}
@@ -79,7 +150,9 @@ export function SidebarToolsNav({
         const rowClass = cn(
           // One look at both widths. Only the box changes, and only
           // because a phone row is pressed rather than read.
-          "group flex items-center text-left transition-colors",
+          utilityClassName(
+            "group flex items-center text-left transition-colors",
+          ),
           // Rows use control-label type, with glyphs matching the
           // sidebar's standard 22px leading rail.
           // `--sidebar-tool-pad` is 5px for a 32px box: the tools are a
@@ -95,16 +168,20 @@ export function SidebarToolsNav({
           // Phones override it to the 13px the session rows take
           // (SIDEBAR_ROW, lib/sidebar-classes.ts) for a 48px box: 32px is
           // a reading height, not a tap target.
-          `w-full ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] phone:py-[13px] text-body font-medium text-dim desktop:text-item-title hover:text-fg`,
+          utilityClassName(
+            `w-full ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] phone:py-[13px] text-body font-medium text-dim desktop:text-item-title hover:text-fg`,
+          ),
           SIDEBAR_HOVER_LAYER,
-          tool.active && "bg-selected text-fg",
+          tool.active && utilityClassName("bg-selected text-fg"),
         );
         const rowBody = (
           <>
             <span
               className={cn(
-                "inline-flex text-faint [&_svg]:size-[22px]",
-                tool.active ? "text-dim" : "group-hover:text-dim",
+                utilityClassName("inline-flex text-faint [&_svg]:size-[22px]"),
+                tool.active
+                  ? utilityClassName("text-dim")
+                  : "group-hover:text-dim",
               )}
             >
               {tool.icon}
@@ -114,7 +191,19 @@ export function SidebarToolsNav({
               // `rounded-full`, not `rounded-[999px]`: this pill never
               // carried a corner-shape, and rounded-full is the one
               // radius spelling base.css does NOT squircle.
-              <span className="ml-auto rounded-full bg-accent px-[7px] py-px text-meta leading-[1.5] font-semibold text-on-accent">
+              <span
+                {...stylex.props(
+                  sx.mlAuto,
+                  sx.roundedFull,
+                  sx.bgAccent,
+                  sx.px7px,
+                  sx.pyPx,
+                  sx.leading15,
+                  sx.fontSemibold,
+                  sx.textOnAccent,
+                  typography.meta,
+                )}
+              >
                 {tool.count}
               </span>
             )}
@@ -163,7 +252,7 @@ export function SidebarToolsNav({
                 onClick={() => onSetToolVisible(tool.id, false)}
               >
                 <IconEyeOff size={20} className={MENU_ICON} />
-                <span className="min-w-0 flex-1 truncate">
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                   Remove from toolbar
                 </span>
               </ContextMenu.Item>
@@ -197,7 +286,10 @@ export function SidebarToolsNav({
         // Feed.
         if (tool.id !== "feed" || team.length === 0) return row;
         return (
-          <div key={tool.id} className="group/team-lens relative">
+          <div
+            key={tool.id}
+            {...mergeStylexProps("group/team-lens", sx.relative)}
+          >
             {row}
             <TeamLensMenu
               members={team}
@@ -217,7 +309,14 @@ export function SidebarToolsNav({
               // the faces are a thumb-sized target rather than a 24px
               // one. It stays a pill either way, so the padding is only
               // reach: nothing about it reads larger at rest.
-              className="absolute right-2 top-1/2 -translate-y-1/2 phone:py-2.5 [--team-face-ring:var(--sidebar-bg)] group-hover/team-lens:[--team-face-ring:var(--row-chip)] data-[popup-open]:[--team-face-ring:var(--row-chip)]"
+              className={mergeStylexOverrideClassName(
+                "[--team-face-ring:var(--sidebar-bg)] group-hover/team-lens:[--team-face-ring:var(--row-chip)] data-[popup-open]:[--team-face-ring:var(--row-chip)]",
+                sx.absolute,
+                sx.right2,
+                sx.top12,
+                sx.TranslateY12,
+                sx.phonePy25,
+              )}
             />
           </div>
         );

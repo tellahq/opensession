@@ -1,4 +1,50 @@
+import { utilityClassName } from "../../ui/cn";
 import { cn } from "../../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  block: {
+    display: "block",
+  },
+  size4: {
+    width: "calc(4px * 4)",
+    height: "calc(4px * 4)",
+  },
+  textPurple: {
+    color: "var(--purple)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  flex: {
+    display: "flex",
+  },
+  w22px: {
+    width: "22px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  selfStretch: {
+    alignSelf: "stretch",
+  },
+  my3px: {
+    marginBlock: "3px",
+  },
+});
 
 /**
  * The rail a stack is drawn on: a node per layer, threaded by a vertical line,
@@ -20,7 +66,11 @@ export function StackNode({
 }) {
   if (state === "MERGED")
     return (
-      <svg className="block size-4 text-purple" viewBox="0 0 16 16" aria-hidden>
+      <svg
+        {...stylex.props(sx.block, sx.size4, sx.textPurple)}
+        viewBox="0 0 16 16"
+        aria-hidden
+      >
         <circle cx="8" cy="8" r="7" fill="currentColor" />
         <path
           d="M4.6 8.2l2.2 2.2 4.6-4.6"
@@ -34,7 +84,11 @@ export function StackNode({
     );
   if (state === "CLOSED")
     return (
-      <svg className="block size-4 text-red" viewBox="0 0 16 16" aria-hidden>
+      <svg
+        {...stylex.props(sx.block, sx.size4, sx.textRed)}
+        viewBox="0 0 16 16"
+        aria-hidden
+      >
         <circle
           cx="8"
           cy="8"
@@ -55,7 +109,11 @@ export function StackNode({
   // which is a destination rather than a layer.
   if (isDraft || !state)
     return (
-      <svg className="block size-4 text-faint" viewBox="0 0 16 16" aria-hidden>
+      <svg
+        {...stylex.props(sx.block, sx.size4, sx.textFaint)}
+        viewBox="0 0 16 16"
+        aria-hidden
+      >
         <circle
           cx="8"
           cy="8"
@@ -67,7 +125,11 @@ export function StackNode({
       </svg>
     );
   return (
-    <svg className="block size-4 text-green" viewBox="0 0 16 16" aria-hidden>
+    <svg
+      {...stylex.props(sx.block, sx.size4, sx.textGreen)}
+      viewBox="0 0 16 16"
+      aria-hidden
+    >
       <circle
         cx="8"
         cy="8"
@@ -107,10 +169,29 @@ export function StackRail({
   children: React.ReactNode;
 }) {
   return (
-    <span className="flex w-[22px] shrink-0 flex-col items-center self-stretch">
-      <span className={cn("w-px flex-1 bg-line", first && "invisible")} />
-      <span className="my-[3px] shrink-0">{children}</span>
-      <span className={cn("w-px flex-1 bg-line", last && "invisible")} />
+    <span
+      {...stylex.props(
+        sx.flex,
+        sx.w22px,
+        sx.shrink0,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.selfStretch,
+      )}
+    >
+      <span
+        className={cn(
+          utilityClassName("w-px flex-1 bg-line"),
+          first && utilityClassName("invisible"),
+        )}
+      />
+      <span {...stylex.props(sx.my3px, sx.shrink0)}>{children}</span>
+      <span
+        className={cn(
+          utilityClassName("w-px flex-1 bg-line"),
+          last && utilityClassName("invisible"),
+        )}
+      />
     </span>
   );
 }

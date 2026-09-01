@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import React from "react";
 import { cn } from "../ui/cn";
 import { markTileShadow } from "../lib/mark-tile";
@@ -10,6 +11,22 @@ import {
   repoIconFill,
   repoIconRevision,
 } from "../lib/repo-colors";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  sizeFull: {
+    width: "100%",
+    height: "100%",
+  },
+  objectCover: {
+    objectFit: "cover",
+  },
+  BorderRadiusInherit: {
+    borderRadius: "inherit",
+    cornerShape: "var(--cs)",
+  },
+});
 
 // The display-name map lives in lib/repo-label and the tile colors in
 // lib/repo-colors, so lib-level formatters can reach both without a component
@@ -58,7 +75,9 @@ const TILE =
   // letter's line box taller than the tile and leaves its cap height visibly
   // high. A direct-child rule wins that page-level override, then flex centers
   // the tight line box without an extra baseline offset.
-  "repo-tile inline-flex size-[18px] shrink-0 items-center justify-center overflow-hidden rounded-sm text-meta font-bold [&>span]:!leading-none";
+  utilityClassName(
+    "repo-tile inline-flex size-[18px] shrink-0 items-center justify-center overflow-hidden rounded-sm text-meta font-bold [&>span]:!leading-none",
+  );
 
 export function RepoTile({
   name,
@@ -102,7 +121,11 @@ export function RepoTile({
   if (usingIcon) {
     return (
       <span
-        className={cn(TILE, circular && "rounded-full", className)}
+        className={cn(
+          TILE,
+          circular && utilityClassName("rounded-full"),
+          className,
+        )}
         style={style}
       >
         {/* The image fills the tile. The parent clips it to the same squircle
@@ -118,7 +141,7 @@ export function RepoTile({
           }`}
           alt=""
           loading="lazy"
-          className="size-full object-cover [border-radius:inherit]"
+          {...stylex.props(sx.sizeFull, sx.objectCover, sx.BorderRadiusInherit)}
           onError={() => setFailedFor(attempt)}
         />
       </span>
@@ -128,7 +151,11 @@ export function RepoTile({
   const letter = repoLetter(name);
   return (
     <span
-      className={cn(TILE, circular && "rounded-full", className)}
+      className={cn(
+        TILE,
+        circular && utilityClassName("rounded-full"),
+        className,
+      )}
       style={style}
     >
       <span>{letter}</span>

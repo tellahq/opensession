@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import { useEffect, useState } from "react";
 import {
   fetchSandboxStatus,
@@ -13,6 +15,18 @@ import {
 import { toast } from "../../ui/toast";
 import { getCurrentUser } from "../UserPicker";
 import { Select, SettingRow } from "./shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  mt0: {
+    marginTop: "0",
+  },
+});
 
 type Scope = "workspace" | "personal";
 
@@ -54,7 +68,7 @@ function SandboxDefaultRow({
         title="Default sandbox"
         desc={loadError || "Loading available sandbox providers…"}
         control={
-          <span className="text-supporting text-faint">
+          <span {...stylex.props(sx.textFaint, typography.supporting)}>
             {loadError ? "Unavailable" : "Loading…"}
           </span>
         }
@@ -132,7 +146,13 @@ function SandboxDefaultRow({
           : "The environment for new sessions."
       }
       control={
-        <div className={saving ? "pointer-events-none opacity-60" : undefined}>
+        <div
+          className={
+            saving
+              ? utilityClassName("pointer-events-none opacity-60")
+              : undefined
+          }
+        >
           <Select
             label={`${scope === "personal" ? "Personal" : "Workspace"} default sandbox`}
             value={value}
@@ -157,7 +177,7 @@ export function WorkspaceSandboxDefaults({
 }) {
   return (
     <>
-      <SettingsGroupLabel className="mt-0">
+      <SettingsGroupLabel className={mergeStylexOverrideClassName("", sx.mt0)}>
         Session environment
       </SettingsGroupLabel>
       <SettingCard>

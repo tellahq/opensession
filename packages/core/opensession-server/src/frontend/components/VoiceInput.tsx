@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import React, {
   useEffect,
   useEffectEvent,
@@ -30,6 +31,145 @@ import {
   type BrowserDictation,
 } from "../lib/browser-dictation";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  h10: {
+    height: "calc(4px * 10)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  phoneGap15: {
+    "@media (max-width: 720px)": {
+      gap: "calc(4px * 1.5)",
+    },
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  relative: {
+    position: "relative",
+  },
+  mx4: {
+    marginInline: "calc(4px * 4)",
+  },
+  hFull: {
+    height: "100%",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  phoneMx18px: {
+    "@media (max-width: 720px)": {
+      marginInline: "18px",
+    },
+  },
+  z1: {
+    zIndex: "1",
+  },
+  block: {
+    display: "block",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  Absolute: {
+    position: "absolute !important",
+  },
+  inset0: {
+    inset: "0",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  bottomCalc1008px: {
+    bottom: "calc(100% + 8px)",
+  },
+  right0: {
+    right: "0",
+  },
+  z7: {
+    zIndex: "7",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderColorMixInSrgbVarRed40Transparent: {
+    borderColor: "color-mix(in srgb,var(--red) 40%,transparent)",
+  },
+  bgRedSoft: {
+    backgroundColor: "var(--red-soft)",
+  },
+  px11px: {
+    paddingInline: "11px",
+  },
+  py7px: {
+    paddingBlock: "7px",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+});
 
 type Phase =
   | "idle"
@@ -56,24 +196,29 @@ const BAR_GAP = 4;
    dictation was about to append to. It carries the host surface's own fill so
    the waveform reads as drawn straight onto the container, not onto a second
    raised slab inside it. */
-const OVERLAY =
-  "pointer-events-auto absolute inset-0 z-[6] flex items-end gap-1.5 bg-[var(--composer-surface)] px-3.5 pb-2.5 phone:px-3 phone:pb-[9px]";
+const OVERLAY = utilityClassName(
+  "pointer-events-auto absolute inset-0 z-[6] flex items-end gap-1.5 bg-[var(--composer-surface)] px-3.5 pb-2.5 phone:px-3 phone:pb-[9px]",
+);
 /** Default corner. A host whose container is rounded differently passes its
  *  own (the new-session card is `rounded-2xl`). */
-const OVERLAY_RADIUS = "rounded-[var(--composer-radius)]";
+const OVERLAY_RADIUS = utilityClassName("rounded-[var(--composer-radius)]");
 
 /* Waveform bars. Colour lives on the variant, never alongside a second colour
    utility on the same element. Two of those don't compose, the sheet's order
    decides the winner. Bars without a sample yet are a 2px baseline dot; live
    ones get their height inline from the level meter. */
-const WAVE_BAR_IDLE = "h-0.5 w-[3px] shrink-0 rounded-full bg-faint";
-const WAVE_BAR_LIVE =
-  "h-0.5 w-[3px] shrink-0 rounded-full bg-dim transition-[height] duration-[90ms] ease-linear";
+const WAVE_BAR_IDLE = utilityClassName(
+  "h-0.5 w-[3px] shrink-0 rounded-full bg-faint",
+);
+const WAVE_BAR_LIVE = utilityClassName(
+  "h-0.5 w-[3px] shrink-0 rounded-full bg-dim transition-[height] duration-[90ms] ease-linear",
+);
 
 /* Hosts can match cancel to the control it replaces. This fallback keeps the
    standalone VoiceInput target at the same 40px size as its idle mic. */
-const GLYPH_CANCEL =
-  "inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-35";
+const GLYPH_CANCEL = utilityClassName(
+  "inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-35",
+);
 
 /** Each period fades in after the one before it, then all three clear together.
  *  Their spans stay in layout while transparent so the label never shifts. */
@@ -539,10 +684,18 @@ export function VoiceInput({
       phase === "cancelling" ? (
         <motion.div
           key="recording"
-          className="flex h-10 min-w-0 flex-1 items-center gap-2 phone:gap-1.5"
+          {...stylex.props(
+            sx.flex,
+            sx.h10,
+            sx.minW0,
+            sx.flex1,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.phoneGap15,
+          )}
           {...ROW_MOTION}
         >
-          <span className="sr-only" role="status" aria-live="polite">
+          <span {...stylex.props(sx.srOnly)} role="status" aria-live="polite">
             {phase === "requesting" ? "Starting dictation" : "Recording"}
           </span>
           {/* Leading × puts the way out where a person's eye starts. The
@@ -557,7 +710,7 @@ export function VoiceInput({
             >
               {cancelFromPlus ? (
                 <motion.span
-                  className="inline-flex"
+                  {...stylex.props(sx.inlineFlex)}
                   initial={PLUS_TO_CANCEL.initial}
                   animate={
                     phase === "cancelling"
@@ -577,13 +730,27 @@ export function VoiceInput({
               bars accumulating on the right by the accept buttons. */}
           <div
             ref={waveformRef}
-            className="relative mx-4 flex h-full min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden phone:mx-[18px]"
+            {...stylex.props(
+              sx.relative,
+              sx.mx4,
+              sx.flex,
+              sx.hFull,
+              sx.minW0,
+              sx.flex1,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.gap1,
+              sx.overflowHidden,
+              sx.phoneMx18px,
+            )}
             aria-hidden="true"
           >
             <div
               className={cn(
-                "absolute inset-0 flex items-center justify-center gap-1 transition-opacity",
-                liveTranscript && "opacity-15",
+                utilityClassName(
+                  "absolute inset-0 flex items-center justify-center gap-1 transition-opacity",
+                ),
+                liveTranscript && utilityClassName("opacity-15"),
               )}
             >
               {Array.from({ length: barCount }, (_, i) => {
@@ -599,7 +766,17 @@ export function VoiceInput({
               })}
             </div>
             {liveTranscript && (
-              <span className="relative z-[1] block min-w-0 truncate text-label text-fg">
+              <span
+                {...stylex.props(
+                  sx.relative,
+                  sx.z1,
+                  sx.block,
+                  sx.minW0,
+                  sx.truncate,
+                  sx.textFg,
+                  typography.label,
+                )}
+              >
                 {liveTranscript}
               </span>
             )}
@@ -607,7 +784,10 @@ export function VoiceInput({
           <Tooltip label="Keep it. The text lands in the draft to edit.">
             <button
               type="button"
-              className={cn(className, "text-fg hover:text-accent")}
+              className={cn(
+                className,
+                utilityClassName("text-fg hover:text-accent"),
+              )}
               onClick={() => stop(true)}
               disabled={phase === "requesting" || phase === "cancelling"}
               aria-label="Stop and transcribe"
@@ -615,14 +795,20 @@ export function VoiceInput({
               {/* Start with the mic at the checkmark's resting position,
                   then blur the two glyphs through one another. */}
               <motion.span
-                className="!absolute inset-0 inline-flex items-center justify-center"
+                {...stylex.props(
+                  sx.Absolute,
+                  sx.inset0,
+                  sx.inlineFlex,
+                  sx.itemsCenter,
+                  sx.justifyCenter,
+                )}
                 {...MIC_OUT}
                 aria-hidden="true"
               >
                 <IconMic size={22} />
               </motion.span>
               <motion.span
-                className="inline-flex"
+                {...stylex.props(sx.inlineFlex)}
                 {...CHECK_IN}
                 aria-hidden="true"
               >
@@ -647,26 +833,44 @@ export function VoiceInput({
       ) : (
         <motion.div
           key="transcribing"
-          className="flex h-10 min-w-0 flex-1 items-center gap-2.5 px-1"
+          {...stylex.props(
+            sx.flex,
+            sx.h10,
+            sx.minW0,
+            sx.flex1,
+            sx.itemsCenter,
+            sx.gap25,
+            sx.px1,
+          )}
           role="status"
           aria-live="polite"
           {...ROW_MOTION}
         >
-          <span className="sr-only">Transcribing</span>
+          <span {...stylex.props(sx.srOnly)}>Transcribing</span>
           {liveTranscript ? (
             <span
-              className="min-w-0 truncate text-label text-fg"
+              {...stylex.props(
+                sx.minW0,
+                sx.truncate,
+                sx.textFg,
+                typography.label,
+              )}
               aria-hidden="true"
             >
               {liveTranscript}
             </span>
           ) : (
             <span
-              className="shrink-0 text-label font-medium text-dim"
+              {...stylex.props(
+                sx.shrink0,
+                sx.fontMedium,
+                sx.textDim,
+                typography.label,
+              )}
               aria-hidden="true"
             >
               Transcribing
-              <span className="inline-flex">
+              <span {...stylex.props(sx.inlineFlex)}>
                 {TRANSCRIBING_DOT_STARTS.map((start, index) => (
                   <motion.span
                     key={index}
@@ -704,7 +908,22 @@ export function VoiceInput({
       {error && phase === "idle" && (
         <div
           role="alert"
-          className="absolute bottom-[calc(100%+8px)] right-0 z-[7] whitespace-nowrap rounded-control border border-[color-mix(in_srgb,var(--red)_40%,transparent)] bg-red-soft px-[11px] py-[7px] text-supporting font-medium text-red"
+          {...stylex.props(
+            sx.absolute,
+            sx.bottomCalc1008px,
+            sx.right0,
+            sx.z7,
+            sx.whitespaceNowrap,
+            sx.roundedControl,
+            sx.border,
+            sx.borderColorMixInSrgbVarRed40Transparent,
+            sx.bgRedSoft,
+            sx.px11px,
+            sx.py7px,
+            sx.fontMedium,
+            sx.textRed,
+            typography.supporting,
+          )}
         >
           {error}
         </div>

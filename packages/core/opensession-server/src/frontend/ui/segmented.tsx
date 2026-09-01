@@ -1,9 +1,51 @@
+import { utilityClassName } from "./cn";
 import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { motion } from "motion/react";
 import * as React from "react";
 import { cn } from "./cn";
 import { duration, ease } from "./motion";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderVarSegmentedKnobEdge: {
+    borderColor: "var(--segmented-knob-edge)",
+  },
+  bgVarSegmentedKnobSurface: {
+    backgroundColor: "var(--segmented-knob-surface)",
+  },
+  smoothShadowSm: {
+    boxShadow:
+      "0 1px 3px -1px color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent), 0 4px 10px -4px color-mix(in srgb, var(--smooth-shadow-color) 9%, transparent)",
+  },
+});
 
 /**
  * Segmented control — a short, exclusive choice shown in full, where every
@@ -52,8 +94,8 @@ import { duration, ease } from "./motion";
 type Size = "sm" | "md";
 
 const optionSizes: Record<Size, string> = {
-  sm: "px-2 py-0.5",
-  md: "px-2.5 py-1",
+  sm: utilityClassName("px-2 py-0.5"),
+  md: utilityClassName("px-2.5 py-1"),
 };
 
 const SegmentedContext = React.createContext<{
@@ -102,7 +144,10 @@ export function Segmented({
           const picked = next[0];
           if (picked !== undefined && picked !== value) onValueChange(picked);
         }}
-        className={cn("inline-flex rounded-lg bg-hover p-0.5", className)}
+        className={cn(
+          utilityClassName("inline-flex rounded-lg bg-hover p-0.5"),
+          className,
+        )}
         {...props}
       >
         {children}
@@ -125,22 +170,32 @@ export function SegmentedOption({
     <Toggle
       value={value}
       className={cn(
-        "relative inline-flex cursor-pointer items-center justify-center rounded-control border-0 bg-transparent text-center text-control-label font-medium",
+        utilityClassName(
+          "relative inline-flex cursor-pointer items-center justify-center rounded-control border-0 bg-transparent text-center text-control-label font-medium",
+        ),
         optionSizes[size],
-        "whitespace-nowrap transition-colors duration-[var(--dur-micro)] ease-[var(--ease)]",
+        utilityClassName(
+          "whitespace-nowrap transition-colors duration-[var(--dur-micro)] ease-[var(--ease)]",
+        ),
         // Phones get the tap box; the desktop control is a reading size.
-        "phone:px-3 phone:py-2 phone:text-item-title",
-        selected ? "text-fg" : "text-dim hover:text-fg",
+        utilityClassName("phone:px-3 phone:py-2 phone:text-item-title"),
+        selected
+          ? utilityClassName("text-fg")
+          : utilityClassName("text-dim hover:text-fg"),
         // An option the data can't offer yet stays in place, greyed: taking
         // it out would shift the ones beside it as the page loads.
-        "disabled:cursor-default disabled:text-faint disabled:hover:text-faint",
+        utilityClassName(
+          "disabled:cursor-default disabled:text-faint disabled:hover:text-faint",
+        ),
         className,
       )}
       {...props}
     >
       {selected && <SegmentedKnob knobId={knobId} />}
       {/* Above the knob, which is absolutely positioned over the option. */}
-      <span className="relative flex items-center gap-1.5">{children}</span>
+      <span {...stylex.props(sx.relative, sx.flex, sx.itemsCenter, sx.gap15)}>
+        {children}
+      </span>
     </Toggle>
   );
 }
@@ -159,7 +214,15 @@ export function SegmentedKnob({ knobId }: { knobId: string }) {
     <motion.span
       layoutId={knobId}
       aria-hidden
-      className="absolute inset-0 rounded-control border border-[var(--segmented-knob-edge)] bg-[var(--segmented-knob-surface)] smooth-shadow-sm"
+      {...stylex.props(
+        sx.absolute,
+        sx.inset0,
+        sx.roundedControl,
+        sx.border,
+        sx.borderVarSegmentedKnobEdge,
+        sx.bgVarSegmentedKnobSurface,
+        sx.smoothShadowSm,
+      )}
       transition={{ type: "tween", duration: duration.base, ease }}
     />
   );

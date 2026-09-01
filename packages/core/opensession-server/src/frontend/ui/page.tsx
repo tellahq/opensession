@@ -1,14 +1,43 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { cn } from "./cn";
 import { PageDescription, PageHeader, PageTitle } from "./page-header";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  phoneWFull: {
+    "@media (max-width: 720px)": {
+      width: "100%",
+    },
+  },
+  Mt15: {
+    marginTop: "calc(4px * -1.5)",
+  },
+  mb18px: {
+    marginBottom: "18px",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+});
 
 export type PageContentWidth = "narrow" | "default" | "wide" | "full";
 
 const contentWidths: Record<PageContentWidth, string> = {
-  narrow: "max-w-[760px]",
-  default: "max-w-[860px]",
-  wide: "max-w-[920px]",
-  full: "max-w-none",
+  narrow: utilityClassName("max-w-[760px]"),
+  default: utilityClassName("max-w-[860px]"),
+  wide: utilityClassName("max-w-[920px]"),
+  full: utilityClassName("max-w-none"),
 };
 
 interface PageLayoutProps extends Omit<
@@ -38,12 +67,17 @@ export function PageLayout({
       // title once this page has travelled under it. Read by App.tsx through
       // hooks/useScrollEdge.ts; it styles nothing.
       data-page-scroll
-      className={cn("min-h-0 w-full flex-1 overflow-y-auto", className)}
+      className={cn(
+        utilityClassName("min-h-0 w-full flex-1 overflow-y-auto"),
+        className,
+      )}
       {...props}
     >
       <div
         className={cn(
-          "mx-auto w-full px-6 pb-[60px] pt-7 max-[560px]:px-3.5 max-[560px]:pb-12 max-[560px]:pt-[18px]",
+          utilityClassName(
+            "mx-auto w-full px-6 pb-[60px] pt-7 max-[560px]:px-3.5 max-[560px]:pb-12 max-[560px]:pt-[18px]",
+          ),
           contentWidths[contentWidth],
         )}
       >
@@ -55,11 +89,20 @@ export function PageLayout({
             )}
           </div>
           {actions !== undefined && (
-            <div className="phone:w-full">{actions}</div>
+            <div {...stylex.props(sx.phoneWFull)}>{actions}</div>
           )}
         </PageHeader>
         {filters !== undefined && (
-          <div className="-mt-1.5 mb-[18px] flex flex-wrap items-center gap-2.5">
+          <div
+            {...stylex.props(
+              sx.Mt15,
+              sx.mb18px,
+              sx.flex,
+              sx.flexWrap,
+              sx.itemsCenter,
+              sx.gap25,
+            )}
+          >
             {filters}
           </div>
         )}
@@ -80,7 +123,11 @@ export function PageSection({
 }: PageSectionProps) {
   return (
     <div
-      className={cn("mx-auto w-full", contentWidths[contentWidth], className)}
+      className={cn(
+        utilityClassName("mx-auto w-full"),
+        contentWidths[contentWidth],
+        className,
+      )}
       {...props}
     />
   );

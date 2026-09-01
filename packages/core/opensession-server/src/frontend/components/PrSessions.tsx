@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useRef, useState } from "react";
 import type {
   UnifiedSession,
@@ -10,6 +12,101 @@ import { Button } from "../ui/button";
 import { getCurrentUser } from "./UserPicker";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  Mx2: {
+    marginInline: "calc(4px * -2)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  minH10: {
+    minHeight: "calc(4px * 10)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  noUnderline: {
+    textDecorationLine: "none",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  mt3: {
+    marginTop: "calc(4px * 3)",
+  },
+  phoneFlexCol: {
+    "@media (max-width: 720px)": {
+      flexDirection: "column",
+    },
+  },
+  phoneItemsStretch: {
+    "@media (max-width: 720px)": {
+      alignItems: "stretch",
+    },
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+});
 
 /**
  * Sessions related to a PR: primarily via the server-enriched `prs` refs
@@ -154,9 +251,17 @@ export function PrSessionsList({
   }
 
   return (
-    <div className="flex flex-col">
+    <div {...stylex.props(sx.flex, sx.flexCol)}>
       {sessions.length === 0 && (
-        <div className="-mx-2 px-2 py-1.5 text-supporting text-faint">
+        <div
+          {...stylex.props(
+            sx.Mx2,
+            sx.px2,
+            sx.py15,
+            sx.textFaint,
+            typography.supporting,
+          )}
+        >
           No sessions yet.
         </div>
       )}
@@ -171,40 +276,77 @@ export function PrSessionsList({
             e.preventDefault();
             onOpenSession?.(s.id);
           }}
-          className="-mx-2 flex min-h-10 items-center gap-2 rounded-control px-2 py-1.5 text-item-title text-fg no-underline hover:bg-hover phone:min-h-11"
+          {...stylex.props(
+            sx.Mx2,
+            sx.flex,
+            sx.minH10,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.roundedControl,
+            sx.px2,
+            sx.py15,
+            sx.textFg,
+            sx.noUnderline,
+            sx.hoverBgHover,
+            sx.phoneMinH11,
+            typography.itemTitle,
+          )}
         >
           <span
-            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-              s.isRunning ? "bg-yellow animate-pulse" : "bg-line"
-            }`}
+            className={utilityClassName(
+              `w-1.5 h-1.5 rounded-full shrink-0 ${
+                s.isRunning ? "bg-yellow animate-pulse" : "bg-line"
+              }`,
+            )}
           />
-          <span className="truncate">{s.title}</span>
+          <span {...stylex.props(sx.truncate)}>{s.title}</span>
           {s.id === currentSessionId && (
             <Badge variant="outline">current</Badge>
           )}
           {s.archived && (
-            <span className="shrink-0 text-meta text-faint">archived</span>
+            <span {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>
+              archived
+            </span>
           )}
           {s.startedBy && (
-            <span className="text-faint text-label shrink-0">
+            <span {...stylex.props(sx.textFaint, sx.shrink0, typography.label)}>
               {s.startedBy}
             </span>
           )}
-          <span className="text-faint text-label shrink-0 ml-auto">
+          <span
+            {...stylex.props(
+              sx.textFaint,
+              sx.shrink0,
+              sx.mlAuto,
+              typography.label,
+            )}
+          >
             {relativeTime(s.lastActivity)}
           </span>
         </a>
       ))}
       {canCompose && (
         <form
-          className="mt-3 flex items-center gap-2 phone:flex-col phone:items-stretch"
+          {...stylex.props(
+            sx.mt3,
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.phoneFlexCol,
+            sx.phoneItemsStretch,
+          )}
           onSubmit={(e) => {
             e.preventDefault();
             handleStart();
           }}
         >
           <Input
-            className="min-w-0 flex-1 phone:min-h-11"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.minW0,
+              sx.flex1,
+              sx.phoneMinH11,
+            )}
             placeholder="What should this session do?"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -213,14 +355,21 @@ export function PrSessionsList({
           <Button
             type="submit"
             variant="primary"
-            className="shrink-0 text-xs phone:min-h-11"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.shrink0,
+              sx.textXs,
+              sx.phoneMinH11,
+            )}
             disabled={starting || !prompt.trim()}
           >
             {starting ? "Starting…" : "Start"}
           </Button>
         </form>
       )}
-      {error && <div className="mt-1.5 text-xs text-red">{error}</div>}
+      {error && (
+        <div {...stylex.props(sx.mt15, sx.textXs, sx.textRed)}>{error}</div>
+      )}
     </div>
   );
 }

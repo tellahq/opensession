@@ -1,9 +1,66 @@
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { subscribeFrontendVersion } from "../lib/frontend-version";
 import { PERSISTENT_NOTICE_CARD } from "../lib/notification-classes";
 import { Tooltip } from "../ui/tooltip";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  TextBoxTrimBothCapAlphabetic: {
+    textBox: "trim-both cap alphabetic",
+  },
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  leading13: {
+    lineHeight: "1.3",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap1: {
+    gap: "4px",
+  },
+});
 
 interface Props {
   addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
@@ -163,9 +220,15 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
         // The pill keeps a squircle at a pill radius on purpose; base.css
         // exempts rounded-full from its generic squircle rule.
         className={
-          "inline-flex h-7 shrink-0 items-center rounded-full [corner-shape:squircle] px-[13px] " +
-          "cursor-pointer border-none bg-accent text-label font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75 " +
-          "animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none " +
+          utilityClassName(
+            "inline-flex h-7 shrink-0 items-center rounded-full [corner-shape:squircle] px-[13px] ",
+          ) +
+          utilityClassName(
+            "cursor-pointer border-none bg-accent text-label font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75 ",
+          ) +
+          utilityClassName(
+            "animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none ",
+          ) +
           // Phone: keep the visible pill compact while a pseudo-element grows
           // its tap target to the full 44px header row.
           "phone:[.app-brand_&]:relative phone:[.app-brand_&]:order-3 " +
@@ -186,7 +249,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
               : `A new update is available${by ? ` (${by})` : ""}. Tap to refresh.`
         }
       >
-        <span className="[text-box:trim-both_cap_alphabetic]">
+        <span {...stylex.props(sx.TextBoxTrimBothCapAlphabetic)}>
           {refreshing
             ? restart
               ? "Restarting…"
@@ -201,8 +264,26 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
 
   return (
     <div className={PERSISTENT_NOTICE_CARD} role="status" aria-live="polite">
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-        <span className="max-w-full truncate text-supporting font-medium leading-[1.3] text-fg">
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.minW0,
+          sx.flex1,
+          sx.flexCol,
+          sx.itemsStart,
+          sx.gap05,
+        )}
+      >
+        <span
+          {...stylex.props(
+            sx.maxWFull,
+            sx.truncate,
+            sx.fontMedium,
+            sx.leading13,
+            sx.textFg,
+            typography.supporting,
+          )}
+        >
           {forced
             ? `Updating in ${secondsLeft}s…`
             : restart
@@ -211,21 +292,32 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
         </span>
         {detail && (
           <Tooltip label={detail} side="top" multiline>
-            <span className="max-w-full truncate text-meta font-medium leading-[1.3] text-dim">
+            <span
+              {...stylex.props(
+                sx.maxWFull,
+                sx.truncate,
+                sx.fontMedium,
+                sx.leading13,
+                sx.textDim,
+                typography.meta,
+              )}
+            >
               {detail}
             </span>
           </Tooltip>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap1)}>
         <button
-          className={
-            "inline-flex h-7 items-center rounded-control px-3 cursor-pointer border-none bg-accent text-supporting font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75"
-          }
+          className={utilityClassName(
+            "inline-flex h-7 items-center rounded-control px-3 cursor-pointer border-none bg-accent text-supporting font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75",
+          )}
           onClick={refresh}
           disabled={refreshing}
         >
-          <span className="[text-box:trim-both_cap_alphabetic]">{action}</span>
+          <span {...stylex.props(sx.TextBoxTrimBothCapAlphabetic)}>
+            {action}
+          </span>
         </button>
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type {
   PlainEntryAttachment,
@@ -75,6 +77,192 @@ import {
 import { FileChips } from "./FileChips";
 import { UserAvatar } from "./UserAvatar";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  hFull: {
+    height: "100%",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  bgRaised: {
+    backgroundColor: "var(--bg-raised)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mx3: {
+    marginInline: "calc(4px * 3)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  flex1: {
+    flex: "1",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  hoverTextGreen: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--green)",
+      },
+    },
+  },
+  maxW240px: {
+    maxWidth: "240px",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  m0: {
+    margin: "0",
+  },
+  block: {
+    display: "block",
+  },
+  maxH220px: {
+    maxHeight: "220px",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  objectContain: {
+    objectFit: "contain",
+  },
+  opacity60: {
+    opacity: "60%",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  textLink: {
+    color: "var(--link)",
+  },
+  noUnderline: {
+    textDecorationLine: "none",
+  },
+  hoverUnderline: {
+    "@media (hover: hover)": {
+      ":hover": {
+        textDecorationLine: "underline",
+      },
+    },
+  },
+});
 
 interface Props {
   sessionId: string;
@@ -169,11 +357,30 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
   const status = thread?.status;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-raised">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-divider px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
+    <div
+      {...stylex.props(sx.flex, sx.hFull, sx.minH0, sx.flexCol, sx.bgRaised)}
+    >
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.justifyBetween,
+          sx.gap2,
+          sx.borderB,
+          sx.borderDivider,
+          sx.px3,
+          sx.py2,
+        )}
+      >
+        <div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
           <span
-            className="truncate text-label font-semibold text-fg"
+            {...stylex.props(
+              sx.truncate,
+              sx.fontSemibold,
+              sx.textFg,
+              typography.label,
+            )}
             title={thread?.customer?.email || ""}
           >
             {thread?.customer?.name ||
@@ -187,7 +394,13 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
       {thread?.waitingSince && (
         <PlainWaitingBanner
           thread={thread}
-          className="shrink-0 mx-3 mt-2 rounded-md"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.shrink0,
+            sx.mx3,
+            sx.mt2,
+            sx.roundedMd,
+          )}
         />
       )}
 
@@ -196,30 +409,77 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
           threadId={threadId}
           thread={thread}
           onChanged={load}
-          className="shrink-0 px-3 py-2 border-b border-divider"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.shrink0,
+            sx.px3,
+            sx.py2,
+            sx.borderB,
+            sx.borderDivider,
+          )}
         />
       )}
 
       {thread?.title && (
-        <div className="shrink-0 border-b border-divider px-3 py-2 text-label font-semibold text-fg">
+        <div
+          {...stylex.props(
+            sx.shrink0,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px3,
+            sx.py2,
+            sx.fontSemibold,
+            sx.textFg,
+            typography.label,
+          )}
+        >
           {thread.title}
         </div>
       )}
 
       <div
-        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3"
+        {...stylex.props(
+          sx.flex,
+          sx.minH0,
+          sx.flex1,
+          sx.flexCol,
+          sx.gap3,
+          sx.overflowYAuto,
+          sx.p3,
+        )}
         ref={bodyRef}
       >
         {loading && !thread ? (
-          <div className="mt-5 text-center text-label text-faint">
+          <div
+            {...stylex.props(
+              sx.mt5,
+              sx.textCenter,
+              sx.textFaint,
+              typography.label,
+            )}
+          >
             Loading conversation…
           </div>
         ) : error && !thread ? (
-          <div className="mt-5 text-center text-label text-faint">
+          <div
+            {...stylex.props(
+              sx.mt5,
+              sx.textCenter,
+              sx.textFaint,
+              typography.label,
+            )}
+          >
             Couldn't load Plain thread: {error}
           </div>
         ) : thread && thread.entries.length === 0 ? (
-          <div className="mt-5 text-center text-label text-faint">
+          <div
+            {...stylex.props(
+              sx.mt5,
+              sx.textCenter,
+              sx.textFaint,
+              typography.label,
+            )}
+          >
             No messages in this thread yet.
           </div>
         ) : (
@@ -240,7 +500,7 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
           threadId={threadId}
           customerName={thread.customer?.name || thread.customer?.email || null}
           onSent={load}
-          className="mx-3 mb-3"
+          className={mergeStylexOverrideClassName("", sx.mx3, sx.mb3)}
         />
       )}
     </div>
@@ -267,7 +527,12 @@ const SNOOZE_OPTIONS: { label: string; seconds: number }[] = [
  *  grammar (see Archived.tsx), where this row used to lead with a "✓" glyph in
  *  a hand-measured 16px gutter. */
 function MenuTick({ on }: { on: boolean }) {
-  return <Menu.Check on={on} className="ml-auto" />;
+  return (
+    <Menu.Check
+      on={on}
+      className={mergeStylexOverrideClassName("", sx.mlAuto)}
+    />
+  );
 }
 
 /**
@@ -420,8 +685,10 @@ export function PlainThreadActions({
   return (
     <div
       className={cn(
-        "flex gap-1",
-        inBar ? "min-w-0 items-center" : "flex-col",
+        utilityClassName("flex gap-1"),
+        inBar
+          ? utilityClassName("min-w-0 items-center")
+          : utilityClassName("flex-col"),
         className,
       )}
     >
@@ -433,8 +700,10 @@ export function PlainThreadActions({
 			    fields, not one segmented choice. */}
       <div
         className={cn(
-          "flex items-center gap-1",
-          inBar ? "flex-nowrap" : "flex-wrap",
+          utilityClassName("flex items-center gap-1"),
+          inBar
+            ? utilityClassName("flex-nowrap")
+            : utilityClassName("flex-wrap"),
         )}
       >
         {status === "DONE" ? (
@@ -455,7 +724,7 @@ export function PlainThreadActions({
               size="sm"
               variant="default"
               icon={<IconCheck size={20} />}
-              className="hover:text-green"
+              className={mergeStylexOverrideClassName("", sx.hoverTextGreen)}
               disabled={busy}
               onClick={() => setStatus("done")}
               aria-label="Mark this thread Done in Plain"
@@ -484,7 +753,7 @@ export function PlainThreadActions({
                       variant="default"
                       icon={<IconClock size={20} />}
                       caret
-                      className={cn(inBar && "w-auto px-2")}
+                      className={cn(inBar && utilityClassName("w-auto px-2"))}
                       disabled={busy}
                       aria-label="Snooze this thread"
                       title="Snooze this thread"
@@ -532,7 +801,9 @@ export function PlainThreadActions({
                   run(() => setPlainThreadPriorityApi(threadId, p, currentUser))
                 }
               >
-                <span className="min-w-0 flex-1">{PRIORITY_LABEL[p]}</span>
+                <span {...stylex.props(sx.minW0, sx.flex1)}>
+                  {PRIORITY_LABEL[p]}
+                </span>
                 <MenuTick on={thread.priority === p} />
               </Menu.Item>
             ))}
@@ -563,12 +834,26 @@ export function PlainThreadActions({
             {usersLoadError ? (
               <div
                 role="alert"
-                className="max-w-[240px] px-2.5 py-1.5 text-label leading-snug text-red"
+                {...stylex.props(
+                  sx.maxW240px,
+                  sx.px25,
+                  sx.py15,
+                  sx.leadingSnug,
+                  sx.textRed,
+                  typography.label,
+                )}
               >
                 {usersLoadError}
               </div>
             ) : users === null ? (
-              <div className="px-2.5 py-1.5 text-label text-faint">
+              <div
+                {...stylex.props(
+                  sx.px25,
+                  sx.py15,
+                  sx.textFaint,
+                  typography.label,
+                )}
+              >
                 Loading…
               </div>
             ) : (
@@ -582,7 +867,9 @@ export function PlainThreadActions({
                   }
                 >
                   <UserAvatar name={u.name} size={18} />
-                  <span className="min-w-0 flex-1 truncate">{u.name}</span>
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                    {u.name}
+                  </span>
                   <MenuTick on={thread.assignee?.id === u.id} />
                 </Menu.Item>
               ))
@@ -633,7 +920,14 @@ export function PlainThreadActions({
               {labelTypesLoadError ? (
                 <div
                   role="alert"
-                  className="max-w-[240px] px-2.5 py-1.5 text-label leading-snug text-red"
+                  {...stylex.props(
+                    sx.maxW240px,
+                    sx.px25,
+                    sx.py15,
+                    sx.leadingSnug,
+                    sx.textRed,
+                    typography.label,
+                  )}
                 >
                   {labelTypesLoadError}
                 </div>
@@ -659,7 +953,9 @@ export function PlainThreadActions({
                         )
                       }
                     >
-                      <span className="min-w-0 flex-1">{lt.name}</span>
+                      <span {...stylex.props(sx.minW0, sx.flex1)}>
+                        {lt.name}
+                      </span>
                       <MenuTick on={!!existing} />
                     </Menu.CheckboxItem>
                   );
@@ -719,7 +1015,7 @@ export function PlainThreadActions({
               size="sm"
               variant="default"
               icon={<IconForbid size={20} />}
-              className={cn(!isSpam && "hover:text-red")}
+              className={cn(!isSpam && utilityClassName("hover:text-red"))}
               disabled={busy}
               onClick={toggleSpam}
               title={spamTitle}
@@ -732,8 +1028,8 @@ export function PlainThreadActions({
       {error && (
         <span
           className={cn(
-            "text-red text-label truncate",
-            inBar && "max-w-[160px] shrink-0",
+            utilityClassName("text-red text-label truncate"),
+            inBar && utilityClassName("max-w-[160px] shrink-0"),
           )}
           title={error}
         >
@@ -840,7 +1136,7 @@ export function PlainReplyBox({
   return (
     <div
       className={cn(
-        "composer shrink-0",
+        utilityClassName("composer shrink-0"),
         composerBox,
         composerBoxExpanded,
         className,
@@ -862,7 +1158,9 @@ export function PlainReplyBox({
         rows={1}
         {...noAutofill}
         className={cn(
-          "composer-textarea min-h-12 text-fg placeholder:text-faint",
+          utilityClassName(
+            "composer-textarea min-h-12 text-fg placeholder:text-faint",
+          ),
           composerTextarea,
           composerTextareaPadding,
         )}
@@ -882,7 +1180,10 @@ export function PlainReplyBox({
         }}
       />
       {error && (
-        <div className="mt-1 truncate text-label text-red" title={error}>
+        <div
+          {...stylex.props(sx.mt1, sx.truncate, sx.textRed, typography.label)}
+          title={error}
+        >
           {error}
         </div>
       )}
@@ -890,7 +1191,7 @@ export function PlainReplyBox({
         <Tooltip label="Add attachments">
           <button
             type="button"
-            className={cn(paletteIconBtn, "-ml-1.5")}
+            className={cn(paletteIconBtn, utilityClassName("-ml-1.5"))}
             onClick={() => fileInputRef.current?.click()}
             disabled={sending}
             aria-label="Add attachments"
@@ -945,9 +1246,11 @@ export function PlainReplyBox({
             aria-pressed={kind === "note"}
             className={cn(
               palettePill,
-              "shrink-0",
+              utilityClassName("shrink-0"),
               kind === "note" &&
-                "bg-[color-mix(in_srgb,var(--yellow-tint)_22%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow-tint)_32%,transparent)] hover:text-yellow",
+                utilityClassName(
+                  "bg-[color-mix(in_srgb,var(--yellow-tint)_22%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow-tint)_32%,transparent)] hover:text-yellow",
+                ),
             )}
             onClick={() =>
               setKind((current) => (current === "note" ? "reply" : "note"))
@@ -958,19 +1261,38 @@ export function PlainReplyBox({
             Internal note
           </button>
         </Tooltip>
-        <span className="min-w-0 truncate text-meta text-faint phone:hidden">
+        <span
+          {...stylex.props(
+            sx.minW0,
+            sx.truncate,
+            sx.textFaint,
+            sx.phoneHidden,
+            typography.meta,
+          )}
+        >
           {kind === "note"
             ? `Posted as ${currentUser} (via ${PRODUCT_NAME})`
             : `Via Plain, signed “${currentUser.split(/\s+/)[0]}”`}
         </span>
         {sent && (
-          <span className="shrink-0 text-meta font-semibold text-green">
+          <span
+            {...stylex.props(
+              sx.shrink0,
+              sx.fontSemibold,
+              sx.textGreen,
+              typography.meta,
+            )}
+          >
             Sent ✓
           </span>
         )}
         <button
           type="button"
-          className={cn("ml-auto", composerSend, composerSendDefault)}
+          className={cn(
+            utilityClassName("ml-auto"),
+            composerSend,
+            composerSendDefault,
+          )}
           onClick={handleSend}
           disabled={sending || (!text.trim() && attachments.length === 0)}
           title="Send (⌘↵)"
@@ -1013,24 +1335,29 @@ export function PlainWaitingBanner({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-lg bg-yellow-soft px-3 py-1.5 text-supporting text-fg",
+        utilityClassName(
+          "flex items-center gap-2 rounded-lg bg-yellow-soft px-3 py-1.5 text-supporting text-fg",
+        ),
         className,
       )}
     >
-      <IconClock size={16} className="shrink-0 text-yellow" />
-      <span className="min-w-0 truncate">
+      <IconClock
+        size={16}
+        className={mergeStylexOverrideClassName("", sx.shrink0, sx.textYellow)}
+      />
+      <span {...stylex.props(sx.minW0, sx.truncate)}>
         {thread.awaitingFirstResponse ? (
           <>
-            <strong className="font-semibold">{who}</strong> is waiting for a
-            first response
+            <strong {...stylex.props(sx.fontSemibold)}>{who}</strong> is waiting
+            for a first response
           </>
         ) : (
           <>
-            <strong className="font-semibold">{who}</strong> is waiting for a
-            reply
+            <strong {...stylex.props(sx.fontSemibold)}>{who}</strong> is waiting
+            for a reply
           </>
         )}
-        <span className="text-dim"> · {waited}</span>
+        <span {...stylex.props(sx.textDim)}> · {waited}</span>
       </span>
     </div>
   );
@@ -1056,7 +1383,7 @@ function PlainAttachments({
 }) {
   const [failed, setFailed] = useState<Record<string, boolean>>({});
   return (
-    <div className="flex flex-wrap gap-2 mt-2">
+    <div {...stylex.props(sx.flex, sx.flexWrap, sx.gap2, sx.mt2)}>
       {attachments.map((a) => {
         const href = `${API_BASE}/plain/attachments/${encodeURIComponent(a.id)}`;
         const isImage = a.mimeType.startsWith("image/") && !failed[a.id];
@@ -1068,10 +1395,12 @@ function PlainAttachments({
             rel="noreferrer"
             title={`${a.fileName}${a.sizeBytes ? ` · ${fileSize(a.sizeBytes)}` : ""}`}
             className={cn(
-              "block overflow-hidden rounded-lg no-underline",
+              utilityClassName("block overflow-hidden rounded-lg no-underline"),
               isImage
-                ? "md-image-link bg-surface"
-                : "inline-flex items-center gap-1.5 bg-active px-2.5 py-1.5 text-label text-dim hover:bg-hover hover:text-fg",
+                ? utilityClassName("md-image-link bg-surface")
+                : utilityClassName(
+                    "inline-flex items-center gap-1.5 bg-active px-2.5 py-1.5 text-label text-dim hover:bg-hover hover:text-fg",
+                  ),
             )}
           >
             {isImage ? (
@@ -1084,14 +1413,30 @@ function PlainAttachments({
 								   treatment is for a full-width transcript image, so the
 								   thumbnail keeps its cap and drops the border and margin
 								   the wrapper already provides. */
-                className="md-image m-0 block max-h-[220px] max-w-full border-0 bg-surface object-contain"
+                {...mergeStylexProps(
+                  "md-image",
+                  sx.m0,
+                  sx.block,
+                  sx.maxH220px,
+                  sx.maxWFull,
+                  sx.border0,
+                  sx.bgSurface,
+                  sx.objectContain,
+                )}
               />
             ) : (
               <>
-                <IconPaperclip size={16} className="shrink-0 opacity-60" />
-                <span className="truncate">{a.fileName}</span>
+                <IconPaperclip
+                  size={16}
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.shrink0,
+                    sx.opacity60,
+                  )}
+                />
+                <span {...stylex.props(sx.truncate)}>{a.fileName}</span>
                 {a.sizeBytes ? (
-                  <span className="shrink-0 text-faint">
+                  <span {...stylex.props(sx.shrink0, sx.textFaint)}>
                     {fileSize(a.sizeBytes)}
                   </span>
                 ) : null}
@@ -1196,7 +1541,7 @@ export function PlainEntryRow({
         <div className={plainEntryHead}>
           <span className={plainEntryName}>{author.name}</span>
           <span
-            className="text-meta font-semibold text-yellow"
+            {...stylex.props(sx.fontSemibold, sx.textYellow, typography.meta)}
             title="Only the team sees this note"
           >
             Note
@@ -1212,7 +1557,19 @@ export function PlainEntryRow({
           <span className={plainEntryMeta}>{timeOf(entry.timestamp)}</span>
           {author.isAgent && threadId && (
             <a
-              className="ml-auto inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
+              {...stylex.props(
+                sx.mlAuto,
+                sx.inlineFlex,
+                sx.shrink0,
+                sx.itemsCenter,
+                sx.gap05,
+                sx.whitespaceNowrap,
+                sx.fontSemibold,
+                sx.textLink,
+                sx.noUnderline,
+                sx.hoverUnderline,
+                typography.meta,
+              )}
               href={`${BASE_PATH}/plain-triage/${encodeURIComponent(threadId)}`}
               target="_blank"
               rel="noreferrer"
@@ -1239,7 +1596,12 @@ export function PlainEntryRow({
 			    bubble holds nothing but the words — the transcript's grammar for a
 			    speaker label, and the only way the customer's side can lose its
 			    plate without losing who wrote it. */}
-      <div className={cn(plainEntryHead, ours && "flex-row-reverse")}>
+      <div
+        className={cn(
+          plainEntryHead,
+          ours && utilityClassName("flex-row-reverse"),
+        )}
+      >
         <span className={plainEntryName}>{entry.actorName}</span>
         <span className={plainEntryMeta}>
           {entry.kind} · {timeOf(entry.timestamp)}
@@ -1247,7 +1609,9 @@ export function PlainEntryRow({
       </div>
       <div className={ours ? plainEntryOut : plainEntryIn}>
         {subject && (
-          <div className="text-body font-semibold text-fg">{subject}</div>
+          <div {...stylex.props(sx.fontSemibold, sx.textFg, typography.body)}>
+            {subject}
+          </div>
         )}
         {entry.text && <PlainEntryText text={entry.text} />}
         {entry.attachments?.length ? (

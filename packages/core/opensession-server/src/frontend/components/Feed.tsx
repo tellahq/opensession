@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { UnifiedSession } from "../lib/types";
@@ -32,6 +34,218 @@ import { cn } from "../ui/cn";
 import { IconFeed, IconRepo, IconRobot } from "./icons";
 import { PEOPLE_SECTION_LABEL } from "../lib/people-classes";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  size24px: {
+    width: "24px",
+    height: "24px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedAvatar: {
+    borderRadius: "calc(32% * var(--rp))",
+    cornerShape: "var(--cs)",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  gapPx: {
+    gap: "1px",
+  },
+  relative: {
+    position: "relative",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  maxW24: {
+    maxWidth: "calc(4px * 24)",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  minH8: {
+    minHeight: "calc(4px * 8)",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  p1: {
+    padding: "4px",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  size6: {
+    width: "calc(4px * 6)",
+    height: "calc(4px * 6)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  maxW150px: {
+    maxWidth: "150px",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  minW200px: {
+    minWidth: "200px",
+  },
+  size18px: {
+    width: "18px",
+    height: "18px",
+  },
+  flex1: {
+    flex: "1",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  wFull: {
+    width: "100%",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  maxW920px: {
+    maxWidth: "920px",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  pb15: {
+    paddingBottom: "calc(4px * 15)",
+  },
+  pt6: {
+    paddingTop: "calc(4px * 6)",
+  },
+  phonePx4: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 4)",
+    },
+  },
+  phonePb12: {
+    "@media (max-width: 720px)": {
+      paddingBottom: "calc(4px * 12)",
+    },
+  },
+  phonePtCalcVarHeaderH18px: {
+    "@media (max-width: 720px)": {
+      paddingTop: "calc(var(--header-h) + 18px)",
+    },
+  },
+  mb5: {
+    marginBottom: "calc(4px * 5)",
+  },
+  hidden: {
+    display: "none",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  phoneFlex: {
+    "@media (max-width: 720px)": {
+      display: "flex",
+    },
+  },
+  ScrollbarWidthNone: {
+    scrollbarWidth: "none",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  minH30px: {
+    minHeight: "30px",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  selfCenter: {
+    alignSelf: "center",
+  },
+  leading13: {
+    lineHeight: "1.3",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  justifySelfEnd: {
+    justifySelf: "flex-end",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  ml2: {
+    marginLeft: "calc(4px * 2)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+});
 
 /**
  * What the team has been shipping.
@@ -93,7 +307,17 @@ function FeedOwnerMark({ owner }: { owner: FeedOwner }) {
   }
   return (
     <span
-      className="flex size-[24px] shrink-0 items-center justify-center rounded-avatar bg-active text-dim shadow-[var(--avatar-edge)]"
+      {...mergeStylexProps(
+        "shadow-[var(--avatar-edge)]",
+        sx.flex,
+        sx.size24px,
+        sx.shrink0,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.roundedAvatar,
+        sx.bgActive,
+        sx.textDim,
+      )}
       title={owner.label}
     >
       <IconRobot size={14} />
@@ -264,7 +488,7 @@ export function Feed({
   const hiddenMemberCount = chips.length - visibleMembers.length;
   const renderMemberPicker = () => (
     <div
-      className="flex shrink-0 items-center gap-px"
+      {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gapPx)}
       aria-label="Filter feed by person"
     >
       {visibleMembers.map((member) => {
@@ -274,8 +498,13 @@ export function Feed({
             key={member.key}
             type="button"
             className={cn(
-              "focus-ring flex min-h-8 shrink-0 items-center gap-1 rounded-md p-1 text-supporting font-medium text-fg transition-[background-color,color,scale] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover active:scale-[0.96] phone:min-h-11 motion-reduce:transform-none",
-              selected && "bg-selected pr-1.5 font-semibold hover:bg-pressed",
+              utilityClassName(
+                "focus-ring flex min-h-8 shrink-0 items-center gap-1 rounded-md p-1 text-supporting font-medium text-fg transition-[background-color,color,scale] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover active:scale-[0.96] phone:min-h-11 motion-reduce:transform-none",
+              ),
+              selected &&
+                utilityClassName(
+                  "bg-selected pr-1.5 font-semibold hover:bg-pressed",
+                ),
             )}
             onClick={() =>
               pick(
@@ -289,7 +518,7 @@ export function Feed({
               selected ? "Show everyone" : `Show ${member.person.name}`
             }
           >
-            <span className="relative flex">
+            <span {...stylex.props(sx.relative, sx.flex)}>
               <UserAvatar name={member.person.name} size={24} edge={false} />
               <StatusDot
                 state={presenceState(member)}
@@ -300,13 +529,22 @@ export function Feed({
             <span
               aria-hidden={!selected}
               className={cn(
-                "grid min-w-0 transition-[grid-template-columns,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+                utilityClassName(
+                  "grid min-w-0 transition-[grid-template-columns,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+                ),
                 selected
-                  ? "grid-cols-[1fr] opacity-100"
-                  : "grid-cols-[0fr] opacity-0",
+                  ? utilityClassName("grid-cols-[1fr] opacity-100")
+                  : utilityClassName("grid-cols-[0fr] opacity-0"),
               )}
             >
-              <span className="min-w-0 max-w-24 overflow-hidden whitespace-nowrap">
+              <span
+                {...stylex.props(
+                  sx.minW0,
+                  sx.maxW24,
+                  sx.overflowHidden,
+                  sx.whitespaceNowrap,
+                )}
+              >
                 {member.isYou ? "You" : personLabel(member.key)}
               </span>
             </span>
@@ -316,11 +554,34 @@ export function Feed({
       {hiddenMemberCount > 0 && (
         <button
           type="button"
-          className="focus-ring flex min-h-8 shrink-0 items-center justify-center rounded-md p-1 hover:bg-hover phone:min-h-11"
+          {...mergeStylexProps(
+            "focus-ring",
+            sx.flex,
+            sx.minH8,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.roundedMd,
+            sx.p1,
+            sx.hoverBgHover,
+            sx.phoneMinH11,
+          )}
           onClick={() => setShowAllMembers(true)}
           aria-label={`Show ${hiddenMemberCount} more people`}
         >
-          <span className="flex size-6 items-center justify-center rounded-md bg-active text-supporting font-semibold text-dim">
+          <span
+            {...stylex.props(
+              sx.flex,
+              sx.size6,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.roundedMd,
+              sx.bgActive,
+              sx.fontSemibold,
+              sx.textDim,
+              typography.supporting,
+            )}
+          >
             +{hiddenMemberCount}
           </span>
         </button>
@@ -336,29 +597,40 @@ export function Feed({
             size="sm"
             icon={<IconRepo size={18} />}
             caret
-            className="shrink-0 phone:min-h-11"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.shrink0,
+              sx.phoneMinH11,
+            )}
           >
-            <span className="max-w-[150px] truncate">
+            <span {...stylex.props(sx.maxW150px, sx.truncate)}>
               {repo === "all" ? "In all repos" : `In ${repoLabel(repo)}`}
             </span>
           </Button>
         }
       />
-      <Menu.Popup align={align} className="min-w-[200px]">
+      <Menu.Popup
+        align={align}
+        className={mergeStylexOverrideClassName("", sx.minW200px)}
+      >
         <Menu.RadioGroup
           value={repo}
           onValueChange={(value) => setRepo(String(value))}
         >
           <Menu.RadioItem value="all" closeOnClick>
             {/* Sized to the tiles below so every label shares one edge. */}
-            <span className="size-[18px] shrink-0" />
-            <span className="min-w-0 flex-1 truncate">All repos</span>
+            <span {...stylex.props(sx.size18px, sx.shrink0)} />
+            <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+              All repos
+            </span>
             <Menu.Check on={repo === "all"} />
           </Menu.RadioItem>
           {repoOptions.map((name) => (
             <Menu.RadioItem key={name} value={name} closeOnClick>
               <RepoTile name={name} size={18} />
-              <span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
+              <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                {repoLabel(name)}
+              </span>
               <Menu.Check on={repo === name} />
             </Menu.RadioItem>
           ))}
@@ -374,27 +646,71 @@ export function Feed({
     dayGroups.length === 0 && (widening || personPrsLoading);
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col bg-surface">
+    <div
+      {...stylex.props(
+        sx.flex,
+        sx.minH0,
+        sx.wFull,
+        sx.flex1,
+        sx.flexCol,
+        sx.bgSurface,
+      )}
+    >
       {headerActionsEl &&
         (repoOptions.length > 1 || team.length > 0) &&
         createPortal(
-          <div className="flex min-w-0 items-center gap-1 phone:hidden">
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.minW0,
+              sx.itemsCenter,
+              sx.gap1,
+              sx.phoneHidden,
+            )}
+          >
             {repoOptions.length > 1 && renderRepoPicker("end")}
             {team.length > 0 && renderMemberPicker()}
           </div>,
           headerActionsEl,
         )}
-      <div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-6 phone:px-4 phone:pb-12 phone:pt-[calc(var(--header-h)+18px)]">
+      <div
+        data-page-scroll
+        {...stylex.props(sx.minH0, sx.flex1, sx.overflowYAuto)}
+      >
+        <div
+          {...stylex.props(
+            sx.mxAuto,
+            sx.wFull,
+            sx.maxW920px,
+            sx.px6,
+            sx.pb15,
+            sx.pt6,
+            sx.phonePx4,
+            sx.phonePb12,
+            sx.phonePtCalcVarHeaderH18px,
+          )}
+        >
           {(repoOptions.length > 1 || team.length > 0) && (
-            <div className="mb-5 hidden min-w-0 items-center gap-1 overflow-x-auto phone:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div
+              {...mergeStylexProps(
+                "[&::-webkit-scrollbar]:hidden",
+                sx.mb5,
+                sx.hidden,
+                sx.minW0,
+                sx.itemsCenter,
+                sx.gap1,
+                sx.overflowXAuto,
+                sx.phoneFlex,
+                sx.ScrollbarWidthNone,
+              )}
+            >
               {repoOptions.length > 1 && renderRepoPicker("start")}
               {team.length > 0 && renderMemberPicker()}
             </div>
           )}
           {recentPrsError && (
             <InlineAlert
-              className="mb-3"
+              className={mergeStylexOverrideClassName("", sx.mb3)}
               onDismiss={() => setRecentPrsError(null)}
             >
               {recentPrsError}
@@ -402,7 +718,7 @@ export function Feed({
           )}
           {commitsError && (
             <InlineAlert
-              className="mb-3"
+              className={mergeStylexOverrideClassName("", sx.mb3)}
               onDismiss={() => setCommitsError(null)}
             >
               {commitsError}
@@ -410,7 +726,7 @@ export function Feed({
           )}
           {personPrsError && (
             <InlineAlert
-              className="mb-3"
+              className={mergeStylexOverrideClassName("", sx.mb3)}
               onDismiss={() => setPersonPrsError(null)}
             >
               {personPrsError}
@@ -418,15 +734,21 @@ export function Feed({
           )}
           {feedLoading ? (
             <>
-              <div className="mb-2 flex min-h-[30px] items-center">
-                <h3 className={cn(PEOPLE_SECTION_LABEL, "mb-0")}>Shipped</h3>
+              <div
+                {...stylex.props(sx.mb2, sx.flex, sx.minH30px, sx.itemsCenter)}
+              >
+                <h3
+                  className={cn(PEOPLE_SECTION_LABEL, utilityClassName("mb-0"))}
+                >
+                  Shipped
+                </h3>
               </div>
               <ListSkeleton
                 variant="bare"
                 rows={6}
                 label="Loading feed"
                 className={PR_LIST}
-                rowClassName="py-[18px]"
+                rowClassName={utilityClassName("py-[18px]")}
               />
             </>
           ) : recentPrs.length === 0 && commits.length === 0 ? (
@@ -435,8 +757,12 @@ export function Feed({
             </EmptyState>
           ) : (
             <>
-              <div className="mb-2 flex min-h-[30px] items-center">
-                <h3 className={cn(PEOPLE_SECTION_LABEL, "mb-0")}>
+              <div
+                {...stylex.props(sx.mb2, sx.flex, sx.minH30px, sx.itemsCenter)}
+              >
+                <h3
+                  className={cn(PEOPLE_SECTION_LABEL, utilityClassName("mb-0"))}
+                >
                   {scopeName ? `${scopeName} shipped` : "Shipped"}
                 </h3>
               </div>
@@ -446,7 +772,7 @@ export function Feed({
                   rows={6}
                   label="Loading feed"
                   className={PR_LIST}
-                  rowClassName="py-[18px]"
+                  rowClassName={utilityClassName("py-[18px]")}
                 />
               ) : dayGroups.length === 0 ? (
                 // A picked teammate or repo with nothing shipped is an answer,
@@ -466,10 +792,12 @@ export function Feed({
               ) : null}
               <div className={PR_LIST}>
                 {dayGroups.map(([label, rows]) => (
-                  <div key={label} className="mb-5">
+                  <div key={label} {...stylex.props(sx.mb5)}>
                     <h4 className={PR_FEED_GROUP_LABEL}>
                       {label}
-                      <span className="font-medium">{rows.length}</span>
+                      <span {...stylex.props(sx.fontMedium)}>
+                        {rows.length}
+                      </span>
                     </h4>
                     <div>
                       {rows.map((row) => (
@@ -507,17 +835,42 @@ export function Feed({
 												    what the picture already said and made the feed twice
 												    as tall as it needed to be. The name is in the row's
 												    tooltip and in the repo filter above. */}
-                          <span className="flex min-w-0 items-baseline gap-2">
+                          <span
+                            {...stylex.props(
+                              sx.flex,
+                              sx.minW0,
+                              sx.itemsBaseline,
+                              sx.gap2,
+                            )}
+                          >
                             <RepoTile
                               name={row.repo}
                               size={16}
-                              className="self-center"
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.selfCenter,
+                              )}
                             />
-                            <span className="truncate text-item-title font-medium leading-[1.3] text-fg">
+                            <span
+                              {...stylex.props(
+                                sx.truncate,
+                                sx.fontMedium,
+                                sx.leading13,
+                                sx.textFg,
+                                typography.itemTitle,
+                              )}
+                            >
                               {row.title}
                             </span>
                             {row.ref && (
-                              <span className="shrink-0 text-meta tabular-nums text-faint">
+                              <span
+                                {...mergeStylexProps(
+                                  "tabular-nums",
+                                  sx.shrink0,
+                                  sx.textFaint,
+                                  typography.meta,
+                                )}
+                              >
                                 {row.ref}
                               </span>
                             )}
@@ -530,19 +883,33 @@ export function Feed({
                           </span>
                           {/* A side that moved no lines is left off rather than
 												    written as a zero: every commit carries both counts. */}
-                          <span className="justify-self-end text-meta tabular-nums phone:hidden">
+                          <span
+                            {...mergeStylexProps(
+                              "tabular-nums",
+                              sx.justifySelfEnd,
+                              sx.phoneHidden,
+                              typography.meta,
+                            )}
+                          >
                             {!!row.additions && (
-                              <span className="text-green">
+                              <span {...stylex.props(sx.textGreen)}>
                                 +{compactDiff(row.additions)}
                               </span>
                             )}
                             {!!row.deletions && (
-                              <span className="ml-2 text-red">
+                              <span {...stylex.props(sx.ml2, sx.textRed)}>
                                 −{compactDiff(row.deletions)}
                               </span>
                             )}
                           </span>
-                          <span className="justify-self-end text-meta tabular-nums text-faint">
+                          <span
+                            {...mergeStylexProps(
+                              "tabular-nums",
+                              sx.justifySelfEnd,
+                              sx.textFaint,
+                              typography.meta,
+                            )}
+                          >
                             {compactAge(row.shippedAt)}
                           </span>
                         </button>
@@ -557,7 +924,7 @@ export function Feed({
 						    it holds nothing older, so the last page ends in the list
 						    rather than in a button that would do nothing. */}
               {canWiden && (
-                <div className="mt-1 flex justify-center">
+                <div {...stylex.props(sx.mt1, sx.flex, sx.justifyCenter)}>
                   <Button
                     variant="ghost"
                     size="sm"

@@ -1,3 +1,5 @@
+import { mergeStylexProps } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import React, {
   useEffect,
@@ -34,6 +36,77 @@ import {
 import { emojiContextAt, emojiMentionSuggestions } from "../lib/emoji";
 import { caretPoint } from "../lib/caret-coords";
 import { PHONE_QUERY } from "../lib/breakpoints";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  text17px: {
+    fontSize: "17px",
+  },
+  leadingNone: {
+    lineHeight: "1",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  bgColorMixInSrgbVarAccent14Transparent: {
+    backgroundColor: "color-mix(in srgb,var(--accent) 14%,transparent)",
+  },
+  px5px: {
+    paddingInline: "5px",
+  },
+  pyPx: {
+    paddingBlock: "1px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  textEllipsis: {
+    textOverflow: "ellipsis",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  DirectionRtl: {
+    direction: "rtl",
+  },
+});
 
 /**
  * Find the active "@"-mention being typed at the caret. Returns the index of
@@ -514,7 +587,9 @@ export function useFileMentions({
           <div
             ref={popupRef}
             className={cn(
-              "fixed overflow-y-auto rounded-xl bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md",
+              utilityClassName(
+                "fixed overflow-y-auto rounded-xl bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md",
+              ),
               FLOATING_OVERLAY_LAYER,
             )}
             id={popupId}
@@ -529,8 +604,12 @@ export function useFileMentions({
               >
                 <div
                   className={cn(
-                    "px-2.5 pb-1 text-meta font-medium text-faint",
-                    groupIndex === 0 ? "pt-1" : "pt-2",
+                    utilityClassName(
+                      "px-2.5 pb-1 text-meta font-medium text-faint",
+                    ),
+                    groupIndex === 0
+                      ? utilityClassName("pt-1")
+                      : utilityClassName("pt-2"),
                   )}
                 >
                   {group.category}
@@ -572,8 +651,10 @@ export function useFileMentions({
                       aria-selected={i === activeIdx}
                       data-mention-index={i}
                       className={cn(
-                        "flex cursor-pointer items-center gap-2.5 overflow-hidden rounded-control px-2.5 py-2 text-label leading-[1.3] whitespace-nowrap",
-                        i === activeIdx && "bg-pressed",
+                        utilityClassName(
+                          "flex cursor-pointer items-center gap-2.5 overflow-hidden rounded-control px-2.5 py-2 text-label leading-[1.3] whitespace-nowrap",
+                        ),
+                        i === activeIdx && utilityClassName("bg-pressed"),
                       )}
                       onMouseDown={(e) => {
                         e.preventDefault();
@@ -582,7 +663,17 @@ export function useFileMentions({
                       onMouseEnter={() => setActiveIdx(i)}
                     >
                       {isEmoji ? (
-                        <span className="flex size-5 shrink-0 items-center justify-center text-[17px] leading-none">
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.size5,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.text17px,
+                            sx.leadingNone,
+                          )}
+                        >
                           {item.display}
                         </span>
                       ) : isPerson ? (
@@ -590,23 +681,74 @@ export function useFileMentions({
                       ) : isTool ? (
                         <IconTile name={item.insert} size={20} />
                       ) : isWorkspace ? (
-                        <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-active text-dim">
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.size5,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.roundedMd,
+                            sx.bgActive,
+                            sx.textDim,
+                          )}
+                        >
                           <IconStack size={14} />
                         </span>
                       ) : isSession ? (
-                        <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-active text-dim">
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.size5,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.roundedMd,
+                            sx.bgActive,
+                            sx.textDim,
+                          )}
+                        >
                           <IconMessage size={14} />
                         </span>
                       ) : isAction ? (
-                        <span className="flex size-5 shrink-0 items-center justify-center text-dim">
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.size5,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.textDim,
+                          )}
+                        >
                           {item.icon || <IconPlug size={16} />}
                         </span>
                       ) : item.repo ? (
-                        <span className="shrink-0 rounded-md bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">
+                        <span
+                          {...mergeStylexProps(
+                            "text-accent",
+                            sx.shrink0,
+                            sx.roundedMd,
+                            sx.bgColorMixInSrgbVarAccent14Transparent,
+                            sx.px5px,
+                            sx.pyPx,
+                            sx.fontSemibold,
+                            typography.meta,
+                          )}
+                        >
                           {repoLabel(item.repo)}
                         </span>
                       ) : (
-                        <span className="flex size-5 shrink-0 items-center justify-center text-faint">
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.size5,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.textFaint,
+                          )}
+                        >
                           {isSkill ? (
                             <IconBolt size={16} />
                           ) : isDir ? (
@@ -617,16 +759,36 @@ export function useFileMentions({
                         </span>
                       )}
                       {!isEmoji && (
-                        <span className="shrink-0 font-medium text-fg">
+                        <span
+                          {...stylex.props(
+                            sx.shrink0,
+                            sx.fontMedium,
+                            sx.textFg,
+                          )}
+                        >
                           {label}
                         </span>
                       )}
                       {isEmoji ? (
-                        <span className="overflow-hidden text-ellipsis font-medium text-fg">
+                        <span
+                          {...stylex.props(
+                            sx.overflowHidden,
+                            sx.textEllipsis,
+                            sx.fontMedium,
+                            sx.textFg,
+                          )}
+                        >
                           {item.sub}
                         </span>
                       ) : isTool ? (
-                        <span className="overflow-hidden text-ellipsis text-meta text-faint">
+                        <span
+                          {...stylex.props(
+                            sx.overflowHidden,
+                            sx.textEllipsis,
+                            sx.textFaint,
+                            typography.meta,
+                          )}
+                        >
                           @{item.insert}
                         </span>
                       ) : isWorkspace ||
@@ -635,12 +797,28 @@ export function useFileMentions({
                         isPerson ||
                         isAction ? (
                         item.sub && (
-                          <span className="overflow-hidden text-ellipsis text-meta text-faint">
+                          <span
+                            {...stylex.props(
+                              sx.overflowHidden,
+                              sx.textEllipsis,
+                              sx.textFaint,
+                              typography.meta,
+                            )}
+                          >
                             {item.sub}
                           </span>
                         )
                       ) : dir ? (
-                        <span className="overflow-hidden text-ellipsis text-left text-meta text-faint [direction:rtl]">
+                        <span
+                          {...stylex.props(
+                            sx.overflowHidden,
+                            sx.textEllipsis,
+                            sx.textLeft,
+                            sx.textFaint,
+                            sx.DirectionRtl,
+                            typography.meta,
+                          )}
+                        >
                           {dir}
                         </span>
                       ) : null}

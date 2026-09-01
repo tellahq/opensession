@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
 import React, { useEffect, useRef, useState } from "react";
@@ -31,6 +33,221 @@ import {
   sessionHasOwner,
   sessionOwners,
 } from "../lib/session-owner";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  maxWMin320pxCalc100vw1rem: {
+    maxWidth: "min(320px, calc(100vw - 1rem))",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  size18px: {
+    width: "18px",
+    height: "18px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  hMin500px76vh: {
+    height: "min(500px, 76vh)",
+  },
+  max560pxHMin560px82vh: {
+    "@media (max-width: 559px)": {
+      height: "min(560px, 82vh)",
+    },
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  borderNone: {
+    borderStyle: "none",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  fontSans: {
+    fontFamily: "var(--sans)",
+  },
+  textInputPhone: {
+    fontSize: "var(--type-input-phone)",
+  },
+  leading14: {
+    lineHeight: "1.4",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  placeholderTextFaint: {
+    "::placeholder": {
+      color: "var(--text-faint)",
+    },
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  p2: {
+    padding: "calc(4px * 2)",
+  },
+  py7: {
+    paddingBlock: "calc(4px * 7)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  pb15: {
+    paddingBottom: "calc(4px * 1.5)",
+  },
+  pt25: {
+    paddingTop: "calc(4px * 2.5)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  leading135: {
+    lineHeight: "1.35",
+  },
+  gap3px: {
+    gap: "3px",
+  },
+  max560pxHidden: {
+    "@media (max-width: 559px)": {
+      display: "none",
+    },
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  maxW220px: {
+    maxWidth: "220px",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgColorMixInSrgbVarYellow16Transparent: {
+    backgroundColor: "color-mix(in srgb,var(--yellow) 16%,transparent)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  pyPx: {
+    paddingBlock: "1px",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
+});
 
 export interface CommandPaletteAction {
   id: string;
@@ -74,16 +291,18 @@ type Status =
  *  than the `--bg-raised` surface: the palette shell is glass, and an absolute
  *  surface reads as an opaque chip cut out of it (and in dark it sat *below*
  *  the popup fill, so a "keycap" rendered sunken). */
-const KBD =
-  "mx-px inline-flex min-w-4 items-center justify-center rounded-md bg-hover px-1.5 py-px font-sans text-meta text-dim phone:hidden";
+const KBD = utilityClassName(
+  "mx-px inline-flex min-w-4 items-center justify-center rounded-md bg-hover px-1.5 py-px font-sans text-meta text-dim phone:hidden",
+);
 
 /** A result row. The selected wash rides on `aria-selected`, which the button
  *  already carries for the listbox — so the icon and keycap tones that used to
  *  need `.ss-item-active` descendant rules are `group-aria-selected:` here.
  *  `bg-pressed` rather than the `--bg-active` surface: the palette shell is
  *  glass, and an absolute surface would land on it as an opaque patch. */
-const ITEM =
-  "group flex w-full cursor-pointer items-center gap-3 rounded-lg border-none bg-transparent px-3 py-2.5 text-left text-fg aria-selected:bg-pressed";
+const ITEM = utilityClassName(
+  "group flex w-full cursor-pointer items-center gap-3 rounded-lg border-none bg-transparent px-3 py-2.5 text-left text-fg aria-selected:bg-pressed",
+);
 
 const STATUS_META: Record<Status, { label: string; dotClass: string }> = {
   paused: { label: "Paused for safety", dotClass: "bg-yellow" },
@@ -227,7 +446,7 @@ function FilterMenu({
             type="button"
             variant="ghost"
             size="sm"
-            className="phone:min-h-11"
+            className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
             icon={icon}
             caret
             data-session-filter
@@ -240,7 +459,10 @@ function FilterMenu({
       <Menu.Popup
         align="start"
         sideOffset={6}
-        className="max-w-[min(320px,calc(100vw-1rem))]"
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.maxWMin320pxCalc100vw1rem,
+        )}
       >
         <Menu.RadioGroup
           value={value}
@@ -251,15 +473,38 @@ function FilterMenu({
               key={option.value}
               value={option.value}
               closeOnClick
-              className="justify-between gap-3"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.justifyBetween,
+                sx.gap3,
+              )}
             >
-              <span className="flex min-w-0 flex-1 items-center gap-2.5">
+              <span
+                {...stylex.props(
+                  sx.flex,
+                  sx.minW0,
+                  sx.flex1,
+                  sx.itemsCenter,
+                  sx.gap25,
+                )}
+              >
                 {hasIcons && (
-                  <span className="flex size-[18px] shrink-0 items-center justify-center text-dim">
+                  <span
+                    {...stylex.props(
+                      sx.flex,
+                      sx.size18px,
+                      sx.shrink0,
+                      sx.itemsCenter,
+                      sx.justifyCenter,
+                      sx.textDim,
+                    )}
+                  >
                     {option.icon}
                   </span>
                 )}
-                <span className="min-w-0 truncate">{option.label}</span>
+                <span {...stylex.props(sx.minW0, sx.truncate)}>
+                  {option.label}
+                </span>
               </span>
               <Menu.Check on={option.value === value} />
             </Menu.RadioItem>
@@ -386,7 +631,9 @@ export function SessionSearch({
       label: STATUS_META[value].label,
       icon: (
         <span
-          className={`size-2 rounded-full ${STATUS_META[value].dotClass}`}
+          className={utilityClassName(
+            `size-2 rounded-full ${STATUS_META[value].dotClass}`,
+          )}
         />
       ),
     })),
@@ -535,19 +782,50 @@ export function SessionSearch({
     >
       <Modal.Content
         variant="palette"
-        widthClassName="w-[min(640px,100%)]"
-        className="h-[min(500px,76vh)] max-[560px]:h-[min(560px,82vh)]"
+        widthClassName={utilityClassName("w-[min(640px,100%)]")}
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.hMin500px76vh,
+          sx.max560pxHMin560px82vh,
+        )}
         aria-label="Command menu"
         initialFocus={inputRef}
         onKeyDown={onKeyDown}
       >
-        <div className="flex items-center gap-3 border-b border-divider px-5 py-4">
-          <IconSearch className="shrink-0 text-faint" size={22} />
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap3,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px5,
+            sx.py4,
+          )}
+        >
+          <IconSearch
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.shrink0,
+              sx.textFaint,
+            )}
+            size={22}
+          />
           <input
             ref={inputRef}
             // 16px at every width on purpose: anything smaller makes iOS zoom
             // the page when the palette's field takes focus.
-            className="flex-1 border-none bg-transparent font-sans text-input-phone leading-[1.4] text-fg outline-none placeholder:text-faint"
+            {...stylex.props(
+              sx.flex1,
+              sx.borderNone,
+              sx.bgTransparent,
+              sx.fontSans,
+              sx.textInputPhone,
+              sx.leading14,
+              sx.textFg,
+              sx.outlineNone,
+              sx.placeholderTextFaint,
+            )}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -567,10 +845,14 @@ export function SessionSearch({
           {(searching || loadingPrs) && (
             <span
               className={
-                "size-[13px] shrink-0 animate-[spin_0.7s_linear_infinite] rounded-full border-2 border-line-strong border-t-accent " +
+                utilityClassName(
+                  "size-[13px] shrink-0 animate-[spin_0.7s_linear_infinite] rounded-full border-2 border-line-strong border-t-accent ",
+                ) +
                 // Keeps turning under reduced motion — it is the only "still
                 // searching" signal, and the blanket rule would freeze it.
-                "motion-reduce:[animation-duration:0.7s]! motion-reduce:[animation-iteration-count:infinite]!"
+                utilityClassName(
+                  "motion-reduce:[animation-duration:0.7s]! motion-reduce:[animation-iteration-count:infinite]!",
+                )
               }
               aria-label="Searching"
             />
@@ -579,7 +861,16 @@ export function SessionSearch({
         </div>
 
         <div
-          className="flex flex-wrap items-center gap-2 border-b border-divider px-4 py-2.5"
+          {...stylex.props(
+            sx.flex,
+            sx.flexWrap,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px4,
+            sx.py25,
+          )}
           aria-label="Session filters"
         >
           <FilterMenu
@@ -608,7 +899,11 @@ export function SessionSearch({
               type="button"
               variant="ghost"
               size="sm"
-              className="ml-auto text-faint"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.mlAuto,
+                sx.textFaint,
+              )}
               data-session-filter-clear
               onClick={() => {
                 setPerson("all");
@@ -623,12 +918,20 @@ export function SessionSearch({
 
         <div
           id="command-palette-results"
-          className="min-h-0 flex-1 overflow-y-auto p-2"
+          {...stylex.props(sx.minH0, sx.flex1, sx.overflowYAuto, sx.p2)}
           ref={listRef}
           role="listbox"
         >
           {results.length === 0 && (
-            <div className="px-4 py-7 text-center text-label text-faint">
+            <div
+              {...stylex.props(
+                sx.px4,
+                sx.py7,
+                sx.textCenter,
+                sx.textFaint,
+                typography.label,
+              )}
+            >
               {searching ? "Searching conversations…" : "Nothing found"}
             </div>
           )}
@@ -639,7 +942,16 @@ export function SessionSearch({
               return (
                 <React.Fragment key={`action:${result.action.id}`}>
                   {startsGroup && (
-                    <div className="px-3 pb-1.5 pt-2.5 text-meta font-semibold text-faint">
+                    <div
+                      {...stylex.props(
+                        sx.px3,
+                        sx.pb15,
+                        sx.pt25,
+                        sx.fontSemibold,
+                        sx.textFaint,
+                        typography.meta,
+                      )}
+                    >
                       {result.category}
                     </div>
                   )}
@@ -655,22 +967,62 @@ export function SessionSearch({
                     onClick={() => selectResult(result)}
                   >
                     {result.action.icon && (
-                      <span className="inline-flex size-5 shrink-0 items-center justify-center text-dim group-aria-selected:text-fg">
+                      <span
+                        {...mergeStylexProps(
+                          "group-aria-selected:text-fg",
+                          sx.inlineFlex,
+                          sx.size5,
+                          sx.shrink0,
+                          sx.itemsCenter,
+                          sx.justifyCenter,
+                          sx.textDim,
+                        )}
+                      >
                         {result.action.icon}
                       </span>
                     )}
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate text-label font-medium">
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.minW0,
+                        sx.flex1,
+                        sx.flexCol,
+                        sx.gap05,
+                      )}
+                    >
+                      <span
+                        {...stylex.props(
+                          sx.truncate,
+                          sx.fontMedium,
+                          typography.label,
+                        )}
+                      >
                         {result.action.label}
                       </span>
                       {result.action.description && (
-                        <span className="max-w-full truncate text-supporting leading-[1.35] text-dim">
+                        <span
+                          {...stylex.props(
+                            sx.maxWFull,
+                            sx.truncate,
+                            sx.leading135,
+                            sx.textDim,
+                            typography.supporting,
+                          )}
+                        >
                           {result.action.description}
                         </span>
                       )}
                     </span>
                     {result.action.shortcut && (
-                      <span className="inline-flex shrink-0 items-center gap-[3px] max-[560px]:hidden">
+                      <span
+                        {...stylex.props(
+                          sx.inlineFlex,
+                          sx.shrink0,
+                          sx.itemsCenter,
+                          sx.gap3px,
+                          sx.max560pxHidden,
+                        )}
+                      >
                         {result.action.shortcut.map((key) => (
                           <kbd key={key} className={KBD}>
                             {key}
@@ -687,7 +1039,16 @@ export function SessionSearch({
               return (
                 <React.Fragment key={`pr:${pr.url}`}>
                   {startsGroup && (
-                    <div className="px-3 pb-1.5 pt-2.5 text-meta font-semibold text-faint">
+                    <div
+                      {...stylex.props(
+                        sx.px3,
+                        sx.pb15,
+                        sx.pt25,
+                        sx.fontSemibold,
+                        sx.textFaint,
+                        typography.meta,
+                      )}
+                    >
                       {result.category}
                     </div>
                   )}
@@ -702,24 +1063,71 @@ export function SessionSearch({
                     onMouseMove={() => setActiveKey(resultKey(result))}
                     onClick={() => selectResult(result)}
                   >
-                    <span className="inline-flex size-5 shrink-0 items-center justify-center text-dim group-aria-selected:text-fg">
+                    <span
+                      {...mergeStylexProps(
+                        "group-aria-selected:text-fg",
+                        sx.inlineFlex,
+                        sx.size5,
+                        sx.shrink0,
+                        sx.itemsCenter,
+                        sx.justifyCenter,
+                        sx.textDim,
+                      )}
+                    >
                       <IconPullRequest size={18} />
                     </span>
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate text-label font-medium">
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.minW0,
+                        sx.flex1,
+                        sx.flexCol,
+                        sx.gap05,
+                      )}
+                    >
+                      <span
+                        {...stylex.props(
+                          sx.truncate,
+                          sx.fontMedium,
+                          typography.label,
+                        )}
+                      >
                         {pr.title}
                       </span>
-                      <span className="flex items-center gap-2 overflow-hidden whitespace-nowrap text-meta text-faint">
-                        <span className="text-dim">
+                      <span
+                        {...stylex.props(
+                          sx.flex,
+                          sx.itemsCenter,
+                          sx.gap2,
+                          sx.overflowHidden,
+                          sx.whitespaceNowrap,
+                          sx.textFaint,
+                          typography.meta,
+                        )}
+                      >
+                        <span {...stylex.props(sx.textDim)}>
                           {repoLabel(pr.repo)} #{pr.number}
                         </span>
-                        <span className="max-w-[220px] truncate max-[560px]:hidden">
+                        <span
+                          {...stylex.props(
+                            sx.maxW220px,
+                            sx.truncate,
+                            sx.max560pxHidden,
+                          )}
+                        >
                           {pr.branch}
                         </span>
                         <span>{pr.author}</span>
                       </span>
                     </span>
-                    <span className="shrink-0 text-meta text-faint max-[560px]:hidden">
+                    <span
+                      {...stylex.props(
+                        sx.shrink0,
+                        sx.textFaint,
+                        sx.max560pxHidden,
+                        typography.meta,
+                      )}
+                    >
                       {prStatus(pr)}
                     </span>
                   </button>
@@ -732,7 +1140,16 @@ export function SessionSearch({
             return (
               <React.Fragment key={`session:${s.id}`}>
                 {startsGroup && (
-                  <div className="px-3 pb-1.5 pt-2.5 text-meta font-semibold text-faint">
+                  <div
+                    {...stylex.props(
+                      sx.px3,
+                      sx.pb15,
+                      sx.pt25,
+                      sx.fontSemibold,
+                      sx.textFaint,
+                      typography.meta,
+                    )}
+                  >
                     {result.category}
                   </div>
                 )}
@@ -748,37 +1165,95 @@ export function SessionSearch({
                   onClick={() => selectResult(result)}
                 >
                   <span
-                    className={`size-2 shrink-0 rounded-full ${meta.dotClass}`}
+                    className={utilityClassName(
+                      `size-2 shrink-0 rounded-full ${meta.dotClass}`,
+                    )}
                   />
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate text-label font-medium">
+                  <span
+                    {...stylex.props(
+                      sx.flex,
+                      sx.minW0,
+                      sx.flex1,
+                      sx.flexCol,
+                      sx.gap05,
+                    )}
+                  >
+                    <span
+                      {...stylex.props(
+                        sx.truncate,
+                        sx.fontMedium,
+                        typography.label,
+                      )}
+                    >
                       {s.title}
                     </span>
                     {result.snippet && (
-                      <span className="max-w-full truncate text-supporting leading-[1.35] text-dim">
+                      <span
+                        {...stylex.props(
+                          sx.maxWFull,
+                          sx.truncate,
+                          sx.leading135,
+                          sx.textDim,
+                          typography.supporting,
+                        )}
+                      >
                         {result.snippet}
                       </span>
                     )}
-                    <span className="flex items-center gap-2 overflow-hidden whitespace-nowrap text-meta text-faint">
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.itemsCenter,
+                        sx.gap2,
+                        sx.overflowHidden,
+                        sx.whitespaceNowrap,
+                        sx.textFaint,
+                        typography.meta,
+                      )}
+                    >
                       {s.automation ? (
-                        <span className="rounded-sm bg-[color-mix(in_srgb,var(--yellow)_16%,transparent)] px-1.5 py-px text-meta text-yellow">
+                        <span
+                          {...stylex.props(
+                            sx.roundedSm,
+                            sx.bgColorMixInSrgbVarYellow16Transparent,
+                            sx.px15,
+                            sx.pyPx,
+                            sx.textYellow,
+                            typography.meta,
+                          )}
+                        >
                           {s.automation}
                         </span>
                       ) : (
                         s.startedBy && <span>{s.startedBy}</span>
                       )}
-                      <span className="text-dim">{sessionRepo(s)}</span>
+                      <span {...stylex.props(sx.textDim)}>
+                        {sessionRepo(s)}
+                      </span>
                       {s.branch && (
-                        <span className="max-w-[220px] truncate max-[560px]:hidden">
+                        <span
+                          {...stylex.props(
+                            sx.maxW220px,
+                            sx.truncate,
+                            sx.max560pxHidden,
+                          )}
+                        >
                           {s.branch}
                         </span>
                       )}
-                      <span className="ml-auto shrink-0">
+                      <span {...stylex.props(sx.mlAuto, sx.shrink0)}>
                         {relativeTime(s.lastActivity)}
                       </span>
                     </span>
                   </span>
-                  <span className="shrink-0 text-meta text-faint max-[560px]:hidden">
+                  <span
+                    {...stylex.props(
+                      sx.shrink0,
+                      sx.textFaint,
+                      sx.max560pxHidden,
+                      typography.meta,
+                    )}
+                  >
                     {meta.label}
                   </span>
                 </button>
@@ -787,15 +1262,27 @@ export function SessionSearch({
           })}
         </div>
 
-        <div className="flex items-center gap-4 border-t border-line px-4 py-2.5 text-meta text-faint">
-          <span className="phone:hidden">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap4,
+            sx.borderT,
+            sx.borderLine,
+            sx.px4,
+            sx.py25,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
+          <span {...stylex.props(sx.phoneHidden)}>
             <kbd className={KBD}>↑</kbd>
             <kbd className={KBD}>↓</kbd> navigate
           </span>
-          <span className="phone:hidden">
+          <span {...stylex.props(sx.phoneHidden)}>
             <kbd className={KBD}>↵</kbd> open
           </span>
-          <span className="ml-auto">
+          <span {...stylex.props(sx.mlAuto)}>
             {results.length} result{results.length === 1 ? "" : "s"}
           </span>
         </div>

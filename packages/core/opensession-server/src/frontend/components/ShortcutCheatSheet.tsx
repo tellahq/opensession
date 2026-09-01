@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import * as React from "react";
 import { useShortcutsVersion } from "../hooks/useShortcutBindings";
 import {
@@ -10,6 +12,176 @@ import { Button } from "../ui/button";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { cn } from "../ui/cn";
 import { IconX } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  m0: {
+    margin: "0",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  leadingTight: {
+    lineHeight: "var(--leading-tight)",
+  },
+  tracking001em: {
+    letterSpacing: "-0.01em",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  relative: {
+    position: "relative",
+  },
+  Mr15: {
+    marginRight: "calc(4px * -1.5)",
+  },
+  size8: {
+    width: "calc(4px * 8)",
+    height: "calc(4px * 8)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  p0: {
+    padding: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  afterAbsolute: {
+    "::after": {
+      content: '""',
+      position: "absolute",
+    },
+  },
+  afterInset1: {
+    "::after": {
+      content: '""',
+      inset: "calc(4px * -1)",
+    },
+  },
+  afterContent: {
+    "::after": {
+      content: "''",
+    },
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  maxH68dvh: {
+    maxHeight: "68dvh",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  overscrollContain: {
+    overscrollBehavior: "contain",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  columns1: {
+    columns: "1",
+  },
+  gap8: {
+    gap: "calc(4px * 8)",
+  },
+  desktopColumns2: {
+    "@media (min-width: 721px)": {
+      columns: "2",
+    },
+  },
+  mb5: {
+    marginBottom: "calc(4px * 5)",
+  },
+  breakInsideAvoid: {
+    breakInside: "avoid",
+  },
+  mb15: {
+    marginBottom: "calc(4px * 1.5)",
+  },
+  listNone: {
+    listStyleType: "none",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  minH8: {
+    minHeight: "calc(4px * 8)",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  py05: {
+    paddingBlock: "calc(4px * 0.5)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  gap1: {
+    gap: "4px",
+  },
+});
 
 /**
  * The whole keyboard surface on one card, summoned by its own chord.
@@ -66,11 +238,33 @@ function CheatSheet({
     >
       <Modal.Content
         variant="palette"
-        widthClassName="w-[min(720px,100%)]"
+        widthClassName={utilityClassName("w-[min(720px,100%)]")}
         initialFocus={listRef}
       >
-        <div className="flex items-center gap-3 border-b border-divider px-5 py-4">
-          <Modal.Title className="m-0 min-w-0 flex-1 text-item-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap3,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px5,
+            sx.py4,
+          )}
+        >
+          <Modal.Title
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.m0,
+              sx.minW0,
+              sx.flex1,
+              sx.fontSemibold,
+              sx.leadingTight,
+              sx.tracking001em,
+              sx.textFg,
+              typography.itemTitle,
+            )}
+          >
             Keyboard shortcuts
           </Modal.Title>
           {onCustomize && (
@@ -80,7 +274,25 @@ function CheatSheet({
           )}
           <Modal.Close
             aria-label="Close"
-            className="focus-ring relative -mr-1.5 flex size-8 shrink-0 items-center justify-center rounded-control p-0 text-faint transition-colors after:absolute after:-inset-1 after:content-[''] hover:bg-hover hover:text-fg"
+            className={mergeStylexOverrideClassName(
+              "focus-ring",
+              sx.relative,
+              sx.Mr15,
+              sx.flex,
+              sx.size8,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.roundedControl,
+              sx.p0,
+              sx.textFaint,
+              sx.transitionColors,
+              sx.afterAbsolute,
+              sx.afterInset1,
+              sx.afterContent,
+              sx.hoverBgHover,
+              sx.hoverTextFg,
+            )}
           >
             <IconX size={20} />
           </Modal.Close>
@@ -88,7 +300,14 @@ function CheatSheet({
         <div
           ref={listRef}
           tabIndex={-1}
-          className="max-h-[68dvh] overflow-y-auto overscroll-contain px-5 py-4 outline-none"
+          {...stylex.props(
+            sx.maxH68dvh,
+            sx.overflowYAuto,
+            sx.overscrollContain,
+            sx.px5,
+            sx.py4,
+            sx.outlineNone,
+          )}
         >
           <ShortcutCheatSheetBody />
         </div>
@@ -107,7 +326,7 @@ export function ShortcutCheatSheetBody() {
   // actually answers to rather than the shipped defaults.
   useShortcutsVersion();
   return (
-    <div className="columns-1 gap-8 desktop:columns-2">
+    <div {...stylex.props(sx.columns1, sx.gap8, sx.desktopColumns2)}>
       {SHORTCUT_GROUPS.map((group) => {
         const rows = SHORTCUT_COMMANDS.filter((c) => c.group === group);
         if (rows.length === 0) return null;
@@ -142,11 +361,21 @@ function Section({
   return (
     // `break-inside-avoid` on the section, not the rows: a group split down
     // the middle reads as two groups sharing a name.
-    <section className="mb-5 break-inside-avoid">
-      <h3 className="m-0 mb-1.5 text-label font-semibold text-faint">
+    <section {...stylex.props(sx.mb5, sx.breakInsideAvoid)}>
+      <h3
+        {...stylex.props(
+          sx.m0,
+          sx.mb15,
+          sx.fontSemibold,
+          sx.textFaint,
+          typography.label,
+        )}
+      >
         {title}
       </h3>
-      <ul className="m-0 flex list-none flex-col p-0">{children}</ul>
+      <ul {...stylex.props(sx.m0, sx.flex, sx.listNone, sx.flexCol, sx.p0)}>
+        {children}
+      </ul>
     </section>
   );
 }
@@ -156,16 +385,36 @@ function Section({
  *  there to be claimed. */
 function Row({ title, keys }: { title: string; keys?: string[] }) {
   return (
-    <li className="flex min-h-8 items-center justify-between gap-4 py-0.5">
-      <span className="min-w-0 truncate text-supporting text-fg">{title}</span>
+    <li
+      {...stylex.props(
+        sx.flex,
+        sx.minH8,
+        sx.itemsCenter,
+        sx.justifyBetween,
+        sx.gap4,
+        sx.py05,
+      )}
+    >
+      <span
+        {...stylex.props(
+          sx.minW0,
+          sx.truncate,
+          sx.textFg,
+          typography.supporting,
+        )}
+      >
+        {title}
+      </span>
       {keys && keys.length > 0 ? (
-        <span className="flex shrink-0 items-center gap-1">
+        <span {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap1)}>
           {keys.map((key, i) => (
             <Keycap key={`${key}-${i}`}>{key}</Keycap>
           ))}
         </span>
       ) : (
-        <span className="shrink-0 text-meta text-faint">Not set</span>
+        <span {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>
+          Not set
+        </span>
       )}
     </li>
   );
@@ -179,8 +428,10 @@ function Keycap({ children }: { children: React.ReactNode }) {
   return (
     <kbd
       className={cn(
-        "inline-flex min-w-6 items-center justify-center rounded-md border border-line-strong bg-hover px-1.5 py-0.5",
-        "font-sans text-meta text-dim",
+        utilityClassName(
+          "inline-flex min-w-6 items-center justify-center rounded-md border border-line-strong bg-hover px-1.5 py-0.5",
+        ),
+        utilityClassName("font-sans text-meta text-dim"),
       )}
     >
       {children}

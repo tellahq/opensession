@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import React, {
   useEffect,
   useEffectEvent,
@@ -45,6 +46,25 @@ import type {
   NewSessionPromptRefs,
 } from "../lib/new-session-prompt-types";
 import { promptScrollEdges } from "../lib/prompt-scroll";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+});
 
 /** One scroll surface for the prompt and its attachments. Keeping the image in
  *  this flow means it travels with the text instead of pinning over it.
@@ -54,10 +74,12 @@ import { promptScrollEdges } from "../lib/prompt-scroll";
  *  while the prompt sat flush against the footer. Now that the hairline only
  *  appears once the prompt scrolls, the header and the prompt read as one
  *  block, and that gap read as a hole in it. */
-const BODY =
-  "relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
-const TEXTAREA =
-  "block min-h-[132px] w-full resize-none overflow-hidden border-none bg-transparent font-sans text-body leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60";
+const BODY = utilityClassName(
+  "relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+);
+const TEXTAREA = utilityClassName(
+  "block min-h-[132px] w-full resize-none overflow-hidden border-none bg-transparent font-sans text-body leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60",
+);
 
 /** How long the draft has to hold still before the palette is handed it. This
  *  is the branch-name suggestion's debounce, moved down here: the palette is
@@ -360,7 +382,7 @@ export function NewSessionPrompt({
       ref={attachPromptBody}
     >
       {mentions.popup}
-      <div className="relative">
+      <div {...stylex.props(sx.relative)}>
         {promptHighlight && (
           // `composer-hl` stays as a hook: the pill spans inside this
           // mirror are written as innerHTML by lib/composer-highlight.ts,
@@ -373,7 +395,9 @@ export function NewSessionPrompt({
             className={cn(
               "composer-hl",
               TEXTAREA,
-              "pointer-events-none absolute inset-0 z-0 h-full select-none overflow-hidden break-words whitespace-pre-wrap",
+              utilityClassName(
+                "pointer-events-none absolute inset-0 z-0 h-full select-none overflow-hidden break-words whitespace-pre-wrap",
+              ),
               // Padding here is two things added together, and both are
               // load-bearing. 4px of it is clearance: a pill's wash reaches
               // past its own box (base.css), so one at either end of a line
@@ -383,7 +407,9 @@ export function NewSessionPrompt({
               // field keeps, unlike the session composer, which zeroes it.
               // Without it every glyph here sits two pixels left of the one
               // it paints over, which puts the wash off the word.
-              "-mx-[4px] w-[calc(100%+8px)] px-[6px] py-[2px]",
+              utilityClassName(
+                "-mx-[4px] w-[calc(100%+8px)] px-[6px] py-[2px]",
+              ),
             )}
             aria-hidden="true"
             dangerouslySetInnerHTML={{ __html: promptHighlightHtml }}
@@ -395,7 +421,9 @@ export function NewSessionPrompt({
           className={cn(
             TEXTAREA,
             promptHighlight &&
-              "relative z-[1] break-words text-transparent caret-[var(--text)]",
+              utilityClassName(
+                "relative z-[1] break-words text-transparent caret-[var(--text)]",
+              ),
           )}
           value={sessionNames.displayText}
           onBeforeInput={sessionNames.handleBeforeInput}
@@ -502,7 +530,7 @@ export function NewSessionPrompt({
 			    nothing out loud. This is the same news for a reader who cannot
 			    see them. */}
       {attachingLabel(staging) && (
-        <span className="sr-only" role="status">
+        <span {...stylex.props(sx.srOnly)} role="status">
           {attachingLabel(staging)}
         </span>
       )}

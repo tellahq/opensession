@@ -1,3 +1,4 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
 import { useEffect, useState } from "react";
 import { useSetupStatus } from "../../hooks/useSetupStatus";
 import { errorMessage } from "../../lib/error-message";
@@ -24,6 +25,69 @@ import {
 } from "../../lib/api";
 import { RepoTile } from "../RepoTile";
 import { Radio, RadioGroup } from "../../ui/radio";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  mt9: {
+    marginTop: "calc(4px * 9)",
+  },
+  flex: {
+    display: "flex",
+  },
+  minH11: {
+    minHeight: "calc(4px * 11)",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  transitionBackgroundColor: {
+    transitionProperty: "background-color",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  block: {
+    display: "block",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+});
 
 function SharedCheckoutSetting() {
   const [settings, setSettings] = useState<WorktreeSettings | null>(null);
@@ -46,12 +110,14 @@ function SharedCheckoutSetting() {
 
   if (!settings) {
     return error ? (
-      <InlineAlert className="mt-9">{error}</InlineAlert>
+      <InlineAlert className={mergeStylexOverrideClassName("", sx.mt9)}>
+        {error}
+      </InlineAlert>
     ) : (
       <SettingCardSkeleton
         rows={1}
         label="Loading worktree settings"
-        className="mt-9"
+        className={mergeStylexOverrideClassName("", sx.mt9)}
       />
     );
   }
@@ -93,25 +159,83 @@ function SharedCheckoutSetting() {
           onValueChange={(mode) => void setMode(mode as SharedCheckoutMode)}
           className="[&>*+*]:relative [&>*+*]:before:pointer-events-none [&>*+*]:before:absolute [&>*+*]:before:inset-x-5 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-line [&>*+*]:before:content-['']"
         >
-          <label className="flex min-h-11 cursor-pointer items-start gap-3 px-5 py-4 transition-[background-color] hover:bg-hover">
-            <Radio value="shared" className="mt-0.5" />
-            <span className="min-w-0">
-              <span className="block text-item-title font-medium text-fg">
+          <label
+            {...stylex.props(
+              sx.flex,
+              sx.minH11,
+              sx.cursorPointer,
+              sx.itemsStart,
+              sx.gap3,
+              sx.px5,
+              sx.py4,
+              sx.transitionBackgroundColor,
+              sx.hoverBgHover,
+            )}
+          >
+            <Radio
+              value="shared"
+              className={mergeStylexOverrideClassName("", sx.mt05)}
+            />
+            <span {...stylex.props(sx.minW0)}>
+              <span
+                {...stylex.props(
+                  sx.block,
+                  sx.fontMedium,
+                  sx.textFg,
+                  typography.itemTitle,
+                )}
+              >
                 Local checkout
               </span>
-              <span className="mt-1 block text-supporting text-dim">
+              <span
+                {...stylex.props(
+                  sx.mt1,
+                  sx.block,
+                  sx.textDim,
+                  typography.supporting,
+                )}
+              >
                 Edit shared checkouts directly. Changes appear there right away,
                 and sessions share the same files.
               </span>
             </span>
           </label>
-          <label className="flex min-h-11 cursor-pointer items-start gap-3 px-5 py-4 transition-[background-color] hover:bg-hover">
-            <Radio value="worktree" className="mt-0.5" />
-            <span className="min-w-0">
-              <span className="block text-item-title font-medium text-fg">
+          <label
+            {...stylex.props(
+              sx.flex,
+              sx.minH11,
+              sx.cursorPointer,
+              sx.itemsStart,
+              sx.gap3,
+              sx.px5,
+              sx.py4,
+              sx.transitionBackgroundColor,
+              sx.hoverBgHover,
+            )}
+          >
+            <Radio
+              value="worktree"
+              className={mergeStylexOverrideClassName("", sx.mt05)}
+            />
+            <span {...stylex.props(sx.minW0)}>
+              <span
+                {...stylex.props(
+                  sx.block,
+                  sx.fontMedium,
+                  sx.textFg,
+                  typography.itemTitle,
+                )}
+              >
                 Separate pull request branch
               </span>
-              <span className="mt-1 block text-supporting text-dim">
+              <span
+                {...stylex.props(
+                  sx.mt1,
+                  sx.block,
+                  sx.textDim,
+                  typography.supporting,
+                )}
+              >
                 Give each session an isolated Git worktree and branch. Changes
                 stay separate from the local checkout, ready for a pull request.
               </span>
@@ -206,7 +330,11 @@ export function ReposPanel() {
             {/* mt-9 stands in for the group label above the list, which
 						    counts the repos and so cannot be drawn before they
 						    arrive. */}
-            <SettingCardSkeleton rows={3} icon={28} className="mt-9" />
+            <SettingCardSkeleton
+              rows={3}
+              icon={28}
+              className={mergeStylexOverrideClassName("", sx.mt9)}
+            />
           </>
         )
       ) : (

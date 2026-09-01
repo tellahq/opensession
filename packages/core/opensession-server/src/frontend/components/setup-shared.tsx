@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { BASE_PATH } from "../lib/base";
 import React from "react";
 import { Badge } from "../ui/badge";
@@ -6,6 +8,197 @@ import { cn } from "../ui/cn";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { fieldClasses } from "../ui/input";
 import { IconCopy } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  h15: {
+    height: "calc(4px * 1.5)",
+  },
+  w15: {
+    width: "calc(4px * 1.5)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBgActive: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--bg-active)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  m0: {
+    margin: "0",
+  },
+  listNone: {
+    listStyleType: "none",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  p0: {
+    padding: "0",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  mtPx: {
+    marginTop: "1px",
+  },
+  size18px: {
+    width: "18px",
+    height: "18px",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  text10px: {
+    fontSize: "10px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  mb1: {
+    marginBottom: "4px",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  selfStart: {
+    alignSelf: "flex-start",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  underline: {
+    textDecorationLine: "underline",
+  },
+  underlineOffset2: {
+    textUnderlineOffset: "2px",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  py05: {
+    paddingBlock: "calc(4px * 0.5)",
+  },
+  pl15: {
+    paddingLeft: "calc(4px * 1.5)",
+  },
+  pr1: {
+    paddingRight: "4px",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  fontMono: {
+    fontFamily: "var(--mono)",
+  },
+  text092em: {
+    fontSize: "0.92em",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  breakAll: {
+    wordBreak: "break-all",
+  },
+  OverflowWrapAnywhere: {
+    overflowWrap: "anywhere",
+  },
+  whitespaceNormal: {
+    whiteSpace: "normal",
+  },
+});
 
 // Shared vocabulary for the Settings → Setup page (Setup.tsx) and its section
 // siblings (SetupTeam.tsx, SetupRepos.tsx): the /api/setup/* response shapes,
@@ -226,9 +419,19 @@ export function repoLifecycleState(repo: SetupRepo): {
 
 export function StateChip({ tone, label }: { tone: ChipTone; label: string }) {
   return (
-    <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-label text-dim">
+    <span
+      {...stylex.props(
+        sx.flex,
+        sx.shrink0,
+        sx.itemsCenter,
+        sx.gap15,
+        sx.whitespaceNowrap,
+        sx.textDim,
+        typography.label,
+      )}
+    >
       <span
-        className="h-1.5 w-1.5 rounded-full"
+        {...stylex.props(sx.h15, sx.w15, sx.roundedFull)}
         style={{ background: CHIP_DOTS[tone] }}
       />
       {label}
@@ -248,7 +451,9 @@ export function Code({
   return (
     <code
       className={cn(
-        "whitespace-nowrap rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[0.92em] text-fg",
+        utilityClassName(
+          "whitespace-nowrap rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[0.92em] text-fg",
+        ),
         className,
       )}
     >
@@ -267,17 +472,32 @@ export function LinkChips({
 }) {
   if (!links.length) return null;
   return (
-    <div className={cn("mt-2 flex flex-wrap gap-1.5", className)}>
+    <div
+      className={cn(utilityClassName("mt-2 flex flex-wrap gap-1.5"), className)}
+    >
       {links.map((link) => (
         <a
           key={link.url}
           href={link.url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 rounded-sm bg-surface px-2 py-1 text-label text-dim transition-colors hover:bg-active hover:text-fg"
+          {...stylex.props(
+            sx.inlineFlex,
+            sx.itemsCenter,
+            sx.gap1,
+            sx.roundedSm,
+            sx.bgSurface,
+            sx.px2,
+            sx.py1,
+            sx.textDim,
+            sx.transitionColors,
+            sx.hoverBgActive,
+            sx.hoverTextFg,
+            typography.label,
+          )}
         >
           {link.label}
-          <span aria-hidden className="text-faint">
+          <span aria-hidden {...stylex.props(sx.textFaint)}>
             ↗
           </span>
         </a>
@@ -290,16 +510,47 @@ export function LinkChips({
  *  had grown their own version of this list, at different sizes and gaps. */
 export function SetupSteps({ steps }: { steps: React.ReactNode[] }) {
   return (
-    <ol className="m-0 flex list-none flex-col gap-2.5 p-0">
+    <ol
+      {...stylex.props(
+        sx.m0,
+        sx.flex,
+        sx.listNone,
+        sx.flexCol,
+        sx.gap25,
+        sx.p0,
+      )}
+    >
       {steps.map((step, index) => (
         <li
           key={index}
-          className="flex items-start gap-2.5 text-supporting leading-relaxed text-dim"
+          {...stylex.props(
+            sx.flex,
+            sx.itemsStart,
+            sx.gap25,
+            sx.leadingRelaxed,
+            sx.textDim,
+            typography.supporting,
+          )}
         >
-          <span className="mt-px flex size-[18px] shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-semibold tabular-nums text-faint">
+          <span
+            {...mergeStylexProps(
+              "tabular-nums",
+              sx.mtPx,
+              sx.flex,
+              sx.size18px,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.roundedFull,
+              sx.bgSurface,
+              sx.text10px,
+              sx.fontSemibold,
+              sx.textFaint,
+            )}
+          >
             {index + 1}
           </span>
-          <span className="min-w-0 flex-1">{step}</span>
+          <span {...stylex.props(sx.minW0, sx.flex1)}>{step}</span>
         </li>
       ))}
     </ol>
@@ -316,8 +567,17 @@ export function GuideBlock({
 }) {
   return (
     <section>
-      <h3 className="m-0 text-label font-semibold text-faint">{title}</h3>
-      <div className="mt-2">{children}</div>
+      <h3
+        {...stylex.props(
+          sx.m0,
+          sx.fontSemibold,
+          sx.textFaint,
+          typography.label,
+        )}
+      >
+        {title}
+      </h3>
+      <div {...stylex.props(sx.mt2)}>{children}</div>
     </section>
   );
 }
@@ -338,10 +598,12 @@ function ScopeChip({ value }: { value: string }) {
       title="Copy"
       onClick={() => copy(value)}
       className={cn(
-        "focus-ring rounded-sm px-1.5 py-0.5 font-mono text-meta transition-colors",
+        utilityClassName(
+          "focus-ring rounded-sm px-1.5 py-0.5 font-mono text-meta transition-colors",
+        ),
         copied
-          ? "bg-green-soft text-green"
-          : "bg-surface text-fg hover:bg-active",
+          ? utilityClassName("bg-green-soft text-green")
+          : utilityClassName("bg-surface text-fg hover:bg-active"),
       )}
     >
       {value}
@@ -360,11 +622,13 @@ export function ScopeGroups({ groups }: { groups: SetupScopeGroup[] }) {
   const all = groups.flatMap((group) => group.items);
   const { copied, copy } = useCopy();
   return (
-    <div className="flex flex-col gap-2.5">
+    <div {...stylex.props(sx.flex, sx.flexCol, sx.gap25)}>
       {groups.map((group) => (
         <div key={group.label}>
-          <div className="mb-1 text-meta text-faint">{group.label}</div>
-          <div className="flex flex-wrap gap-1">
+          <div {...stylex.props(sx.mb1, sx.textFaint, typography.meta)}>
+            {group.label}
+          </div>
+          <div {...stylex.props(sx.flex, sx.flexWrap, sx.gap1)}>
             {group.items.map((item) => (
               <ScopeChip key={item} value={item} />
             ))}
@@ -373,7 +637,7 @@ export function ScopeGroups({ groups }: { groups: SetupScopeGroup[] }) {
       ))}
       <Button
         size="sm"
-        className="self-start"
+        className={mergeStylexOverrideClassName("", sx.selfStart)}
         onClick={() =>
           copy(all.join(", "), { toast: `Copied ${all.length} scopes` })
         }
@@ -427,30 +691,56 @@ export function SecretField({
   onToggleClear: () => void;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 flex-1 truncate">
+    <div {...stylex.props(sx.flex, sx.minW0, sx.flexCol, sx.gap1)}>
+      <div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
+        <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
           {/* A plain name takes the app's field-label treatment; a `label`
 					    node (an env var in a mono well) carries its own. */}
           {label ?? (
-            <span className="text-label font-medium text-dim">{name}</span>
+            <span
+              {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}
+            >
+              {name}
+            </span>
           )}
         </span>
         {cleared ? (
-          <span className="shrink-0 text-meta font-medium text-red">
+          <span
+            {...stylex.props(
+              sx.shrink0,
+              sx.fontMedium,
+              sx.textRed,
+              typography.meta,
+            )}
+          >
             Clears on save
           </span>
         ) : present ? (
-          <span className="shrink-0 text-meta text-green">Saved</span>
+          <span {...stylex.props(sx.shrink0, sx.textGreen, typography.meta)}>
+            Saved
+          </span>
         ) : required ? (
           <Badge tone="warning">Required</Badge>
         ) : (
-          <span className="shrink-0 text-meta text-faint">Optional</span>
+          <span {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>
+            Optional
+          </span>
         )}
         {present && (
           <button
             type="button"
-            className="focus-ring shrink-0 rounded-sm text-meta font-medium text-faint underline underline-offset-2 transition-colors hover:text-fg"
+            {...mergeStylexProps(
+              "focus-ring",
+              sx.shrink0,
+              sx.roundedSm,
+              sx.fontMedium,
+              sx.textFaint,
+              sx.underline,
+              sx.underlineOffset2,
+              sx.transitionColors,
+              sx.hoverTextFg,
+              typography.meta,
+            )}
             onClick={onToggleClear}
           >
             {cleared ? "Keep" : "Clear"}
@@ -458,7 +748,9 @@ export function SecretField({
         )}
       </div>
       {description && (
-        <div className="text-supporting text-faint">{description}</div>
+        <div {...stylex.props(sx.textFaint, typography.supporting)}>
+          {description}
+        </div>
       )}
       <input
         type={type}
@@ -493,17 +785,40 @@ export function CopyableCode({ value }: { value: string }) {
   return (
     <button
       type="button"
-      className="inline-flex max-w-full items-center gap-1.5 rounded-control bg-surface py-0.5 pl-1.5 pr-1 text-left font-mono text-[0.92em] text-fg transition-colors hover:bg-active"
+      {...stylex.props(
+        sx.inlineFlex,
+        sx.maxWFull,
+        sx.itemsCenter,
+        sx.gap15,
+        sx.roundedControl,
+        sx.bgSurface,
+        sx.py05,
+        sx.pl15,
+        sx.pr1,
+        sx.textLeft,
+        sx.fontMono,
+        sx.text092em,
+        sx.textFg,
+        sx.transitionColors,
+        sx.hoverBgActive,
+      )}
       onClick={() => copy(value, { toast: "Copied" })}
       title="Copy"
     >
-      <span className="min-w-0 break-all [overflow-wrap:anywhere] whitespace-normal">
+      <span
+        {...stylex.props(
+          sx.minW0,
+          sx.breakAll,
+          sx.OverflowWrapAnywhere,
+          sx.whitespaceNormal,
+        )}
+      >
         {value}
       </span>
       <CopyCheck
         copied={copied}
         size={14}
-        className="shrink-0 text-faint"
+        className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
         idle={<IconCopy size={14} />}
       />
     </button>

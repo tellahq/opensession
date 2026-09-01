@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import React, { useCallback, useEffect, useState } from "react";
 import type { PrDetails, WSClientMessage } from "../lib/types";
@@ -90,6 +92,130 @@ import {
   IconPlus,
   IconArchive,
 } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  size18px: {
+    width: "18px",
+    height: "18px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  translateY05px: {
+    translate: "0 0.5px",
+  },
+  TextBoxTrimBothCapAlphabetic: {
+    textBox: "trim-both cap alphabetic",
+  },
+  noUnderline: {
+    textDecorationLine: "none",
+  },
+  grow: {
+    flexGrow: "1",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  size4: {
+    width: "calc(4px * 4)",
+    height: "calc(4px * 4)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  w58: {
+    width: "58%",
+  },
+  flex: {
+    display: "flex",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  ml15: {
+    marginLeft: "calc(4px * 1.5)",
+  },
+  bgWhite20: {
+    backgroundColor: "color-mix(in oklab, var(--color-white) 20%, transparent)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  block: {
+    display: "block",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  opacity0: {
+    opacity: "0%",
+  },
+  transitionOpacity: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  duration150: {
+    transitionDuration: "150ms",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  textTooltipFg60: {
+    color: "color-mix(in oklab, var(--tooltip-fg) 60%, transparent)",
+  },
+  mx5: {
+    marginInline: "calc(4px * 5)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  flex1: {
+    flex: "1",
+  },
+});
 
 /**
  * Conductor-style status strip at the top of the right Workspace panel: the PR
@@ -216,7 +342,9 @@ function PrBarButton({
     <button
       type="button"
       className={cn(
-        "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-control border px-2.5 py-[5px] text-label leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
+        utilityClassName(
+          "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-control border px-2.5 py-[5px] text-label leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
+        ),
         tones[tone],
         // A leading glyph carries its own margin: the icon set draws in a
         // 4.75–19.25 span of a 24 grid, so an 18px box holds ~3.5px of
@@ -226,13 +354,22 @@ function PrBarButton({
         // and close the inner gap so the two read as one group rather than
         // two things. Icon-only callers override px themselves, so this
         // never lands on a lone glyph.
-        icon && "gap-1 pl-[6.5px]",
+        icon && utilityClassName("gap-1 pl-[6.5px]"),
         className,
       )}
       {...props}
     >
       {icon && (
-        <span className="inline-flex size-[18px] shrink-0 items-center justify-center [&_svg]:block [&_svg]:stroke-[1.7]">
+        <span
+          {...mergeStylexProps(
+            "[&_svg]:block [&_svg]:stroke-[1.7]",
+            sx.inlineFlex,
+            sx.size18px,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.justifyCenter,
+          )}
+        >
           {icon}
         </span>
       )}
@@ -248,7 +385,9 @@ function PrBarButton({
 			    the geometric center reads a touch high. It settles the label
 			    without going back to a nudge that has to carry the whole
 			    correction. */}
-      <span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
+      <span
+        {...stylex.props(sx.translateY05px, sx.TextBoxTrimBothCapAlphabetic)}
+      >
         {children}
       </span>
     </button>
@@ -287,23 +426,26 @@ function PrCopyItems({ pr }: { pr: PrDetails }) {
             href={pr.url}
             target="_blank"
             rel="noopener"
-            className="no-underline"
+            {...stylex.props(sx.noUnderline)}
           />
         }
       >
         <IconArrowUpRight size={20} className={MENU_ICON} />
-        <span className="grow">Open on {provider.name}</span>
+        <span {...stylex.props(sx.grow)}>Open on {provider.name}</span>
       </ContextMenu.Item>
       <ContextMenu.Item
         closeOnClick={false}
         onClick={() => copy("link", pr.url)}
       >
         {copied === "link" ? (
-          <IconCheck size={20} className="text-green" />
+          <IconCheck
+            size={20}
+            className={mergeStylexOverrideClassName("", sx.textGreen)}
+          />
         ) : (
           <IconCopy size={20} className={MENU_ICON} />
         )}
-        <span className="grow">
+        <span {...stylex.props(sx.grow)}>
           {copied === "link" ? "Copied" : "Copy link"}
         </span>
       </ContextMenu.Item>
@@ -312,11 +454,14 @@ function PrCopyItems({ pr }: { pr: PrDetails }) {
         onClick={() => copy("number", `#${pr.number}`)}
       >
         {copied === "number" ? (
-          <IconCheck size={20} className="text-green" />
+          <IconCheck
+            size={20}
+            className={mergeStylexOverrideClassName("", sx.textGreen)}
+          />
         ) : (
           <IconHash size={20} className={MENU_ICON} />
         )}
-        <span className="grow">
+        <span {...stylex.props(sx.grow)}>
           {copied === "number" ? "Copied" : "Copy number"}
         </span>
       </ContextMenu.Item>
@@ -344,7 +489,7 @@ function PrNumberChip({
   const prChord = useShortcutLabel("open-pr");
 
   return (
-    <div className="inline-flex items-center">
+    <div {...stylex.props(sx.inlineFlex, sx.itemsCenter)}>
       <ContextMenu.Root>
         <ContextMenu.Trigger
           render={
@@ -358,7 +503,12 @@ function PrNumberChip({
         >
           {/* Cap band plus the same half pixel as the action button beside
 					    it, so the pair reads level. */}
-          <span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
+          <span
+            {...stylex.props(
+              sx.translateY05px,
+              sx.TextBoxTrimBothCapAlphabetic,
+            )}
+          >
             #{pr.number}
           </span>
         </ContextMenu.Trigger>
@@ -420,7 +570,7 @@ function PrRefChips({
           ? "green"
           : "muted";
   return (
-    <div className="inline-flex min-w-0 items-center gap-1">
+    <div {...stylex.props(sx.inlineFlex, sx.minW0, sx.itemsCenter, sx.gap1)}>
       {inline.map((ref) => (
         <Tooltip key={`${ref.repo} ${ref.branch}`} label={refLabel(ref)}>
           <button
@@ -454,7 +604,7 @@ function PrRefChips({
                 <span
                   className={`${PR_SIB_DOT} ${PR_SIB_DOT_BG[refTone(ref)]}`}
                 />
-                <span className="grow">
+                <span {...stylex.props(sx.grow)}>
                   {repoLabel(ref.repo)} #{ref.number}
                 </span>
               </Menu.Item>
@@ -629,12 +779,12 @@ export function PrStatusBar({
   const checksPr = pr && !prSettled && checksSummary.total > 0 ? pr : null;
   const checksTone =
     checksSummary.failed > 0
-      ? "text-red"
+      ? utilityClassName("text-red")
       : checksSummary.pending > 0
-        ? "text-yellow"
+        ? utilityClassName("text-yellow")
         : checksSummary.passed > 0
-          ? "text-green"
-          : "text-faint";
+          ? utilityClassName("text-green")
+          : utilityClassName("text-faint");
   const checksLabel = `${checksSummary.total} check${checksSummary.total === 1 ? "" : "s"}`;
 
   async function run(name: string, fn: () => Promise<unknown>) {
@@ -718,8 +868,17 @@ export function PrStatusBar({
         <div className={WS_SUMMARY_BAND}>
           <Skeleton label="Loading PR status">
             <div className={WS_SUMMARY_STATUS_ROW}>
-              <SkeletonBar className="size-4 shrink-0 rounded-full" />
-              <SkeletonBar className="w-[58%]" />
+              <SkeletonBar
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.size4,
+                  sx.shrink0,
+                  sx.roundedFull,
+                )}
+              />
+              <SkeletonBar
+                className={mergeStylexOverrideClassName("", sx.w58)}
+              />
             </div>
           </Skeleton>
           {children}
@@ -777,7 +936,7 @@ export function PrStatusBar({
         const canArchive = !isArchived && openSiblings === 0;
         if (!onNewSession && !canArchive && !isArchived) return null;
         return (
-          <div className="flex items-center gap-2">
+          <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
             {onNewSession && (
               <PrBarButton
                 className={cn(
@@ -957,7 +1116,11 @@ export function PrStatusBar({
         if (mergeScheduled)
           return (
             <MergeUndoControl
-              className={variant === "header" ? "min-h-[32px]" : undefined}
+              className={
+                variant === "header"
+                  ? utilityClassName("min-h-[32px]")
+                  : undefined
+              }
               onUndo={handleMerge}
             />
           );
@@ -986,7 +1149,15 @@ export function PrStatusBar({
                 ? "Merge stack"
                 : "Merge"}
             {stackMerge && !merging && (
-              <span className="ml-1.5 rounded-full bg-white/20 px-1.5 tabular-nums">
+              <span
+                {...mergeStylexProps(
+                  "tabular-nums",
+                  sx.ml15,
+                  sx.roundedFull,
+                  sx.bgWhite20,
+                  sx.px15,
+                )}
+              >
                 {stackMerge.layers.length}
               </span>
             )}
@@ -1016,7 +1187,9 @@ export function PrStatusBar({
     // wrapper would drop the focus ring with the box.
     const labelClass = cn(
       WS_SUMMARY_LABEL,
-      "group/prsum flex cursor-pointer flex-col justify-center gap-1 rounded-sm border-none bg-transparent p-0 text-left focus-ring",
+      utilityClassName(
+        "group/prsum flex cursor-pointer flex-col justify-center gap-1 rounded-sm border-none bg-transparent p-0 text-left focus-ring",
+      ),
     );
     const provider = pr ? providerFromUrl(pr.url) : null;
     const externalHint = provider
@@ -1027,17 +1200,38 @@ export function PrStatusBar({
     // competing with the state or the primary action.
     const labelBody = (
       <>
-        <span className="block truncate text-item-title text-fg">
+        <span
+          {...stylex.props(
+            sx.block,
+            sx.truncate,
+            sx.textFg,
+            typography.itemTitle,
+          )}
+        >
           {headlineLabel}
         </span>
         {pr && provider && (
-          <span className="flex items-center gap-1 truncate text-meta text-faint group-hover/prsum:text-dim">
-            <BrandMark name={provider.key} size={12} className="shrink-0" />
-            <span className="shrink-0">#{pr.number}</span>
+          <span
+            {...mergeStylexProps(
+              "group-hover/prsum:text-dim",
+              sx.flex,
+              sx.itemsCenter,
+              sx.gap1,
+              sx.truncate,
+              sx.textFaint,
+              typography.meta,
+            )}
+          >
+            <BrandMark
+              name={provider.key}
+              size={12}
+              className={mergeStylexOverrideClassName("", sx.shrink0)}
+            />
+            <span {...stylex.props(sx.shrink0)}>#{pr.number}</span>
             {checksPr && (
               <>
                 <span aria-hidden="true">·</span>
-                <span className={cn("truncate", checksTone)}>
+                <span className={cn(utilityClassName("truncate"), checksTone)}>
                   {checksLabel}
                 </span>
               </>
@@ -1045,7 +1239,13 @@ export function PrStatusBar({
             <IconArrowUpRight
               dense
               size={12}
-              className="shrink-0 opacity-0 transition-opacity duration-150 group-hover/prsum:opacity-100 group-focus-visible/prsum:opacity-100"
+              className={mergeStylexOverrideClassName(
+                "group-hover/prsum:opacity-100 group-focus-visible/prsum:opacity-100",
+                sx.shrink0,
+                sx.opacity0,
+                sx.transitionOpacity,
+                sx.duration150,
+              )}
             />
           </span>
         )}
@@ -1084,7 +1284,7 @@ export function PrStatusBar({
             checks={checksPr.checks}
             trigger={
               <a
-                className={cn(labelClass, "no-underline")}
+                className={cn(labelClass, utilityClassName("no-underline"))}
                 href={checksPr.url}
                 target="_blank"
                 rel="noopener"
@@ -1098,10 +1298,10 @@ export function PrStatusBar({
         ) : pr ? (
           <Tooltip
             label={
-              <span className="flex flex-col gap-0.5">
+              <span {...stylex.props(sx.flex, sx.flexCol, sx.gap05)}>
                 <span>Open review</span>
                 {externalHint && (
-                  <span className="font-normal text-tooltip-fg/60">
+                  <span {...stylex.props(sx.fontNormal, sx.textTooltipFg60)}>
                     {externalHint}
                   </span>
                 )}
@@ -1112,7 +1312,7 @@ export function PrStatusBar({
             multiline
           >
             <a
-              className={cn(labelClass, "no-underline")}
+              className={cn(labelClass, utilityClassName("no-underline"))}
               href={pr.url}
               target="_blank"
               rel="noopener"
@@ -1178,7 +1378,14 @@ export function PrStatusBar({
         {error && (
           <p
             role="alert"
-            className="mx-5 mb-2 mt-1 text-meta leading-snug text-red"
+            {...stylex.props(
+              sx.mx5,
+              sx.mb2,
+              sx.mt1,
+              sx.leadingSnug,
+              sx.textRed,
+              typography.meta,
+            )}
           >
             {error}
           </p>
@@ -1304,7 +1511,7 @@ export function PrStatusBar({
           </Tooltip>
         )
       )}
-      <span className="flex-1" />
+      <span {...stylex.props(sx.flex1)} />
       {error && (
         <span className={PR_BAR_ERROR} title={error}>
           {error}

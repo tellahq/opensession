@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { cn } from "./cn";
 
@@ -8,7 +9,9 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "mb-[22px] flex items-start justify-between gap-4 phone:flex-col phone:gap-2.5",
+        utilityClassName(
+          "mb-[22px] flex items-start justify-between gap-4 phone:flex-col phone:gap-2.5",
+        ),
         className,
       )}
       {...props}
@@ -29,7 +32,9 @@ export function PageTitle({
       // range bar both call. Nothing else reads it, and it styles nothing.
       data-large-title=""
       className={cn(
-        "m-0 text-section-title font-title tracking-[-0.01em] text-fg",
+        utilityClassName(
+          "m-0 text-section-title font-title tracking-[-0.01em] text-fg",
+        ),
         className,
       )}
       {...props}
@@ -43,7 +48,10 @@ export function PageDescription({
 }: React.ComponentPropsWithoutRef<"div">) {
   return (
     <div
-      className={cn("mt-1 text-supporting text-faint", className)}
+      className={cn(
+        utilityClassName("mt-1 text-supporting text-faint"),
+        className,
+      )}
       {...props}
     />
   );

@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import React, { useEffect, useState } from "react";
 import { hasDraft, onDraftsChanged } from "../../lib/drafts";
 import {
@@ -9,6 +11,17 @@ import {
 import { cn } from "../../ui/cn";
 import { IconPencil, IconPlus } from "../icons";
 import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./SidebarItem";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+});
 
 /**
  * The session that hasn't started yet.
@@ -46,7 +59,7 @@ export function DraftRow({
         SIDEBAR_ROW,
         SIDEBAR_WS_ROW,
         SIDEBAR_HOVER_LAYER,
-        active && "bg-selected",
+        active && utilityClassName("bg-selected"),
       )}
       data-sidebar-row=""
       data-selected={active || undefined}
@@ -54,12 +67,15 @@ export function DraftRow({
       aria-label="New session, not started yet"
     >
       <span className={SIDEBAR_RAIL}>
-        <IconPlus className="shrink-0 text-faint" size={16} />
+        <IconPlus
+          className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
+          size={16}
+        />
       </span>
       <span className={SIDEBAR_ROW_TITLE}>New session</span>
       {draft && (
         <span
-          className={cn(SIDEBAR_WS_DRAFT, "ml-1.5")}
+          className={cn(SIDEBAR_WS_DRAFT, utilityClassName("ml-1.5"))}
           data-ws-draft=""
           aria-label="Unsent draft"
         >

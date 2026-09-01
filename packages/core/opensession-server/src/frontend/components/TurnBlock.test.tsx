@@ -243,7 +243,9 @@ describe("grouped tool run row", () => {
     );
 
     expect(html).toContain(">Error<");
-    expect(html).toContain("h-[var(--collapsible-panel-height)]");
+    // The collapsible panel reserves its size through the
+    // --collapsible-panel-height custom property.
+    expect(html).toContain("--collapsible-panel-height:");
     // The expanded detail names the failure. A trailing × looked like a close
     // button and repeated the same state on the summary row.
     expect(html).not.toContain('d="M17.25 6.75L6.75 17.25"');

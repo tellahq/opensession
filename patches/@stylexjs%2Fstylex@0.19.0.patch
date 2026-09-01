@@ -1,0 +1,32 @@
+diff --git a/lib/es/stylex.mjs b/lib/es/stylex.mjs
+index 4e4956c83d7ff946563a88a6fcf61e9213039289..1a660d9640b4fe5031ab7c5db9b306ea1186cb6c 100644
+--- a/lib/es/stylex.mjs
++++ b/lib/es/stylex.mjs
+@@ -132,8 +132,15 @@ var styleqExports = /*@__PURE__*/ requireStyleq();
+ 
+ const errorForFn = name => new Error(`Unexpected 'stylex.${name}' call at runtime. Styles must be compiled by '@stylexjs/babel-plugin'.`);
+ const errorForType = key => errorForFn(`types.${key}`);
++const testBaseStyles = styles => Object.fromEntries(
++  Object.entries(styles).flatMap(([name, style]) => [
++    [name, Object.fromEntries(Object.entries(style).filter(([key, value]) =>
++      !key.startsWith(":") && !key.startsWith("@") && (value === null || typeof value !== "object")
++    ))]
++  ])
++);
+ const create = function stylexCreate(_styles) {
+-  return _styles;
++  return testBaseStyles(_styles);
+ };
+ const createTheme = (_baseTokens, _overrides) => {
+   return _overrides;
+@@ -162,9 +169,7 @@ const defineMarker = () => {
+ const firstThatWorks = (..._styles) => {
+   throw errorForFn('firstThatWorks');
+ };
+-const keyframes = _keyframes => {
+-  throw errorForFn('keyframes');
+-};
++const keyframes = _keyframes => '__stylex_test_keyframes';
+ const positionTry = _positionTry => {
+   throw errorForFn('positionTry');
+ };

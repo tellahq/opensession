@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useEffect, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import { errorMessage } from "../lib/error-message";
@@ -6,6 +8,81 @@ import { cn } from "../ui/cn";
 import { OptionSelect } from "../ui/select";
 import { SettingsSection, settingsInputClass } from "../ui/settings";
 import { InlineAlert, LoadingState } from "../ui/state";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  p4: {
+    padding: "calc(4px * 4)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  m0: {
+    margin: "0",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mt3: {
+    marginTop: "calc(4px * 3)",
+  },
+  mt4: {
+    marginTop: "calc(4px * 4)",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  phoneFlexCol: {
+    "@media (max-width: 720px)": {
+      flexDirection: "column",
+    },
+  },
+  phoneItemsStretch: {
+    "@media (max-width: 720px)": {
+      alignItems: "stretch",
+    },
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  flex1: {
+    flex: "1",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+});
 
 interface ModelInfo {
   id: string;
@@ -94,7 +171,7 @@ export function PlainRouterConfiguration() {
 
   if (!config) {
     return (
-      <SettingsSection className="p-4">
+      <SettingsSection className={mergeStylexOverrideClassName("", sx.p4)}>
         {loadError ? (
           <InlineAlert>{loadError}</InlineAlert>
         ) : (
@@ -107,22 +184,56 @@ export function PlainRouterConfiguration() {
   const dirty = draft !== config.prompt;
 
   return (
-    <SettingsSection className="min-w-0 p-4">
-      <div className="text-item-title font-medium text-fg">Triage router</div>
-      <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+    <SettingsSection
+      className={mergeStylexOverrideClassName("", sx.minW0, sx.p4)}
+    >
+      <div {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}>
+        Triage router
+      </div>
+      <p
+        {...stylex.props(
+          sx.m0,
+          sx.mt1,
+          sx.leadingRelaxed,
+          sx.textDim,
+          typography.supporting,
+        )}
+      >
         New tickets first run through a lightweight spam and complexity check.
         Basic tickets use the model below; everything else uses the triage
         automation’s model. Changes apply to the next ticket.
       </p>
       {error && (
-        <InlineAlert className="mt-3" onDismiss={() => setError(null)}>
+        <InlineAlert
+          className={mergeStylexOverrideClassName("", sx.mt3)}
+          onDismiss={() => setError(null)}
+        >
           {error}
         </InlineAlert>
       )}
-      <div className="mt-4 flex min-w-0 items-center gap-2.5 text-meta text-faint phone:flex-col phone:items-stretch">
-        <span className="whitespace-nowrap">Model for basic tickets</span>
+      <div
+        {...stylex.props(
+          sx.mt4,
+          sx.flex,
+          sx.minW0,
+          sx.itemsCenter,
+          sx.gap25,
+          sx.textFaint,
+          sx.phoneFlexCol,
+          sx.phoneItemsStretch,
+          typography.meta,
+        )}
+      >
+        <span {...stylex.props(sx.whitespaceNowrap)}>
+          Model for basic tickets
+        </span>
         <OptionSelect
-          className="min-w-0 flex-1 phone:min-h-11"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.minW0,
+            sx.flex1,
+            sx.phoneMinH11,
+          )}
           label="Model for basic tickets"
           value={config.basicModel}
           disabled={saving}
@@ -139,9 +250,23 @@ export function PlainRouterConfiguration() {
         rows={12}
         spellCheck={false}
         aria-label="Routing prompt"
-        className={cn(settingsInputClass, "mt-3 resize-y text-body")}
+        className={cn(
+          settingsInputClass,
+          utilityClassName("mt-3 resize-y text-body"),
+        )}
       />
-      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2.5 text-meta text-faint">
+      <div
+        {...stylex.props(
+          sx.mt2,
+          sx.flex,
+          sx.minW0,
+          sx.flexWrap,
+          sx.itemsCenter,
+          sx.gap25,
+          sx.textFaint,
+          typography.meta,
+        )}
+      >
         <Button
           variant="primary"
           disabled={saving || !dirty}
@@ -156,7 +281,7 @@ export function PlainRouterConfiguration() {
         >
           Reset to default
         </Button>
-        <span className="min-w-0">
+        <span {...stylex.props(sx.minW0)}>
           {dirty
             ? "Unsaved changes"
             : savedAt

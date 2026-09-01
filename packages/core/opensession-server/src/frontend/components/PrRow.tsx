@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React from "react";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import { prStatusMark } from "../lib/pr-status";
@@ -23,6 +25,20 @@ import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./sidebar/SidebarItem";
 import { ReviewAskerFace } from "./ReviewAskerFace";
 import { PrRowCard, RowCardPopup, useRowHoverCard } from "./SidebarRowCards";
 import { useIsPhone } from "../hooks/useIsPhone";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  minW220px: {
+    minWidth: "220px",
+  },
+  grow: {
+    flexGrow: "1",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+});
 
 /**
  * A session-less open PR, rendered inside a project's status lanes (ported
@@ -94,9 +110,9 @@ export function PrRow({
                     // An unpinned row reveals one chip fewer (the pin only
                     // appears once there is something to unpin), so it gives
                     // that much of its right end back to the title.
-                    !pinned && "hover:pr-[68px]",
+                    !pinned && utilityClassName("hover:pr-[68px]"),
                     SIDEBAR_HOVER_LAYER,
-                    selected && "bg-selected",
+                    selected && utilityClassName("bg-selected"),
                   )}
                   data-sidebar-row=""
                   data-ws-row=""
@@ -119,7 +135,9 @@ export function PrRow({
           <span className={SIDEBAR_RAIL}>
             {needsMyReview ? (
               <span
-                className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
+                className={utilityClassName(
+                  `size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`,
+                )}
                 title="Needs your review"
               />
             ) : (
@@ -181,7 +199,10 @@ export function PrRow({
               <span
                 role="button"
                 tabIndex={0}
-                className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
+                className={cn(
+                  SIDEBAR_WS_ACTION,
+                  utilityClassName("text-faint hover:text-fg"),
+                )}
                 aria-label="Close pull request"
                 onMouseEnter={card.close}
                 onClick={(e) => {
@@ -200,26 +221,31 @@ export function PrRow({
             </Tooltip>
           </span>
         </ContextMenu.Trigger>
-        <ContextMenu.Popup className="min-w-[220px]">
+        <ContextMenu.Popup
+          className={mergeStylexOverrideClassName("", sx.minW220px)}
+        >
           <ContextMenu.Item onClick={onOpen}>
-            <span className="grow">Open review</span>
+            <span {...stylex.props(sx.grow)}>Open review</span>
           </ContextMenu.Item>
           <ContextMenu.Item
             render={<a href={item.pr.url} target="_blank" rel="noopener" />}
           >
             <IconArrowUpRight size={18} />
-            <span className="grow">
+            <span {...stylex.props(sx.grow)}>
               Open on {providerFromUrl(item.pr.url).name}
             </span>
           </ContextMenu.Item>
           <ContextMenu.Separator />
           <ContextMenu.Item
-            className="text-red data-[highlighted]:bg-red-soft"
+            className={mergeStylexOverrideClassName(
+              "data-[highlighted]:bg-red-soft",
+              sx.textRed,
+            )}
             disabled={closing}
             onClick={onClose}
           >
             <IconX size={18} />
-            <span className="grow">
+            <span {...stylex.props(sx.grow)}>
               {closing ? "Closing…" : "Close pull request…"}
             </span>
           </ContextMenu.Item>

@@ -1,3 +1,4 @@
+import { mergeStylexProps } from "../../ui/cn";
 import React, { useEffect, useState } from "react";
 import { IconCheck } from "../icons";
 import { fetchFeeds, type RepoInfo } from "../../lib/api";
@@ -86,6 +87,252 @@ import {
 } from "../sidebar/filter-options";
 import { Tooltip } from "../../ui/tooltip";
 import { Select, SettingRow } from "./shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  bgMkBg: {
+    backgroundColor: "var(--mk-bg)",
+  },
+  pt15: {
+    paddingTop: "15%",
+  },
+  mb9px: {
+    marginBottom: "9px",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap5px: {
+    gap: "5px",
+  },
+  h15: {
+    height: "calc(4px * 1.5)",
+  },
+  w56: {
+    width: "56%",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgMkPill: {
+    backgroundColor: "var(--mk-pill)",
+  },
+  w42: {
+    width: "42%",
+  },
+  opacity65: {
+    opacity: "65%",
+  },
+  mr9: {
+    marginRight: "9%",
+  },
+  ml14: {
+    marginLeft: "14%",
+  },
+  h56: {
+    height: "56%",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  roundedTMd: {
+    borderTopLeftRadius: "calc(7px * var(--rf))",
+    borderTopRightRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgMkPanel: {
+    backgroundColor: "var(--mk-panel)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py11px: {
+    paddingBlock: "11px",
+  },
+  w68: {
+    width: "68%",
+  },
+  roundedXs: {
+    borderRadius: "calc(2px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgMkLine: {
+    backgroundColor: "var(--mk-line)",
+  },
+  w84: {
+    width: "84%",
+  },
+  w20: {
+    width: "calc(4px * 20)",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  borderNone: {
+    borderStyle: "none",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  p0: {
+    padding: "0",
+  },
+  desktopW28: {
+    "@media (min-width: 721px)": {
+      width: "calc(4px * 28)",
+    },
+  },
+  relative: {
+    position: "relative",
+  },
+  aspect1610: {
+    aspectRatio: "16/10",
+  },
+  wFull: {
+    width: "100%",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  roundedRow: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border2: {
+    borderStyle: "solid",
+    borderWidth: "2px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  transitionBorderColorBoxShadow: {
+    transitionProperty: "border-color,box-shadow",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  ClipPathInset00050: {
+    clipPath: "inset(0 0 0 50%)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  minH11: {
+    minHeight: "calc(4px * 11)",
+  },
+  minW11: {
+    minWidth: "calc(4px * 11)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  p1: {
+    padding: "4px",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  size8: {
+    width: "calc(4px * 8)",
+    height: "calc(4px * 8)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  bgLinearGradient135degColorMixInSrgbVarSwatch97WhiteColorMixInSrgbVarSwatch94Black:
+    {
+      backgroundImage:
+        "linear-gradient(135deg,color-mix(in srgb,var(--swatch) 97%,white),color-mix(in srgb,var(--swatch) 94%,black))",
+    },
+  textSwatchInk: {
+    color: "var(--swatch-ink)",
+  },
+  outlineOffset4: {
+    outlineOffset: "4px",
+  },
+  transitionScaleBoxShadow: {
+    transitionProperty: "scale,box-shadow",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  duration150: {
+    transitionDuration: "150ms",
+  },
+  activeScale096: {
+    ":active": {
+      scale: "0.96",
+    },
+  },
+  justifyStart: {
+    justifyContent: "flex-start",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  desktopGap4: {
+    "@media (min-width: 721px)": {
+      gap: "calc(4px * 4)",
+    },
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  wFit: {
+    width: "fit-content",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gapY1: {
+    rowGap: "4px",
+  },
+});
 
 // The look of the app, as it appears inside Settings → Preferences. These used
 // to be their own Appearance section; they are per-device choices about the
@@ -125,17 +372,46 @@ const MOCK_PALETTE: Record<"light" | "dark", React.CSSProperties> = {
 function ThemeMock({ tone }: { tone: "light" | "dark" }) {
   return (
     <div
-      className="absolute inset-0 bg-(--mk-bg) pt-[15%]"
+      {...stylex.props(sx.absolute, sx.inset0, sx.bgMkBg, sx.pt15)}
       style={MOCK_PALETTE[tone]}
     >
-      <div className="mb-[9px] flex flex-col items-center gap-[5px]">
-        <div className="h-1.5 w-[56%] rounded-sm bg-(--mk-pill)" />
-        <div className="h-1.5 w-[42%] rounded-sm bg-(--mk-pill) opacity-65" />
+      <div
+        {...stylex.props(
+          sx.mb9px,
+          sx.flex,
+          sx.flexCol,
+          sx.itemsCenter,
+          sx.gap5px,
+        )}
+      >
+        <div {...stylex.props(sx.h15, sx.w56, sx.roundedSm, sx.bgMkPill)} />
+        <div
+          {...stylex.props(
+            sx.h15,
+            sx.w42,
+            sx.roundedSm,
+            sx.bgMkPill,
+            sx.opacity65,
+          )}
+        />
       </div>
-      <div className="mr-[9%] ml-[14%] flex h-[56%] flex-col gap-2 rounded-t-md bg-(--mk-panel) px-3 py-[11px]">
-        <div className="h-1.5 w-[68%] rounded-xs bg-(--mk-line)" />
-        <div className="h-1.5 w-[84%] rounded-xs bg-(--mk-line)" />
-        <div className="h-1.5 w-[56%] rounded-xs bg-(--mk-line)" />
+      <div
+        {...stylex.props(
+          sx.mr9,
+          sx.ml14,
+          sx.flex,
+          sx.h56,
+          sx.flexCol,
+          sx.gap2,
+          sx.roundedTMd,
+          sx.bgMkPanel,
+          sx.px3,
+          sx.py11px,
+        )}
+      >
+        <div {...stylex.props(sx.h15, sx.w68, sx.roundedXs, sx.bgMkLine)} />
+        <div {...stylex.props(sx.h15, sx.w84, sx.roundedXs, sx.bgMkLine)} />
+        <div {...stylex.props(sx.h15, sx.w56, sx.roundedXs, sx.bgMkLine)} />
       </div>
     </div>
   );
@@ -158,22 +434,52 @@ function ThemeCard({
     // which outrank a single utility: leaving the class here would have let
     // it keep winning against everything below.
     <button
-      className="group flex w-20 cursor-pointer flex-col items-center gap-2.5 border-none bg-transparent p-0 desktop:w-28"
+      {...mergeStylexProps(
+        "group",
+        sx.flex,
+        sx.w20,
+        sx.cursorPointer,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.gap25,
+        sx.borderNone,
+        sx.bgTransparent,
+        sx.p0,
+        sx.desktopW28,
+      )}
       role="radio"
       aria-checked={active}
       data-active={active || undefined}
       onClick={onClick}
     >
-      <div className="relative aspect-16/10 w-full overflow-hidden rounded-row border-2 border-line transition-[border-color,box-shadow] group-hover:border-faint group-data-active:border-accent group-data-active:shadow-[0_0_0_1px_var(--accent)]">
+      <div
+        {...mergeStylexProps(
+          "group-hover:border-faint group-data-active:border-accent group-data-active:shadow-[0_0_0_1px_var(--accent)]",
+          sx.relative,
+          sx.aspect1610,
+          sx.wFull,
+          sx.overflowHidden,
+          sx.roundedRow,
+          sx.border2,
+          sx.borderLine,
+          sx.transitionBorderColorBoxShadow,
+        )}
+      >
         {/* System = light base with the dark mock clipped over the right half. */}
         <ThemeMock tone={option === "dark" ? "dark" : "light"} />
         {option === "system" && (
-          <div className="absolute inset-0 [clip-path:inset(0_0_0_50%)]">
+          <div {...stylex.props(sx.absolute, sx.inset0, sx.ClipPathInset00050)}>
             <ThemeMock tone="dark" />
           </div>
         )}
       </div>
-      <span className="text-label text-dim group-data-active:font-semibold group-data-active:text-fg">
+      <span
+        {...mergeStylexProps(
+          "group-data-active:font-semibold group-data-active:text-fg",
+          sx.textDim,
+          typography.label,
+        )}
+      >
         {label}
       </span>
     </button>
@@ -202,7 +508,16 @@ function AccentSwatch({
   return (
     <Tooltip label={option.label}>
       <label
-        className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-md p-1"
+        {...stylex.props(
+          sx.flex,
+          sx.minH11,
+          sx.minW11,
+          sx.cursorPointer,
+          sx.itemsCenter,
+          sx.justifyCenter,
+          sx.roundedMd,
+          sx.p1,
+        )}
         style={style}
       >
         <input
@@ -212,9 +527,26 @@ function AccentSwatch({
           checked={active}
           onChange={onClick}
           aria-label={option.label}
-          className="peer sr-only"
+          {...mergeStylexProps("peer", sx.srOnly)}
         />
-        <span className="flex size-8 items-center justify-center rounded-full border border-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--swatch)_97%,white),color-mix(in_srgb,var(--swatch)_94%,black))] text-(--swatch-ink) outline-offset-4 transition-[scale,box-shadow] duration-150 active:scale-[0.96] peer-checked:shadow-[0_0_0_2px_var(--bg-raised),0_0_0_4px_var(--swatch)] peer-focus-visible:outline-2 peer-focus-visible:outline-accent-ink">
+        <span
+          {...mergeStylexProps(
+            "peer-checked:shadow-[0_0_0_2px_var(--bg-raised),0_0_0_4px_var(--swatch)] peer-focus-visible:outline-2 peer-focus-visible:outline-accent-ink",
+            sx.flex,
+            sx.size8,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.roundedFull,
+            sx.border,
+            sx.borderLine,
+            sx.bgLinearGradient135degColorMixInSrgbVarSwatch97WhiteColorMixInSrgbVarSwatch94Black,
+            sx.textSwatchInk,
+            sx.outlineOffset4,
+            sx.transitionScaleBoxShadow,
+            sx.duration150,
+            sx.activeScale096,
+          )}
+        >
           {active && <IconCheck size={16} strokeWidth={2.4} />}
         </span>
       </label>
@@ -246,7 +578,7 @@ export function AppearanceSection() {
       <SettingsGroupLabel>Appearance</SettingsGroupLabel>
       <SettingsSection>
         <div
-          className="flex justify-start gap-3 desktop:gap-4"
+          {...stylex.props(sx.flex, sx.justifyStart, sx.gap3, sx.desktopGap4)}
           role="radiogroup"
           aria-label="Theme"
         >
@@ -262,15 +594,28 @@ export function AppearanceSection() {
             />
           ))}
         </div>
-        <div className="mt-5">
-          <div className="mb-2 text-control-label font-medium text-faint">
+        <div {...stylex.props(sx.mt5)}>
+          <div
+            {...stylex.props(
+              sx.mb2,
+              sx.fontMedium,
+              sx.textFaint,
+              typography.controlLabel,
+            )}
+          >
             Accent
           </div>
           <div
             // Keep the seven 44px targets together instead of stretching them
             // across the plate. They wrap only when the viewport cannot hold
             // the full group without shrinking its touch targets.
-            className="flex w-fit max-w-full flex-wrap gap-y-1"
+            {...stylex.props(
+              sx.flex,
+              sx.wFit,
+              sx.maxWFull,
+              sx.flexWrap,
+              sx.gapY1,
+            )}
             role="radiogroup"
             aria-label="Accent colour"
           >

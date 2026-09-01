@@ -56,7 +56,9 @@ palette, and the list below is what they had to add.
 
 The mechanisms, by name:
 
-- `phone:` and `desktop:` variants (`styles/tailwind.css`), the 720px boundary.
+- the 720px boundary, spelled `"@media (max-width: 720px)"` (phone) and
+  `"@media (min-width: 721px)"` (desktop) as StyleX keys, and
+  `PHONE_QUERY` (`lib/breakpoints.ts`) for `matchMedia`
 - `PHONE_QUERY` (`lib/breakpoints.ts`) is the same boundary for `matchMedia`,
   pinned to the stylesheet by `breakpoints.test.ts`. Do not write the query
   again in a component.
@@ -105,14 +107,19 @@ layout from regressing once it exists.
 
 ## Styling
 
-- Use Tailwind utilities for new and touched UI. `styles/legacy.css` is empty
-  and stays that way; component styling lives in a `lib/*-classes.ts` string
-  beside its component, or in a primitive in `ui/`. A class name left on the
-  markup is a hook for something else (base.css, a `closest()` call, another
+- Style components with StyleX: a `const sx = stylex.create({ … })` beside the
+  component, composed onto the element with `{...stylex.props(sx.a, sx.b)}`.
+  Conditional styling is composition (`stylex.props(sx.base, active && sx.on)`),
+  never string building. `styles/STYLEX-MIGRATION.md` is the full contract.
+  A class name left on the markup is a hook for something else (a residual
+  rule in `styles/residual.css`, base.css, a `closest()` call, another
   module's `[.that-class_&]`) — say which, in a comment, or drop the name.
-- Use the semantic tokens from `styles/tailwind.css`, such as `bg-panel`,
-  `text-fg`, `text-dim`, and `border-line`. Never add raw color values or stock
-  Tailwind palette colors to product UI.
+- Use the semantic tokens from `styles/tokens.stylex.ts` (`tokens.panel`,
+  `tokens.fg`, `tokens.dim`, `tokens.line`, …), which resolve through the
+  base.css custom properties so theming stays in one place. Never add raw
+  color values to product UI. Type comes from the shared scale
+  (`styles/typography.stylex.ts`): compose `typography.body`,
+  `typography.meta`, … instead of writing font sizes.
 - Do not frame a section, card, or tile in a border. A block that sits on its
   own fill (`bg-panel` on `bg-surface`) is already separated from the page, and
   a hairline around it adds a second edge that makes a page of them read as a
@@ -129,15 +136,13 @@ layout from regressing once it exists.
   a trade, not a licence. It does not extend to `Card`, which stays
   borderless, and a card that still carries a normal fill has nothing to
   trade.
-- Round generously, and scale the radius with the box. The scale in
-  `styles/tailwind.css` runs `rounded-sm` 4, `rounded-md` 7, `rounded-lg` 14,
-  `rounded-xl` 18, `rounded-2xl` 22, plus the named chrome corners
-  `rounded-control` / `rounded-row` (12) and `rounded-popup` (16) — each of them
+- Round generously, and scale the radius with the box. The named corners live
+  in `tokens.stylex.ts` (`radiusControl` / `radiusRow` 12, `radiusPopup` 16),
   authored as `calc(<n>px * var(--rf))`, so a browser with `corner-shape`
-  support renders them 1.35x larger. A small
-  control keeps a small corner; a card takes `rounded-xl`, and a container that
-  holds cards takes `rounded-2xl`. Never write an arbitrary radius, and never
-  give one surface two different corners.
+  support renders them 1.35x larger. A small control keeps a small corner; a
+  card takes a step up, and a container that holds cards a step above that.
+  Never write an arbitrary radius, and never give one surface two different
+  corners.
 - Keep nested corners concentric: an inner radius plus the padding around it
   should equal the outer radius. A child rounded as hard as its parent pinches
   the gap between them, and a square child inside a round parent reads as a
@@ -168,10 +173,10 @@ layout from regressing once it exists.
   pseudo-element inset by 4px (`before:inset-1`).
 - Follow the existing spacing, type, radius, border, and icon scales. Prefer a
   nearby shared component or token over a new arbitrary value.
-- Reach for the breakpoint by name: `phone:` and `desktop:`, defined in
-  `styles/tailwind.css`. Do not spell it `max-[720px]:` — that compiles to
-  `< 720`, not `<= 720`, so at exactly 720px wide the element drops its phone
-  value while `base.css`'s own `@media (max-width: 720px)` block keeps one.
+- Reach for the breakpoint by its exact media key: `"@media (max-width: 720px)"`
+  (phone, 720 included) and `"@media (min-width: 721px)"` (desktop). The two
+  spellings are pinned by `styles/stylex-parity.test.ts`; a third spelling of
+  the same boundary is how the layouts drift apart at exactly 720px.
 - Match the surrounding surface before adding visual emphasis. Accent colors,
   raised surfaces, shadows, and animation should communicate meaning, not make
   a new feature louder than its neighbors.

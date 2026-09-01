@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { Button, type ButtonProps } from "./button";
 import { cn } from "./cn";
@@ -22,10 +23,14 @@ export const OverlayAction = React.forwardRef<
       variant="default"
       size="sm"
       className={cn(
-        "absolute -right-2 -top-2 z-[1] bg-white transition-[opacity,scale]",
+        utilityClassName(
+          "absolute -right-2 -top-2 z-[1] bg-white transition-[opacity,scale]",
+        ),
         "[@media(hover:hover)]:pointer-events-none [@media(hover:hover)]:opacity-0",
         "[@media(hover:hover)]:group-hover/overlay-action:pointer-events-auto [@media(hover:hover)]:group-hover/overlay-action:opacity-100",
-        "focus-visible:pointer-events-auto focus-visible:opacity-100",
+        utilityClassName(
+          "focus-visible:pointer-events-auto focus-visible:opacity-100",
+        ),
         className,
       )}
       {...props}

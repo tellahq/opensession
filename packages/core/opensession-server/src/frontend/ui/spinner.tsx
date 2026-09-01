@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { cn } from "./cn";
 
@@ -20,9 +21,9 @@ import { cn } from "./cn";
 export type SpinnerSize = "sm" | "md" | "lg";
 
 const sizes: Record<SpinnerSize, string> = {
-  sm: "size-3 border",
-  md: "size-4 border-2",
-  lg: "size-5 border-2",
+  sm: utilityClassName("size-3 border"),
+  md: utilityClassName("size-4 border-2"),
+  lg: utilityClassName("size-5 border-2"),
 };
 
 export function Spinner({
@@ -34,7 +35,9 @@ export function Spinner({
     <span
       aria-hidden
       className={cn(
-        "inline-block shrink-0 animate-spin rounded-full border-current/25 border-t-current",
+        utilityClassName(
+          "inline-block shrink-0 animate-spin rounded-full border-current/25 border-t-current",
+        ),
         sizes[size],
         className,
       )}

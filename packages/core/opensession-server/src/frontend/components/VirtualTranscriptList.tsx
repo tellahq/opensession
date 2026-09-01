@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import {
   Virtualizer,
   defaultRangeExtractor,
@@ -29,6 +30,17 @@ import {
   type TranscriptVirtualNavigation,
 } from "../lib/transcript-virtual-navigation";
 import { cn } from "../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  wFull: {
+    width: "100%",
+  },
+});
 
 export interface VirtualTranscriptItem {
   key: string;
@@ -824,7 +836,7 @@ class TranscriptVirtualizer extends React.Component<
     const result = (
       <div
         ref={this.setRoot}
-        className="relative w-full"
+        {...stylex.props(sx.relative, sx.wFull)}
         style={{ height: totalSize }}
         data-virtual-transcript
         data-virtual-count={this.props.items.length}
@@ -841,7 +853,7 @@ class TranscriptVirtualizer extends React.Component<
               data-eid={item.anchorId}
               data-transcript-key={item.key}
               className={cn(
-                "absolute left-0 top-0 w-full",
+                utilityClassName("absolute left-0 top-0 w-full"),
                 item.className,
                 // Live machine rows glide when their measured position moves.
                 // Indexed transcript slices opt out: hydration is not arrival.

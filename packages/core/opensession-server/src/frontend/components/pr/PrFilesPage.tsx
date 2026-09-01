@@ -1,3 +1,4 @@
+import { utilityClassName } from "../../ui/cn";
 import type { ComponentProps } from "react";
 import type { CommentableDiffOptions } from "../../lib/commentable-diff";
 import type {
@@ -12,6 +13,119 @@ import { CodeFlow } from "../CodeFlow";
 import { CommentableDiff } from "../CommentableDiff";
 import { DiffPanel } from "../DiffPanel";
 import { PrFileTree } from "./PrFileTree";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  py12: {
+    paddingBlock: "calc(4px * 12)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  ml2: {
+    marginLeft: "calc(4px * 2)",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  textLink: {
+    color: "var(--link)",
+  },
+  mb4: {
+    marginBottom: "calc(4px * 4)",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  mb7: {
+    marginBottom: "calc(4px * 7)",
+  },
+  grid: {
+    display: "grid",
+  },
+  gridCols54pxMinmax01fr: {
+    gridTemplateColumns: "54px minmax(0,1fr)",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  m0: {
+    margin: "0",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  tracking001em: {
+    letterSpacing: "-0.01em",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  maxW680px: {
+    maxWidth: "680px",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mb8: {
+    marginBottom: "calc(4px * 8)",
+  },
+  scrollMt64px: {
+    scrollMarginTop: "64px",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+});
 
 type DiffSource = "pull-request" | "worktree";
 type CodeView = "all" | "guide" | "flow";
@@ -94,7 +208,9 @@ export function PrFilesPage({
 }: Props) {
   return (
     <div
-      className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]` : ""}`}
+      className={utilityClassName(
+        `flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]` : ""}`,
+      )}
     >
       {diffSource === "pull-request" &&
         fileListMode !== "hidden" &&
@@ -110,13 +226,17 @@ export function PrFilesPage({
       <main
         // Wide review scrolls the toolbar and canvas in one container. File
         // cards stay in that flow and pass beneath the sticky toolbar.
-        className={`min-w-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+        className={utilityClassName(
+          `min-w-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`,
+        )}
       >
         {/* Keep the review canvas close to the viewport edge. The file
             section's own border now carries the shape instead of a wide
             gray gutter around it. */}
         <div
-          className={`mx-auto max-w-[1500px] px-2 pb-2 phone:px-1 ${compactToolbar ? "pt-0" : "pt-2"}`}
+          className={utilityClassName(
+            `mx-auto max-w-[1500px] px-2 pb-2 phone:px-1 ${compactToolbar ? "pt-0" : "pt-2"}`,
+          )}
         >
           {diffSource === "worktree" ? (
             <DiffPanel
@@ -138,12 +258,19 @@ export function PrFilesPage({
               onOpenLocation={onOpenFile}
             />
           ) : !diff?.patch || !diffOptions ? (
-            <div className="py-12 text-center text-sm text-faint">
+            <div
+              {...stylex.props(sx.py12, sx.textCenter, sx.textSm, sx.textFaint)}
+            >
               {diffError ? (
                 <>
-                  <span className="text-red">{diffError}</span>
+                  <span {...stylex.props(sx.textRed)}>{diffError}</span>
                   <button
-                    className="ml-2 border-0 bg-transparent text-link"
+                    {...stylex.props(
+                      sx.ml2,
+                      sx.border0,
+                      sx.bgTransparent,
+                      sx.textLink,
+                    )}
                     onClick={onRetryDiff}
                   >
                     Retry
@@ -160,17 +287,41 @@ export function PrFilesPage({
           ) : codeView === "guide" ? (
             guideLoading || (!currentGuide && !guideFailed) ? (
               <>
-                <div className="mb-4 rounded-sm border border-line bg-panel px-3 py-2 text-xs text-faint">
+                <div
+                  {...stylex.props(
+                    sx.mb4,
+                    sx.roundedSm,
+                    sx.border,
+                    sx.borderLine,
+                    sx.bgPanel,
+                    sx.px3,
+                    sx.py2,
+                    sx.textXs,
+                    sx.textFaint,
+                  )}
+                >
                   Writing the review guide… You can review the file diff while
                   it groups the change by intent.
                 </div>
                 <CommentableDiff patch={diff.patch} options={diffOptions} />
               </>
             ) : guideFailed ? (
-              <div className="py-12 text-center text-sm text-faint">
+              <div
+                {...stylex.props(
+                  sx.py12,
+                  sx.textCenter,
+                  sx.textSm,
+                  sx.textFaint,
+                )}
+              >
                 Couldn't generate a guide for this PR.
                 <button
-                  className="ml-2 border-0 bg-transparent text-link"
+                  {...stylex.props(
+                    sx.ml2,
+                    sx.border0,
+                    sx.bgTransparent,
+                    sx.textLink,
+                  )}
                   onClick={onRetryGuide}
                 >
                   Retry
@@ -178,16 +329,47 @@ export function PrFilesPage({
               </div>
             ) : currentGuide ? (
               <>
-                <div className="mb-7 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
-                  <div className="text-meta font-medium leading-relaxed text-faint">
+                <div
+                  {...stylex.props(
+                    sx.mb7,
+                    sx.grid,
+                    sx.gridCols54pxMinmax01fr,
+                    sx.gap4,
+                    sx.px1,
+                  )}
+                >
+                  <div
+                    {...stylex.props(
+                      sx.fontMedium,
+                      sx.leadingRelaxed,
+                      sx.textFaint,
+                      typography.meta,
+                    )}
+                  >
                     Review guide
                   </div>
                   <div>
-                    <h2 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">
+                    <h2
+                      {...stylex.props(
+                        sx.m0,
+                        sx.fontSemibold,
+                        sx.tracking001em,
+                        sx.textFg,
+                        typography.itemTitle,
+                      )}
+                    >
                       {currentGuide.sections.length} focused review step
                       {currentGuide.sections.length === 1 ? "" : "s"}
                     </h2>
-                    <p className="mt-1 max-w-[680px] text-xs leading-relaxed text-dim">
+                    <p
+                      {...stylex.props(
+                        sx.mt1,
+                        sx.maxW680px,
+                        sx.textXs,
+                        sx.leadingRelaxed,
+                        sx.textDim,
+                      )}
+                    >
                       {reviewing
                         ? "Review the change by intent rather than alphabetically. Comments stay pending until you finish the review."
                         : "Read the change by intent rather than alphabetically."}
@@ -197,19 +379,40 @@ export function PrFilesPage({
                 {guideSections.map((section, index, all) => (
                   <section
                     id={`review-guide-${index}`}
-                    className="mb-8 scroll-mt-[64px]"
+                    {...stylex.props(sx.mb8, sx.scrollMt64px)}
                     key={`${section.title}-${index}`}
                   >
-                    <div className="mb-3 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
-                      <div className="text-meta text-faint">
+                    <div
+                      {...stylex.props(
+                        sx.mb3,
+                        sx.grid,
+                        sx.gridCols54pxMinmax01fr,
+                        sx.gap4,
+                        sx.px1,
+                      )}
+                    >
+                      <div {...stylex.props(sx.textFaint, typography.meta)}>
                         {String(index + 1).padStart(2, "0")} /{" "}
                         {String(all.length).padStart(2, "0")}
                       </div>
                       <div>
-                        <div className="text-item-title font-semibold text-fg">
+                        <div
+                          {...stylex.props(
+                            sx.fontSemibold,
+                            sx.textFg,
+                            typography.itemTitle,
+                          )}
+                        >
                           {section.title}
                         </div>
-                        <div className="mt-1 text-supporting leading-relaxed text-dim">
+                        <div
+                          {...stylex.props(
+                            sx.mt1,
+                            sx.leadingRelaxed,
+                            sx.textDim,
+                            typography.supporting,
+                          )}
+                        >
                           {section.explanation}
                         </div>
                       </div>

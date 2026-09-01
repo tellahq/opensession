@@ -1,3 +1,4 @@
+import { utilityClassName } from "../../ui/cn";
 import React from "react";
 import { OpenAssetPathsProvider } from "../../lib/open-asset";
 import { cn } from "../../ui/cn";
@@ -32,8 +33,10 @@ export function TranscriptView({
   return (
     <div
       className={cn(
-        "w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150",
-        openSettlePending && "opacity-0",
+        utilityClassName(
+          "w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150",
+        ),
+        openSettlePending && utilityClassName("opacity-0"),
       )}
     >
       <OpenAssetPathsProvider value={assetPaths}>

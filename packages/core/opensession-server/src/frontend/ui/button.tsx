@@ -1,6 +1,28 @@
+import { mergeStylexOverrideClassName } from "./cn";
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { IconChevronDown } from "../components/icons";
 import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  TextBoxTrimBothCapAlphabetic: {
+    textBox: "trim-both cap alphabetic",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  opacity55: {
+    opacity: "55%",
+  },
+});
 
 /**
  * Button primitive — the shared optics for text, icon+label, and icon-only
@@ -71,31 +93,31 @@ const sizes: Record<Size, string> = {
   // There used to be an `xs` between nothing and `sm`, 24px against 26px with
   // the same padding, type and corner. Two names for one control: the 2px
   // never told anyone anything, and choosing between them was a coin toss.
-  sm: "min-h-[26px] px-2.5 text-xs rounded-control",
-  md: "min-h-8 px-3 text-sm rounded-control",
-  lg: "min-h-9 px-3.5 text-base rounded-control",
+  sm: utilityClassName("min-h-[26px] px-2.5 text-xs rounded-control"),
+  md: utilityClassName("min-h-8 px-3 text-sm rounded-control"),
+  lg: utilityClassName("min-h-9 px-3.5 text-base rounded-control"),
 };
 
 // Leading icon + label: shave 4px off the icon side, which is the glyph's own
 // whitespace minus the label's side bearing (see doc block).
 const iconLeadPad: Record<Size, string> = {
-  sm: "pl-1.5",
-  md: "pl-2",
-  lg: "pl-2.5",
+  sm: utilityClassName("pl-1.5"),
+  md: utilityClassName("pl-2"),
+  lg: utilityClassName("pl-2.5"),
 };
 
 // Trailing caret + label: the same 4px shave, on the caret's side.
 const caretTrailPad: Record<Size, string> = {
-  sm: "pr-1.5",
-  md: "pr-2",
-  lg: "pr-2.5",
+  sm: utilityClassName("pr-1.5"),
+  md: utilityClassName("pr-2"),
+  lg: utilityClassName("pr-2.5"),
 };
 
 // The air between glyph and label. One gap utility only: a second one on the
 // same element resolves by Tailwind's output order rather than by the order
 // they are written, so the two cases pick a value instead of layering.
-const LEAD_GAP = "gap-1.5";
-const PLAIN_GAP = "gap-1";
+const LEAD_GAP = utilityClassName("gap-1.5");
+const PLAIN_GAP = utilityClassName("gap-1");
 
 // The caret keys off the label, not the 20px icon step: an iconic-pro glyph at
 // 14 draws an arrow about as tall as the cap height of a 12px label, which is
@@ -105,9 +127,9 @@ const caretSize: Record<Size, number> = { sm: 14, md: 16, lg: 18 };
 
 // Icon-only: square hit target, symmetric.
 const iconOnlyPad: Record<Size, string> = {
-  sm: "w-[26px] px-0",
-  md: "w-8 px-0",
-  lg: "w-9 px-0",
+  sm: utilityClassName("w-[26px] px-0"),
+  md: utilityClassName("w-8 px-0"),
+  lg: utilityClassName("w-9 px-0"),
 };
 
 // Solid ink: the heaviest weight, for the one dominant action on a surface (a
@@ -126,8 +148,9 @@ const iconOnlyPad: Record<Size, string> = {
 // from reading as a flat printed rectangle. It is a white-then-black overlay,
 // so it costs the variant nothing per palette and survives the ink accent at
 // both ends of the light/dark range.
-const INK =
-  "bg-accent border-transparent text-on-accent plate-sheen smooth-shadow-xs hover:bg-accent-hover";
+const INK = utilityClassName(
+  "bg-accent border-transparent text-on-accent plate-sheen smooth-shadow-xs hover:bg-accent-hover",
+);
 
 /**
  * Which one, in one line each. The question a variant answers is what the
@@ -155,8 +178,9 @@ const variants: Record<Variant, string> = {
   // Paper in light (`bg-button`), graphite in dark: the hairline and the cast
   // shadow are what say "raised", so the fill does not have to — see the
   // --button-surface note in base.css.
-  default:
+  default: utilityClassName(
     "bg-button border-line text-dim smooth-shadow-xs hover:text-fg hover:border-line-strong",
+  ),
   primary: INK,
   // A plate with no hairline: the quiet neutral button, and the one to reach
   // for whenever a row holds more than one action (Cancel beside Save, a
@@ -173,21 +197,25 @@ const variants: Record<Variant, string> = {
   // that same #ebebeb over the white page, so nothing moved where the old
   // value was right, and it holds its shape on a panel, a card, or the
   // sidebar's translucent material.
-  soft: "bg-fg/8 border-transparent text-dim hover:bg-fg/13 hover:text-fg data-[popup-open]:bg-fg/13 data-[popup-open]:text-fg",
+  soft: utilityClassName(
+    "bg-fg/8 border-transparent text-dim hover:bg-fg/13 hover:text-fg data-[popup-open]:bg-fg/13 data-[popup-open]:text-fg",
+  ),
   // No plate at all until you reach for it. A ghost is the right weight for a
   // control that is *reporting state* as much as inviting a press — a filter
   // that says "In all workspaces" is mostly a label — so the row stays quiet
   // and the wash arrives on hover. `data-popup-open` is Base UI's: when the
   // ghost is a menu trigger it has to stay lit while its own menu is open, or
   // the thing you just clicked disappears out from under the popup.
-  ghost:
+  ghost: utilityClassName(
     "border-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+  ),
   // Media previews float directly on a dark scrim rather than an app surface.
   // Keep their safe action clusters as quiet inverse ghosts until hover; the
   // shared variant lets lightboxes use Button's spacing, focus, and anchor
   // rendering instead of rebuilding those fundamentals around raw controls.
-  overlay:
+  overlay: utilityClassName(
     "border-transparent bg-transparent text-white/60 hover:bg-white/15 hover:text-white",
+  ),
   // The tones come in two weights and no third: a tinted plate that PROPOSES
   // the action, and a solid one that COMMITS it. Both are fills, like every
   // variant above — a tone used to be an outline, which put a red box around
@@ -201,35 +229,43 @@ const variants: Record<Variant, string> = {
   //
   // Green is the second-most reached-for colour in the app after the accent
   // (approve a review, merge, mark read), so it earns a pair of its own.
-  success: "bg-green-soft border-transparent text-green hover:bg-green/22",
-  danger: "bg-red-soft border-transparent text-red hover:bg-red/22",
+  success: utilityClassName(
+    "bg-green-soft border-transparent text-green hover:bg-green/22",
+  ),
+  danger: utilityClassName(
+    "bg-red-soft border-transparent text-red hover:bg-red/22",
+  ),
   // Yellow has no strong half: it qualifies an action ("delete the session,
   // keep the worktree"), and nothing in the app commits in yellow.
-  warning: "bg-yellow-soft border-transparent text-yellow hover:bg-yellow/22",
+  warning: utilityClassName(
+    "bg-yellow-soft border-transparent text-yellow hover:bg-yellow/22",
+  ),
   // Solid red plate — the button that actually does the irreversible thing
   // (a modal's confirm, the second click of a two-click close). Shares
   // `primary`'s shape, so the two swap cleanly in a footer.
-  "danger-strong":
+  "danger-strong": utilityClassName(
     "bg-red border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
+  ),
   // Solid green plate, for the affirmative action a surface wants read first
   // — the deck's Skip, a workspace's Approve — where the tint would let a
   // destructive neighbour dominate the row.
-  "success-strong":
+  "success-strong": utilityClassName(
     "bg-green border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
+  ),
 };
 
 // Leading-icon dimming per variant (icon-only stays full strength).
 const iconDim: Record<Variant, string> = {
-  default: "opacity-60",
-  primary: "opacity-80",
-  soft: "opacity-60",
-  ghost: "opacity-60",
-  overlay: "opacity-60",
-  success: "opacity-80",
-  danger: "opacity-80",
-  warning: "opacity-80",
-  "danger-strong": "opacity-80",
-  "success-strong": "opacity-80",
+  default: utilityClassName("opacity-60"),
+  primary: utilityClassName("opacity-80"),
+  soft: utilityClassName("opacity-60"),
+  ghost: utilityClassName("opacity-60"),
+  overlay: utilityClassName("opacity-60"),
+  success: utilityClassName("opacity-80"),
+  danger: utilityClassName("opacity-80"),
+  warning: utilityClassName("opacity-80"),
+  "danger-strong": utilityClassName("opacity-80"),
+  "success-strong": utilityClassName("opacity-80"),
 };
 
 export type ButtonProps = React.ComponentPropsWithoutRef<"button"> & {
@@ -309,7 +345,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     // wrapping it would make it a flex item of a flex item.
     const label =
       typeof children === "string" || typeof children === "number" ? (
-        <span className="[text-box:trim-both_cap_alphabetic]">{children}</span>
+        <span {...stylex.props(sx.TextBoxTrimBothCapAlphabetic)}>
+          {children}
+        </span>
       ) : (
         children
       );
@@ -318,7 +356,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {icon != null && (
           <span
             className={cn(
-              "inline-flex shrink-0 items-center",
+              utilityClassName("inline-flex shrink-0 items-center"),
               !iconOnly && iconTone === "muted" && iconDim[variant],
             )}
           >
@@ -327,11 +365,17 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         {label}
         {trailing != null && (
-          <span className="inline-flex shrink-0 items-center">{trailing}</span>
+          <span {...stylex.props(sx.inlineFlex, sx.shrink0, sx.itemsCenter)}>
+            {trailing}
+          </span>
         )}
         {caret && (
           <IconChevronDown
-            className="shrink-0 opacity-55"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.shrink0,
+              sx.opacity55,
+            )}
             size={caretSize[size]}
           />
         )}
@@ -341,19 +385,23 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       // `no-underline` is inert on a <button> and load-bearing under
       // `render`: an <a> underlines its text by default, so without it a
       // button that navigates arrives looking like body copy.
-      "inline-flex items-center justify-center border whitespace-nowrap select-none no-underline",
+      utilityClassName(
+        "inline-flex items-center justify-center border whitespace-nowrap select-none no-underline",
+      ),
       icon != null && hasLabel ? LEAD_GAP : PLAIN_GAP,
       // Text utilities carry different stock line heights even though this
       // button scale pins its own heights. A single tight line box gives
       // labels the same optical centre as fixed-size icons and chevrons.
-      "leading-none",
-      "font-medium transition-[color,background-color,border-color,filter,scale] active:scale-[0.96]",
+      utilityClassName("leading-none"),
+      utilityClassName(
+        "font-medium transition-[color,background-color,border-color,filter,scale] active:scale-[0.96]",
+      ),
       // One keyboard focus treatment for every variant. Without it a
       // Button falls back to the browser's default outline, which
       // differs per engine and sits tight against the corner; the
       // shared utility also carries the forced-colors fallback.
       "focus-ring",
-      "disabled:pointer-events-none disabled:opacity-40",
+      utilityClassName("disabled:pointer-events-none disabled:opacity-40"),
       sizes[size],
       variants[variant],
       icon != null && hasLabel && iconLeadPad[size],

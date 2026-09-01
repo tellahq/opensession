@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useRef, useState } from "react";
 import { fetchOpenPrs, type OpenPr } from "../lib/api";
 import { matchingPullRequests } from "../lib/new-session-prs";
@@ -9,6 +11,87 @@ import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { IconNewBranch, IconPullRequest, IconSearch } from "./icons";
 import { RepoTile, repoLabel } from "./RepoTile";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  shrink0: {
+    flexShrink: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  wMin380pxCalc100vw1rem: {
+    width: "min(380px, calc(100vw - 1rem))",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  grow: {
+    flexGrow: "1",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  pb15: {
+    paddingBottom: "calc(4px * 1.5)",
+  },
+  relative: {
+    position: "relative",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  left25: {
+    left: "calc(4px * 2.5)",
+  },
+  top12: {
+    top: "calc(1 / 2 * 100%)",
+  },
+  TranslateY12: {
+    translate: "0 calc(calc(1 / 2 * 100%) * -1)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  pl9: {
+    paddingLeft: "calc(4px * 9)",
+  },
+  phoneTextInputPhone: {
+    "@media (max-width: 720px)": {
+      fontSize: "var(--type-input-phone)",
+    },
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+});
 
 interface Props {
   repo: string;
@@ -93,40 +176,72 @@ export function NewSessionPrPicker({
           type="button"
           className={cn(
             selected
-              ? "inline-flex min-h-8 max-w-[130px] shrink-0 items-center gap-1.5 rounded-control bg-accent-soft px-2.5 text-label font-medium text-accent transition-[background,color] hover:bg-hover disabled:cursor-default disabled:opacity-50 phone:min-h-11 phone:max-w-[112px] phone:rounded-[999px] phone:px-3"
+              ? utilityClassName(
+                  "inline-flex min-h-8 max-w-[130px] shrink-0 items-center gap-1.5 rounded-control bg-accent-soft px-2.5 text-label font-medium text-accent transition-[background,color] hover:bg-hover disabled:cursor-default disabled:opacity-50 phone:min-h-11 phone:max-w-[112px] phone:rounded-[999px] phone:px-3",
+                )
               : cn(
                   paletteIconBtn,
-                  "shrink-0 phone:size-11 phone:rounded-[999px] phone:before:rounded-[999px]",
+                  utilityClassName(
+                    "shrink-0 phone:size-11 phone:rounded-[999px] phone:before:rounded-[999px]",
+                  ),
                 ),
           )}
           disabled={disabled}
           aria-label={label}
         >
-          <IconPullRequest className="shrink-0" size={20} />
-          {selected && <span className="truncate">#{selected.number}</span>}
+          <IconPullRequest
+            className={mergeStylexOverrideClassName("", sx.shrink0)}
+            size={20}
+          />
+          {selected && (
+            <span {...stylex.props(sx.truncate)}>#{selected.number}</span>
+          )}
         </Menu.Trigger>
       </Tooltip>
       <Menu.Popup
         align="start"
         sideOffset={6}
-        className="w-[min(380px,calc(100vw-1rem))]"
+        className={mergeStylexOverrideClassName("", sx.wMin380pxCalc100vw1rem)}
       >
         <Menu.Group>
           <Menu.GroupLabel>Start from</Menu.GroupLabel>
-          <Menu.Item onClick={onClear} className="phone:min-h-11">
-            <IconNewBranch className="shrink-0 text-dim" size={20} />
-            <span className="min-w-0 grow truncate">New branch</span>
-            <Menu.Check on={!selected} className="text-dim" />
+          <Menu.Item
+            onClick={onClear}
+            className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
+          >
+            <IconNewBranch
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.shrink0,
+                sx.textDim,
+              )}
+              size={20}
+            />
+            <span {...stylex.props(sx.minW0, sx.grow, sx.truncate)}>
+              New branch
+            </span>
+            <Menu.Check
+              on={!selected}
+              className={mergeStylexOverrideClassName("", sx.textDim)}
+            />
           </Menu.Item>
         </Menu.Group>
         <Menu.Separator />
         {hasRepo && (
-          <div className="px-1.5 pb-1.5">
-            <div className="relative">
+          <div {...stylex.props(sx.px15, sx.pb15)}>
+            <div {...stylex.props(sx.relative)}>
               <IconSearch
                 aria-hidden
                 size={16}
-                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.pointerEventsNone,
+                  sx.absolute,
+                  sx.left25,
+                  sx.top12,
+                  sx.TranslateY12,
+                  sx.textFaint,
+                )}
               />
               <Input
                 ref={searchRef}
@@ -156,21 +271,47 @@ export function NewSessionPrPicker({
                 spellCheck={false}
                 autoCapitalize="off"
                 autoCorrect="off"
-                className="pl-9 phone:min-h-11 phone:text-input-phone"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.pl9,
+                  sx.phoneMinH11,
+                  sx.phoneTextInputPhone,
+                )}
               />
             </div>
           </div>
         )}
         {pullRequests === null ? (
-          <Menu.Item disabled className="phone:min-h-11 text-faint">
+          <Menu.Item
+            disabled
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.phoneMinH11,
+              sx.textFaint,
+            )}
+          >
             Loading pull requests…
           </Menu.Item>
         ) : !hasRepo ? (
-          <Menu.Item disabled className="phone:min-h-11 text-faint">
+          <Menu.Item
+            disabled
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.phoneMinH11,
+              sx.textFaint,
+            )}
+          >
             Choose a project first
           </Menu.Item>
         ) : matches.length === 0 ? (
-          <Menu.Item disabled className="phone:min-h-11 text-faint">
+          <Menu.Item
+            disabled
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.phoneMinH11,
+              sx.textFaint,
+            )}
+          >
             {query.trim()
               ? "No matching pull requests"
               : "No open pull requests"}
@@ -186,20 +327,47 @@ export function NewSessionPrPicker({
                 ref={index === 0 ? firstResultRef : undefined}
                 onClick={() => choose(pullRequest)}
                 className={cn(
-                  "items-start gap-2.5 py-2 phone:min-h-11",
-                  active && "bg-hover",
+                  utilityClassName("items-start gap-2.5 py-2 phone:min-h-11"),
+                  active && utilityClassName("bg-hover"),
                 )}
               >
                 <RepoTile name={pullRequest.repo} size={20} />
-                <span className="flex min-w-0 grow flex-col gap-0.5">
-                  <span className="truncate text-control-label text-fg">
+                <span
+                  {...stylex.props(
+                    sx.flex,
+                    sx.minW0,
+                    sx.grow,
+                    sx.flexCol,
+                    sx.gap05,
+                  )}
+                >
+                  <span
+                    {...stylex.props(
+                      sx.truncate,
+                      sx.textFg,
+                      typography.controlLabel,
+                    )}
+                  >
                     {repoLabel(pullRequest.repo)} #{pullRequest.number}
                   </span>
-                  <span className="truncate text-supporting text-faint">
+                  <span
+                    {...stylex.props(
+                      sx.truncate,
+                      sx.textFaint,
+                      typography.supporting,
+                    )}
+                  >
                     {pullRequest.title}
                   </span>
                 </span>
-                <Menu.Check on={active} className="mt-1 text-dim" />
+                <Menu.Check
+                  on={active}
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.mt1,
+                    sx.textDim,
+                  )}
+                />
               </Menu.Item>
             );
           })

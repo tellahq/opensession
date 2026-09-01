@@ -96,7 +96,7 @@ test("the side panel shell stays mounted while another panel tab is active", asy
 
   expect(sidePanelHost).toContain("hasWorkspace && terminalMounted");
   expect(sidePanelHost).toMatch(
-    /page === "terminal"\s*\? "flex h-full min-h-0 flex-col"\s*: "hidden"/,
+    /page === "terminal"\s*\? utilityClassName\("flex h-full min-h-0 flex-col"\)\s*: utilityClassName\("hidden"\)/,
   );
   expect(sidePanelHost).toContain('visible={page === "terminal"}');
 });

@@ -1,5 +1,22 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  phoneFlex1: {
+    "@media (max-width: 720px)": {
+      flex: "1",
+    },
+  },
+});
 
 interface Props {
   open: boolean;
@@ -25,7 +42,10 @@ export function DeleteSessionDialog({
       }}
       disablePointerDismissal={deleting}
     >
-      <Modal.Content role="alertdialog" widthClassName="max-w-[25rem]">
+      <Modal.Content
+        role="alertdialog"
+        widthClassName={utilityClassName("max-w-[25rem]")}
+      >
         <Modal.Header
           title="Delete session"
           description={
@@ -39,7 +59,11 @@ export function DeleteSessionDialog({
             type="button"
             size="lg"
             variant={hasWorktree ? "warning" : "danger-strong"}
-            className="phone:min-h-11 phone:flex-1"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.phoneMinH11,
+              sx.phoneFlex1,
+            )}
             disabled={deleting}
             onClick={() => onDelete(false)}
           >
@@ -50,7 +74,11 @@ export function DeleteSessionDialog({
               type="button"
               size="lg"
               variant="danger-strong"
-              className="phone:min-h-11 phone:flex-1"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.phoneMinH11,
+                sx.phoneFlex1,
+              )}
               disabled={deleting}
               onClick={() => onDelete(true)}
             >

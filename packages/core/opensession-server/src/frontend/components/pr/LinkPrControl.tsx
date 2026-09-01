@@ -7,6 +7,72 @@ import { Field, Input } from "../../ui/input";
 import { Popover } from "../../ui/popover";
 import { toast } from "../../ui/toast";
 import type { LinkedPrEntry } from "../PrPanel";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+import {
+  mergeStylexProps,
+  mergeStylexClassName,
+  mergeStylexOverrideClassName,
+} from "../../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  p4: {
+    padding: "16px",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap4: {
+    gap: "16px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  gap25: {
+    gap: "10px",
+  },
+
+  px25: {
+    paddingInline: "10px",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading,var(--text-xs--line-height))",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "44px",
+    },
+  },
+  phoneTextInputPhone: {
+    "@media (max-width: 720px)": {
+      fontSize: "var(--type-input-phone)",
+    },
+  },
+
+  wMin380pxCalc100vw16px: {
+    width: "min(380px,100vw - 16px)",
+  },
+});
 
 /**
  * Opens the link flow in an anchored modal instead of replacing the action row.
@@ -62,8 +128,14 @@ export function LinkPrControl({
             size="sm"
             className={
               tab
-                ? "px-2.5 text-xs text-faint phone:min-h-11"
-                : "phone:min-h-11"
+                ? mergeStylexClassName(
+                    "",
+                    sx.px25,
+                    sx.textXs,
+                    sx.textFaint,
+                    sx.phoneMinH11,
+                  )
+                : mergeStylexClassName("", sx.phoneMinH11)
             }
             icon={tab ? undefined : <IconLink size={20} />}
             title="Link another PR to this session"
@@ -76,10 +148,10 @@ export function LinkPrControl({
         side="bottom"
         align="start"
         initialFocus
-        className="w-[min(380px,calc(100vw-16px))] p-4"
+        {...mergeStylexProps("", sx.wMin380pxCalc100vw16px, sx.p4)}
       >
         <form
-          className="flex flex-col gap-4"
+          {...stylex.props(sx.flex, sx.flexCol, sx.gap4)}
           aria-label="Link pull request"
           onSubmit={(event) => {
             event.preventDefault();
@@ -87,28 +159,34 @@ export function LinkPrControl({
           }}
         >
           <div>
-            <div className="text-label font-semibold text-fg">
+            <div
+              {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}
+            >
               Link pull request
             </div>
-            <div className="mt-1 text-meta text-dim">
+            <div {...stylex.props(sx.mt1, sx.textDim, typography.meta)}>
               Paste a GitHub pull request URL.
             </div>
           </div>
           <Field label="Pull request URL">
             <Input
               autoFocus
-              className="phone:min-h-11 phone:text-input-phone"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.phoneMinH11,
+                sx.phoneTextInputPhone,
+              )}
               placeholder="https://github.com/org/repo/pull/123"
               value={val}
               onChange={(event) => setVal(event.target.value)}
             />
           </Field>
-          <div className="flex justify-end gap-2.5">
+          <div {...stylex.props(sx.flex, sx.justifyEnd, sx.gap25)}>
             <Popover.Close
               render={
                 <Button
                   variant="soft"
-                  className="phone:min-h-11"
+                  className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                   disabled={busy}
                 >
                   Cancel
@@ -118,7 +196,7 @@ export function LinkPrControl({
             <Button
               type="submit"
               variant="primary"
-              className="phone:min-h-11"
+              className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
               disabled={busy || !val.trim()}
             >
               {busy ? "Linking…" : "Link PR"}

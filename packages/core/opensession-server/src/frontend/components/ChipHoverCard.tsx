@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   fetchRecentPrs,
@@ -46,6 +48,77 @@ import {
 import { pointerCanHover } from "../lib/pointer";
 import { SessionCardBody } from "./sidebar/HoverCards";
 import { IconGitCommit, IconGitMerge, IconPullRequest } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap7px: {
+    gap: "7px",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  mt5px: {
+    marginTop: "5px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  leading13: {
+    lineHeight: "1.3",
+  },
+  mt3px: {
+    marginTop: "3px",
+  },
+  lineClamp3: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "3",
+  },
+  leading14: {
+    lineHeight: "1.4",
+  },
+  fontMono: {
+    fontFamily: "var(--mono)",
+  },
+  text095em: {
+    fontSize: "0.95em",
+  },
+  textPurple: {
+    color: "var(--purple)",
+  },
+});
 
 /**
  * Hover cards for the chips inside rendered markdown: a session reference
@@ -382,38 +455,70 @@ function CommitChipCardBody({ commit }: { commit: CommitDetails }) {
 
   return (
     <>
-      <div className="flex min-w-0 items-center gap-[7px]">
-        <span className="min-w-0 flex-1 truncate text-meta text-dim">
-          <span className="text-green">+{compactNum(commit.additions)}</span>{" "}
-          <span className="text-red">-{compactNum(commit.deletions)}</span>
+      <div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap7px)}>
+        <span
+          {...stylex.props(
+            sx.minW0,
+            sx.flex1,
+            sx.truncate,
+            sx.textDim,
+            typography.meta,
+          )}
+        >
+          <span {...stylex.props(sx.textGreen)}>
+            +{compactNum(commit.additions)}
+          </span>{" "}
+          <span {...stylex.props(sx.textRed)}>
+            -{compactNum(commit.deletions)}
+          </span>
           {commit.filesChanged > 0 && (
-            <span className="text-faint">
+            <span {...stylex.props(sx.textFaint)}>
               {" "}
               · {commit.filesChanged}{" "}
               {commit.filesChanged === 1 ? "file" : "files"}
             </span>
           )}
         </span>
-        <span className="flex shrink-0 items-center">
-          <IconGitCommit className="text-dim" size={20} />
+        <span {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter)}>
+          <IconGitCommit
+            className={mergeStylexOverrideClassName("", sx.textDim)}
+            size={20}
+          />
         </span>
       </div>
 
-      <div className="mt-[5px] text-label font-semibold leading-[1.3]">
+      <div
+        {...stylex.props(
+          sx.mt5px,
+          sx.fontSemibold,
+          sx.leading13,
+          typography.label,
+        )}
+      >
         {commit.title}
       </div>
 
       {lede && (
-        <div className="mt-[3px] line-clamp-3 text-supporting leading-[1.4] text-dim">
+        <div
+          {...stylex.props(
+            sx.mt3px,
+            sx.lineClamp3,
+            sx.leading14,
+            sx.textDim,
+            typography.supporting,
+          )}
+        >
           {lede}
         </div>
       )}
 
       {/* Whether it shipped, in the same slot the PR card puts its state. */}
       <div
-        className={`mt-[3px] text-meta font-medium ${
-          commit.onDefaultBranch ? "text-green" : "text-faint"
-        }`}
+        className={utilityClassName(
+          `mt-[3px] text-meta font-medium ${
+            commit.onDefaultBranch ? "text-green" : "text-faint"
+          }`,
+        )}
       >
         {commit.onDefaultBranch
           ? `On ${commit.defaultBranch}`
@@ -428,7 +533,9 @@ function CommitChipCardBody({ commit }: { commit: CommitDetails }) {
       >
         {commit.url && (
           <CardLink href={commit.url} title="Open on GitHub">
-            <span className="font-mono text-[0.95em]">{commit.shortSha}</span>
+            <span {...stylex.props(sx.fontMono, sx.text095em)}>
+              {commit.shortSha}
+            </span>
           </CardLink>
         )}
       </CardFooter>
@@ -462,34 +569,62 @@ function PrChipCardBody({ pr }: { pr: ChipPr }) {
     <>
       {/* What changed, if we know it, and the branch it changed on when we
 			    don't, which is the head the sidebar's PR and session cards carry. */}
-      <div className="flex min-w-0 items-center gap-[7px]">
-        <span className="min-w-0 flex-1 truncate text-meta text-dim">
+      <div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap7px)}>
+        <span
+          {...stylex.props(
+            sx.minW0,
+            sx.flex1,
+            sx.truncate,
+            sx.textDim,
+            typography.meta,
+          )}
+        >
           {pr.additions != null && pr.deletions != null ? (
             <>
-              <span className="text-green">+{compactNum(pr.additions)}</span>{" "}
-              <span className="text-red">-{compactNum(pr.deletions)}</span>
+              <span {...stylex.props(sx.textGreen)}>
+                +{compactNum(pr.additions)}
+              </span>{" "}
+              <span {...stylex.props(sx.textRed)}>
+                -{compactNum(pr.deletions)}
+              </span>
             </>
           ) : (
             pr.branch
           )}
         </span>
         {pr.isDraft && (
-          <span className="shrink-0 text-meta text-faint">draft</span>
+          <span {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>
+            draft
+          </span>
         )}
-        <span className="flex shrink-0 items-center">
+        <span {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter)}>
           {pr.state === "MERGED" ? (
-            <IconGitMerge className="text-purple" size={20} />
+            <IconGitMerge
+              className={mergeStylexOverrideClassName("", sx.textPurple)}
+              size={20}
+            />
           ) : (
             <IconPullRequest className={PR_STATE_TEXT[tone]} size={20} />
           )}
         </span>
       </div>
 
-      <div className="mt-[5px] text-label font-semibold leading-[1.3]">
+      <div
+        {...stylex.props(
+          sx.mt5px,
+          sx.fontSemibold,
+          sx.leading13,
+          typography.label,
+        )}
+      >
         {pr.title}
       </div>
 
-      <div className={`mt-[3px] text-meta font-medium ${PR_STATE_TEXT[tone]}`}>
+      <div
+        className={utilityClassName(
+          `mt-[3px] text-meta font-medium ${PR_STATE_TEXT[tone]}`,
+        )}
+      >
         {status.label}
       </div>
 

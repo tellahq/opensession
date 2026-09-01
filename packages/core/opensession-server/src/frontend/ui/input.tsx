@@ -1,5 +1,18 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+});
 
 /**
  * Field primitive — the shared optics for single-line inputs, multi-line
@@ -30,9 +43,9 @@ type Size = "sm" | "md" | "lg";
  * Inputs take the exact step height rather than only a minimum, so their
  * single line can be centered consistently across Chromium and WebKit. */
 const sizes: Record<Size, string> = {
-  sm: "min-h-[26px] px-2 text-xs [&:where(input)]:h-[26px]",
-  md: "min-h-8 px-2.5 text-sm [&:where(input)]:h-8",
-  lg: "min-h-9 px-3 text-base [&:where(input)]:h-9",
+  sm: utilityClassName("min-h-[26px] px-2 text-xs [&:where(input)]:h-[26px]"),
+  md: utilityClassName("min-h-8 px-2.5 text-sm [&:where(input)]:h-8"),
+  lg: utilityClassName("min-h-9 px-3 text-base [&:where(input)]:h-9"),
 };
 
 /**
@@ -44,7 +57,9 @@ const sizes: Record<Size, string> = {
 export const fieldClass =
   // Block padding and a one-line box center input text vertically. The element
   // selector deliberately leaves multiline textareas and native selects alone.
-  "w-full rounded-control border border-line bg-surface text-fg outline-none transition-colors placeholder:text-faint focus:border-accent disabled:cursor-default disabled:opacity-40 [&:where(input)]:py-0 [&:where(input)]:leading-none";
+  utilityClassName(
+    "w-full rounded-control border border-line bg-surface text-fg outline-none transition-colors placeholder:text-faint focus:border-accent disabled:cursor-default disabled:opacity-40 [&:where(input)]:py-0 [&:where(input)]:leading-none",
+  );
 
 export function fieldClasses(size: Size = "md", className?: string) {
   return cn(fieldClass, sizes[size], className);
@@ -73,7 +88,10 @@ type TextareaProps = React.ComponentProps<"textarea"> & {
 export function Textarea({ className, size = "md", ...props }: TextareaProps) {
   return (
     <textarea
-      className={fieldClasses(size, cn("resize-y py-2", className))}
+      className={fieldClasses(
+        size,
+        cn(utilityClassName("resize-y py-2"), className),
+      )}
       {...props}
     />
   );
@@ -91,7 +109,10 @@ type SelectProps = Omit<React.ComponentProps<"select">, "size"> & {
 export function Select({ className, size = "md", ...props }: SelectProps) {
   return (
     <select
-      className={fieldClasses(size, cn("cursor-pointer", className))}
+      className={fieldClasses(
+        size,
+        cn(utilityClassName("cursor-pointer"), className),
+      )}
       {...props}
     />
   );
@@ -118,10 +139,15 @@ export function Field({
 }) {
   return (
     <label
-      className={cn("flex min-w-0 flex-col gap-1.5", className)}
+      className={cn(
+        utilityClassName("flex min-w-0 flex-col gap-1.5"),
+        className,
+      )}
       {...props}
     >
-      <span className="text-label font-medium text-dim">{label}</span>
+      <span {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}>
+        {label}
+      </span>
       {children}
     </label>
   );
@@ -136,7 +162,10 @@ export function FieldGrid({
 }: React.ComponentPropsWithoutRef<"div">) {
   return (
     <div
-      className={cn("grid grid-cols-2 gap-3 phone:grid-cols-1", className)}
+      className={cn(
+        utilityClassName("grid grid-cols-2 gap-3 phone:grid-cols-1"),
+        className,
+      )}
       {...props}
     />
   );

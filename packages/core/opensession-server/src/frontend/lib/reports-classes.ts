@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 /**
  * The Reports page's list column: the automations down the left, and the
  * header band that column shares with the report beside it.
@@ -37,9 +38,11 @@ import { SIDEBAR_HOVER_LAYER, SIDEBAR_RAIL_GAP } from "./sidebar-classes";
  * component.
  */
 export const REPORTS_COLUMN =
-  "flex min-h-0 flex-col " +
-  "phone:w-full phone:flex-1 " +
-  "desktop:w-[300px] desktop:shrink-0 desktop:border-r desktop:border-divider";
+  utilityClassName("flex min-h-0 flex-col ") +
+  utilityClassName("phone:w-full phone:flex-1 ") +
+  utilityClassName(
+    "desktop:w-[300px] desktop:shrink-0 desktop:border-r desktop:border-divider",
+  );
 
 /**
  * The column's heading, at both widths: a title bar, not a label over a list.
@@ -63,16 +66,19 @@ export const REPORTS_COLUMN =
 export const REPORTS_COLUMN_HEADER =
   // `wco-chrome`: a row across the top of a pane is where the desktop shell
   // expects to drag the window from, and base.css hangs that off this one name.
-  "wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center gap-2 " +
-  "bg-surface px-4 desktop:border-b desktop:border-divider";
+  utilityClassName(
+    "wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center gap-2 ",
+  ) +
+  utilityClassName("bg-surface px-4 desktop:border-b desktop:border-divider");
 
 /**
  * What the column can say about itself, on the heading's right. `text-meta` is
  * the step the scale reserves for a count, and `tabular-nums` keeps it from
  * shifting width as reports land.
  */
-export const REPORTS_COLUMN_COUNT =
-  "ml-auto shrink-0 text-meta font-medium tabular-nums text-faint";
+export const REPORTS_COLUMN_COUNT = utilityClassName(
+  "ml-auto shrink-0 text-meta font-medium tabular-nums text-faint",
+);
 
 /**
  * The heading itself, set the way the app sets every other title in a bar:
@@ -90,8 +96,9 @@ export const REPORTS_COLUMN_COUNT =
  * override either. The scale sets it, and a third heading style is what this
  * was trying to stop being.
  */
-export const REPORTS_COLUMN_TITLE =
-  "m-0 text-item-title font-semibold text-fg phone:text-section-title";
+export const REPORTS_COLUMN_TITLE = utilityClassName(
+  "m-0 text-item-title font-semibold text-fg phone:text-section-title",
+);
 
 /**
  * The scrolling list, outdented past the column's gutter so a row's pill
@@ -109,8 +116,8 @@ export const REPORTS_COLUMN_TITLE =
  * travel past the top of this box and out of sight under that bar.
  */
 export const REPORTS_LIST =
-  "min-h-0 flex-1 overflow-y-auto px-1.5 pt-3 pb-3 " +
-  "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  utilityClassName("min-h-0 flex-1 overflow-y-auto px-1.5 pt-3 pb-3 ") +
+  utilityClassName("[scrollbar-width:none] [&::-webkit-scrollbar]:hidden");
 
 /**
  * A row: an automation, with the headline of its latest report under it.
@@ -126,29 +133,40 @@ export const REPORTS_LIST =
  * SETTINGS_NAV_ROW's doc has the longer version of that argument.
  */
 export const REPORTS_ROW =
-  "group mt-1.5 flex w-full cursor-pointer items-start rounded-row border-0 " +
-  "bg-transparent py-3.5 pr-3 pl-2.5 text-left data-active:bg-selected " +
+  utilityClassName(
+    "group mt-1.5 flex w-full cursor-pointer items-start rounded-row border-0 ",
+  ) +
+  utilityClassName(
+    "bg-transparent py-3.5 pr-3 pl-2.5 text-left data-active:bg-selected ",
+  ) +
   `${SIDEBAR_RAIL_GAP} ${SIDEBAR_HOVER_LAYER}`;
 
 /** The name and the time share the row's first line. */
-export const REPORTS_ROW_HEAD = "flex min-w-0 items-baseline gap-2";
+export const REPORTS_ROW_HEAD = utilityClassName(
+  "flex min-w-0 items-baseline gap-2",
+);
 
 export const REPORTS_ROW_NAME =
-  "min-w-0 flex-1 truncate text-item-title font-medium text-dim " +
-  "group-hover:text-fg group-data-active:text-fg phone:text-[16px]";
+  utilityClassName(
+    "min-w-0 flex-1 truncate text-item-title font-medium text-dim ",
+  ) +
+  utilityClassName(
+    "group-hover:text-fg group-data-active:text-fg phone:text-[16px]",
+  );
 
 /**
  * The latest report's title, faint under a dim name so the row reads its name
  * first. Both step up one when the row is the open one.
  */
 export const REPORTS_ROW_LATEST =
-  "mt-1 block truncate text-label text-faint " +
-  "group-data-active:text-dim phone:text-[14px]";
+  utilityClassName("mt-1 block truncate text-label text-faint ") +
+  utilityClassName("group-data-active:text-dim phone:text-[14px]");
 
 /**
  * When it landed. SIDEBAR_WS_TIME's box without the gutter that string
  * reserves for the sidebar's pin/archive cluster: these rows have no hover
  * actions, so the digits sit on the row's own right padding.
  */
-export const REPORTS_ROW_TIME =
-  "shrink-0 text-right text-meta tabular-nums text-faint";
+export const REPORTS_ROW_TIME = utilityClassName(
+  "shrink-0 text-right text-meta tabular-nums text-faint",
+);

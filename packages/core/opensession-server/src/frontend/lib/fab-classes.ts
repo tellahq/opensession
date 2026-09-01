@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 /**
  * The two floating action buttons — what used to be `mobile-fab` and
  * `desk-fab` in legacy.css.
@@ -34,11 +35,17 @@
  * is what the Desk trigger beside it now uses.
  */
 export const MOBILE_FAB =
-  "hidden phone:fixed phone:right-3 phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
-  "phone:z-500 phone:flex phone:size-[58px] phone:items-center phone:justify-center " +
-  "phone:rounded-full phone:border-none phone:bg-accent phone:text-on-accent " +
+  utilityClassName(
+    "hidden phone:fixed phone:right-3 phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] ",
+  ) +
+  utilityClassName(
+    "phone:z-500 phone:flex phone:size-[58px] phone:items-center phone:justify-center ",
+  ) +
+  utilityClassName(
+    "phone:rounded-full phone:border-none phone:bg-accent phone:text-on-accent ",
+  ) +
   "phone:shadow-[0_4px_14px_rgba(0,0,0,0.16),0_1px_3px_rgba(0,0,0,0.10)] " +
-  "phone:transition-transform phone:active:scale-[0.92]";
+  utilityClassName("phone:transition-transform phone:active:scale-[0.92]");
 
 /**
  * The ⌘J Desk trigger. Desktop uses the same resting shadow and border as the
@@ -67,12 +74,20 @@ export const MOBILE_FAB =
  * layout from the right edge.
  */
 export const DESK_FAB =
-  "fixed right-[18px] bottom-[18px] z-500 flex size-11 items-center justify-center " +
-  "rounded-full border border-divider bg-[var(--composer-surface)] text-dim " +
-  "smooth-shadow-xs " +
-  "transition-[color,border-color,translate,scale] hover:-translate-y-px hover:border-line hover:text-fg " +
-  "phone:left-auto " +
-  "phone:right-[calc(12px+58px+12px)] phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
-  "phone:size-[58px] phone:text-fg " +
+  utilityClassName(
+    "fixed right-[18px] bottom-[18px] z-500 flex size-11 items-center justify-center ",
+  ) +
+  utilityClassName(
+    "rounded-full border border-divider bg-[var(--composer-surface)] text-dim ",
+  ) +
+  utilityClassName("smooth-shadow-xs ") +
+  utilityClassName(
+    "transition-[color,border-color,translate,scale] hover:-translate-y-px hover:border-line hover:text-fg ",
+  ) +
+  utilityClassName("phone:left-auto ") +
+  utilityClassName(
+    "phone:right-[calc(12px+58px+12px)] phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] ",
+  ) +
+  utilityClassName("phone:size-[58px] phone:text-fg ") +
   "phone:shadow-[0_2px_10px_rgba(0,0,0,0.10),0_1px_2px_rgba(0,0,0,0.06)] " +
-  "phone:hover:translate-y-0 phone:active:scale-[0.92]";
+  utilityClassName("phone:hover:translate-y-0 phone:active:scale-[0.92]");

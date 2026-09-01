@@ -16,7 +16,7 @@ describe("BusyInline", () => {
     // TextShimmer is an inline block. Its status wrapper must shrink to that
     // line box instead of inheriting the taller transcript line box.
     expect(html).toContain(
-      '<span role="status" aria-live="polite" class="inline-flex">',
+      '<span role="status" aria-live="polite" style="display:inline-flex">',
     );
     expect(html).toContain("Still working");
   });

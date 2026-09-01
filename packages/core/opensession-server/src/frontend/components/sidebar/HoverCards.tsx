@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import type { WorkspaceOverview } from "../../lib/api";
 import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged, sessionPrRefs } from "../../lib/session-prs";
@@ -71,6 +73,211 @@ import {
   IconPullRequest,
 } from "../icons";
 import React, { useEffect, useState } from "react";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  text095em: {
+    fontSize: "0.95em",
+  },
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap7px: {
+    gap: "7px",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  shrink: {
+    flexShrink: "1",
+  },
+  textRight: {
+    textAlign: "right",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  mt7px: {
+    marginTop: "7px",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgAccentSoft: {
+    backgroundColor: "var(--accent-soft)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py5px: {
+    paddingBlock: "5px",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  lineClamp2: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "2",
+  },
+  mt9px: {
+    marginTop: "9px",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap3px: {
+    gap: "3px",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  leading135: {
+    lineHeight: "1.35",
+  },
+  w74px: {
+    width: "74px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textPurple: {
+    color: "var(--purple)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  Mr13px: {
+    marginRight: "calc(13px * -1)",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  pr13px: {
+    paddingRight: "13px",
+  },
+  ScrollbarWidthNone: {
+    scrollbarWidth: "none",
+  },
+  relative: {
+    position: "relative",
+  },
+  block: {
+    display: "block",
+  },
+  aspectVideo: {
+    aspectRatio: "var(--aspect-video)",
+  },
+  w124px: {
+    width: "124px",
+  },
+  snapStart: {
+    scrollSnapAlign: "start",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  p0: {
+    padding: "0",
+  },
+  hFull: {
+    height: "100%",
+  },
+  wFull: {
+    width: "100%",
+  },
+  objectContain: {
+    objectFit: "contain",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  grid: {
+    display: "grid",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  textWhite: {
+    color: "var(--color-white)",
+  },
+  bgBlack55: {
+    backgroundColor: "color-mix(in oklab, var(--color-black) 55%, transparent)",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  opacity80: {
+    opacity: "80%",
+  },
+  pb25: {
+    paddingBottom: "calc(4px * 2.5)",
+  },
+  pt1: {
+    paddingTop: "4px",
+  },
+});
 
 // The session card, in the shape the workspace card already proved: what the
 // session is, where it stands, what it last said, and the stills it produced.
@@ -96,7 +303,7 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
     rows.push([
       "Linear",
       <span>
-        <span className="text-[0.95em]">{s.linearIssue.identifier}</span>{" "}
+        <span {...stylex.props(sx.text095em)}>{s.linearIssue.identifier}</span>{" "}
         {s.linearIssue.title}
       </span>,
     ]);
@@ -117,20 +324,34 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 			    show, which spent the card's first line naming the band the row
 			    was already filed under. */}
       {hasHead && (
-        <div className="flex min-w-0 items-center gap-[7px]">
-          <span className="min-w-0 flex-1 truncate text-meta">
+        <div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap7px)}>
+          <span
+            {...stylex.props(sx.minW0, sx.flex1, sx.truncate, typography.meta)}
+          >
             {s.prAdditions != null && s.prDeletions != null && (
               <>
-                <span className="text-green">+{compactNum(s.prAdditions)}</span>{" "}
-                <span className="text-red">-{compactNum(s.prDeletions)}</span>
+                <span {...stylex.props(sx.textGreen)}>
+                  +{compactNum(s.prAdditions)}
+                </span>{" "}
+                <span {...stylex.props(sx.textRed)}>
+                  -{compactNum(s.prDeletions)}
+                </span>
               </>
             )}
           </span>
           {/* What the automated review made of this session's PR, in the same
 					    place the workspace card puts it. */}
           {s.prOsReview && (
-            <span className="min-w-0 shrink truncate text-right text-meta">
-              <span className="text-faint">OS review </span>
+            <span
+              {...stylex.props(
+                sx.minW0,
+                sx.shrink,
+                sx.truncate,
+                sx.textRight,
+                typography.meta,
+              )}
+            >
+              <span {...stylex.props(sx.textFaint)}>OS review </span>
               {osReviewLabel(s.prOsReview)}
             </span>
           )}
@@ -139,39 +360,79 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 
       <div
         className={cn(
-          "flex min-w-0 items-center gap-[7px] text-label font-semibold leading-[1.3]",
-          hasHead && "mt-[5px]",
+          utilityClassName(
+            "flex min-w-0 items-center gap-[7px] text-label font-semibold leading-[1.3]",
+          ),
+          hasHead && utilityClassName("mt-[5px]"),
         )}
       >
         {s.isRunning && (
-          <span className={`size-2 shrink-0 rounded-full ${state.dotClass}`} />
+          <span
+            className={utilityClassName(
+              `size-2 shrink-0 rounded-full ${state.dotClass}`,
+            )}
+          />
         )}
-        <span className="min-w-0 truncate">{s.title}</span>
+        <span {...stylex.props(sx.minW0, sx.truncate)}>{s.title}</span>
       </div>
 
       {!runNeedsAttention(s) && (
         <div
-          className={`mt-[3px] text-meta font-medium ${TONE_TEXT[state.tone]}`}
+          className={utilityClassName(
+            `mt-[3px] text-meta font-medium ${TONE_TEXT[state.tone]}`,
+          )}
         >
           {state.label}
         </div>
       )}
 
       {s.waitingForInput && (
-        <div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim">
+        <div
+          {...stylex.props(
+            sx.mt7px,
+            sx.roundedMd,
+            sx.bgAccentSoft,
+            sx.px2,
+            sx.py5px,
+            sx.leadingSnug,
+            sx.textDim,
+            typography.meta,
+          )}
+        >
           Blocked on a question. Open the session to answer.
         </div>
       )}
       {!s.waitingForInput && attentionDetail && (
         <div
-          className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim line-clamp-2"
+          {...stylex.props(
+            sx.mt7px,
+            sx.roundedMd,
+            sx.bgAccentSoft,
+            sx.px2,
+            sx.py5px,
+            sx.leadingSnug,
+            sx.textDim,
+            sx.lineClamp2,
+            typography.meta,
+          )}
           title={attentionDetail}
         >
           {cardRunErrorDetail(attentionDetail)}
         </div>
       )}
       {!s.waitingForInput && (s.queuedCount ?? 0) > 0 && (
-        <div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim">
+        <div
+          {...stylex.props(
+            sx.mt7px,
+            sx.roundedMd,
+            sx.bgAccentSoft,
+            sx.px2,
+            sx.py5px,
+            sx.leadingSnug,
+            sx.textDim,
+            typography.meta,
+          )}
+        >
           {s.queuedCount} prompt{s.queuedCount === 1 ? "" : "s"} queued.
         </div>
       )}
@@ -179,11 +440,23 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
       <CardOverview ov={ov} />
 
       {rows.length > 0 && (
-        <div className="mt-[9px] flex flex-col gap-[3px]">
+        <div {...stylex.props(sx.mt9px, sx.flex, sx.flexCol, sx.gap3px)}>
           {rows.map(([label, value], i) => (
-            <div className="flex gap-2 text-meta leading-[1.35]" key={i}>
-              <span className="w-[74px] shrink-0 text-faint">{label}</span>
-              <span className="min-w-0 truncate text-dim">{value}</span>
+            <div
+              {...stylex.props(
+                sx.flex,
+                sx.gap2,
+                sx.leading135,
+                typography.meta,
+              )}
+              key={i}
+            >
+              <span {...stylex.props(sx.w74px, sx.shrink0, sx.textFaint)}>
+                {label}
+              </span>
+              <span {...stylex.props(sx.minW0, sx.truncate, sx.textDim)}>
+                {value}
+              </span>
             </div>
           ))}
         </div>
@@ -283,8 +556,11 @@ export function WsPrStatusMark({
   // `prState` stay empty, and that landed work still needs the merged mark.
   if (sessions.some(sessionPrMerged)) {
     return (
-      <span className="flex items-center" title="PR merged">
-        <IconPullRequest size={size} className="text-purple" />
+      <span {...stylex.props(sx.flex, sx.itemsCenter)} title="PR merged">
+        <IconPullRequest
+          size={size}
+          className={mergeStylexOverrideClassName("", sx.textPurple)}
+        />
       </span>
     );
   }
@@ -304,13 +580,21 @@ export function WsPrStatusMark({
     if (!canPr) {
       if (workspace?.draft)
         return (
-          <span className="flex items-center" title="Draft">
-            <IconPencil size={size} className="text-faint" />
+          <span {...stylex.props(sx.flex, sx.itemsCenter)} title="Draft">
+            <IconPencil
+              size={size}
+              className={mergeStylexOverrideClassName("", sx.textFaint)}
+            />
           </span>
         );
       return (
         <span
-          className="flex shrink-0 items-center justify-center"
+          {...stylex.props(
+            sx.flex,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.justifyCenter,
+          )}
           style={{ width: size, height: size }}
         />
       );
@@ -321,17 +605,27 @@ export function WsPrStatusMark({
     if (shipsDirectlyToMain)
       return (
         <span
-          className="flex shrink-0 items-center justify-center"
+          {...stylex.props(
+            sx.flex,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.justifyCenter,
+          )}
           style={{ width: size, height: size }}
         >
           <span
-            className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.idle}`}
+            className={utilityClassName(
+              `size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.idle}`,
+            )}
           />
         </span>
       );
     return (
-      <span className="flex items-center" title="No pull request">
-        <IconPullRequest size={size} className="text-faint" />
+      <span {...stylex.props(sx.flex, sx.itemsCenter)} title="No pull request">
+        <IconPullRequest
+          size={size}
+          className={mergeStylexOverrideClassName("", sx.textFaint)}
+        />
       </span>
     );
   }
@@ -340,12 +634,12 @@ export function WsPrStatusMark({
   const changesRequested = pr.reviewDecision === "CHANGES_REQUESTED";
   const className =
     pr.state === "CLOSED" || failed || changesRequested
-      ? "text-red"
+      ? utilityClassName("text-red")
       : pending
-        ? "text-yellow"
+        ? utilityClassName("text-yellow")
         : pr.isDraft
-          ? "text-faint"
-          : "text-green";
+          ? utilityClassName("text-faint")
+          : utilityClassName("text-green");
   const label =
     pr.state === "CLOSED"
       ? "PR closed"
@@ -361,7 +655,7 @@ export function WsPrStatusMark({
                 ? "PR approved"
                 : "PR open";
   return (
-    <span className="flex items-center" title={label}>
+    <span {...stylex.props(sx.flex, sx.itemsCenter)} title={label}>
       <IconPullRequest size={size} className={className} />
     </span>
   );
@@ -386,14 +680,18 @@ export function WsStatusMark({
   // inline-styled span dodges that (the dots were always immune for this reason).
   const slot = (child: React.ReactNode) => (
     <span
-      className="flex shrink-0 items-center justify-center"
+      {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.justifyCenter)}
       style={{ width: size, height: size }}
     >
       {child}
     </span>
   );
   const dot = (cls: string) =>
-    slot(<span className={`size-2 shrink-0 rounded-full ${cls}`} />);
+    slot(
+      <span
+        className={utilityClassName(`size-2 shrink-0 rounded-full ${cls}`)}
+      />,
+    );
   if (row.sessions.some((session) => session.waitingForInput))
     return dot(SIDEBAR_STATUS_DOT.waiting);
   if (workspaceRunNeedingAttention(row.sessions))
@@ -404,8 +702,11 @@ export function WsStatusMark({
   // grouping's mark stands in for WsPrStatusMark's own draft branch above.
   if (row.workspace?.draft && row.sessions.length === 0)
     return (
-      <span className="flex items-center" title="Draft">
-        <IconPencil size={size} className="text-faint" />
+      <span {...stylex.props(sx.flex, sx.itemsCenter)} title="Draft">
+        <IconPencil
+          size={size}
+          className={mergeStylexOverrideClassName("", sx.textFaint)}
+        />
       </span>
     );
   if (row.status === "review") {
@@ -414,12 +715,21 @@ export function WsStatusMark({
     return slot(
       <IconPullRequest
         size={size}
-        className={allDraft ? "text-faint" : "text-green"}
+        className={
+          allDraft
+            ? utilityClassName("text-faint")
+            : utilityClassName("text-green")
+        }
       />,
     );
   }
   if (row.status === "merged")
-    return slot(<IconGitMerge size={size} className="text-purple" />);
+    return slot(
+      <IconGitMerge
+        size={size}
+        className={mergeStylexOverrideClassName("", sx.textPurple)}
+      />,
+    );
   // A landed PR files its idle row under Done (prLaneForSessions), but a
   // human-pinned lane wins, so a row parked in Backlog stays there after its
   // PR merges. Its mark should carry the PR lifecycle anyway, like the
@@ -427,7 +737,12 @@ export function WsStatusMark({
   // reads as "no PR".
   const prSession = frontingPrSession(row.sessions);
   if (row.status === "pending" && prSession && sessionPrMerged(prSession))
-    return slot(<IconGitMerge size={size} className="text-purple" />);
+    return slot(
+      <IconGitMerge
+        size={size}
+        className={mergeStylexOverrideClassName("", sx.textPurple)}
+      />,
+    );
   return dot(SIDEBAR_STATUS_DOT.idle);
 }
 
@@ -445,7 +760,16 @@ export function CardOverview({ ov }: { ov: WorkspaceOverview | null }) {
   return (
     <>
       {desc && (
-        <div className="selectable mt-1 text-meta leading-snug text-dim line-clamp-2">
+        <div
+          {...mergeStylexProps(
+            "selectable",
+            sx.mt1,
+            sx.leadingSnug,
+            sx.textDim,
+            sx.lineClamp2,
+            typography.meta,
+          )}
+        >
           {desc}
         </div>
       )}
@@ -457,13 +781,37 @@ export function CardOverview({ ov }: { ov: WorkspaceOverview | null }) {
         // everything is reachable instead of hidden behind a "+3". Bleed
         // through the card's right inset so the carousel peek is clipped
         // at the card edge rather than stopping inside its padding.
-        <div className="mt-2 -mr-[13px] flex snap-x snap-mandatory gap-1.5 overflow-x-auto pr-[13px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          {...mergeStylexProps(
+            "snap-x snap-mandatory [&::-webkit-scrollbar]:hidden",
+            sx.mt2,
+            sx.Mr13px,
+            sx.flex,
+            sx.gap15,
+            sx.overflowXAuto,
+            sx.pr13px,
+            sx.ScrollbarWidthNone,
+          )}
+        >
           {media.slice(0, MAX_HOVERCARD_MEDIA).map((m, i) => (
             <button
               key={`${m.sessionId}:${m.at}:${i}`}
               type="button"
               onClick={() => openLightbox(media, i)}
-              className="relative block aspect-video w-[124px] shrink-0 snap-start overflow-hidden rounded-sm border border-line bg-surface p-0"
+              {...stylex.props(
+                sx.relative,
+                sx.block,
+                sx.aspectVideo,
+                sx.w124px,
+                sx.shrink0,
+                sx.snapStart,
+                sx.overflowHidden,
+                sx.roundedSm,
+                sx.border,
+                sx.borderLine,
+                sx.bgSurface,
+                sx.p0,
+              )}
               title={[m.sessionTitle, fullTime(m.at)]
                 .filter(Boolean)
                 .join(" · ")}
@@ -473,7 +821,7 @@ export function CardOverview({ ov }: { ov: WorkspaceOverview | null }) {
                   src={m.src}
                   alt=""
                   loading="lazy"
-                  className="h-full w-full object-contain"
+                  {...stylex.props(sx.hFull, sx.wFull, sx.objectContain)}
                 />
               ) : (
                 <>
@@ -482,16 +830,38 @@ export function CardOverview({ ov }: { ov: WorkspaceOverview | null }) {
                     muted
                     playsInline
                     preload="metadata"
-                    className="h-full w-full object-contain"
+                    {...stylex.props(sx.hFull, sx.wFull, sx.objectContain)}
                   />
-                  <span className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-white drop-shadow">
+                  <span
+                    {...mergeStylexProps(
+                      "drop-shadow",
+                      sx.pointerEventsNone,
+                      sx.absolute,
+                      sx.inset0,
+                      sx.grid,
+                      sx.placeItemsCenter,
+                      sx.textSm,
+                      sx.textWhite,
+                    )}
+                  >
                     ▶
                   </span>
                 </>
               )}
               {i === MAX_HOVERCARD_MEDIA - 1 &&
                 media.length > MAX_HOVERCARD_MEDIA && (
-                  <span className="absolute inset-0 grid place-items-center bg-black/55 text-xs font-semibold text-white">
+                  <span
+                    {...stylex.props(
+                      sx.absolute,
+                      sx.inset0,
+                      sx.grid,
+                      sx.placeItemsCenter,
+                      sx.bgBlack55,
+                      sx.textXs,
+                      sx.fontSemibold,
+                      sx.textWhite,
+                    )}
+                  >
                     +{media.length - MAX_HOVERCARD_MEDIA + 1}
                   </span>
                 )}
@@ -532,17 +902,17 @@ function WsOverviewInfo({
 			    verdict reads better here than under the title, where it sat between
 			    the name and the description and pushed them apart. */}
       {hasHead && (
-        <div className="flex min-w-0 items-center gap-[7px]">
+        <div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap7px)}>
           {/* The diff is two short numbers and never truncates; the verdict is
 					    the variable-length half, so it takes the slack and gives it back. */}
-          <span className="shrink-0 text-meta">
+          <span {...stylex.props(sx.shrink0, typography.meta)}>
             {prSession?.prAdditions != null &&
               prSession?.prDeletions != null && (
                 <>
-                  <span className="text-green">
+                  <span {...stylex.props(sx.textGreen)}>
                     +{compactNum(prSession.prAdditions)}
                   </span>{" "}
-                  <span className="text-red">
+                  <span {...stylex.props(sx.textRed)}>
                     -{compactNum(prSession.prDeletions)}
                   </span>
                 </>
@@ -551,8 +921,16 @@ function WsOverviewInfo({
           {/* What os-review made of this PR: the question a Ready-to-merge row
 					    raises, answered without opening GitHub. */}
           {prSession?.prOsReview && (
-            <span className="min-w-0 flex-1 truncate text-right text-meta">
-              <span className="text-faint">OS review </span>
+            <span
+              {...stylex.props(
+                sx.minW0,
+                sx.flex1,
+                sx.truncate,
+                sx.textRight,
+                typography.meta,
+              )}
+            >
+              <span {...stylex.props(sx.textFaint)}>OS review </span>
               {osReviewLabel(prSession.prOsReview)}
             </span>
           )}
@@ -561,26 +939,51 @@ function WsOverviewInfo({
 
       <div
         className={cn(
-          "flex min-w-0 items-center gap-[7px] text-label font-semibold leading-[1.3]",
-          hasHead && "mt-[5px]",
+          utilityClassName(
+            "flex min-w-0 items-center gap-[7px] text-label font-semibold leading-[1.3]",
+          ),
+          hasHead && utilityClassName("mt-[5px]"),
         )}
       >
         {row.running && (
           <span
-            className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
+            className={utilityClassName(
+              `size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`,
+            )}
           />
         )}
-        <span className="min-w-0 truncate">{row.name}</span>
+        <span {...stylex.props(sx.minW0, sx.truncate)}>{row.name}</span>
       </div>
 
       {row.status === "needsinput" &&
         (row.sessions.some((c) => c.waitingForInput) ? (
-          <div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim">
+          <div
+            {...stylex.props(
+              sx.mt7px,
+              sx.roundedMd,
+              sx.bgAccentSoft,
+              sx.px2,
+              sx.py5px,
+              sx.leadingSnug,
+              sx.textDim,
+              typography.meta,
+            )}
+          >
             Blocked on a question. Open to answer.
           </div>
         ) : (
           <div
-            className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim line-clamp-2"
+            {...stylex.props(
+              sx.mt7px,
+              sx.roundedMd,
+              sx.bgAccentSoft,
+              sx.px2,
+              sx.py5px,
+              sx.leadingSnug,
+              sx.textDim,
+              sx.lineClamp2,
+              typography.meta,
+            )}
             title={attentionDetail}
           >
             {cardRunErrorDetail(attentionDetail)}
@@ -645,7 +1048,12 @@ export function WsCardBody({
           <Button
             size="sm"
             variant={prReady ? "success-strong" : "soft"}
-            trailing={<IconArrowUpRight size={15} className="opacity-80" />}
+            trailing={
+              <IconArrowUpRight
+                size={15}
+                className={mergeStylexOverrideClassName("", sx.opacity80)}
+              />
+            }
             render={
               <a
                 href={prSession.prUrl}
@@ -665,7 +1073,14 @@ export function WsCardBody({
           />
         )}
         {prStatusBits.length > 0 && (
-          <span className="min-w-0 truncate text-meta text-faint">
+          <span
+            {...stylex.props(
+              sx.minW0,
+              sx.truncate,
+              sx.textFaint,
+              typography.meta,
+            )}
+          >
             {prStatusBits.join(" · ")}
           </span>
         )}
@@ -802,18 +1217,30 @@ export function WsMobileSheet({
         }
         return (
           <SheetBody>
-            <div className="px-2 pb-2.5 pt-1">
+            <div {...stylex.props(sx.px2, sx.pb25, sx.pt1)}>
               <WsOverviewInfo row={row} ov={ov} />
               {prStatusBits.length > 0 && (
-                <div className="mt-2 flex min-w-0 items-center gap-2 text-meta text-faint">
+                <div
+                  {...stylex.props(
+                    sx.mt2,
+                    sx.flex,
+                    sx.minW0,
+                    sx.itemsCenter,
+                    sx.gap2,
+                    sx.textFaint,
+                    typography.meta,
+                  )}
+                >
                   {prSession?.prNumber != null && (
                     <span
-                      className={`shrink-0 text-[0.95em] font-semibold ${prTone(prSession)}`}
+                      className={utilityClassName(
+                        `shrink-0 text-[0.95em] font-semibold ${prTone(prSession)}`,
+                      )}
                     >
                       #{prSession.prNumber}
                     </span>
                   )}
-                  <span className="min-w-0 truncate">
+                  <span {...stylex.props(sx.minW0, sx.truncate)}>
                     {prStatusBits.join(" · ")}
                   </span>
                 </div>

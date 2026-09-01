@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React from "react";
 import { SETTINGS_NAV_ICON, SETTINGS_NAV_ROW } from "../lib/settings-classes";
 import { SIDEBAR_HOVER_LAYER, SIDEBAR_RAIL_GAP } from "../lib/sidebar-classes";
@@ -11,6 +13,155 @@ import {
   useCurrentUser,
 } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  shrink0: {
+    flexShrink: "0",
+  },
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  leadingTight: {
+    lineHeight: "var(--leading-tight)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  sticky: {
+    position: "sticky",
+  },
+  bottom0: {
+    bottom: "0",
+  },
+  Mx3: {
+    marginInline: "calc(4px * -3)",
+  },
+  Mb4: {
+    marginBottom: "calc(4px * -4)",
+  },
+  mtAuto: {
+    marginTop: "auto",
+  },
+  borderX0: {
+    borderInlineStyle: "solid",
+    borderInlineWidth: "0px",
+  },
+  borderB0: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "0px",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  borderSolid: {
+    borderStyle: "solid",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  bgSidebar: {
+    backgroundColor: "var(--sidebar-bg)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  pb4: {
+    paddingBottom: "calc(4px * 4)",
+  },
+  pt3: {
+    paddingTop: "calc(4px * 3)",
+  },
+  minW200px: {
+    minWidth: "200px",
+  },
+  gap9px: {
+    gap: "9px",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  rounded2xl: {
+    borderRadius: "calc(22px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderDividerSoft: {
+    borderColor: "var(--divider-soft)",
+  },
+  bgSettingsPlate: {
+    backgroundColor: "var(--settings-plate)",
+  },
+  h7: {
+    height: "calc(4px * 7)",
+  },
+  w7: {
+    width: "calc(4px * 7)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+});
 
 // The account lives at the bottom of Settings: who your sessions act as, and
 // the way out. Two shapes for the two Settings layouts — a footer pinned under
@@ -47,12 +198,40 @@ function AccountIdentity({
 }) {
   return (
     <>
-      <UserAvatar name={name} size={28} className="shrink-0" />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left leading-tight">
-        <span className="truncate text-label font-semibold text-fg">
+      <UserAvatar
+        name={name}
+        size={28}
+        className={mergeStylexOverrideClassName("", sx.shrink0)}
+      />
+      <span
+        {...stylex.props(
+          sx.flex,
+          sx.minW0,
+          sx.flex1,
+          sx.flexCol,
+          sx.gap05,
+          sx.textLeft,
+          sx.leadingTight,
+        )}
+      >
+        <span
+          {...stylex.props(
+            sx.truncate,
+            sx.fontSemibold,
+            sx.textFg,
+            typography.label,
+          )}
+        >
           {name}
         </span>
-        <span className="truncate text-meta font-medium text-faint">
+        <span
+          {...stylex.props(
+            sx.truncate,
+            sx.fontMedium,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
           {subtitle}
         </span>
       </span>
@@ -71,10 +250,31 @@ export function SettingsAccountFooter() {
     // bottom of that column, not a bar laid across it. Its 6px gutter is the
     // list's outdent spelled forwards, so the account row and Sign out sit on
     // the same rail as the sections above them.
-    <div className="sticky bottom-0 -mx-3 -mb-4 mt-auto flex flex-col border-x-0 border-b-0 border-t border-solid border-divider bg-sidebar px-1.5 pb-4 pt-3">
+    <div
+      {...stylex.props(
+        sx.sticky,
+        sx.bottom0,
+        sx.Mx3,
+        sx.Mb4,
+        sx.mtAuto,
+        sx.flex,
+        sx.flexCol,
+        sx.borderX0,
+        sx.borderB0,
+        sx.borderT,
+        sx.borderSolid,
+        sx.borderDivider,
+        sx.bgSidebar,
+        sx.px15,
+        sx.pb4,
+        sx.pt3,
+      )}
+    >
       {githubAuth ? (
         <div
-          className={`flex items-center ${SIDEBAR_RAIL_GAP} py-[var(--sidebar-row-pad)] pl-2.5 pr-2`}
+          className={utilityClassName(
+            `flex items-center ${SIDEBAR_RAIL_GAP} py-[var(--sidebar-row-pad)] pl-2.5 pr-2`,
+          )}
         >
           <AccountIdentity name={currentUser} subtitle={subtitle} />
         </div>
@@ -82,17 +282,26 @@ export function SettingsAccountFooter() {
         <Menu.Root>
           <Menu.Trigger
             aria-label="Switch account"
-            className={`flex w-full min-w-0 items-center ${SIDEBAR_RAIL_GAP} rounded-row border-none bg-transparent py-[var(--sidebar-row-pad)] pl-2.5 pr-2 text-left data-[popup-open]:bg-selected ${SIDEBAR_HOVER_LAYER}`}
+            className={utilityClassName(
+              `flex w-full min-w-0 items-center ${SIDEBAR_RAIL_GAP} rounded-row border-none bg-transparent py-[var(--sidebar-row-pad)] pl-2.5 pr-2 text-left data-[popup-open]:bg-selected ${SIDEBAR_HOVER_LAYER}`,
+            )}
           >
             <AccountIdentity name={currentUser} subtitle={subtitle} />
-            <IconChevronRight size={20} className="shrink-0 text-faint" />
+            <IconChevronRight
+              size={20}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.shrink0,
+                sx.textFaint,
+              )}
+            />
           </Menu.Trigger>
           {/* The trigger sits at the very bottom — open upward. */}
           <Menu.Popup
             side="top"
             align="start"
             sideOffset={8}
-            className="min-w-[200px]"
+            className={mergeStylexOverrideClassName("", sx.minW200px)}
           >
             <Menu.RadioGroup
               value={currentUser}
@@ -103,10 +312,18 @@ export function SettingsAccountFooter() {
                   key={name}
                   value={name}
                   closeOnClick
-                  className="gap-[9px] rounded-sm px-2 py-1.5"
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.gap9px,
+                    sx.roundedSm,
+                    sx.px2,
+                    sx.py15,
+                  )}
                 >
                   <UserAvatar name={name} size={22} />
-                  <span className="min-w-0 flex-1 font-medium">{name}</span>
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.fontMedium)}>
+                    {name}
+                  </span>
                   <Menu.Check on={name === currentUser} />
                 </Menu.RadioItem>
               ))}
@@ -129,15 +346,33 @@ export function SettingsAccountFooter() {
 /** Phone: the last card in the settings sheet's root list. */
 export function SettingsAccountCard() {
   const { currentUser, githubAuth, canSignOut, subtitle } = useAccount();
-  const rowClass =
-    "relative flex w-full items-center gap-3 border-0 bg-transparent px-3.5 py-3 text-left after:absolute after:bottom-0 after:left-[54px] after:right-0 after:h-px after:bg-divider-soft last:after:hidden active:bg-hover";
+  const rowClass = utilityClassName(
+    "relative flex w-full items-center gap-3 border-0 bg-transparent px-3.5 py-3 text-left after:absolute after:bottom-0 after:left-[54px] after:right-0 after:h-px after:bg-divider-soft last:after:hidden active:bg-hover",
+  );
 
   return (
     <div>
-      <div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
+      <div
+        {...stylex.props(
+          sx.mb2,
+          sx.mt5,
+          sx.px1,
+          sx.fontSemibold,
+          sx.textFaint,
+          typography.controlLabel,
+        )}
+      >
         Account
       </div>
-      <div className="overflow-hidden rounded-2xl border border-divider-soft bg-settings-plate">
+      <div
+        {...stylex.props(
+          sx.overflowHidden,
+          sx.rounded2xl,
+          sx.border,
+          sx.borderDividerSoft,
+          sx.bgSettingsPlate,
+        )}
+      >
         {githubAuth ? (
           <div className={rowClass}>
             <AccountIdentity name={currentUser} subtitle={subtitle} />
@@ -149,22 +384,58 @@ export function SettingsAccountCard() {
               className={rowClass}
               onClick={() => setCurrentUser(name)}
             >
-              <UserAvatar name={name} size={28} className="shrink-0" />
-              <span className="min-w-0 flex-1 text-item-title font-medium text-fg">
+              <UserAvatar
+                name={name}
+                size={28}
+                className={mergeStylexOverrideClassName("", sx.shrink0)}
+              />
+              <span
+                {...stylex.props(
+                  sx.minW0,
+                  sx.flex1,
+                  sx.fontMedium,
+                  sx.textFg,
+                  typography.itemTitle,
+                )}
+              >
                 {name}
               </span>
               {name === currentUser && (
-                <IconCheck size={22} className="shrink-0 text-accent" />
+                <IconCheck
+                  size={22}
+                  className={mergeStylexOverrideClassName(
+                    "text-accent",
+                    sx.shrink0,
+                  )}
+                />
               )}
             </button>
           ))
         )}
         {canSignOut && (
           <button className={rowClass} onClick={() => void signOut()}>
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center text-dim">
+            <span
+              {...stylex.props(
+                sx.flex,
+                sx.h7,
+                sx.w7,
+                sx.shrink0,
+                sx.itemsCenter,
+                sx.justifyCenter,
+                sx.textDim,
+              )}
+            >
               <IconLogOut size={20} />
             </span>
-            <span className="min-w-0 flex-1 text-item-title font-medium text-fg">
+            <span
+              {...stylex.props(
+                sx.minW0,
+                sx.flex1,
+                sx.fontMedium,
+                sx.textFg,
+                typography.itemTitle,
+              )}
+            >
               Sign out
             </span>
           </button>

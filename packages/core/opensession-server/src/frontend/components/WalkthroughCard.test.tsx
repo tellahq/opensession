@@ -57,8 +57,10 @@ describe("WalkthroughCard", () => {
     // media it explains, so the fold is what hides the rest, not the point.
     expect(html).toContain(">After</span>");
     expect(html).toContain("The clearer controls");
-    expect(html).toContain("line-clamp-3");
-    expect(html).toContain("max-w-[var(--session-col)]");
+    // StyleX: the fold's three-line clamp renders as the -webkit-line-clamp
+    // declaration; the measure is still the session column var.
+    expect(html).toContain("-webkit-line-clamp:3");
+    expect(html).toContain("var(--session-col)");
     expect(html).not.toContain("transition-[max-width]");
     expect(html).not.toContain("max-w-[min(1120px,100%)]");
   });

@@ -1,3 +1,4 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
 import { useState } from "react";
 import { useSetupStatus } from "../../hooks/useSetupStatus";
 import { shouldReloadAfterGithubAuthEnabled } from "../../lib/github-app-setup";
@@ -14,6 +15,86 @@ import { InlineAlert } from "../../ui/state";
 import { toast } from "../../ui/toast";
 import { setupRequest, type SetupGithub } from "../setup-shared";
 import { SetupRestart } from "../SetupRestart";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  phoneFlexCol: {
+    "@media (max-width: 720px)": {
+      flexDirection: "column",
+    },
+  },
+  phoneItemsStretch: {
+    "@media (max-width: 720px)": {
+      alignItems: "stretch",
+    },
+  },
+  phonePx3: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 3)",
+    },
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  phoneWFull: {
+    "@media (max-width: 720px)": {
+      width: "100%",
+    },
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  phoneFlex1: {
+    "@media (max-width: 720px)": {
+      flex: "1",
+    },
+  },
+  phoneJustifyCenter: {
+    "@media (max-width: 720px)": {
+      justifyContent: "center",
+    },
+  },
+  relative: {
+    position: "relative",
+  },
+});
 
 function AuthenticationMethod({
   github,
@@ -63,12 +144,32 @@ function AuthenticationMethod({
   return (
     <>
       <SettingCard>
-        <div className="flex items-center gap-4 px-5 py-4 phone:flex-col phone:items-stretch phone:px-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-item-title font-medium text-fg">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap4,
+            sx.px5,
+            sx.py4,
+            sx.phoneFlexCol,
+            sx.phoneItemsStretch,
+            sx.phonePx3,
+          )}
+        >
+          <div {...stylex.props(sx.minW0, sx.flex1)}>
+            <div
+              {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}
+            >
               Sign-in method
             </div>
-            <div className="mt-0.5 text-supporting leading-relaxed text-dim">
+            <div
+              {...stylex.props(
+                sx.mt05,
+                sx.leadingRelaxed,
+                sx.textDim,
+                typography.supporting,
+              )}
+            >
               Require GitHub sign-in, or leave this workspace open.
             </div>
           </div>
@@ -76,19 +177,29 @@ function AuthenticationMethod({
             label="Sign-in method"
             value={github.userPrAuth ? "github" : "none"}
             onValueChange={(value) => void select(value)}
-            className="phone:w-full"
+            className={mergeStylexOverrideClassName("", sx.phoneWFull)}
           >
             <SegmentedOption
               value="none"
               disabled={saving}
-              className="phone:min-h-11 phone:flex-1 phone:justify-center"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.phoneMinH11,
+                sx.phoneFlex1,
+                sx.phoneJustifyCenter,
+              )}
             >
               None
             </SegmentedOption>
             <SegmentedOption
               value="github"
               disabled={saving}
-              className="phone:min-h-11 phone:flex-1 phone:justify-center"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.phoneMinH11,
+                sx.phoneFlex1,
+                sx.phoneJustifyCenter,
+              )}
             >
               GitHub
             </SegmentedOption>
@@ -106,7 +217,7 @@ export function AuthenticationPanel() {
   const setup = useSetupStatus();
   const { status, failed } = setup;
   return (
-    <SettingsPanel className="relative">
+    <SettingsPanel className={mergeStylexOverrideClassName("", sx.relative)}>
       <SettingsHeader
         title="Authentication"
         description="Choose how teammates sign in to this workspace."

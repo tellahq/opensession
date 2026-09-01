@@ -126,12 +126,13 @@ test("image attachments carry the classes the shared lightbox watches for", () =
   // MediaLightbox's delegated handler matches exactly these two selectors,
   // and GALLERY_SELECTOR browses across every img.md-image on screen.
   expect(html).toContain("md-image-link");
-  expect(html).toContain("md-image ");
+  expect(html).toContain('class="md-image"');
   // The filename is what captions the viewer.
   expect(html).toContain('alt="broken.png"');
   // The wrapper already draws the surface; the transcript image's own border
-  // and margin would double it.
-  expect(html).toContain("border-0");
+  // and margin would double it. StyleX renders the borderless image inline.
+  expect(html).toContain("border-width:0px");
+  expect(html).toContain("margin:0");
 });
 
 test("a non-image attachment stays a download chip", () => {

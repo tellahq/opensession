@@ -1,7 +1,44 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "./cn";
 import { PhoneTopBarAction } from "./top-bar";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  touchNone: {
+    touchAction: "none",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  pb15: {
+    paddingBottom: "calc(4px * 1.5)",
+  },
+  pt25: {
+    paddingTop: "calc(4px * 2.5)",
+  },
+  h5px: {
+    height: "5px",
+  },
+  w9: {
+    width: "calc(4px * 9)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+});
 
 /**
  * The app's sheet/dialog language for surfaces that own their own open state —
@@ -228,8 +265,8 @@ export function ResponsiveDialog({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[10000]",
-        parked && "invisible pointer-events-none",
+        utilityClassName("fixed inset-0 z-[10000]"),
+        parked && utilityClassName("invisible pointer-events-none"),
       )}
       role="dialog"
       aria-modal={parked ? undefined : "true"}
@@ -239,12 +276,16 @@ export function ResponsiveDialog({
       {!phonePage && (
         <div
           className={cn(
-            "absolute inset-0 bg-black/45",
+            utilityClassName("absolute inset-0 bg-black/45"),
             backdropClassName,
             animated && [
-              "transition-opacity",
-              phone ? "duration-[var(--dur-lg)]" : "duration-[var(--dur)]",
-              shown ? "opacity-100" : "opacity-0",
+              utilityClassName("transition-opacity"),
+              phone
+                ? utilityClassName("duration-[var(--dur-lg)]")
+                : utilityClassName("duration-[var(--dur)]"),
+              shown
+                ? utilityClassName("opacity-100")
+                : utilityClassName("opacity-0"),
             ],
           )}
           onClick={onClose}
@@ -257,33 +298,58 @@ export function ResponsiveDialog({
           // Radii are authored the way base.css authors every corner in the
           // app, `calc(<px> * var(--rf))`, so they follow the squircle bump
           // and its circular fallback with everything else.
-          "absolute flex flex-col overflow-hidden outline-none [corner-shape:squircle]",
+          utilityClassName(
+            "absolute flex flex-col overflow-hidden outline-none [corner-shape:squircle]",
+          ),
           phone
             ? phonePage
-              ? "inset-0 h-dvh max-h-none rounded-none bg-surface pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-none"
-              : "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
-            : "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[calc(18px*var(--rf))] bg-raised smooth-shadow-ring-lg",
+              ? utilityClassName(
+                  "inset-0 h-dvh max-h-none rounded-none bg-surface pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-none",
+                )
+              : utilityClassName(
+                  "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]",
+                )
+            : utilityClassName(
+                "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[calc(18px*var(--rf))] bg-raised smooth-shadow-ring-lg",
+              ),
           animated &&
             (phone
               ? [
-                  "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]",
-                  shown ? "translate-y-0" : "translate-y-full",
+                  utilityClassName(
+                    "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]",
+                  ),
+                  shown
+                    ? utilityClassName("translate-y-0")
+                    : utilityClassName("translate-y-full"),
                 ]
               : [
-                  "origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
-                  shown ? "scale-100 opacity-100" : "scale-[0.96] opacity-0",
+                  utilityClassName(
+                    "origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
+                  ),
+                  shown
+                    ? utilityClassName("scale-100 opacity-100")
+                    : utilityClassName("scale-[0.96] opacity-0"),
                 ]),
           phone ? sheetClassName : modalClassName,
         )}
       >
         {phone && !phonePage && showPhoneGrabber && (
           <div
-            className="flex shrink-0 touch-none justify-center pb-1.5 pt-2.5"
+            {...stylex.props(
+              sx.flex,
+              sx.shrink0,
+              sx.touchNone,
+              sx.justifyCenter,
+              sx.pb15,
+              sx.pt25,
+            )}
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
           >
-            <div className="h-[5px] w-9 rounded-full bg-active" />
+            <div
+              {...stylex.props(sx.h5px, sx.w9, sx.roundedFull, sx.bgActive)}
+            />
           </div>
         )}
         {typeof children === "function" ? children(onClose) : children}
@@ -317,7 +383,9 @@ export function SheetBody({
   return (
     <div
       className={cn(
-        "min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-3.5",
+        utilityClassName(
+          "min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-3.5",
+        ),
         className,
       )}
     >
@@ -337,7 +405,7 @@ export function SheetTitle({
   return (
     <div
       className={cn(
-        "truncate px-3 pb-2 pt-1.5 text-label text-faint",
+        utilityClassName("truncate px-3 pb-2 pt-1.5 text-label text-faint"),
         className,
       )}
     >
@@ -348,7 +416,11 @@ export function SheetTitle({
 
 /** Hairline between two groups of sheet actions. */
 export function SheetSeparator({ className }: { className?: string }) {
-  return <div className={cn("mx-2.5 my-1.5 h-px bg-line", className)} />;
+  return (
+    <div
+      className={cn(utilityClassName("mx-2.5 my-1.5 h-px bg-line"), className)}
+    />
+  );
 }
 
 /**
@@ -380,7 +452,9 @@ export function SheetItem({
     <button
       type="button"
       className={cn(
-        "flex w-full items-center gap-[13px] rounded-control px-3.5 py-[15px] text-left text-body active:bg-pressed [&_svg]:shrink-0",
+        utilityClassName(
+          "flex w-full items-center gap-[13px] rounded-control px-3.5 py-[15px] text-left text-body active:bg-pressed [&_svg]:shrink-0",
+        ),
         SHEET_ITEM_TONE[tone],
         className,
       )}

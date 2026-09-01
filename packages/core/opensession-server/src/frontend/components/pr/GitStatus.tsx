@@ -15,13 +15,20 @@ import {
   GIT_NOTE,
   GIT_ROW,
 } from "../../lib/pr-tone-classes";
-import type {
-  GitStatusInfo,
-  PrDetails,
-  WSClientMessage,
-} from "../../lib/types";
+import type { GitStatusInfo, PrDetails } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { MergeUndoControl } from "./MergeUndoControl";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexClassName } from "../../ui/cn";
+
+const sx = stylex.create({
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+});
 
 /**
  * Local/remote discrepancy rows for the Status card: each gets a line with one
@@ -44,7 +51,7 @@ export function GitStatusRows({
   pr: PrDetails | null;
   sessionId: string;
   repo?: string;
-  send?: (msg: WSClientMessage) => void;
+  send?: (msg: any) => void;
   onRefresh: () => Promise<void> | void;
   onMerge?: () => void;
   merging?: boolean;
@@ -165,11 +172,23 @@ export function GitStatusRows({
         </div>
       ))}
       {prompted && (
-        <div className={`${GIT_NOTE} text-faint`}>
+        <div
+          className={[GIT_NOTE, mergeStylexClassName("", sx.textFaint)]
+            .filter(Boolean)
+            .join(" ")}
+        >
           Asked {AGENT_NAME} to {prompted} ✓
         </div>
       )}
-      {error && <div className={`${GIT_NOTE} text-red`}>{error}</div>}
+      {error && (
+        <div
+          className={[GIT_NOTE, mergeStylexClassName("", sx.textRed)]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {error}
+        </div>
+      )}
     </>
   );
 }

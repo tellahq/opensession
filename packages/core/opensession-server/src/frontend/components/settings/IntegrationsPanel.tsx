@@ -1,3 +1,4 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
 import { useSetupStatus } from "../../hooks/useSetupStatus";
 import {
   SettingCardSkeleton,
@@ -8,6 +9,17 @@ import { InlineAlert } from "../../ui/state";
 import { IntegrationsList } from "../SetupIntegrations";
 import { SetupRestart } from "../SetupRestart";
 import { AppleMobileIntegration } from "../AppleMobileIntegration";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  mt3: {
+    marginTop: "calc(4px * 3)",
+  },
+});
 
 // Organization → Integrations: credentials used by tools and automation.
 // Workspace authentication lives on its own page beside Members.
@@ -16,7 +28,7 @@ export function IntegrationsPanel() {
   const setup = useSetupStatus();
   const { status, failed } = setup;
   return (
-    <SettingsPanel className="relative">
+    <SettingsPanel className={mergeStylexOverrideClassName("", sx.relative)}>
       <SettingsHeader title="Integrations" />
       {!status ? (
         // A failure is an alert, not a quiet label under a spinner: it used
@@ -43,7 +55,7 @@ export function IntegrationsPanel() {
           onGithubSaved={setup.applyGithub}
         />
       )}
-      <div className="mt-3">
+      <div {...stylex.props(sx.mt3)}>
         <AppleMobileIntegration teamNames={status?.team.names ?? []} />
       </div>
       <SetupRestart setup={setup} />

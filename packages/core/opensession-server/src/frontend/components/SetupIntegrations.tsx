@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useState } from "react";
 import { Button } from "../ui/button";
 import { SettingCard, SettingsHint, SettingsSection } from "../ui/settings";
@@ -16,6 +18,106 @@ import {
   type SetupGithub,
   type SetupIntegration,
 } from "./setup-shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  minW14rem: {
+    minWidth: "14rem",
+  },
+  flex1: {
+    flex: "1",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  m0: {
+    margin: "0",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  minH10: {
+    minHeight: "calc(4px * 10)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  maxSmMinH10: {
+    "@media (max-width: 39.999rem)": {
+      minHeight: "calc(4px * 10)",
+    },
+  },
+  grid: {
+    display: "grid",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  phonePx0: {
+    "@media (max-width: 720px)": {
+      paddingInline: "0",
+    },
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap5: {
+    gap: "calc(4px * 5)",
+  },
+  mt6: {
+    marginTop: "calc(4px * 6)",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+});
 
 // The configuration forms behind the integration registry: paste the
 // credentials, flip the enable switch, Save, restart. Rendered both as a Setup
@@ -98,26 +200,60 @@ function IntegrationCard({
   return (
     <>
       <SettingCard>
-        <div className="flex flex-wrap items-start gap-3 px-5 py-4">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.flexWrap,
+            sx.itemsStart,
+            sx.gap3,
+            sx.px5,
+            sx.py4,
+          )}
+        >
           <IconTile name={integration.id} size={40} />
-          <div className="min-w-[14rem] flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="text-item-title font-semibold text-fg">
+          <div {...stylex.props(sx.minW14rem, sx.flex1)}>
+            <div
+              {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap2)}
+            >
+              <div
+                {...stylex.props(
+                  sx.fontSemibold,
+                  sx.textFg,
+                  typography.itemTitle,
+                )}
+              >
                 {integration.label}
               </div>
               <StateChip tone={state.tone} label={stateLabel} />
             </div>
-            <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+            <p
+              {...stylex.props(
+                sx.m0,
+                sx.mt1,
+                sx.leadingRelaxed,
+                sx.textDim,
+                typography.supporting,
+              )}
+            >
               {INTEGRATION_DESCRIPTIONS[integration.id] ??
                 `Connect ${integration.label} to Open Session.`}
             </p>
             {integration.enabled && integration.missingRequired.length > 0 && (
-              <div className="mt-2 text-meta text-yellow">
+              <div {...stylex.props(sx.mt2, sx.textYellow, typography.meta)}>
                 Missing {integration.missingRequired.join(", ")}
               </div>
             )}
           </div>
-          <div className="ml-auto flex min-h-10 shrink-0 items-center gap-2">
+          <div
+            {...stylex.props(
+              sx.mlAuto,
+              sx.flex,
+              sx.minH10,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.gap2,
+            )}
+          >
             {canToggle && (
               <Switch
                 checked={integration.enabled}
@@ -128,7 +264,7 @@ function IntegrationCard({
             )}
             <Button
               size="sm"
-              className="max-sm:min-h-10"
+              className={mergeStylexOverrideClassName("", sx.maxSmMinH10)}
               variant={
                 !hasCredentials && integration.env.length > 0
                   ? "primary"
@@ -174,7 +310,7 @@ export function IntegrationsList({
     integrations.length === 1 && integrations[0]?.id === "github";
   return (
     <>
-      <div className="grid gap-3">
+      <div {...stylex.props(sx.grid, sx.gap3)}>
         {integrations.map((i) => (
           <IntegrationCard
             key={i.id}
@@ -209,11 +345,22 @@ export function GithubAuthCard({
   const state = githubAuthState(github);
 
   return (
-    <div className="grid px-4 phone:px-0">
+    <div {...stylex.props(sx.grid, sx.px4, sx.phonePx0)}>
       <div
-        className={onboarding ? "w-full" : "mx-auto mt-3 w-full max-w-[34rem]"}
+        className={
+          onboarding
+            ? utilityClassName("w-full")
+            : utilityClassName("mx-auto mt-3 w-full max-w-[34rem]")
+        }
       >
-        <SettingsSection className="flex flex-col gap-5">
+        <SettingsSection
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.flex,
+            sx.flexCol,
+            sx.gap5,
+          )}
+        >
           <GithubManifestSetup
             github={github}
             returnTo="welcome"
@@ -229,8 +376,15 @@ export function GithubAuthCard({
           />
         </SettingsSection>
         {onboarding && github.clientIdConfigured && (
-          <div className="mt-6 px-5">
-            <div className="mb-3 text-dialog-title font-semibold text-fg">
+          <div {...stylex.props(sx.mt6, sx.px5)}>
+            <div
+              {...stylex.props(
+                sx.mb3,
+                sx.fontSemibold,
+                sx.textFg,
+                typography.dialogTitle,
+              )}
+            >
               Sign in to GitHub
             </div>
             <GithubAccounts
@@ -245,9 +399,18 @@ export function GithubAuthCard({
                     }
                   : undefined
               }
-              cardClassName="personal-github-card border-line! bg-button! smooth-shadow-xs"
+              cardClassName={utilityClassName(
+                "personal-github-card border-line! bg-button! smooth-shadow-xs",
+              )}
             />
-            <p className="m-0 mt-2 text-supporting text-faint">
+            <p
+              {...stylex.props(
+                sx.m0,
+                sx.mt2,
+                sx.textFaint,
+                typography.supporting,
+              )}
+            >
               You can also sign in to GitHub later.
             </p>
           </div>

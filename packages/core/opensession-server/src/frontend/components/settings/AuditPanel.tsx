@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import { useEffect, useState } from "react";
 import { fetchAudit } from "../../lib/api";
 import { BASE_PATH } from "../../lib/base";
@@ -7,6 +9,115 @@ import { SettingCard, SettingsHeader, SettingsPanel } from "../../ui/settings";
 import { EmptyState } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { Select } from "./shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  wAuto: {
+    width: "auto",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  minW140px: {
+    minWidth: "140px",
+  },
+  flex1: {
+    flex: "1",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  underline: {
+    textDecorationLine: "underline",
+  },
+  m0: {
+    margin: "0",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+});
 
 /** Summarize one audit event for its row (the details live in the expand). */
 function auditSummary(e: Record<string, unknown>): string {
@@ -80,16 +191,25 @@ export function AuditPanel() {
         description="Review prompts, tool decisions, account switches, and confirmations from every agent run. Events are read-only and kept for 400 days."
       />
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 px-5">
+      <div
+        {...stylex.props(
+          sx.mb3,
+          sx.flex,
+          sx.flexWrap,
+          sx.itemsCenter,
+          sx.gap2,
+          sx.px5,
+        )}
+      >
         <Select
-          className="w-auto"
+          className={mergeStylexOverrideClassName("", sx.wAuto)}
           label="Date"
           value={date}
           options={dates.map((d) => ({ value: d, label: d }))}
           onChange={setDate}
         />
         <Select
-          className="w-auto"
+          className={mergeStylexOverrideClassName("", sx.wAuto)}
           label="Event type"
           value={type}
           options={[
@@ -98,12 +218,21 @@ export function AuditPanel() {
           ]}
           onChange={setType}
         />
-        <label className="flex cursor-pointer items-center gap-2 text-label text-dim">
+        <label
+          {...stylex.props(
+            sx.flex,
+            sx.cursorPointer,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.textDim,
+            typography.label,
+          )}
+        >
           <Switch checked={all} onCheckedChange={setAll} />
           Include tool firehose
         </label>
         <Input
-          className="min-w-[140px] flex-1"
+          className={mergeStylexOverrideClassName("", sx.minW140px, sx.flex1)}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search (session id, tool, text…)"
@@ -111,7 +240,7 @@ export function AuditPanel() {
         />
       </div>
 
-      <div className="mb-2 px-5 text-meta text-faint">
+      <div {...stylex.props(sx.mb2, sx.px5, sx.textFaint, typography.meta)}>
         {loading
           ? "Loading…"
           : `${events.length} of ${total} events (newest first)`}
@@ -124,22 +253,47 @@ export function AuditPanel() {
           const sid =
             typeof e.bks_session_id === "string" ? e.bks_session_id : "";
           return (
-            <div key={i} className={expanded === i ? "bg-pressed" : ""}>
+            <div
+              key={i}
+              className={expanded === i ? utilityClassName("bg-pressed") : ""}
+            >
               <button
-                className="flex w-full min-w-0 cursor-pointer items-baseline gap-2 px-5 py-1.5 text-left text-label hover:bg-hover"
+                {...stylex.props(
+                  sx.flex,
+                  sx.wFull,
+                  sx.minW0,
+                  sx.cursorPointer,
+                  sx.itemsBaseline,
+                  sx.gap2,
+                  sx.px5,
+                  sx.py15,
+                  sx.textLeft,
+                  sx.hoverBgHover,
+                  typography.label,
+                )}
                 onClick={() => setExpanded(expanded === i ? null : i)}
               >
-                <span className="text-faint shrink-0">{time}</span>
-                <span className="text-fg font-medium shrink-0">{t}</span>
+                <span {...stylex.props(sx.textFaint, sx.shrink0)}>{time}</span>
+                <span {...stylex.props(sx.textFg, sx.fontMedium, sx.shrink0)}>
+                  {t}
+                </span>
                 {e.run_kind ? (
-                  <span className="text-faint shrink-0">
+                  <span {...stylex.props(sx.textFaint, sx.shrink0)}>
                     {String(e.run_kind)}
                   </span>
                 ) : null}
-                <span className="text-dim truncate">{auditSummary(e)}</span>
+                <span {...stylex.props(sx.textDim, sx.truncate)}>
+                  {auditSummary(e)}
+                </span>
                 {sid && (
                   <a
-                    className="ml-auto shrink-0 text-meta text-faint underline"
+                    {...stylex.props(
+                      sx.mlAuto,
+                      sx.shrink0,
+                      sx.textFaint,
+                      sx.underline,
+                      typography.meta,
+                    )}
                     href={`${BASE_PATH}/session/${sid}`}
                     onClick={(ev) => ev.stopPropagation()}
                   >
@@ -148,7 +302,19 @@ export function AuditPanel() {
                 )}
               </button>
               {expanded === i && (
-                <pre className="m-0 overflow-x-auto border-t border-line px-5 py-2.5 text-meta leading-relaxed text-dim">
+                <pre
+                  {...stylex.props(
+                    sx.m0,
+                    sx.overflowXAuto,
+                    sx.borderT,
+                    sx.borderLine,
+                    sx.px5,
+                    sx.py25,
+                    sx.leadingRelaxed,
+                    sx.textDim,
+                    typography.meta,
+                  )}
+                >
                   {JSON.stringify(e, null, 2)}
                 </pre>
               )}
@@ -161,7 +327,7 @@ export function AuditPanel() {
       </SettingCard>
 
       {events.length < total && (
-        <div className="mt-2">
+        <div {...stylex.props(sx.mt2)}>
           <Button size="sm" onClick={loadMore}>
             Load more ({total - events.length} left)
           </Button>

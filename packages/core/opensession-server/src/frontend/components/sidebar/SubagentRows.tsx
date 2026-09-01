@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import type { CSSProperties } from "react";
 import {
   sessionHasOpenPr,
@@ -18,6 +20,61 @@ import { Tooltip } from "../../ui/tooltip";
 import { IconArchive, IconArrowTurnDownRight } from "../icons";
 import { WsPrStatusMark } from "./HoverCards";
 import { SIDEBAR_ROW_TITLE } from "./SidebarItem";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  top12: {
+    top: "calc(1 / 2 * 100%)",
+  },
+  right7px: {
+    right: "7px",
+  },
+  TranslateY12: {
+    translate: "0 calc(calc(1 / 2 * 100%) * -1)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  opacity0: {
+    opacity: "0%",
+  },
+  transitionOpacity: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  durationDurMicro: {
+    transitionDuration: "var(--dur-micro)",
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  phoneRight0: {
+    "@media (max-width: 720px)": {
+      right: "0",
+    },
+  },
+  phoneSize11: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 11)",
+      height: "calc(4px * 11)",
+    },
+  },
+});
 
 function stateLabel(session: UnifiedSession): string {
   if (session.waitingForInput) return "Waiting for input";
@@ -53,15 +110,17 @@ export function SubagentRows({
           (session.queuedCount ?? 0) === 0 &&
           sessionHasPr(session);
         return (
-          <div className="group relative" key={session.id}>
+          <div {...mergeStylexProps("group", sx.relative)} key={session.id}>
             <button
               type="button"
               className={cn(
-                "relative mt-0.5 flex w-full items-center rounded-row border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-10 text-left text-fg phone:py-[13px] phone:pr-12",
+                utilityClassName(
+                  "relative mt-0.5 flex w-full items-center rounded-row border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-10 text-left text-fg phone:py-[13px] phone:pr-12",
+                ),
                 SIDEBAR_RAIL_GAP,
                 SIDEBAR_RAIL_PAD,
                 SIDEBAR_HOVER_LAYER,
-                selected && "bg-selected",
+                selected && utilityClassName("bg-selected"),
               )}
               // A direct worker's title sits 13px past its parent, enough to
               // read as nested without spending a full icon column on empty
@@ -82,7 +141,7 @@ export function SubagentRows({
               onClick={() => onSelect(session)}
             >
               <span
-                className={cn(SIDEBAR_RAIL, "text-faint")}
+                className={cn(SIDEBAR_RAIL, utilityClassName("text-faint"))}
                 aria-hidden="true"
               >
                 <IconArrowTurnDownRight size={16} />
@@ -93,12 +152,12 @@ export function SubagentRows({
               ) : (
                 <span
                   className={cn(
-                    "size-1.5 shrink-0 rounded-full",
+                    utilityClassName("size-1.5 shrink-0 rounded-full"),
                     session.waitingForInput
                       ? SIDEBAR_STATUS_DOT.waiting
                       : session.isRunning || (session.queuedCount ?? 0) > 0
                         ? SIDEBAR_STATUS_DOT.running
-                        : "bg-faint",
+                        : utilityClassName("bg-faint"),
                   )}
                   aria-hidden="true"
                   title={label}
@@ -111,7 +170,21 @@ export function SubagentRows({
                 variant="ghost"
                 size="sm"
                 icon={<IconArchive size={19} />}
-                className="pointer-events-none absolute top-1/2 right-[7px] -translate-y-1/2 text-faint opacity-0 transition-opacity duration-(--dur-micro) hover:text-fg group-hover:pointer-events-auto group-hover:opacity-100 phone:right-0 phone:size-11 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+                className={mergeStylexOverrideClassName(
+                  "group-hover:pointer-events-auto group-hover:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
+                  sx.pointerEventsNone,
+                  sx.absolute,
+                  sx.top12,
+                  sx.right7px,
+                  sx.TranslateY12,
+                  sx.textFaint,
+                  sx.opacity0,
+                  sx.transitionOpacity,
+                  sx.durationDurMicro,
+                  sx.hoverTextFg,
+                  sx.phoneRight0,
+                  sx.phoneSize11,
+                )}
                 aria-label={`Archive ${session.title}`}
                 onClick={() => onArchive(session)}
               />

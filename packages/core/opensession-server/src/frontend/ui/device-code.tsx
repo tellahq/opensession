@@ -1,7 +1,34 @@
+import { mergeStylexOverrideClassName } from "./cn";
+import { utilityClassName } from "./cn";
 import { IconCopy } from "../components/icons";
 import { cn } from "./cn";
 import { CopyCheck, useCopy } from "./copy";
 import { Tooltip } from "./tooltip";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  translateY05px: {
+    translate: "0 0.5px",
+  },
+  tracking014em: {
+    letterSpacing: "0.14em",
+  },
+  Mr014em: {
+    marginRight: "calc(0.14em * -1)",
+  },
+  TextBoxTrimBothCapAlphabetic: {
+    textBox: "trim-both cap alphabetic",
+  },
+  opacity45: {
+    opacity: "45%",
+  },
+  transitionOpacity: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+});
 
 /**
  * A one-time device code (GitHub, ChatGPT) that someone has to enter on
@@ -33,10 +60,18 @@ export function DeviceCode({
         aria-label={`${label} ${code}`}
         onClick={() => copy(code, { toast: "Code copied" })}
         className={cn(
-          "group inline-flex items-center gap-1.5 rounded-control border border-line bg-control px-2.5 py-1",
-          "font-mono text-item-title font-bold text-fg smooth-shadow-sm",
-          "transition-[background-color,border-color,scale] active:scale-[0.98]",
-          "hover:border-line-strong hover:bg-hover focus-ring",
+          utilityClassName(
+            "group inline-flex items-center gap-1.5 rounded-control border border-line bg-control px-2.5 py-1",
+          ),
+          utilityClassName(
+            "font-mono text-item-title font-bold text-fg smooth-shadow-sm",
+          ),
+          utilityClassName(
+            "transition-[background-color,border-color,scale] active:scale-[0.98]",
+          ),
+          utilityClassName(
+            "hover:border-line-strong hover:bg-hover focus-ring",
+          ),
           className,
         )}
       >
@@ -45,7 +80,14 @@ export function DeviceCode({
 				    on the button's middle whatever font the platform picks, plus
 				    the half pixel the PR strip's labels carry (a word reads a touch
 				    high at the geometric center). */}
-        <span className="translate-y-[0.5px] tracking-[0.14em] -mr-[0.14em] [text-box:trim-both_cap_alphabetic]">
+        <span
+          {...stylex.props(
+            sx.translateY05px,
+            sx.tracking014em,
+            sx.Mr014em,
+            sx.TextBoxTrimBothCapAlphabetic,
+          )}
+        >
           {code}
         </span>
         <CopyCheck
@@ -54,7 +96,11 @@ export function DeviceCode({
           idle={
             <IconCopy
               size={20}
-              className="opacity-45 transition-opacity group-hover:opacity-80"
+              className={mergeStylexOverrideClassName(
+                "group-hover:opacity-80",
+                sx.opacity45,
+                sx.transitionOpacity,
+              )}
             />
           }
         />

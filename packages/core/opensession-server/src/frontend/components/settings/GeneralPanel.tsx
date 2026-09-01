@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import React, { useEffect, useEffectEvent, useState } from "react";
 import {
   fetchGithubOrganizationProfile,
@@ -31,8 +33,142 @@ import { toast } from "../../ui/toast";
 import { InlineAlert } from "../../ui/state";
 import { IconArrowUpToLine, IconTrash } from "../icons";
 import { IdentityRows } from "../SetupIdentity";
+import * as stylex from "@stylexjs/stylex";
 
-const NAME_INPUT_CLASS = cn(settingsInputClass, "w-[220px] max-w-full");
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  sizeFull: {
+    width: "100%",
+    height: "100%",
+  },
+  objectCover: {
+    objectFit: "cover",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  grid: {
+    display: "grid",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+  roundedInherit: {
+    borderRadius: "inherit",
+    cornerShape: "var(--cs)",
+  },
+  bgBlack50: {
+    backgroundColor: "color-mix(in oklab, var(--color-black) 50%, transparent)",
+  },
+  textWhite: {
+    color: "var(--color-white)",
+  },
+  opacity0: {
+    opacity: "0%",
+  },
+  transitionOpacity: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  duration150: {
+    transitionDuration: "150ms",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  phonePointerEventsAuto: {
+    "@media (max-width: 720px)": {
+      pointerEvents: "auto !important",
+    },
+  },
+  phoneOpacity100: {
+    "@media (max-width: 720px)": {
+      opacity: "100% !important",
+    },
+  },
+  hidden: {
+    display: "none",
+  },
+  p6: {
+    padding: "calc(4px * 6)",
+  },
+  phoneP5: {
+    "@media (max-width: 720px)": {
+      padding: "calc(4px * 5)",
+    },
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxW400px: {
+    maxWidth: "400px",
+  },
+  gridCols1: {
+    gridTemplateColumns: "repeat(1, minmax(0, 1fr))",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
+});
+
+const NAME_INPUT_CLASS = cn(
+  settingsInputClass,
+  utilityClassName("w-[220px] max-w-full"),
+);
 
 /**
  * The organization's name and mark.
@@ -178,7 +314,17 @@ export function OrganizationProfileSection({
   const showIcon = !!settings?.organizationIconUrl && !iconFailed;
   const fallbackColor = repoColor(settings?.organizationName || "organization");
   const iconEditor = (
-    <div className="group/overlay-action relative flex shrink-0 flex-col items-center gap-1.5">
+    <div
+      {...mergeStylexProps(
+        "group/overlay-action",
+        sx.relative,
+        sx.flex,
+        sx.shrink0,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.gap15,
+      )}
+    >
       <button
         type="button"
         disabled={busy}
@@ -187,8 +333,12 @@ export function OrganizationProfileSection({
           showIcon ? "Change organization icon" : "Upload organization icon"
         }
         className={cn(
-          "focus-ring group/upload relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg text-section-title font-semibold outline outline-1 outline-divider disabled:pointer-events-none",
-          onboarding ? "size-16" : "size-14",
+          utilityClassName(
+            "focus-ring group/upload relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg text-section-title font-semibold outline outline-1 outline-divider disabled:pointer-events-none",
+          ),
+          onboarding
+            ? utilityClassName("size-16")
+            : utilityClassName("size-14"),
         )}
         style={
           showIcon
@@ -203,24 +353,48 @@ export function OrganizationProfileSection({
           <img
             src={settings?.organizationIconUrl || undefined}
             alt=""
-            className="size-full object-cover"
+            {...stylex.props(sx.sizeFull, sx.objectCover)}
             onError={() => setIconFailed(true)}
           />
         ) : (
           initials
         )}
-        <span className="pointer-events-none absolute inset-0 grid place-items-center rounded-[inherit] bg-black/50 text-white opacity-0 transition-opacity duration-150 group-hover/upload:opacity-100 group-focus-visible/upload:opacity-100">
+        <span
+          {...mergeStylexProps(
+            "group-hover/upload:opacity-100 group-focus-visible/upload:opacity-100",
+            sx.pointerEventsNone,
+            sx.absolute,
+            sx.inset0,
+            sx.grid,
+            sx.placeItemsCenter,
+            sx.roundedInherit,
+            sx.bgBlack50,
+            sx.textWhite,
+            sx.opacity0,
+            sx.transitionOpacity,
+            sx.duration150,
+          )}
+        >
           <IconArrowUpToLine size={20} />
         </span>
       </button>
       {settings?.organizationIconUrl && (
         <OverlayAction
-          icon={<IconTrash className="text-red" size={20} />}
+          icon={
+            <IconTrash
+              className={mergeStylexOverrideClassName("", sx.textRed)}
+              size={20}
+            />
+          }
           disabled={busy}
           onClick={removeIcon}
           aria-label="Remove organization icon"
           title="Remove icon"
-          className="phone:pointer-events-auto! phone:opacity-100!"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.phonePointerEventsAuto,
+            sx.phoneOpacity100,
+          )}
         />
       )}
       <input
@@ -228,7 +402,7 @@ export function OrganizationProfileSection({
         type="file"
         disabled={busy}
         accept="image/*"
-        className="hidden"
+        {...stylex.props(sx.hidden)}
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
@@ -241,7 +415,8 @@ export function OrganizationProfileSection({
     <input
       className={cn(
         NAME_INPUT_CLASS,
-        onboarding && "h-12! min-h-12! w-full! px-3.5! text-base!",
+        onboarding &&
+          utilityClassName("h-12! min-h-12! w-full! px-3.5! text-base!"),
       )}
       // data-setup-field: FirstMile promotes this to the large field step.
       data-setup-field="org-name"
@@ -268,16 +443,34 @@ export function OrganizationProfileSection({
           <SettingCard
             className={
               onboarding
-                ? "mx-auto max-w-[560px] bg-[color-mix(in_srgb,var(--popup-surface)_76%,transparent)]!"
+                ? utilityClassName(
+                    "mx-auto max-w-[560px] bg-[color-mix(in_srgb,var(--popup-surface)_76%,transparent)]!",
+                  )
                 : undefined
             }
           >
             {onboarding ? (
-              <div className="p-6 phone:p-5">
-                <div className="flex justify-center py-4">{iconEditor}</div>
-                <div className="mx-auto mt-5 grid w-full max-w-[400px] grid-cols-1 gap-4">
+              <div {...stylex.props(sx.p6, sx.phoneP5)}>
+                <div {...stylex.props(sx.flex, sx.justifyCenter, sx.py4)}>
+                  {iconEditor}
+                </div>
+                <div
+                  {...stylex.props(
+                    sx.mxAuto,
+                    sx.mt5,
+                    sx.grid,
+                    sx.wFull,
+                    sx.maxW400px,
+                    sx.gridCols1,
+                    sx.gap4,
+                  )}
+                >
                   <Field
-                    label={<span className="text-fg">Organization name</span>}
+                    label={
+                      <span {...stylex.props(sx.textFg)}>
+                        Organization name
+                      </span>
+                    }
                   >
                     {organizationNameInput}
                   </Field>
@@ -286,11 +479,22 @@ export function OrganizationProfileSection({
               </div>
             ) : (
               <>
-                <SettingRow className="items-center">
+                <SettingRow
+                  className={mergeStylexOverrideClassName("", sx.itemsCenter)}
+                >
                   <SettingRowText>
                     <SettingRowTitle>Upload icon</SettingRowTitle>
                   </SettingRowText>
-                  <SettingRowControl className="flex flex-wrap items-center justify-end gap-2">
+                  <SettingRowControl
+                    className={mergeStylexOverrideClassName(
+                      "",
+                      sx.flex,
+                      sx.flexWrap,
+                      sx.itemsCenter,
+                      sx.justifyEnd,
+                      sx.gap2,
+                    )}
+                  >
                     {iconEditor}
                   </SettingRowControl>
                 </SettingRow>
@@ -321,7 +525,10 @@ export function OrganizationProfileSection({
 export function GeneralPanel() {
   return (
     <SettingsPanel>
-      <SettingsHeader title="General" className="phone:hidden" />
+      <SettingsHeader
+        title="General"
+        className={mergeStylexOverrideClassName("", sx.phoneHidden)}
+      />
       <OrganizationProfileSection />
     </SettingsPanel>
   );

@@ -119,7 +119,8 @@ describe("SubagentRows", () => {
 
     expect(html).toContain("Worker pr, subagent, Merged");
     expect(html).toContain('title="PR merged"');
-    expect(html).toContain("text-purple");
+    // The merged tone rides a StyleX registered override marker (sx-styles-*).
+    expect(html).toMatch(/class="sx-styles-[a-z0-9]+"/);
   });
 
   test("opens and archives the exact child session", () => {

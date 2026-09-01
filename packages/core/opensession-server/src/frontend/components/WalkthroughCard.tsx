@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { SessionWalkthrough } from "../lib/types";
@@ -14,6 +16,233 @@ import { ease } from "../ui/motion";
 import { IconChevronDown, IconPlay, IconPlayRectangle } from "./icons";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { openLightbox, type LightboxItem } from "../lib/media-lightbox";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  M1: {
+    margin: "calc(4px * -1)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  p1: {
+    padding: "4px",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  fontSans: {
+    fontFamily: "var(--sans)",
+  },
+  leading5: {
+    lineHeight: "calc(4px * 5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBgHover40: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "color-mix(in oklab, var(--hover) 40%, transparent)",
+      },
+    },
+  },
+  flexShrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  maxW40: {
+    maxWidth: "calc(4px * 40)",
+  },
+  flexShrink: {
+    flexShrink: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  leading4: {
+    lineHeight: "calc(4px * 4)",
+  },
+  phoneMaxW24: {
+    "@media (max-width: 720px)": {
+      maxWidth: "calc(4px * 24)",
+    },
+  },
+  block: {
+    display: "block",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  m0: {
+    margin: "0",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  lineClamp3: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "3",
+  },
+  OverflowWrapAnywhere: {
+    overflowWrap: "anywhere",
+  },
+  TextWrapPretty: {
+    textWrap: "pretty",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  grid: {
+    display: "grid",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+  bgBlack25: {
+    backgroundColor: "color-mix(in oklab, var(--color-black) 25%, transparent)",
+  },
+  textWhite: {
+    color: "var(--color-white)",
+  },
+  ml05: {
+    marginLeft: "calc(4px * 0.5)",
+  },
+  px05: {
+    paddingInline: "calc(4px * 0.5)",
+  },
+  mb15: {
+    marginBottom: "calc(4px * 1.5)",
+  },
+  maxW68ch: {
+    maxWidth: "68ch",
+  },
+  minH5: {
+    minHeight: "calc(4px * 5)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  size15: {
+    width: "calc(4px * 1.5)",
+    height: "calc(4px * 1.5)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgBlue: {
+    backgroundColor: "var(--blue)",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  pb2: {
+    paddingBottom: "calc(4px * 2)",
+  },
+  relative: {
+    position: "relative",
+  },
+  wFull: {
+    width: "100%",
+  },
+  cursorZoomIn: {
+    cursor: "zoom-in",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  p0: {
+    padding: "0",
+  },
+  transitionFilter: {
+    transitionProperty: "filter",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+});
 
 /** Stream server-side media (staged under the uploads dir) through the
  *  existing scoped media route — same URL shape MessageBubble uses. */
@@ -40,7 +269,7 @@ const mediaUrl = (path: string) => `/media?path=${encodeURIComponent(path)}`;
  */
 const SHOT_LABEL = cn(
   WALKTHROUGH_LABEL_CLASS,
-  "pointer-events-none absolute left-2 top-2",
+  utilityClassName("pointer-events-none absolute left-2 top-2"),
 );
 
 /**
@@ -134,7 +363,9 @@ export function WalkthroughCard({
   // shows a picture and a half.
   const fill = gallery.items.length <= 2;
   const tile =
-    gallery.items.length <= 4 ? "w-40 desktop:w-64" : "w-40 desktop:w-56";
+    gallery.items.length <= 4
+      ? utilityClassName("w-40 desktop:w-64")
+      : utilityClassName("w-40 desktop:w-56");
 
   // What a folded tile does with a picture that is not the shape of the tile.
   // Cropping to 16/10 is honest for a landscape screenshot and useless for a
@@ -168,10 +399,10 @@ export function WalkthroughCard({
       };
     return {
       className: cn(
-        "max-w-full",
+        utilityClassName("max-w-full"),
         fill
-          ? "[--tile-h:320px] desktop:[--tile-h:384px]"
-          : "[--tile-h:100px] desktop:[--tile-h:160px]",
+          ? utilityClassName("[--tile-h:320px] desktop:[--tile-h:384px]")
+          : utilityClassName("[--tile-h:100px] desktop:[--tile-h:160px]"),
       ),
       style: {
         height: "var(--tile-h)",
@@ -185,19 +416,24 @@ export function WalkthroughCard({
       className={cn(
         // White in light mode, with only a close edge shadow. The walkthrough
         // should read as finished proof, not a panel floating over the transcript.
-        "rounded-xl border border-line/60 bg-surface p-4 smooth-shadow-xs",
+        utilityClassName(
+          "rounded-xl border border-line/60 bg-surface p-4 smooth-shadow-xs",
+        ),
         // In the session the card is a transcript block like any other, so it
         // takes the same centered reading column the turns and footers use
         // (mx-auto + --session-col) instead of spanning the whole pane. It
         // trails more space than it leads: unlike the neighbouring blocks
         // it ends in media, which otherwise butts straight into the next
         // message.
-        session && "mx-auto mb-6 mt-2 w-full max-w-[var(--session-col)]",
-        !session && "mb-4",
+        session &&
+          utilityClassName(
+            "mx-auto mb-6 mt-2 w-full max-w-[var(--session-col)]",
+          ),
+        !session && utilityClassName("mb-4"),
       )}
     >
       {session ? (
-        <div className="flex items-center gap-2">
+        <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
           <button
             type="button"
             aria-expanded={expanded}
@@ -213,17 +449,56 @@ export function WalkthroughCard({
             // and lighting a slab the size of the card. The chevron takes
             // the rest of it, at its own scale — the whole row folds, but
             // the chevron is what a reader is aiming at.
-            className="group -m-1 flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-item-title leading-5 text-dim outline-none transition-colors hover:bg-hover/40 focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+            {...mergeStylexProps(
+              "group focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+              sx.M1,
+              sx.flex,
+              sx.minW0,
+              sx.flex1,
+              sx.cursorPointer,
+              sx.itemsCenter,
+              sx.gap2,
+              sx.roundedControl,
+              sx.border0,
+              sx.bgTransparent,
+              sx.p1,
+              sx.textLeft,
+              sx.fontSans,
+              sx.leading5,
+              sx.textDim,
+              sx.outlineNone,
+              sx.transitionColors,
+              sx.hoverBgHover40,
+              typography.itemTitle,
+            )}
           >
             {/* The walkthrough's own icon leads the line, so the row is
 					    named before it is operated; the chevron trails at the far
 					    edge, where it reads as this card's disclosure rather than
 					    as another indent level in the transcript. */}
-            <IconPlayRectangle size={20} className="flex-shrink-0 text-faint" />
-            <span className="flex-shrink-0 font-semibold text-fg">
+            <IconPlayRectangle
+              size={20}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.flexShrink0,
+                sx.textFaint,
+              )}
+            />
+            <span {...stylex.props(sx.flexShrink0, sx.fontSemibold, sx.textFg)}>
               Walkthrough
             </span>
-            <span className="ml-auto max-w-40 flex-shrink truncate text-label leading-4 text-faint phone:max-w-24">
+            <span
+              {...stylex.props(
+                sx.mlAuto,
+                sx.maxW40,
+                sx.flexShrink,
+                sx.truncate,
+                sx.leading4,
+                sx.textFaint,
+                sx.phoneMaxW24,
+                typography.label,
+              )}
+            >
               {expanded
                 ? walkthrough.publishedAt
                   ? relativeTime(walkthrough.publishedAt)
@@ -232,18 +507,28 @@ export function WalkthroughCard({
             </span>
             <span
               className={cn(
-                "grid size-5 flex-shrink-0 place-items-center leading-none text-faint transition-[transform,color] duration-150 group-hover:text-dim",
-                !expanded && "-rotate-90",
+                utilityClassName(
+                  "grid size-5 flex-shrink-0 place-items-center leading-none text-faint transition-[transform,color] duration-150 group-hover:text-dim",
+                ),
+                !expanded && utilityClassName("-rotate-90"),
               )}
             >
-              <IconChevronDown size={20} className="block" />
+              <IconChevronDown
+                size={20}
+                className={mergeStylexOverrideClassName("", sx.block)}
+              />
             </span>
           </button>
         </div>
       ) : (
-        <div className="mb-2 flex items-center gap-1.5">
-          <IconPlayRectangle size={20} className="text-faint" />
-          <span className="text-xs font-semibold text-dim">Walkthrough</span>
+        <div {...stylex.props(sx.mb2, sx.flex, sx.itemsCenter, sx.gap15)}>
+          <IconPlayRectangle
+            size={20}
+            className={mergeStylexOverrideClassName("", sx.textFaint)}
+          />
+          <span {...stylex.props(sx.textXs, sx.fontSemibold, sx.textDim)}>
+            Walkthrough
+          </span>
         </div>
       )}
 
@@ -255,7 +540,18 @@ export function WalkthroughCard({
           // transcript. Three lines is what the paragraph usually is; the
           // rest of the writeup stays behind the fold, which is what the
           // fold is for.
-          <p className="m-0 mt-2 line-clamp-3 text-supporting leading-5 text-dim [overflow-wrap:anywhere] [text-wrap:pretty]">
+          <p
+            {...stylex.props(
+              sx.m0,
+              sx.mt2,
+              sx.lineClamp3,
+              sx.leading5,
+              sx.textDim,
+              sx.OverflowWrapAnywhere,
+              sx.TextWrapPretty,
+              typography.supporting,
+            )}
+          >
             {lede}
           </p>
         )}
@@ -273,27 +569,36 @@ export function WalkthroughCard({
           // one that runs under the edge reads as "there is more this way".
           <div
             className={cn(
-              "mt-2",
+              utilityClassName("mt-2"),
               !fill &&
-                "-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                utilityClassName(
+                  "-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                ),
             )}
           >
-            <div className={cn("flex items-start gap-4", !fill && "w-max")}>
+            <div
+              className={cn(
+                utilityClassName("flex items-start gap-4"),
+                !fill && utilityClassName("w-max"),
+              )}
+            >
               {walkthrough.video && (
                 <figure
                   className={cn(
-                    "m-0",
+                    utilityClassName("m-0"),
                     isTall("video")
-                      ? "shrink-0"
+                      ? utilityClassName("shrink-0")
                       : fill
-                        ? "min-w-0 flex-1"
-                        : cn("shrink-0", tile),
+                        ? utilityClassName("min-w-0 flex-1")
+                        : cn(utilityClassName("shrink-0"), tile),
                   )}
                 >
                   <button
                     type="button"
                     className={cn(
-                      "relative block cursor-zoom-in overflow-hidden rounded-md border border-line bg-black p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                      utilityClassName(
+                        "relative block cursor-zoom-in overflow-hidden rounded-md border border-line bg-black p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                      ),
                       tileBox("video").className,
                     )}
                     style={tileBox("video").style}
@@ -302,8 +607,10 @@ export function WalkthroughCard({
                   >
                     <video
                       className={cn(
-                        "h-full w-full",
-                        ownRatio.video ? "object-contain" : "object-cover",
+                        utilityClassName("h-full w-full"),
+                        ownRatio.video
+                          ? utilityClassName("object-contain")
+                          : utilityClassName("object-cover"),
                       )}
                       src={`${mediaUrl(walkthrough.video)}#t=0.1`}
                       preload="metadata"
@@ -317,8 +624,20 @@ export function WalkthroughCard({
                         )
                       }
                     />
-                    <span className="absolute inset-0 grid place-items-center bg-black/25 text-white">
-                      <IconPlay size={18} className="ml-0.5" />
+                    <span
+                      {...stylex.props(
+                        sx.absolute,
+                        sx.inset0,
+                        sx.grid,
+                        sx.placeItemsCenter,
+                        sx.bgBlack25,
+                        sx.textWhite,
+                      )}
+                    >
+                      <IconPlay
+                        size={18}
+                        className={mergeStylexOverrideClassName("", sx.ml05)}
+                      />
                     </span>
                     {/* After the scrim, so the pill keeps its own contrast
 									    rather than sitting under a wash of black. */}
@@ -333,12 +652,12 @@ export function WalkthroughCard({
               {(walkthrough.shots || []).map((shot, i) => (
                 <div
                   className={cn(
-                    "flex gap-1",
+                    utilityClassName("flex gap-1"),
                     fill &&
                       !(isTall(`${i}:before`) || isTall(`${i}:after`)) &&
-                      "min-w-0 flex-1",
+                      utilityClassName("min-w-0 flex-1"),
                     (!fill || isTall(`${i}:before`) || isTall(`${i}:after`)) &&
-                      "shrink-0",
+                      utilityClassName("shrink-0"),
                   )}
                   key={i}
                 >
@@ -354,12 +673,12 @@ export function WalkthroughCard({
                           // decorative rather than the answer to "what
                           // changed". How wide is `fill`/`tile`, above.
                           className={cn(
-                            "m-0",
+                            utilityClassName("m-0"),
                             isTall(`${i}:${side}`)
-                              ? "shrink-0"
+                              ? utilityClassName("shrink-0")
                               : fill
-                                ? "min-w-0 flex-1"
-                                : cn("shrink-0", tile),
+                                ? utilityClassName("min-w-0 flex-1")
+                                : cn(utilityClassName("shrink-0"), tile),
                           )}
                           key={side}
                         >
@@ -370,7 +689,9 @@ export function WalkthroughCard({
                             // silently letterbox the wide sizes. A narrow
                             // one is sized by height instead (tileBox).
                             className={cn(
-                              "relative block cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                              utilityClassName(
+                                "relative block cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+                              ),
                               tileBox(`${i}:${side}`).className,
                             )}
                             style={tileBox(`${i}:${side}`).style}
@@ -383,10 +704,10 @@ export function WalkthroughCard({
 													    "Open before image preview"s. */}
                             <img
                               className={cn(
-                                "h-full w-full",
+                                utilityClassName("h-full w-full"),
                                 ownRatio[`${i}:${side}`]
-                                  ? "object-contain"
-                                  : "object-cover object-top",
+                                  ? utilityClassName("object-contain")
+                                  : utilityClassName("object-cover object-top"),
                               )}
                               src={mediaUrl(shot[side]!)}
                               alt={`${shot.caption || "Change"} · ${side}`}
@@ -436,37 +757,90 @@ export function WalkthroughCard({
                     opacity: { type: "tween", duration: 0.2, ease },
                   }
             }
-            className={session ? "overflow-hidden" : undefined}
+            className={
+              session ? utilityClassName("overflow-hidden") : undefined
+            }
           >
             {/* No rule under the header: the card is already one surface,
 						    and open, the header and the writeup read as parts of it.
 						    The gap does the separating. */}
-            <div className={cn("space-y-5", session ? "mt-4" : "mt-3")}>
-              <section className="px-0.5">
-                <h3 className="m-0 mb-1.5 text-meta font-semibold leading-4 text-faint">
+            <div
+              className={cn(
+                "space-y-5",
+                session ? utilityClassName("mt-4") : utilityClassName("mt-3"),
+              )}
+            >
+              <section {...stylex.props(sx.px05)}>
+                <h3
+                  {...stylex.props(
+                    sx.m0,
+                    sx.mb15,
+                    sx.fontSemibold,
+                    sx.leading4,
+                    sx.textFaint,
+                    typography.meta,
+                  )}
+                >
                   Summary
                 </h3>
                 <MarkdownBody
                   html={summaryHtml}
-                  className="markdown max-w-[68ch] text-label leading-5 text-dim [overflow-wrap:anywhere] [text-wrap:pretty]"
+                  className={mergeStylexOverrideClassName(
+                    "markdown",
+                    sx.maxW68ch,
+                    sx.leading5,
+                    sx.textDim,
+                    sx.OverflowWrapAnywhere,
+                    sx.TextWrapPretty,
+                    typography.label,
+                  )}
                 />
               </section>
 
               {walkthrough.video && (
-                <figure className="m-0">
-                  <figcaption className="mb-2 flex min-h-5 items-center gap-2 px-0.5 text-xs font-medium text-fg">
-                    <span className="size-1.5 flex-shrink-0 rounded-full bg-blue" />
-                    <span className="flex-shrink-0">Demo</span>
+                <figure {...stylex.props(sx.m0)}>
+                  <figcaption
+                    {...stylex.props(
+                      sx.mb2,
+                      sx.flex,
+                      sx.minH5,
+                      sx.itemsCenter,
+                      sx.gap2,
+                      sx.px05,
+                      sx.textXs,
+                      sx.fontMedium,
+                      sx.textFg,
+                    )}
+                  >
+                    <span
+                      {...stylex.props(
+                        sx.size15,
+                        sx.flexShrink0,
+                        sx.roundedFull,
+                        sx.bgBlue,
+                      )}
+                    />
+                    <span {...stylex.props(sx.flexShrink0)}>Demo</span>
                     {walkthrough.videoTitle && (
-                      <span className="min-w-0 truncate font-normal text-faint">
+                      <span
+                        {...stylex.props(
+                          sx.minW0,
+                          sx.truncate,
+                          sx.fontNormal,
+                          sx.textFaint,
+                        )}
+                      >
                         {walkthrough.videoTitle}
                       </span>
                     )}
                   </figcaption>
                   <video
                     className={cn(
-                      "w-full rounded-md bg-black shadow-[0_0_0_1px_var(--border)]",
-                      session && "max-h-[60vh] object-contain",
+                      utilityClassName(
+                        "w-full rounded-md bg-black shadow-[0_0_0_1px_var(--border)]",
+                      ),
+                      session &&
+                        utilityClassName("max-h-[60vh] object-contain"),
                     )}
                     src={mediaUrl(walkthrough.video)}
                     controls
@@ -481,22 +855,35 @@ export function WalkthroughCard({
                 return (
                   <section key={i}>
                     {shot.caption && (
-                      <h3 className="m-0 px-0.5 pb-2 text-xs font-medium leading-5 text-fg">
+                      <h3
+                        {...stylex.props(
+                          sx.m0,
+                          sx.px05,
+                          sx.pb2,
+                          sx.textXs,
+                          sx.fontMedium,
+                          sx.leading5,
+                          sx.textFg,
+                        )}
+                      >
                         {shot.caption}
                       </h3>
                     )}
                     <div
                       className={cn(
-                        "grid gap-2.5",
+                        utilityClassName("grid gap-2.5"),
                         paired
-                          ? "grid-cols-2 phone:grid-cols-1"
-                          : "grid-cols-1",
+                          ? utilityClassName("grid-cols-2 phone:grid-cols-1")
+                          : utilityClassName("grid-cols-1"),
                       )}
                     >
                       {(["before", "after"] as const).map(
                         (side) =>
                           shot[side] && (
-                            <figure className="m-0 min-w-0" key={side}>
+                            <figure
+                              {...stylex.props(sx.m0, sx.minW0)}
+                              key={side}
+                            >
                               <button
                                 type="button"
                                 // The hairline is the edge of the picture, not a
@@ -504,14 +891,33 @@ export function WalkthroughCard({
                                 // UI ends nowhere on a white card. The folded
                                 // tiles and the demo video above carry the same
                                 // one, so open is where it was missing.
-                                className="relative flex w-full cursor-zoom-in items-start justify-center overflow-hidden rounded-md border border-line bg-surface p-0 text-left outline-none transition-[filter] hover:brightness-[0.98] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]"
+                                {...mergeStylexProps(
+                                  "hover:brightness-[0.98] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]",
+                                  sx.relative,
+                                  sx.flex,
+                                  sx.wFull,
+                                  sx.cursorZoomIn,
+                                  sx.itemsStart,
+                                  sx.justifyCenter,
+                                  sx.overflowHidden,
+                                  sx.roundedMd,
+                                  sx.border,
+                                  sx.borderLine,
+                                  sx.bgSurface,
+                                  sx.p0,
+                                  sx.textLeft,
+                                  sx.outlineNone,
+                                  sx.transitionFilter,
+                                )}
                                 onClick={(event) =>
                                   open(`${i}:${side}`, event.currentTarget)
                                 }
                               >
                                 <img
                                   className={cn(
-                                    "block object-contain object-top",
+                                    utilityClassName(
+                                      "block object-contain object-top",
+                                    ),
                                     // A cap on HEIGHT costs a PORTRAIT shot its
                                     // width too: a phone screenshot is about
                                     // twice as tall as it is wide, so every
@@ -520,7 +926,9 @@ export function WalkthroughCard({
                                     // ~120px across — a column of grey. 384
                                     // still leaves the pair, the writeup above
                                     // it and the next block in view.
-                                    session ? "max-h-96 max-w-full" : "w-full",
+                                    session
+                                      ? utilityClassName("max-h-96 max-w-full")
+                                      : utilityClassName("w-full"),
                                   )}
                                   src={mediaUrl(shot[side]!)}
                                   alt={`${shot.caption || "change"} · ${side}`}

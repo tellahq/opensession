@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 /**
  * Copy-to-clipboard feedback primitives.
  *
@@ -16,6 +17,23 @@ import { MIN_ICON_SIZE } from "../components/icons";
 import { copyToClipboard, shareOrCopyLink } from "../lib/share-link";
 import { cn } from "./cn";
 import { toast as fireToast } from "./toast";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  colStart1: {
+    gridColumnStart: "1",
+  },
+  rowStart1: {
+    gridRowStart: "1",
+  },
+  grid: {
+    display: "grid",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+});
 
 /**
  * A checkmark that draws itself on mount — the shared "success" gesture used by
@@ -83,7 +101,10 @@ export function CopyCheck({
   const box = Math.max(size, MIN_ICON_SIZE);
   return (
     <span
-      className={cn("relative inline-grid place-items-center", className)}
+      className={cn(
+        utilityClassName("relative inline-grid place-items-center"),
+        className,
+      )}
       style={{ width: box, height: box }}
     >
       <AnimatePresence initial={false} mode="popLayout">
@@ -91,7 +112,9 @@ export function CopyCheck({
           <motion.span
             key="check"
             className={cn(
-              "col-start-1 row-start-1 grid place-items-center text-green",
+              utilityClassName(
+                "col-start-1 row-start-1 grid place-items-center text-green",
+              ),
               checkClassName,
             )}
             initial={{ opacity: 0, scale: 0.4, rotate: -12 }}
@@ -104,7 +127,12 @@ export function CopyCheck({
         ) : (
           <motion.span
             key="idle"
-            className="col-start-1 row-start-1 grid place-items-center"
+            {...stylex.props(
+              sx.colStart1,
+              sx.rowStart1,
+              sx.grid,
+              sx.placeItemsCenter,
+            )}
             initial={{ opacity: 0, scale: 0.6 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.6 }}

@@ -1,3 +1,4 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
 import type { ReactNode, Ref } from "react";
 import { createPortal } from "react-dom";
 import { BASE_PATH } from "../../lib/base";
@@ -34,6 +35,96 @@ import { RepoBar } from "../RepoBar";
 import { RepoTile } from "../RepoTile";
 import { SandboxBadge } from "../SandboxBadge";
 import { SessionRelations, type RelatedSession } from "../SessionRelations";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  Rotate90: {
+    rotate: "calc(90deg * -1)",
+  },
+  Mx1: {
+    marginInline: "calc(4px * -1)",
+  },
+  Ml1: {
+    marginLeft: "calc(4px * -1)",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  size6: {
+    width: "calc(4px * 6)",
+    height: "calc(4px * 6)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  durationVarDurMicro: {
+    transitionDuration: "var(--dur-micro)",
+  },
+  easeVarEase: {
+    transitionTimingFunction: "var(--ease)",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  flexNone: {
+    flex: "none",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+});
 
 interface SessionHeaderProps {
   session: UnifiedSession;
@@ -102,9 +193,19 @@ export function SessionHeader({
           // switch/attach menu: scratch names the feed it came from,
           // an Ask session with the repo turned off says so.
           (session.repoLess ? (
-            <span className="flex min-w-0 items-center gap-1.5">
+            <span
+              {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap15)}
+            >
               <span
-                className="flex min-w-0 items-center gap-1.5 text-label font-medium text-dim"
+                {...stylex.props(
+                  sx.flex,
+                  sx.minW0,
+                  sx.itemsCenter,
+                  sx.gap15,
+                  sx.fontMedium,
+                  sx.textDim,
+                  typography.label,
+                )}
                 title={
                   session.mode === "scratch"
                     ? "Scratch session · no repo"
@@ -116,9 +217,16 @@ export function SessionHeader({
                     name={session.externalRefs?.[0]?.kind || "scratch"}
                   />
                 ) : (
-                  <IconEye size={16} className="shrink-0 text-faint" />
+                  <IconEye
+                    size={16}
+                    className={mergeStylexOverrideClassName(
+                      "",
+                      sx.shrink0,
+                      sx.textFaint,
+                    )}
+                  />
                 )}
-                <span className="truncate">
+                <span {...stylex.props(sx.truncate)}>
                   {session.mode === "scratch"
                     ? session.externalRefs?.[0]?.kind || "scratch"
                     : "No repo"}
@@ -126,7 +234,12 @@ export function SessionHeader({
               </span>
               <IconChevronDown
                 size={18}
-                className="shrink-0 -rotate-90 text-faint"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.shrink0,
+                  sx.Rotate90,
+                  sx.textFaint,
+                )}
               />
             </span>
           ) : (
@@ -153,7 +266,13 @@ export function SessionHeader({
             </button>
             <IconChevronDown
               size={18}
-              className="-mx-1 shrink-0 -rotate-90 text-faint"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.Mx1,
+                sx.shrink0,
+                sx.Rotate90,
+                sx.textFaint,
+              )}
               aria-hidden="true"
             />
           </>
@@ -163,7 +282,11 @@ export function SessionHeader({
             <Button
               variant="ghost"
               size="md"
-              className="shrink-0 text-dim"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.shrink0,
+                sx.textDim,
+              )}
               icon={<IconArchive size={20} aria-hidden />}
               disabled={archiving}
               onClick={onArchive}
@@ -229,7 +352,12 @@ export function SessionHeader({
         {session.source !== "opensession" &&
           (brandLogo(session.source) ? (
             <span
-              className="flex shrink-0 items-center text-faint"
+              {...stylex.props(
+                sx.flex,
+                sx.shrink0,
+                sx.itemsCenter,
+                sx.textFaint,
+              )}
               title={`From ${sessionSourceName(session.source)}`}
               aria-label={`From ${sessionSourceName(session.source)}`}
               role="img"
@@ -249,7 +377,21 @@ export function SessionHeader({
           <Tooltip label={`Automation · ${session.automation}`} side="bottom">
             <a
               href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
-              className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover hover:text-fg"
+              {...stylex.props(
+                sx.Ml1,
+                sx.inlineFlex,
+                sx.size6,
+                sx.shrink0,
+                sx.itemsCenter,
+                sx.justifyCenter,
+                sx.roundedControl,
+                sx.textFaint,
+                sx.transitionColors,
+                sx.durationVarDurMicro,
+                sx.easeVarEase,
+                sx.hoverBgHover,
+                sx.hoverTextFg,
+              )}
               aria-label={`Open ${session.automation} automation settings`}
             >
               <IconRobot size={18} />
@@ -257,7 +399,15 @@ export function SessionHeader({
           </Tooltip>
         ) : sessionWasAgentStarted(session) ? (
           <span
-            className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center text-faint"
+            {...stylex.props(
+              sx.Ml1,
+              sx.inlineFlex,
+              sx.size6,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.textFaint,
+            )}
             role="img"
             aria-label="Started by an agent"
             title="Started by an agent"
@@ -292,7 +442,15 @@ export function SessionHeader({
             gap rather than the row's 10px and read as one pair, and the pair
             is pulled in a little because each button already pads its glyph. */}
         {!isPhone && (
-          <div className="-ml-1 flex flex-none items-center gap-0.5">
+          <div
+            {...stylex.props(
+              sx.Ml1,
+              sx.flex,
+              sx.flexNone,
+              sx.itemsCenter,
+              sx.gap05,
+            )}
+          >
             {menu}
             {menuTrailing}
             {/* With no tab strip on screen the affordance to spawn a sibling
@@ -320,7 +478,11 @@ export function SessionHeader({
                   <Button
                     variant="ghost"
                     size="md"
-                    className="flex-none rounded-control"
+                    className={mergeStylexOverrideClassName(
+                      "",
+                      sx.flexNone,
+                      sx.roundedControl,
+                    )}
                     onClick={(event) => {
                       const animate =
                         event.detail > 0 &&

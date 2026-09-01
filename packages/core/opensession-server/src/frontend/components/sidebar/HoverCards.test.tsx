@@ -188,14 +188,17 @@ describe("hover cards drop the repo and the idle timestamp", () => {
       />,
     );
     for (const html of [preview, callout]) {
-      expect(html).toContain("text-meta");
-      expect(html).not.toContain("text-supporting");
-      expect(html).not.toContain("text-xs");
+      // The compact metadata size is the type-meta token (inline var under
+      // StyleX), not supporting or xs.
+      expect(html).toContain("var(--type-meta)");
+      expect(html).not.toContain("var(--type-supporting)");
+      expect(html).not.toContain("font-size:0.75rem");
     }
     expect(callout).toContain(
       'title="The model is unavailable. Send the prompt again.">The model is unavailable.</div>',
     );
-    expect(callout).toContain("line-clamp-2");
+    // StyleX: the two-line fold renders as the -webkit-line-clamp declaration.
+    expect(callout).toContain("-webkit-line-clamp:2");
     expect(callout).not.toContain("Last run failed");
 
     const retrying = renderToStaticMarkup(
@@ -270,7 +273,9 @@ describe("workspace PR status marks", () => {
       />,
     );
     expect(html).toContain('title="PR merged"');
-    expect(html).toContain("text-purple");
+    // The merged tone is the StyleX purple entry, carried as a registered
+    // override marker (sx-styles-*) on the icon at test time.
+    expect(html).toMatch(/class="sx-styles-[a-z0-9]+"/);
     expect(html).not.toContain("text-faint");
   });
 

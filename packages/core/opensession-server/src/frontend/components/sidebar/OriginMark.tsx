@@ -1,6 +1,26 @@
 import { BrandMark } from "../BrandMark";
 import { brandLogo } from "../../brand-logos";
 import { sessionSourceName } from "../../lib/brand";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  ml1: {
+    marginLeft: "4px",
+  },
+  flex: {
+    display: "flex",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+});
 
 /**
  * Where this row came from, when it came from somewhere else: a Slack thread,
@@ -22,7 +42,13 @@ export function OriginMark({ source }: { source?: string | null }) {
   const label = `From ${sessionSourceName(source)}`;
   return (
     <span
-      className="ml-1 flex shrink-0 items-center text-faint"
+      {...stylex.props(
+        sx.ml1,
+        sx.flex,
+        sx.shrink0,
+        sx.itemsCenter,
+        sx.textFaint,
+      )}
       role="img"
       aria-label={label}
       title={label}

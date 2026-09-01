@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 /**
  * Class strings shared by the sidebar's row families, kept out of the
  * components so Sidebar, SidebarItem, FeedRows and PrRow can all wear the same
@@ -126,8 +127,9 @@ export const SIDEBAR_DENSITY_VARS =
  * other — and a truncating title faded out 14px short of that seam, which read
  * as the sidebar running out of room rather than as a margin.
  */
-export const SIDEBAR_NAV_X =
-  "[--sidebar-nav-x:6px] desktop:[--sidebar-nav-x:10px]";
+export const SIDEBAR_NAV_X = utilityClassName(
+  "[--sidebar-nav-x:6px] desktop:[--sidebar-nav-x:10px]",
+);
 
 /**
  * The left padding a box inside that inset takes to put its leading mark back
@@ -140,10 +142,12 @@ export const SIDEBAR_NAV_X =
  * padding overrides it); the headings, which only re-inset on desktop, take
  * the prefixed one.
  */
-export const SIDEBAR_RAIL_PAD =
-  "pl-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,6px))]";
-export const SIDEBAR_RAIL_PAD_DESKTOP =
-  "desktop:pl-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,6px))]";
+export const SIDEBAR_RAIL_PAD = utilityClassName(
+  "pl-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,6px))]",
+);
+export const SIDEBAR_RAIL_PAD_DESKTOP = utilityClassName(
+  "desktop:pl-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,6px))]",
+);
 
 /**
  * The sidebar's leading column. Every row and group header opens with one of
@@ -155,8 +159,9 @@ export const SIDEBAR_RAIL_PAD_DESKTOP =
  * resizing them: the group dot and RepoTile are also dropdown option icons,
  * where a 22px box would be wrong.
  */
-export const SIDEBAR_RAIL =
-  "relative flex size-[22px] flex-[0_0_22px] items-center justify-center";
+export const SIDEBAR_RAIL = utilityClassName(
+  "relative flex size-[22px] flex-[0_0_22px] items-center justify-center",
+);
 
 /**
  * The air between that rail and the title after it — one value, shared by
@@ -171,7 +176,7 @@ export const SIDEBAR_RAIL =
  * closed up. Tightening the shared gap keeps that difference where it belongs
  * (inside the rail, centred) instead of adding to it.
  */
-export const SIDEBAR_RAIL_GAP = "gap-[7px]";
+export const SIDEBAR_RAIL_GAP = utilityClassName("gap-[7px]");
 
 /**
  * ── Containers ──────────────────────────────────────────────────────────────
@@ -194,19 +199,23 @@ export const SIDEBAR_RAIL_GAP = "gap-[7px]";
  * queries this box for its candidate rows, and an attribute says "hook" where a
  * class name would read as styling.
  */
-export const SIDEBAR_LIST =
-  "flex-none overflow-y-visible px-3 pt-px pb-0 desktop:px-[var(--sidebar-nav-x)]";
+export const SIDEBAR_LIST = utilityClassName(
+  "flex-none overflow-y-visible px-3 pt-px pb-0 desktop:px-[var(--sidebar-nav-x)]",
+);
 
 /**
  * Bands that are siblings of the workspace list (Automations, People) but
  * participate in the sidebar's single scroll flow rather than creating nested
  * scroll panes.
  */
-export const SIDEBAR_INDEPENDENT_SECTION =
-  "block min-w-0 flex-none mx-3 desktop:mx-[var(--sidebar-nav-x)]";
+export const SIDEBAR_INDEPENDENT_SECTION = utilityClassName(
+  "block min-w-0 flex-none mx-3 desktop:mx-[var(--sidebar-nav-x)]",
+);
 
 /** The scroll flow inside one of those bands — visible, not a nested pane. */
-export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
+export const SIDEBAR_INDEPENDENT_SCROLL = utilityClassName(
+  "min-w-0 overflow-y-visible pb-1.5",
+);
 
 /**
  * A hover painted as a background LAYER rather than a background colour — the
@@ -231,8 +240,9 @@ export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
  * The one thing this is NOT for is an action chip floating over a row — see
  * {@link SIDEBAR_ROW_CHIP}.
  */
-export const SIDEBAR_HOVER_LAYER =
-  "hover:bg-[image:linear-gradient(var(--hover),var(--hover))]";
+export const SIDEBAR_HOVER_LAYER = utilityClassName(
+  "hover:bg-[image:linear-gradient(var(--hover),var(--hover))]",
+);
 
 /**
  * The pin/archive chip's hover — the deliberate exception to the wash.
@@ -245,10 +255,10 @@ export const SIDEBAR_HOVER_LAYER =
  * of through its alpha, and it is never more see-through than the sidebar it
  * sits on.
  */
-export const SIDEBAR_ROW_CHIP = "hover:bg-[var(--row-chip)]";
+export const SIDEBAR_ROW_CHIP = utilityClassName("hover:bg-[var(--row-chip)]");
 
 /** A top-level group in the workspace list, and the gap after it. */
-export const SIDEBAR_GROUP = "mb-[var(--sidebar-group-gap)]";
+export const SIDEBAR_GROUP = utilityClassName("mb-[var(--sidebar-group-gap)]");
 
 /**
  * A status lane. Consecutive lanes open with 8px of their own, which was an
@@ -264,12 +274,13 @@ export const SIDEBAR_STATUS_GROUP = "[[data-status-group]+&]:mt-2";
  * the pointer wears a pill + accent ring, and lanes that only materialized for
  * the drag (they were empty) sit dimmed.
  */
-export const SIDEBAR_LANE_EMPTY = "opacity-55";
-export const SIDEBAR_LANE_DROP_HOVER =
-  "rounded-row bg-pressed opacity-100 shadow-[inset_0_0_0_1px_var(--accent,#6b8afd)]";
+export const SIDEBAR_LANE_EMPTY = utilityClassName("opacity-55");
+export const SIDEBAR_LANE_DROP_HOVER = utilityClassName(
+  "rounded-row bg-pressed opacity-100 shadow-[inset_0_0_0_1px_var(--accent,#6b8afd)]",
+);
 
 /** The drag-to-reorder wrapper around each Pinned row (Motion Reorder.Item). */
-export const SIDEBAR_PIN_ENTRY = "relative";
+export const SIDEBAR_PIN_ENTRY = utilityClassName("relative");
 
 /**
  * While a row is being dragged it floats over its neighbours, so it needs a
@@ -282,8 +293,9 @@ export const SIDEBAR_PIN_ENTRY = "relative";
  * pointer. Every entry wears it while any drag is in flight, which is what the
  * list-level selector did — so the list needs no class of its own.
  */
-export const SIDEBAR_PIN_ENTRY_DRAGGING =
-  "z-[5] rounded-row bg-bg smooth-shadow-ring-sm";
+export const SIDEBAR_PIN_ENTRY_DRAGGING = utilityClassName(
+  "z-[5] rounded-row bg-bg smooth-shadow-ring-sm",
+);
 export const SIDEBAR_PIN_DRAG_ACTIVE = "[&>*]:pointer-events-none";
 
 /**
@@ -303,7 +315,9 @@ export const SIDEBAR_PIN_DRAG_ACTIVE = "[&>*]:pointer-events-none";
  * arbitrary rather than `text-xs` because it is the tile's geometry — it tracks
  * the 18px box, not the sidebar's type scale.
  */
-export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
+export const SIDEBAR_REPO_TILE = utilityClassName(
+  "size-[18px] shrink-0 text-meta",
+);
 
 /**
  * ── Group headers ───────────────────────────────────────────────────────────
@@ -327,7 +341,9 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
    pixel between them is what says so; taken all the way down to the label step
    it stopped reading as the same app as the transcript. On a phone the sidebar
    IS the page, so its rows are the thing being read and stay at body. */
-export const SIDEBAR_GROUP_HEADER = `group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent font-medium tracking-[0px] text-dim hover:text-fg`;
+export const SIDEBAR_GROUP_HEADER = utilityClassName(
+  `group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent font-medium tracking-[0px] text-dim hover:text-fg`,
+);
 
 /**
  * A FULL-LINE heading — a repo or feed band, an automation group, Archived.
@@ -345,11 +361,14 @@ export const SIDEBAR_GROUP_HEADER = `group/gh flex w-full items-center ${SIDEBAR
  * Desktop only. On phones the heading keeps the taller tap box its own inset
  * gives it.
  */
-export const SIDEBAR_HEADER_ROW =
-  "text-body desktop:h-[var(--sidebar-line-h)] desktop:min-h-[var(--sidebar-line-h)] desktop:text-item-title";
+export const SIDEBAR_HEADER_ROW = utilityClassName(
+  "text-body desktop:h-[var(--sidebar-line-h)] desktop:min-h-[var(--sidebar-line-h)] desktop:text-item-title",
+);
 
 /** Left pad puts the icon on the shared rail, whatever the list's inset is. */
-export const SIDEBAR_GROUP_HEADER_INSET = `pt-[11px] pr-1 pb-[11px] pl-1 desktop:pt-1 desktop:pr-1.5 desktop:pb-1 ${SIDEBAR_RAIL_PAD_DESKTOP}`;
+export const SIDEBAR_GROUP_HEADER_INSET = utilityClassName(
+  `pt-[11px] pr-1 pb-[11px] pl-1 desktop:pt-1 desktop:pr-1.5 desktop:pb-1 ${SIDEBAR_RAIL_PAD_DESKTOP}`,
+);
 
 /**
  * Status lanes, inbox bands and Snoozed — the groups nested inside a list or a
@@ -366,29 +385,33 @@ export const SIDEBAR_GROUP_HEADER_INSET = `pt-[11px] pr-1 pb-[11px] pl-1 desktop
  * like an item, and a list of five lanes then presented five clickable-looking
  * rows that lead nowhere between the rows that do.
  */
-export const SIDEBAR_LANE_HEADER =
-  "gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1";
+export const SIDEBAR_LANE_HEADER = utilityClassName(
+  "gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1",
+);
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
  * of overflow rules that makes the ellipsis, and a min-width of 0 is what lets
  * a flex child shrink far enough to need one.
  */
-export const SIDEBAR_GROUP_NAME = "min-w-0 truncate text-left";
+export const SIDEBAR_GROUP_NAME = utilityClassName(
+  "min-w-0 truncate text-left",
+);
 
 /**
  * Phone lane captions keep a slight 2px inset for arm's-length reading.
  * Desktop captions sit directly on the header's content rail, while the hover
  * pill still runs the sidebar's full width.
  */
-export const SIDEBAR_LANE_NAME = "pl-0.5 desktop:pl-0";
+export const SIDEBAR_LANE_NAME = utilityClassName("pl-0.5 desktop:pl-0");
 
 /**
  * The collapse chevron. Revealed by the header's hover, and rotated to mark the
  * collapsed state by the call site's inline transform.
  */
-export const SIDEBAR_GROUP_CHEVRON =
-  "shrink-0 text-faint opacity-0 transition-[transform,opacity] group-hover/gh:text-fg group-hover/gh:opacity-100";
+export const SIDEBAR_GROUP_CHEVRON = utilityClassName(
+  "shrink-0 text-faint opacity-0 transition-[transform,opacity] group-hover/gh:text-fg group-hover/gh:opacity-100",
+);
 
 /**
  * A collapsed heading keeps its chevron out of hover. Expanded, the rows below
@@ -401,7 +424,7 @@ export const SIDEBAR_GROUP_CHEVRON =
  * loud. Muting the label instead would say the opposite of what is true: a
  * collapsed group is hiding work, which is worth more attention, not less.
  */
-export const SIDEBAR_GROUP_CHEVRON_COLLAPSED = "opacity-100";
+export const SIDEBAR_GROUP_CHEVRON_COLLAPSED = utilityClassName("opacity-100");
 
 /**
  * The count on a group or band heading. Written phone-first for the same
@@ -420,17 +443,19 @@ export const SIDEBAR_GROUP_CHEVRON_COLLAPSED = "opacity-100";
  * numeral has no ascender, so the same nominal gap costs it more than it costs
  * a word.
  */
-export const SIDEBAR_GROUP_COUNT = "font-medium text-faint";
+export const SIDEBAR_GROUP_COUNT = utilityClassName("font-medium text-faint");
 
 /**
  * The same count on a status-lane heading. Identical to
  * {@link SIDEBAR_GROUP_COUNT} today and kept as its own name because the two
  * headings are free to diverge; neither sets a size.
  */
-export const SIDEBAR_LANE_COUNT = "font-medium text-faint";
+export const SIDEBAR_LANE_COUNT = utilityClassName("font-medium text-faint");
 
 /** The 7px liveness dot a lane or automation heading leads with. */
-export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
+export const SIDEBAR_GROUP_DOT = utilityClassName(
+  "size-[7px] shrink-0 rounded-full opacity-85",
+);
 
 /* The 22px glyph a top-level heading used to lead with is gone: Needs review,
    Approved, Awaiting review and Pinned are groupings rather than
@@ -465,9 +490,15 @@ export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
  * as a second, already-lit control rather than as the row's own hover.
  */
 export const SIDEBAR_AUTO_COG =
-  "relative -my-1 ml-auto hidden w-6 shrink-0 cursor-pointer items-center justify-center self-stretch text-dim group-hover/gh:inline-flex hover:text-fg " +
-  "before:absolute before:top-1/2 before:left-1/2 before:z-0 before:size-7 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-[calc(6px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-pressed " +
-  "after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] " +
+  utilityClassName(
+    "relative -my-1 ml-auto hidden w-6 shrink-0 cursor-pointer items-center justify-center self-stretch text-dim group-hover/gh:inline-flex hover:text-fg ",
+  ) +
+  utilityClassName(
+    "before:absolute before:top-1/2 before:left-1/2 before:z-0 before:size-7 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-[calc(6px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-pressed ",
+  ) +
+  utilityClassName(
+    "after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] ",
+  ) +
   "[&>svg]:relative [&>svg]:z-[1]";
 
 /**
@@ -512,7 +543,9 @@ export const SIDEBAR_AUTOMATION_RUNS = "[--sidebar-icon-left:28px]";
  */
 
 /** Tier 1 — a band heading pinned at the top of the rail. */
-export const SIDEBAR_STICKY_BAND = "desktop:sticky desktop:top-0 desktop:z-20";
+export const SIDEBAR_STICKY_BAND = utilityClassName(
+  "desktop:sticky desktop:top-0 desktop:z-20",
+);
 
 /**
  * One invariant row height for the tier-1 headings, which is what stops the
@@ -528,8 +561,9 @@ export const SIDEBAR_STICKY_BAND = "desktop:sticky desktop:top-0 desktop:z-20";
  * left over is the air a heading wants above the rows it names. It is also
  * what every tier-2 header pins under, so the offsets below start from it.
  */
-export const SIDEBAR_STICKY_BAND_ROW =
-  "desktop:mt-0 desktop:flex desktop:h-[var(--sidebar-band-slot)] desktop:min-h-[var(--sidebar-band-slot)] desktop:items-center desktop:py-0";
+export const SIDEBAR_STICKY_BAND_ROW = utilityClassName(
+  "desktop:mt-0 desktop:flex desktop:h-[var(--sidebar-band-slot)] desktop:min-h-[var(--sidebar-band-slot)] desktop:items-center desktop:py-0",
+);
 
 /**
  * Tier 2: a lane / repo / status header, pinned one band-row lower. Once
@@ -544,7 +578,9 @@ export const SIDEBAR_STICKY_BAND_ROW =
  * rows around them instead of with each other.
  */
 export const SIDEBAR_STICKY_LANE =
-  "desktop:sticky desktop:top-[var(--sidebar-band-slot)] desktop:z-[15] " +
+  utilityClassName(
+    "desktop:sticky desktop:top-[var(--sidebar-band-slot)] desktop:z-[15] ",
+  ) +
   "desktop:data-[stuck]:after:pointer-events-none desktop:data-[stuck]:after:absolute desktop:data-[stuck]:after:top-[calc(100%-8px)] desktop:data-[stuck]:after:left-[-400px] desktop:data-[stuck]:after:right-[-400px] desktop:data-[stuck]:after:z-[-1] desktop:data-[stuck]:after:h-5 desktop:data-[stuck]:after:content-[''] desktop:data-[stuck]:after:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--sidebar-bg),transparent)]";
 
 /**
@@ -559,8 +595,9 @@ export const SIDEBAR_STICKY_LANE =
  * instead of a measurement; spelling it as the sum rather than as either
  * number is what keeps it right at both densities.
  */
-export const SIDEBAR_STICKY_LANE_NESTED =
-  "desktop:top-[calc(var(--sidebar-band-slot)+var(--sidebar-line-h))] desktop:z-[14]";
+export const SIDEBAR_STICKY_LANE_NESTED = utilityClassName(
+  "desktop:top-[calc(var(--sidebar-band-slot)+var(--sidebar-line-h))] desktop:z-[14]",
+);
 
 /**
  * ── Band headings ───────────────────────────────────────────────────────────
@@ -578,7 +615,9 @@ export const SIDEBAR_STICKY_LANE_NESTED =
  * made Automations and Earlier read as two different kinds of thing in the same
  * column.
  */
-export const SIDEBAR_BAND_LABEL = "text-label font-semibold text-dim";
+export const SIDEBAR_BAND_LABEL = utilityClassName(
+  "text-label font-semibold text-dim",
+);
 
 /**
  * The heading's toggle button. Horizontal padding is NOT here: each band sits
@@ -597,14 +636,18 @@ export const SIDEBAR_BAND_TOGGLE =
   // inside the 32px slot SIDEBAR_STICKY_BAND_ROW reserves, so the caption keeps
   // a little air around it without the pinned slot growing. Compact takes the
   // pair to 24 inside 28, which is the same 4px of air.
-  "group/band m-0 flex min-h-[var(--sidebar-cap-h)] w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1 text-left text-inherit [font:inherit] hover:text-fg";
+  utilityClassName(
+    "group/band m-0 flex min-h-[var(--sidebar-cap-h)] w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1 text-left text-inherit [font:inherit] hover:text-fg",
+  );
 
 /**
  * The inset the Automations and People headings take. The desktop value lands
  * the glyphless labels on the same 16px rail as Tools, Workspaces and lane
  * captions. The phone layout keeps its tighter base inset.
  */
-export const SIDEBAR_BAND_TOGGLE_INSET = `pr-1 pl-2 desktop:pr-2 ${SIDEBAR_RAIL_PAD_DESKTOP}`;
+export const SIDEBAR_BAND_TOGGLE_INSET = utilityClassName(
+  `pr-1 pl-2 desktop:pr-2 ${SIDEBAR_RAIL_PAD_DESKTOP}`,
+);
 
 /**
  * The chevron reveals on hover but stays IN LAYOUT at all times (visibility,
@@ -613,10 +656,12 @@ export const SIDEBAR_BAND_TOGGLE_INSET = `pr-1 pl-2 desktop:pr-2 ${SIDEBAR_RAIL_
  * and nudge the whole list below. Reserved-but-hidden costs only trailing
  * space at the row's right edge, which is invisible.
  */
-export const SIDEBAR_BAND_CHEVRON = "invisible shrink-0 text-faint";
+export const SIDEBAR_BAND_CHEVRON = utilityClassName(
+  "invisible shrink-0 text-faint",
+);
 
 /** The band heading's counterpart to {@link SIDEBAR_GROUP_CHEVRON_COLLAPSED}. */
-export const SIDEBAR_BAND_CHEVRON_COLLAPSED = "visible";
+export const SIDEBAR_BAND_CHEVRON_COLLAPSED = utilityClassName("visible");
 
 /**
  * The full-width surface a header paints once it is actually pinned. It uses
@@ -658,8 +703,9 @@ export const SIDEBAR_STUCK_BACKING =
  * the same group in one string would leave the winner to Tailwind's internal
  * ordering rather than to the call site.
  */
-export const SIDEBAR_CHROME_BTN =
-  "shrink-0 items-center justify-center rounded-control text-faint transition-[color,background] hover:bg-hover hover:text-fg";
+export const SIDEBAR_CHROME_BTN = utilityClassName(
+  "shrink-0 items-center justify-center rounded-control text-faint transition-[color,background] hover:bg-hover hover:text-fg",
+);
 
 /**
  * The square icon buttons in the workspace header — the filter and the new
@@ -668,7 +714,9 @@ export const SIDEBAR_CHROME_BTN =
  * by the call site rather than baked in, because the filter button's `active`
  * state paints a stronger wash that hovering must NOT wash back out.
  */
-export const SIDEBAR_HEADER_BTN = "shrink-0 rounded-control font-medium";
+export const SIDEBAR_HEADER_BTN = utilityClassName(
+  "shrink-0 rounded-control font-medium",
+);
 /**
  * Size and type step together, so each viewport carries its whole pair rather
  * than overriding half of the other's. `leading-none` has to sit AFTER the
@@ -676,9 +724,12 @@ export const SIDEBAR_HEADER_BTN = "shrink-0 rounded-control font-medium";
  * as a conflict of `font-size`, so a later type size silently drops an earlier
  * line-height and the glyph starts riding on `normal`.
  */
-export const SIDEBAR_HEADER_BTN_PHONE = "size-[38px] text-[22px] leading-none";
-export const SIDEBAR_HEADER_BTN_DESKTOP =
-  "size-[34px] text-[20px] leading-none";
+export const SIDEBAR_HEADER_BTN_PHONE = utilityClassName(
+  "size-[38px] text-[22px] leading-none",
+);
+export const SIDEBAR_HEADER_BTN_DESKTOP = utilityClassName(
+  "size-[34px] text-[20px] leading-none",
+);
 
 /**
  * The trailing icon button on a band heading (the feed filter). Carries no
@@ -686,8 +737,9 @@ export const SIDEBAR_HEADER_BTN_DESKTOP =
  * `text-*` utilities on one element are decided by Tailwind's internal order,
  * not by which one you wrote last.
  */
-export const SIDEBAR_BAND_ACTION =
-  "ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-control hover:bg-hover hover:text-fg";
+export const SIDEBAR_BAND_ACTION = utilityClassName(
+  "ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-control hover:bg-hover hover:text-fg",
+);
 
 /**
  * The dot a filter button wears while a non-default filter is applied — the
@@ -696,8 +748,9 @@ export const SIDEBAR_BAND_ACTION =
  * `rounded-full` — the one radius spelling base.css does NOT squircle — is the
  * correct spelling here.
  */
-export const SIDEBAR_FILTER_DOT =
-  "relative after:absolute after:top-[5px] after:right-[5px] after:size-1.5 after:rounded-full after:bg-accent after:content-['']";
+export const SIDEBAR_FILTER_DOT = utilityClassName(
+  "relative after:absolute after:top-[5px] after:right-[5px] after:size-1.5 after:rounded-full after:bg-accent after:content-['']",
+);
 
 /**
  * The attention count on a COLLAPSED band — urgent rows must not vanish inside
@@ -708,8 +761,9 @@ export const SIDEBAR_FILTER_DOT =
  * `rounded-full`, not `rounded-[999px]`: the old rule set no corner-shape, and
  * rounded-full is the one radius spelling base.css leaves un-squircled.
  */
-export const SIDEBAR_ATTN_COUNT =
-  "min-w-4 flex-[0_0_auto] rounded-full px-1 text-center text-[10px] leading-4 font-semibold text-white";
+export const SIDEBAR_ATTN_COUNT = utilityClassName(
+  "min-w-4 flex-[0_0_auto] rounded-full px-1 text-center text-[10px] leading-4 font-semibold text-white",
+);
 
 /**
  * ── Workspace rows: the trailing cluster ────────────────────────────────────
@@ -748,7 +802,9 @@ export const SIDEBAR_ATTN_COUNT =
  * title truncates at one place in the rail rather than 12px
  * earlier on the families that share this row.
  */
-export const SIDEBAR_WS_ROW = `flex items-center ${SIDEBAR_RAIL_GAP} hover:pr-[98px]`;
+export const SIDEBAR_WS_ROW = utilityClassName(
+  `flex items-center ${SIDEBAR_RAIL_GAP} hover:pr-[98px]`,
+);
 
 /**
  * Pin + snooze + archive, floated over the row's right edge so revealing them can never
@@ -762,8 +818,9 @@ export const SIDEBAR_WS_ROW = `flex items-center ${SIDEBAR_RAIL_GAP} hover:pr-[9
  * differs between a live row (hover only), a row whose swipe action is open
  * (never) and an archived row on touch (always).
  */
-export const SIDEBAR_WS_ACTIONS =
-  "absolute top-1/2 right-[7px] -translate-y-1/2 items-center gap-1 rounded-sm";
+export const SIDEBAR_WS_ACTIONS = utilityClassName(
+  "absolute top-1/2 right-[7px] -translate-y-1/2 items-center gap-1 rounded-sm",
+);
 
 /**
  * The hover-only reveal. `group-hover` is gated to real hover devices by
@@ -771,7 +828,9 @@ export const SIDEBAR_WS_ACTIONS =
  * rule was for: on touch a sticky first-tap `:hover` would otherwise expose
  * actions that live behind the swipe gesture there.
  */
-export const SIDEBAR_WS_ACTIONS_HOVER = "hidden group-hover:inline-flex";
+export const SIDEBAR_WS_ACTIONS_HOVER = utilityClassName(
+  "hidden group-hover:inline-flex",
+);
 
 /**
  * An archived row carries no swipe gesture — that is a live-row affordance —
@@ -801,7 +860,9 @@ export const SIDEBAR_WS_ACTIONS_TOUCH = "[@media(hover:none)]:inline-flex";
  * three `color` declarations that used to be settled by where their rules sat
  * in the sheet relative to each other.
  */
-export const SIDEBAR_WS_ACTION = `inline-flex size-[var(--sidebar-row-action,26px)] cursor-pointer items-center justify-center rounded-md ${SIDEBAR_ROW_CHIP}`;
+export const SIDEBAR_WS_ACTION = utilityClassName(
+  `inline-flex size-[var(--sidebar-row-action,26px)] cursor-pointer items-center justify-center rounded-md ${SIDEBAR_ROW_CHIP}`,
+);
 
 /**
  * Compact last-activity time. It has no `display` of its own on purpose: as a
@@ -811,13 +872,16 @@ export const SIDEBAR_WS_ACTION = `inline-flex size-[var(--sidebar-row-action,26p
  * `margin-left: auto` has already pushed the pair right — a second auto margin
  * would split the free space and strand one of them mid-row.
  */
-export const SIDEBAR_WS_TIME =
-  "ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta text-faint desktop:min-w-[34px] desktop:pr-1";
+export const SIDEBAR_WS_TIME = utilityClassName(
+  "ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta text-faint desktop:min-w-[34px] desktop:pr-1",
+);
 
 /** Hidden at rest and revealed on row hover. The room for the action cluster is
  *  the row's own (see {@link SIDEBAR_WS_ROW}), so this no longer carries a
  *  margin of its own. Call sites that need an always-visible time omit this. */
-export const SIDEBAR_WS_TIME_HOVER = "hidden group-hover:inline-flex";
+export const SIDEBAR_WS_TIME_HOVER = utilityClassName(
+  "hidden group-hover:inline-flex",
+);
 
 /**
  * Live "in progress" elapsed ticker — it sits where the time badge would, in
@@ -831,8 +895,9 @@ export const SIDEBAR_WS_TIME_HOVER = "hidden group-hover:inline-flex";
  * see formatDuration), so it stays about as wide as the idle time badge it
  * stands in for instead of growing a clock's worth of digits.
  */
-export const SIDEBAR_WS_TICKER =
-  "ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-0.5 text-right text-meta tabular-nums text-yellow group-hover:hidden desktop:min-w-[34px] desktop:pr-1";
+export const SIDEBAR_WS_TICKER = utilityClassName(
+  "ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-0.5 text-right text-meta tabular-nums text-yellow group-hover:hidden desktop:min-w-[34px] desktop:pr-1",
+);
 
 /**
  * Teammates focused on this row's work, as the same overlapping pile used by
@@ -843,7 +908,9 @@ export const SIDEBAR_WS_TICKER =
  * a sidebar-coloured halo through it.
  */
 export const SIDEBAR_WS_FACES =
-  "flex shrink-0 items-center [--sidebar-face-ring:var(--sidebar-bg)] " +
+  utilityClassName(
+    "flex shrink-0 items-center [--sidebar-face-ring:var(--sidebar-bg)] ",
+  ) +
   "group-hover:[--sidebar-face-ring:var(--sidebar-row-hover)] " +
   "group-data-[selected]:[--sidebar-face-ring:var(--sidebar-row-selected)] " +
   "group-hover:group-data-[selected]:[--sidebar-face-ring:var(--sidebar-row-selected-hover)]";
@@ -854,16 +921,18 @@ export const SIDEBAR_WS_FACE = "[&:not(:first-child)]:-ml-1.5";
  * workspace row it pins itself to the right edge, unless a ticker or a snooze
  * countdown already did that pushing.
  */
-export const SIDEBAR_WS_DRAFT =
-  "inline-flex flex-[0_0_auto] items-center text-dim";
+export const SIDEBAR_WS_DRAFT = utilityClassName(
+  "inline-flex flex-[0_0_auto] items-center text-dim",
+);
 
 /**
  * Wake countdown on a snoozed workspace row (moon + "1h"). It stands in for
  * the idle time badge, so it rests in that same right-edge slot, matches its
  * type, and yields to the pin/archive actions like every other trailing badge.
  */
-export const SIDEBAR_WS_SNOOZE =
-  "ml-auto inline-flex flex-[0_0_auto] items-center gap-1 text-meta tabular-nums text-faint group-hover:hidden";
+export const SIDEBAR_WS_SNOOZE = utilityClassName(
+  "ml-auto inline-flex flex-[0_0_auto] items-center gap-1 text-meta tabular-nums text-faint group-hover:hidden",
+);
 
 /**
  * ── Swipe rows ──────────────────────────────────────────────────────────────
@@ -877,7 +946,9 @@ export const SIDEBAR_WS_SNOOZE =
  * class, it is also what lets this name drop out of the hand-written list of
  * legacy classes base.css squircles there.
  */
-export const SIDEBAR_SWIPE_ROW = "relative mt-0.5 overflow-hidden rounded-row";
+export const SIDEBAR_SWIPE_ROW = utilityClassName(
+  "relative mt-0.5 overflow-hidden rounded-row",
+);
 
 /**
  * One revealed action behind the row. Hidden until the gesture opens its side,
@@ -889,15 +960,18 @@ export const SIDEBAR_SWIPE_ACTION =
   // `border-none`, not `border-0`: the latter zeroes the width but leaves
   // the style at Tailwind's `solid` default, where the `border: 0` this
   // replaced computed to `none`. Width resolves to 0 under either.
-  "absolute top-0 bottom-0 z-0 hidden w-[var(--swipe-action-w,82px)] flex-col items-center justify-center gap-0.5 border-none text-meta font-semibold will-change-[width] [&>svg]:shrink-0";
+  utilityClassName(
+    "absolute top-0 bottom-0 z-0 hidden w-[var(--swipe-action-w,82px)] flex-col items-center justify-center gap-0.5 border-none text-meta font-semibold will-change-[width] [&>svg]:shrink-0",
+  );
 
 /** Revealed because the gesture opened this side. Touch only, as above. */
 export const SIDEBAR_SWIPE_ACTION_OPEN = "[@media(hover:none)]:flex";
 
 /** The action grows and shrinks with the finger, except while the finger is
  *  actually down — a transition there would lag the drag by a frame. */
-export const SIDEBAR_SWIPE_ACTION_TRANSITION =
-  "transition-[width] duration-(--dur) ease-(--ease)";
+export const SIDEBAR_SWIPE_ACTION_TRANSITION = utilityClassName(
+  "transition-[width] duration-(--dur) ease-(--ease)",
+);
 
 /**
  * Each side carries its own fill AND its own ink, so exactly one `text-*` ever
@@ -908,17 +982,25 @@ export const SIDEBAR_SWIPE_ACTION_TRANSITION =
  */
 
 /** Destructive, and on the trailing edge because the swipe travels left. */
-export const SIDEBAR_SWIPE_ACTION_ARCHIVE = "right-0 bg-red text-white";
+export const SIDEBAR_SWIPE_ACTION_ARCHIVE = utilityClassName(
+  "right-0 bg-red text-white",
+);
 
 /** Reversible snooze filing on the trailing edge. Quieter than Archive. */
-export const SIDEBAR_SWIPE_ACTION_SNOOZE = "right-0 bg-active text-fg";
+export const SIDEBAR_SWIPE_ACTION_SNOOZE = utilityClassName(
+  "right-0 bg-active text-fg",
+);
 
 /** Pin, on the leading edge. Dark ink: the yellow is too light for white. */
-export const SIDEBAR_SWIPE_ACTION_STAR = "left-0 bg-yellow text-[#17130a]";
+export const SIDEBAR_SWIPE_ACTION_STAR = utilityClassName(
+  "left-0 bg-yellow text-[#17130a]",
+);
 
 /** Already pinned — the same action in the accent, so the swipe reads as a
  *  toggle rather than as a second way to pin. */
-export const SIDEBAR_SWIPE_ACTION_STAR_ON = "left-0 bg-accent text-on-accent";
+export const SIDEBAR_SWIPE_ACTION_STAR_ON = utilityClassName(
+  "left-0 bg-accent text-on-accent",
+);
 
 export const SIDEBAR_STATUS_DOT = {
   /** Yellow to match the "In progress" lane — green means "In review". */

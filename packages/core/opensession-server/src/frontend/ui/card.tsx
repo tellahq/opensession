@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { cn } from "./cn";
 
@@ -25,7 +26,7 @@ export function Card({
       // paints a plate lighter than a fill alone can hold and adds `border`
       // at the call site. That is the documented carve-out and it belongs
       // there, not here. This primitive stays borderless.
-      "rounded-xl bg-panel",
+      utilityClassName("rounded-xl bg-panel"),
       // `as="ul"` is one of the shapes this primitive offers, and the
       // browser's own list styling doesn't know that: a card rendered as a
       // list arrives with 40px of marker indent and 14px of vertical margin,
@@ -42,7 +43,9 @@ export function CardList({ className, ...props }: CardProps) {
   return (
     <Card
       className={cn(
-        "overflow-hidden [&>*+*]:border-t [&>*+*]:border-line",
+        utilityClassName(
+          "overflow-hidden [&>*+*]:border-t [&>*+*]:border-line",
+        ),
         className,
       )}
       {...props}

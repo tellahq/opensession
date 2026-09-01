@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import React, { useEffect, useEffectEvent, useState, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -41,11 +43,205 @@ import {
 } from "../hooks/useCodeDisplaySettings";
 import { PrFileTree } from "./pr/PrFileTree";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  w340px: {
+    width: "340px",
+  },
+  maxWCalc100vw24px: {
+    maxWidth: "calc(100vw - 24px)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  mx2: {
+    marginInline: "calc(4px * 2)",
+  },
+  my15: {
+    marginBlock: "calc(4px * 1.5)",
+  },
+  hPx: {
+    height: "1px",
+  },
+  bgLine: {
+    backgroundColor: "var(--border)",
+  },
+  m4: {
+    margin: "calc(4px * 4)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgYellow15: {
+    backgroundColor: "color-mix(in oklab, var(--yellow) 15%, transparent)",
+  },
+  px7px: {
+    paddingInline: "7px",
+  },
+  pyPx: {
+    paddingBlock: "1px",
+  },
+  fontBold: {
+    fontWeight: "var(--font-weight-bold)",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  ml2: {
+    marginLeft: "calc(4px * 2)",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py05: {
+    paddingBlock: "calc(4px * 0.5)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  h10: {
+    height: "calc(4px * 10)",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px35: {
+    paddingInline: "calc(4px * 3.5)",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  ScrollbarWidthNone: {
+    scrollbarWidth: "none",
+  },
+  sticky: {
+    position: "sticky",
+  },
+  topVarDiffPanelTop0px: {
+    top: "var(--diff-panel-top,0px)",
+  },
+  z2: {
+    zIndex: "2",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  bgPanelSurface: {
+    backgroundColor: "var(--panel-surface)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgFaint20: {
+    backgroundColor: "color-mix(in oklab, var(--text-faint) 20%, transparent)",
+  },
+  px5px: {
+    paddingInline: "5px",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  hFull: {
+    height: "100%",
+  },
+  minH280px: {
+    minHeight: "280px",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  pt12: {
+    paddingTop: "calc(4px * 12)",
+  },
+  pb24: {
+    paddingBottom: "calc(4px * 24)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  h14: {
+    height: "calc(4px * 14)",
+  },
+  w14: {
+    width: "calc(4px * 14)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+});
 
 /* The +/− counts. Kept as constants because CommentableDiff carries the same
    pair on its file rows and group headers, and the two must read alike. */
-const DIFF_ADD = "font-semibold text-green";
-const DIFF_DEL = "font-semibold text-red";
+const DIFF_ADD = utilityClassName("font-semibold text-green");
+const DIFF_DEL = utilityClassName("font-semibold text-red");
 
 interface Props {
   sessionId: string;
@@ -387,12 +583,23 @@ export function DiffPanel({
         side="bottom"
         align="end"
         initialFocus
-        className="flex w-[340px] max-w-[calc(100vw-24px)] flex-col gap-0.5 p-3"
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.flex,
+          sx.w340px,
+          sx.maxWCalc100vw24px,
+          sx.flexCol,
+          sx.gap05,
+          sx.p3,
+        )}
       >
         {source && onSourceChange && (
           <>
             <DiffSourceSetting value={source} onValueChange={onSourceChange} />
-            <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+            <div
+              aria-hidden
+              {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+            />
           </>
         )}
         <SettingRow label="Code view">
@@ -422,7 +629,10 @@ export function DiffPanel({
           </Segmented>
         </SettingRow>
 
-        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+        <div
+          aria-hidden
+          {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+        />
 
         <CodeOrganizationSettings
           settings={organizationSettings}
@@ -431,7 +641,10 @@ export function DiffPanel({
           showFileListSetting={showFileList}
         />
 
-        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+        <div
+          aria-hidden
+          {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+        />
 
         <CodeDisplaySettings {...codeDisplaySettings} />
       </Popover.Popup>
@@ -440,7 +653,12 @@ export function DiffPanel({
   const emptyState = <DiffEmptyState isRunning={isRunning} />;
 
   if (loading) return <LoadingState>Loading diff…</LoadingState>;
-  if (error) return <InlineAlert className="m-4">{error}</InlineAlert>;
+  if (error)
+    return (
+      <InlineAlert className={mergeStylexOverrideClassName("", sx.m4)}>
+        {error}
+      </InlineAlert>
+    );
   if (!repos || !repos.length) return emptyState;
 
   // Repos that actually have changes; if none, show the empty state.
@@ -466,7 +684,7 @@ export function DiffPanel({
 
   const toolbarContents = (
     <>
-      <span className="text-dim">
+      <span {...stylex.props(sx.textDim)}>
         {d.files.length} file{d.files.length === 1 ? "" : "s"}
         {groupsLoading && (
           <span role="status" aria-label="Organizing files">
@@ -478,7 +696,17 @@ export function DiffPanel({
       <span className={DIFF_ADD}>+{d.totalAdditions}</span>
       <span className={DIFF_DEL}>−{d.totalDeletions}</span>
       {d.truncated && (
-        <span className="rounded-sm bg-yellow/15 px-[7px] py-px text-meta font-bold text-yellow">
+        <span
+          {...stylex.props(
+            sx.roundedSm,
+            sx.bgYellow15,
+            sx.px7px,
+            sx.pyPx,
+            sx.fontBold,
+            sx.textYellow,
+            typography.meta,
+          )}
+        >
           truncated
         </span>
       )}
@@ -486,7 +714,14 @@ export function DiffPanel({
         <Button
           variant="default"
           size="sm"
-          className="ml-2 min-h-0 px-2 py-0.5 text-meta"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.ml2,
+            sx.minH0,
+            sx.px2,
+            sx.py05,
+            typography.meta,
+          )}
           onClick={tellAgentAboutEdits}
           title="Sends a note listing your hand-edits so they get reviewed and committed"
         >
@@ -494,10 +729,18 @@ export function DiffPanel({
           {handEdited.length === 1 ? "" : "s"}
         </Button>
       )}
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div
+        {...stylex.props(
+          sx.mlAuto,
+          sx.flex,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.gap2,
+        )}
+      >
         <div
           ref={setDiffControlsTarget}
-          className="flex shrink-0 items-center gap-2"
+          {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2)}
         />
         {codeSettings}
         <Tooltip label="Refresh diff">
@@ -523,9 +766,26 @@ export function DiffPanel({
       // Paint through the section's 10px top gutter. The gutter still belongs
       // to the diff below, but code cannot scroll through its empty space.
       <div
-        className={`sticky ${multi ? "top-[calc(var(--diff-panel-top,0px)+37px)] phone:top-[calc(var(--diff-panel-top,0px)+47px)]" : "top-[var(--diff-panel-top,0px)]"} z-1 bg-panel-surface after:absolute after:inset-x-0 after:top-full after:h-2.5 after:bg-panel-surface after:content-['']`}
+        className={utilityClassName(
+          `sticky ${multi ? "top-[calc(var(--diff-panel-top,0px)+37px)] phone:top-[calc(var(--diff-panel-top,0px)+47px)]" : "top-[var(--diff-panel-top,0px)]"} z-1 bg-panel-surface after:absolute after:inset-x-0 after:top-full after:h-2.5 after:bg-panel-surface after:content-['']`,
+        )}
       >
-        <div className="flex h-10 items-center gap-2.5 overflow-x-auto border-b border-divider px-3.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          {...mergeStylexProps(
+            "[&::-webkit-scrollbar]:hidden",
+            sx.flex,
+            sx.h10,
+            sx.itemsCenter,
+            sx.gap25,
+            sx.overflowXAuto,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px35,
+            sx.whitespaceNowrap,
+            sx.ScrollbarWidthNone,
+            typography.label,
+          )}
+        >
           {toolbarContents}
         </div>
       </div>
@@ -535,11 +795,27 @@ export function DiffPanel({
 
   return (
     <div
-      className={`@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+87px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+97px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+50px)]"}`}
+      className={utilityClassName(
+        `@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+87px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+97px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+50px)]"}`,
+      )}
       ref={panelRef}
     >
       {multi && (
-        <div className="sticky top-[var(--diff-panel-top,0px)] z-2 flex gap-1 overflow-x-auto border-b border-divider bg-panel-surface px-2.5 py-1.5">
+        <div
+          {...stylex.props(
+            sx.sticky,
+            sx.topVarDiffPanelTop0px,
+            sx.z2,
+            sx.flex,
+            sx.gap1,
+            sx.overflowXAuto,
+            sx.borderB,
+            sx.borderDivider,
+            sx.bgPanelSurface,
+            sx.px25,
+            sx.py15,
+          )}
+        >
           {changed.map((r, i) => {
             return (
               <button
@@ -547,16 +823,26 @@ export function DiffPanel({
                 // The active pill supplies its own surface and border colour —
                 // the base has the geometry only, so nothing carries two
                 // competing colour utilities.
-                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-[9px] py-[3px] text-label whitespace-nowrap phone:px-3 phone:py-2 ${
-                  i === active
-                    ? "border-line bg-panel text-fg"
-                    : "border-transparent bg-transparent text-dim hover:text-fg"
-                }`}
+                className={utilityClassName(
+                  `inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-[9px] py-[3px] text-label whitespace-nowrap phone:px-3 phone:py-2 ${
+                    i === active
+                      ? "border-line bg-panel text-fg"
+                      : "border-transparent bg-transparent text-dim hover:text-fg"
+                  }`,
+                )}
                 onClick={() => setActive(i)}
                 title={r.primary ? "Primary repo" : "Attached repo"}
               >
                 {repoLabel(r.repo)}
-                <span className="rounded-full bg-faint/20 px-[5px] text-meta text-faint">
+                <span
+                  {...stylex.props(
+                    sx.roundedFull,
+                    sx.bgFaint20,
+                    sx.px5px,
+                    sx.textFaint,
+                    typography.meta,
+                  )}
+                >
                   {r.diff.files.length}
                 </span>
               </button>
@@ -567,7 +853,7 @@ export function DiffPanel({
 
       {toolbar}
 
-      <div className="flex min-h-0 min-w-0 flex-1">
+      <div {...stylex.props(sx.flex, sx.minH0, sx.minW0, sx.flex1)}>
         {showFileList &&
           fileListMode !== "hidden" &&
           orderedFiles.length > 0 && (
@@ -578,7 +864,7 @@ export function DiffPanel({
               onOpenFile={openFlowLocation}
             />
           )}
-        <div className="min-w-0 flex-1">
+        <div {...stylex.props(sx.minW0, sx.flex1)}>
           {view === "flow" ? (
             <CodeFlow
               data={flow?.key === flowKey ? flow.data : null}
@@ -593,7 +879,9 @@ export function DiffPanel({
          supplies the review canvas's shared 8px inset; standalone Changes
          keeps this panel's own inset. */
             <div
-              className={`${toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"} min-w-0 max-w-full overflow-clip pb-7 [&_[class*=pierre]]:max-w-full`}
+              className={utilityClassName(
+                `${toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"} min-w-0 max-w-full overflow-clip pb-7 [&_[class*=pierre]]:max-w-full`,
+              )}
             >
               <CommentableDiff
                 key={cur.repo}
@@ -685,10 +973,24 @@ export function DiffPanel({
  */
 function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
   return (
-    <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 px-4 pt-12 pb-24 text-center">
+    <div
+      {...stylex.props(
+        sx.flex,
+        sx.hFull,
+        sx.minH280px,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.gap3,
+        sx.px4,
+        sx.pt12,
+        sx.pb24,
+        sx.textCenter,
+      )}
+    >
       <svg
         viewBox="0 0 40 40"
-        className="h-14 w-14 text-faint"
+        {...stylex.props(sx.h14, sx.w14, sx.textFaint)}
         fill="none"
         stroke="currentColor"
         strokeWidth={2}
@@ -700,15 +1002,26 @@ function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
         <circle cx="27" cy="27" r="5" />
         <path d="M13 18v5a4 4 0 0 0 4 4h5" />
       </svg>
-      <div className="flex flex-col gap-1">
-        <div className="text-item-title font-medium text-dim">
+      <div {...stylex.props(sx.flex, sx.flexCol, sx.gap1)}>
+        <div {...stylex.props(sx.fontMedium, sx.textDim, typography.itemTitle)}>
           No file changes yet
         </div>
-        <div className="text-sm text-faint">Changes appear here.</div>
+        <div {...stylex.props(sx.textSm, sx.textFaint)}>
+          Changes appear here.
+        </div>
       </div>
       {isRunning && (
-        <div className="mt-1 flex items-center gap-2 text-xs text-faint">
-          <Spinner className="text-faint" />
+        <div
+          {...stylex.props(
+            sx.mt1,
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.textXs,
+            sx.textFaint,
+          )}
+        >
+          <Spinner className={mergeStylexOverrideClassName("", sx.textFaint)} />
           <span>Pulling latest…</span>
         </div>
       )}

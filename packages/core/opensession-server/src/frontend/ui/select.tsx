@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "./cn";
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { Select as BaseSelect } from "@base-ui/react/select";
 import { IconCheck, IconChevronDown } from "../components/icons";
@@ -11,6 +13,51 @@ import {
   popupSurfaceClasses,
 } from "./popup-classes";
 import { restoreSelectFocusAfterClose } from "./select-focus";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  colStart1: {
+    gridColumnStart: "1",
+  },
+  rowStart1: {
+    gridRowStart: "1",
+  },
+  flex: {
+    display: "flex",
+  },
+  size4: {
+    width: "calc(4px * 4)",
+    height: "calc(4px * 4)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  size17px: {
+    width: "17px",
+    height: "17px",
+  },
+});
 
 /**
  * Select on Base UI parts: a field-shaped trigger that opens the app's own
@@ -121,7 +168,9 @@ function Trigger(triggerProps: TriggerProps) {
   // Presence, not truthiness: an icon-bearing list keeps the slot for the
   // values that have no glyph, so the labels stay on one x.
   const iconSlot = "icon" in triggerProps;
-  const label = iconSlot ? "col-start-2" : "col-start-1";
+  const label = iconSlot
+    ? utilityClassName("col-start-2")
+    : utilityClassName("col-start-1");
   return (
     <BaseSelect.Trigger
       {...props}
@@ -131,31 +180,49 @@ function Trigger(triggerProps: TriggerProps) {
           // The chevron sits in flow in its own grid column, so the
           // field's own padding is what separates it from the edge.
           cn(
-            "inline-grid cursor-pointer items-center gap-2 pr-2 text-left",
+            utilityClassName(
+              "inline-grid cursor-pointer items-center gap-2 pr-2 text-left",
+            ),
             iconSlot
-              ? "grid-cols-[auto_minmax(0,1fr)_auto]"
-              : "grid-cols-[minmax(0,1fr)_auto]",
+              ? utilityClassName("grid-cols-[auto_minmax(0,1fr)_auto]")
+              : utilityClassName("grid-cols-[minmax(0,1fr)_auto]"),
           ),
         ),
         // A select lifts slightly under the pointer; opening still reads like
         // focus, with the border carrying that state as on every other field.
-        "transition-[border-color,box-shadow] hover:border-line-strong enabled:hover:smooth-shadow-xs data-[popup-open]:border-accent",
+        utilityClassName(
+          "transition-[border-color,box-shadow] hover:border-line-strong enabled:hover:smooth-shadow-xs data-[popup-open]:border-accent",
+        ),
         className,
       )}
     >
       {iconSlot && (
-        <span className="col-start-1 row-start-1 flex size-4 shrink-0 items-center justify-center text-dim">
+        <span
+          {...stylex.props(
+            sx.colStart1,
+            sx.rowStart1,
+            sx.flex,
+            sx.size4,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.textDim,
+          )}
+        >
           {icon}
         </span>
       )}
-      <span className={cn("row-start-1 truncate", label)}>
+      <span className={cn(utilityClassName("row-start-1 truncate"), label)}>
         {children ?? <BaseSelect.Value placeholder={placeholder} />}
       </span>
       {sizeTo?.map((text, index) => (
         <span
           key={index}
           aria-hidden
-          className={cn("invisible row-start-1 truncate", label)}
+          className={cn(
+            utilityClassName("invisible row-start-1 truncate"),
+            label,
+          )}
         >
           {text}
         </span>
@@ -163,8 +230,10 @@ function Trigger(triggerProps: TriggerProps) {
       <IconChevronDown
         size={16}
         className={cn(
-          "row-start-1 shrink-0 text-faint",
-          iconSlot ? "col-start-3" : "col-start-2",
+          utilityClassName("row-start-1 shrink-0 text-faint"),
+          iconSlot
+            ? utilityClassName("col-start-3")
+            : utilityClassName("col-start-2"),
         )}
       />
     </BaseSelect.Trigger>
@@ -198,14 +267,14 @@ function Popup({
         // would give this one popup two open behaviours and no
         // animation. Anchor it below the trigger like every menu.
         alignItemWithTrigger={false}
-        className={cn(FLOATING_OVERLAY_LAYER, "outline-none")}
+        className={cn(FLOATING_OVERLAY_LAYER, utilityClassName("outline-none"))}
       >
         <BaseSelect.Popup
           finalFocus={() => restoreFocusRef?.current ?? true}
           className={cn(
             POPUP_HOOK,
             popupSurfaceClasses,
-            "min-w-[var(--anchor-width)]",
+            utilityClassName("min-w-[var(--anchor-width)]"),
             className,
           )}
         >
@@ -236,17 +305,30 @@ function Item(itemProps: ItemProps) {
       {...props}
       className={cn(
         popupItemClasses,
-        "justify-between gap-3 data-[disabled]:cursor-default data-[disabled]:opacity-40",
+        utilityClassName(
+          "justify-between gap-3 data-[disabled]:cursor-default data-[disabled]:opacity-40",
+        ),
         className,
       )}
     >
-      <span className="flex min-w-0 items-center gap-2">
+      <span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
         {iconSlot && (
-          <span className="flex size-4 shrink-0 items-center justify-center text-dim">
+          <span
+            {...stylex.props(
+              sx.flex,
+              sx.size4,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.textDim,
+            )}
+          >
             {icon}
           </span>
         )}
-        <BaseSelect.ItemText className="min-w-0 truncate">
+        <BaseSelect.ItemText
+          className={mergeStylexOverrideClassName("", sx.minW0, sx.truncate)}
+        >
           {children}
         </BaseSelect.ItemText>
       </span>
@@ -254,7 +336,16 @@ function Item(itemProps: ItemProps) {
 			    `Check` reserves it: an indicator that only takes space while
 			    selected makes the picked row wider than the rest, so the popup
 			    is a different width depending on what is selected. */}
-      <span className="flex size-[17px] shrink-0 items-center justify-center text-accent">
+      <span
+        {...mergeStylexProps(
+          "text-accent",
+          sx.flex,
+          sx.size17px,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.justifyCenter,
+        )}
+      >
         <BaseSelect.ItemIndicator>
           <IconCheck size={17} />
         </BaseSelect.ItemIndicator>
@@ -273,7 +364,9 @@ function GroupLabel({
     <BaseSelect.GroupLabel
       {...props}
       className={cn(
-        "px-2 pb-1 pt-1.5 text-meta font-semibold tracking-[-0.01em] text-faint",
+        utilityClassName(
+          "px-2 pb-1 pt-1.5 text-meta font-semibold tracking-[-0.01em] text-faint",
+        ),
         className,
       )}
     />
@@ -283,7 +376,7 @@ function GroupLabel({
 function Separator({ className }: { className?: string }) {
   return (
     <BaseSelect.Separator
-      className={cn("-mx-1.5 my-1.5 h-px bg-line", className)}
+      className={cn(utilityClassName("-mx-1.5 my-1.5 h-px bg-line"), className)}
     />
   );
 }

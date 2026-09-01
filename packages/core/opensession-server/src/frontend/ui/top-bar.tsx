@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { MOBILE_BACK, MOBILE_TOP_BAR_CONTROL } from "../lib/app-header-classes";
 import { IconChevronLeft } from "../components/icons";
@@ -17,7 +18,7 @@ export const TopBar = React.forwardRef<HTMLElement, TopBarProps>(
     return React.createElement(as, {
       ref,
       "data-top-bar": "",
-      className: cn("flex min-w-0 items-center", className),
+      className: cn(utilityClassName("flex min-w-0 items-center"), className),
       ...props,
     });
   },
@@ -30,7 +31,10 @@ export const TopBarLeading = React.forwardRef<
   return (
     <div
       ref={ref}
-      className={cn("flex min-w-0 items-center gap-2", className)}
+      className={cn(
+        utilityClassName("flex min-w-0 items-center gap-2"),
+        className,
+      )}
       {...props}
     />
   );
@@ -40,7 +44,13 @@ export const TopBarTitle = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<"div">
 >(function TopBarTitle({ className, ...props }, ref) {
-  return <div ref={ref} className={cn("min-w-0", className)} {...props} />;
+  return (
+    <div
+      ref={ref}
+      className={cn(utilityClassName("min-w-0"), className)}
+      {...props}
+    />
+  );
 });
 
 export const TopBarActions = React.forwardRef<
@@ -50,7 +60,10 @@ export const TopBarActions = React.forwardRef<
   return (
     <div
       ref={ref}
-      className={cn("ml-auto flex shrink-0 items-center", className)}
+      className={cn(
+        utilityClassName("ml-auto flex shrink-0 items-center"),
+        className,
+      )}
       {...props}
     />
   );
@@ -69,7 +82,9 @@ export const PhoneTopBar = React.forwardRef<
       as="header"
       ref={ref}
       className={cn(
-        "phone:relative phone:h-11 phone:shrink-0 phone:justify-center phone:px-3",
+        utilityClassName(
+          "phone:relative phone:h-11 phone:shrink-0 phone:justify-center phone:px-3",
+        ),
         className,
       )}
       {...props}
@@ -84,7 +99,10 @@ export const PhoneTopBarTitle = React.forwardRef<
   return (
     <TopBarTitle
       ref={ref}
-      className={cn("text-body font-title text-fg", className)}
+      className={cn(
+        utilityClassName("text-body font-title text-fg"),
+        className,
+      )}
       {...props}
     />
   );
@@ -101,7 +119,9 @@ export const PhoneTopBarAction = React.forwardRef<
       variant="ghost"
       size="md"
       className={cn(
-        "size-11 min-h-11 shrink-0 touch-manipulation rounded-full bg-panel p-0 text-dim shadow-none hover:bg-pressed active:scale-[0.96] [&_svg]:size-6",
+        utilityClassName(
+          "size-11 min-h-11 shrink-0 touch-manipulation rounded-full bg-panel p-0 text-dim shadow-none hover:bg-pressed active:scale-[0.96] [&_svg]:size-6",
+        ),
         className,
       )}
       {...props}

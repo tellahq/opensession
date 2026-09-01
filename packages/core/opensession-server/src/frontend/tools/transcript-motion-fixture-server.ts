@@ -6,12 +6,10 @@ import { activeFrontendDist, compileAssets } from "../../server/frontend-build";
 const meta = await compileAssets();
 const dist = activeFrontendDist();
 const port = Number(process.env.PORT ?? 4899);
-const tailwind = meta.twName
-  ? `<link rel="stylesheet" href="/${meta.twName}">`
-  : "";
+const stylexSheet = `<link rel="stylesheet" href="/${meta.sxName}">`;
 const index = `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/${meta.cssName}">${tailwind}</head>
+<link rel="stylesheet" href="/${meta.cssName}">${stylexSheet}</head>
 <body><div id="root"></div><script type="module" src="/${meta.entryName}"></script></body></html>`;
 
 const server = Bun.serve({

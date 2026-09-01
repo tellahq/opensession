@@ -110,8 +110,10 @@ describe("TranscriptBlocks shipped change action", () => {
     // The channel picker is the app's own select (ui/select), not a bare
     // <select> with an overlaid chevron.
     expect(html).toContain('role="combobox"');
-    expect(html).toContain("rounded-[var(--composer-radius)]");
-    expect(html).toContain("smooth-shadow-ring-soft");
+    // StyleX: the composer corner is the --composer-radius token, inline.
+    expect(html).toContain("border-radius:var(--composer-radius)");
+    // The shipped composer wears the composer's own shadow token.
+    expect(html).toContain("shadow-[var(--composer-shadow)]");
     expect(html).not.toContain("rounded-xl bg-panel p-4");
   });
 
@@ -1455,7 +1457,8 @@ describe("TranscriptBlocks review loops", () => {
     expect(html).toContain("M9.75 12.75L10.1837 13.6744");
     expect(html).toContain("text-faint");
     expect(html).toContain("1 round · 5/5 · 8 checks passed");
-    expect(html).toContain("mt-0.5 pl-2");
+    // StyleX: the step rail spacing renders as inline calc() declarations.
+    expect(html).toContain("margin-top:calc(4px * 0.5)");
     expect(html).toContain(
       "flex size-[22px] flex-none self-center items-center justify-center",
     );

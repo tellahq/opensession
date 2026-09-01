@@ -1,5 +1,25 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  size15: {
+    width: "calc(4px * 1.5)",
+    height: "calc(4px * 1.5)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgCurrent: {
+    backgroundColor: "currentcolor",
+  },
+});
 
 /**
  * Badge — a label that reports state, not an action.
@@ -35,12 +55,12 @@ type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
 type Variant = "soft" | "outline";
 
 const soft: Record<Tone, string> = {
-  neutral: "bg-active text-dim",
-  accent: "bg-accent-soft text-accent",
-  success: "bg-green-soft text-green",
-  warning: "bg-yellow-soft text-yellow",
-  danger: "bg-red-soft text-red",
-  info: "bg-blue-soft text-blue",
+  neutral: utilityClassName("bg-active text-dim"),
+  accent: utilityClassName("bg-accent-soft text-accent"),
+  success: utilityClassName("bg-green-soft text-green"),
+  warning: utilityClassName("bg-yellow-soft text-yellow"),
+  danger: utilityClassName("bg-red-soft text-red"),
+  info: utilityClassName("bg-blue-soft text-blue"),
 };
 
 // The outline set borrows the tone's own ink for its edge at low strength, so
@@ -50,12 +70,12 @@ const outline: Record<Tone, string> = {
   // that a soft badge reads against, and faint ink on top of that leaves the
   // label barely there — which matters most here, since the neutral outline
   // is the one that carries names (a branch, "current") rather than states.
-  neutral: "border border-line text-dim",
-  accent: "border border-accent/40 text-accent",
-  success: "border border-green/40 text-green",
-  warning: "border border-yellow/40 text-yellow",
-  danger: "border border-red/40 text-red",
-  info: "border border-blue/40 text-blue",
+  neutral: utilityClassName("border border-line text-dim"),
+  accent: utilityClassName("border border-accent/40 text-accent"),
+  success: utilityClassName("border border-green/40 text-green"),
+  warning: utilityClassName("border border-yellow/40 text-yellow"),
+  danger: utilityClassName("border border-red/40 text-red"),
+  info: utilityClassName("border border-blue/40 text-blue"),
 };
 
 export type BadgeProps = React.ComponentPropsWithoutRef<"span"> & {
@@ -76,8 +96,10 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5",
-        "text-meta whitespace-nowrap",
+        utilityClassName(
+          "inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5",
+        ),
+        utilityClassName("text-meta whitespace-nowrap"),
         variant === "outline" ? outline[tone] : soft[tone],
         className,
       )}
@@ -85,7 +107,7 @@ export function Badge({
     >
       {dot && (
         <span
-          className="size-1.5 shrink-0 rounded-full bg-current"
+          {...stylex.props(sx.size15, sx.shrink0, sx.roundedFull, sx.bgCurrent)}
           aria-hidden="true"
         />
       )}

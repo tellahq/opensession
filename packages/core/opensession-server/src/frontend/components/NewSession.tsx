@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, {
   useCallback,
   useEffect,
@@ -131,6 +133,162 @@ import {
   paletteIconBtnOn,
   palettePill,
 } from "../lib/palette-classes";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  Absolute: {
+    position: "absolute !important",
+  },
+  inset0: {
+    inset: "0",
+  },
+  Z6: {
+    zIndex: "6 !important",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gapX1: {
+    columnGap: "4px",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  phonePx3: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 3)",
+    },
+  },
+  phonePt1: {
+    "@media (max-width: 720px)": {
+      paddingTop: "4px",
+    },
+  },
+  mr1: {
+    marginRight: "4px",
+  },
+  selfCenter: {
+    alignSelf: "center",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  phoneBlock: {
+    "@media (max-width: 720px)": {
+      display: "block",
+    },
+  },
+  desktopHidden: {
+    "@media (min-width: 721px)": {
+      display: "none",
+    },
+  },
+  minW260px: {
+    minWidth: "260px",
+  },
+  maxWMin360pxCalc100vw1rem: {
+    maxWidth: "min(360px, calc(100vw - 1rem))",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  flexNone: {
+    flex: "none",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  maxWMin340pxCalc100vw1rem: {
+    maxWidth: "min(340px, calc(100vw - 1rem))",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  whitespaceNormal: {
+    whiteSpace: "normal",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  maxW300px: {
+    maxWidth: "300px",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  pb1: {
+    paddingBottom: "4px",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  pt15: {
+    paddingTop: "calc(4px * 1.5)",
+  },
+  mtPx: {
+    marginTop: "1px",
+  },
+  gapPx: {
+    gap: "1px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+});
 
 interface Props {
   /** Close the palette (Esc, backdrop click, or after a create without "Create more"). */
@@ -233,10 +391,11 @@ const LAST_REPO_KEY = "opensession-new-session-repo";
  *  second row under that bar, and the two rows together pushed the sheet taller
  *  than the strip a keyboard leaves visible, which cut the bar off the top of
  *  the screen as soon as an attachment took its own space. */
-const HEADER =
-  "flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:h-auto phone:px-[18px] phone:pb-3 phone:pt-[18px]";
+const HEADER = utilityClassName(
+  "flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:h-auto phone:px-[18px] phone:pb-3 phone:pt-[18px]",
+);
 /** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
-const EDGE_DIVIDER = "border-line";
+const EDGE_DIVIDER = utilityClassName("border-line");
 /** The header's picker, which doubles as the palette's title: bigger, solid,
  *  heavier than a footer control.
  *
@@ -245,15 +404,17 @@ const EDGE_DIVIDER = "border-line";
  *  already truncates, but a flex item whose own overflow is visible cannot be
  *  sized below its content, so a long repo name would push the row wider than
  *  the card instead of ellipsizing. */
-const TRIGGER_STRONG =
-  "relative inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
-const CHEVRON = "-ml-0.5 shrink-0 text-faint phone:size-4";
+const TRIGGER_STRONG = utilityClassName(
+  "relative inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55",
+);
+const CHEVRON = utilityClassName("-ml-0.5 shrink-0 text-faint phone:size-4");
 /** A pass-through on a desktop, where the picker is the header's one control.
  *  On a phone it is the middle slot of the title bar: it takes the space the
  *  two discs leave and centres the title inside it, so the row reads as one
  *  balanced bar rather than a label pushed against the close button. */
-const MOBILE_PICKER =
-  "desktop:contents phone:flex phone:min-w-0 phone:flex-1 phone:justify-center";
+const MOBILE_PICKER = utilityClassName(
+  "desktop:contents phone:flex phone:min-w-0 phone:flex-1 phone:justify-center",
+);
 /** On a phone the trigger is the sheet's title: the row's name, centred
  *  between the two discs that dismiss and commit. It carries no fill and no
  *  edge of its own. Those discs are the bar's only surfaces, and a third one
@@ -266,17 +427,23 @@ const MOBILE_PICKER =
  *  rest of the chrome's chips wear. It keeps the full 44px height as a touch
  *  target, and it has to fit the row it shares, which is what `max-w-full`
  *  plus the label's own truncation buy. */
-const MOBILE_TRIGGER =
-  "phone:min-h-11 phone:gap-1 phone:rounded-[999px] phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4";
+const MOBILE_TRIGGER = utilityClassName(
+  "phone:min-h-11 phone:gap-1 phone:rounded-[999px] phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4",
+);
 /** The composer's own send disc, so the gesture that commits a prompt looks the
  *  same in the palette as it does in a session. Sized up to the 44px target the
  *  rest of this bar keeps. */
-const PHONE_SEND = cn(composerSend, composerSendDefault, "phone:size-11");
+const PHONE_SEND = cn(
+  composerSend,
+  composerSendDefault,
+  utilityClassName("phone:size-11"),
+);
 
 /* (The prompt's own surface — the scroller and the field — moved to
    NewSessionPrompt, with the draft state it belongs to.) */
-const ERROR =
-  "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting text-red";
+const ERROR = utilityClassName(
+  "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting text-red",
+);
 
 /* Single-line footer: the model pill is the only flexible item — it gives way
    (its label ellipsizes) while the icon buttons and Create keep their size.
@@ -288,18 +455,23 @@ const ERROR =
    leaves it the same 16px clearance the side padding gives it. The safe-area
    inset clears the home indicator at rest, but the keyboard covers that edge
    while a field is focused, so the ordinary 12px pad takes over then. */
-const FOOTER =
-  "flex items-center justify-between gap-x-2 gap-y-2 border-t border-transparent px-4 pt-[9px] pb-3.5 phone:flex-wrap phone:px-3 phone:pb-[calc(0.75rem+env(safe-area-inset-bottom))] phone:[body.kb-open_&]:pb-3 max-[560px]:gap-x-1.5";
-const FOOTER_LEFT =
-  "flex min-w-0 items-center gap-1.5 phone:flex-1 max-[560px]:gap-1";
-const FOOTER_RIGHT =
-  "flex min-w-0 items-center gap-1.5 phone:contents max-[560px]:gap-1";
+const FOOTER = utilityClassName(
+  "flex items-center justify-between gap-x-2 gap-y-2 border-t border-transparent px-4 pt-[9px] pb-3.5 phone:flex-wrap phone:px-3 phone:pb-[calc(0.75rem+env(safe-area-inset-bottom))] phone:[body.kb-open_&]:pb-3 max-[560px]:gap-x-1.5",
+);
+const FOOTER_LEFT = utilityClassName(
+  "flex min-w-0 items-center gap-1.5 phone:flex-1 max-[560px]:gap-1",
+);
+const FOOTER_RIGHT = utilityClassName(
+  "flex min-w-0 items-center gap-1.5 phone:contents max-[560px]:gap-1",
+);
 /** Round on a phone, where the bar's two controls are discs and the repo is a
  *  pill: a 12px corner among them is the one square thing on the card. The
  *  hover wash rides a pseudo-element, so it has to be rounded with them. */
 const FOOTER_ICON_BTN = cn(
   paletteIconBtn,
-  "shrink-0 phone:size-11 phone:rounded-[999px] phone:before:rounded-[999px]",
+  utilityClassName(
+    "shrink-0 phone:size-11 phone:rounded-[999px] phone:before:rounded-[999px]",
+  ),
 );
 /** Ask mode's toggle. Off, it is one of the footer's quiet icon tools. On, it
  *  wears the same green marker the session composer's toolbar shows for the
@@ -312,8 +484,9 @@ const FOOTER_ICON_BTN = cn(
  *  `size-11` would crush the labelled chip on phones. 32px tall on a desktop,
  *  the size the icon buttons' hover wash paints, so the row keeps one rhythm;
  *  44px on a phone, where the whole row is thumb-sized. */
-const ASK_BTN_ON =
-  "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:rounded-[999px] phone:px-3.5 bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
+const ASK_BTN_ON = utilityClassName(
+  "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:rounded-[999px] phone:px-3.5 bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50",
+);
 /** Ask mode paints the whole card, not just its toggle — the same thing the
  *  session composer does for ask and for note mode, because the mode governs
  *  everything you are about to type rather than one control in the corner.
@@ -323,15 +496,19 @@ const ASK_BTN_ON =
  *  out with it intact. Children are lifted above it, and the shell's own
  *  `overflow-hidden` clips it to the rounded corner. */
 const ASK_SURFACE =
-  "isolate " +
-  "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] " +
+  utilityClassName("isolate ") +
+  utilityClassName(
+    "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] ",
+  ) +
   "[&>*]:relative [&>*]:z-[1]";
 /** The one flexible footer item. The palette has room for the model's full
  *  name, so it opts out of palettePill's generic 180px cap. On phones the
  *  effort suffix steps aside first and leaves that room to the model. */
 const MODEL_PILL = cn(
   palettePill,
-  "shrink min-w-0 max-w-none phone:ml-auto phone:min-h-11 phone:[&_[data-effort]]:hidden max-[560px]:px-[9px]",
+  utilityClassName(
+    "shrink min-w-0 max-w-none phone:ml-auto phone:min-h-11 phone:[&_[data-effort]]:hidden max-[560px]:px-[9px]",
+  ),
 );
 
 /* What a create does with the view behind the palette: "open" follows the new
@@ -369,10 +546,12 @@ const CREATE_LABELS: Record<CreateAction, string> = {
    chrome shares (the Button primitive, the header CTAs). It used to be
    `rounded-md` — one step down, 9.45px against 13.5px — which on a 36px-tall
    plate read visibly square next to its neighbours. */
-const CREATE_SPLIT =
-  "relative inline-flex shrink-0 items-stretch phone:order-2 phone:mt-0.5 phone:w-full";
-const CREATE_MAIN =
-  "inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 phone:min-h-11 phone:flex-1 phone:justify-center max-[560px]:px-3";
+const CREATE_SPLIT = utilityClassName(
+  "relative inline-flex shrink-0 items-stretch phone:order-2 phone:mt-0.5 phone:w-full",
+);
+const CREATE_MAIN = utilityClassName(
+  "inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 phone:min-h-11 phone:flex-1 phone:justify-center max-[560px]:px-3",
+);
 /** The desktop corner, split between the two shapes the button takes: half of
  *  a split button beside its caret, or the whole button when there is no caret
  *  (inline). Written as two whole classes rather than one plus an override,
@@ -382,16 +561,22 @@ const CREATE_MAIN =
  *  The phone overlay moves Create into its title bar and does not render this
  *  pair. Only the inline card reaches these phone classes, where it has no
  *  caret and rounds the whole button. */
-const CREATE_MAIN_SPLIT =
-  "desktop:rounded-l-control phone:rounded-l-[999px] phone:rounded-r-none";
-const CREATE_MAIN_WHOLE = "desktop:rounded-control phone:rounded-[999px]";
-const CREATE_CARET =
-  "inline-flex cursor-pointer items-center gap-[7px] rounded-r-control phone:min-w-11 phone:justify-center phone:rounded-r-[999px] border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40";
+const CREATE_MAIN_SPLIT = utilityClassName(
+  "desktop:rounded-l-control phone:rounded-l-[999px] phone:rounded-r-none",
+);
+const CREATE_MAIN_WHOLE = utilityClassName(
+  "desktop:rounded-control phone:rounded-[999px]",
+);
+const CREATE_CARET = utilityClassName(
+  "inline-flex cursor-pointer items-center gap-[7px] rounded-r-control phone:min-w-11 phone:justify-center phone:rounded-r-[999px] border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40",
+);
 const CREATE_KBD = "opacity-70";
-const CREATE_MENU =
-  "absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md";
-const CREATE_MENU_ITEM =
-  "flex w-full cursor-pointer items-start gap-[9px] rounded-md border-none bg-transparent px-[9px] py-[7px] text-left text-fg transition-colors hover:bg-hover";
+const CREATE_MENU = utilityClassName(
+  "absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md",
+);
+const CREATE_MENU_ITEM = utilityClassName(
+  "flex w-full cursor-pointer items-start gap-[9px] rounded-md border-none bg-transparent px-[9px] py-[7px] text-left text-fg transition-colors hover:bg-hover",
+);
 
 /**
  * The same card rendered on the page rather than over a dimmed one: what the
@@ -410,8 +595,8 @@ const CREATE_MENU_ITEM =
  * HUD; `overflow-hidden` keeps the rows' dividers inside the rounded shell.
  */
 const INLINE_CARD = cn(
-  "relative flex w-full flex-col overflow-hidden rounded-2xl",
-  "max-h-[min(560px,68dvh)]",
+  utilityClassName("relative flex w-full flex-col overflow-hidden rounded-2xl"),
+  utilityClassName("max-h-[min(560px,68dvh)]"),
   composerBox,
 );
 
@@ -1615,7 +1800,11 @@ export function NewSession({
             />
             {/* The sheet still has a name, it just isn't drawn: the dialog
                 needs one, and a screen reader has no card to look at. */}
-            <Modal.Title className="sr-only">New session</Modal.Title>
+            <Modal.Title
+              className={mergeStylexOverrideClassName("", sx.srOnly)}
+            >
+              New session
+            </Modal.Title>
           </>
         )}
         <div className={MOBILE_PICKER}>
@@ -1685,11 +1874,14 @@ export function NewSession({
             isPhone={isPhone}
           >
             {repo === NO_REPO ? (
-              <IconMessage className="shrink-0" size={18} />
+              <IconMessage
+                className={mergeStylexOverrideClassName("", sx.shrink0)}
+                size={18}
+              />
             ) : (
               <RepoTile name={repo} />
             )}
-            <span className="truncate">
+            <span {...stylex.props(sx.truncate)}>
               {repo === NO_REPO
                 ? "No repo"
                 : repoOptionLabel(repo) || repo || "No repositories"}
@@ -1698,7 +1890,12 @@ export function NewSession({
                 the same shorthand the session header's repo pill uses. */}
             {extraRepos.length > 0 && (
               <span
-                className="shrink-0 text-label font-medium text-dim"
+                {...stylex.props(
+                  sx.shrink0,
+                  sx.fontMedium,
+                  sx.textDim,
+                  typography.label,
+                )}
                 title={extraRepos.map(repoOptionLabel).join(", ")}
               >
                 +{extraRepos.length}
@@ -1712,7 +1909,10 @@ export function NewSession({
         {phoneBar && (
           <button
             type="button"
-            className={cn(PHONE_SEND, dictating && "invisible")}
+            className={cn(
+              PHONE_SEND,
+              dictating && utilityClassName("invisible"),
+            )}
             onClick={handleCreate}
             disabled={!canCreate}
             aria-label={CREATE_LABELS[createAction]}
@@ -1730,8 +1930,8 @@ export function NewSession({
           if (!dictating) setDictationClipping(false);
         }}
         className={cn(
-          "relative flex min-h-0 flex-col",
-          dictationClipping && "overflow-hidden",
+          utilityClassName("relative flex min-h-0 flex-col"),
+          dictationClipping && utilityClassName("overflow-hidden"),
         )}
       >
         {/* Dictation replaces everything below Project while the card itself
@@ -1739,12 +1939,12 @@ export function NewSession({
             the card avoids drawing a second rounded container over the first. */}
         <div
           ref={voiceOverlayRef}
-          className="pointer-events-none !absolute inset-0 !z-[6]"
+          {...stylex.props(sx.pointerEventsNone, sx.Absolute, sx.inset0, sx.Z6)}
         />
         <div
           className={cn(
-            "flex min-h-0 flex-1 flex-col",
-            dictating && "invisible",
+            utilityClassName("flex min-h-0 flex-1 flex-col"),
+            dictating && utilityClassName("invisible"),
           )}
         >
           {/* Picked services, above the field like every other thing attached to
@@ -1752,9 +1952,29 @@ export function NewSession({
           so without this the only trace of a pick is a count on the overflow
           button, and the pick governs the whole session rather than one
           prompt. The row stays mounted so the last chip can animate out. */}
-          <div className="flex flex-wrap items-start gap-x-1 px-4 phone:px-3 phone:pt-1">
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.flexWrap,
+              sx.itemsStart,
+              sx.gapX1,
+              sx.px4,
+              sx.phonePx3,
+              sx.phonePt1,
+            )}
+          >
             {selectedMcpServers.length > 0 && (
-              <span className="mr-1 self-center text-meta font-medium text-faint phone:block desktop:hidden">
+              <span
+                {...stylex.props(
+                  sx.mr1,
+                  sx.selfCenter,
+                  sx.fontMedium,
+                  sx.textFaint,
+                  sx.phoneBlock,
+                  sx.desktopHidden,
+                  typography.meta,
+                )}
+              >
                 Using
               </span>
             )}
@@ -1920,27 +2140,67 @@ export function NewSession({
                 <Menu.Popup
                   align="start"
                   sideOffset={6}
-                  className="min-w-[260px] max-w-[min(360px,calc(100vw-1rem))]"
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.minW260px,
+                    sx.maxWMin360pxCalc100vw1rem,
+                  )}
                 >
                   {showBranchPicker && (
                     <Menu.SubmenuRoot>
-                      <Menu.SubmenuTrigger className="justify-between gap-3">
-                        <span className="flex flex-none items-center gap-2">
+                      <Menu.SubmenuTrigger
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.justifyBetween,
+                          sx.gap3,
+                        )}
+                      >
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.flexNone,
+                            sx.itemsCenter,
+                            sx.gap2,
+                          )}
+                        >
                           <IconNewBranch
-                            className="shrink-0 text-dim"
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.shrink0,
+                              sx.textDim,
+                            )}
                             size={20}
                           />
                           <span>Branch</span>
                         </span>
-                        <span className="flex min-w-0 items-center gap-1 text-dim">
-                          <span className="truncate">{createFromLabel}</span>
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.minW0,
+                            sx.itemsCenter,
+                            sx.gap1,
+                            sx.textDim,
+                          )}
+                        >
+                          <span {...stylex.props(sx.truncate)}>
+                            {createFromLabel}
+                          </span>
                           <IconChevronRight
-                            className="shrink-0 text-faint"
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.shrink0,
+                              sx.textFaint,
+                            )}
                             size={17}
                           />
                         </span>
                       </Menu.SubmenuTrigger>
-                      <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
+                      <Menu.Popup
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.maxWMin340pxCalc100vw1rem,
+                        )}
+                      >
                         {createFromOptions.map((opt) => {
                           const selected =
                             opt.point.kind === startPoint.kind &&
@@ -1956,8 +2216,14 @@ export function NewSession({
                               }
                               onClick={() => setStartPoint(opt.point)}
                             >
-                              <Menu.Check on={selected} className="text-dim" />
-                              <span className="min-w-0 truncate">
+                              <Menu.Check
+                                on={selected}
+                                className={mergeStylexOverrideClassName(
+                                  "",
+                                  sx.textDim,
+                                )}
+                              />
+                              <span {...stylex.props(sx.minW0, sx.truncate)}>
                                 {opt.label}
                               </span>
                             </Menu.Item>
@@ -1968,23 +2234,60 @@ export function NewSession({
                   )}
                   {showSandboxPicker && (
                     <Menu.SubmenuRoot>
-                      <Menu.SubmenuTrigger className="justify-between gap-3">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <IconBox className="shrink-0 text-dim" size={20} />
-                          <span className="truncate">Sandbox</span>
+                      <Menu.SubmenuTrigger
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.justifyBetween,
+                          sx.gap3,
+                        )}
+                      >
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.minW0,
+                            sx.itemsCenter,
+                            sx.gap2,
+                          )}
+                        >
+                          <IconBox
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.shrink0,
+                              sx.textDim,
+                            )}
+                            size={20}
+                          />
+                          <span {...stylex.props(sx.truncate)}>Sandbox</span>
                         </span>
-                        <span className="flex flex-none items-center gap-1 text-dim">
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.flexNone,
+                            sx.itemsCenter,
+                            sx.gap1,
+                            sx.textDim,
+                          )}
+                        >
                           {sandboxLabel(sandboxProvider)}
                           {sandboxWarmed && shouldPrewarm && (
-                            <span className="text-faint">· ready</span>
+                            <span {...stylex.props(sx.textFaint)}>· ready</span>
                           )}
                           <IconChevronRight
-                            className="shrink-0 text-faint"
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.shrink0,
+                              sx.textFaint,
+                            )}
                             size={17}
                           />
                         </span>
                       </Menu.SubmenuTrigger>
-                      <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
+                      <Menu.Popup
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.maxWMin340pxCalc100vw1rem,
+                        )}
+                      >
                         {[
                           { id: "", note: undefined as string | undefined },
                           ...visibleSandboxChoices,
@@ -1997,16 +2300,37 @@ export function NewSession({
                                 sandboxSelectionTouched.current = true;
                                 setSandboxProvider(opt.id);
                               }}
-                              className="items-start"
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.itemsStart,
+                              )}
                             >
                               <Menu.Check
                                 on={selected}
-                                className="mt-0.5 text-dim"
+                                className={mergeStylexOverrideClassName(
+                                  "",
+                                  sx.mt05,
+                                  sx.textDim,
+                                )}
                               />
-                              <span className="flex min-w-0 flex-col gap-0.5">
+                              <span
+                                {...stylex.props(
+                                  sx.flex,
+                                  sx.minW0,
+                                  sx.flexCol,
+                                  sx.gap05,
+                                )}
+                              >
                                 <span>{sandboxLabel(opt.id)}</span>
                                 {opt.note && (
-                                  <span className="whitespace-normal text-supporting leading-snug text-faint">
+                                  <span
+                                    {...stylex.props(
+                                      sx.whitespaceNormal,
+                                      sx.leadingSnug,
+                                      sx.textFaint,
+                                      typography.supporting,
+                                    )}
+                                  >
                                     {opt.note}
                                   </span>
                                 )}
@@ -2018,15 +2342,42 @@ export function NewSession({
                     </Menu.SubmenuRoot>
                   )}
                   <Menu.SubmenuRoot>
-                    <Menu.SubmenuTrigger className="justify-between gap-3">
-                      <span className="flex min-w-0 items-center gap-2">
+                    <Menu.SubmenuTrigger
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.justifyBetween,
+                        sx.gap3,
+                      )}
+                    >
+                      <span
+                        {...stylex.props(
+                          sx.flex,
+                          sx.minW0,
+                          sx.itemsCenter,
+                          sx.gap2,
+                        )}
+                      >
                         <IconConnections
-                          className="shrink-0 text-dim"
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.shrink0,
+                            sx.textDim,
+                          )}
                           size={20}
                         />
-                        <span className="truncate">Connected services</span>
+                        <span {...stylex.props(sx.truncate)}>
+                          Connected services
+                        </span>
                       </span>
-                      <span className="flex flex-none items-center gap-1 text-dim">
+                      <span
+                        {...stylex.props(
+                          sx.flex,
+                          sx.flexNone,
+                          sx.itemsCenter,
+                          sx.gap1,
+                          sx.textDim,
+                        )}
+                      >
                         {/* Nothing picked is not "none": an empty allowlist means
                           the run gets every service you can see
                           (filterMcpServers, scope "all"), so the readout says
@@ -2035,19 +2386,43 @@ export function NewSession({
                           ? `${selectedMcpServers.length} on`
                           : "All"}
                         <IconChevronRight
-                          className="shrink-0 text-faint"
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.shrink0,
+                            sx.textFaint,
+                          )}
                           size={17}
                         />
                       </span>
                     </Menu.SubmenuTrigger>
-                    <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+                    <Menu.Popup
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.maxWMin360pxCalc100vw1rem,
+                      )}
+                    >
                       {availableMcpServers.length > 0 && (
-                        <div className="max-w-[300px] px-2 pb-1 text-supporting leading-snug text-faint">
+                        <div
+                          {...stylex.props(
+                            sx.maxW300px,
+                            sx.px2,
+                            sx.pb1,
+                            sx.leadingSnug,
+                            sx.textFaint,
+                            typography.supporting,
+                          )}
+                        >
                           Picked services are the only ones the session gets.
                         </div>
                       )}
                       {availableMcpServers.length === 0 && (
-                        <Menu.Item disabled className="text-faint">
+                        <Menu.Item
+                          disabled
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.textFaint,
+                          )}
+                        >
                           No services available
                         </Menu.Item>
                       )}
@@ -2060,17 +2435,30 @@ export function NewSession({
                             closeOnClick={false}
                             onCheckedChange={(on) => toggleMcpServer(mcp, on)}
                             className={cn(
-                              "justify-between gap-3",
-                              checked && "bg-hover",
+                              utilityClassName("justify-between gap-3"),
+                              checked && utilityClassName("bg-hover"),
                             )}
                           >
-                            <span className="flex min-w-0 items-center gap-2.5">
+                            <span
+                              {...stylex.props(
+                                sx.flex,
+                                sx.minW0,
+                                sx.itemsCenter,
+                                sx.gap25,
+                              )}
+                            >
                               <IconTile name={mcp} size={20} />
-                              <span className="min-w-0 truncate">
+                              <span {...stylex.props(sx.minW0, sx.truncate)}>
                                 {displayName(mcp)}
                               </span>
                             </span>
-                            <Menu.Check on={checked} className="text-dim" />
+                            <Menu.Check
+                              on={checked}
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.textDim,
+                              )}
+                            />
                           </Menu.CheckboxItem>
                         );
                       })}
@@ -2083,7 +2471,16 @@ export function NewSession({
                     the sibling submenus above from opening at all. */}
                   {phoneBar && (
                     <>
-                      <div className="px-2 pb-1 pt-1.5 text-meta font-medium text-faint">
+                      <div
+                        {...stylex.props(
+                          sx.px2,
+                          sx.pb1,
+                          sx.pt15,
+                          sx.fontMedium,
+                          sx.textFaint,
+                          typography.meta,
+                        )}
+                      >
                         On create
                       </div>
                       {CREATE_ACTIONS.map((action) => (
@@ -2093,9 +2490,12 @@ export function NewSession({
                         >
                           <Menu.Check
                             on={createAction === action}
-                            className="text-dim"
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.textDim,
+                            )}
                           />
-                          <span className="min-w-0 truncate">
+                          <span {...stylex.props(sx.minW0, sx.truncate)}>
                             {CREATE_LABELS[action]}
                           </span>
                         </Menu.Item>
@@ -2151,7 +2551,9 @@ export function NewSession({
                 }}
                 // The parent card owns the only visible surface. This layer is
                 // just controls and waveform clipped by that card's outer edge.
-                overlayClassName="rounded-none bg-transparent [backdrop-filter:none]"
+                overlayClassName={utilityClassName(
+                  "rounded-none bg-transparent [backdrop-filter:none]",
+                )}
               />
 
               {!phoneBar && (
@@ -2176,7 +2578,9 @@ export function NewSession({
                     broken in the first place. */}
                     {sendKey === "mod-enter" ? (
                       <span
-                        className={`${CREATE_KBD} mx-0 phone:hidden text-xs`}
+                        className={utilityClassName(
+                          `${CREATE_KBD} mx-0 phone:hidden text-xs`,
+                        )}
                       >
                         {MOD_ENTER_GLYPH}
                       </span>
@@ -2185,7 +2589,9 @@ export function NewSession({
                      button edge. "Create more" is a desktop workflow, so the
                      hint goes away with the caret on phones. */
                       <IconReturn
-                        className={`${CREATE_KBD} -mx-[3px] phone:hidden`}
+                        className={utilityClassName(
+                          `${CREATE_KBD} -mx-[3px] phone:hidden`,
+                        )}
                         size={20}
                       />
                     )}
@@ -2213,7 +2619,9 @@ export function NewSession({
                         aria-label="Create options"
                       >
                         <IconChevronDown
-                          className={`transition-transform ${createMenuOpen ? "rotate-180" : ""}`}
+                          className={utilityClassName(
+                            `transition-transform ${createMenuOpen ? "rotate-180" : ""}`,
+                          )}
                           size={22}
                         />
                       </button>
@@ -2252,13 +2660,34 @@ export function NewSession({
                           <Menu.Check
                             on={createAction === opt.action}
                             size={22}
-                            className="mt-px text-dim"
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.mtPx,
+                              sx.textDim,
+                            )}
                           />
-                          <span className="flex min-w-0 flex-col gap-px">
-                            <span className="text-label font-semibold">
+                          <span
+                            {...stylex.props(
+                              sx.flex,
+                              sx.minW0,
+                              sx.flexCol,
+                              sx.gapPx,
+                            )}
+                          >
+                            <span
+                              {...stylex.props(
+                                sx.fontSemibold,
+                                typography.label,
+                              )}
+                            >
                               {opt.title}
                             </span>
-                            <span className="text-supporting text-dim">
+                            <span
+                              {...stylex.props(
+                                sx.textDim,
+                                typography.supporting,
+                              )}
+                            >
                               {opt.desc}
                             </span>
                           </span>
@@ -2281,7 +2710,8 @@ export function NewSession({
         className={cn(
           INLINE_CARD,
           ASK_SURFACE,
-          mode === "ask" && "before:opacity-100 after:opacity-100",
+          mode === "ask" &&
+            utilityClassName("before:opacity-100 after:opacity-100"),
         )}
         style={askSurfaceStyle}
         role="group"
@@ -2318,13 +2748,15 @@ export function NewSession({
       <Modal.Content
         data-global-file-composer="new-session"
         variant="palette"
-        widthClassName="w-[min(820px,100%)] phone:w-full"
+        widthClassName={utilityClassName("w-[min(820px,100%)] phone:w-full")}
         // The bottom pad is the keyboard's own height (lib/keyboard-inset).
         // The sheet is anchored to the bottom of the LAYOUT viewport, which iOS
         // does not shrink for the keyboard, so without it the composer sits
         // behind the keys and the page has to be panned to reach it. It is 0px
         // wherever nothing covers the window.
-        viewportClassName="phone:items-end phone:px-0 phone:pb-[var(--kb-inset,0px)] phone:pt-3"
+        viewportClassName={utilityClassName(
+          "phone:items-end phone:px-0 phone:pb-[var(--kb-inset,0px)] phone:pt-3",
+        )}
         className={cn(
           // A phone sheet carries a rounder top corner than the floating
           // palette does: it meets the screen's own edge on three sides, so the
@@ -2337,9 +2769,12 @@ export function NewSession({
           // inside that strip on a client whose keyboard is taller than the
           // one 43dvh was measured against. Past the cap the prompt scrolls,
           // which is what its scroller is for.
-          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[min(43dvh,100%)] phone:rounded-t-[calc(40px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
+          utilityClassName(
+            "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[min(43dvh,100%)] phone:rounded-t-[calc(40px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
+          ),
           ASK_SURFACE,
-          mode === "ask" && "before:opacity-100 after:opacity-100",
+          mode === "ask" &&
+            utilityClassName("before:opacity-100 after:opacity-100"),
         )}
         style={askSurfaceStyle}
         aria-label="New session"

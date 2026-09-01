@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { Collapsible, collapsiblePanelClasses } from "./collapsible";
 import { cn } from "./cn";
@@ -33,7 +34,10 @@ export function Fold({
   children: React.ReactNode;
 }) {
   return (
-    <Collapsible.Root open={open} className={cn("min-w-0", className)}>
+    <Collapsible.Root
+      open={open}
+      className={cn(utilityClassName("min-w-0"), className)}
+    >
       <Collapsible.Panel
         className={cn(collapsiblePanelClasses, panelClassName)}
       >

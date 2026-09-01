@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "./ui/cn";
+import { utilityClassName } from "./ui/cn";
 import { BASE_PATH, stripBasePath } from "./lib/base";
 import { DEFAULT_REPO_ID, PRODUCT_NAME } from "./lib/brand";
 import type { NavigationActions } from "./lib/navigation";
@@ -307,6 +309,68 @@ import {
   viewTabKind,
   type WorkspacePaneTab,
 } from "./lib/workspace-pane-tabs";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  h100dvh: {
+    height: "100dvh",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  bgBg: {
+    backgroundColor: "var(--bg)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  flex1: {
+    flex: "1",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py8: {
+    paddingBlock: "calc(4px * 8)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxW680px: {
+    maxWidth: "680px",
+  },
+});
 
 function deferred<Props extends object>(
   load: () => Promise<{ default: React.ComponentType<Props> }>,
@@ -3952,11 +4016,31 @@ function AppContent({
       <RunningCloseDialog {...runningCloseDialog} />
       <div className="app">
         {!forceFirstMile && onboarding.state === "loading" ? (
-          <div className="flex h-[100dvh] items-center justify-center bg-bg">
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.h100dvh,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.bgBg,
+            )}
+          >
             <LoadingState>Preparing Open Session…</LoadingState>
           </div>
         ) : !forceFirstMile && onboarding.state === "failed" ? (
-          <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.h100dvh,
+              sx.flexCol,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.gap4,
+              sx.bgBg,
+              sx.px6,
+              sx.textCenter,
+            )}
+          >
             <LoadingState>Couldn&rsquo;t check onboarding.</LoadingState>
             <Button onClick={() => void onboarding.refetch()}>Try again</Button>
           </div>
@@ -3984,7 +4068,9 @@ function AppContent({
                   route.view === "archived" && ARCHIVED_SEARCH_HEADER,
                 )}
               >
-                <TopBarLeading className="shrink-0">
+                <TopBarLeading
+                  className={mergeStylexOverrideClassName("", sx.shrink0)}
+                >
                   {mobileDetail ? (
                     <TopBarBack
                       floating
@@ -4079,7 +4165,11 @@ function AppContent({
                           sessionWasAgentStarted(currentSession) && (
                             <IconRobot
                               size={16}
-                              className="shrink-0 text-faint"
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.shrink0,
+                                sx.textFaint,
+                              )}
                               aria-label="Started by an agent"
                             />
                           )}
@@ -4189,7 +4279,9 @@ function AppContent({
                 <div
                   ref={sidebarColRef}
                   className={cn(
-                    "sidebar-container flex min-h-0 shrink-0 flex-col bg-sidebar [--sidebar-icon-left:16px]",
+                    utilityClassName(
+                      "sidebar-container flex min-h-0 shrink-0 flex-col bg-sidebar [--sidebar-icon-left:16px]",
+                    ),
                     // Desktop and the exposed workspace gutter share one chrome
                     // material, so opaque sticky headers scroll over the exact same
                     // surface instead of revealing a gradient seam. No
@@ -4197,16 +4289,18 @@ function AppContent({
                     // nothing but our own flat background while forcing the
                     // compositor to re-rasterize the whole sidebar on any repaint
                     // behind it (a scroll-flash amplifier).
-                    "desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)]",
+                    utilityClassName(
+                      "desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)]",
+                    ),
                     // On phones the sidebar is the root PAGE of the iOS-style
                     // stack — full bleed under the pushed detail pane — rather than
                     // a fixed-width column.
                     isPhone
-                      ? "absolute inset-0 z-[1] w-full"
-                      : "relative w-[var(--sidebar-w,280px)]",
+                      ? utilityClassName("absolute inset-0 z-[1] w-full")
+                      : utilityClassName("relative w-[var(--sidebar-w,280px)]"),
                     // Collapsed hides the whole left column; on phones the page
                     // stack owns the sidebar and the class is inert.
-                    sidebarCollapsed && "desktop:hidden",
+                    sidebarCollapsed && utilityClassName("desktop:hidden"),
                   )}
                   style={
                     {
@@ -4229,7 +4323,9 @@ function AppContent({
 						    --sidebar-icon-left column. */}
                   <div
                     className={cn(
-                      "sidebar-brand wco-chrome h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-start gap-2 py-0 pr-3 pl-[calc(var(--sidebar-icon-left)-8px)]",
+                      utilityClassName(
+                        "sidebar-brand wco-chrome h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-start gap-2 py-0 pr-3 pl-[calc(var(--sidebar-icon-left)-8px)]",
+                      ),
                       // No scroll hairline: the tools sit fixed below this row and
                       // only the workspace list scrolls, so nothing passes under it.
                       // The brand row (and its account menu) is a desktop
@@ -4237,10 +4333,20 @@ function AppContent({
                       // instead. Gated in JS rather than at `phone:` because
                       // Tailwind's max-* is `width < 720`, one pixel short of the
                       // `max-width: 720px` the rest of the app means by "phone".
-                      isPhone ? "hidden" : "flex",
+                      isPhone
+                        ? utilityClassName("hidden")
+                        : utilityClassName("flex"),
                     )}
                   >
-                    <div className="sidebar-brand-actions flex shrink-0 items-center gap-2">
+                    <div
+                      {...mergeStylexProps(
+                        "sidebar-brand-actions",
+                        sx.flex,
+                        sx.shrink0,
+                        sx.itemsCenter,
+                        sx.gap2,
+                      )}
+                    >
                       <Tooltip
                         label="Hide sidebar"
                         side="bottom"
@@ -4252,7 +4358,7 @@ function AppContent({
                         <button
                           className={cn(
                             SIDEBAR_CHROME_BTN,
-                            "inline-flex px-[5px] py-[3px]",
+                            utilityClassName("inline-flex px-[5px] py-[3px]"),
                           )}
                           onClick={toggleSidebarCollapsed}
                           aria-label="Hide sidebar"
@@ -4331,8 +4437,10 @@ function AppContent({
 						    edge while the list scrolls. */}
                   <div
                     className={cn(
-                      "absolute top-0 right-[-3px] z-30 h-full w-[7px] cursor-col-resize after:absolute after:top-0 after:right-[3px] after:h-full after:w-[2px] after:bg-transparent after:transition-[background] after:content-[''] hover:after:bg-line-strong [body.resizing-sidebar_&]:after:bg-faint",
-                      isPhone && "hidden",
+                      utilityClassName(
+                        "absolute top-0 right-[-3px] z-30 h-full w-[7px] cursor-col-resize after:absolute after:top-0 after:right-[3px] after:h-full after:w-[2px] after:bg-transparent after:transition-[background] after:content-[''] hover:after:bg-line-strong [body.resizing-sidebar_&]:after:bg-faint",
+                      ),
+                      isPhone && utilityClassName("hidden"),
                     )}
                     onMouseDown={startSidebarResize}
                     aria-hidden="true"
@@ -4359,8 +4467,11 @@ function AppContent({
                     <button
                       className={cn(
                         SIDEBAR_CHROME_BTN,
-                        "sidebar-reopen absolute top-[calc((var(--desktop-header-h)-35px)/2)] left-2 z-20 hidden size-[34px] p-0",
-                        sidebarCollapsed && "desktop:inline-flex",
+                        utilityClassName(
+                          "sidebar-reopen absolute top-[calc((var(--desktop-header-h)-35px)/2)] left-2 z-20 hidden size-[34px] p-0",
+                        ),
+                        sidebarCollapsed &&
+                          utilityClassName("desktop:inline-flex"),
                       )}
                       onClick={toggleSidebarCollapsed}
                       aria-label="Show sidebar"
@@ -4398,7 +4509,8 @@ function AppContent({
                           <TopBarActions
                             className={cn(
                               DETAIL_TOPBAR_ACTIONS,
-                              route.view === "prs" && "ml-4 flex-1 pl-0",
+                              route.view === "prs" &&
+                                utilityClassName("ml-4 flex-1 pl-0"),
                             )}
                             ref={setTopbarActionsEl}
                           />
@@ -4647,7 +4759,14 @@ function AppContent({
                         )
                       )
                     ) : (
-                      <div className="flex flex-1 items-center justify-center">
+                      <div
+                        {...stylex.props(
+                          sx.flex,
+                          sx.flex1,
+                          sx.itemsCenter,
+                          sx.justifyCenter,
+                        )}
+                      >
                         {(() => {
                           const isLoading =
                             loading || route.id === pendingSessionId;
@@ -4697,7 +4816,13 @@ function AppContent({
                       Check the connection to this server.
                     </EmptyState>
                   ) : productEmpty && githubConnectionState === "loading" ? (
-                    <LoadingState className="min-h-0 flex-1">
+                    <LoadingState
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.minH0,
+                        sx.flex1,
+                      )}
+                    >
                       Checking GitHub…
                     </LoadingState>
                   ) : productEmpty ? (
@@ -4711,8 +4836,27 @@ function AppContent({
 							   sidebar +): one instance at a time, and since both persist
 							   the same "new-session" draft, whatever was typed here is
 							   already in the one that opens. */
-                    <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-8">
-                      <div className="flex w-full max-w-[680px] flex-col">
+                    <div
+                      {...stylex.props(
+                        sx.flex,
+                        sx.minH0,
+                        sx.flex1,
+                        sx.flexCol,
+                        sx.itemsCenter,
+                        sx.justifyCenter,
+                        sx.overflowYAuto,
+                        sx.px5,
+                        sx.py8,
+                      )}
+                    >
+                      <div
+                        {...stylex.props(
+                          sx.flex,
+                          sx.wFull,
+                          sx.maxW680px,
+                          sx.flexCol,
+                        )}
+                      >
                         {!palette.open && (
                           <NewSession
                             inline

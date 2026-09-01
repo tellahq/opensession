@@ -1,6 +1,26 @@
 import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useResolvedTheme } from "./CodeHighlight";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  maxH80: {
+    maxHeight: "calc(4px * 80)",
+  },
+  overflowAuto: {
+    overflow: "auto",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+
+    cornerShape: "var(--cs)",
+  },
+  bgCodeWell: {
+    backgroundColor: "var(--code-well)",
+  },
+});
 
 /**
  * A compact, read-only version of the Files changed renderer for one tool
@@ -19,7 +39,15 @@ export function ToolInputDiff({ patch }: { patch: string }) {
 
   if (!file) return null;
   return (
-    <div className="max-h-80 overflow-auto rounded-md bg-code-well text-label">
+    <div
+      {...stylex.props(
+        sx.maxH80,
+        sx.overflowAuto,
+        sx.roundedMd,
+        sx.bgCodeWell,
+        typography.label,
+      )}
+    >
       <FileDiff
         key={theme}
         fileDiff={file}

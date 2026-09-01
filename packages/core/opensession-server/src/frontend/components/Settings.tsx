@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useState } from "react";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useScrollEdge } from "../hooks/useScrollEdge";
@@ -59,6 +61,172 @@ import { RunnersPanel } from "./settings/RunnersPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
 import { SetupPanel } from "./Setup";
 import type { Workspace } from "../lib/types";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  block: {
+    display: "block",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  py3: {
+    paddingBlock: "calc(4px * 3)",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  left3: {
+    left: "calc(4px * 3)",
+  },
+  right3: {
+    right: "calc(4px * 3)",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  rounded2xl: {
+    borderRadius: "calc(22px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderDividerSoft: {
+    borderColor: "var(--divider-soft)",
+  },
+  bgSettingsPlate: {
+    backgroundColor: "var(--settings-plate)",
+  },
+  flex: {
+    display: "flex",
+  },
+  wFull: {
+    width: "100%",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  px35: {
+    paddingInline: "calc(4px * 3.5)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  afterAbsolute: {
+    "::after": {
+      content: '""',
+      position: "absolute",
+    },
+  },
+  afterBottom0: {
+    "::after": {
+      content: '""',
+      bottom: "0",
+    },
+  },
+  afterLeft54px: {
+    "::after": {
+      content: '""',
+      left: "54px",
+    },
+  },
+  afterRight0: {
+    "::after": {
+      content: '""',
+      right: "0",
+    },
+  },
+  afterHPx: {
+    "::after": {
+      content: '""',
+      height: "1px",
+    },
+  },
+  afterBgDividerSoft: {
+    "::after": {
+      content: '""',
+      backgroundColor: "var(--divider-soft)",
+    },
+  },
+  activeBgHover: {
+    ":active": {
+      backgroundColor: "var(--hover)",
+    },
+  },
+  h7: {
+    height: "calc(4px * 7)",
+  },
+  w7: {
+    width: "calc(4px * 7)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt6: {
+    marginTop: "calc(4px * 6)",
+  },
+});
 
 // The full-window Settings surface: a left sub-nav + a scrolling body, reached
 // from the "Settings" item in the account menu. Designed to grow — each area is
@@ -90,7 +258,7 @@ const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library", "setup"]);
 // roles stay compact at 110%. The descendant rules deliberately beat local
 // one-off leading utilities so every section follows the page-level rhythm.
 const SETTINGS_LEADING =
-  "leading-normal [&_*]:!leading-normal " +
+  utilityClassName("leading-normal [&_*]:!leading-normal ") +
   "[&_h1]:!leading-[1.1] [&_h2]:!leading-[1.1] [&_h3]:!leading-[1.1] " +
   "[&_h4]:!leading-[1.1] [&_h5]:!leading-[1.1] [&_h6]:!leading-[1.1] " +
   "[&_.font-title]:!leading-[1.1] [&_.text-item-title]:!leading-[1.1] " +
@@ -146,12 +314,14 @@ function NavSearch({
   // or stick the strip around it without moving the icons off the field.
   return (
     <div className={className} ref={ref}>
-      <div className="relative">
+      <div {...stylex.props(sx.relative)}>
         <IconSearch
           size={sheet ? 20 : 18}
           className={cn(
-            "pointer-events-none absolute top-1/2 -translate-y-1/2 text-faint",
-            sheet ? "left-3.5" : "left-2",
+            utilityClassName(
+              "pointer-events-none absolute top-1/2 -translate-y-1/2 text-faint",
+            ),
+            sheet ? utilityClassName("left-3.5") : utilityClassName("left-2"),
           )}
         />
         <Input
@@ -175,10 +345,12 @@ function NavSearch({
             // that gets true round ends rather than a superellipse.
             sheet
               ? cn(
-                  "h-10 rounded-full border-transparent bg-raised pl-11 text-input-phone",
-                  value && "pr-11",
+                  utilityClassName(
+                    "h-10 rounded-full border-transparent bg-raised pl-11 text-input-phone",
+                  ),
+                  value && utilityClassName("pr-11"),
                 )
-              : cn("pl-8", value && "pr-8"),
+              : cn(utilityClassName("pl-8"), value && utilityClassName("pr-8")),
           )}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
@@ -197,11 +369,13 @@ function NavSearch({
             type="button"
             aria-label="Clear search"
             className={cn(
-              "absolute top-1/2 flex -translate-y-1/2 cursor-pointer items-center justify-center border-none bg-transparent text-faint hover:bg-hover hover:text-fg",
+              utilityClassName(
+                "absolute top-1/2 flex -translate-y-1/2 cursor-pointer items-center justify-center border-none bg-transparent text-faint hover:bg-hover hover:text-fg",
+              ),
               // Round inside a capsule; the desktop field keeps the app's corner.
               sheet
-                ? "right-1.5 size-8 rounded-full"
-                : "right-1 size-6 rounded-md",
+                ? utilityClassName("right-1.5 size-8 rounded-full")
+                : utilityClassName("right-1 size-6 rounded-md"),
             )}
             onClick={() => onChange("")}
           >
@@ -364,10 +538,18 @@ export function Settings({
                   onClick={() => onSelect(s.key)}
                 >
                   <span className={SETTINGS_NAV_ICON}>{s.icon}</span>
-                  <span className="min-w-0 flex-1">
+                  <span {...stylex.props(sx.minW0, sx.flex1)}>
                     {s.label}
                     {hint && (
-                      <span className="block truncate text-meta font-normal text-faint">
+                      <span
+                        {...stylex.props(
+                          sx.block,
+                          sx.truncate,
+                          sx.fontNormal,
+                          sx.textFaint,
+                          typography.meta,
+                        )}
+                      >
                         {hint}
                       </span>
                     )}
@@ -377,7 +559,9 @@ export function Settings({
             </div>
           ))}
           {shown.length === 0 && (
-            <div className="px-2.5 py-3 text-meta text-faint">
+            <div
+              {...stylex.props(sx.px25, sx.py3, sx.textFaint, typography.meta)}
+            >
               Nothing matches “{query}”.
             </div>
           )}
@@ -465,8 +649,9 @@ function MobileSettings({
   const detail = section ?? null;
   const shownSection = detail ?? lastSection;
   const shownLabel = SECTIONS.find((s) => s.key === shownSection)?.label;
-  const pageEase =
-    "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]";
+  const pageEase = utilityClassName(
+    "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]",
+  );
 
   return (
     <PhonePage
@@ -479,7 +664,11 @@ function MobileSettings({
           <PhoneTopBar>
             {detail && (
               <SheetIconButton
-                className="absolute left-3"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.absolute,
+                  sx.left3,
+                )}
                 onClick={() => onShowRoot?.()}
                 aria-label="Back to settings"
               >
@@ -494,7 +683,11 @@ function MobileSettings({
               {detail ? shownLabel : "Settings"}
             </PhoneTopBarTitle>
             <SheetIconButton
-              className="absolute right-3"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.absolute,
+                sx.right3,
+              )}
               onClick={dismiss}
               aria-label="Close settings"
             >
@@ -502,44 +695,117 @@ function MobileSettings({
             </SheetIconButton>
           </PhoneTopBar>
 
-          <div className="relative min-h-0 flex-1 overflow-hidden">
+          <div
+            {...stylex.props(
+              sx.relative,
+              sx.minH0,
+              sx.flex1,
+              sx.overflowHidden,
+            )}
+          >
             {/* Root page: grouped section list over a bottom search bar.
 						    Parked slightly left while a detail page covers it, iOS-style. */}
             <div
               className={cn(
-                "absolute inset-0",
+                utilityClassName("absolute inset-0"),
                 pageEase,
-                detail && "-translate-x-1/3",
+                detail && utilityClassName("-translate-x-1/3"),
               )}
               aria-hidden={!!detail}
             >
               <div className={SETTINGS_SHEET_LIST}>
                 {shown.map((g) => (
                   <div key={g.group}>
-                    <div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
+                    <div
+                      {...stylex.props(
+                        sx.mb2,
+                        sx.mt5,
+                        sx.px1,
+                        sx.fontSemibold,
+                        sx.textFaint,
+                        typography.controlLabel,
+                      )}
+                    >
                       {g.group}
                     </div>
-                    <div className="overflow-hidden rounded-2xl border border-divider-soft bg-settings-plate">
+                    <div
+                      {...stylex.props(
+                        sx.overflowHidden,
+                        sx.rounded2xl,
+                        sx.border,
+                        sx.borderDividerSoft,
+                        sx.bgSettingsPlate,
+                      )}
+                    >
                       {g.hits.map(({ item: s, hint }) => (
                         <button
                           key={s.key}
-                          className="relative flex w-full items-center gap-3 border-0 bg-transparent px-3.5 py-3 text-left after:absolute after:bottom-0 after:left-[54px] after:right-0 after:h-px after:bg-divider-soft last:after:hidden active:bg-hover"
+                          {...mergeStylexProps(
+                            "last:after:hidden",
+                            sx.relative,
+                            sx.flex,
+                            sx.wFull,
+                            sx.itemsCenter,
+                            sx.gap3,
+                            sx.border0,
+                            sx.bgTransparent,
+                            sx.px35,
+                            sx.py3,
+                            sx.textLeft,
+                            sx.afterAbsolute,
+                            sx.afterBottom0,
+                            sx.afterLeft54px,
+                            sx.afterRight0,
+                            sx.afterHPx,
+                            sx.afterBgDividerSoft,
+                            sx.activeBgHover,
+                          )}
                           onClick={() => onSelect(s.key)}
                         >
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center text-dim">
+                          <span
+                            {...stylex.props(
+                              sx.flex,
+                              sx.h7,
+                              sx.w7,
+                              sx.shrink0,
+                              sx.itemsCenter,
+                              sx.justifyCenter,
+                              sx.textDim,
+                            )}
+                          >
                             {s.icon}
                           </span>
-                          <span className="min-w-0 flex-1 text-item-title font-medium text-fg">
+                          <span
+                            {...stylex.props(
+                              sx.minW0,
+                              sx.flex1,
+                              sx.fontMedium,
+                              sx.textFg,
+                              typography.itemTitle,
+                            )}
+                          >
                             {s.label}
                             {hint && (
-                              <span className="block truncate text-meta font-normal text-faint">
+                              <span
+                                {...stylex.props(
+                                  sx.block,
+                                  sx.truncate,
+                                  sx.fontNormal,
+                                  sx.textFaint,
+                                  typography.meta,
+                                )}
+                              >
                                 {hint}
                               </span>
                             )}
                           </span>
                           <IconChevronRight
                             size={20}
-                            className="shrink-0 text-faint"
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.shrink0,
+                              sx.textFaint,
+                            )}
                           />
                         </button>
                       ))}
@@ -547,7 +813,14 @@ function MobileSettings({
                   </div>
                 ))}
                 {shown.length === 0 && (
-                  <div className="mt-6 px-1 text-supporting text-faint">
+                  <div
+                    {...stylex.props(
+                      sx.mt6,
+                      sx.px1,
+                      sx.textFaint,
+                      typography.supporting,
+                    )}
+                  >
                     Nothing matches “{query}”.
                   </div>
                 )}
@@ -570,9 +843,11 @@ function MobileSettings({
             {/* Detail page: the picked section's panel, slid in from the right. */}
             <div
               className={cn(
-                "absolute inset-0 flex flex-col bg-surface",
+                utilityClassName("absolute inset-0 flex flex-col bg-surface"),
                 pageEase,
-                detail ? "translate-x-0" : "translate-x-full",
+                detail
+                  ? utilityClassName("translate-x-0")
+                  : utilityClassName("translate-x-full"),
               )}
               aria-hidden={!detail}
             >

@@ -9,7 +9,7 @@ import { Button } from "./button";
 // slots below exist — a caller who works around their absence by passing an
 // element child silently loses the trim, and the hover card's footer is the
 // worked example of what that costs.
-const TRIMMED = /<span class="[^"]*text-box[^"]*">/;
+const TRIMMED = /<span style="[^"]*text-box:trim-both cap alphabetic[^"]*">/;
 
 describe("Button", () => {
   test("wraps a string label in the cap-band trim", () => {
@@ -80,7 +80,12 @@ describe("Button", () => {
       </Button>,
     );
     expect(html).toContain("bg-purple");
-    expect(html).not.toContain("bg-accent");
+    expect(html).toContain("hover:bg-purple/90");
+    // StyleX resolves property conflicts by composition order, so the caller
+    // override must land after the variant fill it replaces.
+    expect(html.indexOf("bg-purple")).toBeGreaterThan(
+      html.indexOf("bg-accent"),
+    );
   });
 
   test("overriding only the resting fill leaves the variant's hover behind", () => {

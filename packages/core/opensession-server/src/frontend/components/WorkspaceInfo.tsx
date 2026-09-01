@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { AGENT_NAME, GITHUB_BOT_NAME } from "../lib/brand";
 import { BASE_PATH } from "../lib/base";
 import { commitPrompt } from "../lib/commit-prompt";
@@ -81,6 +83,405 @@ import {
   IconRobot,
   IconStack,
 } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  size4px: {
+    width: "4px",
+    height: "4px",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgCurrent: {
+    backgroundColor: "currentcolor",
+  },
+  size6: {
+    width: "calc(4px * 6)",
+    height: "calc(4px * 6)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  objectCover: {
+    objectFit: "cover",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+  grid: {
+    display: "grid",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textWhite: {
+    color: "var(--color-white)",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  right15: {
+    right: "calc(4px * 1.5)",
+  },
+  top12: {
+    top: "calc(1 / 2 * 100%)",
+  },
+  z1: {
+    zIndex: "1",
+  },
+  TranslateY12: {
+    translate: "0 calc(calc(1 / 2 * 100%) * -1)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py05: {
+    paddingBlock: "calc(4px * 0.5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  opacity0: {
+    opacity: "0%",
+  },
+  transitionOpacity: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  duration150: {
+    transitionDuration: "150ms",
+  },
+  hoverBorderFaint: {
+    "@media (hover: hover)": {
+      ":hover": {
+        borderColor: "var(--text-faint)",
+      },
+    },
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  py5px: {
+    paddingBlock: "5px",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  leading135: {
+    lineHeight: "1.35",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  maxHMin560px70vhVarAvailableHeight: {
+    maxHeight: "min(560px, 70vh, var(--available-height))",
+  },
+  wMin440pxCalc100vw24px: {
+    width: "min(440px, calc(100vw - 24px))",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  gap9px: {
+    gap: "9px",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py11px: {
+    paddingBlock: "11px",
+  },
+  contents: {
+    display: "contents",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  mb15: {
+    marginBottom: "calc(4px * 1.5)",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  mb5px: {
+    marginBottom: "5px",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  size4: {
+    width: "calc(4px * 4)",
+    height: "calc(4px * 4)",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  maxHMin720px82vhVarAvailableHeight: {
+    maxHeight: "min(720px, 82vh, var(--available-height))",
+  },
+  wMin720pxCalc100vw24px: {
+    width: "min(720px, calc(100vw - 24px))",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  overflowAuto: {
+    overflow: "auto",
+  },
+  Mr1: {
+    marginRight: "calc(4px * -1)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  transitionColorBackgroundColor: {
+    transitionProperty: "color,background-color",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  disabledOpacity50: {
+    ":disabled": {
+      opacity: "50%",
+    },
+  },
+  minW280px: {
+    minWidth: "280px",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  maxHMin680pxCalc100vh24pxVarAvailableHeight: {
+    maxHeight: "min(680px, calc(100vh - 24px), var(--available-height))",
+  },
+  wMin680pxCalc100vw24pxVarAvailableWidth: {
+    width: "min(680px, calc(100vw - 24px), var(--available-width))",
+  },
+  wFull: {
+    width: "100%",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py3: {
+    paddingBlock: "calc(4px * 3)",
+  },
+  underline: {
+    textDecorationLine: "underline",
+  },
+  decorationLineStrong: {
+    textDecorationColor: "var(--border-strong)",
+  },
+  underlineOffset2: {
+    textUnderlineOffset: "2px",
+  },
+  minW200px: {
+    minWidth: "200px",
+  },
+  size22px: {
+    width: "22px",
+    height: "22px",
+  },
+  pb1: {
+    paddingBottom: "4px",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  overflowYHidden: {
+    overflowY: "hidden",
+  },
+  roundedLg: {
+    borderRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  ScrollPaddingLeft12px: {
+    scrollPaddingLeft: "12px",
+  },
+  ScrollbarWidthNone: {
+    scrollbarWidth: "none",
+  },
+  block: {
+    display: "block",
+  },
+  aspectVideo: {
+    aspectRatio: "var(--aspect-video)",
+  },
+  roundedCalc14pxVarRf12px: {
+    borderRadius: "calc(14px * var(--rf) - 12px)",
+    cornerShape: "var(--cs)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  hFull: {
+    height: "100%",
+  },
+  objectContain: {
+    objectFit: "contain",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  inset0: {
+    inset: "0",
+  },
+  size8: {
+    width: "calc(4px * 8)",
+    height: "calc(4px * 8)",
+  },
+  bgBlack45: {
+    backgroundColor: "color-mix(in oklab, var(--color-black) 45%, transparent)",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  pb22px: {
+    paddingBottom: "22px",
+  },
+  pt3: {
+    paddingTop: "calc(4px * 3)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  hoverBorderLineStrong: {
+    "@media (hover: hover)": {
+      ":hover": {
+        borderColor: "var(--border-strong)",
+      },
+    },
+  },
+  lineClamp2: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "2",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+});
 
 /**
  * Workspace info block at the top of the right side panel (the "Info" tab): a
@@ -174,10 +575,12 @@ const reviewBand = (tone: ReviewTone): string =>
 
 /** The leading visual on a Review row: the box a `UserAvatar size={20}` fills,
     so a glyph and a face line up down the section. */
-const REVIEW_FACE =
-  "inline-flex size-5 shrink-0 items-center justify-center [&_svg]:block";
-const INFO_MORE_BUTTON_CLASS =
-  "cursor-pointer bg-panel px-2 py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg";
+const REVIEW_FACE = utilityClassName(
+  "inline-flex size-5 shrink-0 items-center justify-center [&_svg]:block",
+);
+const INFO_MORE_BUTTON_CLASS = utilityClassName(
+  "cursor-pointer bg-panel px-2 py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg",
+);
 
 function initial(name: string): string {
   return (name.trim()[0] || "?").toUpperCase();
@@ -237,7 +640,10 @@ function fmtBytes(n: number): string {
 /** A dot: the mark for a file that already existed and was edited. Sized to
 		read as punctuation next to the ± counts rather than as a second glyph. */
 const STATUS_DOT = (
-  <span className="size-[4px] rounded-full bg-current" aria-hidden />
+  <span
+    {...stylex.props(sx.size4px, sx.roundedFull, sx.bgCurrent)}
+    aria-hidden
+  />
 );
 /**
  * What the run did to the file, as a mark rather than a letter. A list of
@@ -251,11 +657,15 @@ const STATUS_MARK: Record<
   DiffFile["status"],
   { label: string; glyph: ReactNode; className: string }
 > = {
-  added: { label: "Added", glyph: "+", className: "bg-green-soft text-green" },
+  added: {
+    label: "Added",
+    glyph: "+",
+    className: utilityClassName("bg-green-soft text-green"),
+  },
   untracked: {
     label: "Added",
     glyph: "+",
-    className: "bg-green-soft text-green",
+    className: utilityClassName("bg-green-soft text-green"),
   },
   // No tile and no hue: a list of changes is nearly always all
   // modifications, so a tinted square on every row paints a column of colour
@@ -265,17 +675,17 @@ const STATUS_MARK: Record<
   modified: {
     label: "Modified",
     glyph: STATUS_DOT,
-    className: "text-faint",
+    className: utilityClassName("text-faint"),
   },
   deleted: {
     label: "Deleted",
     glyph: "−",
-    className: "bg-red-soft text-red",
+    className: utilityClassName("bg-red-soft text-red"),
   },
   renamed: {
     label: "Renamed",
     glyph: "→",
-    className: "bg-accent-soft text-accent",
+    className: utilityClassName("bg-accent-soft text-accent"),
   },
 };
 
@@ -309,7 +719,15 @@ function CommentAvatar({ author }: { author: string }) {
   if (canAvatar && !failed) {
     return (
       <img
-        className="size-6 shrink-0 rounded-full border border-line object-cover bg-active"
+        {...stylex.props(
+          sx.size6,
+          sx.shrink0,
+          sx.roundedFull,
+          sx.border,
+          sx.borderLine,
+          sx.objectCover,
+          sx.bgActive,
+        )}
         src={`https://github.com/${login}.png?size=48`}
         alt=""
         aria-hidden
@@ -320,7 +738,19 @@ function CommentAvatar({ author }: { author: string }) {
   }
   return (
     <span
-      className="grid size-6 shrink-0 place-items-center rounded-full border border-line bg-active text-meta font-semibold text-white"
+      {...stylex.props(
+        sx.grid,
+        sx.size6,
+        sx.shrink0,
+        sx.placeItemsCenter,
+        sx.roundedFull,
+        sx.border,
+        sx.borderLine,
+        sx.bgActive,
+        sx.fontSemibold,
+        sx.textWhite,
+        typography.meta,
+      )}
       style={{ background: `hsl(${hueFor(login || "?")} 52% 42%)` }}
       aria-hidden
     >
@@ -352,7 +782,29 @@ function CommentCard({
   const addBtn = onAddToInput && (
     <button
       type="button"
-      className="absolute right-1.5 top-1/2 z-[1] -translate-y-1/2 rounded-control border border-line-strong bg-panel px-2 py-0.5 text-meta font-semibold text-dim opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:border-faint hover:bg-hover hover:text-fg"
+      {...mergeStylexProps(
+        "group-hover:opacity-100",
+        sx.absolute,
+        sx.right15,
+        sx.top12,
+        sx.z1,
+        sx.TranslateY12,
+        sx.roundedControl,
+        sx.border,
+        sx.borderLineStrong,
+        sx.bgPanel,
+        sx.px2,
+        sx.py05,
+        sx.fontSemibold,
+        sx.textDim,
+        sx.opacity0,
+        sx.transitionOpacity,
+        sx.duration150,
+        sx.hoverBorderFaint,
+        sx.hoverBgHover,
+        sx.hoverTextFg,
+        typography.meta,
+      )}
       onClick={(e) => {
         e.stopPropagation();
         onAddToInput(formatPrCommentPrompt(comment, pr));
@@ -372,7 +824,20 @@ function CommentCard({
         openOnHover
         delay={200}
         closeDelay={90}
-        className="group relative flex min-w-0 items-center gap-2 rounded-md px-2 py-[5px] text-left transition-colors hover:bg-hover"
+        className={mergeStylexOverrideClassName(
+          "group",
+          sx.relative,
+          sx.flex,
+          sx.minW0,
+          sx.itemsCenter,
+          sx.gap2,
+          sx.roundedMd,
+          sx.px2,
+          sx.py5px,
+          sx.textLeft,
+          sx.transitionColors,
+          sx.hoverBgHover,
+        )}
         role="button"
         tabIndex={0}
         onClick={() => onOpenTab?.("pr")}
@@ -382,10 +847,20 @@ function CommentCard({
         aria-label={`Comment by ${comment.author}`}
       >
         {avatar}
-        <span className="min-w-0 flex-1 truncate text-supporting font-medium leading-[1.35] text-fg">
+        <span
+          {...stylex.props(
+            sx.minW0,
+            sx.flex1,
+            sx.truncate,
+            sx.fontMedium,
+            sx.leading135,
+            sx.textFg,
+            typography.supporting,
+          )}
+        >
           {title}
         </span>
-        <span className="shrink-0 text-meta text-faint">
+        <span {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>
           {relTime(comment.createdAt)}
         </span>
         {addBtn}
@@ -395,22 +870,54 @@ function CommentCard({
         align="start"
         sideOffset={10}
         elevation="lg"
-        className="flex max-h-[min(560px,70vh,var(--available-height))] w-[min(440px,calc(100vw-24px))] cursor-pointer gap-[9px] overflow-hidden bg-panel px-3 py-[11px]"
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.flex,
+          sx.maxHMin560px70vhVarAvailableHeight,
+          sx.wMin440pxCalc100vw24px,
+          sx.cursorPointer,
+          sx.gap9px,
+          sx.overflowHidden,
+          sx.bgPanel,
+          sx.px3,
+          sx.py11px,
+        )}
       >
-        <div className="contents" onClick={() => onOpenTab?.("pr")}>
+        <div {...stylex.props(sx.contents)} onClick={() => onOpenTab?.("pr")}>
           {avatar}
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="mb-1.5 flex min-w-0 items-baseline justify-between gap-2">
-              <span className="min-w-0 truncate text-meta font-semibold text-faint">
+          <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
+            <div
+              {...stylex.props(
+                sx.mb15,
+                sx.flex,
+                sx.minW0,
+                sx.itemsBaseline,
+                sx.justifyBetween,
+                sx.gap2,
+              )}
+            >
+              <span
+                {...stylex.props(
+                  sx.minW0,
+                  sx.truncate,
+                  sx.fontSemibold,
+                  sx.textFaint,
+                  typography.meta,
+                )}
+              >
                 {comment.author}
               </span>
               {comment.createdAt && (
-                <span className="shrink-0 text-meta text-faint">
+                <span
+                  {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}
+                >
                   {relTime(comment.createdAt)}
                 </span>
               )}
             </div>
-            <div className="mb-[5px] min-h-0 flex-1 overflow-y-auto">
+            <div
+              {...stylex.props(sx.mb5px, sx.minH0, sx.flex1, sx.overflowYAuto)}
+            >
               <MarkdownBody html={html} className="markdown" />
             </div>
           </div>
@@ -435,20 +942,45 @@ const PREVIEW_DIFF_OPTIONS = {
 function CommitRow({ commit }: { commit: WorkspaceCommit }) {
   const content = (
     <>
-      <span className="grid size-4 shrink-0 place-items-center text-faint">
+      <span
+        {...stylex.props(
+          sx.grid,
+          sx.size4,
+          sx.shrink0,
+          sx.placeItemsCenter,
+          sx.textFaint,
+        )}
+      >
         <IconGitCommit size={20} />
       </span>
-      <span className="min-w-0 flex-1 truncate text-label text-fg">
+      <span
+        {...stylex.props(
+          sx.minW0,
+          sx.flex1,
+          sx.truncate,
+          sx.textFg,
+          typography.label,
+        )}
+      >
         {commit.title}
       </span>
-      <span className="shrink-0 text-meta font-medium text-dim tabular-nums">
+      <span
+        {...mergeStylexProps(
+          "tabular-nums",
+          sx.shrink0,
+          sx.fontMedium,
+          sx.textDim,
+          typography.meta,
+        )}
+      >
         {commit.filesChanged} file{commit.filesChanged === 1 ? "" : "s"}
       </span>
     </>
   );
   const title = `${commit.title} · ${commit.sha.slice(0, 8)} · ${fullTime(commit.committedAt)}`;
-  const className =
-    "flex min-w-0 items-center gap-2 rounded-md px-2 py-[5px] text-left no-underline transition-colors hover:bg-hover";
+  const className = utilityClassName(
+    "flex min-w-0 items-center gap-2 rounded-md px-2 py-[5px] text-left no-underline transition-colors hover:bg-hover",
+  );
   return commit.url ? (
     <a
       className={className}
@@ -493,21 +1025,42 @@ function FileRow({
     themeType: theme,
   };
   const stats = (
-    <span className="inline-flex shrink-0 items-center gap-1 text-meta font-semibold tabular-nums">
+    <span
+      {...mergeStylexProps(
+        "tabular-nums",
+        sx.inlineFlex,
+        sx.shrink0,
+        sx.itemsCenter,
+        sx.gap1,
+        sx.fontSemibold,
+        typography.meta,
+      )}
+    >
       {file.additions > 0 && (
-        <span className="text-green">+{file.additions}</span>
+        <span {...stylex.props(sx.textGreen)}>+{file.additions}</span>
       )}
       {file.deletions > 0 && (
-        <span className="text-red">−{file.deletions}</span>
+        <span {...stylex.props(sx.textRed)}>−{file.deletions}</span>
       )}
     </span>
   );
   // The directory is what gives, not the filename: a path long enough to cut
   // is cut in the middle, so the name — the part being read — stays whole.
   const path = (
-    <span className="flex min-w-0 flex-1 items-baseline text-left text-label">
-      {dir && <span className="truncate text-dim">{dir}</span>}
-      <span className="max-w-full shrink-0 truncate text-fg">{base}</span>
+    <span
+      {...stylex.props(
+        sx.flex,
+        sx.minW0,
+        sx.flex1,
+        sx.itemsBaseline,
+        sx.textLeft,
+        typography.label,
+      )}
+    >
+      {dir && <span {...stylex.props(sx.truncate, sx.textDim)}>{dir}</span>}
+      <span {...stylex.props(sx.maxWFull, sx.shrink0, sx.truncate, sx.textFg)}>
+        {base}
+      </span>
     </span>
   );
   const mark = STATUS_MARK[file.status];
@@ -519,7 +1072,19 @@ function FileRow({
         delay={200}
         closeDelay={90}
         type="button"
-        className="flex min-w-0 items-center gap-2 rounded-md px-2 py-[5px] text-left transition-colors hover:bg-hover"
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.flex,
+          sx.minW0,
+          sx.itemsCenter,
+          sx.gap2,
+          sx.roundedMd,
+          sx.px2,
+          sx.py5px,
+          sx.textLeft,
+          sx.transitionColors,
+          sx.hoverBgHover,
+        )}
         onClick={() => onOpenTab?.("changes")}
         aria-label={`${file.path} · ${mark.label.toLowerCase()} · open in Changes`}
       >
@@ -528,7 +1093,9 @@ function FileRow({
             // An even box around an even dot: 15px left half-pixels on
             // both axes, which at Retina reads as a dot sitting off
             // its own tile.
-            "inline-flex size-4 shrink-0 items-center justify-center rounded-md text-meta font-bold leading-none",
+            utilityClassName(
+              "inline-flex size-4 shrink-0 items-center justify-center rounded-md text-meta font-bold leading-none",
+            ),
             mark.className,
           )}
           title={mark.label}
@@ -545,17 +1112,50 @@ function FileRow({
           align="start"
           sideOffset={10}
           elevation="lg"
-          className="flex max-h-[min(720px,82vh,var(--available-height))] w-[min(720px,calc(100vw-24px))] cursor-pointer flex-col overflow-hidden bg-panel px-3 py-2.5"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.flex,
+            sx.maxHMin720px82vhVarAvailableHeight,
+            sx.wMin720pxCalc100vw24px,
+            sx.cursorPointer,
+            sx.flexCol,
+            sx.overflowHidden,
+            sx.bgPanel,
+            sx.px3,
+            sx.py25,
+          )}
         >
           <div
-            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            {...stylex.props(
+              sx.flex,
+              sx.minH0,
+              sx.flex1,
+              sx.flexCol,
+              sx.overflowHidden,
+            )}
             onClick={() => onOpenTab?.("changes")}
           >
-            <div className="mb-2 flex min-w-0 items-baseline justify-between gap-2">
+            <div
+              {...stylex.props(
+                sx.mb2,
+                sx.flex,
+                sx.minW0,
+                sx.itemsBaseline,
+                sx.justifyBetween,
+                sx.gap2,
+              )}
+            >
               {path}
               {stats}
             </div>
-            <div className="min-h-0 flex-1 overflow-auto text-label">
+            <div
+              {...stylex.props(
+                sx.minH0,
+                sx.flex1,
+                sx.overflowAuto,
+                typography.label,
+              )}
+            >
               <FileDiff fileDiff={meta} options={options} disableWorkerPool />
             </div>
           </div>
@@ -631,14 +1231,14 @@ function AgentReviewCard({
     !!reviewQueued;
   const canFix = actionable && !!review && !stale && review.findings > 0;
   const scoreTone = stale
-    ? "text-faint"
+    ? utilityClassName("text-faint")
     : score && score >= 4
-      ? "text-green"
+      ? utilityClassName("text-green")
       : score === 3
-        ? "text-yellow"
+        ? utilityClassName("text-yellow")
         : score
-          ? "text-red"
-          : "text-dim";
+          ? utilityClassName("text-red")
+          : utilityClassName("text-dim");
   // One tone for the row, answering one question: does this reading want you?
   // A blocking review does. 5/5 with no findings does not, and neither does a
   // run still in flight — and a row with no state to lend keeps the neutral
@@ -745,7 +1345,7 @@ function AgentReviewCard({
 
   return (
     <div data-agent-score className={INFO_SECTION_CLASS}>
-      <div className="flex items-center gap-2">
+      <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
         {/* One section for both reviewers: the agent's reading and the
 				    teammate's request are the same question, so they share a label
 				    and a plate rather than sitting in two sections that each say
@@ -754,13 +1354,31 @@ function AgentReviewCard({
         {actionable && (
           <Menu.Root>
             <Menu.Trigger
-              className="-mr-1 ml-auto grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg disabled:opacity-50"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.Mr1,
+                sx.mlAuto,
+                sx.grid,
+                sx.size6,
+                sx.shrink0,
+                sx.placeItemsCenter,
+                sx.roundedMd,
+                sx.textFaint,
+                sx.transitionColorBackgroundColor,
+                sx.hoverBgHover,
+                sx.hoverTextFg,
+                sx.disabledOpacity50,
+              )}
               disabled={busy !== null}
               aria-label={`${AGENT_NAME} actions`}
             >
               <IconChevronDown size={14} />
             </Menu.Trigger>
-            <Menu.Popup align="end" sideOffset={6} className="min-w-[280px]">
+            <Menu.Popup
+              align="end"
+              sideOffset={6}
+              className={mergeStylexOverrideClassName("", sx.minW280px)}
+            >
               <Menu.Group>
                 <Menu.GroupLabel>{AGENT_NAME} actions</Menu.GroupLabel>
                 {PR_AGENT_ACTIONS.map((action) => (
@@ -770,13 +1388,24 @@ function AgentReviewCard({
                       busy !== null || (action.kind === "review" && active)
                     }
                     onClick={() => run(action)}
-                    className="items-start py-2"
+                    className={mergeStylexOverrideClassName(
+                      "",
+                      sx.itemsStart,
+                      sx.py2,
+                    )}
                   >
-                    <div className="min-w-0">
-                      <div className="font-semibold text-fg">
+                    <div {...stylex.props(sx.minW0)}>
+                      <div {...stylex.props(sx.fontSemibold, sx.textFg)}>
                         {action.label}
                       </div>
-                      <div className="mt-0.5 text-supporting leading-[1.35] text-faint">
+                      <div
+                        {...stylex.props(
+                          sx.mt05,
+                          sx.leading135,
+                          sx.textFaint,
+                          typography.supporting,
+                        )}
+                      >
                         {action.hint}
                       </div>
                     </div>
@@ -792,7 +1421,13 @@ function AgentReviewCard({
 			    block; at most one row carries a band now, so the section goes
 			    back to the panel's own list grammar. */}
       <div className={INFO_LIST_CLASS}>
-        <div className={cn(GIT_ROW, "rounded-md py-2", reviewBand(rowTone))}>
+        <div
+          className={cn(
+            GIT_ROW,
+            utilityClassName("rounded-md py-2"),
+            reviewBand(rowTone),
+          )}
+        >
           <Popover.Root>
             <Popover.Trigger
               render={<div />}
@@ -801,8 +1436,8 @@ function AgentReviewCard({
               delay={200}
               closeDelay={120}
               className={cn(
-                "flex min-w-0 flex-1 items-center gap-2",
-                reviewMessage && "cursor-help",
+                utilityClassName("flex min-w-0 flex-1 items-center gap-2"),
+                reviewMessage && utilityClassName("cursor-help"),
               )}
               tabIndex={reviewMessage ? 0 : undefined}
             >
@@ -812,8 +1447,8 @@ function AgentReviewCard({
               <span
                 className={cn(
                   REVIEW_FACE,
-                  "text-dim",
-                  active && "animate-pulse",
+                  utilityClassName("text-dim"),
+                  active && utilityClassName("animate-pulse"),
                 )}
                 aria-hidden
               >
@@ -824,20 +1459,23 @@ function AgentReviewCard({
 								    the shared "Review": this line is the agent's, the one
 								    under it is the teammate's. */}
                 {AGENT_NAME}
-                <span className="text-faint"> · </span>
+                <span {...stylex.props(sx.textFaint)}> · </span>
                 {score ? (
                   <>
                     {/* No live region: the panel repolls, and a `status` role
 									    here would re-announce an unchanged score every time. */}
                     <span
-                      className={cn("font-semibold tabular-nums", scoreTone)}
+                      className={cn(
+                        utilityClassName("font-semibold tabular-nums"),
+                        scoreTone,
+                      )}
                     >
                       {score}/5
                     </span>
-                    <span className="text-faint"> · </span>
+                    <span {...stylex.props(sx.textFaint)}> · </span>
                   </>
                 ) : null}
-                <span className="text-dim">{state}</span>
+                <span {...stylex.props(sx.textDim)}>{state}</span>
               </span>
             </Popover.Trigger>
             {reviewMessage && (
@@ -845,34 +1483,60 @@ function AgentReviewCard({
                 side="left"
                 align="start"
                 sideOffset={12}
-                className="flex max-h-[min(680px,calc(100vh-24px),var(--available-height))] w-[min(680px,calc(100vw-24px),var(--available-width))] min-h-0 overflow-hidden"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.flex,
+                  sx.maxHMin680pxCalc100vh24pxVarAvailableHeight,
+                  sx.wMin680pxCalc100vw24pxVarAvailableWidth,
+                  sx.minH0,
+                  sx.overflowHidden,
+                )}
               >
-                <div className="flex min-h-0 w-full flex-col">
-                  <div className="flex items-center gap-2.5 border-b border-divider px-4 py-3">
+                <div {...stylex.props(sx.flex, sx.minH0, sx.wFull, sx.flexCol)}>
+                  <div
+                    {...stylex.props(
+                      sx.flex,
+                      sx.itemsCenter,
+                      sx.gap25,
+                      sx.borderB,
+                      sx.borderDivider,
+                      sx.px4,
+                      sx.py3,
+                    )}
+                  >
                     <CommentAvatar
                       author={
                         reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME
                       }
                     />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-label font-semibold text-fg">
+                    <div {...stylex.props(sx.minW0, sx.flex1)}>
+                      <div
+                        {...stylex.props(
+                          sx.truncate,
+                          sx.fontSemibold,
+                          sx.textFg,
+                          typography.label,
+                        )}
+                      >
                         {reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME}
                       </div>
-                      <div className="text-meta text-faint">
+                      <div {...stylex.props(sx.textFaint, typography.meta)}>
                         Automated review
                         {reviewedAgo ? ` · reviewed ${reviewedAgo} ago` : ""}
                       </div>
                     </div>
                     <span
                       className={cn(
-                        "shrink-0 text-label font-semibold",
+                        utilityClassName("shrink-0 text-label font-semibold"),
                         scoreTone,
                       )}
                     >
                       {score ?? "–"}/5
                     </span>
                   </div>
-                  <div className="min-h-0 overflow-auto px-4 py-3">
+                  <div
+                    {...stylex.props(sx.minH0, sx.overflowAuto, sx.px4, sx.py3)}
+                  >
                     <MarkdownBody
                       html={reviewHtml}
                       className="markdown review-preview-markdown"
@@ -903,14 +1567,19 @@ function AgentReviewCard({
         {children}
       </div>
       {done && (
-        <div className="px-3 text-supporting text-dim">
+        <div {...stylex.props(sx.px3, sx.textDim, typography.supporting)}>
           Started {done.label.toLowerCase()}. {AGENT_NAME} will post results on{" "}
           {pr.url ? (
             <a
               href={pr.url}
               target="_blank"
               rel="noopener"
-              className="text-fg underline decoration-line-strong underline-offset-2"
+              {...stylex.props(
+                sx.textFg,
+                sx.underline,
+                sx.decorationLineStrong,
+                sx.underlineOffset2,
+              )}
             >
               the PR
             </a>
@@ -930,7 +1599,12 @@ function AgentReviewCard({
                   e.preventDefault();
                   onOpenSession(done.bksId!, done.session ?? null);
                 }}
-                className="text-fg underline decoration-line-strong underline-offset-2"
+                {...stylex.props(
+                  sx.textFg,
+                  sx.underline,
+                  sx.decorationLineStrong,
+                  sx.underlineOffset2,
+                )}
               >
                 open run
               </a>
@@ -938,7 +1612,11 @@ function AgentReviewCard({
           )}
         </div>
       )}
-      {error && <div className="px-3 text-supporting text-red">{error}</div>}
+      {error && (
+        <div {...stylex.props(sx.px3, sx.textRed, typography.supporting)}>
+          {error}
+        </div>
+      )}
     </div>
   );
 }
@@ -1121,12 +1799,12 @@ function ReviewerChip({
         ? "requested"
         : "No reviewer";
   const stateTone = needsMyReview
-    ? "font-semibold text-red"
+    ? utilityClassName("font-semibold text-red")
     : accepted
-      ? "text-green"
+      ? utilityClassName("text-green")
       : req || githubTarget
-        ? "text-yellow"
-        : "text-dim";
+        ? utilityClassName("text-yellow")
+        : utilityClassName("text-dim");
   const rowTitle = needsMyReview
     ? `Review requested by ${req?.by || "a teammate"}`
     : accepted
@@ -1141,7 +1819,7 @@ function ReviewerChip({
       <div
         className={cn(
           GIT_ROW,
-          "rounded-md py-2",
+          utilityClassName("rounded-md py-2"),
           // Background only: the row's own `text-fg` and a tone utility on
           // the same element would resolve by Tailwind's output order, so
           // the ink goes on the spans inside it instead.
@@ -1154,7 +1832,10 @@ function ReviewerChip({
         {faceName ? (
           <UserAvatar name={faceName} size={20} edge={false} />
         ) : (
-          <span className={cn(REVIEW_FACE, "text-dim")} aria-hidden>
+          <span
+            className={cn(REVIEW_FACE, utilityClassName("text-dim"))}
+            aria-hidden
+          >
             {selectedTeam ? <IconStack size={18} /> : <IconPeople size={18} />}
           </span>
         )}
@@ -1162,7 +1843,7 @@ function ReviewerChip({
           {rowName && (
             <>
               {rowName}
-              <span className="text-faint"> · </span>
+              <span {...stylex.props(sx.textFaint)}> · </span>
             </>
           )}
           <span className={stateTone}>{rowState}</span>
@@ -1181,7 +1862,9 @@ function ReviewerChip({
           <Menu.Trigger
             className={
               reviewNow
-                ? "-mr-1 ml-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg"
+                ? utilityClassName(
+                    "-mr-1 ml-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg",
+                  )
                 : gitActionClass(rowTone, true)
             }
             aria-label="Review options"
@@ -1196,7 +1879,11 @@ function ReviewerChip({
               </>
             )}
           </Menu.Trigger>
-          <Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
+          <Menu.Popup
+            align="start"
+            sideOffset={6}
+            className={mergeStylexOverrideClassName("", sx.minW200px)}
+          >
             {req &&
               (accepted ? (
                 <Menu.Item
@@ -1206,13 +1893,21 @@ function ReviewerChip({
                       : accept(false)
                   }
                 >
-                  <IconBell size={20} className="text-dim" />
-                  <span className="min-w-0 flex-1 truncate">Reopen review</span>
+                  <IconBell
+                    size={20}
+                    className={mergeStylexOverrideClassName("", sx.textDim)}
+                  />
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                    Reopen review
+                  </span>
                 </Menu.Item>
               ) : (
                 <Menu.Item onClick={() => accept(true)}>
-                  <IconCheck size={20} className="text-dim" />
-                  <span className="min-w-0 flex-1 truncate">
+                  <IconCheck
+                    size={20}
+                    className={mergeStylexOverrideClassName("", sx.textDim)}
+                  />
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                     Mark as reviewed
                   </span>
                 </Menu.Item>
@@ -1221,11 +1916,13 @@ function ReviewerChip({
             {TEAM.map((name) => (
               <Menu.Item key={name} onClick={() => pick(name)}>
                 <UserAvatar name={name} size={22} />
-                <span className="min-w-0 flex-1 truncate">{name}</span>
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                  {name}
+                </span>
                 <Menu.Check
                   on={req?.to === name}
                   size={20}
-                  className="text-dim"
+                  className={mergeStylexOverrideClassName("", sx.textDim)}
                 />
               </Menu.Item>
             ))}
@@ -1235,21 +1932,33 @@ function ReviewerChip({
                 key={team.github}
                 onClick={() => pick(team.github, team.members)}
               >
-                <span className="grid size-[22px] place-items-center text-dim">
+                <span
+                  {...stylex.props(
+                    sx.grid,
+                    sx.size22px,
+                    sx.placeItemsCenter,
+                    sx.textDim,
+                  )}
+                >
                   <IconStack size={20} />
                 </span>
-                <span className="min-w-0 flex-1 truncate">{team.name}</span>
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                  {team.name}
+                </span>
                 <Menu.Check
                   on={req?.to === team.github}
                   size={20}
-                  className="text-dim"
+                  className={mergeStylexOverrideClassName("", sx.textDim)}
                 />
               </Menu.Item>
             ))}
             {(req || githubRequested.length > 0) && (
               <>
                 <Menu.Separator />
-                <Menu.Item className="text-dim" onClick={() => pick(null)}>
+                <Menu.Item
+                  className={mergeStylexOverrideClassName("", sx.textDim)}
+                  onClick={() => pick(null)}
+                >
                   Clear review request
                 </Menu.Item>
               </>
@@ -1258,7 +1967,17 @@ function ReviewerChip({
         </Menu.Root>
       </div>
       {error && (
-        <div className="px-2 pb-1 text-meta font-medium text-red">{error}</div>
+        <div
+          {...stylex.props(
+            sx.px2,
+            sx.pb1,
+            sx.fontMedium,
+            sx.textRed,
+            typography.meta,
+          )}
+        >
+          {error}
+        </div>
       )}
     </>
   );
@@ -1306,7 +2025,7 @@ function GitStatusRows({
     <div className={INFO_SECTION_CLASS}>
       <div className={INFO_LABEL_CLASS}>Uncommitted</div>
       <div className={INFO_LIST_CLASS}>
-        <div className={`${GIT_ROW} py-2`}>
+        <div className={utilityClassName(`${GIT_ROW} py-2`)}>
           <span className={`${GIT_DOT} ${GIT_DOT_BG.yellow}`} aria-hidden />
           <span className={GIT_LABEL}>
             {dirty} uncommitted file{dirty === 1 ? "" : "s"}
@@ -1324,7 +2043,7 @@ function GitStatusRows({
         </div>
       </div>
       {prompted && (
-        <div className={`${GIT_NOTE} text-faint`}>
+        <div className={utilityClassName(`${GIT_NOTE} text-faint`)}>
           Asked {AGENT_NAME} to {prompted} ✓
         </div>
       )}
@@ -1368,7 +2087,18 @@ function MediaStrip({ items }: { items: StripItem[] }) {
       // own `px-2`, which puts row content 12px off the card edge. A frame is
       // its own content, so the card holds all 12 itself and the frames line
       // up with the rows and the label above them.
-      className="flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-lg bg-panel p-3 [scroll-padding-left:12px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      {...mergeStylexProps(
+        "snap-x snap-mandatory [&::-webkit-scrollbar]:hidden",
+        sx.flex,
+        sx.gap2,
+        sx.overflowXAuto,
+        sx.overflowYHidden,
+        sx.roundedLg,
+        sx.bgPanel,
+        sx.p3,
+        sx.ScrollPaddingLeft12px,
+        sx.ScrollbarWidthNone,
+      )}
     >
       {items.map((item) => (
         <button
@@ -1377,15 +2107,17 @@ function MediaStrip({ items }: { items: StripItem[] }) {
           onClick={(event) => item.onOpen(event.currentTarget)}
           title={item.title}
           className={cn(
-            "focus-ring group/frame flex shrink-0 snap-start flex-col gap-1 rounded-[calc(14px*var(--rf)-12px)] text-left",
+            utilityClassName(
+              "focus-ring group/frame flex shrink-0 snap-start flex-col gap-1 rounded-[calc(14px*var(--rf)-12px)] text-left",
+            ),
             items.length === 1
-              ? "w-full"
+              ? utilityClassName("w-full")
               : items.length === 2
-                ? "w-[calc((100%-8px)/2)]"
+                ? utilityClassName("w-[calc((100%-8px)/2)]")
                 : // Two full frames + the 8px gap + a 22px sliver of the
                   // third, filling the card exactly, so the sliver sits
                   // inside the card's own padding, not against the panel.
-                  "w-[calc((100%-30px)/2)]",
+                  utilityClassName("w-[calc((100%-30px)/2)]"),
           )}
         >
           <span
@@ -1401,10 +2133,30 @@ function MediaStrip({ items }: { items: StripItem[] }) {
             // at the same step every other image in the app is outlined
             // with (NoteBubble, the Slack composer's thumbnails). Hover is
             // the fill alone: there is no line above strong to escalate to.
-            className="relative block aspect-video w-full overflow-hidden rounded-[calc(14px*var(--rf)-12px)] border border-line-strong bg-surface transition-colors group-hover/frame:bg-hover"
+            {...mergeStylexProps(
+              "group-hover/frame:bg-hover",
+              sx.relative,
+              sx.block,
+              sx.aspectVideo,
+              sx.wFull,
+              sx.overflowHidden,
+              sx.roundedCalc14pxVarRf12px,
+              sx.border,
+              sx.borderLineStrong,
+              sx.bgSurface,
+              sx.transitionColors,
+            )}
           >
             {item.kind === "file" ? (
-              <span className="grid h-full w-full place-items-center text-faint">
+              <span
+                {...stylex.props(
+                  sx.grid,
+                  sx.hFull,
+                  sx.wFull,
+                  sx.placeItemsCenter,
+                  sx.textFaint,
+                )}
+              >
                 <IconFile size={24} />
               </span>
             ) : item.kind === "image" ? (
@@ -1414,7 +2166,7 @@ function MediaStrip({ items }: { items: StripItem[] }) {
                 loading="lazy"
                 // contain, not cover: a screenshot is only worth showing
                 // if the whole frame is there.
-                className="h-full w-full object-contain"
+                {...stylex.props(sx.hFull, sx.wFull, sx.objectContain)}
               />
             ) : (
               <>
@@ -1426,12 +2178,30 @@ function MediaStrip({ items }: { items: StripItem[] }) {
                   muted
                   playsInline
                   preload="metadata"
-                  className="h-full w-full object-contain"
+                  {...stylex.props(sx.hFull, sx.wFull, sx.objectContain)}
                 />
                 {/* Dark translucent disc so the wedge reads on any frame
 								    (a bare white glyph vanishes on light footage). */}
-                <span className="pointer-events-none absolute inset-0 grid place-items-center">
-                  <span className="grid size-8 place-items-center rounded-full bg-black/45 text-white backdrop-blur-sm">
+                <span
+                  {...stylex.props(
+                    sx.pointerEventsNone,
+                    sx.absolute,
+                    sx.inset0,
+                    sx.grid,
+                    sx.placeItemsCenter,
+                  )}
+                >
+                  <span
+                    {...mergeStylexProps(
+                      "backdrop-blur-sm",
+                      sx.grid,
+                      sx.size8,
+                      sx.placeItemsCenter,
+                      sx.roundedFull,
+                      sx.bgBlack45,
+                      sx.textWhite,
+                    )}
+                  >
                     <IconPlay size={18} />
                   </span>
                 </span>
@@ -1439,7 +2209,15 @@ function MediaStrip({ items }: { items: StripItem[] }) {
             )}
           </span>
           {item.caption && (
-            <span className="block w-full truncate text-meta text-dim">
+            <span
+              {...stylex.props(
+                sx.block,
+                sx.wFull,
+                sx.truncate,
+                sx.textDim,
+                typography.meta,
+              )}
+            >
               {item.caption}
             </span>
           )}
@@ -1607,7 +2385,17 @@ export function WorkspaceInfo({
   // page reaches it from an ancestor — `[&_.workspace-info-panel]:pt-0` in
   // INFO_OVERVIEW (lib/session-viewer-classes).
   return (
-    <div className="workspace-info-panel flex flex-col gap-4 px-2 pb-[22px] pt-3">
+    <div
+      {...mergeStylexProps(
+        "workspace-info-panel",
+        sx.flex,
+        sx.flexCol,
+        sx.gap4,
+        sx.px2,
+        sx.pb22px,
+        sx.pt3,
+      )}
+    >
       {/* Both reviewers in one section. With a PR the agent's card owns the
 			    plate and the teammate's row goes in under it; without one there is
 			    no agent reading to show, so the row stands in its own section. */}
@@ -1630,19 +2418,27 @@ export function WorkspaceInfo({
         // `px-3`, the label inset: the badge is a section's worth of content
         // with no plate under it, so it lines up with the labels rather than
         // with the rows inside a plate.
-        <div className="flex flex-wrap items-center gap-1.5 px-3">
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.flexWrap,
+            sx.itemsCenter,
+            sx.gap15,
+            sx.px3,
+          )}
+        >
           <SandboxBadge sessionId={sessionId} sandbox={sandbox} />
         </div>
       )}
       {showGit && <GitStatusRows sessionId={sessionId} git={git} send={send} />}
       {hasBody ? (
-        <div className="grid gap-4">
+        <div {...stylex.props(sx.grid, sx.gap4)}>
           {comments.length > 0 && (
             <div className={INFO_SECTION_CLASS}>
               <div
                 className={cn(
                   INFO_LABEL_CLASS,
-                  "flex items-center justify-between gap-2",
+                  utilityClassName("flex items-center justify-between gap-2"),
                 )}
               >
                 <span>
@@ -1651,7 +2447,21 @@ export function WorkspaceInfo({
                 {onAddToInput && (
                   <button
                     type="button"
-                    className="rounded-control border border-line bg-surface px-2 py-0.5 text-meta font-semibold text-dim transition-colors hover:border-line-strong hover:bg-hover hover:text-fg"
+                    {...stylex.props(
+                      sx.roundedControl,
+                      sx.border,
+                      sx.borderLine,
+                      sx.bgSurface,
+                      sx.px2,
+                      sx.py05,
+                      sx.fontSemibold,
+                      sx.textDim,
+                      sx.transitionColors,
+                      sx.hoverBorderLineStrong,
+                      sx.hoverBgHover,
+                      sx.hoverTextFg,
+                      typography.meta,
+                    )}
                     onClick={() =>
                       onAddToInput(formatFixCommentsPrompt(comments, pr!))
                     }
@@ -1703,18 +2513,28 @@ export function WorkspaceInfo({
               <div
                 className={cn(
                   INFO_LABEL_CLASS,
-                  "flex items-center justify-between gap-2",
+                  utilityClassName("flex items-center justify-between gap-2"),
                 )}
               >
                 <span>
                   {changed.length} file{changed.length === 1 ? "" : "s"} changed
                 </span>
-                <span className="inline-flex shrink-0 items-center gap-1 text-meta font-semibold tabular-nums">
+                <span
+                  {...mergeStylexProps(
+                    "tabular-nums",
+                    sx.inlineFlex,
+                    sx.shrink0,
+                    sx.itemsCenter,
+                    sx.gap1,
+                    sx.fontSemibold,
+                    typography.meta,
+                  )}
+                >
                   {totalAdd > 0 && (
-                    <span className="text-green">+{totalAdd}</span>
+                    <span {...stylex.props(sx.textGreen)}>+{totalAdd}</span>
                   )}
                   {totalDel > 0 && (
-                    <span className="text-red">−{totalDel}</span>
+                    <span {...stylex.props(sx.textRed)}>−{totalDel}</span>
                   )}
                 </span>
               </div>
@@ -1750,7 +2570,7 @@ export function WorkspaceInfo({
               <div
                 className={cn(
                   INFO_LABEL_CLASS,
-                  "flex items-center justify-between gap-2",
+                  utilityClassName("flex items-center justify-between gap-2"),
                 )}
               >
                 <span>Screenshots</span>
@@ -1774,11 +2594,13 @@ export function WorkspaceInfo({
               <div
                 className={cn(
                   INFO_LABEL_CLASS,
-                  "group/assets flex items-center justify-between gap-2",
+                  utilityClassName(
+                    "group/assets flex items-center justify-between gap-2",
+                  ),
                 )}
               >
                 <span>Assets</span>
-                <span className="flex items-center gap-1.5">
+                <span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15)}>
                   <AssetViewToggle mode={assetView} onChange={setAssetView} />
                   <span className="tabular-nums">{assets.length}</span>
                 </span>
@@ -1812,11 +2634,15 @@ export function WorkspaceInfo({
                       onClick={() => onOpenAsset?.(a.path)}
                       title={`Open ${a.path}`}
                       className={cn(
-                        "flex w-full min-w-0 gap-2 rounded-control px-2 py-[5px] text-left text-label text-fg transition-colors hover:bg-hover",
+                        utilityClassName(
+                          "flex w-full min-w-0 gap-2 rounded-control px-2 py-[5px] text-left text-label text-fg transition-colors hover:bg-hover",
+                        ),
                         // With a description the row is two lines and the icon
                         // and size ride the first one; a bare filename is a
                         // single line, so centre everything on it instead.
-                        a.description ? "items-start" : "items-center",
+                        a.description
+                          ? utilityClassName("items-start")
+                          : utilityClassName("items-center"),
                       )}
                     >
                       {assetPreviewKind(a.path) === "image" ? (
@@ -1828,8 +2654,10 @@ export function WorkspaceInfo({
                           // what the frames are for. What it does is tell
                           // two rows apart once you already know them.
                           className={cn(
-                            "size-3.5 shrink-0 rounded-[3px] border border-line-strong object-cover",
-                            a.description && "mt-0.5",
+                            utilityClassName(
+                              "size-3.5 shrink-0 rounded-[3px] border border-line-strong object-cover",
+                            ),
+                            a.description && utilityClassName("mt-0.5"),
                           )}
                         />
                       ) : assetPreviewKind(a.path) === "video" ? (
@@ -1838,28 +2666,44 @@ export function WorkspaceInfo({
                         <IconPlayRectangle
                           size={14}
                           className={cn(
-                            "shrink-0 text-faint",
-                            a.description && "mt-0.5",
+                            utilityClassName("shrink-0 text-faint"),
+                            a.description && utilityClassName("mt-0.5"),
                           )}
                         />
                       ) : (
                         <IconFile
                           size={14}
                           className={cn(
-                            "shrink-0 text-faint",
-                            a.description && "mt-0.5",
+                            utilityClassName("shrink-0 text-faint"),
+                            a.description && utilityClassName("mt-0.5"),
                           )}
                         />
                       )}
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{a.path}</span>
+                      <span {...stylex.props(sx.minW0, sx.flex1)}>
+                        <span {...stylex.props(sx.block, sx.truncate)}>
+                          {a.path}
+                        </span>
                         {a.description && (
-                          <span className="mt-0.5 line-clamp-2 text-supporting leading-snug text-dim">
+                          <span
+                            {...stylex.props(
+                              sx.mt05,
+                              sx.lineClamp2,
+                              sx.leadingSnug,
+                              sx.textDim,
+                              typography.supporting,
+                            )}
+                          >
                             {a.description}
                           </span>
                         )}
                       </span>
-                      <span className="shrink-0 text-meta text-faint">
+                      <span
+                        {...stylex.props(
+                          sx.shrink0,
+                          sx.textFaint,
+                          typography.meta,
+                        )}
+                      >
                         {fmtBytes(a.size)}
                       </span>
                     </button>

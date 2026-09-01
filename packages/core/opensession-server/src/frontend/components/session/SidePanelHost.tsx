@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { SidePanelPage } from "../../lib/side-panel-open";
@@ -11,6 +13,26 @@ import {
 import { cn } from "../../ui/cn";
 import { IconFile, IconGlobe, IconStack, IconTerminal } from "../icons";
 import { ShellPanel } from "../TerminalPanel";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+});
 
 interface SidePanelHostProps {
   hidden: boolean;
@@ -72,11 +94,14 @@ export function SidePanelHost({
                 aria-pressed={page === "changes"}
                 className={cn(
                   PANEL_TAB,
-                  page === "changes" && "bg-hover text-fg",
+                  page === "changes" && utilityClassName("bg-hover text-fg"),
                 )}
                 onClick={() => onPageChange("changes")}
               >
-                <IconFile size={15} className="shrink-0" />
+                <IconFile
+                  size={15}
+                  className={mergeStylexOverrideClassName("", sx.shrink0)}
+                />
                 <span className="@max-[380px]:hidden">Changes</span>
               </button>
               <button
@@ -84,14 +109,23 @@ export function SidePanelHost({
                 aria-pressed={page === "portals"}
                 className={cn(
                   PANEL_TAB,
-                  page === "portals" && "bg-hover text-fg",
+                  page === "portals" && utilityClassName("bg-hover text-fg"),
                 )}
                 onClick={() => onPageChange("portals")}
               >
-                <IconGlobe size={15} className="shrink-0" />
+                <IconGlobe
+                  size={15}
+                  className={mergeStylexOverrideClassName("", sx.shrink0)}
+                />
                 <span className="@max-[380px]:hidden">Portals</span>
                 {livePortals > 0 && (
-                  <span className="shrink-0 tabular-nums text-faint @max-[380px]:hidden">
+                  <span
+                    {...mergeStylexProps(
+                      "tabular-nums @max-[380px]:hidden",
+                      sx.shrink0,
+                      sx.textFaint,
+                    )}
+                  >
                     {livePortals}
                   </span>
                 )}
@@ -101,14 +135,23 @@ export function SidePanelHost({
                 aria-pressed={page === "agents"}
                 className={cn(
                   PANEL_TAB,
-                  page === "agents" && "bg-hover text-fg",
+                  page === "agents" && utilityClassName("bg-hover text-fg"),
                 )}
                 onClick={() => onPageChange("agents")}
               >
-                <IconStack size={15} className="shrink-0" />
+                <IconStack
+                  size={15}
+                  className={mergeStylexOverrideClassName("", sx.shrink0)}
+                />
                 <span className="@max-[380px]:hidden">Agents</span>
                 {runningAgents > 0 && (
-                  <span className="shrink-0 tabular-nums text-yellow @max-[380px]:hidden">
+                  <span
+                    {...mergeStylexProps(
+                      "tabular-nums @max-[380px]:hidden",
+                      sx.shrink0,
+                      sx.textYellow,
+                    )}
+                  >
                     {runningAgents}
                   </span>
                 )}
@@ -118,14 +161,17 @@ export function SidePanelHost({
                 aria-pressed={page === "terminal"}
                 className={cn(
                   PANEL_TAB,
-                  page === "terminal" && "bg-hover text-fg",
+                  page === "terminal" && utilityClassName("bg-hover text-fg"),
                 )}
                 onClick={() => {
                   onTerminalMount();
                   onPageChange("terminal");
                 }}
               >
-                <IconTerminal size={15} className="shrink-0" />
+                <IconTerminal
+                  size={15}
+                  className={mergeStylexOverrideClassName("", sx.shrink0)}
+                />
                 <span className="@max-[380px]:hidden">Terminal</span>
               </button>
             </div>
@@ -144,11 +190,11 @@ export function SidePanelHost({
               <div
                 className={
                   page === "terminal"
-                    ? "flex h-full min-h-0 flex-col"
-                    : "hidden"
+                    ? utilityClassName("flex h-full min-h-0 flex-col")
+                    : utilityClassName("hidden")
                 }
               >
-                <div className="min-h-0 flex-1">
+                <div {...stylex.props(sx.minH0, sx.flex1)}>
                   <ShellPanel
                     sessionId={sessionId}
                     visible={page === "terminal"}

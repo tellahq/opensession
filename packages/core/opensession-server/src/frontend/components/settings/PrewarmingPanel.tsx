@@ -1,3 +1,4 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
 import { useEffect, useState } from "react";
 import {
   fetchWarmTemplates,
@@ -19,6 +20,23 @@ import {
 import { InlineAlert } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { Select, SettingRow } from "./shared";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  mt0: {
+    marginTop: "0",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+});
 
 // ── Warm previews (per-repo prebuilt template worktrees) ────────────────────
 
@@ -74,7 +92,7 @@ function WarmPreviewsPanel() {
   }
 
   const label = (
-    <SettingsGroupLabel className="mt-0">
+    <SettingsGroupLabel className={mergeStylexOverrideClassName("", sx.mt0)}>
       Host dependency cache
     </SettingsGroupLabel>
   );
@@ -119,7 +137,7 @@ function WarmPreviewsPanel() {
               title={entry.repoId}
               desc={status}
               control={
-                <div className="flex items-center gap-2">
+                <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
                   {entry.enabled && (
                     <>
                       <Button

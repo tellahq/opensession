@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
 import { Reorder } from "motion/react";
 import type { TranscriptEntry } from "../lib/types";
@@ -35,6 +37,39 @@ import { cn } from "../ui/cn";
 import { TextShimmer } from "../ui/text-shimmer";
 import { Tooltip } from "../ui/tooltip";
 import { IconArrowUp, IconPencil, IconPullRequest, IconTrash } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flexNone: {
+    flex: "none",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+});
 
 interface Props {
   currentUser: string;
@@ -81,7 +116,14 @@ function QueueContent({
   return (
     <div className={composerQueueContent}>
       {isReview && (
-        <IconPullRequest size={18} className="flex-none text-faint" />
+        <IconPullRequest
+          size={18}
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.flexNone,
+            sx.textFaint,
+          )}
+        />
       )}
       {firstImage && (
         <div className={composerQueueImage}>
@@ -260,7 +302,8 @@ export function SessionQueue({
           key={item.clientId}
           className={cn(
             composerQueueItem,
-            item.state === "failed" && "flex-col items-stretch gap-1.5",
+            item.state === "failed" &&
+              utilityClassName("flex-col items-stretch gap-1.5"),
             (index > 0 || pendingQueue.length > 0) &&
               composerQueueItemSeparated,
           )}
@@ -281,8 +324,18 @@ export function SessionQueue({
             tone="sending"
           />
           {item.state === "failed" && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="min-w-0 flex-1 text-meta text-red" role="alert">
+            <div
+              {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap2)}
+            >
+              <span
+                {...stylex.props(
+                  sx.minW0,
+                  sx.flex1,
+                  sx.textRed,
+                  typography.meta,
+                )}
+                role="alert"
+              >
                 {item.error || "This message could not be delivered."}
               </span>
               <Button

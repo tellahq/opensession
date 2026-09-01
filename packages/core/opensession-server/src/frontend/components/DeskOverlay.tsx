@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useRef, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import { getCurrentUser } from "./UserPicker";
@@ -10,6 +12,78 @@ import { DeskVoiceClient, type DeskVoiceState } from "../lib/desk-voice-client";
 import { getDeskVoicePref, onDeskVoiceChanged } from "../lib/desk-voice-pref";
 import { cn } from "../ui/cn";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  maxW160px: {
+    maxWidth: "160px",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  py6: {
+    paddingBlock: "calc(4px * 6)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+});
 
 /**
  * The Desk — a summonable overlay (⌘J / the floating desk button) on top of
@@ -140,16 +214,46 @@ function DeskBody({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-2.5 border-b border-divider px-4 py-2.5">
-        <IconDesk size={22} className="text-dim" />
-        <span className="min-w-0 flex-1 truncate text-item-title font-semibold text-fg">
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.gap25,
+          sx.borderB,
+          sx.borderDivider,
+          sx.px4,
+          sx.py25,
+        )}
+      >
+        <IconDesk
+          size={22}
+          className={mergeStylexOverrideClassName("", sx.textDim)}
+        />
+        <span
+          {...stylex.props(
+            sx.minW0,
+            sx.flex1,
+            sx.truncate,
+            sx.fontSemibold,
+            sx.textFg,
+            typography.itemTitle,
+          )}
+        >
           Desk
         </span>
         {voiceEnabled && voiceState !== "idle" && (
           <span
-            className="max-w-[160px] shrink-0 truncate text-meta font-medium text-dim"
+            {...stylex.props(
+              sx.maxW160px,
+              sx.shrink0,
+              sx.truncate,
+              sx.fontMedium,
+              sx.textDim,
+              typography.meta,
+            )}
             title={voiceError ?? undefined}
           >
             {voiceState === "error"
@@ -166,7 +270,7 @@ function DeskBody({
         <Button
           variant="ghost"
           size="sm"
-          className="shrink-0 text-faint"
+          className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
           onClick={clearSession}
           title="Clear the session here. The full transcript stays in the expanded session."
         >
@@ -176,7 +280,11 @@ function DeskBody({
           <Button
             variant="ghost"
             size="sm"
-            className="shrink-0 text-faint"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.shrink0,
+              sx.textFaint,
+            )}
             icon={<IconExpand size={20} />}
             onClick={() => {
               onClose();
@@ -189,7 +297,7 @@ function DeskBody({
         <Button
           variant="ghost"
           size="sm"
-          className="shrink-0 text-faint"
+          className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
           icon={<IconMinus size={20} />}
           onClick={onClose}
           title="Minimise Desk"
@@ -198,9 +306,18 @@ function DeskBody({
       </div>
 
       {/* Concierge session */}
-      <div className="min-h-0 flex-1">
+      <div {...stylex.props(sx.minH0, sx.flex1)}>
         {ensureError ? (
-          <div className="px-4 py-6 text-center text-label font-medium text-dim">
+          <div
+            {...stylex.props(
+              sx.px4,
+              sx.py6,
+              sx.textCenter,
+              sx.fontMedium,
+              sx.textDim,
+              typography.label,
+            )}
+          >
             {ensureError}
           </div>
         ) : sessionId ? (
@@ -225,7 +342,16 @@ function DeskBody({
             suggestions={DESK_SUGGESTIONS}
           />
         ) : (
-          <div className="px-4 py-6 text-center text-label font-medium text-dim">
+          <div
+            {...stylex.props(
+              sx.px4,
+              sx.py6,
+              sx.textCenter,
+              sx.fontMedium,
+              sx.textDim,
+              typography.label,
+            )}
+          >
             Opening…
           </div>
         )}
@@ -261,11 +387,17 @@ export function DeskOverlay({
       <Modal.Content
         variant="palette"
         keepMounted
-        widthClassName="w-[min(650px,100%)]"
+        widthClassName={utilityClassName("w-[min(650px,100%)]")}
         className={cn(
-          phone ? "h-[min(600px,85dvh)]" : "h-[600px] max-h-[80dvh]",
-          openOrigin === "center" ? "origin-center" : "origin-bottom-right",
-          "rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! duration-[100ms]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!",
+          phone
+            ? utilityClassName("h-[min(600px,85dvh)]")
+            : utilityClassName("h-[600px] max-h-[80dvh]"),
+          openOrigin === "center"
+            ? utilityClassName("origin-center")
+            : utilityClassName("origin-bottom-right"),
+          utilityClassName(
+            "rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! duration-[100ms]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!",
+          ),
         )}
         aria-label="Desk"
       >

@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { PlainThread, UnifiedSession } from "../lib/types";
 import { fetchPlainThreadById, startPlainTriageApi } from "../lib/api";
@@ -28,6 +30,109 @@ import {
 import { cn } from "../ui/cn";
 import { IconSparkle } from "./icons";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  m0: {
+    margin: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  relative: {
+    position: "relative",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  hFull: {
+    height: "100%",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  mt3: {
+    marginTop: "calc(4px * 3)",
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  size7px: {
+    width: "7px",
+    height: "7px",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxW760px: {
+    maxWidth: "760px",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  pb5: {
+    paddingBottom: "calc(4px * 5)",
+  },
+});
 
 interface Props {
   /** The Plain thread id — the pane's key. */
@@ -201,7 +306,10 @@ export function ConversationPane({
   return (
     <div
       ref={setPaneEl}
-      className={cn("flex min-h-0 flex-1 flex-col", className)}
+      className={cn(
+        utilityClassName("flex min-h-0 flex-1 flex-col"),
+        className,
+      )}
     >
       {headerInTopBar && (
         <div className={SUPPORT_COLUMN_BAR}>
@@ -215,11 +323,25 @@ export function ConversationPane({
 							    ticket's state and the subject gets a fixed left edge to
 							    truncate against. */}
               {status && <PlainStatusBadge status={status} />}
-              <div className="flex min-w-0 flex-1 flex-col justify-center">
+              <div
+                {...stylex.props(
+                  sx.flex,
+                  sx.minW0,
+                  sx.flex1,
+                  sx.flexCol,
+                  sx.justifyCenter,
+                )}
+              >
                 {/* The actions beside it can leave this 200px on a
 								    laptop, so the full subject stays on hover. */}
                 <h2
-                  className="m-0 truncate text-item-title font-semibold text-fg"
+                  {...stylex.props(
+                    sx.m0,
+                    sx.truncate,
+                    sx.fontSemibold,
+                    sx.textFg,
+                    typography.itemTitle,
+                  )}
                   title={thread.title || undefined}
                 >
                   {thread.title || "No subject"}
@@ -228,12 +350,22 @@ export function ConversationPane({
 								    subject. Who the ticket is from is read once on the way
 								    in and then lives in the queue row beside it, so it
 								    recedes here rather than competing with the subject. */}
-                <div className="flex min-w-0 items-center gap-1.5 text-meta">
-                  <span className="truncate text-dim">{customerLabel}</span>
+                <div
+                  {...stylex.props(
+                    sx.flex,
+                    sx.minW0,
+                    sx.itemsCenter,
+                    sx.gap15,
+                    typography.meta,
+                  )}
+                >
+                  <span {...stylex.props(sx.truncate, sx.textDim)}>
+                    {customerLabel}
+                  </span>
                   {customerName && customerEmail && (
                     <>
-                      <span className="text-faint">·</span>
-                      <span className="truncate text-faint">
+                      <span {...stylex.props(sx.textFaint)}>·</span>
+                      <span {...stylex.props(sx.truncate, sx.textFaint)}>
                         {customerEmail}
                       </span>
                     </>
@@ -246,27 +378,27 @@ export function ConversationPane({
                   thread={thread}
                   onChanged={load}
                   layout="bar"
-                  className="shrink-0"
+                  className={mergeStylexOverrideClassName("", sx.shrink0)}
                 />
               )}
             </>
           )}
         </div>
       )}
-      <div className="relative min-h-0 flex-1">
-        <div className="h-full overflow-y-auto">
+      <div {...stylex.props(sx.relative, sx.minH0, sx.flex1)}>
+        <div {...stylex.props(sx.hFull, sx.overflowYAuto)}>
           <div
             className={cn(
-              "mx-auto w-full max-w-[760px] px-5 pb-5",
+              utilityClassName("mx-auto w-full max-w-[760px] px-5 pb-5"),
               // The rail floats, so the thread owes it the space it sits in:
               // 12px of offset plus a 32px pill, and 4px clear of it.
               rail
-                ? "pt-12"
+                ? utilityClassName("pt-12")
                 : // With the identity in the bar, the first block's own top
                   // margin is the whole gap under it.
                   headerInTopBar
-                  ? "pt-1"
-                  : "pt-6",
+                  ? utilityClassName("pt-1")
+                  : utilityClassName("pt-6"),
             )}
           >
             {loading && !thread ? (
@@ -279,22 +411,47 @@ export function ConversationPane({
               <>
                 {!headerInTopBar && (
                   <>
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      {...stylex.props(
+                        sx.flex,
+                        sx.itemsCenter,
+                        sx.gap25,
+                        sx.minW0,
+                      )}
+                    >
                       <span
-                        className="truncate text-item-title font-semibold text-fg"
+                        {...stylex.props(
+                          sx.truncate,
+                          sx.fontSemibold,
+                          sx.textFg,
+                          typography.itemTitle,
+                        )}
                         title={customerEmail}
                       >
                         {customerLabel}
                       </span>
                       {customerName && customerEmail && (
-                        <span className="text-faint text-label truncate">
+                        <span
+                          {...stylex.props(
+                            sx.textFaint,
+                            sx.truncate,
+                            typography.label,
+                          )}
+                        >
                           {customerEmail}
                         </span>
                       )}
                       {status && <PlainStatusBadge status={status} />}
                     </div>
                     {thread?.title && (
-                      <div className="mt-2 text-section-title font-semibold text-fg">
+                      <div
+                        {...stylex.props(
+                          sx.mt2,
+                          sx.fontSemibold,
+                          sx.textFg,
+                          typography.sectionTitle,
+                        )}
+                      >
                         {thread.title}
                       </div>
                     )}
@@ -304,7 +461,10 @@ export function ConversationPane({
                 {/* Is anyone still owed an answer? Plain leads with this;
 							    so should we. */}
                 {thread && (
-                  <PlainWaitingBanner thread={thread} className="mt-3" />
+                  <PlainWaitingBanner
+                    thread={thread}
+                    className={mergeStylexOverrideClassName("", sx.mt3)}
+                  />
                 )}
 
                 {/* One-click ticket admin, straight from here: status,
@@ -315,13 +475,20 @@ export function ConversationPane({
                     threadId={threadId}
                     thread={thread}
                     onChanged={load}
-                    className="mt-3"
+                    className={mergeStylexOverrideClassName("", sx.mt3)}
                   />
                 )}
 
-                <div className="mt-5 flex flex-col gap-3">
+                <div {...stylex.props(sx.mt5, sx.flex, sx.flexCol, sx.gap3)}>
                   {thread && thread.entries.length === 0 ? (
-                    <div className="mt-5 text-center text-label text-faint">
+                    <div
+                      {...stylex.props(
+                        sx.mt5,
+                        sx.textCenter,
+                        sx.textFaint,
+                        typography.label,
+                      )}
+                    >
                       No messages in this thread yet.
                     </div>
                   ) : (
@@ -349,18 +516,23 @@ export function ConversationPane({
               >
                 <button
                   type="button"
-                  className={cn(FLOATING_PILL_BUTTON, "pointer-events-auto")}
+                  className={cn(
+                    FLOATING_PILL_BUTTON,
+                    utilityClassName("pointer-events-auto"),
+                  )}
                   onClick={() => onOpenSession(session.id)}
                 >
                   <span
-                    className="size-[7px] shrink-0 rounded-full"
+                    {...stylex.props(sx.size7px, sx.shrink0, sx.roundedFull)}
                     style={{
                       backgroundColor:
                         sessionState?.dotColor || "var(--text-faint)",
                     }}
                     aria-hidden
                   />
-                  <span className="min-w-0 truncate">{sessionLabel}</span>
+                  <span {...stylex.props(sx.minW0, sx.truncate)}>
+                    {sessionLabel}
+                  </span>
                 </button>
               </Tooltip>
             ) : triaging ? (
@@ -372,10 +544,17 @@ export function ConversationPane({
               <Tooltip label="Investigates, posts an internal note, and can open a PR for review.">
                 <button
                   type="button"
-                  className={cn(FLOATING_PILL_BUTTON, "pointer-events-auto")}
+                  className={cn(
+                    FLOATING_PILL_BUTTON,
+                    utilityClassName("pointer-events-auto"),
+                  )}
                   onClick={handleTriage}
                 >
-                  <IconSparkle size={14} className="text-dim" aria-hidden />
+                  <IconSparkle
+                    size={14}
+                    className={mergeStylexOverrideClassName("", sx.textDim)}
+                    aria-hidden
+                  />
                   Triage this ticket
                 </button>
               </Tooltip>
@@ -384,11 +563,16 @@ export function ConversationPane({
               <div
                 className={cn(
                   FLOATING_PILL,
-                  "pointer-events-auto min-w-0 font-normal text-red",
+                  utilityClassName(
+                    "pointer-events-auto min-w-0 font-normal text-red",
+                  ),
                 )}
                 role="alert"
               >
-                <span className="min-w-0 truncate" title={triageError}>
+                <span
+                  {...stylex.props(sx.minW0, sx.truncate)}
+                  title={triageError}
+                >
                   {triageError}
                 </span>
               </div>
@@ -399,7 +583,16 @@ export function ConversationPane({
 
       {/* Keep the customer reply available while the ticket scrolls. */}
       {thread && (
-        <div className="mx-auto w-full max-w-[760px] shrink-0 px-5 pb-5">
+        <div
+          {...stylex.props(
+            sx.mxAuto,
+            sx.wFull,
+            sx.maxW760px,
+            sx.shrink0,
+            sx.px5,
+            sx.pb5,
+          )}
+        >
           <PlainReplyBox
             key={threadId}
             threadId={threadId}

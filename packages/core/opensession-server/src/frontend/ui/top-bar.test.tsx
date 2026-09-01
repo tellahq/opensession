@@ -35,7 +35,11 @@ test("column hosts can stretch portaled top-bar rows", () => {
   );
 
   expect(html).toContain("items-stretch");
-  expect(html).not.toContain("items-center");
+  // StyleX resolves the alignment conflict by composition order rather than
+  // tailwind-merge, so the caller's stretch lands after the base center.
+  expect(html.indexOf("items-stretch")).toBeGreaterThan(
+    html.indexOf("items-center"),
+  );
 });
 
 test("phone pages and sheets share one bar and action rhythm", () => {

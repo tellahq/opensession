@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+// Collapse whitespace so source assertions survive the formatter's line wrapping.
+const norm = (text: string): string => text.replace(/\s+/g, " ");
 
 const summarySource = await Bun.file(
   new URL("./WorkspaceSummary.tsx", import.meta.url),
@@ -43,9 +45,11 @@ test("the Committed section folds open to every PR or workspace commit", () => {
     "const commitCount = prCommits.length || commits.length",
   );
   expect(summarySource).toContain("aria-expanded={commitsOpen}");
-  expect(summarySource).toContain("{commitCount}</span>");
+  expect(summarySource).toMatch(/\{commitCount\}\s*<\/span>/);
   expect(summarySource).toContain("<IconChevronRight");
-  expect(summarySource).toContain('commitsOpen && "rotate-90"');
+  expect(summarySource).toMatch(
+    /commitsOpen\s*&&\s*utilityClassName\(\s*"rotate-90"\s*\)/,
+  );
   expect(summarySource).toContain("hover:bg-transparent hover:text-faint");
   expect(summarySource).not.toContain(
     'title={commitsOpen ? "Hide commits" : "Show all commits"}',
@@ -76,7 +80,9 @@ test("reviewers stay hidden until a pull request is connected", () => {
   expect(summarySource).toContain(
     "const hasConnectedPr = sessionHasConnectedPr(session)",
   );
-  expect(summarySource).toContain('!hasConnectedPr && "hidden!"');
+  expect(summarySource).toMatch(
+    /!hasConnectedPr\s*&&\s*utilityClassName\(\s*"hidden!"\s*\)/,
+  );
 });
 
 test("an assigned reviewer can be changed or cleared from the summary", () => {
@@ -120,7 +126,9 @@ test("a stale automated review offers an inline re-review action", () => {
 test("the review label opens the review with an adjacent arrow", () => {
   expect(summarySource).toContain('aria-label="Open review"');
   expect(summarySource).toContain("group-hover/review:translate-x-0.5");
-  expect(summarySource).toContain("[font-size:inherit] [font-weight:inherit]");
+  expect(summarySource).toMatch(
+    /sx\.ColorInherit,\s*sx\.FontSizeInherit,\s*sx\.FontWeightInherit/,
+  );
   expect(summarySource).not.toContain("w-[calc(100%+16px)]");
   expect(summarySource).not.toContain(
     ">\n              Open\n            </Button>",

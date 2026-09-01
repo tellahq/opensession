@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useEffect, useState } from "react";
 import {
   connectCodeStorage,
@@ -16,6 +18,134 @@ import {
   settingsInputClass,
 } from "../ui/settings";
 import { InlineAlert, LoadingState } from "../ui/state";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  p4: {
+    padding: "calc(4px * 4)",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  minW12rem: {
+    minWidth: "12rem",
+  },
+  flex1: {
+    flex: "1",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  hoverBorderRed: {
+    "@media (hover: hover)": {
+      ":hover": {
+        borderColor: "var(--red)",
+      },
+    },
+  },
+  hoverTextRed: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--red)",
+      },
+    },
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  mt4: {
+    marginTop: "calc(4px * 4)",
+  },
+  mt3: {
+    marginTop: "calc(4px * 3)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  pt4: {
+    paddingTop: "calc(4px * 4)",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  py05: {
+    paddingBlock: "calc(4px * 0.5)",
+  },
+  fontMono: {
+    fontFamily: "var(--mono)",
+  },
+  maxW340px: {
+    maxWidth: "340px",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+});
 
 /** The code.storage organization credential and live webhook health. This is
  * part of the code.storage integration modal, alongside its setup guide. */
@@ -114,7 +244,7 @@ export function CodeStorageConfiguration({
 
   if (!status) {
     return (
-      <SettingsSection className="p-4">
+      <SettingsSection className={mergeStylexOverrideClassName("", sx.p4)}>
         {error ? (
           <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
         ) : (
@@ -129,11 +259,22 @@ export function CodeStorageConfiguration({
   const lastDelivery = webhook?.lastDelivery ?? null;
 
   return (
-    <SettingsSection className="p-4">
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="min-w-[12rem] flex-1">
-          <div className="text-item-title font-medium text-fg">Connection</div>
-          <div className="mt-0.5 text-supporting leading-snug text-dim">
+    <SettingsSection className={mergeStylexOverrideClassName("", sx.p4)}>
+      <div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsStart, sx.gap3)}>
+        <div {...stylex.props(sx.minW12rem, sx.flex1)}>
+          <div
+            {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}
+          >
+            Connection
+          </div>
+          <div
+            {...stylex.props(
+              sx.mt05,
+              sx.leadingSnug,
+              sx.textDim,
+              typography.supporting,
+            )}
+          >
             {!connected
               ? "Enter the organization and its private signing key."
               : status.error
@@ -160,7 +301,13 @@ export function CodeStorageConfiguration({
         {connected && (
           <Button
             size="sm"
-            className="shrink-0 hover:border-red hover:text-red phone:min-h-11"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.shrink0,
+              sx.hoverBorderRed,
+              sx.hoverTextRed,
+              sx.phoneMinH11,
+            )}
             onClick={() => void disconnect()}
           >
             Disconnect
@@ -169,14 +316,31 @@ export function CodeStorageConfiguration({
       </div>
 
       {error && (
-        <InlineAlert className="mt-4" onDismiss={() => setError(null)}>
+        <InlineAlert
+          className={mergeStylexOverrideClassName("", sx.mt4)}
+          onDismiss={() => setError(null)}
+        >
           {error}
         </InlineAlert>
       )}
-      {note && <div className="mt-3 text-supporting text-dim">{note}</div>}
+      {note && (
+        <div {...stylex.props(sx.mt3, sx.textDim, typography.supporting)}>
+          {note}
+        </div>
+      )}
 
       {!connected ? (
-        <div className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
+        <div
+          {...stylex.props(
+            sx.mt4,
+            sx.flex,
+            sx.flexCol,
+            sx.gap4,
+            sx.borderT,
+            sx.borderLine,
+            sx.pt4,
+          )}
+        >
           <SettingsFormRow>
             <SettingsField>
               Organization
@@ -194,7 +358,10 @@ export function CodeStorageConfiguration({
           <SettingsField>
             Private key
             <textarea
-              className={cn(settingsInputClass, "resize-y font-mono")}
+              className={cn(
+                settingsInputClass,
+                utilityClassName("resize-y font-mono"),
+              )}
               value={pem}
               onChange={(event) => setPem(event.target.value)}
               rows={5}
@@ -202,11 +369,19 @@ export function CodeStorageConfiguration({
               placeholder={"-----BEGIN PRIVATE KEY-----\n…"}
               aria-label="code.storage private key PEM"
             />
-            <span className="text-supporting font-normal text-faint">
+            <span
+              {...stylex.props(
+                sx.fontNormal,
+                sx.textFaint,
+                typography.supporting,
+              )}
+            >
               PKCS8 PEM. Register its public half with the organization first.
             </span>
           </SettingsField>
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div
+            {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap25)}
+          >
             <Button
               variant="primary"
               disabled={connecting || !org.trim() || !pem.trim()}
@@ -214,7 +389,7 @@ export function CodeStorageConfiguration({
             >
               {connecting ? "Connecting…" : "Connect"}
             </Button>
-            <span className="text-supporting text-faint">
+            <span {...stylex.props(sx.textFaint, typography.supporting)}>
               Stored on this server with mode 0600.
             </span>
           </div>
@@ -222,15 +397,47 @@ export function CodeStorageConfiguration({
       ) : (
         <>
           {status.error && (
-            <div className="mt-3 text-supporting text-red">{status.error}</div>
+            <div {...stylex.props(sx.mt3, sx.textRed, typography.supporting)}>
+              {status.error}
+            </div>
           )}
           {webhook && (
-            <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
-              <div className="text-label font-medium text-fg">
+            <div
+              {...stylex.props(
+                sx.mt4,
+                sx.flex,
+                sx.flexCol,
+                sx.gap2,
+                sx.borderT,
+                sx.borderLine,
+                sx.pt4,
+              )}
+            >
+              <div
+                {...stylex.props(sx.fontMedium, sx.textFg, typography.label)}
+              >
                 Webhook receiver
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-label text-dim">
-                <code className="rounded-sm bg-active px-1.5 py-0.5 font-mono text-fg">
+              <div
+                {...stylex.props(
+                  sx.flex,
+                  sx.flexWrap,
+                  sx.itemsCenter,
+                  sx.gap2,
+                  sx.textDim,
+                  typography.label,
+                )}
+              >
+                <code
+                  {...stylex.props(
+                    sx.roundedSm,
+                    sx.bgActive,
+                    sx.px15,
+                    sx.py05,
+                    sx.fontMono,
+                    sx.textFg,
+                  )}
+                >
                   POST {webhook.path}
                 </code>
                 <span>on port {webhook.port}, behind your TLS proxy</span>
@@ -242,9 +449,29 @@ export function CodeStorageConfiguration({
                   {copied === "path" ? "Copied" : "Copy path"}
                 </Button>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-label text-dim">
+              <div
+                {...stylex.props(
+                  sx.flex,
+                  sx.flexWrap,
+                  sx.itemsCenter,
+                  sx.gap2,
+                  sx.textDim,
+                  typography.label,
+                )}
+              >
                 <span>Secret</span>
-                <code className="max-w-[340px] truncate rounded-sm bg-active px-1.5 py-0.5 font-mono text-fg">
+                <code
+                  {...stylex.props(
+                    sx.maxW340px,
+                    sx.truncate,
+                    sx.roundedSm,
+                    sx.bgActive,
+                    sx.px15,
+                    sx.py05,
+                    sx.fontMono,
+                    sx.textFg,
+                  )}
+                >
                   {showSecret ? webhook.secret : "••••••••••••••••"}
                 </code>
                 <Button
@@ -262,14 +489,22 @@ export function CodeStorageConfiguration({
                   {copied === "secret" ? "Copied" : "Copy"}
                 </Button>
               </div>
-              <div className="text-supporting leading-snug text-faint">
+              <div
+                {...stylex.props(
+                  sx.leadingSnug,
+                  sx.textFaint,
+                  typography.supporting,
+                )}
+              >
                 Add the public URL and secret in Pierre → Webhooks. Subscribe to
                 push and repo.sync events.
               </div>
               <div
                 className={cn(
-                  "text-meta",
-                  lastDelivery && !lastDelivery.ok ? "text-red" : "text-faint",
+                  utilityClassName("text-meta"),
+                  lastDelivery && !lastDelivery.ok
+                    ? utilityClassName("text-red")
+                    : utilityClassName("text-faint"),
                 )}
               >
                 {!lastDelivery
@@ -279,7 +514,13 @@ export function CodeStorageConfiguration({
                     : `Last delivery failed (${lastDelivery.error}), ${relativeTime(lastDelivery.at)}`}
               </div>
               {webhook.lastRejected && (
-                <div className="text-supporting leading-snug text-red">
+                <div
+                  {...stylex.props(
+                    sx.leadingSnug,
+                    sx.textRed,
+                    typography.supporting,
+                  )}
+                >
                   {webhook.rejectedCount} unauthenticated request
                   {webhook.rejectedCount === 1 ? "" : "s"} rejected (
                   {webhook.lastRejected.error}), last{" "}
@@ -287,7 +528,10 @@ export function CodeStorageConfiguration({
                 </div>
               )}
               {webhook.syncFailures.map((failure) => (
-                <div key={failure.repo} className="text-meta text-red">
+                <div
+                  key={failure.repo}
+                  {...stylex.props(sx.textRed, typography.meta)}
+                >
                   Sync failing for {failure.repo}: {failure.error} (
                   {relativeTime(failure.at)})
                 </div>

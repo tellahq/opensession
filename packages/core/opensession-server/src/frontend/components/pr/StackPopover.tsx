@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import { useState } from "react";
 import {
   PR_ROW_OUT,
@@ -12,6 +14,68 @@ import { cn } from "../../ui/cn";
 import { Popover } from "../../ui/popover";
 import { IconArrowUpRight, IconStack } from "../icons";
 import { StackNode, StackRail } from "./StackRail";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  noUnderline: {
+    textDecorationLine: "none",
+  },
+  block: {
+    display: "block",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  flex: {
+    display: "flex",
+  },
+  maxHMin560px70vhVarAvailableHeight: {
+    maxHeight: "min(560px, 70vh, var(--available-height))",
+  },
+  wMin460pxCalc100vw24px: {
+    width: "min(460px, calc(100vw - 24px))",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  p0: {
+    padding: "0",
+  },
+  m0: {
+    margin: "0",
+  },
+  listNone: {
+    listStyleType: "none",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  fontMono: {
+    fontFamily: "var(--mono)",
+  },
+});
 
 /**
  * The stack, from the status strip: a chip reading `position/size` that opens
@@ -27,7 +91,7 @@ import { StackNode, StackRail } from "./StackRail";
 /* The rail and its nodes live in ./StackRail so this component stays focused
    on the popup and its navigation rows. */
 
-const ROW = "flex items-stretch gap-2.5 pr-1.5 pl-3";
+const ROW = utilityClassName("flex items-stretch gap-2.5 pr-1.5 pl-3");
 
 function StackRow({
   layer,
@@ -51,12 +115,19 @@ function StackRow({
   // "You are here" is painted as a wash, not a surface: bg-surface is an
   // absolute colour and lands *lighter* than the popup's panel in light mode.
   return (
-    <li className={cn(ROW, current ? "bg-hover" : "hover:bg-hover")}>
+    <li
+      className={cn(
+        ROW,
+        current
+          ? utilityClassName("bg-hover")
+          : utilityClassName("hover:bg-hover"),
+      )}
+    >
       <StackRail first={first}>
         <StackNode state={layer.state} isDraft={layer.isDraft} />
       </StackRail>
       <a
-        className="min-w-0 flex-1 py-2 no-underline"
+        {...stylex.props(sx.minW0, sx.flex1, sx.py2, sx.noUnderline)}
         href={inApp || layer.url}
         {...(inApp ? {} : { target: "_blank", rel: "noopener" })}
         aria-current={current ? "true" : undefined}
@@ -71,18 +142,31 @@ function StackRow({
       >
         <span
           className={cn(
-            "block truncate text-label leading-snug",
-            current ? "font-semibold text-fg" : "font-medium text-fg",
+            utilityClassName("block truncate text-label leading-snug"),
+            current
+              ? utilityClassName("font-semibold text-fg")
+              : utilityClassName("font-medium text-fg"),
           )}
         >
           {layer.title}
         </span>
-        <span className="block truncate text-meta leading-snug text-faint">
+        <span
+          {...stylex.props(
+            sx.block,
+            sx.truncate,
+            sx.leadingSnug,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
           #{layer.number} · {layer.headRefName}
         </span>
       </a>
       <a
-        className={cn(PR_ROW_OUT, "self-center phone:size-11")}
+        className={cn(
+          PR_ROW_OUT,
+          utilityClassName("self-center phone:size-11"),
+        )}
         href={layer.url}
         target="_blank"
         rel="noopener"
@@ -141,19 +225,38 @@ export function PrStackChip({
         side="bottom"
         align="start"
         sideOffset={6}
-        className="flex max-h-[min(560px,70vh,var(--available-height))] w-[min(460px,calc(100vw-24px))] flex-col overflow-hidden p-0"
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.flex,
+          sx.maxHMin560px70vhVarAvailableHeight,
+          sx.wMin460pxCalc100vw24px,
+          sx.flexCol,
+          sx.overflowHidden,
+          sx.p0,
+        )}
       >
         {/* The strip's headline, in the strip's tone: the popup opens under a
 				    green chip and has to keep saying what the green means. */}
         <div
           className={cn(
-            "shrink-0 border-b border-divider px-3 py-2.5 text-item-title font-semibold",
+            utilityClassName(
+              "shrink-0 border-b border-divider px-3 py-2.5 text-item-title font-semibold",
+            ),
             PR_STATE_TEXT[tone],
           )}
         >
           {headline}
         </div>
-        <ul className="m-0 flex list-none flex-col overflow-y-auto p-0">
+        <ul
+          {...stylex.props(
+            sx.m0,
+            sx.flex,
+            sx.listNone,
+            sx.flexCol,
+            sx.overflowYAuto,
+            sx.p0,
+          )}
+        >
           {layers.map((layer, i) => (
             <StackRow
               key={layer.number}
@@ -166,11 +269,20 @@ export function PrStackChip({
             />
           ))}
           {/* The trunk: not a layer, just where the bottom one lands. */}
-          <li className={cn(ROW, "py-2")}>
+          <li className={cn(ROW, utilityClassName("py-2"))}>
             <StackRail last>
               <StackNode />
             </StackRail>
-            <span className="min-w-0 flex-1 truncate font-mono text-label text-faint">
+            <span
+              {...stylex.props(
+                sx.minW0,
+                sx.flex1,
+                sx.truncate,
+                sx.fontMono,
+                sx.textFaint,
+                typography.label,
+              )}
+            >
               {stack.baseRefName}
             </span>
           </li>

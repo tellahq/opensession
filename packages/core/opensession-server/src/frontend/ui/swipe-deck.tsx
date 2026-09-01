@@ -1,3 +1,4 @@
+import { utilityClassName } from "./cn";
 import React from "react";
 import {
   motion,
@@ -7,6 +8,146 @@ import {
 } from "motion/react";
 import { cn } from "./cn";
 import { SWIPE_DISTANCE, SWIPE_VELOCITY } from "../lib/swipe-deck";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  left4: {
+    left: "calc(4px * 4)",
+  },
+  top16: {
+    top: "calc(4px * 16)",
+  },
+  z10: {
+    zIndex: "10",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border2: {
+    borderStyle: "solid",
+    borderWidth: "2px",
+  },
+  borderRed: {
+    borderColor: "var(--red)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  fontBold: {
+    fontWeight: "var(--font-weight-bold)",
+  },
+  trackingWide: {
+    letterSpacing: "var(--tracking-wide)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  right4: {
+    right: "calc(4px * 4)",
+  },
+  borderGreen: {
+    borderColor: "var(--green)",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  flex: {
+    display: "flex",
+  },
+  flex1: {
+    flex: "1",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  text4xl: {
+    fontSize: "var(--text-4xl)",
+    lineHeight: "var(--tw-leading, var(--text-4xl--line-height))",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  maxWXs: {
+    maxWidth: "var(--container-xs)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  hoverBgSurface: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--bg)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+});
 
 /**
  * The swipe-card mechanics shared by the decks (Support Tinder, catch-up):
@@ -85,7 +226,9 @@ export function SwipeCard<A extends string>({
   return (
     <motion.div
       className={cn(
-        "flex touch-pan-y flex-col overflow-hidden rounded-xl bg-panel smooth-shadow-soft",
+        utilityClassName(
+          "flex touch-pan-y flex-col overflow-hidden rounded-xl bg-panel smooth-shadow-soft",
+        ),
         className,
       )}
       style={{ x, rotate }}
@@ -102,13 +245,43 @@ export function SwipeCard<A extends string>({
     >
       {/* Swipe intent stamps. */}
       <motion.div
-        className="pointer-events-none absolute left-4 top-16 z-10 rounded-md border-2 border-red px-2.5 py-1 text-sm font-bold tracking-wide text-red"
+        {...stylex.props(
+          sx.pointerEventsNone,
+          sx.absolute,
+          sx.left4,
+          sx.top16,
+          sx.z10,
+          sx.roundedMd,
+          sx.border2,
+          sx.borderRed,
+          sx.px25,
+          sx.py1,
+          sx.textSm,
+          sx.fontBold,
+          sx.trackingWide,
+          sx.textRed,
+        )}
         style={{ opacity: leftTint, rotate: -12 }}
       >
         {stampLeft}
       </motion.div>
       <motion.div
-        className="pointer-events-none absolute right-4 top-16 z-10 rounded-md border-2 border-green px-2.5 py-1 text-sm font-bold tracking-wide text-green"
+        {...stylex.props(
+          sx.pointerEventsNone,
+          sx.absolute,
+          sx.right4,
+          sx.top16,
+          sx.z10,
+          sx.roundedMd,
+          sx.border2,
+          sx.borderGreen,
+          sx.px25,
+          sx.py1,
+          sx.textSm,
+          sx.fontBold,
+          sx.trackingWide,
+          sx.textGreen,
+        )}
         style={{ opacity: rightTint, rotate: 12 }}
       >
         {stampRight}
@@ -139,21 +312,55 @@ export function DeckDone({
   onExit: () => void;
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-      <div className="text-4xl">{emoji}</div>
-      <div className="text-item-title font-semibold text-fg">{title}</div>
-      <div className="max-w-xs text-sm text-dim">{message}</div>
-      <div className="mt-2 flex gap-2">
+    <div
+      {...stylex.props(
+        sx.flex,
+        sx.flex1,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.gap3,
+        sx.px6,
+        sx.textCenter,
+      )}
+    >
+      <div {...stylex.props(sx.text4xl)}>{emoji}</div>
+      <div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>
+        {title}
+      </div>
+      <div {...stylex.props(sx.maxWXs, sx.textSm, sx.textDim)}>{message}</div>
+      <div {...stylex.props(sx.mt2, sx.flex, sx.gap2)}>
         {secondary && (
           <button
-            className="rounded-control border border-line bg-panel px-4 py-2.5 text-sm font-semibold text-dim hover:bg-surface hover:text-fg"
+            {...stylex.props(
+              sx.roundedControl,
+              sx.border,
+              sx.borderLine,
+              sx.bgPanel,
+              sx.px4,
+              sx.py25,
+              sx.textSm,
+              sx.fontSemibold,
+              sx.textDim,
+              sx.hoverBgSurface,
+              sx.hoverTextFg,
+            )}
             onClick={secondary.onClick}
           >
             {secondary.label}
           </button>
         )}
         <button
-          className="rounded-control bg-panel px-4 py-2.5 text-sm font-semibold text-fg hover:bg-surface"
+          {...stylex.props(
+            sx.roundedControl,
+            sx.bgPanel,
+            sx.px4,
+            sx.py25,
+            sx.textSm,
+            sx.fontSemibold,
+            sx.textFg,
+            sx.hoverBgSurface,
+          )}
           onClick={onExit}
         >
           Done

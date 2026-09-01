@@ -3,6 +3,181 @@ import { getCurrentUser } from "./UserPicker";
 import { Button } from "../ui/button";
 import { noAutofill } from "../lib/composer-autofill";
 import type { WSClientMessage } from "../lib/types";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import {
+  mergeStylexProps,
+  mergeStylexClassName,
+  mergeStylexOverrideClassName,
+} from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  contents: {
+    display: "contents",
+  },
+  fixed: {
+    position: "fixed",
+  },
+  z1000: {
+    zIndex: "1000",
+  },
+  TranslateX12: {
+    translate: "calc(calc(1 / 2 * 100%) * -1) 0",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderAccent: {
+    borderColor: "var(--accent)",
+  },
+  bgPopupGlass: {
+    backgroundColor: "var(--popup-glass)",
+  },
+  fontSans: {
+    fontFamily: "var(--sans)",
+  },
+  smoothShadowMd: {
+    boxShadow:
+      "0 2px 6px -2px var(--smooth-shadow-color), 0 10px 28px -8px var(--smooth-shadow-color)",
+  },
+  px35: {
+    paddingInline: "14px",
+  },
+  py2: {
+    paddingBlock: "8px",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  textAccent: {
+    color: "var(--accent-ink)",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap2: {
+    gap: "8px",
+  },
+  p25: {
+    padding: "10px",
+  },
+  maxH16: {
+    maxHeight: "64px",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  borderL2: {
+    borderLeftStyle: "solid",
+    borderLeftWidth: "2px",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  pl2: {
+    paddingLeft: "8px",
+  },
+  breakWords: {
+    overflowWrap: "break-word",
+  },
+  whitespacePreWrap: {
+    whiteSpace: "pre-wrap",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  resizeY: {
+    resize: "vertical",
+  },
+  bgRaised: {
+    backgroundColor: "var(--bg-raised)",
+  },
+  px25: {
+    paddingInline: "10px",
+  },
+  leading145: {
+    lineHeight: "1.45",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  px3: {
+    paddingInline: "12px",
+  },
+  py5px: {
+    paddingBlock: "5px",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  px14px: {
+    paddingInline: "14px",
+  },
+  py6px: {
+    paddingBlock: "6px",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  block: {
+    display: "block",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  borderNone: {
+    borderStyle: "none",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  py7px: {
+    paddingBlock: "7px",
+  },
+
+  maxWMin340px90vw: {
+    maxWidth: "min(340px,90vw)",
+  },
+  BackdropFilterVarPopupBlur: {
+    WebkitBackdropFilter: "var(--popup-blur)",
+    backdropFilter: "var(--popup-blur)",
+  },
+  focusBorderAccent: {
+    ":focus": {
+      borderColor: "var(--accent)",
+    },
+  },
+  shadowNone: {
+    "--tw-shadow": "0 0 transparent",
+    boxShadow:
+      "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+});
 
 interface Props {
   sessionId: string;
@@ -105,28 +280,76 @@ export function SelectionToSession({
 
   return (
     // display:contents so wrapping a region doesn't disturb its layout.
-    <div ref={hostRef} className="contents" onMouseUp={onMouseUp}>
+    <div ref={hostRef} {...stylex.props(sx.contents)} onMouseUp={onMouseUp}>
       {children}
       {sel && send && (
         <div
           ref={popRef}
-          className="fixed z-1000 max-w-[min(340px,90vw)] -translate-x-1/2 rounded-md border border-accent bg-popup-glass [backdrop-filter:var(--popup-blur)] font-sans smooth-shadow-md"
+          {...mergeStylexProps(
+            "",
+            sx.maxWMin340px90vw,
+            sx.BackdropFilterVarPopupBlur,
+            sx.fixed,
+            sx.z1000,
+            sx.TranslateX12,
+            sx.roundedMd,
+            sx.border,
+            sx.borderAccent,
+            sx.bgPopupGlass,
+            sx.fontSans,
+            sx.smoothShadowMd,
+          )}
           style={{ left: sel.x, top: sel.y + 6 }}
           onMouseDown={(e) => e.stopPropagation()}
         >
           {sent ? (
-            <div className="px-3.5 py-2 text-label whitespace-nowrap text-accent">
+            <div
+              {...stylex.props(
+                sx.px35,
+                sx.py2,
+                sx.whitespaceNowrap,
+                sx.textAccent,
+                typography.label,
+              )}
+            >
               Sent to session ✓
             </div>
           ) : composing ? (
-            <div className="flex flex-col gap-2 p-2.5">
-              <div className="max-h-16 overflow-y-auto border-l-2 border-line-strong pl-2 text-supporting break-words whitespace-pre-wrap text-faint">
+            <div {...stylex.props(sx.flex, sx.flexCol, sx.gap2, sx.p25)}>
+              <div
+                {...stylex.props(
+                  sx.maxH16,
+                  sx.overflowYAuto,
+                  sx.borderL2,
+                  sx.borderLineStrong,
+                  sx.pl2,
+                  sx.breakWords,
+                  sx.whitespacePreWrap,
+                  sx.textFaint,
+                  typography.supporting,
+                )}
+              >
                 {sel.text}
               </div>
               <textarea
                 autoFocus
                 {...noAutofill}
-                className="resize-y rounded-md border border-line-strong bg-raised px-2.5 py-2 font-sans text-label leading-[1.45] text-fg outline-none focus:border-accent"
+                {...mergeStylexProps(
+                  "",
+                  sx.focusBorderAccent,
+                  sx.resizeY,
+                  sx.roundedMd,
+                  sx.border,
+                  sx.borderLineStrong,
+                  sx.bgRaised,
+                  sx.px25,
+                  sx.py2,
+                  sx.fontSans,
+                  sx.leading145,
+                  sx.textFg,
+                  sx.outlineNone,
+                  typography.label,
+                )}
                 rows={2}
                 placeholder="Message to the session (optional)… ⌘↵ to send"
                 value={message}
@@ -138,11 +361,18 @@ export function SelectionToSession({
                   }
                 }}
               />
-              <div className="flex justify-end gap-2">
+              <div {...stylex.props(sx.flex, sx.justifyEnd, sx.gap2)}>
                 <Button
                   variant="soft"
                   size="sm"
-                  className="min-h-0 px-3 py-[5px] text-label font-normal"
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.minH0,
+                    sx.px3,
+                    sx.py5px,
+                    sx.fontNormal,
+                    typography.label,
+                  )}
                   onClick={dismiss}
                 >
                   Cancel
@@ -150,7 +380,15 @@ export function SelectionToSession({
                 <Button
                   variant="primary"
                   size="sm"
-                  className="min-h-0 px-[14px] py-[6px] text-supporting font-medium shadow-none"
+                  {...mergeStylexProps(
+                    "",
+                    sx.shadowNone,
+                    sx.minH0,
+                    sx.px14px,
+                    sx.py6px,
+                    sx.fontMedium,
+                    typography.supporting,
+                  )}
                   onClick={doSend}
                 >
                   Send to session
@@ -159,7 +397,21 @@ export function SelectionToSession({
             </div>
           ) : (
             <button
-              className="block cursor-pointer rounded-md border-none bg-transparent px-3 py-[7px] font-sans text-label whitespace-nowrap text-fg hover:bg-hover"
+              {...mergeStylexProps(
+                "",
+                sx.hoverBgHover,
+                sx.block,
+                sx.cursorPointer,
+                sx.roundedMd,
+                sx.borderNone,
+                sx.bgTransparent,
+                sx.px3,
+                sx.py7px,
+                sx.fontSans,
+                sx.whitespaceNowrap,
+                sx.textFg,
+                typography.label,
+              )}
               onClick={() => setComposing(true)}
             >
               💬 Send to session

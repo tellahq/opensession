@@ -12,6 +12,66 @@ import {
   tabCloseClass,
 } from "../lib/session-tab-classes";
 import { IconPlus, IconX } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  hFull: {
+    height: "100%",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  relative: {
+    position: "relative",
+  },
+  h10: {
+    height: "40px",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap3px: {
+    gap: "3px",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  px2: {
+    paddingInline: "8px",
+  },
+  sizeFull: {
+    width: "100%",
+    height: "100%",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  flex1: { flex: "1" },
+  pl4: { paddingLeft: "16px" },
+  pt2: { paddingTop: "8px" },
+  pb15: { paddingBottom: "6px" },
+  hidden: { display: "none" },
+});
 
 /**
  * Interactive terminals over server-side PTYs in the session's worktree:
@@ -166,9 +226,21 @@ export function ShellPanel({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div {...stylex.props(sx.flex, sx.flexCol, sx.hFull, sx.minH0)}>
       <div
-        className="relative flex h-10 min-w-0 shrink-0 items-center gap-[3px] border-b border-divider bg-surface px-2"
+        {...stylex.props(
+          sx.relative,
+          sx.flex,
+          sx.h10,
+          sx.minW0,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.gap3px,
+          sx.borderB,
+          sx.borderDivider,
+          sx.bgSurface,
+          sx.px2,
+        )}
         role="tablist"
         aria-label="Terminals"
       >
@@ -366,12 +438,24 @@ function ShellView({
 
   return (
     <div
-      className={`flex-1 min-h-0 overflow-hidden bg-surface pl-4 pt-2 pb-1.5 ${visible ? "" : "hidden"}`}
+      {...stylex.props(
+        sx.flex1,
+        sx.minH0,
+        sx.overflowHidden,
+        sx.bgSurface,
+        sx.pl4,
+        sx.pt2,
+        sx.pb15,
+        !visible && sx.hidden,
+      )}
     >
       {/* Ghostty mounts its hidden keyboard textarea absolutely. Keep this
           host positioned so that input remains inside the terminal instead of
           escaping to the page's top-left corner. */}
-      <div ref={hostRef} className="relative size-full overflow-hidden" />
+      <div
+        ref={hostRef}
+        {...stylex.props(sx.relative, sx.sizeFull, sx.overflowHidden)}
+      />
     </div>
   );
 }

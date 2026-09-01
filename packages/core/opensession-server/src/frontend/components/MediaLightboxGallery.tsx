@@ -1,3 +1,5 @@
+import { mergeStylexProps } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, {
   useEffect,
   useEffectEvent,
@@ -62,6 +64,345 @@ import {
   IconShare,
   IconX,
 } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  fixed: {
+    position: "fixed",
+  },
+  inset0: {
+    inset: "0",
+  },
+  z11000: {
+    zIndex: "11000",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  bgBlack85: {
+    backgroundColor: "color-mix(in oklab, var(--color-black) 85%, transparent)",
+  },
+  phoneH100dvh: {
+    "@media (max-width: 720px)": {
+      height: "100dvh",
+    },
+  },
+  phoneBgBlack: {
+    "@media (max-width: 720px)": {
+      backgroundColor: "var(--color-black)",
+    },
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  selfStretch: {
+    alignSelf: "stretch",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  maxHFull: {
+    maxHeight: "100%",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  rounded2xl: {
+    borderRadius: "calc(22px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderWhite20: {
+    borderColor: "color-mix(in oklab, var(--color-white) 20%, transparent)",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  lineClamp2: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "2",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  textWhite: {
+    color: "var(--color-white)",
+  },
+  textWhite75: {
+    color: "color-mix(in oklab, var(--color-white) 75%, transparent)",
+  },
+  h12: {
+    height: "calc(4px * 12)",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  pxCalc5022px: {
+    paddingInline: "calc(50% - 22px)",
+  },
+  ScrollbarWidthNone: {
+    scrollbarWidth: "none",
+  },
+  grid: {
+    display: "grid",
+  },
+  size11: {
+    width: "calc(4px * 11)",
+    height: "calc(4px * 11)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  snapCenter: {
+    scrollSnapAlign: "center",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  p0: {
+    padding: "0",
+  },
+  sizeFull: {
+    width: "100%",
+    height: "100%",
+  },
+  objectCover: {
+    objectFit: "cover",
+  },
+  gridCols3: {
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  justifySelfStart: {
+    justifySelf: "flex-start",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  insetX0: {
+    insetInline: "0",
+  },
+  bottomCalc16pxEnvSafeAreaInsetBottom: {
+    bottom: "calc(16px + env(safe-area-inset-bottom))",
+  },
+  z20: {
+    zIndex: "20",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  pointerEventsAuto: {
+    pointerEvents: "auto",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  borderWhite10: {
+    borderColor: "color-mix(in oklab, var(--color-white) 10%, transparent)",
+  },
+  bgBlack55: {
+    backgroundColor: "color-mix(in oklab, var(--color-black) 55%, transparent)",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  pl4: {
+    paddingLeft: "calc(4px * 4)",
+  },
+  pr1: {
+    paddingRight: "4px",
+  },
+  minH9: {
+    minHeight: "calc(4px * 9)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  textWhite70: {
+    color: "color-mix(in oklab, var(--color-white) 70%, transparent)",
+  },
+  hoverBgWhite10: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor:
+          "color-mix(in oklab, var(--color-white) 10%, transparent)",
+      },
+    },
+  },
+  hoverTextWhite: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--color-white)",
+      },
+    },
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  cursorText: {
+    cursor: "text",
+  },
+  rounded22px: {
+    borderRadius: "22px",
+    cornerShape: "var(--cs)",
+  },
+  p15: {
+    padding: "calc(4px * 1.5)",
+  },
+  itemsEnd: {
+    alignItems: "flex-end",
+  },
+  block: {
+    display: "block",
+  },
+  wFull: {
+    width: "100%",
+  },
+  resizeNone: {
+    resize: "none",
+  },
+  appearanceNone: {
+    appearance: "none",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  placeholderTextWhite45: {
+    "::placeholder": {
+      color: "color-mix(in oklab, var(--color-white) 45%, transparent)",
+    },
+  },
+  phoneTextInputPhone: {
+    "@media (max-width: 720px)": {
+      fontSize: "var(--type-input-phone)",
+    },
+  },
+  size9: {
+    width: "calc(4px * 9)",
+    height: "calc(4px * 9)",
+  },
+  textWhite60: {
+    color: "color-mix(in oklab, var(--color-white) 60%, transparent)",
+  },
+  phoneSize11: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 11)",
+      height: "calc(4px * 11)",
+    },
+  },
+  bgAccent: {
+    backgroundColor: "var(--accent)",
+  },
+  transitionTransform: {
+    transitionProperty: "transform, translate, scale, rotate",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  activeScale096: {
+    ":active": {
+      scale: "0.96",
+    },
+  },
+  disabledBgWhite15: {
+    ":disabled": {
+      backgroundColor:
+        "color-mix(in oklab, var(--color-white) 15%, transparent)",
+    },
+  },
+  disabledTextWhite40: {
+    ":disabled": {
+      color: "color-mix(in oklab, var(--color-white) 40%, transparent)",
+    },
+  },
+  pb1: {
+    paddingBottom: "4px",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  maxWMin720px90vw: {
+    maxWidth: "min(720px, 90vw)",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  p1: {
+    padding: "4px",
+  },
+  leadingNone: {
+    lineHeight: "1",
+  },
+  textWhite50: {
+    color: "color-mix(in oklab, var(--color-white) 50%, transparent)",
+  },
+});
 
 export function MediaLightboxGallery({
   items,
@@ -558,8 +899,9 @@ export function MediaLightboxGallery({
   // z-10 keeps the chrome floating above a zoomed image, which is free to
   // spread under it across the whole viewport (z-index applies to flex items
   // without needing position).
-  const navBtn =
-    "z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full border-0 bg-white/10 p-0 text-white hover:bg-white/20 phone:h-11 phone:w-11";
+  const navBtn = utilityClassName(
+    "z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full border-0 bg-white/10 p-0 text-white hover:bg-white/20 phone:h-11 phone:w-11",
+  );
   // Wide enough for a sentence, never wider than the screen it floats on.
   const commentCardWidth = Math.min(340, Math.max(220, viewport.width - 24));
   const commentAnchor =
@@ -576,14 +918,24 @@ export function MediaLightboxGallery({
   // upward. Preserve the same fitted size, but share that clearance between the
   // top and bottom so the image's center stays at the viewport's center.
   const phoneStagePadding = (68 + phoneBottomHeight) / 2;
-  const phoneAction =
-    "grid size-11 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white transition-[transform,background-color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96] disabled:opacity-[0.35]";
+  const phoneAction = utilityClassName(
+    "grid size-11 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white transition-[transform,background-color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96] disabled:opacity-[0.35]",
+  );
 
   return (
     <motion.div
       ref={dialogRef}
       data-media-lightbox=""
-      className="fixed inset-0 z-[11000] flex flex-col bg-black/85 phone:h-[100dvh] phone:bg-black"
+      {...stylex.props(
+        sx.fixed,
+        sx.inset0,
+        sx.z11000,
+        sx.flex,
+        sx.flexCol,
+        sx.bgBlack85,
+        sx.phoneH100dvh,
+        sx.phoneBgBlack,
+      )}
       role="dialog"
       tabIndex={-1}
       aria-modal="true"
@@ -602,10 +954,16 @@ export function MediaLightboxGallery({
     >
       <div
         className={cn(
-          "pointer-events-none absolute left-[calc(12px+env(safe-area-inset-left))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center justify-center",
+          utilityClassName(
+            "pointer-events-none absolute left-[calc(12px+env(safe-area-inset-left))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center justify-center",
+          ),
           isPhone &&
-            "transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
-          isPhone && !chromeVisible && "-translate-y-2 opacity-0",
+            utilityClassName(
+              "transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+            ),
+          isPhone &&
+            !chromeVisible &&
+            utilityClassName("-translate-y-2 opacity-0"),
         )}
         inert={isPhone && !chromeVisible ? true : undefined}
         aria-hidden={isPhone && !chromeVisible ? true : undefined}
@@ -617,7 +975,9 @@ export function MediaLightboxGallery({
           role="group"
           aria-label="Media actions"
           className={
-            isPhone ? "hidden" : "pointer-events-auto flex items-center gap-1"
+            isPhone
+              ? utilityClassName("hidden")
+              : utilityClassName("pointer-events-auto flex items-center gap-1")
           }
         >
           {commentable && (
@@ -627,7 +987,7 @@ export function MediaLightboxGallery({
               icon={<IconMessage size={20} />}
               className={cn(
                 LIGHTBOX_ACTION_CLASS,
-                commenting && "bg-white/15 text-white",
+                commenting && utilityClassName("bg-white/15 text-white"),
               )}
               onClick={toggleComment}
               aria-pressed={commenting}
@@ -725,7 +1085,10 @@ export function MediaLightboxGallery({
         <button
           ref={closeRef}
           type="button"
-          className={cn(navBtn, "pointer-events-auto absolute right-0")}
+          className={cn(
+            navBtn,
+            utilityClassName("pointer-events-auto absolute right-0"),
+          )}
           onClick={requestClose}
           aria-label="Close"
         >
@@ -735,8 +1098,10 @@ export function MediaLightboxGallery({
 
       <div
         className={cn(
-          "flex min-h-0 flex-1 items-center justify-center gap-3 px-3 pb-2 pt-[calc(56px+env(safe-area-inset-top))] sm:px-4",
-          isPhone && "gap-0 px-0",
+          utilityClassName(
+            "flex min-h-0 flex-1 items-center justify-center gap-3 px-3 pb-2 pt-[calc(56px+env(safe-area-inset-top))] sm:px-4",
+          ),
+          isPhone && utilityClassName("gap-0 px-0"),
         )}
         style={
           isPhone
@@ -764,7 +1129,13 @@ export function MediaLightboxGallery({
           </button>
         )}
         <motion.div
-          className="flex min-h-0 min-w-0 flex-1 self-stretch"
+          {...stylex.props(
+            sx.flex,
+            sx.minH0,
+            sx.minW0,
+            sx.flex1,
+            sx.selfStretch,
+          )}
           initial={
             useHeroTransition
               ? false
@@ -834,7 +1205,15 @@ export function MediaLightboxGallery({
             // close too. Without this, only the thin strip outside this
             // wrapper was a backdrop and the lightbox felt stuck.
             <div
-              className="flex min-h-0 min-w-0 flex-1 items-center justify-center self-stretch"
+              {...stylex.props(
+                sx.flex,
+                sx.minH0,
+                sx.minW0,
+                sx.flex1,
+                sx.itemsCenter,
+                sx.justifyCenter,
+                sx.selfStretch,
+              )}
               onMouseDown={(e) => {
                 if (e.target === e.currentTarget) requestClose();
               }}
@@ -848,7 +1227,15 @@ export function MediaLightboxGallery({
                 playsInline
                 // Same hairline as the photo: a dark first frame needs
                 // an edge against the scrim just as much.
-                className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20"
+                {...stylex.props(
+                  sx.minH0,
+                  sx.minW0,
+                  sx.maxHFull,
+                  sx.maxWFull,
+                  sx.rounded2xl,
+                  sx.border,
+                  sx.borderWhite20,
+                )}
               />
             </div>
           )}
@@ -869,17 +1256,48 @@ export function MediaLightboxGallery({
         <div
           ref={phoneBottomRef}
           className={cn(
-            "absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 bg-linear-to-b from-transparent via-black/85 to-black px-0 pb-[max(14px,env(safe-area-inset-bottom))] pt-8 transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
-            !chromeVisible && "pointer-events-none translate-y-3 opacity-0",
+            utilityClassName(
+              "absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 bg-linear-to-b from-transparent via-black/85 to-black px-0 pb-[max(14px,env(safe-area-inset-bottom))] pt-8 transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+            ),
+            !chromeVisible &&
+              utilityClassName("pointer-events-none translate-y-3 opacity-0"),
           )}
           inert={!chromeVisible ? true : undefined}
           aria-hidden={!chromeVisible ? true : undefined}
         >
           {!commenting && (item.walkthroughLabel || caption || description) && (
-            <div className="flex max-w-full flex-col items-center gap-0.5 px-6 text-center">
-              <div className="flex max-w-full items-center justify-center gap-2">
+            <div
+              {...stylex.props(
+                sx.flex,
+                sx.maxWFull,
+                sx.flexCol,
+                sx.itemsCenter,
+                sx.gap05,
+                sx.px6,
+                sx.textCenter,
+              )}
+            >
+              <div
+                {...stylex.props(
+                  sx.flex,
+                  sx.maxWFull,
+                  sx.itemsCenter,
+                  sx.justifyCenter,
+                  sx.gap2,
+                )}
+              >
                 {caption && (
-                  <div className="line-clamp-2 min-w-0 max-w-full text-sm font-medium leading-snug text-white">
+                  <div
+                    {...stylex.props(
+                      sx.lineClamp2,
+                      sx.minW0,
+                      sx.maxWFull,
+                      sx.textSm,
+                      sx.fontMedium,
+                      sx.leadingSnug,
+                      sx.textWhite,
+                    )}
+                  >
                     {caption}
                   </div>
                 )}
@@ -895,7 +1313,15 @@ export function MediaLightboxGallery({
                 )}
               </div>
               {description && (
-                <div className="line-clamp-2 max-w-full text-sm leading-snug text-white/75">
+                <div
+                  {...stylex.props(
+                    sx.lineClamp2,
+                    sx.maxWFull,
+                    sx.textSm,
+                    sx.leadingSnug,
+                    sx.textWhite75,
+                  )}
+                >
                   {description}
                 </div>
               )}
@@ -905,7 +1331,16 @@ export function MediaLightboxGallery({
           {many && (
             <div
               ref={filmstripRef}
-              className="flex h-12 snap-x snap-mandatory items-center gap-1 overflow-x-auto px-[calc(50%_-_22px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              {...mergeStylexProps(
+                "snap-x snap-mandatory [&::-webkit-scrollbar]:hidden",
+                sx.flex,
+                sx.h12,
+                sx.itemsCenter,
+                sx.gap1,
+                sx.overflowXAuto,
+                sx.pxCalc5022px,
+                sx.ScrollbarWidthNone,
+              )}
               role="group"
               aria-label="Media filmstrip"
             >
@@ -916,17 +1351,32 @@ export function MediaLightboxGallery({
                     key={`${thumb.src}-${thumbIndex}`}
                     type="button"
                     data-lightbox-thumb={thumbIndex}
-                    className="grid size-11 shrink-0 snap-center place-items-center border-0 bg-transparent p-0"
+                    {...stylex.props(
+                      sx.grid,
+                      sx.size11,
+                      sx.shrink0,
+                      sx.snapCenter,
+                      sx.placeItemsCenter,
+                      sx.border0,
+                      sx.bgTransparent,
+                      sx.p0,
+                    )}
                     onClick={() => go(thumbIndex)}
                     aria-label={`Show ${thumb.kind} ${thumbIndex + 1} of ${items.length}`}
                     aria-current={active ? "true" : undefined}
                   >
                     <span
                       className={cn(
-                        "block overflow-hidden rounded-sm outline outline-1 outline-offset-1 transition-[width,height,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+                        utilityClassName(
+                          "block overflow-hidden rounded-sm outline outline-1 outline-offset-1 transition-[width,height,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+                        ),
                         active
-                          ? "h-11 w-11 opacity-100 outline-white/85"
-                          : "h-9 w-7 opacity-60 outline-transparent",
+                          ? utilityClassName(
+                              "h-11 w-11 opacity-100 outline-white/85",
+                            )
+                          : utilityClassName(
+                              "h-9 w-7 opacity-60 outline-transparent",
+                            ),
                       )}
                     >
                       {thumb.kind === "video" ? (
@@ -935,14 +1385,14 @@ export function MediaLightboxGallery({
                           muted
                           playsInline
                           preload="metadata"
-                          className="size-full object-cover"
+                          {...stylex.props(sx.sizeFull, sx.objectCover)}
                         />
                       ) : (
                         <img
                           src={thumb.src}
                           alt=""
                           loading="lazy"
-                          className="size-full object-cover"
+                          {...stylex.props(sx.sizeFull, sx.objectCover)}
                         />
                       )}
                     </span>
@@ -952,8 +1402,8 @@ export function MediaLightboxGallery({
             </div>
           )}
 
-          <div className="grid grid-cols-3 items-center px-5">
-            <div className="justify-self-start">
+          <div {...stylex.props(sx.grid, sx.gridCols3, sx.itemsCenter, sx.px5)}>
+            <div {...stylex.props(sx.justifySelfStart)}>
               {nativeShare ? (
                 <button
                   type="button"
@@ -985,8 +1435,8 @@ export function MediaLightboxGallery({
                 type="button"
                 className={cn(
                   phoneAction,
-                  "justify-self-center",
-                  commenting && "bg-white/15",
+                  utilityClassName("justify-self-center"),
+                  commenting && utilityClassName("bg-white/15"),
                 )}
                 onClick={toggleComment}
                 aria-pressed={commenting}
@@ -1001,7 +1451,10 @@ export function MediaLightboxGallery({
 
             <button
               type="button"
-              className={cn(phoneAction, "col-start-3 justify-self-end")}
+              className={cn(
+                phoneAction,
+                utilityClassName("col-start-3 justify-self-end"),
+              )}
               onClick={copyImage}
               disabled={item.kind === "video"}
               aria-label={copied ? "Image copied" : "Copy image"}
@@ -1013,14 +1466,52 @@ export function MediaLightboxGallery({
       )}
 
       {commenting && !selection && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-20 flex justify-center px-4">
-          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-black/55 py-1 pl-4 pr-1 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_12px_44px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150">
-            <span className="text-label font-medium text-white">
+        <div
+          {...stylex.props(
+            sx.pointerEventsNone,
+            sx.absolute,
+            sx.insetX0,
+            sx.bottomCalc16pxEnvSafeAreaInsetBottom,
+            sx.z20,
+            sx.flex,
+            sx.justifyCenter,
+            sx.px4,
+          )}
+        >
+          <div
+            {...mergeStylexProps(
+              "shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_12px_44px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150",
+              sx.pointerEventsAuto,
+              sx.flex,
+              sx.itemsCenter,
+              sx.gap1,
+              sx.roundedFull,
+              sx.border,
+              sx.borderWhite10,
+              sx.bgBlack55,
+              sx.py1,
+              sx.pl4,
+              sx.pr1,
+            )}
+          >
+            <span
+              {...stylex.props(sx.fontMedium, sx.textWhite, typography.label)}
+            >
               Drag over the part you mean
             </span>
             <button
               type="button"
-              className="min-h-9 rounded-full px-3 text-label font-medium text-white/70 hover:bg-white/10 hover:text-white phone:min-h-11"
+              {...stylex.props(
+                sx.minH9,
+                sx.roundedFull,
+                sx.px3,
+                sx.fontMedium,
+                sx.textWhite70,
+                sx.hoverBgWhite10,
+                sx.hoverTextWhite,
+                sx.phoneMinH11,
+                typography.label,
+              )}
               onClick={resetComment}
             >
               Cancel
@@ -1035,7 +1526,18 @@ export function MediaLightboxGallery({
           /* Fixed and placed against the region: the remark and the pixels it
 					   is about read as one thing. Kept to a single row, because on a
 					   phone a taller card would cover the picture it is describing. */
-          className="fixed z-20 flex cursor-text flex-col gap-1 rounded-[22px] bg-black/55 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_16px_50px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150"
+          {...mergeStylexProps(
+            "shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_16px_50px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150",
+            sx.fixed,
+            sx.z20,
+            sx.flex,
+            sx.cursorText,
+            sx.flexCol,
+            sx.gap1,
+            sx.rounded22px,
+            sx.bgBlack55,
+            sx.p15,
+          )}
           // It grows out of the corner of the region it belongs to, rather
           // than fading in beside it.
           initial={reduceMotion ? false : { opacity: 0, scale: 0.94 }}
@@ -1065,7 +1567,7 @@ export function MediaLightboxGallery({
             commentInputRef.current?.focus({ preventScroll: true });
           }}
         >
-          <div className="flex items-end gap-1">
+          <div {...stylex.props(sx.flex, sx.itemsEnd, sx.gap1)}>
             <textarea
               ref={commentInputRef}
               value={commentText}
@@ -1096,12 +1598,43 @@ export function MediaLightboxGallery({
               // A long remark grows the bar rather than scrolling inside
               // one line, up to the point where it would start covering
               // the picture it is about.
-              className="block w-full flex-1 resize-none appearance-none border-0 bg-transparent px-2.5 py-2 text-body leading-snug text-white outline-none [scrollbar-width:none] placeholder:text-white/45 phone:text-input-phone [&::-webkit-scrollbar]:hidden"
+              {...mergeStylexProps(
+                "[&::-webkit-scrollbar]:hidden",
+                sx.block,
+                sx.wFull,
+                sx.flex1,
+                sx.resizeNone,
+                sx.appearanceNone,
+                sx.border0,
+                sx.bgTransparent,
+                sx.px25,
+                sx.py2,
+                sx.leadingSnug,
+                sx.textWhite,
+                sx.outlineNone,
+                sx.ScrollbarWidthNone,
+                sx.placeholderTextWhite45,
+                sx.phoneTextInputPhone,
+                typography.body,
+              )}
               disabled={sendingComment}
             />
             <button
               type="button"
-              className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white/60 hover:bg-white/10 hover:text-white phone:size-11"
+              {...stylex.props(
+                sx.grid,
+                sx.size9,
+                sx.shrink0,
+                sx.placeItemsCenter,
+                sx.roundedFull,
+                sx.border0,
+                sx.bgTransparent,
+                sx.p0,
+                sx.textWhite60,
+                sx.hoverBgWhite10,
+                sx.hoverTextWhite,
+                sx.phoneSize11,
+              )}
               onClick={resetComment}
               disabled={sendingComment}
               aria-label="Cancel comment"
@@ -1112,7 +1645,22 @@ export function MediaLightboxGallery({
               type="submit"
               // The filled circle a message is sent with, in the app's own
               // accent rather than a plain white chip.
-              className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-accent p-0 text-white transition-transform active:scale-[0.96] disabled:bg-white/15 disabled:text-white/40 phone:size-11"
+              {...stylex.props(
+                sx.grid,
+                sx.size9,
+                sx.shrink0,
+                sx.placeItemsCenter,
+                sx.roundedFull,
+                sx.border0,
+                sx.bgAccent,
+                sx.p0,
+                sx.textWhite,
+                sx.transitionTransform,
+                sx.activeScale096,
+                sx.disabledBgWhite15,
+                sx.disabledTextWhite40,
+                sx.phoneSize11,
+              )}
               disabled={!commentText.trim() || sendingComment}
               aria-label={sendingComment ? "Sending comment" : "Send comment"}
             >
@@ -1120,7 +1668,10 @@ export function MediaLightboxGallery({
             </button>
           </div>
           {commentError && (
-            <div className="px-2.5 pb-1 text-label text-red" role="alert">
+            <div
+              {...stylex.props(sx.px25, sx.pb1, sx.textRed, typography.label)}
+              role="alert"
+            >
               {commentError}
             </div>
           )}
@@ -1133,20 +1684,48 @@ export function MediaLightboxGallery({
       {!isPhone && (
         <div
           className={cn(
-            "z-10 flex flex-col items-center gap-1.5 px-4 pb-4 pt-4",
+            utilityClassName(
+              "z-10 flex flex-col items-center gap-1.5 px-4 pb-4 pt-4",
+            ),
             (commenting ||
               (!item.walkthroughLabel && !caption && !description && !many)) &&
-              "hidden",
+              utilityClassName("hidden"),
           )}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) requestClose();
           }}
         >
           {(item.walkthroughLabel || caption || description) && (
-            <div className="flex max-w-full flex-col items-center gap-0.5 text-center">
-              <div className="flex max-w-full items-center justify-center gap-2">
+            <div
+              {...stylex.props(
+                sx.flex,
+                sx.maxWFull,
+                sx.flexCol,
+                sx.itemsCenter,
+                sx.gap05,
+                sx.textCenter,
+              )}
+            >
+              <div
+                {...stylex.props(
+                  sx.flex,
+                  sx.maxWFull,
+                  sx.itemsCenter,
+                  sx.justifyCenter,
+                  sx.gap2,
+                )}
+              >
                 {caption && (
-                  <div className="min-w-0 max-w-full truncate text-sm font-medium text-white">
+                  <div
+                    {...stylex.props(
+                      sx.minW0,
+                      sx.maxWFull,
+                      sx.truncate,
+                      sx.textSm,
+                      sx.fontMedium,
+                      sx.textWhite,
+                    )}
+                  >
                     {caption}
                   </div>
                 )}
@@ -1162,17 +1741,25 @@ export function MediaLightboxGallery({
                 )}
               </div>
               {description && (
-                <div className="max-w-[min(720px,90vw)] line-clamp-2 text-sm leading-snug text-white/75">
+                <div
+                  {...stylex.props(
+                    sx.maxWMin720px90vw,
+                    sx.lineClamp2,
+                    sx.textSm,
+                    sx.leadingSnug,
+                    sx.textWhite75,
+                  )}
+                >
                   {description}
                 </div>
               )}
             </div>
           )}
-          <div className="flex items-center gap-1.5">
+          <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15)}>
             {many && (
               // Dots provide direct jumps; the counter beside them gives the
               // exact position without making the reader count circles.
-              <div className="flex items-center">
+              <div {...stylex.props(sx.flex, sx.itemsCenter)}>
                 {dotIndexes.map((dot, position) => (
                   <button
                     key={`${dot}-${items[dot].src}`}
@@ -1180,18 +1767,30 @@ export function MediaLightboxGallery({
                     onClick={() => go(dot)}
                     aria-label={`Show ${dot + 1} of ${items.length}`}
                     aria-current={dot === index ? "true" : undefined}
-                    className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
+                    {...mergeStylexProps(
+                      "group",
+                      sx.shrink0,
+                      sx.cursorPointer,
+                      sx.border0,
+                      sx.bgTransparent,
+                      sx.p1,
+                      sx.leadingNone,
+                    )}
                   >
                     <span
                       className={cn(
-                        "block size-1.5 rounded-full transition-[scale,background-color]",
+                        utilityClassName(
+                          "block size-1.5 rounded-full transition-[scale,background-color]",
+                        ),
                         ((position === 0 && dotStart > 0) ||
                           (position === dotIndexes.length - 1 &&
                             dotStart + dotIndexes.length < items.length)) &&
-                          "scale-[0.67]",
+                          utilityClassName("scale-[0.67]"),
                         dot === index
-                          ? "bg-white"
-                          : "bg-white/30 group-hover:bg-white/60",
+                          ? utilityClassName("bg-white")
+                          : utilityClassName(
+                              "bg-white/30 group-hover:bg-white/60",
+                            ),
                       )}
                     />
                   </button>
@@ -1199,7 +1798,14 @@ export function MediaLightboxGallery({
               </div>
             )}
             {many && (
-              <span className="text-meta font-medium tabular-nums text-white/50">
+              <span
+                {...mergeStylexProps(
+                  "tabular-nums",
+                  sx.fontMedium,
+                  sx.textWhite50,
+                  typography.meta,
+                )}
+              >
                 {index + 1} of {items.length}
               </span>
             )}

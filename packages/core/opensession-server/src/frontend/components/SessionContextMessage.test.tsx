@@ -9,5 +9,7 @@ test("reserves the session context row before metadata arrives", () => {
 
   expect(html).toContain("data-session-context");
   expect(html).toContain('aria-label="Loading session context"');
-  expect(html).toContain("h-5 w-44");
+  // The reservation is the h-3 utility (compat map, source spelling at test
+  // time): one skeleton line that holds the row's height before metadata.
+  expect(html).toContain("h-3");
 });

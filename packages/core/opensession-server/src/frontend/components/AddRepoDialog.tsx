@@ -1,9 +1,77 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useRef, useState } from "react";
 import { registerRepoApi, type RepoInfo } from "../lib/api";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import { fieldClasses } from "../ui/input";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  wFull: {
+    width: "100%",
+  },
+  flex1: {
+    flex: "1",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderRed30: {
+    borderColor: "color-mix(in oklab, var(--red) 30%, transparent)",
+  },
+  bgRedSoft: {
+    backgroundColor: "var(--red-soft)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+});
 
 type AddMode = "clone" | "path";
 
@@ -61,14 +129,17 @@ export function AddRepoDialog({
       }}
       disablePointerDismissal={adding}
     >
-      <Modal.Content widthClassName="max-w-[28rem]" initialFocus={inputRef}>
+      <Modal.Content
+        widthClassName={utilityClassName("max-w-[28rem]")}
+        initialFocus={inputRef}
+      >
         <Modal.Header
           title="Add repository"
           description="Clone a Git repository (GitHub or a code.storage remote), or register a checkout already on this Mac."
         />
 
         <Segmented
-          className="w-full"
+          className={mergeStylexOverrideClassName("", sx.wFull)}
           label="Repository source"
           value={mode}
           onValueChange={(next) => {
@@ -85,7 +156,11 @@ export function AddRepoDialog({
             <SegmentedOption
               key={nextMode}
               value={nextMode}
-              className="flex-1 justify-center"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.flex1,
+                sx.justifyCenter,
+              )}
               disabled={adding}
             >
               {label}
@@ -93,8 +168,17 @@ export function AddRepoDialog({
           ))}
         </Segmented>
 
-        <form className="flex flex-col gap-3" onSubmit={submit}>
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-fg">
+        <form {...stylex.props(sx.flex, sx.flexCol, sx.gap3)} onSubmit={submit}>
+          <label
+            {...stylex.props(
+              sx.flex,
+              sx.flexCol,
+              sx.gap15,
+              sx.textSm,
+              sx.fontMedium,
+              sx.textFg,
+            )}
+          >
             {mode === "clone" ? "Git clone URL" : "Absolute folder path"}
             <input
               ref={inputRef}
@@ -126,7 +210,17 @@ export function AddRepoDialog({
 
           {error && (
             <div
-              className="rounded-md border border-red/30 bg-red-soft px-3 py-2 text-xs leading-relaxed text-red"
+              {...stylex.props(
+                sx.roundedMd,
+                sx.border,
+                sx.borderRed30,
+                sx.bgRedSoft,
+                sx.px3,
+                sx.py2,
+                sx.textXs,
+                sx.leadingRelaxed,
+                sx.textRed,
+              )}
               role="alert"
             >
               {error}
@@ -134,7 +228,7 @@ export function AddRepoDialog({
           )}
 
           <Modal.Footer>
-            <div className="flex-1" />
+            <div {...stylex.props(sx.flex1)} />
             <Button
               variant="ghost"
               onClick={() => onOpenChange(false)}

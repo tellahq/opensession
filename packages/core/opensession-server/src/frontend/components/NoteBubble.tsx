@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useRef, useState } from "react";
 import type { SessionNote } from "../lib/types";
 import { cn } from "../ui/cn";
@@ -12,6 +14,171 @@ import { openLightbox } from "../lib/media-lightbox";
 import { noAutofill } from "../lib/composer-autofill";
 import { noteSurface } from "../lib/tinted-surface";
 import { errorMessage } from "../lib/error-message";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  relative: {
+    position: "relative",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  mb6: {
+    marginBottom: "calc(4px * 6)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxWVarSessionCol: {
+    maxWidth: "var(--session-col)",
+  },
+  rounded2xl: {
+    borderRadius: "calc(22px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py35: {
+    paddingBlock: "calc(4px * 3.5)",
+  },
+  mb1: {
+    marginBottom: "4px",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  resizeNone: {
+    resize: "none",
+  },
+  roundedLg: {
+    borderRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderColorColorMixInSrgbVarYellowTint45Transparent: {
+    borderColor: "color-mix(in srgb,var(--yellow-tint) 45%,transparent)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  focusVisibleBorderColorVarYellow: {
+    ":focus-visible": {
+      borderColor: "var(--yellow)",
+    },
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgAccent: {
+    backgroundColor: "var(--accent)",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textOnAccent: {
+    color: "var(--on-accent)",
+  },
+  disabledCursorDefault: {
+    ":disabled": {
+      cursor: "default",
+    },
+  },
+  disabledOpacity50: {
+    ":disabled": {
+      opacity: "50%",
+    },
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  whitespacePreWrap: {
+    whiteSpace: "pre-wrap",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  block: {
+    display: "block",
+  },
+  cursorZoomIn: {
+    cursor: "zoom-in",
+  },
+  leading0: {
+    lineHeight: "0",
+  },
+  maxH60: {
+    maxHeight: "calc(4px * 60)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  objectContain: {
+    objectFit: "contain",
+  },
+});
 
 /**
  * A team note interleaved into the session transcript — a human-to-human
@@ -101,22 +268,35 @@ export function NoteBubble({
       // WalkthroughCard) so it doesn't crowd whatever follows it.
       //
       // `group` so the actions can stay quiet until the note is hovered.
-      className="group relative mx-auto mb-6 mt-2 w-full max-w-[var(--session-col)] rounded-2xl px-4 py-3.5"
+      {...mergeStylexProps(
+        "group",
+        sx.relative,
+        sx.mxAuto,
+        sx.mb6,
+        sx.mt2,
+        sx.wFull,
+        sx.maxWVarSessionCol,
+        sx.rounded2xl,
+        sx.px4,
+        sx.py35,
+      )}
       style={{ background: noteSurface("transparent") }}
     >
-      <div className="mb-1 flex items-center gap-2">
+      <div {...stylex.props(sx.mb1, sx.flex, sx.itemsCenter, sx.gap2)}>
         <UserAvatar name={note.user} size={18} />
-        <span className="text-supporting font-semibold text-fg">
+        <span
+          {...stylex.props(sx.fontSemibold, sx.textFg, typography.supporting)}
+        >
           {note.user}
         </span>
         <span
-          className="text-meta font-semibold"
+          {...stylex.props(sx.fontSemibold, typography.meta)}
           style={{ color: "var(--yellow)" }}
           title="Only the team sees this note"
         >
           Note
         </span>
-        <span className="text-meta text-faint">
+        <span {...stylex.props(sx.textFaint, typography.meta)}>
           {noteTime(note.ts)}
           {note.editedAt ? " · edited" : ""}
         </span>
@@ -128,8 +308,12 @@ export function NoteBubble({
               // focus, and while its own menu is open — never hover-only,
               // which would strand touch and keyboard.
               className={cn(
-                "ml-auto flex size-7 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim opacity-0 transition-opacity",
-                "hover:bg-hover hover:text-fg focus-visible:opacity-100 group-hover:opacity-100",
+                utilityClassName(
+                  "ml-auto flex size-7 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim opacity-0 transition-opacity",
+                ),
+                utilityClassName(
+                  "hover:bg-hover hover:text-fg focus-visible:opacity-100 group-hover:opacity-100",
+                ),
                 "data-[popup-open]:bg-hover data-[popup-open]:text-fg data-[popup-open]:opacity-100",
               )}
             >
@@ -142,11 +326,17 @@ export function NoteBubble({
                   setEditing(true);
                 }}
               >
-                <IconPencil size={18} className="text-faint" />
+                <IconPencil
+                  size={18}
+                  className={mergeStylexOverrideClassName("", sx.textFaint)}
+                />
                 Edit
               </Menu.Item>
               <Menu.Separator />
-              <Menu.Item onClick={remove} className="text-red">
+              <Menu.Item
+                onClick={remove}
+                className={mergeStylexOverrideClassName("", sx.textRed)}
+              >
                 <IconTrash size={18} />
                 Delete
               </Menu.Item>
@@ -155,7 +345,7 @@ export function NoteBubble({
         )}
       </div>
       {editing ? (
-        <div className="flex flex-col gap-2">
+        <div {...stylex.props(sx.flex, sx.flexCol, sx.gap2)}>
           <textarea
             ref={textareaRef}
             value={draft}
@@ -177,14 +367,39 @@ export function NoteBubble({
                 void save();
               }
             }}
-            className="w-full resize-none rounded-lg border border-[color:color-mix(in_srgb,var(--yellow-tint)_45%,transparent)] bg-surface px-2.5 py-2 text-body leading-relaxed text-fg outline-none focus-visible:border-[color:var(--yellow)]"
+            {...stylex.props(
+              sx.wFull,
+              sx.resizeNone,
+              sx.roundedLg,
+              sx.border,
+              sx.borderColorColorMixInSrgbVarYellowTint45Transparent,
+              sx.bgSurface,
+              sx.px25,
+              sx.py2,
+              sx.leadingRelaxed,
+              sx.textFg,
+              sx.outlineNone,
+              sx.focusVisibleBorderColorVarYellow,
+              typography.body,
+            )}
           />
-          <div className="flex items-center gap-2">
+          <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
             <button
               type="button"
               onClick={() => void save()}
               disabled={busy || !draft.trim()}
-              className="rounded-control bg-accent px-2.5 py-1 text-label font-medium text-on-accent enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-50"
+              {...mergeStylexProps(
+                "enabled:hover:bg-accent-hover",
+                sx.roundedControl,
+                sx.bgAccent,
+                sx.px25,
+                sx.py1,
+                sx.fontMedium,
+                sx.textOnAccent,
+                sx.disabledCursorDefault,
+                sx.disabledOpacity50,
+                typography.label,
+              )}
             >
               Save
             </button>
@@ -195,11 +410,20 @@ export function NoteBubble({
                 setDraft(note.text);
               }}
               disabled={busy}
-              className="rounded-control px-2.5 py-1 text-label font-medium text-dim hover:bg-hover hover:text-fg"
+              {...stylex.props(
+                sx.roundedControl,
+                sx.px25,
+                sx.py1,
+                sx.fontMedium,
+                sx.textDim,
+                sx.hoverBgHover,
+                sx.hoverTextFg,
+                typography.label,
+              )}
             >
               Cancel
             </button>
-            <span className="text-meta text-faint">
+            <span {...stylex.props(sx.textFaint, typography.meta)}>
               ⌘↵ to save · Esc to cancel
             </span>
           </div>
@@ -207,17 +431,30 @@ export function NoteBubble({
       ) : (
         <>
           {note.text && (
-            <div className="whitespace-pre-wrap text-body leading-relaxed text-fg">
+            <div
+              {...stylex.props(
+                sx.whitespacePreWrap,
+                sx.leadingRelaxed,
+                sx.textFg,
+                typography.body,
+              )}
+            >
               <MentionText text={note.text} />
             </div>
           )}
           {!!note.images?.length && (
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div {...stylex.props(sx.mt2, sx.flex, sx.flexWrap, sx.gap2)}>
               {note.images.map((src, index) => (
                 <button
                   key={src}
                   type="button"
-                  className="focus-ring block cursor-zoom-in rounded-lg leading-[0]"
+                  {...mergeStylexProps(
+                    "focus-ring",
+                    sx.block,
+                    sx.cursorZoomIn,
+                    sx.roundedLg,
+                    sx.leading0,
+                  )}
                   onClick={(event) =>
                     openLightbox(
                       note.images!.map((image) => ({
@@ -234,7 +471,14 @@ export function NoteBubble({
                     src={src}
                     alt=""
                     loading="lazy"
-                    className="max-h-60 max-w-full rounded-lg border border-line-strong object-contain"
+                    {...stylex.props(
+                      sx.maxH60,
+                      sx.maxWFull,
+                      sx.roundedLg,
+                      sx.border,
+                      sx.borderLineStrong,
+                      sx.objectContain,
+                    )}
                   />
                 </button>
               ))}

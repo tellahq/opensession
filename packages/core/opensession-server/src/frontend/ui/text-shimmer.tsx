@@ -1,5 +1,56 @@
+import { utilityClassName } from "./cn";
 import type { CSSProperties } from "react";
 import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  selectNone: {
+    WebkitUserSelect: "none",
+    userSelect: "none",
+  },
+  textVarTextShimmerHighlight: {
+    color: "var(--text-shimmer-highlight)",
+  },
+  MaskImageLinearGradient90degTransparent25Black45Black55Transparent75: {
+    maskImage:
+      "linear-gradient(90deg,transparent 25%,black 45%,black 55%,transparent 75%)",
+  },
+  MaskRepeatNoRepeat: {
+    maskRepeat: "no-repeat",
+  },
+  MaskSize100100: {
+    maskSize: "100% 100%",
+  },
+  WillChangeTransform: {
+    willChange: "transform",
+  },
+  WebkitMaskImageLinearGradient90degTransparent25Black45Black55Transparent75: {
+    WebkitMaskImage:
+      "linear-gradient(90deg,transparent 25%,black 45%,black 55%,transparent 75%)",
+  },
+  WebkitMaskRepeatNoRepeat: {
+    WebkitMaskRepeat: "no-repeat",
+  },
+  WebkitMaskSize100100: {
+    WebkitMaskSize: "100% 100%",
+  },
+  block: {
+    display: "block",
+  },
+  wFull: {
+    width: "100%",
+  },
+});
 
 const sweepAnimation: CSSProperties = {
   animationName: "text-shimmer-window",
@@ -32,17 +83,33 @@ export function TextShimmer({
 }) {
   return (
     <span
-      className={cn("relative inline-block [contain:paint]", className)}
+      className={cn(
+        utilityClassName("relative inline-block [contain:paint]"),
+        className,
+      )}
       data-text-shimmer=""
     >
       <span>{children}</span>
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 select-none text-[var(--text-shimmer-highlight)] [mask-image:linear-gradient(90deg,transparent_25%,black_45%,black_55%,transparent_75%)] [mask-repeat:no-repeat] [mask-size:100%_100%] [will-change:transform] [-webkit-mask-image:linear-gradient(90deg,transparent_25%,black_45%,black_55%,transparent_75%)] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:100%_100%]"
+        {...stylex.props(
+          sx.pointerEventsNone,
+          sx.absolute,
+          sx.inset0,
+          sx.selectNone,
+          sx.textVarTextShimmerHighlight,
+          sx.MaskImageLinearGradient90degTransparent25Black45Black55Transparent75,
+          sx.MaskRepeatNoRepeat,
+          sx.MaskSize100100,
+          sx.WillChangeTransform,
+          sx.WebkitMaskImageLinearGradient90degTransparent25Black45Black55Transparent75,
+          sx.WebkitMaskRepeatNoRepeat,
+          sx.WebkitMaskSize100100,
+        )}
         style={sweepAnimation}
       >
         <span
-          className="block w-full [will-change:transform]"
+          {...stylex.props(sx.block, sx.wFull, sx.WillChangeTransform)}
           style={copyAnimation}
         >
           {children}

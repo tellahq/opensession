@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import { cn } from "../ui/cn";
 import { typingLabel } from "../lib/typing";
 
@@ -15,7 +16,7 @@ export function TypingIndicator({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className={cn("text-label text-faint", className)}
+      className={cn(utilityClassName("text-label text-faint"), className)}
     >
       {label}
     </div>

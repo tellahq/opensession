@@ -46,17 +46,14 @@
     "sharp": "0.35.4",
     "shiki": "3.23.0",
     "swr": "^2.3.6",
-    "tailwind-merge": "^3.6.0",
     "typescript": "^5.7.0",
     "web-push": "^3.6.7",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.3.2",
     "@types/bun": "latest",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/web-push": "^3.6.4",
-    "tailwindcss": "^4.3.2"
+    "@types/web-push": "^3.6.4"
   }
 }

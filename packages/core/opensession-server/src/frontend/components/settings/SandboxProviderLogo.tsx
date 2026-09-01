@@ -1,6 +1,58 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import type { ReactNode } from "react";
 import type { SandboxConnectionInfo } from "../../lib/api";
 import { cn } from "../../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  roundedLg: {
+    borderRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgWhite: {
+    backgroundColor: "var(--color-white)",
+  },
+  text111: {
+    color: "#111",
+  },
+  h8: {
+    height: "calc(4px * 8)",
+  },
+  w7: {
+    width: "calc(4px * 7)",
+  },
+  size10: {
+    width: "calc(4px * 10)",
+    height: "calc(4px * 10)",
+  },
+  bgEdf7ff: {
+    backgroundColor: "#edf7ff",
+  },
+  text2496ed: {
+    color: "#2496ed",
+  },
+  size6: {
+    width: "calc(4px * 6)",
+    height: "calc(4px * 6)",
+  },
+  bg07140d: {
+    backgroundColor: "#07140d",
+  },
+  text62de61: {
+    color: "#62de61",
+  },
+});
 
 type SandboxProvider = SandboxConnectionInfo["provider"];
 
@@ -24,13 +76,20 @@ function SandboxProviderTile({
   return (
     <span
       className={cn(
-        "relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg",
+        utilityClassName(
+          "relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg",
+        ),
         className,
       )}
     >
       {children}
       <span
-        className="pointer-events-none absolute inset-0 rounded-lg"
+        {...stylex.props(
+          sx.pointerEventsNone,
+          sx.absolute,
+          sx.inset0,
+          sx.roundedLg,
+        )}
         style={tileStyle}
         aria-hidden="true"
       />
@@ -45,10 +104,12 @@ export function SandboxProviderLogo({
 }) {
   if (provider === "box") {
     return (
-      <SandboxProviderTile className="bg-white text-[#111]">
+      <SandboxProviderTile
+        className={mergeStylexOverrideClassName("", sx.bgWhite, sx.text111)}
+      >
         <svg
           viewBox="-4.6 0 35.5 35.5"
-          className="h-8 w-7"
+          {...stylex.props(sx.h8, sx.w7)}
           fill="currentColor"
           aria-hidden="true"
         >
@@ -60,9 +121,11 @@ export function SandboxProviderLogo({
 
   if (provider === "daytona") {
     return (
-      <SandboxProviderTile className="bg-white">
+      <SandboxProviderTile
+        className={mergeStylexOverrideClassName("", sx.bgWhite)}
+      >
         <img
-          className="size-10"
+          {...stylex.props(sx.size10)}
           src={DAYTONA_FAVICON}
           alt=""
           aria-hidden="true"
@@ -73,10 +136,12 @@ export function SandboxProviderLogo({
 
   if (provider === "docker") {
     return (
-      <SandboxProviderTile className="bg-[#edf7ff] text-[#2496ed]">
+      <SandboxProviderTile
+        className={mergeStylexOverrideClassName("", sx.bgEdf7ff, sx.text2496ed)}
+      >
         <svg
           viewBox="0 0 24 24"
-          className="size-6"
+          {...stylex.props(sx.size6)}
           fill="currentColor"
           aria-hidden="true"
         >
@@ -87,10 +152,12 @@ export function SandboxProviderLogo({
   }
 
   return (
-    <SandboxProviderTile className="bg-[#07140d] text-[#62de61]">
+    <SandboxProviderTile
+      className={mergeStylexOverrideClassName("", sx.bg07140d, sx.text62de61)}
+    >
       <svg
         viewBox="0 0 24 24"
-        className="size-6"
+        {...stylex.props(sx.size6)}
         fill="currentColor"
         aria-hidden="true"
       >

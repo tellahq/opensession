@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 /**
  * The tool call block's code surfaces.
  *
@@ -26,13 +27,19 @@
  * out-runs a phone-width pane — the run of tabs hangs past the edge instead
  * of wrapping. */
 export const TOOL_PRE =
-  "tool-pre m-0 max-h-80 overflow-y-auto font-mono text-meta leading-[1.5] " +
-  "whitespace-pre-wrap [word-break:break-word] [tab-size:2] text-dim";
+  utilityClassName(
+    "tool-pre m-0 max-h-80 overflow-y-auto font-mono text-meta leading-[1.5] ",
+  ) +
+  utilityClassName(
+    "whitespace-pre-wrap [word-break:break-word] [tab-size:2] text-dim",
+  );
 
 /** The sunk surface a snippet sits on. */
 export const TOOL_CODE_WELL =
-  "overflow-x-auto rounded-md border border-code-well-line bg-code-well " +
-  "px-2.5 py-2 [tab-size:2] " +
+  utilityClassName(
+    "overflow-x-auto rounded-md border border-code-well-line bg-code-well ",
+  ) +
+  utilityClassName("px-2.5 py-2 [tab-size:2] ") +
   "[&_.tool-pre]:text-code-well-ink [&.tool-pre]:text-code-well-ink " +
   "[&_.shiki-gutter]:text-code-well-gutter";
 
@@ -50,7 +57,9 @@ export const TOOL_PRE_CODE =
   "[&_pre.shiki_code]:font-[inherit] [&_pre.shiki_code]:text-[length:inherit]";
 
 /** Image and video grids under a tool result. */
-export const TOOL_RESULT_MEDIA = "mt-1.5 flex flex-wrap gap-2";
+export const TOOL_RESULT_MEDIA = utilityClassName(
+  "mt-1.5 flex flex-wrap gap-2",
+);
 
 /**
  * The tool row's trailing drill-in chip — "Open ↗" on a file the call wrote,
@@ -59,10 +68,16 @@ export const TOOL_RESULT_MEDIA = "mt-1.5 flex flex-wrap gap-2";
  * translucent plate instead of a hairline box that reads like an input.
  */
 export const TOOL_ROW_CHIP =
-  "inline-flex flex-shrink-0 self-center items-center gap-0.5 rounded-control " +
-  "bg-hover py-[2px] pl-2 pr-1 text-meta font-medium leading-4 text-dim " +
-  "transition-[color,background-color,scale] hover:bg-pressed hover:text-fg " +
-  "active:scale-[0.96] focus-ring";
+  utilityClassName(
+    "inline-flex flex-shrink-0 self-center items-center gap-0.5 rounded-control ",
+  ) +
+  utilityClassName(
+    "bg-hover py-[2px] pl-2 pr-1 text-meta font-medium leading-4 text-dim ",
+  ) +
+  utilityClassName(
+    "transition-[color,background-color,scale] hover:bg-pressed hover:text-fg ",
+  ) +
+  utilityClassName("active:scale-[0.96] focus-ring");
 
 /**
  * Says a collapsed row is holding media the agent didn't ask to show — a Read
@@ -72,5 +87,9 @@ export const TOOL_ROW_CHIP =
  * competing with the "Open ↗" chip beside it.
  */
 export const TOOL_ROW_MEDIA_HINT =
-  "inline-flex flex-shrink-0 self-center items-center gap-1 text-meta " +
-  "leading-4 text-faint transition-colors group-hover:text-dim";
+  utilityClassName(
+    "inline-flex flex-shrink-0 self-center items-center gap-1 text-meta ",
+  ) +
+  utilityClassName(
+    "leading-4 text-faint transition-colors group-hover:text-dim",
+  );

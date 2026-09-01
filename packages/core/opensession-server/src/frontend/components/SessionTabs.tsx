@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useRef, useState } from "react";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { Reorder, useReducedMotion } from "motion/react";
@@ -57,6 +59,35 @@ import { useTabReorder } from "./session-tabs/useTabReorder";
 import { SessionDraftIndicator } from "./session-tabs/SessionDraftIndicator";
 import { shouldShowTabStrip } from "../lib/split-tabs";
 import type { SessionTabsProps, ViewTab } from "../lib/session-tabs-types";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  minW250px: {
+    minWidth: "250px",
+  },
+  minW240px: {
+    minWidth: "240px",
+  },
+  maxW320px: {
+    maxWidth: "320px",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  grow: {
+    flexGrow: "1",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+});
 
 /**
  * The tab strip is scoped to ONE Workspace: it shows the sibling sessions of the
@@ -357,7 +388,7 @@ export function SessionTabs({
         render={
           <button
             type="button"
-            className={cn(TAB_NEW, "relative z-[1]")}
+            className={cn(TAB_NEW, utilityClassName("relative z-[1]"))}
             aria-label="New session in this workspace"
             title="New session. Shares this workspace's worktree (right-click for options)"
             onClick={(event) => {
@@ -382,7 +413,9 @@ export function SessionTabs({
       >
         <IconPlus size={ctrlIconSize} />
       </ContextMenu.Trigger>
-      <ContextMenu.Popup className="min-w-[250px]">
+      <ContextMenu.Popup
+        className={mergeStylexOverrideClassName("", sx.minW250px)}
+      >
         <ContextMenu.Item onClick={() => onNewSession("share")}>
           New session · share worktree
         </ContextMenu.Item>
@@ -411,7 +444,7 @@ export function SessionTabs({
       <Menu.Popup
         align="end"
         sideOffset={4}
-        className="min-w-[240px] max-w-[320px]"
+        className={mergeStylexOverrideClassName("", sx.minW240px, sx.maxW320px)}
       >
         <ArchivedSessionItems
           sessions={archived}
@@ -424,7 +457,10 @@ export function SessionTabs({
 
   return (
     <div
-      className={cn(TAB_STRIP, !inSplit && "desktop:-mt-[11px]")}
+      className={cn(
+        TAB_STRIP,
+        !inSplit && utilityClassName("desktop:-mt-[11px]"),
+      )}
       role="tablist"
     >
       <div
@@ -488,7 +524,8 @@ export function SessionTabs({
                       <span
                         className={cn(
                           TAB_VICON,
-                          v.closable !== false && "desktop:mr-3.5",
+                          v.closable !== false &&
+                            utilityClassName("desktop:mr-3.5"),
                         )}
                         aria-hidden="true"
                       >
@@ -578,7 +615,7 @@ export function SessionTabs({
                             waiting,
                             colored: !!hex,
                           }),
-                          emptyVisual && "desktop:pr-7",
+                          emptyVisual && utilityClassName("desktop:pr-7"),
                         )}
                         style={
                           {
@@ -602,7 +639,7 @@ export function SessionTabs({
                     )}
                     {emptyVisual ? (
                       <span
-                        className="inline-flex min-w-0"
+                        {...stylex.props(sx.inlineFlex, sx.minW0)}
                         data-empty-tab-title=""
                       >
                         {titleContent}
@@ -665,7 +702,10 @@ export function SessionTabs({
                       }}
                     >
                       {emptyVisual ? (
-                        <span className="inline-flex" data-empty-tab-glyph="">
+                        <span
+                          {...stylex.props(sx.inlineFlex)}
+                          data-empty-tab-glyph=""
+                        >
                           <IconX size={16} dense aria-hidden="true" />
                         </span>
                       ) : (
@@ -677,7 +717,7 @@ export function SessionTabs({
 							    input (autoFocus) — the closing menu must not steal focus
 							    back to the tab. */}
                   <ContextMenu.Popup
-                    className="min-w-[250px]"
+                    className={mergeStylexOverrideClassName("", sx.minW250px)}
                     finalFocus={false}
                   >
                     <ContextMenu.Item
@@ -687,7 +727,7 @@ export function SessionTabs({
                       }}
                     >
                       <IconPencil size={20} className={MENU_ICON} />
-                      <span className="grow">Rename session</span>
+                      <span {...stylex.props(sx.grow)}>Rename session</span>
                     </ContextMenu.Item>
                     {/* The cross-bar drag, spelled out: a bar down to its last
 								    tab has no room to show a drag, and this is also the
@@ -699,7 +739,7 @@ export function SessionTabs({
                         ) : (
                           <IconSidebarRight size={20} className={MENU_ICON} />
                         )}
-                        <span className="grow">
+                        <span {...stylex.props(sx.grow)}>
                           Move to {moveAcrossSide} side
                         </span>
                       </ContextMenu.Item>
@@ -708,8 +748,14 @@ export function SessionTabs({
                     <ContextMenu.SubmenuRoot>
                       <ContextMenu.SubmenuTrigger>
                         <IconCopy size={20} className={MENU_ICON} />
-                        <span className="grow">Copy transcript</span>
-                        <IconChevronRight size={16} className="text-faint" />
+                        <span {...stylex.props(sx.grow)}>Copy transcript</span>
+                        <IconChevronRight
+                          size={16}
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.textFaint,
+                          )}
+                        />
                       </ContextMenu.SubmenuTrigger>
                       <Menu.Popup>
                         <Menu.Item
@@ -722,7 +768,7 @@ export function SessionTabs({
                           }
                         >
                           <IconListCircles size={20} className={MENU_ICON} />
-                          <span className="grow">Concise</span>
+                          <span {...stylex.props(sx.grow)}>Concise</span>
                           {key === activeId && copyTranscriptLabel && (
                             <Menu.Shortcut>{copyTranscriptLabel}</Menu.Shortcut>
                           )}
@@ -733,7 +779,7 @@ export function SessionTabs({
                           }
                         >
                           <IconFile size={20} className={MENU_ICON} />
-                          <span className="grow">Full</span>
+                          <span {...stylex.props(sx.grow)}>Full</span>
                         </Menu.Item>
                       </Menu.Popup>
                     </ContextMenu.SubmenuRoot>
@@ -746,7 +792,7 @@ export function SessionTabs({
                       }
                     >
                       <IconLink size={20} className={MENU_ICON} />
-                      <span className="grow">Copy link</span>
+                      <span {...stylex.props(sx.grow)}>Copy link</span>
                     </ContextMenu.Item>
                     <ContextMenu.Separator />
                     {/* Tab color. A swatch click bubbles to the Item, which
@@ -777,7 +823,7 @@ export function SessionTabs({
                     <ContextMenu.Separator />
                     <ContextMenu.Item onClick={() => onClose(session)}>
                       <IconX size={20} className={MENU_ICON} />
-                      <span className="grow">Close tab</span>
+                      <span {...stylex.props(sx.grow)}>Close tab</span>
                       {key === activeId && closeLabel && (
                         <ContextMenu.Shortcut>
                           {closeLabel}
@@ -786,11 +832,14 @@ export function SessionTabs({
                     </ContextMenu.Item>
                     {onDelete && (
                       <ContextMenu.Item
-                        className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+                        className={mergeStylexOverrideClassName(
+                          "data-[highlighted]:bg-red-soft data-[highlighted]:text-red",
+                          sx.textRed,
+                        )}
                         onClick={() => setDeleteTarget(session)}
                       >
                         <IconTrash size={20} />
-                        <span className="grow">Delete session</span>
+                        <span {...stylex.props(sx.grow)}>Delete session</span>
                       </ContextMenu.Item>
                     )}
                   </ContextMenu.Popup>

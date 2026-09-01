@@ -128,7 +128,10 @@ test("SessionViewer navigation comes from NavigationContext", async () => {
 test("duplicate session stays available at the current tip inside a workspace", async () => {
   const { viewer } = await sources();
   expect(viewer).toContain("                  {forkAction}");
-  expect(viewer).toContain('<span className="grow">Duplicate session</span>');
+  // StyleX: the label's growth is the sx.grow composition.
+  expect(viewer).toContain(
+    "<span {...stylex.props(sx.grow)}>Duplicate session</span>",
+  );
   expect(viewer).not.toContain("{!workspaceScopedMenu && forkAction}");
   expect(viewer).toContain("                handleFork();");
   expect(viewer).toContain("void navigation.duplicateSession();");

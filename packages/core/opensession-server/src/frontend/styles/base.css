@@ -294,6 +294,9 @@
 	   button and .pr-bar-btn-solid already paint ink-on-paper, each with its own
 	   comment explaining that the red accent shouted. */
   --accent: var(--text);
+  /* Readable accent ink defaults to the fill when no named accent has been
+	   chosen yet; html[data-accent] supplies hue-specific light/dark ink. */
+  --accent-ink: var(--accent);
   /* What sits ON an --accent fill: its inverse. Was a hardcoded #fff at every
 	   call site, which is white-on-white the moment the accent becomes ink. */
   --on-accent: var(--bg);
@@ -362,12 +365,12 @@
 	   where a pasted one reads sunk. Kept as-is by the migration; changing it
 	   is a visual call, not a mechanical one. */
   /* Keep both surfaces available because the code theme can differ from the
-     app theme. --code-well remains the surface for the current app theme. */
+	   app theme. --code-well remains the surface for the current app theme. */
   --code-well-light: #f6f8fa;
   --code-well-dark: #0d0f13;
   --code-well: var(--code-well-dark);
   /* Review code can pin the opposite scheme from the app. Keep both app-base
-     surfaces available so either pinned scheme matches its surrounding chrome. */
+	   surfaces available so either pinned scheme matches its surrounding chrome. */
   --review-code-light: #ffffff;
   --review-code-dark: #1c1c1c;
   --code-well-line: rgba(255, 255, 255, 0.06);
@@ -388,6 +391,50 @@
   --chip-ask-fg: #e3b341;
   --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  /* StyleX owns the small stock-theme substrate that converted declarations
+	   still reference. These values used to arrive incidentally from
+	   tailwindcss/theme.css; keeping them here makes the component sheet
+	   independent of Tailwind without changing a computed value. */
+  --font-sans: var(--sans);
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --text-xs--line-height: calc(1 / 0.75);
+  --text-sm--line-height: calc(1.25 / 0.875);
+  --text-base--line-height: calc(1.5 / 1);
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: calc(2.5 / 2.25);
+  --tracking-wide: 0.025em;
+  --tracking-wider: 0.05em;
+  --container-xs: 20rem;
+  --container-sm: 24rem;
+  --container-md: 28rem;
+  --aspect-video: 16 / 9;
+  --blur-xl: 24px;
+  --color-white: #fff;
+  --color-black: #000;
+  --neutral-mid: #808080;
+  --radius-control: calc(12px * var(--rf));
+  --radius-row: calc(12px * var(--rf));
+  --radius-popup: calc(16px * var(--rf));
+  --radius-xs: calc(2px * var(--rf));
+  --radius-sm: calc(4px * var(--rf));
+  --radius-md: calc(7px * var(--rf));
+  --radius-lg: calc(14px * var(--rf));
+  --radius-xl: calc(18px * var(--rf));
+  --radius-2xl: calc(22px * var(--rf));
+  --radius-avatar: calc(32% * var(--rp));
+  --animate-spin: spin 1s linear infinite;
+  --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --smooth-shadow-color: black;
+  --tw-gradient-from-position: 0%;
+  --tw-gradient-via-position: 50%;
+  --tw-gradient-to-position: 100%;
   /* The web keeps desktop's compact metrics, while a phone promotes every role
 	   one rung. These are real custom properties, rather than values written
 	   directly into Tailwind's @theme block, so the same utility can follow the
@@ -857,10 +904,9 @@ html[data-accent="green"] {
                         that actually translates.
      animate-[composer-agents-pulse_…]  (ComposerAgents) keeping the existing
                         explicit choice to stop it.
-     text-shimmer-window / text-shimmer-copy  (TextShimmer) the crest that
-                        crosses queue and reasoning activity labels. The words
-                        themselves say what is happening, so a still label
-                        loses nothing.
+     animate-[text-shimmer_…]  (composerQueueSendingShimmer) the crest that
+                        crosses "Queueing"/"Sending". The word itself says
+                        what is happening, so a still label loses nothing.
      [animation-name:pixel-snake-trail]  (PixelSpinner) the decorative pixel
                         loader — a wave that travels across the block. However
                         fun, it is the single most motion-heavy thing in the
@@ -1468,9 +1514,10 @@ html:is(.wco, .desktop-shell)
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
-/* Settings has no visible titlebar row, so its empty strip is shell-only and
-   the nav starts below it. Keeping both rules here lets the durable Electron
-   capability work even while Chromium reports WCO as hidden. */
+/* Chromium withholds pointer events from native drag regions. While a visible
+   menu is mounted, temporarily return the chrome to the page so its outside
+   press can dismiss the menu. A hidden keep-mounted popup must not disable
+   window dragging indefinitely. */
 .settings-drag-handle {
   display: none;
 }
@@ -2046,7 +2093,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   border: 1px solid var(--border);
   border-radius: calc(7px * var(--rf));
   corner-shape: var(--cs);
-  background: var(--bg-surface);
+  background: var(--bg);
   overflow: hidden;
 }
 .markdown .md-details > summary {
@@ -2947,6 +2994,17 @@ html[data-theme="light"] span.commit-ref:hover {
    Grep for BOTH spellings before assuming one of these is unused: the
    underscores in an arbitrary value hide the name from a naive search. */
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
 @keyframes composer-agents-pulse {
   0%,
   100% {
@@ -3019,26 +3077,17 @@ html[data-theme="light"] span.commit-ref:hover {
   }
 }
 
-/* TextShimmer moves a masked window and its duplicate text in opposite
-   directions. The transforms cancel for the glyphs, keeping them registered
-   with the base label while the mask crosses it on compositor layers. Unlike
-   animating a clipped gradient's background-position, this needs no repaint on
-   each frame. Timing and highlight color remain caller-controlled. */
-@keyframes text-shimmer-window {
+/* A highlight travelling across a word, for a status label that is its own
+   loading indicator ("Queueing", "Sending"). The gradient is twice the box
+   wide, so sliding the position from 100% to 0% walks the crest left to
+   right across the letters. Referenced from `composerQueueSendingShimmer`
+   in lib/composer-classes. */
+@keyframes text-shimmer {
   from {
-    transform: translateX(-100%);
+    background-position: 100% center;
   }
   to {
-    transform: translateX(100%);
-  }
-}
-
-@keyframes text-shimmer-copy {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(-100%);
+    background-position: 0% center;
   }
 }
 

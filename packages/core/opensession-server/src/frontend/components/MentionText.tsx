@@ -1,7 +1,29 @@
+import { mergeStylexProps } from "../ui/cn";
 import React from "react";
 import { parseMentions } from "../lib/mention-text";
 import { usePeople } from "../lib/people";
 import { githubLoginFor } from "./UserAvatar";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  underline: {
+    textDecorationLine: "underline",
+  },
+  decorationAccent40: {
+    textDecorationColor: "color-mix(in oklab, var(--accent) 40%, transparent)",
+  },
+  underlineOffset2: {
+    textUnderlineOffset: "2px",
+  },
+  hoverDecorationAccent: {
+    "@media (hover: hover)": {
+      ":hover": {
+        textDecorationColor: "var(--accent)",
+      },
+    },
+  },
+});
 
 /**
  * Plain human text with @-mentions rendered as the person they name. Team
@@ -29,7 +51,13 @@ export function MentionText({ text }: { text: string }) {
               href={token.text}
               target="_blank"
               rel="noreferrer"
-              className="text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+              {...mergeStylexProps(
+                "text-accent",
+                sx.underline,
+                sx.decorationAccent40,
+                sx.underlineOffset2,
+                sx.hoverDecorationAccent,
+              )}
             >
               {token.text}
             </a>

@@ -1,3 +1,28 @@
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexClassName } from "./cn";
+
+const sx = stylex.create({
+  hVarCollapsiblePanelHeight: {
+    height: "var(--collapsible-panel-height)",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  transitionHeight: {
+    transitionProperty: "height",
+    transitionTimingFunction: "var(--tw-ease,var(--ease))",
+    transitionDuration: "var(--tw-duration,var(--dur-micro))",
+  },
+  durationVarDur: {
+    "--tw-duration": "var(--dur)",
+    transitionDuration: "var(--dur)",
+  },
+  easeVarEase: {
+    "--tw-ease": "var(--ease)",
+    transitionTimingFunction: "var(--ease)",
+  },
+});
+
 /**
  * Collapsible — the open-in-place primitive, re-exported through `ui/`.
  *
@@ -30,5 +55,11 @@ export { Collapsible } from "@base-ui/react/collapsible";
  * hiding a closed panel, and any display utility on the same element would
  * outrank it.
  */
-export const collapsiblePanelClasses =
-  "h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-[var(--dur)] ease-[var(--ease)] data-[starting-style]:h-0 data-[ending-style]:h-0 [&[hidden]]:hidden";
+export const collapsiblePanelClasses = mergeStylexClassName(
+  "data-[starting-style]:h-0 data-[ending-style]:h-0 [&[hidden]]:hidden",
+  sx.hVarCollapsiblePanelHeight,
+  sx.overflowHidden,
+  sx.transitionHeight,
+  sx.durationVarDur,
+  sx.easeVarEase,
+);

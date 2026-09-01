@@ -1,9 +1,137 @@
+import { mergeStylexProps } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import type { TranscriptEntry } from "../lib/types";
 import type { WorkflowAgentSnapshot } from "../../server/workflow-types";
 import { cn } from "../ui/cn";
 import { TranscriptBlocks } from "./TranscriptBlocks";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  sticky: {
+    position: "sticky",
+  },
+  top0: {
+    top: "0",
+  },
+  z10: {
+    zIndex: "10",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  py05: {
+    paddingBlock: "calc(4px * 0.5)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  size3: {
+    width: "calc(4px * 3)",
+    height: "calc(4px * 3)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  size15: {
+    width: "calc(4px * 1.5)",
+    height: "calc(4px * 1.5)",
+  },
+  animatePulse: {
+    animation: "var(--animate-pulse)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgYellow: {
+    backgroundColor: "var(--yellow)",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  pl18px: {
+    paddingLeft: "18px",
+  },
+});
 
 /**
  * The workflow-agent drill-in: one workflow agent's FULL conversation — every
@@ -88,15 +216,37 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
   const entries = load.kind === "ready" ? load.entries : [];
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <div className="sticky top-0 z-10 border-b border-divider bg-panel px-2 py-2">
+    <div {...stylex.props(sx.flex, sx.minH0, sx.flexCol)}>
+      <div
+        {...stylex.props(
+          sx.sticky,
+          sx.top0,
+          sx.z10,
+          sx.borderB,
+          sx.borderDivider,
+          sx.bgPanel,
+          sx.px2,
+          sx.py2,
+        )}
+      >
         <button
-          className="flex w-full items-center gap-1.5 rounded-control px-1 py-0.5 text-left transition-colors hover:bg-hover"
+          {...stylex.props(
+            sx.flex,
+            sx.wFull,
+            sx.itemsCenter,
+            sx.gap15,
+            sx.roundedControl,
+            sx.px1,
+            sx.py05,
+            sx.textLeft,
+            sx.transitionColors,
+            sx.hoverBgHover,
+          )}
           onClick={onBack}
         >
           <svg
             viewBox="0 0 12 12"
-            className="size-3 shrink-0 text-faint"
+            {...stylex.props(sx.size3, sx.shrink0, sx.textFaint)}
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
@@ -106,14 +256,39 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
           >
             <path d="M7.5 2 3.5 6l4 4" />
           </svg>
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
+          <span
+            {...stylex.props(
+              sx.minW0,
+              sx.flex1,
+              sx.truncate,
+              sx.textSm,
+              sx.fontMedium,
+              sx.textFg,
+            )}
+          >
             {agent.label}
           </span>
           {agent.status === "running" && (
-            <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-yellow" />
+            <span
+              {...stylex.props(
+                sx.size15,
+                sx.shrink0,
+                sx.animatePulse,
+                sx.roundedFull,
+                sx.bgYellow,
+              )}
+            />
           )}
         </button>
-        <div className="mt-0.5 pl-[18px] text-meta text-faint tabular-nums">
+        <div
+          {...mergeStylexProps(
+            "tabular-nums",
+            sx.mt05,
+            sx.pl18px,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
           {[
             `agent ${agent.seq}`,
             agent.status,
@@ -124,7 +299,7 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
             .join(" · ")}
         </div>
       </div>
-      <div className="min-w-0 px-2 py-2">
+      <div {...stylex.props(sx.minW0, sx.px2, sx.py2)}>
         {load.kind === "loading" ? (
           <Placeholder>Loading the agent&rsquo;s conversation…</Placeholder>
         ) : load.kind === "error" ? (
@@ -166,8 +341,10 @@ function Placeholder({
   return (
     <div
       className={cn(
-        "px-1 py-3 text-xs leading-relaxed",
-        tone === "error" ? "text-red" : "text-faint",
+        utilityClassName("px-1 py-3 text-xs leading-relaxed"),
+        tone === "error"
+          ? utilityClassName("text-red")
+          : utilityClassName("text-faint"),
       )}
     >
       {children}

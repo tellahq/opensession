@@ -1,3 +1,4 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
 import React, {
   useEffect,
   useEffectEvent,
@@ -36,6 +37,166 @@ import {
   REPORTS_ROW_NAME,
   REPORTS_ROW_TIME,
 } from "../lib/reports-classes";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  p8: {
+    padding: "calc(4px * 8)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  maxW420px: {
+    maxWidth: "420px",
+  },
+  size7px: {
+    width: "7px",
+    height: "7px",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  bgBg: {
+    backgroundColor: "var(--bg)",
+  },
+  block: {
+    display: "block",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  pb3: {
+    paddingBottom: "calc(4px * 3)",
+  },
+  pt2: {
+    paddingTop: "calc(4px * 2)",
+  },
+  Ml1: {
+    marginLeft: "calc(4px * -1)",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  pl1: {
+    paddingLeft: "4px",
+  },
+  pr25: {
+    paddingRight: "calc(4px * 2.5)",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  m0: {
+    margin: "0",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mt25: {
+    marginTop: "calc(4px * 2.5)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  hVarDesktopHeaderH: {
+    height: "var(--desktop-header-h)",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  maxW190px: {
+    maxWidth: "190px",
+  },
+});
 
 interface Props {
   selectedAutomationId?: string;
@@ -164,20 +325,42 @@ export function Reports({
 
   if (groups === null)
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center">
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.minH0,
+          sx.flex1,
+          sx.itemsCenter,
+          sx.justifyCenter,
+        )}
+      >
         <LoadingState>Loading reports…</LoadingState>
       </div>
     );
 
   if (!groups.length)
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-8">
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.minH0,
+          sx.flex1,
+          sx.flexCol,
+          sx.itemsCenter,
+          sx.justifyCenter,
+          sx.p8,
+        )}
+      >
         <EmptyState icon={<IconFile size={22} />} title="No reports yet">
           Recurring automation reports collect here, with the latest result and
           the full history in one place.
         </EmptyState>
         {error && (
-          <InlineAlert className="mt-2 max-w-[420px]">{error}</InlineAlert>
+          <InlineAlert
+            className={mergeStylexOverrideClassName("", sx.mt2, sx.maxW420px)}
+          >
+            {error}
+          </InlineAlert>
         )}
       </div>
     );
@@ -188,7 +371,7 @@ export function Reports({
   const showDetail = !isPhone || !!selectedAutomationId;
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div {...stylex.props(sx.flex, sx.minH0, sx.flex1)}>
       {showList && (
         <aside className={REPORTS_COLUMN}>
           {/* The bar sits above the scroller, not in it, so it holds its
@@ -220,13 +403,13 @@ export function Reports({
                 >
                   <span className={SIDEBAR_RAIL}>
                     <span
-                      className="size-[7px] rounded-full"
+                      {...stylex.props(sx.size7px, sx.roundedFull)}
                       style={{
                         backgroundColor: reportUrgencyDot(group.latest.urgency),
                       }}
                     />
                   </span>
-                  <span className="min-w-0 flex-1">
+                  <span {...stylex.props(sx.minW0, sx.flex1)}>
                     <span className={REPORTS_ROW_HEAD}>
                       <span className={REPORTS_ROW_NAME}>
                         {group.automationName}
@@ -235,7 +418,9 @@ export function Reports({
 											    colour is nothing to a screen reader. Named here
 											    rather than in the rail so the row reads "Cassandra,
 											    low urgency" instead of leading with it. */}
-                      {urgency && <span className="sr-only">{urgency}</span>}
+                      {urgency && (
+                        <span {...stylex.props(sx.srOnly)}>{urgency}</span>
+                      )}
                       <span
                         className={REPORTS_ROW_TIME}
                         title={new Date(
@@ -252,7 +437,12 @@ export function Reports({
                   {isPhone && (
                     <IconChevronRight
                       size={16}
-                      className="mt-0.5 shrink-0 text-faint"
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.mt05,
+                        sx.shrink0,
+                        sx.textFaint,
+                      )}
                     />
                   )}
                 </button>
@@ -263,12 +453,39 @@ export function Reports({
       )}
 
       {showDetail && (
-        <section className="flex min-w-0 flex-1 flex-col bg-bg">
+        <section
+          {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.bgBg)}
+        >
           {isPhone ? (
-            <TopBar as="header" className="block shrink-0 px-3 pb-3 pt-2">
+            <TopBar
+              as="header"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.block,
+                sx.shrink0,
+                sx.px3,
+                sx.pb3,
+                sx.pt2,
+              )}
+            >
               <button
                 type="button"
-                className="-ml-1 flex items-center gap-0.5 rounded-control border-0 bg-transparent py-1.5 pl-1 pr-2.5 text-sm font-medium text-accent cursor-pointer"
+                {...mergeStylexProps(
+                  "text-accent",
+                  sx.Ml1,
+                  sx.flex,
+                  sx.itemsCenter,
+                  sx.gap05,
+                  sx.roundedControl,
+                  sx.border0,
+                  sx.bgTransparent,
+                  sx.py15,
+                  sx.pl1,
+                  sx.pr25,
+                  sx.textSm,
+                  sx.fontMedium,
+                  sx.cursorPointer,
+                )}
                 onClick={onBack}
               >
                 <IconChevronLeft size={18} />
@@ -279,13 +496,35 @@ export function Reports({
                   {/* Same argument as the desktop header below: the name,
 									    and nothing the row in the list or the picker under
 									    it already says. */}
-                  <h2 className="m-0 mt-1 px-1 text-item-title font-medium leading-snug text-dim">
+                  <h2
+                    {...stylex.props(
+                      sx.m0,
+                      sx.mt1,
+                      sx.px1,
+                      sx.fontMedium,
+                      sx.leadingSnug,
+                      sx.textDim,
+                      typography.itemTitle,
+                    )}
+                  >
                     {selected.title}
                   </h2>
-                  <div className="mt-2.5 flex items-center gap-2 px-1">
+                  <div
+                    {...stylex.props(
+                      sx.mt25,
+                      sx.flex,
+                      sx.itemsCenter,
+                      sx.gap2,
+                      sx.px1,
+                    )}
+                  >
                     <OptionSelect
                       label="Report history"
-                      className="min-w-0 flex-1"
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.minW0,
+                        sx.flex1,
+                      )}
                       value={selected.id}
                       options={historyOptions}
                       onChange={(id) => onSelect(selected.automationId, id)}
@@ -294,7 +533,7 @@ export function Reports({
                       <Button
                         size="md"
                         variant="primary"
-                        className="shrink-0"
+                        className={mergeStylexOverrideClassName("", sx.shrink0)}
                         onClick={() => setFanOutId(selected.id)}
                       >
                         Fix each
@@ -303,7 +542,7 @@ export function Reports({
                     {selected.sessionId && (
                       <Button
                         size="md"
-                        className="shrink-0"
+                        className={mergeStylexOverrideClassName("", sx.shrink0)}
                         onClick={() => onOpenSession(selected.sessionId!)}
                       >
                         Open run
@@ -311,7 +550,7 @@ export function Reports({
                     )}
                     <Button
                       size="md"
-                      className="shrink-0"
+                      className={mergeStylexOverrideClassName("", sx.shrink0)}
                       icon={
                         <CopyCheck
                           copied={copied}
@@ -330,7 +569,15 @@ export function Reports({
             selected && (
               <TopBar
                 as="header"
-                className="wco-chrome h-[var(--desktop-header-h)] shrink-0 gap-4 border-b border-divider px-5"
+                className={mergeStylexOverrideClassName(
+                  "wco-chrome",
+                  sx.hVarDesktopHeaderH,
+                  sx.shrink0,
+                  sx.gap4,
+                  sx.borderB,
+                  sx.borderDivider,
+                  sx.px5,
+                )}
               >
                 {/* The name, and nothing else. Quiet on purpose: the report
 								    below opens with these same words as its own first
@@ -350,18 +597,30 @@ export function Reports({
 								    column's header takes and the chat header beside it, so
 								    the two seams meet across the window instead of stepping
 								    down by the height of a line this no longer draws. */}
-                <h2 className="m-0 min-w-0 flex-1 truncate text-item-title font-medium text-dim">
+                <h2
+                  {...stylex.props(
+                    sx.m0,
+                    sx.minW0,
+                    sx.flex1,
+                    sx.truncate,
+                    sx.fontMedium,
+                    sx.textDim,
+                    typography.itemTitle,
+                  )}
+                >
                   {selected.title}
                 </h2>
                 {/* The report's own proposal, so it sits with the actions
 								    rather than inside the document: a report is read in a
 								    sandboxed frame that cannot start anything itself. */}
-                <TopBarActions className="gap-4">
+                <TopBarActions
+                  className={mergeStylexOverrideClassName("", sx.gap4)}
+                >
                   {!!selected.tasks?.length && (
                     <Button
                       size="md"
                       variant="primary"
-                      className="shrink-0"
+                      className={mergeStylexOverrideClassName("", sx.shrink0)}
                       onClick={() => setFanOutId(selected.id)}
                     >
                       Fix each
@@ -374,7 +633,7 @@ export function Reports({
 								    square. One size for the row, from the scale. */}
                   <Button
                     size="md"
-                    className="shrink-0"
+                    className={mergeStylexOverrideClassName("", sx.shrink0)}
                     icon={
                       <CopyCheck
                         copied={copied}
@@ -389,7 +648,7 @@ export function Reports({
                   {selected.sessionId && (
                     <Button
                       size="md"
-                      className="shrink-0"
+                      className={mergeStylexOverrideClassName("", sx.shrink0)}
                       onClick={() => onOpenSession(selected.sessionId!)}
                     >
                       Open run
@@ -397,7 +656,11 @@ export function Reports({
                   )}
                   <OptionSelect
                     label="Report history"
-                    className="max-w-[190px] shrink-0"
+                    className={mergeStylexOverrideClassName(
+                      "",
+                      sx.maxW190px,
+                      sx.shrink0,
+                    )}
                     value={selected.id}
                     options={historyOptions}
                     onChange={(id) => onSelect(selected.automationId, id)}

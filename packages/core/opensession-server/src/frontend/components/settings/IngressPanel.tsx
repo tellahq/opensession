@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   configurePublicIngressCloudflare,
@@ -54,6 +56,349 @@ import { toast } from "../../ui/toast";
 import { BrandMark } from "../BrandTile";
 import { IconCopy, IconGlobe, IconServer, IconX } from "../icons";
 import { SetupRestart } from "../SetupRestart";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  pr1: {
+    paddingRight: "4px",
+  },
+  pl3: {
+    paddingLeft: "calc(4px * 3)",
+  },
+  flex1: {
+    flex: "1",
+  },
+  selectAll: {
+    WebkitUserSelect: "all",
+    userSelect: "all",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  whitespacePreWrap: {
+    whiteSpace: "pre-wrap",
+  },
+  fontMono: {
+    fontFamily: "var(--mono)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  phoneSize10: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 10)",
+      height: "calc(4px * 10)",
+    },
+  },
+  phoneJustifyCenter: {
+    "@media (max-width: 720px)": {
+      justifyContent: "center",
+    },
+  },
+  phoneP0: {
+    "@media (max-width: 720px)": {
+      padding: "0",
+    },
+  },
+  relative: {
+    position: "relative",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  roundedXl: {
+    borderRadius: "calc(18px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderCodeWellLine: {
+    borderColor: "var(--code-well-line)",
+  },
+  bgCodeWell: {
+    backgroundColor: "var(--code-well)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  pr14: {
+    paddingRight: "calc(4px * 14)",
+  },
+  pl35: {
+    paddingLeft: "calc(4px * 3.5)",
+  },
+  textCodeWellInk: {
+    color: "var(--code-well-ink)",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  top1: {
+    top: "4px",
+  },
+  right1: {
+    right: "4px",
+  },
+  m0: {
+    margin: "0",
+  },
+  OverflowWrapAnywhere: {
+    overflowWrap: "anywhere",
+  },
+  grid: {
+    display: "grid",
+  },
+  listNone: {
+    listStyleType: "none",
+  },
+  p0: {
+    padding: "0",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  gridCols24pxMinmax01fr: {
+    gridTemplateColumns: "24px minmax(0,1fr)",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  size6: {
+    width: "calc(4px * 6)",
+    height: "calc(4px * 6)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgFg: {
+    backgroundColor: "var(--text)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textBg: {
+    color: "var(--bg)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  mt3: {
+    marginTop: "calc(4px * 3)",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  desktopMt0: {
+    "@media (min-width: 721px)": {
+      marginTop: "0",
+    },
+  },
+  bgRaised: {
+    backgroundColor: "var(--bg-raised)",
+  },
+  desktopBgPanel: {
+    "@media (min-width: 721px)": {
+      backgroundColor: "var(--bg-panel)",
+    },
+  },
+  breakAll: {
+    wordBreak: "break-all",
+  },
+  mb0: {
+    marginBottom: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  wFit: {
+    width: "fit-content",
+  },
+  textLink: {
+    color: "var(--link)",
+  },
+  hoverUnderline: {
+    "@media (hover: hover)": {
+      ":hover": {
+        textDecorationLine: "underline",
+      },
+    },
+  },
+  insetX0: {
+    insetInline: "0",
+  },
+  bottom0: {
+    bottom: "0",
+  },
+  z10: {
+    zIndex: "10",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  phoneFlexColReverse: {
+    "@media (max-width: 720px)": {
+      flexDirection: "column-reverse",
+    },
+  },
+  phoneBgSurface: {
+    "@media (max-width: 720px)": {
+      backgroundColor: "var(--bg)",
+    },
+  },
+  phonePx4: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 4)",
+    },
+  },
+  phoneWFull: {
+    "@media (max-width: 720px)": {
+      width: "100%",
+    },
+  },
+  roundedLg: {
+    borderRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  size10: {
+    width: "calc(4px * 10)",
+    height: "calc(4px * 10)",
+  },
+  phoneSize11: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 11)",
+      height: "calc(4px * 11)",
+    },
+  },
+  p6: {
+    padding: "calc(4px * 6)",
+  },
+  desktopFlexRow: {
+    "@media (min-width: 721px)": {
+      flexDirection: "row",
+    },
+  },
+  desktopItemsCenter: {
+    "@media (min-width: 721px)": {
+      alignItems: "center",
+    },
+  },
+  desktopJustifyBetween: {
+    "@media (min-width: 721px)": {
+      justifyContent: "space-between",
+    },
+  },
+  phoneP4: {
+    "@media (max-width: 720px)": {
+      padding: "calc(4px * 4)",
+    },
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  w52: {
+    width: "calc(4px * 52)",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  contentStart: {
+    alignContent: "flex-start",
+  },
+  gap35: {
+    gap: "calc(4px * 3.5)",
+  },
+  pt35: {
+    paddingTop: "calc(4px * 3.5)",
+  },
+});
 
 const EMPTY_DRAFTS: Record<IngressExposure, string> = {
   cloudflare: "",
@@ -63,8 +408,31 @@ const EMPTY_DRAFTS: Record<IngressExposure, string> = {
 function CodeBlock({ children }: { children: string }) {
   const { copied, copy } = useCopy();
   return (
-    <div className="flex min-w-0 items-center gap-1 rounded-control bg-surface py-1 pr-1 pl-3">
-      <code className="min-w-0 flex-1 select-all overflow-x-auto whitespace-pre-wrap font-mono text-meta text-fg">
+    <div
+      {...stylex.props(
+        sx.flex,
+        sx.minW0,
+        sx.itemsCenter,
+        sx.gap1,
+        sx.roundedControl,
+        sx.bgSurface,
+        sx.py1,
+        sx.pr1,
+        sx.pl3,
+      )}
+    >
+      <code
+        {...stylex.props(
+          sx.minW0,
+          sx.flex1,
+          sx.selectAll,
+          sx.overflowXAuto,
+          sx.whitespacePreWrap,
+          sx.fontMono,
+          sx.textFg,
+          typography.meta,
+        )}
+      >
         {children}
       </code>
       <Button
@@ -74,7 +442,13 @@ function CodeBlock({ children }: { children: string }) {
         icon={
           <CopyCheck copied={copied} size={15} idle={<IconCopy size={15} />} />
         }
-        className="shrink-0 phone:size-10 phone:justify-center phone:p-0"
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.shrink0,
+          sx.phoneSize10,
+          sx.phoneJustifyCenter,
+          sx.phoneP0,
+        )}
         onClick={() => copy(children, { toast: "Copied" })}
       />
     </div>
@@ -86,7 +460,20 @@ function CodeBlock({ children }: { children: string }) {
 function ConfigCodeBlock({ code }: { code: string }) {
   const { copied, copy } = useCopy();
   return (
-    <div className="relative overflow-hidden rounded-xl border border-code-well-line bg-code-well py-2.5 pr-14 pl-3.5 text-code-well-ink">
+    <div
+      {...stylex.props(
+        sx.relative,
+        sx.overflowHidden,
+        sx.roundedXl,
+        sx.border,
+        sx.borderCodeWellLine,
+        sx.bgCodeWell,
+        sx.py25,
+        sx.pr14,
+        sx.pl35,
+        sx.textCodeWellInk,
+      )}
+    >
       <Button
         variant="ghost"
         size="sm"
@@ -94,10 +481,28 @@ function ConfigCodeBlock({ code }: { code: string }) {
         icon={
           <CopyCheck copied={copied} size={15} idle={<IconCopy size={15} />} />
         }
-        className="absolute top-1 right-1 shrink-0 phone:size-10 phone:justify-center phone:p-0"
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.absolute,
+          sx.top1,
+          sx.right1,
+          sx.shrink0,
+          sx.phoneSize10,
+          sx.phoneJustifyCenter,
+          sx.phoneP0,
+        )}
         onClick={() => copy(code, { toast: "Copied" })}
       />
-      <pre className="m-0 overflow-x-auto font-mono text-meta whitespace-pre-wrap [overflow-wrap:anywhere]">
+      <pre
+        {...stylex.props(
+          sx.m0,
+          sx.overflowXAuto,
+          sx.fontMono,
+          sx.whitespacePreWrap,
+          sx.OverflowWrapAnywhere,
+          typography.meta,
+        )}
+      >
         {code}
       </pre>
     </div>
@@ -106,7 +511,17 @@ function ConfigCodeBlock({ code }: { code: string }) {
 
 function SetupSteps({ children }: { children: React.ReactNode }) {
   return (
-    <ol className="m-0 grid list-none divide-y divide-line p-0 text-supporting text-dim">
+    <ol
+      {...mergeStylexProps(
+        "divide-y divide-line",
+        sx.m0,
+        sx.grid,
+        sx.listNone,
+        sx.p0,
+        sx.textDim,
+        typography.supporting,
+      )}
+    >
       {children}
     </ol>
   );
@@ -124,25 +539,53 @@ function SetupStep({
   controls?: React.ReactNode;
 }) {
   return (
-    <li className="grid grid-cols-[24px_minmax(0,1fr)] gap-2.5 py-4 first:pt-0 last:pb-0">
-      <span className="flex size-6 items-center justify-center rounded-full bg-fg text-meta font-semibold text-bg">
+    <li
+      {...mergeStylexProps(
+        "first:pt-0 last:pb-0",
+        sx.grid,
+        sx.gridCols24pxMinmax01fr,
+        sx.gap25,
+        sx.py4,
+      )}
+    >
+      <span
+        {...stylex.props(
+          sx.flex,
+          sx.size6,
+          sx.itemsCenter,
+          sx.justifyCenter,
+          sx.roundedFull,
+          sx.bgFg,
+          sx.fontSemibold,
+          sx.textBg,
+          typography.meta,
+        )}
+      >
         {number}
       </span>
       <div
         className={cn(
-          "min-w-0 pt-0.5",
+          utilityClassName("min-w-0 pt-0.5"),
           controls &&
-            "desktop:grid desktop:grid-cols-[minmax(0,1fr)_18rem] desktop:items-start desktop:gap-6",
+            utilityClassName(
+              "desktop:grid desktop:grid-cols-[minmax(0,1fr)_18rem] desktop:items-start desktop:gap-6",
+            ),
         )}
       >
-        <div className="min-w-0">
-          <div className="font-medium text-fg">{title}</div>
+        <div {...stylex.props(sx.minW0)}>
+          <div {...stylex.props(sx.fontMedium, sx.textFg)}>{title}</div>
           {children && (
-            <div className="mt-1 grid gap-2 leading-relaxed">{children}</div>
+            <div {...stylex.props(sx.mt1, sx.grid, sx.gap2, sx.leadingRelaxed)}>
+              {children}
+            </div>
           )}
         </div>
         {controls && (
-          <div className="mt-3 grid min-w-0 gap-3 desktop:mt-0">{controls}</div>
+          <div
+            {...stylex.props(sx.mt3, sx.grid, sx.minW0, sx.gap3, sx.desktopMt0)}
+          >
+            {controls}
+          </div>
         )}
       </div>
     </li>
@@ -221,11 +664,26 @@ function PrivateAppSetup({
   return (
     <>
       {!onboarding && savedDomain && (
-        <SettingCard className="bg-raised desktop:bg-panel">
+        <SettingCard
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.bgRaised,
+            sx.desktopBgPanel,
+          )}
+        >
           <SettingRow>
             <SettingRowText>
               <SettingRowTitle>Current address</SettingRowTitle>
-              <div className="selectable mt-1 break-all font-mono text-supporting text-dim">
+              <div
+                {...mergeStylexProps(
+                  "selectable",
+                  sx.mt1,
+                  sx.breakAll,
+                  sx.fontMono,
+                  sx.textDim,
+                  typography.supporting,
+                )}
+              >
                 {settings.app.publicBaseUrl}
               </div>
             </SettingRowText>
@@ -250,12 +708,12 @@ function PrivateAppSetup({
       )}
       <SettingsForm
         className={cn(
-          "bg-raised desktop:bg-panel",
-          onboarding ? "mt-0" : "mt-3",
+          utilityClassName("bg-raised desktop:bg-panel"),
+          onboarding ? utilityClassName("mt-0") : utilityClassName("mt-3"),
         )}
       >
         {status === "ready" && !settings.app.domain.credentialConfigured && (
-          <SettingsHint className="m-0">
+          <SettingsHint className={mergeStylexOverrideClassName("", sx.m0)}>
             This address is already working. Its certificate is managed outside
             Open Session.
           </SettingsHint>
@@ -265,7 +723,9 @@ function PrivateAppSetup({
             number={1}
             title="Choose the app domain"
             controls={
-              <SettingsField className="mb-0">
+              <SettingsField
+                className={mergeStylexOverrideClassName("", sx.mb0)}
+              >
                 Domain
                 <Input
                   value={domain}
@@ -278,7 +738,7 @@ function PrivateAppSetup({
               </SettingsField>
             }
           >
-            <p className="m-0">
+            <p {...stylex.props(sx.m0)}>
               Keep it different from the public callback domain.
             </p>
           </SetupStep>
@@ -287,8 +747,14 @@ function PrivateAppSetup({
             title="Authorize the DNS provider"
             controls={
               <>
-                <div className="flex min-w-0 flex-col gap-1.5">
-                  <div className="text-label font-medium text-dim">
+                <div {...stylex.props(sx.flex, sx.minW0, sx.flexCol, sx.gap15)}>
+                  <div
+                    {...stylex.props(
+                      sx.fontMedium,
+                      sx.textDim,
+                      typography.label,
+                    )}
+                  >
                     DNS provider
                   </div>
                   <Segmented
@@ -297,31 +763,47 @@ function PrivateAppSetup({
                     onValueChange={(value) =>
                       onProviderChange(value as "cloudflare" | "vercel")
                     }
-                    className="w-full"
+                    className={mergeStylexOverrideClassName("", sx.wFull)}
                   >
                     <SegmentedOption
                       value="cloudflare"
                       disabled={busy}
-                      className="flex-1 justify-center phone:min-h-11"
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.flex1,
+                        sx.justifyCenter,
+                        sx.phoneMinH11,
+                      )}
                     >
                       <BrandMark
                         name="cloudflare"
                         size={16}
-                        className="shrink-0"
+                        className={mergeStylexOverrideClassName("", sx.shrink0)}
                       />
                       Cloudflare
                     </SegmentedOption>
                     <SegmentedOption
                       value="vercel"
                       disabled={busy}
-                      className="flex-1 justify-center phone:min-h-11"
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.flex1,
+                        sx.justifyCenter,
+                        sx.phoneMinH11,
+                      )}
                     >
-                      <BrandMark name="vercel" size={15} className="shrink-0" />
+                      <BrandMark
+                        name="vercel"
+                        size={15}
+                        className={mergeStylexOverrideClassName("", sx.shrink0)}
+                      />
                       Vercel
                     </SegmentedOption>
                   </Segmented>
                 </div>
-                <SettingsField className="mb-0">
+                <SettingsField
+                  className={mergeStylexOverrideClassName("", sx.mb0)}
+                >
                   Certificate email
                   <Input
                     type="email"
@@ -338,7 +820,9 @@ function PrivateAppSetup({
                     onChange={(event) => onEmailChange(event.target.value)}
                   />
                 </SettingsField>
-                <SettingsField className="mb-0">
+                <SettingsField
+                  className={mergeStylexOverrideClassName("", sx.mb0)}
+                >
                   {provider === "cloudflare" ? "Cloudflare" : "Vercel"} API
                   token
                   <Input
@@ -355,9 +839,13 @@ function PrivateAppSetup({
                   />
                 </SettingsField>
                 {provider === "vercel" && (
-                  <SettingsField className="mb-0">
+                  <SettingsField
+                    className={mergeStylexOverrideClassName("", sx.mb0)}
+                  >
                     Team ID{" "}
-                    <span className="font-normal text-faint">Optional</span>
+                    <span {...stylex.props(sx.fontNormal, sx.textFaint)}>
+                      Optional
+                    </span>
                     <Input
                       value={teamId}
                       placeholder="team_…"
@@ -371,13 +859,15 @@ function PrivateAppSetup({
               </>
             }
           >
-            <p className="m-0">
+            <p {...stylex.props(sx.m0)}>
               {provider === "cloudflare" ? (
                 <>
                   Create a token with{" "}
-                  <strong className="font-medium text-fg">Zone:DNS Edit</strong>{" "}
+                  <strong {...stylex.props(sx.fontMedium, sx.textFg)}>
+                    Zone:DNS Edit
+                  </strong>{" "}
                   and{" "}
-                  <strong className="font-medium text-fg">
+                  <strong {...stylex.props(sx.fontMedium, sx.textFg)}>
                     Zone:Zone Read
                   </strong>{" "}
                   for this zone.
@@ -392,7 +882,7 @@ function PrivateAppSetup({
               returns it to the browser.
             </p>
             <a
-              className="w-fit text-link hover:underline"
+              {...stylex.props(sx.wFit, sx.textLink, sx.hoverUnderline)}
               href={
                 provider === "cloudflare"
                   ? "https://dash.cloudflare.com/profile/api-tokens"
@@ -405,7 +895,7 @@ function PrivateAppSetup({
             </a>
           </SetupStep>
           <SetupStep number={3} title="Set up and verify">
-            <p className="m-0">
+            <p {...stylex.props(sx.m0)}>
               Open Session creates the DNS-only A record, requests a Let’s
               Encrypt certificate with DNS-01, configures Caddy, and checks the
               private address. It checks renewal daily.
@@ -439,11 +929,33 @@ function PrivateAppSetup({
               Verify Caddy and the certificate, then try again.
             </InlineAlert>
           )}
-        <SettingsFormActions className="absolute inset-x-0 bottom-0 z-10 m-0 border-t border-line bg-raised px-5 py-4 phone:flex-col-reverse phone:bg-surface phone:px-4">
+        <SettingsFormActions
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.absolute,
+            sx.insetX0,
+            sx.bottom0,
+            sx.z10,
+            sx.m0,
+            sx.borderT,
+            sx.borderLine,
+            sx.bgRaised,
+            sx.px5,
+            sx.py4,
+            sx.phoneFlexColReverse,
+            sx.phoneBgSurface,
+            sx.phonePx4,
+          )}
+        >
           <Button
             variant="soft"
             disabled={busy || !savedDomain || !settings.canManage}
-            className="phone:min-h-11 phone:w-full phone:justify-center"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.phoneMinH11,
+              sx.phoneWFull,
+              sx.phoneJustifyCenter,
+            )}
             onClick={onVerify}
           >
             {action === "verify" ? "Checking…" : "Verify address"}
@@ -458,7 +970,12 @@ function PrivateAppSetup({
               !settings.app.domain.legoInstalled ||
               !settings.canManage
             }
-            className="phone:min-h-11 phone:w-full phone:justify-center"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.phoneMinH11,
+              sx.phoneWFull,
+              sx.phoneJustifyCenter,
+            )}
             onClick={onSetup}
           >
             {action === "setup"
@@ -468,14 +985,26 @@ function PrivateAppSetup({
                 : "Set up private domain"}
           </Button>
         </SettingsFormActions>
-        <details className="rounded-lg bg-surface p-3 text-meta text-dim">
-          <summary className="cursor-pointer font-medium text-fg">
+        <details
+          {...stylex.props(
+            sx.roundedLg,
+            sx.bgSurface,
+            sx.p3,
+            sx.textDim,
+            typography.meta,
+          )}
+        >
+          <summary
+            {...stylex.props(sx.cursorPointer, sx.fontMedium, sx.textFg)}
+          >
             Use an externally managed certificate
           </summary>
-          <div className="mt-3 grid gap-4">
+          <div {...stylex.props(sx.mt3, sx.grid, sx.gap4)}>
             <SetupSteps>
               <SetupStep number={1} title="Choose the app domain">
-                <SettingsField className="mb-0">
+                <SettingsField
+                  className={mergeStylexOverrideClassName("", sx.mb0)}
+                >
                   Domain
                   <Input
                     value={domain}
@@ -488,7 +1017,7 @@ function PrivateAppSetup({
                 </SettingsField>
               </SetupStep>
               <SetupStep number={2} title="Point DNS to Tailscale">
-                <p className="m-0">
+                <p {...stylex.props(sx.m0)}>
                   Add this DNS-only record at your provider. Only devices on
                   your tailnet can connect.
                 </p>
@@ -502,7 +1031,7 @@ function PrivateAppSetup({
                 )}
               </SetupStep>
               <SetupStep number={3} title="Install existing TLS files">
-                <p className="m-0">
+                <p {...stylex.props(sx.m0)}>
                   Only use this path when your infrastructure already issues and
                   renews the certificate.
                 </p>
@@ -510,24 +1039,30 @@ function PrivateAppSetup({
                 <CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.key`}</CodeBlock>
               </SetupStep>
               <SetupStep number={4} title="Configure Caddy">
-                <p className="m-0">
+                <p {...stylex.props(sx.m0)}>
                   Bind Caddy only to the Tailscale address and forward the app
                   to loopback.
                 </p>
               </SetupStep>
             </SetupSteps>
-            <details className="text-meta text-dim">
-              <summary className="cursor-pointer font-medium text-fg">
+            <details {...stylex.props(sx.textDim, typography.meta)}>
+              <summary
+                {...stylex.props(sx.cursorPointer, sx.fontMedium, sx.textFg)}
+              >
                 Generated Caddy configuration
               </summary>
-              <div className="mt-2">
+              <div {...stylex.props(sx.mt2)}>
                 <ConfigCodeBlock
                   code={privateAppCaddyConfig(settings, domain)}
                 />
               </div>
             </details>
-            <div className="grid gap-2">
-              <div className="text-label font-medium text-dim">Apply Caddy</div>
+            <div {...stylex.props(sx.grid, sx.gap2)}>
+              <div
+                {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}
+              >
+                Apply Caddy
+              </div>
               <CodeBlock>
                 sudo caddy validate --config /etc/caddy/Caddyfile
               </CodeBlock>
@@ -544,7 +1079,12 @@ function PrivateAppSetup({
                   !settings.custom.caddyInstalled ||
                   !settings.canManage
                 }
-                className="phone:min-h-11 phone:w-full phone:justify-center"
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.phoneMinH11,
+                  sx.phoneWFull,
+                  sx.phoneJustifyCenter,
+                )}
                 onClick={onSaveManual}
               >
                 {action === "save" ? "Saving…" : "Save app domain"}
@@ -811,7 +1351,11 @@ export function IngressPanel({
 
   return (
     <SettingsPanel
-      className={onboarding ? "mx-auto max-w-[1120px]" : "relative"}
+      className={
+        onboarding
+          ? utilityClassName("mx-auto max-w-[1120px]")
+          : utilityClassName("relative")
+      }
     >
       {!onboarding && !embedded && (
         <SettingsHeader
@@ -831,15 +1375,28 @@ export function IngressPanel({
             <SettingRow>
               <SettingRowText>
                 <SettingRowTitle>Domain</SettingRowTitle>
-                <SettingRowDescription className="selectable break-all font-mono">
+                <SettingRowDescription
+                  className={mergeStylexOverrideClassName(
+                    "selectable",
+                    sx.breakAll,
+                    sx.fontMono,
+                  )}
+                >
                   {domainUrl || "No domain configured"}
                 </SettingRowDescription>
               </SettingRowText>
-              <SettingRowControl className="flex items-center gap-2">
+              <SettingRowControl
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.flex,
+                  sx.itemsCenter,
+                  sx.gap2,
+                )}
+              >
                 <StatusChip {...domainStatus} />
                 <Button
                   size="sm"
-                  className="phone:min-h-11"
+                  className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                   disabled={!settings}
                   onClick={() => setSurface("domain")}
                 >
@@ -850,15 +1407,28 @@ export function IngressPanel({
             <SettingRow>
               <SettingRowText>
                 <SettingRowTitle>Public callback</SettingRowTitle>
-                <SettingRowDescription className="selectable break-all font-mono">
+                <SettingRowDescription
+                  className={mergeStylexOverrideClassName(
+                    "selectable",
+                    sx.breakAll,
+                    sx.fontMono,
+                  )}
+                >
                   {callbackUrl || "No public callback configured"}
                 </SettingRowDescription>
               </SettingRowText>
-              <SettingRowControl className="flex items-center gap-2">
+              <SettingRowControl
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.flex,
+                  sx.itemsCenter,
+                  sx.gap2,
+                )}
+              >
                 <StatusChip {...callbackStatus} />
                 <Button
                   size="sm"
-                  className="phone:min-h-11"
+                  className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                   disabled={!settings}
                   onClick={() => setSurface("callbacks")}
                 >
@@ -878,19 +1448,48 @@ export function IngressPanel({
                   ? "Configure domain"
                   : "Configure public callback"
               }
-              modalClassName="h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(760px,calc(100vw-32px))] max-w-[760px]"
-              sheetClassName="h-[94dvh]"
+              modalClassName={utilityClassName(
+                "h-[min(840px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[min(760px,calc(100vw-32px))] max-w-[760px]",
+              )}
+              sheetClassName={utilityClassName("h-[94dvh]")}
             >
               {(dismiss) => (
                 <>
-                  <header className="flex shrink-0 items-start gap-3 border-b border-line px-5 py-4 phone:px-4">
-                    <div className="min-w-0 flex-1">
-                      <h2 className="m-0 text-dialog-title font-semibold text-fg">
+                  <header
+                    {...stylex.props(
+                      sx.flex,
+                      sx.shrink0,
+                      sx.itemsStart,
+                      sx.gap3,
+                      sx.borderB,
+                      sx.borderLine,
+                      sx.px5,
+                      sx.py4,
+                      sx.phonePx4,
+                    )}
+                  >
+                    <div {...stylex.props(sx.minW0, sx.flex1)}>
+                      <h2
+                        {...stylex.props(
+                          sx.m0,
+                          sx.fontSemibold,
+                          sx.textFg,
+                          typography.dialogTitle,
+                        )}
+                      >
                         {surface === "domain"
                           ? "Configure domain"
                           : "Configure public callback"}
                       </h2>
-                      <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+                      <p
+                        {...stylex.props(
+                          sx.m0,
+                          sx.mt1,
+                          sx.leadingRelaxed,
+                          sx.textDim,
+                          typography.supporting,
+                        )}
+                      >
                         {surface === "domain"
                           ? "Give your team a memorable private address."
                           : "Connect the public endpoint used by webhooks and remote services."}
@@ -900,14 +1499,24 @@ export function IngressPanel({
                       variant="ghost"
                       aria-label="Close"
                       icon={<IconX size={20} />}
-                      className="size-10 shrink-0 justify-center p-0 phone:size-11"
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.size10,
+                        sx.shrink0,
+                        sx.justifyCenter,
+                        sx.p0,
+                        sx.phoneSize11,
+                      )}
                       onClick={dismiss}
                     />
                   </header>
                   <div
                     className={cn(
-                      "min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 phone:p-4",
-                      surface === "domain" && "pb-24 phone:pb-32",
+                      utilityClassName(
+                        "min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 phone:p-4",
+                      ),
+                      surface === "domain" &&
+                        utilityClassName("pb-24 phone:pb-32"),
                     )}
                   >
                     {error && (
@@ -970,9 +1579,30 @@ export function IngressPanel({
                         }
                       />
                     ) : (
-                      <div className="grid items-start gap-4">
-                        <SettingsForm className="m-0 min-w-0 gap-4 bg-raised p-6 desktop:flex-row desktop:bg-panel desktop:items-center desktop:justify-between phone:p-4">
-                          <div className="px-1 text-item-title font-semibold text-fg">
+                      <div {...stylex.props(sx.grid, sx.itemsStart, sx.gap4)}>
+                        <SettingsForm
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.m0,
+                            sx.minW0,
+                            sx.gap4,
+                            sx.bgRaised,
+                            sx.p6,
+                            sx.desktopFlexRow,
+                            sx.desktopBgPanel,
+                            sx.desktopItemsCenter,
+                            sx.desktopJustifyBetween,
+                            sx.phoneP4,
+                          )}
+                        >
+                          <div
+                            {...stylex.props(
+                              sx.px1,
+                              sx.fontSemibold,
+                              sx.textFg,
+                              typography.itemTitle,
+                            )}
+                          >
                             Connection method
                           </div>
                           <Segmented
@@ -981,31 +1611,72 @@ export function IngressPanel({
                             onValueChange={(next) =>
                               setMethod(next as IngressExposure)
                             }
-                            className="flex w-52 shrink-0 phone:w-full"
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.flex,
+                              sx.w52,
+                              sx.shrink0,
+                              sx.phoneWFull,
+                            )}
                           >
                             <SegmentedOption
                               value="custom"
                               disabled={!!busy || !settings.canManage}
-                              className="flex flex-1 justify-center"
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.flex,
+                                sx.flex1,
+                                sx.justifyCenter,
+                              )}
                             >
                               <IconServer size={14} /> Caddy
                             </SegmentedOption>
                             <SegmentedOption
                               value="cloudflare"
                               disabled={!!busy || !settings.canManage}
-                              className="flex flex-1 justify-center"
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.flex,
+                                sx.flex1,
+                                sx.justifyCenter,
+                              )}
                             >
                               <IconGlobe size={14} /> Cloudflare
                             </SegmentedOption>
                           </Segmented>
                         </SettingsForm>
 
-                        <SettingsForm className="m-0 min-w-0 gap-4 bg-raised p-6 desktop:bg-panel phone:p-4">
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="min-w-0 text-item-title font-semibold text-fg">
+                        <SettingsForm
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.m0,
+                            sx.minW0,
+                            sx.gap4,
+                            sx.bgRaised,
+                            sx.p6,
+                            sx.desktopBgPanel,
+                            sx.phoneP4,
+                          )}
+                        >
+                          <div
+                            {...stylex.props(
+                              sx.flex,
+                              sx.itemsCenter,
+                              sx.justifyBetween,
+                              sx.gap4,
+                            )}
+                          >
+                            <div
+                              {...stylex.props(
+                                sx.minW0,
+                                sx.fontSemibold,
+                                sx.textFg,
+                                typography.itemTitle,
+                              )}
+                            >
                               {method === "custom" ? "Caddy" : "Cloudflare"}
                             </div>
-                            <div className="shrink-0">
+                            <div {...stylex.props(sx.shrink0)}>
                               <StatusChip
                                 label={
                                   busy === "apply"
@@ -1020,14 +1691,21 @@ export function IngressPanel({
                               />
                             </div>
                           </div>
-                          <div className="grid min-w-0 content-start gap-3.5">
+                          <div
+                            {...stylex.props(
+                              sx.grid,
+                              sx.minW0,
+                              sx.contentStart,
+                              sx.gap35,
+                            )}
+                          >
                             {method === "cloudflare" && (
                               <>
                                 {!settings.cloudflare.installed && (
                                   <InlineAlert>
                                     Install cloudflared first, then reload this
                                     page.
-                                    <div className="mt-2">
+                                    <div {...stylex.props(sx.mt2)}>
                                       <CodeBlock>
                                         {
                                           "curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --cloudflare --no-onboard"
@@ -1041,23 +1719,32 @@ export function IngressPanel({
                                     number={1}
                                     title="Create a remotely managed tunnel"
                                   >
-                                    <p className="m-0">
+                                    <p {...stylex.props(sx.m0)}>
                                       In Cloudflare Zero Trust, open{" "}
-                                      <strong className="font-medium text-fg">
+                                      <strong
+                                        {...stylex.props(
+                                          sx.fontMedium,
+                                          sx.textFg,
+                                        )}
+                                      >
                                         Networks → Connectors → Cloudflare
                                         Tunnels
                                       </strong>{" "}
                                       and create a Cloudflared tunnel.
                                     </p>
                                     <a
-                                      className="w-fit text-link hover:underline"
+                                      {...stylex.props(
+                                        sx.wFit,
+                                        sx.textLink,
+                                        sx.hoverUnderline,
+                                      )}
                                       href="https://one.dash.cloudflare.com/"
                                       target="_blank"
                                       rel="noreferrer"
                                     >
                                       Open Cloudflare Zero Trust
                                     </a>
-                                    <p className="m-0">
+                                    <p {...stylex.props(sx.m0)}>
                                       Use the dashboard rather than{" "}
                                       <code>cloudflared tunnel create</code>.
                                       Connector tokens require a remotely
@@ -1068,7 +1755,12 @@ export function IngressPanel({
                                     number={2}
                                     title="Add the callback route"
                                   >
-                                    <SettingsField className="mb-0">
+                                    <SettingsField
+                                      className={mergeStylexOverrideClassName(
+                                        "",
+                                        sx.mb0,
+                                      )}
+                                    >
                                       Public URL
                                       <Input
                                         key={method}
@@ -1086,22 +1778,37 @@ export function IngressPanel({
                                       />
                                     </SettingsField>
                                     {privateDomain && (
-                                      <p className="m-0">
+                                      <p {...stylex.props(sx.m0)}>
                                         Open Session uses a separate{" "}
-                                        <strong className="font-medium text-fg">
+                                        <strong
+                                          {...stylex.props(
+                                            sx.fontMedium,
+                                            sx.textFg,
+                                          )}
+                                        >
                                           ingress
                                         </strong>{" "}
                                         hostname alongside the private app
                                         address.
                                       </p>
                                     )}
-                                    <p className="m-0">
+                                    <p {...stylex.props(sx.m0)}>
                                       Under{" "}
-                                      <strong className="font-medium text-fg">
+                                      <strong
+                                        {...stylex.props(
+                                          sx.fontMedium,
+                                          sx.textFg,
+                                        )}
+                                      >
                                         Published application routes
                                       </strong>
                                       , add{" "}
-                                      <strong className="font-medium text-fg">
+                                      <strong
+                                        {...stylex.props(
+                                          sx.fontMedium,
+                                          sx.textFg,
+                                        )}
+                                      >
                                         {ingressHostname(url)}
                                       </strong>{" "}
                                       and point its HTTP service to:
@@ -1109,7 +1816,7 @@ export function IngressPanel({
                                     <CodeBlock>
                                       {settings.cloudflare.connectorTarget}
                                     </CodeBlock>
-                                    <p className="m-0">
+                                    <p {...stylex.props(sx.m0)}>
                                       Cloudflare creates the DNS route. Never
                                       point this public hostname at the private
                                       app port.
@@ -1119,25 +1826,38 @@ export function IngressPanel({
                                     number={3}
                                     title="Connect this server"
                                   >
-                                    <p className="m-0">
+                                    <p {...stylex.props(sx.m0)}>
                                       Copy the tunnel ID and connector token
                                       from that same tunnel. Open Session
                                       protects the token on this server and
                                       starts cloudflared for you.
                                     </p>
-                                    <SettingsField className="mb-0">
+                                    <SettingsField
+                                      className={mergeStylexOverrideClassName(
+                                        "",
+                                        sx.mb0,
+                                      )}
+                                    >
                                       Tunnel ID
                                       <Input
                                         value={tunnelId}
                                         placeholder="00000000-0000-0000-0000-000000000000"
                                         disabled={!!busy}
-                                        className="font-mono"
+                                        className={mergeStylexOverrideClassName(
+                                          "",
+                                          sx.fontMono,
+                                        )}
                                         onChange={(event) =>
                                           setTunnelId(event.target.value)
                                         }
                                       />
                                     </SettingsField>
-                                    <SettingsField className="mb-0">
+                                    <SettingsField
+                                      className={mergeStylexOverrideClassName(
+                                        "",
+                                        sx.mb0,
+                                      )}
+                                    >
                                       Tunnel token
                                       <Input
                                         type="password"
@@ -1172,7 +1892,12 @@ export function IngressPanel({
                                     number={1}
                                     title="Choose a separate public domain"
                                     controls={
-                                      <SettingsField className="mb-0">
+                                      <SettingsField
+                                        className={mergeStylexOverrideClassName(
+                                          "",
+                                          sx.mb0,
+                                        )}
+                                      >
                                         Domain
                                         <Input
                                           key={method}
@@ -1192,7 +1917,7 @@ export function IngressPanel({
                                       </SettingsField>
                                     }
                                   >
-                                    <p className="m-0">
+                                    <p {...stylex.props(sx.m0)}>
                                       Do not use the private app hostname. HTTPS
                                       is added automatically.
                                     </p>
@@ -1201,7 +1926,7 @@ export function IngressPanel({
                                     number={2}
                                     title="Open ports 80 and 443"
                                   >
-                                    <p className="m-0">
+                                    <p {...stylex.props(sx.m0)}>
                                       Allow inbound TCP traffic from the public
                                       internet to ports 80 and 443 in the server
                                       firewall and your cloud security group.
@@ -1214,7 +1939,12 @@ export function IngressPanel({
                                     title="Add DNS records at your provider"
                                     controls={
                                       <>
-                                        <SettingsField className="mb-0">
+                                        <SettingsField
+                                          className={mergeStylexOverrideClassName(
+                                            "",
+                                            sx.mb0,
+                                          )}
+                                        >
                                           Public IPv4 or IPv6 address
                                           <Input
                                             value={publicAddress}
@@ -1245,14 +1975,14 @@ export function IngressPanel({
                                       </>
                                     }
                                   >
-                                    <p className="m-0">
+                                    <p {...stylex.props(sx.m0)}>
                                       Point the domain to this server’s public
                                       IP address, not its private or Tailscale
                                       address.
                                     </p>
                                   </SetupStep>
                                   <SetupStep number={4} title="Configure Caddy">
-                                    <p className="m-0">
+                                    <p {...stylex.props(sx.m0)}>
                                       Open Session adds this dedicated site to
                                       /etc/caddy/Caddyfile, binds it to the
                                       public-facing network interface, and
@@ -1269,16 +1999,24 @@ export function IngressPanel({
                                     )}
                                   </SetupStep>
                                 </SetupSteps>
-                                <details className="text-meta text-dim">
-                                  <summary className="cursor-pointer font-medium text-fg">
+                                <details
+                                  {...stylex.props(sx.textDim, typography.meta)}
+                                >
+                                  <summary
+                                    {...stylex.props(
+                                      sx.cursorPointer,
+                                      sx.fontMedium,
+                                      sx.textFg,
+                                    )}
+                                  >
                                     Caddy route preview
                                   </summary>
-                                  <div className="mt-2">
+                                  <div {...stylex.props(sx.mt2)}>
                                     <ConfigCodeBlock
                                       code={customCaddyConfig(url)}
                                     />
                                   </div>
-                                  <p className="mt-2 mb-0">
+                                  <p {...stylex.props(sx.mt2, sx.mb0)}>
                                     Automatic setup also adds the detected local
                                     interface bind.
                                   </p>
@@ -1314,7 +2052,12 @@ export function IngressPanel({
                               </InlineAlert>
                             )}
 
-                          <SettingsFormActions className="phone:flex-col-reverse">
+                          <SettingsFormActions
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.phoneFlexColReverse,
+                            )}
+                          >
                             <Button
                               variant="soft"
                               disabled={
@@ -1323,7 +2066,12 @@ export function IngressPanel({
                                 settings.exposure !== method ||
                                 !settings.publicBaseUrl
                               }
-                              className="phone:min-h-11 phone:w-full phone:justify-center"
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.phoneMinH11,
+                                sx.phoneWFull,
+                                sx.phoneJustifyCenter,
+                              )}
                               onClick={() =>
                                 void run("test", testPublicIngress, (next) =>
                                   next.health === "ready"
@@ -1346,7 +2094,12 @@ export function IngressPanel({
                                 !!missingTool ||
                                 invalidInput
                               }
-                              className="phone:min-h-11 phone:w-full phone:justify-center"
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.phoneMinH11,
+                                sx.phoneWFull,
+                                sx.phoneJustifyCenter,
+                              )}
                               onClick={() => void applyMethod()}
                             >
                               {busy === "apply"
@@ -1358,11 +2111,31 @@ export function IngressPanel({
                                   : "Start tunnel"}
                             </Button>
                           </SettingsFormActions>
-                          <div className="border-t border-line pt-3.5">
-                            <div className="text-item-title font-medium text-fg">
+                          <div
+                            {...stylex.props(
+                              sx.borderT,
+                              sx.borderLine,
+                              sx.pt35,
+                            )}
+                          >
+                            <div
+                              {...stylex.props(
+                                sx.fontMedium,
+                                sx.textFg,
+                                typography.itemTitle,
+                              )}
+                            >
                               Private by default
                             </div>
-                            <p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">
+                            <p
+                              {...stylex.props(
+                                sx.mt1,
+                                sx.mb0,
+                                sx.leadingRelaxed,
+                                sx.textDim,
+                                typography.supporting,
+                              )}
+                            >
                               Unknown methods and paths return 404. This
                               endpoint never serves sessions, APIs, or the app
                               UI.
