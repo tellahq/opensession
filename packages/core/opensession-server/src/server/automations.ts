@@ -31,6 +31,11 @@ import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
 import { runAgent } from "./agent-runner";
 import { activeRunRecords } from "./run-journal";
+import {
+  getRunState,
+  isRunStateUnsettled,
+  transitionRunState,
+} from "./run-state";
 import { runAgentHosted } from "./host-client";
 import {
   providerFor,
@@ -1082,6 +1087,39 @@ function recordRunStart(id: string, run: AutomationRun): void {
   });
 }
 
+/**
+ * Settle the SESSION's run state when an automation's engine stream ends.
+ *
+ * Automation turns execute in a detached run host (runAgentHosted, the only
+ * path since every model routes to pi). The host journals `run_registered`,
+ * which moves the session FSM to `running`, but its own teardown only clears
+ * the journal — retiring the VISIBLE run is the consumer's job, exactly as
+ * run-session.ts, session-create.ts and the GitHub agent already do. Without
+ * this, a successful automation left the session `running` with no live
+ * execution owner: the ownership watchdog paused it for safety while the
+ * ledger below recorded `last ok`, and send/cancel were refused as
+ * quarantined.
+ *
+ * Only a terminal engine event settles. A stream that ended without one has
+ * not proven what the run did, so it keeps the real safety fence rather than
+ * being waved through as finished.
+ */
+export async function settleAutomationRunState(
+  sessionId: string,
+  errorMessage: string | null,
+  sawTerminalEvent: boolean,
+  emit?: Parameters<typeof transitionRunState>[3],
+): Promise<void> {
+  if (!sawTerminalEvent) return;
+  if (!isRunStateUnsettled(getRunState(sessionId))) return;
+  await transitionRunState(
+    sessionId,
+    errorMessage ? "run_failed" : "turn_end",
+    { source: "automation_terminal" },
+    emit,
+  );
+}
+
 /** Settle the ledger entry for `sessionId` (matched by id, not position, so
  *  overlapping runs settle independently). */
 function settleRun(
@@ -1681,6 +1719,9 @@ export async function runAutomation(
 
     let engineSessionId = "";
     let errorMsg = "";
+    // Whether the engine reported a terminal outcome. Only that proves the
+    // turn is over and lets settleAutomationRunState retire the session.
+    let sawTerminalEvent = false;
     // Tail of the assistant's text: an automation whose prompt declares
     // failure (`RUN STATUS: failed — …` / `SCAN STATUS: failed — …` as the
     // final line) settles the ledger as error instead of "the turn finished
@@ -1806,6 +1847,7 @@ export async function runAutomation(
         }
       }
       if (event.type === "done") {
+        sawTerminalEvent = true;
         engineSessionId = event.sessionId || engineSessionId;
         if (event.provider) effectiveProvider = event.provider;
         if (event.model) effectiveModel = event.model;
@@ -1814,12 +1856,17 @@ export async function runAutomation(
         textTail = (textTail + event.text).slice(-16384);
       }
       if (event.type === "error") {
+        sawTerminalEvent = true;
         errorMsg = event.content || "Unknown error";
       }
     }
     if (!errorMsg) errorMsg = declaredRunFailure(textTail) || "";
 
     await persistSession(engineSessionId);
+
+    // Before the ledger claims an outcome: a session the ledger calls done
+    // must not still read as an owner-less running turn.
+    await settleAutomationRunState(bksId, errorMsg || null, sawTerminalEvent);
 
     if (!errorMsg) {
       await deliverAutomationOutputs({
