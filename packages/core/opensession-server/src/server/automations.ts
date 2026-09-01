@@ -1108,6 +1108,7 @@ export async function settleAutomationRunState(
   sessionId: string,
   errorMessage: string | null,
   sawTerminalEvent: boolean,
+  runKey?: string,
   emit?: Parameters<typeof transitionRunState>[3],
 ): Promise<void> {
   if (!sawTerminalEvent) return;
@@ -1115,7 +1116,15 @@ export async function settleAutomationRunState(
   await transitionRunState(
     sessionId,
     errorMessage ? "run_failed" : "turn_end",
-    { source: "automation_terminal" },
+    {
+      source: "automation_terminal",
+      // Fence the settlement to this automation's own physical run. The
+      // hosted generator can still be draining when a Stop retires this run
+      // and a new prompt claims the session; without the key the actor skips
+      // its stale-run check in applyRunEvent and this late settlement would
+      // retire the SUCCESSOR's turn.
+      ...(runKey ? { run_key: runKey } : {}),
+    },
     emit,
   );
 }
@@ -1742,11 +1751,16 @@ export async function runAutomation(
         `[automations] "${automation.name}" completing accepted setup during shutdown`,
       );
     let events: AsyncGenerator<StreamEvent>;
+    // One physical run id for whichever backend runs this turn. Every backend
+    // journals `run_registered` under it, so it becomes the session's
+    // `currentRunId` and lets the terminal settlement below be fenced to this
+    // exact run rather than to whatever owns the session when it lands.
+    const automationRunKey = `rh-${randomUUIDv7()}`;
     if (sandbox) {
       sandboxRpcToken = crypto.randomUUID();
       registerRunToken(sandboxRpcToken, { sessionId: bksId });
       const spec: RunHostSpec = {
-        hostId: `rh-${randomUUIDv7()}`,
+        hostId: automationRunKey,
         osSessionId: bksId,
         prompt,
         cwd,
@@ -1803,6 +1817,7 @@ export async function runAutomation(
           ? runAgentHosted({
               ...common,
               osSessionId: bksId,
+              startToken: automationRunKey,
               proxyMcpServers: Object.keys(inProcessMcp),
               fallbackInProcessMcp: () => inProcessMcp,
               journalKind: "automation",
@@ -1810,6 +1825,7 @@ export async function runAutomation(
             })
           : runAgent({
               ...common,
+              startToken: automationRunKey,
               inProcessMcp,
               journal: { osSessionId: bksId, kind: "automation" },
             });
@@ -1871,7 +1887,12 @@ export async function runAutomation(
     // session this function exists to prevent. The engine session id is
     // already persisted from the `init` event, so nothing below is a
     // precondition for reading this session back.
-    await settleAutomationRunState(bksId, errorMsg || null, sawTerminalEvent);
+    await settleAutomationRunState(
+      bksId,
+      errorMsg || null,
+      sawTerminalEvent,
+      automationRunKey,
+    );
 
     await persistSession(engineSessionId);
 

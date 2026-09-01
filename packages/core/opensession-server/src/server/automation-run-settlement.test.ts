@@ -26,6 +26,8 @@ import { runStateRequiresLiveOwner } from "./session-cache";
 const silent = () => {};
 const sid = () => `automation-settlement-${crypto.randomUUID()}`;
 const created: string[] = [];
+/** The physical run id whichever backend journals for this turn. */
+const runKeyFor = (id: string) => `rh-${id}`;
 
 /** Put the session where a journaled detached automation host leaves it. */
 async function hostedAutomationRunning(id: string): Promise<void> {
@@ -33,7 +35,7 @@ async function hostedAutomationRunning(id: string): Promise<void> {
   await transitionRunState(
     id,
     "run_registered",
-    { run_key: `rh-${id}`, kind: "automation" },
+    { run_key: runKeyFor(id), kind: "automation" },
     silent,
   );
   expect(getRunState(id)).toBe("running");
@@ -53,7 +55,7 @@ describe("automation run settlement", () => {
     // quarantine precondition ("no live execution owner or recovery claim").
     expect(runStateRequiresLiveOwner(getRunState(id))).toBe(true);
 
-    await settleAutomationRunState(id, null, true, silent);
+    await settleAutomationRunState(id, null, true, runKeyFor(id), silent);
 
     expect(getRunState(id)).toBe("idle");
     expect(isRunStateUnsettled(getRunState(id))).toBe(false);
@@ -64,7 +66,13 @@ describe("automation run settlement", () => {
     const id = sid();
     await hostedAutomationRunning(id);
 
-    await settleAutomationRunState(id, "RUN STATUS: failed", true, silent);
+    await settleAutomationRunState(
+      id,
+      "RUN STATUS: failed",
+      true,
+      runKeyFor(id),
+      silent,
+    );
 
     expect(getRunState(id)).toBe("failed");
     expect(isRunStateUnsettled(getRunState(id))).toBe(false);
@@ -76,19 +84,46 @@ describe("automation run settlement", () => {
 
     // Nothing proved what this run did, so it must stay owned and pausable.
     // Settling here would retire a fence that exists for unverified effects.
-    await settleAutomationRunState(id, null, false, silent);
+    await settleAutomationRunState(id, null, false, runKeyFor(id), silent);
 
     expect(getRunState(id)).toBe("running");
     expect(isRunStateUnsettled(getRunState(id))).toBe(true);
   });
 
+  test("a late settlement cannot retire a successor's run", async () => {
+    const id = sid();
+    await hostedAutomationRunning(id);
+
+    // Stop retires this automation's run, then a new prompt claims the
+    // session. The automation's hosted generator is still draining and its
+    // settlement lands only now — against a run it does not own.
+    await transitionRunState(id, "cancel", { run_key: runKeyFor(id) }, silent);
+    await transitionRunState(id, "prompt", { run_key: "rh-successor" }, silent);
+    await transitionRunState(
+      id,
+      "run_registered",
+      { run_key: "rh-successor" },
+      silent,
+    );
+    expect(getRunState(id)).toBe("running");
+
+    await settleAutomationRunState(id, null, true, runKeyFor(id), silent);
+
+    // The actor's stale-run fence rejected it, so the successor keeps its turn.
+    expect(getRunState(id)).toBe("running");
+
+    // The successor's own settlement still works.
+    await settleAutomationRunState(id, null, true, "rh-successor", silent);
+    expect(getRunState(id)).toBe("idle");
+  });
+
   test("settling an already-settled session emits no double teardown", async () => {
     const id = sid();
     await hostedAutomationRunning(id);
-    await settleAutomationRunState(id, null, true, silent);
+    await settleAutomationRunState(id, null, true, runKeyFor(id), silent);
 
     const events: Record<string, unknown>[] = [];
-    await settleAutomationRunState(id, null, true, (event) =>
+    await settleAutomationRunState(id, null, true, runKeyFor(id), (event) =>
       events.push(event),
     );
 
@@ -102,9 +137,7 @@ describe("automation run settlement", () => {
       "utf8",
     );
     const terminalFlag = source.indexOf("sawTerminalEvent = true");
-    const settleSession = source.indexOf(
-      "await settleAutomationRunState(bksId,",
-    );
+    const settleSession = source.indexOf("await settleAutomationRunState(");
     const settleLedger = source.indexOf(
       "settleRun(automation.id, bksId,",
       settleSession,
@@ -130,7 +163,7 @@ describe("automation run settlement", () => {
     );
     expect(streamDrained).toBeGreaterThan(0);
     const settleSession = source.indexOf(
-      "await settleAutomationRunState(bksId,",
+      "await settleAutomationRunState(",
       streamDrained,
     );
     expect(settleSession).toBeGreaterThan(streamDrained);
@@ -143,5 +176,20 @@ describe("automation run settlement", () => {
         settleSession,
       );
     }
+  });
+
+  test("every automation backend journals the run id the settlement fences on", () => {
+    // The fence only holds if the id passed to settlement is the same one the
+    // backend journals as `run_registered` — that is what becomes the actor's
+    // `currentRunId`. All three dispatch paths must carry it.
+    const source = readFileSync(
+      resolve(import.meta.dir, "automations.ts"),
+      "utf8",
+    );
+    expect(source).toContain("const automationRunKey = `rh-${randomUUIDv7()}`");
+    // Sandboxed runs journal spec.hostId; both gateway paths journal startToken.
+    expect(source).toContain("hostId: automationRunKey");
+    expect(source.match(/startToken: automationRunKey/g)).toHaveLength(2);
+    expect(source).toContain("automationRunKey,\n    );");
   });
 });
