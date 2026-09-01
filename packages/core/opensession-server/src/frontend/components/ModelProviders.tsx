@@ -25,6 +25,7 @@ import { Checkbox } from "../ui/checkbox";
 import { IconTile } from "./BrandTile";
 import { IconDotsHorizontal, IconPlus, IconSearch, IconTrash } from "./icons";
 import { errorMessage } from "../lib/error-message";
+import { modelProviderSettingsPayload } from "../lib/model-provider-settings";
 
 // Settings → Model providers: third-party Pi providers (xai, openrouter,
 // groq, …) — API key + optional baseURL, stored server-side (0600, returned
@@ -281,15 +282,16 @@ function AddProviderForm({
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            // Strip all whitespace — pasted keys often carry newlines.
-            ...(apiKey.trim() ? { apiKey: apiKey.replace(/\s+/g, "") } : {}),
-            ...(baseURL.trim() ? { baseURL: baseURL.trim() } : {}),
-            ...(modelIds.length ? { models: modelIds } : {}),
-            api: custom ? "openai-completions" : "",
-            ...(name.trim() ? { name: name.trim() } : {}),
-            discoverModels: discover,
-          }),
+          body: JSON.stringify(
+            modelProviderSettingsPayload({
+              apiKey,
+              baseURL,
+              models: modelIds,
+              custom,
+              name,
+              discoverModels: discover,
+            }),
+          ),
         },
       );
       const body = await res.json();
