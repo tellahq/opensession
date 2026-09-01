@@ -1862,11 +1862,18 @@ export async function runAutomation(
     }
     if (!errorMsg) errorMsg = declaredRunFailure(textTail) || "";
 
-    await persistSession(engineSessionId);
-
-    // Before the ledger claims an outcome: a session the ledger calls done
-    // must not still read as an owner-less running turn.
+    // First, before anything that can reject. The engine reported a terminal
+    // outcome and the host has already retired its journal, so the session is
+    // owner-less from here on. Everything below — session persistence, output
+    // delivery, the ledger — can fail into the outer catch, which settles the
+    // ledger but cannot settle the session (its state is scoped to this try).
+    // Settling after any of them would leave exactly the owner-less running
+    // session this function exists to prevent. The engine session id is
+    // already persisted from the `init` event, so nothing below is a
+    // precondition for reading this session back.
     await settleAutomationRunState(bksId, errorMsg || null, sawTerminalEvent);
+
+    await persistSession(engineSessionId);
 
     if (!errorMsg) {
       await deliverAutomationOutputs({
