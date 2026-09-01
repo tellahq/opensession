@@ -171,9 +171,9 @@ export function buildRunInstructions(input: {
     parts.push(
       "## Preview links\nFor user-facing web changes, set the exact root-relative route, " +
         "query included. For editors, call `tella-stage` `lease_editor_fixture` with " +
-        "fixture `multi_clip_transcript_v1` and this Open Session id as `leaseKey`. Pass its " +
-        "`editorPath`, `videoId`, `leaseId`, and `expiresAt` to `opensession-portals` " +
-        "`set_editor_preview_path`. Never construct a video id or report fixture evidence " +
+        "fixture `multi_clip_transcript_v1` and this Open Session id as `leaseKey`. Pass only " +
+        "its `leaseId` to `opensession-portals` `set_editor_preview_path`; Open Session " +
+        "verifies the lease directly with Tella. Never construct a video id or report evidence " +
         "yourself. Otherwise call `set_portal_path` without a name. Open the staging URL and " +
         "verify the changed feature.",
     );
