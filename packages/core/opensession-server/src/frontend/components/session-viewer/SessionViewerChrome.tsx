@@ -184,7 +184,8 @@ interface ChromeSessionActions {
   handleShareWorkspace: () => void;
   openNewSession: React.ComponentProps<typeof SessionHeader>["openNewSession"];
   openSession:
-    ((id: string, created?: UnifiedSession | null) => void) | undefined;
+    | ((id: string, created?: UnifiedSession | null) => void)
+    | undefined;
   onRestoreSession: ((session: UnifiedSession) => void) | undefined;
   onRename: ((id: string, title: string) => void) | undefined;
   setRenameDraft: Dispatch<SetStateAction<string | null>>;

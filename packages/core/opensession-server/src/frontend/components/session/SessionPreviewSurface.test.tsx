@@ -47,7 +47,7 @@ test("a non-embeddable deployment keeps the first-party fallback", () => {
 
 test("SessionViewer keeps preview selection and state ownership", async () => {
   const viewer = await Bun.file(
-    new URL("../SessionViewer.tsx", import.meta.url),
+    new URL("../session-viewer/SessionViewerMainRegion.tsx", import.meta.url),
   ).text();
   const branch = viewer.slice(
     viewer.indexOf("{showPortal && portalTarget ? ("),

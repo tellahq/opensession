@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { readFollowingLive } from "./transcript-anchor";
 
 const [
-  viewer,
+  viewerSource,
+  mainRegion,
   subscriptionHook,
   transcriptView,
   transcriptHook,
@@ -10,6 +11,7 @@ const [
   historyController,
 ] = await Promise.all([
   Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text(),
+  Bun.file(new URL("./SessionViewerMainRegion.tsx", import.meta.url)).text(),
   Bun.file(
     new URL("../../hooks/useSessionViewerSubscription.ts", import.meta.url),
   ).text(),
@@ -22,6 +24,7 @@ const [
     new URL("../../hooks/useTranscriptHistoryController.ts", import.meta.url),
   ).text(),
 ]);
+const viewer = [viewerSource, mainRegion].join("\n");
 
 test("fresh transcript ranges reaffirm a cached reader's live edge", () => {
   expect(transcriptHook).toContain("settledIndexRef.current = index");

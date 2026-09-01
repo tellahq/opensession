@@ -82,11 +82,15 @@ test("SessionViewer delegates its session subscription once", async () => {
 });
 
 test("SessionViewer descendants no longer receive socket props", async () => {
-  const [viewer, sidePanelHost, terminal] = await Promise.all([
-    source("./SessionViewer.tsx"),
-    source("./session/SidePanelHost.tsx"),
-    source("./TerminalPanel.tsx"),
-  ]);
+  const [viewerSource, mainRegion, sidePanelHost, terminal] = await Promise.all(
+    [
+      source("./SessionViewer.tsx"),
+      source("./session-viewer/SessionViewerMainRegion.tsx"),
+      source("./session/SidePanelHost.tsx"),
+      source("./TerminalPanel.tsx"),
+    ],
+  );
+  const viewer = [viewerSource, mainRegion].join("\n");
   const prPanel = invocation(viewer, "PrPanel");
   expect(prPanel).not.toContain("send=");
   expect(prPanel).not.toContain("addHandler=");

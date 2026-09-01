@@ -169,7 +169,8 @@ interface ReviewRegion {
   allSessions: SessionViewerProps["workspace"]["allSessions"];
   workspaceSessions: SessionViewerProps["workspace"]["workspaceSessions"];
   openSession: SessionViewerProps["availability"]["canOpenSession"] extends
-    boolean | undefined
+    | boolean
+    | undefined
     ? Navigation["openSession"] | undefined
     : never;
   reviewSessionActionTarget: PrPanelProps["sessionActionTarget"];

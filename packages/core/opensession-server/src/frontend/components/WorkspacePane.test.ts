@@ -11,6 +11,9 @@ const viewerSource = await Promise.all([
   Bun.file(
     new URL("./session-viewer/SessionViewerSidePanel.tsx", import.meta.url),
   ).text(),
+  Bun.file(
+    new URL("./session-viewer/SessionViewerMainRegion.tsx", import.meta.url),
+  ).text(),
 ]).then((parts) => parts.join("\n"));
 const prPanelSource = await Bun.file(
   new URL("./PrPanel.tsx", import.meta.url),

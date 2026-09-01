@@ -64,6 +64,15 @@ async function sources() {
     Bun.file(
       new URL("./session-viewer/SessionViewerChrome.tsx", import.meta.url),
     ).text(),
+    Bun.file(
+      new URL("./session-viewer/SessionViewerMainRegion.tsx", import.meta.url),
+    ).text(),
+    Bun.file(
+      new URL(
+        "./session-viewer/SessionViewerAssetOverlay.tsx",
+        import.meta.url,
+      ),
+    ).text(),
   ]).then((parts) => parts.join("\n"));
   const app = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
   const bindings = await Bun.file(
@@ -116,14 +125,14 @@ test("SessionViewer navigation comes from NavigationContext", async () => {
   );
   expect(viewer).toContain('void openNewSession("share");');
   expect(viewer).toContain(
-    "navigation.startNewChat(\n                      session,",
+    'navigation.startNewChat(session, withQuotes([selection], ""))',
   );
   expect(viewer).toContain(
     "openReview && (prPresentation.primary || prPresentation.additional.length)",
   );
   expect(viewer).toContain("if (!id || !openSession) return;");
   expect(viewer).toContain(
-    "onOpenAsTab={openAssets ? promoteAssetToTab : undefined}",
+    "onOpenAsTab: openAssets ? promoteAssetToTab : undefined",
   );
   expect(viewer).toContain(
     "const openCurrentWorkspace = canOpenWorkspace\n    ? navigation.openCurrentWorkspace\n    : undefined;",
