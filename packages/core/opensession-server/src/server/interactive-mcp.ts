@@ -150,20 +150,9 @@ function papercutsServerFor(
 }
 
 export function editorFixtureGrantUser(
-  session:
-    | {
-        createdByLogin?: string | null;
-        createdBy?: string | null;
-        startedBy?: string | null;
-      }
-    | undefined,
+  session: { createdByLogin?: string | null } | undefined,
 ): string | undefined {
-  return (
-    session?.createdByLogin ||
-    session?.createdBy ||
-    session?.startedBy ||
-    undefined
-  );
+  return session?.createdByLogin || undefined;
 }
 
 export function interactiveMcpServers(
