@@ -29,8 +29,8 @@ export const RELEASE_SERVICE_TEMPLATES: readonly string[] = [
  * Paths `service.ts` resolves from the release directory that are
  * deliberately NOT part of the tarball. Each entry needs a reason.
  */
-export const RELEASE_TEMPLATE_EXEMPTIONS: ReadonlyMap<string, string> =
-  new Map([
+export const RELEASE_TEMPLATE_EXEMPTIONS: ReadonlyMap<string, string> = new Map(
+  [
     [
       "opensession-ingress.service",
       "source-install only: renderIngressUnit is skipped when isCompiledBinary()",
@@ -39,4 +39,5 @@ export const RELEASE_TEMPLATE_EXEMPTIONS: ReadonlyMap<string, string> =
       "bin/bun",
       "install.sh places the runtime bun for source installs; the compiled binary embeds its own",
     ],
-  ]);
+  ],
+);
