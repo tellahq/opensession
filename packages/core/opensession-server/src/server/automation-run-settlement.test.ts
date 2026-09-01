@@ -177,6 +177,60 @@ describe("automation run settlement", () => {
     expect(inLoopSettle).toBeLessThan(streamDrained);
   });
 
+  test("a usage-exhausted done becomes a failure before the run settles", () => {
+    // Dying on usage limits with no account left reports as a `done` carrying
+    // `usageLimitExhausted`, not an `error`. An automation with
+    // `fallbackModel: "none"` gets that event unfiltered, because
+    // runAgentInner yields runOnModel directly instead of routing it into the
+    // fallback walk. Both other consumers of the hosted path convert the shape
+    // into a failure; without the same conversion the ledger records `ok`,
+    // outputs are delivered for a turn that never ran, and the session settles
+    // `turn_end` instead of `failed`.
+    const source = readFileSync(
+      resolve(import.meta.dir, "automations.ts"),
+      "utf8",
+    );
+    const loopStart = source.indexOf("for await (const event of events) {");
+    const doneBranch = source.indexOf(
+      'if (event.type === "done") {',
+      loopStart,
+    );
+    const conversion = source.indexOf(
+      "if (event.usageLimitExhausted)",
+      doneBranch,
+    );
+    const inLoopSettle = source.indexOf(
+      "await settleAutomationRunState(",
+      loopStart,
+    );
+    expect(doneBranch).toBeGreaterThan(loopStart);
+    expect(conversion).toBeGreaterThan(doneBranch);
+    // The conversion has to precede the settlement, or the run state is
+    // decided before the failure is known.
+    expect(conversion).toBeLessThan(inLoopSettle);
+    expect(source).toContain(
+      'errorMsg = event.result || "Usage limit reached on every account"',
+    );
+  });
+
+  test("an exhausted run settles as failed, matching the ledger", async () => {
+    const id = sid();
+    await hostedAutomationRunning(id);
+
+    // What the loop now passes for a usage-exhausted `done`: the same
+    // non-null message the ledger records as `error`.
+    await settleAutomationRunState(
+      id,
+      "Usage limit reached on every account",
+      true,
+      runKeyFor(id),
+      silent,
+    );
+
+    expect(getRunState(id)).toBe("failed");
+    expect(isRunStateUnsettled(getRunState(id))).toBe(false);
+  });
+
   test("nothing that can reject runs between the terminal event and settlement", () => {
     // The outer catch settles the LEDGER but cannot settle the session: the
     // run-state variables are scoped to the try. So every fallible step of the
