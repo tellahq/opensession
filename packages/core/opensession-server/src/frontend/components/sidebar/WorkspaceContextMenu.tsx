@@ -11,6 +11,7 @@ import { shortcutLabel } from "../../lib/shortcuts";
 import type { CtxEntry, Props, WsRow } from "../../lib/sidebar-types";
 import {
   IconArchive,
+  IconCopy,
   IconEye,
   IconEyeOff,
   IconInbox,
@@ -43,6 +44,8 @@ interface WorkspaceContextMenuProps {
   onSnooze: (row: WsRow, until: string | null) => void;
   onStartWorkspaceRename: (workspace: Workspace) => void;
   onStartSessionRename: (session: UnifiedSession) => void;
+  selectedSessionId?: string | null;
+  onDuplicateSession: (session: UnifiedSession) => void;
   onToast?: (message: string) => void;
   onOpenReview: (session: UnifiedSession) => void;
   onHide: (row: WsRow, hidden: boolean) => void;
@@ -65,6 +68,8 @@ export function WorkspaceContextMenu({
   onSnooze,
   onStartWorkspaceRename,
   onStartSessionRename,
+  selectedSessionId,
+  onDuplicateSession,
   onToast,
   onOpenReview,
   onHide,
@@ -74,6 +79,8 @@ export function WorkspaceContextMenu({
 }: WorkspaceContextMenuProps) {
   const sessions = row?.sessions ?? [];
   const first = sessions[0];
+  const duplicateSource =
+    sessions.find((session) => session.id === selectedSessionId) ?? first;
   const pinKey = workspace ? `workspace:${workspace.id}` : menu.id;
   const pinnedKeys = [
     pinKey,
@@ -173,6 +180,14 @@ export function WorkspaceContextMenu({
       icon: <IconPencil size={20} />,
       label: "Rename",
       onClick: () => onStartSessionRename(first),
+    });
+  }
+  if (duplicateSource?.source === "opensession" && duplicateSource.ran) {
+    entries.push({
+      kind: "item",
+      icon: <IconCopy size={20} />,
+      label: "Duplicate session",
+      onClick: () => onDuplicateSession(duplicateSource),
     });
   }
   if (first) {

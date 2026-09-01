@@ -8,7 +8,6 @@ import { CodeHighlight } from "./LazyCode";
 import { TOOL_CODE_WELL } from "../lib/tool-classes";
 import {
   IconArrowUpRight,
-  IconBranches,
   IconCheck,
   IconClock,
   IconCopy,
@@ -141,8 +140,8 @@ export const TurnFooter = function TurnFooter({
           >
             {onFork && (
               <Menu.Item onClick={() => onFork(entry.id)}>
-                <IconBranches size={20} className="text-faint" />
-                Fork from here
+                <IconCopy size={20} className="text-faint" />
+                Duplicate from here
               </Menu.Item>
             )}
             {onFork && <Menu.Separator className="my-1" />}
