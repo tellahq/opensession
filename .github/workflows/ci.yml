@@ -217,7 +217,7 @@ jobs:
             const text = kind === "launchd"
               ? `${renderPlist()}\n${renderLauncher()}`
               : await renderUnit();
-            if (!text.includes("opensession.ts") && !text.includes("opensession server")) {
+            if (!text.includes("gateway-supervisor.ts") && !text.includes("opensession server")) {
               throw new Error("no service command");
             }
             const user = text.match(/^User=(.*)$/m)?.[1];
