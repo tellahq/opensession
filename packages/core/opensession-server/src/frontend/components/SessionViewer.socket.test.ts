@@ -64,6 +64,23 @@ test("SessionViewer receives its socket capabilities from context", async () => 
   expect(app).toMatch(/renderSessionPane\(\s*currentSession,\s*mainSocket,/);
 });
 
+test("SessionViewer delegates its session subscription once", async () => {
+  const [viewer, subscription] = await Promise.all([
+    source("./SessionViewer.tsx"),
+    source("../hooks/useSessionViewerSubscription.ts"),
+  ]);
+
+  expect(viewer.match(/useSessionViewerSubscription\(/g)).toHaveLength(1);
+  expect(viewer).not.toContain('case "transcript_init"');
+  expect(viewer).not.toContain('type: "watch"');
+  expect(subscription).toContain('case "transcript_init"');
+  expect(subscription).toContain('case "transcript_append"');
+  const register = subscription.indexOf("const unsubscribe = addHandler(");
+  const watch = subscription.indexOf('type: "watch"');
+  expect(register).toBeGreaterThanOrEqual(0);
+  expect(watch).toBeGreaterThan(register);
+});
+
 test("SessionViewer descendants no longer receive socket props", async () => {
   const [viewer, sidePanelHost, terminal] = await Promise.all([
     source("./SessionViewer.tsx"),

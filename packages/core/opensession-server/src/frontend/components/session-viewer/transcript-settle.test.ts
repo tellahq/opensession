@@ -1,11 +1,15 @@
 import { expect, test } from "bun:test";
 import { readFollowingLive } from "./transcript-anchor";
 
-const [viewer, transcriptView, transcriptHook] = await Promise.all([
-  Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text(),
-  Bun.file(new URL("../session/TranscriptView.tsx", import.meta.url)).text(),
-  Bun.file(new URL("../../hooks/useTranscript.ts", import.meta.url)).text(),
-]);
+const [viewer, subscriptionHook, transcriptView, transcriptHook] =
+  await Promise.all([
+    Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text(),
+    Bun.file(
+      new URL("../../hooks/useSessionViewerSubscription.ts", import.meta.url),
+    ).text(),
+    Bun.file(new URL("../session/TranscriptView.tsx", import.meta.url)).text(),
+    Bun.file(new URL("../../hooks/useTranscript.ts", import.meta.url)).text(),
+  ]);
 
 test("fresh transcript ranges reaffirm a cached reader's live edge", () => {
   expect(transcriptHook).toContain("settledIndexRef.current = index");
@@ -49,7 +53,7 @@ test("setup and loading surfaces leave before transcript rows mount", () => {
 test("indexed transcripts settle positively but cannot stay hidden forever", () => {
   expect(transcriptHook).toContain("if (!outlineReady) return");
   expect(viewer).toContain("onSettled: () => setOpenSettlePending(false)");
-  expect(viewer).toContain("setIndexMode(v2)");
+  expect(subscriptionHook).toContain("setIndexMode(v2)");
   expect(transcriptHook).toContain("setOutlineReady(!v2)");
   expect(transcriptHook).toContain("setOutlineReady(true)");
   expect(viewer).toContain("const LEGACY_OPEN_SETTLE_MAX_MS = 350");
