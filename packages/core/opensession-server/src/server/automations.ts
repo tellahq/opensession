@@ -54,6 +54,7 @@ import {
 } from "./worktree";
 import { engineSessionPatch } from "./sessions";
 import { recordRunOutcome, updateSessionFile } from "./session-cache";
+import { sessionKernel } from "./session-kernel";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { getWorkspace } from "./workspaces";
 import type { NativeSessionFile } from "./types";
@@ -1109,12 +1110,20 @@ function recordRunStart(id: string, run: AutomationRun): void {
  * Settling the FSM alone is not enough. The session APIs read `lastRunError`
  * from `runErrors` and the session file, both written by `recordRunOutcome`,
  * so a run that reaches `failed` without that projection cannot explain itself
- * to any consumer. Project through the same choke point the other callers use.
+ * to any consumer. Project through the same choke point the other callers use,
+ * with the same durable identity they pass: this run's id, the generation it
+ * owned, and a stable projection id. Those three route the outcome through the
+ * actor's turn-outcome executor, which makes the projection idempotent and
+ * fenced to this exact run rather than a best-effort direct write.
  */
 type AutomationOutcomeProjector = (
   sessionId: string,
   errorMessage: string | null,
-  opts?: { runId?: string },
+  opts?: {
+    runId?: string;
+    runGeneration?: number;
+    projectionId?: string;
+  },
 ) => Promise<void>;
 
 export async function settleAutomationRunState(
@@ -1130,6 +1139,12 @@ export async function settleAutomationRunState(
 ): Promise<void> {
   if (!terminalProven) return;
   if (!isRunStateUnsettled(getRunState(sessionId))) return;
+  // Capture the generation BEFORE settling. It is the generation this run
+  // owned, which is what the outcome executor fences against; reading it after
+  // the transition would race a successor that claims the session in between.
+  const runGeneration = runKey
+    ? sessionKernel(sessionId).runStateProjection().generation
+    : undefined;
   const decision = await decideRunStateTransition(
     sessionId,
     errorMessage ? "run_failed" : "turn_end",
@@ -1148,7 +1163,15 @@ export async function settleAutomationRunState(
   // anyway would stamp our outcome onto whoever does.
   if (!decision.accepted) return;
   await (deps?.project ?? recordRunOutcome)(sessionId, errorMessage, {
-    ...(runKey ? { runId: runKey } : {}),
+    ...(runKey
+      ? {
+          runId: runKey,
+          runGeneration,
+          // Stable and derived from the run id, so a retry of the same run
+          // reuses the projection rather than issuing a second one.
+          projectionId: `outcome:${runKey}`,
+        }
+      : {}),
   });
 }
 

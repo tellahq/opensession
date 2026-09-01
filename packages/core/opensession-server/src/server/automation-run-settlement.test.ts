@@ -22,6 +22,7 @@ import {
   transitionRunState,
 } from "./run-state";
 import { runStateRequiresLiveOwner } from "./session-cache";
+import { sessionKernel } from "./session-kernel";
 
 const silent = () => {};
 const sid = () => `automation-settlement-${crypto.randomUUID()}`;
@@ -36,15 +37,23 @@ const projected: Array<{
   sessionId: string;
   errorMessage: string | null;
   runId?: string;
+  runGeneration?: number;
+  projectionId?: string;
 }> = [];
 const deps = {
   emit: silent,
   project: async (
     sessionId: string,
     errorMessage: string | null,
-    opts?: { runId?: string },
+    opts?: { runId?: string; runGeneration?: number; projectionId?: string },
   ) => {
-    projected.push({ sessionId, errorMessage, runId: opts?.runId });
+    projected.push({
+      sessionId,
+      errorMessage,
+      runId: opts?.runId,
+      runGeneration: opts?.runGeneration,
+      projectionId: opts?.projectionId,
+    });
   },
 };
 
@@ -319,13 +328,28 @@ describe("automation run settlement", () => {
     // The session APIs read lastRunError from runErrors and the session file,
     // both written by recordRunOutcome. Reaching `failed` without that
     // projection leaves a run that cannot explain itself to any consumer.
-    expect(projected).toEqual([
-      {
-        sessionId: id,
-        errorMessage: "Usage limit reached on every account",
-        runId: runKeyFor(id),
-      },
-    ]);
+    expect(projected).toHaveLength(1);
+    expect(projected[0]).toMatchObject({
+      sessionId: id,
+      errorMessage: "Usage limit reached on every account",
+      runId: runKeyFor(id),
+      // Durable identity: these three route the outcome through the actor's
+      // turn-outcome executor instead of a best-effort direct write.
+      projectionId: `outcome:${runKeyFor(id)}`,
+    });
+    expect(typeof projected[0]!.runGeneration).toBe("number");
+  });
+
+  test("the projected generation is the one this run owned", async () => {
+    const id = sid();
+    await hostedAutomationRunning(id);
+    const owned = sessionKernel(id).runStateProjection().generation;
+
+    await settleAutomationRunState(id, null, true, runKeyFor(id), deps);
+
+    // Captured before the transition. Reading it afterwards would race a
+    // successor claiming the session, and the executor fences on this value.
+    expect(projected[0]!.runGeneration).toBe(owned);
   });
 
   test("a clean turn projects a null outcome, clearing any earlier failure", async () => {
@@ -335,9 +359,13 @@ describe("automation run settlement", () => {
     await settleAutomationRunState(id, null, true, runKeyFor(id), deps);
 
     expect(getRunState(id)).toBe("idle");
-    expect(projected).toEqual([
-      { sessionId: id, errorMessage: null, runId: runKeyFor(id) },
-    ]);
+    expect(projected).toHaveLength(1);
+    expect(projected[0]).toMatchObject({
+      sessionId: id,
+      errorMessage: null,
+      runId: runKeyFor(id),
+      projectionId: `outcome:${runKeyFor(id)}`,
+    });
   });
 
   test("a stale settlement projects nothing onto the successor", async () => {
