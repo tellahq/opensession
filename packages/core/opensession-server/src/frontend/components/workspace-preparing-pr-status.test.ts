@@ -8,6 +8,9 @@ const viewerSource = await Promise.all([
   Bun.file(
     new URL("./session-viewer/SessionViewerChrome.tsx", import.meta.url),
   ).text(),
+  Bun.file(
+    new URL("./session-viewer/SessionViewerSidePanel.tsx", import.meta.url),
+  ).text(),
 ]).then((parts) => parts.join("\n"));
 
 test("PR status stays hidden until a new workspace is ready", () => {
@@ -25,6 +28,8 @@ test("PR status stays hidden until a new workspace is ready", () => {
   expect(headerCondition).toContain("!workspacePreparing");
 
   expect(
-    viewerSource.match(/workspacePreparing=\{workspacePreparing\}/g),
+    viewerSource.match(
+      /workspacePreparing=\{(?:workspacePreparing|summary\.workspacePreparing)\}/g,
+    ),
   ).toHaveLength(3);
 });

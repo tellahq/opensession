@@ -371,7 +371,10 @@ import {
   toolPathRootsFromKey,
 } from "../lib/session-viewer-derive";
 import { SessionShellTiming } from "./session-viewer/shell-timing";
+import { SessionViewerAssetOverlay } from "./session-viewer/SessionViewerAssetOverlay";
 import { SessionViewerChrome } from "./session-viewer/SessionViewerChrome";
+import { SessionViewerDialogs } from "./session-viewer/SessionViewerDialogs";
+import { SessionViewerSidePanel } from "./session-viewer/SessionViewerSidePanel";
 import { runningAgentCount } from "./session-viewer/runtime-controller";
 import {
   commitSessionQueueReorder,
@@ -3108,81 +3111,31 @@ export function SessionViewer({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {deleting && (
-        <div
-          /* `session-delete-overlay` stays on the markup as a bare hook with
-					   no rule behind it: the Escape/outside-click handlers above ask
-					   `closest('.palette-backdrop, .composer-schedule-modal-backdrop,
-					   .session-delete-overlay')` whether a click landed on a blocking
-					   surface. Drop the name and a click through this overlay starts
-					   dismissing what's underneath it. */
-          className="session-delete-overlay absolute inset-0 z-30 flex items-center justify-center bg-[color-mix(in_srgb,var(--bg)_72%,transparent)] backdrop-blur-[2px]"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="flex flex-col items-center gap-[14px] rounded-xl border border-line bg-panel px-8 py-[26px] smooth-shadow-lg">
-            {/* `rounded-full` rather than `rounded-[50%]`: base.css grants the
-						    squircle to every `rounded-*` class EXCEPT `rounded-full`, and
-						    this ring was a bare `border-radius: 50%` with no corner-shape.
-						    It serialises as a clamped huge px value instead of 50%, which
-						    on a square box is the same circle. */}
-            <div className="size-[30px] animate-[spin_0.8s_linear_infinite] rounded-full border-2 border-line-strong border-t-accent" />
-            <span className={SESSION_DELETE_LABEL}>{deleteLabel}</span>
-          </div>
-        </div>
-      )}
-      {confirmDialog}
-      <DeleteSessionDialog
-        open={showDeleteConfirm}
-        onOpenChange={setShowDeleteConfirm}
-        hasWorktree={Boolean(session.worktreeDir && !isAsk)}
-        deleting={deleting}
-        onDelete={(cleanWorktree) => void handleDelete(cleanWorktree)}
-      />
-      <Modal.Root
-        open={branchConfirmOpen}
-        onOpenChange={(open) => {
-          if (!branchActionBusy) setBranchConfirmOpen(open);
+      <SessionViewerDialogs
+        confirmDialog={confirmDialog}
+        deletion={{
+          open: showDeleteConfirm,
+          deleting,
+          label: deleteLabel,
+          hasWorktree: Boolean(session.worktreeDir && !isAsk),
         }}
-        disablePointerDismissal={branchActionBusy !== null}
-      >
-        <Modal.Content>
-          <Modal.Header title="Move to a branch?" />
-          <Modal.Description className="m-0 text-pretty text-supporting font-normal leading-relaxed text-dim">
-            {branchConfirmMode === "create"
-              ? "You need to move this session to a branch before you can create a PR."
-              : "Copies this session’s changes to a new branch without removing them from the shared checkout."}
-          </Modal.Description>
-          <Modal.Footer>
-            <Modal.Close
-              render={
-                <Button variant="ghost" disabled={branchActionBusy !== null}>
-                  Cancel
-                </Button>
-              }
-            />
-            <Button
-              variant="primary"
-              disabled={
-                isBusy ||
-                branchActionBusy !== null ||
-                (branchConfirmMode === "create" && !connected)
-              }
-              onClick={() =>
-                void (branchConfirmMode === "create"
-                  ? moveAndCreatePr()
-                  : moveToBranchFromMenu())
-              }
-            >
-              {branchActionBusy
-                ? "Moving…"
-                : branchConfirmMode === "create"
-                  ? "Move and create PR"
-                  : "Move to branch"}
-            </Button>
-          </Modal.Footer>
-        </Modal.Content>
-      </Modal.Root>
+        deletionActions={{
+          onOpenChange: setShowDeleteConfirm,
+          onDelete: (cleanWorktree) => void handleDelete(cleanWorktree),
+        }}
+        branch={{
+          open: branchConfirmOpen,
+          busy: branchActionBusy,
+          mode: branchConfirmMode,
+          sessionBusy: isBusy,
+          connected,
+        }}
+        branchActions={{
+          onOpenChange: setBranchConfirmOpen,
+          onMove: moveToBranchFromMenu,
+          onMoveAndCreatePr: moveAndCreatePr,
+        }}
+      />
       <SessionViewerChrome
         identity={{
           session,
@@ -4222,118 +4175,103 @@ export function SessionViewer({
         {/* Right region: the Workspace panel. Portaled to an app-level slot so
             it opens as a full-height column beside the left sidebar (not just
             below the session header). */}
-        <SidePanelHost
-          hidden={hideRightPanel}
-          isPhone={isPhone}
-          available={panelAvailable}
-          open={activePanelOpen}
-          onOpenChange={setActivePanelOpen}
-          portalTarget={rightPanelEl}
-          style={panelStyle}
-          resizeHandle={panelResizeHandle}
-          hasWorkspace={hasWorkspace}
-          page={desktopPanelPage}
-          onPageChange={setDesktopPanelPage}
-          livePortals={livePortals}
-          runningAgents={runningAgents}
-          terminalMounted={panelTerminalMounted}
-          onTerminalMount={() => setPanelTerminalMounted(true)}
-          sessionId={session.id}
-          changes={
-            <>
-              <section
-                aria-label="Workspace summary"
-                className="flex flex-col border-b border-divider py-2"
-              >
-                <WorkspaceSummaryBody
-                  session={session}
-                  onOpenPanelTab={(tab) => {
-                    if (tab === "changes") {
-                      desktopChangesRef.current?.scrollIntoView({
-                        block: "start",
-                      });
-                      return;
-                    }
-                    focusPrInReview();
-                  }}
-                  onOpenPr={() => focusPrInReview()}
-                  onOpenStackPr={openPr}
-                  onOpenChecks={() => focusPrInReview(undefined, "checks")}
-                  onOpenAsset={openAssetFromTranscript}
-                  onOpenAssets={openAssets}
-                  onOpenSession={openSession}
-                  onArchive={handleArchive}
-                  reviewRequest={effectiveReview?.req ?? null}
-                  reviewRequestSessionId={effectiveReview?.ownerId}
-                  onReviewChange={onReviewChange}
-                  prReviewRequested={effectiveReview?.prReviewRequested}
-                  running={isRunningLive}
-                  workspacePreparing={workspacePreparing}
-                  send={connected ? send : undefined}
-                  refreshTick={gitRefreshTick}
-                  liveMedia={liveOverviewMedia}
-                  close={() => setActivePanelOpen(false)}
-                />
-              </section>
-              <div ref={desktopChangesRef}>
-                {waitingForWorkspace ? (
-                  <WorkspaceWaiting detail="This takes a moment." />
-                ) : (
-                  <DiffPanel
-                    sessionId={session.id}
-                    isRunning={isBusy}
-                    canSend={connected && !isBusy && !noEngine}
-                    send={send}
-                    diff={diffState}
-                    showFileList={false}
-                    source={worktreeDiffSource}
-                    onSourceChange={changeWorktreeDiffSource}
-                  />
-                )}
-              </div>
-            </>
-          }
-          portals={
-            <PortalsPage
-              sessionId={session.id}
-              status={previewStatus}
-              activePortal={portalTarget}
-              onBack={() => setActivePanelOpen(false)}
-              hideHeader
-              onOpenPortal={openPortal}
-              onStartPortal={startDeclaredPortal}
-              onPortalAction={async (name, action) => {
-                setPreviewStatus(
-                  await portalActionApi(session.id, name, action),
-                );
-              }}
-            />
-          }
-          agents={
-            <WorkflowPanel
-              sessionId={session.id}
-              runs={workflowRuns}
-              onAction={workflowAction}
-              subagents={subagents}
-              onOpenSubagent={openSubagent}
-              onOpenSession={openSession}
-              onBack={() => setActivePanelOpen(false)}
-              hideHeader
-            />
-          }
+        <SessionViewerSidePanel
+          shell={{
+            hidden: hideRightPanel,
+            isPhone,
+            available: panelAvailable,
+            open: activePanelOpen,
+            onOpenChange: setActivePanelOpen,
+            portalTarget: rightPanelEl,
+            style: panelStyle,
+            resizeHandle: panelResizeHandle,
+            hasWorkspace,
+            page: desktopPanelPage,
+            onPageChange: setDesktopPanelPage,
+            livePortals,
+            runningAgents,
+            terminalMounted: panelTerminalMounted,
+            onTerminalMount: () => setPanelTerminalMounted(true),
+          }}
+          summary={{
+            session,
+            onOpenPanelTab: (tab) => {
+              if (tab === "changes") {
+                desktopChangesRef.current?.scrollIntoView({
+                  block: "start",
+                });
+                return;
+              }
+              focusPrInReview();
+            },
+            onOpenPr: () => focusPrInReview(),
+            onOpenStackPr: openPr,
+            onOpenChecks: () => focusPrInReview(undefined, "checks"),
+            onOpenAsset: openAssetFromTranscript,
+            onOpenAssets: openAssets,
+            onOpenSession: openSession,
+            onArchive: handleArchive,
+            reviewRequest: effectiveReview?.req ?? null,
+            reviewRequestSessionId: effectiveReview?.ownerId,
+            onReviewChange,
+            prReviewRequested: effectiveReview?.prReviewRequested,
+            running: isRunningLive,
+            workspacePreparing,
+          }}
+          summaryRuntime={{
+            send: connected ? send : undefined,
+            refreshTick: gitRefreshTick,
+            liveMedia: liveOverviewMedia,
+            close: () => setActivePanelOpen(false),
+          }}
+          changes={{
+            waitingForWorkspace,
+            sessionId: session.id,
+            isRunning: isBusy,
+            canSend: connected && !isBusy && !noEngine,
+            send,
+            diff: diffState,
+            source: worktreeDiffSource,
+            onSourceChange: changeWorktreeDiffSource,
+          }}
+          changesContainerRef={desktopChangesRef}
+          portals={{
+            sessionId: session.id,
+            status: previewStatus,
+            activePortal: portalTarget,
+            onBack: () => setActivePanelOpen(false),
+            onOpenPortal: openPortal,
+            onStartPortal: startDeclaredPortal,
+            onPortalAction: async (name, action) => {
+              setPreviewStatus(await portalActionApi(session.id, name, action));
+            },
+          }}
+          agents={{
+            sessionId: session.id,
+            runs: workflowRuns,
+            onAction: workflowAction,
+            subagents,
+            onOpenSubagent: openSubagent,
+            onOpenSession: openSession,
+            onBack: () => setActivePanelOpen(false),
+          }}
         />
       </div>
       {/* Portals to the body, so it sits over the whole viewer rather than
 			    inside whichever column opened it. */}
-      <AssetOverlay
-        sessionId={session.id}
-        path={overlayAssetPath}
-        files={assetFiles}
-        refresh={refreshAssets}
-        onClose={closeAssetOverlay}
-        onSelectPath={setOverlayAssetPath}
-        onOpenAsTab={openAssets ? promoteAssetToTab : undefined}
-        onOpenNewSession={navigation.openPrefilledSession}
+      <SessionViewerAssetOverlay
+        asset={{
+          sessionId: session.id,
+          path: overlayAssetPath,
+          files: assetFiles,
+        }}
+        actions={{
+          refresh: refreshAssets,
+          onClose: closeAssetOverlay,
+          onSelectPath: setOverlayAssetPath,
+          onOpenAsTab: openAssets ? promoteAssetToTab : undefined,
+          onOpenNewSession: navigation.openPrefilledSession,
+        }}
       />
     </div>
   );

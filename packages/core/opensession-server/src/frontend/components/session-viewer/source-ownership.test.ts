@@ -26,6 +26,9 @@ test("SessionViewer decomposition files stay below the source line limit", async
     "components/session/SessionPreviewSurface.tsx",
     "components/session-viewer/shell-timing.ts",
     "components/session-viewer/SessionViewerChrome.tsx",
+    "components/session-viewer/SessionViewerAssetOverlay.tsx",
+    "components/session-viewer/SessionViewerDialogs.tsx",
+    "components/session-viewer/SessionViewerSidePanel.tsx",
     "lib/session-viewer-constants.ts",
     "lib/session-viewer-derive.ts",
   ];
@@ -98,6 +101,53 @@ test("SessionViewer delegates its complete header chrome through bounded consume
   expect(chrome).not.toMatch(/\buse(?:Memo|Callback)\(/);
   expect(chrome).not.toMatch(/\b(?:any|as unknown|ts-ignore)\b/);
   expect(chrome).not.toContain("...props");
+});
+
+test("SessionViewer delegates overlays and the side panel through bounded contracts", async () => {
+  const [viewer, dialogs, assetOverlay, sidePanel] = await Promise.all([
+    source("components/SessionViewer.tsx"),
+    source("components/session-viewer/SessionViewerDialogs.tsx"),
+    source("components/session-viewer/SessionViewerAssetOverlay.tsx"),
+    source("components/session-viewer/SessionViewerSidePanel.tsx"),
+  ]);
+
+  expect(viewer).toContain("<SessionViewerDialogs");
+  expect(viewer).toContain("<SessionViewerAssetOverlay");
+  expect(viewer).toContain("<SessionViewerSidePanel");
+  expect(viewer).not.toContain("<SidePanelHost");
+  expect(viewer).not.toContain("<AssetOverlay");
+  expect(viewer).not.toContain("<DeleteSessionDialog");
+  expect(viewer).not.toContain("<Modal.Root");
+
+  const contracts = [
+    [dialogs, "SessionViewerDialogsProps"],
+    [dialogs, "DeleteDialogState"],
+    [dialogs, "DeleteDialogActions"],
+    [dialogs, "BranchDialogState"],
+    [dialogs, "BranchDialogActions"],
+    [assetOverlay, "SessionViewerAssetOverlayProps"],
+    [assetOverlay, "AssetOverlayIdentity"],
+    [assetOverlay, "AssetOverlayActions"],
+    [sidePanel, "SessionViewerSidePanelProps"],
+    [sidePanel, "SidePanelShell"],
+    [sidePanel, "WorkspaceSummaryContent"],
+    [sidePanel, "WorkspaceSummaryRuntime"],
+    [sidePanel, "WorkspaceChangesContent"],
+    [sidePanel, "PortalContent"],
+    [sidePanel, "AgentContent"],
+  ];
+  for (const [moduleSource, contract] of contracts) {
+    expect(
+      interfaceMemberCount(moduleSource, contract),
+      contract,
+    ).toBeLessThanOrEqual(15);
+  }
+
+  for (const moduleSource of [dialogs, assetOverlay, sidePanel]) {
+    expect(moduleSource).not.toMatch(/\buse(?:Memo|Callback)\(/);
+    expect(moduleSource).not.toMatch(/\{\s*\.\.\./);
+    expect(moduleSource).not.toMatch(/\bany\b|\bts-ignore\b|\bas\s+[A-Z]/);
+  }
 });
 
 test("SessionViewer delegates bounded action state without moving memo wrappers", async () => {
