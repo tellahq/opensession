@@ -184,9 +184,11 @@ describe("public PR review policy", () => {
     expect(source.slice(verify, toolLess)).not.toContain(
       'getSandboxProvider("microvm")',
     );
-    expect(daytona).toContain("if (!sbx && !sourceVerification)");
-    expect(daytona).toContain("const template = sourceVerification");
-    expect(daytona).toContain("sourceVerification\n            ? undefined");
+    expect(daytona).toContain("if (!sbx && !disposable)");
+    expect(daytona).toContain("const template = disposable");
+    expect(daytona).toContain(
+      "sbx = await create(\n          disposable\n            ? undefined",
+    );
     expect(daytona).toContain("runLifecycleHooks: !sourceVerification");
     expect(daytona).toContain("await client.delete(sbx, 120)");
     expect(source).toContain("provider.destroy(sandbox.id, { strict: true })");

@@ -284,6 +284,23 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
       SANDBOX_MODEL_FAMILIES,
     );
   });
+
+  test("sandbox automations require a qualified Daytona provider and dial-back URL", () => {
+    write({
+      provider: "daytona",
+      callbackBaseUrl: "wss://sessions.example.com",
+    });
+    expect(sandboxCapabilityStatus().automation).toMatchObject({
+      provider: "daytona",
+      available: false,
+    });
+
+    ready("daytona");
+    expect(sandboxCapabilityStatus().automation).toEqual({
+      provider: "daytona",
+      available: true,
+    });
+  });
 });
 
 describe("provider-independent model-family sandboxability", () => {

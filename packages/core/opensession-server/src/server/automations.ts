@@ -78,7 +78,15 @@ import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
 import { createSelfImproveMcpServer } from "../agents/slack/self-improve-tools";
 import { AUTOMATION_DENIED_TOOLS } from "./automation-denied-tools";
 import { audit } from "./audit";
-import type { Sandbox } from "./sandbox";
+import { getSandboxProvider, type Sandbox } from "./sandbox";
+import {
+  sandboxAutomationAvailability,
+  sandboxAutomationConfig,
+} from "./sandbox/config";
+import {
+  automationModelEgressDestinations,
+  mcpEgressDestinations,
+} from "./sandbox/automation-egress";
 import type { RunHostSpec } from "../runner-host/protocol";
 import { configuredIntegration, personaName } from "./config";
 import { shouldPersistModelSwitch, type StreamEvent } from "./run-events";
@@ -455,14 +463,79 @@ function sanitizeAccountId(
   return id;
 }
 
+/**
+ * Fail-closed contract for a sandboxed automation (docs/security-model.md):
+ * a disposable Daytona Executor, one hard-pinned model account, no fallback
+ * model, an explicit MCP allowlist, and no nested CLI credentials. Checked on
+ * create, update, and again at launch so a config change after save cannot
+ * widen a stored job.
+ */
 function validateSandboxAutomation(
-  automation: Pick<Automation, "sandbox">,
+  automation: Pick<
+    Automation,
+    | "sandbox"
+    | "model"
+    | "accountId"
+    | "accountStrict"
+    | "fallbackModel"
+    | "mcpServers"
+    | "claudeCliEnv"
+    | "codexCliEnv"
+  >,
 ): { error: string } | null {
   if (!automation.sandbox) return null;
-  return {
-    error:
-      "sandbox automations are unavailable while managed Executor automation isolation is being qualified",
-  };
+  const availability = sandboxAutomationAvailability();
+  if (!availability.available) {
+    return {
+      error: `sandbox automations are unavailable: ${availability.reason}`,
+    };
+  }
+  if (!automation.accountId) {
+    return { error: "sandbox automations require a pinned model account" };
+  }
+  const runModel = automationModel(automation.model) || "";
+  if (/^pi\/anthropic\//.test(runModel)) {
+    if (!getAccountById(automation.accountId)) {
+      return {
+        error:
+          "the pinned account does not belong to the selected Claude model",
+      };
+    }
+  } else if (/^pi\/openai\//.test(runModel)) {
+    if (!getCodexAccountById(automation.accountId)) {
+      return {
+        error:
+          "the pinned account does not belong to the selected OpenAI model",
+      };
+    }
+  } else {
+    return {
+      error:
+        "sandbox automations require an Anthropic or OpenAI subscription model with a pinned account",
+    };
+  }
+  if (automation.accountStrict === false) {
+    return { error: "sandbox automation account pins must be strict" };
+  }
+  if (automation.fallbackModel && automation.fallbackModel !== "none") {
+    return {
+      error:
+        "sandbox automations cannot widen credentials through a fallback model; set fallbackModel to none",
+    };
+  }
+  if (!Array.isArray(automation.mcpServers)) {
+    return {
+      error:
+        "sandbox automations require an explicit mcpServers allowlist (use [] for none)",
+    };
+  }
+  if (automation.claudeCliEnv || automation.codexCliEnv) {
+    return {
+      error:
+        "sandbox automations cannot provision nested Claude/Codex CLI credentials",
+    };
+  }
+  return null;
 }
 
 function sanitizeModel(
@@ -1525,6 +1598,10 @@ export async function runAutomation(
   const stamp = startedAt.toISOString().slice(0, 16).replace("T", " ");
   automationPreparations.add(bksId);
   let sandboxRpcToken: string | undefined;
+  // The disposable Executor this run owns, destroyed once the run settles.
+  let disposableSandbox:
+    | { provider: ReturnType<typeof getSandboxProvider>; id: string }
+    | undefined;
   // One physical run id for whichever backend runs this turn. Every backend
   // journals `run_registered` under it, so it becomes the session's
   // `currentRunId` and lets the terminal settlement be fenced to this exact
@@ -1533,7 +1610,13 @@ export async function runAutomation(
   const automationRunKey = `rh-${randomUUIDv7()}`;
 
   try {
-    const runtimeSandboxValidation = validateSandboxAutomation(automation);
+    const runModel = automationModel(
+      options?.modelOverride || automation.model,
+    );
+    const runtimeSandboxValidation = validateSandboxAutomation({
+      ...automation,
+      model: options?.modelOverride || automation.model,
+    });
     if (runtimeSandboxValidation)
       throw new Error(runtimeSandboxValidation.error);
     // The automation's repo (instance default when omitted). Ask mode reads the repo's
@@ -1561,9 +1644,29 @@ export async function runAutomation(
       if (!automation.sandbox) cwd = await ensureAskCheckout(repo.id);
     }
     if (automation.sandbox) {
-      throw new Error(
-        "sandbox automations are unavailable while managed Executor automation isolation is being qualified",
-      );
+      // A fresh disposable Executor per run (the same path isolated public
+      // review uses). The automation trust profile makes the provider refuse
+      // prewarm/template adoption, project only the pinned account and the
+      // explicit MCP allowlist, and install the egress allowlist before the
+      // run host launches. It is destroyed in the finally below.
+      const automationSandbox = sandboxAutomationConfig();
+      const provider = getSandboxProvider(automationSandbox.provider);
+      sandbox = await provider.ensure({
+        sessionId: bksId,
+        repo: repo.id,
+        branch,
+        mode: automation.mode,
+        trustProfile: "automation",
+        egressAllowlist: [
+          ...(automationSandbox.egressAllowlist || []),
+          ...automationModelEgressDestinations(runModel || ""),
+          ...mcpEgressDestinations(
+            filterMcpServers(automation.mcpServers || [], undefined, []),
+          ),
+        ],
+      });
+      disposableSandbox = { provider, id: sandbox.id };
+      cwd = sandbox.cwd;
     }
 
     recordRunStart(automation.id, {
@@ -1695,9 +1798,6 @@ export async function runAutomation(
     // Automations dispatch on Pi (tier-preserving mapping; see
     // automationModel). The effective model/provider can change mid-run on a
     // usage-limit fallback, so track it from runner events for persistence.
-    const runModel = automationModel(
-      options?.modelOverride || automation.model,
-    );
     let effectiveModel = runModel;
     let selectedModel = runModel;
     let effectiveProvider = providerFor(effectiveModel);
@@ -2075,6 +2175,42 @@ export async function runAutomation(
     activeAutomationIntentSessions.delete(bksId);
     unregisterRunToken(sandboxRpcToken);
     unregisterSessionMcpServers(bksId);
+    if (disposableSandbox) {
+      // Strict: a run whose Executor cannot be confirmed gone is logged
+      // loudly rather than left as a warm credential-bearing sandbox. The
+      // session record keeps the sandbox id for the audit trail; its provider
+      // is no longer resumable, so the session cannot be reopened in it.
+      try {
+        await disposableSandbox.provider.destroy(disposableSandbox.id, {
+          strict: true,
+        });
+        await updateSessionFile(bksId, (data) => ({
+          ...data,
+          ...(data.sandbox
+            ? {
+                sandbox: {
+                  ...data.sandbox,
+                  lifecycle: "needs_attention" as const,
+                  lastLifecycleError:
+                    "Disposable automation Executor was destroyed after the run",
+                },
+              }
+            : {}),
+        }));
+      } catch (error) {
+        console.error(
+          `[automations] could not dispose Executor ${disposableSandbox.id} for "${automation.name}":`,
+          error,
+        );
+        audit({
+          kind: "sandbox_automation_dispose_failed",
+          session_id: bksId,
+          provider: disposableSandbox.provider.id,
+          sandbox_id: disposableSandbox.id,
+          error: String((error as Error)?.message || error),
+        });
+      }
+    }
     const left = (runningCounts.get(automation.id) || 1) - 1;
     if (left <= 0) runningCounts.delete(automation.id);
     else runningCounts.set(automation.id, left);

@@ -12,6 +12,7 @@ import {
   draftAutomationApi,
   fetchConnections,
   fetchProviderAccounts,
+  fetchSandboxStatus,
   relativeTime,
   type ModelOption,
   type ProviderAccountOption,
@@ -133,6 +134,10 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   const toggleRequest = React.useRef(0);
   const [defaultModel, setDefaultModel] = useState("");
   const [modelLoadError, setModelLoadError] = useState<string | null>(null);
+  const [sandboxAvailability, setSandboxAvailability] = useState<{
+    available: boolean;
+    reason?: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const {
     accounts: providerAccounts,
@@ -146,6 +151,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
       .catch((cause: unknown) =>
         setModelLoadError(errorMessage(cause, "Could not load models")),
       );
+    fetchSandboxStatus(getCurrentUser())
+      .then((status) => setSandboxAvailability(status.automation || null))
+      .catch(() => setSandboxAvailability(null));
   }, []);
   // The modal is create-only; editing happens inline in the detail drawer.
   const [showModal, setShowModal] = useState(false);
@@ -587,16 +595,22 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
 
                     <DetailKey>Mode</DetailKey>
                     <span className="text-dim">
-                      {sel.sandbox
-                        ? "Unavailable legacy sandbox configuration"
-                        : sel.mode === "ask"
-                          ? "Ask · read-only on the main checkout"
+                      {sel.mode === "ask"
+                        ? sel.sandbox
+                          ? "Ask · disposable Sandbox workspace"
+                          : "Ask · read-only on the main checkout"
+                        : sel.sandbox
+                          ? "Code · disposable Sandbox workspace"
                           : "Code · isolated worktree, can open PRs"}
                     </span>
 
                     <DetailKey>Environment</DetailKey>
                     <span className="text-dim">
-                      {sel.sandbox ? "Unavailable" : "Host worktree"}
+                      {sel.sandbox
+                        ? sandboxAvailability?.available
+                          ? "Sandbox · fresh disposable Executor"
+                          : `Sandbox unavailable${sandboxAvailability?.reason ? ` · ${sandboxAvailability.reason}` : ""}`
+                        : "Host worktree"}
                     </span>
 
                     <DetailKey>Model</DetailKey>
@@ -1496,7 +1510,11 @@ function AutomationForm({
     initial?.accountStrict !== false,
   );
   const [usageCredits, setUsageCredits] = useState(!!initial?.usageCredits);
-  const sandbox = false;
+  const [sandbox, setSandbox] = useState(!!initial?.sandbox);
+  const [sandboxAvailability, setSandboxAvailability] = useState<{
+    available: boolean;
+    reason?: string;
+  } | null>(null);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const [modelLoadError, setModelLoadError] = useState<string | null>(null);
@@ -1522,6 +1540,24 @@ function AutomationForm({
       onError: (cause) =>
         setWorkspaceLoadError(errorMessage(cause, "Could not load workspaces")),
     }).then(setWorkspaces);
+    fetchSandboxStatus(getCurrentUser())
+      .then((status) =>
+        setSandboxAvailability(
+          status.automation || {
+            available: false,
+            reason: "The server does not support sandbox automations yet.",
+          },
+        ),
+      )
+      .catch((cause: unknown) =>
+        setSandboxAvailability({
+          available: false,
+          reason: errorMessage(
+            cause,
+            "Could not check sandbox automation availability",
+          ),
+        }),
+      );
   }, []);
   const effectiveModel = model || defaultModel;
   const accountProvider = models.find(
@@ -1773,7 +1809,7 @@ function AutomationForm({
       </div>
 
       {showAdvanced && (
-        <div className={FORM_ROW}>
+        <div className={cn(FORM_ROW, "desktop:flex-wrap")}>
           <label className={FIELD_LABEL}>
             Mode
             <Select
@@ -1783,6 +1819,30 @@ function AutomationForm({
               <option value="ask">Ask · read-only on main</option>
               <option value="code">Code · fresh worktree per run</option>
             </Select>
+          </label>
+
+          <label className="flex min-h-11 flex-1 items-center justify-between gap-3 pb-1 text-label font-medium text-dim phone:items-start desktop:w-full desktop:flex-none">
+            <span className="flex flex-col gap-1">
+              <span>Run in a Sandbox</span>
+              <span className="font-normal text-faint">
+                {sandboxAvailability?.available
+                  ? "Fresh disposable Executor with pinned credentials and restricted network"
+                  : sandboxAvailability?.reason || "Checking availability"}
+              </span>
+            </span>
+            <Switch
+              checked={sandbox}
+              disabled={!sandbox && !sandboxAvailability?.available}
+              onCheckedChange={(checked) => {
+                setSandbox(checked);
+                if (checked) {
+                  setAccountStrict(true);
+                  setFallbackModel("");
+                  setMcpServers((current) => current ?? []);
+                }
+              }}
+              aria-label="Run this automation in a Sandbox"
+            />
           </label>
 
           <label className={FIELD_LABEL}>
@@ -1920,7 +1980,7 @@ function AutomationForm({
             !prompt.trim() ||
             !scheduleValid ||
             !watchValid ||
-            (sandbox && !accountId)
+            (sandbox && (!accountId || sandboxAvailability?.available !== true))
           }
         >
           {saving ? "Saving…" : initial ? "Save changes" : "Create automation"}
