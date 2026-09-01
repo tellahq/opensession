@@ -29,6 +29,7 @@ import {
 import { stateDir } from "../paths";
 import {
   BRIDGE_PROVIDER_IDS,
+  PROVIDER_APIS,
   PROVIDER_ID_RE,
   addPickerModel,
   defaultPickerModelsForProvider,
@@ -38,7 +39,9 @@ import {
   removeModelProvider,
   removePickerModel,
   setModelProvider,
+  type ModelProviderConfig,
 } from "../model-providers";
+import { discoverProviderModels } from "../model-discovery";
 import {
   isPiModelId,
   piEngineEnabled,
@@ -47,6 +50,28 @@ import {
   setPiPickerModels,
 } from "../pi-config";
 import { requireWorkspaceAdmin } from "../workspace-auth";
+
+/** The client-facing shape of a configured provider: the key masked, plus the
+ *  fields Settings edits and a summary of the catalog it cannot edit. */
+function publicProvider(
+  id: string,
+  p: ModelProviderConfig,
+  pickerModels: readonly string[],
+) {
+  const catalogIds = Object.keys(p.catalog || {});
+  return {
+    id,
+    apiKeyMasked: maskProviderKey(p.apiKey),
+    ...(p.baseURL ? { baseURL: p.baseURL } : {}),
+    ...(p.api ? { api: p.api } : {}),
+    ...(p.name ? { name: p.name } : {}),
+    ...(p.discoverModels ? { discoverModels: true } : {}),
+    ...(p.discovered?.at ? { discoveredAt: p.discovered.at } : {}),
+    ...(p.catalogFile ? { catalogFile: p.catalogFile } : {}),
+    catalogModels: catalogIds.length,
+    models: pickerModels.filter((m) => m.startsWith(`pi/${id}/`)),
+  };
+}
 
 /** Navigate `integrations.github` in a raw parsed config object so the App
  *  routes can set or drop its keys without disturbing anything else the file
@@ -542,20 +567,49 @@ export async function handleConnectionsRoutes(
   if (path === "/api/settings/model-providers" && req.method === "GET") {
     const pickerModels = readModelProviderConfig()?.pickerModels || [];
     return Response.json({
-      providers: Object.entries(modelProviders()).map(([id, p]) => ({
-        id,
-        apiKeyMasked: maskProviderKey(p.apiKey),
-        ...(p.baseURL ? { baseURL: p.baseURL } : {}),
-        models: pickerModels.filter((m) => m.startsWith(`pi/${id}/`)),
-      })),
+      providers: Object.entries(modelProviders()).map(([id, p]) =>
+        publicProvider(id, p, pickerModels),
+      ),
       pickerModels,
     });
+  }
+
+  // Opt-in `GET {baseURL}/models` poll: records what the gateway lists and
+  // adds the ids to the picker without removing operator-pinned ones.
+  const discoverMatch = path.match(
+    /^\/api\/settings\/model-providers\/([^/]+)\/discover$/,
+  );
+  if (discoverMatch && req.method === "POST") {
+    // Discovery sends the stored key to whatever base URL is configured, so
+    // it is a shared-configuration mutation and stays admin-only.
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
+    const id = decodeURIComponent(discoverMatch[1]);
+    if (!modelProviders()[id]) {
+      return Response.json({ error: "Not found" }, { status: 404 });
+    }
+    try {
+      const result = await discoverProviderModels(id);
+      refreshPickerModels();
+      const pickerModels = readModelProviderConfig()?.pickerModels || [];
+      return Response.json({
+        ...result,
+        provider: publicProvider(id, modelProviders()[id], pickerModels),
+      });
+    } catch (e: any) {
+      return Response.json(
+        { error: e?.message || "Discovery failed" },
+        { status: 502 },
+      );
+    }
   }
 
   const modelProviderMatch = path.match(
     /^\/api\/settings\/model-providers\/([^/]+)$/,
   );
   if (modelProviderMatch && req.method === "PUT") {
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
     const id = decodeURIComponent(modelProviderMatch[1]);
     if (!PROVIDER_ID_RE.test(id)) {
       return Response.json(
@@ -585,11 +639,31 @@ export async function handleConnectionsRoutes(
         : undefined;
     const baseURL =
       typeof body.baseURL === "string" ? body.baseURL.trim() : undefined;
+    const api = typeof body.api === "string" ? body.api.trim() : undefined;
+    if (api && !(PROVIDER_APIS as readonly string[]).includes(api)) {
+      return Response.json(
+        { error: `Unsupported api "${api}" (expected openai-completions)` },
+        { status: 400 },
+      );
+    }
+    const name = typeof body.name === "string" ? body.name.trim() : undefined;
+    const discoverModels =
+      typeof body.discoverModels === "boolean"
+        ? body.discoverModels
+        : undefined;
     const models = Array.isArray(body.models)
       ? body.models.filter((m: unknown): m is string => typeof m === "string")
       : undefined;
     try {
-      setModelProvider(id, { apiKey, baseURL });
+      setModelProvider(id, {
+        apiKey,
+        baseURL,
+        api: api as ModelProviderConfig["api"] | "" | undefined,
+        name,
+        discoverModels,
+      });
+      // setModelProvider validated the effective provider before writing.
+      const savedProvider = modelProviders()[id];
       const pickerModels = readModelProviderConfig()?.pickerModels || [];
       const providerModels =
         models ??
@@ -610,16 +684,22 @@ export async function handleConnectionsRoutes(
           if (tail) addPickerModel(`${prefix}${tail}`);
         }
       }
+      let discovery: { added: number; models: string[] } | undefined;
+      let discoveryError: string | undefined;
+      if (discoverModels && savedProvider?.baseURL && savedProvider.apiKey) {
+        try {
+          discovery = await discoverProviderModels(id);
+        } catch (e: any) {
+          discoveryError = e?.message || "Discovery failed";
+        }
+      }
       refreshPickerModels();
       const stored = modelProviders()[id] || {};
       const savedPickerModels = readModelProviderConfig()?.pickerModels || [];
       return Response.json({
-        provider: {
-          id,
-          apiKeyMasked: maskProviderKey(stored.apiKey),
-          ...(stored.baseURL ? { baseURL: stored.baseURL } : {}),
-          models: savedPickerModels.filter((m) => m.startsWith(`pi/${id}/`)),
-        },
+        provider: publicProvider(id, stored, savedPickerModels),
+        ...(discovery ? { discovery } : {}),
+        ...(discoveryError ? { discoveryError } : {}),
       });
     } catch (e: any) {
       return Response.json(
@@ -630,6 +710,8 @@ export async function handleConnectionsRoutes(
   }
 
   if (modelProviderMatch && req.method === "DELETE") {
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
     const id = decodeURIComponent(modelProviderMatch[1]);
     try {
       const removed = removeModelProvider(id);

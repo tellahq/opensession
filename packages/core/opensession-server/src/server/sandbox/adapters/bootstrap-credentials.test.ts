@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 import {
   projectRemoteClaudeAccounts,
@@ -203,6 +204,44 @@ describe("remote engine credential projection", () => {
     expect(JSON.parse(projected.content).providers).toEqual({
       cerebras: { apiKey: "csk-secret", baseURL: "https://cerebras.test" },
     });
+  });
+
+  test("projects merged catalog-file rows without exposing the host path", () => {
+    const dir = mkdtempSync(join(tmpdir(), "os-sandbox-catalog-"));
+    const configPath = join(dir, "model-providers.json");
+    const previous = process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
+    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = configPath;
+    writeFileSync(
+      join(dir, "gateway-catalog.json"),
+      JSON.stringify({ m: { contextWindow: 32_000, maxTokens: 4_000 } }),
+    );
+    const source = {
+      providers: {
+        gateway: {
+          apiKey: "secret",
+          api: "openai-completions",
+          baseURL: "https://gateway.test/v1",
+          catalogFile: "gateway-catalog.json",
+        },
+      },
+    };
+    writeFileSync(configPath, JSON.stringify(source));
+    try {
+      const projected = projectRemoteModelProviderConfig(
+        source,
+        "pi/gateway/m",
+      );
+      const provider = JSON.parse(projected.content).providers.gateway;
+      expect(provider.catalog).toEqual({
+        m: { id: "m", contextWindow: 32_000, maxTokens: 4_000 },
+      });
+      expect(provider.catalogFile).toBeUndefined();
+    } finally {
+      if (previous === undefined)
+        delete process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
+      else process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = previous;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("interactive provider projection follows only the reachable fallback walk", () => {

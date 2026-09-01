@@ -869,7 +869,13 @@ export function PrPanel({
     };
     // Optimistic: flip locally, revert if GitHub rejects the mutation.
     setPrViewed({ ...info, viewed: apply(info.viewed, next) });
-    void setPrFileViewed(info.prId, path, next, getCurrentUser()).catch(() => {
+    void setPrFileViewed(
+      activeRepoId,
+      info.prId,
+      path,
+      next,
+      getCurrentUser(),
+    ).catch(() => {
       setPrViewed((prev) =>
         prev && prev.key === info.key
           ? { ...prev, viewed: apply(prev.viewed, !next) }

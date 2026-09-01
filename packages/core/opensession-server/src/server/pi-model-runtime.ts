@@ -879,12 +879,21 @@ async function* runSdkAttempt(
       return;
     }
 
+    // Stay on the account that already holds this session's SDK conversation
+    // while it is usable. Every request re-picks, and the least-used tiebreak
+    // round-robins equal accounts, so without this a session hopped
+    // subscriptions on nearly every step and replayed its full context (a
+    // cache write, not a read) each time. The sticky step sits below the pin
+    // and above the least-used pool pick; exhaustion, sidelining, and the
+    // in-turn walk (excludeIds) still move the session off it.
+    const stickyId = piSdkSessionStore().get(storeKey)?.accountId;
     const picked = pickBridgeAccount(model.id, {
       accountId: opts.accountId,
       accountStrict: opts.accountStrict,
       usageCredits: opts.usageCredits,
       user: opts.user,
       excludeIds: excluded.size ? [...excluded] : undefined,
+      stickyId,
     });
     if ("error" in picked) throw new Error(picked.error);
     account = picked;

@@ -274,6 +274,7 @@ export async function fetchPrViewedFiles(
 
 /** Mark/unmark one PR file as viewed on GitHub for the current viewer. */
 export async function setPrFileViewed(
+  repo: string | undefined,
   prId: string,
   path: string,
   viewed: boolean,
@@ -281,7 +282,7 @@ export async function setPrFileViewed(
 ): Promise<void> {
   await request(`/pr-viewed-files`, {
     method: "POST",
-    body: { prId, path, viewed, user },
+    body: { repo, prId, path, viewed, user },
     label: "Failed to update viewed state",
   });
 }

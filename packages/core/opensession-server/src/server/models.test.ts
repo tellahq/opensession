@@ -49,8 +49,14 @@ describe("Pi-only model routing", () => {
     expect(toPiModel("gpt-5.6-sol")).toBe("pi/openai/gpt-5.6-sol");
   });
 
-  test("preserves explicit Pi ids", () => {
+  test("preserves explicit Pi ids and case-sensitive model suffixes", () => {
     expect(toPiModel("pi/wafer/glm-5.2")).toBe("pi/wafer/glm-5.2");
+    expect(toPiModel(" pi/My-Gateway/Qwen/Qwen3-Coder ")).toBe(
+      "pi/my-gateway/Qwen/Qwen3-Coder",
+    );
+    expect(resolveModel("pi/My-Gateway/Qwen/Qwen3-Coder")?.id).toBe(
+      "pi/my-gateway/Qwen/Qwen3-Coder",
+    );
     expect(explicitEngineFor("pi/openai/gpt-5.6-sol")).toBe("pi");
   });
 

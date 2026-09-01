@@ -200,6 +200,11 @@ export interface BridgeAccountPin {
   /** Accounts this turn already burned, skipped on every path. Drives the pi
    *  provider's in-turn account walk (see resolveAccount's excludeIds). */
   excludeIds?: readonly string[];
+  /** The account whose isolated config dir already holds this session's SDK
+   *  conversation. Preferred over the least-used pick while it is usable, so
+   *  a session keeps its SDK resume and prompt cache instead of replaying the
+   *  whole context onto a different subscription every request. */
+  stickyId?: string;
 }
 
 /** Pick the account to serve a bridge/pi request (utilization-gated).
@@ -232,6 +237,7 @@ export function pickBridgeAccount(
     model,
     pinnedId: pin?.accountId,
     strictPin: pin?.accountStrict,
+    stickyId: pin?.stickyId,
     designatedIds: ids,
     allowExtraUsage: pin?.usageCredits,
     excludeIds: pin?.excludeIds,

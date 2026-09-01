@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TranscriptEntry } from "../lib/types";
-import { setTurnPrefs } from "./TranscriptBlocks.test-setup";
+import {
+  setThinkingMessagesPref,
+  setTurnPrefs,
+} from "./TranscriptBlocks.test-setup";
 
 const { TranscriptBlocks } = await import("./TranscriptBlocks");
 
@@ -876,6 +879,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
   });
 
   test("coalesces consecutive reasoning revisions into their latest visible step", () => {
+    setThinkingMessagesPref("all");
     const entries: TranscriptEntry[] = [
       {
         id: "prompt",
@@ -930,6 +934,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     expect(html).toContain("Checking deployment status");
     expect(html).toContain("Verifying the release");
     setTurnPrefs(null);
+    setThinkingMessagesPref(null);
   });
 
   test("repairs fragmented reasoning inside open work", () => {
@@ -992,6 +997,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
   });
 
   test("keeps reasoning quiet inside one work disclosure", () => {
+    setThinkingMessagesPref("all");
     const entries: TranscriptEntry[] = [
       {
         id: "prompt",
@@ -1095,6 +1101,66 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     );
     expect(proseReasoning).toContain('data-text-shimmer=""');
     setTurnPrefs(null);
+    setThinkingMessagesPref(null);
+  });
+
+  test("shows only the newest thinking message by default", () => {
+    setTurnPrefs("open", "folded");
+    const entries: TranscriptEntry[] = [
+      {
+        id: "prompt",
+        type: "user",
+        content: "Check it",
+        timestamp: "2026-08-28T08:00:00Z",
+      },
+      {
+        id: "reasoning-1",
+        type: "assistant",
+        content: "**Reading the current state**",
+        isReasoning: true,
+        timestamp: "2026-08-28T08:00:01Z",
+      },
+      {
+        id: "tool",
+        type: "tool_use",
+        toolUseId: "tool-call",
+        toolName: "bash",
+        content: "Using bash",
+        timestamp: "2026-08-28T08:00:02Z",
+      },
+      {
+        id: "reasoning-2",
+        type: "assistant",
+        content: "**Verifying the result**",
+        isReasoning: true,
+        timestamp: "2026-08-28T08:00:03Z",
+      },
+      {
+        id: "answer",
+        type: "assistant",
+        content: "Done.",
+        timestamp: "2026-08-28T08:00:04Z",
+      },
+    ];
+
+    const latest = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    expect(latest).not.toContain("Reading the current state");
+    expect(latest).toContain("Verifying the result");
+    expect(latest.match(/data-reasoning=""/g)).toHaveLength(1);
+
+    setThinkingMessagesPref("none");
+    const none = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    expect(none).not.toContain('data-reasoning=""');
+    expect(none).not.toContain("Verifying the result");
+
+    setThinkingMessagesPref("all");
+    const all = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    expect(all).toContain("Reading the current state");
+    expect(all).toContain("Verifying the result");
+    expect(all.match(/data-reasoning=""/g)).toHaveLength(2);
+
+    setTurnPrefs(null);
+    setThinkingMessagesPref(null);
   });
 });
 

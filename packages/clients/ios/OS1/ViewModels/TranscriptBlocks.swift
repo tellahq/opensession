@@ -452,7 +452,8 @@ enum TranscriptGrouping {
         worktreeDir: String?,
         walkthrough: SessionWalkthrough? = nil,
         notes: [SessionNote] = [],
-        reviewResult: ReviewLoopResult? = nil
+        reviewResult: ReviewLoopResult? = nil,
+        thinkingMessages: ThinkingMessages = .standard
     ) -> [TranscriptBlock] {
         var blocks: [TranscriptBlock] = []
         var turn: [TurnItem] = []
@@ -580,11 +581,12 @@ enum TranscriptGrouping {
             }
             if isLast { flush(isTrailing: true) }
         }
-        return groupReviewLoops(
+        let grouped = groupReviewLoops(
             place(notes, into: place(walkthrough, into: blocks)),
             live: live,
             result: reviewResult
         )
+        return thinkingMessages.visibleBlocks(grouped)
     }
 
     private enum ReviewBlockRole {

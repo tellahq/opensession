@@ -97,7 +97,7 @@ export async function uploadUserAttachment(
   const cacheKey = [ghRepo, filePath, stat.size, stat.mtimeMs].join("\u0000");
   const cached = uploadCache.get(cacheKey);
   if (cached) return cached;
-  const token = await botGhToken({ write: true });
+  const token = await botGhToken({ write: true, repo: ghRepo });
   if (!token) return null;
   const repoId = await repoDbId(ghRepo, token);
   if (repoId === null) return null;
@@ -190,7 +190,7 @@ export async function resolveUserAttachment(
   const key = `${id.toLowerCase()}\u0000${ghRepo}`;
   const hit = resolveCache.get(key);
   if (hit && hit.expires > Date.now()) return hit.resolved;
-  const token = await botGhToken();
+  const token = await botGhToken({ repo: ghRepo });
   if (!token) return null;
   const url = attachmentUrl(id);
   try {

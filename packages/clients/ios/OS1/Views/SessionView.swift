@@ -167,6 +167,7 @@ struct SessionView: View {
     /// web.
     @AppStorage("os1.appearance.turnActivity") private var turnWork = "running"
     @AppStorage("os1.appearance.toolCalls") private var toolCalls = "folded"
+    @AppStorage(ThinkingMessages.storageKey) private var thinkingMessages = "latest"
     private var turnActivity: TurnActivity {
         TurnActivity(work: turnWork, tools: toolCalls)
     }
@@ -1002,6 +1003,9 @@ struct SessionView: View {
             .onChange(of: DraftsStore.shared.remoteRevision) {
                 let remote = DraftsStore.shared.mountedText(for: viewModel.session.id)
                 if viewModel.draft != remote { viewModel.draft = remote }
+            }
+            .onChange(of: thinkingMessages, initial: true) { _, value in
+                viewModel.setThinkingMessages(ThinkingMessages(value))
             }
     }
 

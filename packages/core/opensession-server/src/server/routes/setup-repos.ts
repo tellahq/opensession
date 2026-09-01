@@ -236,7 +236,7 @@ async function listReposViaUserRepos(token: string): Promise<PickerRepo[]> {
  * user endpoints used by PATs and App user tokens. */
 export async function listReposViaAppInstallation(
   token: string,
-): Promise<PickerRepo[]> {
+): Promise<PickerRepo[] | null> {
   const registered = registeredGhRepos();
   const repos: PickerRepo[] = [];
   for (let page = 1; repos.length < REPO_LIST_CAP && page <= 5; page++) {
@@ -244,7 +244,7 @@ export async function listReposViaAppInstallation(
       token,
       `https://api.github.com/installation/repositories?per_page=100&page=${page}`,
     );
-    if (!ok || !Array.isArray(body?.repositories)) break;
+    if (!ok || !Array.isArray(body?.repositories)) return null;
     for (const raw of body.repositories) {
       const repo = toPickerRepo(raw, registered);
       if (repo) repos.push(repo);

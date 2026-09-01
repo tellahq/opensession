@@ -145,7 +145,7 @@ describe("App installation repository listing", () => {
     }) as typeof fetch;
     try {
       const repos = await listReposViaAppInstallation("ghs_installation");
-      expect(repos.map((repo) => repo.fullName)).toEqual([
+      expect(repos?.map((repo) => repo.fullName)).toEqual([
         "tellahq/opensession",
       ]);
       expect(urls).toEqual([
@@ -221,10 +221,12 @@ describe("GET /api/setup/github/repos with several App installations", () => {
   ];
 
   /** Two installations: solo-dev (1) sees nothing, acme-org (2) sees one
-   * repo. `broken` names installation ids whose mint is refused. */
+   * repo. `brokenMints` and `brokenLists` name installation ids whose token
+   * mint or repository request is refused. */
   function twoInstallationFetch(
     listCalls: string[],
-    broken: number[] = [],
+    brokenMints: number[] = [],
+    brokenLists: number[] = [],
   ): typeof fetch {
     const repoLists = new Map<number, string[]>([
       [1, []],
@@ -236,7 +238,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
         return Response.json(installs);
       const mint = url.match(/\/app\/installations\/(\d+)\/access_tokens$/);
       if (mint) {
-        if (broken.includes(Number(mint[1])))
+        if (brokenMints.includes(Number(mint[1])))
           return Response.json({ message: "Not Found" }, { status: 404 });
         return Response.json({
           token: `ghs_install_${mint[1]}`,
@@ -249,6 +251,8 @@ describe("GET /api/setup/github/repos with several App installations", () => {
         );
         listCalls.push(auth);
         const id = Number(auth.replace(/^Bearer ghs_install_/, ""));
+        if (brokenLists.includes(id))
+          return Response.json({ message: "Forbidden" }, { status: 403 });
         return Response.json({
           repositories: (repoLists.get(id) ?? []).map((fullName) => ({
             full_name: fullName,
@@ -319,6 +323,20 @@ describe("GET /api/setup/github/repos with several App installations", () => {
     ]);
     expect(listCalls).toEqual(["Bearer ghs_install_2"]);
     expect(body.unavailableInstallations).toEqual(["solo-dev"]);
+  });
+
+  test("reports an installation whose repository list request fails", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-picker-list-error-"));
+    tempDirs.push(dir);
+    writeAppIdentity(dir);
+    const listCalls: string[] = [];
+    globalThis.fetch = twoInstallationFetch(listCalls, [], [2]);
+
+    const body = await getRepos();
+    expect(body.source).toBe("app");
+    expect(body.repos).toEqual([]);
+    expect(body.unavailableInstallations).toEqual(["acme-org"]);
+    expect(listCalls).toEqual(["Bearer ghs_install_1", "Bearer ghs_install_2"]);
   });
 
   test("still names the installations when no installation can mint", async () => {

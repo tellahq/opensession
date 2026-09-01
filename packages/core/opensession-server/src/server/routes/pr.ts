@@ -188,6 +188,7 @@ export async function handlePrRoutes(
   }
   if (path === "/api/pr-viewed-files" && req.method === "POST") {
     const body = (await req.json().catch(() => ({}))) as {
+      repo?: string;
       prId?: string;
       path?: string;
       viewed?: boolean;
@@ -203,6 +204,7 @@ export async function handlePrRoutes(
       await setPrFileViewed(
         ctx,
         requestUser(ctx, body.user),
+        (body.repo ? getRepo(body.repo) : defaultRepo()).ghRepo,
         body.prId,
         body.path,
         body.viewed,

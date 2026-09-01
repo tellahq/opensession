@@ -31,6 +31,7 @@ export interface PrViewedFiles {
 /** The requester's App user token, else the workspace installation token. */
 async function viewerToken(
   ctx: RouteContext,
+  ghRepo: string,
   claimedUser?: string | null,
 ): Promise<string | null> {
   // Use the same request-scoped resolver as the other human-triggered PR
@@ -46,7 +47,7 @@ async function viewerToken(
     const credential = githubCredentialForLogin(login);
     if (credential?.env.GH_TOKEN) return credential.env.GH_TOKEN;
   }
-  return botGhToken({ write: true });
+  return botGhToken({ write: true, repo: ghRepo });
 }
 
 async function graphql(
@@ -102,7 +103,7 @@ export async function getPrViewedFiles(
   ghRepo: string,
   number: number,
 ): Promise<PrViewedFiles> {
-  const token = await viewerToken(ctx, claimedUser);
+  const token = await viewerToken(ctx, ghRepo, claimedUser);
   if (!token) throw new Error("No GitHub credential available");
   const [owner, name] = ghRepo.split("/");
   const viewed: string[] = [];
@@ -132,11 +133,12 @@ export async function getPrViewedFiles(
 export async function setPrFileViewed(
   ctx: RouteContext,
   claimedUser: string | null,
+  ghRepo: string,
   prId: string,
   filePath: string,
   viewed: boolean,
 ): Promise<void> {
-  const token = await viewerToken(ctx, claimedUser);
+  const token = await viewerToken(ctx, ghRepo, claimedUser);
   if (!token) throw new Error("No GitHub credential available");
   const mutation = viewed
     ? `mutation($id: ID!, $path: String!) { markFileAsViewed(input: { pullRequestId: $id, path: $path }) { clientMutationId } }`

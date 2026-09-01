@@ -81,6 +81,12 @@ import {
   setLiveTypingPref,
 } from "../../lib/live-typing-pref";
 import {
+  getThinkingMessagesPref,
+  onThinkingMessagesChanged,
+  setThinkingMessagesPref,
+  type ThinkingMessagesPref,
+} from "../../lib/thinking-messages-pref";
+import {
   getReplySuggestionsPref,
   onReplySuggestionsChanged,
   setReplySuggestionsPref,
@@ -518,6 +524,15 @@ export function PreferencesPanel() {
     () => onTurnActivityChanged(() => setTurnActivity(getTurnActivityPrefs())),
     [],
   );
+  const [thinkingMessages, setThinkingMessages] =
+    useState<ThinkingMessagesPref>(getThinkingMessagesPref);
+  useEffect(
+    () =>
+      onThinkingMessagesChanged(() =>
+        setThinkingMessages(getThinkingMessagesPref()),
+      ),
+    [],
+  );
   const [liveTyping, setLiveTyping] = useState<boolean>(getLiveTypingPref);
   useEffect(
     () => onLiveTypingChanged(() => setLiveTyping(getLiveTypingPref())),
@@ -890,6 +905,21 @@ export function PreferencesPanel() {
                   { value: "open", label: "Open" },
                 ]}
                 onChange={setTurnWorkPref}
+              />
+            }
+          />
+          <SettingRow
+            title="Thinking messages"
+            control={
+              <Select
+                label="Thinking messages"
+                value={thinkingMessages}
+                options={[
+                  { value: "none", label: "None" },
+                  { value: "latest", label: "Latest" },
+                  { value: "all", label: "All" },
+                ]}
+                onChange={setThinkingMessagesPref}
               />
             }
           />

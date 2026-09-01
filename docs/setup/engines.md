@@ -72,6 +72,68 @@ remain supported when the grouped path is absent. Run `opensession doctor`
 after setup to verify that the engine and the default model have usable
 capacity.
 
+### Custom OpenAI-compatible providers
+
+A provider id Pi does not know runs when its entry in
+`~/.opensession/model-providers.json` declares the protocol. Only
+`openai-completions` is accepted, and it needs a base URL. Each provider under
+`providers.<id>` takes:
+
+| Field            | Meaning                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| `apiKey`         | Bearer key sent to the provider                                                                         |
+| `baseURL`        | OpenAI-compatible base URL, for example `https://gateway.example/v1`                                    |
+| `api`            | `openai-completions`; lets an id unknown to Pi and Open Session run                                     |
+| `name`           | Display name in Settings                                                                                |
+| `catalog`        | Per-model metadata keyed by model id (see below)                                                        |
+| `catalogFile`    | JSON file with more catalog rows; relative paths resolve next to `model-providers.json`                 |
+| `discoverModels` | `true` to read `GET {baseURL}/models` on save and from **Discover models** in Settings; picker ids only |
+| `discovered`     | Written by discovery: the last listed ids and any extended fields the gateway sent                      |
+
+A catalog row fills the fields a model unknown to every catalog would otherwise
+get from the conservative stub (131072 context, 32768 output tokens, text
+only, zero cost). Rows accept our camelCase names or the snake_case fields
+gateway model objects tend to carry: `name` or `display_name`, `contextWindow`
+or `context_length`, `maxTokens` or `max_output_tokens`, `input` or
+`input_modalities` (`["text", "image"]`), `reasoning`, `efforts` (the
+reasoning levels the gateway accepts, from `none`, `low`, `medium`, `high`,
+`xhigh`, `max`), and `cost` with `input`, `output`, `cacheRead` and
+`cacheWrite` in USD per million tokens. Layers apply weakest first: discovered
+fields, then `catalogFile`, then inline `catalog`. A row for a model id Pi or
+Open Session already knows overrides that entry.
+
+```json
+{
+  "providers": {
+    "my-gateway": {
+      "apiKey": "…",
+      "baseURL": "https://gateway.example/v1",
+      "api": "openai-completions",
+      "name": "My gateway",
+      "catalogFile": "my-gateway-catalog.json",
+      "catalog": {
+        "big-model": {
+          "name": "Big Model",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "input": ["text", "image"],
+          "efforts": ["low", "high"],
+          "cost": { "input": 1, "output": 4, "cacheRead": 0.1, "cacheWrite": 0 }
+        }
+      },
+      "discoverModels": true
+    }
+  },
+  "pickerModels": ["pi/my-gateway/big-model"]
+}
+```
+
+The catalog file holds the same rows, either as a map keyed by model id or as
+a list of objects with `id`. Discovery only adds ids to `pickerModels`; it
+never removes hand-written ones, and a failed poll leaves the file untouched.
+The stock OpenAI models object carries no limits or pricing, so keep those in
+the catalog. Settings writes preserve every field the form does not edit.
+
 ## Defaults and fallbacks
 
 **Settings → Providers** controls the default model and whether interactive

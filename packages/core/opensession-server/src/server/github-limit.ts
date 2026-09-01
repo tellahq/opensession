@@ -127,9 +127,11 @@ export function noteGhRateLimited(
   })();
 }
 
-/** Service token for direct REST calls. Missing App authority fails closed. */
+/** Service token for direct REST calls. Repository-specific calls must pass
+ * `repo` or `owner` so the token comes from that account's installation.
+ * Missing App authority fails closed. */
 export async function botGhToken(
-  opts: { write?: boolean } = {},
+  opts: { write?: boolean; repo?: string; owner?: string } = {},
 ): Promise<string | null> {
   const { githubToken } = await import("./github-app");
   return githubToken(opts);

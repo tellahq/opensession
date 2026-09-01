@@ -279,7 +279,7 @@ export const githubPrHost: PrHost = {
   // instance polls for free. Moved from sessions.ts (repoPrsUnchanged) —
   // the caller keeps owning cursor persistence.
   async changedSince(repo, cursor) {
-    const token = await botGhToken();
+    const token = await botGhToken({ repo });
     if (!token) return { changed: true, cursor };
     try {
       const resp = await fetchWithTimeout(

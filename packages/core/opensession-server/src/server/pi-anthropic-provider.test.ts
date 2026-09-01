@@ -1147,4 +1147,36 @@ describe("pickBridgeAccount pool mode (no designation — picks like pi)", () =>
     const anonymous = pickBridgeAccount("claude-sonnet-5");
     expect((anonymous as any).id).toBe("pool-shared");
   });
+
+  test("a sticky account beats the least-used round-robin while usable", () => {
+    designate([]);
+    seedAccounts(["pool-sticky-a", "pool-sticky-b", "pool-sticky-c"]);
+    for (const id of ["pool-sticky-a", "pool-sticky-b", "pool-sticky-c"])
+      accounts.__setUsageCacheForTest(id, freshUsage);
+    // Consume the round-robin turn on the sticky account so the plain pick
+    // would move elsewhere; the sticky preference must hold it in place.
+    expect((pickBridgeAccount("claude-sonnet-5") as any).id).toBe(
+      "pool-sticky-a",
+    );
+    expect(
+      (
+        pickBridgeAccount("claude-sonnet-5", {
+          stickyId: "pool-sticky-a",
+        }) as any
+      ).id,
+    ).toBe("pool-sticky-a");
+    // Burned this turn: the walk moves on instead of retrying the sticky one.
+    const walked = pickBridgeAccount("claude-sonnet-5", {
+      stickyId: "pool-sticky-a",
+      excludeIds: ["pool-sticky-a"],
+    });
+    expect((walked as any).id).not.toBe("pool-sticky-a");
+    // Exhausted: falls through to the least-used pick.
+    accounts.__setUsageCacheForTest("pool-sticky-a", maxedUsage);
+    const moved = pickBridgeAccount("claude-sonnet-5", {
+      stickyId: "pool-sticky-a",
+    });
+    expect((moved as any).id).not.toBe("pool-sticky-a");
+    expect("error" in moved).toBe(false);
+  });
 });
