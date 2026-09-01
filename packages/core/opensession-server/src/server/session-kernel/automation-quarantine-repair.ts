@@ -161,6 +161,22 @@ export function repairSettledAutomationQuarantines(
         });
         continue;
       }
+      const releaseReady = host.call(
+        "releaseQuarantineAfterRunStatePreflight",
+        [
+          sessionId,
+          verdict.settleAs,
+          quarantine.commandKind,
+          quarantine.reason,
+        ],
+      ) as boolean;
+      if (!releaseReady) {
+        result.skipped.push({
+          sessionId,
+          reason: "quarantine release preflight refused",
+        });
+        continue;
+      }
       host.call("setRunState", [
         {
           sessionId,

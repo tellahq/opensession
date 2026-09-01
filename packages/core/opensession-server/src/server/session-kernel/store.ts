@@ -1774,6 +1774,41 @@ export class SessionKernelStore {
     reason?: string,
     verifiedCommittedOutboxSettlement = false,
   ): boolean {
+    return this.quarantineRepairEvidenceForRunState(
+      sessionId,
+      this.runState(sessionId).state,
+      commandKind,
+      reason,
+      verifiedCommittedOutboxSettlement,
+    );
+  }
+
+  releaseQuarantineAfterRunStatePreflight(
+    sessionId: string,
+    settledRunState: string,
+    expectedCommandKind: string,
+    expectedReason: string,
+  ): boolean {
+    const quarantine = this.quarantinedSession(sessionId);
+    return (
+      quarantine?.commandKind === expectedCommandKind &&
+      quarantine.reason === expectedReason &&
+      this.quarantineRepairEvidenceForRunState(
+        sessionId,
+        settledRunState,
+        quarantine.commandKind,
+        quarantine.reason,
+      )
+    );
+  }
+
+  private quarantineRepairEvidenceForRunState(
+    sessionId: string,
+    runState: string,
+    commandKind: string,
+    reason?: string,
+    verifiedCommittedOutboxSettlement = false,
+  ): boolean {
     const recoverableSettlement =
       this.recoverableGatewaySettlementCommands(sessionId, commandKind) ??
       this.recoverableDeliverySettlementCommands(
@@ -1794,7 +1829,7 @@ export class SessionKernelStore {
         "ask_blocked",
         "interrupted",
         "reattaching",
-      ].includes(this.runState(sessionId).state) &&
+      ].includes(runState) &&
       !recoverableSettlement
     )
       return false;

@@ -249,6 +249,40 @@ describe("offline repair", () => {
     }
   });
 
+  test("release refusal leaves run state untouched", () => {
+    const centralPath = fixture([{ sessionId: "release-refused" }]);
+    const seed = new SessionKernelStore(centralPath);
+    seed.enqueueOutbox(
+      "release-refused",
+      "human_ask_deliver",
+      { askId: "unproven-effect", skipUi: false },
+      "unproven-effect",
+    );
+    const before = seed.runState("release-refused");
+    seed.close();
+
+    const result = repairSettledAutomationQuarantines({
+      centralPath,
+      ledgerStatus: ledger({ "release-refused": "ok" }),
+      journalBusy: noJournal,
+    });
+
+    expect(result.repaired).toEqual([]);
+    expect(result.skipped).toEqual([
+      {
+        sessionId: "release-refused",
+        reason: "quarantine release preflight refused",
+      },
+    ]);
+    const store = new SessionKernelStore(centralPath);
+    try {
+      expect(store.runState("release-refused")).toEqual(before);
+      expect(store.quarantinedSession("release-refused")).toBeTruthy();
+    } finally {
+      store.close();
+    }
+  });
+
   test("a dry run changes nothing", () => {
     const centralPath = fixture([{ sessionId: "auto-done" }]);
     const result = repairSettledAutomationQuarantines({
