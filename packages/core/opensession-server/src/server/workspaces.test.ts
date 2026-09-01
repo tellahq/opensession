@@ -43,7 +43,7 @@ describe("default workspace model settings", () => {
       ),
     ).toMatchObject({
       label: "Orchestrator · Fable + Sol",
-      lead: { model: "pi/anthropic/claude-fable-5", effort: "high" },
+      lead: { model: "pi/anthropic/claude-fable-5-1", effort: "high" },
       supporting: [
         {
           model: "pi/openai/gpt-5.6-sol",

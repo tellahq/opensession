@@ -790,7 +790,7 @@ describe("Claude account notice probe", () => {
     ).toBe(true);
     expect(
       shouldDeferClaudeText(
-        "You're out of usage credits. Run /usage-credits to keep using Fable 5 or /model to switch models.",
+        "You're out of usage credits. Run /usage-credits to keep using Fable 5.1 or /model to switch models.",
       ),
     ).toBe(true);
     expect(

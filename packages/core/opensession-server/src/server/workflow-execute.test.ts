@@ -354,17 +354,17 @@ describe("runAgentCollect", () => {
         {
           type: "init",
           sessionId: "oc-a",
-          model: "pi/anthropic/claude-fable-5",
+          model: "pi/anthropic/claude-fable-5-1",
         },
         { type: "text_chunk", text: "I started answering but " },
         {
           type: "model_switch",
-          fromModel: "pi/anthropic/claude-fable-5",
+          fromModel: "pi/anthropic/claude-fable-5-1",
           toModel: "pi/anthropic/claude-sonnet-5",
         },
         {
           type: "text_chunk",
-          text: "\n\n[runner] pi/anthropic/claude-fable-5 usage exhausted on all accounts; falling back to pi/anthropic/claude-sonnet-5.\n\n",
+          text: "\n\n[runner] pi/anthropic/claude-fable-5-1 usage exhausted on all accounts; falling back to pi/anthropic/claude-sonnet-5.\n\n",
         },
         {
           type: "init",

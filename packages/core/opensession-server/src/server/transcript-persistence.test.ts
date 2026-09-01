@@ -39,7 +39,7 @@ describe("transcript persistence", () => {
         "hi",
         "a1",
         "2026-01-01T00:00:01.000Z",
-        "pi/anthropic/claude-fable-5",
+        "pi/anthropic/claude-fable-5-1",
       ),
       transcriptLineAssistantText(
         "**Checking the repository**",

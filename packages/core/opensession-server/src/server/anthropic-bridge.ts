@@ -45,22 +45,13 @@
  *  - Request hygiene: bodies over 10MB are refused (413), and a per-boot
  *    rolling per-account counter caps requests/hour (`bridgeMaxRequestsPerHour`
  *    in ~/.opensession-model-providers.json, default 300 → 429 past it; estimated
- *    tokens are tracked alongside for the audit trail). The ultimate backstop
- *    is Anthropic's own per-account extra-usage credit ceiling: bridge traffic
- *    bills to the designated account's extra-usage credits (see below), so
- *    even a runaway client can never spend past the credits that account has
- *    enabled at claude.ai/settings/usage.
+ *    tokens are tracked alongside for the audit trail). Account selection stops
+ *    at plan limits by default. A run may continue on paid credits only when it
+ *    explicitly enables `usageCredits` and the account has credit headroom.
  *
- * Billing reality (verified live, 2026-07-08): Anthropic's server classifies
- * these requests as third-party-app traffic (it fingerprints the Pi
- * system prompt content — a claude_code preset wrapper does NOT change the
- * verdict) and answers `400 "Third-party apps now draw from your extra
- * usage, not your plan limits"` unless the account has extra-usage credits
- * enabled at claude.ai/settings/usage. So the designated bridge account MUST
- * have extra usage enabled, and bridge traffic bills to those credits, never
- * plan limits. We deliberately do NOT scrub the fingerprints (the reference
- * ecosystem's scrub plugin does) — that's classifier evasion, the same bucket
- * as the OAuth spoofing the plan rules out.
+ * Billing behavior (verified live, 2026-08-06): this SDK mapping is accepted as
+ * Claude Code plan traffic on an account with extra usage disabled. It uses the
+ * same no-op tool registration and PreToolUse capture pattern as Meridian.
  *
  * Known approximations (documented, acceptable for a bridge):
  *  - No token-level streaming: streamed responses open the SSE immediately,

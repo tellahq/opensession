@@ -31,7 +31,6 @@ export const EFFORTS = [
 
 const PRIMARY_MODEL_IDS = [
   "claude-fable-5-1",
-  "claude-fable-5",
   "claude-opus-5",
   "claude-sonnet-5",
   "claude-haiku-4-5",
@@ -143,7 +142,7 @@ export function workspacePresetLabel(
   );
 }
 
-/** Display name without the vendor noise: "Claude Fable 5" → "Fable 5",
+/** Display name without the vendor noise: "Claude Fable 5.1" → "Fable 5.1",
  * "GPT-5.5 (Codex)" → "GPT-5.5", "engine/anthropic/claude-sonnet-5" →
  * "Sonnet 5". The engine is an implementation detail — it never shows in a
  * model's name. */
@@ -212,7 +211,6 @@ const MODEL_TAIL_ORDER = [
   "fable",
   "sol",
   "claude-fable-5-1",
-  "claude-fable-5",
   "claude-opus-5",
   "claude-opus-4-8",
   "claude-sonnet-5",

@@ -277,10 +277,10 @@ describe("resolvePiRoutedModel", () => {
     // agent-runner dispatches presets as their concrete model; the stored
     // session id is where the preset (and its oracle/effort) still lives.
     expect(
-      resolvePiRoutedModel("pi/anthropic/claude-fable-5", "dial/ultra"),
+      resolvePiRoutedModel("pi/anthropic/claude-fable-5-1", "dial/ultra"),
     ).toMatchObject({
       providerID: "anthropic",
-      modelID: "claude-fable-5",
+      modelID: "claude-fable-5-1",
       dial: { id: "dial/ultra" },
       effort: "high",
     });
@@ -325,7 +325,7 @@ const WS_PRESETS: Record<string, ResolvedWorkspaceModelPreset> = {
   lead: {
     id: "pi/workspace-preset/ws-test/lead",
     label: "Fable leads",
-    model: "pi/anthropic/claude-fable-5",
+    model: "pi/anthropic/claude-fable-5-1",
     effort: "high",
     enginePresetId: "orchestrator/fable",
     note: "## Workspace model preset · Fable leads",
@@ -366,7 +366,7 @@ describe("resolvePiPresetWiring (workspace presets)", () => {
       WS_PRESETS.lead,
     );
     expect(out).toMatchObject({
-      modelID: "claude-fable-5",
+      modelID: "claude-fable-5-1",
       orchestrator: { id: "orchestrator/fable" },
       effort: "high",
     });
@@ -542,7 +542,7 @@ describe("resolvePiDialModel", () => {
     const resolved = resolvePiDialModel("pi/dial/ultra");
     expect(resolved).toMatchObject({
       providerID: "anthropic",
-      modelID: "claude-fable-5",
+      modelID: "claude-fable-5-1",
       dial: { id: "dial/ultra", effort: "high", oracleAgent: "oracle-sol" },
     });
   });

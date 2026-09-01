@@ -36,7 +36,7 @@ import {
 const STATE_DIR = stateDir("github");
 /** Distillation is judgment work (which patterns generalize, which are noise) —
  *  it runs at most twice a day per repo, so use a frontier model. */
-const DISTILL_MODEL = "pi/anthropic/claude-fable-5";
+const DISTILL_MODEL = "pi/anthropic/claude-fable-5-1";
 const TICK_MS = 60 * 60 * 1000;
 
 function repoKey(ghRepo?: string): string {

@@ -5,7 +5,7 @@ describe("isTimelineOnlyRunnerNotice", () => {
   test("recognizes legacy model fallback stream chunks", () => {
     expect(
       isTimelineOnlyRunnerNotice(
-        "\n\n[runner] Fable 5 is out of usage on all accounts; falling back to GPT-5.6 Sol.\n\n",
+        "\n\n[runner] Fable 5.1 is out of usage on all accounts; falling back to GPT-5.6 Sol.\n\n",
       ),
     ).toBe(true);
     expect(

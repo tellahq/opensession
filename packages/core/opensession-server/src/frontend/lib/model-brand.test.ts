@@ -17,7 +17,7 @@ describe("modelBrandKey", () => {
   test("maps every distinct vendor in combo compositions", () => {
     expect(
       modelBrandKeys("pi/dial/ultra", "pi", [
-        "pi/anthropic/claude-fable-5",
+        "pi/anthropic/claude-fable-5-1",
         "pi/openai/gpt-5.6-sol",
       ]),
     ).toEqual(["claude", "codex"]);

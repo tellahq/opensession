@@ -133,9 +133,22 @@ export function normalizeModelEffort(
   return supported.includes("high") ? "high" : supported[0];
 }
 
+/** Retired Claude slugs upgrade persisted sessions to the current release. */
+const RETIRED_CLAUDE_REROUTE: Record<string, string> = {
+  "claude-fable-5": "claude-fable-5-1",
+};
+
+function rerouteRetiredClaudeModel(model: string): string {
+  const segments = model.split("/");
+  const tail = segments.at(-1) || "";
+  const replacement = RETIRED_CLAUDE_REROUTE[tail];
+  if (!replacement) return model;
+  segments[segments.length - 1] = replacement;
+  return segments.join("/");
+}
+
 export const DEFAULT_BRIDGE_PICKER_MODELS = [
   "claude-fable-5-1",
-  "claude-fable-5",
   "claude-opus-5",
   "claude-sonnet-5",
   "claude-haiku-4-5",
@@ -151,6 +164,8 @@ export const KNOWN_MODELS: ModelInfo[] = [
     label: "Claude Fable 5.1",
     aliases: ["fable", "fable5.1"],
   },
+  // Keep the old id resolvable for persisted sessions. Dispatch upgrades it
+  // to Fable 5.1 through RETIRED_CLAUDE_REROUTE.
   {
     id: "claude-fable-5",
     provider: "claude",
@@ -290,11 +305,11 @@ export const DIAL_ORACLE_AGENTS: Record<
   { model: string; variant: SessionEffort; label: string; description: string }
 > = {
   "oracle-fable": {
-    model: "anthropic/claude-fable-5",
+    model: "anthropic/claude-fable-5-1",
     variant: "high",
-    label: "Claude Fable 5",
+    label: "Claude Fable 5.1",
     description:
-      "Oracle: senior-engineer second opinion on Claude Fable 5 — plan review, " +
+      "Oracle: senior-engineer second opinion on Claude Fable 5.1 — plan review, " +
       "architecture decisions, deep debugging, reviewing significant work. Read-only advisor.",
   },
   "oracle-sol": {
@@ -372,8 +387,8 @@ export const DIAL_PRESETS: DialPreset[] = [
     id: "dial/ultra",
     label: "Dial · Ultra",
     description:
-      "The most capable combo for hard, open-ended tasks — Fable 5 high with a Sol-xhigh oracle",
-    model: "claude-fable-5",
+      "The most capable combo for hard, open-ended tasks — Fable 5.1 high with a Sol-xhigh oracle",
+    model: "claude-fable-5-1",
     effort: "high",
     oracleAgent: "oracle-sol",
   },
@@ -381,7 +396,7 @@ export const DIAL_PRESETS: DialPreset[] = [
     id: "dial/high",
     label: "Dial · High",
     description:
-      "Deep reasoning for hard tasks — Sol at extra-high effort with a Fable 5-high oracle",
+      "Deep reasoning for hard tasks — Sol at extra-high effort with a Fable 5.1-high oracle",
     model: "gpt-5.6-sol",
     effort: "xhigh",
     oracleAgent: "oracle-fable",
@@ -408,7 +423,7 @@ export const DIAL_PRESETS: DialPreset[] = [
     id: "dial/opus-fable",
     label: "Opus 5 + Fable oracle",
     description:
-      "Custom combo — Opus 5 at extra-high effort with a Fable 5-high oracle",
+      "Custom combo — Opus 5 at extra-high effort with a Fable 5.1-high oracle",
     model: "claude-opus-5",
     effort: "xhigh",
     oracleAgent: "oracle-fable",
@@ -546,9 +561,9 @@ export function orchestratorWorkerForBridge(
 export const ORCHESTRATOR_PRESETS: OrchestratorPreset[] = [
   {
     id: "orchestrator/fable",
-    label: "Orchestrator · Fable 5",
-    description: "Fable 5 high leads planning, review, and integration",
-    model: "claude-fable-5",
+    label: "Orchestrator · Fable 5.1",
+    description: "Fable 5.1 high leads planning, review, and integration",
+    model: "claude-fable-5-1",
     effort: "high",
     workerAgents: ["worker", "worker-fast"],
   },
@@ -716,8 +731,8 @@ export function refreshPickerModels(): void {
 }
 refreshPickerModels();
 
-/** Per-provider defaults: claude-fable-5 for Anthropic, gpt-5.6-sol for OpenAI. */
-export const DEFAULT_CLAUDE_MODEL = "claude-fable-5";
+/** Per-provider defaults: claude-fable-5-1 for Anthropic, gpt-5.6-sol for OpenAI. */
+export const DEFAULT_CLAUDE_MODEL = "claude-fable-5-1";
 export const DEFAULT_CODEX_MODEL = "gpt-5.6-sol";
 export const BEST_AVAILABLE_CODEX_MODEL = "codex-best-available";
 
@@ -736,7 +751,6 @@ const CODEX_MODEL_ORDER = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
  */
 const FALLBACK_TIER: Record<string, number> = {
   "claude-fable-5-1": 3,
-  "claude-fable-5": 3,
   "gpt-5.6-sol": 3,
   "claude-opus-5": 3,
   "gpt-5.6-terra": 3,
@@ -1006,6 +1020,7 @@ export function toPiModel(model?: string | null): string | undefined {
   if (requested.startsWith("claude/") || requested.startsWith("codex/")) {
     requested = requested.slice(requested.indexOf("/") + 1);
   }
+  requested = rerouteRetiredClaudeModel(requested);
   const pickerId = requested.startsWith("pi/")
     ? requested.slice("pi/".length)
     : requested;
@@ -1237,7 +1252,8 @@ export function resolveModel(input: string): ModelInfo | null {
   if (!value) return null;
   for (const model of KNOWN_MODELS) {
     if (model.id === value || model.aliases.includes(value)) {
-      const replacement = RETIRED_CODEX_REROUTE[model.id];
+      const replacement =
+        RETIRED_CLAUDE_REROUTE[model.id] || RETIRED_CODEX_REROUTE[model.id];
       return replacement
         ? KNOWN_MODELS.find((candidate) => candidate.id === replacement)!
         : model;
@@ -1310,7 +1326,6 @@ export function modelLabel(model?: string | null): string {
 
 const CONTEXT_WINDOWS: Record<string, number> = {
   "claude-fable-5-1": 1_000_000,
-  "claude-fable-5": 1_000_000,
   "claude-opus-5": 1_000_000,
   "claude-opus-4-8": 1_000_000,
   "claude-opus-4-7": 1_000_000,

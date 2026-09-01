@@ -182,7 +182,7 @@ describe("fake engine through runAgent", () => {
         prompt: "keep going",
         cwd: "/tmp",
         mcpServers: [],
-        model: "pi/anthropic/claude-fable-5",
+        model: "pi/anthropic/claude-fable-5-1",
         fallbackModel: "claude-opus-4-8",
       }),
     );
@@ -195,11 +195,11 @@ describe("fake engine through runAgent", () => {
     ]);
     expect(events[1]).toMatchObject({
       type: "model_switch",
-      fromModel: "pi/anthropic/claude-fable-5",
+      fromModel: "pi/anthropic/claude-fable-5-1",
       toModel: "pi/openai/gpt-5.6-sol",
     });
     expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[0].model).toBe("pi/anthropic/claude-fable-5");
+    expect(fake.calls[0].model).toBe("pi/anthropic/claude-fable-5-1");
     expect(fake.calls[1].model).toBe("pi/openai/gpt-5.6-sol");
     expect(fake.calls[1].sessionId).toBeUndefined();
   });

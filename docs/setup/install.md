@@ -371,7 +371,7 @@ credentials its setup page marks as required. Common operator-facing variables:
 | `OPENSESSION_CLAUDE_ACCOUNTS_PATH`               | `~/.opensession/claude-accounts.json` | Claude account store override                                                   |
 | `OPENSESSION_PI_CONFIG`                          | `~/.opensession/pi.json`              | Pi engine config path override (primarily a test/verification seam)             |
 | `OPENSESSION_MODEL_PROVIDERS_CONFIG`             | `~/.opensession/model-providers.json` | provider API-key config path override (primarily a test/verification seam)      |
-| `OPENSESSION_MODEL`                              | `claude-fable-5`                      | default model, below the persisted UI override                                  |
+| `OPENSESSION_MODEL`                              | `claude-fable-5-1`                    | default model, below the persisted UI override                                  |
 | `OPENSESSION_FALLBACK_MODEL`                     | `claude-opus-5`                       | global fallback model; `none` disables                                          |
 | `OPENSESSION_HAIKU_FALLBACK_MODEL`               | `gpt-5.6-luna`                        | OpenAI fallback for exhausted Haiku runs and derived one-shots; `none` disables |
 | `OPENSESSION_MCP_CONFIG`                         | `<checkout>/mcp-config.json`          | MCP config path override                                                        |
@@ -447,7 +447,7 @@ GitHub bot identities are also injected into the SPA bootstrap.
 
 ## 6. Model capacity
 
-The default `claude-fable-5` model needs a Claude subscription account. Mint a
+The default `claude-fable-5-1` model needs a Claude subscription account. Mint a
 token on a Claude Max login:
 
 ```sh
