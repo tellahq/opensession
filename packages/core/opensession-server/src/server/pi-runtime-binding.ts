@@ -1,6 +1,7 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { CodexAccount } from "./codex-accounts";
 import type { SeededOpenaiAuth } from "./openai-auth";
+import type { ModelProviderConfig } from "./model-providers";
 
 export type PiSdk = typeof import("@earendil-works/pi-coding-agent");
 type PiModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
@@ -44,10 +45,7 @@ export interface PiRuntimeBinding extends PiRuntimeAccountEvidence {
   usesOpenaiOAuth: boolean;
 }
 
-interface ConfiguredProvider {
-  apiKey?: string;
-  baseURL?: string;
-}
+type ConfiguredProvider = ModelProviderConfig;
 
 interface OpenaiPickOut {
   reason?: string;
@@ -86,6 +84,7 @@ export interface PiRuntimeBindingDependencies {
     modelID: string;
     apiKey: string;
     baseURL?: string;
+    configured?: ModelProviderConfig;
     builtinModelIds: readonly string[];
   }) => { config: PiProviderConfigInput } | { error: string };
   now?: () => number;
@@ -301,6 +300,7 @@ export async function createPiRuntimeBinding(
       modelID: input.modelID,
       apiKey: provider.apiKey!,
       baseURL: provider.baseURL,
+      configured: provider,
       builtinModelIds: runtime
         .getModels(input.providerID)
         .map((candidate) => candidate.id),

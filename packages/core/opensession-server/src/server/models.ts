@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
   canonicalProviderPickerModelId,
+  configuredCatalogModel,
   configuredPickerModels,
   modelProviders,
   waferModelEfforts,
@@ -114,6 +115,9 @@ export function modelEfforts(model: string): SessionEffort[] {
     if (efforts.length) return [...efforts];
   }
   if (provider === "meta" && slug === "muse-spark-1.1") return OPENAI_EFFORTS;
+  // An operator's catalog row names the levels its gateway accepts.
+  const configured = provider ? configuredCatalogModel(provider, slug) : null;
+  if (configured?.efforts?.length) return [...configured.efforts];
   return [];
 }
 
@@ -642,6 +646,13 @@ export function piModelLabel(id: string): string {
     id.startsWith("pi/") ? id : `pi/${id}`,
   );
   const tail = canonical.split("/").pop() || id;
+  // A configured catalog row's name beats the generic prettifier.
+  const [, provider, ...rest] = canonical.split("/");
+  const configured =
+    provider && rest.length
+      ? configuredCatalogModel(provider, rest.join("/"))
+      : undefined;
+  if (configured?.name) return configured.name;
   const native = KNOWN_MODELS.find((m) => m.provider !== "pi" && m.id === tail);
   return (native?.label || prettifyModelSlug(tail))
     .replace(/^Claude\s+/i, "")

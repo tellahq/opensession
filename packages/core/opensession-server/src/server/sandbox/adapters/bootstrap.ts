@@ -401,6 +401,16 @@ export function projectRemoteModelProviderConfig(
         projected.apiKey = provider.apiKey;
       if (typeof provider.baseURL === "string" && provider.baseURL)
         projected.baseURL = provider.baseURL;
+      // A custom OpenAI-compatible gateway needs its protocol and catalog in
+      // the guest too. `catalogFile` stays host-side (a host path), so the
+      // in-guest runner sees only the inline and discovered rows.
+      if (typeof provider.api === "string" && provider.api)
+        projected.api = provider.api;
+      if (typeof provider.name === "string" && provider.name)
+        projected.name = provider.name;
+      if (jsonRecord(provider.catalog)) projected.catalog = provider.catalog;
+      if (jsonRecord(provider.discovered))
+        projected.discovered = provider.discovered;
       if (Object.keys(projected).length) settingsProviders[id] = projected;
     }
   }

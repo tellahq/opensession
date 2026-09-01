@@ -460,8 +460,10 @@ third-party provider API key and select one of its models. Subscription account
 stores live at `~/.opensession/claude-accounts.json` and
 `~/.opensession/codex-accounts.json`; provider keys live at
 `~/.opensession/model-providers.json`. All are server-managed mode-`0600`
-files, so use the UI rather than hand-editing them. Pi configuration is covered
-in [engines.md](engines.md).
+files, so use the UI rather than hand-editing them. The exception is a custom
+OpenAI-compatible gateway's per-model catalog, which is hand-written and
+preserved across Settings writes. Pi configuration, including custom providers
+and catalogs, is covered in [engines.md](engines.md).
 
 ## 7. `mcp-config.json`
 

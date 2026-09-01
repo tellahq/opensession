@@ -21,8 +21,9 @@ import {
   settingsInputClass,
 } from "../ui/settings";
 import { Menu } from "../ui/menu";
+import { Checkbox } from "../ui/checkbox";
 import { IconTile } from "./BrandTile";
-import { IconDotsHorizontal, IconPlus, IconTrash } from "./icons";
+import { IconDotsHorizontal, IconPlus, IconSearch, IconTrash } from "./icons";
 import { errorMessage } from "../lib/error-message";
 
 // Settings → Model providers: third-party Pi providers (xai, openrouter,
@@ -35,6 +36,15 @@ interface ProviderInfo {
   id: string;
   apiKeyMasked: string;
   baseURL?: string;
+  /** Set when the id is a custom OpenAI-compatible gateway rather than a
+   *  slug Pi already knows. */
+  api?: string;
+  name?: string;
+  discoverModels?: boolean;
+  discoveredAt?: string;
+  catalogFile?: string;
+  /** Rows in the operator catalog (inline, file, or discovered). */
+  catalogModels: number;
   /** Full picker ids (pi/<provider>/<model>) registered for it. */
   models: string[];
 }
@@ -74,6 +84,25 @@ export function ModelProvidersPanel() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function handleDiscover(p: ProviderInfo) {
+    await (async () => {
+      const res = await fetch(
+        `${BASE_PATH}/api/settings/model-providers/${encodeURIComponent(p.id)}/discover`,
+        { method: "POST" },
+      );
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+      toast(
+        `${body.models.length} models listed, ${body.added} added to the picker`,
+      );
+      load();
+    })().catch(async (error) => {
+      toast(errorMessage(error, "Failed to discover models"), {
+        variant: "error",
+      });
+    });
+  }
 
   async function handleRemove(p: ProviderInfo) {
     if (
@@ -139,10 +168,21 @@ export function ModelProvidersPanel() {
             <SettingRow key={p.id} className="items-start gap-x-3">
               <IconTile name={p.id} size={28} />
               <SettingRowText>
-                <SettingRowTitle>{p.id}</SettingRowTitle>
+                <SettingRowTitle>
+                  {p.name || p.id}
+                  {p.name && (
+                    <span className="ml-1.5 text-meta text-faint">{p.id}</span>
+                  )}
+                </SettingRowTitle>
                 <SettingRowDescription className="truncate">
                   {p.apiKeyMasked || "no API key stored"}
                   {p.baseURL && ` · ${p.baseURL}`}
+                  {p.api && " · OpenAI-compatible"}
+                  {p.catalogModels > 0 &&
+                    ` · ${p.catalogModels} catalog ${
+                      p.catalogModels === 1 ? "row" : "rows"
+                    }`}
+                  {p.discoverModels && " · discovery on"}
                 </SettingRowDescription>
                 {p.models.length > 0 ? (
                   <div className="mt-1.5 flex flex-wrap gap-1">
@@ -172,6 +212,12 @@ export function ModelProvidersPanel() {
                     <IconDotsHorizontal size={18} />
                   </Menu.Trigger>
                   <Menu.Popup align="end" sideOffset={4}>
+                    {p.baseURL && (
+                      <Menu.Item onClick={() => handleDiscover(p)}>
+                        <IconSearch size={16} />
+                        Discover models
+                      </Menu.Item>
+                    )}
                     <Menu.Item
                       onClick={() => handleRemove(p)}
                       className="text-red data-[highlighted]:bg-red-soft"
@@ -189,11 +235,13 @@ export function ModelProvidersPanel() {
 
       <SettingsHint>
         Any provider the Pi engine supports (xAI, OpenRouter, Groq, Mistral, …)
-        with your API key. Keys are stored on the server (0600) and only ever
-        shown masked. Changes apply to new session runs immediately, and saved
-        models appear in the picker without a restart. To update a provider, add
-        it again with the same id. The key, base URL and model list are
-        replaced.
+        with your API key, or any OpenAI-compatible gateway with its base URL.
+        Keys are stored on the server (0600) and only ever shown masked. Changes
+        apply to new session runs immediately, and saved models appear in the
+        picker without a restart. To update a provider, add it again with the
+        same id. The key, base URL and model list are replaced. Discover models
+        reads the gateway's model list into the picker. Per-model limits and
+        pricing come from a catalog in model-providers.json.
       </SettingsHint>
     </>
   );
@@ -210,11 +258,15 @@ function AddProviderForm({
   const [apiKey, setApiKey] = useState("");
   const [baseURL, setBaseURL] = useState("");
   const [models, setModels] = useState("");
+  const [custom, setCustom] = useState(false);
+  const [name, setName] = useState("");
+  const [discover, setDiscover] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const cleanId = id.trim().toLowerCase();
   const idValid = /^[a-z0-9-]+$/.test(cleanId);
+  const needsBaseURL = (custom || discover) && !baseURL.trim();
 
   async function handleSave() {
     setSaving(true);
@@ -234,12 +286,23 @@ function AddProviderForm({
             ...(apiKey.trim() ? { apiKey: apiKey.replace(/\s+/g, "") } : {}),
             ...(baseURL.trim() ? { baseURL: baseURL.trim() } : {}),
             ...(modelIds.length ? { models: modelIds } : {}),
+            api: custom ? "openai-completions" : "",
+            ...(name.trim() ? { name: name.trim() } : {}),
+            discoverModels: discover,
           }),
         },
       );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-      toast(`Provider ${cleanId} saved`);
+      if (body.discoveryError) {
+        toast(`Provider ${cleanId} saved. ${body.discoveryError}`, {
+          variant: "error",
+        });
+      } else if (body.discovery) {
+        toast(
+          `Provider ${cleanId} saved, ${body.discovery.models.length} models discovered`,
+        );
+      } else toast(`Provider ${cleanId} saved`);
       onSaved();
     })().catch(async (error) => {
       setError(errorMessage(error, "Failed to save provider"));
@@ -251,10 +314,10 @@ function AddProviderForm({
     <SettingsForm>
       <SettingsFormTitle>Add provider</SettingsFormTitle>
       <SettingRowDescription className="-mt-2 mb-3">
-        The provider id must match pi's slug for it (xai, openrouter, groq, …).
-        Models are registered in the picker as{" "}
-        <code>pi/&lt;provider&gt;/&lt;model&gt;</code>. List the provider's own
-        model ids, e.g. <code>grok-4</code> for xai.
+        Use pi's slug for a known provider (xai, openrouter, groq, …), or any id
+        with a base URL for an OpenAI-compatible gateway. Models are registered
+        in the picker as <code>pi/&lt;provider&gt;/&lt;model&gt;</code>. List
+        the provider's own model ids, e.g. <code>grok-4</code> for xai.
       </SettingRowDescription>
 
       <SettingsFormRow>
@@ -307,6 +370,37 @@ function AddProviderForm({
         </SettingsField>
       </SettingsFormRow>
 
+      <SettingsFormRow>
+        <SettingsField>
+          Display name (optional)
+          <input
+            className={settingsInputClass}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My gateway"
+          />
+        </SettingsField>
+        <div className="flex flex-col justify-end gap-2 pb-1.5">
+          <label className="flex cursor-pointer items-center gap-2 text-label">
+            <Checkbox
+              checked={custom}
+              onCheckedChange={(v) => setCustom(v === true)}
+            />
+            OpenAI-compatible gateway (id not known to pi)
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-label">
+            <Checkbox
+              checked={discover}
+              onCheckedChange={(v) => setDiscover(v === true)}
+            />
+            Discover models from /v1/models on save
+          </label>
+        </div>
+      </SettingsFormRow>
+      {needsBaseURL && (
+        <SettingsHint>A base URL is required for these options.</SettingsHint>
+      )}
+
       {error && <InlineAlert>{error}</InlineAlert>}
 
       <SettingsFormActions>
@@ -316,7 +410,9 @@ function AddProviderForm({
         <Button
           variant="primary"
           onClick={handleSave}
-          disabled={saving || !cleanId || !idValid || !apiKey.trim()}
+          disabled={
+            saving || !cleanId || !idValid || !apiKey.trim() || needsBaseURL
+          }
         >
           {saving ? "Saving…" : "Save provider"}
         </Button>

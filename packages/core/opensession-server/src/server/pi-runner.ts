@@ -55,9 +55,14 @@ import {
 } from "./runner-shared";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import {
+  FALLBACK_CONTEXT_WINDOW,
+  FALLBACK_MAX_TOKENS,
+  configuredProviderCatalog,
   modelProviders,
   piProviderCatalog,
   readModelProviderConfig,
+  type ModelProviderConfig,
+  type PiProviderCatalog,
 } from "./model-providers";
 import { markCodexExhausted, type CodexAccount } from "./codex-accounts";
 import { pickAccount as pickClaudeAccount } from "./claude-accounts";
@@ -359,39 +364,58 @@ export function piDialOracleAgent(
  * Model metadata comes from Pi's built-in provider catalog when Pi knows the
  * provider (Cerebras, Moonshot, xAI, and others). piProviderCatalog supplies a
  * provider Pi does not know (Wafer) and models newer than its bundled snapshot
- * (GLM-5.3 on OpenRouter). A provider in neither catalog fails clearly rather
- * than guessing a protocol. A model id newer than both catalogs gets a
- * conservative fallback entry: zero cost because unknown pricing must
- * under-report, plus safe window and output floors. It inherits the provider's
- * API and base URL, so catalog lag never blocks a run.
+ * (GLM-5.3 on OpenRouter). The operator's config adds a third layer: a
+ * declared `api` makes a slug unknown to both catalogs runnable as a plain
+ * OpenAI-compatible provider at its `baseURL`, and its catalog rows (inline,
+ * file, or discovered) override the other layers per model id. A provider in
+ * no catalog fails clearly rather than guessing a protocol. A model id in none
+ * of them gets a conservative fallback entry: zero cost because unknown
+ * pricing must under-report, plus safe window and output floors. It inherits
+ * the provider's API and base URL, so catalog lag never blocks a run.
  */
 export function buildPiThirdPartyProviderPlan(input: {
   providerID: string;
   modelID: string;
   apiKey: string;
   baseURL?: string;
+  /** The provider's stored config beyond the key and base URL. */
+  configured?: ModelProviderConfig;
   /** Model ids pi's built-in catalog holds for this provider (may be empty). */
   builtinModelIds: readonly string[];
 }): { config: PiProviderConfigInput } | { error: string } {
-  const catalog = piProviderCatalog(input.providerID);
+  const ours = piProviderCatalog(input.providerID);
+  const custom = configuredProviderCatalog(input.providerID, input.configured);
   const builtin = new Set(input.builtinModelIds);
-  if (!catalog && !builtin.size) {
+  const declared = !!input.configured?.api;
+  if (!ours && !builtin.size && !declared) {
     return {
       error:
         `Provider "${input.providerID}" is in neither Pi's built-in catalog nor ours, ` +
-        "so the Pi engine cannot guess its protocol. Configure a supported provider for this model.",
+        "so the Pi engine cannot guess its protocol. Set its api to openai-completions " +
+        "with a base URL, or configure a supported provider for this model.",
     };
   }
-  const builtinKnown = builtin.has(input.modelID);
-  const catalogKnown = !!catalog?.models.some((m) => m.id === input.modelID);
+  if (declared && !input.baseURL) {
+    return {
+      error: `Provider "${input.providerID}" declares an api but no base URL. Set its base URL first.`,
+    };
+  }
+  const configuredRow = custom?.models.find((m) => m.id === input.modelID);
+  const builtinKnown = builtin.has(input.modelID) && !configuredRow;
+  const catalogKnown =
+    !!configuredRow || !!ours?.models.some((m) => m.id === input.modelID);
   // Registering `models` REPLACES the provider's model list in Pi's extension
   // layer. Preserve Pi's full built-in list when it already knows the selected
-  // model. A self-catalogued model carries its complete table, while a model
-  // unknown to both catalogs gets that table plus a conservative fallback row.
+  // model and the operator pinned nothing for it. Otherwise the table carries
+  // our rows, the configured rows on top (same id wins), and a conservative
+  // fallback row when the selected model is in none of them.
+  const table = new Map<string, PiProviderCatalog["models"][number]>();
+  for (const m of ours?.models ?? []) table.set(m.id, m);
+  for (const m of custom?.models ?? []) table.set(m.id, m);
   const models = builtinKnown
     ? []
     : [
-        ...(catalog?.models ?? []),
+        ...table.values(),
         ...(catalogKnown
           ? []
           : [
@@ -401,19 +425,22 @@ export function buildPiThirdPartyProviderPlan(input: {
                 reasoning: true,
                 input: ["text"] as Array<"text" | "image">,
                 cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                contextWindow: 131_072,
-                maxTokens: 32_768,
+                contextWindow: FALLBACK_CONTEXT_WINDOW,
+                maxTokens: FALLBACK_MAX_TOKENS,
               },
             ]),
       ];
+  const api = custom?.api ?? ours?.api;
+  const name = input.configured?.name || ours?.name;
   return {
     config: {
       apiKey: input.apiKey,
-      ...(catalog ? { name: catalog.name, api: catalog.api } : {}),
+      ...(api && (declared || ours) ? { api } : {}),
+      ...(name && (declared || ours) ? { name } : {}),
       ...(input.baseURL
         ? { baseUrl: input.baseURL }
-        : catalog
-          ? { baseUrl: catalog.baseUrl }
+        : ours
+          ? { baseUrl: ours.baseUrl }
           : {}),
       ...(models.length ? { models } : {}),
     },
