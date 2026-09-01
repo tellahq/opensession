@@ -82,6 +82,7 @@ import { asDataUrlList, countImageRefs, parseImageDataUrls } from "../uploads";
 import { notifyMentions } from "../mentions";
 import { reviewTeamFor } from "../people";
 import { sendPushToUser } from "../push";
+import { unarchiveForHumanTurn } from "../session-unarchive";
 import {
   sessionChangesSince,
   sessionGatewayCommand,
@@ -1317,6 +1318,9 @@ export async function handleSessionsRoutes(
           { ...result, error: result.message },
           { status: /no session/i.test(result.message) ? 404 : 400 },
         );
+      }
+      if (session && result.status !== "handled") {
+        await unarchiveForHumanTurn(session);
       }
       if (session && !result.duplicate) {
         await notifyMentions(

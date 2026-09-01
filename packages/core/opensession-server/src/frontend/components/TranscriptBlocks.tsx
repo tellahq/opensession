@@ -81,7 +81,7 @@ interface Props {
   pendingDeliveryIds?: string[];
   /** Whether the conversation is live (last work block shows a spinner / stays open). */
   live?: boolean;
-  /** Assistant messages show a "Fork from here" action when provided. */
+  /** Assistant messages show a "Duplicate from here" action when provided. */
   onFork?: (entryId: string) => void;
   /** Your own sent messages can be reopened in the composer when provided. */
   onEditMessage?: (entry: TranscriptEntry) => void;

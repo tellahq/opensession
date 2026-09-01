@@ -105,10 +105,10 @@ directories marked by `CACHEDIR.TAG`, under host worktrees:
   the last 24 hours; if usage remains at least 80%, a final pass can reclaim
   caches idle for more than 2 hours.
 
-The sweep reads `/proc` and skips everything if it cannot determine which
-worktrees contain live build processes. It protects Ask checkouts and warm
-infrastructure. It does not remove worktrees, branches, commits,
-`node_modules`, or non-Rust build output.
+The sweep reads `/proc` on Linux and uses `ps` plus `lsof` on macOS. It skips
+everything if it cannot determine which worktrees contain live build
+processes. It protects Ask checkouts and warm infrastructure. It does not
+remove worktrees, branches, commits, `node_modules`, or non-Rust build output.
 
 Disable it with `OPENSESSION_DISK_GC=0`. The thresholds and cadence can be
 overridden at startup with `OPENSESSION_DISK_GC_COLD_DAYS`,

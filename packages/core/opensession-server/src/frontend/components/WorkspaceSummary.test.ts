@@ -27,12 +27,28 @@ test("the Committed section folds open to every PR or workspace commit", () => {
   expect(summarySource).toContain(
     "const [commitsOpen, setCommitsOpen] = useState(false)",
   );
-  expect(summarySource).toContain("aria-expanded={commitsOpen}");
   expect(summarySource).toContain(
+    "const commitCount = prCommits.length || commits.length",
+  );
+  expect(summarySource).toContain("aria-expanded={commitsOpen}");
+  expect(summarySource).toContain("{commitCount}</span>");
+  expect(summarySource).toContain("<IconChevronRight");
+  expect(summarySource).toContain('commitsOpen && "rotate-90"');
+  expect(summarySource).toContain("hover:bg-transparent hover:text-faint");
+  expect(summarySource).not.toContain(
     'title={commitsOpen ? "Hide commits" : "Show all commits"}',
   );
   expect(summarySource).toContain("prCommits.map(prCommittedRow)");
   expect(summarySource).toContain("commits.map(committedRow)");
+});
+
+test("a commit opens its details in a nested overlay instead of GitHub", () => {
+  expect(summarySource).toContain("function setCommitDetailsOpen(");
+  expect(summarySource).toContain("fetchCommit(sha, repo)");
+  expect(summarySource).toContain("function commitDetailsPopup(");
+  expect(summarySource).toContain("exclusive={false}");
+  expect(summarySource).toContain('side={embedded ? "top" : "left"}');
+  expect(summarySource).not.toContain("href={commit.url}");
 });
 
 test("uncommitted work opens Changes without using the separate commit action", () => {
@@ -78,6 +94,7 @@ test("popup review heading keeps a small gap after a lone PR band", () => {
   );
 });
 
-test("popup review tabs keep a small gap after the PR band", () => {
-  expect(summarySource).toContain('className={embedded ? undefined : "mt-1"}');
+test("pull request page navigation stays in the review toolbar", () => {
+  expect(summarySource).not.toContain('aria-label="Pull request pages"');
+  expect(summarySource).not.toContain("onReviewPageChange");
 });

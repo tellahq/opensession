@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -139,9 +140,10 @@ describe("hasEntryNewerThan", () => {
 });
 
 describe("worktreesInUse", () => {
-  it("returns a set on Linux and never invents entries for an empty root", () => {
+  it("returns a set on supported hosts and never invents entries for an empty root", () => {
     const inUse = worktreesInUse(root);
-    // /proc exists on the VPS; no process is cwd'd inside our temp fixture.
+    if (process.platform === "linux" || process.platform === "darwin")
+      expect(inUse).not.toBeNull();
     if (inUse !== null) expect(inUse.size).toBe(0);
   });
 
@@ -161,7 +163,8 @@ describe("worktreesInUse", () => {
     // `cargo` is in BUILD_PROCESS_NAMES; sleep under that name stands in for a
     // build so the test needs no toolchain and leaves nothing to clean up.
     const fakeCargo = join(root, "cargo");
-    copyFileSync("/bin/sleep", fakeCargo);
+    if (process.platform === "darwin") symlinkSync("/bin/sleep", fakeCargo);
+    else copyFileSync("/bin/sleep", fakeCargo);
     const proc = Bun.spawn([fakeCargo, "30"], { cwd: wt });
     try {
       await Bun.sleep(150);

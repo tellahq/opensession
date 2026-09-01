@@ -7,9 +7,11 @@ import {
 } from "react";
 import {
   cancelPrReviewApi,
+  fetchCommit,
   setSessionReviewerApi,
   sessionAssetPreviewUrl,
   triggerPrActionApi,
+  type CommitDetails,
   type WorkspaceCommit,
   type WorkspaceMediaItem,
 } from "../lib/api";
@@ -32,7 +34,6 @@ import { sessionHasConnectedPr } from "../lib/session-prs";
 import { getCurrentUser } from "./UserPicker";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { PrStatusBar } from "./PrStatusBar";
-import type { PrReviewPage } from "./PrPanel";
 import { reviewerStateMeta } from "./pr/PrRows";
 import { StagingLink } from "./StagingLink";
 import { UserAvatar } from "./UserAvatar";
@@ -81,6 +82,7 @@ import {
 } from "../lib/workspace-summary-open";
 import {
   IconChevronDown,
+  IconChevronRight,
   IconClock,
   IconFile,
   IconGitCommit,
@@ -194,9 +196,6 @@ interface Props {
   tabStripVisible?: boolean;
   /** Review starts with the card shut and opens it below its own toolbar. */
   reviewMode?: boolean;
-  /** Wide Review moves its page navigation into this standing summary. */
-  reviewPage?: PrReviewPage;
-  onReviewPageChange?: (page: PrReviewPage) => void;
   /** Keep a pinned card visible while its Changes side panel is open. */
   forceOpen?: boolean;
   /** Render the same quiet rows inside the phone Workspace page. */
@@ -233,6 +232,15 @@ interface Props {
  * already on, so the latest state wins per login before any of this.
  */
 const REVIEWERS_SHOWN = 4;
+
+type OpenCommitDetails =
+  | { sha: string; status: "loading" }
+  | { sha: string; status: "ready"; details: CommitDetails }
+  | { sha: string; status: "unavailable" };
+
+type CommitRowTarget =
+  | { kind: "workspace"; commit: WorkspaceCommit }
+  | { kind: "pr"; commit: PrCommit };
 
 type ReviewLine = {
   key: string;
@@ -533,8 +541,6 @@ export function WorkspaceSummaryBody({
   close,
   embedded = false,
   reviewMode = false,
-  reviewPage,
-  onReviewPageChange,
   liveMedia = NO_LIVE_MEDIA,
 }: Omit<Props, "anchor" | "onOpenChange" | "tabStripVisible"> & {
   close: () => void;
@@ -596,7 +602,8 @@ export function WorkspaceSummaryBody({
   const assets = assetsResource.data ?? [];
   const commits = overviewResource.data?.commits ?? [];
   const prCommits = pr?.commits ?? [];
-  const hasCommitDetails = prCommits.length > 0 || commits.length > 0;
+  const commitCount = prCommits.length || commits.length;
+  const hasCommitDetails = commitCount > 0;
   const media = (() => {
     const seen = new Set<string>();
     return [...liveMedia, ...(overviewResource.data?.media ?? [])].filter(
@@ -620,6 +627,7 @@ export function WorkspaceSummaryBody({
   const [prompted, setPrompted] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const [commitsOpen, setCommitsOpen] = useState(false);
+  const [openCommit, setOpenCommit] = useState<OpenCommitDetails | null>(null);
   const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
@@ -890,65 +898,180 @@ export function WorkspaceSummaryBody({
     );
   }
 
-  function committedRow(commit: WorkspaceCommit) {
-    const content = (
-      <>
-        <span className={WS_SUMMARY_RAIL}>
-          <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
-        </span>
-        <span className={WS_SUMMARY_LABEL}>{commit.title}</span>
-        <span
-          className={cn(
-            WS_SUMMARY_STATE,
-            "flex items-baseline gap-2 text-dim tabular-nums",
-          )}
-        >
-          <span>
-            {commit.filesChanged} file{commit.filesChanged === 1 ? "" : "s"}
-          </span>
-          <span className="text-green">+{commit.additions}</span>
-          <span className="text-red">−{commit.deletions}</span>
-        </span>
-      </>
+  function setCommitDetailsOpen(open: boolean, sha: string, repo?: string) {
+    if (!open) {
+      setOpenCommit((current) => (current?.sha === sha ? null : current));
+      return;
+    }
+    setOpenCommit({ sha, status: "loading" });
+    fetchCommit(sha, repo)
+      .then((details) => {
+        setOpenCommit((current) => {
+          if (current?.sha !== sha) return current;
+          return details
+            ? { sha, status: "ready", details }
+            : { sha, status: "unavailable" };
+        });
+      })
+      .catch(() => {
+        setOpenCommit((current) =>
+          current?.sha === sha ? { sha, status: "unavailable" } : current,
+        );
+      });
+  }
+
+  function commitDetailsPopup(target: CommitRowTarget) {
+    const sha =
+      target.kind === "workspace" ? target.commit.sha : target.commit.oid;
+    const details =
+      openCommit?.sha === sha && openCommit.status === "ready"
+        ? openCommit.details
+        : null;
+    const title =
+      details?.title ||
+      (target.kind === "workspace"
+        ? target.commit.title
+        : target.commit.messageHeadline);
+    const body =
+      details?.body ||
+      (target.kind === "pr" ? target.commit.messageBody : undefined);
+    const author =
+      details?.author ||
+      (target.kind === "pr" ? target.commit.author : undefined);
+    const committedAt =
+      details?.committedAt ||
+      (target.kind === "workspace"
+        ? target.commit.committedAt
+        : target.commit.authoredDate);
+    const repo =
+      details?.repo ||
+      (target.kind === "workspace" ? target.commit.repo : session.repo);
+    const shortSha = details?.shortSha || sha.slice(0, 8);
+
+    return (
+      <Popover.Popup
+        portalContainer={
+          typeof document !== "undefined" ? document.body : undefined
+        }
+        side={embedded ? "top" : "left"}
+        align="start"
+        sideOffset={10}
+        className="flex max-h-[min(560px,70vh,var(--available-height))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden p-0"
+      >
+        <div className="flex items-baseline justify-between gap-2.5 border-b border-divider bg-surface px-3 py-[9px]">
+          <span className="text-label font-semibold text-fg">Commit</span>
+          <code className="text-meta text-faint">{shortSha}</code>
+        </div>
+        {openCommit?.sha === sha && openCommit.status === "loading" ? (
+          <div className="p-3 text-meta text-faint" role="status">
+            Loading commit…
+          </div>
+        ) : (
+          <div className="overflow-y-auto p-3 text-meta text-dim">
+            <div className="text-label font-semibold leading-relaxed text-fg">
+              {title}
+            </div>
+            {body && (
+              <div className="mt-2 whitespace-pre-wrap leading-relaxed">
+                {body}
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              {author && <span>{author}</span>}
+              {repo && <span>{repo}</span>}
+              {committedAt && <span>{fullTime(committedAt)}</span>}
+              {details && (
+                <span className="inline-flex gap-1.5 tabular-nums">
+                  <span>
+                    {details.filesChanged} file
+                    {details.filesChanged === 1 ? "" : "s"}
+                  </span>
+                  <span className="text-green">+{details.additions}</span>
+                  <span className="text-red">−{details.deletions}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </Popover.Popup>
     );
-    const title = `${commit.title} · ${commit.sha.slice(0, 8)}`;
-    return commit.url ? (
-      <a
+  }
+
+  function committedRow(commit: WorkspaceCommit) {
+    const expanded = openCommit?.sha === commit.sha;
+    return (
+      <Popover.Root
         key={commit.sha}
-        className={cn(WS_SUMMARY_ROW, "no-underline")}
-        href={commit.url}
-        target="_blank"
-        rel="noopener"
-        title={title}
+        open={expanded}
+        onOpenChange={(open) =>
+          setCommitDetailsOpen(open, commit.sha, commit.repo)
+        }
+        exclusive={false}
       >
-        {content}
-      </a>
-    ) : (
-      <div
-        key={commit.sha}
-        className={cn(WS_SUMMARY_ROW, "cursor-default")}
-        title={title}
-      >
-        {content}
-      </div>
+        <Popover.Trigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              className={WS_SUMMARY_ROW}
+              title="Show commit details"
+            >
+              <span className={WS_SUMMARY_RAIL}>
+                <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+              </span>
+              <span className={WS_SUMMARY_LABEL}>{commit.title}</span>
+              <span
+                className={cn(
+                  WS_SUMMARY_STATE,
+                  "flex items-baseline gap-2 text-dim tabular-nums",
+                )}
+              >
+                <span>
+                  {commit.filesChanged} file
+                  {commit.filesChanged === 1 ? "" : "s"}
+                </span>
+                <span className="text-green">+{commit.additions}</span>
+                <span className="text-red">−{commit.deletions}</span>
+              </span>
+            </Button>
+          }
+        />
+        {commitDetailsPopup({ kind: "workspace", commit })}
+      </Popover.Root>
     );
   }
 
   function prCommittedRow(commit: PrCommit) {
+    const expanded = openCommit?.sha === commit.oid;
     return (
-      <div
+      <Popover.Root
         key={commit.oid}
-        className={cn(WS_SUMMARY_ROW, "cursor-default")}
-        title={`${commit.messageHeadline} · ${commit.oid.slice(0, 8)} · ${commit.author}`}
+        open={expanded}
+        onOpenChange={(open) =>
+          setCommitDetailsOpen(open, commit.oid, session.repo)
+        }
+        exclusive={false}
       >
-        <span className={WS_SUMMARY_RAIL}>
-          <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
-        </span>
-        <span className={WS_SUMMARY_LABEL}>{commit.messageHeadline}</span>
-        <code className="shrink-0 text-meta text-faint">
-          {commit.oid.slice(0, 7)}
-        </code>
-      </div>
+        <Popover.Trigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              className={WS_SUMMARY_ROW}
+              title="Show commit details"
+            >
+              <span className={WS_SUMMARY_RAIL}>
+                <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+              </span>
+              <span className={WS_SUMMARY_LABEL}>{commit.messageHeadline}</span>
+              <code className="shrink-0 text-meta text-faint">
+                {commit.oid.slice(0, 7)}
+              </code>
+            </Button>
+          }
+        />
+        {commitDetailsPopup({ kind: "pr", commit })}
+      </Popover.Root>
     );
   }
 
@@ -1049,51 +1172,6 @@ export function WorkspaceSummaryBody({
           </PrStatusBar>
         )}
       </div>
-
-      {reviewMode && reviewPage && onReviewPageChange && (
-        <div
-          className={embedded ? undefined : "mt-1"}
-          role="tablist"
-          aria-label="Pull request pages"
-        >
-          <button
-            className={WS_SUMMARY_ROW}
-            role="tab"
-            aria-selected={reviewPage === "overview"}
-            onClick={() => onReviewPageChange("overview")}
-          >
-            <span className={WS_SUMMARY_RAIL}>
-              <IconListCircles size={20} className={WS_SUMMARY_ICON} />
-            </span>
-            <span className={WS_SUMMARY_LABEL}>Overview</span>
-            {reviewPage === "overview" ? (
-              <span className={cn(WS_SUMMARY_STATE, "text-accent")}>
-                Viewing
-              </span>
-            ) : pr?.comments?.length ? (
-              <span className={WS_SUMMARY_COUNT}>{pr.comments.length}</span>
-            ) : null}
-          </button>
-          <button
-            className={WS_SUMMARY_ROW}
-            role="tab"
-            aria-selected={reviewPage === "files"}
-            onClick={() => onReviewPageChange("files")}
-          >
-            <span className={WS_SUMMARY_RAIL}>
-              <IconFile size={20} className={WS_SUMMARY_ICON} />
-            </span>
-            <span className={WS_SUMMARY_LABEL}>Files</span>
-            {reviewPage === "files" ? (
-              <span className={cn(WS_SUMMARY_STATE, "text-accent")}>
-                Viewing
-              </span>
-            ) : changedFiles > 0 ? (
-              <span className={WS_SUMMARY_COUNT}>{changedFiles}</span>
-            ) : null}
-          </button>
-        </div>
-      )}
 
       <div
         className={cn(
@@ -1387,18 +1465,20 @@ export function WorkspaceSummaryBody({
               size="sm"
               className={cn(
                 WS_SUMMARY_SECTION,
-                "group/committed w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left",
+                "w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left hover:bg-transparent hover:text-faint active:scale-100",
               )}
               onClick={() => setCommitsOpen((open) => !open)}
               aria-expanded={commitsOpen}
-              title={commitsOpen ? "Hide commits" : "Show all commits"}
             >
-              <span>Committed</span>
-              <IconChevronDown
+              <span className="flex items-baseline gap-1.5">
+                <span>Committed</span>
+                <span className="text-meta tabular-nums">{commitCount}</span>
+              </span>
+              <IconChevronRight
                 size={14}
                 className={cn(
                   "shrink-0 transition-transform motion-reduce:transition-none",
-                  commitsOpen && "rotate-180",
+                  commitsOpen && "rotate-90",
                 )}
               />
             </Button>

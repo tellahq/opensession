@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Compose a new session, laid out like the palette on the desktop: the repo
 /// names the iOS title bar (and reads across the top on Mac), the prompt fills
@@ -266,9 +269,24 @@ struct NewSessionView: View {
     private var attachments: some View {
         VStack(spacing: 6) {
             if !images.isEmpty {
-                AttachedImagesRow(images: images) { image in
-                    images.removeAll { $0.id == image.id }
-                }
+                AttachedImagesRow(
+                    images: images,
+                    onRemove: { image in
+                        let state = Self.removingImage(
+                            image, from: images, prompt: prompt
+                        )
+                        images = state.images
+                        prompt = state.prompt
+                    },
+                    onComment: { index, region, text in
+                        prompt = Self.appendingImageComment(
+                            to: prompt,
+                            imageIndex: index,
+                            region: region,
+                            comment: text
+                        )
+                    }
+                )
             }
             if !files.isEmpty {
                 AttachedFilesRow(
@@ -282,6 +300,34 @@ struct NewSessionView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
+    }
+
+    static func appendingImageComment(
+        to prompt: String,
+        imageIndex: Int,
+        region: ImageAttachmentRegion,
+        comment: String
+    ) -> String {
+        ImageAttachmentComments.appending(
+            to: prompt,
+            imageIndex: imageIndex,
+            region: region,
+            comment: comment
+        )
+    }
+
+    static func removingImage(
+        _ image: AttachedImage,
+        from images: [AttachedImage],
+        prompt: String
+    ) -> (images: [AttachedImage], prompt: String) {
+        guard let index = images.firstIndex(of: image) else { return (images, prompt) }
+        var remaining = images
+        remaining.remove(at: index)
+        return (
+            remaining,
+            ImageAttachmentComments.rebasing(prompt, removingImageAt: index)
+        )
     }
 
     private var startDisabled: Bool {
@@ -1029,6 +1075,9 @@ struct NewSessionView: View {
     }
 
     private func load() async {
+        #if DEBUG && os(iOS)
+        installAnnotationScreenshotFixture()
+        #endif
         if prompt.isEmpty, let initialDraft { prompt = initialDraft.text }
         promptFocused = true
         // Opened from the Action Button: the mic goes hot with the sheet, so
@@ -1178,6 +1227,39 @@ struct NewSessionView: View {
         }
         parkDraft(text, dismissWhenSaved: true)
     }
+
+    #if DEBUG && os(iOS)
+    private func installAnnotationScreenshotFixture() {
+        guard ProcessInfo.processInfo.environment["OS1_NEW_SESSION_ANNOTATION_FIXTURE"] == "1"
+        else { return }
+        prompt = "Refine the settings screen\n[Image 1 · 20–65% × 20–55%] Increase contrast on this button"
+        guard images.isEmpty else { return }
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600))
+        let image = renderer.image { context in
+            UIColor.systemGroupedBackground.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
+            UIColor.secondarySystemGroupedBackground.setFill()
+            context.cgContext.fill(CGRect(x: 70, y: 70, width: 760, height: 460))
+            "Review settings".draw(
+                at: CGPoint(x: 120, y: 120),
+                withAttributes: [.font: UIFont.boldSystemFont(ofSize: 42)]
+            )
+            UIColor.systemBlue.setFill()
+            context.cgContext.fillEllipse(in: CGRect(x: 620, y: 365, width: 150, height: 68))
+            "Save".draw(
+                at: CGPoint(x: 650, y: 379),
+                withAttributes: [
+                    .font: UIFont.boldSystemFont(ofSize: 28),
+                    .foregroundColor: UIColor.white,
+                ]
+            )
+        }
+        if let data = image.jpegData(compressionQuality: 0.9) {
+            images = [AttachedImage(id: "new-session-annotation-fixture", jpegData: data)]
+        }
+    }
+    #endif
 
     /// Covers an interactive sheet dismissal. The outer NavigationStack owns
     /// this callback, so opening the recipe library does not count as leaving.

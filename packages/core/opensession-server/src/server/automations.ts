@@ -29,8 +29,13 @@ import {
 } from "./runner-shared";
 import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
-import { runAgent } from "./agent-runner";
-import { activeRunRecords } from "./run-journal";
+import { isAgentLiveEngineBusy, runAgent } from "./agent-runner";
+import { activeRunRecords, hasActiveRunFor } from "./run-journal";
+import {
+  decideRunStateTransition,
+  getRunState,
+  isRunStateUnsettled,
+} from "./run-state";
 import { runAgentHosted } from "./host-client";
 import {
   providerFor,
@@ -48,7 +53,8 @@ import {
   worktreeHeadBranch,
 } from "./worktree";
 import { engineSessionPatch } from "./sessions";
-import { updateSessionFile } from "./session-cache";
+import { recordRunOutcome, updateSessionFile } from "./session-cache";
+import { sessionKernel } from "./session-kernel";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { getWorkspace } from "./workspaces";
 import type { NativeSessionFile } from "./types";
@@ -1082,6 +1088,122 @@ function recordRunStart(id: string, run: AutomationRun): void {
   });
 }
 
+/**
+ * Settle the SESSION's run state when an automation's engine stream ends.
+ *
+ * Automation turns execute in a detached run host (runAgentHosted, the only
+ * path since every model routes to pi). The host journals `run_registered`,
+ * which moves the session FSM to `running`, but its own teardown only clears
+ * the journal — retiring the VISIBLE run is the consumer's job, exactly as
+ * run-session.ts, session-create.ts and the GitHub agent already do. Without
+ * this, a successful automation left the session `running` with no live
+ * execution owner: the ownership watchdog paused it for safety while the
+ * ledger below recorded `last ok`, and send/cancel were refused as
+ * quarantined.
+ *
+ * `terminalProven` is the caller's evidence that this run is over: a terminal
+ * engine event on the streaming path, or a definitively failed launch with no
+ * journal record and no live engine left on the throw path. Without such
+ * evidence nothing settles, so a run whose fate is unknown keeps the real
+ * safety fence rather than being waved through as finished.
+ *
+ * Settling the FSM alone is not enough. The session APIs read `lastRunError`
+ * from `runErrors` and the session file, both written by `recordRunOutcome`,
+ * so a run that reaches `failed` without that projection cannot explain itself
+ * to any consumer. Project through the same choke point the other callers use,
+ * with the same durable identity they pass: this run's id, the generation it
+ * owned, and a stable projection id. Those three route the outcome through the
+ * actor's turn-outcome executor, which makes the projection idempotent and
+ * fenced to this exact run rather than a best-effort direct write.
+ */
+type AutomationOutcomeProjector = (
+  sessionId: string,
+  errorMessage: string | null,
+  opts?: {
+    runId?: string;
+    runGeneration?: number;
+    projectionId?: string;
+  },
+) => Promise<void>;
+
+type AutomationRunSettlementDeps = {
+  emit?: Parameters<typeof decideRunStateTransition>[3];
+  /** Test seam. Production always projects through recordRunOutcome. */
+  project?: AutomationOutcomeProjector;
+};
+
+export async function settleAutomationRunState(
+  sessionId: string,
+  errorMessage: string | null,
+  terminalProven: boolean,
+  runKey?: string,
+  deps?: AutomationRunSettlementDeps,
+): Promise<void> {
+  if (!terminalProven) return;
+  if (!isRunStateUnsettled(getRunState(sessionId))) return;
+  // Capture the generation BEFORE settling. It is the generation this run
+  // owned, which is what the outcome executor fences against; reading it after
+  // the transition would race a successor that claims the session in between.
+  const runGeneration = runKey
+    ? sessionKernel(sessionId).runStateProjection().generation
+    : undefined;
+  const decision = await decideRunStateTransition(
+    sessionId,
+    errorMessage ? "run_failed" : "turn_end",
+    {
+      source: "automation_terminal",
+      // Fence the settlement to this automation's own physical run. The
+      // hosted generator can still be draining when a Stop retires this run
+      // and a new prompt claims the session; without the key the actor skips
+      // its stale-run check in applyRunEvent and this late settlement would
+      // retire the SUCCESSOR's turn.
+      ...(runKey ? { run_key: runKey } : {}),
+    },
+    deps?.emit,
+  );
+  // A rejected decision means this run no longer owns the session. Projecting
+  // anyway would stamp our outcome onto whoever does.
+  if (!decision.accepted) return;
+  await (deps?.project ?? recordRunOutcome)(sessionId, errorMessage, {
+    ...(runKey
+      ? {
+          runId: runKey,
+          runGeneration,
+          // Stable and derived from the run id, so a retry of the same run
+          // reuses the projection rather than issuing a second one.
+          projectionId: `outcome:${runKey}`,
+        }
+      : {}),
+  });
+}
+
+type AutomationLaunchFailureDeps = AutomationRunSettlementDeps & {
+  hasActiveRun?: (sessionId: string, runKey: string) => boolean;
+  isLiveEngineBusy?: (sessionId: string, runKey: string) => boolean;
+};
+
+/**
+ * Record a failed launch only after retiring a run proven to have no journal or
+ * live engine owner. The ledger callback can write the automation file and is
+ * therefore deliberately last.
+ */
+export async function settleAutomationLaunchFailure(
+  sessionId: string,
+  runKey: string,
+  errorMessage: string,
+  settleLedger: () => void,
+  deps?: AutomationLaunchFailureDeps,
+): Promise<void> {
+  const hasJournalOwner = (deps?.hasActiveRun ?? hasActiveRunFor)(
+    sessionId,
+    runKey,
+  );
+  const isLiveOwner = deps?.isLiveEngineBusy ?? isAgentLiveEngineBusy;
+  if (!hasJournalOwner && !isLiveOwner(sessionId, runKey))
+    await settleAutomationRunState(sessionId, errorMessage, true, runKey, deps);
+  settleLedger();
+}
+
 /** Settle the ledger entry for `sessionId` (matched by id, not position, so
  *  overlapping runs settle independently). */
 function settleRun(
@@ -1403,6 +1525,12 @@ export async function runAutomation(
   const stamp = startedAt.toISOString().slice(0, 16).replace("T", " ");
   automationPreparations.add(bksId);
   let sandboxRpcToken: string | undefined;
+  // One physical run id for whichever backend runs this turn. Every backend
+  // journals `run_registered` under it, so it becomes the session's
+  // `currentRunId` and lets the terminal settlement be fenced to this exact
+  // run rather than to whatever owns the session when it lands. Declared out
+  // here so the outer catch can settle a launch that threw before dispatch.
+  const automationRunKey = `rh-${randomUUIDv7()}`;
 
   try {
     const runtimeSandboxValidation = validateSandboxAutomation(automation);
@@ -1660,6 +1788,13 @@ export async function runAutomation(
         };
       });
 
+    // A host can report a terminal event before `init`. Create the native
+    // session before any backend can journal or launch the run, so an immediate
+    // actor-outbox projection always has a durable destination. A failed write
+    // happens before `run_registered`, which avoids reopening the journal
+    // cleanup window that requires terminal settlement inside the event loop.
+    await persistSession("");
+
     console.log(
       `[automations] Running "${automation.name}" → ${bksId}${runModel ? ` (${runModel})` : ""}${options?.modelOverride ? " [routed]" : ""}`,
     );
@@ -1681,6 +1816,12 @@ export async function runAutomation(
 
     let engineSessionId = "";
     let errorMsg = "";
+    // Whether the engine reported a terminal outcome. Only that proves the
+    // turn is over and lets settleAutomationRunState retire the session.
+    let sawTerminalEvent = false;
+    // Settlement happens once, inside the event loop. The flag keeps the
+    // post-loop safety net from re-entering it.
+    let settledRunState = false;
     // Tail of the assistant's text: an automation whose prompt declares
     // failure (`RUN STATUS: failed — …` / `SCAN STATUS: failed — …` as the
     // final line) settles the ledger as error instead of "the turn finished
@@ -1705,7 +1846,7 @@ export async function runAutomation(
       sandboxRpcToken = crypto.randomUUID();
       registerRunToken(sandboxRpcToken, { sessionId: bksId });
       const spec: RunHostSpec = {
-        hostId: `rh-${randomUUIDv7()}`,
+        hostId: automationRunKey,
         osSessionId: bksId,
         prompt,
         cwd,
@@ -1762,6 +1903,7 @@ export async function runAutomation(
           ? runAgentHosted({
               ...common,
               osSessionId: bksId,
+              startToken: automationRunKey,
               proxyMcpServers: Object.keys(inProcessMcp),
               fallbackInProcessMcp: () => inProcessMcp,
               journalKind: "automation",
@@ -1769,6 +1911,7 @@ export async function runAutomation(
             })
           : runAgent({
               ...common,
+              startToken: automationRunKey,
               inProcessMcp,
               journal: { osSessionId: bksId, kind: "automation" },
             });
@@ -1806,18 +1949,81 @@ export async function runAutomation(
         }
       }
       if (event.type === "done") {
+        sawTerminalEvent = true;
         engineSessionId = event.sessionId || engineSessionId;
         if (event.provider) effectiveProvider = event.provider;
         if (event.model) effectiveModel = event.model;
+        // Dying on usage limits with no account left to rotate to reports as
+        // a `done` whose result is the limit notice, not an `error` — but it
+        // still needs a human. An automation with `fallbackModel: "none"`
+        // reaches the caller unfiltered, because runAgentInner yields
+        // runOnModel directly on that path instead of routing the event into
+        // its fallback walk. run-session.ts and session-create.ts both
+        // convert this shape into a failure; without the same conversion the
+        // ledger would record `ok`, outputs would be delivered for a turn
+        // that never ran, and the session would settle `turn_end`.
+        if (event.usageLimitExhausted)
+          errorMsg = event.result || "Usage limit reached on every account";
       }
       if (event.type === "text_chunk" && event.text) {
         textTail = (textTail + event.text).slice(-16384);
       }
       if (event.type === "error") {
+        sawTerminalEvent = true;
         errorMsg = event.content || "Unknown error";
+      }
+      // Settle HERE, inside the loop, not after it. Asking the generator for
+      // its next item is what resumes the journal wrapper, and every wrapper
+      // (hostedEventsWithJournal and both sandbox wrappers) clears this run's
+      // recovery journal in its `finally` on normal source completion. A
+      // session-kernel restart in the window between that clear and a
+      // post-loop settlement would leave the session `running` with no journal
+      // record left to recover it — the exact stranding this change exists to
+      // prevent. Settling first means the journal still names this run for as
+      // long as the session is unsettled.
+      //
+      // The declared-failure tail is read here too: text chunks precede the
+      // terminal event, so it carries the same verdict the ledger will record.
+      if (sawTerminalEvent && !settledRunState) {
+        settledRunState = true;
+        await settleAutomationRunState(
+          bksId,
+          errorMsg || declaredRunFailure(textTail) || null,
+          true,
+          automationRunKey,
+        );
       }
     }
     if (!errorMsg) errorMsg = declaredRunFailure(textTail) || "";
+    // A stream that ended without any terminal event never proved the turn
+    // finished. session-create.ts throws "Opening run ended without a terminal
+    // event" for exactly this shape, and every journal wrapper records
+    // journalRecordAbnormalCompletion instead of clearing, so boot recovery
+    // reports it as a failure. runAutomation used to fall through with an
+    // empty errorMsg: it delivered outputs for a turn that produced nothing
+    // and recorded `ok` while the session stayed unsettled — the same
+    // ledger-ok/session-running split-brain this change exists to remove.
+    //
+    // The run state deliberately stays fenced (settleAutomationRunState
+    // refuses without a terminal event): the journal still carries this run's
+    // terminalFailure, and boot recovery owns settling it. Only the LEDGER
+    // verdict is corrected here, so the two sides agree.
+    if (!errorMsg && !sawTerminalEvent)
+      errorMsg = "Run ended without a terminal event";
+
+    // Safety net for a stream that reported its terminal outcome in a shape
+    // the loop could not settle on. Already-settled sessions return early, so
+    // this is a no-op on the normal path. It stays ahead of everything that
+    // can reject — session persistence, output delivery, the ledger — because
+    // the outer catch settles the LEDGER but cannot settle the session: the
+    // run-state locals are scoped to this try.
+    if (!settledRunState)
+      await settleAutomationRunState(
+        bksId,
+        errorMsg || null,
+        sawTerminalEvent,
+        automationRunKey,
+      );
 
     await persistSession(engineSessionId);
 
@@ -1845,13 +2051,25 @@ export async function runAutomation(
     );
   } catch (e: any) {
     console.error(`[automations] "${automation.name}" failed:`, e);
-    settleRun(automation.id, bksId, {
-      status: "error",
-      error: e.message || String(e),
-      durationMs: Date.now() - startedAt.getTime(),
-    });
-    // A thrown consumer after physical adoption is ambiguous. Keep the intent;
-    // boot reconciles its active journal or terminal receipt before replay.
+    const errorMessage = e.message || String(e);
+    // A throw is usually ambiguous. The host may still be executing, so the
+    // journal stays and boot recovery owns settling it. A definitive launch
+    // failure has neither a journal record nor a live engine. Retire that
+    // proven-ownerless run before settleRun can fail while saving the ledger.
+    // An ambiguous launch keeps its journal and therefore stays fenced.
+    await settleAutomationLaunchFailure(
+      bksId,
+      automationRunKey,
+      errorMessage,
+      () =>
+        settleRun(automation.id, bksId, {
+          status: "error",
+          error: errorMessage,
+          durationMs: Date.now() - startedAt.getTime(),
+        }),
+    );
+    // Keep the intent; boot reconciles its active journal or terminal receipt
+    // before replay.
   } finally {
     automationPreparations.delete(bksId);
     activeAutomationIntentSessions.delete(bksId);

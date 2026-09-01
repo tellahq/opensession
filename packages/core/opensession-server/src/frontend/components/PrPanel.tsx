@@ -8,6 +8,7 @@ import React, {
   useState,
   useRef,
 } from "react";
+import { createPortal } from "react-dom";
 import type {
   PrCheck,
   PrDetails,
@@ -186,6 +187,9 @@ interface Props {
   sessions?: UnifiedSession[];
   /** Navigate to a session picked from the linked-sessions list. */
   onOpenSessionById?: (id: string) => void;
+  /** Host the session action in surrounding workspace chrome. `undefined`
+   * keeps it in this PR toolbar for standalone review views. */
+  sessionActionTarget?: HTMLElement | null;
   /** Open another PR in this panel — used by the stack map to move between
    *  layers in-app. Without it the layer rows still link, just via a full
    *  page load. */
@@ -195,7 +199,7 @@ interface Props {
   /** The surrounding review header already offers the workspace summary.
    * Keep this panel's metadata rail only when it stacks for a narrow canvas. */
   hideWideOverviewRail?: boolean;
-  /** Controlled page for hosts that move Review navigation into the summary. */
+  /** Controlled page for hosts that preserve Review state outside the panel. */
   page?: PrReviewPage;
   onPageChange?: (page: PrReviewPage) => void;
   /** Move file controls into the identity row and omit the secondary row. */
@@ -230,6 +234,7 @@ export function PrPanel({
   previewTarget,
   sessions,
   onOpenSessionById,
+  sessionActionTarget,
   onOpenPr,
   addHandler: addHandlerProp,
   hideWideOverviewRail = false,
@@ -907,6 +912,20 @@ export function PrPanel({
     sessions && active
       ? prRelatedSessions(sessions, active.repo, active.branch, pr)
       : [];
+  const sessionActionButton = sessions ? (
+    <Button
+      variant="default"
+      size={sessionActionTarget === undefined ? "sm" : "md"}
+      icon={<IconMessages size={18} />}
+      onClick={() => setSessionsOpen(true)}
+    >
+      {relatedSessions.length === 0
+        ? "Start session"
+        : relatedSessions.length === 1
+          ? "Open session"
+          : `${relatedSessions.length} sessions`}
+    </Button>
+  ) : null;
 
   const files = pr?.files ?? NO_PR_FILES;
   const reviewedFiles =
@@ -1322,20 +1341,40 @@ export function PrPanel({
     </Popover.Root>
   );
 
-  /* The review has two pages. Without the workspace summary they sit in a
-     small floating switcher, leaving the identity and file controls in the
-     same toolbar positions used while the summary is open. */
-  const pageTabs = (
-    [
-      ["overview", "Overview", comments.length || undefined],
-      ["files", "Files", files.length || undefined],
-    ] as const
-  ).map(([key, label, count]) => (
+  const pageOptions = [
+    ["overview", "Overview", comments.length || undefined],
+    ["files", "Files", files.length || undefined],
+  ] as const;
+
+  // Page navigation shares the identity bar on desktop, preserving the code
+  // canvas' vertical space. Phone keeps the full-width row and larger targets.
+  const titlePageSwitcher = (
+    <Segmented
+      label="Pull request pages"
+      value={page}
+      onValueChange={(next) => {
+        if (next === "overview" || next === "files") setPage(next);
+      }}
+      size="sm"
+      className="shrink-0 phone:hidden"
+    >
+      {pageOptions.map(([key, label, count]) => (
+        <SegmentedOption key={key} value={key}>
+          {label}
+          {count !== undefined && (
+            <span className="text-meta text-faint tabular-nums">{count}</span>
+          )}
+        </SegmentedOption>
+      ))}
+    </Segmented>
+  );
+
+  const phonePageTabs = pageOptions.map(([key, label, count]) => (
     <button
       key={key}
       role="tab"
       aria-selected={page === key}
-      className={`flex h-8 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-label font-medium transition-colors phone:h-11 phone:text-control-label ${
+      className={`flex h-11 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-control-label font-medium transition-colors ${
         page === key ? "text-fg" : "text-dim hover:text-fg"
       }`}
       onClick={() => setPage(key)}
@@ -1385,15 +1424,15 @@ export function PrPanel({
     </div>
   );
 
-  const reviewBar = !compactToolbar && (
-    <div className="flex h-8 shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden bg-surface [scrollbar-width:none] desktop:absolute desktop:left-2 desktop:top-[calc(100%+8px)] desktop:z-20 desktop:rounded-lg desktop:border desktop:border-line phone:h-11 phone:gap-2 phone:px-2 phone:shadow-[inset_0_-1px_0_var(--border)] [&::-webkit-scrollbar]:hidden">
+  const reviewBar = (
+    <div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-2 [scrollbar-width:none] desktop:hidden [&::-webkit-scrollbar]:hidden">
       <div
         className="flex shrink-0 items-center gap-0.5 self-stretch"
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Pull request pages"
       >
-        {pageTabs}
+        {phonePageTabs}
       </div>
       {phoneLayout && fileControls}
     </div>
@@ -1405,9 +1444,11 @@ export function PrPanel({
       data-review-canvas="true"
       ref={setRoot}
     >
-      {/* Desktop always keeps file controls in the identity row, so opening
-          the summary only relocates page navigation. Phone keeps one
-          edge-to-edge navigation and controls row below the identity. */}
+      {sessionActionTarget && sessionActionButton
+        ? createPortal(sessionActionButton, sessionActionTarget)
+        : null}
+      {/* Desktop keeps page navigation and file controls in the identity row.
+          Phone keeps one edge-to-edge navigation and controls row below it. */}
       <ReviewToolbar compact={compactToolbar}>
         <TopBar as="header" className="h-10 shrink-0 gap-2.5 px-4 phone:px-3">
           {/* State, in the app's own PR language, filled rather than drawn: the
@@ -1466,6 +1507,7 @@ export function PrPanel({
               </a>
             </Tooltip>
           </h1>
+          {titlePageSwitcher}
           {(compactToolbar || !phoneLayout) && fileControls}
           {/* A stack is secondary navigation, not page content. Keep its compact
             position/size chip in the identity bar and reveal the full rail in
@@ -1518,20 +1560,9 @@ export function PrPanel({
                 Review
               </Button>
             )}
-          {sessions && !headerCompact && (
-            <Button
-              variant="default"
-              size="sm"
-              icon={<IconMessages size={18} />}
-              onClick={() => setSessionsOpen(true)}
-            >
-              {relatedSessions.length === 0
-                ? "Start session"
-                : relatedSessions.length === 1
-                  ? "Open session"
-                  : `${relatedSessions.length} sessions`}
-            </Button>
-          )}
+          {sessionActionTarget === undefined &&
+            !headerCompact &&
+            sessionActionButton}
           <Menu.Root>
             <Tooltip label="Pull request actions">
               <Menu.Trigger
@@ -1565,18 +1596,20 @@ export function PrPanel({
                     </span>
                   </Menu.Item>
                 )}
-              {sessions && headerCompact && (
-                <Menu.Item onClick={() => setSessionsOpen(true)}>
-                  <IconMessages size={18} className={MENU_ICON} />
-                  <span className="min-w-0 flex-1 truncate">
-                    {relatedSessions.length === 0
-                      ? "Start a session"
-                      : relatedSessions.length === 1
-                        ? "Open session"
-                        : `Open ${relatedSessions.length} sessions`}
-                  </span>
-                </Menu.Item>
-              )}
+              {sessions &&
+                sessionActionTarget === undefined &&
+                headerCompact && (
+                  <Menu.Item onClick={() => setSessionsOpen(true)}>
+                    <IconMessages size={18} className={MENU_ICON} />
+                    <span className="min-w-0 flex-1 truncate">
+                      {relatedSessions.length === 0
+                        ? "Start a session"
+                        : relatedSessions.length === 1
+                          ? "Open session"
+                          : `Open ${relatedSessions.length} sessions`}
+                    </span>
+                  </Menu.Item>
+                )}
               <Menu.Item
                 render={<a href={pr.url} target="_blank" rel="noopener" />}
               >

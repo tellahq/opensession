@@ -4,7 +4,7 @@ const source = await Bun.file(
   new URL("./SessionViewer.tsx", import.meta.url),
 ).text();
 
-test("session Review shares page navigation with its workspace summary", () => {
+test("session Review keeps PR navigation below workspace actions", () => {
   expect(source).toContain(
     'const [reviewPage, setReviewPage] = useState<PrReviewPage>("files")',
   );
@@ -14,8 +14,8 @@ test("session Review shares page navigation with its workspace summary", () => {
   const summary = source.slice(summaryStart, summaryEnd);
   expect(summaryStart).toBeGreaterThan(-1);
   expect(summary).toContain("reviewMode={showReview}");
-  expect(summary).toContain("reviewPage={reviewPage}");
-  expect(summary).toContain("onReviewPageChange={setReviewPage}");
+  expect(summary).not.toContain("reviewPage={reviewPage}");
+  expect(summary).not.toContain("onReviewPageChange={setReviewPage}");
 
   const panelStart = source.lastIndexOf("<PrPanel");
   const panelEnd = source.indexOf("/>", panelStart);
@@ -24,4 +24,6 @@ test("session Review shares page navigation with its workspace summary", () => {
   expect(panel).toContain("page={reviewPage}");
   expect(panel).toContain("onPageChange={setReviewPage}");
   expect(panel).toContain("compactToolbar={summaryVisible}");
+  expect(panel).toContain("sessionActionTarget={");
+  expect(source).toContain("ref={setReviewSessionActionTarget}");
 });

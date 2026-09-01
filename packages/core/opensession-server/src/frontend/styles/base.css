@@ -361,7 +361,11 @@
 	   note above that rule — so a snippet here reads a touch raised in light
 	   where a pasted one reads sunk. Kept as-is by the migration; changing it
 	   is a visual call, not a mechanical one. */
-  --code-well: #0d0f13;
+  /* Keep both surfaces available because the code theme can differ from the
+     app theme. --code-well remains the surface for the current app theme. */
+  --code-well-light: #f6f8fa;
+  --code-well-dark: #0d0f13;
+  --code-well: var(--code-well-dark);
   --code-well-line: rgba(255, 255, 255, 0.06);
   --code-well-ink: #b6bcc8;
   --code-well-gutter: #565d6b;
@@ -652,7 +656,7 @@ html[data-theme="light"] {
   --tool-agent: #bf3989;
   --tool-mcp: #8250df;
   --tool-skill: #0f766e;
-  --code-well: #f6f8fa;
+  --code-well: var(--code-well-light);
   --code-well-line: #d8dee4;
   --code-well-ink: #57606a;
   --code-well-gutter: #8c959f;

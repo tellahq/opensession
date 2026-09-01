@@ -247,8 +247,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   becomes the shipped-change composer: it suggests copy from the walkthrough,
   preloads its after image, accepts up to 10 images, and reconnects Slack when
   the person's existing grant lacks image access. Agent-requested Slack
-  composers settle into a sent or cancelled receipt; sent receipts keep the
-  channel and an **Open in Slack** link. A workspace row's
+  composers save edited copy, channel, and images while pending, including on
+  dismiss or background. They settle into a sent or cancelled receipt; sent
+  receipts keep the channel and an **Open in Slack** link. A workspace row's
   long-press menu also rolls the
   cached PR state into one next action: merge when ready, fix failed checks,
   resolve conflicts, address feedback, view running checks, or archive after it

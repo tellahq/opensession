@@ -24,11 +24,12 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   statfsSync,
   statSync,
 } from "node:fs";
 import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { audit } from "./audit";
 import { configuredPaths } from "./config";
 
@@ -128,10 +129,13 @@ const BUILD_PROCESS_NAMES = new Set([
  * twice over: its cargo/rustc child matches here, and `hasEntryNewerThan`
  * spares any target/ touched within HOT_HOURS.
  *
- * Returns null when /proc is unavailable (non-Linux) — callers must treat that
- * as "cannot determine" and skip the sweep entirely rather than guess.
+ * Linux reads `/proc`; macOS pairs `ps` with `lsof` for the same process/cwd
+ * lookup. Returns null when the platform cannot provide a trustworthy answer,
+ * so callers skip the sweep rather than guess.
  */
 export function worktreesInUse(root: string): Set<string> | null {
+  if (process.platform === "darwin") return macWorktreesInUse(root);
+
   let pids: string[];
   try {
     pids = readdirSync("/proc").filter((p) => /^\d+$/.test(p));
@@ -151,6 +155,56 @@ export function worktreesInUse(root: string): Set<string> | null {
     if (!isBuildProcess(pid)) continue;
     const rest = cwd.slice(prefix.length);
     const name = rest.split("/")[0];
+    if (name) inUse.add(join(root, name));
+  }
+  return inUse;
+}
+
+function macWorktreesInUse(root: string): Set<string> | null {
+  const ps = Bun.spawnSync(["ps", "-axo", "pid=,comm="], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (ps.exitCode !== 0) return null;
+
+  const builds = ps.stdout
+    .toString()
+    .split("\n")
+    .map((line) => line.match(/^\s*(\d+)\s+(.+?)\s*$/))
+    .filter(
+      (match): match is RegExpMatchArray =>
+        !!match && BUILD_PROCESS_NAMES.has(basename(match[2]!)),
+    );
+  if (!builds.length) return new Set();
+  if (!Bun.which("lsof")) return null;
+
+  const inUse = new Set<string>();
+  let canonicalRoot = root;
+  try {
+    canonicalRoot = realpathSync(root);
+  } catch {}
+  const prefix = `${canonicalRoot}/`;
+  for (const match of builds) {
+    const pid = match[1]!;
+    const lsof = Bun.spawnSync(["lsof", "-a", "-p", pid, "-d", "cwd", "-Fn"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (lsof.exitCode !== 0) {
+      try {
+        process.kill(Number(pid), 0);
+        return null;
+      } catch {
+        continue; // The build exited between ps and lsof.
+      }
+    }
+    const cwd = lsof.stdout
+      .toString()
+      .split("\n")
+      .find((line) => line.startsWith("n"))
+      ?.slice(1);
+    if (!cwd?.startsWith(prefix)) continue;
+    const name = cwd.slice(prefix.length).split("/")[0];
     if (name) inUse.add(join(root, name));
   }
   return inUse;
@@ -330,7 +384,7 @@ export async function sweepDiskGc(
   const inUse = worktreesInUse(root);
   if (!inUse) {
     console.warn(
-      "[disk-gc] cannot read /proc — skipping sweep (never GC without the in-use check)",
+      "[disk-gc] cannot inspect build processes — skipping sweep (never GC without the in-use check)",
     );
     return result;
   }

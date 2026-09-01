@@ -253,7 +253,6 @@ import {
   IconDesk,
   IconDotsHorizontal,
   IconEye,
-  IconBranches,
   IconNewBranch,
   IconPullRequest,
   IconLink,
@@ -291,7 +290,11 @@ import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { onTranscriptDisclosure } from "../lib/transcript-disclosures";
-import { takePendingSessionFork } from "../lib/pending-session-fork";
+import {
+  onPendingSessionFork,
+  takePendingSessionFork,
+  type PendingSessionFork,
+} from "../lib/pending-session-fork";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged } from "../lib/lanes";
 import { ownedBy } from "../lib/sidebar-lanes";
@@ -1010,12 +1013,16 @@ export function SessionViewer({
   }, [draftKey, images, files]);
   // When set, the next send forks a new session from either the current tip or
   // a specific earlier message instead of continuing this one.
-  const [forkFrom, setForkFrom] = useState<
-    { kind: "tip" } | { kind: "message"; messageId: string } | null
-  >(null);
+  const [forkFrom, setForkFrom] = useState<PendingSessionFork | null>(null);
   useEffect(() => {
-    const messageId = takePendingSessionFork(session.id);
-    if (messageId) setForkFrom({ kind: "message", messageId });
+    const applyPendingFork = () => {
+      const target = takePendingSessionFork(session.id);
+      if (target) setForkFrom(target);
+    };
+    applyPendingFork();
+    return onPendingSessionFork((sessionId) => {
+      if (sessionId === session.id) applyPendingFork();
+    });
   }, [session.id]);
   const [
     {
@@ -4298,6 +4305,8 @@ export function SessionViewer({
   // of the surrounding chrome.
   const headerRef = useRef<HTMLDivElement>(null);
   const headerActionsRef = useRef<HTMLDivElement>(null);
+  const [reviewSessionActionTarget, setReviewSessionActionTarget] =
+    useState<HTMLDivElement | null>(null);
   const desktopChangesRef = useRef<HTMLDivElement>(null);
   const [headerW, setHeaderW] = useState(0);
   // Whether the header's workspace-summary card is up. The transcript and
@@ -5308,10 +5317,10 @@ export function SessionViewer({
                 setOverflowOpen(false);
                 handleFork();
               }}
-              title="Start a new session from this one's history"
+              title="Duplicate this session with its current context"
             >
-              <IconBranches size={20} className={MENU_ICON} />
-              <span className="grow">Fork session</span>
+              <IconCopy size={20} className={MENU_ICON} />
+              <span className="grow">Duplicate session</span>
             </Menu.Item>
           );
           // Start something from this session. Renders nothing until the session
@@ -5610,6 +5619,12 @@ export function SessionViewer({
               headerActionsEl={headerActionsEl}
               actions={
                 <>
+                  {!isPhone && showReview && (
+                    <div
+                      ref={setReviewSessionActionTarget}
+                      className="contents"
+                    />
+                  )}
                   {!isPhone && secondaryActions(false)}
                   {!isPhone && keepInSidebarAction(false)}
                   {/* Whoever ELSE has the session open, right before Share. Your
@@ -5726,8 +5741,6 @@ export function SessionViewer({
                       onOpenChange={setSummaryOpen}
                       tabStripVisible={tabStripVisible}
                       reviewMode={showReview}
-                      reviewPage={reviewPage}
-                      onReviewPageChange={setReviewPage}
                       // Too narrow for both, and the card gets out of the way
                       // until someone asks for it from the same button.
                       hasRoom={summaryHasRoom}
@@ -6340,6 +6353,9 @@ export function SessionViewer({
                 sessionId={session.id}
                 sessions={allSessions || workspaceSessions || []}
                 onOpenSessionById={openSession}
+                sessionActionTarget={
+                  isPhone ? undefined : reviewSessionActionTarget
+                }
                 editGate={connected && !isBusy && !noEngine}
                 onOpenSession={openCurrentWorkspace}
                 onAddToInput={(text) =>
@@ -6793,8 +6809,8 @@ export function SessionViewer({
                       <div className="mb-2 flex items-center justify-between gap-3 rounded-control border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-3 py-[7px] text-supporting text-fg">
                         <span>
                           {forkFrom.kind === "tip"
-                            ? "⑂ Forking a new session from the current history. Type the new direction."
-                            : "⑂ Forking a new session from the selected message. Type the new direction."}
+                            ? "Duplicating this session from the current context. Type the new direction."
+                            : "Duplicating this session from the selected message. Type the new direction."}
                         </span>
                         <button
                           className="cursor-pointer bg-transparent text-label text-dim hover:text-fg"
