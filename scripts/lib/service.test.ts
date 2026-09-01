@@ -15,10 +15,12 @@
 import { describe, expect, test } from "bun:test";
 import { platform } from "os";
 import {
+  bootstrapLaunchAgent,
   LAUNCHD_LABEL,
   LAUNCHD_LAUNCHER,
   metadataInstallBlockGuidance,
   renderExecutorUnit,
+  renderIngressUnit,
   renderLauncher,
   renderPlist,
   renderUnit,
@@ -32,6 +34,64 @@ import { ENV_PATH, HOME } from "./paths";
 // real regression on the platforms that install them.
 const onServiceHost = platform() !== "win32";
 
+describe("launchd bootstrap", () => {
+  test("retries transient EIO after bootout", async () => {
+    const commands: string[][] = [];
+    const results = [
+      {
+        code: 5,
+        stdout: "",
+        stderr: "Bootstrap failed: 5: Input/output error",
+      },
+      { code: 113, stdout: "", stderr: "Could not find service" },
+      { code: 0, stdout: "", stderr: "" },
+    ];
+
+    const result = await bootstrapLaunchAgent(
+      "dev.opensession.test",
+      "/tmp/test.plist",
+      {
+        domain: "gui/501",
+        runCommand: async (command) => {
+          commands.push(command);
+          return results.shift()!;
+        },
+        pause: async () => {},
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(commands).toEqual([
+      ["launchctl", "bootstrap", "gui/501", "/tmp/test.plist"],
+      ["launchctl", "print", "gui/501/dev.opensession.test"],
+      ["launchctl", "bootstrap", "gui/501", "/tmp/test.plist"],
+    ]);
+  });
+
+  test("accepts a job registered despite transient EIO", async () => {
+    const results = [
+      {
+        code: 5,
+        stdout: "",
+        stderr: "Bootstrap failed: 5: Input/output error",
+      },
+      { code: 0, stdout: "registered", stderr: "" },
+    ];
+
+    const result = await bootstrapLaunchAgent(
+      "dev.opensession.test",
+      "/tmp/test.plist",
+      {
+        domain: "gui/501",
+        runCommand: async () => results.shift()!,
+        pause: async () => {},
+      },
+    );
+
+    expect(result).toEqual({ code: 0, stdout: "registered", stderr: "" });
+  });
+});
+
 describe("cloud metadata install refusal", () => {
   test("explains the EC2 risk, safe block, explicit bypass, and rerun", () => {
     const guidance = metadataInstallBlockGuidance(1234).join("\n");
@@ -41,7 +101,9 @@ describe("cloud metadata install refusal", () => {
     expect(guidance).toContain(
       "sudo iptables -I OUTPUT -d 169.254.169.254 -m owner --uid-owner 1234 -j REJECT",
     );
-    expect(guidance).toContain("rerun the same Open Session installation command");
+    expect(guidance).toContain(
+      "rerun the same Open Session installation command",
+    );
     expect(guidance).toContain("OPENSESSION_ALLOW_IMDS=1");
     expect(guidance).toContain("explicitly skip this safety check");
   });
@@ -56,13 +118,14 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
     // start at boot.
     expect(unit).not.toMatch(/^User=/m);
     expect(unit).not.toMatch(/^IPAddressDeny=/m);
+    expect(unit).not.toMatch(/^Slice=opensession-control\.slice$/m);
     expect(unit).toMatch(/^WantedBy=default\.target$/m);
     // Optional env file: a box with no secrets yet must still start.
     expect(unit).toContain(`EnvironmentFile=-${ENV_PATH}`);
     expect(unit).toContain(`WorkingDirectory=${serviceWorkdir()}`);
     expect(
       unit.match(
-        /^ExecStart=(\S+) run packages\/core\/opensession-server\/opensession\.ts$/m,
+        /^ExecStart=(\S+) run packages\/core\/opensession-server\/src\/server\/gateway-supervisor\.ts$/m,
       )?.[1],
     ).toMatch(/bun$/);
     expect(unit).not.toContain("opensession-executor.service");
@@ -85,9 +148,10 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
 
     expect(unit).toContain(`WorkingDirectory=${serviceWorkdir()}`);
     expect(unit).toContain(`EnvironmentFile=${ENV_PATH}`);
+    expect(unit).toContain("Slice=opensession-control.slice");
     expect(
       unit.match(
-        /^ExecStart=(\S+) run packages\/core\/opensession-server\/opensession\.ts$/m,
+        /^ExecStart=(\S+) run packages\/core\/opensession-server\/src\/server\/gateway-supervisor\.ts$/m,
       )?.[1],
     ).toMatch(/bun$/);
   });
@@ -100,7 +164,13 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
     expect(unit).toContain("IPAddressDeny=169.254.169.254/32");
     expect(unit).toMatch(/^TimeoutStopSec=\d+$/m);
     expect(unit).toContain("[Install]");
-    expect(unit).toContain("Wants=opensession-executor.service");
+    expect(unit).not.toContain("Wants=opensession-session-kernel.service");
+    expect(unit).not.toContain("Wants=opensession-executor.service");
+    expect(unit).toContain(
+      "Wants=opensession.socket opensession-ingress.service",
+    );
+    expect(unit).not.toContain("Sockets=opensession.socket");
+    expect(unit).toContain('Environment="OPENSESSION_EXTERNAL_INGRESS=1"');
     expect(unit).not.toContain("Requires=opensession-executor.service");
     expect(unit).toContain(
       "LoadCredential=executor-token:/etc/opensession/executor-token",
@@ -116,6 +186,18 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
   });
 });
 
+describe.skipIf(!onServiceHost)("ingress systemd unit", () => {
+  test("owns the socket independently from gateway lifecycle", async () => {
+    const unit = await renderIngressUnit("system");
+    expect(unit).toContain(`WorkingDirectory=${serviceWorkdir()}`);
+    expect(unit).toContain("Sockets=opensession.socket");
+    expect(unit).toContain("Requires=opensession.socket");
+    expect(unit).toContain("src/server/gateway-ingress.ts");
+    expect(unit).not.toContain("EnvironmentFile=");
+    expect(unit).toContain("Restart=always");
+  });
+});
+
 describe.skipIf(!onServiceHost)("executor systemd unit", () => {
   test("is independently restartable and host-specific", async () => {
     const unit = await renderExecutorUnit();
@@ -127,6 +209,7 @@ describe.skipIf(!onServiceHost)("executor systemd unit", () => {
     );
     expect(unit).toContain("Restart=always");
     expect(unit).toContain("RuntimeDirectory=opensession-executor");
+    expect(unit).toContain("Slice=opensession-control.slice");
     expect(unit).toContain(
       "LoadCredential=executor-token:/etc/opensession/executor-token",
     );

@@ -10,7 +10,9 @@ describe("parseCsRemote", () => {
   });
 
   it("parses an ephemeral remote to the base repo with ephemeral: true", () => {
-    expect(parseCsRemote("https://acme.code.storage/team/widget+ephemeral.git")).toEqual({
+    expect(
+      parseCsRemote("https://acme.code.storage/team/widget+ephemeral.git"),
+    ).toEqual({
       org: "acme",
       repoId: "team/widget",
       ephemeral: true,
@@ -18,15 +20,19 @@ describe("parseCsRemote", () => {
   });
 
   it("parses an ephemeral remote without .git", () => {
-    expect(parseCsRemote("https://acme.code.storage/widget+ephemeral")).toEqual({
-      org: "acme",
-      repoId: "widget",
-      ephemeral: true,
-    });
+    expect(parseCsRemote("https://acme.code.storage/widget+ephemeral")).toEqual(
+      {
+        org: "acme",
+        repoId: "widget",
+        ephemeral: true,
+      },
+    );
   });
 
   it("parses an ephemeral remote with embedded credentials", () => {
-    expect(parseCsRemote("https://t:jwt@acme.code.storage/widget+ephemeral.git")).toEqual({
+    expect(
+      parseCsRemote("https://t:jwt@acme.code.storage/widget+ephemeral.git"),
+    ).toEqual({
       org: "acme",
       repoId: "widget",
       ephemeral: true,
@@ -34,7 +40,9 @@ describe("parseCsRemote", () => {
   });
 
   it("rejects a bare +ephemeral path (no repo id left)", () => {
-    expect(parseCsRemote("https://acme.code.storage/+ephemeral.git")).toBeNull();
+    expect(
+      parseCsRemote("https://acme.code.storage/+ephemeral.git"),
+    ).toBeNull();
   });
 
   it("rejects non-code.storage URLs", () => {
@@ -49,7 +57,9 @@ describe("csRepoClaimFromPath", () => {
   });
 
   it("strips a +ephemeral ref-namespace suffix", () => {
-    expect(csRepoClaimFromPath("/team/widget+ephemeral.git")).toBe("team/widget");
+    expect(csRepoClaimFromPath("/team/widget+ephemeral.git")).toBe(
+      "team/widget",
+    );
     expect(csRepoClaimFromPath("widget+ephemeral")).toBe("widget");
   });
 });

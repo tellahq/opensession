@@ -21,7 +21,11 @@ const fs = require("node:fs");
 const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { NativeDictation } = require("./native-dictation");
-const { resumableAccountUrl } = require("./account-navigation");
+const {
+  accountForContext,
+  isOpenSessionAppUrl,
+  resumableAccountUrl,
+} = require("./account-navigation");
 const packageConfig = require("../package.json").opensession || {};
 const nativeDictation = new NativeDictation();
 
@@ -30,7 +34,11 @@ const nativeDictation = new NativeDictation();
 // leave the app in a startup crash loop. Open Session restores its own window bounds, so
 // native persistent UI state is both redundant and unsafe here.
 if (process.platform === "darwin") {
-  systemPreferences.setUserDefault("ApplePersistenceIgnoreState", "boolean", true);
+  systemPreferences.setUserDefault(
+    "ApplePersistenceIgnoreState",
+    "boolean",
+    true,
+  );
 }
 
 // Which Open Session server this shell is a window onto. It is asked for on the
@@ -116,9 +124,9 @@ function adoptLegacyUserData() {
 adoptLegacyUserData();
 
 // Visible app windows share Chromium's profile (auth, preferences and drafts),
-// but each renderer owns its own route so two windows can stay in different
-// workspaces. `win` is the most recently focused one and is only a fallback for
-// actions, such as deep links and app-menu commands, that do not name a window.
+// but each renderer owns both its organization and route. `win` is the most
+// recently focused one and is only a fallback for actions, such as deep links
+// and app-menu commands, that do not name a window.
 let win = null;
 const appWindows = new Set();
 const windowData = new WeakMap();
@@ -128,9 +136,12 @@ let pendingDeepLink = null;
 
 function activeWindow() {
   const focused = BrowserWindow.getFocusedWindow();
-  if (focused && appWindows.has(focused) && !focused.isDestroyed()) return focused;
+  if (focused && appWindows.has(focused) && !focused.isDestroyed())
+    return focused;
   if (win && appWindows.has(win) && !win.isDestroyed()) return win;
-  return [...appWindows].findLast((candidate) => !candidate.isDestroyed()) || null;
+  return (
+    [...appWindows].findLast((candidate) => !candidate.isDestroyed()) || null
+  );
 }
 
 function eventWindow(event) {
@@ -187,15 +198,19 @@ function readStoredAccounts() {
       const accounts = stored.accounts.flatMap((account) => {
         const url = normalizeServerUrl(account?.url);
         if (!url) return [];
-        return [{
-          id: String(account.id || crypto.randomUUID()),
-          label: String(account.label || new URL(url).host),
-          url,
-          lastUrl: resumableAccountUrl(url, account.lastUrl),
-        }];
+        return [
+          {
+            id: String(account.id || crypto.randomUUID()),
+            label: String(account.label || new URL(url).host),
+            url,
+            lastUrl: resumableAccountUrl(url, account.lastUrl),
+          },
+        ];
       });
       if (accounts.length) {
-        const activeId = accounts.some((account) => account.id === stored.activeId)
+        const activeId = accounts.some(
+          (account) => account.id === stored.activeId,
+        )
           ? stored.activeId
           : accounts[0].id;
         return { accounts, activeId };
@@ -229,17 +244,32 @@ function writeStoredAccounts(accounts) {
 
 function activeAccountResumeUrl() {
   const stored = readStoredAccounts();
-  const account = stored.accounts.find((candidate) => candidate.id === stored.activeId);
+  const account = stored.accounts.find(
+    (candidate) => candidate.id === stored.activeId,
+  );
   return account?.lastUrl || account?.url || APP_URL;
+}
+
+function accountForWindow(target, stored = readStoredAccounts()) {
+  return accountForContext(
+    stored.accounts,
+    stored.activeId,
+    target && windowData.get(target)?.accountId,
+    target?.webContents.getURL(),
+  );
+}
+
+function accountUrlForWindow(target) {
+  return accountForWindow(target)?.url || APP_URL;
 }
 
 // pushState changes the renderer's URL without a document load, so local web
 // state alone is not enough for the shell's next launch. Persist the route of
 // the most recently focused app window whenever it changes.
-function rememberActiveAccountUrl(target) {
+function rememberWindowAccountUrl(target) {
   if (!target || target.isDestroyed() || target !== activeWindow()) return;
   const stored = readStoredAccounts();
-  const account = stored.accounts.find((candidate) => candidate.id === stored.activeId);
+  const account = accountForWindow(target, stored);
   if (!account) return;
   const next = resumableAccountUrl(account.url, target.webContents.getURL());
   if (!next || next === account.lastUrl) return;
@@ -247,14 +277,34 @@ function rememberActiveAccountUrl(target) {
   writeStoredAccounts(stored);
 }
 
-function readStoredServer() {
+function rememberFocusedWindowAccount(target) {
+  if (!target || target.isDestroyed()) return;
   const stored = readStoredAccounts();
-  return stored.accounts.find((account) => account.id === stored.activeId)?.url || null;
+  const account = accountForWindow(target, stored);
+  if (!account) return;
+  const data = windowData.get(target);
+  if (data) data.accountId = account.id;
+  if (stored.activeId !== account.id) {
+    stored.activeId = account.id;
+    writeStoredAccounts(stored);
+  }
+  rememberWindowAccountUrl(target);
+  syncBackgroundAccountWindows();
+  buildAppMenu();
 }
 
-function writeStoredServer(url, addingAccount = false) {
+function readStoredServer() {
   const stored = readStoredAccounts();
-  const active = stored.accounts.find((account) => account.id === stored.activeId);
+  return (
+    stored.accounts.find((account) => account.id === stored.activeId)?.url ||
+    null
+  );
+}
+
+function writeStoredServer(url, addingAccount = false, accountID = null) {
+  const stored = readStoredAccounts();
+  const selectedID = accountID || stored.activeId;
+  const active = stored.accounts.find((account) => account.id === selectedID);
   if (addingAccount || !active) {
     const account = { id: crypto.randomUUID(), label: new URL(url).host, url };
     stored.accounts.push(account);
@@ -275,14 +325,20 @@ function adoptDefaultForExistingProfile() {
 }
 
 function trustedAccountOrigins() {
-  return readStoredAccounts().accounts.map((account) => new URL(account.url).origin);
+  return readStoredAccounts().accounts.map(
+    (account) => new URL(account.url).origin,
+  );
+}
+
+function refreshAccountOrigins() {
+  IN_WINDOW_ORIGINS = [...new Set(trustedAccountOrigins())];
+  blockServiceWorker();
 }
 
 function setServer(url) {
   APP_URL = url;
   APP_ORIGIN = new URL(url).origin;
-  IN_WINDOW_ORIGINS = [...new Set([APP_ORIGIN, ...trustedAccountOrigins()])];
-  blockServiceWorker();
+  refreshAccountOrigins();
 }
 
 // The web app's service worker only exists for Web Push, app-shell caching and
@@ -295,8 +351,9 @@ function blockServiceWorker() {
   // one of them, so re-registering is how the block follows a server change.
   session.defaultSession.webRequest.onBeforeRequest(
     {
-      urls: [...new Set([APP_ORIGIN, ...trustedAccountOrigins()])]
-        .map((origin) => origin + "/*sw.js*"),
+      urls: [...new Set([APP_ORIGIN, ...trustedAccountOrigins()])].map(
+        (origin) => origin + "/*sw.js*",
+      ),
     },
     (_details, callback) => callback({ cancel: true }),
   );
@@ -313,7 +370,8 @@ async function probeServer(url) {
       signal: controller.signal,
       credentials: "omit",
     });
-    if (!res.ok) return { ok: false, error: `That address answered ${res.status}.` };
+    if (!res.ok)
+      return { ok: false, error: `That address answered ${res.status}.` };
     // The health route is public and answers JSON, so a host that is something
     // else (a parked domain, a proxy's login wall) fails here rather than at
     // the first empty window.
@@ -331,7 +389,8 @@ async function probeServer(url) {
 
 async function resolveServer(raw) {
   const url = normalizeServerUrl(raw);
-  if (!url) return { ok: false, error: "That doesn't look like a server address." };
+  if (!url)
+    return { ok: false, error: "That doesn't look like a server address." };
   const reached = await probeServer(url);
   if (reached.ok) return { ok: true, url };
   // A bare tailnet or LAN host often serves plain HTTP. Match the first-run
@@ -341,20 +400,25 @@ async function resolveServer(raw) {
   return { ...reached, url };
 }
 
-function showSetup(returnDestination = "app", target = activeWindow(), addingAccount = false) {
+function showSetup(
+  returnDestination = "app",
+  target = activeWindow(),
+  addingAccount = false,
+) {
   if (!target || target.isDestroyed()) return;
   const data = windowData.get(target);
   if (data) {
     data.setupReturnDestination = returnDestination;
     data.addingAccount = addingAccount;
   }
+  const currentURL = accountUrlForWindow(target);
   clearStallGuard(target);
   target.loadFile(path.join(__dirname, "setup.html"), {
     query: {
-      url: addingAccount ? "" : APP_URL || DEFAULT_URL,
+      url: addingAccount ? "" : currentURL || DEFAULT_URL,
       // A later visit can be called off; the first run has nothing to go back
       // to.
-      mode: addingAccount ? "add" : APP_URL ? "change" : "first-run",
+      mode: addingAccount ? "add" : currentURL ? "change" : "first-run",
     },
   });
 }
@@ -371,7 +435,8 @@ let updateState = { state: "idle", version: null };
 function setUpdateState(next) {
   updateState = next;
   for (const target of appWindows) {
-    if (!target.isDestroyed()) target.webContents.send("os1:update-state", updateState);
+    if (!target.isDestroyed())
+      target.webContents.send("os1:update-state", updateState);
   }
 }
 
@@ -454,7 +519,8 @@ function initAutoUpdate() {
       dialog.showMessageBox(win, {
         type: "info",
         message: "Update available",
-        detail: "Downloading in the background. You'll be asked to restart when it's ready.",
+        detail:
+          "Downloading in the background. You'll be asked to restart when it's ready.",
       });
     }
   });
@@ -547,9 +613,11 @@ function onScreenBounds(saved) {
   if (Object.values(bounds).some((n) => !Number.isFinite(n))) return null;
   const area = screen.getDisplayMatching(bounds).workArea;
   const shownWidth =
-    Math.min(bounds.x + bounds.width, area.x + area.width) - Math.max(bounds.x, area.x);
+    Math.min(bounds.x + bounds.width, area.x + area.width) -
+    Math.max(bounds.x, area.x);
   const shownHeight =
-    Math.min(bounds.y + bounds.height, area.y + area.height) - Math.max(bounds.y, area.y);
+    Math.min(bounds.y + bounds.height, area.y + area.height) -
+    Math.max(bounds.y, area.y);
   if (shownWidth < 200 || shownHeight < 100) return null;
   bounds.width = clamp(bounds.width, MIN_WIDTH, area.width);
   bounds.height = clamp(bounds.height, MIN_HEIGHT, area.height);
@@ -630,12 +698,9 @@ function inWindow(url) {
   }
 }
 
-function inActiveWindow(url) {
-  try {
-    return new URL(url).origin === APP_ORIGIN;
-  } catch {
-    return false;
-  }
+function inActiveWindow(url, target = activeWindow()) {
+  const accountURL = accountUrlForWindow(target);
+  return accountURL ? isOpenSessionAppUrl(accountURL, url) : false;
 }
 
 // Sign-in pages for external services (e.g. the ChatGPT device-code sign-in
@@ -678,19 +743,22 @@ async function explainMicDenied() {
   if (micDialogOpen) return;
   micDialogOpen = true;
   try {
-    const { response } = await dialog.showMessageBox(win && !win.isDestroyed() ? win : null, {
-      type: "info",
-      message: "macOS is blocking the microphone",
-      // app.getName() rather than the product name: what System Settings lists
-      // is the bundle's label, so this text has to follow the label.
-      detail:
-        `Dictation needs microphone access, and macOS has it turned off for ${app.getName()}.\n\n` +
-        `Open System Settings → Privacy & Security → Microphone, switch ${app.getName()} on, ` +
-        "then quit and reopen it.",
-      buttons: ["Open System Settings", "Not now"],
-      defaultId: 0,
-      cancelId: 1,
-    });
+    const { response } = await dialog.showMessageBox(
+      win && !win.isDestroyed() ? win : null,
+      {
+        type: "info",
+        message: "macOS is blocking the microphone",
+        // app.getName() rather than the product name: what System Settings lists
+        // is the bundle's label, so this text has to follow the label.
+        detail:
+          `Dictation needs microphone access, and macOS has it turned off for ${app.getName()}.\n\n` +
+          `Open System Settings → Privacy & Security → Microphone, switch ${app.getName()} on, ` +
+          "then quit and reopen it.",
+        buttons: ["Open System Settings", "Not now"],
+        defaultId: 0,
+        cancelId: 1,
+      },
+    );
     if (response === 0) openMicSettings();
   } finally {
     micDialogOpen = false;
@@ -710,18 +778,20 @@ async function micAccessAllowed() {
   return false;
 }
 
-// os1://session/abc → <configured instance>/session/abc; app links pass through.
-function deepLinkToUrl(raw) {
+// os1://session/abc → <focused instance>/session/abc; app links pass through.
+function deepLinkToUrl(raw, target = activeWindow()) {
+  const accountURL = accountUrlForWindow(target);
+  if (!accountURL) return null;
   try {
     const u = new URL(raw);
     if (u.protocol === "os1:") {
-      const target = new URL(APP_URL);
-      target.pathname = "/" + (u.host || "") + u.pathname;
-      target.search = u.search;
-      target.hash = u.hash;
-      return target.toString();
+      const destination = new URL(accountURL);
+      destination.pathname = "/" + (u.host || "") + u.pathname;
+      destination.search = u.search;
+      destination.hash = u.hash;
+      return destination.toString();
     }
-    if (u.origin === APP_ORIGIN) return raw;
+    if (inActiveWindow(raw, target)) return raw;
   } catch {}
   return null;
 }
@@ -740,15 +810,17 @@ function openDeepLink(raw) {
       const account = stored.accounts.find(
         (candidate) => new URL(candidate.url).origin === incoming.origin,
       );
-      if (account && account.id !== stored.activeId) {
-        switchAccount(account.id, raw);
+      const target = showWindow();
+      if (account && account.id !== accountForWindow(target, stored)?.id) {
+        switchAccount(account.id, raw, target);
         return;
       }
     }
   } catch {}
-  const url = deepLinkToUrl(raw);
+  const target = showWindow();
+  const url = deepLinkToUrl(raw, target);
   if (!url) return;
-  loadApp(url, showWindow());
+  loadApp(url, target);
 }
 
 // Answers whether there was one, so a caller that would otherwise load the app
@@ -783,7 +855,7 @@ function showStatusPage(target = activeWindow()) {
   if (!target || target.isDestroyed()) return;
   clearStallGuard(target);
   target.loadFile(path.join(__dirname, "offline.html"), {
-    query: { url: APP_URL },
+    query: { url: accountUrlForWindow(target) },
   });
 }
 
@@ -827,8 +899,24 @@ function loadApp(url, target = activeWindow()) {
   target.loadURL(url);
 }
 
-function createWindow(initialURL = null) {
+function createWindow(initialURL = null, initialAccountID = null) {
   const state = loadWindowState();
+  const stored = readStoredAccounts();
+  let account = stored.accounts.find(
+    (candidate) => candidate.id === initialAccountID,
+  );
+  if (initialURL) {
+    try {
+      const initialOrigin = new URL(initialURL).origin;
+      account =
+        stored.accounts.find(
+          (candidate) => new URL(candidate.url).origin === initialOrigin,
+        ) || account;
+    } catch {}
+  }
+  account ||= stored.accounts.find(
+    (candidate) => candidate.id === stored.activeId,
+  );
   const createdWindow = new BrowserWindow({
     ...cascadeWindowBounds(state.bounds),
     minWidth: MIN_WIDTH,
@@ -867,6 +955,7 @@ function createWindow(initialURL = null) {
     saveTimer: null,
     addingAccount: false,
     setupReturnDestination: "app",
+    accountId: account?.id || null,
   };
   appWindows.add(createdWindow);
   windowData.set(createdWindow, data);
@@ -887,7 +976,7 @@ function createWindow(initialURL = null) {
 
   createdWindow.on("focus", () => {
     win = createdWindow;
-    rememberActiveAccountUrl(createdWindow);
+    rememberFocusedWindowAccount(createdWindow);
   });
   createdWindow.once("ready-to-show", () => {
     if (createdWindow.isDestroyed()) return;
@@ -901,9 +990,9 @@ function createWindow(initialURL = null) {
   createdWindow.webContents.on("did-finish-load", () => {
     if (createdWindow.isDestroyed()) return;
     createdWindow.webContents.setZoomLevel(clampZoom(data.zoomLevel));
-    if (inActiveWindow(createdWindow.webContents.getURL())) {
-      const stored = readStoredAccounts();
-      if (stored.activeId) refreshAccountLabel(stored.activeId, createdWindow.webContents);
+    if (inActiveWindow(createdWindow.webContents.getURL(), createdWindow)) {
+      const accountID = windowData.get(createdWindow)?.accountId;
+      if (accountID) refreshAccountLabel(accountID, createdWindow.webContents);
     }
   });
   // A commit means the server answered, so the stall guard's job is done —
@@ -911,10 +1000,10 @@ function createWindow(initialURL = null) {
   // changes are a separate Electron event because they use history.pushState.
   createdWindow.webContents.on("did-navigate", () => {
     clearStallGuard(createdWindow);
-    rememberActiveAccountUrl(createdWindow);
+    rememberWindowAccountUrl(createdWindow);
   });
   createdWindow.webContents.on("did-navigate-in-page", () => {
-    rememberActiveAccountUrl(createdWindow);
+    rememberWindowAccountUrl(createdWindow);
   });
   // Pinch and wheel zoom land in the renderer, so the level has to be read back
   // a tick later; the View menu's roles are picked up by saveWindowState.
@@ -941,12 +1030,14 @@ function createWindow(initialURL = null) {
     clearStallGuard(createdWindow);
     appWindows.delete(createdWindow);
     if (win === createdWindow) win = activeWindow();
+    syncBackgroundAccountWindows();
   });
 
-  // Keep app navigation in-window; everything else (the device-code page, PR
-  // links, docs, …) goes to the default browser.
+  // Keep app-page navigation in-window. Same-origin documents such as raw
+  // reports, assets and downloads still belong in the default browser,
+  // alongside the device-code page, PR links and docs.
   createdWindow.webContents.on("will-navigate", (e, url) => {
-    if (!inActiveWindow(url)) {
+    if (!inActiveWindow(url, createdWindow)) {
       e.preventDefault();
       openExternal(url);
       return;
@@ -956,8 +1047,8 @@ function createWindow(initialURL = null) {
     armStallGuard(createdWindow);
   });
   createdWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (inActiveWindow(url)) {
-      createWindow(url);
+    if (inActiveWindow(url, createdWindow)) {
+      createWindow(url, data.accountId);
       return { action: "deny" };
     }
     openExternal(url);
@@ -987,9 +1078,13 @@ function createWindow(initialURL = null) {
       items.push(
         {
           label: "Copy Image",
-          click: () => createdWindow.webContents.copyImageAt(params.x, params.y),
+          click: () =>
+            createdWindow.webContents.copyImageAt(params.x, params.y),
         },
-        { label: "Copy Image Address", click: () => clipboard.writeText(params.srcURL) },
+        {
+          label: "Copy Image Address",
+          click: () => clipboard.writeText(params.srcURL),
+        },
         { type: "separator" },
       );
     }
@@ -1007,20 +1102,24 @@ function createWindow(initialURL = null) {
     }
 
     // Drop a trailing separator so link-only menus end cleanly.
-    while (items.length && items[items.length - 1].type === "separator") items.pop();
+    while (items.length && items[items.length - 1].type === "separator")
+      items.pop();
     if (!items.length) return;
     Menu.buildFromTemplate(items).popup({ window: createdWindow });
   });
 
   // Show a themed recovery page instead of Chromium's network error.
-  createdWindow.webContents.on("did-fail-load", (_e, code, _desc, _url, isMainFrame) => {
-    if (!isMainFrame) return;
-    // A superseded navigation aborts as a matter of course, so ERR_ABORTED is
-    // not a failure to report. It must not call off the stall guard either: an
-    // abort that commits nothing is the empty window this guards against.
-    if (code === -3 /* ERR_ABORTED */) return;
-    showStatusPage(createdWindow);
-  });
+  createdWindow.webContents.on(
+    "did-fail-load",
+    (_e, code, _desc, _url, isMainFrame) => {
+      if (!isMainFrame) return;
+      // A superseded navigation aborts as a matter of course, so ERR_ABORTED is
+      // not a failure to report. It must not call off the stall guard either: an
+      // abort that commits nothing is the empty window this guards against.
+      if (code === -3 /* ERR_ABORTED */) return;
+      showStatusPage(createdWindow);
+    },
+  );
 
   // Belt-and-braces: if the renderer ever dies, come back instead of showing
   // a dead window.
@@ -1029,7 +1128,8 @@ function createWindow(initialURL = null) {
     openHome(createdWindow);
   });
 
-  if (initialURL && inActiveWindow(initialURL)) loadApp(initialURL, createdWindow);
+  if (initialURL && inActiveWindow(initialURL, createdWindow))
+    loadApp(initialURL, createdWindow);
   else openHome(createdWindow);
   return createdWindow;
 }
@@ -1042,7 +1142,9 @@ async function refreshAccountLabel(accountID, webContents) {
     );
     if (typeof name !== "string" || !name.trim()) return;
     const stored = readStoredAccounts();
-    const account = stored.accounts.find((candidate) => candidate.id === accountID);
+    const account = stored.accounts.find(
+      (candidate) => candidate.id === accountID,
+    );
     if (!account || account.label === name.trim()) return;
     account.label = name.trim();
     if (writeStoredAccounts(stored)) buildAppMenu();
@@ -1050,9 +1152,16 @@ async function refreshAccountLabel(accountID, webContents) {
 }
 
 function syncBackgroundAccountWindows() {
-  if (!appReady) return;
+  if (!appReady || quitting) return;
   const stored = readStoredAccounts();
-  const inactive = stored.accounts.filter((account) => account.id !== stored.activeId);
+  const visibleAccountIDs = new Set(
+    [...appWindows]
+      .map((target) => windowData.get(target)?.accountId)
+      .filter(Boolean),
+  );
+  const inactive = stored.accounts.filter(
+    (account) => !visibleAccountIDs.has(account.id),
+  );
   const inactiveIDs = new Set(inactive.map((account) => account.id));
   for (const [id, accountWindow] of backgroundAccountWindows) {
     if (!inactiveIDs.has(id) || accountWindow.isDestroyed()) {
@@ -1083,7 +1192,9 @@ function syncBackgroundAccountWindows() {
       }
     });
     accountWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    accountWindow.on("closed", () => backgroundAccountWindows.delete(account.id));
+    accountWindow.on("closed", () =>
+      backgroundAccountWindows.delete(account.id),
+    );
     accountWindow.webContents.on("did-finish-load", () => {
       refreshAccountLabel(account.id, accountWindow.webContents);
     });
@@ -1093,47 +1204,53 @@ function syncBackgroundAccountWindows() {
 }
 
 function switchAccount(id, targetURL = null, target = activeWindow()) {
+  if (!target || target.isDestroyed()) return;
   const stored = readStoredAccounts();
   const account = stored.accounts.find((candidate) => candidate.id === id);
-  if (!account || account.id === stored.activeId) return;
+  const current = accountForWindow(target, stored);
+  if (!account || account.id === current?.id) return;
 
   // Keep each organization at its exact in-app URL. Loading the account root
   // delegated this to the web app's generic cold-start fallback, which could
   // only recover one session id and often selected the workspace's first tab.
-  // Capturing before setServer changes the active origin preserves sessions,
-  // workspace panes, review tabs, and route refinements independently per org.
-  const current = stored.accounts.find((candidate) => candidate.id === stored.activeId);
-  if (current && target && !target.isDestroyed()) {
-    const currentUrl = resumableAccountUrl(current.url, target.webContents.getURL());
+  // Each visible window owns its account, so switching one must not navigate
+  // any of the others.
+  if (current) {
+    const currentUrl = resumableAccountUrl(
+      current.url,
+      target.webContents.getURL(),
+    );
     if (currentUrl) current.lastUrl = currentUrl;
   }
   const destination =
-    resumableAccountUrl(account.url, targetURL) || account.lastUrl || account.url;
+    resumableAccountUrl(account.url, targetURL) ||
+    account.lastUrl ||
+    account.url;
   account.lastUrl = destination;
   stored.activeId = account.id;
   if (!writeStoredAccounts(stored)) return;
-  setServer(account.url);
+  const data = windowData.get(target);
+  if (data) data.accountId = account.id;
+  refreshAccountOrigins();
   syncBackgroundAccountWindows();
   buildAppMenu();
-  initAutoUpdate();
-  const destinationWindow = showWindow(target);
-  for (const appWindow of appWindows) {
-    loadApp(appWindow === destinationWindow ? destination : account.url, appWindow);
-  }
+  loadApp(destination, showWindow(target));
 }
 
 // What a window opens on: the app once there is a server to open, and the
 // question itself until then.
 function openHome(target = activeWindow()) {
-  if (APP_URL) loadApp(APP_URL, target);
+  const accountURL = accountUrlForWindow(target);
+  if (accountURL) loadApp(accountURL, target);
   else showSetup("app", target);
 }
 
 function organizationAccountMenuItems(stored = readStoredAccounts()) {
+  const selectedID = accountForWindow(activeWindow(), stored)?.id;
   return stored.accounts.map((account, index) => ({
     label: `${account.label}${badgeByOrigin.get(new URL(account.url).origin) ? ` (${badgeByOrigin.get(new URL(account.url).origin)})` : ""}`,
     type: "radio",
-    checked: account.id === stored.activeId,
+    checked: account.id === selectedID,
     accelerator: index < 9 ? `CommandOrControl+Shift+${index + 1}` : undefined,
     click: () => switchAccount(account.id),
   }));
@@ -1189,7 +1306,8 @@ function buildAppMenu() {
           {
             label: "New Window",
             accelerator: "CommandOrControl+N",
-            click: () => createWindow(),
+            click: () =>
+              createWindow(null, accountForWindow(activeWindow())?.id || null),
           },
           { role: "close" },
         ],
@@ -1225,7 +1343,11 @@ app.whenReady().then(async () => {
   // macOS; everything else outside the allowlist is refused.
   session.defaultSession.setPermissionRequestHandler(
     async (wc, permission, callback, details) => {
-      const allowed = ["notifications", "clipboard-sanitized-write", "fullscreen"];
+      const allowed = [
+        "notifications",
+        "clipboard-sanitized-write",
+        "fullscreen",
+      ];
       if (!inWindow(wc.getURL())) return callback(false);
       if (permission === "media") {
         // Audio only. A request that also wants the camera isn't dictation.
@@ -1240,11 +1362,18 @@ app.whenReady().then(async () => {
     const source = e.senderFrame?.url ?? "";
     if (!inWindow(source)) return;
     let origin;
-    try { origin = new URL(source).origin; } catch { return; }
+    try {
+      origin = new URL(source).origin;
+    } catch {
+      return;
+    }
     const next = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
     if (next) badgeByOrigin.set(origin, next);
     else badgeByOrigin.delete(origin);
-    const total = [...badgeByOrigin.values()].reduce((sum, value) => sum + value, 0);
+    const total = [...badgeByOrigin.values()].reduce(
+      (sum, value) => sum + value,
+      0,
+    );
     app.setBadgeCount(total);
     buildAppMenu();
   });
@@ -1255,23 +1384,31 @@ app.whenReady().then(async () => {
     const source = e.senderFrame?.url ?? "";
     if (!inWindow(source)) return;
     let origin;
-    try { origin = new URL(source).origin; } catch { return; }
+    try {
+      origin = new URL(source).origin;
+    } catch {
+      return;
+    }
     const stored = readStoredAccounts();
-    const account = stored.accounts.find((candidate) => new URL(candidate.url).origin === origin);
+    const account = stored.accounts.find(
+      (candidate) => new URL(candidate.url).origin === origin,
+    );
     const target = eventWindow(e) || activeWindow();
-    if (account && account.id !== stored.activeId) switchAccount(account.id, source, target);
+    if (account && account.id !== accountForWindow(target, stored)?.id)
+      switchAccount(account.id, source, target);
     else showWindow(target);
   });
 
   const fromActiveOrganizationPicker = (e) => {
     const source = e.senderFrame?.url ?? "";
-    return !!eventWindow(e) && inActiveWindow(source);
+    const target = eventWindow(e);
+    return !!target && inActiveWindow(source, target);
   };
   ipcMain.handle("os1:organizations-list", (e) => {
     if (!fromActiveOrganizationPicker(e)) return null;
     const stored = readStoredAccounts();
     return {
-      activeId: stored.activeId,
+      activeId: accountForWindow(eventWindow(e), stored)?.id || stored.activeId,
       accounts: stored.accounts.map((account, index) => ({
         id: account.id,
         label: account.label,
@@ -1312,6 +1449,7 @@ app.whenReady().then(async () => {
     if (!writeStoredAccounts(stored)) {
       return { ok: false, error: "Couldn't save that organization." };
     }
+    refreshAccountOrigins();
     // Let invoke resolve before navigation destroys its renderer, then activate
     // the new account through the normal switch path.
     const target = eventWindow(e);
@@ -1367,11 +1505,13 @@ app.whenReady().then(async () => {
     if (fromShellPage(e)) showSetup("status", eventWindow(e));
   });
   ipcMain.on("os1:server-cancel", (e) => {
-    if (!fromShellPage(e) || !APP_URL) return;
+    if (!fromShellPage(e)) return;
     const target = eventWindow(e);
+    const accountURL = accountUrlForWindow(target);
+    if (!accountURL) return;
     const data = target && windowData.get(target);
     if (data?.setupReturnDestination === "status") showStatusPage(target);
-    else loadApp(APP_URL, target);
+    else loadApp(accountURL, target);
   });
   ipcMain.handle("os1:server-probe", async (e, raw) => {
     if (!fromShellPage(e)) return { ok: false };
@@ -1382,8 +1522,10 @@ app.whenReady().then(async () => {
     const target = eventWindow(e);
     const data = target && windowData.get(target);
     const url = normalizeServerUrl(raw);
-    if (!url) return { ok: false, error: "That doesn't look like a server address." };
-    if (!writeStoredServer(url, data?.addingAccount)) {
+    if (!url)
+      return { ok: false, error: "That doesn't look like a server address." };
+    const previousAccount = accountForWindow(target);
+    if (!writeStoredServer(url, data?.addingAccount, previousAccount?.id)) {
       return { ok: false, error: "Couldn't save that address." };
     }
     // A change reaches a running app by restarting it. The service-worker
@@ -1391,17 +1533,24 @@ app.whenReady().then(async () => {
     // already loaded were all wired to the old address, and one restart is
     // steadier than four things kept in step. A first run has none of that
     // behind it yet.
-    if (APP_URL && url !== APP_URL) {
+    if (
+      !data?.addingAccount &&
+      previousAccount &&
+      url !== previousAccount.url
+    ) {
       quitting = true;
       app.relaunch();
       app.quit();
       return { ok: true };
     }
     setServer(url);
+    const stored = readStoredAccounts();
+    const selected = stored.accounts.find(
+      (account) => account.id === stored.activeId,
+    );
+    if (data) data.accountId = selected?.id || null;
     initAutoUpdate();
-    if (!flushPendingDeepLink()) {
-      for (const appWindow of appWindows) openHome(appWindow);
-    }
+    if (!flushPendingDeepLink()) openHome(target);
     return { ok: true };
   });
 
@@ -1422,11 +1571,11 @@ app.whenReady().then(async () => {
   // on screen. A loaded app reconnects on its own and would lose drafts and
   // scroll position on a reload, so only the status page is retried here.
   powerMonitor.on("resume", () => {
-    if (!APP_URL) return;
     for (const appWindow of appWindows) {
       // Named rather than any file:// page: the setup page is someone typing.
       if (appWindow.webContents.getURL().includes("offline.html")) {
-        loadApp(APP_URL, appWindow);
+        const accountURL = accountUrlForWindow(appWindow);
+        if (accountURL) loadApp(accountURL, appWindow);
       }
     }
   });
@@ -1447,7 +1596,7 @@ app.on("continue-activity", (e, _type, _userInfo, details) => {
 });
 
 app.on("before-quit", () => {
-  rememberActiveAccountUrl(activeWindow());
+  rememberWindowAccountUrl(activeWindow());
   quitting = true;
   nativeDictation.cancel();
   saveWindowState();

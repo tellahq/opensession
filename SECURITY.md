@@ -39,7 +39,7 @@ So the following are **not** vulnerabilities:
   equivalent to handing over a shell on that machine.
 - "The API accepts a `user` field I can set." When sign-in is off, yes — it is a
   display name. When sign-in is on, the verified identity overrides it, and a
-  case where it does *not* would be a real finding.
+  case where it does _not_ would be a real finding.
 
 Optional GitHub sign-in ([docs/setup/github.md](docs/setup/github.md)) adds real
 authentication on top. Turning it on does not make the server safe to expose
@@ -49,7 +49,7 @@ publicly, and we do not claim it does.
 
 The interesting boundary is **untrusted input reaching privileged capability**.
 Agent runs process text we did not write — customer support tickets, pull-request
-diffs, issue bodies, web pages — and the guarantee is that this text is *data*,
+diffs, issue bodies, web pages — and the guarantee is that this text is _data_,
 never instructions that can widen what a run may do.
 
 Anything that breaks that is in scope, especially:
@@ -69,7 +69,7 @@ Anything that breaks that is in scope, especially:
   task spawning, status and cancellation, without `answer_session_question`,
   `send_to_session`, `cancel_session` or `create_session`.
 - **Prompt injection that crosses a real boundary.** Text in a diff or a ticket
-  persuading an agent to *say* something is not a vulnerability; text that causes
+  persuading an agent to _say_ something is not a vulnerability; text that causes
   it to exfiltrate a credential, post as a user, mutate an account, or move money
   is. The money-moving Stripe tools are stripped from the model's tool list
   rather than merely discouraged — a way to reach them would be critical.
@@ -112,7 +112,7 @@ that changes, this section will say so.
 If you run Open Session, the highest-value things you can do:
 
 1. **Keep it off the public internet.** [networking.md](docs/setup/networking.md)
-   — and verify from *outside* your network, which is the only check that proves
+   — and verify from _outside_ your network, which is the only check that proves
    anything.
 2. **Publish only the public ingress gateway** for webhooks, not the private app,
    and configure the signing secret for every enabled provider. Built-in handlers

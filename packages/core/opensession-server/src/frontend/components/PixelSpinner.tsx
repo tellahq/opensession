@@ -1,12 +1,12 @@
 import React from "react";
 import { cn } from "../ui/cn";
 import {
-	PIXEL,
-	PIXEL_DELAY,
-	PIXEL_GRID,
-	PIXEL_WAVE,
-	PIXEL_WAVE_SLOW,
-	pixelDelayStep,
+  PIXEL,
+  PIXEL_DELAY,
+  PIXEL_GRID,
+  PIXEL_WAVE,
+  PIXEL_WAVE_SLOW,
+  pixelDelayStep,
 } from "../lib/pixel-spinner-classes";
 
 /**
@@ -33,28 +33,28 @@ import {
  * pattern.
  */
 interface Props {
-	/** Retained for compatibility; the pattern no longer changes over time. */
-	cycling?: boolean;
-	/** Retained for compatibility; no longer used. */
-	interval?: number;
-	/** Slower, calmer cadence for ambient indicators. */
-	slow?: boolean;
-	className?: string;
+  /** Retained for compatibility; the pattern no longer changes over time. */
+  cycling?: boolean;
+  /** Retained for compatibility; no longer used. */
+  interval?: number;
+  /** Slower, calmer cadence for ambient indicators. */
+  slow?: boolean;
+  className?: string;
 }
 
 export function PixelSpinner({ className, slow }: Props) {
-	return (
-		<div className={cn(PIXEL_GRID, className)} aria-hidden>
-			{Array.from({ length: 9 }, (_, i) => (
-				<div
-					key={i}
-					className={cn(
-						PIXEL,
-						slow ? PIXEL_WAVE_SLOW : PIXEL_WAVE,
-						PIXEL_DELAY[pixelDelayStep(i)],
-					)}
-				/>
-			))}
-		</div>
-	);
+  return (
+    <div className={cn(PIXEL_GRID, className)} aria-hidden>
+      {Array.from({ length: 9 }, (_, i) => (
+        <div
+          key={i}
+          className={cn(
+            PIXEL,
+            slow ? PIXEL_WAVE_SLOW : PIXEL_WAVE,
+            PIXEL_DELAY[pixelDelayStep(i)],
+          )}
+        />
+      ))}
+    </div>
+  );
 }

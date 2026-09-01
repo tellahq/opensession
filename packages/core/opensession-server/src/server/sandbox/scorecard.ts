@@ -116,15 +116,27 @@ function providerOf(event: AuditEvent, environment?: string): string {
 }
 
 function utcDate(daysAgo: number, now: Date): string {
-  return new Date(now.getTime() - daysAgo * 86_400_000).toISOString().slice(0, 10);
+  return new Date(now.getTime() - daysAgo * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 }
 
-function scoreOutcomeEvents(events: AuditEvent[], kind: string): OutcomeScore[] {
-  const groups = new Map<string, { successful: number; failed: number; values: number[] }>();
+function scoreOutcomeEvents(
+  events: AuditEvent[],
+  kind: string,
+): OutcomeScore[] {
+  const groups = new Map<
+    string,
+    { successful: number; failed: number; values: number[] }
+  >();
   for (const event of events) {
     if (event.kind !== kind) continue;
     const provider = providerOf(event);
-    const group = groups.get(provider) ?? { successful: 0, failed: 0, values: [] };
+    const group = groups.get(provider) ?? {
+      successful: 0,
+      failed: 0,
+      values: [],
+    };
     if (event.outcome === "ok") group.successful++;
     else group.failed++;
     const elapsed = finiteNumber(
@@ -149,7 +161,10 @@ export function buildSandboxScorecard(
   events: AuditEvent[],
   options: { days?: number; now?: Date } = {},
 ): SandboxScorecard {
-  const days = Math.min(90, Math.max(1, Math.floor(options.days ?? SCORECARD_DEFAULT_DAYS)));
+  const days = Math.min(
+    90,
+    Math.max(1, Math.floor(options.days ?? SCORECARD_DEFAULT_DAYS)),
+  );
   const now = options.now ?? new Date();
   const through = now.toISOString().slice(0, 10);
   const from = utcDate(days - 1, now);
@@ -172,7 +187,8 @@ export function buildSandboxScorecard(
   const turnGroups = new Map<string, TurnGroup>();
   for (const event of windowEvents) {
     if (event.kind !== "session_turn_metric") continue;
-    const environment = event.environment === "sandbox" ? "sandbox" : "worktree";
+    const environment =
+      event.environment === "sandbox" ? "sandbox" : "worktree";
     const provider = providerOf(event, environment);
     const key = `${environment}:${provider}`;
     const group = turnGroups.get(key) ?? {
@@ -218,15 +234,27 @@ export function buildSandboxScorecard(
       duration: timing(group.duration),
       sandboxReady: timing(group.sandboxReady),
     }))
-    .sort((a, b) => `${a.environment}:${a.provider}`.localeCompare(`${b.environment}:${b.provider}`));
+    .sort((a, b) =>
+      `${a.environment}:${a.provider}`.localeCompare(
+        `${b.environment}:${b.provider}`,
+      ),
+    );
 
-  const previewGroups = new Map<string, { environment: "worktree" | "sandbox"; provider: string; values: number[] }>();
+  const previewGroups = new Map<
+    string,
+    { environment: "worktree" | "sandbox"; provider: string; values: number[] }
+  >();
   for (const event of windowEvents) {
     if (event.kind !== "preview_ready_metric") continue;
-    const environment = event.environment === "sandbox" ? "sandbox" : "worktree";
+    const environment =
+      event.environment === "sandbox" ? "sandbox" : "worktree";
     const provider = providerOf(event, environment);
     const key = `${environment}:${provider}`;
-    const group = previewGroups.get(key) ?? { environment, provider, values: [] };
+    const group = previewGroups.get(key) ?? {
+      environment,
+      provider,
+      values: [],
+    };
     const value = finiteNumber(event.ready_ms);
     if (value !== null) group.values.push(value);
     previewGroups.set(key, group);
@@ -237,15 +265,27 @@ export function buildSandboxScorecard(
       provider: group.provider,
       timing: timing(group.values),
     }))
-    .sort((a, b) => `${a.environment}:${a.provider}`.localeCompare(`${b.environment}:${b.provider}`));
+    .sort((a, b) =>
+      `${a.environment}:${a.provider}`.localeCompare(
+        `${b.environment}:${b.provider}`,
+      ),
+    );
 
   const resumes = scoreOutcomeEvents(windowEvents, "sandbox_resume_metric");
-  const restartSurvival = scoreOutcomeEvents(windowEvents, "sandbox_restart_survival_metric");
+  const restartSurvival = scoreOutcomeEvents(
+    windowEvents,
+    "sandbox_restart_survival_metric",
+  );
   const hostTurns = turns.filter((score) => score.environment === "worktree");
   const sandboxTurns = turns.filter((score) => score.environment === "sandbox");
-  const hostPreviews = previews.filter((score) => score.environment === "worktree");
-  const sandboxPreviews = previews.filter((score) => score.environment === "sandbox");
-  const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+  const hostPreviews = previews.filter(
+    (score) => score.environment === "worktree",
+  );
+  const sandboxPreviews = previews.filter(
+    (score) => score.environment === "sandbox",
+  );
+  const sum = (values: number[]) =>
+    values.reduce((total, value) => total + value, 0);
   const weightedFailureRate = (scores: TurnScore[]) => {
     const total = sum(scores.map((score) => score.turns));
     return total ? sum(scores.map((score) => score.failed)) / total : null;
@@ -254,10 +294,11 @@ export function buildSandboxScorecard(
     // Provider-level medians are sufficient only for display. Gate on raw
     // samples so a low-volume provider cannot carry the aggregate.
     const values = windowEvents
-      .filter((event) =>
-        event.kind === "session_turn_metric" &&
-        (event.environment === "sandbox" ? "sandbox" : "worktree") ===
-          (scores[0]?.environment ?? "missing"),
+      .filter(
+        (event) =>
+          event.kind === "session_turn_metric" &&
+          (event.environment === "sandbox" ? "sandbox" : "worktree") ===
+            (scores[0]?.environment ?? "missing"),
       )
       .map((event) => finiteNumber(event.start_to_first_token_ms))
       .filter((value): value is number => value !== null);
@@ -268,57 +309,95 @@ export function buildSandboxScorecard(
   const hostTurnCount = sum(hostTurns.map((score) => score.turns));
   const sandboxTurnCount = sum(sandboxTurns.map((score) => score.turns));
   if (hostTurnCount < SCORECARD_THRESHOLDS.minimumTurnsPerEnvironment) {
-    reasons.push(`Need ${SCORECARD_THRESHOLDS.minimumTurnsPerEnvironment - hostTurnCount} more worktree turns.`);
+    reasons.push(
+      `Need ${SCORECARD_THRESHOLDS.minimumTurnsPerEnvironment - hostTurnCount} more worktree turns.`,
+    );
   }
   if (sandboxTurnCount < SCORECARD_THRESHOLDS.minimumTurnsPerEnvironment) {
-    reasons.push(`Need ${SCORECARD_THRESHOLDS.minimumTurnsPerEnvironment - sandboxTurnCount} more sandbox turns.`);
+    reasons.push(
+      `Need ${SCORECARD_THRESHOLDS.minimumTurnsPerEnvironment - sandboxTurnCount} more sandbox turns.`,
+    );
   }
   const sandboxDays = new Set(
     windowEvents
-      .filter((event) => event.kind === "session_turn_metric" && event.environment === "sandbox")
+      .filter(
+        (event) =>
+          event.kind === "session_turn_metric" &&
+          event.environment === "sandbox",
+      )
       .map(dayOf)
       .filter((day): day is string => day !== null),
   ).size;
   if (sandboxDays < SCORECARD_THRESHOLDS.minimumSandboxDays) {
-    reasons.push(`Need sandbox use on ${SCORECARD_THRESHOLDS.minimumSandboxDays - sandboxDays} more distinct days.`);
+    reasons.push(
+      `Need sandbox use on ${SCORECARD_THRESHOLDS.minimumSandboxDays - sandboxDays} more distinct days.`,
+    );
   }
-  const hostPreviewCount = sum(hostPreviews.map((score) => score.timing.samples));
-  const sandboxPreviewCount = sum(sandboxPreviews.map((score) => score.timing.samples));
+  const hostPreviewCount = sum(
+    hostPreviews.map((score) => score.timing.samples),
+  );
+  const sandboxPreviewCount = sum(
+    sandboxPreviews.map((score) => score.timing.samples),
+  );
   if (hostPreviewCount < SCORECARD_THRESHOLDS.minimumPreviewsPerEnvironment) {
-    reasons.push(`Need ${SCORECARD_THRESHOLDS.minimumPreviewsPerEnvironment - hostPreviewCount} more worktree preview starts.`);
+    reasons.push(
+      `Need ${SCORECARD_THRESHOLDS.minimumPreviewsPerEnvironment - hostPreviewCount} more worktree preview starts.`,
+    );
   }
-  if (sandboxPreviewCount < SCORECARD_THRESHOLDS.minimumPreviewsPerEnvironment) {
-    reasons.push(`Need ${SCORECARD_THRESHOLDS.minimumPreviewsPerEnvironment - sandboxPreviewCount} more sandbox preview starts.`);
+  if (
+    sandboxPreviewCount < SCORECARD_THRESHOLDS.minimumPreviewsPerEnvironment
+  ) {
+    reasons.push(
+      `Need ${SCORECARD_THRESHOLDS.minimumPreviewsPerEnvironment - sandboxPreviewCount} more sandbox preview starts.`,
+    );
   }
   const resumeAttempts = sum(resumes.map((score) => score.attempts));
   if (resumeAttempts < SCORECARD_THRESHOLDS.minimumSandboxResumes) {
-    reasons.push(`Need ${SCORECARD_THRESHOLDS.minimumSandboxResumes - resumeAttempts} more sandbox wake/resume samples.`);
+    reasons.push(
+      `Need ${SCORECARD_THRESHOLDS.minimumSandboxResumes - resumeAttempts} more sandbox wake/resume samples.`,
+    );
   }
   const restartAttempts = sum(restartSurvival.map((score) => score.attempts));
   if (restartAttempts < SCORECARD_THRESHOLDS.minimumRestartAttempts) {
-    reasons.push(`Need ${SCORECARD_THRESHOLDS.minimumRestartAttempts - restartAttempts} more sandbox restart-survival samples.`);
+    reasons.push(
+      `Need ${SCORECARD_THRESHOLDS.minimumRestartAttempts - restartAttempts} more sandbox restart-survival samples.`,
+    );
   }
 
   const hostMedian = pooledMedian(hostTurns, "firstToken");
   const sandboxMedian = pooledMedian(sandboxTurns, "firstToken");
-  if (hostMedian !== null && sandboxMedian !== null && sandboxMedian > hostMedian) {
-    reasons.push(`Sandbox median first-token latency (${sandboxMedian} ms) exceeds worktree (${hostMedian} ms).`);
+  if (
+    hostMedian !== null &&
+    sandboxMedian !== null &&
+    sandboxMedian > hostMedian
+  ) {
+    reasons.push(
+      `Sandbox median first-token latency (${sandboxMedian} ms) exceeds worktree (${hostMedian} ms).`,
+    );
   }
   const hostFailureRate = weightedFailureRate(hostTurns);
   const sandboxFailureRate = weightedFailureRate(sandboxTurns);
   if (
     hostFailureRate !== null &&
     sandboxFailureRate !== null &&
-    sandboxFailureRate > hostFailureRate + SCORECARD_THRESHOLDS.maximumFailureRateRegression
+    sandboxFailureRate >
+      hostFailureRate + SCORECARD_THRESHOLDS.maximumFailureRateRegression
   ) {
-    reasons.push("Sandbox turn failure rate exceeds the worktree rate by more than 2 percentage points.");
+    reasons.push(
+      "Sandbox turn failure rate exceeds the worktree rate by more than 2 percentage points.",
+    );
   }
-  const restartSuccessful = sum(restartSurvival.map((score) => score.successful));
+  const restartSuccessful = sum(
+    restartSurvival.map((score) => score.successful),
+  );
   if (
     restartAttempts >= SCORECARD_THRESHOLDS.minimumRestartAttempts &&
-    restartSuccessful / restartAttempts < SCORECARD_THRESHOLDS.requiredRestartSurvivalRate
+    restartSuccessful / restartAttempts <
+      SCORECARD_THRESHOLDS.requiredRestartSurvivalRate
   ) {
-    reasons.push("Not every observed sandbox run survived the Open Session restart.");
+    reasons.push(
+      "Not every observed sandbox run survived the Open Session restart.",
+    );
   }
 
   return {
@@ -339,7 +418,9 @@ export function buildSandboxScorecard(
   };
 }
 
-export function readSandboxScorecard(days = SCORECARD_DEFAULT_DAYS): SandboxScorecard {
+export function readSandboxScorecard(
+  days = SCORECARD_DEFAULT_DAYS,
+): SandboxScorecard {
   const boundedDays = Math.min(90, Math.max(1, Math.floor(days)));
   const now = new Date();
   const events: AuditEvent[] = [];

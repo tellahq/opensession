@@ -21,7 +21,10 @@ let routeTable = new Map<string, PublicWebhookHandler>();
  * Register a route after boot for an integration configured live from the UI.
  * Existing keys win because boot-time registration is authoritative.
  */
-export function addWebhookRoute(key: string, handler: PublicWebhookHandler): void {
+export function addWebhookRoute(
+  key: string,
+  handler: PublicWebhookHandler,
+): void {
   if (!routeTable.has(key)) routeTable.set(key, handler);
 }
 
@@ -34,13 +37,16 @@ export function configureWebhookRoutes(
   for (const agent of agents) {
     for (const [key, handler] of agent.getRoutes()) {
       if (routeTable.has(key)) {
-        console.warn(`[webhook] Route collision: ${key} (agent: ${agent.name})`);
+        console.warn(
+          `[webhook] Route collision: ${key} (agent: ${agent.name})`,
+        );
       }
       routeTable.set(key, handler);
     }
   }
   for (const [key, handler] of extraRoutes || []) {
-    if (routeTable.has(key)) console.warn(`[webhook] Route collision: ${key} (extra)`);
+    if (routeTable.has(key))
+      console.warn(`[webhook] Route collision: ${key} (extra)`);
     routeTable.set(key, handler);
   }
   console.log(
@@ -53,7 +59,9 @@ export function configureWebhookRoutes(
  * Dispatch one request through the exact public webhook registry. Undefined
  * means the ingress listener must answer with its bodyless 404.
  */
-export async function handleWebhookRequest(req: Request): Promise<Response | undefined> {
+export async function handleWebhookRequest(
+  req: Request,
+): Promise<Response | undefined> {
   let url: URL;
   try {
     url = new URL(req.url);

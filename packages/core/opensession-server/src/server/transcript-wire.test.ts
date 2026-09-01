@@ -11,7 +11,7 @@ function entry(
   id: string,
   type: SeqEntry["type"],
   content: string,
-  extra: Partial<SeqEntry> = {}
+  extra: Partial<SeqEntry> = {},
 ): SeqEntry {
   return {
     id,
@@ -55,9 +55,7 @@ describe("v2 transcript wire previews", () => {
       contentClamped: true,
       contentLength: 3_000,
     });
-    expect(clamped[1].content).toHaveLength(
-      INIT_COLLAPSED_MESSAGE_CLAMP_BYTES
-    );
+    expect(clamped[1].content).toHaveLength(INIT_COLLAPSED_MESSAGE_CLAMP_BYTES);
     expect(clamped[4]).toBe(answer);
     expect(clamped[4].content).toHaveLength(3_000);
   });
@@ -74,7 +72,7 @@ describe("v2 transcript wire previews", () => {
 
   test("uses the same clamp budgets when sizing a snapshot", () => {
     expect(v2SnapshotEntryWeight("tool_result", 100_000)).toBe(
-      INIT_TOOL_RESULT_CLAMP_BYTES + 512
+      INIT_TOOL_RESULT_CLAMP_BYTES + 512,
     );
     expect(v2SnapshotEntryWeight("assistant", 100_000)).toBe(8 * 1024);
     expect(v2SnapshotEntryWeight("assistant", 900)).toBe(900);

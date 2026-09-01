@@ -475,7 +475,8 @@ private struct WorkflowAgentTranscriptView: View {
                         worktreeDir: nil,
                         foldState: { folds.fold(for: $0, preference: turnActivity) },
                         expansionState: { folds.expansion(id: $0, defaultExpanded: $1) },
-                        activity: turnActivity
+                        activity: turnActivity,
+                        isActiveReasoning: keepsPolling && block.id == blocks.last?.id
                     )
                     .id(block.id)
                 }

@@ -20,25 +20,25 @@ let cache = new Map<string, MentionRecord>();
 let loadedFor: string | null = null;
 
 function emit() {
-	window.dispatchEvent(new Event(CHANGE_EVENT));
+  window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
 function toMap(list: MentionRecord[]): Map<string, MentionRecord> {
-	return new Map(list.map((m) => [m.sessionId, m]));
+  return new Map(list.map((m) => [m.sessionId, m]));
 }
 
 async function load(user: string) {
-	loadedFor = user;
-	let list: MentionRecord[] = [];
-	try {
-		list = await fetchMentions(user);
-	} catch {
-		list = [];
-	}
-	// A newer load() (user switched mid-flight) wins.
-	if (loadedFor !== user) return;
-	cache = toMap(list);
-	emit();
+  loadedFor = user;
+  let list: MentionRecord[] = [];
+  try {
+    list = await fetchMentions(user);
+  } catch {
+    list = [];
+  }
+  // A newer load() (user switched mid-flight) wins.
+  if (loadedFor !== user) return;
+  cache = toMap(list);
+  emit();
 }
 
 whenCurrentUserReady((user) => void load(user));
@@ -46,15 +46,15 @@ window.addEventListener(USER_CHANGE_EVENT, () => void load(getCurrentUser()));
 
 /** The mention on this session, if you have one. */
 export function mentionFor(sessionId: string): MentionRecord | undefined {
-	return cache.get(sessionId);
+  return cache.get(sessionId);
 }
 
 export function mentionCount(): number {
-	return cache.size;
+  return cache.size;
 }
 
 export function allMentions(): MentionRecord[] {
-	return [...cache.values()].sort((a, b) => b.ts - a.ts);
+  return [...cache.values()].sort((a, b) => b.ts - a.ts);
 }
 
 /**
@@ -63,52 +63,52 @@ export function allMentions(): MentionRecord[] {
  * client because the cache already agrees.
  */
 export function clearMention(sessionId: string): void {
-	if (!cache.has(sessionId)) return;
-	const next = new Map(cache);
-	next.delete(sessionId);
-	cache = next;
-	emit();
-	void clearMentionApi(getCurrentUser(), sessionId).catch(() => {});
+  if (!cache.has(sessionId)) return;
+  const next = new Map(cache);
+  next.delete(sessionId);
+  cache = next;
+  emit();
+  void clearMentionApi(getCurrentUser(), sessionId).catch(() => {});
 }
 
 export function clearAllMentions(): void {
-	if (!cache.size) return;
-	cache = new Map();
-	emit();
-	void clearMentionApi(getCurrentUser()).catch(() => {});
+  if (!cache.size) return;
+  cache = new Map();
+  emit();
+  void clearMentionApi(getCurrentUser()).catch(() => {});
 }
 
 /** Apply a server push. Ignores mentions addressed to somebody else. */
 export function receiveMention(user: string, mention: MentionRecord): void {
-	if (!sameUser(user)) return;
-	const next = new Map(cache);
-	next.set(mention.sessionId, mention);
-	cache = next;
-	emit();
+  if (!sameUser(user)) return;
+  const next = new Map(cache);
+  next.set(mention.sessionId, mention);
+  cache = next;
+  emit();
 }
 
 /** Another device of yours opened the session (or cleared everything). */
 export function receiveMentionsCleared(user: string, sessionId?: string): void {
-	if (!sameUser(user)) return;
-	if (!sessionId) {
-		if (!cache.size) return;
-		cache = new Map();
-		emit();
-		return;
-	}
-	if (!cache.has(sessionId)) return;
-	const next = new Map(cache);
-	next.delete(sessionId);
-	cache = next;
-	emit();
+  if (!sameUser(user)) return;
+  if (!sessionId) {
+    if (!cache.size) return;
+    cache = new Map();
+    emit();
+    return;
+  }
+  if (!cache.has(sessionId)) return;
+  const next = new Map(cache);
+  next.delete(sessionId);
+  cache = next;
+  emit();
 }
 
 /** Mentions are keyed on the picker first name; the socket carries the same. */
 function sameUser(user: string): boolean {
-	return user.trim().toLowerCase() === getCurrentUser().trim().toLowerCase();
+  return user.trim().toLowerCase() === getCurrentUser().trim().toLowerCase();
 }
 
 export function onMentionsChanged(handler: () => void): () => void {
-	window.addEventListener(CHANGE_EVENT, handler);
-	return () => window.removeEventListener(CHANGE_EVENT, handler);
+  window.addEventListener(CHANGE_EVENT, handler);
+  return () => window.removeEventListener(CHANGE_EVENT, handler);
 }

@@ -5,11 +5,7 @@ import type {
   ExecutorResponse,
 } from "@tellahq/opensession-protocol/executor";
 import { EXECUTOR_PROTOCOL_VERSION } from "@tellahq/opensession-protocol/executor";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-} from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import type { RunHostMeta, RunHostSpec } from "../runner-host/protocol";
 import {
   HOST_META_NAME,
@@ -27,7 +23,8 @@ import {
 } from "./host-unit";
 import { timingSafeEqual } from "crypto";
 
-const HOST_ID_RE = /^rh-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const HOST_ID_RE =
+  /^rh-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Bounds concurrent launch requests crossing the control socket, not active
 // hosts. Executor service process: it does not load ~/.opensession.env, so an
 // override only takes effect through a systemd drop-in on
@@ -67,10 +64,15 @@ const defaultDeps: ExecutorCoordinatorDeps = {
     if (!existsSync(`${dir}/${HOST_SOCK_NAME}`) || !meta?.pid) return false;
     const matches = sameProcess(meta);
     if (matches !== undefined) return matches;
-    try { process.kill(meta.pid, 0); return true; }
-    catch { return false; }
+    try {
+      process.kill(meta.pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
   },
-  hostStarted: (dir) => !!readJson<RunHostMeta>(`${dir}/${HOST_META_NAME}`)?.pid,
+  hostStarted: (dir) =>
+    !!readJson<RunHostMeta>(`${dir}/${HOST_META_NAME}`)?.pid,
   now: () => new Date().toISOString(),
 };
 
@@ -98,11 +100,19 @@ export class ExecutorCoordinator {
   }
 
   async handle(request: ExecutorRequest): Promise<ExecutorResponse> {
-    if (!request || typeof request.requestId !== "string" || !request.requestId) {
+    if (
+      !request ||
+      typeof request.requestId !== "string" ||
+      !request.requestId
+    ) {
       return this.error("", "invalid_request", "requestId is required");
     }
     if (!secureEqual(request.token, this.authTokenBytes)) {
-      return this.error(request.requestId, "invalid_request", "invalid executor credential");
+      return this.error(
+        request.requestId,
+        "invalid_request",
+        "invalid executor credential",
+      );
     }
     if (request.t === "hello") {
       const compatible =
@@ -136,13 +146,25 @@ export class ExecutorCoordinator {
       );
     }
     if (!HOST_ID_RE.test(request.hostId)) {
-      return this.error(request.requestId, "invalid_host", "invalid run host id");
+      return this.error(
+        request.requestId,
+        "invalid_host",
+        "invalid run host id",
+      );
     }
     if (request.specHash !== undefined && !HASH_RE.test(request.specHash)) {
-      return this.error(request.requestId, "invalid_request", "invalid spec hash");
+      return this.error(
+        request.requestId,
+        "invalid_request",
+        "invalid spec hash",
+      );
     }
     if (request.t === "stop_host" && !request.specHash) {
-      return this.error(request.requestId, "invalid_request", "spec hash is required");
+      return this.error(
+        request.requestId,
+        "invalid_request",
+        "spec hash is required",
+      );
     }
 
     try {
@@ -202,7 +224,10 @@ export class ExecutorCoordinator {
     }
   }
 
-  private async launch(hostId: string, specHash: string): Promise<ExecutorHostStatus> {
+  private async launch(
+    hostId: string,
+    specHash: string,
+  ): Promise<ExecutorHostStatus> {
     const stopping = this.stopping.get(hostId);
     if (stopping) {
       if (stopping.specHash !== specHash) {
@@ -331,7 +356,10 @@ export class ExecutorCoordinator {
     const dir = `${this.hostsDir}/${hostId}`;
     const specPath = `${dir}/${HOST_SPEC_NAME}`;
     if (!existsSync(specPath)) {
-      throw new CoordinatorError("spec_not_found", `missing run spec for ${hostId}`);
+      throw new CoordinatorError(
+        "spec_not_found",
+        `missing run spec for ${hostId}`,
+      );
     }
     const raw = readFileSync(specPath);
     const actualHash = new Bun.CryptoHasher("sha256").update(raw).digest("hex");
@@ -343,7 +371,10 @@ export class ExecutorCoordinator {
     }
     const spec = JSON.parse(raw.toString()) as RunHostSpec;
     if (spec.hostId !== hostId) {
-      throw new CoordinatorError("invalid_host", "run spec hostId does not match request");
+      throw new CoordinatorError(
+        "invalid_host",
+        "run spec hostId does not match request",
+      );
     }
     this.record({
       hostId,
@@ -413,7 +444,7 @@ export class ExecutorCoordinator {
       hostId,
       specHash: record?.specHash,
       unit: record?.unit ?? runHostUnitName(hostId),
-      state: ready ? "started" : record?.state ?? "unknown",
+      state: ready ? "started" : (record?.state ?? "unknown"),
       ready,
       pid: meta?.pid,
       error: record?.error,
@@ -435,8 +466,13 @@ export class ExecutorCoordinator {
     }
     const deferred = Promise.withResolvers<ExecutorHostStatus>();
     this.stopping.set(hostId, { specHash, promise: deferred.promise });
-    void this.stopOnce(hostId, specHash).then(deferred.resolve, deferred.reject);
-    void deferred.promise.finally(() => this.stopping.delete(hostId)).catch(() => {});
+    void this.stopOnce(hostId, specHash).then(
+      deferred.resolve,
+      deferred.reject,
+    );
+    void deferred.promise
+      .finally(() => this.stopping.delete(hostId))
+      .catch(() => {});
     return deferred.promise;
   }
 
@@ -554,8 +590,6 @@ function readJson<T>(path: string): T | null {
 function secureEqual(actual: string, expected: Buffer): boolean {
   const a = Buffer.from(actual || "");
   return (
-    a.length === expected.length &&
-    a.length > 0 &&
-    timingSafeEqual(a, expected)
+    a.length === expected.length && a.length > 0 && timingSafeEqual(a, expected)
   );
 }

@@ -33,7 +33,9 @@ export type MigrateEngineResult =
 
 function readJson<T>(path: string): T | null {
   try {
-    return existsSync(path) ? (JSON.parse(readFileSync(path, "utf-8")) as T) : null;
+    return existsSync(path)
+      ? (JSON.parse(readFileSync(path, "utf-8")) as T)
+      : null;
   } catch {
     return null;
   }
@@ -50,7 +52,7 @@ function journaledRuns(): ActiveRunRecord[] {
 }
 
 export function isAutomationOwnedSession(
-  data: Pick<NativeSessionFile, "automation" | "createdBy">
+  data: Pick<NativeSessionFile, "automation" | "createdBy">,
 ): boolean {
   return !!data.automation || !!data.createdBy?.endsWith(" (automation)");
 }
@@ -61,7 +63,7 @@ export function sessionHasJournaledRun(
   data?: Pick<
     NativeSessionFile,
     "claudeSessionId" | "codexThreadId" | "piSessionId"
-  >
+  >,
 ): boolean {
   const engineIds = new Set(
     [
@@ -69,13 +71,13 @@ export function sessionHasJournaledRun(
       data?.claudeSessionId,
       data?.codexThreadId,
       data?.piSessionId,
-    ].filter(Boolean) as string[]
+    ].filter(Boolean) as string[],
   );
   return journaledRuns().some(
     (r) =>
       (r.osSessionId && engineIds.has(r.osSessionId)) ||
       (r.claudeSessionId && engineIds.has(r.claudeSessionId)) ||
-      engineIds.has(r.runKey)
+      engineIds.has(r.runKey),
   );
 }
 
@@ -88,12 +90,15 @@ export async function migrateSessionEngine(
   sessionId: string,
   targetModel: string,
   by = "engine-migration",
-  options: { preserveActivity?: boolean } = {}
+  options: { preserveActivity?: boolean } = {},
 ): Promise<MigrateEngineResult> {
   const path = `${OPENSESSION_SESSIONS_DIR}/${sessionId}.json`;
   const data = readJson<NativeSessionFile>(path);
   if (!data?.id) {
-    return { ok: false, error: `No opensession session file for "${sessionId}".` };
+    return {
+      ok: false,
+      error: `No opensession session file for "${sessionId}".`,
+    };
   }
 
   const resolved = resolveModel(targetModel);
@@ -139,7 +144,9 @@ export async function migrateSessionEngine(
         ...(data.modelHistory || []),
         { model: resolved.id, from, at: new Date().toISOString(), by },
       ],
-      ...(options.preserveActivity ? {} : { lastActivity: new Date().toISOString() }),
+      ...(options.preserveActivity
+        ? {}
+        : { lastActivity: new Date().toISOString() }),
     }),
   );
   return { ok: true, sessionId, from, to: resolved.id };

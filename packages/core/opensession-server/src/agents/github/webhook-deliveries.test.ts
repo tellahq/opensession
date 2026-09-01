@@ -8,10 +8,12 @@ const previousStateDir = process.env.OPENSESSION_STATE_DIR;
 process.env.OPENSESSION_STATE_DIR = scratch;
 
 const {
+  claimGithubDelivery,
   githubDeliveriesStore,
   loadGithubDeliveries,
   isGithubDeliveryProcessed,
   markGithubDeliveryProcessed,
+  releaseGithubDelivery,
 } = await import("./webhook-deliveries");
 const { writeJsonAtomic } = await import("../../server/shared/atomic-write");
 
@@ -37,7 +39,9 @@ describe("GitHub delivery replay protection", () => {
   test("persists delivery ids at the legacy Slack-store path and restores them after a reload", () => {
     const deliveryId = "github-delivery-persists";
     markGithubDeliveryProcessed(deliveryId);
-    expect(githubDeliveriesStore()).toBe(`${scratch}/.slack-sessions/github-deliveries.json`);
+    expect(githubDeliveriesStore()).toBe(
+      `${scratch}/.slack-sessions/github-deliveries.json`,
+    );
     expect(isGithubDeliveryProcessed(deliveryId)).toBe(true);
 
     // A forced load clears the in-memory map first, mirroring a restart.
@@ -49,5 +53,18 @@ describe("GitHub delivery replay protection", () => {
     writeJsonAtomic(githubDeliveriesStore(), [["expired-delivery", 0]], false);
     loadGithubDeliveries(true);
     expect(isGithubDeliveryProcessed("expired-delivery")).toBe(false);
+  });
+
+  test("deduplicates in-flight admission but releases a failed claim", () => {
+    const deliveryId = "github-delivery-in-flight";
+    expect(claimGithubDelivery(deliveryId)).toBe("claimed");
+    expect(claimGithubDelivery(deliveryId)).toBe("in_flight");
+    expect(isGithubDeliveryProcessed(deliveryId)).toBe(false);
+
+    releaseGithubDelivery(deliveryId);
+    expect(claimGithubDelivery(deliveryId)).toBe("claimed");
+    markGithubDeliveryProcessed(deliveryId);
+    expect(isGithubDeliveryProcessed(deliveryId)).toBe(true);
+    expect(claimGithubDelivery(deliveryId)).toBe("processed");
   });
 });

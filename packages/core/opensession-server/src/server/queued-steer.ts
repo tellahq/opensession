@@ -72,7 +72,7 @@ const queuedSteerDeps: QueuedSteerDeps = {
     if (text.trim() || images?.length) {
       await storeAppendUserLineEarly(
         sessionId,
-        transcriptLineUser(text, promptEntryId, undefined, images),
+        transcriptLineUser(text, promptEntryId, undefined, images, [itemId]),
         { required: true },
       );
     }
@@ -87,10 +87,12 @@ function sameFence(
   before: QueuedSteerFence,
   after: QueuedSteerFence | undefined,
 ): boolean {
-  return !!after &&
+  return (
+    !!after &&
     after.token === before.token &&
     after.runId === before.runId &&
-    after.generation === before.generation;
+    after.generation === before.generation
+  );
 }
 
 /** Prepare durably, then steer only the immutable run captured before await. */
@@ -128,23 +130,26 @@ export async function prepareAndSteerQueuedPrompt(
       input.images,
     );
   } catch (error) {
-    if (!await deps.reject(input.sessionId, input.itemId, before))
-      throw new Error("Pending steer changed while transcript admission failed", {
-        cause: error,
-      });
+    if (!(await deps.reject(input.sessionId, input.itemId, before)))
+      throw new Error(
+        "Pending steer changed while transcript admission failed",
+        {
+          cause: error,
+        },
+      );
     throw error;
   }
   if (!sameFence(before, deps.target(input.sessionId))) {
-    if (!await deps.reject(input.sessionId, input.itemId, before))
+    if (!(await deps.reject(input.sessionId, input.itemId, before)))
       throw new Error("Pending steer changed before fenced rejection");
     return "rejected";
   }
   if (!deps.steer(before.token, input.text, input.images, input.itemId)) {
-    if (!await deps.reject(input.sessionId, input.itemId, before))
+    if (!(await deps.reject(input.sessionId, input.itemId, before)))
       throw new Error("Pending steer changed before fenced rejection");
     return "rejected";
   }
-  if (!await deps.accept(input.sessionId, input.itemId, before))
+  if (!(await deps.accept(input.sessionId, input.itemId, before)))
     throw new Error("Pending steer changed before runner acceptance");
   return "steered";
 }
@@ -188,23 +193,30 @@ export async function prepareAndInterruptQueuedPrompt(
       input.images,
     );
   } catch (error) {
-    if (!await deps.reject(input.sessionId, input.itemId, before))
-      throw new Error("Pending interrupt steer changed while transcript admission failed", {
-        cause: error,
-      });
+    if (!(await deps.reject(input.sessionId, input.itemId, before)))
+      throw new Error(
+        "Pending interrupt steer changed while transcript admission failed",
+        {
+          cause: error,
+        },
+      );
     throw error;
   }
   if (!sameFence(before, deps.target(input.sessionId))) {
-    if (!await deps.reject(input.sessionId, input.itemId, before))
-      throw new Error("Pending interrupt steer changed before fenced rejection");
+    if (!(await deps.reject(input.sessionId, input.itemId, before)))
+      throw new Error(
+        "Pending interrupt steer changed before fenced rejection",
+      );
     return "target_changed";
   }
   if (!deps.steer(before.token, input.text, input.images, input.itemId)) {
-    if (!await deps.reject(input.sessionId, input.itemId, before))
-      throw new Error("Pending interrupt steer changed before fenced rejection");
+    if (!(await deps.reject(input.sessionId, input.itemId, before)))
+      throw new Error(
+        "Pending interrupt steer changed before fenced rejection",
+      );
     return "unsupported";
   }
-  if (!await deps.accept(input.sessionId, input.itemId, before))
+  if (!(await deps.accept(input.sessionId, input.itemId, before)))
     throw new Error("Pending interrupt steer changed before runner acceptance");
   return "interrupted";
 }

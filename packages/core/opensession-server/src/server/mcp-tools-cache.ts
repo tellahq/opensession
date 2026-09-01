@@ -41,17 +41,17 @@ import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
 export interface CachedToolCatalog {
-	/** Hash of the config entry this listing was taken under. */
-	hash: string;
-	/** Raw `tools/list` output, exactly as the server returned it. */
-	tools: Array<Record<string, unknown>>;
-	/** Epoch ms the listing was taken. */
-	at: number;
+  /** Hash of the config entry this listing was taken under. */
+  hash: string;
+  /** Raw `tools/list` output, exactly as the server returned it. */
+  tools: Array<Record<string, unknown>>;
+  /** Epoch ms the listing was taken. */
+  at: number;
 }
 
 interface CacheFile {
-	version: number;
-	servers: Record<string, CachedToolCatalog>;
+  version: number;
+  servers: Record<string, CachedToolCatalog>;
 }
 
 const VERSION = 1;
@@ -64,44 +64,48 @@ const FILE_MODE = 0o600;
  *  OPENSESSION_STATE_DIR at a scratch dir is actually isolated (a module-load
  *  constant here would pin whichever test imported this file first). */
 function cachePath(): string {
-	return stateDir("mcp-tools-cache.json");
+  return stateDir("mcp-tools-cache.json");
 }
 
 export function toolsCacheEnabled(): boolean {
-	return process.env.OPENSESSION_MCP_TOOLS_CACHE !== "0";
+  return process.env.OPENSESSION_MCP_TOOLS_CACHE !== "0";
 }
 
 /** Stable stringify — object keys sorted at every depth, so a config entry
  *  differing only in key order hashes the same. */
 function stable(value: unknown): string {
-	if (value === null || typeof value !== "object") {
-		return JSON.stringify(value) ?? "null";
-	}
-	if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
-	const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
-		a < b ? -1 : a > b ? 1 : 0,
-	);
-	return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stable(v)}`).join(",")}}`;
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "null";
+  }
+  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>).sort(
+    ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
+  );
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stable(v)}`).join(",")}}`;
 }
 
 /** Cache key for one server's config entry (command/args/env/url/headers…). */
 export function toolsCacheKey(cfg: unknown): string {
-	return createHash("sha256").update(stable(cfg)).digest("hex").slice(0, 32);
+  return createHash("sha256").update(stable(cfg)).digest("hex").slice(0, 32);
 }
 
 function readFile(): CacheFile {
-	try {
-		const path = cachePath();
-		if (!existsSync(path)) return { version: VERSION, servers: {} };
-		const parsed = JSON.parse(readFileSync(path, "utf8")) as CacheFile | null;
-		if (!parsed || parsed.version !== VERSION || typeof parsed.servers !== "object") {
-			return { version: VERSION, servers: {} };
-		}
-		return { version: VERSION, servers: parsed.servers ?? {} };
-	} catch {
-		// A corrupt or unreadable cache is a cold cache, never an error.
-		return { version: VERSION, servers: {} };
-	}
+  try {
+    const path = cachePath();
+    if (!existsSync(path)) return { version: VERSION, servers: {} };
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as CacheFile | null;
+    if (
+      !parsed ||
+      parsed.version !== VERSION ||
+      typeof parsed.servers !== "object"
+    ) {
+      return { version: VERSION, servers: {} };
+    }
+    return { version: VERSION, servers: parsed.servers ?? {} };
+  } catch {
+    // A corrupt or unreadable cache is a cold cache, never an error.
+    return { version: VERSION, servers: {} };
+  }
 }
 
 /**
@@ -109,50 +113,51 @@ function readFile(): CacheFile {
  * hash and is still inside the TTL. Undefined means "connect and list".
  */
 export function readCachedTools(
-	server: string,
-	hash: string,
-	ttlMs = DEFAULT_TTL_MS,
-	now = Date.now(),
+  server: string,
+  hash: string,
+  ttlMs = DEFAULT_TTL_MS,
+  now = Date.now(),
 ): Array<Record<string, unknown>> | undefined {
-	if (!toolsCacheEnabled()) return undefined;
-	const entry = readFile().servers[server];
-	if (!entry || entry.hash !== hash || !Array.isArray(entry.tools)) return undefined;
-	if (!Number.isFinite(entry.at) || now - entry.at > ttlMs) return undefined;
-	// A server that legitimately exposes no tools would re-list every build;
-	// that is one cheap connect against never trusting an empty listing.
-	return entry.tools.length ? entry.tools : undefined;
+  if (!toolsCacheEnabled()) return undefined;
+  const entry = readFile().servers[server];
+  if (!entry || entry.hash !== hash || !Array.isArray(entry.tools))
+    return undefined;
+  if (!Number.isFinite(entry.at) || now - entry.at > ttlMs) return undefined;
+  // A server that legitimately exposes no tools would re-list every build;
+  // that is one cheap connect against never trusting an empty listing.
+  return entry.tools.length ? entry.tools : undefined;
 }
 
 /** Record a fresh listing. No-op when nothing changed, to keep parallel runs
  *  from rewriting the file on every turn. */
 export function writeCachedTools(
-	server: string,
-	hash: string,
-	tools: Array<Record<string, unknown>>,
-	now = Date.now(),
+  server: string,
+  hash: string,
+  tools: Array<Record<string, unknown>>,
+  now = Date.now(),
 ): void {
-	if (!toolsCacheEnabled() || !Array.isArray(tools) || !tools.length) return;
-	try {
-		const file = readFile();
-		const prev = file.servers[server];
-		if (prev?.hash === hash && stable(prev.tools) === stable(tools)) {
-			// Same listing under the same config: only the timestamp would move,
-			// and refreshing it is what keeps a live server from expiring.
-			if (now - prev.at < DEFAULT_TTL_MS / 4) return;
-		}
-		file.servers[server] = { hash, tools, at: now };
-		writeJsonAtomic(cachePath(), file, true, FILE_MODE);
-	} catch {
-		// Caching is an optimization; a failed write must never fail a run.
-	}
+  if (!toolsCacheEnabled() || !Array.isArray(tools) || !tools.length) return;
+  try {
+    const file = readFile();
+    const prev = file.servers[server];
+    if (prev?.hash === hash && stable(prev.tools) === stable(tools)) {
+      // Same listing under the same config: only the timestamp would move,
+      // and refreshing it is what keeps a live server from expiring.
+      if (now - prev.at < DEFAULT_TTL_MS / 4) return;
+    }
+    file.servers[server] = { hash, tools, at: now };
+    writeJsonAtomic(cachePath(), file, true, FILE_MODE);
+  } catch {
+    // Caching is an optimization; a failed write must never fail a run.
+  }
 }
 
 /** Drop one server's entry (or the whole cache when no server is named). */
 export function forgetCachedTools(server?: string): void {
-	try {
-		const file = readFile();
-		if (server) delete file.servers[server];
-		else file.servers = {};
-		writeJsonAtomic(cachePath(), file, true, FILE_MODE);
-	} catch {}
+  try {
+    const file = readFile();
+    if (server) delete file.servers[server];
+    else file.servers = {};
+    writeJsonAtomic(cachePath(), file, true, FILE_MODE);
+  } catch {}
 }

@@ -19,21 +19,21 @@ import { dirname, join } from "node:path";
 const GRACE_MS_MIN = 100;
 
 test("Base UI's safe-polygon grace period survives our pointer-event cadence", () => {
-	// safePolygon is internal, so it has no exports entry to resolve directly:
-	// find the package root through a part that does.
-	const packageRoot = dirname(dirname(require.resolve("@base-ui/react/menu")));
-	const source = readFileSync(
-		join(packageRoot, "floating-ui-react", "safePolygon.mjs"),
-		"utf8",
-	);
-	const match = source.match(/timeout\.start\((\d+),\s*closeIfNoOpenChild\)/);
-	expect(
-		match,
-		"safePolygon no longer arms a timer named closeIfNoOpenChild — re-read the upstream source and re-cut patches/@base-ui%2Freact@1.6.0.patch",
-	).not.toBeNull();
-	const graceMs = Number(match![1]);
-	expect(
-		graceMs,
-		`safe-polygon grace period is ${graceMs}ms; below ${GRACE_MS_MIN}ms a dropped frame closes the submenu the pointer is aiming at. Re-apply patches/@base-ui%2Freact@1.6.0.patch for the installed Base UI version.`,
-	).toBeGreaterThanOrEqual(GRACE_MS_MIN);
+  // safePolygon is internal, so it has no exports entry to resolve directly:
+  // find the package root through a part that does.
+  const packageRoot = dirname(dirname(require.resolve("@base-ui/react/menu")));
+  const source = readFileSync(
+    join(packageRoot, "floating-ui-react", "safePolygon.mjs"),
+    "utf8",
+  );
+  const match = source.match(/timeout\.start\((\d+),\s*closeIfNoOpenChild\)/);
+  expect(
+    match,
+    "safePolygon no longer arms a timer named closeIfNoOpenChild — re-read the upstream source and re-cut patches/@base-ui%2Freact@1.6.0.patch",
+  ).not.toBeNull();
+  const graceMs = Number(match![1]);
+  expect(
+    graceMs,
+    `safe-polygon grace period is ${graceMs}ms; below ${GRACE_MS_MIN}ms a dropped frame closes the submenu the pointer is aiming at. Re-apply patches/@base-ui%2Freact@1.6.0.patch for the installed Base UI version.`,
+  ).toBeGreaterThanOrEqual(GRACE_MS_MIN);
 });

@@ -33,8 +33,12 @@ describe("GitHub clone credential boundary", () => {
       "test",
     );
 
-    const scrub = commands.findIndex((command) => command.includes("remote set-url origin"));
-    const deps = commands.findIndex((command) => command.includes("install --frozen-lockfile"));
+    const scrub = commands.findIndex((command) =>
+      command.includes("remote set-url origin"),
+    );
+    const deps = commands.findIndex((command) =>
+      command.includes("install --frozen-lockfile"),
+    );
     expect(scrub).toBeGreaterThanOrEqual(0);
     expect(deps).toBeGreaterThan(scrub);
   });
@@ -47,14 +51,19 @@ describe("remote engine credential projection", () => {
       source.indexOf("// GitHub credentials are projected"),
       source.indexOf("const githubAuthPath"),
     );
-    expect(projection).toContain("readRemoteState(provider, sandboxId)?.repoId");
+    expect(projection).toContain(
+      "readRemoteState(provider, sandboxId)?.repoId",
+    );
     expect(projection).toContain("getRepo(repoId)");
     expect(projection).not.toContain("git remote get-url origin");
   });
 
   test("every remote provider delegates launch credential projection to bootstrap", () => {
     for (const provider of ["daytona", "box", "e2b", "modal"]) {
-      const source = readFileSync(join(import.meta.dir, `${provider}.ts`), "utf-8");
+      const source = readFileSync(
+        join(import.meta.dir, `${provider}.ts`),
+        "utf-8",
+      );
       expect(source).toContain("makeRemoteSandbox({");
       expect(source).not.toContain("listCodexAccounts(");
       expect(source).not.toContain("CODEX_HOME:");
@@ -64,7 +73,9 @@ describe("remote engine credential projection", () => {
 
   test("run specs are private in both host and guest filesystems", () => {
     const source = readFileSync(join(import.meta.dir, "bootstrap.ts"), "utf-8");
-    expect(source).toContain("writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec, true, 0o600)");
+    expect(source).toContain(
+      "writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec, true, 0o600)",
+    );
     expect(source).toContain("remote run spec chmod failed");
   });
 
@@ -76,8 +87,12 @@ describe("remote engine credential projection", () => {
   });
 
   test("projects subscription credentials only when the reachable walk needs them", () => {
-    expect(remoteRunNeedsAnthropic("pi/anthropic/claude-sonnet-5", "none")).toBe(true);
-    expect(remoteRunNeedsAnthropic("pi/openai/gpt-5.6-sol", "none")).toBe(false);
+    expect(
+      remoteRunNeedsAnthropic("pi/anthropic/claude-sonnet-5", "none"),
+    ).toBe(true);
+    expect(remoteRunNeedsAnthropic("pi/openai/gpt-5.6-sol", "none")).toBe(
+      false,
+    );
     expect(remoteRunNeedsOpenai("pi/openai/gpt-5.6-sol")).toBe(true);
     expect(remoteRunNeedsOpenai("pi/orchestrator/sol")).toBe(true);
     // Production workspace-preset tuple: both the lead and preferred fallback
@@ -113,7 +128,9 @@ describe("remote engine credential projection", () => {
   });
 
   test("Pi projection is allowlisted and disabled state removes the file", () => {
-    expect(projectRemotePiConfig({ enabled: false, futureSecret: "do-not-copy" })).toBeNull();
+    expect(
+      projectRemotePiConfig({ enabled: false, futureSecret: "do-not-copy" }),
+    ).toBeNull();
     expect(
       JSON.parse(
         projectRemotePiConfig({
@@ -142,7 +159,11 @@ describe("remote engine credential projection", () => {
         },
         turnTimeoutMinutes: 90,
         providers: {
-          cerebras: { apiKey: "csk-secret", baseURL: "https://example.test", extra: "drop" },
+          cerebras: {
+            apiKey: "csk-secret",
+            baseURL: "https://example.test",
+            extra: "drop",
+          },
         },
         futureSecret: "drop",
       },
@@ -167,7 +188,11 @@ describe("remote engine credential projection", () => {
         providers: {
           anthropic: { apiKey: "never" },
           openai: { apiKey: "never" },
-          cerebras: { apiKey: "csk-secret", baseURL: "https://cerebras.test", extra: "drop" },
+          cerebras: {
+            apiKey: "csk-secret",
+            baseURL: "https://cerebras.test",
+            extra: "drop",
+          },
           xai: { apiKey: "xai-secret" },
           empty: { extra: "drop" },
         },
@@ -227,5 +252,4 @@ describe("remote engine credential projection", () => {
       providers: { cerebras: { apiKey: "selected" } },
     });
   });
-
 });

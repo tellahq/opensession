@@ -8,7 +8,7 @@ function utc(
   day: number,
   hour = 0,
   minute = 0,
-  second = 0
+  second = 0,
 ): Date {
   return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
 }

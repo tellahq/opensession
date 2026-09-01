@@ -10,12 +10,12 @@ customer or change thread state.
 
 ## Env vars
 
-| Var | Required for | Notes |
-| --- | --- | --- |
-| `PLAIN_API_KEY` | Plain API calls | required by the integration registry; used by the Support UI and agent's `PlainClient` (`packages/core/opensession-server/src/agents/plain/api.ts`) and by the archive safety sweep |
-| `PLAIN_WEBHOOK_SECRET` | webhook intake | **fail-closed**: unset or empty means every Plain webhook returns 401 |
-| `PLAIN_SPAM_CHECK_MODEL` | optional | tool-less pre-triage router model; default `claude-haiku-4-5` |
-| `PLAIN_REFUND_INTENT_MODEL` | optional | tool-less classifier for the legacy mention flow's refund/cancellation approval; default `claude-haiku-4-5` |
+| Var                         | Required for    | Notes                                                                                                                                                                               |
+| --------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PLAIN_API_KEY`             | Plain API calls | required by the integration registry; used by the Support UI and agent's `PlainClient` (`packages/core/opensession-server/src/agents/plain/api.ts`) and by the archive safety sweep |
+| `PLAIN_WEBHOOK_SECRET`      | webhook intake  | **fail-closed**: unset or empty means every Plain webhook returns 401                                                                                                               |
+| `PLAIN_SPAM_CHECK_MODEL`    | optional        | tool-less pre-triage router model; default `claude-haiku-4-5`                                                                                                                       |
+| `PLAIN_REFUND_INTENT_MODEL` | optional        | tool-less classifier for the legacy mention flow's refund/cancellation approval; default `claude-haiku-4-5`                                                                         |
 
 Put server secrets and an optional enable flag in `~/.opensession.env`; the
 service does not use a checkout `.env`:
@@ -33,13 +33,13 @@ Only the literal value `true` enables an integration through an env flag. If
 
 Config keys under `integrations.plain` in `~/.opensession/config.json`:
 
-| Key | Notes |
-| --- | --- |
-| `enabled` | enables the agent when `ENABLE_PLAIN_AGENT` is unset; default `false` |
-| `apiUrl` | GraphQL endpoint used by the archive safety sweep; default `https://core-api.uk.plain.com/graphql/v1` |
-| `workspaceId` | Plain workspace id (`w_…`) for app.plain.com deep links; unset hides the UI's open-in-Plain affordances |
+| Key             | Notes                                                                                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `enabled`       | enables the agent when `ENABLE_PLAIN_AGENT` is unset; default `false`                                                                                  |
+| `apiUrl`        | GraphQL endpoint used by the archive safety sweep; default `https://core-api.uk.plain.com/graphql/v1`                                                  |
+| `workspaceId`   | Plain workspace id (`w_…`) for app.plain.com deep links; unset hides the UI's open-in-Plain affordances                                                |
 | `mentionHandle` | handle in Plain notes that wakes the mention flow, with or without a leading `@`; default is `persona.name` lowercased with spaces replaced by hyphens |
-| `linearTeamKey` | Linear team key or UUID used when the legacy mention flow creates an issue directly; it uses the Linear OAuth token store or `LINEAR_API_KEY` |
+| `linearTeamKey` | Linear team key or UUID used when the legacy mention flow creates an issue directly; it uses the Linear OAuth token store or `LINEAR_API_KEY`          |
 
 The Plain MCP server used by agent runs is separate from the server-side Plain
 SDK. Open Session does not bundle a Plain MCP server. Add your compatible

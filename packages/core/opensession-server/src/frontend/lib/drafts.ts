@@ -45,7 +45,12 @@ export function workspaceDraftKey(workspaceId: string): string {
   return `workspace-home:${workspaceId}`;
 }
 
-const EMPTY: ComposerDraft = { text: "", images: [], files: [], pastedTexts: [] };
+const EMPTY: ComposerDraft = {
+  text: "",
+  images: [],
+  files: [],
+  pastedTexts: [],
+};
 const drafts = new Map<string, ComposerDraft>();
 /** Text last confirmed by the server. Persisted beside each local draft so a
  * reload can distinguish offline typing from text already sent elsewhere. */
@@ -130,7 +135,10 @@ function persistNow(key: string) {
 
 function schedulePersist(key: string) {
   clearTimeout(timers.get(key));
-  timers.set(key, setTimeout(() => persistNow(key), PERSIST_DEBOUNCE_MS));
+  timers.set(
+    key,
+    setTimeout(() => persistNow(key), PERSIST_DEBOUNCE_MS),
+  );
 }
 
 // Flush pending mirrors when the page is going away, so the debounce window
@@ -268,7 +276,9 @@ let textMutation = 0;
 let unloading = false;
 
 function sessionIdOf(key: string): string | null {
-  return key.startsWith(SESSION_PREFIX) ? key.slice(SESSION_PREFIX.length) : null;
+  return key.startsWith(SESSION_PREFIX)
+    ? key.slice(SESSION_PREFIX.length)
+    : null;
 }
 
 function pushNow(key: string): void {
@@ -311,7 +321,10 @@ function markEdited(key: string, opts?: { immediate?: boolean }): void {
     return;
   }
   clearTimeout(pushTimers.get(key));
-  pushTimers.set(key, setTimeout(() => pushNow(key), PUSH_DEBOUNCE_MS));
+  pushTimers.set(
+    key,
+    setTimeout(() => pushNow(key), PUSH_DEBOUNCE_MS),
+  );
 }
 
 /** Adopt the server's text for a clean key, keeping any staged attachments. */
@@ -339,7 +352,8 @@ async function hydrate(user: string): Promise<void> {
     version !== hydrateVersion ||
     mutation !== textMutation ||
     getCurrentUser() !== user
-  ) return;
+  )
+    return;
   clearTimeout(hydrateRetry);
   hydrateRetry = undefined;
   hydratedFor = user;
@@ -369,8 +383,7 @@ async function hydrate(user: string): Promise<void> {
     else if (action.kind === "agree") {
       syncedText.set(action.key, action.text);
       schedulePersist(action.key);
-    }
-    else pushNow(action.key);
+    } else pushNow(action.key);
   }
   // Keys the server dropped and we no longer hold are settled: stop tracking
   // them so the map doesn't grow for the life of the tab.
@@ -400,7 +413,8 @@ function dropSessionDrafts(): void {
   try {
     for (let index = sessionStorage.length - 1; index >= 0; index--) {
       const key = sessionStorage.key(index);
-      if (key?.startsWith(SS_PREFIX + SESSION_PREFIX)) sessionStorage.removeItem(key);
+      if (key?.startsWith(SS_PREFIX + SESSION_PREFIX))
+        sessionStorage.removeItem(key);
     }
   } catch {}
   syncedText.clear();
@@ -432,10 +446,12 @@ if (
     // Coming back to a tab that sat in the background: pick up what was typed
     // (or sent) on the other device while it was away.
     document.addEventListener?.("visibilitychange", () => {
-      if (document.visibilityState === "visible") void hydrate(getCurrentUser());
+      if (document.visibilityState === "visible")
+        void hydrate(getCurrentUser());
     });
     window.setInterval(() => {
-      if (document.visibilityState === "visible") void hydrate(getCurrentUser());
+      if (document.visibilityState === "visible")
+        void hydrate(getCurrentUser());
     }, 30_000);
   }
   // Don't let the debounce eat the last keystrokes when the tab goes away.

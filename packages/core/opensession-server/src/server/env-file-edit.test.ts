@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -32,13 +39,17 @@ afterEach(() => {
 describe("applyEnvEdits", () => {
   test("replaces an existing KEY=... line in place", () => {
     const before = "A=1\nSLACK_BOT_TOKEN=old\nB=2\n";
-    const after = applyEnvEdits(before, { SLACK_BOT_TOKEN: "replacement-token" });
+    const after = applyEnvEdits(before, {
+      SLACK_BOT_TOKEN: "replacement-token",
+    });
     expect(after).toBe("A=1\nSLACK_BOT_TOKEN=replacement-token\nB=2\n");
   });
 
   test("uncomments a commented # KEY=... line in place", () => {
     const before = "A=1\n# SLACK_BOT_TOKEN=old\nB=2\n";
-    const after = applyEnvEdits(before, { SLACK_BOT_TOKEN: "replacement-token" });
+    const after = applyEnvEdits(before, {
+      SLACK_BOT_TOKEN: "replacement-token",
+    });
     expect(after).toBe("A=1\nSLACK_BOT_TOKEN=replacement-token\nB=2\n");
   });
 
@@ -50,13 +61,17 @@ describe("applyEnvEdits", () => {
 
   test("appends new keys at the end under the web-setup marker", () => {
     const after = applyEnvEdits("A=1\n", { NEW_KEY: "v1", OTHER_KEY: "v2" });
-    expect(after).toBe(`A=1\n\n${WEB_SETUP_MARKER}\nNEW_KEY=v1\nOTHER_KEY=v2\n`);
+    expect(after).toBe(
+      `A=1\n\n${WEB_SETUP_MARKER}\nNEW_KEY=v1\nOTHER_KEY=v2\n`,
+    );
   });
 
   test("reuses an existing marker instead of adding another", () => {
     const before = `A=1\n\n${WEB_SETUP_MARKER}\nNEW_KEY=v1\n`;
     const after = applyEnvEdits(before, { OTHER_KEY: "v2" });
-    expect(after.split("\n").filter((l) => l === WEB_SETUP_MARKER)).toHaveLength(1);
+    expect(
+      after.split("\n").filter((l) => l === WEB_SETUP_MARKER),
+    ).toHaveLength(1);
     expect(after).toContain("OTHER_KEY=v2");
   });
 
@@ -89,7 +104,9 @@ describe("applyEnvEdits", () => {
   });
 
   test("starts an empty file with the marker", () => {
-    expect(applyEnvEdits("", { KEY: "v" })).toBe(`${WEB_SETUP_MARKER}\nKEY=v\n`);
+    expect(applyEnvEdits("", { KEY: "v" })).toBe(
+      `${WEB_SETUP_MARKER}\nKEY=v\n`,
+    );
   });
 });
 

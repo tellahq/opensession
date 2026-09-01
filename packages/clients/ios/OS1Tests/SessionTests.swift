@@ -25,6 +25,26 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(session.effectiveRepo, "backstage")
     }
 
+    func testLastRunErrorDecodesMessageAndTimestamp() throws {
+        let failed = try session(#"{"id":"os-failed","lastRunError":{"message":"Provider credits exhausted.","at":"2026-08-28T10:00:00Z"}}"#)
+
+        XCTAssertEqual(failed.lastRunError?.message, "Provider credits exhausted.")
+        XCTAssertEqual(failed.lastRunError?.at, "2026-08-28T10:00:00Z")
+    }
+
+    func testSafetyProjectionDecodesTolerantlyAndOverridesRunningLane() throws {
+        let paused = try session(#"{"id":"os-paused","isRunning":true,"safety":{"status":"paused_for_safety","explanation":"This session was paused safely.","automaticReconciliationRunning":false,"pausedAt":"2026-08-26T12:00:00Z","operation":"finishing the current turn","repairAvailable":false}}"#)
+
+        XCTAssertEqual(paused.safety?.status, "paused_for_safety")
+        XCTAssertEqual(paused.safety?.explanation, "This session was paused safely.")
+        XCTAssertEqual(paused.status, .needsInput)
+        XCTAssertEqual(paused.lane, .needsInput)
+
+        let partial = try session(#"{"id":"os-partial","safety":{"status":"paused_for_safety"}}"#)
+        XCTAssertEqual(partial.safety?.status, "paused_for_safety")
+        XCTAssertNil(partial.safety?.explanation)
+    }
+
     func testSessionAliasesAreDecodedForTranscriptLinks() throws {
         let session = try self.session(
             #"{"id":"os-current","aliasIds":["bks-original"]}"#
@@ -58,6 +78,29 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(body["repo"] as? String, "none")
         XCTAssertEqual(body["user"] as? String, "Alice")
         XCTAssertNil(body["repoLess"])
+    }
+
+    @MainActor
+    func testSessionCreationSendsValidatedCheckoutMode() {
+        for mode in ["default", "checkout", "worktree"] {
+            let body = OS1API.createSessionBody(
+                prompt: "Build it",
+                repo: "opensession",
+                mode: "code",
+                checkoutMode: mode,
+                user: "Alice"
+            )
+            XCTAssertEqual(body["checkoutMode"] as? String, mode)
+        }
+
+        let malformed = OS1API.createSessionBody(
+            prompt: "Build it",
+            repo: "opensession",
+            mode: "code",
+            checkoutMode: "future",
+            user: "Alice"
+        )
+        XCTAssertEqual(malformed["checkoutMode"] as? String, "default")
     }
 
     @MainActor
@@ -195,13 +238,31 @@ final class SessionTests: XCTestCase {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"second","workspaceId":"ws-1","createdAt":"2026-07-02T00:00:00Z"},{"id":"other","workspaceId":"ws-2","createdAt":"2026-07-01T00:00:00Z"},{"id":"first","workspaceId":"ws-1","createdAt":"2026-07-01T00:00:00Z"},{"id":"archived","workspaceId":"ws-1","archived":true}]"#.utf8
+                #"[{"id":"second","workspaceId":"ws-1","createdAt":"2026-07-02T00:00:00Z"},{"id":"other","workspaceId":"ws-2","createdAt":"2026-07-01T00:00:00Z"},{"id":"first","workspaceId":"ws-1","createdAt":"2026-07-01T00:00:00Z"},{"id":"worker","workspaceId":"ws-1","parentSessionId":"first","createdAt":"2026-07-03T00:00:00Z"},{"id":"archived","workspaceId":"ws-1","archived":true}]"#.utf8
             )
         )
 
         XCTAssertEqual(
             SessionsListViewModel.tabSessions(in: sessions, containing: sessions[0]).map(\.id),
             ["first", "second"]
+        )
+        XCTAssertEqual(
+            SessionsListViewModel.tabSessions(in: sessions, containing: sessions[3]).map(\.id),
+            ["worker"]
+        )
+    }
+
+    func testWorkerMenuUsesDirectLiveChildrenAcrossWorkspaces() throws {
+        let sessions = try JSONDecoder().decode(
+            [Session].self,
+            from: Data(
+                #"[{"id":"parent","workspaceId":"ws-1"},{"id":"later","workspaceId":"ws-worker","parentSessionId":"parent","createdAt":"2026-07-03T00:00:00Z"},{"id":"nested","parentSessionId":"later"},{"id":"archived","parentSessionId":"parent","archived":true},{"id":"earlier","parentSessionId":"parent","createdAt":"2026-07-02T00:00:00Z"}]"#.utf8
+            )
+        )
+
+        XCTAssertEqual(
+            SessionsListViewModel.workerSessions(in: sessions, parentId: "parent").map(\.id),
+            ["earlier", "later"]
         )
     }
 

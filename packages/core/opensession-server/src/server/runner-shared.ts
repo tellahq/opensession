@@ -10,7 +10,12 @@
  *   detection driving account rotation and model fallback.
  * - CLAUDE_CODE_BIN: the Claude Code CLI path (the Meridian bridge's motor).
  */
-import { readMcpConfig, withDynamicCredentials } from "./connections";
+import {
+  hasValidRequiredAllowedUsers,
+  readMcpConfig,
+  requiresAllowedUsers,
+  withDynamicCredentials,
+} from "./connections";
 import { userMatchesAny } from "./shared/user-mappings";
 import { configuredPaths } from "./config";
 
@@ -25,10 +30,28 @@ import { GH_CHECKS_CLI_PATH } from "./run-instructions";
 
 /**
  * Resolve the MCP servers for a run: all configured, or just the allowlist,
- * minus any server whose per-user `allowedUsers` list excludes `user`. The
- * `allowedUsers` field is stripped from every entry before it reaches an
- * engine (it's our metadata, not MCP config).
+ * minus any server whose per-user `allowedUsers` list excludes the run. Most
+ * servers accept the prompter or session creator; `apple-release` is stricter
+ * and accepts only the current prompter. The metadata is stripped before the
+ * entry reaches an engine.
  */
+export function mcpServerAllowedForRun(
+  name: string,
+  allowedUsers: unknown,
+  user?: string,
+  grantUsers?: Array<string | undefined>,
+): boolean {
+  const protectedServer = requiresAllowedUsers(name);
+  if (protectedServer && !hasValidRequiredAllowedUsers(allowedUsers)) {
+    return false;
+  }
+  if (!Array.isArray(allowedUsers) || allowedUsers.length === 0) return true;
+  const gateUsers = protectedServer ? [user] : [user, ...(grantUsers || [])];
+  return gateUsers
+    .filter((candidate): candidate is string => !!candidate)
+    .some((candidate) => userMatchesAny(candidate, allowedUsers));
+}
+
 export function filterMcpServers(
   scope: McpScope,
   user?: string,
@@ -47,18 +70,15 @@ export function filterMcpServers(
   for (const name of names) {
     const cfg = all[name] as any;
     if (!cfg) {
-      if (allowlist) console.warn(`[runner] MCP allowlist names unknown server "${name}" — skipping`);
+      if (allowlist)
+        console.warn(
+          `[runner] MCP allowlist names unknown server "${name}" — skipping`,
+        );
       continue;
     }
     const { allowedUsers, oauthUrl, ...entry } = cfg;
-    if (Array.isArray(allowedUsers) && allowedUsers.length) {
-      // Cleared when the prompter OR the session creator (grantUsers[0]) is
-      // on the list — anyone with access to a cleared person's session can
-      // use it there (per-session invites = future).
-      const gateUsers = [user, ...(grantUsers || [])].filter(
-        (u): u is string => !!u,
-      );
-      if (!gateUsers.some((u) => userMatchesAny(u, allowedUsers))) continue;
+    if (!mcpServerAllowedForRun(name, allowedUsers, user, grantUsers)) {
+      continue;
     }
     out[name] = entry;
   }
@@ -93,7 +113,10 @@ export const STRIPE_CONFIRM_TOOLS: Record<string, string> = {
 // "5-hour limit reached ∙ resets …"), with subtype "success". The looser
 // heuristic only applies to error results, where false positives can't
 // clobber a legitimate answer.
-export function isClaudeUsageLimitError(message: string, isErrorResult: boolean): boolean {
+export function isClaudeUsageLimitError(
+  message: string,
+  isErrorResult: boolean,
+): boolean {
   const s = message.toLowerCase();
   // Observed CLI phrasings: "You've hit your session limit · resets 12:50pm (UTC)",
   // "Claude AI usage limit reached|<ts>", "5-hour limit reached ∙ resets 3am"
@@ -104,13 +127,20 @@ export function isClaudeUsageLimitError(message: string, isErrorResult: boolean)
   // /usage-credits to keep using Fable 5 or /model to switch models." Treat it
   // as a usage limit so the run rotates to another account (each has its own
   // credit balance) and, once the pool is drained, falls back off the model.
-  if (/out of (usage )?credits/.test(s) || s.includes("/usage-credits")) return true;
+  if (/out of (usage )?credits/.test(s) || s.includes("/usage-credits"))
+    return true;
   if (/claude (ai )?usage limit reached/.test(s)) return true;
   if (/limit (reached|hit).{0,60}resets/.test(s)) return true;
   // Short result that is just a limit notice, whatever the exact phrasing
-  if (s.length < 200 && /\blimit\b/.test(s) && /\bresets\b/.test(s)) return true;
+  if (s.length < 200 && /\blimit\b/.test(s) && /\bresets\b/.test(s))
+    return true;
   if (!isErrorResult) return false;
-  if (s.includes("rate_limit_error") || s.includes("429") || s.includes("too many requests")) return true;
+  if (
+    s.includes("rate_limit_error") ||
+    s.includes("429") ||
+    s.includes("too many requests")
+  )
+    return true;
   return (
     (s.includes("usage") || s.includes("rate") || s.includes("limit")) &&
     (s.includes("exceeded") || s.includes("reached"))
@@ -118,8 +148,18 @@ export function isClaudeUsageLimitError(message: string, isErrorResult: boolean)
 }
 
 const RESET_MONTHS: Record<string, number> = {
-  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
 };
 
 /**
@@ -155,7 +195,10 @@ export function usageLimitResetAt(
 ): number | undefined {
   const text = describeUsageLimitReset(message);
   if (!text) return undefined;
-  const s = text.toLowerCase().replace(/\((?:utc|gmt)\)/g, " ").trim();
+  const s = text
+    .toLowerCase()
+    .replace(/\((?:utc|gmt)\)/g, " ")
+    .trim();
   const time = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/.exec(s);
   if (!time) return undefined;
   let hour = Number(time[1]) % 12;
@@ -179,7 +222,11 @@ export function usageLimitResetAt(
     // Time only: the next occurrence of it.
     const d = new Date(now);
     at = Date.UTC(
-      d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour, minute,
+      d.getUTCFullYear(),
+      d.getUTCMonth(),
+      d.getUTCDate(),
+      hour,
+      minute,
     );
     if (at <= now) at += 24 * 60 * 60 * 1000;
   }
@@ -205,7 +252,8 @@ export function isClaudeSubscriptionError(message: string): boolean {
     s.includes("subscription issue") ||
     s.includes("check your subscription") ||
     (s.includes("claude max") && s.includes("subscription")) ||
-    (s.includes("organization has disabled") && s.includes("subscription access"))
+    (s.includes("organization has disabled") &&
+      s.includes("subscription access"))
   );
 }
 
@@ -274,12 +322,15 @@ export function isCodexUsageLimitError(message: string): boolean {
  * A false positive here spends real budget retrying / silently downgrades the
  * model, so when in doubt this returns false and the error surfaces.
  */
-export function isTransientRunError(message: string | undefined | null): boolean {
+export function isTransientRunError(
+  message: string | undefined | null,
+): boolean {
   if (!message) return false;
   if (
     isClaudeMalformedTerminalError(message) ||
     isClaudeBridgeLaunchError(message)
-  ) return true;
+  )
+    return true;
   const s = message.toLowerCase();
   // Never treat a user/engine abort as transient — that's an intentional stop.
   if (s.includes("messageabortederror") || s.includes("aborted")) return false;
@@ -333,7 +384,9 @@ export function isTransientRunError(message: string | undefined | null): boolean
  * classifier keeps the broad matcher from matching model output that merely
  * mentions the term.
  */
-export function isClaudeMalformedTerminalError(message: string | undefined | null): boolean {
+export function isClaudeMalformedTerminalError(
+  message: string | undefined | null,
+): boolean {
   if (!message) return false;
   return /claude code returned an error result:\s*\[ede_diagnostic\]\s*result_type=user\b/i.test(
     message,
@@ -343,7 +396,9 @@ export function isClaudeMalformedTerminalError(message: string | undefined | nul
 /** A provider-declared overload is capacity pressure upstream, not an engine,
  * MCP, or network fault on this host. Retrying different models immediately
  * tends to produce the same error and obscures the real cause. */
-export function isProviderOverloadError(message: string | undefined | null): boolean {
+export function isProviderOverloadError(
+  message: string | undefined | null,
+): boolean {
   if (!message) return false;
   return /(?:our )?servers? (?:are )?(?:currently )?overloaded|overloaded_error/i.test(
     message,
@@ -364,7 +419,8 @@ export function isProviderOverloadError(message: string | undefined | null): boo
  * start of the text to stay narrow — prose that merely quotes an envelope
  * mid-answer should not trip it.
  */
-export const TOOL_RESULT_ENVELOPE_RE = /^\s*\[your [a-z0-9][\w.:-]*(?:\s[^\]]*)?\]:/i;
+export const TOOL_RESULT_ENVELOPE_RE =
+  /^\s*\[your [a-z0-9][\w.:-]*(?:\s[^\]]*)?\]:/i;
 
 /**
  * Second observed costume of the same confabulation (2026-07-29, ~1h after
@@ -394,7 +450,8 @@ const DURATION_CHIP_JSON_RE = /(^|\n)[–—]\s*\d+(?:\.\d+)?\s*m?s\s*\n\s*[{[]/
  * protocol and never belongs in prose; requiring BOTH tags keeps a passing
  * mention of "<invoke" in code discussion from tripping it.
  */
-const INVOKE_XML_RE = /<invoke name="[^"\n]{1,120}">[\s\S]{0,2000}?<parameter name="[^"\n]{1,120}">/;
+const INVOKE_XML_RE =
+  /<invoke name="[^"\n]{1,120}">[\s\S]{0,2000}?<parameter name="[^"\n]{1,120}">/;
 
 export function looksLikeFabricatedToolTranscript(text: string): boolean {
   if (!text) return false;
@@ -445,36 +502,71 @@ export function hasRunStatusDeclaration(text: string): boolean {
  *  evaluate/disabled, session/llm/request.ts resolveTools). */
 export const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
   "*": "deny",
-  "cat *": "allow", "ls*": "allow", "rg *": "allow", "grep *": "allow",
-  "find *": "allow", "head *": "allow", "tail *": "allow", "wc *": "allow",
-  "tree*": "allow", "file *": "allow", "stat *": "allow", "du *": "allow",
-  "df*": "allow", "which *": "allow", "pwd": "allow", "echo *": "allow",
+  "cat *": "allow",
+  "ls*": "allow",
+  "rg *": "allow",
+  "grep *": "allow",
+  "find *": "allow",
+  "head *": "allow",
+  "tail *": "allow",
+  "wc *": "allow",
+  "tree*": "allow",
+  "file *": "allow",
+  "stat *": "allow",
+  "du *": "allow",
+  "df*": "allow",
+  "which *": "allow",
+  pwd: "allow",
+  "echo *": "allow",
   // Identity, kernel, environment, and path inspection. These commands only
   // print process or filesystem metadata and cannot mutate the host.
-  "whoami": "allow", "id": "allow", "id *": "allow", "uname": "allow",
-  "uname *": "allow", "printenv": "allow", "printenv *": "allow",
-  "readlink *": "allow", "realpath *": "allow",
+  whoami: "allow",
+  id: "allow",
+  "id *": "allow",
+  uname: "allow",
+  "uname *": "allow",
+  printenv: "allow",
+  "printenv *": "allow",
+  "readlink *": "allow",
+  "realpath *": "allow",
   // Read-only clock reads (timestamp math in digests/triage). Only the read
   // forms — bare "date */date -s" (setting the clock) needs root and is not
   // allowed here; these globs cover `date +%s`, `date -u`, `date -d '…'`.
-  "date": "allow", "date +*": "allow", "date -u*": "allow",
-  "date -d*": "allow", "date -r*": "allow",
-  "git status*": "allow", "git log*": "allow", "git diff*": "allow",
-  "git show*": "allow", "git branch*": "allow", "git blame*": "allow",
-  "git grep*": "allow", "git ls-files*": "allow",
+  date: "allow",
+  "date +*": "allow",
+  "date -u*": "allow",
+  "date -d*": "allow",
+  "date -r*": "allow",
+  "git status*": "allow",
+  "git log*": "allow",
+  "git diff*": "allow",
+  "git show*": "allow",
+  "git branch*": "allow",
+  "git blame*": "allow",
+  "git grep*": "allow",
+  "git ls-files*": "allow",
   // git plumbing reads: rev-parse just prints resolved revs/paths (no mutation),
   // and review agents routinely chain `… && git rev-parse HEAD` — the previous runner
   // evaluates each sub-command, so an unlisted rev-parse denied the whole line.
-  "git rev-parse*": "allow", "git cat-file*": "allow", "git describe*": "allow",
+  "git rev-parse*": "allow",
+  "git cat-file*": "allow",
+  "git describe*": "allow",
   "git merge-base*": "allow",
   // Read-only stdout filters — the usual tails on allowed git/gh reads
   // (`git show X:f | nl -ba`, `… | cut -d…`); an unlisted filter denies the
   // whole pipeline (each sub-command is evaluated, see rev-parse note).
   // Deliberately NOT sort/uniq (`sort -o FILE` and `uniq in out` both write
   // files) and not awk/perl (arbitrary code; sed's exclusion is noted below).
-  "nl": "allow", "nl *": "allow", "cut *": "allow", "tr *": "allow",
-  "comm *": "allow", "column": "allow", "column *": "allow",
-  "diff *": "allow", "sha256sum*": "allow", "md5sum*": "allow",
+  nl: "allow",
+  "nl *": "allow",
+  "cut *": "allow",
+  "tr *": "allow",
+  "comm *": "allow",
+  column: "allow",
+  "column *": "allow",
+  "diff *": "allow",
+  "sha256sum*": "allow",
+  "md5sum*": "allow",
   // Exact spelling, no trailing glob: `git hash-object --stdin*` would also
   // match `--stdin -w`, which writes the object into .git.
   "git hash-object --stdin": "allow",
@@ -491,20 +583,31 @@ export const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
   // non-mutating `gh pr`/`gh run` read verbs — NOT bare "gh *" (that would
   // allow pr create/merge/close/comment, run rerun/cancel/delete) and NOT
   // "gh api *" (which can -X POST/PATCH any endpoint). These only ever read.
-  "gh pr list*": "allow", "gh pr view*": "allow",
-  "gh pr checks*": "allow", "gh pr status*": "allow",
-  "gh run view*": "allow", "gh run list*": "allow", "gh run watch*": "allow",
+  "gh pr list*": "allow",
+  "gh pr view*": "allow",
+  "gh pr checks*": "allow",
+  "gh pr status*": "allow",
+  "gh run view*": "allow",
+  "gh run list*": "allow",
+  "gh run watch*": "allow",
   // jq: a pure read-only JSON filter (no file writes, no shell-out, no code
   // exec — its language is sandboxed data transformation), so it's on par with
   // grep/wc for the allowlist. Lets ask-mode runs process `gh --json` / API
   // output instead of thrashing on the (correctly denied) `python3 -c`.
-  "jq *": "allow", "jq*": "allow",
+  "jq *": "allow",
+  "jq*": "allow",
   // Read-only system inspection (health checks, diagnosing the box). Only
   // no-op systemctl verbs — bare "systemctl *" would allow restart/stop.
-  "free*": "allow", "uptime*": "allow", "nproc*": "allow",
-  "ps": "allow", "ps *": "allow", "top -b*": "allow",
-  "systemctl status*": "allow", "systemctl is-active*": "allow",
-  "systemctl is-enabled*": "allow", "systemctl list-units*": "allow",
+  "free*": "allow",
+  "uptime*": "allow",
+  "nproc*": "allow",
+  ps: "allow",
+  "ps *": "allow",
+  "top -b*": "allow",
+  "systemctl status*": "allow",
+  "systemctl is-active*": "allow",
+  "systemctl is-enabled*": "allow",
+  "systemctl list-units*": "allow",
 };
 
 // Compiled lazily on first use: building regexes at import would be harmless
@@ -519,13 +622,16 @@ let askBashRules: Array<{ re: RegExp; value: "allow" | "deny" }> | null = null;
 function askBashVerdict(segment: string): "allow" | "deny" {
   if (!askBashRules) {
     const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    askBashRules = Object.entries(ASK_BASH_PERMISSIONS).map(([pattern, value]) => ({
-      re: new RegExp(`^${pattern.split("*").map(escape).join("[\\s\\S]*")}$`),
-      value,
-    }));
+    askBashRules = Object.entries(ASK_BASH_PERMISSIONS).map(
+      ([pattern, value]) => ({
+        re: new RegExp(`^${pattern.split("*").map(escape).join("[\\s\\S]*")}$`),
+        value,
+      }),
+    );
   }
   let verdict: "allow" | "deny" = "deny";
-  for (const rule of askBashRules) if (rule.re.test(segment)) verdict = rule.value;
+  for (const rule of askBashRules)
+    if (rule.re.test(segment)) verdict = rule.value;
   return verdict;
 }
 

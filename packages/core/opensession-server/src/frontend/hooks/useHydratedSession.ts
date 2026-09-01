@@ -27,32 +27,32 @@ import type { UnifiedSession } from "../lib/types";
  * running, and a list row without its detail still renders the conversation.
  */
 export function useHydratedSession(
-	sessionId: string | null,
-	fromList: UnifiedSession | null,
+  sessionId: string | null,
+  fromList: UnifiedSession | null,
 ): UnifiedSession | null {
-	const { data: hydrated = null, mutate } = useSWR<UnifiedSession | null>(
-		sessionId ? apiSWRKey.session(sessionId) : null,
-		() => fetchSession(sessionId!),
-		API_SWR_OPTIONS,
-	);
-	const have =
-		hydrated &&
-		sessionId &&
-		(hydrated.id === sessionId || hydrated.aliasIds?.includes(sessionId))
-			? hydrated
-			: null;
-	// Refetch on new activity: the detail-only fields change when the session
-	// runs, and `lastActivity` is the list's marker that it has.
-	const at = fromList?.lastActivity ?? null;
-	useEffect(() => {
-		if (sessionId) void mutate();
-	}, [sessionId, at, mutate]);
+  const { data: hydrated = null, mutate } = useSWR<UnifiedSession | null>(
+    sessionId ? apiSWRKey.session(sessionId) : null,
+    () => fetchSession(sessionId!),
+    API_SWR_OPTIONS,
+  );
+  const have =
+    hydrated &&
+    sessionId &&
+    (hydrated.id === sessionId || hydrated.aliasIds?.includes(sessionId))
+      ? hydrated
+      : null;
+  // Refetch on new activity: the detail-only fields change when the session
+  // runs, and `lastActivity` is the list's marker that it has.
+  const at = fromList?.lastActivity ?? null;
+  useEffect(() => {
+    if (sessionId) void mutate();
+  }, [sessionId, at, mutate]);
 
-	// Identity matters here, not cost: the merge would otherwise mint a fresh
-	// session object on every render of the app, and the viewer hangs effects
-	// off the session it is handed. The React Compiler preserves referential
-	// identity across renders for these inputs.
-	if (!sessionId) return null;
-	if (!fromList) return have;
-	return mergeSessionDetail(fromList, have);
+  // Identity matters here, not cost: the merge would otherwise mint a fresh
+  // session object on every render of the app, and the viewer hangs effects
+  // off the session it is handed. The React Compiler preserves referential
+  // identity across renders for these inputs.
+  if (!sessionId) return null;
+  if (!fromList) return have;
+  return mergeSessionDetail(fromList, have);
 }

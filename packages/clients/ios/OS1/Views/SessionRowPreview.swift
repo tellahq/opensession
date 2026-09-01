@@ -19,9 +19,8 @@ import SwiftUI
 ///   who is being waited on read as one wrapping run of short phrases. The web
 ///   card has 300px and a label column; a phone has neither, and a 74pt label
 ///   gutter would leave its values a dozen characters wide.
-/// - **The verdict is a word.** "approve · 4/5 · stale" said one thing in
-///   three tokens; it says "approved" now, and only a blocking count changes
-///   what to do next (web commit "verdict on the fact strip").
+/// - **The review is compact.** Its score leads the verdict (`4/5 · approved`),
+///   with blocking and stale context retained when present.
 ///
 /// What deliberately did NOT come across is the web footer's centred Merge
 /// button. A context menu preview is not interactive: taps go to the menu, so
@@ -177,6 +176,59 @@ struct SessionRowPreview: View {
     }
 }
 
+#if DEBUG
+/// Deterministic visual proof for the native screenshot harness.
+struct PrReviewCardsScreenshot: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("PR review readings")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+
+                card(
+                    title: "Ready after review",
+                    review: OsReviewSummary(
+                        verdict: "approve", confidence: 4, findings: 0, blocking: 0, stale: false
+                    )
+                )
+                card(
+                    title: "Address blocking feedback",
+                    review: OsReviewSummary(
+                        verdict: "request_changes", confidence: 2,
+                        findings: 2, blocking: 1, stale: false
+                    )
+                )
+                card(
+                    title: "Review is behind the branch",
+                    review: OsReviewSummary(
+                        verdict: "comment", confidence: 3, findings: 1, blocking: 0, stale: true
+                    )
+                )
+            }
+            .padding(20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(OS1VisualStyle.background)
+    }
+
+    private func card(title: String, review: OsReviewSummary) -> some View {
+        var session = Session(id: title)
+        session.repo = "opensession"
+        session.branch = "review-score-parity"
+        session.prNumber = 128
+        session.prState = "OPEN"
+        session.prMergeable = "MERGEABLE"
+        session.prAdditions = 42
+        session.prDeletions = 8
+        session.prChangedFiles = 3
+        session.prOsReview = review
+        session.lastActivity = ISO8601DateFormatter().string(from: .now.addingTimeInterval(-180))
+        return SessionRowPreview(title: title, repo: "opensession", session: session)
+    }
+}
+#endif
+
 // MARK: - Facts
 
 /// One phrase on the preview's strip, and the tone it is said in.
@@ -279,11 +331,10 @@ enum PrPreviewFacts {
         return PrPreviewFact(text: "approved", tone: .green)
     }
 
-    /// The automated review's verdict, in the one word a person is looking
-    /// for. Only a blocking count changes what to do next, so that stays out
-    /// loud; the confidence score does not, and is dropped rather than
-    /// shrunk. A verdict the branch has moved past goes faint and says so
-    /// instead of lending stale news the weight of fresh news.
+    /// The automated review's score and verdict. The score stays directly in
+    /// the compact reading, followed by blocking and stale context when
+    /// present. A verdict the branch has moved past goes faint instead of
+    /// lending stale news the weight of fresh news.
     static func osReviewFact(_ review: OsReviewSummary) -> PrPreviewFact? {
         guard let verdict = review.verdict else { return nil }
         let word = switch verdict {
@@ -292,7 +343,11 @@ enum PrPreviewFacts {
         case "comment": "commented"
         default: "reviewed"
         }
-        var parts = ["OS review \(word)"]
+        var parts = [String]()
+        if let confidence = review.confidence {
+            parts.append("\(confidence)/5")
+        }
+        parts.append(word)
         if let blocking = review.blocking, blocking > 0 {
             parts.append("\(blocking) blocking")
         }

@@ -16,33 +16,33 @@ type OrderMap = Record<string, string[]>;
  * Session and pane tabs use the same rule, so no tab kind gets a privileged side.
  */
 export function appendNewTabs(
-	previous: readonly string[],
-	current: readonly string[],
+  previous: readonly string[],
+  current: readonly string[],
 ): string[] {
-	const currentSet = new Set(current);
-	const previousSet = new Set(previous);
-	const added = current.filter((id) => !previousSet.has(id));
-	if (added.length === 0) return [...current];
-	return [...previous.filter((id) => currentSet.has(id)), ...added];
+  const currentSet = new Set(current);
+  const previousSet = new Set(previous);
+  const added = current.filter((id) => !previousSet.has(id));
+  if (added.length === 0) return [...current];
+  return [...previous.filter((id) => currentSet.has(id)), ...added];
 }
 
 function read(): OrderMap {
-	try {
-		const v = JSON.parse(localStorage.getItem(KEY) || "{}");
-		if (!v || typeof v !== "object" || Array.isArray(v)) return {};
-		return v as OrderMap;
-	} catch {
-		return {};
-	}
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || "{}");
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    return v as OrderMap;
+  } catch {
+    return {};
+  }
 }
 
 function write(map: OrderMap): void {
-	try {
-		localStorage.setItem(KEY, JSON.stringify(map));
-	} catch {
-		/* private mode / quota — keep working from the last read in memory */
-	}
-	window.dispatchEvent(new Event(CHANGE_EVENT));
+  try {
+    localStorage.setItem(KEY, JSON.stringify(map));
+  } catch {
+    /* private mode / quota — keep working from the last read in memory */
+  }
+  window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
 /**
@@ -53,17 +53,17 @@ function write(map: OrderMap): void {
  * closed session) simply matches nothing. Pure read; persists nothing.
  */
 export function applyTabOrder(workspaceId: string, ids: string[]): string[] {
-	const saved = read()[workspaceId];
-	if (!saved || saved.length === 0) return ids;
-	const pos = new Map(saved.map((id, i) => [id, i] as const));
-	return ids
-		.map((id, i) => ({ id, i }))
-		.sort((a, b) => {
-			const pa = pos.has(a.id) ? (pos.get(a.id) as number) : Infinity;
-			const pb = pos.has(b.id) ? (pos.get(b.id) as number) : Infinity;
-			return pa !== pb ? pa - pb : a.i - b.i;
-		})
-		.map((e) => e.id);
+  const saved = read()[workspaceId];
+  if (!saved || saved.length === 0) return ids;
+  const pos = new Map(saved.map((id, i) => [id, i] as const));
+  return ids
+    .map((id, i) => ({ id, i }))
+    .sort((a, b) => {
+      const pa = pos.has(a.id) ? (pos.get(a.id) as number) : Infinity;
+      const pb = pos.has(b.id) ? (pos.get(b.id) as number) : Infinity;
+      return pa !== pb ? pa - pb : a.i - b.i;
+    })
+    .map((e) => e.id);
 }
 
 /**
@@ -72,19 +72,19 @@ export function applyTabOrder(workspaceId: string, ids: string[]): string[] {
  * that no longer has a custom order doesn't linger in the map.
  */
 export function saveTabOrder(workspaceId: string, ids: string[]): void {
-	if (!workspaceId) return;
-	const map = read();
-	if (ids.length === 0) delete map[workspaceId];
-	else map[workspaceId] = ids;
-	write(map);
+  if (!workspaceId) return;
+  const map = read();
+  if (ids.length === 0) delete map[workspaceId];
+  else map[workspaceId] = ids;
+  write(map);
 }
 
 /** Subscribe to order changes (this tab's commits and other tabs' via storage). */
 export function onTabOrderChanged(handler: () => void): () => void {
-	window.addEventListener(CHANGE_EVENT, handler);
-	window.addEventListener("storage", handler);
-	return () => {
-		window.removeEventListener(CHANGE_EVENT, handler);
-		window.removeEventListener("storage", handler);
-	};
+  window.addEventListener(CHANGE_EVENT, handler);
+  window.addEventListener("storage", handler);
+  return () => {
+    window.removeEventListener(CHANGE_EVENT, handler);
+    window.removeEventListener("storage", handler);
+  };
 }

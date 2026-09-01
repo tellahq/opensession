@@ -27,9 +27,19 @@ self.addEventListener("message", (event: MessageEvent<Record<string, any>>) => {
     }, 300);
     return;
   }
-  if (request.t === "runtime_work") {
+  if (request.t === "runtime_catalog_work") {
     self.postMessage({
-      t: "runtime_work_result",
+      t: "runtime_catalog_work_result",
+      rpcId: request.rpcId,
+      sessionIds: ["runtime-session"],
+      timers: [],
+      outbox: [],
+    });
+    return;
+  }
+  if (request.t === "runtime_session_work") {
+    self.postMessage({
+      t: "runtime_session_work_result",
       rpcId: request.rpcId,
       timers: [],
       outbox: [],

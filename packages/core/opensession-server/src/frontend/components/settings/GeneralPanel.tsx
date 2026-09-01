@@ -2,31 +2,32 @@ import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
 import { utilityClassName } from "../../ui/cn";
 import React, { useEffect, useEffectEvent, useState } from "react";
 import {
-	fetchGithubOrganizationProfile,
-	fetchOrganizationSettings,
-	removeOrganizationIcon,
-	saveOrganizationSettings,
-	uploadOrganizationIcon,
-	type OrganizationSettingsDto,
+  fetchGithubOrganizationProfile,
+  fetchOrganizationSettings,
+  removeOrganizationIcon,
+  saveOrganizationSettings,
+  uploadOrganizationIcon,
+  type OrganizationSettingsDto,
 } from "../../lib/api";
 import { rememberOrganizationIcon } from "../../hooks/useOrganizationIcon";
 import { PRODUCT_NAME } from "../../lib/brand";
 import { pngFromImageFile, pngFromImageUrl } from "../../lib/icon-image";
 import { REPO_TILE_INK, repoColor, repoIconFill } from "../../lib/repo-colors";
+import { errorMessage } from "../../lib/error-message";
 import { cn } from "../../ui/cn";
 import { OverlayAction } from "../../ui/overlay-action";
 import { Field } from "../../ui/input";
 import {
-	SettingCard,
-	SettingCardSkeleton,
-	SettingRow,
-	SettingRowControl,
-	SettingRowText,
-	SettingRowTitle,
-	SettingsHeader,
-	SettingsHint,
-	SettingsPanel,
-	settingsInputClass,
+  SettingCard,
+  SettingCardSkeleton,
+  SettingRow,
+  SettingRowControl,
+  SettingRowText,
+  SettingRowTitle,
+  SettingsHeader,
+  SettingsHint,
+  SettingsPanel,
+  settingsInputClass,
 } from "../../ui/settings";
 import { toast } from "../../ui/toast";
 import { InlineAlert } from "../../ui/state";
@@ -36,112 +37,138 @@ import * as stylex from "@stylexjs/stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	relative: {
-			position: "relative"
-	},
-	flex: {
-			display: "flex"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap15: {
-			gap: "calc(4px * 1.5)"
-	},
-	sizeFull: {
-			width: "100%",
-			height: "100%"
-	},
-	objectCover: {
-			objectFit: "cover"
-	},
-	pointerEventsNone: {
-			pointerEvents: "none"
-	},
-	absolute: {
-			position: "absolute"
-	},
-	inset0: {
-			inset: "0"
-	},
-	grid: {
-			display: "grid"
-	},
-	placeItemsCenter: {
-			placeItems: "center"
-	},
-	roundedInherit: {
-			borderRadius: "inherit",
-
-		cornerShape: "var(--cs)",},
-	textWhite: {
-			color: "var(--color-white)"
-	},
-	opacity0: {
-			opacity: "0%"
-	},
-	transitionOpacity: {
-			transitionProperty: "opacity",
-			transitionTimingFunction: "var(--tw-ease, var(--ease))",
-			transitionDuration: "var(--tw-duration, var(--dur-micro))"
-	},
-	duration150: {
-			transitionDuration: "150ms"
-	},
-	textRed: {
-			color: "var(--red)"
-	},
-	hidden: {
-			display: "none"
-	},
-	p6: {
-			padding: "calc(4px * 6)"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	py4: {
-			paddingBlock: "calc(4px * 4)"
-	},
-	mxAuto: {
-			marginInline: "auto"
-	},
-	mt5: {
-			marginTop: "calc(4px * 5)"
-	},
-	wFull: {
-			width: "100%"
-	},
-	maxW400px: {
-			maxWidth: "400px"
-	},
-	gridCols1: {
-			gridTemplateColumns: "repeat(1, minmax(0, 1fr))"
-	},
-	gap4: {
-			gap: "calc(4px * 4)"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	flexWrap: {
-			flexWrap: "wrap"
-	},
-	justifyEnd: {
-			justifyContent: "flex-end"
-	},
-	gap2: {
-			gap: "calc(4px * 2)"
-	},
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  sizeFull: {
+    width: "100%",
+    height: "100%",
+  },
+  objectCover: {
+    objectFit: "cover",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  grid: {
+    display: "grid",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+  roundedInherit: {
+    borderRadius: "inherit",
+    cornerShape: "var(--cs)",
+  },
+  bgBlack50: {
+    backgroundColor: "color-mix(in oklab, var(--color-black) 50%, transparent)",
+  },
+  textWhite: {
+    color: "var(--color-white)",
+  },
+  opacity0: {
+    opacity: "0%",
+  },
+  transitionOpacity: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  duration150: {
+    transitionDuration: "150ms",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  phonePointerEventsAuto: {
+    "@media (max-width: 720px)": {
+      pointerEvents: "auto !important",
+    },
+  },
+  phoneOpacity100: {
+    "@media (max-width: 720px)": {
+      opacity: "100% !important",
+    },
+  },
+  hidden: {
+    display: "none",
+  },
+  p6: {
+    padding: "calc(4px * 6)",
+  },
+  phoneP5: {
+    "@media (max-width: 720px)": {
+      padding: "calc(4px * 5)",
+    },
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxW400px: {
+    maxWidth: "400px",
+  },
+  gridCols1: {
+    gridTemplateColumns: "repeat(1, minmax(0, 1fr))",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
 });
 
-const NAME_INPUT_CLASS = cn(settingsInputClass, utilityClassName("w-[220px] max-w-full"));
+const NAME_INPUT_CLASS = cn(
+  settingsInputClass,
+  utilityClassName("w-[220px] max-w-full"),
+);
 
 /**
  * The organization's name and mark.
@@ -154,267 +181,355 @@ const NAME_INPUT_CLASS = cn(settingsInputClass, utilityClassName("w-[220px] max-
  * a rename.
  */
 export function OrganizationProfileSection({
-	githubOrganization,
-	onboarding = false,
+  githubOrganization,
+  onboarding = false,
 }: {
-	githubOrganization?: string;
-	onboarding?: boolean;
+  githubOrganization?: string;
+  onboarding?: boolean;
 } = {}) {
-	const [settings, setSettings] = useState<OrganizationSettingsDto | null>(null);
-	const [draft, setDraft] = useState("");
-	const [busy, setBusy] = useState(false);
-	const [loadError, setLoadError] = useState<string | null>(null);
-	const [iconFailed, setIconFailed] = useState(false);
-	const fileInput = React.useRef<HTMLInputElement>(null);
-	// One attempt per mount: a failed lookup must not retry on every render, and
-	// a successful one must not fight the operator's own edits.
-	const prefilled = React.useRef(false);
+  const [settings, setSettings] = useState<OrganizationSettingsDto | null>(
+    null,
+  );
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [iconFailed, setIconFailed] = useState(false);
+  const fileInput = React.useRef<HTMLInputElement>(null);
+  // One attempt per mount: a failed lookup must not retry on every render, and
+  // a successful one must not fight the operator's own edits.
+  const prefilled = React.useRef(false);
 
-	async function load(cancelled?: () => boolean) {
-		setLoadError(null);
-		await (async () => {
-const next = await fetchOrganizationSettings();
-			if (cancelled?.()) return;
-			setSettings(next);
-			setDraft(next.organizationName);
-			rememberOrganizationIcon(next);
-})().catch(async (error: any) => {
-if (cancelled?.()) return;
-			const message = error?.message || "Couldn’t load organization settings";
-			setLoadError(message);
-			toast(message, { variant: "error" });
-});
-	}
+  async function load(cancelled?: () => boolean) {
+    setLoadError(null);
+    await (async () => {
+      const next = await fetchOrganizationSettings();
+      if (cancelled?.()) return;
+      setSettings(next);
+      setDraft(next.organizationName);
+      rememberOrganizationIcon(next);
+    })().catch(async (error) => {
+      if (cancelled?.()) return;
+      const message = errorMessage(
+        error,
+        "Couldn’t load organization settings",
+      );
+      setLoadError(message);
+      toast(message, { variant: "error" });
+    });
+  }
 
-	useEffect(() => {
-		let cancelled = false;
-		void load(() => cancelled);
-		return () => {
-			cancelled = true;
-		};
-	}, []);
+  useEffect(() => {
+    let cancelled = false;
+    void load(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-	async function update(work: () => Promise<OrganizationSettingsDto>, message: string) {
-		if (busy) return;
-		setBusy(true);
-		await (async () => {
-const next = await work();
-			setSettings(next);
-			setDraft(next.organizationName);
-			setIconFailed(false);
-			rememberOrganizationIcon(next);
-			toast(message, { variant: "success" });
-})().catch(async (error: any) => {
-toast(error?.message || "Couldn’t save organization settings", {
-				variant: "error",
-			});
-			if (settings) setDraft(settings.organizationName);
-}).finally(async () => {
-setBusy(false);
-});
-	}
+  async function update(
+    work: () => Promise<OrganizationSettingsDto>,
+    message: string,
+  ) {
+    if (busy) return;
+    setBusy(true);
+    await (async () => {
+      const next = await work();
+      setSettings(next);
+      setDraft(next.organizationName);
+      setIconFailed(false);
+      rememberOrganizationIcon(next);
+      toast(message, { variant: "success" });
+    })()
+      .catch(async (error) => {
+        toast(errorMessage(error, "Couldn’t save organization settings"), {
+          variant: "error",
+        });
+        if (settings) setDraft(settings.organizationName);
+      })
+      .finally(async () => {
+        setBusy(false);
+      });
+  }
 
-	async function commitName() {
-		const next = draft.trim();
-		if (!settings || next === settings.organizationName || busy) {
-			if (settings) setDraft(settings.organizationName);
-			return;
-		}
-		await update(
-			() => saveOrganizationSettings({ organizationName: next }),
-			"Organization name saved.",
-		);
-	}
+  async function commitName() {
+    const next = draft.trim();
+    if (!settings || next === settings.organizationName || busy) {
+      if (settings) setDraft(settings.organizationName);
+      return;
+    }
+    await update(
+      () => saveOrganizationSettings({ organizationName: next }),
+      "Organization name saved.",
+    );
+  }
 
-	// Fill only what is still unset. A fresh install has no icon and a name that
-	// is still the product's own.
-	// The body reads `update` through an effect event: the trigger set stays the
-	// org/settings state, while the call always reaches the latest closure.
-	const maybePrefillFromGithub = useEffectEvent(() => {
-		const login = githubOrganization?.trim();
-		if (!login || !settings || prefilled.current || busy) return;
-		const needsName =
-			!settings.organizationName || settings.organizationName === PRODUCT_NAME;
-		const needsIcon = !settings.organizationIconUrl;
-		if (!needsName && !needsIcon) return;
-		prefilled.current = true;
-		void (async () => {
-			const profile = await fetchGithubOrganizationProfile(login);
-			await update(async () => {
-				if (needsIcon && profile?.avatarUrl) {
-					const icon = await pngFromImageUrl(profile.avatarUrl);
-					if (icon) await uploadOrganizationIcon(icon);
-				}
-				return saveOrganizationSettings({
-					...(needsName ? { organizationName: profile?.name || login } : {}),
-				});
-			}, `Filled in from ${login} on GitHub.`);
-		})();
-	});
-	useEffect(() => {
-		maybePrefillFromGithub();
-	}, [githubOrganization, settings, busy]);
+  // Fill only what is still unset. A fresh install has no icon and a name that
+  // is still the product's own.
+  // The body reads `update` through an effect event: the trigger set stays the
+  // org/settings state, while the call always reaches the latest closure.
+  const maybePrefillFromGithub = useEffectEvent(() => {
+    const login = githubOrganization?.trim();
+    if (!login || !settings || prefilled.current || busy) return;
+    const needsName =
+      !settings.organizationName || settings.organizationName === PRODUCT_NAME;
+    const needsIcon = !settings.organizationIconUrl;
+    if (!needsName && !needsIcon) return;
+    prefilled.current = true;
+    void (async () => {
+      const profile = await fetchGithubOrganizationProfile(login);
+      await update(async () => {
+        if (needsIcon && profile?.avatarUrl) {
+          const icon = await pngFromImageUrl(profile.avatarUrl);
+          if (icon) await uploadOrganizationIcon(icon);
+        }
+        return saveOrganizationSettings({
+          ...(needsName ? { organizationName: profile?.name || login } : {}),
+        });
+      }, `Filled in from ${login} on GitHub.`);
+    })();
+  });
+  useEffect(() => {
+    maybePrefillFromGithub();
+  }, [githubOrganization, settings, busy]);
 
-	async function upload(file: File) {
-		await update(async () => {
-			const png = await pngFromImageFile(file);
-			return uploadOrganizationIcon(png);
-		}, "Organization icon updated.");
-	}
+  async function upload(file: File) {
+    await update(async () => {
+      const png = await pngFromImageFile(file);
+      return uploadOrganizationIcon(png);
+    }, "Organization icon updated.");
+  }
 
-	function removeIcon() {
-		void update(removeOrganizationIcon, "Organization icon removed.");
-	}
+  function removeIcon() {
+    void update(removeOrganizationIcon, "Organization icon removed.");
+  }
 
-	const nameParts = (settings?.organizationName || "Organization").trim().split(/\s+/);
-	const initials = (
-		nameParts.length > 1
-			? `${nameParts[0].charAt(0)}${nameParts.at(-1)?.charAt(0) || ""}`
-			: nameParts[0].slice(0, 2)
-	).toUpperCase();
-	const showIcon = !!settings?.organizationIconUrl && !iconFailed;
-	const fallbackColor = repoColor(settings?.organizationName || "organization");
-	const iconEditor = (
-		<div {...mergeStylexProps("group/overlay-action", sx.relative, sx.flex, sx.shrink0, sx.flexCol, sx.itemsCenter, sx.gap15)} >
-			<button
-				type="button"
-				disabled={busy}
-				onClick={() => fileInput.current?.click()}
-				aria-label={showIcon ? "Change organization icon" : "Upload organization icon"}
-				className={cn(
-					utilityClassName("focus-ring group/upload relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg text-section-title font-semibold outline outline-1 outline-divider disabled:pointer-events-none"),
-					onboarding ? utilityClassName("size-16") : utilityClassName("size-14"),
-				)}
-				style={
-					showIcon
-						? undefined
-						: {
-								backgroundImage: repoIconFill(fallbackColor),
-								color: REPO_TILE_INK,
-							}
-				}
-			>
-				{showIcon ? (
-					<img
-						src={settings?.organizationIconUrl || undefined}
-						alt=""
-						{...stylex.props(sx.sizeFull, sx.objectCover)}
-						onError={() => setIconFailed(true)}
-					/>
-				) : (
-					initials
-				)}
-				<span {...mergeStylexProps("bg-black/50 group-hover/upload:opacity-100 group-focus-visible/upload:opacity-100", sx.pointerEventsNone, sx.absolute, sx.inset0, sx.grid, sx.placeItemsCenter, sx.roundedInherit, sx.textWhite, sx.opacity0, sx.transitionOpacity, sx.duration150)} >
-					<IconArrowUpToLine size={20} />
-				</span>
-			</button>
-			{settings?.organizationIconUrl && (
-				<OverlayAction
-					icon={<IconTrash className={mergeStylexOverrideClassName("", sx.textRed)} size={20} />}
-					disabled={busy}
-					onClick={removeIcon}
-					aria-label="Remove organization icon"
-					title="Remove icon"
-					className="phone:pointer-events-auto! phone:opacity-100!"
-				/>
-			)}
-			<input
-				ref={fileInput}
-				type="file"
-				disabled={busy}
-				accept="image/*"
-				{...stylex.props(sx.hidden)}
-				onChange={(event) => {
-					const file = event.target.files?.[0];
-					event.target.value = "";
-					if (file) void upload(file);
-				}}
-			/>
-		</div>
-	);
-	const organizationNameInput = (
-		<input
-			className={cn(
-				NAME_INPUT_CLASS,
-				onboarding && utilityClassName("h-12! min-h-12! w-full! px-3.5! text-base!"),
-			)}
-			// data-setup-field: FirstMile promotes this to the large field step.
-			data-setup-field="org-name"
-			value={draft}
-			maxLength={80}
-			disabled={busy}
-			onChange={(event) => setDraft(event.target.value)}
-			onBlur={() => void commitName()}
-			onKeyDown={(event) => {
-				if (event.key === "Enter") event.currentTarget.blur();
-				else if (event.key === "Escape") setDraft(settings?.organizationName || "");
-			}}
-			aria-label="Organization name"
-		/>
-	);
+  const nameParts = (settings?.organizationName || "Organization")
+    .trim()
+    .split(/\s+/);
+  const initials = (
+    nameParts.length > 1
+      ? `${nameParts[0].charAt(0)}${nameParts.at(-1)?.charAt(0) || ""}`
+      : nameParts[0].slice(0, 2)
+  ).toUpperCase();
+  const showIcon = !!settings?.organizationIconUrl && !iconFailed;
+  const fallbackColor = repoColor(settings?.organizationName || "organization");
+  const iconEditor = (
+    <div
+      {...mergeStylexProps(
+        "group/overlay-action",
+        sx.relative,
+        sx.flex,
+        sx.shrink0,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.gap15,
+      )}
+    >
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => fileInput.current?.click()}
+        aria-label={
+          showIcon ? "Change organization icon" : "Upload organization icon"
+        }
+        className={cn(
+          utilityClassName(
+            "focus-ring group/upload relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg text-section-title font-semibold outline outline-1 outline-divider disabled:pointer-events-none",
+          ),
+          onboarding
+            ? utilityClassName("size-16")
+            : utilityClassName("size-14"),
+        )}
+        style={
+          showIcon
+            ? undefined
+            : {
+                backgroundImage: repoIconFill(fallbackColor),
+                color: REPO_TILE_INK,
+              }
+        }
+      >
+        {showIcon ? (
+          <img
+            src={settings?.organizationIconUrl || undefined}
+            alt=""
+            {...stylex.props(sx.sizeFull, sx.objectCover)}
+            onError={() => setIconFailed(true)}
+          />
+        ) : (
+          initials
+        )}
+        <span
+          {...mergeStylexProps(
+            "group-hover/upload:opacity-100 group-focus-visible/upload:opacity-100",
+            sx.pointerEventsNone,
+            sx.absolute,
+            sx.inset0,
+            sx.grid,
+            sx.placeItemsCenter,
+            sx.roundedInherit,
+            sx.bgBlack50,
+            sx.textWhite,
+            sx.opacity0,
+            sx.transitionOpacity,
+            sx.duration150,
+          )}
+        >
+          <IconArrowUpToLine size={20} />
+        </span>
+      </button>
+      {settings?.organizationIconUrl && (
+        <OverlayAction
+          icon={
+            <IconTrash
+              className={mergeStylexOverrideClassName("", sx.textRed)}
+              size={20}
+            />
+          }
+          disabled={busy}
+          onClick={removeIcon}
+          aria-label="Remove organization icon"
+          title="Remove icon"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.phonePointerEventsAuto,
+            sx.phoneOpacity100,
+          )}
+        />
+      )}
+      <input
+        ref={fileInput}
+        type="file"
+        disabled={busy}
+        accept="image/*"
+        {...stylex.props(sx.hidden)}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void upload(file);
+        }}
+      />
+    </div>
+  );
+  const organizationNameInput = (
+    <input
+      className={cn(
+        NAME_INPUT_CLASS,
+        onboarding &&
+          utilityClassName("h-12! min-h-12! w-full! px-3.5! text-base!"),
+      )}
+      // data-setup-field: FirstMile promotes this to the large field step.
+      data-setup-field="org-name"
+      value={draft}
+      maxLength={80}
+      disabled={busy}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => void commitName()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        else if (event.key === "Escape")
+          setDraft(settings?.organizationName || "");
+      }}
+      aria-label="Organization name"
+    />
+  );
 
-	return (
-		<>
-			{loadError && !settings ? (
-				<InlineAlert onRetry={() => void load()}>{loadError}</InlineAlert>
-			) : settings ? (
-				<>
-					<SettingCard
-						className={
-							onboarding
-								? utilityClassName("mx-auto max-w-[560px] bg-[color-mix(in_srgb,var(--popup-surface)_76%,transparent)]!")
-								: undefined
-						}
-					>
-						{onboarding ? (
-							<div {...mergeStylexProps("phone:p-5", sx.p6)} >
-								<div {...stylex.props(sx.flex, sx.justifyCenter, sx.py4)}>{iconEditor}</div>
-								<div {...stylex.props(sx.mxAuto, sx.mt5, sx.grid, sx.wFull, sx.maxW400px, sx.gridCols1, sx.gap4)}>
-									<Field label={<span {...stylex.props(sx.textFg)}>Organization name</span>}>
-										{organizationNameInput}
-									</Field>
-									<IdentityRows compact showProductName={false} />
-								</div>
-							</div>
-						) : (
-							<>
-								<SettingRow className={mergeStylexOverrideClassName("", sx.itemsCenter)}>
-									<SettingRowText>
-										<SettingRowTitle>Upload icon</SettingRowTitle>
-									</SettingRowText>
-									<SettingRowControl className={mergeStylexOverrideClassName("", sx.flex, sx.flexWrap, sx.itemsCenter, sx.justifyEnd, sx.gap2)}>
-										{iconEditor}
-									</SettingRowControl>
-								</SettingRow>
-								<SettingRow>
-									<SettingRowText>
-										<SettingRowTitle>Organization name</SettingRowTitle>
-									</SettingRowText>
-									{organizationNameInput}
-								</SettingRow>
-								<IdentityRows />
-							</>
-						)}
-					</SettingCard>
-					{!onboarding && (
-						<SettingsHint>
-							Shared by everyone in this organization. Clearing the name restores the
-							product name.
-						</SettingsHint>
-					)}
-				</>
-			) : (
-				<SettingCardSkeleton rows={2} label="Loading organization settings" />
-			)}
-		</>
-	);
+  return (
+    <>
+      {loadError && !settings ? (
+        <InlineAlert onRetry={() => void load()}>{loadError}</InlineAlert>
+      ) : settings ? (
+        <>
+          <SettingCard
+            className={
+              onboarding
+                ? utilityClassName(
+                    "mx-auto max-w-[560px] bg-[color-mix(in_srgb,var(--popup-surface)_76%,transparent)]!",
+                  )
+                : undefined
+            }
+          >
+            {onboarding ? (
+              <div {...stylex.props(sx.p6, sx.phoneP5)}>
+                <div {...stylex.props(sx.flex, sx.justifyCenter, sx.py4)}>
+                  {iconEditor}
+                </div>
+                <div
+                  {...stylex.props(
+                    sx.mxAuto,
+                    sx.mt5,
+                    sx.grid,
+                    sx.wFull,
+                    sx.maxW400px,
+                    sx.gridCols1,
+                    sx.gap4,
+                  )}
+                >
+                  <Field
+                    label={
+                      <span {...stylex.props(sx.textFg)}>
+                        Organization name
+                      </span>
+                    }
+                  >
+                    {organizationNameInput}
+                  </Field>
+                  <IdentityRows compact showProductName={false} />
+                </div>
+              </div>
+            ) : (
+              <>
+                <SettingRow
+                  className={mergeStylexOverrideClassName("", sx.itemsCenter)}
+                >
+                  <SettingRowText>
+                    <SettingRowTitle>Upload icon</SettingRowTitle>
+                  </SettingRowText>
+                  <SettingRowControl
+                    className={mergeStylexOverrideClassName(
+                      "",
+                      sx.flex,
+                      sx.flexWrap,
+                      sx.itemsCenter,
+                      sx.justifyEnd,
+                      sx.gap2,
+                    )}
+                  >
+                    {iconEditor}
+                  </SettingRowControl>
+                </SettingRow>
+                <SettingRow>
+                  <SettingRowText>
+                    <SettingRowTitle>Organization name</SettingRowTitle>
+                  </SettingRowText>
+                  {organizationNameInput}
+                </SettingRow>
+                <IdentityRows />
+              </>
+            )}
+          </SettingCard>
+          {!onboarding && (
+            <SettingsHint>
+              Shared by everyone in this organization. Clearing the name
+              restores the product name.
+            </SettingsHint>
+          )}
+        </>
+      ) : (
+        <SettingCardSkeleton rows={2} label="Loading organization settings" />
+      )}
+    </>
+  );
 }
 
 export function GeneralPanel() {
-	return (
-		<SettingsPanel>
-			<SettingsHeader title="General" className={utilityClassName("phone:hidden")} />
-			<OrganizationProfileSection />
-		</SettingsPanel>
-	);
+  return (
+    <SettingsPanel>
+      <SettingsHeader
+        title="General"
+        className={mergeStylexOverrideClassName("", sx.phoneHidden)}
+      />
+      <OrganizationProfileSection />
+    </SettingsPanel>
+  );
 }

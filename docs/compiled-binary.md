@@ -39,15 +39,15 @@ A compiled install has no `bun`/`.ts` tree to re-exec, so
 `packages/core/opensession-server/src/main.ts` dispatches a leading subcommand
 to these source entrypoints:
 
-| Invocation | Runs | Source entrypoint |
-| --- | --- | --- |
-| `opensession server` | HTTP/WS gateway | `packages/core/opensession-server/opensession.ts` |
-| `opensession runner-host <spec>` | detached agent run | `packages/core/opensession-server/src/runner-host/host.ts` |
-| `opensession mcp-proxy` | stdio↔RPC MCP proxy | `packages/core/opensession-server/src/runner-host/mcp-proxy.ts` |
-| `opensession executor` | supervised executor launcher | `packages/core/opensession-server/src/executor/main.ts` |
-| `opensession session-kernel-service` | supervised session-kernel service | `packages/core/opensession-server/src/session-kernel-service.ts` |
-| `opensession transcript-search-worker` | read-only transcript search worker | `packages/core/opensession-server/src/server/transcript-search-worker.ts` |
-| `opensession <anything else>` | CLI (`onboard`, `start`, `doctor`, …) | `scripts/cli.ts` |
+| Invocation                             | Runs                                  | Source entrypoint                                                         |
+| -------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------- |
+| `opensession server`                   | HTTP/WS gateway                       | `packages/core/opensession-server/opensession.ts`                         |
+| `opensession runner-host <spec>`       | detached agent run                    | `packages/core/opensession-server/src/runner-host/host.ts`                |
+| `opensession mcp-proxy`                | stdio↔RPC MCP proxy                   | `packages/core/opensession-server/src/runner-host/mcp-proxy.ts`           |
+| `opensession executor`                 | supervised executor launcher          | `packages/core/opensession-server/src/executor/main.ts`                   |
+| `opensession session-kernel-service`   | supervised session-kernel service     | `packages/core/opensession-server/src/session-kernel-service.ts`          |
+| `opensession transcript-search-worker` | read-only transcript search worker    | `packages/core/opensession-server/src/server/transcript-search-worker.ts` |
+| `opensession <anything else>`          | CLI (`onboard`, `start`, `doctor`, …) | `scripts/cli.ts`                                                          |
 
 `packages/core/opensession-server/src/runner-host/exe.ts` supplies compiled and
 source argv helpers. `isCompiledBinary()` (execPath basename ≠ `bun`) selects
@@ -114,7 +114,7 @@ install/service/update, non-sandbox turns) works and is not listed here.
 - **On-box self-development.** No source tree ships in the binary, so code
   sessions cannot run against the Open Session checkout itself (the
   `sharedCheckout` self-hosting path). Use the `--source` install (git checkout
-  + bun) for self-development.
+  - bun) for self-development.
 - **Bundled agent skills.** The release does not stage the repository's
   `.agents/skills` tree, so built-in skills are absent by default. Set
   `OPENSESSION_SKILLS_DIR` to an on-disk skills directory to load externally

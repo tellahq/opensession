@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <!--
   The offscreen page MermaidRenderer drives. Swift loads this file from the app
   bundle, calls render() once per diagram, then snapshots the laid-out result;
@@ -15,99 +15,116 @@
   has no natural size to measure, cache or lay out against.
 -->
 <html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  html, body { margin: 0; padding: 0; }
-  #d { display: inline-block; }
-  #d svg { display: block; max-width: none; height: auto; }
-</style>
-<script src="mermaid.min.js"></script>
-</head>
-<body><div id="d"></div>
-<script>
-let started = false;
-let current = null;
-let seq = 0;
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      #d {
+        display: inline-block;
+      }
+      #d svg {
+        display: block;
+        max-width: none;
+        height: auto;
+      }
+    </style>
+    <script src="mermaid.min.js"></script>
+  </head>
+  <body>
+    <div id="d"></div>
+    <script>
+      let started = false;
+      let current = null;
+      let seq = 0;
 
-function init(theme, font) {
-  const sized = { useMaxWidth: false };
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: theme,
-    fontFamily: font,
-    flowchart: sized,
-    sequence: sized,
-    class: sized,
-    state: sized,
-    er: sized,
-    gantt: sized,
-    journey: sized,
-    pie: sized,
-    quadrantChart: sized,
-    timeline: sized,
-    mindmap: sized,
-    gitGraph: sized,
-    c4: sized,
-    sankey: sized,
-    xyChart: sized
-  });
-  started = true;
-}
+      function init(theme, font) {
+        const sized = { useMaxWidth: false };
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: theme,
+          fontFamily: font,
+          flowchart: sized,
+          sequence: sized,
+          class: sized,
+          state: sized,
+          er: sized,
+          gantt: sized,
+          journey: sized,
+          pie: sized,
+          quadrantChart: sized,
+          timeline: sized,
+          mindmap: sized,
+          gitGraph: sized,
+          c4: sized,
+          sankey: sized,
+          xyChart: sized,
+        });
+        started = true;
+      }
 
-/**
- * The viewport as the page currently sees it, after letting a pending resize
- * paint. Swift resizes the web view to the measured diagram and then waits on
- * this before snapshotting: the resize is asynchronous, and a snapshot taken
- * against the old bounds comes back with the diagram cut off.
- */
-async function settle() {
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  return { width: window.innerWidth, height: window.innerHeight };
-}
+      /**
+       * The viewport as the page currently sees it, after letting a pending resize
+       * paint. Swift resizes the web view to the measured diagram and then waits on
+       * this before snapshotting: the resize is asynchronous, and a snapshot taken
+       * against the old bounds comes back with the diagram cut off.
+       */
+      async function settle() {
+        await new Promise((r) =>
+          requestAnimationFrame(() => requestAnimationFrame(r)),
+        );
+        return { width: window.innerWidth, height: window.innerHeight };
+      }
 
-/**
- * Draws one diagram and reports the size it came out at, or an error the
- * caller turns back into a plain code fence — the same fallback the web uses
- * for source that doesn't parse.
- */
-async function render(source, theme, font, bg) {
-  document.body.style.background = bg;
-  if (!started || current !== theme) {
-    init(theme, font);
-    current = theme;
-  }
-  const host = document.getElementById('d');
-  host.innerHTML = '';
-  // parse() first: render() on bad input both throws AND leaves an error bomb
-  // in the document, which the next snapshot would happily capture.
-  const ok = await mermaid.parse(source, { suppressErrors: true }).catch(() => false);
-  if (!ok) return { error: 'parse' };
-  const id = 'm' + (++seq);
-  let svg;
-  try {
-    svg = (await mermaid.render(id, source)).svg;
-  } catch (e) {
-    // render() can still fail after a clean parse (layout errors), and leaves
-    // its temporary container behind on the way out.
-    const orphan = document.getElementById('d' + id);
-    if (orphan) orphan.remove();
-    return { error: String((e && e.message) || e) };
-  }
-  host.innerHTML = svg;
-  const el = host.firstElementChild;
-  if (!el) return { error: 'empty' };
-  // Two frames: the SVG is in the document, but fonts and layout settle on the
-  // next paint, and a size read before that is the wrong size.
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  const box = el.getBoundingClientRect();
-  const width = Math.ceil(box.width);
-  const height = Math.ceil(box.height);
-  if (!width || !height) return { error: 'empty' };
-  return { width: width, height: height };
-}
-</script>
-</body>
+      /**
+       * Draws one diagram and reports the size it came out at, or an error the
+       * caller turns back into a plain code fence — the same fallback the web uses
+       * for source that doesn't parse.
+       */
+      async function render(source, theme, font, bg) {
+        document.body.style.background = bg;
+        if (!started || current !== theme) {
+          init(theme, font);
+          current = theme;
+        }
+        const host = document.getElementById("d");
+        host.innerHTML = "";
+        // parse() first: render() on bad input both throws AND leaves an error bomb
+        // in the document, which the next snapshot would happily capture.
+        const ok = await mermaid
+          .parse(source, { suppressErrors: true })
+          .catch(() => false);
+        if (!ok) return { error: "parse" };
+        const id = "m" + ++seq;
+        let svg;
+        try {
+          svg = (await mermaid.render(id, source)).svg;
+        } catch (e) {
+          // render() can still fail after a clean parse (layout errors), and leaves
+          // its temporary container behind on the way out.
+          const orphan = document.getElementById("d" + id);
+          if (orphan) orphan.remove();
+          return { error: String((e && e.message) || e) };
+        }
+        host.innerHTML = svg;
+        const el = host.firstElementChild;
+        if (!el) return { error: "empty" };
+        // Two frames: the SVG is in the document, but fonts and layout settle on the
+        // next paint, and a size read before that is the wrong size.
+        await new Promise((r) =>
+          requestAnimationFrame(() => requestAnimationFrame(r)),
+        );
+        const box = el.getBoundingClientRect();
+        const width = Math.ceil(box.width);
+        const height = Math.ceil(box.height);
+        if (!width || !height) return { error: "empty" };
+        return { width: width, height: height };
+      }
+    </script>
+  </body>
 </html>

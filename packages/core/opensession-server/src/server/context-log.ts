@@ -72,28 +72,25 @@
  */
 import { createHash } from "crypto";
 import {
-	storeAppendUserLineEarly,
-	transcriptLineContextInjection,
-	transcriptLineStandingContext,
+  storeAppendUserLineEarly,
+  transcriptLineContextInjection,
+  transcriptLineStandingContext,
 } from "./transcript-persistence";
-import {
-	parseContextBlocks,
-	type ContextSource,
-} from "./prompt-context";
+import { parseContextBlocks, type ContextSource } from "./prompt-context";
 
 export interface InjectedContextInput {
-	/** Unified session id. No session ⇒ nothing to log against (see gaps). */
-	sessionId?: string | null;
-	/** The prompt's transcript entry id, or the run token — what groups a
-	 *  turn's injections with the message they rode with. */
-	turnId?: string | null;
-	/** Prompt body about to be sent; every fenced block in it is recorded. */
-	prompt?: string | null;
-	/** The per-turn system note (repos + memory), injected through the engine's
-	 *  system/instructions channel rather than the prompt body. */
-	reposNote?: string | null;
-	/** Model the payload was sent to, for the audit line. */
-	model?: string;
+  /** Unified session id. No session ⇒ nothing to log against (see gaps). */
+  sessionId?: string | null;
+  /** The prompt's transcript entry id, or the run token — what groups a
+   *  turn's injections with the message they rode with. */
+  turnId?: string | null;
+  /** Prompt body about to be sent; every fenced block in it is recorded. */
+  prompt?: string | null;
+  /** The per-turn system note (repos + memory), injected through the engine's
+   *  system/instructions channel rather than the prompt body. */
+  reposNote?: string | null;
+  /** Model the payload was sent to, for the audit line. */
+  model?: string;
 }
 
 /**
@@ -104,43 +101,44 @@ export interface InjectedContextInput {
  * long-lived server would otherwise accumulate one string per injection
  * forever; a drop past the bound costs one harmless upsert.
  */
-const logged: Set<string> = ((globalThis as any).__osContextLogged ??= new Set());
+const logged: Set<string> = ((globalThis as any).__osContextLogged ??=
+  new Set());
 const LOGGED_MAX = 5_000;
 
 function remember(id: string): boolean {
-	if (logged.has(id)) return false;
-	if (logged.size >= LOGGED_MAX) logged.clear();
-	logged.add(id);
-	return true;
+  if (logged.has(id)) return false;
+  if (logged.size >= LOGGED_MAX) logged.clear();
+  logged.add(id);
+  return true;
 }
 
 /** Deterministic, content-derived id: the same payload in the same turn is the
  *  same row, whichever call site logs it and however many times a turn is
  *  retried. */
 function entryId(
-	sessionId: string,
-	turnId: string,
-	source: string,
-	body: string,
+  sessionId: string,
+  turnId: string,
+  source: string,
+  body: string,
 ): string {
-	const h = createHash("sha256")
-		.update(`${sessionId}\u0000${turnId}\u0000${source}\u0000${body}`)
-		.digest("hex");
-	return `ctx-${h.slice(0, 32)}`;
+  const h = createHash("sha256")
+    .update(`${sessionId}\u0000${turnId}\u0000${source}\u0000${body}`)
+    .digest("hex");
+  return `ctx-${h.slice(0, 32)}`;
 }
 
 /** Test seam: record instead of writing, so a test can assert the calls
  *  without a store. Null (the default) = the real store path. */
 let sinkForTest:
-	| ((rec: {
-			sessionId: string;
-			source: ContextSource | string;
-			turnId: string;
-			body: string;
-	  }) => void)
-	| null = null;
+  | ((rec: {
+      sessionId: string;
+      source: ContextSource | string;
+      turnId: string;
+      body: string;
+    }) => void)
+  | null = null;
 export function __setContextLogSinkForTest(fn: typeof sinkForTest): void {
-	sinkForTest = fn;
+  sinkForTest = fn;
 }
 
 /**
@@ -149,37 +147,42 @@ export function __setContextLogSinkForTest(fn: typeof sinkForTest): void {
  * once per session on failure).
  */
 export function logInjectedContext(input: InjectedContextInput): void {
-	const sessionId = input.sessionId || "";
-	if (!sessionId) return;
-	const turnId = input.turnId || "";
-	const blocks: Array<{ source: ContextSource | string; body: string }> =
-		parseContextBlocks(input.prompt || "");
-	// The system-channel note (repos discipline + repo/user/team memory) is
-	// model-visible without ever appearing in the prompt body, so it is logged
-	// beside the fenced blocks rather than through them.
-	const note = input.reposNote?.trim();
-	if (note) blocks.push({ source: "repos-note", body: note });
-	if (!blocks.length) return;
+  const sessionId = input.sessionId || "";
+  if (!sessionId) return;
+  const turnId = input.turnId || "";
+  const blocks: Array<{ source: ContextSource | string; body: string }> =
+    parseContextBlocks(input.prompt || "");
+  // The system-channel note (repos discipline + repo/user/team memory) is
+  // model-visible without ever appearing in the prompt body, so it is logged
+  // beside the fenced blocks rather than through them.
+  const note = input.reposNote?.trim();
+  if (note) blocks.push({ source: "repos-note", body: note });
+  if (!blocks.length) return;
 
-	for (const block of blocks) {
-		const id = entryId(sessionId, turnId, block.source, block.body);
-		if (!remember(id)) continue;
-		if (sinkForTest) {
-			sinkForTest({ sessionId, source: block.source, turnId, body: block.body });
-			continue;
-		}
-		// The ordinary entry path — same helper the intake user line uses, so
-		// the import-first gate, the 32KB blob split and the bus publish all
-		// behave exactly as they do for any other entry.
-		void storeAppendUserLineEarly(
-			sessionId,
-			transcriptLineContextInjection(
-				block.body,
-				{ source: block.source, ...(turnId ? { turnId } : {}) },
-				id,
-			),
-		);
-	}
+  for (const block of blocks) {
+    const id = entryId(sessionId, turnId, block.source, block.body);
+    if (!remember(id)) continue;
+    if (sinkForTest) {
+      sinkForTest({
+        sessionId,
+        source: block.source,
+        turnId,
+        body: block.body,
+      });
+      continue;
+    }
+    // The ordinary entry path — same helper the intake user line uses, so
+    // the import-first gate, the 32KB blob split and the bus publish all
+    // behave exactly as they do for any other entry.
+    void storeAppendUserLineEarly(
+      sessionId,
+      transcriptLineContextInjection(
+        block.body,
+        { source: block.source, ...(turnId ? { turnId } : {}) },
+        id,
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -191,60 +194,60 @@ export function logInjectedContext(input: InjectedContextInput): void {
  * `ContextSource` is one: the log is only queryable if the labels are.
  */
 export type StandingContextSource =
-	/** The run's tool scoping as the harness decided it, engine-neutral: the
-	 *  MCP allowlist, the in-process servers, the tool denials, the mode.
-	 *  Written at the runOnModel choke point, so every engine has one. */
-	| "tools"
-	/** The MCP servers an engine actually mounted for the run, plus the tool
-	 *  strips applied to them — the resolution of the scoping above, known
-	 *  only inside the runner. */
-	| "mcp-servers"
-	/** The standing instruction text the engine was given (pi's
-	 *  instructions file or the shared server's per-prompt `system`), which
-	 *  already folds in AGENTS.local.md / CLAUDE.local.md. Written wherever
-	 *  that text is final. */
-	| "instructions"
-	/** The first run's complete effective provider input: Pi's final system
-	 *  prompt after AGENTS.md, skills and tool guidance have been applied, plus
-	 *  the schemas of the active tools. This is the source the session viewer
-	 *  exposes as its collapsed, lazy-loaded "Session context" row. */
-	| "session-start";
+  /** The run's tool scoping as the harness decided it, engine-neutral: the
+   *  MCP allowlist, the in-process servers, the tool denials, the mode.
+   *  Written at the runOnModel choke point, so every engine has one. */
+  | "tools"
+  /** The MCP servers an engine actually mounted for the run, plus the tool
+   *  strips applied to them — the resolution of the scoping above, known
+   *  only inside the runner. */
+  | "mcp-servers"
+  /** The standing instruction text the engine was given (pi's
+   *  instructions file or the shared server's per-prompt `system`), which
+   *  already folds in AGENTS.local.md / CLAUDE.local.md. Written wherever
+   *  that text is final. */
+  | "instructions"
+  /** The first run's complete effective provider input: Pi's final system
+   *  prompt after AGENTS.md, skills and tool guidance have been applied, plus
+   *  the schemas of the active tools. This is the source the session viewer
+   *  exposes as its collapsed, lazy-loaded "Session context" row. */
+  | "session-start";
 
 export interface StandingContextInput {
-	/** Unified session id. No session ⇒ nothing to log against. */
-	sessionId?: string | null;
-	/** The turn that first saw this version, for grouping. */
-	turnId?: string | null;
-	source: StandingContextSource;
-	/** The full content, recorded verbatim. */
-	content?: string | null;
+  /** Unified session id. No session ⇒ nothing to log against. */
+  sessionId?: string | null;
+  /** The turn that first saw this version, for grouping. */
+  turnId?: string | null;
+  source: StandingContextSource;
+  /** The full content, recorded verbatim. */
+  content?: string | null;
 }
 
 export interface SessionStartTool {
-	name: string;
-	description: string;
-	parameters: unknown;
+  name: string;
+  description: string;
+  parameters: unknown;
 }
 
 /** Build the exact, human-readable snapshot shown at the start of a session.
  * Kept here beside the writer so the audit record and the UI can never drift
  * into two reconstructions of what the provider received. */
 export function sessionStartContext(
-	systemPrompt: string,
-	tools: SessionStartTool[],
+  systemPrompt: string,
+  tools: SessionStartTool[],
 ): string {
-	return [
-		"# System prompt",
-		systemPrompt,
-		"# Tools",
-		canonicalJson(
-			tools.map((tool) => ({
-				name: tool.name,
-				description: tool.description,
-				parameters: tool.parameters,
-			})),
-		),
-	].join("\n\n");
+  return [
+    "# System prompt",
+    systemPrompt,
+    "# Tools",
+    canonicalJson(
+      tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      })),
+    ),
+  ].join("\n\n");
 }
 
 /**
@@ -254,8 +257,9 @@ export function sessionStartContext(
  * re-records each source — which is exactly when the run config could have
  * moved under the session, so it is a feature rather than a leak.
  */
-const standing: Map<string, string> = ((globalThis as any).__osStandingContext ??=
-	new Map());
+const standing: Map<string, string> = ((
+  globalThis as any
+).__osStandingContext ??= new Map());
 const STANDING_MAX = 5_000;
 
 /** Stable JSON for hashing and for reading: keys sorted at every level, so a
@@ -263,17 +267,17 @@ const STANDING_MAX = 5_000;
  *  object in. Array order is left alone — the caller sorts where order carries
  *  no meaning. */
 export function canonicalJson(value: unknown): string {
-	const sorted = (v: unknown): unknown => {
-		if (Array.isArray(v)) return v.map(sorted);
-		if (v && typeof v === "object") {
-			const out: Record<string, unknown> = {};
-			for (const k of Object.keys(v as Record<string, unknown>).sort())
-				out[k] = sorted((v as Record<string, unknown>)[k]);
-			return out;
-		}
-		return v;
-	};
-	return JSON.stringify(sorted(value), null, 2);
+  const sorted = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(sorted);
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(v as Record<string, unknown>).sort())
+        out[k] = sorted((v as Record<string, unknown>)[k]);
+      return out;
+    }
+    return v;
+  };
+  return JSON.stringify(sorted(value), null, 2);
 }
 
 /**
@@ -286,14 +290,16 @@ export function canonicalJson(value: unknown): string {
  * undefined despite the required type (2026-08-16). An audit record is never
  * worth a turn.
  */
-export async function logStandingContext(input: StandingContextInput): Promise<void> {
-	try {
-		await appendStandingContext(input);
-	} catch (e) {
-		console.warn(
-			`[context-log] standing "${input.source}" not recorded: ${e instanceof Error ? e.message : String(e)}`,
-		);
-	}
+export async function logStandingContext(
+  input: StandingContextInput,
+): Promise<void> {
+  try {
+    await appendStandingContext(input);
+  } catch (e) {
+    console.warn(
+      `[context-log] standing "${input.source}" not recorded: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
 
 /**
@@ -302,54 +308,59 @@ export async function logStandingContext(input: StandingContextInput): Promise<v
  * missing field, a circular object) would otherwise escape.
  */
 export async function logStandingJson(
-	input: Omit<StandingContextInput, "content"> & { value: unknown },
+  input: Omit<StandingContextInput, "content"> & { value: unknown },
 ): Promise<void> {
-	try {
-		await appendStandingContext({ ...input, content: canonicalJson(input.value) });
-	} catch (e) {
-		console.warn(
-			`[context-log] standing "${input.source}" not recorded: ${e instanceof Error ? e.message : String(e)}`,
-		);
-	}
+  try {
+    await appendStandingContext({
+      ...input,
+      content: canonicalJson(input.value),
+    });
+  } catch (e) {
+    console.warn(
+      `[context-log] standing "${input.source}" not recorded: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
 
-async function appendStandingContext(input: StandingContextInput): Promise<void> {
-	const sessionId = input.sessionId || "";
-	const content = input.content?.trim();
-	if (!sessionId || !content) return;
-	const hash = createHash("sha256").update(content).digest("hex");
-	const key = `${sessionId}\u0000${input.source}`;
-	if (standing.get(key) === hash) return;
-	if (standing.size >= STANDING_MAX) standing.clear();
-	standing.set(key, hash);
-	const turnId = input.turnId || "";
-	// Content-addressed, and deliberately NOT keyed by turn: one version of one
-	// source is one row for the life of the session, so re-recording it upserts
-	// in place instead of appending. The map above already skips the common
-	// case; this is what covers the case it cannot see, a server restart, which
-	// on this instance happens many times a day and would otherwise append
-	// another copy of a 273KB instructions record per session per restart
-	// (measured 2026-08-16).
-	//
-	// The cost is a source that changes A → B → A: the returning version
-	// upserts A's original row rather than earning a later one, so the
-	// timeline reads as if B were still in force. Rare, and cheap next to
-	// unbounded duplication of the biggest record we write.
-	const id = `std-${createHash("sha256")
-		.update(`${sessionId}\u0000${input.source}\u0000${hash}`)
-		.digest("hex")
-		.slice(0, 32)}`;
-	await storeAppendUserLineEarly(
-		sessionId,
-		transcriptLineStandingContext(
-			content,
-			{
-				source: input.source,
-				hash,
-				bytes: Buffer.byteLength(content, "utf8"),
-				...(turnId ? { turnId } : {}),
-			},
-			id,
-		),
-	);
+async function appendStandingContext(
+  input: StandingContextInput,
+): Promise<void> {
+  const sessionId = input.sessionId || "";
+  const content = input.content?.trim();
+  if (!sessionId || !content) return;
+  const hash = createHash("sha256").update(content).digest("hex");
+  const key = `${sessionId}\u0000${input.source}`;
+  if (standing.get(key) === hash) return;
+  if (standing.size >= STANDING_MAX) standing.clear();
+  standing.set(key, hash);
+  const turnId = input.turnId || "";
+  // Content-addressed, and deliberately NOT keyed by turn: one version of one
+  // source is one row for the life of the session, so re-recording it upserts
+  // in place instead of appending. The map above already skips the common
+  // case; this is what covers the case it cannot see, a server restart, which
+  // on this instance happens many times a day and would otherwise append
+  // another copy of a 273KB instructions record per session per restart
+  // (measured 2026-08-16).
+  //
+  // The cost is a source that changes A → B → A: the returning version
+  // upserts A's original row rather than earning a later one, so the
+  // timeline reads as if B were still in force. Rare, and cheap next to
+  // unbounded duplication of the biggest record we write.
+  const id = `std-${createHash("sha256")
+    .update(`${sessionId}\u0000${input.source}\u0000${hash}`)
+    .digest("hex")
+    .slice(0, 32)}`;
+  await storeAppendUserLineEarly(
+    sessionId,
+    transcriptLineStandingContext(
+      content,
+      {
+        source: input.source,
+        hash,
+        bytes: Buffer.byteLength(content, "utf8"),
+        ...(turnId ? { turnId } : {}),
+      },
+      id,
+    ),
+  );
 }

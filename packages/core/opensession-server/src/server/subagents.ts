@@ -78,19 +78,22 @@ export function listSubagents(transcriptPath: string): SubagentMeta[] {
  *  multi-MB and the sync parse held the event loop for the whole read. */
 export async function getSubagentTranscript(
   transcriptPath: string,
-  agentId: string
+  agentId: string,
 ): Promise<SubagentTranscript | null> {
   const dir = subagentsDir(transcriptPath);
   if (!dir) return null;
   const file = join(dir, `agent-${agentId}.jsonl`);
   if (!existsSync(file)) return null;
-  return { meta: readMeta(dir, agentId), entries: await parseTranscriptAsync(file) };
+  return {
+    meta: readMeta(dir, agentId),
+    entries: await parseTranscriptAsync(file),
+  };
 }
 
 /** Absolute path to a sub-agent's transcript file (for live file-watching). */
 export function subagentTranscriptPath(
   transcriptPath: string,
-  agentId: string
+  agentId: string,
 ): string | null {
   const dir = subagentsDir(transcriptPath);
   if (!dir) return null;

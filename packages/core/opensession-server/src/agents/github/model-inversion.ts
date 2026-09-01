@@ -35,13 +35,16 @@ export function familyOf(model?: string): ModelFamily | null {
   if (!model) return null;
   const m = model.toLowerCase();
   if (m.includes("claude") || m.includes("anthropic")) return "anthropic";
-  if (m.includes("gpt") || m.includes("codex") || m.includes("openai")) return "openai";
+  if (m.includes("gpt") || m.includes("codex") || m.includes("openai"))
+    return "openai";
   return null;
 }
 
 function sessionFileModel(bksId: string): string | undefined {
   try {
-    const parsed = JSON.parse(readFileSync(`${OPENSESSION_SESSIONS_DIR}/${bksId}.json`, "utf-8"));
+    const parsed = JSON.parse(
+      readFileSync(`${OPENSESSION_SESSIONS_DIR}/${bksId}.json`, "utf-8"),
+    );
     return typeof parsed?.model === "string" ? parsed.model : undefined;
   } catch {
     return undefined;
@@ -49,7 +52,9 @@ function sessionFileModel(bksId: string): string | undefined {
 }
 
 /** Which model family authored the PR's current head, and how we know. */
-export function authorFamilyFor(pr: PrRef): { family: ModelFamily; source: string } | null {
+export function authorFamilyFor(
+  pr: PrRef,
+): { family: ModelFamily; source: string } | null {
   // 1. A live session owns the branch — its model wrote the code. Same
   //    resolution as the review handoff (handoff.ts), so the model that gets
   //    the findings is also the one whose reviewer is inverted.
@@ -59,7 +64,11 @@ export function authorFamilyFor(pr: PrRef): { family: ModelFamily; source: strin
     if (workspaceId) {
       const owners = matchSessions(control, workspaceId, pr.headRef)
         .filter((s) => !s.id.startsWith("bks-ghpr-"))
-        .sort((a, b) => Date.parse(b.lastActivity || "0") - Date.parse(a.lastActivity || "0"));
+        .sort(
+          (a, b) =>
+            Date.parse(b.lastActivity || "0") -
+            Date.parse(a.lastActivity || "0"),
+        );
       for (const s of owners) {
         const family = familyOf(s.model);
         if (family) return { family, source: `owning session ${s.id}` };
@@ -70,7 +79,10 @@ export function authorFamilyFor(pr: PrRef): { family: ModelFamily; source: strin
   //    model authored it (this is the reviewGate case, where inversion matters
   //    most: the gate must not share the fixer's blind spots).
   const state = readPrState(pr.number, pr.ghRepo);
-  if (state?.autoFix?.lastPushedSha && state.autoFix.lastPushedSha === pr.headSha) {
+  if (
+    state?.autoFix?.lastPushedSha &&
+    state.autoFix.lastPushedSha === pr.headSha
+  ) {
     const model = sessionFileModel(bksIdFor(pr.number, "autofix", pr.ghRepo));
     // The fix pool defaults to Anthropic when the session never recorded a model.
     return { family: familyOf(model) || "anthropic", source: "auto-fix loop" };

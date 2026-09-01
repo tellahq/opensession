@@ -65,11 +65,19 @@ describe("isClaudeBridgeLaunchError", () => {
     // Usage limits and subscription faults are account-level and own their own
     // (much longer) sideline; a model's own words about a launch must never
     // wedge the account either.
-    expect(isClaudeBridgeLaunchError("Claude AI usage limit reached")).toBe(false);
+    expect(isClaudeBridgeLaunchError("Claude AI usage limit reached")).toBe(
+      false,
+    );
     expect(
-      isClaudeBridgeLaunchError("Claude Max subscription issue. Check your subscription status."),
+      isClaudeBridgeLaunchError(
+        "Claude Max subscription issue. Check your subscription status.",
+      ),
     ).toBe(false);
-    expect(isClaudeBridgeLaunchError("the deploy script failed to launch the server")).toBe(false);
+    expect(
+      isClaudeBridgeLaunchError(
+        "the deploy script failed to launch the server",
+      ),
+    ).toBe(false);
     expect(isClaudeBridgeLaunchError("command not found: claude")).toBe(false);
     expect(isClaudeBridgeLaunchError("")).toBe(false);
   });
@@ -78,15 +86,23 @@ describe("isClaudeBridgeLaunchError", () => {
 describe("isUpstreamIdleStallError", () => {
   test("matches Meridian's idle-guard kill", () => {
     // The exact shape from the 2026-08-03 bks-019fc819 incident.
-    expect(isUpstreamIdleStallError("Upstream stalled: no data for 160090ms")).toBe(true);
     expect(
-      isUpstreamIdleStallError("AI_APICallError: Upstream stalled: no data for 91150ms"),
+      isUpstreamIdleStallError("Upstream stalled: no data for 160090ms"),
+    ).toBe(true);
+    expect(
+      isUpstreamIdleStallError(
+        "AI_APICallError: Upstream stalled: no data for 91150ms",
+      ),
     ).toBe(true);
   });
 
   test("does not match other stalls or provider errors", () => {
-    expect(isUpstreamIdleStallError("Claude AI usage limit reached")).toBe(false);
-    expect(isUpstreamIdleStallError("upstream timeout while connecting")).toBe(false);
+    expect(isUpstreamIdleStallError("Claude AI usage limit reached")).toBe(
+      false,
+    );
+    expect(isUpstreamIdleStallError("upstream timeout while connecting")).toBe(
+      false,
+    );
     expect(isUpstreamIdleStallError("no data received")).toBe(false);
     expect(isUpstreamIdleStallError("")).toBe(false);
   });
@@ -108,12 +124,17 @@ describe("isClaudeMalformedTerminalError", () => {
   });
 
   test("does not mistake normal Claude errors or model text for the diagnostic", () => {
-    expect(isClaudeMalformedTerminalError("Claude Code returned an error result: You've hit your weekly limit")).toBe(false);
-    expect(isClaudeMalformedTerminalError("Please explain the ede_diagnostic field")).toBe(false);
+    expect(
+      isClaudeMalformedTerminalError(
+        "Claude Code returned an error result: You've hit your weekly limit",
+      ),
+    ).toBe(false);
+    expect(
+      isClaudeMalformedTerminalError("Please explain the ede_diagnostic field"),
+    ).toBe(false);
     expect(isClaudeMalformedTerminalError("")).toBe(false);
   });
 });
-
 
 describe("isTransientRunError", () => {
   test("recovers when the Claude binary fails to launch", () => {
@@ -127,7 +148,11 @@ describe("isTransientRunError", () => {
 
 describe("isProviderOverloadError", () => {
   test("matches provider-declared overloads", () => {
-    expect(isProviderOverloadError("Our servers are currently overloaded. Please try again later.")).toBe(true);
+    expect(
+      isProviderOverloadError(
+        "Our servers are currently overloaded. Please try again later.",
+      ),
+    ).toBe(true);
     expect(isProviderOverloadError("overloaded_error")).toBe(true);
   });
 
@@ -139,13 +164,19 @@ describe("isProviderOverloadError", () => {
 
 describe("declaredRunFailure", () => {
   test("a failed declaration is returned with its reason, last line wins", () => {
-    expect(declaredRunFailure("summary…\nSCAN STATUS: failed — claude CLI auth failure")).toBe(
-      "SCAN STATUS: failed — claude CLI auth failure",
+    expect(
+      declaredRunFailure(
+        "summary…\nSCAN STATUS: failed — claude CLI auth failure",
+      ),
+    ).toBe("SCAN STATUS: failed — claude CLI auth failure");
+    expect(declaredRunFailure("RUN STATUS: failed — dry pool")).toBe(
+      "RUN STATUS: failed — dry pool",
     );
-    expect(declaredRunFailure("RUN STATUS: failed — dry pool")).toBe("RUN STATUS: failed — dry pool");
     // A closing ok clears an earlier quoted/failed line.
     expect(
-      declaredRunFailure("SCAN STATUS: failed — transient\nretried fine\nSCAN STATUS: ok"),
+      declaredRunFailure(
+        "SCAN STATUS: failed — transient\nretried fine\nSCAN STATUS: ok",
+      ),
     ).toBeNull();
   });
 
@@ -153,7 +184,9 @@ describe("declaredRunFailure", () => {
     expect(declaredRunFailure("all good\nSCAN STATUS: ok")).toBeNull();
     expect(declaredRunFailure("no status here")).toBeNull();
     // Not line-anchored ⇒ not a declaration (e.g. quoting the instruction).
-    expect(declaredRunFailure("end with `SCAN STATUS: failed — <reason>` on errors")).toBeNull();
+    expect(
+      declaredRunFailure("end with `SCAN STATUS: failed — <reason>` on errors"),
+    ).toBeNull();
   });
 });
 
@@ -161,7 +194,9 @@ describe("hasRunStatusDeclaration", () => {
   test("line-anchored status lines only", () => {
     expect(hasRunStatusDeclaration("done\nSCAN STATUS: ok")).toBe(true);
     expect(hasRunStatusDeclaration("done\nRUN STATUS: failed — x")).toBe(true);
-    expect(hasRunStatusDeclaration("mentions SCAN STATUS: ok inline")).toBe(false);
+    expect(hasRunStatusDeclaration("mentions SCAN STATUS: ok inline")).toBe(
+      false,
+    );
     expect(hasRunStatusDeclaration("")).toBe(false);
   });
 });
@@ -169,16 +204,24 @@ describe("hasRunStatusDeclaration", () => {
 describe("describeUsageLimitReset", () => {
   test("returns the account's own words, whatever the phrasing", () => {
     expect(
-      describeUsageLimitReset("You've hit your weekly limit · resets Aug 20, 9am (UTC)"),
+      describeUsageLimitReset(
+        "You've hit your weekly limit · resets Aug 20, 9am (UTC)",
+      ),
     ).toBe("Aug 20, 9am (UTC)");
     expect(
-      describeUsageLimitReset("You've hit your session limit · resets 12:50pm (UTC)"),
+      describeUsageLimitReset(
+        "You've hit your session limit · resets 12:50pm (UTC)",
+      ),
     ).toBe("12:50pm (UTC)");
-    expect(describeUsageLimitReset("5-hour limit reached ∙ resets 3am")).toBe("3am");
+    expect(describeUsageLimitReset("5-hour limit reached ∙ resets 3am")).toBe(
+      "3am",
+    );
   });
 
   test("no reset stated means no opinion", () => {
-    expect(describeUsageLimitReset("You're out of usage credits.")).toBeUndefined();
+    expect(
+      describeUsageLimitReset("You're out of usage credits."),
+    ).toBeUndefined();
     expect(describeUsageLimitReset("")).toBeUndefined();
   });
 });
@@ -220,7 +263,9 @@ describe("usageLimitResetAt", () => {
     // No time of day.
     expect(usageLimitResetAt("resets soon", now)).toBeUndefined();
     // No reset at all.
-    expect(usageLimitResetAt("You're out of usage credits.", now)).toBeUndefined();
+    expect(
+      usageLimitResetAt("You're out of usage credits.", now),
+    ).toBeUndefined();
     // Unknown month.
     expect(usageLimitResetAt("resets Foo 20, 9am (UTC)", now)).toBeUndefined();
     // Beyond the 14-day ceiling: a mis-parse must never bench a healthy
@@ -271,7 +316,9 @@ describe("askBashDenyReason", () => {
     expect(askBashDenyReason("echo $(rm -rf /)")).toContain("substitution");
     expect(askBashDenyReason("echo `id`")).toContain("substitution");
     expect(askBashDenyReason('echo "$(id)"')).toContain("substitution");
-    expect(askBashDenyReason("diff <(cat a) <(cat b)")).toContain("substitution");
+    expect(askBashDenyReason("diff <(cat a) <(cat b)")).toContain(
+      "substitution",
+    );
   });
 
   test("redirection: fd dups and /dev/null pass, file writes do not", () => {

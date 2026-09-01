@@ -96,14 +96,17 @@ export const AWS_HUMAN_AUTH_DENIAL =
  * questions about auth architecture or IAM. We block only requests that ask a
  * human to perform/approve an interactive login or device-code authorization.
  */
-export function isAwsHumanAuthRequest(...parts: Array<string | undefined>): boolean {
+export function isAwsHumanAuthRequest(
+  ...parts: Array<string | undefined>
+): boolean {
   const text = parts.filter(Boolean).join("\n");
   if (!text) return false;
-  const aws =
-    /\bAWS\b|Amazon Web Services|awsapps\.com\/start|aws\s+sso/i.test(text);
+  const aws = /\bAWS\b|Amazon Web Services|awsapps\.com\/start|aws\s+sso/i.test(
+    text,
+  );
   const interactiveAuth =
     /\b(?:authori[sz]e|approve|authenticate|log\s*in|login|sign\s*in|device\s*(?:login|code|authorization)|enter\s+(?:the\s+)?code)\b/i.test(
-      text
+      text,
     );
   return aws && interactiveAuth;
 }
@@ -131,9 +134,17 @@ const REFRESH_SKEW_MS = 5 * 60_000; // refresh 5 min before expiry
 /** The command that reaches IMDS, as the mint runs it. */
 export function mintCommand(user = agentAwsMintUser()): string[] {
   return [
-    "sudo", "-n", "systemd-run", "--pipe", "--collect", "--quiet",
-    `--uid=${user}`, `--gid=${user}`,
-    "/bin/bash", "-c", FETCH_SCRIPT,
+    "sudo",
+    "-n",
+    "systemd-run",
+    "--pipe",
+    "--collect",
+    "--quiet",
+    `--uid=${user}`,
+    `--gid=${user}`,
+    "/bin/bash",
+    "-c",
+    FETCH_SCRIPT,
   ];
 }
 
@@ -156,7 +167,9 @@ async function fetchInstanceCreds(spawn: MintSpawn): Promise<ImdsCreds | null> {
   try {
     const { code, stdout: out, stderr: err } = await spawn(mintCommand());
     if (code !== 0) {
-      console.error(`[aws-creds] mint helper exited ${code}: ${err.trim().slice(0, 200)}`);
+      console.error(
+        `[aws-creds] mint helper exited ${code}: ${err.trim().slice(0, 200)}`,
+      );
       return null;
     }
     const creds = JSON.parse(out.trim());
@@ -212,7 +225,9 @@ export async function getAgentAwsEnv(
     AWS_DEFAULT_REGION: region,
   };
   cache = { env, expiresAt: new Date(creds.Expiration).getTime() };
-  console.log(`[aws-creds] minted agent credentials, expire ${creds.Expiration}`);
+  console.log(
+    `[aws-creds] minted agent credentials, expire ${creds.Expiration}`,
+  );
   return env;
 }
 
@@ -267,7 +282,9 @@ function writeCredsFile(env: Record<string, string>) {
 // run that created it ends. Parked on globalThis like the other live state so
 // a hot reload doesn't stack tickers.
 function startCredsFileRefresh() {
-  const g = globalThis as { __opensessionAwsCredsTicker?: ReturnType<typeof setInterval> };
+  const g = globalThis as {
+    __opensessionAwsCredsTicker?: ReturnType<typeof setInterval>;
+  };
   if (g.__opensessionAwsCredsTicker) return;
   g.__opensessionAwsCredsTicker = setInterval(() => {
     void getAgentAwsEnv().then((env) => {

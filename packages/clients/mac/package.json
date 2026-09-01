@@ -1,15 +1,11 @@
 {
   "name": "os1-mac",
-  "productName": "OS",
   "version": "0.4.22",
-  "description": "macOS desktop shell for an Open Session server",
   "private": true,
+  "description": "macOS desktop shell for an Open Session server",
   "license": "MIT",
-  "main": "src/main.js",
   "workspaces": [],
-  "opensession": {
-    "defaultServer": "http://127.0.0.1:3850/"
-  },
+  "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --mac",
@@ -19,6 +15,10 @@
     "electron": "43.2.0",
     "electron-builder": "^26.0.12"
   },
+  "opensession": {
+    "defaultServer": "http://127.0.0.1:3850/"
+  },
+  "productName": "OS",
   "trustedDependencies": [
     "electron",
     "electron-winstaller",

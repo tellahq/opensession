@@ -20,7 +20,9 @@ describe("OpenAI auth", () => {
 
   test("adds the priority service tier after Pi's existing payload hook", async () => {
     const agent = {
-      onPayload: async (payload: unknown): Promise<Record<string, unknown>> => ({
+      onPayload: async (
+        payload: unknown,
+      ): Promise<Record<string, unknown>> => ({
         ...(payload as Record<string, unknown>),
         existing_hook: true,
       }),
@@ -77,13 +79,18 @@ describe("OpenAI auth", () => {
         apiKeyAccount,
       ]);
       expect(upload.skipped).toEqual([]);
-      const serialized = JSON.stringify({ accounts: upload.accounts, seeds: upload.seeds });
+      const serialized = JSON.stringify({
+        accounts: upload.accounts,
+        seeds: upload.seeds,
+      });
       expect(serialized).toContain(apiKeyAccount.value);
       expect(serialized).not.toContain(hostHome);
       expect(serialized).not.toContain("host-refresh-must-not-cross");
       expect(serialized).not.toContain("host-id-token-must-not-cross");
       expect(upload.seeds).toHaveLength(1);
-      expect(upload.seeds.some((seed) => seed.accountId === apiKeyAccount.id)).toBe(false);
+      expect(
+        upload.seeds.some((seed) => seed.accountId === apiKeyAccount.id),
+      ).toBe(false);
 
       const seed = upload.seeds[0];
       const accountDir = join(remoteRoot, seed.accountId);
@@ -131,7 +138,11 @@ describe("OpenAI auth", () => {
       createdAt: "2026-08-20T00:00:00.000Z",
     } satisfies CodexAccount;
 
-    const upload = buildOpenaiRemoteSeedUpload([selected, other], [selected.id], "Alex");
+    const upload = buildOpenaiRemoteSeedUpload(
+      [selected, other],
+      [selected.id],
+      "Alex",
+    );
     expect(upload.accounts).toEqual([
       {
         id: "selected",

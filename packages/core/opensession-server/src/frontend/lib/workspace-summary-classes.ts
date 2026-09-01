@@ -37,18 +37,22 @@ import { utilityClassName } from "../ui/cn";
  * without pressing against it.
  */
 export const WS_SUMMARY_CARD =
-	utilityClassName("flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto py-2 ") +
-	"[--popup-glass:color-mix(in_srgb,var(--popup-surface)_58%,transparent)] " +
-	"[--popup-blur:blur(32px)_saturate(1.6)_brightness(1.12)] " +
-	"[border-radius:calc(18px*var(--rf))]!";
+  utilityClassName(
+    "flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto py-2 ",
+  ) +
+  "[--popup-glass:color-mix(in_srgb,var(--popup-surface)_58%,transparent)] " +
+  "[--popup-blur:blur(32px)_saturate(1.6)_brightness(1.12)] " +
+  utilityClassName("[border-radius:calc(18px*var(--rf))]!");
 
 /** Wide Review keeps its scroller full width so the native scrollbar stays at
  * the window edge, beyond the summary card. These child clearances reserve the
  * summary column with an 8px visible gap. They stay 8px apart because the file
  * canvas supplies its own 8px inner gutter, keeping its border aligned with the
  * toolbar. */
-export const WS_SUMMARY_REVIEW_BAR_CLEARANCE = utilityClassName("desktop:mr-[320px]");
-export const WS_SUMMARY_REVIEW_CANVAS_CLEARANCE = utilityClassName("desktop:mr-[312px]");
+export const WS_SUMMARY_REVIEW_BAR_CLEARANCE =
+  utilityClassName("desktop:mr-[320px]");
+export const WS_SUMMARY_REVIEW_CANVAS_CLEARANCE =
+  utilityClassName("desktop:mr-[312px]");
 
 /**
  * Band label ("Assets"), taken from the sidebar so the card heads its lists
@@ -69,8 +73,9 @@ export const WS_SUMMARY_REVIEW_CANVAS_CLEARANCE = utilityClassName("desktop:mr-[
  * is what the card IS, and a heading over it could only repeat the card's own
  * name back at you.
  */
-export const WS_SUMMARY_SECTION =
-	utilityClassName("mt-3 flex h-[22px] shrink-0 items-center px-4 text-label font-medium text-faint first:mt-1");
+export const WS_SUMMARY_SECTION = utilityClassName(
+  "mt-3 flex h-[22px] shrink-0 items-center px-4 text-label font-medium text-faint first:mt-1",
+);
 
 /**
  * A row. 31px tall on a 300px card, which is the proportion a dense list needs
@@ -92,15 +97,19 @@ export const WS_SUMMARY_SECTION =
 const BAND_ROW = " [.ws-summary-band_&]:mx-0 [.ws-summary-band_&]:w-full";
 
 export const WS_SUMMARY_ROW =
-	utilityClassName("group/ws mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 cursor-pointer items-center gap-1.5 ") +
-	utilityClassName("rounded-row border-none bg-transparent px-2 text-left text-item-title text-fg ") +
-	utilityClassName("hover:bg-hover focus-ring ") +
-	// Inside the PR band the row is already inset by the band, and the neutral
-	// hover plate would sit as a grey patch on a tinted surface. Give up the
-	// gutter and wash with the row's own ink instead, so the hover reads as the
-	// band getting darker rather than as a second colour landing on it.
-	BAND_ROW +
-	" [.ws-summary-band_&]:hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]";
+  utilityClassName(
+    "group/ws mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 cursor-pointer items-center gap-1.5 ",
+  ) +
+  utilityClassName(
+    "rounded-row border-none bg-transparent px-2 text-left text-item-title text-fg ",
+  ) +
+  utilityClassName("hover:bg-hover focus-ring ") +
+  // Inside the PR band the row is already inset by the band, and the neutral
+  // hover plate would sit as a grey patch on a tinted surface. Give up the
+  // gutter and wash with the row's own ink instead, so the hover reads as the
+  // band getting darker rather than as a second colour landing on it.
+  BAND_ROW +
+  " [.ws-summary-band_&]:hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]";
 
 /**
  * The one row that holds a real control: the PR headline and its action
@@ -109,9 +118,13 @@ export const WS_SUMMARY_ROW =
  * to the PR, the button does the thing.
  */
 export const WS_SUMMARY_STATUS_ROW =
-	utilityClassName("mx-2 flex min-h-[38px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-center gap-1.5 ") +
-	utilityClassName("rounded-row pr-2 pl-2.5 text-left text-item-title text-fg") +
-	BAND_ROW;
+  utilityClassName(
+    "mx-2 flex min-h-[38px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-center gap-1.5 ",
+  ) +
+  utilityClassName(
+    "rounded-row pr-2 pl-2.5 text-left text-item-title text-fg",
+  ) +
+  BAND_ROW;
 
 /**
  * The PR band: the card's one plate, at the top, holding everything about the
@@ -132,8 +145,12 @@ export const WS_SUMMARY_STATUS_ROW =
  * this short reading as a rectangle, so it gives up 2px instead of 8.
  */
 export const WS_SUMMARY_BAND =
-	utilityClassName("ws-summary-band mx-2 mb-1 flex min-w-0 shrink-0 flex-col ") +
-	"[border-radius:calc(16px*var(--rf))] [corner-shape:squircle]";
+  utilityClassName(
+    "ws-summary-band mx-2 mb-1 flex min-w-0 shrink-0 flex-col ",
+  ) +
+  utilityClassName(
+    "[border-radius:calc(16px*var(--rf))] [corner-shape:squircle]",
+  );
 
 /** The band's inner padding, once it has a fill to hold. An untinted band is
  *  invisible, so it stays flush and the rows keep the list's own pitch. */
@@ -151,11 +168,13 @@ export const WS_SUMMARY_BAND_PAD = utilityClassName("py-1");
  * draws — `Svg` in components/icons.tsx clamps `size` up to a 20px minimum, so
  * a row asking for 15 was never getting it.
  */
-export const WS_SUMMARY_RAIL = utilityClassName("grid size-5 shrink-0 place-items-center");
+export const WS_SUMMARY_RAIL = utilityClassName(
+  "grid size-5 shrink-0 place-items-center",
+);
 
 /** A glyph in that rail. Faint: the label is the content, the icon only says
  *  which kind of thing the row is. */
-export const WS_SUMMARY_ICON = "text-faint";
+export const WS_SUMMARY_ICON = utilityClassName("text-faint");
 
 /** The label. It truncates, because a PR title or a worktree path is routinely
  *  longer than the card. */
@@ -164,18 +183,23 @@ export const WS_SUMMARY_LABEL = utilityClassName("min-w-0 flex-1 truncate");
 /** Right-edge action word ("Fix", "Pull", "Commit"). Reads as text until the
  *  row is hovered, then takes the accent, because the row itself is the
  *  button. */
-export const WS_SUMMARY_ACTION =
-	utilityClassName("shrink-0 text-meta font-medium text-dim group-hover/ws:text-accent");
+export const WS_SUMMARY_ACTION = utilityClassName(
+  "shrink-0 text-meta font-medium text-dim group-hover/ws:text-accent",
+);
 
 /** A count parked at a place row's right edge (live portals, working agents).
  *  Tone comes from the caller; a number that only reports gets `text-faint`,
  *  one that means something is running gets `text-yellow`, exactly as the
  *  panel's own tab strip reads them. */
-export const WS_SUMMARY_COUNT = utilityClassName("shrink-0 text-meta tabular-nums");
+export const WS_SUMMARY_COUNT = utilityClassName(
+  "shrink-0 text-meta tabular-nums",
+);
 
 /** The PR row's trailing state word ("Draft", "Merged", "Changes requested").
  *  Tone comes from the caller; this is only the shape. */
-export const WS_SUMMARY_STATE = utilityClassName("shrink-0 text-meta font-medium");
+export const WS_SUMMARY_STATE = utilityClassName(
+  "shrink-0 text-meta font-medium",
+);
 
 /* A reviewer's face is drawn by `UserAvatar`, not by a class here: it resolves
  * the roster picture, the GitHub fallback and the initials tile, and it wears
@@ -208,13 +232,18 @@ export const WS_SUMMARY_STATE = utilityClassName("shrink-0 text-meta font-medium
  * hairline instead of scrolling past them.
  */
 export const WS_SUMMARY_STRIP =
-	utilityClassName("mx-2 flex shrink-0 snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 pt-2 pb-1 ") +
-	"[scroll-padding-left:8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  utilityClassName(
+    "mx-2 flex shrink-0 snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 pt-2 pb-1 ",
+  ) +
+  utilityClassName(
+    "[scroll-padding-left:8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+  );
 
 /** One frame in that strip: the picture, with its filename under it. */
 export const WS_SUMMARY_FRAME =
-	utilityClassName("group/frame flex shrink-0 cursor-pointer snap-start flex-col gap-1 border-none ") +
-	utilityClassName("bg-transparent p-0 text-left focus-ring");
+  utilityClassName(
+    "group/frame flex shrink-0 cursor-pointer snap-start flex-col gap-1 border-none ",
+  ) + utilityClassName("bg-transparent p-0 text-left focus-ring");
 
 /** The picture itself. It carries a hairline because a capture's own edge is
  *  whatever it happened to end on, so a light screenshot would otherwise have
@@ -223,13 +252,16 @@ export const WS_SUMMARY_FRAME =
  *  loudest thing in a card that has no other lines in it. `object-contain`,
  *  because a screenshot is only worth showing whole. */
 export const WS_SUMMARY_FRAME_MEDIA =
-	utilityClassName("relative block aspect-video w-full overflow-hidden rounded-md border border-line ") +
-	utilityClassName("bg-surface transition-colors group-hover/frame:bg-hover");
+  utilityClassName(
+    "relative block aspect-video w-full overflow-hidden rounded-md border border-line ",
+  ) +
+  utilityClassName("bg-surface transition-colors group-hover/frame:bg-hover");
 
 /** The filename under a frame. The picture is the content, but the name is how
  *  you refer to it ("use the dark one"), so it stays. */
-export const WS_SUMMARY_FRAME_CAPTION =
-	utilityClassName("block w-full truncate text-meta text-dim");
+export const WS_SUMMARY_FRAME_CAPTION = utilityClassName(
+  "block w-full truncate text-meta text-dim",
+);
 
 /** A picture in the list, centred in the rail the glyphs use. A 16px tile
  *  inside a 20px slot, the same inset the sidebar gives its repo tiles: a
@@ -237,5 +269,6 @@ export const WS_SUMMARY_FRAME_CAPTION =
  *  glyphs, or it reads as the heaviest thing in the list. It cannot say what
  *  the capture is at this size, which is what the frames are for. What it does
  *  is tell two rows apart at a glance once you already know them. */
-export const WS_SUMMARY_THUMB =
-	utilityClassName("size-4 overflow-hidden rounded-sm border border-line bg-panel object-cover");
+export const WS_SUMMARY_THUMB = utilityClassName(
+  "size-4 overflow-hidden rounded-sm border border-line bg-panel object-cover",
+);

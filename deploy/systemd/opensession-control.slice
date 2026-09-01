@@ -1,0 +1,9 @@
+[Unit]
+Description=Open Session latency-sensitive control plane
+
+[Slice]
+# The gateway, SessionKernel, and executor normally use little sustained CPU or
+# disk bandwidth. Give their short control work precedence when repository
+# builds saturate the host; unused capacity remains available to workloads.
+CPUWeight=1000
+IOWeight=1000

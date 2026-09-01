@@ -7,13 +7,13 @@ import type { Workspace, UnifiedSession } from "./types";
  * PR workspaces (a bare sidebar PR row with no sessions yet).
  */
 export function defaultSessionWorkspaceView(
-	workspace: Pick<Workspace, "key" | "prNumber"> | null | undefined,
-	reviewDismissed: boolean,
-	hasLiveSession: boolean,
+  workspace: Pick<Workspace, "key" | "prNumber"> | null | undefined,
+  reviewDismissed: boolean,
+  hasLiveSession: boolean,
 ): "review" | null {
-	const prBacked =
-		workspace?.prNumber !== undefined || workspace?.key?.startsWith("ghpr-");
-	return prBacked && !reviewDismissed && !hasLiveSession ? "review" : null;
+  const prBacked =
+    workspace?.prNumber !== undefined || workspace?.key?.startsWith("ghpr-");
+  return prBacked && !reviewDismissed && !hasLiveSession ? "review" : null;
 }
 
 /**
@@ -23,10 +23,10 @@ export function defaultSessionWorkspaceView(
  * WorkspacePane's session-less Review shell instead of its SessionViewer.
  */
 export function workspaceLandingReady(
-	workspacesLoaded: boolean,
-	sessionsLoading: boolean,
+  workspacesLoaded: boolean,
+  sessionsLoading: boolean,
 ): boolean {
-	return workspacesLoaded && !sessionsLoading;
+  return workspacesLoaded && !sessionsLoading;
 }
 
 /**
@@ -40,12 +40,13 @@ export function workspaceLandingReady(
  * neither, which is correct — it hasn't run.
  */
 export function sessionNeverRan(s: UnifiedSession): boolean {
-	return (
-		!s.ran &&
-		!s.isRunning &&
-		!(s.queuedCount && s.queuedCount > 0) &&
-		s.lastActivity === s.createdAt
-	);
+  return (
+    !s.duplicatedFromSessionId &&
+    !s.ran &&
+    !s.isRunning &&
+    !(s.queuedCount && s.queuedCount > 0) &&
+    s.lastActivity === s.createdAt
+  );
 }
 
 /**
@@ -54,7 +55,7 @@ export function sessionNeverRan(s: UnifiedSession): boolean {
  * the conversation that started it.
  */
 export function isAutomationSession(s: UnifiedSession): boolean {
-	return !!s.automation || s.id.startsWith("bks-ghpr-");
+  return !!s.automation || s.id.startsWith("bks-ghpr-");
 }
 
 /**
@@ -65,13 +66,15 @@ export function isAutomationSession(s: UnifiedSession): boolean {
  * workspace only has automation sessions or shells.
  */
 export function mainSession(
-	liveOldestFirst: UnifiedSession[],
+  liveOldestFirst: UnifiedSession[],
 ): UnifiedSession | undefined {
-	return (
-		liveOldestFirst.find((s) => !isAutomationSession(s) && !sessionNeverRan(s)) ??
-		liveOldestFirst.find((s) => !sessionNeverRan(s)) ??
-		liveOldestFirst[0]
-	);
+  return (
+    liveOldestFirst.find(
+      (s) => !isAutomationSession(s) && !sessionNeverRan(s),
+    ) ??
+    liveOldestFirst.find((s) => !sessionNeverRan(s)) ??
+    liveOldestFirst[0]
+  );
 }
 
 /**
@@ -80,11 +83,11 @@ export function mainSession(
  * archived session remains a valid source instead of forcing the global composer.
  */
 export function newSessionSource(
-	current: UnifiedSession | null | undefined,
-	liveOldestFirst: UnifiedSession[],
-	archivedNewestFirst: UnifiedSession[],
+  current: UnifiedSession | null | undefined,
+  liveOldestFirst: UnifiedSession[],
+  archivedNewestFirst: UnifiedSession[],
 ): UnifiedSession | undefined {
-	return current ?? mainSession(liveOldestFirst) ?? archivedNewestFirst[0];
+  return current ?? mainSession(liveOldestFirst) ?? archivedNewestFirst[0];
 }
 
 /**
@@ -92,23 +95,23 @@ export function newSessionSource(
  * tab while the archived source needed by the create endpoint is still loading.
  */
 export function workspaceSessionSeed(
-	workspace: Workspace,
-	startedBy: string,
+  workspace: Workspace,
+  startedBy: string,
 ): UnifiedSession {
-	return {
-		id: `workspace:${workspace.id}`,
-		source: "opensession",
-		branch: workspace.branch ?? null,
-		worktreeDir: workspace.worktreeDir ?? null,
-		startedBy,
-		title: "New session",
-		lastActivity: workspace.createdAt,
-		createdAt: workspace.createdAt,
-		isRunning: false,
-		workspaceId: workspace.id,
-		repo: workspace.repo,
-		mode: workspace.repo || workspace.worktreeDir ? "code" : "scratch",
-	};
+  return {
+    id: `workspace:${workspace.id}`,
+    source: "opensession",
+    branch: workspace.branch ?? null,
+    worktreeDir: workspace.worktreeDir ?? null,
+    startedBy,
+    title: "New session",
+    lastActivity: workspace.createdAt,
+    createdAt: workspace.createdAt,
+    isRunning: false,
+    workspaceId: workspace.id,
+    repo: workspace.repo,
+    mode: workspace.repo || workspace.worktreeDir ? "code" : "scratch",
+  };
 }
 
 /**
@@ -116,12 +119,12 @@ export function workspaceSessionSeed(
  * user's saved order for every sibling session.
  */
 export function pinMainSessionFirst(
-	liveOldestFirst: UnifiedSession[],
-	orderedIds: string[],
+  liveOldestFirst: UnifiedSession[],
+  orderedIds: string[],
 ): string[] {
-	const mainId = mainSession(liveOldestFirst)?.id;
-	if (!mainId || !orderedIds.includes(mainId)) return orderedIds;
-	return [mainId, ...orderedIds.filter((id) => id !== mainId)];
+  const mainId = mainSession(liveOldestFirst)?.id;
+  if (!mainId || !orderedIds.includes(mainId)) return orderedIds;
+  return [mainId, ...orderedIds.filter((id) => id !== mainId)];
 }
 
 /**
@@ -139,26 +142,23 @@ export function pinMainSessionFirst(
  * workspace lands on the tab it was left on.
  */
 export function pickLandingSession(
-	all: UnifiedSession[],
-	workspaceId: string,
-	preferredId?: string,
+  all: UnifiedSession[],
+  workspaceId: string,
+  preferredId?: string,
 ): UnifiedSession | undefined {
-	const live = all
-		.filter((s) => !s.archived && s.workspaceId === workspaceId)
-		.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
-	const preferred = preferredId
-		? live.find((s) => s.id === preferredId)
-		: undefined;
-	if (preferred) return preferred;
-	const main = mainSession(live);
-	if (main && !sessionNeverRan(main)) return main;
-	const archived = all
-		.filter(
-			(s) =>
-				s.archived &&
-				s.workspaceId === workspaceId &&
-				!sessionNeverRan(s),
-		)
-		.sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
-	return archived[0] ?? live[0];
+  const live = all
+    .filter((s) => !s.archived && s.workspaceId === workspaceId)
+    .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+  const preferred = preferredId
+    ? live.find((s) => s.id === preferredId)
+    : undefined;
+  if (preferred) return preferred;
+  const main = mainSession(live);
+  if (main && !sessionNeverRan(main)) return main;
+  const archived = all
+    .filter(
+      (s) => s.archived && s.workspaceId === workspaceId && !sessionNeverRan(s),
+    )
+    .sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
+  return archived[0] ?? live[0];
 }

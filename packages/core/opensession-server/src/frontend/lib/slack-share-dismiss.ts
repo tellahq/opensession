@@ -23,59 +23,59 @@ const CAP = 200;
 
 /** Identity of one card: the session it renders in, and the PR it announces. */
 export function slackShareDismissKey(
-	sessionId: string,
-	prNumber: number,
+  sessionId: string,
+  prNumber: number,
 ): string {
-	return `${sessionId}:${prNumber}`;
+  return `${sessionId}:${prNumber}`;
 }
 
 export function parseDismissed(raw: string | null | undefined): string[] {
-	if (!raw) return [];
-	try {
-		const value = JSON.parse(raw);
-		if (!Array.isArray(value)) return [];
-		return value.filter((entry): entry is string => typeof entry === "string");
-	} catch {
-		return [];
-	}
+  if (!raw) return [];
+  try {
+    const value = JSON.parse(raw);
+    if (!Array.isArray(value)) return [];
+    return value.filter((entry): entry is string => typeof entry === "string");
+  } catch {
+    return [];
+  }
 }
 
 /** Add a key, newest first, deduped and capped. Returns the same list when the
  *  key is already dismissed, so callers can skip a pointless write. */
 export function withDismissed(list: string[], key: string): string[] {
-	if (!key || list.includes(key)) return list;
-	return [key, ...list].slice(0, CAP);
+  if (!key || list.includes(key)) return list;
+  return [key, ...list].slice(0, CAP);
 }
 
 let store: UserPref<string> | null = null;
 
 function prefStore(): UserPref<string> {
-	if (!store) {
-		store = makeUserPref<string>({
-			localKey: LOCAL_KEY,
-			prefKey: PREF_KEY,
-			changeEvent: CHANGE_EVENT,
-			defaultValue: "",
-			decode: (raw) => (typeof raw === "string" ? raw : null),
-			encode: (value) => value,
-		});
-	}
-	return store;
+  if (!store) {
+    store = makeUserPref<string>({
+      localKey: LOCAL_KEY,
+      prefKey: PREF_KEY,
+      changeEvent: CHANGE_EVENT,
+      defaultValue: "",
+      decode: (raw) => (typeof raw === "string" ? raw : null),
+      encode: (value) => value,
+    });
+  }
+  return store;
 }
 
 export function isSlackShareDismissed(key: string): boolean {
-	if (!key) return false;
-	return parseDismissed(prefStore().get()).includes(key);
+  if (!key) return false;
+  return parseDismissed(prefStore().get()).includes(key);
 }
 
 export function dismissSlackShare(key: string): void {
-	if (!key) return;
-	const current = parseDismissed(prefStore().get());
-	const next = withDismissed(current, key);
-	if (next === current) return;
-	prefStore().set(JSON.stringify(next));
+  if (!key) return;
+  const current = parseDismissed(prefStore().get());
+  const next = withDismissed(current, key);
+  if (next === current) return;
+  prefStore().set(JSON.stringify(next));
 }
 
 export function onSlackShareDismissChanged(handler: () => void): () => void {
-	return prefStore().onChanged(handler);
+  return prefStore().onChanged(handler);
 }

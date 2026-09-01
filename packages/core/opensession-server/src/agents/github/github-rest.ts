@@ -8,9 +8,21 @@
  * refresh is transparent and missing authority fails closed.
  */
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
-import { defaultRepo, githubBotLogins, isGithubBotLogin, personaName } from "../../server/config";
-import { githubConfiguredCredential, githubToken } from "../../server/github-app";
-import { ghRateLimited, isGhRateLimitMsg, noteGhRateLimited } from "../../server/github-limit";
+import {
+  defaultRepo,
+  githubBotLogins,
+  isGithubBotLogin,
+  personaName,
+} from "../../server/config";
+import {
+  githubConfiguredCredential,
+  githubToken,
+} from "../../server/github-app";
+import {
+  ghRateLimited,
+  isGhRateLimitMsg,
+  noteGhRateLimited,
+} from "../../server/github-limit";
 import { noteGithubGraphqlCall } from "../../server/github-budget";
 /** The PR agent's target — the instance's default repo (config-driven). */
 export const GITHUB_REPO = defaultRepo().ghRepo;
@@ -34,12 +46,18 @@ export const OWN_MARKERS = [
 ];
 
 /** Whether a comment is the unfinished review placeholder for this head. */
-export function isReviewProgressForHead(body: string, headSha: string): boolean {
+export function isReviewProgressForHead(
+  body: string,
+  headSha: string,
+): boolean {
   if (!body.startsWith(REVIEW_MARKER)) return false;
   const match = body.match(/🔄 Reviewing(?: `([0-9a-f]{7,40})`)?…/i);
   if (!match) return false;
   const shownSha = match[1];
-  return !shownSha || Boolean(headSha && headSha.toLowerCase().startsWith(shownSha.toLowerCase()));
+  return (
+    !shownSha ||
+    Boolean(headSha && headSha.toLowerCase().startsWith(shownSha.toLowerCase()))
+  );
 }
 
 export function githubConfigured(): boolean {
@@ -56,10 +74,16 @@ interface GithubResult<T = any> {
 export async function githubRequest<T = any>(
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
 ): Promise<GithubResult<T>> {
   const token = await githubToken({ write: true });
-  if (!token) return { ok: false, status: 0, data: null, error: "GitHub App credential unavailable" };
+  if (!token)
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: "GitHub App credential unavailable",
+    };
   try {
     // Timeout matters here: these calls run while holding a per-PR lock with
     // no TTL — a hung fetch would block that PR until the next restart.
@@ -83,14 +107,17 @@ export async function githubRequest<T = any>(
       }
     }
     if (!resp.ok) {
-      const error = (data && (data.message || data.error)) || `GitHub ${resp.status}`;
+      const error =
+        (data && (data.message || data.error)) || `GitHub ${resp.status}`;
       console.warn(`[github] ${method} ${path} → ${resp.status}: ${error}`);
       if (
         (resp.status === 403 || resp.status === 429) &&
-        (resp.headers.get("x-ratelimit-remaining") === "0" || isGhRateLimitMsg(String(error)))
+        (resp.headers.get("x-ratelimit-remaining") === "0" ||
+          isGhRateLimitMsg(String(error)))
       ) {
         const resetHeader = resp.headers.get("x-ratelimit-reset");
-        if (resetHeader) noteGhRateLimited("github-rest", Number(resetHeader) * 1000, "rest");
+        if (resetHeader)
+          noteGhRateLimited("github-rest", Number(resetHeader) * 1000, "rest");
         else noteGhRateLimited("github-rest", undefined, "rest");
       }
       return { ok: false, status: resp.status, data, error };
@@ -125,18 +152,35 @@ async function githubGraphQL<T = any>(
     });
     const json: any = await resp.json().catch(() => null);
     if (!resp.ok || !json || json.errors) {
-      noteGithubGraphqlCall("github-agent:review-threads", Date.now() - started, false);
-      const msg = json?.errors?.map((e: any) => e.message).join("; ") || `GitHub GraphQL ${resp.status}`;
+      noteGithubGraphqlCall(
+        "github-agent:review-threads",
+        Date.now() - started,
+        false,
+      );
+      const msg =
+        json?.errors?.map((e: any) => e.message).join("; ") ||
+        `GitHub GraphQL ${resp.status}`;
       console.warn(`[github] graphql → ${resp.status}: ${msg}`);
-      if (json?.errors?.some((e: any) => e.type === "RATE_LIMITED") || isGhRateLimitMsg(msg)) {
+      if (
+        json?.errors?.some((e: any) => e.type === "RATE_LIMITED") ||
+        isGhRateLimitMsg(msg)
+      ) {
         noteGhRateLimited("github-graphql");
       }
       return null;
     }
-    noteGithubGraphqlCall("github-agent:review-threads", Date.now() - started, true);
+    noteGithubGraphqlCall(
+      "github-agent:review-threads",
+      Date.now() - started,
+      true,
+    );
     return json.data as T;
   } catch (e: any) {
-    noteGithubGraphqlCall("github-agent:review-threads", Date.now() - started, false);
+    noteGithubGraphqlCall(
+      "github-agent:review-threads",
+      Date.now() - started,
+      false,
+    );
     console.warn(`[github] graphql error:`, e);
     return null;
   }
@@ -151,12 +195,21 @@ interface IssueComment {
 }
 
 /** Fetch a single issue comment's body. */
-export async function getComment(commentId: number, ghRepo: string = GITHUB_REPO): Promise<IssueComment | null> {
-  const r = await githubRequest<IssueComment>("GET", `/repos/${ghRepo}/issues/comments/${commentId}`);
+export async function getComment(
+  commentId: number,
+  ghRepo: string = GITHUB_REPO,
+): Promise<IssueComment | null> {
+  const r = await githubRequest<IssueComment>(
+    "GET",
+    `/repos/${ghRepo}/issues/comments/${commentId}`,
+  );
   return r.ok && r.data ? r.data : null;
 }
 
-async function listIssueComments(prNumber: number, ghRepo: string): Promise<IssueComment[]> {
+async function listIssueComments(
+  prNumber: number,
+  ghRepo: string,
+): Promise<IssueComment[]> {
   const list = await githubRequest<IssueComment[]>(
     "GET",
     `/repos/${ghRepo}/issues/${prNumber}/comments?per_page=100`,
@@ -165,10 +218,15 @@ async function listIssueComments(prNumber: number, ghRepo: string): Promise<Issu
 }
 
 /** Find the current (active, not-outdated) agent review comment id, if any. */
-export async function findActiveReviewComment(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<number | null> {
+export async function findActiveReviewComment(
+  prNumber: number,
+  ghRepo: string = GITHUB_REPO,
+): Promise<number | null> {
   const mine = (await listIssueComments(prNumber, ghRepo))
     .reverse()
-    .find((c) => typeof c.body === "string" && c.body.startsWith(REVIEW_MARKER));
+    .find(
+      (c) => typeof c.body === "string" && c.body.startsWith(REVIEW_MARKER),
+    );
   return mine ? mine.id : null;
 }
 
@@ -180,22 +238,34 @@ export async function findReviewProgressComment(
 ): Promise<number | null> {
   const mine = (await listIssueComments(prNumber, ghRepo))
     .reverse()
-    .find((c) => typeof c.body === "string" && isReviewProgressForHead(c.body, headSha));
+    .find(
+      (c) =>
+        typeof c.body === "string" && isReviewProgressForHead(c.body, headSha),
+    );
   return mine ? mine.id : null;
 }
 
 /** Collapse a prior review comment under a "Outdated review" <details> and re-mark it. */
-export async function supersedeReviewComment(commentId: number, ghRepo: string = GITHUB_REPO): Promise<void> {
+export async function supersedeReviewComment(
+  commentId: number,
+  ghRepo: string = GITHUB_REPO,
+): Promise<void> {
   const old = await getComment(commentId, ghRepo);
   if (!old?.body) return;
   let inner = old.body
     .replace(REVIEW_MARKER, "")
     .replace(REVIEW_OUTDATED_MARKER, "")
     .trim();
-  const detailsMatch = inner.match(/<details>[\s\S]*?<summary>[\s\S]*?<\/summary>\s*([\s\S]*?)<\/details>/i);
+  const detailsMatch = inner.match(
+    /<details>[\s\S]*?<summary>[\s\S]*?<\/summary>\s*([\s\S]*?)<\/details>/i,
+  );
   if (detailsMatch) inner = detailsMatch[1].trim(); // avoid nesting details on re-supersede
   const collapsed = `${REVIEW_OUTDATED_MARKER}\n<details>\n<summary>🕙 Outdated review — superseded by a newer review below</summary>\n\n${inner}\n\n</details>`;
-  await githubRequest("PATCH", `/repos/${ghRepo}/issues/comments/${commentId}`, { body: collapsed });
+  await githubRequest(
+    "PATCH",
+    `/repos/${ghRepo}/issues/comments/${commentId}`,
+    { body: collapsed },
+  );
 }
 
 export interface ReviewCommentInfo {
@@ -208,7 +278,10 @@ export interface ReviewCommentInfo {
 }
 
 /** List the inline review comments on a PR (for auto-fix to address + reply to). Newest first. */
-async function listReviewComments(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<ReviewCommentInfo[]> {
+async function listReviewComments(
+  prNumber: number,
+  ghRepo: string = GITHUB_REPO,
+): Promise<ReviewCommentInfo[]> {
   const r = await githubRequest<any[]>(
     "GET",
     `/repos/${ghRepo}/pulls/${prNumber}/comments?per_page=100`,
@@ -234,12 +307,22 @@ export interface ReviewInfo {
 }
 
 /** List the formal reviews on a PR that carry a summary body (Greptile/human/agent). */
-async function listReviews(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<ReviewInfo[]> {
-  const r = await githubRequest<any[]>("GET", `/repos/${ghRepo}/pulls/${prNumber}/reviews?per_page=100`);
+async function listReviews(
+  prNumber: number,
+  ghRepo: string = GITHUB_REPO,
+): Promise<ReviewInfo[]> {
+  const r = await githubRequest<any[]>(
+    "GET",
+    `/repos/${ghRepo}/pulls/${prNumber}/reviews?per_page=100`,
+  );
   if (!r.ok || !Array.isArray(r.data)) return [];
   return r.data
     .filter((rv) => typeof rv.body === "string" && rv.body.trim())
-    .map((rv) => ({ login: rv.user?.login || "", body: rv.body, state: rv.state || "" }));
+    .map((rv) => ({
+      login: rv.user?.login || "",
+      body: rv.body,
+      state: rv.state || "",
+    }));
 }
 
 /** Reply within a review-comment thread (inline @mention replies). */
@@ -247,29 +330,41 @@ export async function replyToReviewComment(
   prNumber: number,
   commentId: number,
   body: string,
-  ghRepo: string = GITHUB_REPO
+  ghRepo: string = GITHUB_REPO,
 ): Promise<boolean> {
   const r = await githubRequest(
     "POST",
     `/repos/${ghRepo}/pulls/${prNumber}/comments/${commentId}/replies`,
-    { body }
+    { body },
   );
   return r.ok;
 }
 
 /** Post a plain (non-marker) comment on the PR — used for fix/simplify status. */
-export async function postIssueComment(prNumber: number, body: string, ghRepo: string = GITHUB_REPO): Promise<number | null> {
+export async function postIssueComment(
+  prNumber: number,
+  body: string,
+  ghRepo: string = GITHUB_REPO,
+): Promise<number | null> {
   const created = await githubRequest<IssueComment>(
     "POST",
     `/repos/${ghRepo}/issues/${prNumber}/comments`,
-    { body }
+    { body },
   );
   return created.ok && created.data ? created.data.id : null;
 }
 
 /** Edit an existing comment (status comments edited in place across fix iterations). */
-export async function editIssueComment(commentId: number, body: string, ghRepo: string = GITHUB_REPO): Promise<boolean> {
-  const r = await githubRequest("PATCH", `/repos/${ghRepo}/issues/comments/${commentId}`, { body });
+export async function editIssueComment(
+  commentId: number,
+  body: string,
+  ghRepo: string = GITHUB_REPO,
+): Promise<boolean> {
+  const r = await githubRequest(
+    "PATCH",
+    `/repos/${ghRepo}/issues/comments/${commentId}`,
+    { body },
+  );
   return r.ok;
 }
 
@@ -311,23 +406,36 @@ export async function submitReview(
   commitId: string,
   body: string,
   comments: ReviewInlineComment[],
-  ghRepo: string = GITHUB_REPO
+  ghRepo: string = GITHUB_REPO,
 ): Promise<boolean> {
   const payload: Record<string, unknown> = {
     commit_id: commitId,
     event: "COMMENT",
     body,
-    comments: comments.map((c) => ({ path: c.path, line: c.line, side: c.side || "RIGHT", body: c.body })),
+    comments: comments.map((c) => ({
+      path: c.path,
+      line: c.line,
+      side: c.side || "RIGHT",
+      body: c.body,
+    })),
   };
-  const r = await githubRequest("POST", `/repos/${ghRepo}/pulls/${prNumber}/reviews`, payload);
+  const r = await githubRequest(
+    "POST",
+    `/repos/${ghRepo}/pulls/${prNumber}/reviews`,
+    payload,
+  );
   if (r.ok) return true;
   if (comments.length) {
     // Inline anchors can be rejected (line not in diff) — fall back to a body-only review.
-    const r2 = await githubRequest("POST", `/repos/${ghRepo}/pulls/${prNumber}/reviews`, {
-      commit_id: commitId,
-      event: "COMMENT",
-      body,
-    });
+    const r2 = await githubRequest(
+      "POST",
+      `/repos/${ghRepo}/pulls/${prNumber}/reviews`,
+      {
+        commit_id: commitId,
+        event: "COMMENT",
+        body,
+      },
+    );
     return r2.ok;
   }
   return false;
@@ -366,7 +474,10 @@ export interface ReviewThread {
  * bridge REST doesn't expose. Used to find threads the fixer replied "Fixed in
  * <sha>" to (so we can resolve them) and to sweep stale outdated bot threads.
  */
-export async function listReviewThreads(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<ReviewThread[]> {
+export async function listReviewThreads(
+  prNumber: number,
+  ghRepo: string = GITHUB_REPO,
+): Promise<ReviewThread[]> {
   const data = await githubGraphQL<any>(
     `query($owner:String!,$name:String!,$number:Int!){
       repository(owner:$owner,name:$name){
@@ -380,13 +491,19 @@ export async function listReviewThreads(prNumber: number, ghRepo: string = GITHU
         }
       }
     }`,
-    { owner: ghRepo.split("/")[0], name: ghRepo.split("/")[1], number: prNumber },
+    {
+      owner: ghRepo.split("/")[0],
+      name: ghRepo.split("/")[1],
+      number: prNumber,
+    },
   );
   const nodes = data?.repository?.pullRequest?.reviewThreads?.nodes;
   if (!Array.isArray(nodes)) return [];
   return nodes.map((t: any) => {
     const comments = (t.comments?.nodes || []).map((c: any) => {
-      const groups: any[] = Array.isArray(c.reactionGroups) ? c.reactionGroups : [];
+      const groups: any[] = Array.isArray(c.reactionGroups)
+        ? c.reactionGroups
+        : [];
       const count = (content: string) =>
         groups.find((g) => g?.content === content)?.reactors?.totalCount || 0;
       return {
@@ -419,9 +536,14 @@ export async function resolveReviewThread(threadId: string): Promise<boolean> {
 
 /** A thread the auto-fixer addressed: it left a "Fixed in <sha>" reply (not the root). */
 function threadWasFixed(t: ReviewThread): boolean {
-  return t.comments.slice(1).some(
-    (c) => isGithubBotLogin(c.login) && (c.body.includes(FIXED_REPLY_MARKER) || /(^|\s)fixed in\b/i.test(c.body)),
-  );
+  return t.comments
+    .slice(1)
+    .some(
+      (c) =>
+        isGithubBotLogin(c.login) &&
+        (c.body.includes(FIXED_REPLY_MARKER) ||
+          /(^|\s)fixed in\b/i.test(c.body)),
+    );
 }
 
 /**
@@ -444,7 +566,8 @@ export async function resolveAddressedThreads(
   let resolved = 0;
   for (const t of threads) {
     if (t.isResolved) continue;
-    const staleBot = alsoOutdatedBotThreads && t.isOutdated && isGithubBotLogin(t.rootAuthor);
+    const staleBot =
+      alsoOutdatedBotThreads && t.isOutdated && isGithubBotLogin(t.rootAuthor);
     if (!threadWasFixed(t) && !staleBot) continue;
     if (await resolveReviewThread(t.id)) resolved++;
   }
@@ -469,7 +592,9 @@ export interface OpenPrSummary {
 
 /** Open PRs on a repo, most recently updated first (one page — the sweep only
  *  cares about recent activity). */
-export async function listOpenPrs(ghRepo: string = GITHUB_REPO): Promise<OpenPrSummary[]> {
+export async function listOpenPrs(
+  ghRepo: string = GITHUB_REPO,
+): Promise<OpenPrSummary[]> {
   const r = await githubRequest<any[]>(
     "GET",
     `/repos/${ghRepo}/pulls?state=open&sort=updated&direction=desc&per_page=50`,
@@ -494,10 +619,14 @@ export async function listOpenPrs(ghRepo: string = GITHUB_REPO): Promise<OpenPrS
 // ── Labels ───────────────────────────────────────────────────
 
 /** Remove a label from a PR (action labels are cleared when the action completes). */
-export async function removeLabel(prNumber: number, label: string, ghRepo: string = GITHUB_REPO): Promise<boolean> {
+export async function removeLabel(
+  prNumber: number,
+  label: string,
+  ghRepo: string = GITHUB_REPO,
+): Promise<boolean> {
   const r = await githubRequest(
     "DELETE",
-    `/repos/${ghRepo}/issues/${prNumber}/labels/${encodeURIComponent(label)}`
+    `/repos/${ghRepo}/issues/${prNumber}/labels/${encodeURIComponent(label)}`,
   );
   // 404 = label already gone; treat as success.
   return r.ok || r.status === 404;
@@ -510,7 +639,10 @@ export async function removeLabel(prNumber: number, label: string, ghRepo: strin
  * not just CI). Skips outdated inline comments and the agent's own boilerplate review
  * body. Returns "" when there's nothing. Shared by auto-fix and the review handoff.
  */
-export async function fetchReviewFindings(prNumber: number, ghRepo?: string): Promise<string> {
+export async function fetchReviewFindings(
+  prNumber: number,
+  ghRepo?: string,
+): Promise<string> {
   const [comments, reviews] = await Promise.all([
     listReviewComments(prNumber, ghRepo),
     listReviews(prNumber, ghRepo),
@@ -518,14 +650,24 @@ export async function fetchReviewFindings(prNumber: number, ghRepo?: string): Pr
   const lines: string[] = [];
   for (const c of comments.filter((c) => !c.outdated && c.line != null)) {
     // `comment <id>` lets the agent reply in that thread after fixing.
-    lines.push(`- [@${c.login} · comment ${c.id}] ${c.path}:${c.line} — ${c.body.replace(/\s+/g, " ").trim().slice(0, 400)}`);
+    lines.push(
+      `- [@${c.login} · comment ${c.id}] ${c.path}:${c.line} — ${c.body.replace(/\s+/g, " ").trim().slice(0, 400)}`,
+    );
   }
   for (const rv of reviews) {
     // Skip the agent's own short review boilerplate. Inline comments already
     // carry its findings.
-    if (isGithubBotLogin(rv.login) && rv.body.trim().startsWith(`${personaName()} review`)) continue;
-    const state = rv.state ? ` ${rv.state.toLowerCase().replace(/_/g, " ")}` : "";
-    lines.push(`- [@${rv.login} review${state}] ${rv.body.replace(/\s+/g, " ").trim().slice(0, 600)}`);
+    if (
+      isGithubBotLogin(rv.login) &&
+      rv.body.trim().startsWith(`${personaName()} review`)
+    )
+      continue;
+    const state = rv.state
+      ? ` ${rv.state.toLowerCase().replace(/_/g, " ")}`
+      : "";
+    lines.push(
+      `- [@${rv.login} review${state}] ${rv.body.replace(/\s+/g, " ").trim().slice(0, 600)}`,
+    );
   }
   return lines.join("\n");
 }

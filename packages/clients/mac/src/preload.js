@@ -56,7 +56,10 @@ contextBridge.exposeInMainWorld("os1", {
     onState: (cb) => {
       const listener = (_e, state) => cb(state);
       ipcRenderer.on("os1:update-state", listener);
-      ipcRenderer.invoke("os1:update-state").then(cb).catch(() => {});
+      ipcRenderer
+        .invoke("os1:update-state")
+        .then(cb)
+        .catch(() => {});
       return () => ipcRenderer.removeListener("os1:update-state", listener);
     },
     install: () => ipcRenderer.send("os1:update-install"),

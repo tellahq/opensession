@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import {
-  SessionEffectExecutorRegistry,
-} from "./effect-executors";
+import { SessionEffectExecutorRegistry } from "./effect-executors";
 import type { DurableOutboxItem } from "./store";
 
-function outbox(payload: unknown, kind = "human_ask_deliver"): DurableOutboxItem {
+function outbox(
+  payload: unknown,
+  kind = "human_ask_deliver",
+): DurableOutboxItem {
   return {
     id: 1,
     effectId: "session:human_ask_deliver:ask",
@@ -38,11 +39,18 @@ describe("session effect executor registry", () => {
     registry.register("delivery_interrupt_cancel", (item) => {
       cancel = item.payload;
     });
-    expect(await registry.execute(outbox({
-      interruptId: "interrupt-one",
-      runIds: ["session-one", "engine-one"],
-      runGeneration: 4,
-    }, "delivery_interrupt_cancel"))).toBe(true);
+    expect(
+      await registry.execute(
+        outbox(
+          {
+            interruptId: "interrupt-one",
+            runIds: ["session-one", "engine-one"],
+            runGeneration: 4,
+          },
+          "delivery_interrupt_cancel",
+        ),
+      ),
+    ).toBe(true);
     expect(cancel).toEqual({
       interruptId: "interrupt-one",
       runIds: ["session-one", "engine-one"],
@@ -56,11 +64,18 @@ describe("session effect executor registry", () => {
     registry.register("turn_cancel", (item) => {
       cancel = item.payload;
     });
-    expect(await registry.execute(outbox({
-      cancelId: "cancel-one",
-      dispatchId: "dispatch-one",
-      runGeneration: 4,
-    }, "turn_cancel"))).toBe(true);
+    expect(
+      await registry.execute(
+        outbox(
+          {
+            cancelId: "cancel-one",
+            dispatchId: "dispatch-one",
+            runGeneration: 4,
+          },
+          "turn_cancel",
+        ),
+      ),
+    ).toBe(true);
     expect(cancel).toEqual({
       cancelId: "cancel-one",
       dispatchId: "dispatch-one",
@@ -87,33 +102,47 @@ describe("session effect executor registry", () => {
       attachment = item.payload;
     });
     const fence = { creationIdentity: "create-one", creationGeneration: 2 };
-    expect(await registry.execute(outbox({
-      ...fence,
-      principal: "github:alice",
-      scope: "repo:read",
-      mode: "resolve_current",
-      token: "must-not-cross",
-    }, "creation_credential_resolve"))).toBe(true);
+    expect(
+      await registry.execute(
+        outbox(
+          {
+            ...fence,
+            principal: "github:alice",
+            scope: "repo:read",
+            mode: "resolve_current",
+            token: "must-not-cross",
+          },
+          "creation_credential_resolve",
+        ),
+      ),
+    ).toBe(true);
     expect(credential).toEqual({
       ...fence,
       principal: "github:alice",
       scope: "repo:read",
       mode: "resolve_current",
     });
-    expect(await registry.execute(outbox({
-      ...fence,
-      project: "opensession",
-      branch: "feature/create-one",
-      worktreePath: "/worktrees/create-one",
-      // Older clean-install creates persisted an empty optional stack base.
-      // It means "branch from the repo default", not an invalid effect.
-      baseBranch: "",
-      isolated: true,
-      existingBranch: true,
-      credentialPrincipal: "user:alice",
-      mode: "adopt_or_create",
-      gitEnv: { GIT_ASKPASS: "must-not-cross" },
-    }, "creation_branch_prepare"))).toBe(true);
+    expect(
+      await registry.execute(
+        outbox(
+          {
+            ...fence,
+            project: "opensession",
+            branch: "feature/create-one",
+            worktreePath: "/worktrees/create-one",
+            // Older clean-install creates persisted an empty optional stack base.
+            // It means "branch from the repo default", not an invalid effect.
+            baseBranch: "",
+            isolated: true,
+            existingBranch: true,
+            credentialPrincipal: "user:alice",
+            mode: "adopt_or_create",
+            gitEnv: { GIT_ASKPASS: "must-not-cross" },
+          },
+          "creation_branch_prepare",
+        ),
+      ),
+    ).toBe(true);
     expect(branch).toEqual({
       ...fence,
       project: "opensession",
@@ -124,20 +153,27 @@ describe("session effect executor registry", () => {
       credentialPrincipal: "user:alice",
       mode: "adopt_or_create",
     });
-    expect(await registry.execute(outbox({
-      ...fence,
-      provider: "modal",
-      sandboxKey: "session-one",
-      repo: "opensession",
-      branch: "feature/create-one",
-      sessionMode: "code",
-      cwd: "/worktrees/create-one",
-      attachedDirs: ["/worktrees/attached"],
-      trustProfile: "interactive",
-      egressAllowlist: ["github.com"],
-      mode: "adopt_or_create",
-      token: "must-not-cross",
-    }, "creation_sandbox_prepare"))).toBe(true);
+    expect(
+      await registry.execute(
+        outbox(
+          {
+            ...fence,
+            provider: "modal",
+            sandboxKey: "session-one",
+            repo: "opensession",
+            branch: "feature/create-one",
+            sessionMode: "code",
+            cwd: "/worktrees/create-one",
+            attachedDirs: ["/worktrees/attached"],
+            trustProfile: "interactive",
+            egressAllowlist: ["github.com"],
+            mode: "adopt_or_create",
+            token: "must-not-cross",
+          },
+          "creation_sandbox_prepare",
+        ),
+      ),
+    ).toBe(true);
     expect(sandbox).toEqual({
       ...fence,
       provider: "modal",
@@ -151,15 +187,22 @@ describe("session effect executor registry", () => {
       egressAllowlist: ["github.com"],
       mode: "adopt_or_create",
     });
-    expect(await registry.execute(outbox({
-      ...fence,
-      attachmentId: "attachment-one",
-      name: "brief.pdf",
-      sourceRef: "staged:attachment-one",
-      digest: "sha256:digest",
-      mode: "reconcile_or_stage",
-      dataUrl: "data:image/png;base64,must-not-cross",
-    }, "creation_attachment_stage"))).toBe(true);
+    expect(
+      await registry.execute(
+        outbox(
+          {
+            ...fence,
+            attachmentId: "attachment-one",
+            name: "brief.pdf",
+            sourceRef: "staged:attachment-one",
+            digest: "sha256:digest",
+            mode: "reconcile_or_stage",
+            dataUrl: "data:image/png;base64,must-not-cross",
+          },
+          "creation_attachment_stage",
+        ),
+      ),
+    ).toBe(true);
     expect(attachment).toEqual({
       ...fence,
       attachmentId: "attachment-one",
@@ -178,23 +221,30 @@ describe("session effect executor registry", () => {
       registry.execute(outbox({ askId: "ask-one" })),
     ).rejects.toThrow("Invalid human_ask_deliver effect payload");
     registry.register("creation_opening_turn", () => {});
-    await expect(registry.execute(outbox({
-      creationIdentity: "create-one",
-      creationGeneration: 1,
-      openingPromptEntryId: "entry-one",
-      runId: "run-one",
-      runGeneration: 0,
-      mode: "adopt_or_launch",
-    }, "creation_opening_turn"))).rejects.toThrow("opening fence");
+    await expect(
+      registry.execute(
+        outbox(
+          {
+            creationIdentity: "create-one",
+            creationGeneration: 1,
+            openingPromptEntryId: "entry-one",
+            runId: "run-one",
+            runGeneration: 0,
+            mode: "adopt_or_launch",
+          },
+          "creation_opening_turn",
+        ),
+      ),
+    ).rejects.toThrow("opening fence");
     expect(await registry.execute(outbox(null, "future_effect"))).toBe(false);
   });
 
   test("allows exactly one executor per effect kind", () => {
     const registry = new SessionEffectExecutorRegistry();
     const unregister = registry.register("human_ask_deliver", () => {});
-    expect(() =>
-      registry.register("human_ask_deliver", () => {}),
-    ).toThrow("already registered");
+    expect(() => registry.register("human_ask_deliver", () => {})).toThrow(
+      "already registered",
+    );
     unregister();
     expect(registry.kinds()).toEqual([]);
   });

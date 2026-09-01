@@ -53,8 +53,8 @@ export interface RunTokenContext {
 // valid until the LAST of them finishes. ctx is the most recent registration:
 // it is only the fallback identity for calls that arrive without a per-call
 // ocSession tag (see dispatchRunRpc below).
-const tokens: Map<string, RunTokenContext & { refs: number }> = (g.__runRpcTokens ??=
-  new Map());
+const tokens: Map<string, RunTokenContext & { refs: number }> =
+  (g.__runRpcTokens ??= new Map());
 
 export function registerRunToken(token: string, ctx: RunTokenContext): void {
   const existing = tokens.get(token);
@@ -89,7 +89,7 @@ export function timingSafeEqStr(a: string, b: string): boolean {
  */
 export type InteractiveMcpBuilder = (
   sessionId: string,
-  user?: string
+  user?: string,
 ) => Record<string, any>;
 
 export function registerInteractiveMcpBuilder(b: InteractiveMcpBuilder): void {
@@ -102,12 +102,14 @@ export function registerInteractiveMcpBuilder(b: InteractiveMcpBuilder): void {
 // ask handler, opensession-github's report-back channel) — so the stdio proxies
 // execute THOSE for the run's duration. Keyed by bks session id; parked on
 // globalThis so a hot reload keeps live runs' overrides.
-const sessionServers: Map<string, Record<string, any>> = (g.__runRpcSessionServers ??=
-  new Map());
+const sessionServers: Map<
+  string,
+  Record<string, any>
+> = (g.__runRpcSessionServers ??= new Map());
 
 export function registerSessionMcpServers(
   sessionId: string,
-  servers: Record<string, any>
+  servers: Record<string, any>,
 ): void {
   sessionServers.set(sessionId, servers);
 }
@@ -134,7 +136,10 @@ export type RunRpcDispatch =
   | { kind: "immediate"; status: number; body: Record<string, unknown> }
   | { kind: "call"; done: Promise<Record<string, unknown>> };
 
-const imm = (status: number, body: Record<string, unknown>): RunRpcDispatch => ({
+const imm = (
+  status: number,
+  body: Record<string, unknown>,
+): RunRpcDispatch => ({
   kind: "immediate",
   status,
   body,
@@ -145,28 +150,34 @@ const imm = (status: number, body: Record<string, unknown>): RunRpcDispatch => (
  * the WS bridge (src/server/run-ws.ts): validate the run token, build the
  * server, run tools/list or tools/call. Never throws.
  */
-export async function dispatchRunRpc(path: string, body: any): Promise<RunRpcDispatch> {
+export async function dispatchRunRpc(
+  path: string,
+  body: any,
+): Promise<RunRpcDispatch> {
   const token = String(body?.token || "");
   let ctx: RunTokenContext | undefined = tokens.get(token);
   if (!ctx) return imm(403, { error: "unauthorized (unknown run token)" });
-
 
   const builder: InteractiveMcpBuilder | undefined = g.__runRpcMcpBuilder;
   if (!builder) return imm(503, { error: "MCP builder not registered yet" });
 
   const serverName = String(body?.server || "");
   const perSession = sessionServers.get(ctx.sessionId);
-  const cfg = perSession?.[serverName] ?? builder(ctx.sessionId, ctx.user)[serverName];
+  const cfg =
+    perSession?.[serverName] ?? builder(ctx.sessionId, ctx.user)[serverName];
   if (!cfg?.instance) {
     // tools/list for a server this session doesn't carry (shared servers list
     // the union of in-process servers in their config) answers with an empty
     // tool list rather than an error — the proxy stays healthy and the
     // session simply sees no tools from it. Calls still 404.
     if (path === "/mcp/list") return imm(200, { tools: [] });
-    return imm(404, { error: `no interactive MCP server "${serverName}" for this run` });
+    return imm(404, {
+      error: `no interactive MCP server "${serverName}" for this run`,
+    });
   }
 
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "backstage-run-rpc", version: "1.0.0" });
   const cleanup = async () => {
     try {
@@ -192,11 +203,11 @@ export async function dispatchRunRpc(path: string, body: any): Promise<RunRpcDis
             arguments: body?.args ?? {},
           },
           undefined,
-          { timeout: RPC_TOOL_CALL_TIMEOUT_MS }
+          { timeout: RPC_TOOL_CALL_TIMEOUT_MS },
         )
         .then(
           (res) => ({ result: res }),
-          (e: any) => ({ error: e?.message || String(e) })
+          (e: any) => ({ error: e?.message || String(e) }),
         )
         .then(async (respBody) => {
           await cleanup();
@@ -361,7 +372,11 @@ function jsonRpcResult(id: unknown, result: unknown): Record<string, unknown> {
   return { jsonrpc: "2.0", id: id ?? null, result };
 }
 
-function jsonRpcError(id: unknown, code: number, message: string): Record<string, unknown> {
+function jsonRpcError(
+  id: unknown,
+  code: number,
+  message: string,
+): Record<string, unknown> {
   return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
 }
 
@@ -385,7 +400,10 @@ async function handleMcpHttp(req: Request): Promise<Response> {
     // it we don't push server-initiated messages, which is true.
     return new Response(null, { status: 405, headers: { allow: "POST" } });
   }
-  const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const token = (req.headers.get("authorization") || "").replace(
+    /^Bearer\s+/i,
+    "",
+  );
   if (!token || !tokens.has(token)) {
     return json({ error: "unauthorized (unknown run token)" }, 401);
   }
@@ -403,7 +421,8 @@ async function handleMcpHttp(req: Request): Promise<Response> {
   const id = msg?.id;
 
   // Notifications (no id) need only acknowledgement.
-  if (id === undefined || id === null) return new Response(null, { status: 202 });
+  if (id === undefined || id === null)
+    return new Response(null, { status: 202 });
 
   if (method === "initialize") {
     return json(
@@ -418,9 +437,16 @@ async function handleMcpHttp(req: Request): Promise<Response> {
 
   if (method === "tools/list") {
     const d = await dispatchRunRpc("/mcp/list", { token, server });
-    if (d.kind !== "immediate") return json(jsonRpcError(id, -32603, "unexpected dispatch"), 500);
+    if (d.kind !== "immediate")
+      return json(jsonRpcError(id, -32603, "unexpected dispatch"), 500);
     if (d.status !== 200) {
-      return json(jsonRpcError(id, -32000, String((d.body as any)?.error || `status ${d.status}`)));
+      return json(
+        jsonRpcError(
+          id,
+          -32000,
+          String((d.body as any)?.error || `status ${d.status}`),
+        ),
+      );
     }
     return json(jsonRpcResult(id, { tools: (d.body as any)?.tools ?? [] }));
   }
@@ -433,10 +459,14 @@ async function handleMcpHttp(req: Request): Promise<Response> {
       tool: String(msg?.params?.name || ""),
       args,
     });
-    const toResult = (respBody: Record<string, unknown>): Record<string, unknown> =>
+    const toResult = (
+      respBody: Record<string, unknown>,
+    ): Record<string, unknown> =>
       respBody.error
         ? jsonRpcResult(id, {
-            content: [{ type: "text", text: `Tool call failed: ${respBody.error}` }],
+            content: [
+              { type: "text", text: `Tool call failed: ${respBody.error}` },
+            ],
             isError: true,
           })
         : jsonRpcResult(id, respBody.result);
@@ -460,7 +490,9 @@ async function handleMcpHttp(req: Request): Promise<Response> {
           clearInterval(heartbeat);
           try {
             controller.enqueue(
-              enc.encode(`event: message\ndata: ${JSON.stringify(toResult(respBody))}\n\n`),
+              enc.encode(
+                `event: message\ndata: ${JSON.stringify(toResult(respBody))}\n\n`,
+              ),
             );
             controller.close();
           } catch {}
@@ -472,7 +504,10 @@ async function handleMcpHttp(req: Request): Promise<Response> {
       },
     });
     return new Response(stream, {
-      headers: { "content-type": "text/event-stream", "cache-control": "no-store" },
+      headers: {
+        "content-type": "text/event-stream",
+        "cache-control": "no-store",
+      },
     });
   }
 
@@ -500,7 +535,8 @@ export function startMcpHttpServer(): void {
       // Proxied tool calls block for minutes; SSE heartbeats keep the client
       // side alive, idleTimeout 0 keeps ours from closing under them.
       idleTimeout: 0,
-      fetch: (req: Request) => (g.__mcpHttpHandler as typeof handleMcpHttp)(req),
+      fetch: (req: Request) =>
+        (g.__mcpHttpHandler as typeof handleMcpHttp)(req),
     } as unknown as Parameters<typeof Bun.serve>[0]);
     console.log(`[run-rpc] MCP HTTP listening on 127.0.0.1:${MCP_HTTP_PORT}`);
   } catch (e) {
@@ -564,10 +600,14 @@ function startRunRpcSocketHeal(): void {
       const sock = rpcSocketPath(OPENSESSION_SESSIONS_DIR);
       if (await rpcSocketPathAlive(sock)) return;
       if (g.__runRpcServer) {
-        console.warn(`[run-rpc] socket path dead or stolen — rebinding ${sock}`);
+        console.warn(
+          `[run-rpc] socket path dead or stolen — rebinding ${sock}`,
+        );
         audit({ msg: "run_rpc_socket_heal", socket: sock });
         try {
-          (g.__runRpcServer as { stop?: (force?: boolean) => void })?.stop?.(true);
+          (g.__runRpcServer as { stop?: (force?: boolean) => void })?.stop?.(
+            true,
+          );
         } catch {}
         g.__runRpcServer = undefined;
       }

@@ -65,7 +65,9 @@ function makeLocalSandbox(cwd: string): Sandbox {
 
     // One-shot host command in the workspace. Never throws on non-zero exit.
     async exec(cmd: string[], opts?: ExecOpts): Promise<ExecResult> {
-      const shell = opts?.env ? $.env({ ...process.env, ...opts.env } as any) : $;
+      const shell = opts?.env
+        ? $.env({ ...process.env, ...opts.env } as any)
+        : $;
       // Bun's shell expands an array interpolation into escaped argv words.
       const r = await shell`${cmd}`.cwd(cwd).nothrow().quiet();
       return {
@@ -91,6 +93,7 @@ function makeLocalSandbox(cwd: string): Sandbox {
         inProcessMcp: cb?.inProcessMcp?.(),
         reposNote: spec.reposNote,
         deniedTools: spec.deniedTools,
+        publicationPolicy: spec.publicationPolicy,
         confirmTools: spec.confirmTools,
         aws: spec.aws,
         author: spec.author,
@@ -167,7 +170,9 @@ export class LocalProvider implements SandboxProvider {
       return makeLocalSandbox(repo.repo);
     }
     if (!spec.branch) {
-      throw new Error("code-mode local sandbox needs a branch for its worktree");
+      throw new Error(
+        "code-mode local sandbox needs a branch for its worktree",
+      );
     }
     const existing = (await listWorktrees(repo.id)).find(
       (w) => w.branch === spec.branch,

@@ -16,7 +16,9 @@ export class CodeStorageIntegration implements AgentModule {
   name = "codestorage";
 
   getRoutes(): Map<string, (req: Request, url: URL) => Promise<Response>> {
-    return new Map([["POST /codestorage/webhook", (req: Request) => handleCsWebhook(req)]]);
+    return new Map([
+      ["POST /codestorage/webhook", (req: Request) => handleCsWebhook(req)],
+    ]);
   }
 
   async startup(): Promise<void> {}

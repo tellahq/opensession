@@ -32,15 +32,15 @@ Set secrets in **Settings → Integrations → Linear** or in
 `~/.opensession.env`. Settings writes the same env file and requires a restart
 to load the agent.
 
-| Var | Required for | Notes |
-| --- | --- | --- |
-| `LINEAR_CLIENT_ID` | OAuth | Linear OAuth app client ID |
-| `LINEAR_CLIENT_SECRET` | OAuth | authorization-code exchange and token refresh |
-| `LINEAR_WEBHOOK_SECRET` | webhooks | HMAC secret; unset or empty rejects every webhook with 401 |
-| `ENABLE_LINEAR_AGENT` | loading the agent | optional env override; only the literal `true` enables, and any other set value disables |
-| `LINEAR_API_KEY` | current Settings enable gate; optional Plain fallback | the Linear session agent does not read it; the Plain agent uses it only to create Linear issues when no stored OAuth token is usable |
-| `OPENSESSION_INGRESS_BASE` | optional global override | public origin used by the default OAuth callback URL |
-| `OPENSESSION_UI_BASE` | optional global override | private app origin used for links added to Linear sessions |
+| Var                        | Required for                                          | Notes                                                                                                                                |
+| -------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `LINEAR_CLIENT_ID`         | OAuth                                                 | Linear OAuth app client ID                                                                                                           |
+| `LINEAR_CLIENT_SECRET`     | OAuth                                                 | authorization-code exchange and token refresh                                                                                        |
+| `LINEAR_WEBHOOK_SECRET`    | webhooks                                              | HMAC secret; unset or empty rejects every webhook with 401                                                                           |
+| `ENABLE_LINEAR_AGENT`      | loading the agent                                     | optional env override; only the literal `true` enables, and any other set value disables                                             |
+| `LINEAR_API_KEY`           | current Settings enable gate; optional Plain fallback | the Linear session agent does not read it; the Plain agent uses it only to create Linear issues when no stored OAuth token is usable |
+| `OPENSESSION_INGRESS_BASE` | optional global override                              | public origin used by the default OAuth callback URL                                                                                 |
+| `OPENSESSION_UI_BASE`      | optional global override                              | private app origin used for links added to Linear sessions                                                                           |
 
 The agent is off by default. If `ENABLE_LINEAR_AGENT` is unset, enable it with
 `integrations.linear.enabled: true` in `~/.opensession/config.json`; the env flag

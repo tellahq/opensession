@@ -18,7 +18,9 @@ const OPERATION_LABELS: Record<string, string> = {
 /** Human-facing operation name. The durable command kind stays available to
  * operators through the admin reliability endpoint, never through this view. */
 export function safetyOperationLabel(commandKind: string): string {
-  const normalized = commandKind.replace(/^store:/, "").replace(/^command:/, "");
+  const normalized = commandKind
+    .replace(/^store:/, "")
+    .replace(/^command:/, "");
   const [kind, operation] = normalized.split(":", 2);
   if (OPERATION_LABELS[kind]) return OPERATION_LABELS[kind];
   if (operation) return operation.replaceAll("_", " ");
@@ -58,7 +60,8 @@ export async function reconcileAutomaticallyRecoverableSessionSafety(
   const released: string[] = [];
   for (const quarantine of quarantines) {
     if (!automaticallyRecoverableSessionSafety(quarantine)) continue;
-    if (await release(quarantine.sessionId)) released.push(quarantine.sessionId);
+    if (await release(quarantine.sessionId))
+      released.push(quarantine.sessionId);
   }
   return released;
 }
@@ -66,17 +69,21 @@ export async function reconcileAutomaticallyRecoverableSessionSafety(
 export function automaticSafetyReconciliationRunning(
   sessionId: string,
   quarantine?: DurableSessionQuarantine,
+  claimedJournalSessions?: ReadonlySet<string>,
 ): boolean {
   return (
     (!!quarantine && automaticallyRecoverableSessionSafety(quarantine)) ||
-    activeRunRecords().some(
-      (run) => run.osSessionId === sessionId && !!run.claimedAt,
-    )
+    (claimedJournalSessions
+      ? claimedJournalSessions.has(sessionId)
+      : activeRunRecords().some(
+          (run) => run.osSessionId === sessionId && !!run.claimedAt,
+        ))
   );
 }
 
 export function publicSessionSafety(
   quarantine: DurableSessionQuarantine,
+  claimedJournalSessions?: ReadonlySet<string>,
 ): SessionSafetyState {
   return {
     status: "paused_for_safety",
@@ -85,10 +92,12 @@ export function publicSessionSafety(
     automaticReconciliationRunning: automaticSafetyReconciliationRunning(
       quarantine.sessionId,
       quarantine,
+      claimedJournalSessions,
     ),
     pausedAt: new Date(quarantine.quarantinedAt).toISOString(),
     operation: safetyOperationLabel(quarantine.commandKind),
     repairAvailable:
-      quarantine.repairable || automaticallyRecoverableSessionSafety(quarantine),
+      quarantine.repairable ||
+      automaticallyRecoverableSessionSafety(quarantine),
   };
 }

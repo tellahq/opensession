@@ -66,7 +66,9 @@ const DEFAULT_TEMPLATE = "base";
 const BG_TIMEOUT_MS = 23 * 60 * 60 * 1000;
 
 function idleMs(): number {
-  return (sandboxConfig().idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000;
+  return (
+    (sandboxConfig().idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000
+  );
 }
 
 function apiKeyOrThrow(): string {
@@ -100,7 +102,11 @@ function e2bDriver(sbx: E2bSandbox): RemoteDriver {
         // CommandExitError implements CommandResult — a non-zero exit, not an
         // infra failure.
         if (typeof e?.exitCode === "number") {
-          return { exitCode: e.exitCode, stdout: e.stdout || "", stderr: e.stderr || "" };
+          return {
+            exitCode: e.exitCode,
+            stdout: e.stdout || "",
+            stderr: e.stderr || "",
+          };
         }
         return { exitCode: 1, stdout: "", stderr: String(e?.message || e) };
       }
@@ -136,12 +142,16 @@ export class E2bProvider implements SandboxProvider {
   readonly id = "e2b" as const;
 
   ensure(spec: SandboxSessionSpec): Promise<Sandbox> {
-    return withRemoteEnsureLock(this.id, spec.sessionId, () => this.ensureInner(spec));
+    return withRemoteEnsureLock(this.id, spec.sessionId, () =>
+      this.ensureInner(spec),
+    );
   }
 
   private async ensureInner(spec: SandboxSessionSpec): Promise<Sandbox> {
     if (spec.attachedDirs?.length) {
-      throw new Error("attached repos are not supported in remote sandboxes — detach them or use docker/local");
+      throw new Error(
+        "attached repos are not supported in remote sandboxes — detach them or use docker/local",
+      );
     }
     const apiKey = apiKeyOrThrow();
     const SandboxCls = await e2bSandboxClass();
@@ -150,10 +160,13 @@ export class E2bProvider implements SandboxProvider {
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
     const cwd =
-      spec.cwd || prevState?.cwd || worktreePathFor(branch, repo.id, { isolated: true });
+      spec.cwd ||
+      prevState?.cwd ||
+      worktreePathFor(branch, repo.id, { isolated: true });
 
     let sbx: E2bSandbox | null = null;
-    const existingId = (await this.findSandboxId(spec.sessionId)) || prevState?.sandboxId;
+    const existingId =
+      (await this.findSandboxId(spec.sessionId)) || prevState?.sandboxId;
     if (existingId) {
       try {
         sbx = await SandboxCls.connect(existingId, { apiKey });
@@ -163,11 +176,14 @@ export class E2bProvider implements SandboxProvider {
     }
     if (!sbx) {
       console.log(`[sandbox:e2b] creating sandbox for ${spec.sessionId}`);
-      sbx = await SandboxCls.create(sandboxConfig().e2b?.template || DEFAULT_TEMPLATE, {
-        apiKey,
-        metadata: { [SESSION_META]: spec.sessionId, opensessionSandbox: "1" },
-        timeoutMs: idleMs(),
-      });
+      sbx = await SandboxCls.create(
+        sandboxConfig().e2b?.template || DEFAULT_TEMPLATE,
+        {
+          apiKey,
+          metadata: { [SESSION_META]: spec.sessionId, opensessionSandbox: "1" },
+          timeoutMs: idleMs(),
+        },
+      );
     }
 
     const driver = e2bDriver(sbx);
@@ -185,7 +201,13 @@ export class E2bProvider implements SandboxProvider {
       branch,
       repo.defaultBranch,
       repo.id,
-      { sandboxId: sbx.sandboxId, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
+      {
+        sandboxId: sbx.sandboxId,
+        provider: this.id,
+        sessionId: spec.sessionId,
+        repoId: repo.id,
+        trustProfile: trust.trustProfile,
+      },
     );
     writeRemoteState({
       sandboxId: sbx.sandboxId,
@@ -267,7 +289,9 @@ export class E2bProvider implements SandboxProvider {
     if (!state) return null;
     try {
       const SandboxCls = await e2bSandboxClass();
-      const sbx = await SandboxCls.connect(sandboxId, { apiKey: apiKeyOrThrow() });
+      const sbx = await SandboxCls.connect(sandboxId, {
+        apiKey: apiKeyOrThrow(),
+      });
       return this.makeHandle(sbx, state.sessionId, state.cwd);
     } catch (e) {
       console.warn(`[sandbox:e2b] get(${sandboxId}) failed:`, e);

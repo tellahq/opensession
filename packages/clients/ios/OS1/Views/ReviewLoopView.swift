@@ -83,6 +83,8 @@ struct ReviewLoopView: View {
                     notice: notice,
                     state: expansionState("notice-\(entry.id)", false)
                 )
+            } else if entry.isReasoning == true {
+                ReasoningSummaryRow(entry: entry)
             } else {
                 // A plain prompt can never be in here — one ends the loop —
                 // so anything left is the agent's own prose.

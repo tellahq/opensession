@@ -34,11 +34,25 @@ import {
 } from "fs";
 import { basename, dirname, join, resolve } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
-import { createWorkloadIdentityEnv, type WorkloadIdentityContext } from "./workload-identity";
+import {
+  createWorkloadIdentityEnv,
+  type WorkloadIdentityContext,
+} from "./workload-identity";
 import { audit } from "./audit";
-import { ensureRemoteSandboxPortalAgent, forgetRemoteSandboxPortalAgents, listPortalServices, listSandboxPortalServices } from "./portal-supervisor";
-import { revokeSandboxPortalGrants, revokeSandboxPortalRelay } from "./sandbox-portal-relay";
-import { cacheSandboxPortals, dropCachedSandboxPortals } from "./sandbox-portals";
+import {
+  ensureRemoteSandboxPortalAgent,
+  forgetRemoteSandboxPortalAgents,
+  listPortalServices,
+  listSandboxPortalServices,
+} from "./portal-supervisor";
+import {
+  revokeSandboxPortalGrants,
+  revokeSandboxPortalRelay,
+} from "./sandbox-portal-relay";
+import {
+  cacheSandboxPortals,
+  dropCachedSandboxPortals,
+} from "./sandbox-portals";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
   lookupSandboxHttpsPort,
@@ -47,7 +61,11 @@ import {
 } from "./sandbox/preview-ports";
 import type { Sandbox } from "./sandbox/provider";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
-import { DEFAULT_SANDBOX_PREVIEW_PORTS, sandboxConfig, usesOutboundSandboxPortalRelay } from "./sandbox/config";
+import {
+  DEFAULT_SANDBOX_PREVIEW_PORTS,
+  sandboxConfig,
+  usesOutboundSandboxPortalRelay,
+} from "./sandbox/config";
 import { configuredRepos, configuredServer, type Repo } from "./config";
 import { repoForPath, repoForPathOrNull } from "./worktree";
 import {
@@ -78,13 +96,13 @@ export interface PreviewService {
   pids: number[];
   /** Authenticated URL for this individual service when it is reachable. */
   previewUrl?: string | null;
-	/** Session supervisor metadata for an agent-created Portal. */
-	description?: string;
-	defaultPath?: string;
-	/** The one lifecycle field. A managed Portal takes it from its supervisor;
-	 *  an unmanaged .ports.conf service gets it from the single port probe. */
-	state: "starting" | "awake" | "sleeping" | "waking" | "failed" | "stopped";
-	managed?: boolean;
+  /** Session supervisor metadata for an agent-created Portal. */
+  description?: string;
+  defaultPath?: string;
+  /** The one lifecycle field. A managed Portal takes it from its supervisor;
+   *  an unmanaged .ports.conf service gets it from the single port probe. */
+  state: "starting" | "awake" | "sleeping" | "waking" | "failed" | "stopped";
+  managed?: boolean;
 }
 
 export interface PreviewPortalRecipe {
@@ -126,11 +144,16 @@ export interface PreviewStatus {
 }
 
 export function recipeCommand(recipe: PreviewPortalRecipe): string {
-  if (!recipe.command) throw new Error("This Portal still needs an agent-assisted starter.");
+  if (!recipe.command)
+    throw new Error("This Portal still needs an agent-assisted starter.");
   const exports = [
     recipe.serviceKey ? `export ${recipe.serviceKey}="$PORT"` : "",
-    recipe.serviceKey === "WEBAPP_PORT" ? 'export WEBAPP_PORT="$PORT" PREVIEW_URL="$PORTAL_URL"' : "",
-  ].filter(Boolean).join("; ");
+    recipe.serviceKey === "WEBAPP_PORT"
+      ? 'export WEBAPP_PORT="$PORT" PREVIEW_URL="$PORTAL_URL"'
+      : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
   return `bash -c ${shellQuoteWord(`${exports ? `${exports}; ` : ""}exec ${recipe.command}`)}`;
 }
 
@@ -141,56 +164,78 @@ export function recipeStartOptions(recipe: PreviewPortalRecipe) {
     ...(recipe.port ? { port: recipe.port } : {}),
     ...(recipe.serviceKey ? { key: recipe.serviceKey } : {}),
     ...(recipe.description ? { description: recipe.description } : {}),
-    ...(recipe.readyTimeoutSeconds ? { readyTimeoutMs: recipe.readyTimeoutSeconds * 1_000 } : {}),
+    ...(recipe.readyTimeoutSeconds
+      ? { readyTimeoutMs: recipe.readyTimeoutSeconds * 1_000 }
+      : {}),
   };
 }
 
 /** Parse the safe, declarative contents of .agents/portals.json. */
-export function parsePreviewPortalRecipes(raw: string | null): PreviewPortalRecipe[] {
+export function parsePreviewPortalRecipes(
+  raw: string | null,
+): PreviewPortalRecipe[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as { portals?: unknown };
     if (!Array.isArray(parsed.portals)) return [];
-    return parsed.portals.slice(0, 12).flatMap((value): PreviewPortalRecipe[] => {
-      if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-      const item = value as Record<string, unknown>;
-      const name = typeof item.name === "string" ? item.name.trim() : "";
-      const skill = typeof item.skill === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(item.skill.trim())
-        ? item.skill.trim()
-        : undefined;
-      const idValue = typeof item.id === "string" ? item.id.trim() : skill;
-      const id = idValue && /^[a-z][a-z0-9-]{0,62}$/.test(idValue) ? idValue : undefined;
-      const command =
-        typeof item.command === "string" && item.command.trim().length <= 2_000
-          ? item.command.trim()
-          : undefined;
-      if (!name || name.length > 80 || !id || (!command && !skill)) return [];
-      const description =
-        typeof item.description === "string" && item.description.trim().length <= 240
-          ? item.description.trim()
-          : undefined;
-      const serviceKey =
-        typeof item.serviceKey === "string" && /^[A-Z][A-Z0-9_]*_PORT$/.test(item.serviceKey)
-          ? item.serviceKey
-          : undefined;
-      const port = Number.isInteger(item.port) && Number(item.port) >= 1_024 && Number(item.port) <= 19_000
-        ? Number(item.port)
-        : undefined;
-      const readyTimeoutSeconds =
-        Number.isInteger(item.readyTimeoutSeconds) && Number(item.readyTimeoutSeconds) >= 5 && Number(item.readyTimeoutSeconds) <= 300
-          ? Number(item.readyTimeoutSeconds)
-          : undefined;
-      return [{
-        id,
-        name,
-        ...(description ? { description } : {}),
-        ...(command ? { command } : {}),
-        ...(skill ? { skill } : {}),
-        ...(serviceKey ? { serviceKey } : {}),
-        ...(port ? { port } : {}),
-        ...(readyTimeoutSeconds ? { readyTimeoutSeconds } : {}),
-      }];
-    });
+    return parsed.portals
+      .slice(0, 12)
+      .flatMap((value): PreviewPortalRecipe[] => {
+        if (!value || typeof value !== "object" || Array.isArray(value))
+          return [];
+        const item = value as Record<string, unknown>;
+        const name = typeof item.name === "string" ? item.name.trim() : "";
+        const skill =
+          typeof item.skill === "string" &&
+          /^[a-z0-9][a-z0-9-]{0,63}$/.test(item.skill.trim())
+            ? item.skill.trim()
+            : undefined;
+        const idValue = typeof item.id === "string" ? item.id.trim() : skill;
+        const id =
+          idValue && /^[a-z][a-z0-9-]{0,62}$/.test(idValue)
+            ? idValue
+            : undefined;
+        const command =
+          typeof item.command === "string" &&
+          item.command.trim().length <= 2_000
+            ? item.command.trim()
+            : undefined;
+        if (!name || name.length > 80 || !id || (!command && !skill)) return [];
+        const description =
+          typeof item.description === "string" &&
+          item.description.trim().length <= 240
+            ? item.description.trim()
+            : undefined;
+        const serviceKey =
+          typeof item.serviceKey === "string" &&
+          /^[A-Z][A-Z0-9_]*_PORT$/.test(item.serviceKey)
+            ? item.serviceKey
+            : undefined;
+        const port =
+          Number.isInteger(item.port) &&
+          Number(item.port) >= 1_024 &&
+          Number(item.port) <= 19_000
+            ? Number(item.port)
+            : undefined;
+        const readyTimeoutSeconds =
+          Number.isInteger(item.readyTimeoutSeconds) &&
+          Number(item.readyTimeoutSeconds) >= 5 &&
+          Number(item.readyTimeoutSeconds) <= 300
+            ? Number(item.readyTimeoutSeconds)
+            : undefined;
+        return [
+          {
+            id,
+            name,
+            ...(description ? { description } : {}),
+            ...(command ? { command } : {}),
+            ...(skill ? { skill } : {}),
+            ...(serviceKey ? { serviceKey } : {}),
+            ...(port ? { port } : {}),
+            ...(readyTimeoutSeconds ? { readyTimeoutSeconds } : {}),
+          },
+        ];
+      });
   } catch {
     return [];
   }
@@ -289,7 +334,10 @@ export async function resolvePreviewBoot(
   if (repo.previewCommand) {
     // Absolute previewCommands may not exist in this environment (e.g. a host
     // path the sandbox image doesn't carry) — fall through instead of failing.
-    if (!repo.previewCommand.startsWith("/") || (await exists(repo.previewCommand))) {
+    if (
+      !repo.previewCommand.startsWith("/") ||
+      (await exists(repo.previewCommand))
+    ) {
       return {
         kind: "preview-command",
         cmd: `${repo.previewCommand} ${assertSafePath(worktreeDir)}`,
@@ -315,77 +363,112 @@ const warnedMissingPreviewCommand = new Set<string>();
  * provider headers on the server side, so Caddy has one safe invariant: every
  * Portal route targets localhost. */
 type RemotePortalRelay = {
-	upstream: string;
-	headers?: Record<string, string>;
-	server: ReturnType<typeof Bun.serve>;
+  upstream: string;
+  headers?: Record<string, string>;
+  server: ReturnType<typeof Bun.serve>;
 };
-const remotePortalRelays: Map<string, RemotePortalRelay> =
-	((globalThis as any).__opensessionRemotePortalRelays ??= new Map());
+const remotePortalRelays: Map<string, RemotePortalRelay> = ((
+  globalThis as any
+).__opensessionRemotePortalRelays ??= new Map());
 
 function relayKey(sandboxId: string, port: number): string {
-	return `${sandboxId}:${port}`;
+  return `${sandboxId}:${port}`;
 }
 
 function relayTarget(upstream: string, requestUrl: string): string {
-	const base = new URL(upstream);
-	const incoming = new URL(requestUrl);
-	base.pathname = `${base.pathname.replace(/\/$/, "")}/${incoming.pathname.replace(/^\//, "")}`.replace(/\/{2,}/g, "/");
-	base.search = incoming.search;
-	return base.toString();
+  const base = new URL(upstream);
+  const incoming = new URL(requestUrl);
+  base.pathname =
+    `${base.pathname.replace(/\/$/, "")}/${incoming.pathname.replace(/^\//, "")}`.replace(
+      /\/{2,}/g,
+      "/",
+    );
+  base.search = incoming.search;
+  return base.toString();
 }
 
 function localRelayFor(
-	sandboxId: string,
-	port: number,
-	upstream: string,
-	headers?: Record<string, string>,
+  sandboxId: string,
+  port: number,
+  upstream: string,
+  headers?: Record<string, string>,
 ): string {
-	const key = relayKey(sandboxId, port);
-	const current = remotePortalRelays.get(key);
-	if (current?.upstream === upstream && JSON.stringify(current.headers || {}) === JSON.stringify(headers || {}))
-		return `127.0.0.1:${current.server.port}`;
-	if (current) {
-		try { current.server.stop(true); } catch {}
-		remotePortalRelays.delete(key);
-	}
-	const connections = new Map<any, WebSocket>();
-	const server = Bun.serve<{ url: string }>({
-		hostname: "127.0.0.1",
-		port: 0,
-		fetch(request, relayServer) {
-			const upgrade = request.headers.get("upgrade")?.toLowerCase() === "websocket";
-			if (upgrade) {
-				return relayServer.upgrade(request, { data: { url: request.url } })
-					? undefined
-					: new Response("WebSocket upgrade failed", { status: 400 });
-			}
-			const forwarded = new Headers(request.headers);
-			forwarded.delete("host");
-			forwarded.delete("connection");
-			forwarded.delete("content-length");
-			for (const [name, value] of Object.entries(headers || {})) forwarded.set(name, value);
-			return fetch(relayTarget(upstream, request.url), {
-				method: request.method,
-				headers: forwarded,
-				body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
-				redirect: "manual",
-			});
-		},
-		websocket: {
-			open(ws) {
-				const remoteUrl = relayTarget(upstream.replace(/^http/, "ws"), ws.data.url);
-				const remote = new (WebSocket as any)(remoteUrl, { headers }) as WebSocket;
-				connections.set(ws, remote);
-				remote.addEventListener("message", (event) => ws.send(event.data));
-				remote.addEventListener("close", () => { try { ws.close(); } catch {} });
-				remote.addEventListener("error", () => { try { ws.close(); } catch {} });
-			},
-			message(ws, message) { connections.get(ws)?.send(message); },
-			close(ws) { try { connections.get(ws)?.close(); } catch {} connections.delete(ws); },
-		},
-	});
-	remotePortalRelays.set(key, { upstream, headers, server });
-	return `127.0.0.1:${server.port}`;
+  const key = relayKey(sandboxId, port);
+  const current = remotePortalRelays.get(key);
+  if (
+    current?.upstream === upstream &&
+    JSON.stringify(current.headers || {}) === JSON.stringify(headers || {})
+  )
+    return `127.0.0.1:${current.server.port}`;
+  if (current) {
+    try {
+      current.server.stop(true);
+    } catch {}
+    remotePortalRelays.delete(key);
+  }
+  const connections = new Map<any, WebSocket>();
+  const server = Bun.serve<{ url: string }>({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request, relayServer) {
+      const upgrade =
+        request.headers.get("upgrade")?.toLowerCase() === "websocket";
+      if (upgrade) {
+        return relayServer.upgrade(request, { data: { url: request.url } })
+          ? undefined
+          : new Response("WebSocket upgrade failed", { status: 400 });
+      }
+      const forwarded = new Headers(request.headers);
+      forwarded.delete("host");
+      forwarded.delete("connection");
+      forwarded.delete("content-length");
+      for (const [name, value] of Object.entries(headers || {}))
+        forwarded.set(name, value);
+      return fetch(relayTarget(upstream, request.url), {
+        method: request.method,
+        headers: forwarded,
+        body:
+          request.method === "GET" || request.method === "HEAD"
+            ? undefined
+            : request.body,
+        redirect: "manual",
+      });
+    },
+    websocket: {
+      open(ws) {
+        const remoteUrl = relayTarget(
+          upstream.replace(/^http/, "ws"),
+          ws.data.url,
+        );
+        const remote = new (WebSocket as any)(remoteUrl, {
+          headers,
+        }) as WebSocket;
+        connections.set(ws, remote);
+        remote.addEventListener("message", (event) => ws.send(event.data));
+        remote.addEventListener("close", () => {
+          try {
+            ws.close();
+          } catch {}
+        });
+        remote.addEventListener("error", () => {
+          try {
+            ws.close();
+          } catch {}
+        });
+      },
+      message(ws, message) {
+        connections.get(ws)?.send(message);
+      },
+      close(ws) {
+        try {
+          connections.get(ws)?.close();
+        } catch {}
+        connections.delete(ws);
+      },
+    },
+  });
+  remotePortalRelays.set(key, { upstream, headers, server });
+  return `127.0.0.1:${server.port}`;
 }
 
 // Worktrees with an in-flight `startPreview` (worktreeDir -> started-at ms).
@@ -400,7 +483,8 @@ const gStart = globalThis as unknown as {
 const starting: Map<string, number> = (gStart.__previewStarting ??= new Map());
 // worktreeDir -> process group of the in-flight bring-up (see startPreview's
 // setsid). Lets stopPreview cancel a start whose services aren't listening yet.
-const startPgids: Map<string, number> = (gStart.__previewStartPgids ??= new Map());
+const startPgids: Map<string, number> = (gStart.__previewStartPgids ??=
+  new Map());
 const sandboxAwsRefresh: Map<string, number> =
   (gStart.__sandboxPreviewAwsRefresh ??= new Map());
 const START_TTL_MS = 5 * 60_000;
@@ -536,10 +620,11 @@ async function pgidOf(pid: number): Promise<number | null> {
 // deterministic high port, so each session gets its own secure origin.
 
 const caddyAdmin = () => configuredServer().caddyAdmin.replace(/\/+$/, "");
-const caddyFetch = (url: string, init: RequestInit = {}) => fetch(url, {
-  ...init,
-  signal: init.signal ?? AbortSignal.timeout(10_000),
-});
+const caddyFetch = (url: string, init: RequestInit = {}) =>
+  fetch(url, {
+    ...init,
+    signal: init.signal ?? AbortSignal.timeout(10_000),
+  });
 const g = globalThis as unknown as {
   __previewRoutes?: Map<number, string>;
   __previewHost?: string;
@@ -589,11 +674,14 @@ export function previewServerConfig(
   upstream: string,
   host: string,
 ) {
-	if (!/^127\.0\.0\.1:\d{1,5}$/.test(upstream)) {
-		throw new Error("Portal Caddy routes must target a loopback relay");
-	}
+  if (!/^127\.0\.0\.1:\d{1,5}$/.test(upstream)) {
+    throw new Error("Portal Caddy routes must target a loopback relay");
+  }
   const authPort = configuredServer().port;
-  const serviceProxy = { handler: "reverse_proxy", upstreams: [{ dial: upstream }] };
+  const serviceProxy = {
+    handler: "reverse_proxy",
+    upstreams: [{ dial: upstream }],
+  };
   return {
     listen: [`:${httpsPort}`],
     routes: [
@@ -684,7 +772,10 @@ async function ensurePreviewRoute(
 async function removePreviewRoute(httpsPort: number): Promise<void> {
   if (!previewRoutes.has(httpsPort)) return;
   try {
-    await caddyFetch(`${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`, { method: "DELETE" });
+    await caddyFetch(
+      `${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`,
+      { method: "DELETE" },
+    );
   } catch {}
   previewRoutes.delete(httpsPort);
 }
@@ -692,16 +783,25 @@ async function removePreviewRoute(httpsPort: number): Promise<void> {
 /** Expose a pre-built loopback relay through the same permission-coupled
  * Caddy wrapper used by every Sandbox Portal. The caller never passes a remote
  * address, so a Runner cannot turn this into a network tunnel. */
-export async function ensureAuthenticatedPortalRoute(httpsPort: number, upstream: string): Promise<string | null> {
-	const host = await previewHost();
-	return (await ensurePreviewRoute(httpsPort, upstream, host)) ? `https://${host}:${httpsPort}` : null;
+export async function ensureAuthenticatedPortalRoute(
+  httpsPort: number,
+  upstream: string,
+): Promise<string | null> {
+  const host = await previewHost();
+  return (await ensurePreviewRoute(httpsPort, upstream, host))
+    ? `https://${host}:${httpsPort}`
+    : null;
 }
 
-export async function dropAuthenticatedPortalRoute(httpsPort: number): Promise<void> {
-	await removePreviewRoute(httpsPort);
+export async function dropAuthenticatedPortalRoute(
+  httpsPort: number,
+): Promise<void> {
+  await removePreviewRoute(httpsPort);
 }
 
-export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStatus> {
+export async function getPreviewStatus(
+  worktreeDir: string,
+): Promise<PreviewStatus> {
   // Pool-backed previews: claims persist on disk but sync timers don't —
   // re-attach after a process restart (cheap no-op otherwise).
   resumePoolSyncIfNeeded(worktreeDir);
@@ -734,24 +834,31 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
   }
   const ports = readPorts(worktreeDir);
   const portalRecipes = hostPreviewPortalRecipes(worktreeDir);
-	const portalRecords = await listPortalServices(worktreeDir);
-	const portalByKey = new Map(portalRecords.map((record) => [record.key, record]));
+  const portalRecords = await listPortalServices(worktreeDir);
+  const portalByKey = new Map(
+    portalRecords.map((record) => [record.key, record]),
+  );
   const observedServices: PreviewService[] = await Promise.all(
     ports.map(async ({ key, port }): Promise<PreviewService> => {
- 		const portal = portalByKey.get(key);
-		// A managed Portal has one liveness owner: listPortalServices already
-		// probed this port. Probing it again here is what let a stopped Portal
-		// whose port had been taken over report itself as running.
-		if (portal) {
-			return {
-				name: portalRecipes.find((recipe) => recipe.serviceKey === key)?.name ?? portal.name, key, port,
-				running: portal.state === "awake",
-				pids: portal.pid ? [portal.pid] : [],
-				...(portal.description ? { description: portal.description } : {}),
-				...(portal.defaultPath ? { defaultPath: portal.defaultPath } : {}),
-				state: portal.state, managed: true,
-			};
-		}
+      const portal = portalByKey.get(key);
+      // A managed Portal has one liveness owner: listPortalServices already
+      // probed this port. Probing it again here is what let a stopped Portal
+      // whose port had been taken over report itself as running.
+      if (portal) {
+        return {
+          name:
+            portalRecipes.find((recipe) => recipe.serviceKey === key)?.name ??
+            portal.name,
+          key,
+          port,
+          running: portal.state === "awake",
+          pids: portal.pid ? [portal.pid] : [],
+          ...(portal.description ? { description: portal.description } : {}),
+          ...(portal.defaultPath ? { defaultPath: portal.defaultPath } : {}),
+          state: portal.state,
+          managed: true,
+        };
+      }
       const pids = await listenersOnPort(port);
       // Root-owned listeners (docker-proxy fronting a preview-pool container)
       // show no pid to non-root `ss -p` — a listening socket counts as
@@ -761,7 +868,14 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
           ? poolLive
           : pids.length > 0 || (await portListening(port));
       const state = awake ? "awake" : "stopped";
-      return { name: friendly(key), key, port, running: state === "awake", pids, state };
+      return {
+        name: friendly(key),
+        key,
+        port,
+        running: state === "awake",
+        pids,
+        state,
+      };
     }),
   );
   const host = await previewHost();
@@ -773,7 +887,9 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
     const httpsPort = hostServiceHttpsPort(service.port);
     let previewUrl: string | null = null;
     if (service.state === "awake" && httpsPort != null) {
-      if (await ensurePreviewRoute(httpsPort, `127.0.0.1:${service.port}`, host)) {
+      if (
+        await ensurePreviewRoute(httpsPort, `127.0.0.1:${service.port}`, host)
+      ) {
         previewUrl = `https://${host}:${httpsPort}`;
       }
     } else if (httpsPort != null) {
@@ -788,7 +904,9 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
   if (services.some((service) => service.previewUrl)) {
     writeHostTunnelsEnv(worktreeDir, services);
   } else {
-    try { unlinkSync(join(worktreeDir, ".tunnels.env")); } catch {}
+    try {
+      unlinkSync(join(worktreeDir, ".tunnels.env"));
+    } catch {}
   }
 
   // Once the webapp is listening, the bring-up is done — clear any "starting".
@@ -806,17 +924,22 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
     // that IS a bring-up in progress. Without it the button saw
     // running:false starting:false right after a claim and closed its own
     // interstitial ("opens then closes itself, and then I have no tab").
-    starting: !webapp?.running && (isStarting(worktreeDir) || poolLive === false),
+    starting:
+      !webapp?.running && (isStarting(worktreeDir) || poolLive === false),
     previewUrl,
     bootable:
       !!webapp?.running ||
-      (repo != null && (await resolvePreviewBoot(worktreeDir, repo, hostExists)) != null),
+      (repo != null &&
+        (await resolvePreviewBoot(worktreeDir, repo, hostExists)) != null),
     services,
     portalRecipes,
   };
 }
 
-function writeHostTunnelsEnv(worktreeDir: string, services: PreviewService[]): void {
+function writeHostTunnelsEnv(
+  worktreeDir: string,
+  services: PreviewService[],
+): void {
   const values: string[] = [];
   const webapp = services.find(
     (service) => service.key === "WEBAPP_PORT" && service.previewUrl,
@@ -825,7 +948,9 @@ function writeHostTunnelsEnv(worktreeDir: string, services: PreviewService[]): v
   for (const service of services) {
     if (!service.previewUrl) continue;
     values.push(`PREVIEW_URL_${service.port}=${service.previewUrl}`);
-    values.push(`PORTAL_${service.key.replace(/_PORT$/, "")}_URL=${service.previewUrl}`);
+    values.push(
+      `PORTAL_${service.key.replace(/_PORT$/, "")}_URL=${service.previewUrl}`,
+    );
   }
   try {
     writeFileSync(join(worktreeDir, ".tunnels.env"), values.join("\n") + "\n");
@@ -833,7 +958,9 @@ function writeHostTunnelsEnv(worktreeDir: string, services: PreviewService[]): v
     let gitDir = dotGit;
     if (existsSync(dotGit)) {
       try {
-        const marker = readFileSync(dotGit, "utf8").match(/^gitdir:\s*(.+)$/m)?.[1];
+        const marker = readFileSync(dotGit, "utf8").match(
+          /^gitdir:\s*(.+)$/m,
+        )?.[1];
         if (marker) gitDir = resolve(worktreeDir, marker.trim());
       } catch {}
     }
@@ -841,7 +968,10 @@ function writeHostTunnelsEnv(worktreeDir: string, services: PreviewService[]): v
     if (existsSync(dirname(exclude))) {
       const prior = existsSync(exclude) ? readFileSync(exclude, "utf8") : "";
       if (!prior.split("\n").includes(".tunnels.env")) {
-        writeFileSync(exclude, `${prior}${prior && !prior.endsWith("\n") ? "\n" : ""}.tunnels.env\n`);
+        writeFileSync(
+          exclude,
+          `${prior}${prior && !prior.endsWith("\n") ? "\n" : ""}.tunnels.env\n`,
+        );
       }
     }
   } catch {}
@@ -882,7 +1012,8 @@ export async function capturePreviewScreenshot(
 /** Fresh `.ports.conf` body in dev-services.sh format (harmless
  *  for repos that ignore it — a lifecycle start.sh just reads $WEBAPP_PORT). */
 function freshPortsConfText(webappPort: number, comment: string): string {
-  const rand = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
+  const rand = (min: number, max: number) =>
+    min + Math.floor(Math.random() * (max - min + 1));
   return [
     "# Port configuration for development services",
     `# Seeded by opensession (${comment}): WEBAPP_PORT is the port the preview`,
@@ -946,12 +1077,16 @@ function seedHostPortsConf(worktreeDir: string, webappPort: number): void {
 /** A webapp port for a host repo-script boot: the worktree's existing
  *  .ports.conf entry when nothing else is listening on it, else a free
  *  random port from the host webapp dev range (3100-3999). */
-async function allocateHostWebappPort(worktreeDir: string): Promise<number | null> {
+async function allocateHostWebappPort(
+  worktreeDir: string,
+): Promise<number | null> {
   // portListening, not pid-counting: preview-pool containers publish on this
   // same range via docker-proxy (root-owned, no pid visible to ss -p) — the
   // pid check once handed a session a port already serving another session's
   // pool container, so both "opened the same preview".
-  const existing = readPorts(worktreeDir).find((p) => p.key === "WEBAPP_PORT")?.port;
+  const existing = readPorts(worktreeDir).find(
+    (p) => p.key === "WEBAPP_PORT",
+  )?.port;
   if (existing && !(await portListening(existing))) return existing;
   for (let i = 0; i < 20; i++) {
     const port = 3100 + Math.floor(Math.random() * 900);
@@ -988,7 +1123,9 @@ function setupStampPath(worktreeDir: string): string {
  * `aws` preflight and prebuilt-WASM S3 install both needed creds. Inject
  * the same short-lived credentials agent runs get (aws-creds.ts).
  */
-export async function startPreview(worktreeDir: string): Promise<PreviewStatus> {
+export async function startPreview(
+  worktreeDir: string,
+): Promise<PreviewStatus> {
   const status = await getPreviewStatus(worktreeDir);
   if (status.running || status.starting) return status;
   const repo = repoForPathOrNull(worktreeDir);
@@ -1009,7 +1146,10 @@ export async function startPreview(worktreeDir: string): Promise<PreviewStatus> 
       }
     }
   } catch (e) {
-    console.warn(`[preview] pool claim for ${worktreeDir} failed (falling back to host boot):`, e);
+    console.warn(
+      `[preview] pool claim for ${worktreeDir} failed (falling back to host boot):`,
+      e,
+    );
   }
 
   const boot = await resolvePreviewBoot(worktreeDir, repo, hostExists);
@@ -1025,7 +1165,9 @@ export async function startPreview(worktreeDir: string): Promise<PreviewStatus> 
   if (boot.kind === "repo-script") {
     const port = await allocateHostWebappPort(worktreeDir);
     if (port == null) {
-      console.warn(`[preview] ${worktreeDir}: no free webapp port for the repo-script boot`);
+      console.warn(
+        `[preview] ${worktreeDir}: no free webapp port for the repo-script boot`,
+      );
       return status;
     }
     seedHostPortsConf(worktreeDir, port);
@@ -1040,7 +1182,8 @@ export async function startPreview(worktreeDir: string): Promise<PreviewStatus> 
         mkdirSync(SETUP_STAMP_DIR, { recursive: true });
       } catch {}
       cmd =
-        `bash ${assertSafePath(boot.setupScript)}; touch ${assertSafePath(stamp)}; ` + cmd;
+        `bash ${assertSafePath(boot.setupScript)}; touch ${assertSafePath(stamp)}; ` +
+        cmd;
     }
   }
 
@@ -1077,19 +1220,16 @@ export async function startPreview(worktreeDir: string): Promise<PreviewStatus> 
           ...innerCmd,
         ]
       : innerCmd;
-    const proc = Bun.spawn(
-      spawnCmd,
-      {
-        cwd: worktreeDir,
-        env: {
-          ...(env as Record<string, string>),
-          ...(scoped ? systemdUserEnv(env) : {}),
-        },
-        stdout: log,
-        stderr: log,
-        stdin: "ignore",
+    const proc = Bun.spawn(spawnCmd, {
+      cwd: worktreeDir,
+      env: {
+        ...(env as Record<string, string>),
+        ...(scoped ? systemdUserEnv(env) : {}),
       },
-    );
+      stdout: log,
+      stderr: log,
+      stdin: "ignore",
+    });
     if (!scoped) startPgids.set(worktreeDir, proc.pid);
     // Don't hold the event loop open on it, and clear the flag when it exits
     // (success flips to running via polling; failure/exit stops "starting").
@@ -1164,7 +1304,8 @@ export async function stopPreview(worktreeDir: string): Promise<PreviewStatus> {
       try {
         cwd = readlinkSync(`/proc/${pid}/cwd`);
       } catch {}
-      if (!cwd || !(cwd === worktreeDir || cwd.startsWith(worktreeDir + "/"))) continue;
+      if (!cwd || !(cwd === worktreeDir || cwd.startsWith(worktreeDir + "/")))
+        continue;
       const pgid = await pgidOf(pid);
       if (pgid && pgid > 1) pgids.add(pgid);
     }
@@ -1183,7 +1324,9 @@ export async function stopPreview(worktreeDir: string): Promise<PreviewStatus> {
       process.kill(-pgid, "SIGKILL");
     } catch {}
   }
-  try { unlinkSync(join(worktreeDir, ".ports", "dev-pgid")); } catch {}
+  try {
+    unlinkSync(join(worktreeDir, ".ports", "dev-pgid"));
+  } catch {}
 
   return getPreviewStatus(worktreeDir);
 }
@@ -1232,7 +1375,8 @@ export async function writeSandboxPreviewAwsCredentials(
   profile?: string,
 ): Promise<Record<string, string>> {
   if (!awsEnv.AWS_ACCESS_KEY_ID || !awsEnv.AWS_SECRET_ACCESS_KEY) return awsEnv;
-  const safeProfile = profile && /^[A-Za-z0-9_+=,.@-]+$/.test(profile) ? profile : "";
+  const safeProfile =
+    profile && /^[A-Za-z0-9_+=,.@-]+$/.test(profile) ? profile : "";
   const credentialsFile = `${SANDBOX_PREVIEW_AWS_DIR}/credentials`;
   const configFile = `${SANDBOX_PREVIEW_AWS_DIR}/config`;
   const script = `set -eu
@@ -1304,9 +1448,16 @@ async function sandboxPreviewAwsEnv(
 }
 
 /** True when a TCP connect to 127.0.0.1:<port> succeeds INSIDE the sandbox. */
-async function sandboxPortListening(sandbox: Sandbox, port: number): Promise<boolean> {
+async function sandboxPortListening(
+  sandbox: Sandbox,
+  port: number,
+): Promise<boolean> {
   const r = await sandbox.exec([
-    "timeout", "2", "bash", "-c", `exec 3<>/dev/tcp/127.0.0.1/${port}`,
+    "timeout",
+    "2",
+    "bash",
+    "-c",
+    `exec 3<>/dev/tcp/127.0.0.1/${port}`,
   ]);
   return r.exitCode === 0;
 }
@@ -1314,49 +1465,65 @@ async function sandboxPortListening(sandbox: Sandbox, port: number): Promise<boo
 export async function getSandboxPreviewStatus(
   sandbox: Sandbox,
   worktreeDir: string,
-	sessionId?: string,
+  sessionId?: string,
 ): Promise<PreviewStatus> {
   // .ports.conf via the sandbox exec — works for bind mounts and is the only
   // way for volume-mode workspaces (no host copy).
   const conf = await sandbox.exec(["cat", ".ports.conf"]);
   const ports = conf.exitCode === 0 ? parsePortsText(conf.stdout) : [];
-	const portalRecords = await listSandboxPortalServices(sandbox);
-	const portalByKey = new Map(portalRecords.map((record) => [record.key, record]));
-  const portalsManifest = await sandbox.exec(["cat", `${LIFECYCLE_DIR}/portals.json`]);
+  const portalRecords = await listSandboxPortalServices(sandbox);
+  const portalByKey = new Map(
+    portalRecords.map((record) => [record.key, record]),
+  );
+  const portalsManifest = await sandbox.exec([
+    "cat",
+    `${LIFECYCLE_DIR}/portals.json`,
+  ]);
   const portalRecipes = parsePreviewPortalRecipes(
     portalsManifest.exitCode === 0 ? portalsManifest.stdout : null,
   );
   const services: PreviewService[] = [];
   // Remote providers can publish a port on demand. Docker/microVM providers
   // may ignore this hint when their mappings are fixed at sandbox creation.
-	const portMap = usesOutboundSandboxPortalRelay(sandbox.provider) ? {} : await sandbox.ports(ports.map((service) => service.port));
+  const portMap = usesOutboundSandboxPortalRelay(sandbox.provider)
+    ? {}
+    : await sandbox.ports(ports.map((service) => service.port));
   const host = await previewHost();
   for (const { key, port } of ports) {
- 		const portal = portalByKey.get(key);
-		// One probe per service. A managed Portal's state comes from
-		// listSandboxPortalServices, which already spent that container round
-		// trip; only unmanaged .ports.conf entries are connected to here.
-		const state = portal ? portal.state : (await sandboxPortListening(sandbox, port)) ? "awake" : "stopped";
-		const running = state === "awake";
+    const portal = portalByKey.get(key);
+    // One probe per service. A managed Portal's state comes from
+    // listSandboxPortalServices, which already spent that container round
+    // trip; only unmanaged .ports.conf entries are connected to here.
+    const state = portal
+      ? portal.state
+      : (await sandboxPortListening(sandbox, port))
+        ? "awake"
+        : "stopped";
+    const running = state === "awake";
     let previewUrl: string | null = null;
- 		if (running && usesOutboundSandboxPortalRelay(sandbox.provider)) {
-			previewUrl = sessionId ? await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port }) : null;
-		} else if (running) {
+    if (running && usesOutboundSandboxPortalRelay(sandbox.provider)) {
+      previewUrl = sessionId
+        ? await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port })
+        : null;
+    } else if (running) {
       const entry = portMap[port];
       const published = typeof entry === "number" ? entry : entry?.hostPort;
-      const privateUpstream = typeof entry === "object" ? entry?.upstream : undefined;
+      const privateUpstream =
+        typeof entry === "object" ? entry?.upstream : undefined;
       const directUrl = typeof entry === "object" ? entry?.url : undefined;
-      const requestHeaders = typeof entry === "object" ? entry?.requestHeaders : undefined;
+      const requestHeaders =
+        typeof entry === "object" ? entry?.requestHeaders : undefined;
       if (directUrl || published || privateUpstream) {
         const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
-        const upstream = directUrl || privateUpstream
-          ? localRelayFor(
-              sandbox.id,
-              port,
-              directUrl || `http://${privateUpstream}`,
-              requestHeaders,
-            )
-          : `127.0.0.1:${published}`;
+        const upstream =
+          directUrl || privateUpstream
+            ? localRelayFor(
+                sandbox.id,
+                port,
+                directUrl || `http://${privateUpstream}`,
+                requestHeaders,
+              )
+            : `127.0.0.1:${published}`;
         if (await ensurePreviewRoute(httpsPort, upstream, host, requestHeaders))
           previewUrl = `https://${host}:${httpsPort}`;
       }
@@ -1366,16 +1533,19 @@ export async function getSandboxPreviewStatus(
     }
     // PIDs are container-internal — meaningless to the host UI; leave empty.
     services.push({
-		name: portalRecipes.find((recipe) => recipe.serviceKey === key)?.name ?? portal?.name ?? friendly(key),
+      name:
+        portalRecipes.find((recipe) => recipe.serviceKey === key)?.name ??
+        portal?.name ??
+        friendly(key),
       key,
       port,
       running,
       pids: [],
       previewUrl,
- 		...(portal?.description ? { description: portal.description } : {}),
- 		...(portal?.defaultPath ? { defaultPath: portal.defaultPath } : {}),
- 		state,
- 		...(portal ? { managed: true } : {}),
+      ...(portal?.description ? { description: portal.description } : {}),
+      ...(portal?.defaultPath ? { defaultPath: portal.defaultPath } : {}),
+      state,
+      ...(portal ? { managed: true } : {}),
     });
   }
   const webapp = services.find((s) => s.key === "WEBAPP_PORT");
@@ -1385,7 +1555,8 @@ export async function getSandboxPreviewStatus(
   for (const service of services) {
     if (!service.previewUrl) continue;
     tunnelValues[`PREVIEW_URL_${service.port}`] = service.previewUrl;
-    tunnelValues[`PORTAL_${service.key.replace(/_PORT$/, "")}_URL`] = service.previewUrl;
+    tunnelValues[`PORTAL_${service.key.replace(/_PORT$/, "")}_URL`] =
+      service.previewUrl;
   }
   if (Object.keys(tunnelValues).length) {
     await writeSandboxTunnelsEnv(sandbox, worktreeDir, tunnelValues);
@@ -1393,9 +1564,9 @@ export async function getSandboxPreviewStatus(
 
   const previewUrl = webapp?.previewUrl || null;
   if (webapp?.running && !previewUrl) {
-      console.warn(
-        `[preview] ${sandbox.id}: webapp on ${webapp.port} is up in-container but the port isn't published — add it to sandbox previewPorts`,
-      );
+    console.warn(
+      `[preview] ${sandbox.id}: webapp on ${webapp.port} is up in-container but the port isn't published — add it to sandbox previewPorts`,
+    );
   }
 
   if (webapp?.running) {
@@ -1408,7 +1579,10 @@ export async function getSandboxPreviewStatus(
   // status poll rediscovers them.
   if (services.some((service) => service.running)) {
     await sandboxPreviewAwsEnv(sandbox, worktreeDir).catch((error) =>
-      console.warn(`[preview] ${sandbox.id}: AWS profile refresh failed:`, error),
+      console.warn(
+        `[preview] ${sandbox.id}: AWS profile refresh failed:`,
+        error,
+      ),
     );
   }
 
@@ -1420,13 +1594,16 @@ export async function getSandboxPreviewStatus(
     previewUrl,
     bootable:
       !!webapp?.running ||
-      (await resolvePreviewBoot(worktreeDir, repoForPath(worktreeDir), sandboxExists(sandbox))) !=
-        null,
+      (await resolvePreviewBoot(
+        worktreeDir,
+        repoForPath(worktreeDir),
+        sandboxExists(sandbox),
+      )) != null,
     services,
     portalRecipes,
   };
-	if (sessionId) cacheSandboxPortals(sessionId, sandbox.id, services);
-	return status;
+  if (sessionId) cacheSandboxPortals(sessionId, sandbox.id, services);
+  return status;
 }
 
 /** `exists` predicate for resolvePreviewBoot inside a sandbox. */
@@ -1450,9 +1627,13 @@ export async function seedSandboxPortsConf(
   webappPort: number,
 ): Promise<void> {
   const conf = assertSafePath(`${worktreeDir}/.ports.conf`);
-  const fresh = freshPortsConfText(webappPort, "sandbox preview").replace(/\n/g, "\\n");
+  const fresh = freshPortsConfText(webappPort, "sandbox preview").replace(
+    /\n/g,
+    "\\n",
+  );
   await sandbox.exec([
-    "sh", "-c",
+    "sh",
+    "-c",
     `if [ -f ${conf} ]; then ` +
       `if grep -q '^WEBAPP_PORT=' ${conf}; then sed -i 's/^WEBAPP_PORT=.*/WEBAPP_PORT=${webappPort}/' ${conf}; ` +
       `else printf '\\nWEBAPP_PORT=${webappPort}\\n' >> ${conf}; fi; ` +
@@ -1495,7 +1676,8 @@ async function writeSandboxTunnelsEnv(
   // Keep it out of the session diff: one idempotent line in the repo's shared
   // info/exclude (a repo may not gitignore .tunnels.env).
   await sandbox.exec([
-    "sh", "-c",
+    "sh",
+    "-c",
     `ex="$(git rev-parse --git-path info/exclude 2>/dev/null)" && [ -n "$ex" ] && ` +
       `{ grep -qxF ".tunnels.env" "$ex" 2>/dev/null || echo ".tunnels.env" >> "$ex"; } || true`,
   ]);
@@ -1537,19 +1719,25 @@ export function sandboxPreviewIdentityContext(
 export async function startSandboxPreview(
   sandbox: Sandbox,
   worktreeDir: string,
-	sessionId?: string,
+  sessionId?: string,
   trustProfile: "interactive" | "automation" = "interactive",
 ): Promise<PreviewStatus> {
-	if (usesOutboundSandboxPortalRelay(sandbox.provider) && !sessionId) throw new Error("A remote Sandbox Portal requires its session identity.");
-	const status = await getSandboxPreviewStatus(sandbox, worktreeDir, sessionId);
+  if (usesOutboundSandboxPortalRelay(sandbox.provider) && !sessionId)
+    throw new Error("A remote Sandbox Portal requires its session identity.");
+  const status = await getSandboxPreviewStatus(sandbox, worktreeDir, sessionId);
   if (status.running || status.starting) return status;
 
   // 1. Allocate a webapp port from the pre-published range.
-	const portMap = usesOutboundSandboxPortalRelay(sandbox.provider) ? {} : await sandbox.ports();
-	const publishedPorts = (usesOutboundSandboxPortalRelay(sandbox.provider)
-		? sandboxConfig().previewPorts ?? [...DEFAULT_SANDBOX_PREVIEW_PORTS]
-		: Object.keys(portMap).map(Number)
-	).filter(Number.isFinite).sort((a, b) => a - b);
+  const portMap = usesOutboundSandboxPortalRelay(sandbox.provider)
+    ? {}
+    : await sandbox.ports();
+  const publishedPorts = (
+    usesOutboundSandboxPortalRelay(sandbox.provider)
+      ? (sandboxConfig().previewPorts ?? [...DEFAULT_SANDBOX_PREVIEW_PORTS])
+      : Object.keys(portMap).map(Number)
+  )
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
   if (!publishedPorts.length) {
     console.warn(
       `[preview] ${sandbox.id}: no preview ports are published — configure previewPorts and recreate the container`,
@@ -1598,24 +1786,37 @@ export async function startSandboxPreview(
   //    one that outlives the bring-up — either way the file points at the
   //    right group).
   await seedSandboxPortsConf(sandbox, worktreeDir, port);
-	const entry = portMap[port];
+  const entry = portMap[port];
   const directUrl = typeof entry === "object" ? entry.url : undefined;
-  const privateUpstream = typeof entry === "object" ? entry.upstream : undefined;
+  const privateUpstream =
+    typeof entry === "object" ? entry.upstream : undefined;
   const published = typeof entry === "number" ? entry : entry?.hostPort;
-  const requestHeaders = typeof entry === "object" ? entry.requestHeaders : undefined;
-	const remotePortalUrl = usesOutboundSandboxPortalRelay(sandbox.provider) && sessionId
-		? await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port })
-		: null;
-	const upstream = remotePortalUrl
-		? undefined
-		: directUrl || privateUpstream
-			? localRelayFor(sandbox.id, port, directUrl || `http://${privateUpstream}`, requestHeaders)
-			: `127.0.0.1:${published}`;
+  const requestHeaders =
+    typeof entry === "object" ? entry.requestHeaders : undefined;
+  const remotePortalUrl =
+    usesOutboundSandboxPortalRelay(sandbox.provider) && sessionId
+      ? await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port })
+      : null;
+  const upstream = remotePortalUrl
+    ? undefined
+    : directUrl || privateUpstream
+      ? localRelayFor(
+          sandbox.id,
+          port,
+          directUrl || `http://${privateUpstream}`,
+          requestHeaders,
+        )
+      : `127.0.0.1:${published}`;
   const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
   const host = await previewHost();
   const previewUrl = `https://${host}:${httpsPort}`;
-	if (!remotePortalUrl && !(await ensurePreviewRoute(httpsPort, upstream!, host, requestHeaders))) {
-    console.warn(`[preview] ${sandbox.id}: Caddy did not accept the sandbox preview portal route`);
+  if (
+    !remotePortalUrl &&
+    !(await ensurePreviewRoute(httpsPort, upstream!, host, requestHeaders))
+  ) {
+    console.warn(
+      `[preview] ${sandbox.id}: Caddy did not accept the sandbox preview portal route`,
+    );
   }
   await writeSandboxTunnelsEnv(sandbox, worktreeDir, {
     PREVIEW_URL: previewUrl,
@@ -1637,13 +1838,17 @@ export async function startSandboxPreview(
   const awsEnv = Object.keys(workloadIdentityEnv).length
     ? {}
     : await sandboxPreviewAwsEnv(sandbox, worktreeDir, true);
-  const r = await sandbox.exec([
-    "sh", "-c",
-    `mkdir -p .ports && nohup setsid env HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PREVIEW_PATH)} ` +
-      `WEBAPP_PORT=${port} PREVIEW_URL=${shellQuoteWord(previewUrl)} ` +
-      `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ` +
-      `bash -c 'echo $$ > .ports/dev-pgid; exec ${cmd}' >> /tmp/backstage-preview.log 2>&1 &`,
-  ], { env: { ...awsEnv, ...workloadIdentityEnv } });
+  const r = await sandbox.exec(
+    [
+      "sh",
+      "-c",
+      `mkdir -p .ports && nohup setsid env HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PREVIEW_PATH)} ` +
+        `WEBAPP_PORT=${port} PREVIEW_URL=${shellQuoteWord(previewUrl)} ` +
+        `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ` +
+        `bash -c 'echo $$ > .ports/dev-pgid; exec ${cmd}' >> /tmp/backstage-preview.log 2>&1 &`,
+    ],
+    { env: { ...awsEnv, ...workloadIdentityEnv } },
+  );
   if (r.exitCode !== 0) starting.delete(worktreeDir);
   return { ...status, starting: r.exitCode === 0 };
 }
@@ -1663,14 +1868,15 @@ export async function stopSandboxPreview(
   sandboxAwsRefresh.delete(sandbox.id);
   const conf = await sandbox.exec(["cat", ".ports.conf"]);
   const ports = conf.exitCode === 0 ? parsePortsText(conf.stdout) : [];
-	for (const service of ports) {
-		revokeSandboxPortalRelay(sandbox.id, service.port);
-		forgetRemoteSandboxPortalAgents(sandbox.id, service.port);
+  for (const service of ports) {
+    revokeSandboxPortalRelay(sandbox.id, service.port);
+    forgetRemoteSandboxPortalAgents(sandbox.id, service.port);
     const allocated = lookupSandboxHttpsPort(sandbox.id, service.port);
     if (allocated != null) await removePreviewRoute(allocated);
   }
   await sandbox.exec([
-    "bash", "-c",
+    "bash",
+    "-c",
     `[ -f .ports/dev-pgid ] && kill -TERM -- "-$(cat .ports/dev-pgid)" 2>/dev/null; true`,
   ]);
   await sandbox.exec(["pkill", "-f", "next dev"]);
@@ -1687,23 +1893,31 @@ export async function stopSandboxPreview(
  * Teardown hook for DockerProvider.destroy(): release the sandbox's https
  * allocations and drop any Caddy routes still pointing at them.
  */
-export async function dropSandboxPreviewRoutes(sandboxId: string, options: { preservePortalCache?: boolean } = {}): Promise<void> {
-	revokeSandboxPortalGrants(sandboxId);
-	forgetRemoteSandboxPortalAgents(sandboxId);
-	if (!options.preservePortalCache) dropCachedSandboxPortals(sandboxId);
-	for (const [key, relay] of remotePortalRelays) {
-		if (!key.startsWith(`${sandboxId}:`)) continue;
-		try { relay.server.stop(true); } catch {}
-		remotePortalRelays.delete(key);
-	}
-	for (const httpsPort of releaseSandboxPreviewPorts(sandboxId)) {
+export async function dropSandboxPreviewRoutes(
+  sandboxId: string,
+  options: { preservePortalCache?: boolean } = {},
+): Promise<void> {
+  revokeSandboxPortalGrants(sandboxId);
+  forgetRemoteSandboxPortalAgents(sandboxId);
+  if (!options.preservePortalCache) dropCachedSandboxPortals(sandboxId);
+  for (const [key, relay] of remotePortalRelays) {
+    if (!key.startsWith(`${sandboxId}:`)) continue;
+    try {
+      relay.server.stop(true);
+    } catch {}
+    remotePortalRelays.delete(key);
+  }
+  for (const httpsPort of releaseSandboxPreviewPorts(sandboxId)) {
     // removePreviewRoute only touches routes this process cached — a destroy
     // right after a restart may miss the cache, so delete unconditionally.
     previewRoutes.delete(httpsPort);
     try {
-      await caddyFetch(`${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`, {
-        method: "DELETE",
-      });
+      await caddyFetch(
+        `${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`,
+        {
+          method: "DELETE",
+        },
+      );
     } catch {}
   }
 }

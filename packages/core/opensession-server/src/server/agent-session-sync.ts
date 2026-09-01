@@ -31,9 +31,9 @@ import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { statePath } from "./paths";
 import {
-	activeSessions as slackActiveSessions,
-	getSessionKey as slackSessionKey,
-	SESSION_DIR as SLACK_SESSION_DIR,
+  activeSessions as slackActiveSessions,
+  getSessionKey as slackSessionKey,
+  SESSION_DIR as SLACK_SESSION_DIR,
 } from "../agents/slack/state";
 import type { UnifiedSession } from "./types";
 
@@ -42,45 +42,52 @@ import type { UnifiedSession } from "./types";
 const LINEAR_SESSION_DIR = statePath(".linear-sessions");
 
 export interface EngineSessionPatch {
-	engineSessionId?: string;
-	/** Pi engine session id — lands in the file's own piSessionId slot AND
-	 *  mirrors into the claude slot (see module doc). Callers pick this field
-	 *  over engineSessionId when the run's provider is "pi". */
-	piSessionId?: string;
-	model?: string;
+  engineSessionId?: string;
+  /** Pi engine session id — lands in the file's own piSessionId slot AND
+   *  mirrors into the claude slot (see module doc). Callers pick this field
+   *  over engineSessionId when the run's provider is "pi". */
+  piSessionId?: string;
+  model?: string;
 }
 
-function patchFile(path: string, patch: EngineSessionPatch, activityField: string): boolean {
-	if (!existsSync(path)) return false;
-	try {
-		const data = JSON.parse(readFileSync(path, "utf-8"));
-		let changed = false;
-		if (patch.engineSessionId && data.claudeSessionId !== patch.engineSessionId) {
-			data.claudeSessionId = patch.engineSessionId;
-			changed = true;
-		}
-		if (patch.piSessionId) {
-			if (data.piSessionId !== patch.piSessionId) {
-				data.piSessionId = patch.piSessionId;
-				changed = true;
-			}
-			if (data.claudeSessionId !== patch.piSessionId) {
-				data.claudeSessionId = patch.piSessionId;
-				changed = true;
-			}
-		}
-		if (patch.model && data.model !== patch.model) {
-			data.model = patch.model;
-			changed = true;
-		}
-		if (!changed) return false;
-		data[activityField] = new Date().toISOString();
-		writeJsonAtomic(path, data);
-		return true;
-	} catch (e) {
-		console.error(`[agent-session-sync] failed to patch ${path}:`, e);
-		return false;
-	}
+function patchFile(
+  path: string,
+  patch: EngineSessionPatch,
+  activityField: string,
+): boolean {
+  if (!existsSync(path)) return false;
+  try {
+    const data = JSON.parse(readFileSync(path, "utf-8"));
+    let changed = false;
+    if (
+      patch.engineSessionId &&
+      data.claudeSessionId !== patch.engineSessionId
+    ) {
+      data.claudeSessionId = patch.engineSessionId;
+      changed = true;
+    }
+    if (patch.piSessionId) {
+      if (data.piSessionId !== patch.piSessionId) {
+        data.piSessionId = patch.piSessionId;
+        changed = true;
+      }
+      if (data.claudeSessionId !== patch.piSessionId) {
+        data.claudeSessionId = patch.piSessionId;
+        changed = true;
+      }
+    }
+    if (patch.model && data.model !== patch.model) {
+      data.model = patch.model;
+      changed = true;
+    }
+    if (!changed) return false;
+    data[activityField] = new Date().toISOString();
+    writeJsonAtomic(path, data);
+    return true;
+  } catch (e) {
+    console.error(`[agent-session-sync] failed to patch ${path}:`, e);
+    return false;
+  }
 }
 
 /**
@@ -89,49 +96,54 @@ function patchFile(path: string, patch: EngineSessionPatch, activityField: strin
  * anything was actually written.
  */
 export function syncAgentSessionEngine(
-	session: Pick<UnifiedSession, "id" | "source" | "branch" | "slackThread">,
-	patch: EngineSessionPatch,
+  session: Pick<UnifiedSession, "id" | "source" | "branch" | "slackThread">,
+  patch: EngineSessionPatch,
 ): boolean {
-	if (!patch.engineSessionId && !patch.piSessionId && !patch.model) return false;
+  if (!patch.engineSessionId && !patch.piSessionId && !patch.model)
+    return false;
 
-	if (session.source === "slack") {
-		// Both file shapes exist: the key-named file the loop owns
-		// (<channel>-<threadTs>.json) and the branch-named mirror written by
-		// `wt new-slack` — the sessions scan ids off either, so patch both.
-		const files = new Set<string>();
-		files.add(`${SLACK_SESSION_DIR}/${session.id.replace(/^slack-/, "")}.json`);
-		if (session.slackThread?.channel)
-			files.add(
-				`${SLACK_SESSION_DIR}/${slackSessionKey(session.slackThread.channel, session.slackThread.threadTs || undefined)}.json`,
-			);
-		if (session.branch) files.add(`${SLACK_SESSION_DIR}/${session.branch}.json`);
-		let wrote = false;
-		for (const f of files) wrote = patchFile(f, patch, "lastActivity") || wrote;
+  if (session.source === "slack") {
+    // Both file shapes exist: the key-named file the loop owns
+    // (<channel>-<threadTs>.json) and the branch-named mirror written by
+    // `wt new-slack` — the sessions scan ids off either, so patch both.
+    const files = new Set<string>();
+    files.add(`${SLACK_SESSION_DIR}/${session.id.replace(/^slack-/, "")}.json`);
+    if (session.slackThread?.channel)
+      files.add(
+        `${SLACK_SESSION_DIR}/${slackSessionKey(session.slackThread.channel, session.slackThread.threadTs || undefined)}.json`,
+      );
+    if (session.branch)
+      files.add(`${SLACK_SESSION_DIR}/${session.branch}.json`);
+    let wrote = false;
+    for (const f of files) wrote = patchFile(f, patch, "lastActivity") || wrote;
 
-		// The loop's live copy, so an in-flight thread doesn't fork the old id.
-		if (session.slackThread?.channel) {
-			const live = slackActiveSessions.get(
-				slackSessionKey(session.slackThread.channel, session.slackThread.threadTs || undefined),
-			);
-			if (live) {
-				if (patch.engineSessionId) live.claudeSessionId = patch.engineSessionId;
-				// The loop's resume path reads claudeSessionId — the mirror is what
-				// keeps its next thread-driven turn on the fresh pi session.
-				if (patch.piSessionId) live.claudeSessionId = patch.piSessionId;
-				if (patch.model) live.model = patch.model;
-			}
-		}
-		return wrote;
-	}
+    // The loop's live copy, so an in-flight thread doesn't fork the old id.
+    if (session.slackThread?.channel) {
+      const live = slackActiveSessions.get(
+        slackSessionKey(
+          session.slackThread.channel,
+          session.slackThread.threadTs || undefined,
+        ),
+      );
+      if (live) {
+        if (patch.engineSessionId) live.claudeSessionId = patch.engineSessionId;
+        // The loop's resume path reads claudeSessionId — the mirror is what
+        // keeps its next thread-driven turn on the fresh pi session.
+        if (patch.piSessionId) live.claudeSessionId = patch.piSessionId;
+        if (patch.model) live.model = patch.model;
+      }
+    }
+    return wrote;
+  }
 
-	if (session.source === "linear") {
-		if (!session.branch) return false;
-		return patchFile(
-			`${LINEAR_SESSION_DIR}/${session.branch}.json`,
-			patch,
-			"updatedAt",
-		);
-	}
+  if (session.source === "linear") {
+    if (!session.branch) return false;
+    return patchFile(
+      `${LINEAR_SESSION_DIR}/${session.branch}.json`,
+      patch,
+      "updatedAt",
+    );
+  }
 
-	return false;
+  return false;
 }

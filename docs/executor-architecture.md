@@ -53,6 +53,19 @@ host socket instead of starting a second run.
 
 ## Capacity controls
 
+On system-scope systemd hosts, the gateway, SessionKernel, and executor run in
+the high-priority `opensession-control.slice`. Detached run hosts and their
+complete process trees run in `opensession-workloads.slice`. Opening turns and
+workflow fan-out workers use those hosts too; auxiliary workers do not claim the
+parent session's authoritative run slot. As a defense in depth for legacy or
+non-session gateway execution, Pi shell commands escape the control cgroup into
+the low-priority user `opensession-agents.slice` before bash, Cargo, rustc, or a
+nested agent starts. Commands already inside a detached host remain in that
+host's system unit so cancellation still reaches every descendant. CPU and I/O
+weights let agent builds consume idle capacity while yielding promptly to
+control-plane requests during contention. Preview scopes use a lower-priority
+slice inside the user manager. The weights do not impose a fixed CPU quota.
+
 Before persisting a detached launch, the gateway checks the active and pending
 host count, Linux `MemAvailable`, and CPU PSI `some avg10`. A launch waits with
 bounded backoff when a present signal is over its limit. Missing `/proc` signals
@@ -88,13 +101,13 @@ and retain the built-in default.
 
 ## Failure behavior
 
-| Failure | Behavior |
-| --- | --- |
-| Executor unavailable before detached launch | Delegated launch fails closed and does not invoke the direct helper. `runAgentHosted` logs the failure and falls back to in-process execution unless launch effects are ambiguous. |
-| Executor incompatible | Detached launch fails without a direct-helper fallback. `runAgentHosted` logs the failure and falls back to in-process execution. |
-| Executor disconnects after launch request | The gateway checks the host locally and retries through the executor, then preserves recovery state if the launch remains uncertain. |
-| Executor restarts during an active run | Run host and engine continue; the gateway remains attached directly. |
-| Gateway restarts during an active run | Existing run-host journal and socket reattachment recover the turn. |
+| Failure                                     | Behavior                                                                                                                             |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Executor unavailable before detached launch | Delegated launch fails closed and does not invoke the direct helper or absorb the engine into the gateway.                           |
+| Executor incompatible                       | Detached launch fails without a direct-helper or in-process fallback.                                                                |
+| Executor disconnects after launch request   | The gateway checks the host locally and retries through the executor, then preserves recovery state if the launch remains uncertain. |
+| Executor restarts during an active run      | Run host and engine continue; the gateway remains attached directly.                                                                 |
+| Gateway restarts during an active run       | Existing run-host journal and socket reattachment recover the turn.                                                                  |
 
 The executor is not the parent of active run hosts. Hosts run in transient
 systemd units, so restarting `opensession-executor.service` affects only launch
@@ -136,8 +149,7 @@ puts the root-owned helper in place.
 Set `OPENSESSION_EXECUTOR=0` to deliberately bypass the sidecar and select the
 fixed direct helper path for an otherwise supported detached host. Existing run
 hosts are unaffected. An unavailable configured executor never falls through to
-the direct helper, although the run may fall back to in-process execution after
-logging the detached-launch failure.
+the direct helper or to gateway-owned in-process execution.
 
 Detached local hosts require Linux with a booted systemd and the installed
 run-host helper. Other platforms keep using the in-process runner.

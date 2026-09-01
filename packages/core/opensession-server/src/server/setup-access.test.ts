@@ -31,10 +31,16 @@ describe("setup access origins", () => {
     ).toBe("https://hooks.example.com");
     expect(normalizeWebhookOrigin("", "https://os.example.com")).toBe("");
     expect(() =>
-      normalizeWebhookOrigin("http://hooks.example.com", "https://os.example.com"),
+      normalizeWebhookOrigin(
+        "http://hooks.example.com",
+        "https://os.example.com",
+      ),
     ).toThrow("must use https");
     expect(() =>
-      normalizeWebhookOrigin("https://os.example.com", "https://os.example.com"),
+      normalizeWebhookOrigin(
+        "https://os.example.com",
+        "https://os.example.com",
+      ),
     ).toThrow("different hostname");
     expect(() =>
       normalizeWebhookOrigin(
@@ -66,10 +72,7 @@ describe("setup access origins", () => {
       expect(isObviouslyPrivateWebhookHost(host)).toBe(true);
       const urlHost = host.includes(":") ? `[${host}]` : host;
       expect(() =>
-        normalizeWebhookOrigin(
-          `https://${urlHost}`,
-          "https://os.example.com",
-        ),
+        normalizeWebhookOrigin(`https://${urlHost}`, "https://os.example.com"),
       ).toThrow("public internet");
     }
     expect(isObviouslyPrivateWebhookHost("hooks.example.com")).toBe(false);

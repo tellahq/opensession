@@ -60,7 +60,10 @@ afterAll(() => {
   srv?.stop(true);
 });
 
-async function until<T>(fn: () => T | undefined | false, timeoutMs = 5_000): Promise<T> {
+async function until<T>(
+  fn: () => T | undefined | false,
+  timeoutMs = 5_000,
+): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const v = fn();
@@ -101,7 +104,10 @@ describe("WsFrameBuffer oversized frames", () => {
     // A sandboxed Read image arrives inline and blows the byte cap on its own.
     buf.stamp({
       t: "event",
-      event: { type: "tool_result", images: [`data:image/png;base64,${"x".repeat(200)}`] },
+      event: {
+        type: "tool_result",
+        images: [`data:image/png;base64,${"x".repeat(200)}`],
+      },
     });
     const afterImage = buf.replayFrom(0);
     expect(afterImage.lines).toHaveLength(1);
@@ -115,7 +121,8 @@ describe("WsFrameBuffer oversized frames", () => {
 
   test("still trims ordinary overflow to the byte budget", () => {
     const buf = new WsFrameBuffer(10, 200);
-    for (let i = 0; i < 20; i++) buf.stamp({ t: "event", event: { type: "text_chunk", text: `f${i}` } });
+    for (let i = 0; i < 20; i++)
+      buf.stamp({ t: "event", event: { type: "text_chunk", text: `f${i}` } });
     const replay = buf.replayFrom(0);
     expect(replay.lines.length).toBeLessThan(20);
     expect(replay.gap).not.toBeNull();
@@ -125,7 +132,8 @@ describe("WsFrameBuffer oversized frames", () => {
     // Four-byte characters: a budget counted in code units would hold roughly
     // twice the bytes it advertises.
     const wide = new WsFrameBuffer(1000, 400);
-    for (let i = 0; i < 40; i++) wide.stamp({ t: "event", event: { text: "🙂".repeat(10) } });
+    for (let i = 0; i < 40; i++)
+      wide.stamp({ t: "event", event: { text: "🙂".repeat(10) } });
     const bytes = wide
       .replayFrom(0)
       .lines.reduce((sum, line) => sum + Buffer.byteLength(line), 0);
@@ -215,12 +223,18 @@ describe("replayStartFor", () => {
 
 describe("timer poison starvation classification", () => {
   test("defers when host load reaches runnable capacity", () => {
-    expect(runWs.shouldDeferTimerPoisonForStarvation(16, 16, 80_000)).toBe(true);
+    expect(runWs.shouldDeferTimerPoisonForStarvation(16, 16, 80_000)).toBe(
+      true,
+    );
   });
 
   test("does not defer below capacity or beyond the starvation hold", () => {
-    expect(runWs.shouldDeferTimerPoisonForStarvation(15.9, 16, 80_000)).toBe(false);
-    expect(runWs.shouldDeferTimerPoisonForStarvation(40, 16, 300_000)).toBe(false);
+    expect(runWs.shouldDeferTimerPoisonForStarvation(15.9, 16, 80_000)).toBe(
+      false,
+    );
+    expect(runWs.shouldDeferTimerPoisonForStarvation(40, 16, 300_000)).toBe(
+      false,
+    );
   });
 });
 
@@ -241,9 +255,13 @@ describe("run-ws seq/ack replay", () => {
     expect(epoch).toBeTruthy();
 
     // Stream hello + three sequenced frames, then attach a consumer.
-    c1.sock.send(JSON.stringify({ t: "hello", hostId, state: "running", pendingAsks: [] }));
+    c1.sock.send(
+      JSON.stringify({ t: "hello", hostId, state: "running", pendingAsks: [] }),
+    );
     for (let i = 1; i <= 3; i++) {
-      c1.sock.send(buf.stamp({ t: "event", event: { type: "text_chunk", text: `e${i}` } }));
+      c1.sock.send(
+        buf.stamp({ t: "event", event: { type: "text_chunk", text: `e${i}` } }),
+      );
     }
     const got1: any[] = [];
     let closed1 = false;
@@ -259,7 +277,9 @@ describe("run-ws seq/ack replay", () => {
     expect(got1.map((m) => m.t)).toEqual(["hello", "event", "event", "event"]);
     // The consumed watermark advanced to 3 — a ping piggybacks an ack with it.
     c1.sock.send('{"t":"ping"}');
-    const flushAck = await until(() => c1.inbox.find((m) => m.t === "ack" && m.seq === 3));
+    const flushAck = await until(() =>
+      c1.inbox.find((m) => m.t === "ack" && m.seq === 3),
+    );
     expect(flushAck.epoch).toBe(epoch);
     expect(conn1.send({ t: "pong" })).toBe(true);
 
@@ -281,7 +301,10 @@ describe("run-ws seq/ack replay", () => {
     expect(from).toBe(3);
     for (const line of buf.replayFrom(from - 1).lines) c2.sock.send(line); // overlap: 3..6
     const got2: any[] = [];
-    const conn2 = await connector.connect({ onMsg: (m) => got2.push(m), onClose: () => {} });
+    const conn2 = await connector.connect({
+      onMsg: (m) => got2.push(m),
+      onClose: () => {},
+    });
     await until(() => got2.length >= 3);
     expect(got2.map((m) => m.seq)).toEqual([4, 5, 6]); // 3 deduped, 4..6 once
     c2.sock.send('{"t":"ping"}');
@@ -299,8 +322,12 @@ describe("run-ws seq/ack replay", () => {
     const c1 = dialHost(hostId, token);
     const ack1 = await c1.nextAck();
     expect(ack1.seq).toBe(0);
-    c1.sock.send(buf.stamp({ t: "event", event: { type: "text_chunk", text: "a" } }));
-    c1.sock.send(buf.stamp({ t: "event", event: { type: "text_chunk", text: "b" } }));
+    c1.sock.send(
+      buf.stamp({ t: "event", event: { type: "text_chunk", text: "a" } }),
+    );
+    c1.sock.send(
+      buf.stamp({ t: "event", event: { type: "text_chunk", text: "b" } }),
+    );
     // Give the server a beat to park them, then drop with no consumer attached.
     await new Promise((r) => setTimeout(r, 100));
     c1.sock.close();
@@ -311,7 +338,8 @@ describe("run-ws seq/ack replay", () => {
     const c2 = dialHost(hostId, token);
     const ack2 = await c2.nextAck();
     expect(ack2.seq).toBe(0);
-    for (const line of buf.replayFrom(replayStartFor(ack2, ack2.epoch, 0)).lines) {
+    for (const line of buf.replayFrom(replayStartFor(ack2, ack2.epoch, 0))
+      .lines) {
       c2.sock.send(line);
     }
     const got: any[] = [];
@@ -428,15 +456,38 @@ describe("rpc-ws upgrade auth (WS-transport opt-in only)", () => {
     // doesn't carry answers 200 with an empty tool list (shared pi
     // servers list the union of in-process servers in their config; the
     // proxy must stay healthy) — tools/CALL on it still 404s.
-    sock.send(JSON.stringify({ id: "f1", path: "/mcp/list", token: rpcToken, server: "nope" }));
+    sock.send(
+      JSON.stringify({
+        id: "f1",
+        path: "/mcp/list",
+        token: rpcToken,
+        server: "nope",
+      }),
+    );
     const ok = await until(() => inbox.find((m) => m.id === "f1"));
     expect(ok.status).toBe(200);
     expect(ok.body?.tools ?? []).toEqual([]);
-    sock.send(JSON.stringify({ id: "f1c", path: "/mcp/call", token: rpcToken, server: "nope", tool: "x", args: {} }));
+    sock.send(
+      JSON.stringify({
+        id: "f1c",
+        path: "/mcp/call",
+        token: rpcToken,
+        server: "nope",
+        tool: "x",
+        args: {},
+      }),
+    );
     const okCall = await until(() => inbox.find((m) => m.id === "f1c"));
     expect(okCall.status).toBe(404);
     // Unknown frame token → 403 from dispatchRunRpc even on an authed socket.
-    sock.send(JSON.stringify({ id: "f2", path: "/mcp/list", token: "bogus", server: "nope" }));
+    sock.send(
+      JSON.stringify({
+        id: "f2",
+        path: "/mcp/list",
+        token: "bogus",
+        server: "nope",
+      }),
+    );
     const bad = await until(() => inbox.find((m) => m.id === "f2"));
     expect(bad.status).toBe(403);
 

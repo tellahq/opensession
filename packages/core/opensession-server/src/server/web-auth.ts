@@ -38,7 +38,9 @@ import { githubLoginFor } from "./shared/user-mappings";
 
 /** Env override is for tests; read once at first use (the map loads lazily). */
 function sessionsPath(): string {
-  return process.env.OPENSESSION_WEB_SESSIONS_STORE || stateDir("web-sessions.json");
+  return (
+    process.env.OPENSESSION_WEB_SESSIONS_STORE || stateDir("web-sessions.json")
+  );
 }
 const COOKIE_NAME = "opensession_auth";
 const TTL_MS = 90 * 24 * 60 * 60 * 1000; // sliding
@@ -146,7 +148,10 @@ export function keypadBearerAuthorized(req: Request): boolean {
 
   const presented = Buffer.from(match[1]);
   const configured = Buffer.from(expected);
-  return presented.length === configured.length && timingSafeEqual(presented, configured);
+  return (
+    presented.length === configured.length &&
+    timingSafeEqual(presented, configured)
+  );
 }
 
 /** The configured team member a GitHub login belongs to, or null. */
@@ -168,7 +173,9 @@ export function refreshWebIdentity(identity: WebIdentity): WebIdentity | null {
 
 /** Mint a session for a VERIFIED login. Returns null for non-team logins
  *  (fail-closed — the caller should also discard the OAuth token). */
-export function createWebSession(login: string): { token: string; name: string } | null {
+export function createWebSession(
+  login: string,
+): { token: string; name: string } | null {
   const member = teamMemberForLogin(login);
   if (!member) return null;
   const token = randomBytes(32).toString("hex");

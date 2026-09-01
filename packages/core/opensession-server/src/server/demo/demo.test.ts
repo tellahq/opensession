@@ -12,12 +12,14 @@
 
 import { describe, expect, it } from "bun:test";
 import { rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 describe("demo dataset generator (isolated child process)", () => {
   it("full suite passes with zero writes outside the scratch HOME", async () => {
-    const home = join(tmpdir(), `demo-data-child-${crypto.randomUUID()}`);
+    // The operator sets TMPDIR beneath /home/ubuntu for session isolation,
+    // while this test asserts generated data has no operator-home literals.
+    // Use the OS scratch root so the fixture does not fail on its own HOME.
+    const home = join("/tmp", `demo-data-child-${crypto.randomUUID()}`);
     try {
       const proc = Bun.spawn(
         [

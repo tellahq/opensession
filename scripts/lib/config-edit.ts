@@ -8,7 +8,8 @@
 import { chmodSync, copyFileSync, existsSync } from "fs";
 import { CONFIG_PATH } from "./paths";
 
-export const MACOS_TAILSCALE_CLI = "/Applications/Tailscale.app/Contents/MacOS/Tailscale";
+export const MACOS_TAILSCALE_CLI =
+  "/Applications/Tailscale.app/Contents/MacOS/Tailscale";
 
 type TailnetIpProcess = {
   exitCode: number;
@@ -69,7 +70,9 @@ export async function readConfig(): Promise<Record<string, any> | undefined> {
 }
 
 /** Write config.json (backed up, 0600); returns the backup path if one was made. */
-export async function writeConfig(config: Record<string, unknown>): Promise<string | undefined> {
+export async function writeConfig(
+  config: Record<string, unknown>,
+): Promise<string | undefined> {
   const backedUp = backup(CONFIG_PATH);
   await Bun.write(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
   chmodSync(CONFIG_PATH, 0o600);

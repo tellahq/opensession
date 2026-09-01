@@ -35,5 +35,7 @@ export async function markDocsSyncPrMerged(prNumber: number): Promise<void> {
   }
 
   await addReaction(channel, message.ts, MERGED_REACTION);
-  console.log(`[github] Checked off docs-sync announcement for merged PR #${prNumber}`);
+  console.log(
+    `[github] Checked off docs-sync announcement for merged PR #${prNumber}`,
+  );
 }

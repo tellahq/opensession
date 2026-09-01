@@ -14,7 +14,7 @@ import { BASE_PATH } from "./base";
 const OS_BLOB_RE = /^os-blob:(.+)\/(\d+)$/;
 
 export function resolveEntryImageSrc(src: string, sessionId?: string): string {
-	const m = OS_BLOB_RE.exec(src);
-	if (!m || !sessionId) return src;
-	return `${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/transcript-image/${encodeURIComponent(m[1])}/${m[2]}`;
+  const m = OS_BLOB_RE.exec(src);
+  if (!m || !sessionId) return src;
+  return `${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/transcript-image/${encodeURIComponent(m[1])}/${m[2]}`;
 }

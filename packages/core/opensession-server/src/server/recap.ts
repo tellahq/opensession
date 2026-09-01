@@ -24,7 +24,10 @@
  */
 
 import { oneShot } from "./one-shot";
-import { storeAppendUserLineEarly, transcriptLineRecap } from "./transcript-persistence";
+import {
+  storeAppendUserLineEarly,
+  transcriptLineRecap,
+} from "./transcript-persistence";
 import { getRunState } from "./run-state";
 import { findSession } from "./session-cache";
 import { formatExcerpt, transcriptExcerpt } from "./transcript-excerpt";
@@ -42,7 +45,12 @@ const recapInFlight: Set<string> = (g.__recapInFlight ??= new Set());
 const MAX_PENDING = 500;
 
 /** Turn states during which a recap of the *previous* turn would be stale. */
-const ACTIVE_STATES = new Set(["preparing", "starting", "running", "reattaching"]);
+const ACTIVE_STATES = new Set([
+  "preparing",
+  "starting",
+  "running",
+  "reattaching",
+]);
 
 function recapDisabled(): boolean {
   return process.env.OPENSESSION_RECAP === "0";
@@ -66,7 +74,7 @@ function anyPresentWatcher(sessionId: string): boolean {
  */
 export function walkthroughStandsInForRecap(
   publishedAt: string | undefined,
-  turnStartedAt: number | undefined
+  turnStartedAt: number | undefined,
 ): boolean {
   if (!publishedAt || turnStartedAt === undefined) return false;
   const at = Date.parse(publishedAt);
@@ -83,7 +91,7 @@ export function walkthroughStandsInForRecap(
  */
 export function markRecapPendingIfUnwatched(
   sessionId: string,
-  turnStartedAt?: number
+  turnStartedAt?: number,
 ): void {
   if (recapDisabled()) return;
   if (anyPresentWatcher(sessionId)) {
@@ -93,7 +101,7 @@ export function markRecapPendingIfUnwatched(
   if (
     walkthroughStandsInForRecap(
       findSession(sessionId)?.walkthrough?.publishedAt,
-      turnStartedAt
+      turnStartedAt,
     )
   ) {
     recapPending.delete(sessionId);
@@ -126,7 +134,9 @@ export function maybeRecapOnReturn(sessionId: string, user?: string): void {
   recapPending.delete(sessionId);
   recapInFlight.add(sessionId);
   void generateAndPersistRecap(sessionId, user)
-    .catch((e) => console.warn(`[recap] generation failed for ${sessionId}:`, e))
+    .catch((e) =>
+      console.warn(`[recap] generation failed for ${sessionId}:`, e),
+    )
     .finally(() => recapInFlight.delete(sessionId));
 }
 
@@ -141,7 +151,7 @@ const RECAP_SYSTEM =
 
 async function generateAndPersistRecap(
   sessionId: string,
-  user?: string
+  user?: string,
 ): Promise<void> {
   const excerpt = await transcriptExcerpt(sessionId, { limit: 40 });
   if (!excerpt.windows.some((w) => w.entries.length)) return;

@@ -120,7 +120,10 @@ export function mcpServerDisplayName(name: string): string {
   return identifierWords(name)
     .map((word) => {
       const lower = word.toLowerCase();
-      return IDENTIFIER_NAMES[lower] ?? `${lower[0]?.toUpperCase() ?? ""}${lower.slice(1)}`;
+      return (
+        IDENTIFIER_NAMES[lower] ??
+        `${lower[0]?.toUpperCase() ?? ""}${lower.slice(1)}`
+      );
     })
     .join(" ");
 }
@@ -169,9 +172,8 @@ export function mcpLabelParts(server: string, tool: string): string[] {
   const parts = mcpServerParts(server);
   const scope = parts[parts.length - 1] ?? "";
   const rawWords = identifierWords(tool);
-  const words = parts.length > 1
-    ? withoutRepeatedScope(rawWords, scope)
-    : rawWords;
+  const words =
+    parts.length > 1 ? withoutRepeatedScope(rawWords, scope) : rawWords;
   return [...parts, mcpToolDisplayName(words.join("_") || tool)];
 }
 
@@ -324,7 +326,10 @@ export interface ToolPresentation {
 /** First non-empty string among `keys` — engines disagree on the spelling.
  *  Exported because clients reading the same inputs for their expanded views
  *  must not re-invent the spelling list. */
-export function toolInputString(inp: Record<string, unknown>, ...keys: string[]): string {
+export function toolInputString(
+  inp: Record<string, unknown>,
+  ...keys: string[]
+): string {
   for (const key of keys) {
     const v = inp[key];
     if (typeof v === "string" && v) return v;
@@ -333,7 +338,14 @@ export function toolInputString(inp: Record<string, unknown>, ...keys: string[])
 }
 
 export const toolFilePath = (inp: Record<string, unknown>) =>
-  toolInputString(inp, "file_path", "filePath", "path", "notebook_path", "notebookPath");
+  toolInputString(
+    inp,
+    "file_path",
+    "filePath",
+    "path",
+    "notebook_path",
+    "notebookPath",
+  );
 export const toolCommand = (inp: Record<string, unknown>) =>
   toolInputString(inp, "command", "cmd");
 
@@ -377,9 +389,9 @@ function lineCount(value: string): number {
 function patchFiles(inp: Record<string, unknown>): string[] {
   const text = toolInputString(inp, "patchText", "patch");
   if (!text) return [];
-  return [
-    ...text.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm),
-  ].map((m) => m[1].trim());
+  return [...text.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)].map(
+    (m) => m[1].trim(),
+  );
 }
 
 function fileChangeDetail(inp: Record<string, unknown>): ToolDetail | null {
@@ -575,7 +587,9 @@ export function toolLineStats(
     additions += lineCount(
       toolInputString(edit, "new_string", "newString", "newText", "content"),
     );
-    deletions += lineCount(toolInputString(edit, "old_string", "oldString", "oldText"));
+    deletions += lineCount(
+      toolInputString(edit, "old_string", "oldString", "oldText"),
+    );
   }
   return additions || deletions ? { additions, deletions } : null;
 }

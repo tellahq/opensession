@@ -50,7 +50,7 @@ const BROKER_TIMEOUT_MS = 30_000;
 const MAX_SCRUB_BYTES = 2 * 1024 * 1024;
 
 export async function handleKeychainRoutes(
-  ctx: RouteContext
+  ctx: RouteContext,
 ): Promise<Response | undefined> {
   const { req, url, path } = ctx;
 
@@ -60,7 +60,8 @@ export async function handleKeychainRoutes(
     const slash = rest.indexOf("/");
     const grantId = slash === -1 ? rest : rest.slice(0, slash);
     const upstreamPath = slash === -1 ? "/" : rest.slice(slash);
-    if (!grantId) return Response.json({ error: "missing grant id" }, { status: 400 });
+    if (!grantId)
+      return Response.json({ error: "missing grant id" }, { status: 400 });
 
     const use = consumeGrantForBroker(grantId, req.method, upstreamPath);
     if ("error" in use) {
@@ -74,12 +75,16 @@ export async function handleKeychainRoutes(
       return Response.json({ error: use.error }, { status: use.status });
     }
 
-    const target = new URL(`https://${use.credential.host}${upstreamPath}${url.search}`);
+    const target = new URL(
+      `https://${use.credential.host}${upstreamPath}${url.search}`,
+    );
     const headers = new Headers();
     req.headers.forEach((value, key) => {
-      if (!STRIPPED_REQUEST_HEADERS.has(key.toLowerCase())) headers.set(key, value);
+      if (!STRIPPED_REQUEST_HEADERS.has(key.toLowerCase()))
+        headers.set(key, value);
     });
-    for (const [k, v] of Object.entries(brokerHeaders(use.credential))) headers.set(k, v);
+    for (const [k, v] of Object.entries(brokerHeaders(use.credential)))
+      headers.set(k, v);
 
     audit({
       kind: "keychain_broker_call",
@@ -99,7 +104,10 @@ export async function handleKeychainRoutes(
       upstream = await fetch(target, {
         method: req.method,
         headers,
-        body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
+        body:
+          req.method === "GET" || req.method === "HEAD"
+            ? undefined
+            : await req.arrayBuffer(),
         signal: AbortSignal.timeout(BROKER_TIMEOUT_MS),
         // A redirect's Location can point at any host; following it would send
         // the credential somewhere the owner never approved. Surface the 3xx
@@ -108,8 +116,10 @@ export async function handleKeychainRoutes(
       });
     } catch (e: any) {
       return Response.json(
-        { error: `broker request to ${use.credential.host} failed: ${e?.message || String(e)}` },
-        { status: 502 }
+        {
+          error: `broker request to ${use.credential.host} failed: ${e?.message || String(e)}`,
+        },
+        { status: 502 },
       );
     }
 
@@ -121,7 +131,10 @@ export async function handleKeychainRoutes(
       /text\/|json|xml|x-www-form-urlencoded/i.test(contentType) &&
       Number(upstream.headers.get("content-length") || 0) <= MAX_SCRUB_BYTES;
     if (!scrubbable) {
-      return new Response(upstream.body, { status: upstream.status, headers: outHeaders });
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: outHeaders,
+      });
     }
     const body = await upstream.text();
     return new Response(scrubSecret(body, use.credential.secret), {
@@ -141,17 +154,24 @@ export async function handleKeychainRoutes(
 
   if (path === "/api/keychain/credentials" && req.method === "POST") {
     const body = await req.json().catch(() => null);
-    if (!body || typeof body.service !== "string" || typeof body.secret !== "string") {
+    if (
+      !body ||
+      typeof body.service !== "string" ||
+      typeof body.secret !== "string"
+    ) {
       return Response.json(
         { error: "expected { service, host, secret, ... }" },
-        { status: 400 }
+        { status: 400 },
       );
     }
     const owner = requestUser(ctx, body.owner);
     if (!owner) {
       return Response.json(
-        { error: "no signed-in identity — a credential must have an owner who can approve asks" },
-        { status: 400 }
+        {
+          error:
+            "no signed-in identity — a credential must have an owner who can approve asks",
+        },
+        { status: 400 },
       );
     }
     try {
@@ -161,9 +181,12 @@ export async function handleKeychainRoutes(
           service: body.service,
           host: String(body.host || ""),
           secret: body.secret,
-          description: typeof body.description === "string" ? body.description : undefined,
+          description:
+            typeof body.description === "string" ? body.description : undefined,
           injection: body.injection,
-          allowedMethods: Array.isArray(body.allowedMethods) ? body.allowedMethods : undefined,
+          allowedMethods: Array.isArray(body.allowedMethods)
+            ? body.allowedMethods
+            : undefined,
           allowedPathPrefixes: Array.isArray(body.allowedPathPrefixes)
             ? body.allowedPathPrefixes
             : undefined,
@@ -177,7 +200,10 @@ export async function handleKeychainRoutes(
   const credMatch = path.match(/^\/api\/keychain\/credentials\/([^/]+)$/);
   if (credMatch && req.method === "DELETE") {
     try {
-      const ok = deleteCredential(decodeURIComponent(credMatch[1]!), requestUser(ctx));
+      const ok = deleteCredential(
+        decodeURIComponent(credMatch[1]!),
+        requestUser(ctx),
+      );
       return ok
         ? Response.json({ ok: true })
         : Response.json({ error: "no such credential" }, { status: 404 });
@@ -188,7 +214,10 @@ export async function handleKeychainRoutes(
 
   const grantMatch = path.match(/^\/api\/keychain\/grants\/([^/]+)$/);
   if (grantMatch && req.method === "DELETE") {
-    const result = revokeGrant(decodeURIComponent(grantMatch[1]!), requestUser(ctx));
+    const result = revokeGrant(
+      decodeURIComponent(grantMatch[1]!),
+      requestUser(ctx),
+    );
     return "error" in result
       ? Response.json(result, { status: 403 })
       : Response.json({ ok: true });

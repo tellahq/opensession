@@ -7,9 +7,13 @@
 import type { McpScope } from "./runner-shared";
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { } from "./paths";
+import {} from "./paths";
 import { transitionRunState } from "./run-state";
-import { sessionDelivery, sessionTurn, sessionTurnSnapshot } from "./session-kernel/kernel";
+import {
+  sessionDelivery,
+  sessionTurn,
+  sessionTurnSnapshot,
+} from "./session-kernel/kernel";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
 // Overridable so a detached run host (src/runner-host/host.ts) journals to its
@@ -27,9 +31,9 @@ let onJournalSet:
 /** Register the in-process acknowledgement for a prompt intake record. Kept as
  * a callback so this low-level journal stays independent of queue state. */
 export function setJournalSetListener(
-	listener: ((record: ActiveRunRecord) => void | Promise<void>) | undefined,
+  listener: ((record: ActiveRunRecord) => void | Promise<void>) | undefined,
 ): void {
-	onJournalSet = listener;
+  onJournalSet = listener;
 }
 
 function syncActiveRunAliases(journal: Record<string, ActiveRunRecord>): void {
@@ -72,6 +76,7 @@ export interface ActiveRunRecord {
   mcpServers?: McpScope;
   user?: string; // per-run user, preserved across resume (gates per-user MCP servers)
   deniedTools?: Record<string, string>; // per-run tool denials, preserved across resume
+  publicationPolicy?: { repo: string; branch: string; headBranch: string };
   confirmTools?: Record<string, string>; // per-run human-confirmed tools, preserved across resume
   aws?: boolean; // whether to inject AWS creds, preserved across resume
   claudeCliEnv?: boolean; // pool Claude-CLI credential in the run env (deepsec scans), preserved across resume
@@ -164,6 +169,7 @@ function writeRunJournal(journal: Record<string, ActiveRunRecord>): void {
 export function buildRunJournalRecord(
   opts: {
     deniedTools?: Record<string, string>;
+    publicationPolicy?: { repo: string; branch: string; headBranch: string };
     aws?: boolean;
     claudeCliEnv?: boolean;
     codexCliEnv?: boolean;
@@ -188,6 +194,7 @@ export function buildRunJournalRecord(
     | "resumeAttempts"
     | "lastResumeAt"
     | "deniedTools"
+    | "publicationPolicy"
     | "aws"
     | "claudeCliEnv"
     | "codexCliEnv"
@@ -204,6 +211,7 @@ export function buildRunJournalRecord(
     usageCredits: site.usageCredits ?? opts.usageCredits,
     prReviewer: site.prReviewer ?? opts.prReviewer,
     deniedTools: opts.deniedTools,
+    publicationPolicy: opts.publicationPolicy,
     aws: !!opts.aws,
     claudeCliEnv: opts.claudeCliEnv || undefined,
     codexCliEnv: opts.codexCliEnv || undefined,
@@ -235,7 +243,10 @@ export async function journalSet(
   journal[record.runKey] = {
     ...record,
     firstJournaledAt:
-      prior?.firstJournaledAt || record.firstJournaledAt || prior?.startedAt || record.startedAt,
+      prior?.firstJournaledAt ||
+      record.firstJournaledAt ||
+      prior?.startedAt ||
+      record.startedAt,
     // An existing record is the live source of recovery health. A fallback
     // may re-journal stale opts captured before model output reset the
     // consecutive-failure fuse; it must not resurrect the old attempt count.
@@ -278,11 +289,15 @@ export interface QuarantinedRun {
 export function journalQuarantine(entries: QuarantinedRun[]): void {
   if (!entries.length) return;
   const journal = readRunJournal();
-  const quarantinePath = ACTIVE_RUNS_PATH.replace(/\.json$/, "") + ".quarantine.json";
-  let quarantine: Record<string, ActiveRunRecord & {
-    quarantinedAt: string;
-    quarantineReason: RunQuarantineReason;
-  }> = {};
+  const quarantinePath =
+    ACTIVE_RUNS_PATH.replace(/\.json$/, "") + ".quarantine.json";
+  let quarantine: Record<
+    string,
+    ActiveRunRecord & {
+      quarantinedAt: string;
+      quarantineReason: RunQuarantineReason;
+    }
+  > = {};
   try {
     if (existsSync(quarantinePath)) {
       quarantine = JSON.parse(readFileSync(quarantinePath, "utf-8"));
@@ -317,8 +332,12 @@ export function journalStartRecovery(record: ActiveRunRecord): ActiveRunRecord {
     ...current,
     ...record,
     firstJournaledAt:
-      record.firstJournaledAt || current.firstJournaledAt || current.startedAt || record.startedAt,
-    resumeAttempts: Math.max(record.resumeAttempts ?? 0, current.resumeAttempts ?? 0) + 1,
+      record.firstJournaledAt ||
+      current.firstJournaledAt ||
+      current.startedAt ||
+      record.startedAt,
+    resumeAttempts:
+      Math.max(record.resumeAttempts ?? 0, current.resumeAttempts ?? 0) + 1,
     lastResumeAt: now,
     claimedAt: current.claimedAt,
   };
@@ -332,7 +351,9 @@ export function journalStartRecovery(record: ActiveRunRecord): ActiveRunRecord {
  * Reboots while the turn keeps running should not exhaust the recovery-attempt
  * fuse: that fuse is for consecutive failed recoveries, not healthy resumptions
  * of the same turn. */
-export function journalMarkRecoveryAttached(record: ActiveRunRecord): ActiveRunRecord | undefined {
+export function journalMarkRecoveryAttached(
+  record: ActiveRunRecord,
+): ActiveRunRecord | undefined {
   const journal = readRunJournal();
   const current = journal[record.runKey];
   if (!current) return undefined;
@@ -470,10 +491,13 @@ export function hasActiveRunFor(
 // still actively driven by THIS process" (a hot reload re-runs boot-ish code
 // while old runs keep executing off their old closures) apart from genuinely
 // interrupted runs. Parked on globalThis so a reload keeps live probes.
-const activeRunProbes: Set<(runKey: string) => boolean> = ((globalThis as any)
-  .__runJournalActiveProbes ??= new Set());
+const activeRunProbes: Set<(runKey: string) => boolean> = ((
+  globalThis as any
+).__runJournalActiveProbes ??= new Set());
 
-export function registerActiveRunProbe(probe: (runKey: string) => boolean): void {
+export function registerActiveRunProbe(
+  probe: (runKey: string) => boolean,
+): void {
   activeRunProbes.add(probe);
 }
 
@@ -505,7 +529,8 @@ const takenRunKeys: Set<string> = ((globalThis as any).__runJournalTakenKeys ??=
  */
 export async function takeInterruptedRuns(
   seedRecords: ActiveRunRecord[] = [],
-  shouldTake: (record: ActiveRunRecord) => boolean | Promise<boolean> = () => true,
+  shouldTake: (record: ActiveRunRecord) => boolean | Promise<boolean> = () =>
+    true,
   transition: JournalRunStateTransition = transitionRunState,
 ): Promise<ActiveRunRecord[]> {
   const journal = readRunJournal();
@@ -526,7 +551,7 @@ export async function takeInterruptedRuns(
     if (
       !isRunActiveInProcess(record.runKey) &&
       !takenRunKeys.has(record.runKey) &&
-      await shouldTake(record)
+      (await shouldTake(record))
     )
       entries.push(record);
   }

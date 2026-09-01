@@ -83,12 +83,12 @@ opensession-video-library/
 Four kinds of content, all of them things the instance already knows how to
 store:
 
-| In the manifest | Installs into | Existing writer |
-| --- | --- | --- |
-| `mcpServers` | `mcp-config.json` | `packages/core/opensession-server/src/server/connections.ts` |
-| `feeds` | `~/.opensession/feeds.json` | `packages/core/opensession-server/src/server/feeds-config.ts` |
-| `automations` | `integrations.seeds.automations` in `config.json` | `scripts/lib/recipes.ts` |
-| `skills` | `.agents/skills/<name>/` | a directory copy |
+| In the manifest | Installs into                                     | Existing writer                                               |
+| --------------- | ------------------------------------------------- | ------------------------------------------------------------- |
+| `mcpServers`    | `mcp-config.json`                                 | `packages/core/opensession-server/src/server/connections.ts`  |
+| `feeds`         | `~/.opensession/feeds.json`                       | `packages/core/opensession-server/src/server/feeds-config.ts` |
+| `automations`   | `integrations.seeds.automations` in `config.json` | `scripts/lib/recipes.ts`                                      |
+| `skills`        | `.agents/skills/<name>/`                          | a directory copy                                              |
 
 These are the fresh default paths. If a corresponding new path does not yet
 exist, an existing legacy `~/.opensession-feeds.json`,

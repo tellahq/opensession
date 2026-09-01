@@ -333,6 +333,66 @@ struct TurnFooter: Identifiable, Equatable {
     }
 }
 
+/// Display text for provider reasoning summaries. Generated leading bold is
+/// chrome, not answer emphasis, so it becomes a regular-weight title while a
+/// longer body retains markdown.
+struct ReasoningSummaryDisplay: Equatable {
+    let title: String
+    let body: String
+
+    init(_ content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("**"),
+              let close = trimmed.dropFirst(2).range(of: "**"),
+              !trimmed[trimmed.index(trimmed.startIndex, offsetBy: 2)..<close.lowerBound]
+                .contains("\n")
+        else {
+            title = ""
+            body = trimmed
+            return
+        }
+        let after = trimmed[close.upperBound...]
+        guard after.isEmpty || after.first?.isWhitespace == true else {
+            title = ""
+            body = trimmed
+            return
+        }
+        title = String(
+            trimmed[trimmed.index(trimmed.startIndex, offsetBy: 2)..<close.lowerBound]
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        body = String(after).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The activity chrome for this summary. Providers that send prose rather
+    /// than a generated heading still get one stable live label; their prose
+    /// remains in `body` and readable below it. Durable prose gets no label.
+    func activityTitle(isActive: Bool) -> String? {
+        if !title.isEmpty { return title }
+        return isActive ? "Thinking" : nil
+    }
+
+    /// A tolerant compatibility check for the old bold-heading-only shape.
+    static func isLegacyHeading(_ content: String) -> Bool {
+        // Generated headings are short. Reject normal prose before trimming or
+        // parsing it so the O(n) grouping pass never repeatedly copies a large
+        // durable answer while new stream snapshots arrive.
+        guard content.utf8.count <= 4_096 else { return false }
+        let display = ReasoningSummaryDisplay(content)
+        return !display.title.isEmpty && display.body.isEmpty
+    }
+
+    /// A streamed generated heading may not have received its closing `**`
+    /// yet. Multiline output is normal answer markdown, not this live state.
+    static func liveHeading(_ content: String) -> String? {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("**"), !trimmed.contains("\n") else { return nil }
+        var heading = String(trimmed.dropFirst(2))
+        if heading.hasSuffix("**") { heading.removeLast(2) }
+        heading = heading.trimmingCharacters(in: .whitespacesAndNewlines)
+        return heading.isEmpty ? nil : heading
+    }
+}
+
 // MARK: - Grouping
 
 @MainActor
@@ -400,13 +460,36 @@ enum TranscriptGrouping {
         func flush(isTrailing: Bool) {
             defer { turn = [] }
             guard !turn.isEmpty else { return }
-            let tools = turn.compactMap { item -> ToolCallItem? in
+
+            // A plain final assistant row is the only answer candidate. Before
+            // `isReasoning`, providers persisted intermediate summaries as a
+            // bold-only row; every such row in the work is activity, including
+            // the last assistant message when later tools prove it was not the
+            // answer. A bold final answer stays ordinary answer markdown.
+            let finalIndex: Int? = {
+                guard let index = turn.indices.last,
+                      case .message(let entry) = turn[index],
+                      entry.isReasoning != true
+                else { return nil }
+                return index
+            }()
+            var normalized = turn
+            for index in normalized.indices where index != finalIndex {
+                guard case .message(var entry) = normalized[index],
+                      entry.isReasoning == nil,
+                      ReasoningSummaryDisplay.isLegacyHeading(entry.text)
+                else { continue }
+                entry.isReasoning = true
+                normalized[index] = .message(entry)
+            }
+
+            let tools = normalized.compactMap { item -> ToolCallItem? in
                 if case .tool(let call) = item { return call }
                 return nil
             }
             // No tools: nothing worth hiding, so every message stands alone.
             guard !tools.isEmpty else {
-                blocks.append(contentsOf: turn.map { item in
+                blocks.append(contentsOf: normalized.map { item in
                     switch item {
                     case .message(let entry): TranscriptBlock.message(entry)
                     case .tool(let call): TranscriptBlock.tool(call)
@@ -414,11 +497,16 @@ enum TranscriptGrouping {
                 })
                 return
             }
-            // The answer is the last item only when it is prose; a turn that
-            // ended mid-tools folds entirely.
-            var final: TranscriptEntry?
-            if case .message(let entry)? = turn.last { final = entry }
-            let folded = final == nil ? turn : Array(turn.dropLast())
+            // Explicit and inferred reasoning stays interleaved with the tools
+            // it describes, matching the web transcript. It is work even at
+            // the tail and must never acquire answer metadata or hierarchy.
+            let final: TranscriptEntry? = if let finalIndex,
+                                             case .message(let entry) = normalized[finalIndex] {
+                entry
+            } else {
+                nil
+            }
+            let folded = final == nil ? normalized : Array(normalized.dropLast())
             let isLive = live && isTrailing
 
             if let first = folded.first, let last = folded.last {
@@ -435,7 +523,7 @@ enum TranscriptGrouping {
             // A running turn's footer would show a duration that is still
             // ticking; wait for it to settle.
             guard !isLive else { return }
-            let start = turn.first.flatMap(startTimestamp)
+            let start = normalized.first.flatMap(startTimestamp)
             let end = final.timestampDate
             let footer = TurnFooter(
                 id: "\(final.id):footer",
@@ -466,6 +554,10 @@ enum TranscriptGrouping {
                         worktreeDir: worktreeDir
                     )
                 )))
+            case .entry(let entry) where entry.turnBoundary == true:
+                // Hidden system-triggered turns separate completed output from
+                // later work without drawing an empty user message.
+                flush(isTrailing: false)
             case .entry(let entry) where entry.isAssistant:
                 turn.append(.message(entry))
             case .entry(let entry) where entry.isTool:

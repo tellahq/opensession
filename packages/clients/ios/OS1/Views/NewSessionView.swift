@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Compose a new session, laid out like the palette on the desktop: the repo
 /// names the iOS title bar (and reads across the top on Mac), the prompt fills
@@ -103,10 +106,14 @@ struct NewSessionView: View {
     /// keeps it alive across the layout changes a long dictation causes.
     @State private var dictation = Dictation()
     @State private var sessionProjection = ComposerSessionProjectionState()
+    @State private var promptSelection: TextSelection?
     @FocusState private var promptFocused: Bool
 
-    /// The universal "+" reopens on whatever repo was used last.
+    /// Remembered only for restoring Code after switching this composer to
+    /// Ask. A fresh universal composer starts from the cross-device default.
     @AppStorage("os1.newSession.repo") private var lastRepo = ""
+    @AppStorage("os1.composer.defaultRepo") private var preferredRepo = ""
+    @AppStorage(NativePreferences.sessionCheckoutsStorageKey) private var sessionCheckouts = ""
     @AppStorage("os1.composer.defaultModel") private var preferredModel = ""
     @AppStorage("os1.composer.defaultEngine") private var preferredEngine = ""
 
@@ -117,27 +124,8 @@ struct NewSessionView: View {
                 header
                 #endif
                 editor
-                if !images.isEmpty || !files.isEmpty {
-                    VStack(spacing: 6) {
-                        if !images.isEmpty {
-                            AttachedImagesRow(images: images) { image in
-                                images.removeAll { $0.id == image.id }
-                            }
-                        }
-                        if !files.isEmpty {
-                            AttachedFilesRow(
-                                files: files,
-                                staging: stagingFileIDs,
-                                failed: failedFileIDs,
-                                onRetry: { file in Task { await stage(file) } },
-                                onRemove: remove
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 6)
-                }
                 #if os(macOS)
+                if !images.isEmpty || !files.isEmpty { attachments }
                 Divider()
                 controls
                 #endif
@@ -190,26 +178,33 @@ struct NewSessionView: View {
                         usesSystemButtonStyle: true
                     )
                 }
-
-                // iOS hides the bottom bar while the software keyboard is up.
-                // Repeat the same controls in its accessory so composing never
-                // makes attachments, run options, model, or dictation vanish.
-                ToolbarItemGroup(placement: .keyboard) {
-                    AttachImagesButton(images: $images, usesSystemButtonStyle: true)
-                    moreOptionsMenu
-                    Spacer()
-                    modelChip
-                    ComposerDictationButton(
-                        dictation: dictation,
-                        draft: $prompt,
-                        usesSystemButtonStyle: true
-                    )
-                }
                 #else
                 ToolbarItem(placement: .confirmationAction) { startButton }
                 ToolbarItem(placement: .cancellationAction) { cancelButton }
                 #endif
             }
+            #if os(iOS)
+            // Keep staged files above both forms of the composer toolbar. The
+            // keyboard tools live here too: unlike a keyboard toolbar, this
+            // inset can reserve real space below its glass instead of extending
+            // the material until it touches the keys.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 0) {
+                    if !images.isEmpty || !files.isEmpty {
+                        VStack(spacing: 0) {
+                            Divider()
+                            attachments
+                        }
+                        .background(OS1VisualStyle.background)
+                    }
+                    if promptFocused {
+                        keyboardTools
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                    }
+                }
+            }
+            #endif
             .task { await load() }
             .task { await stagePendingFiles() }
             // The library is a detail of composing this session, so it pushes
@@ -253,6 +248,12 @@ struct NewSessionView: View {
         // This belongs to the outer stack. The editor itself disappears when
         // the recipe library is pushed, which is not an exit from the sheet.
         .onDisappear { parkDraftAfterDismiss() }
+        #if os(iOS)
+        // While the prompt owns the keyboard, a downward drag belongs to the
+        // editor and dismisses the keyboard. Once focus leaves, the sheet's
+        // normal swipe-to-dismiss gesture becomes available again.
+        .interactiveDismissDisabled(promptFocused)
+        #endif
         // The floor belongs to the stack, not to its first screen. A macOS
         // sheet sizes to its content, so applied inside, a push replaced it
         // with a view that asks for nothing and the sheet collapsed to its
@@ -264,6 +265,70 @@ struct NewSessionView: View {
     }
 
     // ── Prompt editor ─────────────────────────────────────────────────────
+
+    private var attachments: some View {
+        VStack(spacing: 6) {
+            if !images.isEmpty {
+                AttachedImagesRow(
+                    images: images,
+                    onRemove: { image in
+                        let state = Self.removingImage(
+                            image, from: images, prompt: prompt
+                        )
+                        images = state.images
+                        prompt = state.prompt
+                    },
+                    onComment: { index, region, text in
+                        prompt = Self.appendingImageComment(
+                            to: prompt,
+                            imageIndex: index,
+                            region: region,
+                            comment: text
+                        )
+                    }
+                )
+            }
+            if !files.isEmpty {
+                AttachedFilesRow(
+                    files: files,
+                    staging: stagingFileIDs,
+                    failed: failedFileIDs,
+                    onRetry: { file in Task { await stage(file) } },
+                    onRemove: remove
+                )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
+    }
+
+    static func appendingImageComment(
+        to prompt: String,
+        imageIndex: Int,
+        region: ImageAttachmentRegion,
+        comment: String
+    ) -> String {
+        ImageAttachmentComments.appending(
+            to: prompt,
+            imageIndex: imageIndex,
+            region: region,
+            comment: comment
+        )
+    }
+
+    static func removingImage(
+        _ image: AttachedImage,
+        from images: [AttachedImage],
+        prompt: String
+    ) -> (images: [AttachedImage], prompt: String) {
+        guard let index = images.firstIndex(of: image) else { return (images, prompt) }
+        var remaining = images
+        remaining.remove(at: index)
+        return (
+            remaining,
+            ImageAttachmentComments.rebasing(prompt, removingImageAt: index)
+        )
+    }
 
     private var startDisabled: Bool {
         savingDraft
@@ -342,13 +407,10 @@ struct NewSessionView: View {
 
     private var editor: some View {
         ZStack(alignment: .topLeading) {
-            TextEditor(text: sessionProjection.binding(
-                $prompt,
-                titleGeneration: TranscriptLinks.shared.generation,
-                refreshTitles: !promptFocused
-            ))
+            TextEditor(text: projectedPrompt, selection: $promptSelection)
                 .font(.body)
                 .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboardImmediatelyCompat()
                 .padding(.horizontal, 11)
                 .padding(.top, 8)
                 .focused($promptFocused)
@@ -368,12 +430,34 @@ struct NewSessionView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, placeholderTopPadding)
             }
+            VStack {
+                Spacer(minLength: 0)
+                ComposerMentionPalette(
+                    text: projectedPrompt.wrappedValue,
+                    selection: promptSelection,
+                    scope: ComposerMentionScope(repo: repo)
+                ) { edit in
+                    projectedPrompt.wrappedValue = edit.text
+                    promptSelection = edit.selection
+                    promptFocused = true
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 64)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         #if os(iOS)
         .contentShape(Rectangle())
         .onTapGesture { promptFocused = true }
         #endif
+    }
+
+    private var projectedPrompt: Binding<String> {
+        sessionProjection.binding(
+            $prompt,
+            titleGeneration: TranscriptLinks.shared.generation,
+            refreshTitles: !promptFocused
+        )
     }
 
     /// Offered only while the prompt is empty, under the placeholder it
@@ -599,6 +683,40 @@ struct NewSessionView: View {
         #endif
         return catalog?.label(for: id) ?? "Model"
     }
+
+    #if os(iOS)
+    private var keyboardTools: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 2) {
+                AttachImagesButton(images: $images)
+                moreOptionsMenu
+            }
+            .padding(.horizontal, 2)
+            .background { Color.clear.glassSurface(in: Capsule()) }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 2) {
+                modelChip
+                ComposerDictationButton(dictation: dictation, draft: $prompt)
+                Button(
+                    "Dismiss keyboard",
+                    systemImage: "keyboard.chevron.compact.down"
+                ) {
+                    promptFocused = false
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+            }
+            .padding(.horizontal, 2)
+            .background { Color.clear.glassSurface(in: Capsule()) }
+        }
+    }
+    #endif
 
     /// Attach stays at the leading edge. iOS keeps mode and execution choices
     /// behind one overflow button, with model and dictation on the right. The
@@ -957,6 +1075,9 @@ struct NewSessionView: View {
     }
 
     private func load() async {
+        #if DEBUG && os(iOS)
+        installAnnotationScreenshotFixture()
+        #endif
         if prompt.isEmpty, let initialDraft { prompt = initialDraft.text }
         promptFocused = true
         // Opened from the Action Button: the mic goes hot with the sheet, so
@@ -967,28 +1088,41 @@ struct NewSessionView: View {
         if autoDictate, !dictation.active, Dictation.isAuthorized {
             Task { await dictation.start(base: prompt) { prompt = $0 } }
         }
-        repo = initialRepo ?? lastRepo
-        if repo == Session.noRepoID { mode = "ask" }
+        // Show an explicit scope immediately. An unscoped composer waits for
+        // the repository list so a removed preference never flashes as real.
+        repo = initialRepo ?? ""
+        if initialRepo == Session.noRepoID { mode = "ask" }
+        let requestContext = NativePreferences.context()
         async let reposFetch = OS1API.repos()
         async let modelsFetch = OS1API.models(workspaceId: initialWorkspaceId)
+        async let prefsFetch = SettingsAPI.uiPrefs(user: requestContext.user)
         // A server without sandboxes, or one too old to answer, simply leaves
         // the chip off. It must never keep the composer from opening.
         async let sandboxFetch = OS1API.sandboxStatus()
-        repos = (try? await reposFetch) ?? []
-        if repo != Session.noRepoID,
-           !repos.isEmpty,
-           !repos.contains(where: { $0.id == repo }) {
-            repo = repos.first(where: { $0.isDefault == true })?.id ?? repos[0].id
+        let fetchedRepos = (try? await reposFetch) ?? []
+        let fetchedPrefs = try? await prefsFetch
+        let livePrefs = NativePreferences.context() == requestContext ? fetchedPrefs : nil
+        let livePreferredRepo = livePrefs.map {
+            NativePreferences.normalizedDefaultRepository($0["default-repo"]) ?? ""
+        } ?? preferredRepo
+        preferredRepo = livePreferredRepo
+        if let livePrefs {
+            sessionCheckouts = NativePreferences.validatedSessionCheckouts(
+                livePrefs["session-checkouts"]
+            ) ?? ""
         }
+        repos = fetchedRepos
+        repo = Self.startingRepository(
+            in: fetchedRepos,
+            preferred: livePreferredRepo,
+            explicit: initialRepo
+        )
         // The picker's rows can only show an icon the cache already holds, so
         // fetch them here rather than when the menu opens.
         for repoInfo in repos { RepoTile.prefetchIcon(for: repoInfo.id) }
         sandboxStatus = try? await sandboxFetch
         if let fetched = try? await modelsFetch {
             catalog = fetched
-            let livePrefs = try? await SettingsAPI.uiPrefs(
-                user: ServerConfig.shared.userName
-            )
             let livePreferred = livePrefs?["default-model"] ?? preferredModel
             let liveEngine = livePrefs?["default-engine"] ?? preferredEngine
             preferredModel = livePreferred
@@ -1058,6 +1192,24 @@ struct NewSessionView: View {
         }
     }
 
+    /// Resolve only real repository ids. Explicit scopes win, including the
+    /// no-repo Ask/Scratch sentinel. A fresh composer then uses the account's
+    /// preference before the workspace/default repository. Retired `auto` and
+    /// removed ids fall through safely.
+    static func startingRepository(
+        in repos: [OS1API.RepoInfo],
+        preferred: String,
+        explicit: String?
+    ) -> String {
+        if explicit == Session.noRepoID { return Session.noRepoID }
+        if let explicit, repos.contains(where: { $0.id == explicit }) { return explicit }
+        let preferred = NativePreferences.normalizedDefaultRepository(preferred) ?? ""
+        if repos.contains(where: { $0.id == preferred }) { return preferred }
+        return repos.first(where: { $0.isDefault == true })?.id
+            ?? repos.first?.id
+            ?? Session.noRepoID
+    }
+
     private var fallbackRepo: String {
         if repos.contains(where: { $0.id == lastRepo }) { return lastRepo }
         return repos.first(where: { $0.isDefault == true })?.id ?? repos.first?.id ?? ""
@@ -1075,6 +1227,39 @@ struct NewSessionView: View {
         }
         parkDraft(text, dismissWhenSaved: true)
     }
+
+    #if DEBUG && os(iOS)
+    private func installAnnotationScreenshotFixture() {
+        guard ProcessInfo.processInfo.environment["OS1_NEW_SESSION_ANNOTATION_FIXTURE"] == "1"
+        else { return }
+        prompt = "Refine the settings screen\n[Image 1 · 20–65% × 20–55%] Increase contrast on this button"
+        guard images.isEmpty else { return }
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600))
+        let image = renderer.image { context in
+            UIColor.systemGroupedBackground.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
+            UIColor.secondarySystemGroupedBackground.setFill()
+            context.cgContext.fill(CGRect(x: 70, y: 70, width: 760, height: 460))
+            "Review settings".draw(
+                at: CGPoint(x: 120, y: 120),
+                withAttributes: [.font: UIFont.boldSystemFont(ofSize: 42)]
+            )
+            UIColor.systemBlue.setFill()
+            context.cgContext.fillEllipse(in: CGRect(x: 620, y: 365, width: 150, height: 68))
+            "Save".draw(
+                at: CGPoint(x: 650, y: 379),
+                withAttributes: [
+                    .font: UIFont.boldSystemFont(ofSize: 28),
+                    .foregroundColor: UIColor.white,
+                ]
+            )
+        }
+        if let data = image.jpegData(compressionQuality: 0.9) {
+            images = [AttachedImage(id: "new-session-annotation-fixture", jpegData: data)]
+        }
+    }
+    #endif
 
     /// Covers an interactive sheet dismissal. The outer NavigationStack owns
     /// this callback, so opening the recipe library does not count as leaving.
@@ -1154,6 +1339,10 @@ struct NewSessionView: View {
                     prompt: text,
                     repo: repo,
                     mode: mode,
+                    checkoutMode: NativePreferences.sessionCheckoutMode(
+                        for: repo,
+                        in: sessionCheckouts
+                    ),
                     model: model.isEmpty ? nil : model,
                     effort: effort.isEmpty ? nil : effort,
                     fastMode: fastMode,

@@ -101,7 +101,9 @@ function writeConfigFeeds(feeds: ConfigFeed[]): void {
 
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,40}$/;
 
-export function validateConfigFeed(input: unknown): ConfigFeed | { error: string } {
+export function validateConfigFeed(
+  input: unknown,
+): ConfigFeed | { error: string } {
   const f = input as Partial<ConfigFeed>;
   if (!f || typeof f !== "object") return { error: "Invalid feed" };
   if (!f.id || !ID_RE.test(f.id)) return { error: "id must be a short slug" };
@@ -124,7 +126,9 @@ export function validateConfigFeed(input: unknown): ConfigFeed | { error: string
     items: {
       server: items.server.trim(),
       tool: items.tool.trim(),
-      ...(items.args && typeof items.args === "object" ? { args: items.args } : {}),
+      ...(items.args && typeof items.args === "object"
+        ? { args: items.args }
+        : {}),
       ...(items.path ? { path: String(items.path) } : {}),
       map: items.map,
     },
@@ -156,7 +160,9 @@ export function validateConfigFeed(input: unknown): ConfigFeed | { error: string
   };
 }
 
-export function upsertConfigFeed(input: unknown): { ok: true } | { error: string } {
+export function upsertConfigFeed(
+  input: unknown,
+): { ok: true } | { error: string } {
   const feed = validateConfigFeed(input);
   if ("error" in feed) return feed;
   const feeds = readConfigFeeds().filter((f) => f.id !== feed.id);

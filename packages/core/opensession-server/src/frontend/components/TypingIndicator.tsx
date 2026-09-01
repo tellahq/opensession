@@ -1,30 +1,24 @@
-import * as stylex from "@stylexjs/stylex";
-import { type as typography } from "../styles/typography.stylex";
-
-const sx = stylex.create({
-	textFaint: { color: "var(--text-faint)" },
-});
+import { utilityClassName } from "../ui/cn";
+import { cn } from "../ui/cn";
 import { typingLabel } from "../lib/typing";
 
 export function TypingIndicator({
-	users,
-	className,
+  users,
+  className,
 }: {
-	users: string[];
-	className?: string;
+  users: string[];
+  className?: string;
 }) {
-	const label = typingLabel(users);
-	if (!label) return null;
-	const rootStyles = stylex.props(typography.label, sx.textFaint);
-	return (
-		<div
-			role="status"
-			aria-live="polite"
-			aria-atomic="true"
-			className={[rootStyles.className, className].filter(Boolean).join(" ")}
-			style={rootStyles.style}
-		>
-			{label}
-		</div>
-	);
+  const label = typingLabel(users);
+  if (!label) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className={cn(utilityClassName("text-label text-faint"), className)}
+    >
+      {label}
+    </div>
+  );
 }

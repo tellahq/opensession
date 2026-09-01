@@ -4,8 +4,8 @@
  * `getSandboxProvider()` resolves the provider for a run: an explicit spec
  * wins, otherwise the config file (~/.opensession-sandbox.json) decides, and the
  * kill-switch file (<sessions-dir>/disable-sandboxes) forces "local".
- * Every registered provider is implemented (local host, docker, the microvm
- * backends, and the remote daytona/e2b/box/modal adapters); an unknown id
+ * Every registered provider is implemented (local host, Docker, Lambda
+ * MicroVM, and the remote Daytona/E2B/Box/Modal adapters); an unknown id
  * still throws at run start instead of silently running unsandboxed.
  */
 
@@ -15,7 +15,6 @@ import { DaytonaProvider } from "./adapters/daytona";
 import { E2bProvider } from "./adapters/e2b";
 import { BoxProvider } from "./adapters/box";
 import { ModalProvider } from "./adapters/modal";
-import { MicrovmProvider } from "./adapters/microvm";
 import { LambdaMicrovmProvider } from "./adapters/lambda-microvm";
 import { effectiveSandboxProvider } from "./config";
 import type { SandboxProvider, SandboxProviderId } from "./provider";
@@ -57,7 +56,6 @@ const daytonaProvider = new DaytonaProvider();
 const e2bProvider = new E2bProvider();
 const boxProvider = new BoxProvider();
 const modalProvider = new ModalProvider();
-const microvmProvider = new MicrovmProvider();
 const lambdaMicrovmProvider = new LambdaMicrovmProvider();
 
 /**
@@ -84,7 +82,9 @@ export function getSandboxProvider(
     case "modal":
       return modalProvider;
     case "microvm":
-      return microvmProvider;
+      throw new Error(
+        "Local MicroVM has been retired; choose a managed remote provider",
+      );
     case "lambda-microvm":
       return lambdaMicrovmProvider;
     default:

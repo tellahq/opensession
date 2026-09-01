@@ -9,11 +9,11 @@ of traps along the way cost an afternoon each.
 Open Session runs agent turns, builds frontends and cuts git worktrees, so it
 wants memory and disk more than cores.
 
-| Use | Instance | Disk | IOPS / throughput |
-| --- | --- | --- | --- |
-| Trying it out | `t3.large` (2 vCPU, 8 GB) | 50 GB gp3 | default (3000 / 125) |
-| A small team | `m7i-flex.2xlarge` (8 vCPU, 32 GB) | 500 GB gp3 | 6000 / 500 |
-| Heavy use, sandboxes, big repos | `r8i.2xlarge` (8 vCPU, 64 GB)+ | 1 TB gp3 | 12000 / 1000 |
+| Use                             | Instance                           | Disk       | IOPS / throughput    |
+| ------------------------------- | ---------------------------------- | ---------- | -------------------- |
+| Trying it out                   | `t3.large` (2 vCPU, 8 GB)          | 50 GB gp3  | default (3000 / 125) |
+| A small team                    | `m7i-flex.2xlarge` (8 vCPU, 32 GB) | 500 GB gp3 | 6000 / 500           |
+| Heavy use, sandboxes, big repos | `r8i.2xlarge` (8 vCPU, 64 GB)+     | 1 TB gp3   | 12000 / 1000         |
 
 For reference: Tella runs its whole team on one `r8i.4xlarge` (16 vCPU,
 128 GB) with a 2 TB gp3 volume. Concurrent agent sessions are memory-hungry:
@@ -24,7 +24,7 @@ heavy-use row uses the memory-optimized `r` family.
 Worktrees and engine state grow steadily; disk is the resource that bites first.
 
 **Set IOPS and throughput explicitly.** This is the non-obvious part of gp3: it
-does *not* scale with capacity the way gp2 did. A 1 TB gp3 gets exactly the same
+does _not_ scale with capacity the way gp2 did. A 1 TB gp3 gets exactly the same
 3,000 IOPS and 125 MB/s as an 8 GB one unless you ask for more. Cloning repos,
 cutting worktrees, installing dependencies and building frontends are all
 I/O-heavy, so both baseline IOPS and throughput can bottleneck the box.
@@ -219,23 +219,23 @@ test something. Nothing about the install hides state from you:
 ssh ubuntu@"$IP"
 ```
 
-| Command | What |
-| --- | --- |
-| `opensession status` | is it running? |
-| `opensession doctor` | what is wrong |
+| Command               | What                       |
+| --------------------- | -------------------------- |
+| `opensession status`  | is it running?             |
+| `opensession doctor`  | what is wrong              |
 | `opensession logs -f` | follow the service journal |
-| `opensession version` | which commit is deployed |
+| `opensession version` | which commit is deployed   |
 
 Useful paths:
 
-| Path | What |
-| --- | --- |
-| `~/.opensession/src` | active release symlink, or the checkout for a `--source` install |
-| `~/.opensession/releases/` | downloaded compiled releases |
-| `~/.opensession/config.json` | instance config (most changes are re-read live) |
-| `~/.opensession.env` | secrets, loaded by the service |
-| `~/.opensession/sessions/` | session store |
-| `~/.opensession/worktrees/` | per-session git worktrees |
+| Path                         | What                                                             |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `~/.opensession/src`         | active release symlink, or the checkout for a `--source` install |
+| `~/.opensession/releases/`   | downloaded compiled releases                                     |
+| `~/.opensession/config.json` | instance config (most changes are re-read live)                  |
+| `~/.opensession.env`         | secrets, loaded by the service                                   |
+| `~/.opensession/sessions/`   | session store                                                    |
+| `~/.opensession/worktrees/`  | per-session git worktrees                                        |
 
 All of these live under the service user's `$HOME`; on Ubuntu's default EC2
 user (the setup this guide uses) that resolves to `/home/ubuntu`.

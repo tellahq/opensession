@@ -21,13 +21,18 @@ import { READ_METHODS } from "./store-routing";
 import { workerEntry } from "../../runner-host/exe";
 import { chooseSessionLane, type LaneLoad } from "./lane-placement";
 import type { SessionKernelStoreHostMetrics } from "./store-host";
+import { runtimeGeneration } from "../runtime-generation";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3849;
+const RUNTIME_GENERATION = runtimeGeneration();
 // Must remain below the gateway transport's 8s fail-stop budget, including
 // quarantine/restart bookkeeping after an ambiguous lane turn.
 const ACTOR_RESPONSE_TIMEOUT_MS = 5_000;
-const DEFAULT_SESSION_WORKERS = Math.min(32, Math.max(4, availableParallelism()));
+const DEFAULT_SESSION_WORKERS = Math.min(
+  32,
+  Math.max(4, availableParallelism()),
+);
 // Mailboxes absorb short ingress bursts; actor turns must still remain bounded
 // and fast. Control traffic has its own reserved class so stop/steer cannot be
 // stranded behind ordinary projections. Operators may tune these independently
@@ -56,6 +61,18 @@ type Pending = {
   criticalSessionId?: string;
   /** When the turn started executing on the worker (lane busy-time metric). */
   startedAt: number;
+};
+
+type RuntimeWorkRequest = {
+  t: "runtime_work";
+  rpcId: string;
+  now: number;
+  timerKinds: string[];
+  effectKinds: string[];
+  limit: number;
+  additionalOutboxGroups?: Array<{ effectKinds: string[]; limit: number }>;
+  activeOutbox?: Array<{ id: number; sessionId: string }>;
+  activeOutboxRecheckAt?: number;
 };
 
 type SlotTurn = {
@@ -200,9 +217,12 @@ function json(value: unknown, init: ResponseInit = {}): Response {
 }
 
 function actorFatal(response: KernelActorResponse): boolean {
+  if (response.t === "error") return response.fatal === true;
   if (response.t !== "call_result" || !response.body) return false;
   try {
-    return (JSON.parse(response.body) as { code?: string }).code === "actor_fatal";
+    return (
+      (JSON.parse(response.body) as { code?: string }).code === "actor_fatal"
+    );
   } catch {
     return false;
   }
@@ -210,20 +230,33 @@ function actorFatal(response: KernelActorResponse): boolean {
 
 export async function startSessionKernelService(
   options: SessionKernelServiceOptions = {},
-): Promise<{ stop(): void; url: string }> {
-  const host = options.host ?? process.env.OPENSESSION_SESSION_KERNEL_HOST ?? DEFAULT_HOST;
-  const port = options.port ?? Number(process.env.OPENSESSION_SESSION_KERNEL_PORT ?? DEFAULT_PORT);
+): Promise<{
+  stop(options?: { terminateWorkers?: boolean }): void;
+  url: string;
+}> {
+  const host =
+    options.host ?? process.env.OPENSESSION_SESSION_KERNEL_HOST ?? DEFAULT_HOST;
+  const port =
+    options.port ??
+    Number(process.env.OPENSESSION_SESSION_KERNEL_PORT ?? DEFAULT_PORT);
   if (host !== DEFAULT_HOST)
     throw new Error("Session kernel service must bind to 127.0.0.1");
   if (!Number.isInteger(port) || port < 0 || port > 65_535)
     throw new Error("Invalid session kernel service port");
   const token = options.token ?? (await readSessionKernelCredential());
-  const configuredWorkers = options.workerCount ?? Number(
-    process.env.OPENSESSION_SESSION_KERNEL_WORKERS ?? DEFAULT_SESSION_WORKERS,
-  );
-  if (!Number.isInteger(configuredWorkers) || configuredWorkers < 1 || configuredWorkers > 32)
+  const configuredWorkers =
+    options.workerCount ??
+    Number(
+      process.env.OPENSESSION_SESSION_KERNEL_WORKERS ?? DEFAULT_SESSION_WORKERS,
+    );
+  if (
+    !Number.isInteger(configuredWorkers) ||
+    configuredWorkers < 1 ||
+    configuredWorkers > 32
+  )
     throw new Error("Session kernel worker count must be between 1 and 32");
-  const responseTimeoutMs = options.responseTimeoutMs ?? ACTOR_RESPONSE_TIMEOUT_MS;
+  const responseTimeoutMs =
+    options.responseTimeoutMs ?? ACTOR_RESPONSE_TIMEOUT_MS;
   if (!Number.isFinite(responseTimeoutMs) || responseTimeoutMs < 100)
     throw new Error("Invalid session kernel worker timeout");
   const mutationMailboxLimit = mailboxLimit(
@@ -254,10 +287,12 @@ export async function startSessionKernelService(
   if (options.databasePath)
     process.env.OPENSESSION_SESSION_KERNEL_DB_PATH = options.databasePath;
 
-  const workerUrl = options.workerUrl ?? workerEntry(
-    "session-kernel-worker.js",
-    new URL("../../session-kernel-worker.ts", import.meta.url).href,
-  );
+  const workerUrl =
+    options.workerUrl ??
+    workerEntry(
+      "session-kernel-worker.js",
+      new URL("../../session-kernel-worker.ts", import.meta.url).href,
+    );
   // Slot zero is reserved for catalog/global compatibility work. Remaining
   // slots are the bounded session execution pool.
   const slots: WorkerSlot[] = Array.from(
@@ -308,7 +343,8 @@ export async function startSessionKernelService(
       request.t !== "call" ||
       request.request.t !== "reduce" ||
       !isCriticalSettlementCommand(request.request.command)
-    ) return undefined;
+    )
+      return undefined;
     const route = sessionActorServiceRoute(request);
     return route.scope === "session" ? route.sessionId : undefined;
   }
@@ -316,14 +352,23 @@ export async function startSessionKernelService(
   function isReadOnlyRequest(
     request: KernelActorTransportEnvelope["request"],
   ): boolean {
-    if (request.t === "hello" || request.t === "stats") return true;
+    if (
+      request.t === "hello" ||
+      request.t === "stats" ||
+      request.t === "runtime_catalog_work"
+    )
+      return true;
     if (request.t !== "call") return false;
     return request.request.t === "store"
       ? READ_METHODS.has(request.request.method)
       : isReadReducer(request.request.command);
   }
 
-  function stopSlot(slot: WorkerSlot, error: Error, retainQueue = false): Pending[] {
+  function stopSlot(
+    slot: WorkerSlot,
+    error: Error,
+    retainQueue = false,
+  ): Pending[] {
     slot.ready = false;
     const worker = slot.worker;
     slot.worker = undefined;
@@ -370,20 +415,26 @@ export async function startSessionKernelService(
     sessionId: string,
     reason: string,
   ): Promise<void> {
-    const response = await sendToSlot(slots[0], {
-      t: "call",
-      rpcId: crypto.randomUUID(),
-      outputBytes: 256 * 1024,
-      request: {
-        t: "store",
-        method: "quarantineSession",
-        args: [sessionId, reason, "actor_lane_ambiguity"],
+    const response = await sendToSlot(
+      slots[0],
+      {
+        t: "call",
+        rpcId: crypto.randomUUID(),
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "quarantineSession",
+          args: [sessionId, reason, "actor_lane_ambiguity"],
+        },
       },
-    }, false, true);
+      false,
+      true,
+    );
     if (response.t !== "call_result" || response.status !== 1 || !response.body)
       throw new Error(`Failed to quarantine ambiguous session ${sessionId}`);
     const body = JSON.parse(response.body) as { ok?: boolean };
-    if (!body.ok) throw new Error(`Failed to quarantine ambiguous session ${sessionId}`);
+    if (!body.ok)
+      throw new Error(`Failed to quarantine ambiguous session ${sessionId}`);
   }
 
   function restartSessionSlot(
@@ -391,7 +442,12 @@ export async function startSessionKernelService(
     error: Error,
     generation: number,
   ): void {
-    if (stopping || serviceError || generation !== slot.generation || slot.restarting)
+    if (
+      stopping ||
+      serviceError ||
+      generation !== slot.generation ||
+      slot.restarting
+    )
       return;
     const active = [...slot.pending.values()];
     const safeCatalogReadRestart =
@@ -407,7 +463,10 @@ export async function startSessionKernelService(
       return;
     }
     if (safeCatalogReadRestart)
-      console.warn("Restarting session kernel catalog lane after read failure", error);
+      console.warn(
+        "Restarting session kernel catalog lane after read failure",
+        error,
+      );
     slot.restarting = true;
     slot.metrics.restarts += 1;
     stopSlot(slot, error, true);
@@ -418,10 +477,13 @@ export async function startSessionKernelService(
         entry.reject(new RetryableActorHostError(error.message));
       for (const sessionId of new Set(
         critical.map((entry) => entry.criticalSessionId!),
-      )) await quarantineAmbiguousSession(sessionId, error.message);
+      ))
+        await quarantineAmbiguousSession(sessionId, error.message);
       for (const entry of critical) {
         const sessionId = entry.criticalSessionId!;
-        entry.resolve(sessionQuarantinedResponse(entry, sessionId, error.message));
+        entry.resolve(
+          sessionQuarantinedResponse(entry, sessionId, error.message),
+        );
       }
       if (stopping || serviceError) return;
       await new Promise((resolve) => setTimeout(resolve, 25));
@@ -430,7 +492,9 @@ export async function startSessionKernelService(
       pumpSlot(slot);
     })().catch((restartError) => {
       failService(
-        restartError instanceof Error ? restartError : new Error(String(restartError)),
+        restartError instanceof Error
+          ? restartError
+          : new Error(String(restartError)),
       );
     });
   }
@@ -466,7 +530,9 @@ export async function startSessionKernelService(
     slot.metrics.queueWaitMsTotal += Math.max(0, startedAt - turn.enqueuedAt);
     const timer = setTimeout(() => {
       slot.metrics.timeouts += 1;
-      const error = new Error(`Session actor lane ${slot.index} response timed out`);
+      const error = new Error(
+        `Session actor lane ${slot.index} response timed out`,
+      );
       restartSessionSlot(slot, error, generation);
     }, responseTimeoutMs);
     slot.pending.set(rpcId, {
@@ -496,10 +562,10 @@ export async function startSessionKernelService(
     urgent = false,
   ): Promise<KernelActorResponse> {
     if (serviceError) return Promise.reject(serviceError);
-    if (
-      ((!slot.ready && !allowUnready) || !slot.worker) &&
-      !slot.restarting
-    ) return Promise.reject(new RetryableActorHostError("Session actor lane is unavailable"));
+    if (((!slot.ready && !allowUnready) || !slot.worker) && !slot.restarting)
+      return Promise.reject(
+        new RetryableActorHostError("Session actor lane is unavailable"),
+      );
     const priority = urgent || isPrioritySessionActorRequest(request);
     const ordinaryQueued = slot.queue.reduce(
       (count, turn) => count + (turn.priority ? 0 : 1),
@@ -508,16 +574,28 @@ export async function startSessionKernelService(
     if (
       pendingCount() >= SESSION_KERNEL_MAX_TRANSPORT_REQUESTS ||
       slot.queue.length >= laneQueueLimit ||
-      (!priority && ordinaryQueued >= laneQueueLimit - Math.min(
-        RESERVED_LANE_PRIORITY_TURNS,
-        Math.max(0, laneQueueLimit - 1),
-      ))
+      (!priority &&
+        ordinaryQueued >=
+          laneQueueLimit -
+            Math.min(
+              RESERVED_LANE_PRIORITY_TURNS,
+              Math.max(0, laneQueueLimit - 1),
+            ))
     ) {
       slot.metrics.rejectedFull += 1;
-      return Promise.reject(new RetryableActorHostError("Session actor lane is full"));
+      return Promise.reject(
+        new RetryableActorHostError("Session actor lane is full"),
+      );
     }
     return new Promise((resolve, reject) => {
-      const turn = { request, allowUnready, priority, enqueuedAt: Date.now(), resolve, reject };
+      const turn = {
+        request,
+        allowUnready,
+        priority,
+        enqueuedAt: Date.now(),
+        resolve,
+        reject,
+      };
       if (urgent) slot.queue.unshift(turn);
       else slot.queue.push(turn);
       pumpSlot(slot);
@@ -528,11 +606,12 @@ export async function startSessionKernelService(
     slot: WorkerSlot,
     current: SessionKernelStoreHostMetrics,
   ): void {
-    for (const key of Object.keys(current) as Array<keyof SessionKernelStoreHostMetrics>) {
+    for (const key of Object.keys(current) as Array<
+      keyof SessionKernelStoreHostMetrics
+    >) {
       const previous = slot.workerMetrics[key];
-      slot.metrics[key] += current[key] >= previous
-        ? current[key] - previous
-        : current[key];
+      slot.metrics[key] +=
+        current[key] >= previous ? current[key] - previous : current[key];
     }
     slot.workerMetrics = current;
   }
@@ -560,7 +639,9 @@ export async function startSessionKernelService(
         const restored = { ...response, rpcId: entry.originalRpcId };
         entry.resolve(restored);
         if (actorFatal(response))
-          failService(new Error("Session kernel catalog authority became ambiguous"));
+          failService(
+            new Error("Session kernel catalog authority became ambiguous"),
+          );
         else pumpSlot(slot);
       },
     );
@@ -574,7 +655,9 @@ export async function startSessionKernelService(
     worker.addEventListener("messageerror", () =>
       restartSessionSlot(
         slot,
-        new Error(`Session actor lane ${slot.index} emitted an invalid message`),
+        new Error(
+          `Session actor lane ${slot.index} emitted an invalid message`,
+        ),
         generation,
       ),
     );
@@ -617,7 +700,10 @@ export async function startSessionKernelService(
     return sessionSlots[chooseSessionLane(sessionId, loads)]!;
   }
 
-  function pumpSessionMailbox(sessionId: string, mailbox: SessionMailbox): void {
+  function pumpSessionMailbox(
+    sessionId: string,
+    mailbox: SessionMailbox,
+  ): void {
     if (mailbox.running) return;
     const priority = mailbox.priority[0];
     const normal = mailbox.normal[0];
@@ -628,7 +714,8 @@ export async function startSessionKernelService(
     let turn: QueuedSessionTurn | undefined;
     if (
       priority?.barrier === earliestBarrier &&
-      (normal?.barrier !== earliestBarrier || mailbox.priorityBurst < MAX_PRIORITY_BURST)
+      (normal?.barrier !== earliestBarrier ||
+        mailbox.priorityBurst < MAX_PRIORITY_BURST)
     ) {
       turn = mailbox.priority.shift();
       mailbox.priorityBurst += 1;
@@ -684,19 +771,24 @@ export async function startSessionKernelService(
         ? readMailboxLimit
         : mutationMailboxLimit;
     if (queuedForClass >= classLimit) {
-      return Promise.reject(new RetryableActorHostError(
-        priority
-          ? "Session priority mailbox is full"
-          : readOnly
-            ? "Session read mailbox is full"
-            : "Session mailbox is full",
-      ));
+      return Promise.reject(
+        new RetryableActorHostError(
+          priority
+            ? "Session priority mailbox is full"
+            : readOnly
+              ? "Session read mailbox is full"
+              : "Session mailbox is full",
+        ),
+      );
     }
 
     queuedSessionTurns += 1;
     let settleTail!: () => void;
-    const settled = new Promise<void>((resolve) => { settleTail = resolve; });
-    if (mutation) mailbox.mutationTail = mailbox.mutationTail.then(() => settled);
+    const settled = new Promise<void>((resolve) => {
+      settleTail = resolve;
+    });
+    if (mutation)
+      mailbox.mutationTail = mailbox.mutationTail.then(() => settled);
     const response = new Promise<KernelActorResponse>((resolve, reject) => {
       const turn: QueuedSessionTurn = {
         request,
@@ -718,23 +810,100 @@ export async function startSessionKernelService(
     id: number,
     urgent = false,
   ): Promise<string> {
-    const response = await sendToSlot(slots[0], {
-      t: "call",
-      rpcId: crypto.randomUUID(),
-      outputBytes: 256 * 1024,
-      request: { t: "store", method: "outboxSessionId", args: [id] },
-    }, false, urgent);
+    const response = await sendToSlot(
+      slots[0],
+      {
+        t: "call",
+        rpcId: crypto.randomUUID(),
+        outputBytes: 256 * 1024,
+        request: { t: "store", method: "outboxSessionId", args: [id] },
+      },
+      false,
+      urgent,
+    );
     if (response.t !== "call_result" || response.status !== 1 || !response.body)
       throw new Error(`Outbox ${id} route could not be resolved`);
-    const body = JSON.parse(response.body) as { ok: boolean; result?: unknown; error?: string };
+    const body = JSON.parse(response.body) as {
+      ok: boolean;
+      result?: unknown;
+      error?: string;
+    };
     if (!body.ok || typeof body.result !== "string" || !body.result)
       throw new Error(body.error ?? `Outbox ${id} has no session route`);
     return body.result;
   }
 
+  async function runtimeWorkRequest(
+    request: RuntimeWorkRequest,
+  ): Promise<KernelActorResponse> {
+    const catalog = await sendToSlot(slots[0], {
+      ...request,
+      t: "runtime_catalog_work",
+      rpcId: crypto.randomUUID(),
+    });
+    if (catalog.t !== "runtime_catalog_work_result")
+      throw new RetryableActorHostError(
+        catalog.t === "error"
+          ? catalog.error
+          : "Invalid runtime catalog response",
+      );
+
+    const activeBySession = new Map<
+      string,
+      Array<{ id: number; sessionId: string }>
+    >();
+    for (const item of request.activeOutbox ?? []) {
+      const active = activeBySession.get(item.sessionId) ?? [];
+      active.push(item);
+      activeBySession.set(item.sessionId, active);
+    }
+    const sessionResults = await Promise.all(
+      catalog.sessionIds.map((sessionId) =>
+        enqueueSession(
+          sessionId,
+          {
+            t: "runtime_session_work",
+            rpcId: crypto.randomUUID(),
+            sessionId,
+            candidateCount: catalog.sessionIds.length,
+            now: request.now,
+            timerKinds: request.timerKinds,
+            effectKinds: request.effectKinds,
+            limit: request.limit,
+            additionalOutboxGroups: request.additionalOutboxGroups,
+            activeOutbox: activeBySession.get(sessionId) ?? [],
+            activeOutboxRecheckAt: request.activeOutboxRecheckAt,
+          },
+          true,
+        ),
+      ),
+    );
+
+    const timers = [...catalog.timers];
+    const outbox = new Map(catalog.outbox.map((item) => [item.id, item]));
+    for (const result of sessionResults) {
+      if (result.t !== "runtime_session_work_result")
+        throw new RetryableActorHostError(
+          result.t === "error"
+            ? result.error
+            : "Invalid session runtime response",
+        );
+      timers.push(...result.timers);
+      for (const item of result.outbox) outbox.set(item.id, item);
+    }
+    return {
+      t: "runtime_work_result",
+      rpcId: request.rpcId,
+      timers: timers.slice(0, request.limit),
+      outbox: [...outbox.values()],
+    };
+  }
+
   async function actorRequest(
     request: KernelActorTransportEnvelope["request"],
   ): Promise<KernelActorResponse> {
+    if (request.t === "runtime_work")
+      return runtimeWorkRequest(request as RuntimeWorkRequest);
     const route = sessionActorServiceRoute(request);
     if (route.scope === "session")
       return enqueueSession(route.sessionId, request, route.mutation);
@@ -747,43 +916,56 @@ export async function startSessionKernelService(
         request,
         route.mutation,
       );
-    if (route.scope === "catalog_read")
-      return sendToSlot(slots[0], request);
+    if (route.scope === "catalog_read") return sendToSlot(slots[0], request);
 
     if (request.t === "hello") return sendToSlot(slots[0], request);
     if (queuedGlobalTurns >= MAX_GLOBAL_TURNS)
-      throw new RetryableActorHostError("Session kernel catalog mailbox is full");
+      throw new RetryableActorHostError(
+        "Session kernel catalog mailbox is full",
+      );
     queuedGlobalTurns += 1;
     const active = [...sessionMailboxes.values()].map(
       (mailbox) => mailbox.mutationTail,
     );
     const operation = globalGate
       .catch(() => {})
-      .then(() => new Promise<void>((resolve, reject) => {
-        if (active.length === 0) {
-          resolve();
-          return;
-        }
-        const timeout = setTimeout(() => {
-          reject(new RetryableActorHostError(
-            `Session kernel global barrier timed out waiting for ${active.length} mailbox(es)`,
-          ));
-        }, GLOBAL_BARRIER_TIMEOUT_MS);
-        void Promise.all(active).then(
-          () => {
-            clearTimeout(timeout);
-            resolve();
-          },
-          (error) => {
-            clearTimeout(timeout);
-            reject(error);
-          },
-        );
-      }))
+      .then(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            if (active.length === 0) {
+              resolve();
+              return;
+            }
+            const timeout = setTimeout(() => {
+              reject(
+                new RetryableActorHostError(
+                  `Session kernel global barrier timed out waiting for ${active.length} mailbox(es)`,
+                ),
+              );
+            }, GLOBAL_BARRIER_TIMEOUT_MS);
+            void Promise.all(active).then(
+              () => {
+                clearTimeout(timeout);
+                resolve();
+              },
+              (error) => {
+                clearTimeout(timeout);
+                reject(error);
+              },
+            );
+          }),
+      )
       .then(() => sendToSlot(slots[0], request));
-    globalGate = operation.then(() => {}, () => {});
+    globalGate = operation.then(
+      () => {},
+      () => {},
+    );
     barrierGeneration += 1;
-    void operation.finally(() => { queuedGlobalTurns -= 1; }).catch(() => {});
+    void operation
+      .finally(() => {
+        queuedGlobalTurns -= 1;
+      })
+      .catch(() => {});
     return operation;
   }
 
@@ -805,15 +987,23 @@ export async function startSessionKernelService(
     maxRequestBodySize: SESSION_KERNEL_MAX_REQUEST_BYTES,
     async fetch(request) {
       const url = new URL(request.url);
-      const ready = !serviceError && slots[0].ready && sessionSlots.some((slot) => slot.ready);
+      const ready =
+        !serviceError &&
+        slots[0].ready &&
+        sessionSlots.some((slot) => slot.ready);
       if (request.method === "GET" && url.pathname === "/live")
-        return json({ live: !serviceError, version: SESSION_KERNEL_TRANSPORT_VERSION }, { status: serviceError ? 503 : 200 });
+        return json(
+          { live: !serviceError, version: SESSION_KERNEL_TRANSPORT_VERSION },
+          { status: serviceError ? 503 : 200 },
+        );
       if (request.method === "GET" && url.pathname === "/ready")
         return json(
           {
             ready,
             actorVersion: SESSION_KERNEL_ACTOR_VERSION,
             transportVersion: SESSION_KERNEL_TRANSPORT_VERSION,
+            generation: RUNTIME_GENERATION,
+            component: "session-kernel",
             workers: {
               ready: sessionSlots.filter((slot) => slot.ready).length,
               capacity: sessionSlots.length,
@@ -838,7 +1028,10 @@ export async function startSessionKernelService(
       if (!authorized(request.headers.get("authorization"), token))
         return json({ error: "Unauthorized" }, { status: 401 });
       if (!ready)
-        return json({ error: serviceError?.message ?? "Actor pool is not ready" }, { status: 503 });
+        return json(
+          { error: serviceError?.message ?? "Actor pool is not ready" },
+          { status: 503 },
+        );
       const declaredLength = Number(request.headers.get("content-length") ?? 0);
       if (declaredLength > SESSION_KERNEL_MAX_REQUEST_BYTES)
         return json({ error: "Request is too large" }, { status: 413 });
@@ -866,20 +1059,27 @@ export async function startSessionKernelService(
           { error: "Unsupported session kernel actor version" },
           { status: 409 },
         );
-      if (envelope.request?.t !== "hello" && envelope.serviceEpoch !== serviceEpoch)
+      if (
+        envelope.request?.t !== "hello" &&
+        envelope.serviceEpoch !== serviceEpoch
+      )
         return json(
           { error: "Session kernel service incarnation changed" },
           { status: 409 },
         );
       if (!envelope.request || typeof envelope.request.rpcId !== "string")
         return json({ error: "Invalid RPC envelope" }, { status: 400 });
-      const priority = envelope.request.t === "hello" ||
+      const priority =
+        envelope.request.t === "hello" ||
         isPrioritySessionActorRequest(envelope.request);
       const admissionLimit = priority
         ? SESSION_KERNEL_MAX_TRANSPORT_REQUESTS
         : SESSION_KERNEL_MAX_TRANSPORT_REQUESTS - RESERVED_PRIORITY_TURNS;
       if (admittedTransportRequests >= admissionLimit)
-        return json({ error: "Session kernel transport is full" }, { status: 429 });
+        return json(
+          { error: "Session kernel transport is full" },
+          { status: 429 },
+        );
       admittedTransportRequests += 1;
       try {
         // Supervision issuer fields are never accepted from or rewritten for the
@@ -911,10 +1111,11 @@ export async function startSessionKernelService(
   const runningServer = server;
   return {
     url: runningServer.url.origin,
-    stop() {
+    stop(stopOptions = {}) {
       if (stopping) return;
       stopping = true;
       runningServer.stop(true);
+      if (stopOptions.terminateWorkers === false) return;
       const error = new Error("Session kernel service stopped");
       for (const slot of slots) stopSlot(slot, error);
     },

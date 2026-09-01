@@ -14,9 +14,19 @@ import { chmodSync, readFileSync } from "fs";
 import { statePath } from "./paths";
 import { githubLoginToPersonKey, githubLoginFor } from "./shared/user-mappings";
 import { configuredRepos, githubBotLogins } from "./config";
-import { isLockHeld, readPrState, type LastReviewState } from "../agents/github/state";
+import {
+  isLockHeld,
+  readPrState,
+  type LastReviewState,
+} from "../agents/github/state";
 import { ghRateLimited } from "./github-limit";
-import { ghJson, hostRepoId, prHostFor, type BulkPr, type PrHostCapabilities } from "./pr-host";
+import {
+  ghJson,
+  hostRepoId,
+  prHostFor,
+  type BulkPr,
+  type PrHostCapabilities,
+} from "./pr-host";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
   cachedReviewTeamLogins,
@@ -91,64 +101,67 @@ export function sessionRefFromPrBody(
   return m?.[1];
 }
 function prRepos() {
-	return Object.values(configuredRepos())
-		.filter((repo) => hostRepoId(repo) && repo.prCache !== false)
-		.map((repo) => ({
-			id: repo.id,
-			// The host-side repo identifier (field keeps its historical name — it
-			// keys probe cursors and cache tombstones): GitHub owner/name, or the
-			// code.storage repo id for host: "codestorage" rows.
-			ghRepo: hostRepoId(repo),
-			openLimit: repo.prCacheOpenLimit ?? 100,
-			recentLimit: repo.prCacheRecentLimit ?? 500,
-			host: prHostFor(repo),
-			// GitHub-API-backed repos share gh's rate-limit backoff; code.storage
-			// tokens are self-signed (no shared quota), so the sweep's
-			// ghRateLimited() gates must not freeze those rows.
-			ghBacked: repo.host !== "codestorage",
-		}));
+  return Object.values(configuredRepos())
+    .filter((repo) => hostRepoId(repo) && repo.prCache !== false)
+    .map((repo) => ({
+      id: repo.id,
+      // The host-side repo identifier (field keeps its historical name — it
+      // keys probe cursors and cache tombstones): GitHub owner/name, or the
+      // code.storage repo id for host: "codestorage" rows.
+      ghRepo: hostRepoId(repo),
+      openLimit: repo.prCacheOpenLimit ?? 100,
+      recentLimit: repo.prCacheRecentLimit ?? 500,
+      host: prHostFor(repo),
+      // GitHub-API-backed repos share gh's rate-limit backoff; code.storage
+      // tokens are self-signed (no shared quota), so the sweep's
+      // ghRateLimited() gates must not freeze those rows.
+      ghBacked: repo.host !== "codestorage",
+    }));
 }
 
 // repo id → branch → PR info. Keyed per repo so the same branch name in two
 // repos (multi-repo sessions share branch names) never collides.
-let prCache: { data: Map<string, Map<string, PrInfo>>; ts: number } = { data: new Map(), ts: 0 };
+let prCache: { data: Map<string, Map<string, PrInfo>>; ts: number } = {
+  data: new Map(),
+  ts: 0,
+};
 const PR_CACHE_TTL = 60_000;
 // How long a merged/closed row survives in the bulk cache after the sweep's
 // queries stop returning it (see the carry-forward in refreshPrCacheInner).
 const PR_CARRY_FORWARD_MS = 180 * 24 * 60 * 60 * 1000;
 let prRefreshPromise: Promise<Set<string>> | null = null;
 const prCloseState: {
-	generation: number;
-	closed: Map<string, number>;
-	merged: Map<string, number>;
+  generation: number;
+  closed: Map<string, number>;
+  merged: Map<string, number>;
 } = ((globalThis as any).__opensessionPrCloseState ??= {
-	generation: 0,
-	closed: new Map(),
-	merged: new Map(),
+  generation: 0,
+  closed: new Map(),
+  merged: new Map(),
 });
 // A hot reload can hand back an object parked before `merged` existed.
 prCloseState.merged ??= new Map();
 type CachedReviewMutation = {
-	generation: number;
-	person: string;
-	event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+  generation: number;
+  person: string;
+  event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 };
 const prReviewState: {
-	generation: number;
-	reviews: Map<string, CachedReviewMutation>;
-	/** PRs whose review requests were withdrawn in OS1 → the generation at
-	 *  which that happened, same staleness guard the reviews above use. */
-	cleared: Map<string, number>;
+  generation: number;
+  reviews: Map<string, CachedReviewMutation>;
+  /** PRs whose review requests were withdrawn in OS1 → the generation at
+   *  which that happened, same staleness guard the reviews above use. */
+  cleared: Map<string, number>;
 } = ((globalThis as any).__opensessionPrReviewState ??= {
-	generation: 0,
-	reviews: new Map(),
-	cleared: new Map(),
+  generation: 0,
+  reviews: new Map(),
+  cleared: new Map(),
 });
 // A hot reload can hand back an object parked before `cleared` existed.
 prReviewState.cleared ??= new Map();
 
 function closeTombstoneKey(ghRepo: string, number: number): string {
-	return `${ghRepo}#${number}`;
+  return `${ghRepo}#${number}`;
 }
 
 /** A merge tombstone for a branch whose PR number we don't know — the cache
@@ -156,15 +169,15 @@ function closeTombstoneKey(ghRepo: string, number: number): string {
  *  the two can share `prCloseState.merged`: a branch literally named "#123"
  *  keys as `owner/repo@#123`, never as `owner/repo#123`. */
 function mergedBranchTombstoneKey(ghRepo: string, branch: string): string {
-	return `${ghRepo}@${branch}`;
+  return `${ghRepo}@${branch}`;
 }
 
 function reviewMutationKey(
-	ghRepo: string,
-	number: number,
-	person: string,
+  ghRepo: string,
+  number: number,
+  person: string,
 ): string {
-	return `${ghRepo}#${number}#${person}`;
+  return `${ghRepo}#${number}#${person}`;
 }
 
 // The cache is also snapshotted to disk after every successful refresh and
@@ -188,63 +201,76 @@ const lastFullRefresh = new Map<string, number>(); // repo id → epoch ms
  * PR rows stay empty (2026-08-05).
  */
 export function loadPrCacheSnapshot(): void {
-try {
-  const parsed = JSON.parse(readFileSync(prCacheFile(), "utf8"));
-  const raw: Record<string, Record<string, PrInfo>> =
-    ([2, 3, 4, PR_CACHE_VERSION].includes(parsed?.version)) && parsed?.repos
+  try {
+    const parsed = JSON.parse(readFileSync(prCacheFile(), "utf8"));
+    const raw: Record<string, Record<string, PrInfo>> = [
+      2,
+      3,
+      4,
+      PR_CACHE_VERSION,
+    ].includes(parsed?.version) && parsed?.repos
       ? parsed.repos
       : parsed;
-  prCache.data = new Map(
-    Object.entries(raw).map(([repo, byBranch]) => [
-      repo,
-      new Map(Object.entries(byBranch)),
-    ]),
-  );
-  // Older snapshots either used smaller history windows or predate expanded
-  // team review requests. Keep their stale rows available, but skip refresh
-  // timestamps so the current shape refills immediately.
-  if (parsed?.version === PR_CACHE_VERSION) {
-    const now = Date.now();
-    let durableRepos = 0;
-    const repos = prRepos();
-    for (const repo of repos) {
-      if (!prCache.data.has(repo.id)) continue;
-      if (parsed.recentLimits?.[repo.id] !== repo.recentLimit) continue;
-      if (parsed.openLimits?.[repo.id] !== repo.openLimit) continue;
-      const etag = parsed.probeEtags?.[repo.ghRepo];
-      if (typeof etag === "string" && etag) probeEtags.set(repo.ghRepo, etag);
-      const refreshedAt = parsed.lastFullRefresh?.[repo.id];
-      if (
-        typeof refreshedAt === "number" &&
-        Number.isFinite(refreshedAt) &&
-        refreshedAt > 0 &&
-        refreshedAt <= now + 60_000
-      ) {
-        lastFullRefresh.set(repo.id, refreshedAt);
-        if (now - refreshedAt < DURABLE_CACHE_MAX_AGE_MS) durableRepos++;
+    prCache.data = new Map(
+      Object.entries(raw).map(([repo, byBranch]) => [
+        repo,
+        new Map(Object.entries(byBranch)),
+      ]),
+    );
+    // Older snapshots either used smaller history windows or predate expanded
+    // team review requests. Keep their stale rows available, but skip refresh
+    // timestamps so the current shape refills immediately.
+    if (parsed?.version === PR_CACHE_VERSION) {
+      const now = Date.now();
+      let durableRepos = 0;
+      const repos = prRepos();
+      for (const repo of repos) {
+        if (!prCache.data.has(repo.id)) continue;
+        if (parsed.recentLimits?.[repo.id] !== repo.recentLimit) continue;
+        if (parsed.openLimits?.[repo.id] !== repo.openLimit) continue;
+        const etag = parsed.probeEtags?.[repo.ghRepo];
+        if (typeof etag === "string" && etag) probeEtags.set(repo.ghRepo, etag);
+        const refreshedAt = parsed.lastFullRefresh?.[repo.id];
+        if (
+          typeof refreshedAt === "number" &&
+          Number.isFinite(refreshedAt) &&
+          refreshedAt > 0 &&
+          refreshedAt <= now + 60_000
+        ) {
+          lastFullRefresh.set(repo.id, refreshedAt);
+          if (now - refreshedAt < DURABLE_CACHE_MAX_AGE_MS) durableRepos++;
+        }
       }
+      // Keep the snapshot hot across a restart only when every configured repo is
+      // represented with the current query bounds and a recent full refresh.
+      // Otherwise first access reconciles immediately, preserving multi-repo correctness.
+      if (repos.length > 0 && durableRepos === repos.length) prCache.ts = now;
     }
-    // Keep the snapshot hot across a restart only when every configured repo is
-    // represented with the current query bounds and a recent full refresh.
-    // Otherwise first access reconciles immediately, preserving multi-repo correctness.
-    if (repos.length > 0 && durableRepos === repos.length) prCache.ts = now;
-  }
-} catch {}
+  } catch {}
 }
 loadPrCacheSnapshot();
 
 function persistPrCache(data: Map<string, Map<string, PrInfo>>) {
   try {
     const obj: Record<string, Record<string, PrInfo>> = {};
-    for (const [repo, byBranch] of data) obj[repo] = Object.fromEntries(byBranch);
-    writeJsonAtomic(prCacheFile(), {
-      version: PR_CACHE_VERSION,
-      repos: obj,
-      recentLimits: Object.fromEntries(prRepos().map((repo) => [repo.id, repo.recentLimit])),
-      openLimits: Object.fromEntries(prRepos().map((repo) => [repo.id, repo.openLimit])),
-      probeEtags: Object.fromEntries(probeEtags),
-      lastFullRefresh: Object.fromEntries(lastFullRefresh),
-    }, false);
+    for (const [repo, byBranch] of data)
+      obj[repo] = Object.fromEntries(byBranch);
+    writeJsonAtomic(
+      prCacheFile(),
+      {
+        version: PR_CACHE_VERSION,
+        repos: obj,
+        recentLimits: Object.fromEntries(
+          prRepos().map((repo) => [repo.id, repo.recentLimit]),
+        ),
+        openLimits: Object.fromEntries(
+          prRepos().map((repo) => [repo.id, repo.openLimit]),
+        ),
+        probeEtags: Object.fromEntries(probeEtags),
+        lastFullRefresh: Object.fromEntries(lastFullRefresh),
+      },
+      false,
+    );
     chmodSync(prCacheFile(), 0o600);
   } catch (e) {
     console.error("Failed to persist PR cache:", e);
@@ -253,29 +279,29 @@ function persistPrCache(data: Map<string, Map<string, PrInfo>>) {
 
 /** Keep the repo-wide PR queue coherent after a human closes a PR in OS1. */
 export function markCachedPrClosed(ghRepo: string, number: number): void {
-	prCloseState.generation++;
-	prCloseState.closed.set(
-		closeTombstoneKey(ghRepo, number),
-		prCloseState.generation,
-	);
-	const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
-	if (!repoId) return;
-	const byBranch = prCache.data.get(repoId);
-	if (!byBranch) return;
-	for (const [branch, pr] of byBranch) {
-		if (pr.number !== number) continue;
-		// In place, like every other write-through here: an in-flight sweep holds
-		// this inner Map as its `stale` reference and re-installs that same object
-		// on its skip paths, so the mutation reaches both. Never swap in a copy.
-		byBranch.set(branch, {
-			...pr,
-			state: "CLOSED",
-			updatedAt: new Date().toISOString(),
-		});
-		prCache.ts = Date.now();
-		persistPrCache(prCache.data);
-		return;
-	}
+  prCloseState.generation++;
+  prCloseState.closed.set(
+    closeTombstoneKey(ghRepo, number),
+    prCloseState.generation,
+  );
+  const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
+  if (!repoId) return;
+  const byBranch = prCache.data.get(repoId);
+  if (!byBranch) return;
+  for (const [branch, pr] of byBranch) {
+    if (pr.number !== number) continue;
+    // In place, like every other write-through here: an in-flight sweep holds
+    // this inner Map as its `stale` reference and re-installs that same object
+    // on its skip paths, so the mutation reaches both. Never swap in a copy.
+    byBranch.set(branch, {
+      ...pr,
+      state: "CLOSED",
+      updatedAt: new Date().toISOString(),
+    });
+    prCache.ts = Date.now();
+    persistPrCache(prCache.data);
+    return;
+  }
 }
 
 /**
@@ -287,38 +313,38 @@ export function markCachedPrClosed(ghRepo: string, number: number): void {
  * rebuilds the list off the same unrefreshed PR data.
  */
 export function markCachedPrMerged(ghRepo: string, branch: string): void {
-	// Record the overlay BEFORE any lookup can bail, exactly as the close path
-	// does: a merge on a branch the cache has no row for (the stack-merge loop
-	// in routes/pr.ts walks layers owned by other sessions, which are the ones
-	// most likely to be missing) must still beat an in-flight sweep's pre-merge
-	// OPEN row. Keyed by branch here because the PR number is only knowable
-	// from the cached row; applyPrCloseTombstones checks both key shapes.
-	prCloseState.generation++;
-	prCloseState.merged.set(
-		mergedBranchTombstoneKey(ghRepo, branch),
-		prCloseState.generation,
-	);
-	const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
-	if (!repoId) return;
-	const byBranch = prCache.data.get(repoId);
-	const pr = byBranch?.get(branch);
-	if (!byBranch || !pr) return;
-	prCloseState.merged.set(
-		closeTombstoneKey(ghRepo, pr.number),
-		prCloseState.generation,
-	);
-	// Mutates the LIVE inner Map in place, deliberately: a sweep already in
-	// flight holds this same object as its `stale` reference and re-installs it
-	// unchanged on its skip paths, so the write is visible through both. Never
-	// swap in a fresh Map here.
-	byBranch.set(branch, {
-		...pr,
-		state: "MERGED",
-		isDraft: false,
-		updatedAt: new Date().toISOString(),
-	});
-	prCache.ts = Date.now();
-	persistPrCache(prCache.data);
+  // Record the overlay BEFORE any lookup can bail, exactly as the close path
+  // does: a merge on a branch the cache has no row for (the stack-merge loop
+  // in routes/pr.ts walks layers owned by other sessions, which are the ones
+  // most likely to be missing) must still beat an in-flight sweep's pre-merge
+  // OPEN row. Keyed by branch here because the PR number is only knowable
+  // from the cached row; applyPrCloseTombstones checks both key shapes.
+  prCloseState.generation++;
+  prCloseState.merged.set(
+    mergedBranchTombstoneKey(ghRepo, branch),
+    prCloseState.generation,
+  );
+  const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
+  if (!repoId) return;
+  const byBranch = prCache.data.get(repoId);
+  const pr = byBranch?.get(branch);
+  if (!byBranch || !pr) return;
+  prCloseState.merged.set(
+    closeTombstoneKey(ghRepo, pr.number),
+    prCloseState.generation,
+  );
+  // Mutates the LIVE inner Map in place, deliberately: a sweep already in
+  // flight holds this same object as its `stale` reference and re-installs it
+  // unchanged on its skip paths, so the write is visible through both. Never
+  // swap in a fresh Map here.
+  byBranch.set(branch, {
+    ...pr,
+    state: "MERGED",
+    isDraft: false,
+    updatedAt: new Date().toISOString(),
+  });
+  prCache.ts = Date.now();
+  persistPrCache(prCache.data);
 }
 
 /**
@@ -327,28 +353,28 @@ export function markCachedPrMerged(ghRepo: string, branch: string): void {
  * a completed request visible for up to 30 minutes.
  */
 export function markCachedPrReviewed(
-	ghRepo: string,
-	branch: string,
-	person: string,
-	event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES",
+  ghRepo: string,
+  branch: string,
+  person: string,
+  event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES",
 ): void {
-	const reviewer = person.trim().toLowerCase();
-	if (!reviewer) return;
-	const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
-	if (!repoId) return;
-	const byBranch = prCache.data.get(repoId);
-	if (!byBranch) return;
-	const pr = byBranch.get(branch);
-	if (!pr) return;
-	prReviewState.generation++;
-	prReviewState.reviews.set(reviewMutationKey(ghRepo, pr.number, reviewer), {
-		generation: prReviewState.generation,
-		person: reviewer,
-		event,
-	});
-	byBranch.set(branch, applyCachedReview(pr, reviewer, event));
-	prCache.ts = Date.now();
-	persistPrCache(prCache.data);
+  const reviewer = person.trim().toLowerCase();
+  if (!reviewer) return;
+  const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
+  if (!repoId) return;
+  const byBranch = prCache.data.get(repoId);
+  if (!byBranch) return;
+  const pr = byBranch.get(branch);
+  if (!pr) return;
+  prReviewState.generation++;
+  prReviewState.reviews.set(reviewMutationKey(ghRepo, pr.number, reviewer), {
+    generation: prReviewState.generation,
+    person: reviewer,
+    event,
+  });
+  byBranch.set(branch, applyCachedReview(pr, reviewer, event));
+  prCache.ts = Date.now();
+  persistPrCache(prCache.data);
 }
 
 /**
@@ -359,118 +385,118 @@ export function markCachedPrReviewed(
  * keeps reporting reviewers that are already gone for up to 30 minutes.
  */
 export function markCachedPrReviewRequestsCleared(
-	ghRepo: string,
-	branch: string,
+  ghRepo: string,
+  branch: string,
 ): void {
-	const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
-	if (!repoId) return;
-	const byBranch = prCache.data.get(repoId);
-	const pr = byBranch?.get(branch);
-	if (!byBranch || !pr) return;
-	prReviewState.generation++;
-	prReviewState.cleared.set(
-		reviewMutationKey(ghRepo, pr.number, "*"),
-		prReviewState.generation,
-	);
-	byBranch.set(branch, { ...pr, reviewRequested: [] });
-	prCache.ts = Date.now();
-	persistPrCache(prCache.data);
+  const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
+  if (!repoId) return;
+  const byBranch = prCache.data.get(repoId);
+  const pr = byBranch?.get(branch);
+  if (!byBranch || !pr) return;
+  prReviewState.generation++;
+  prReviewState.cleared.set(
+    reviewMutationKey(ghRepo, pr.number, "*"),
+    prReviewState.generation,
+  );
+  byBranch.set(branch, { ...pr, reviewRequested: [] });
+  prCache.ts = Date.now();
+  persistPrCache(prCache.data);
 }
 
 function applyCachedReview(
-	pr: PrInfo,
-	person: string,
-	event: CachedReviewMutation["event"],
+  pr: PrInfo,
+  person: string,
+  event: CachedReviewMutation["event"],
 ): PrInfo {
-	return {
-		...pr,
-		reviewDecision:
-			event === "APPROVE"
-				? "APPROVED"
-				: event === "REQUEST_CHANGES"
-					? "CHANGES_REQUESTED"
-					: pr.reviewDecision,
-		reviewRequested: pr.reviewRequested.filter((reviewer) => reviewer !== person),
-		reviewedBy: pr.reviewedBy.includes(person)
-			? pr.reviewedBy
-			: [...pr.reviewedBy, person],
-	};
+  return {
+    ...pr,
+    reviewDecision:
+      event === "APPROVE"
+        ? "APPROVED"
+        : event === "REQUEST_CHANGES"
+          ? "CHANGES_REQUESTED"
+          : pr.reviewDecision,
+    reviewRequested: pr.reviewRequested.filter(
+      (reviewer) => reviewer !== person,
+    ),
+    reviewedBy: pr.reviewedBy.includes(person)
+      ? pr.reviewedBy
+      : [...pr.reviewedBy, person],
+  };
 }
 
 function applyPrCloseTombstones(
-	data: Map<string, Map<string, PrInfo>>,
-	refreshGeneration: number,
-	authoritativeRepos: Set<string>,
+  data: Map<string, Map<string, PrInfo>>,
+  refreshGeneration: number,
+  authoritativeRepos: Set<string>,
 ): void {
-	for (const tombstones of [prCloseState.closed, prCloseState.merged])
-		for (const [key, generation] of tombstones) {
-			// A refresh that began after this close/merge AND actually re-queried
-			// the repo is authoritative. Earlier refreshes retain the tombstone so
-			// their pre-close OPEN result cannot win the race; so do sweeps that
-			// skipped this repo entirely (rate limit, unchanged probe, failed open
-			// query), which never observed the close at all. Same authority rule
-			// the review mutations below use.
-			// Two key shapes live in these maps: `owner/repo#<number>` from
-			// closeTombstoneKey, and `owner/repo@<branch>` from
-			// mergedBranchTombstoneKey (a merge recorded before any cached row
-			// named the number). Cut at whichever separator comes first — a
-			// ghRepo holds neither character, a branch may hold "@".
-			const cut = key.search(/[#@]/);
-			const ghRepo = cut === -1 ? key : key.slice(0, cut);
-			const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
-			if (
-				generation <= refreshGeneration &&
-				repoId &&
-				authoritativeRepos.has(repoId)
-			)
-				tombstones.delete(key);
-		}
-	for (const repo of prRepos()) {
-		const byBranch = data.get(repo.id);
-		if (!byBranch) continue;
-		for (const [branch, pr] of byBranch) {
-			const key = closeTombstoneKey(repo.ghRepo, pr.number);
-			// Merged wins: GitHub reports a merged PR as closed too. A merge of a
-			// branch the cache had no row for is tombstoned by branch instead of
-			// number, so check that shape too — this sweep is the first to see
-			// which PR the branch had.
-			if (
-				prCloseState.merged.has(key) ||
-				prCloseState.merged.has(
-					mergedBranchTombstoneKey(repo.ghRepo, branch),
-				)
-			)
-				byBranch.set(branch, { ...pr, state: "MERGED", isDraft: false });
-			else if (prCloseState.closed.has(key))
-				byBranch.set(branch, { ...pr, state: "CLOSED" });
-		}
-	}
+  for (const tombstones of [prCloseState.closed, prCloseState.merged])
+    for (const [key, generation] of tombstones) {
+      // A refresh that began after this close/merge AND actually re-queried
+      // the repo is authoritative. Earlier refreshes retain the tombstone so
+      // their pre-close OPEN result cannot win the race; so do sweeps that
+      // skipped this repo entirely (rate limit, unchanged probe, failed open
+      // query), which never observed the close at all. Same authority rule
+      // the review mutations below use.
+      // Two key shapes live in these maps: `owner/repo#<number>` from
+      // closeTombstoneKey, and `owner/repo@<branch>` from
+      // mergedBranchTombstoneKey (a merge recorded before any cached row
+      // named the number). Cut at whichever separator comes first — a
+      // ghRepo holds neither character, a branch may hold "@".
+      const cut = key.search(/[#@]/);
+      const ghRepo = cut === -1 ? key : key.slice(0, cut);
+      const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
+      if (
+        generation <= refreshGeneration &&
+        repoId &&
+        authoritativeRepos.has(repoId)
+      )
+        tombstones.delete(key);
+    }
+  for (const repo of prRepos()) {
+    const byBranch = data.get(repo.id);
+    if (!byBranch) continue;
+    for (const [branch, pr] of byBranch) {
+      const key = closeTombstoneKey(repo.ghRepo, pr.number);
+      // Merged wins: GitHub reports a merged PR as closed too. A merge of a
+      // branch the cache had no row for is tombstoned by branch instead of
+      // number, so check that shape too — this sweep is the first to see
+      // which PR the branch had.
+      if (
+        prCloseState.merged.has(key) ||
+        prCloseState.merged.has(mergedBranchTombstoneKey(repo.ghRepo, branch))
+      )
+        byBranch.set(branch, { ...pr, state: "MERGED", isDraft: false });
+      else if (prCloseState.closed.has(key))
+        byBranch.set(branch, { ...pr, state: "CLOSED" });
+    }
+  }
 }
 
 /** Test seam: the overlay pass a sweep applies to its freshly fetched rows,
  *  without spending a real sweep to get there. */
 export function __applyPrCloseTombstonesForTest(
-	data: Map<string, Map<string, PrInfo>>,
-	refreshGeneration: number,
-	authoritativeRepos: Set<string> = new Set(),
+  data: Map<string, Map<string, PrInfo>>,
+  refreshGeneration: number,
+  authoritativeRepos: Set<string> = new Set(),
 ): void {
-	applyPrCloseTombstones(data, refreshGeneration, authoritativeRepos);
+  applyPrCloseTombstones(data, refreshGeneration, authoritativeRepos);
 }
 
 /** The cached head branch of an open PR, by number — lets webhook events that
  *  carry only a PR number (issue_comment on a PR) resolve the branch the
  *  detail cache is keyed by. */
 export function cachedPrBranchByNumber(
-	ghRepo: string,
-	number: number,
+  ghRepo: string,
+  number: number,
 ): string | undefined {
-	const repoId = prRepos().find(
-		(repo) => repo.ghRepo.toLowerCase() === ghRepo.toLowerCase(),
-	)?.id;
-	const byBranch = repoId ? prCache.data.get(repoId) : undefined;
-	if (!byBranch) return undefined;
-	for (const [branch, pr] of byBranch) if (pr.number === number) return branch;
-	return undefined;
+  const repoId = prRepos().find(
+    (repo) => repo.ghRepo.toLowerCase() === ghRepo.toLowerCase(),
+  )?.id;
+  const byBranch = repoId ? prCache.data.get(repoId) : undefined;
+  if (!byBranch) return undefined;
+  for (const [branch, pr] of byBranch) if (pr.number === number) return branch;
+  return undefined;
 }
 
 // Webhook write-throughs can burst (a push lands synchronize + several check
@@ -479,11 +505,11 @@ export function cachedPrBranchByNumber(
 // matters across restarts.
 let prCachePersistTimer: ReturnType<typeof setTimeout> | null = null;
 function schedulePrCachePersist() {
-	if (prCachePersistTimer) return;
-	prCachePersistTimer = setTimeout(() => {
-		prCachePersistTimer = null;
-		persistPrCache(prCache.data);
-	}, 5_000);
+  if (prCachePersistTimer) return;
+  prCachePersistTimer = setTimeout(() => {
+    prCachePersistTimer = null;
+    persistPrCache(prCache.data);
+  }, 5_000);
 }
 
 /**
@@ -497,148 +523,158 @@ function schedulePrCachePersist() {
  * its ETag probe stay the authoritative reconciliation loop.
  */
 export function applyPrWebhookToBulkCache(
-	ghRepo: string,
-	event: string,
-	payload: any,
+  ghRepo: string,
+  event: string,
+  payload: any,
 ): void {
-	const hookRepo = prRepos().find(
-		(repo) => repo.ghRepo.toLowerCase() === ghRepo.toLowerCase(),
-	);
-	if (!hookRepo) return;
-	const repoId = hookRepo.id;
-	// Tombstone keys are built from the configured spelling everywhere else
-	// (applyPrCloseTombstones reads them back off prRepos()), and a webhook
-	// delivery can carry a different casing.
-	const canonicalGhRepo = hookRepo.ghRepo;
+  const hookRepo = prRepos().find(
+    (repo) => repo.ghRepo.toLowerCase() === ghRepo.toLowerCase(),
+  );
+  if (!hookRepo) return;
+  const repoId = hookRepo.id;
+  // Tombstone keys are built from the configured spelling everywhere else
+  // (applyPrCloseTombstones reads them back off prRepos()), and a webhook
+  // delivery can carry a different casing.
+  const canonicalGhRepo = hookRepo.ghRepo;
 
-	if (event === "pull_request_review") {
-		const branch: string | undefined = payload?.pull_request?.head?.ref;
-		const person = githubLoginToPersonKey(payload?.review?.user?.login);
-		const state = String(payload?.review?.state || "").toUpperCase();
-		const reviewEvent =
-			state === "APPROVED"
-				? ("APPROVE" as const)
-				: state === "CHANGES_REQUESTED"
-					? ("REQUEST_CHANGES" as const)
-					: state === "COMMENTED"
-						? ("COMMENT" as const)
-						: null;
-		if (branch && person && reviewEvent)
-			markCachedPrReviewed(canonicalGhRepo, branch, person, reviewEvent);
-		return;
-	}
+  if (event === "pull_request_review") {
+    const branch: string | undefined = payload?.pull_request?.head?.ref;
+    const person = githubLoginToPersonKey(payload?.review?.user?.login);
+    const state = String(payload?.review?.state || "").toUpperCase();
+    const reviewEvent =
+      state === "APPROVED"
+        ? ("APPROVE" as const)
+        : state === "CHANGES_REQUESTED"
+          ? ("REQUEST_CHANGES" as const)
+          : state === "COMMENTED"
+            ? ("COMMENT" as const)
+            : null;
+    if (branch && person && reviewEvent)
+      markCachedPrReviewed(canonicalGhRepo, branch, person, reviewEvent);
+    return;
+  }
 
-	if (event !== "pull_request") return;
-	const pr = payload?.pull_request;
-	const branch: string | undefined = pr?.head?.ref;
-	if (!pr || typeof pr.number !== "number" || !branch) return;
-	let byBranch = prCache.data.get(repoId);
-	if (!byBranch) {
-		byBranch = new Map();
-		prCache.data.set(repoId, byBranch);
-	}
-	const prev = byBranch.get(branch);
-	const owner = ghRepo.split("/")[0] || "";
-	const reviewRequests: ReviewRequestRef[] = [
-		...(Array.isArray(pr.requested_reviewers) ? pr.requested_reviewers : []),
-		...(Array.isArray(pr.requested_teams) ? pr.requested_teams : []),
-	];
-	const requestedTeamSlugs = reviewRequests
-		.map((request) => request.slug?.toLowerCase())
-		.filter((slug): slug is string => !!slug);
-	const teamLoginsBySlug = new Map<string, string[]>();
-	for (const slug of requestedTeamSlugs) {
-		const logins = cachedReviewTeamLogins(owner, slug);
-		if (logins) teamLoginsBySlug.set(slug, logins);
-	}
-	const unresolvedTeam = requestedTeamSlugs.some(
-		(slug) => !teamLoginsBySlug.has(slug),
-	);
-	const state: PrInfo["state"] =
-		pr.merged || pr.merged_at
-			? "MERGED"
-			: pr.state === "closed"
-				? "CLOSED"
-				: "OPEN";
-	// Record the same close/merge overlay the OS1 write-throughs
-	// (markCachedPrClosed / markCachedPrMerged) register, so a bulk sweep
-	// already in flight when this delivery lands cannot revert the row to its
-	// pre-close OPEN state. An OPEN payload drops a standing CLOSED tombstone
-	// instead, since the PR is demonstrably open again, but never the MERGED
-	// one: GitHub cannot reopen a merged PR, so an OPEN delivery there is an
-	// out-of-order one that must not resurrect it.
-	const closeKey = closeTombstoneKey(canonicalGhRepo, pr.number);
-	if (state === "MERGED") {
-		prCloseState.generation++;
-		prCloseState.merged.set(closeKey, prCloseState.generation);
-	} else if (state === "CLOSED") {
-		prCloseState.generation++;
-		prCloseState.closed.set(closeKey, prCloseState.generation);
-	} else {
-		prCloseState.closed.delete(closeKey);
-	}
-	byBranch.set(branch, {
-		url: pr.html_url || prev?.url || "",
-		state,
-		number: pr.number,
-		title: pr.title || prev?.title || "",
-		isDraft: !!pr.draft,
-		additions: typeof pr.additions === "number" ? pr.additions : prev?.additions || 0,
-		deletions: typeof pr.deletions === "number" ? pr.deletions : prev?.deletions || 0,
-		changedFiles:
-			typeof pr.changed_files === "number" ? pr.changed_files : prev?.changedFiles || 0,
-		reviewDecision: prev?.reviewDecision || "",
-		author: pr.user?.login || prev?.author || "",
-		createdAt: pr.created_at || prev?.createdAt || "",
-		updatedAt: pr.updated_at || new Date().toISOString(),
-		checks: prev?.checks || { total: 0, passed: 0, failed: 0, pending: 0 },
-		// REST payloads carry mergeable as true/false/null (computed async).
-		mergeable:
-			pr.mergeable === true
-				? "MERGEABLE"
-				: pr.mergeable === false
-					? "CONFLICTING"
-					: prev?.mergeable || "UNKNOWN",
-		reviewRequested: [
-			...new Set([
-				...reviewRequestPersonKeys(reviewRequests, teamLoginsBySlug, pr.user?.login),
-				...(unresolvedTeam ? prev?.reviewRequested || [] : []),
-			]),
-		],
-		reviewedBy: prev?.reviewedBy || [],
-		assignees: Array.isArray(pr.assignees)
-			? pr.assignees.map((a: any) => a?.login).filter((l: any): l is string => !!l)
-			: prev?.assignees || [],
-		sessionRef: sessionRefFromPrBody(pr.body) ?? prev?.sessionRef,
-	});
-	schedulePrCachePersist();
-	if (unresolvedTeam) {
-		void Promise.all(
-			requestedTeamSlugs.map((slug) => fetchReviewTeamLogins(owner, slug)),
-		).then((teamLogins) => {
-			const current = byBranch?.get(branch);
-			if (!current || current.number !== pr.number) return;
-			const hydratedTeams = new Map<string, string[]>();
-			for (const [index, slug] of requestedTeamSlugs.entries()) {
-				const logins = teamLogins[index];
-				if (logins) hydratedTeams.set(slug, logins);
-			}
-			const resolved = reviewRequestPersonKeys(
-				reviewRequests,
-				hydratedTeams,
-				pr.user?.login,
-			);
-			current.reviewRequested = [
-				...new Set([
-					...resolved,
-					...(teamLogins.some((logins) => logins === null)
-						? current.reviewRequested
-						: []),
-				]),
-			];
-			schedulePrCachePersist();
-		});
-	}
+  if (event !== "pull_request") return;
+  const pr = payload?.pull_request;
+  const branch: string | undefined = pr?.head?.ref;
+  if (!pr || typeof pr.number !== "number" || !branch) return;
+  let byBranch = prCache.data.get(repoId);
+  if (!byBranch) {
+    byBranch = new Map();
+    prCache.data.set(repoId, byBranch);
+  }
+  const prev = byBranch.get(branch);
+  const owner = ghRepo.split("/")[0] || "";
+  const reviewRequests: ReviewRequestRef[] = [
+    ...(Array.isArray(pr.requested_reviewers) ? pr.requested_reviewers : []),
+    ...(Array.isArray(pr.requested_teams) ? pr.requested_teams : []),
+  ];
+  const requestedTeamSlugs = reviewRequests
+    .map((request) => request.slug?.toLowerCase())
+    .filter((slug): slug is string => !!slug);
+  const teamLoginsBySlug = new Map<string, string[]>();
+  for (const slug of requestedTeamSlugs) {
+    const logins = cachedReviewTeamLogins(owner, slug);
+    if (logins) teamLoginsBySlug.set(slug, logins);
+  }
+  const unresolvedTeam = requestedTeamSlugs.some(
+    (slug) => !teamLoginsBySlug.has(slug),
+  );
+  const state: PrInfo["state"] =
+    pr.merged || pr.merged_at
+      ? "MERGED"
+      : pr.state === "closed"
+        ? "CLOSED"
+        : "OPEN";
+  // Record the same close/merge overlay the OS1 write-throughs
+  // (markCachedPrClosed / markCachedPrMerged) register, so a bulk sweep
+  // already in flight when this delivery lands cannot revert the row to its
+  // pre-close OPEN state. An OPEN payload drops a standing CLOSED tombstone
+  // instead, since the PR is demonstrably open again, but never the MERGED
+  // one: GitHub cannot reopen a merged PR, so an OPEN delivery there is an
+  // out-of-order one that must not resurrect it.
+  const closeKey = closeTombstoneKey(canonicalGhRepo, pr.number);
+  if (state === "MERGED") {
+    prCloseState.generation++;
+    prCloseState.merged.set(closeKey, prCloseState.generation);
+  } else if (state === "CLOSED") {
+    prCloseState.generation++;
+    prCloseState.closed.set(closeKey, prCloseState.generation);
+  } else {
+    prCloseState.closed.delete(closeKey);
+  }
+  byBranch.set(branch, {
+    url: pr.html_url || prev?.url || "",
+    state,
+    number: pr.number,
+    title: pr.title || prev?.title || "",
+    isDraft: !!pr.draft,
+    additions:
+      typeof pr.additions === "number" ? pr.additions : prev?.additions || 0,
+    deletions:
+      typeof pr.deletions === "number" ? pr.deletions : prev?.deletions || 0,
+    changedFiles:
+      typeof pr.changed_files === "number"
+        ? pr.changed_files
+        : prev?.changedFiles || 0,
+    reviewDecision: prev?.reviewDecision || "",
+    author: pr.user?.login || prev?.author || "",
+    createdAt: pr.created_at || prev?.createdAt || "",
+    updatedAt: pr.updated_at || new Date().toISOString(),
+    checks: prev?.checks || { total: 0, passed: 0, failed: 0, pending: 0 },
+    // REST payloads carry mergeable as true/false/null (computed async).
+    mergeable:
+      pr.mergeable === true
+        ? "MERGEABLE"
+        : pr.mergeable === false
+          ? "CONFLICTING"
+          : prev?.mergeable || "UNKNOWN",
+    reviewRequested: [
+      ...new Set([
+        ...reviewRequestPersonKeys(
+          reviewRequests,
+          teamLoginsBySlug,
+          pr.user?.login,
+        ),
+        ...(unresolvedTeam ? prev?.reviewRequested || [] : []),
+      ]),
+    ],
+    reviewedBy: prev?.reviewedBy || [],
+    assignees: Array.isArray(pr.assignees)
+      ? pr.assignees
+          .map((a: any) => a?.login)
+          .filter((l: any): l is string => !!l)
+      : prev?.assignees || [],
+    sessionRef: sessionRefFromPrBody(pr.body) ?? prev?.sessionRef,
+  });
+  schedulePrCachePersist();
+  if (unresolvedTeam) {
+    void Promise.all(
+      requestedTeamSlugs.map((slug) => fetchReviewTeamLogins(owner, slug)),
+    ).then((teamLogins) => {
+      const current = byBranch?.get(branch);
+      if (!current || current.number !== pr.number) return;
+      const hydratedTeams = new Map<string, string[]>();
+      for (const [index, slug] of requestedTeamSlugs.entries()) {
+        const logins = teamLogins[index];
+        if (logins) hydratedTeams.set(slug, logins);
+      }
+      const resolved = reviewRequestPersonKeys(
+        reviewRequests,
+        hydratedTeams,
+        pr.user?.login,
+      );
+      current.reviewRequested = [
+        ...new Set([
+          ...resolved,
+          ...(teamLogins.some((logins) => logins === null)
+            ? current.reviewRequested
+            : []),
+        ]),
+      ];
+      schedulePrCachePersist();
+    });
+  }
 }
 
 // Rate-limit backoff is shared across ALL GitHub callers (github-limit.ts):
@@ -700,11 +736,17 @@ export function getPrsByRepo(): Map<string, Map<string, PrInfo>> {
 export function prsBySessionRef(
   prsByRepo: Map<string, Map<string, PrInfo>>,
 ): Map<string, Array<{ repo: string; branch: string; pr: PrInfo }>> {
-  const out = new Map<string, Array<{ repo: string; branch: string; pr: PrInfo }>>();
+  const out = new Map<
+    string,
+    Array<{ repo: string; branch: string; pr: PrInfo }>
+  >();
   for (const [repoId, byBranch] of prsByRepo)
     for (const [branch, pr] of byBranch) {
       if (!pr.sessionRef) continue;
-      if (!githubBotLogins().includes(pr.author.toLowerCase()) && !githubLoginToPersonKey(pr.author))
+      if (
+        !githubBotLogins().includes(pr.author.toLowerCase()) &&
+        !githubLoginToPersonKey(pr.author)
+      )
         continue;
       const list = out.get(pr.sessionRef);
       if (list) list.push({ repo: repoId, branch, pr });
@@ -715,7 +757,10 @@ export function prsBySessionRef(
 
 /** The footer-linked PRs claiming this session, under its id or any alias. */
 export function footerPrsFor(
-  bySessionRef: Map<string, Array<{ repo: string; branch: string; pr: PrInfo }>>,
+  bySessionRef: Map<
+    string,
+    Array<{ repo: string; branch: string; pr: PrInfo }>
+  >,
   session: UnifiedSession,
 ): Array<{ repo: string; branch: string; pr: PrInfo }> {
   const out: Array<{ repo: string; branch: string; pr: PrInfo }> = [];
@@ -846,7 +891,12 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
         const people = new Set<string>();
         for (const rev of r.latestReviews || []) {
           const s = (rev.state || "").toUpperCase();
-          if (s !== "APPROVED" && s !== "CHANGES_REQUESTED" && s !== "COMMENTED") continue;
+          if (
+            s !== "APPROVED" &&
+            s !== "CHANGES_REQUESTED" &&
+            s !== "COMMENTED"
+          )
+            continue;
           const p = githubLoginToPersonKey(rev.author?.login);
           if (p) people.add(p);
         }
@@ -862,7 +912,8 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
         additions: pr.additions || 0,
         deletions: pr.deletions || 0,
         changedFiles: pr.changedFiles || 0,
-        reviewDecision: pr.reviewDecision || reviewByNumber.get(pr.number) || "",
+        reviewDecision:
+          pr.reviewDecision || reviewByNumber.get(pr.number) || "",
         author: pr.author?.login || pr.author?.name || "",
         createdAt: pr.createdAt || "",
         updatedAt: pr.updatedAt || "",
@@ -946,7 +997,10 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
       const number = Number(numberText);
       for (const [branch, pr] of byBranch) {
         if (pr.number !== number) continue;
-        byBranch.set(branch, applyCachedReview(pr, mutation.person, mutation.event));
+        byBranch.set(
+          branch,
+          applyCachedReview(pr, mutation.person, mutation.event),
+        );
         break;
       }
     }
@@ -1006,164 +1060,194 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
  * under their own account.
  */
 export interface OpenPrEntry {
-	repo: string;
-	branch: string;
-	url: string;
-	number: number;
-	title: string;
-	isDraft: boolean;
-	reviewDecision: string;
-	author: string;
-	/** Web user-picker key ("kent"), or null when the author isn't a teammate. */
-	person: string | null;
-	createdAt: string;
-	updatedAt: string;
-	checks: PrChecksSummary;
-	/** MERGEABLE | CONFLICTING | UNKNOWN — GitHub's async conflict probe. */
-	mergeable: string;
-	/** Person keys of teammates with a pending review request on this PR. */
-	reviewRequested: string[];
-	/** An automated Open Session review is still running for this PR. */
-	reviewActive: boolean;
-	/** What the last automated review concluded, so the queue can show the
-	 *  score without opening the PR. Absent until one has run. */
-	osReview?: OsReviewSummary;
-	/** What the repo's PR host supports (GitHub: everything) — one shared
-	 *  object per repo, so the list UI can hide host-less surfaces per row. */
-	capabilities?: PrHostCapabilities;
+  repo: string;
+  branch: string;
+  url: string;
+  number: number;
+  title: string;
+  isDraft: boolean;
+  reviewDecision: string;
+  author: string;
+  /** Web user-picker key ("kent"), or null when the author isn't a teammate. */
+  person: string | null;
+  createdAt: string;
+  updatedAt: string;
+  checks: PrChecksSummary;
+  /** MERGEABLE | CONFLICTING | UNKNOWN — GitHub's async conflict probe. */
+  mergeable: string;
+  /** Person keys of teammates with a pending review request on this PR. */
+  reviewRequested: string[];
+  /** An automated Open Session review is still running for this PR. */
+  reviewActive: boolean;
+  /** What the last automated review concluded, so the queue can show the
+   *  score without opening the PR. Absent until one has run. */
+  osReview?: OsReviewSummary;
+  /** What the repo's PR host supports (GitHub: everything) — one shared
+   *  object per repo, so the list UI can hide host-less surfaces per row. */
+  capabilities?: PrHostCapabilities;
 }
 
-export interface RecentPrEntry extends Omit<OpenPrEntry, "reviewActive" | "osReview"> {
-	state: "OPEN" | "MERGED" | "CLOSED";
-	additions: number;
-	deletions: number;
-	/** The session named by the trusted attribution footer, when there is one. */
-	sessionId?: string;
+export interface RecentPrEntry extends Omit<
+  OpenPrEntry,
+  "reviewActive" | "osReview"
+> {
+  state: "OPEN" | "MERGED" | "CLOSED";
+  additions: number;
+  deletions: number;
+  /** The session named by the trusted attribution footer, when there is one. */
+  sessionId?: string;
 }
 
 /** Only trusted authors may turn a PR-body link into an in-app session route. */
-function trustedPrSessionId(pr: Pick<PrInfo, "author" | "sessionRef">): string | undefined {
-	if (!pr.sessionRef) return undefined;
-	const author = pr.author.toLowerCase();
-	return githubBotLogins().includes(author) || githubLoginToPersonKey(author)
-		? pr.sessionRef
-		: undefined;
+function trustedPrSessionId(
+  pr: Pick<PrInfo, "author" | "sessionRef">,
+): string | undefined {
+  if (!pr.sessionRef) return undefined;
+  const author = pr.author.toLowerCase();
+  return githubBotLogins().includes(author) || githubLoginToPersonKey(author)
+    ? pr.sessionRef
+    : undefined;
 }
 
 /** The recent repo-wide PR window, including PRs created outside Open Session. */
 export function getRecentPrs(): RecentPrEntry[] {
-	const out: RecentPrEntry[] = [];
-	for (const [repoId, byBranch] of getPrsByRepo()) {
-		const repoCfg = configuredRepos()[repoId];
-		// GitHub is the client default. Only alternate hosts need to repeat a
-		// capability object on every row.
-		const capabilities = repoCfg?.host === "codestorage"
-			? prHostFor(repoCfg).capabilities
-			: undefined;
-		for (const [branch, pr] of byBranch) {
-			out.push({
-				capabilities,
-				repo: repoId,
-				branch,
-				url: pr.url,
-				number: pr.number,
-				title: pr.title,
-				state: pr.state,
-				isDraft: pr.isDraft,
-				reviewDecision: pr.reviewDecision,
-				author: pr.author,
-				person:
-					githubLoginToPersonKey(pr.author) ??
-					pr.assignees
-						.map((login) => githubLoginToPersonKey(login))
-						.find((person): person is string => !!person) ??
-					null,
-				createdAt: pr.createdAt,
-				updatedAt: pr.updatedAt,
-				additions: pr.additions,
-				deletions: pr.deletions,
-				checks: pr.checks,
-				mergeable: pr.mergeable,
-				reviewRequested: pr.reviewRequested,
-				sessionId: trustedPrSessionId(pr),
-			});
-		}
-	}
-	return out.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  const out: RecentPrEntry[] = [];
+  for (const [repoId, byBranch] of getPrsByRepo()) {
+    const repoCfg = configuredRepos()[repoId];
+    // GitHub is the client default. Only alternate hosts need to repeat a
+    // capability object on every row.
+    const capabilities =
+      repoCfg?.host === "codestorage"
+        ? prHostFor(repoCfg).capabilities
+        : undefined;
+    for (const [branch, pr] of byBranch) {
+      out.push({
+        capabilities,
+        repo: repoId,
+        branch,
+        url: pr.url,
+        number: pr.number,
+        title: pr.title,
+        state: pr.state,
+        isDraft: pr.isDraft,
+        reviewDecision: pr.reviewDecision,
+        author: pr.author,
+        person:
+          githubLoginToPersonKey(pr.author) ??
+          pr.assignees
+            .map((login) => githubLoginToPersonKey(login))
+            .find((person): person is string => !!person) ??
+          null,
+        createdAt: pr.createdAt,
+        updatedAt: pr.updatedAt,
+        additions: pr.additions,
+        deletions: pr.deletions,
+        checks: pr.checks,
+        mergeable: pr.mergeable,
+        reviewRequested: pr.reviewRequested,
+        sessionId: trustedPrSessionId(pr),
+      });
+    }
+  }
+  return out.sort((a, b) =>
+    (b.updatedAt || "").localeCompare(a.updatedAt || ""),
+  );
 }
 
 const personPrCache = new Map<string, { data: RecentPrEntry[]; ts: number }>();
 const PERSON_PR_CACHE_TTL = 10 * 60_000;
 
 /** Complete PR history for one teammate, fetched on demand for Home's person view. */
-export async function getRecentPrsForPerson(person: string): Promise<RecentPrEntry[]> {
-	const key = person.trim().toLowerCase();
-	const cached = personPrCache.get(key);
-	if (cached && Date.now() - cached.ts < PERSON_PR_CACHE_TTL) return cached.data;
-	const login = githubLoginFor(key);
-	if (!login) return [];
+export async function getRecentPrsForPerson(
+  person: string,
+): Promise<RecentPrEntry[]> {
+  const key = person.trim().toLowerCase();
+  const cached = personPrCache.get(key);
+  if (cached && Date.now() - cached.ts < PERSON_PR_CACHE_TTL)
+    return cached.data;
+  const login = githubLoginFor(key);
+  if (!login) return [];
 
-	type PersonPr = {
-		headRefName: string;
-		url: string;
-		state: "OPEN" | "MERGED" | "CLOSED";
-		number: number;
-		title: string;
-		isDraft: boolean;
-		additions: number;
-		deletions: number;
-		author?: { login?: string; name?: string };
-		createdAt: string;
-		updatedAt: string;
-		assignees?: Array<{ login?: string }>;
-		body?: string;
-	};
-	const fields = "headRefName,url,state,number,title,isDraft,additions,deletions,author,createdAt,updatedAt,assignees,body";
-	const out = new Map(
-		getRecentPrs().filter((pr) => pr.person === key).map((pr) => [pr.url, pr]),
-	);
-	let complete = true;
-	for (const repo of prRepos()) {
-		// Author search is a gh-ism; code.storage has no user accounts to search.
-		if (configuredRepos()[repo.id]?.host === "codestorage") continue;
-		const prs = await ghJson<PersonPr[]>([
-			"pr", "list", "--repo", repo.ghRepo, "--state", "all",
-			"--search", `author:${login} OR assignee:${login}`,
-			"--limit", "1000", "--json", fields,
-		]);
-		if (!prs) {
-			complete = false;
-			continue;
-		}
-		for (const pr of prs || []) {
-			const author = pr.author?.login || pr.author?.name || "";
-			const assignees = (pr.assignees || []).map((entry) => entry.login || "").filter(Boolean);
-			const sessionRef = sessionRefFromPrBody(pr.body);
-			out.set(pr.url, {
-				repo: repo.id,
-				branch: pr.headRefName,
-				url: pr.url,
-				number: pr.number,
-				title: pr.title,
-				state: pr.state,
-				isDraft: pr.isDraft,
-				reviewDecision: "",
-				author,
-				person: githubLoginToPersonKey(author) ?? assignees.map(githubLoginToPersonKey).find(Boolean) ?? null,
-				createdAt: pr.createdAt,
-				updatedAt: pr.updatedAt,
-				additions: pr.additions,
-				deletions: pr.deletions,
-				checks: { total: 0, passed: 0, failed: 0, pending: 0 },
-				mergeable: "UNKNOWN",
-				reviewRequested: [],
-				sessionId: trustedPrSessionId({ author, sessionRef }),
-			});
-		}
-	}
-	const data = [...out.values()].sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
-	if (complete) personPrCache.set(key, { data, ts: Date.now() });
-	return data;
+  type PersonPr = {
+    headRefName: string;
+    url: string;
+    state: "OPEN" | "MERGED" | "CLOSED";
+    number: number;
+    title: string;
+    isDraft: boolean;
+    additions: number;
+    deletions: number;
+    author?: { login?: string; name?: string };
+    createdAt: string;
+    updatedAt: string;
+    assignees?: Array<{ login?: string }>;
+    body?: string;
+  };
+  const fields =
+    "headRefName,url,state,number,title,isDraft,additions,deletions,author,createdAt,updatedAt,assignees,body";
+  const out = new Map(
+    getRecentPrs()
+      .filter((pr) => pr.person === key)
+      .map((pr) => [pr.url, pr]),
+  );
+  let complete = true;
+  for (const repo of prRepos()) {
+    // Author search is a gh-ism; code.storage has no user accounts to search.
+    if (configuredRepos()[repo.id]?.host === "codestorage") continue;
+    const prs = await ghJson<PersonPr[]>([
+      "pr",
+      "list",
+      "--repo",
+      repo.ghRepo,
+      "--state",
+      "all",
+      "--search",
+      `author:${login} OR assignee:${login}`,
+      "--limit",
+      "1000",
+      "--json",
+      fields,
+    ]);
+    if (!prs) {
+      complete = false;
+      continue;
+    }
+    for (const pr of prs || []) {
+      const author = pr.author?.login || pr.author?.name || "";
+      const assignees = (pr.assignees || [])
+        .map((entry) => entry.login || "")
+        .filter(Boolean);
+      const sessionRef = sessionRefFromPrBody(pr.body);
+      out.set(pr.url, {
+        repo: repo.id,
+        branch: pr.headRefName,
+        url: pr.url,
+        number: pr.number,
+        title: pr.title,
+        state: pr.state,
+        isDraft: pr.isDraft,
+        reviewDecision: "",
+        author,
+        person:
+          githubLoginToPersonKey(author) ??
+          assignees.map(githubLoginToPersonKey).find(Boolean) ??
+          null,
+        createdAt: pr.createdAt,
+        updatedAt: pr.updatedAt,
+        additions: pr.additions,
+        deletions: pr.deletions,
+        checks: { total: 0, passed: 0, failed: 0, pending: 0 },
+        mergeable: "UNKNOWN",
+        reviewRequested: [],
+        sessionId: trustedPrSessionId({ author, sessionRef }),
+      });
+    }
+  }
+  const data = [...out.values()].sort((a, b) =>
+    (b.updatedAt || "").localeCompare(a.updatedAt || ""),
+  );
+  if (complete) personPrCache.set(key, { data, ts: Date.now() });
+  return data;
 }
 
 /**
@@ -1173,73 +1257,74 @@ export async function getRecentPrsForPerson(person: string): Promise<RecentPrEnt
  * on a current review is the more misleading of the two errors.
  */
 export function lastReviewSummary(
-	last: LastReviewState | undefined,
-	headRefOid: string | undefined,
+  last: LastReviewState | undefined,
+  headRefOid: string | undefined,
 ): OsReviewSummary | undefined {
-	if (!last) return undefined;
-	return {
-		verdict: last.verdict,
-		confidence: last.confidence,
-		findings: last.findings,
-		blocking: last.blocking,
-		stale: !!headRefOid && !!last.sha && headRefOid !== last.sha,
-		at: last.at,
-	};
+  if (!last) return undefined;
+  return {
+    verdict: last.verdict,
+    confidence: last.confidence,
+    findings: last.findings,
+    blocking: last.blocking,
+    stale: !!headRefOid && !!last.sha && headRefOid !== last.sha,
+    at: last.at,
+  };
 }
 
 /** Live automated-review state for one PR, shared by the queue and PR detail
  * surfaces so the same score and staleness rules are rendered everywhere. */
 export function getPrReviewStatus(
-	prNumber: number,
-	ghRepo: string | undefined,
-	headRefOid: string | undefined,
+  prNumber: number,
+  ghRepo: string | undefined,
+  headRefOid: string | undefined,
 ): { reviewActive: boolean; osReview?: OsReviewSummary } {
-	const state = readPrState(prNumber, ghRepo);
-	return {
-		reviewActive:
-			state?.activeRun?.kind === "review" ||
-			isLockHeld("review", prNumber, ghRepo),
-		osReview: lastReviewSummary(state?.lastReview, headRefOid),
-	};
+  const state = readPrState(prNumber, ghRepo);
+  return {
+    reviewActive:
+      state?.activeRun?.kind === "review" ||
+      isLockHeld("review", prNumber, ghRepo),
+    osReview: lastReviewSummary(state?.lastReview, headRefOid),
+  };
 }
 
 export function getOpenPrs(): OpenPrEntry[] {
-	const out: OpenPrEntry[] = [];
-	for (const [repoId, byBranch] of getPrsByRepo()) {
-		const repoCfg = configuredRepos()[repoId];
-		const ghRepo = repoCfg?.ghRepo;
-		const capabilities = repoCfg?.host === "codestorage"
-			? prHostFor(repoCfg).capabilities
-			: undefined;
-		for (const [branch, pr] of byBranch) {
-			if (pr.state !== "OPEN") continue;
-			const review = getPrReviewStatus(pr.number, ghRepo, pr.headRefOid);
-			out.push({
-				capabilities,
-				repo: repoId,
-				branch,
-				url: pr.url,
-				number: pr.number,
-				title: pr.title,
-				isDraft: pr.isDraft,
-				reviewDecision: pr.reviewDecision,
-				author: pr.author,
-				person:
-					githubLoginToPersonKey(pr.author) ??
-					pr.assignees
-						.map((l) => githubLoginToPersonKey(l))
-						.find((p): p is string => !!p) ??
-					null,
-				createdAt: pr.createdAt,
-				updatedAt: pr.updatedAt,
-				checks: pr.checks,
-				mergeable: pr.mergeable,
-				reviewRequested: pr.reviewRequested,
-				...review,
-			});
-		}
-	}
-	return out.sort((a, b) =>
-		(b.updatedAt || "").localeCompare(a.updatedAt || ""),
-	);
+  const out: OpenPrEntry[] = [];
+  for (const [repoId, byBranch] of getPrsByRepo()) {
+    const repoCfg = configuredRepos()[repoId];
+    const ghRepo = repoCfg?.ghRepo;
+    const capabilities =
+      repoCfg?.host === "codestorage"
+        ? prHostFor(repoCfg).capabilities
+        : undefined;
+    for (const [branch, pr] of byBranch) {
+      if (pr.state !== "OPEN") continue;
+      const review = getPrReviewStatus(pr.number, ghRepo, pr.headRefOid);
+      out.push({
+        capabilities,
+        repo: repoId,
+        branch,
+        url: pr.url,
+        number: pr.number,
+        title: pr.title,
+        isDraft: pr.isDraft,
+        reviewDecision: pr.reviewDecision,
+        author: pr.author,
+        person:
+          githubLoginToPersonKey(pr.author) ??
+          pr.assignees
+            .map((l) => githubLoginToPersonKey(l))
+            .find((p): p is string => !!p) ??
+          null,
+        createdAt: pr.createdAt,
+        updatedAt: pr.updatedAt,
+        checks: pr.checks,
+        mergeable: pr.mergeable,
+        reviewRequested: pr.reviewRequested,
+        ...review,
+      });
+    }
+  }
+  return out.sort((a, b) =>
+    (b.updatedAt || "").localeCompare(a.updatedAt || ""),
+  );
 }

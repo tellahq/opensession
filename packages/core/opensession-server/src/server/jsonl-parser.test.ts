@@ -43,11 +43,16 @@ function writeCodexFixture(lines: string[]): string {
 
 const TS = "2026-07-01T10:00:00.000Z";
 
-function userLine(uuid: string, text: string): string {
+function userLine(
+  uuid: string,
+  text: string,
+  sourceMessageIds?: string[],
+): string {
   return JSON.stringify({
     type: "user",
     uuid,
     timestamp: TS,
+    ...(sourceMessageIds?.length ? { sourceMessageIds } : {}),
     message: { role: "user", content: text },
   });
 }
@@ -68,19 +73,27 @@ function toolUseLine(uuid: string, toolUseId: string, command: string): string {
     timestamp: TS,
     message: {
       role: "assistant",
-      content: [{ type: "tool_use", id: toolUseId, name: "Bash", input: { command } }],
+      content: [
+        { type: "tool_use", id: toolUseId, name: "Bash", input: { command } },
+      ],
     },
   });
 }
 
-function toolResultLine(uuid: string, toolUseId: string, output: string): string {
+function toolResultLine(
+  uuid: string,
+  toolUseId: string,
+  output: string,
+): string {
   return JSON.stringify({
     type: "user",
     uuid,
     timestamp: TS,
     message: {
       role: "user",
-      content: [{ type: "tool_result", tool_use_id: toolUseId, content: output }],
+      content: [
+        { type: "tool_result", tool_use_id: toolUseId, content: output },
+      ],
     },
   });
 }
@@ -119,6 +132,41 @@ describe("entriesForWire", () => {
         },
       ]),
     ).toEqual([]);
+  });
+
+  it("projects a background wait as a private turn boundary", () => {
+    expect(
+      entriesForWire([
+        {
+          id: "ordinary-context",
+          type: "system",
+          content: "private handoff",
+          timestamp: TS,
+          noticeKind: "context-injection",
+          contextInjection: { source: "handoff", turnId: "turn-1" },
+        },
+        {
+          id: "wait-context",
+          type: "system",
+          content: "private wait instructions",
+          timestamp: TS,
+          noticeKind: "context-injection",
+          contextInjection: { source: "background-wait", turnId: "turn-2" },
+          seq: 9,
+          changeSeq: 12,
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "wait-context",
+        type: "user",
+        content: "",
+        timestamp: TS,
+        turnBoundary: true,
+        seq: 9,
+        changeSeq: 12,
+      },
+    ]);
   });
 });
 
@@ -206,7 +254,10 @@ describe("parseTranscript", () => {
     const path = writeFixture([
       userLine("u1", "real question"),
       blockLine,
-      userLine("n2", "<runner-notice>Transient engine error — retrying once.</runner-notice>"),
+      userLine(
+        "n2",
+        "<runner-notice>Transient engine error — retrying once.</runner-notice>",
+      ),
     ]);
     const entries = parseTranscript(path);
     expect(entries.map((e) => e.type)).toEqual(["user", "system", "system"]);
@@ -390,7 +441,9 @@ describe("parseTranscriptWindow", () => {
   it("returns empty at offset 0 and for a missing file", () => {
     const path = writeFixture(BASIC_LINES);
     expect(parseTranscriptWindow(path, 0).entries).toEqual([]);
-    expect(parseTranscriptWindow(join(dir, "nope.jsonl"), 100).entries).toEqual([]);
+    expect(parseTranscriptWindow(join(dir, "nope.jsonl"), 100).entries).toEqual(
+      [],
+    );
   });
 
   it("keeps an entry floor through fat tool-result regions despite the soft cap", () => {
@@ -463,7 +516,9 @@ describe("parseTranscriptFrom", () => {
     const full = parseTranscript(path);
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.map((e) => `${e.type}:${e.content}`)).toEqual(
-      full.slice(full.length - entries.length).map((e) => `${e.type}:${e.content}`)
+      full
+        .slice(full.length - entries.length)
+        .map((e) => `${e.type}:${e.content}`),
     );
     // The first two lines' entries (user + tool_use) must NOT be present.
     expect(entries.some((e) => e.type === "tool_use")).toBe(false);
@@ -479,7 +534,10 @@ describe("parseTranscriptFrom", () => {
     const appended = [BASIC_LINES[2], BASIC_LINES[3]];
     writeFileSync(path, appended.map((l) => l + "\n").join(""), { flag: "a" });
     const second = parseTranscriptFrom(path, first.newOffset);
-    expect(second.entries.map((e) => e.type)).toEqual(["tool_result", "assistant"]);
+    expect(second.entries.map((e) => e.type)).toEqual([
+      "tool_result",
+      "assistant",
+    ]);
     expect(second.newOffset).toBe(Bun.file(path).size);
   });
 
@@ -526,7 +584,9 @@ describe("parseTranscriptFrom", () => {
     const first = parseTranscriptFrom(path, 0);
     expect(first.entries.map((e) => e.id)).toEqual(["u1"]);
     // Offset must stop at the end of the complete line, not EOF.
-    expect(first.newOffset).toBe(Buffer.byteLength(BASIC_LINES[0], "utf-8") + 1);
+    expect(first.newOffset).toBe(
+      Buffer.byteLength(BASIC_LINES[0], "utf-8") + 1,
+    );
     // Writer finishes the line; the next poll picks up the WHOLE entry.
     writeFileSync(path, nextLine.slice(25) + "\n", { flag: "a" });
     const second = parseTranscriptFrom(path, first.newOffset);
@@ -554,7 +614,10 @@ describe("Codex rollout parsing", () => {
       JSON.stringify({
         timestamp: "2026-07-01T10:00:02.000Z",
         type: "event_msg",
-        payload: { type: "agent_message", message: "Found the relevant notes." },
+        payload: {
+          type: "agent_message",
+          message: "Found the relevant notes.",
+        },
       }),
     ];
     const path = writeCodexFixture(lines);
@@ -612,7 +675,9 @@ describe("Codex rollout parsing", () => {
     ]);
     const entries = parseTranscript(path);
     expect(entries[0].videos).toHaveLength(1);
-    expect(entries[0].videos![0]).toContain(encodeURIComponent("/tmp/legacy-demo.mp4"));
+    expect(entries[0].videos![0]).toContain(
+      encodeURIComponent("/tmp/legacy-demo.mp4"),
+    );
   });
 
   it("extracts videos from Codex shell tool output markers", () => {
@@ -646,7 +711,9 @@ describe("Codex rollout parsing", () => {
         payload: {
           type: "function_call_output",
           call_id: "call_mcp_1",
-          output: { output: "ok\nOPENSESSION_VIDEO: /var/tmp/mcp-recording.webm\n" },
+          output: {
+            output: "ok\nOPENSESSION_VIDEO: /var/tmp/mcp-recording.webm\n",
+          },
         },
       }),
     ]);
@@ -668,7 +735,8 @@ describe("Codex rollout parsing", () => {
         type: "event_msg",
         payload: {
           type: "agent_message",
-          message: "Captured the production flow.\n\nOPENSESSION_VIDEO: /tmp/codex-demo.mov",
+          message:
+            "Captured the production flow.\n\nOPENSESSION_VIDEO: /tmp/codex-demo.mov",
         },
       }),
     ]);
@@ -677,9 +745,7 @@ describe("Codex rollout parsing", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].type).toBe("assistant");
     expect(entries[0].content).toBe("Captured the production flow.");
-    expect(entries[0].videos).toEqual([
-      "/media?path=%2Ftmp%2Fcodex-demo.mov",
-    ]);
+    expect(entries[0].videos).toEqual(["/media?path=%2Ftmp%2Fcodex-demo.mov"]);
   });
 });
 
@@ -707,7 +773,9 @@ describe("assistant video markers", () => {
 describe("extractVideoMarkers", () => {
   it("returns media URLs for absolute OPENSESSION_VIDEO markers", () => {
     expect(
-      extractVideoMarkers("before\nOPENSESSION_VIDEO: /tmp/capture-one.mp4\nOPENSESSION_VIDEO: /tmp/second.webm")
+      extractVideoMarkers(
+        "before\nOPENSESSION_VIDEO: /tmp/capture-one.mp4\nOPENSESSION_VIDEO: /tmp/second.webm",
+      ),
     ).toEqual([
       "/media?path=%2Ftmp%2Fcapture-one.mp4",
       "/media?path=%2Ftmp%2Fsecond.webm",
@@ -718,7 +786,9 @@ describe("extractVideoMarkers", () => {
 describe("markers wrapped in markdown", () => {
   it("reads a bolded image marker", () => {
     expect(
-      extractImageMarkers("**OPENSESSION_IMAGE: /tmp/scale-shots/cmp-final.png**"),
+      extractImageMarkers(
+        "**OPENSESSION_IMAGE: /tmp/scale-shots/cmp-final.png**",
+      ),
     ).toEqual(["/media?path=%2Ftmp%2Fscale-shots%2Fcmp-final.png"]);
   });
 
@@ -735,9 +805,9 @@ describe("markers wrapped in markdown", () => {
   });
 
   it("keeps underscores that belong to the path", () => {
-    expect(extractImageMarkers("__OPENSESSION_IMAGE: /tmp/my_final_shot.png__")).toEqual([
-      "/media?path=%2Ftmp%2Fmy_final_shot.png",
-    ]);
+    expect(
+      extractImageMarkers("__OPENSESSION_IMAGE: /tmp/my_final_shot.png__"),
+    ).toEqual(["/media?path=%2Ftmp%2Fmy_final_shot.png"]);
   });
 
   it("strips the whole wrapped line from an assistant bubble", () => {
@@ -757,10 +827,12 @@ describe("markers wrapped in markdown", () => {
   it("renders an emphasised bare path mention", () => {
     const shot = join(dir, "emphasised.png");
     writeFileSync(shot, "x");
-    expect(extractImplicitMedia(`Look at **${shot}** for the result.`)).toEqual({
-      images: [`/media?path=${encodeURIComponent(shot)}`],
-      videos: [],
-    });
+    expect(extractImplicitMedia(`Look at **${shot}** for the result.`)).toEqual(
+      {
+        images: [`/media?path=${encodeURIComponent(shot)}`],
+        videos: [],
+      },
+    );
   });
 });
 
@@ -771,7 +843,10 @@ describe("implicit media in code search output", () => {
   Line 13: let poster = "https://example.com/poster.png";`;
 
   it("does not turn URLs in grep source snippets into attachments", () => {
-    expect(extractImplicitMedia(grepOutput)).toEqual({ images: [], videos: [] });
+    expect(extractImplicitMedia(grepOutput)).toEqual({
+      images: [],
+      videos: [],
+    });
   });
 
   it("still extracts a genuine remote media URL outside grep output", () => {
@@ -790,7 +865,10 @@ describe("implicit media in code search output", () => {
 12290:     let poster = "https://cdn.tella.tv/fixtures/image.png";
 12291:     let source = "http://media.invalid/delayed.mp4";
 </content>`;
-    expect(extractImplicitMedia(readOutput)).toEqual({ images: [], videos: [] });
+    expect(extractImplicitMedia(readOutput)).toEqual({
+      images: [],
+      videos: [],
+    });
   });
 
   it("drops reserved documentation hosts wherever they appear", () => {
@@ -898,7 +976,11 @@ describe("featuredMedia (which tool-result media the agent asked to show)", () =
                 { type: "text", text: "Image read successfully." },
                 {
                   type: "image",
-                  source: { type: "base64", media_type: "image/png", data: "AAAA" },
+                  source: {
+                    type: "base64",
+                    media_type: "image/png",
+                    data: "AAAA",
+                  },
                 },
               ],
             },
@@ -949,6 +1031,35 @@ describe("steer-joined composite user turns", () => {
     expect(entries[1].content).toBe("[Alex] Also, explain the changes");
     expect(entries[0].id).toBe("u1");
     expect(entries[1].id).toBe("u1-j2");
+  });
+
+  it("keeps each source delivery identity on its normalized part", () => {
+    const path = writeFixture([
+      userLine("batch-entry", "[Alex] first\n\n[Johnny] second", [
+        "delivery-one",
+        "delivery-two",
+      ]),
+    ]);
+    const entries = parseTranscript(path).filter((e) => e.type === "user");
+    expect(entries.map((entry) => entry.sourceMessageIds)).toEqual([
+      ["delivery-one"],
+      ["delivery-two"],
+    ]);
+  });
+
+  it("keeps every source identity when normalization cannot split the batch", () => {
+    const path = writeFixture([
+      userLine("batch-entry", "first\n\nsecond", [
+        "delivery-one",
+        "delivery-two",
+      ]),
+    ]);
+    const entries = parseTranscript(path).filter((e) => e.type === "user");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].sourceMessageIds).toEqual([
+      "delivery-one",
+      "delivery-two",
+    ]);
   });
 
   it("splits parts from different senders", () => {

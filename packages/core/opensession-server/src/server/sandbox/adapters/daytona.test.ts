@@ -19,7 +19,9 @@ describe("Daytona create source", () => {
   });
 
   test("uses an explicit image whenever custom resources are requested", () => {
-    expect(daytonaCreateSource(undefined, { cpu: 2, memory: 4, disk: 8 })).toEqual({
+    expect(
+      daytonaCreateSource(undefined, { cpu: 2, memory: 4, disk: 8 }),
+    ).toEqual({
       image: "daytonaio/sandbox:0.8.0",
       resources: { cpu: 2, memory: 4, disk: 8 },
     });
@@ -56,16 +58,10 @@ describe("Daytona create source", () => {
       ),
     ).toBe(false);
     expect(
-      daytonaSnapshotIsRecent(
-        { updatedAt: "2026-08-11T12:55:00.000Z" },
-        now,
-      ),
+      daytonaSnapshotIsRecent({ updatedAt: "2026-08-11T12:55:00.000Z" }, now),
     ).toBe(true);
     expect(
-      daytonaSnapshotIsRecent(
-        { updatedAt: "2026-08-11T11:55:00.000Z" },
-        now,
-      ),
+      daytonaSnapshotIsRecent({ updatedAt: "2026-08-11T11:55:00.000Z" }, now),
     ).toBe(false);
   });
 });
@@ -86,7 +82,9 @@ describe("Daytona exec transport", () => {
   });
 
   test("falls back to the SDK response for an unwrapped transport failure", () => {
-    expect(parseDaytonaExecResult({ exitCode: 124, result: "timed out" })).toEqual({
+    expect(
+      parseDaytonaExecResult({ exitCode: 124, result: "timed out" }),
+    ).toEqual({
       exitCode: 124,
       stdout: "timed out",
       stderr: "",

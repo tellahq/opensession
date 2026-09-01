@@ -17,9 +17,9 @@
 const g = globalThis as { __opensessionShuttingDown?: boolean };
 
 export function beginShutdown(): void {
-	g.__opensessionShuttingDown = true;
+  g.__opensessionShuttingDown = true;
 }
 
 export function isShuttingDown(): boolean {
-	return g.__opensessionShuttingDown === true;
+  return g.__opensessionShuttingDown === true;
 }

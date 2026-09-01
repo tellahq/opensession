@@ -29,9 +29,11 @@ import {
 let keyPathOverride: string | undefined;
 
 function keyPath(): string {
-  return keyPathOverride ||
+  return (
+    keyPathOverride ||
     process.env.OPENSESSION_GITHUB_APP_KEY ||
-    stateDir("github-app.pem");
+    stateDir("github-app.pem")
+  );
 }
 
 /** Test seam: isolate key mutations from the operator's real key file. */
@@ -66,9 +68,13 @@ const g = globalThis as {
 
 function appJwt(clientId: string, key: string): string {
   const now = Math.floor(Date.now() / 1000);
-  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const b64 = (o: object) =>
+    Buffer.from(JSON.stringify(o)).toString("base64url");
   const unsigned = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iat: now - 60, exp: now + 540, iss: clientId })}`;
-  const sig = createSign("RSA-SHA256").update(unsigned).sign(key).toString("base64url");
+  const sig = createSign("RSA-SHA256")
+    .update(unsigned)
+    .sign(key)
+    .toString("base64url");
   return `${unsigned}.${sig}`;
 }
 
@@ -112,7 +118,10 @@ export async function githubAppInstallationToken(
   try {
     const key = await Bun.file(keyPath()).text();
     const jwt = appJwt(clientId, key);
-    const headers = { Authorization: `Bearer ${jwt}`, Accept: "application/vnd.github+json" };
+    const headers = {
+      Authorization: `Bearer ${jwt}`,
+      Accept: "application/vnd.github+json",
+    };
     // Either cache slot can supply the installation id — it does not vary by scope.
     let installationId =
       configuredInstallationId ||
@@ -137,14 +146,23 @@ export async function githubAppInstallationToken(
           ? matchingWrite.installationOwner
           : undefined;
     if (!installationId) {
-      const res = await fetch("https://api.github.com/app/installations", { headers });
-      const installs = (await res.json()) as Array<{ id: number; account?: { login?: string } }>;
-      if (!Array.isArray(installs) || !installs.length) throw new Error("no installations");
+      const res = await fetch("https://api.github.com/app/installations", {
+        headers,
+      });
+      const installs = (await res.json()) as Array<{
+        id: number;
+        account?: { login?: string };
+      }>;
+      if (!Array.isArray(installs) || !installs.length)
+        throw new Error("no installations");
       // Prefer an explicit installation owner, then the org captured at setup
       // (appOrg) — the same precedence setup-team.ts uses. An org App installed
       // on more than one account must be selected explicitly.
       const selected = configuredOwner
-        ? installs.find((installation) => installation.account?.login?.toLowerCase() === configuredOwner)
+        ? installs.find(
+            (installation) =>
+              installation.account?.login?.toLowerCase() === configuredOwner,
+          )
         : installs.length === 1
           ? installs[0]
           : undefined;
@@ -168,7 +186,9 @@ export async function githubAppInstallationToken(
       };
       installationOwner = installation.account?.login;
       if (!installationRes.ok || !installationOwner) {
-        throw new Error(`cannot resolve installation owner (${installationRes.status})`);
+        throw new Error(
+          `cannot resolve installation owner (${installationRes.status})`,
+        );
       }
     }
 
@@ -180,13 +200,16 @@ export async function githubAppInstallationToken(
         body: JSON.stringify({
           permissions: opts.write ? WRITE_PERMISSIONS : READ_PERMISSIONS,
         }),
-      }
+      },
     );
     const tok = (await res.json()) as { token?: string; expires_at?: string };
-    if (!tok.token) throw new Error(`mint failed: ${JSON.stringify(tok).slice(0, 120)}`);
+    if (!tok.token)
+      throw new Error(`mint failed: ${JSON.stringify(tok).slice(0, 120)}`);
     g[slot] = {
       token: tok.token,
-      expiresAt: tok.expires_at ? Date.parse(tok.expires_at) : Date.now() + 55 * 60_000,
+      expiresAt: tok.expires_at
+        ? Date.parse(tok.expires_at)
+        : Date.now() + 55 * 60_000,
       installationId,
       installationOwner,
       credentialIdentity,
@@ -200,7 +223,9 @@ export async function githubAppInstallationToken(
     g.__ghAppLastMintIdentity = credentialIdentity;
     if (!g.__ghAppTokenWarned) {
       g.__ghAppTokenWarned = true;
-      console.warn(`[github-app] installation token unavailable: ${String(e).slice(0, 200)}`);
+      console.warn(
+        `[github-app] installation token unavailable: ${String(e).slice(0, 200)}`,
+      );
     }
     return null;
   }
@@ -230,11 +255,16 @@ export function githubAppCredentialHealth():
   | "unchecked" {
   if (!githubConfiguredCredential()) return "unavailable";
   const github = configuredIntegration("github");
-  const owner = String(github.installationOwner || github.appOrg || "").toLowerCase();
+  const owner = String(
+    github.installationOwner || github.appOrg || "",
+  ).toLowerCase();
   const installationId =
     typeof github.installationId === "number" ? github.installationId : "";
   const identity = `${githubUserAuthSettings().clientId || ""}:${installationId}:${owner}`;
-  if (g.__ghAppLastMintIdentity !== identity || g.__ghAppLastMintOk === undefined)
+  if (
+    g.__ghAppLastMintIdentity !== identity ||
+    g.__ghAppLastMintOk === undefined
+  )
     return "unchecked";
   return g.__ghAppLastMintOk ? "operational" : "unavailable";
 }
@@ -298,7 +328,9 @@ export async function updateGithubAppWebhook(
  *  OPENSESSION_GITHUB_APP_KEY override so an ops-managed key is never clobbered. */
 export function writeGithubAppKey(pem: string): void {
   if (process.env.OPENSESSION_GITHUB_APP_KEY)
-    throw new Error("OPENSESSION_GITHUB_APP_KEY is set; not overwriting an ops-managed key");
+    throw new Error(
+      "OPENSESSION_GITHUB_APP_KEY is set; not overwriting an ops-managed key",
+    );
   writeFileAtomic(keyPath(), pem.endsWith("\n") ? pem : `${pem}\n`, 0o600);
   g.__ghAppTokenCacheRead = null;
   g.__ghAppTokenCacheWrite = null;
@@ -322,7 +354,10 @@ export async function commitGithubAppKeyMutation<T>(
   key: string | null | undefined,
   commitConfig: () => T | Promise<T>,
 ): Promise<T> {
-  if (key === undefined || (key === null && process.env.OPENSESSION_GITHUB_APP_KEY)) {
+  if (
+    key === undefined ||
+    (key === null && process.env.OPENSESSION_GITHUB_APP_KEY)
+  ) {
     if (key === null) {
       g.__ghAppTokenCacheRead = null;
       g.__ghAppTokenCacheWrite = null;
@@ -330,7 +365,9 @@ export async function commitGithubAppKeyMutation<T>(
     return commitConfig();
   }
   if (key !== null && process.env.OPENSESSION_GITHUB_APP_KEY)
-    throw new Error("OPENSESSION_GITHUB_APP_KEY is set; not overwriting an ops-managed key");
+    throw new Error(
+      "OPENSESSION_GITHUB_APP_KEY is set; not overwriting an ops-managed key",
+    );
 
   const path = keyPath();
   const previous = existsSync(path) ? await Bun.file(path).text() : null;
@@ -359,21 +396,32 @@ export function githubRepositoryMatchesInstallation(
   installationOwner: string | undefined,
 ): boolean {
   const [owner, repo, extra] = ghRepo.split("/");
-  return !!owner && !!repo && !extra &&
-    !!installationOwner && owner.toLowerCase() === installationOwner.toLowerCase();
+  return (
+    !!owner &&
+    !!repo &&
+    !extra &&
+    !!installationOwner &&
+    owner.toLowerCase() === installationOwner.toLowerCase()
+  );
 }
 
-export async function githubAppRepositoryToken(ghRepo: string): Promise<string | null> {
+export async function githubAppRepositoryToken(
+  ghRepo: string,
+): Promise<string | null> {
   if (!githubConfiguredCredential()) return null;
   const [owner, repo] = ghRepo.split("/");
   if (!owner || !repo || ghRepo.split("/").length !== 2) return null;
   // Resolve the installation id through the existing credential path. It keeps
   // installation selection in one place and may populate the shared cache.
   await githubAppInstallationToken();
-  const installation =
-    g.__ghAppTokenCacheRead || g.__ghAppTokenCacheWrite;
+  const installation = g.__ghAppTokenCacheRead || g.__ghAppTokenCacheWrite;
   const installationId = installation?.installationId;
-  if (!githubRepositoryMatchesInstallation(ghRepo, installation?.installationOwner)) {
+  if (
+    !githubRepositoryMatchesInstallation(
+      ghRepo,
+      installation?.installationOwner,
+    )
+  ) {
     console.warn(
       `[github-app] refusing repository token for ${ghRepo}: selected installation belongs to ${installation?.installationOwner || "unknown"}`,
     );
@@ -403,7 +451,9 @@ export async function githubAppRepositoryToken(ghRepo: string): Promise<string |
     if (!res.ok || !token.token) throw new Error(`mint failed (${res.status})`);
     return token.token;
   } catch (error) {
-    console.warn(`[github-app] repository token unavailable for ${owner}/${repo}: ${String(error).slice(0, 160)}`);
+    console.warn(
+      `[github-app] repository token unavailable for ${owner}/${repo}: ${String(error).slice(0, 160)}`,
+    );
     return null;
   }
 }

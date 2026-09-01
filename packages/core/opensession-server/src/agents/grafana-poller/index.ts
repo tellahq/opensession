@@ -46,8 +46,7 @@ const GRAFANA_TOKEN = process.env.GRAFANA_SERVICE_ACCOUNT_TOKEN || "";
 const LOKI_DATASOURCE_UID = process.env.LOKI_DATASOURCE_UID || "loki";
 
 const UI_BASE =
-  process.env.OPENSESSION_UI_BASE ||
-  configuredServer().publicBaseUrl;
+  process.env.OPENSESSION_UI_BASE || configuredServer().publicBaseUrl;
 
 const DEFAULT_LOOKBACK = "20m";
 const DEFAULT_POLL_MINUTES = 15;
@@ -79,12 +78,17 @@ async function queryLoki(cfg: GrafanaPollConfig): Promise<LokiSeries[]> {
       signal: ctrl.signal,
     });
     if (!resp.ok) {
-      console.error(`[grafana-poller] Loki query failed: ${resp.status} ${await resp.text()}`);
+      console.error(
+        `[grafana-poller] Loki query failed: ${resp.status} ${await resp.text()}`,
+      );
       return [];
     }
     const data = (await resp.json()) as any;
     if (data?.status !== "success") {
-      console.error("[grafana-poller] Loki non-success:", JSON.stringify(data).slice(0, 300));
+      console.error(
+        "[grafana-poller] Loki non-success:",
+        JSON.stringify(data).slice(0, 300),
+      );
       return [];
     }
     return (data.data?.result || []) as LokiSeries[];
@@ -130,7 +134,8 @@ function groupByDedup(series: LokiSeries[], cfg: GrafanaPollConfig): Failure[] {
     if (runId && !existing.runIds.includes(runId)) existing.runIds.push(runId);
     // Backfill any label this series has that the representative one was missing.
     for (const [k, v] of Object.entries(m)) {
-      if (!isPresent(existing.labels[k]) && isPresent(v)) existing.labels[k] = v;
+      if (!isPresent(existing.labels[k]) && isPresent(v))
+        existing.labels[k] = v;
     }
   }
 
@@ -158,7 +163,10 @@ function dedupPath(automationId: string, dedupValue: string): string {
   return `${dedupDir(automationId)}/${safe}.json`;
 }
 
-function readDedup(automationId: string, dedupValue: string): DedupRecord | null {
+function readDedup(
+  automationId: string,
+  dedupValue: string,
+): DedupRecord | null {
   const path = dedupPath(automationId, dedupValue);
   if (!existsSync(path)) return null;
   try {
@@ -168,7 +176,11 @@ function readDedup(automationId: string, dedupValue: string): DedupRecord | null
   }
 }
 
-function recentlyInvestigated(automationId: string, dedupValue: string, dedupDays: number): boolean {
+function recentlyInvestigated(
+  automationId: string,
+  dedupValue: string,
+  dedupDays: number,
+): boolean {
   const rec = readDedup(automationId, dedupValue);
   if (!rec) return false;
   const last = Date.parse(rec.lastInvestigatedAt);
@@ -186,7 +198,7 @@ function controlCardBlocks(
   cfg: GrafanaPollConfig,
   failure: Failure,
   bksId: string,
-  running: boolean
+  running: boolean,
 ) {
   // A friendly human label if the signal carries one, else the card title.
   const friendly =
@@ -194,7 +206,10 @@ function controlCardBlocks(
     (isPresent(failure.labels.user_email) && failure.labels.user_email) ||
     null;
   const heading = friendly ? `*${friendly}*` : `*${cfg.cardTitle}*`;
-  const attempts = failure.runIds.length > 1 ? `  ·  *Attempts:* ${failure.runIds.length}` : "";
+  const attempts =
+    failure.runIds.length > 1
+      ? `  ·  *Attempts:* ${failure.runIds.length}`
+      : "";
 
   const sectionText = [
     `:mag: Investigating ${cfg.cardTitle} — ${heading}`,
@@ -203,7 +218,11 @@ function controlCardBlocks(
 
   const opensessionButton = {
     type: "button",
-    text: { type: "plain_text", text: `:desktop_computer: Open in ${productName()}`, emoji: true },
+    text: {
+      type: "plain_text",
+      text: `:desktop_computer: Open in ${productName()}`,
+      emoji: true,
+    },
     url: `${UI_BASE}/session/${bksId}`,
     action_id: `opensession:${bksId}`,
   };
@@ -231,7 +250,7 @@ async function investigate(
   automation: Automation,
   cfg: GrafanaPollConfig,
   failure: Failure,
-  onSessionInvalidate?: () => void
+  onSessionInvalidate?: () => void,
 ): Promise<void> {
   const bksId = `bks-${randomUUIDv7()}`;
   const nowIso = new Date().toISOString();
@@ -252,7 +271,7 @@ async function investigate(
     const card = await postSlackBlocks(
       cfg.slackChannel,
       `Investigating ${cfg.cardTitle} for ${failure.dedupValue}`,
-      controlCardBlocks(cfg, failure, bksId, true)
+      controlCardBlocks(cfg, failure, bksId, true),
     );
     slackTs = card?.ts;
   } catch (e) {
@@ -276,10 +295,12 @@ async function investigate(
       slackThreadTs: slackTs || null,
     },
     null,
-    2
+    2,
   );
 
-  console.log(`[grafana-poller] Investigating ${cfg.dedupLabel}=${failure.dedupValue} → ${bksId}`);
+  console.log(
+    `[grafana-poller] Investigating ${cfg.dedupLabel}=${failure.dedupValue} → ${bksId}`,
+  );
 
   void runAutomation(automation, onSessionInvalidate, {
     trigger: "event",
@@ -287,7 +308,10 @@ async function investigate(
     eventContext,
   })
     .catch((e) => {
-      console.error(`[grafana-poller] runAutomation failed for ${failure.dedupValue}:`, e);
+      console.error(
+        `[grafana-poller] runAutomation failed for ${failure.dedupValue}:`,
+        e,
+      );
       // The dedup slot was stamped before launch (to stop an overlapping poll
       // from double-firing) — but a crashed launch must not mute this alert
       // for dedupDays. Roll the stamp back so the next poll retries.
@@ -295,7 +319,10 @@ async function investigate(
         if (prior) writeDedup(automation.id, prior);
         else unlinkSync(dedupPath(automation.id, failure.dedupValue));
       } catch (e2) {
-        console.error(`[grafana-poller] Failed to roll back dedup stamp for ${failure.dedupValue}:`, e2);
+        console.error(
+          `[grafana-poller] Failed to roll back dedup stamp for ${failure.dedupValue}:`,
+          e2,
+        );
       }
     })
     .finally(() => {
@@ -304,7 +331,7 @@ async function investigate(
         cfg.slackChannel,
         slackTs,
         `Investigation for ${failure.dedupValue}`,
-        controlCardBlocks(cfg, failure, bksId, false)
+        controlCardBlocks(cfg, failure, bksId, false),
       ).catch(() => {});
     });
 }
@@ -315,7 +342,7 @@ const pollingNow = new Set<string>();
 
 async function pollAutomation(
   automation: Automation,
-  onSessionInvalidate?: () => void
+  onSessionInvalidate?: () => void,
 ): Promise<void> {
   const cfg = automation.grafanaPoll;
   if (!cfg) return;
@@ -327,9 +354,11 @@ async function pollAutomation(
     if (!failures.length) return;
 
     const dedupDays = cfg.dedupDays || DEFAULT_DEDUP_DAYS;
-    const fresh = failures.filter((f) => !recentlyInvestigated(automation.id, f.dedupValue, dedupDays));
+    const fresh = failures.filter(
+      (f) => !recentlyInvestigated(automation.id, f.dedupValue, dedupDays),
+    );
     console.log(
-      `[grafana-poller] "${automation.name}": ${failures.length} failing, ${fresh.length} new`
+      `[grafana-poller] "${automation.name}": ${failures.length} failing, ${fresh.length} new`,
     );
 
     // Sequentially so each dedup claim is committed before the next; the
@@ -362,14 +391,18 @@ export class GrafanaPollerAgent implements AgentModule {
   private due(now: number): Automation[] {
     return listAutomations().filter((a) => {
       if (!a.enabled || !a.grafanaPoll) return false;
-      const intervalMs = (a.grafanaPoll.pollMinutes || DEFAULT_POLL_MINUTES) * 60 * 1000;
+      const intervalMs =
+        (a.grafanaPoll.pollMinutes || DEFAULT_POLL_MINUTES) * 60 * 1000;
       const last = this.lastPolled.get(a.id) || 0;
       return now - last >= intervalMs;
     });
   }
 
   getRoutes(): Map<string, (req: Request, url: URL) => Promise<Response>> {
-    const routes = new Map<string, (req: Request, url: URL) => Promise<Response>>();
+    const routes = new Map<
+      string,
+      (req: Request, url: URL) => Promise<Response>
+    >();
 
     // Manual trigger: POST /grafana-poll/<automationId>/<secret> { "value": "...", "force": true }
     // Path-auth on the automation's webhook secret, same model as the automations webhook.
@@ -378,7 +411,11 @@ export class GrafanaPollerAgent implements AgentModule {
       if (!m) return Response.json({ error: "Bad path" }, { status: 400 });
 
       const automation = listAutomations().find((a) => a.id === m[1]);
-      if (!automation || !automation.grafanaPoll || automation.webhookSecret !== m[2]) {
+      if (
+        !automation ||
+        !automation.grafanaPoll ||
+        automation.webhookSecret !== m[2]
+      ) {
         return Response.json({ error: "Not found" }, { status: 404 });
       }
       const cfg = automation.grafanaPoll;
@@ -387,25 +424,29 @@ export class GrafanaPollerAgent implements AgentModule {
       try {
         body = JSON.parse(await readRequestTextWithinLimit(req, 64 * 1024));
       } catch (error) {
-        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(64 * 1024);
+        if (error instanceof RequestBodyTooLargeError)
+          return webhookBodyTooLargeResponse(64 * 1024);
       }
       const value = typeof body?.value === "string" ? body.value.trim() : "";
-      if (!value) return Response.json({ error: "value required" }, { status: 400 });
+      if (!value)
+        return Response.json({ error: "value required" }, { status: 400 });
 
       const force = body?.force === true;
       const dedupDays = cfg.dedupDays || DEFAULT_DEDUP_DAYS;
       if (!force && recentlyInvestigated(automation.id, value, dedupDays)) {
-        return Response.json({ ok: false, skipped: `investigated within ${dedupDays} days` });
+        return Response.json({
+          ok: false,
+          skipped: `investigated within ${dedupDays} days`,
+        });
       }
 
       // Enrich from a live query if the value currently shows in the signal.
       const failures = groupByDedup(await queryLoki(cfg), cfg);
-      const failure: Failure =
-        failures.find((f) => f.dedupValue === value) || {
-          dedupValue: value,
-          labels: { [cfg.dedupLabel]: value },
-          runIds: [],
-        };
+      const failure: Failure = failures.find((f) => f.dedupValue === value) || {
+        dedupValue: value,
+        labels: { [cfg.dedupLabel]: value },
+        runIds: [],
+      };
 
       void investigate(automation, cfg, failure, this.onSessionInvalidate);
       return Response.json({ ok: true, value });
@@ -417,7 +458,7 @@ export class GrafanaPollerAgent implements AgentModule {
   async startup(): Promise<void> {
     if (!GRAFANA_URL || !GRAFANA_TOKEN) {
       console.warn(
-        "[grafana-poller] GRAFANA_URL/GRAFANA_SERVICE_ACCOUNT_TOKEN unset — poller disabled"
+        "[grafana-poller] GRAFANA_URL/GRAFANA_SERVICE_ACCOUNT_TOKEN unset — poller disabled",
       );
       return;
     }
@@ -434,7 +475,7 @@ export class GrafanaPollerAgent implements AgentModule {
       .filter((a) => a.grafanaPoll)
       .map((a) => a.name);
     console.log(
-      `[grafana-poller] Agent started — ${names.length} poll automation(s): ${names.join(", ") || "none yet"}`
+      `[grafana-poller] Agent started — ${names.length} poll automation(s): ${names.join(", ") || "none yet"}`,
     );
   }
 
@@ -446,9 +487,16 @@ export class GrafanaPollerAgent implements AgentModule {
   health(): Record<string, unknown> {
     const polls = listAutomations()
       .filter((a) => a.grafanaPoll)
-      .map((a) => ({ name: a.name, enabled: a.enabled, channel: a.grafanaPoll?.slackChannel }));
+      .map((a) => ({
+        name: a.name,
+        enabled: a.enabled,
+        channel: a.grafanaPoll?.slackChannel,
+      }));
     return {
-      status: GRAFANA_URL && GRAFANA_TOKEN ? "operational" : "missing GRAFANA credentials",
+      status:
+        GRAFANA_URL && GRAFANA_TOKEN
+          ? "operational"
+          : "missing GRAFANA credentials",
       polls,
     };
   }

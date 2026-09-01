@@ -11,7 +11,8 @@
 
 const COLOR = process.stdout.isTTY && !process.env.NO_COLOR;
 
-const wrap = (code: string) => (s: string) => (COLOR ? `\x1b[${code}m${s}\x1b[0m` : s);
+const wrap = (code: string) => (s: string) =>
+  COLOR ? `\x1b[${code}m${s}\x1b[0m` : s;
 
 export const bold = wrap("1");
 export const dim = wrap("2");
@@ -30,19 +31,27 @@ export function info(message: string): void {
 }
 
 export function ok(message: string, detail?: string): void {
-  console.log(`  ${green("ok")}      ${message}${detail ? ` ${dim(detail)}` : ""}`);
+  console.log(
+    `  ${green("ok")}      ${message}${detail ? ` ${dim(detail)}` : ""}`,
+  );
 }
 
 export function warn(message: string, detail?: string): void {
-  console.log(`  ${yellow("warn")}    ${message}${detail ? ` ${dim(detail)}` : ""}`);
+  console.log(
+    `  ${yellow("warn")}    ${message}${detail ? ` ${dim(detail)}` : ""}`,
+  );
 }
 
 export function fail(message: string, detail?: string): void {
-  console.log(`  ${red("fail")}    ${message}${detail ? ` ${dim(detail)}` : ""}`);
+  console.log(
+    `  ${red("fail")}    ${message}${detail ? ` ${dim(detail)}` : ""}`,
+  );
 }
 
 export function wrote(path: string, detail?: string): void {
-  console.log(`  ${green("wrote")}   ${path}${detail ? ` ${dim(detail)}` : ""}`);
+  console.log(
+    `  ${green("wrote")}   ${path}${detail ? ` ${dim(detail)}` : ""}`,
+  );
 }
 
 /**

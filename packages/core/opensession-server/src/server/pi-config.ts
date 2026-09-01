@@ -135,7 +135,9 @@ function readRawPiConfig(): Record<string, unknown> {
   // a config that's merely unparseable — fail loudly instead.
   const raw = JSON.parse(readFileSync(path, "utf-8"));
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(`Cannot update ${path}: existing content is not a JSON object`);
+    throw new Error(
+      `Cannot update ${path}: existing content is not a JSON object`,
+    );
   }
   return raw as Record<string, unknown>;
 }
@@ -148,7 +150,9 @@ function writeRawPiConfig(raw: Record<string, unknown>): void {
 
 function rawPiPickerModels(raw: Record<string, unknown>): string[] {
   return Array.isArray(raw.pickerModels)
-    ? raw.pickerModels.filter((x: unknown): x is string => typeof x === "string" && !!x)
+    ? raw.pickerModels.filter(
+        (x: unknown): x is string => typeof x === "string" && !!x,
+      )
     : [];
 }
 
@@ -164,7 +168,9 @@ export function setPiEnabled(enabled: boolean): void {
  *  write an id the reader would silently discard. Returns the stored list. */
 export function addPiPickerModel(id: string): string[] {
   if (!isPiModelId(id)) {
-    throw new Error(`Invalid pi model id "${id}" (expected pi/<provider>/<model>)`);
+    throw new Error(
+      `Invalid pi model id "${id}" (expected pi/<provider>/<model>)`,
+    );
   }
   const raw = readRawPiConfig();
   const list = rawPiPickerModels(raw);
@@ -191,7 +197,9 @@ export function removePiPickerModel(id: string): string[] {
 export function setPiPickerModels(ids: string[]): string[] {
   for (const id of ids) {
     if (!isPiModelId(id)) {
-      throw new Error(`Invalid pi model id "${id}" (expected pi/<provider>/<model>)`);
+      throw new Error(
+        `Invalid pi model id "${id}" (expected pi/<provider>/<model>)`,
+      );
     }
   }
   const raw = readRawPiConfig();

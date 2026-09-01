@@ -49,16 +49,16 @@ literal value `true` enables it; see
 
 ## Environment variables
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `ENABLE_SLACK_AGENT` | to enable by environment | Only the literal `true` enables Slack. When absent, `integrations.slack.enabled` decides |
-| `SLACK_BOT_TOKEN` | yes | Bot user token (`xoxb-…`) for the agent's Slack Web API calls. Missing or invalid credentials produce warnings and failed Slack operations rather than stopping the server |
-| `SLACK_SIGNING_SECRET` | yes | Verifies both HTTP endpoints. Missing or invalid signatures fail closed with 401; request timestamps must be within five minutes |
-| `ALLOWED_SLACK_USER_ID` | strongly recommended | Restricts ordinary DMs and mentions and sets the `isAdmin` gate for admin, session-control and human-ask tools. Unset means every sender admitted by routing is an admin |
-| `WORKTREE_HOOK_SECRET` | only for worktree hooks | Value callers send as `x-worktree-secret` to the two `/worktree/*` routes. Missing means every hook request is rejected with 403 |
-| `SLACK_MENTION_INTENT_MODEL` | no | Mention intent classifier; default `claude-haiku-4-5` |
-| `SCHEDULE_WHEN_MODEL` | no | Natural-language parser used by one-off scheduling tools; default `claude-haiku-4-5` |
-| `SLACK_APP_TOKEN` | do not use | Declared by the setup registry but not consumed by the runtime; it does not enable Socket Mode |
+| Variable                     | Required                 | Purpose                                                                                                                                                                    |
+| ---------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ENABLE_SLACK_AGENT`         | to enable by environment | Only the literal `true` enables Slack. When absent, `integrations.slack.enabled` decides                                                                                   |
+| `SLACK_BOT_TOKEN`            | yes                      | Bot user token (`xoxb-…`) for the agent's Slack Web API calls. Missing or invalid credentials produce warnings and failed Slack operations rather than stopping the server |
+| `SLACK_SIGNING_SECRET`       | yes                      | Verifies both HTTP endpoints. Missing or invalid signatures fail closed with 401; request timestamps must be within five minutes                                           |
+| `ALLOWED_SLACK_USER_ID`      | strongly recommended     | Restricts ordinary DMs and mentions and sets the `isAdmin` gate for admin, session-control and human-ask tools. Unset means every sender admitted by routing is an admin   |
+| `WORKTREE_HOOK_SECRET`       | only for worktree hooks  | Value callers send as `x-worktree-secret` to the two `/worktree/*` routes. Missing means every hook request is rejected with 403                                           |
+| `SLACK_MENTION_INTENT_MODEL` | no                       | Mention intent classifier; default `claude-haiku-4-5`                                                                                                                      |
+| `SCHEDULE_WHEN_MODEL`        | no                       | Natural-language parser used by one-off scheduling tools; default `claude-haiku-4-5`                                                                                       |
+| `SLACK_APP_TOKEN`            | do not use               | Declared by the setup registry but not consumed by the runtime; it does not enable Socket Mode                                                                             |
 
 The setup dialog manages the bot token, signing secret, allowed user and
 worktree-hook secret. It does not expose the two model overrides. Set those
@@ -181,13 +181,13 @@ does not exist.
 No destination channel or user is compiled into the agent. Optional destinations
 and display metadata live in `~/.opensession/config.json`:
 
-| Setting | Used for |
-| --- | --- |
-| `integrations.slack.workspaceId` | Building `app.slack.com` deep links when Slack channel references are rendered in transcripts |
-| `integrations.slack.channelNames` | Mapping `C…` channel IDs to names in transcripts and providing the configured Slack-channel list for feed and composer UI |
-| `integrations.github.docsSyncChannel` | Channel scanned after a docs-sync PR merges so Open Session can find its existing bot announcement and add a check reaction; this setting does not post the announcement |
-| `integrations.github.shippedChangesChannel` | Default channel for sharing merged visual changes; it must also appear in `integrations.slack.channelNames` |
-| `grafanaPoll.slackChannel` | Destination on each Grafana-poll automation; see [Grafana poller](integrations-misc.md#grafana-poller) |
+| Setting                                     | Used for                                                                                                                                                                 |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `integrations.slack.workspaceId`            | Building `app.slack.com` deep links when Slack channel references are rendered in transcripts                                                                            |
+| `integrations.slack.channelNames`           | Mapping `C…` channel IDs to names in transcripts and providing the configured Slack-channel list for feed and composer UI                                                |
+| `integrations.github.docsSyncChannel`       | Channel scanned after a docs-sync PR merges so Open Session can find its existing bot announcement and add a check reaction; this setting does not post the announcement |
+| `integrations.github.shippedChangesChannel` | Default channel for sharing merged visual changes; it must also appear in `integrations.slack.channelNames`                                                              |
+| `grafanaPoll.slackChannel`                  | Destination on each Grafana-poll automation; see [Grafana poller](integrations-misc.md#grafana-poller)                                                                   |
 
 Slack IDs map to people through `identity.team[].slackId`; extra display-only
 mappings can go in `identity.slackNames`. Without a roster, only exact raw-ID

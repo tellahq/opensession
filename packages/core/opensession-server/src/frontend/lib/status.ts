@@ -1,6 +1,12 @@
 import type { UnifiedSession } from "./types";
 
-export type StatusTone = "green" | "blue" | "purple" | "red" | "yellow" | "gray";
+export type StatusTone =
+  | "green"
+  | "blue"
+  | "purple"
+  | "red"
+  | "yellow"
+  | "gray";
 
 export interface SessionStatus {
   label: string;

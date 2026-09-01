@@ -2,9 +2,7 @@
   "id": "stale-pr-monitor",
   "label": "Stale PR monitor",
   "description": "Weekly list of pull requests that have gone quiet.",
-  "requires": [
-    "github"
-  ],
+  "requires": ["github"],
   "automation": {
     "name": "Stale PR monitor",
     "eventKey": "monitor:stale-prs",

@@ -17,7 +17,14 @@
  * Fails soft everywhere: no trufflehog binary, git errors, or a scan timeout
  * all return a skipped result and the review proceeds without the section.
  */
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { audit } from "../../server/audit";
@@ -105,23 +112,38 @@ export async function runSecretScanCheck(opts: {
     });
     return result;
   };
-  const skip = (reason: string) => done({ findings: [], checkedFiles: 0, skipped: reason });
+  const skip = (reason: string) =>
+    done({ findings: [], checkedFiles: 0, skipped: reason });
 
   const bin = opts.bin || trufflehogBin();
   if (!bin) return skip("trufflehog not installed");
 
-  const mb = await runCommand(["git", "merge-base", "HEAD", `origin/${opts.baseRefName}`], {
-    cwd: opts.cwd,
-    timeoutMs: GIT_TIMEOUT_MS,
-  });
+  const mb = await runCommand(
+    ["git", "merge-base", "HEAD", `origin/${opts.baseRefName}`],
+    {
+      cwd: opts.cwd,
+      timeoutMs: GIT_TIMEOUT_MS,
+    },
+  );
   const mergeBase = mb.stdout.trim();
-  if (mb.status !== 0 || !mergeBase) return skip(`merge-base failed: ${mb.stderr.trim().slice(0, 200)}`);
+  if (mb.status !== 0 || !mergeBase)
+    return skip(`merge-base failed: ${mb.stderr.trim().slice(0, 200)}`);
 
   const diff = await runCommand(
-    ["git", "diff", "-U0", "--no-color", "--find-renames", "--diff-filter=AM", mergeBase, "HEAD"],
+    [
+      "git",
+      "diff",
+      "-U0",
+      "--no-color",
+      "--find-renames",
+      "--diff-filter=AM",
+      mergeBase,
+      "HEAD",
+    ],
     { cwd: opts.cwd, timeoutMs: GIT_TIMEOUT_MS },
   );
-  if (diff.status !== 0) return skip(`diff failed: ${diff.stderr.trim().slice(0, 200)}`);
+  if (diff.status !== 0)
+    return skip(`diff failed: ${diff.stderr.trim().slice(0, 200)}`);
   const addedLines = parseAddedLines(diff.stdout);
   if (!addedLines.size) return skip("no added lines");
 
@@ -142,12 +164,22 @@ export async function runSecretScanCheck(opts: {
     if (!copied) return skip("no scannable changed files");
 
     const scan = await runCommand(
-      [bin, "filesystem", snapDir, "--results=verified,unknown", "--json", "--no-update"],
+      [
+        bin,
+        "filesystem",
+        snapDir,
+        "--results=verified,unknown",
+        "--json",
+        "--no-update",
+      ],
       { timeoutMs: SCAN_TIMEOUT_MS },
     );
     // TruffleHog exits non-zero with --fail on hits; without it, non-zero means
     // the scan itself broke.
-    if (scan.status !== 0) return skip(`trufflehog exited ${scan.status}: ${scan.stderr.trim().slice(0, 200)}`);
+    if (scan.status !== 0)
+      return skip(
+        `trufflehog exited ${scan.status}: ${scan.stderr.trim().slice(0, 200)}`,
+      );
 
     const findings: SecretFinding[] = [];
     const seen = new Set<string>();

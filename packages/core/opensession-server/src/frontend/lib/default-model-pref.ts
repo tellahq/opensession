@@ -13,12 +13,12 @@ import { preferredNewSessionModel } from "./new-session-model";
 import { makeUserPref } from "./user-pref";
 
 const pref = makeUserPref<string>({
-	localKey: "opensession-default-model-pref",
-	prefKey: "default-model",
-	changeEvent: "opensession-default-model-pref-changed",
-	defaultValue: "",
-	decode: (v) => (typeof v === "string" ? v : null),
-	encode: (v) => v,
+  localKey: "opensession-default-model-pref",
+  prefKey: "default-model",
+  changeEvent: "opensession-default-model-pref-changed",
+  defaultValue: "",
+  decode: (v) => (typeof v === "string" ? v : null),
+  encode: (v) => v,
 });
 
 /** The user's preferred new-session model id, or "" for no preference. */
@@ -32,12 +32,12 @@ export const onDefaultModelPrefChanged = pref.onChanged;
  * preference, so the composer sends no model and the server picks.
  */
 export async function resolveNewSessionModel(catalog: {
-	models: { id: string }[];
-	default: string;
+  models: { id: string }[];
+  default: string;
 }): Promise<string> {
-	return preferredNewSessionModel({
-		models: catalog.models,
-		default: catalog.default,
-		modelPref: getDefaultModelPref(),
-	});
+  return preferredNewSessionModel({
+    models: catalog.models,
+    default: catalog.default,
+    modelPref: getDefaultModelPref(),
+  });
 }

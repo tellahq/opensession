@@ -12,6 +12,7 @@ npx agent-react-devtools init
 This detects the framework and applies the minimal configuration needed.
 
 Use `--dry-run` to preview changes without modifying files:
+
 ```bash
 npx agent-react-devtools init --dry-run
 ```
@@ -39,9 +40,11 @@ The plugin only runs in dev mode (`vite dev`). It injects the connect script bef
 
 ```tsx
 // app/devtools.tsx
-'use client';
-import 'agent-react-devtools/connect';
-export default function DevTools() { return null; }
+"use client";
+import "agent-react-devtools/connect";
+export default function DevTools() {
+  return null;
+}
 ```
 
 Then imports it in `app/layout.tsx`.
@@ -51,7 +54,7 @@ Then imports it in `app/layout.tsx`.
 `init` prepends the import to `src/index.tsx`:
 
 ```ts
-import 'agent-react-devtools/connect';
+import "agent-react-devtools/connect";
 ```
 
 ### React Native / Expo
@@ -65,6 +68,7 @@ npx react-native start
 ```
 
 For physical devices, reverse the port:
+
 ```bash
 adb reverse tcp:8097 tcp:8097
 ```
@@ -74,10 +78,11 @@ adb reverse tcp:8097 tcp:8097
 If `init` doesn't cover your setup, add this as the first import in your entry point:
 
 ```ts
-import 'agent-react-devtools/connect';
+import "agent-react-devtools/connect";
 ```
 
 The connect script is:
+
 - **SSR-safe** — no-ops on the server
 - **Production-safe** — tree-shaken in production builds
 - Connects via WebSocket with a 2-second timeout
@@ -89,12 +94,14 @@ agent-react-devtools status
 ```
 
 Expected output when connected:
+
 ```
 Daemon: running (port 8097)
 Apps: 1 connected, 42 components
 ```
 
 If `Apps: 0 connected`:
+
 1. Check the app is running in dev mode
 2. Check the console for WebSocket connection errors
 3. Ensure no other DevTools instance is using port 8097

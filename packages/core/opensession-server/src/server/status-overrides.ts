@@ -16,22 +16,22 @@ import { OPENSESSION_SESSIONS_DIR } from "./paths";
 
 /** The manual lanes a session can be pinned into — mirrors the frontend's MineStatus. */
 export type ManualStatus =
-	| "needsinput"
-	| "inprogress"
-	| "review"
-	| "merged"
-	| "pending";
+  | "needsinput"
+  | "inprogress"
+  | "review"
+  | "merged"
+  | "pending";
 
 const VALID: ReadonlySet<string> = new Set<ManualStatus>([
-	"needsinput",
-	"inprogress",
-	"review",
-	"merged",
-	"pending",
+  "needsinput",
+  "inprogress",
+  "review",
+  "merged",
+  "pending",
 ]);
 
 export function isManualStatus(v: unknown): v is ManualStatus {
-	return typeof v === "string" && VALID.has(v);
+  return typeof v === "string" && VALID.has(v);
 }
 
 const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/status-overrides.json`;
@@ -39,30 +39,33 @@ const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/status-overrides.json`;
 let cache: Record<string, ManualStatus> | null = null;
 
 function load(): Record<string, ManualStatus> {
-	if (cache) return cache;
-	try {
-		cache = existsSync(REGISTRY_PATH)
-			? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
-			: {};
-	} catch {
-		cache = {};
-	}
-	return cache!;
+  if (cache) return cache;
+  try {
+    cache = existsSync(REGISTRY_PATH)
+      ? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
+      : {};
+  } catch {
+    cache = {};
+  }
+  return cache!;
 }
 
 function save(registry: Record<string, ManualStatus>): void {
-	cache = registry;
-	writeJsonAtomic(REGISTRY_PATH, registry);
+  cache = registry;
+  writeJsonAtomic(REGISTRY_PATH, registry);
 }
 
 export function getStatusOverride(id: string): ManualStatus | undefined {
-	return load()[id];
+  return load()[id];
 }
 
 /** Set (a valid lane) or clear (null/invalid) the manual lane for a session id. */
-export function setStatusOverride(id: string, status: ManualStatus | null): void {
-	const registry = { ...load() };
-	if (status && isManualStatus(status)) registry[id] = status;
-	else delete registry[id];
-	save(registry);
+export function setStatusOverride(
+  id: string,
+  status: ManualStatus | null,
+): void {
+  const registry = { ...load() };
+  if (status && isManualStatus(status)) registry[id] = status;
+  else delete registry[id];
+  save(registry);
 }

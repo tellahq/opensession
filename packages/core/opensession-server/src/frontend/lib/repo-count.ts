@@ -16,33 +16,36 @@ let cached: number | null | undefined;
 
 /** The count as of the last load, or null the very first time. */
 export function repoCount(): number | null {
-	if (cached === undefined) {
-		try {
-			const raw = localStorage.getItem(KEY);
-			const n = raw === null ? Number.NaN : Number.parseInt(raw, 10);
-			cached = Number.isFinite(n) ? n : null;
-		} catch {
-			cached = null;
-		}
-	}
-	return cached;
+  if (cached === undefined) {
+    try {
+      const raw = localStorage.getItem(KEY);
+      const n = raw === null ? Number.NaN : Number.parseInt(raw, 10);
+      cached = Number.isFinite(n) ? n : null;
+    } catch {
+      cached = null;
+    }
+  }
+  return cached;
 }
 
 /** Record the size of the registered set (called as the repo list lands). */
 export function rememberRepoCount(count: number): void {
-	if (cached === count) return;
-	cached = count;
-	try {
-		localStorage.setItem(KEY, String(count));
-	} catch {
-		// A browser with storage blocked still gets the in-memory count.
-	}
-	// Server rendering and tests have no browser event target.
-	if (typeof window !== "undefined" && typeof window.dispatchEvent === "function")
-		window.dispatchEvent(new Event(CHANGE_EVENT));
+  if (cached === count) return;
+  cached = count;
+  try {
+    localStorage.setItem(KEY, String(count));
+  } catch {
+    // A browser with storage blocked still gets the in-memory count.
+  }
+  // Server rendering and tests have no browser event target.
+  if (
+    typeof window !== "undefined" &&
+    typeof window.dispatchEvent === "function"
+  )
+    window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
 export function onRepoCountChanged(handler: () => void): () => void {
-	window.addEventListener(CHANGE_EVENT, handler);
-	return () => window.removeEventListener(CHANGE_EVENT, handler);
+  window.addEventListener(CHANGE_EVENT, handler);
+  return () => window.removeEventListener(CHANGE_EVENT, handler);
 }

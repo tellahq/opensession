@@ -1,119 +1,104 @@
+import { mergeStylexProps } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { dismissToast, toast } from "../ui/toast";
 import { fetchHealthStatus } from "../lib/health";
+import { bootTransition } from "../lib/restart-boot";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
-import { mergeStylexProps, mergeStylexClassName } from "../ui/cn";
-
-const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	fixed: {
-			position: "fixed"
-	},
-	inset0: {
-			inset: "0"
-	},
-	z10000: {
-			zIndex: "10000"
-	},
-	flex: {
-			display: "flex"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	bgBlack82: {
-			backgroundColor: "color-mix(in srgb, var(--color-black) 82%, transparent)"
-	},
-	p6: {
-			padding: "24px"
-	},
-	maxW340px: {
-			maxWidth: "340px"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	gap35: {
-			gap: "14px"
-	},
-	roundedLg: {
-			borderRadius: "calc(14px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	borderLine: {
-			borderColor: "var(--border)"
-	},
-	bgPanel: {
-			backgroundColor: "var(--bg-panel)"
-	},
-	px26px: {
-			paddingInline: "26px"
-	},
-	py7: {
-			paddingBlock: "28px"
-	},
-	textCenter: {
-			textAlign: "center"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	leading15: {
-			lineHeight: "1.5"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	mt15: {
-			marginTop: "6px"
-	},
-	maxWFull: {
-			maxWidth: "100%"
-	},
-	truncate: {
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap",
-			overflow: "hidden"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	leading14: {
-			lineHeight: "1.4"
-	},
-	opacity80: {
-			opacity: ".8"
-	},
-	size30px: { width: "30px", height: "30px" },
-	roundedFull: { borderRadius: "calc(infinity * 1px)" ,
-		cornerShape: "round"},
-	border2: { borderStyle: "solid", borderWidth: "2px" },
-	borderGreen: { borderColor: "var(--green)" },
-	borderTopGreen: { borderTopColor: "var(--green)" },
-	spin: { animationName: spin, animationDuration: "0.8s", animationTimingFunction: "linear", animationIterationCount: "infinite" },
-	borderLineStrong: { borderColor: "var(--border-strong)" },
-	borderTopAccent: { borderTopColor: "var(--accent)" },
-
-	backdropBlur4px: {
-		"--tw-backdrop-blur": "blur(4px)",
-		"WebkitBackdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)",
-		"backdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)"
-	},
+  fixed: {
+    position: "fixed",
+  },
+  inset0: {
+    inset: "0",
+  },
+  z10000: {
+    zIndex: "10000",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  bgBlack82: {
+    backgroundColor: "color-mix(in oklab, var(--color-black) 82%, transparent)",
+  },
+  p6: {
+    padding: "calc(4px * 6)",
+  },
+  maxW340px: {
+    maxWidth: "340px",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap35: {
+    gap: "calc(4px * 3.5)",
+  },
+  roundedLg: {
+    borderRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px26px: {
+    paddingInline: "26px",
+  },
+  py7: {
+    paddingBlock: "calc(4px * 7)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  leading15: {
+    lineHeight: "1.5",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  leading14: {
+    lineHeight: "1.4",
+  },
+  opacity80: {
+    opacity: "80%",
+  },
 });
 
 // Give foreground recovery enough time to probe and replace the stale PWA
@@ -141,8 +126,8 @@ interface Props {
  *  - Socket loss with no restart signal → a calm "Reconnecting…" pill while
  *    useWebSocket retries. On reconnect the server's bootId (hello frame;
  *    /api/health fallback for servers without it) is compared: unchanged →
- *    pure blip; changed → it really was a restart. Either way, the pill clears
- *    silently.
+ *    pure blip; changed → it really was a restart, so a fallback receipt says
+ *    so even if the pre-restart broadcast was lost.
  *  - An explicit `server_restarting` broadcast (graceful drain) shows the same
  *    NON-blocking pill — restarts complete in a couple of seconds and Caddy
  *    parks in-flight requests, so nothing needs to block the composer or
@@ -155,7 +140,9 @@ interface Props {
  *    answers again — that page state is suspect anyway.
  */
 export function RestartOverlay({ connected, addHandler }: Props) {
-  const [phase, setPhase] = useState<"ok" | "reconnecting" | "restarting" | "crashed">("ok");
+  const [phase, setPhase] = useState<
+    "ok" | "reconnecting" | "restarting" | "crashed"
+  >("ok");
   const [backOnline, setBackOnline] = useState(false);
   // Who likely caused the restart: `by` on server_restarting, or `restartBy`
   // on the new server's hello.
@@ -170,9 +157,9 @@ export function RestartOverlay({ connected, addHandler }: Props) {
   const explicitAt = useRef(0);
   const disconnectedAt = useRef<number | null>(null);
   const phaseRef = useRef(phase);
-	useLayoutEffect(() => {
-		phaseRef.current = phase;
-	});
+  useLayoutEffect(() => {
+    phaseRef.current = phase;
+  });
 
   const resolveRestart = () => {
     explicit.current = false;
@@ -183,22 +170,25 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     if (phaseRef.current === "restarting") setPhase("ok");
   };
 
-  // Adopt/compare a server-reported bootId. First sighting just records it,
-  // unless an explicit restart is pending, where ANY fresh sighting after the
-  // announcement is evidence of the new instance (a never-learned old bootId
-  // must not wedge the pill). A change outside the restart flow needs no UI:
-  // there is no pending restart status to clear.
+  // Adopt/compare a server-reported bootId. The first sighting is only a
+  // baseline: a health request made after the announcement can still be
+  // answered by the draining process, so it must not clear the notice. If the
+  // announcement itself was lost, a changed bootId provides a fallback receipt.
   const handleBootId = (id: unknown) => {
     if (typeof id !== "string" || !id) return;
-    const prev = bootId.current;
+    const transition = bootTransition(bootId.current, id);
     bootId.current = id;
     if (explicit.current) {
-      if (!prev || id !== prev) resolveRestart();
+      if (transition === "changed") resolveRestart();
       return;
+    }
+    if (transition === "changed") {
+      toast(`${PRODUCT_NAME} restarted`, { variant: "success" });
     }
   };
 
-  const handleHealth = (data: { bootId?: unknown }) => handleBootId(data.bootId);
+  const handleHealth = (data: { bootId?: unknown }) =>
+    handleBootId(data.bootId);
 
   // Learn the current instance's bootId up front (also the fallback for
   // servers that don't send the hello frame yet).
@@ -220,7 +210,10 @@ export function RestartOverlay({ connected, addHandler }: Props) {
           explicit.current = true;
           explicitAt.current = Date.now();
           if (msg.by) setRestartBy(msg.by);
-          if (phaseRef.current === "ok" || phaseRef.current === "reconnecting") {
+          if (
+            phaseRef.current === "ok" ||
+            phaseRef.current === "reconnecting"
+          ) {
             setPhase("restarting");
           }
         } else if (msg.type === "hello") {
@@ -228,7 +221,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
           handleBootId(msg.bootId);
         }
       }),
-    [addHandler]
+    [addHandler],
   );
 
   // Disconnect tracking: after a foreground grace, show the calm reconnecting
@@ -256,10 +249,12 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
       if (document.visibilityState === "hidden") {
-        if (phaseRef.current === "reconnecting" && !explicit.current) setPhase("ok");
+        if (phaseRef.current === "reconnecting" && !explicit.current)
+          setPhase("ok");
         return;
       }
-      if (phaseRef.current !== "ok" && phaseRef.current !== "restarting") return;
+      if (phaseRef.current !== "ok" && phaseRef.current !== "restarting")
+        return;
       const delay = phaseRef.current === "restarting" ? 0 : PILL_DELAY_MS;
       timer = setTimeout(() => {
         if (document.visibilityState !== "hidden") setPhase("reconnecting");
@@ -284,13 +279,13 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       const started = disconnectedAt.current ?? Date.now();
       if (Date.now() - started < ESCALATE_AFTER_MS) return;
       await (async () => {
-await fetchHealthStatus();
-})().catch(async () => {
-if (!cancelled) {
+        await fetchHealthStatus();
+      })().catch(async () => {
+        if (!cancelled) {
           sawDown.current = true;
           setPhase("crashed");
         }
-});
+      });
     }, 3000);
     return () => {
       cancelled = true;
@@ -310,11 +305,9 @@ if (!cancelled) {
         return;
       }
       await (async () => {
-const d = await fetchHealthStatus();
+        const d = await fetchHealthStatus();
         if (!cancelled) handleHealth(d);
-})().catch(async () => {
-
-});
+      })().catch(async () => {});
     }, 1500);
     return () => {
       cancelled = true;
@@ -328,14 +321,12 @@ const d = await fetchHealthStatus();
     let cancelled = false;
     const iv = setInterval(async () => {
       await (async () => {
-await fetchHealthStatus();
+        await fetchHealthStatus();
         if (!cancelled) {
           setBackOnline(true);
           setTimeout(() => location.reload(), 700);
         }
-})().catch(async () => {
-
-});
+      })().catch(async () => {});
     }, 1500);
     return () => {
       cancelled = true;
@@ -364,21 +355,51 @@ await fetchHealthStatus();
   if (phase !== "crashed") return null;
 
   return (
-    <div {...mergeStylexProps("", sx.backdropBlur4px, sx.fixed, sx.inset0, sx.z10000, sx.flex, sx.itemsCenter, sx.justifyCenter, sx.bgBlack82, sx.p6)} role="alertdialog" aria-live="assertive">
-      <div {...stylex.props(sx.flex, sx.maxW340px, sx.flexCol, sx.itemsCenter, sx.gap35, sx.roundedLg, sx.border, sx.borderLine, sx.bgPanel, sx.px26px, sx.py7, sx.textCenter)}>
+    <div
+      {...mergeStylexProps(
+        "backdrop-blur-[4px]",
+        sx.fixed,
+        sx.inset0,
+        sx.z10000,
+        sx.flex,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.bgBlack82,
+        sx.p6,
+      )}
+      role="alertdialog"
+      aria-live="assertive"
+    >
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.maxW340px,
+          sx.flexCol,
+          sx.itemsCenter,
+          sx.gap35,
+          sx.roundedLg,
+          sx.border,
+          sx.borderLine,
+          sx.bgPanel,
+          sx.px26px,
+          sx.py7,
+          sx.textCenter,
+        )}
+      >
         <div
-          {...stylex.props(
-            sx.size30px,
-            sx.roundedFull,
-            sx.border2,
-            backOnline ? sx.borderGreen : sx.borderLineStrong,
-            backOnline ? sx.borderTopGreen : sx.borderTopAccent,
-            !backOnline && sx.spin,
+          className={utilityClassName(
+            `size-[30px] rounded-full border-2 ${
+              backOnline
+                ? "border-green border-t-green"
+                : "animate-[spin_0.8s_linear_infinite] border-line-strong border-t-accent"
+            }`,
           )}
         />
         {/* Deliberately not "is restarting": that's the calm pill's copy, and
             this state is the one that reloads your page. */}
-        <div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>
+        <div
+          {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}
+        >
           {backOnline ? "Back online" : `${PRODUCT_NAME} isn't responding`}
         </div>
         <div {...stylex.props(sx.leading15, sx.textDim, typography.label)}>
@@ -387,7 +408,20 @@ await fetchHealthStatus();
             : "The page will refresh automatically once the server is back."}
         </div>
         {!backOnline && restartBy && (
-          <div {...stylex.props(sx.mt15, sx.maxWFull, sx.truncate, sx.fontMedium, sx.leading14, sx.textDim, sx.opacity80, typography.label)}>Triggered by {restartBy}</div>
+          <div
+            {...stylex.props(
+              sx.mt15,
+              sx.maxWFull,
+              sx.truncate,
+              sx.fontMedium,
+              sx.leading14,
+              sx.textDim,
+              sx.opacity80,
+              typography.label,
+            )}
+          >
+            Triggered by {restartBy}
+          </div>
         )}
       </div>
     </div>

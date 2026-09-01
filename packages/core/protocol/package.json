@@ -4,6 +4,11 @@
   "private": true,
   "description": "Open Session protocol — the wire and record contracts for cloud agent sessions: bring your own runner, bring your own UI",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tellahq/opensession.git",
+    "directory": "packages/core/protocol"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -18,10 +23,5 @@
     "./identity": "./src/identity.ts",
     "./workspace-group": "./src/workspace-group.ts",
     "./executor": "./src/executor.ts"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/tellahq/opensession.git",
-    "directory": "packages/core/protocol"
   }
 }

@@ -14,16 +14,16 @@ import { ProviderAccountsSection } from "./ModelAccounts";
  * back here because the answer to "this pool is spent" is on this page too:
  * connect another account, or start runs on a different model. */
 export function ProvidersPanel({ workspace }: { workspace?: Workspace }) {
-	return (
-		<SettingsPanel>
-			<SettingsHeader title="Providers" />
-			<ModelDefaultsSection />
-			<WorkspaceModelPresetSettings workspace={workspace} />
-			{/* The pool those models run on, and how full each account is. */}
-			<ProviderAccountsSection />
-			{/* Last: one row per model, Auto on all of them until someone pins
+  return (
+    <SettingsPanel>
+      <SettingsHeader title="Providers" />
+      <ModelDefaultsSection />
+      <WorkspaceModelPresetSettings workspace={workspace} />
+      {/* The pool those models run on, and how full each account is. */}
+      <ProviderAccountsSection />
+      {/* Last: one row per model, Auto on all of them until someone pins
 			    one, so it sits below everything people came here to read. */}
-			<ModelProvidersPanel />
-		</SettingsPanel>
-	);
+      <ModelProvidersPanel />
+    </SettingsPanel>
+  );
 }

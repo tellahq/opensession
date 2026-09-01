@@ -51,9 +51,7 @@
       "worktreeSetup": "git submodule update --init --depth 1",
       "depsInstall": "bun install",
       "previewCommand": "/srv/opensession/bin/start-widget-preview",
-      "warmCachePaths": [
-        "dist/generated-client.js"
-      ],
+      "warmCachePaths": ["dist/generated-client.js"],
       "previewAwsProfile": "widget-dev",
       "deploymentTracking": true,
       "securityInstructions": "Read SECURITY.md before triaging findings; run bun test for changed packages.",
@@ -84,14 +82,10 @@
       {
         "name": "Alice Example",
         "email": "alice@example.com",
-        "aliases": [
-          "alice"
-        ],
+        "aliases": ["alice"],
         "slackId": "U012345",
         "github": "alice",
-        "linearEmails": [
-          "alice@example.com"
-        ],
+        "linearEmails": ["alice@example.com"],
         "timezone": "UTC"
       }
     ],
@@ -99,17 +93,13 @@
       {
         "name": "Platform reviewers",
         "github": "acme/platform-reviewers",
-        "members": [
-          "Alice"
-        ]
+        "members": ["Alice"]
       }
     ],
     "slackNames": {}
   },
   "policy": {
-    "githubWriteOwners": [
-      "acme"
-    ]
+    "githubWriteOwners": ["acme"]
   },
   "integrations": {
     "github": {

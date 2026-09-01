@@ -64,7 +64,6 @@ enum SandboxOffering {
         case "e2b": "E2B"
         case "box": "Box"
         case "modal": "Modal"
-        case "microvm": "Local MicroVM"
         case "lambda-microvm": "AWS Lambda MicroVM"
         default: id
         }

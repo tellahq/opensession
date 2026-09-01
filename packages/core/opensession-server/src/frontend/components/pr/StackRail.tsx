@@ -1,61 +1,49 @@
-import { cn, mergeStylexClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
+import { cn } from "../../ui/cn";
 import * as stylex from "@stylexjs/stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	block: {
-			display: "block"
-	},
-	size4: {
-			width: "16px",
-			height: "16px"
-	},
-	textPurple: {
-			color: "var(--purple)"
-	},
-	textRed: {
-			color: "var(--red)"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	textGreen: {
-			color: "var(--green)"
-	},
-	flex: {
-			display: "flex"
-	},
-	w22px: {
-			width: "22px"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	selfStretch: {
-			alignSelf: "stretch"
-	},
-	my3px: {
-			marginBlock: "3px"
-	},
-
-	wPx: {
-		"width": "1px"
-	},
-	flex1: {
-		"flex": "1"
-	},
-	bgLine: {
-		"backgroundColor": "var(--border)"
-	},
-	invisible: {
-		"visibility": "hidden"
-	},
+  block: {
+    display: "block",
+  },
+  size4: {
+    width: "calc(4px * 4)",
+    height: "calc(4px * 4)",
+  },
+  textPurple: {
+    color: "var(--purple)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  flex: {
+    display: "flex",
+  },
+  w22px: {
+    width: "22px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  selfStretch: {
+    alignSelf: "stretch",
+  },
+  my3px: {
+    marginBlock: "3px",
+  },
 });
 
 /**
@@ -70,80 +58,96 @@ const sx = stylex.create({
 /** A node on the rail: the layer's state, as a ring rather than a filled dot —
  *  filled circles read as check results, and these are places in a chain. */
 export function StackNode({
-	state,
-	isDraft,
+  state,
+  isDraft,
 }: {
-	state?: string;
-	isDraft?: boolean;
+  state?: string;
+  isDraft?: boolean;
 }) {
-	if (state === "MERGED")
-		return (
-			<svg {...stylex.props(sx.block, sx.size4, sx.textPurple)} viewBox="0 0 16 16" aria-hidden>
-				<circle cx="8" cy="8" r="7" fill="currentColor" />
-				<path
-					d="M4.6 8.2l2.2 2.2 4.6-4.6"
-					fill="none"
-					stroke="var(--bg-panel)"
-					strokeWidth="1.7"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-				/>
-			</svg>
-		);
-	if (state === "CLOSED")
-		return (
-			<svg {...stylex.props(sx.block, sx.size4, sx.textRed)} viewBox="0 0 16 16" aria-hidden>
-				<circle
-					cx="8"
-					cy="8"
-					r="7"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="1.4"
-				/>
-				<path
-					d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8"
-					stroke="currentColor"
-					strokeWidth="1.5"
-					strokeLinecap="round"
-				/>
-			</svg>
-		);
-	// A draft can't merge, so it gets no check — and neither does the trunk,
-	// which is a destination rather than a layer.
-	if (isDraft || !state)
-		return (
-			<svg {...stylex.props(sx.block, sx.size4, sx.textFaint)} viewBox="0 0 16 16" aria-hidden>
-				<circle
-					cx="8"
-					cy="8"
-					r="7"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="1.4"
-				/>
-			</svg>
-		);
-	return (
-		<svg {...stylex.props(sx.block, sx.size4, sx.textGreen)} viewBox="0 0 16 16" aria-hidden>
-			<circle
-				cx="8"
-				cy="8"
-				r="7"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			/>
-			<path
-				d="M4.9 8.2l2.1 2.1 4.2-4.2"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.6"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-			/>
-		</svg>
-	);
+  if (state === "MERGED")
+    return (
+      <svg
+        {...stylex.props(sx.block, sx.size4, sx.textPurple)}
+        viewBox="0 0 16 16"
+        aria-hidden
+      >
+        <circle cx="8" cy="8" r="7" fill="currentColor" />
+        <path
+          d="M4.6 8.2l2.2 2.2 4.6-4.6"
+          fill="none"
+          stroke="var(--bg-panel)"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  if (state === "CLOSED")
+    return (
+      <svg
+        {...stylex.props(sx.block, sx.size4, sx.textRed)}
+        viewBox="0 0 16 16"
+        aria-hidden
+      >
+        <circle
+          cx="8"
+          cy="8"
+          r="7"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+        />
+        <path
+          d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  // A draft can't merge, so it gets no check — and neither does the trunk,
+  // which is a destination rather than a layer.
+  if (isDraft || !state)
+    return (
+      <svg
+        {...stylex.props(sx.block, sx.size4, sx.textFaint)}
+        viewBox="0 0 16 16"
+        aria-hidden
+      >
+        <circle
+          cx="8"
+          cy="8"
+          r="7"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+        />
+      </svg>
+    );
+  return (
+    <svg
+      {...stylex.props(sx.block, sx.size4, sx.textGreen)}
+      viewBox="0 0 16 16"
+      aria-hidden
+    >
+      <circle
+        cx="8"
+        cy="8"
+        r="7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+      />
+      <path
+        d="M4.9 8.2l2.1 2.1 4.2-4.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 /**
@@ -156,19 +160,38 @@ export function StackNode({
  * row's title lands on the same rhythm as other railed rows in the app.
  */
 export function StackRail({
-	first,
-	last,
-	children,
+  first,
+  last,
+  children,
 }: {
-	first?: boolean;
-	last?: boolean;
-	children: React.ReactNode;
+  first?: boolean;
+  last?: boolean;
+  children: React.ReactNode;
 }) {
-	return (
-		<span {...stylex.props(sx.flex, sx.w22px, sx.shrink0, sx.flexCol, sx.itemsCenter, sx.selfStretch)}>
-			<span className={cn(mergeStylexClassName("", sx.wPx, sx.flex1, sx.bgLine), first && mergeStylexClassName("", sx.invisible))} />
-			<span {...stylex.props(sx.my3px, sx.shrink0)}>{children}</span>
-			<span className={cn(mergeStylexClassName("", sx.wPx, sx.flex1, sx.bgLine), last && mergeStylexClassName("", sx.invisible))} />
-		</span>
-	);
+  return (
+    <span
+      {...stylex.props(
+        sx.flex,
+        sx.w22px,
+        sx.shrink0,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.selfStretch,
+      )}
+    >
+      <span
+        className={cn(
+          utilityClassName("w-px flex-1 bg-line"),
+          first && utilityClassName("invisible"),
+        )}
+      />
+      <span {...stylex.props(sx.my3px, sx.shrink0)}>{children}</span>
+      <span
+        className={cn(
+          utilityClassName("w-px flex-1 bg-line"),
+          last && utilityClassName("invisible"),
+        )}
+      />
+    </span>
+  );
 }

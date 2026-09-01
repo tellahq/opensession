@@ -8,26 +8,26 @@
 import { useEffect, useState } from "react";
 import { BASE_PATH } from "./base";
 import {
-	registerGithubLogins,
-	registerProfileImages,
+  registerGithubLogins,
+  registerProfileImages,
 } from "../components/UserAvatar";
 import { setKnownPeople } from "./markdown";
 import type { FileMention } from "./api";
 
 export interface Person {
-	/** Picker/display first name. */
-	name: string;
-	fullName: string;
-	github?: string;
-	timezone?: string;
-	/** Uploaded profile picture (a `/media` URL), when they set one. */
-	image?: string;
+  /** Picker/display first name. */
+  name: string;
+  fullName: string;
+  github?: string;
+  timezone?: string;
+  /** Uploaded profile picture (a `/media` URL), when they set one. */
+  image?: string;
 }
 
 export interface ReviewTeam {
-	name: string;
-	github: string;
-	members: string[];
+  name: string;
+  github: string;
+  members: string[];
 }
 
 const CHANGE_EVENT = "opensession-people-changed";
@@ -37,13 +37,13 @@ let fetched = false;
 
 /** Current roster, synchronously (fallback until the fetch lands). */
 export function getPeople(): Person[] {
-	void ensurePeople();
-	return people;
+  void ensurePeople();
+  return people;
 }
 
 export function getReviewTeams(): ReviewTeam[] {
-	void ensurePeople();
-	return reviewTeams;
+  void ensurePeople();
+  return reviewTeams;
 }
 
 /**
@@ -53,53 +53,53 @@ export function getReviewTeams(): ReviewTeam[] {
  * picture have to appear without a reload (Settings > Personal > Account).
  */
 export function refreshPeople(): Promise<void> {
-	fetched = false;
-	return ensurePeople();
+  fetched = false;
+  return ensurePeople();
 }
 
 let inflight: Promise<void> | null = null;
 export function ensurePeople(): Promise<void> {
-	if (fetched) return Promise.resolve();
-	if (inflight) return inflight;
-	inflight = fetch(`${BASE_PATH}/api/people`)
-		.then((r) => (r.ok ? r.json() : null))
-		.then((body: { people?: Person[]; reviewTeams?: ReviewTeam[] } | null) => {
-			const list =
-				body?.people?.filter((p) => p && typeof p.name === "string") ?? [];
-			people = list;
-			reviewTeams =
-				body?.reviewTeams?.filter(
-					(team) =>
-						team &&
-						typeof team.name === "string" &&
-						typeof team.github === "string" &&
-						Array.isArray(team.members),
-				) ?? [];
-			fetched = true;
-			// The markdown renderer mints the @-mention chips, so it needs the
-			// same roster: a name nobody on it stays prose.
-			setKnownPeople(list);
-			registerGithubLogins(
-				Object.fromEntries(
-					list
-						.filter((p) => p.github)
-						.map((p) => [p.name.toLowerCase(), p.github as string]),
-				),
-			);
-			registerProfileImages(
-				Object.fromEntries(
-					list
-						.filter((p) => p.image)
-						.map((p) => [p.name.toLowerCase(), p.image as string]),
-				),
-			);
-			window.dispatchEvent(new Event(CHANGE_EVENT));
-		})
-		.catch(() => {})
-		.finally(() => {
-			inflight = null;
-		});
-	return inflight;
+  if (fetched) return Promise.resolve();
+  if (inflight) return inflight;
+  inflight = fetch(`${BASE_PATH}/api/people`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((body: { people?: Person[]; reviewTeams?: ReviewTeam[] } | null) => {
+      const list =
+        body?.people?.filter((p) => p && typeof p.name === "string") ?? [];
+      people = list;
+      reviewTeams =
+        body?.reviewTeams?.filter(
+          (team) =>
+            team &&
+            typeof team.name === "string" &&
+            typeof team.github === "string" &&
+            Array.isArray(team.members),
+        ) ?? [];
+      fetched = true;
+      // The markdown renderer mints the @-mention chips, so it needs the
+      // same roster: a name nobody on it stays prose.
+      setKnownPeople(list);
+      registerGithubLogins(
+        Object.fromEntries(
+          list
+            .filter((p) => p.github)
+            .map((p) => [p.name.toLowerCase(), p.github as string]),
+        ),
+      );
+      registerProfileImages(
+        Object.fromEntries(
+          list
+            .filter((p) => p.image)
+            .map((p) => [p.name.toLowerCase(), p.image as string]),
+        ),
+      );
+      window.dispatchEvent(new Event(CHANGE_EVENT));
+    })
+    .catch(() => {})
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
 }
 
 /**
@@ -108,9 +108,9 @@ export function ensurePeople(): Promise<void> {
  * which only resolves name → login.
  */
 export function personNameForGithubLogin(login?: string | null): string | null {
-	const key = login?.trim().toLowerCase();
-	if (!key) return null;
-	return getPeople().find((p) => p.github?.toLowerCase() === key)?.name || null;
+  const key = login?.trim().toLowerCase();
+  if (!key) return null;
+  return getPeople().find((p) => p.github?.toLowerCase() === key)?.name || null;
 }
 
 /**
@@ -119,12 +119,12 @@ export function personNameForGithubLogin(login?: string | null): string | null {
  * reviewer keeps their key, capitalized, so they still read as a name.
  */
 export function personNameForKey(key: string): string {
-	const lower = key.trim().toLowerCase();
-	if (!lower) return "";
-	const match = getPeople().find(
-		(p) => p.name.trim().split(/\s+/)[0]?.toLowerCase() === lower,
-	);
-	return match?.name || lower.charAt(0).toUpperCase() + lower.slice(1);
+  const lower = key.trim().toLowerCase();
+  if (!lower) return "";
+  const match = getPeople().find(
+    (p) => p.name.trim().split(/\s+/)[0]?.toLowerCase() === lower,
+  );
+  return match?.name || lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 /**
@@ -134,51 +134,51 @@ export function personNameForKey(key: string): string {
  * `@Name`, which the server's mention scan turns into a push when sent.
  */
 export function peopleMentionMatches(
-	query: string,
-	roster: Person[] = getPeople(),
-	currentUser = "",
+  query: string,
+  roster: Person[] = getPeople(),
+  currentUser = "",
 ): FileMention[] {
-	const q = query.trim().toLowerCase();
-	const current = currentUser.trim().toLowerCase();
-	return roster
-		.filter(
-			(p) =>
-				!q ||
-				p.name.toLowerCase().includes(q) ||
-				p.fullName.toLowerCase().includes(q),
-		)
-		.sort((a, b) => {
-			const aIsCurrent = a.name.toLowerCase() === current;
-			const bIsCurrent = b.name.toLowerCase() === current;
-			return Number(bIsCurrent) - Number(aIsCurrent);
-		})
-		.map((p) => ({
-			display: p.name,
-			insert: p.name,
-			kind: "person" as const,
-			sub: p.fullName,
-		}));
+  const q = query.trim().toLowerCase();
+  const current = currentUser.trim().toLowerCase();
+  return roster
+    .filter(
+      (p) =>
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.fullName.toLowerCase().includes(q),
+    )
+    .sort((a, b) => {
+      const aIsCurrent = a.name.toLowerCase() === current;
+      const bIsCurrent = b.name.toLowerCase() === current;
+      return Number(bIsCurrent) - Number(aIsCurrent);
+    })
+    .map((p) => ({
+      display: p.name,
+      insert: p.name,
+      kind: "person" as const,
+      sub: p.fullName,
+    }));
 }
 
 /** Reactive roster — triggers the fetch on first use. */
 export function usePeople(): Person[] {
-	const [list, setList] = useState(people);
-	useEffect(() => {
-		void ensurePeople();
-		const handler = () => setList(people);
-		window.addEventListener(CHANGE_EVENT, handler);
-		return () => window.removeEventListener(CHANGE_EVENT, handler);
-	}, []);
-	return list;
+  const [list, setList] = useState(people);
+  useEffect(() => {
+    void ensurePeople();
+    const handler = () => setList(people);
+    window.addEventListener(CHANGE_EVENT, handler);
+    return () => window.removeEventListener(CHANGE_EVENT, handler);
+  }, []);
+  return list;
 }
 
 export function useReviewTeams(): ReviewTeam[] {
-	const [list, setList] = useState(reviewTeams);
-	useEffect(() => {
-		void ensurePeople();
-		const handler = () => setList(reviewTeams);
-		window.addEventListener(CHANGE_EVENT, handler);
-		return () => window.removeEventListener(CHANGE_EVENT, handler);
-	}, []);
-	return list;
+  const [list, setList] = useState(reviewTeams);
+  useEffect(() => {
+    void ensurePeople();
+    const handler = () => setList(reviewTeams);
+    window.addEventListener(CHANGE_EVENT, handler);
+    return () => window.removeEventListener(CHANGE_EVENT, handler);
+  }, []);
+  return list;
 }

@@ -145,8 +145,8 @@ export function makeFakeEngine(
       prompt: opts.prompt,
       model,
       sessionId: opts.sessionId,
-    journalKind: opts.journal?.kind,
-    firstJournaledAt: opts.journal?.firstJournaledAt,
+      journalKind: opts.journal?.kind,
+      firstJournaledAt: opts.journal?.firstJournaledAt,
       seedEntries: opts.seedTranscriptEntries?.length,
       opts,
     });

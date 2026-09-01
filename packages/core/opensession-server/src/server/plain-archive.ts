@@ -9,6 +9,7 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 import { plainApiUrl } from "./config";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { invalidateSessionsCache } from "./session-cache";
+import { releasePreviewPathLease } from "./preview-path-leases";
 import type { NativeSessionFile } from "./types";
 
 const HOME = homeDir();
@@ -55,7 +56,9 @@ export async function clearSessionFileArchive(id: string): Promise<boolean> {
 }
 
 /** Mark every session tied to this thread as archived. Returns count. */
-export async function archiveSessionsForThread(threadId: string): Promise<number> {
+export async function archiveSessionsForThread(
+  threadId: string,
+): Promise<number> {
   return archivePlainSessionCandidates(
     threadId,
     activePlainSessions(),
@@ -69,8 +72,15 @@ export async function archivePlainSessionCandidates(
   threadId: string,
   sessions: PlainSessionCandidate[],
   project: SessionProjector = executeSessionProjection,
-  reportFailure: (sessionId: string, error: unknown) => void = (sessionId, error) =>
-    console.warn(`[plain-archive] Could not archive session ${sessionId}:`, error),
+  reportFailure: (sessionId: string, error: unknown) => void = (
+    sessionId,
+    error,
+  ) =>
+    console.warn(
+      `[plain-archive] Could not archive session ${sessionId}:`,
+      error,
+    ),
+  releaseLease: (sessionId: string) => void = releasePreviewPathLease,
 ): Promise<number> {
   let archived = 0;
   for (const { path, data } of sessions) {
@@ -84,6 +94,11 @@ export async function archivePlainSessionCandidates(
           archivedReason: "plain",
         }),
       );
+      try {
+        releaseLease(data.id);
+      } catch (error) {
+        reportFailure(data.id, error);
+      }
       archived++;
     } catch (error) {
       reportFailure(data.id, error);
@@ -101,7 +116,10 @@ async function fetchThreadStatus(threadId: string): Promise<string | null> {
     const timer = setTimeout(() => controller.abort(), 10_000);
     const res = await fetch(plainApiUrl(), {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         query: `query($id: ID!) { thread(threadId: $id) { status } }`,
         variables: { id: threadId },
@@ -123,14 +141,19 @@ export function startPlainArchiveSweep(onChange?: () => void): void {
 
   const sweep = async () => {
     const sessions = activePlainSessions();
-    const threadIds = [...new Set(sessions.map((s) => s.data.plainThreadId!))].slice(0, 40);
+    const threadIds = [
+      ...new Set(sessions.map((s) => s.data.plainThreadId!)),
+    ].slice(0, 40);
     let archived = 0;
     for (const threadId of threadIds) {
       const status = await fetchThreadStatus(threadId);
-      if (status === "DONE") archived += await archiveSessionsForThread(threadId);
+      if (status === "DONE")
+        archived += await archiveSessionsForThread(threadId);
     }
     if (archived > 0) {
-      console.log(`[plain-archive] Archived ${archived} session(s) for done tickets`);
+      console.log(
+        `[plain-archive] Archived ${archived} session(s) for done tickets`,
+      );
       onChange?.();
     }
   };

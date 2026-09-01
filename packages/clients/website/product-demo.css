@@ -82,7 +82,9 @@ html.wco .sidebar-brand::before {
   margin-top: -6px;
   border-radius: 50%;
   background: #ff5f57;
-  box-shadow: 20px 0 #febc2e, 40px 0 #28c840;
+  box-shadow:
+    20px 0 #febc2e,
+    40px 0 #28c840;
   content: "";
   pointer-events: none;
 }

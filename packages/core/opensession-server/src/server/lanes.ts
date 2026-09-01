@@ -27,44 +27,42 @@ import { userStore } from "./shared/user-store";
  * own live state (In progress while running, Backlog once idle).
  */
 const ALLOWED = new Set([
-	"needsinput",
-	"inprogress",
-	"review",
-	"merged",
-	"pending",
-	"mine",
+  "needsinput",
+  "inprogress",
+  "review",
+  "merged",
+  "pending",
+  "mine",
 ]);
 
 export type Lanes = Record<string, string>;
 
 /** Keep only string-id → allowed-lane entries. */
 function clean(input: unknown): Lanes {
-	const out: Lanes = {};
-	if (input && typeof input === "object") {
-		for (const [id, lane] of Object.entries(
-			input as Record<string, unknown>,
-		)) {
-			if (
-				typeof id === "string" &&
-				id.length > 0 &&
-				id.length <= 128 &&
-				typeof lane === "string" &&
-				ALLOWED.has(lane)
-			) {
-				out[id] = lane;
-			}
-		}
-	}
-	return out;
+  const out: Lanes = {};
+  if (input && typeof input === "object") {
+    for (const [id, lane] of Object.entries(input as Record<string, unknown>)) {
+      if (
+        typeof id === "string" &&
+        id.length > 0 &&
+        id.length <= 128 &&
+        typeof lane === "string" &&
+        ALLOWED.has(lane)
+      ) {
+        out[id] = lane;
+      }
+    }
+  }
+  return out;
 }
 
 const store = userStore<Lanes>({ name: "lanes", field: "lanes", clean });
 
 export function getLanes(user: string): Lanes {
-	return store.get(user);
+  return store.get(user);
 }
 
 /** Replace a user's lanes (validated). Returns the stored map. */
 export function setLanes(user: string, lanes: unknown): Lanes {
-	return store.set(user, lanes);
+  return store.set(user, lanes);
 }

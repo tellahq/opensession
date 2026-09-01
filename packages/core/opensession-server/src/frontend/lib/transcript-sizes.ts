@@ -26,9 +26,9 @@ const WIDTH_EPSILON_PX = 2;
 const MAX_SESSIONS = 16;
 
 export interface TranscriptSizes {
-	/** Layer width the heights were measured at; 0 until the first record. */
-	width: number;
-	blockHeights: Map<string, number>;
+  /** Layer width the heights were measured at; 0 until the first record. */
+  width: number;
+  blockHeights: Map<string, number>;
 }
 
 const caches = new Map<string, TranscriptSizes>();
@@ -39,20 +39,20 @@ const caches = new Map<string, TranscriptSizes>();
  * oldest falls out beyond {@link MAX_SESSIONS}.
  */
 export function loadTranscriptSizes(sessionId: string): TranscriptSizes {
-	const existing = caches.get(sessionId);
-	if (existing) {
-		caches.delete(sessionId);
-		caches.set(sessionId, existing);
-		return existing;
-	}
-	const fresh: TranscriptSizes = { width: 0, blockHeights: new Map() };
-	caches.set(sessionId, fresh);
-	while (caches.size > MAX_SESSIONS) {
-		const oldest = caches.keys().next().value;
-		if (oldest === undefined) break;
-		caches.delete(oldest);
-	}
-	return fresh;
+  const existing = caches.get(sessionId);
+  if (existing) {
+    caches.delete(sessionId);
+    caches.set(sessionId, existing);
+    return existing;
+  }
+  const fresh: TranscriptSizes = { width: 0, blockHeights: new Map() };
+  caches.set(sessionId, fresh);
+  while (caches.size > MAX_SESSIONS) {
+    const oldest = caches.keys().next().value;
+    if (oldest === undefined) break;
+    caches.delete(oldest);
+  }
+  return fresh;
 }
 
 /**
@@ -61,25 +61,25 @@ export function loadTranscriptSizes(sessionId: string): TranscriptSizes {
  * every stored height is stale, so the cache empties and adopts the new width.
  */
 export function recordTranscriptSizes(
-	cache: TranscriptSizes,
-	width: number,
-	measured: ReadonlyArray<readonly [string, number]>,
+  cache: TranscriptSizes,
+  width: number,
+  measured: ReadonlyArray<readonly [string, number]>,
 ): void {
-	if (!Number.isFinite(width) || width <= 0 || measured.length === 0) return;
-	if (cache.width && Math.abs(cache.width - width) > WIDTH_EPSILON_PX) {
-		cache.blockHeights.clear();
-	}
-	cache.width = width;
-	for (const [key, size] of measured) {
-		if (Number.isFinite(size) && size > 0) {
-			cache.blockHeights.set(key, Math.round(size));
-		}
-	}
+  if (!Number.isFinite(width) || width <= 0 || measured.length === 0) return;
+  if (cache.width && Math.abs(cache.width - width) > WIDTH_EPSILON_PX) {
+    cache.blockHeights.clear();
+  }
+  cache.width = width;
+  for (const [key, size] of measured) {
+    if (Number.isFinite(size) && size > 0) {
+      cache.blockHeights.set(key, Math.round(size));
+    }
+  }
 }
 
 /** Empty the whole store; exists so tests start from a known slate. */
 export function resetTranscriptSizes(): void {
-	caches.clear();
+  caches.clear();
 }
 
 /**
@@ -89,10 +89,10 @@ export function resetTranscriptSizes(): void {
  * seed behaves exactly like a stale heuristic.
  */
 export function seededBlockEstimate(
-	heuristic: number,
-	seeded: TranscriptSizes | undefined,
-	blockKey: string,
+  heuristic: number,
+  seeded: TranscriptSizes | undefined,
+  blockKey: string,
 ): number {
-	const cached = seeded?.blockHeights.get(blockKey);
-	return typeof cached === "number" && cached > 0 ? cached : heuristic;
+  const cached = seeded?.blockHeights.get(blockKey);
+  return typeof cached === "number" && cached > 0 ? cached : heuristic;
 }

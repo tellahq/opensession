@@ -105,7 +105,9 @@ export interface CreatePiRuntimeBindingInput {
   /** Publishes evidence immediately so a later throw can still rotate safely. */
   onAccountEvidence?: (evidence: PiRuntimeAccountEvidence) => void;
   /** Preserves the runner's audit-before-SDK-load ordering. */
-  beforeRuntimeLoad?: (evidence: PiRuntimeAccountEvidence) => void | Promise<void>;
+  beforeRuntimeLoad?: (
+    evidence: PiRuntimeAccountEvidence,
+  ) => void | Promise<void>;
   dependencies: PiRuntimeBindingDependencies;
 }
 
@@ -210,29 +212,43 @@ export async function createPiRuntimeBinding(
     const credential = seededOpenaiCredential;
     await credentials.modify("openai-codex", async () => credential);
   }
-  const runtime = await sdk.ModelRuntime.create({ credentials, modelsPath: null });
+  const runtime = await sdk.ModelRuntime.create({
+    credentials,
+    modelsPath: null,
+  });
   let model: ReturnType<typeof runtime.getModel>;
 
   if (input.providerID === "openai" && openaiApiKeyCredential) {
     await runtime.setRuntimeApiKey("openai", openaiApiKeyCredential);
     model = runtime.getModel("openai", input.modelID);
     if (!model) {
-      runtime.registerProvider("openai", { models: [OPENAI_FALLBACK_MODEL(input.modelID)] });
+      runtime.registerProvider("openai", {
+        models: [OPENAI_FALLBACK_MODEL(input.modelID)],
+      });
       model = runtime.getModel("openai", input.modelID);
     }
     if (!model) {
-      throw new Error(`Unknown OpenAI API model "${input.modelID}" (could not register it with pi)`);
+      throw new Error(
+        `Unknown OpenAI API model "${input.modelID}" (could not register it with pi)`,
+      );
     }
   } else if (input.providerID === "openai") {
     model = runtime.getModel("openai-codex", input.modelID);
     if (!model) {
-      runtime.registerProvider("openai-codex", { models: [OPENAI_FALLBACK_MODEL(input.modelID)] });
+      runtime.registerProvider("openai-codex", {
+        models: [OPENAI_FALLBACK_MODEL(input.modelID)],
+      });
       model = runtime.getModel("openai-codex", input.modelID);
     }
     if (!model) {
-      throw new Error(`Unknown OpenAI model "${input.modelID}" (could not register it with pi)`);
+      throw new Error(
+        `Unknown OpenAI model "${input.modelID}" (could not register it with pi)`,
+      );
     }
-  } else if (input.providerID === "anthropic" && deps.anthropicTransport() === "inprocess") {
+  } else if (
+    input.providerID === "anthropic" &&
+    deps.anthropicTransport() === "inprocess"
+  ) {
     const provider = deps.buildAnthropicProvider({
       unifiedSessionId: input.unifiedSessionId,
       user: input.accountUser,
@@ -245,7 +261,9 @@ export async function createPiRuntimeBinding(
     runtime.registerNativeProvider(provider);
     model = runtime.getModel("anthropic", input.modelID);
     if (!model) {
-      throw new Error(`Unknown Anthropic model "${input.modelID}" (could not register it with pi)`);
+      throw new Error(
+        `Unknown Anthropic model "${input.modelID}" (could not register it with pi)`,
+      );
     }
   } else if (input.providerID === "anthropic") {
     const bridge = deps.ensureAnthropicBridge();
@@ -257,20 +275,24 @@ export async function createPiRuntimeBinding(
       runtime.registerProvider("anthropic", {
         baseUrl: bridge.url,
         headers,
-        models: [{
-          id: input.modelID,
-          name: input.modelID,
-          reasoning: true,
-          input: ["text", "image"],
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          contextWindow: 200_000,
-          maxTokens: 32_000,
-        }],
+        models: [
+          {
+            id: input.modelID,
+            name: input.modelID,
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 200_000,
+            maxTokens: 32_000,
+          },
+        ],
       });
       model = runtime.getModel("anthropic", input.modelID);
     }
     if (!model) {
-      throw new Error(`Unknown Anthropic model "${input.modelID}" (could not register it with pi)`);
+      throw new Error(
+        `Unknown Anthropic model "${input.modelID}" (could not register it with pi)`,
+      );
     }
   } else {
     const provider = input.configuredProvider!;
@@ -279,7 +301,9 @@ export async function createPiRuntimeBinding(
       modelID: input.modelID,
       apiKey: provider.apiKey!,
       baseURL: provider.baseURL,
-      builtinModelIds: runtime.getModels(input.providerID).map((candidate) => candidate.id),
+      builtinModelIds: runtime
+        .getModels(input.providerID)
+        .map((candidate) => candidate.id),
     });
     if ("error" in plan) throw new Error(plan.error);
     runtime.registerProvider(input.providerID, plan.config);

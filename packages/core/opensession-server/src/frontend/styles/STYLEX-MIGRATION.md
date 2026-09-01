@@ -44,7 +44,7 @@ ternaries, maps over class strings, and the exported string constants in
    `import { type as typography } from "../styles/typography.stylex";`
    (aliased because many files have a local value named `type`) — and compose
    `typography.meta | label | supporting | controlLabel | body | itemTitle |
-   dialogTitle | sectionTitle | pageTitle | stat | inputPhone`.
+dialogTitle | sectionTitle | pageTitle | stat | inputPhone`.
 6. **Colors/tokens**: values resolve through base.css custom properties.
    Prefer the token objects (`import { tokens } from "../styles/tokens.stylex"`)
    or literal `"var(--…)"` references; NEVER a raw hex/rgb color. Radii:
@@ -58,7 +58,7 @@ ternaries, maps over class strings, and the exported string constants in
    `<div className={cn("data-[popup-open]:bg-raised", open && "hidden")} {...stylex.props(sx.base)}>`.
 8. **tailwind-merge conflicts no longer apply across the StyleX boundary.**
    Where a caller could previously override a utility (`cn("px-2",
-   className)` with `px-3`), the override now has to happen through
+className)` with `px-3`), the override now has to happen through
    `stylex.props` argument order — flag such spots in your report instead of
    redesigning the API.
 9. **Animations**: express keyframes with `stylex.keyframes`; mind that an

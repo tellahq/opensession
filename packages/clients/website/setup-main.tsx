@@ -293,7 +293,8 @@ function StepLayout({
 function SetupPage() {
   const [step, setStep] = useState(0);
   const [providerId, setProviderId] = useState<ProviderId | null>(null);
-  const provider = providers.find((item) => item.id === providerId) ?? providers[0]!;
+  const provider =
+    providers.find((item) => item.id === providerId) ?? providers[0]!;
   const [setupOption, setSetupOption] = useState<SetupOptionId | null>(null);
   const [login, setLogin] = useState(provider.login);
   const [serverAddress, setServerAddress] = useState("");
@@ -429,7 +430,10 @@ function SetupPage() {
               </div>
             ) : (
               <div className="setup-server-options-empty">
-                <div className="setup-server-options-empty-icon" aria-hidden="true">
+                <div
+                  className="setup-server-options-empty-icon"
+                  aria-hidden="true"
+                >
                   <IconSparkle size={24} />
                 </div>
                 <strong>Choose a server</strong>
@@ -516,7 +520,9 @@ function SetupPage() {
                 />
                 <div className="setup-reconnect">
                   <strong>Reconnect as the new user</strong>
-                  <code>ssh opensession@{serverAddress || "YOUR_SERVER_IP"}</code>
+                  <code>
+                    ssh opensession@{serverAddress || "YOUR_SERVER_IP"}
+                  </code>
                 </div>
               </div>
             ) : (
@@ -545,7 +551,9 @@ function SetupPage() {
             </div>
             <div className="setup-server-status-copy">
               <strong>
-                {serverConnected ? "Server connected" : "Waiting for your server"}
+                {serverConnected
+                  ? "Server connected"
+                  : "Waiting for your server"}
               </strong>
               <p>
                 {serverConnected
@@ -768,7 +776,8 @@ function SetupPage() {
           step={step}
           onSelect={setStep}
           canSelect={(nextStep) =>
-            nextStep === 0 || Boolean(setupOption && (nextStep === 1 || serverConnected))
+            nextStep === 0 ||
+            Boolean(setupOption && (nextStep === 1 || serverConnected))
           }
         />
         <a className="setup-home-link" href="./">

@@ -1,40 +1,30 @@
 import Foundation
 import Observation
 
-/// Per-user sidebar lanes — the "claim" half of the sidebar's personal triage.
-///
-/// An entry claims a SESSION into YOUR sidebar. That is what pulls an
-/// automation's run, or a workspace someone else started, into your own list:
-/// the value either forces a status lane on the web ("pending", "review", …)
-/// or, as "mine", leaves the row to follow its live state. Personal, not
-/// workspace state — two teammates can each hold the same workspace.
-/// Same store the web sidebar writes (`GET/PUT /api/lanes`, see
-/// src/server/lanes.ts and src/frontend/lib/lanes.ts), so a row claimed in the
-/// browser is yours on the phone too.
-///
-/// This app READS the map and never writes it. Claiming is a browser action,
-/// and the reason the app needs the map at all is `PeopleLens`: a claim is one
-/// of the things that makes a row yours under "My sessions". Without it a
-/// claimed workspace showed in the browser and nowhere here.
-///
-/// Only the KEYS are kept. The values force a status lane, and this app groups
-/// its list by activity bands rather than status lanes, so there is nothing
-/// here for them to change.
+/// Per-user sidebar lane claims. A claim pulls teammate, automation, or
+/// spawned work into this person's own sidebar without changing workspace
+/// state for anyone else.
 @Observable
 @MainActor
 final class LaneStore {
     static let shared = LaneStore()
 
-    /// Session ids this user has claimed.
+    /// Session ids this user has claimed, regardless of the lane value.
     private(set) var claims: Set<String> = []
 
+    private var lanes: [String: String] = [:]
+    /// Local intent survives hydration and in-flight writes. Each key is a
+    /// delta, never a whole-map snapshot, so other clients' claims are safe.
+    private var pendingChanges: [String: String] = [:]
     private var hydratedContext: NativePreferences.Context?
     private(set) var hasHydrated = false
+    private var isSaving = false
 
     init() {}
 
-    /// Load this user's map from the server. Guarded like `HideStore.hydrate`:
-    /// a response for a server/user that has since changed is dropped.
+    /// Load this user's map from the server. A response for a server/user that
+    /// has since changed is dropped, while mutations made before it landed are
+    /// replayed over it.
     func hydrate() async {
         let requestContext = NativePreferences.context()
         resetForNewContext(requestContext)
@@ -50,14 +40,73 @@ final class LaneStore {
         }
         guard hydratedContext != context else { return }
         self.hydratedContext = context
+        lanes = [:]
         claims = []
+        pendingChanges.removeAll()
         hasHydrated = false
+        isSaving = false
     }
 
-    /// Kept internal so the claim set can be covered in tests without a server.
-    func applyHydrated(_ loaded: [String: String]) {
+    /// Claim every session represented by a sidebar row. Optimistic locally;
+    /// persistence waits for hydration so a startup mutation cannot overwrite
+    /// remote state it has not seen yet.
+    func claim(_ sessions: [Session]) {
+        let requestContext = NativePreferences.context()
+        resetForNewContext(requestContext)
+        let ids = Set(sessions.map(\.id)).subtracting(claims)
+        guard !ids.isEmpty else { return }
+        for id in ids {
+            lanes[id] = "mine"
+            pendingChanges[id] = "mine"
+        }
+        claims.formUnion(ids)
+        save()
+    }
+
+    /// Internal so pre-hydration mutation reconciliation is unit-testable.
+    func applyHydrated(_ loaded: [String: String], persist: Bool = true) {
+        var merged = loaded
+        for (key, value) in pendingChanges { merged[key] = value }
         hasHydrated = true
-        let next = Set(loaded.keys)
-        if next != claims { claims = next }
+        apply(merged)
+        if persist, !pendingChanges.isEmpty { save() }
+    }
+
+    /// Reconcile one successful delta response without dropping a newer local
+    /// mutation that landed while that request was in flight.
+    func applySaved(_ saved: [String: String], acknowledging captured: [String: String]) {
+        for (key, value) in captured where pendingChanges[key] == value {
+            pendingChanges.removeValue(forKey: key)
+        }
+        applyHydrated(saved, persist: false)
+    }
+
+    private func apply(_ next: [String: String]) {
+        lanes = next
+        let nextClaims = Set(next.keys)
+        if nextClaims != claims { claims = nextClaims }
+    }
+
+    private func save() {
+        guard hasHydrated,
+              !isSaving,
+              !pendingChanges.isEmpty,
+              let requestContext = hydratedContext,
+              NativePreferences.context() == requestContext else { return }
+        let captured = pendingChanges
+        isSaving = true
+        Task { [weak self] in
+            let saved = try? await SettingsAPI.saveLanes(
+                user: requestContext.user,
+                set: captured
+            )
+            guard let self,
+                  self.hydratedContext == requestContext,
+                  NativePreferences.context() == requestContext else { return }
+            self.isSaving = false
+            guard let saved else { return }
+            self.applySaved(saved, acknowledging: captured)
+            self.save()
+        }
     }
 }

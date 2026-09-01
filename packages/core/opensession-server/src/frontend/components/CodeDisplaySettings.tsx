@@ -11,26 +11,26 @@ import { mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	shrink0: {
-			flexShrink: "0"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	justifyBetween: {
-			justifyContent: "space-between"
-	},
-	gap3: {
-			gap: "12px"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	truncate: {
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap",
-			overflow: "hidden"
-	},
+  shrink0: {
+    flexShrink: "0",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap3: {
+    gap: "12px",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  truncate: {
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+  },
 });
 
 export function DiffSourceSetting({
@@ -128,9 +128,23 @@ export function CodeOrganizationSettings({
         }
         trailing={
           sortDirection === "asc" ? (
-            <IconArrowUp size={15} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textDim)} />
+            <IconArrowUp
+              size={15}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.shrink0,
+                sx.textDim,
+              )}
+            />
           ) : (
-            <IconArrowDown size={15} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textDim)} />
+            <IconArrowDown
+              size={15}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.shrink0,
+                sx.textDim,
+              )}
+            />
           )
         }
         footer={
@@ -150,7 +164,11 @@ export function CodeOrganizationSettings({
                 key={value}
                 value={value}
                 closeOnClick
-                className={mergeStylexOverrideClassName("", sx.justifyBetween, sx.gap3)}
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.justifyBetween,
+                  sx.gap3,
+                )}
               >
                 <span {...stylex.props(sx.minW0, sx.truncate)}>{label}</span>
                 <Menu.Check on={sortDirection === value} />
@@ -183,9 +201,7 @@ export function CodeDisplaySettings({
           label="Diff layout"
           size="sm"
           value={diffStyle}
-          onValueChange={(next) =>
-            changeDiffStyle(next as "unified" | "split")
-          }
+          onValueChange={(next) => changeDiffStyle(next as "unified" | "split")}
         >
           <SegmentedOption value="split">Split</SegmentedOption>
           <SegmentedOption value="unified">Unified</SegmentedOption>

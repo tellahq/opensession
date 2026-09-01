@@ -13,24 +13,24 @@ export const UNDO_MS = 7000;
 
 /** Fisher–Yates, returns a new array — the deck order is rolled once per visit. */
 export function shuffle<T>(arr: T[]): T[] {
-	const out = arr.slice();
-	for (let i = out.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		[out[i], out[j]] = [out[j], out[i]];
-	}
-	return out;
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 export function ageDays(ts: string): number {
-	return Math.floor((Date.now() - new Date(ts).getTime()) / 86_400_000);
+  return Math.floor((Date.now() - new Date(ts).getTime()) / 86_400_000);
 }
 
 /** "today" for anything under a day, else "Nd"; empty for a missing timestamp. */
 export function ageLabel(ts: string | null): string {
-	if (!ts) return "";
-	const d = ageDays(ts);
-	if (d <= 0) return "today";
-	return `${d}d`;
+  if (!ts) return "";
+  const d = ageDays(ts);
+  if (d <= 0) return "today";
+  return `${d}d`;
 }
 
 /**
@@ -39,13 +39,13 @@ export function ageLabel(ts: string | null): string {
  * passes its own.
  */
 export function ageTone(
-	ts: string | null,
-	freshDays: number,
-	staleDays: number,
+  ts: string | null,
+  freshDays: number,
+  staleDays: number,
 ): string {
-	if (!ts) return "text-faint";
-	const d = ageDays(ts);
-	if (d < freshDays) return "text-green";
-	if (d < staleDays) return "text-yellow";
-	return "text-red";
+  if (!ts) return "text-faint";
+  const d = ageDays(ts);
+  if (d < freshDays) return "text-green";
+  if (d < staleDays) return "text-yellow";
+  return "text-red";
 }

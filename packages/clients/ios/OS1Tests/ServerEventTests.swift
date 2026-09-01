@@ -17,6 +17,12 @@ final class ServerEventTests: XCTestCase {
         XCTAssertEqual(bootId, "boot-1")
     }
 
+    func testServerRestarting() {
+        guard case .serverRestarting = parse(#"{"type":"server_restarting"}"#) else {
+            return XCTFail("expected .serverRestarting")
+        }
+    }
+
     func testPong() {
         guard case .pong = parse(#"{"type":"pong"}"#) else {
             return XCTFail("expected .pong")
@@ -126,24 +132,34 @@ final class ServerEventTests: XCTestCase {
     }
 
     func testSessionStatus() {
-        guard case .sessionStatus(_, let running) =
+        guard case .sessionStatus(_, let running, let safety) =
             parse(#"{"type":"session_status","sessionId":"bks-1","isRunning":true}"#)
         else { return XCTFail("expected .sessionStatus") }
         XCTAssertTrue(running)
+        XCTAssertNil(safety)
         // Missing isRunning defaults to false rather than failing the frame.
-        guard case .sessionStatus(_, let defaulted) =
+        guard case .sessionStatus(_, let defaulted, _) =
             parse(#"{"type":"session_status","sessionId":"bks-1"}"#)
         else { return XCTFail("expected .sessionStatus") }
         XCTAssertFalse(defaulted)
+
+        let paused = #"{"type":"session_status","sessionId":"bks-1","isRunning":true,"safety":{"status":"paused_for_safety","explanation":"This session was paused safely.","automaticReconciliationRunning":false,"pausedAt":"2026-08-26T12:00:00Z","operation":"finishing the current turn","repairAvailable":true}}"#
+        guard case .sessionStatus(_, let staleRunning, let pausedSafety) = parse(paused) else {
+            return XCTFail("expected paused .sessionStatus")
+        }
+        XCTAssertTrue(staleRunning)
+        XCTAssertEqual(pausedSafety?.status, "paused_for_safety")
+        XCTAssertEqual(pausedSafety?.repairAvailable, true)
     }
 
     func testQueueUpdate() {
         let json = #"""
         {"type":"queue_update","sessionId":"bks-1",
          "queued":[{"id":"q1","content":"do this","user":"jaap"},{}],
-         "steered":[{"id":"s1","content":"steer"}]}
+         "steered":[{"id":"s1","content":"steer"}],
+         "pendingDeliveryIds":["sent-1"]}
         """#
-        guard case .queueUpdate(_, let queued, let steered) = parse(json) else {
+        guard case .queueUpdate(_, let queued, let steered, let pendingIds) = parse(json) else {
             return XCTFail("expected .queueUpdate")
         }
         XCTAssertEqual(queued.count, 2)
@@ -153,6 +169,12 @@ final class ServerEventTests: XCTestCase {
         XCTAssertFalse(queued[1].id.isEmpty)
         XCTAssertEqual(queued[1].content, "")
         XCTAssertEqual(steered.map(\.id), ["s1"])
+        XCTAssertEqual(pendingIds, ["sent-1"])
+
+        guard case .queueUpdate(_, _, _, let legacyPending) = parse(
+            #"{"type":"queue_update","sessionId":"bks-1","queued":[],"steered":[]}"#
+        ) else { return XCTFail("expected legacy .queueUpdate") }
+        XCTAssertTrue(legacyPending.isEmpty)
     }
 
     func testAskQuestionAndResolved() {

@@ -12,7 +12,7 @@ Supports multiple Codex and Claude subscriptions and model APIs.
 
 <br>
 
-*More: [pull-request review, diffs, automations, mobile →](docs/screenshots.md)*
+_More: [pull-request review, diffs, automations, mobile →](docs/screenshots.md)_
 
 ## Quickstart
 
@@ -142,13 +142,13 @@ requires Bun and git.
 One server, five front ends — only the web UI is required, and everything else
 talks to the same instance. [CLIENTS.md](CLIENTS.md) has the full tour.
 
-| Client | Where |
-| --- | --- |
-| Web UI | served by the server itself — start here |
-| PWA | the web UI on your phone's home screen (iOS push notifications require the installed PWA and an HTTPS origin) |
-| macOS desktop shell (Electron) | [`packages/clients/mac/`](packages/clients/mac/) |
-| Native Swift app (iOS + macOS) | [`packages/clients/ios/`](packages/clients/ios/) |
-| Chrome extension (page context → session) | [`packages/clients/chrome/`](packages/clients/chrome/) |
+| Client                                    | Where                                                                                                         |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Web UI                                    | served by the server itself — start here                                                                      |
+| PWA                                       | the web UI on your phone's home screen (iOS push notifications require the installed PWA and an HTTPS origin) |
+| macOS desktop shell (Electron)            | [`packages/clients/mac/`](packages/clients/mac/)                                                              |
+| Native Swift app (iOS + macOS)            | [`packages/clients/ios/`](packages/clients/ios/)                                                              |
+| Chrome extension (page context → session) | [`packages/clients/chrome/`](packages/clients/chrome/)                                                        |
 
 ## Make it your own
 
@@ -158,7 +158,7 @@ the agent's name and persona, your repositories, integrations, automations
 stock install at your config and it becomes your company's agent server. No
 fork needed for that.
 
-Forking is welcome — recommended, even — when you want to change what it *is*,
+Forking is welcome — recommended, even — when you want to change what it _is_,
 not just whose it is: strip the integrations you'll never use, rebrand the
 client apps to your own bundle ids, hard-code opinions we left configurable.
 It's MIT, so you owe nothing but the license notice.

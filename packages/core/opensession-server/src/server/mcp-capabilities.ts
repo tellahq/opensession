@@ -41,7 +41,8 @@ export const INTERNAL_MCP_CAPABILITIES = {
       "Search the durable record of past sessions when earlier work, decisions, or findings may answer the task.",
   },
   "opensession-self-deploy": {
-    summary: "Promote frontend-only releases without restart, or standard-deploy other source changes.",
+    summary:
+      "Promote frontend-only releases without restart, or standard-deploy other source changes.",
     guidance:
       "Deploy an ordinary frontend, backend, protocol, or dependency change to a specific commit. Deployment may be autonomous, but check status and batch a burst of commits into one rollout. A strictly frontend-only diff is bundled and promoted without restarting services; other runtime changes use the health-gated three-service rollout. Rebuild-frontend cannot publish shared-checkout source. Changes to live deploy controllers, service templates, credential installers, the run-host helper, or root-managed systemd artifacts require the documented full root deploy instead.",
   },
@@ -51,7 +52,8 @@ export const INTERNAL_MCP_CAPABILITIES = {
       "Ask a specific teammate for knowledge or a decision and route their answer back into this session.",
   },
   "opensession-keychain": {
-    summary: "Borrow a teammate's credential for a stated purpose, with their approval.",
+    summary:
+      "Borrow a teammate's credential for a stated purpose, with their approval.",
     guidance:
       "Request temporary access to a teammate's credential with their approval when ambient credentials cannot satisfy the task.",
   },
@@ -66,12 +68,14 @@ export const INTERNAL_MCP_CAPABILITIES = {
       "Attach or switch repositories and link pull requests while preserving this session's multi-repo context.",
   },
   "opensession-memory": {
-    summary: "Durable repo / user / team memory, shared with Slack channel memory.",
+    summary:
+      "Durable repo / user / team memory, shared with Slack channel memory.",
     guidance:
       "Search or manage durable repo, user, and team facts. Store only information worth carrying into future sessions, especially when the user says to remember it.",
   },
   "opensession-web": {
-    summary: "Read a URL as text, search what was fetched, clone a GitHub repo. No web search.",
+    summary:
+      "Read a URL as text, search what was fetched, clone a GitHub repo. No web search.",
     guidance:
       "Fetch a known URL as text, search fetched content, or clone a GitHub repository. It does not provide general web search.",
   },
@@ -81,7 +85,8 @@ export const INTERNAL_MCP_CAPABILITIES = {
       "Start and manage supervised HTTP or WebSocket services for this workspace instead of leaving an unmanaged background process.",
   },
   "opensession-walkthrough": {
-    summary: "Publish a walkthrough (video, before/after, writeup) onto the Review tab and the PR.",
+    summary:
+      "Publish a walkthrough (video, before/after, writeup) onto the Review tab and the PR.",
     guidance:
       "Publish visual proof of a user-visible change to the Review tab and pull request.",
   },
@@ -126,7 +131,8 @@ export const INTERNAL_MCP_CAPABILITIES = {
       "Declare a clean, silent unattended outcome when the run genuinely found nothing worth reporting.",
   },
   "opensession-health": {
-    summary: "Read this instance's own disk, memory, load, process fleets and agent status.",
+    summary:
+      "Read this instance's own disk, memory, load, process fleets and agent status.",
     guidance:
       "Inspect this instance's disk, memory, load, process fleets, and agent status.",
   },
@@ -136,12 +142,14 @@ export const INTERNAL_MCP_CAPABILITIES = {
       "Inspect one UTC day's audit totals, run outcomes, model usage, recurring errors, papercuts, and troubled sessions.",
   },
   "opensession-self": {
-    summary: "A self-improving automation reading and rewriting its OWN prompt.",
+    summary:
+      "A self-improving automation reading and rewriting its OWN prompt.",
     guidance:
       "Read or improve this automation's own prompt. It cannot modify another automation.",
   },
   "opensession-github": {
-    summary: "Trigger the PR behaviours (review / auto-fix / simplify / adversarial).",
+    summary:
+      "Trigger the PR behaviours (review / auto-fix / simplify / adversarial).",
     guidance:
       "Trigger the configured pull request review, auto-fix, simplify, or adversarial behavior.",
   },

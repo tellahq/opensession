@@ -19,9 +19,17 @@
  * over the parent; per-directory sums double-count shared inodes.
  */
 
-import { type Dirent, readdirSync, readFileSync, readlinkSync, statfsSync, statSync } from "node:fs";
+import {
+  type Dirent,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  statfsSync,
+  statSync,
+} from "node:fs";
 import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { audit } from "./audit";
 import { configuredPaths } from "./config";
 
@@ -39,12 +47,18 @@ const COLD_DAYS = num(process.env.OPENSESSION_DISK_GC_COLD_DAYS, 7);
 /** Never touch a cache built this recently, even under pressure. */
 const HOT_HOURS = num(process.env.OPENSESSION_DISK_GC_HOT_HOURS, 24);
 /** Relaxed hot window for the last-resort pass, when HOT_HOURS spared everything. */
-const URGENT_HOT_HOURS = num(process.env.OPENSESSION_DISK_GC_URGENT_HOT_HOURS, 2);
+const URGENT_HOT_HOURS = num(
+  process.env.OPENSESSION_DISK_GC_URGENT_HOT_HOURS,
+  2,
+);
 /** Above this disk usage, start reclaiming stale caches... */
 const PRESSURE_PCT = num(process.env.OPENSESSION_DISK_GC_PRESSURE_PCT, 80);
 /** ...until back under this. */
 const RELIEF_PCT = num(process.env.OPENSESSION_DISK_GC_RELIEF_PCT, 70);
-const SWEEP_INTERVAL_MS = num(process.env.OPENSESSION_DISK_GC_INTERVAL_MS, HOUR);
+const SWEEP_INTERVAL_MS = num(
+  process.env.OPENSESSION_DISK_GC_INTERVAL_MS,
+  HOUR,
+);
 const FIRST_SWEEP_DELAY_MS = 5 * MINUTE;
 
 /** Worktrees that are infrastructure, not disposable session trees. */
@@ -115,10 +129,13 @@ const BUILD_PROCESS_NAMES = new Set([
  * twice over: its cargo/rustc child matches here, and `hasEntryNewerThan`
  * spares any target/ touched within HOT_HOURS.
  *
- * Returns null when /proc is unavailable (non-Linux) — callers must treat that
- * as "cannot determine" and skip the sweep entirely rather than guess.
+ * Linux reads `/proc`; macOS pairs `ps` with `lsof` for the same process/cwd
+ * lookup. Returns null when the platform cannot provide a trustworthy answer,
+ * so callers skip the sweep rather than guess.
  */
 export function worktreesInUse(root: string): Set<string> | null {
+  if (process.platform === "darwin") return macWorktreesInUse(root);
+
   let pids: string[];
   try {
     pids = readdirSync("/proc").filter((p) => /^\d+$/.test(p));
@@ -138,6 +155,56 @@ export function worktreesInUse(root: string): Set<string> | null {
     if (!isBuildProcess(pid)) continue;
     const rest = cwd.slice(prefix.length);
     const name = rest.split("/")[0];
+    if (name) inUse.add(join(root, name));
+  }
+  return inUse;
+}
+
+function macWorktreesInUse(root: string): Set<string> | null {
+  const ps = Bun.spawnSync(["ps", "-axo", "pid=,comm="], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (ps.exitCode !== 0) return null;
+
+  const builds = ps.stdout
+    .toString()
+    .split("\n")
+    .map((line) => line.match(/^\s*(\d+)\s+(.+?)\s*$/))
+    .filter(
+      (match): match is RegExpMatchArray =>
+        !!match && BUILD_PROCESS_NAMES.has(basename(match[2]!)),
+    );
+  if (!builds.length) return new Set();
+  if (!Bun.which("lsof")) return null;
+
+  const inUse = new Set<string>();
+  let canonicalRoot = root;
+  try {
+    canonicalRoot = realpathSync(root);
+  } catch {}
+  const prefix = `${canonicalRoot}/`;
+  for (const match of builds) {
+    const pid = match[1]!;
+    const lsof = Bun.spawnSync(["lsof", "-a", "-p", pid, "-d", "cwd", "-Fn"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (lsof.exitCode !== 0) {
+      try {
+        process.kill(Number(pid), 0);
+        return null;
+      } catch {
+        continue; // The build exited between ps and lsof.
+      }
+    }
+    const cwd = lsof.stdout
+      .toString()
+      .split("\n")
+      .find((line) => line.startsWith("n"))
+      ?.slice(1);
+    if (!cwd?.startsWith(prefix)) continue;
+    const name = cwd.slice(prefix.length).split("/")[0];
     if (name) inUse.add(join(root, name));
   }
   return inUse;
@@ -163,7 +230,11 @@ function isBuildProcess(pid: string): boolean {
  * with an early exit, so this stays cheap over a multi-GB tree: a build always
  * touches the shallow levels (target/debug, .fingerprint, the binaries).
  */
-export function hasEntryNewerThan(dir: string, cutoffMs: number, maxDepth = 3): boolean {
+export function hasEntryNewerThan(
+  dir: string,
+  cutoffMs: number,
+  maxDepth = 3,
+): boolean {
   const walk = (d: string, depth: number): boolean => {
     let entries: Dirent[];
     try {
@@ -178,7 +249,8 @@ export function hasEntryNewerThan(dir: string, cutoffMs: number, maxDepth = 3): 
       } catch {
         continue;
       }
-      if (depth < maxDepth && e.isDirectory() && walk(p, depth + 1)) return true;
+      if (depth < maxDepth && e.isDirectory() && walk(p, depth + 1))
+        return true;
     }
     return false;
   };
@@ -250,7 +322,8 @@ export function findTargetCaches(root: string, maxDepth = 5): TargetCache[] {
         return;
       }
       for (const e of entries) {
-        if (!e.isDirectory() || e.name === "node_modules" || e.name === ".git") continue;
+        if (!e.isDirectory() || e.name === "node_modules" || e.name === ".git")
+          continue;
         const p = join(dir, e.name);
         if (e.name === "target") {
           if (isCargoTarget(p)) {
@@ -294,7 +367,9 @@ async function removeCache(dir: string): Promise<boolean> {
  * One GC pass: reclaim every cold cache, then — only if the disk is still
  * under pressure — the stalest remaining ones until back under RELIEF_PCT.
  */
-export async function sweepDiskGc(opts: { dryRun?: boolean } = {}): Promise<DiskGcResult> {
+export async function sweepDiskGc(
+  opts: { dryRun?: boolean } = {},
+): Promise<DiskGcResult> {
   const root = configuredPaths().worktreesDir;
   const pctBefore = diskUsagePct();
   const result: DiskGcResult = {
@@ -308,7 +383,9 @@ export async function sweepDiskGc(opts: { dryRun?: boolean } = {}): Promise<Disk
 
   const inUse = worktreesInUse(root);
   if (!inUse) {
-    console.warn("[disk-gc] cannot read /proc — skipping sweep (never GC without the in-use check)");
+    console.warn(
+      "[disk-gc] cannot inspect build processes — skipping sweep (never GC without the in-use check)",
+    );
     return result;
   }
 
@@ -327,7 +404,9 @@ export async function sweepDiskGc(opts: { dryRun?: boolean } = {}): Promise<Disk
   const reclaim = async (c: TargetCache, reason: string) => {
     const size = await dirSizeBytes(c.path);
     if (opts.dryRun) {
-      console.log(`[disk-gc] would reclaim (${reason}, ${(size / 1e9).toFixed(1)}GB): ${c.path}`);
+      console.log(
+        `[disk-gc] would reclaim (${reason}, ${(size / 1e9).toFixed(1)}GB): ${c.path}`,
+      );
       result.reclaimed.push(c.path);
       result.freedBytes += size;
       return;
@@ -338,7 +417,9 @@ export async function sweepDiskGc(opts: { dryRun?: boolean } = {}): Promise<Disk
     }
     result.reclaimed.push(c.path);
     result.freedBytes += size;
-    console.log(`[disk-gc] reclaimed (${reason}, ${(size / 1e9).toFixed(1)}GB): ${c.path}`);
+    console.log(
+      `[disk-gc] reclaimed (${reason}, ${(size / 1e9).toFixed(1)}GB): ${c.path}`,
+    );
     audit({ event: "disk_gc_reclaim", path: c.path, reason, bytes: size });
   };
 
@@ -352,7 +433,9 @@ export async function sweepDiskGc(opts: { dryRun?: boolean } = {}): Promise<Disk
 
   // Pass 2 — disk pressure. Stalest first, and never a cache built recently.
   if (diskUsagePct() >= PRESSURE_PCT) {
-    console.log(`[disk-gc] disk at ${diskUsagePct().toFixed(1)}% — reclaiming stale caches`);
+    console.log(
+      `[disk-gc] disk at ${diskUsagePct().toFixed(1)}% — reclaiming stale caches`,
+    );
     for (const c of remaining.sort((a, b) => a.mtimeMs - b.mtimeMs)) {
       if (diskUsagePct() < RELIEF_PCT) break;
       if (hasEntryNewerThan(c.path, hotCutoff)) {
@@ -417,7 +500,10 @@ export function startDiskGc(): void {
     console.log("[disk-gc] disabled (OPENSESSION_DISK_GC=0)");
     return;
   }
-  const run = () => void sweepDiskGc().catch((e) => console.error("[disk-gc] sweep failed:", e));
+  const run = () =>
+    void sweepDiskGc().catch((e) =>
+      console.error("[disk-gc] sweep failed:", e),
+    );
   setTimeout(run, FIRST_SWEEP_DELAY_MS);
   sweepTimer = setInterval(run, SWEEP_INTERVAL_MS);
   console.log(

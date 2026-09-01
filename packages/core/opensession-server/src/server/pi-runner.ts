@@ -41,7 +41,12 @@ import type {
 type PiProviderConfigInput = Parameters<ModelRuntime["registerProvider"]>[1];
 import { stateDir } from "./paths";
 import { audit, summarizeText } from "./audit";
-import { journalSet, buildRunJournalRecord, journalClear, registerActiveRunProbe } from "./run-journal";
+import {
+  journalSet,
+  buildRunJournalRecord,
+  journalClear,
+  registerActiveRunProbe,
+} from "./run-journal";
 import {
   askBashDenyReason,
   isClaudeSubscriptionError,
@@ -78,7 +83,11 @@ import {
 } from "./context-log";
 import { wrapContext } from "./prompt-context";
 import { EMPTY_REPLY_RETRY_PROMPT } from "./auto-continue";
-import { bashAskPolicyReply } from "./command-policy";
+import {
+  bashAskPolicyReply,
+  publicationPolicyDenyReason,
+  type PublicationPolicy,
+} from "./command-policy";
 import {
   appendTranscriptEntries,
   recordEngineSessionOwner,
@@ -107,6 +116,7 @@ import {
   prewarmPiSdk as prewarmPiSdkBinding,
 } from "./pi-runtime-binding";
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
+import { controlPlaneWorkloadCommand, stopUserScope } from "./systemd-scopes";
 import {
   createMcpRuntime,
   splitMcpMigrationBoundary,
@@ -138,7 +148,9 @@ export const PI_MODEL_PREFIX = "pi/";
 /** Fresh authority for an unattended GitHub code run. Host recovery resolves
  * the selected service credential from the registered cwd; remote runners can
  * consume only the private run-scoped file projected by their launcher. */
-export async function githubCodeRunEnv(cwd: string): Promise<Record<string, string>> {
+export async function githubCodeRunEnv(
+  cwd: string,
+): Promise<Record<string, string>> {
   if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return projectedGithubRunEnv();
   const { repoForPathOrNull } = await import("./worktree");
   const repo = repoForPathOrNull(cwd);
@@ -152,23 +164,95 @@ export async function githubCodeRunEnv(cwd: string): Promise<Record<string, stri
 export const PI_STATE_DIR = stateDir("pi");
 
 /** How many content blocks of an assistant message a reader could actually
- *  see: non-empty text blocks and tool calls. Thinking-only or empty content
+ *  see: non-empty text or thinking blocks and tool calls. Truly empty content
  *  counts zero — that is the empty-completion shape the pump loop retries. */
 export function assistantRenderableBlockCount(content: unknown): number {
   if (!Array.isArray(content)) return 0;
   let n = 0;
   for (const b of content) {
     if (!b || typeof b !== "object") continue;
-    const block = b as { type?: string; text?: unknown; id?: unknown };
-    if (block.type === "text" && typeof block.text === "string" && block.text.trim()) n++;
+    const block = b as {
+      type?: string;
+      text?: unknown;
+      thinking?: unknown;
+      id?: unknown;
+    };
+    if (
+      block.type === "text" &&
+      typeof block.text === "string" &&
+      block.text.trim()
+    )
+      n++;
+    else if (
+      block.type === "thinking" &&
+      typeof block.thinking === "string" &&
+      block.thinking.trim()
+    )
+      n++;
     else if (block.type === "toolCall" && block.id) n++;
   }
   return n;
 }
 
+/** Preserve every model-authored prose block in provider order. Pi exposes
+ * reasoning as `thinking` blocks and ordinary output as `text`; both become
+ * visible assistant transcript entries, while tool calls keep their own rows. */
+export function piAssistantTranscriptEntries(
+  content: unknown,
+  timestamp: string,
+  model: string,
+  messageId: string = crypto.randomUUID(),
+): TranscriptEntry[] {
+  if (!Array.isArray(content)) return [];
+  const entries: TranscriptEntry[] = [];
+  let proseIndex = 0;
+  for (const raw of content) {
+    if (!raw || typeof raw !== "object") continue;
+    const block = raw as {
+      type?: string;
+      text?: unknown;
+      thinking?: unknown;
+      id?: unknown;
+      name?: unknown;
+      arguments?: unknown;
+    };
+    const reasoning =
+      block.type === "thinking" && typeof block.thinking === "string"
+        ? block.thinking
+        : "";
+    const isReasoning = reasoning.length > 0;
+    const prose =
+      block.type === "text" && typeof block.text === "string"
+        ? block.text
+        : reasoning;
+    if (prose.trim()) {
+      entries.push({
+        id: proseIndex === 0 ? messageId : `${messageId}-b${proseIndex}`,
+        type: "assistant",
+        content: prose,
+        timestamp,
+        model,
+        ...(isReasoning ? { isReasoning: true } : {}),
+      });
+      proseIndex++;
+    } else if (block.type === "toolCall" && block.id) {
+      entries.push({
+        id: String(block.id),
+        type: "tool_use",
+        content: "",
+        timestamp,
+        toolName: String(block.name || "tool"),
+        toolInput: block.arguments ?? {},
+        toolUseId: String(block.id),
+      });
+    }
+  }
+  return entries;
+}
+
 /** Split `pi/<provider>/<model>` (model may itself contain slashes). */
 export function parsePiModel(
-  model: string
+  model: string,
 ): { providerID: string; modelID: string } | null {
   if (!model.startsWith(PI_MODEL_PREFIX)) return null;
   const rest = model.slice(PI_MODEL_PREFIX.length);
@@ -189,7 +273,7 @@ export function parsePiModel(
  * (resolveCodexDirectPreset). */
 export function resolvePiRoutedModel(
   model: string,
-  storedModel?: string | null
+  storedModel?: string | null,
 ): PiResolvedModel | null {
   const ids = [model, storedModel || ""].filter(Boolean);
   const ws = ids
@@ -216,7 +300,7 @@ export interface PiResolvedModel {
 export function resolvePiPresetWiring(
   model: string,
   ws: ResolvedWorkspaceModelPreset | undefined,
-  candidateIds: readonly string[] = [model]
+  candidateIds: readonly string[] = [model],
 ): PiResolvedModel | null {
   const candidates = [...candidateIds, ws?.enginePresetId];
   const dial = candidates
@@ -224,7 +308,9 @@ export function resolvePiPresetWiring(
     .find((hit): hit is NonNullable<ReturnType<typeof dialPreset>> => !!hit);
   const orchestrator = candidates
     .map((id) => orchestratorPreset(id))
-    .find((hit): hit is NonNullable<ReturnType<typeof orchestratorPreset>> => !!hit);
+    .find(
+      (hit): hit is NonNullable<ReturnType<typeof orchestratorPreset>> => !!hit,
+    );
   const lower = model.toLowerCase();
   if (lower.startsWith("pi/dial/") && !dial) return null;
   if (lower.startsWith("pi/orchestrator/") && !orchestrator) return null;
@@ -232,7 +318,9 @@ export function resolvePiPresetWiring(
   // A workspace preset id resolves to its (already pi-routed) lead; everything
   // else routes through toPiModel as before.
   const concrete =
-    ws && lower.startsWith("pi/workspace-preset/") ? ws.model : toPiModel(model);
+    ws && lower.startsWith("pi/workspace-preset/")
+      ? ws.model
+      : toPiModel(model);
   const parsed = concrete ? parsePiModel(concrete) : null;
   if (!parsed) return null;
   const effort = ws?.effort ?? dial?.effort ?? orchestrator?.effort;
@@ -257,7 +345,10 @@ export const resolvePiDialModel = resolvePiRoutedModel;
  * parity — a dial run must not consult (and bill) a second account family the
  * same preset would not consult on any other engine. Third-party providers
  * (wafer, cerebras) keep the preset's own choice, also like the others. */
-export function piDialOracleAgent(oracleAgent: string, providerID: string): string {
+export function piDialOracleAgent(
+  oracleAgent: string,
+  providerID: string,
+): string {
   return sameBridgeDialOracle(oracleAgent, providerID);
 }
 
@@ -268,7 +359,7 @@ export function piDialOracleAgent(oracleAgent: string, providerID: string): stri
  * Model metadata comes from Pi's built-in provider catalog when Pi knows the
  * provider (Cerebras, Moonshot, xAI, and others). piProviderCatalog supplies a
  * provider Pi does not know (Wafer) and models newer than its bundled snapshot
- * (Ox Alpha on OpenRouter). A provider in neither catalog fails clearly rather
+ * (GLM-5.3 on OpenRouter). A provider in neither catalog fails clearly rather
  * than guessing a protocol. A model id newer than both catalogs gets a
  * conservative fallback entry: zero cost because unknown pricing must
  * under-report, plus safe window and output floors. It inherits the provider's
@@ -350,7 +441,7 @@ function oracleShouldFallOver(error: string | null): boolean {
 
 function makePiDialOracleTool(
   oracleAgent: string,
-  user?: string
+  user?: string,
 ): ToolDefinition<any, any, any> {
   const oracle = DIAL_ORACLE_AGENTS[oracleAgent];
   return {
@@ -364,16 +455,20 @@ function makePiDialOracleTool(
       properties: {
         prompt: {
           type: "string",
-          description: "Precise question with the relevant context, file paths, constraints, and options under consideration",
+          description:
+            "Precise question with the relevant context, file paths, constraints, and options under consideration",
         },
       },
       required: ["prompt"],
     } as any,
     async execute(_toolCallId, params, signal) {
-      const prompt = String((params as { prompt?: unknown })?.prompt ?? "").trim();
+      const prompt = String(
+        (params as { prompt?: unknown })?.prompt ?? "",
+      ).trim();
       if (!prompt) throw new Error("oracle requires a prompt");
       if (signal?.aborted) throw new Error("Oracle request aborted");
-      if (!oracle) throw new Error(`Dial oracle "${oracleAgent}" is not configured`);
+      if (!oracle)
+        throw new Error(`Dial oracle "${oracleAgent}" is not configured`);
       // Dynamic import avoids a module cycle: one-shot.ts drives runPi, while
       // Pi's Dial oracle delegates its out-of-band consultation back to it.
       const { oneShotDetailed } = await import("./one-shot");
@@ -381,7 +476,10 @@ function makePiDialOracleTool(
       // interactiveFallbackModel does for a full session. A dry pool is a
       // provider-wide condition, so the hop has to change bridges to be worth
       // taking (DIAL_ORACLE_FALLBACKS).
-      const ladder = [oracleAgent, ...(DIAL_ORACLE_FALLBACKS[oracleAgent] || [])];
+      const ladder = [
+        oracleAgent,
+        ...(DIAL_ORACLE_FALLBACKS[oracleAgent] || []),
+      ];
       const failures: string[] = [];
       for (let i = 0; i < ladder.length; i++) {
         const name = ladder[i]!;
@@ -404,7 +502,10 @@ function makePiDialOracleTool(
             i === 0
               ? ""
               : `[${oracle.label} was unavailable (${failures[0]}). Answered by ${agent.label}.]\n\n`;
-          return { content: [{ type: "text", text: note + text }], details: undefined };
+          return {
+            content: [{ type: "text", text: note + text }],
+            details: undefined,
+          };
         }
         failures.push(error || "no answer");
         if (!oracleShouldFallOver(error)) break;
@@ -414,7 +515,7 @@ function makePiDialOracleTool(
       // "unavailable" sends whoever reads it to journalctl.
       throw new Error(
         `The Dial oracle was unavailable: ${failures.join("; ") || "no answer"}. ` +
-          "Continue using your own judgment."
+          "Continue using your own judgment.",
       );
     },
   };
@@ -440,7 +541,6 @@ interface PiRunHandle {
   steer?: (text: string, images?: ImageInput[], steerId?: string) => void;
   retractSteer?: (steerId: string) => boolean;
   acceptedSteerIds?: Set<string>;
-
 }
 
 // Alias keys (runKey, unified session id, pi session id) → shared handle,
@@ -462,7 +562,7 @@ export function activePiRunCount(): number {
  * its unrestricted built-ins for enabled names without a custom override, so
  * the enabled-name list must never be maintained separately. */
 export function piToolNames(
-  customTools: readonly Pick<ToolDefinition<any, any, any>, "name">[]
+  customTools: readonly Pick<ToolDefinition<any, any, any>, "name">[],
 ): string[] {
   return customTools.map((tool) => tool.name);
 }
@@ -525,7 +625,7 @@ export function steerPiRun(
   id: string,
   text: string,
   images?: ImageInput[],
-  steerId?: string
+  steerId?: string,
 ): boolean {
   const handle = activeRuns.get(id);
   if (!handle?.steer) return false;
@@ -533,10 +633,8 @@ export function steerPiRun(
     handle.steer(text, images);
     return true;
   }
-  return acceptSteerOnce(
-    (handle.acceptedSteerIds ??= new Set()),
-    steerId,
-    () => handle.steer!(text, images, steerId),
+  return acceptSteerOnce((handle.acceptedSteerIds ??= new Set()), steerId, () =>
+    handle.steer!(text, images, steerId),
   );
 }
 
@@ -553,7 +651,7 @@ export function retractPiSteer(id: string, steerId: string): boolean {
 export function retractPendingSteer<T extends { steerId?: string }>(
   pending: T[],
   steerId: string,
-  replay: (remaining: readonly T[]) => void
+  replay: (remaining: readonly T[]) => void,
 ): boolean {
   const index = pending.findIndex((item) => item.steerId === steerId);
   if (index < 0) return false;
@@ -574,7 +672,9 @@ let smokeGateBypass = 0;
 /** Non-null = the reason this run may not use the pi engine. Same deny-by-
  *  default semantics as previous runnerGateReason: interactive + unattended journal
  *  kinds only, kind-less runs refused. */
-export function piGateReason(opts: { journal?: { kind?: string } }): string | null {
+export function piGateReason(opts: {
+  journal?: { kind?: string };
+}): string | null {
   const base = baseJournalKind(opts.journal?.kind);
   if (base === "pi-smoke" && smokeGateBypass > 0) return null;
   if (INTERACTIVE_KINDS.has(base) || isUnattendedKind(base)) return null;
@@ -595,13 +695,22 @@ function sanitizeId(id: string): string {
 }
 
 /** Pi ImageContent from our wire shape. */
-function piImages(images?: ImageInput[]): Array<{ type: "image"; data: string; mimeType: string }> | undefined {
+function piImages(
+  images?: ImageInput[],
+): Array<{ type: "image"; data: string; mimeType: string }> | undefined {
   if (!images?.length) return undefined;
-  return images.map((im) => ({ type: "image" as const, data: im.data, mimeType: im.mediaType }));
+  return images.map((im) => ({
+    type: "image" as const,
+    data: im.data,
+    mimeType: im.mediaType,
+  }));
 }
 
 /** Flatten pi tool-result content to text + renderable image srcs. */
-function contentToTextAndImages(content: unknown): { text: string; images: string[] } {
+function contentToTextAndImages(content: unknown): {
+  text: string;
+  images: string[];
+} {
   const texts: string[] = [];
   const images: string[] = [];
   if (Array.isArray(content)) {
@@ -609,7 +718,9 @@ function contentToTextAndImages(content: unknown): { text: string; images: strin
       if (!b || typeof b !== "object") continue;
       if (b.type === "text" && typeof b.text === "string") texts.push(b.text);
       else if (b.type === "image" && typeof b.data === "string") {
-        images.push(`data:${String(b.mimeType || "image/png")};base64,${b.data}`);
+        images.push(
+          `data:${String(b.mimeType || "image/png")};base64,${b.data}`,
+        );
       }
     }
   } else if (typeof content === "string") {
@@ -641,16 +752,21 @@ const CODEX_USAGE_LIMIT_CODE_SHAPES =
  *  (isCodexUsageLimitError) plus the raw code shapes above — never the
  *  bridge-only shapes (529/overload is transient there, not exhaustion).
  *  Exported for the classifier tests. */
-export function isPiUsageLimitShape(message: string, providerID: string): boolean {
+export function isPiUsageLimitShape(
+  message: string,
+  providerID: string,
+): boolean {
   if (providerID === "openai") {
     return (
-      isCodexUsageLimitError(message) || CODEX_USAGE_LIMIT_CODE_SHAPES.test(message)
+      isCodexUsageLimitError(message) ||
+      CODEX_USAGE_LIMIT_CODE_SHAPES.test(message)
     );
   }
   if (
     isClaudeUsageLimitError(message, true) ||
     isClaudeSubscriptionError(message)
-  ) return true;
+  )
+    return true;
   const s = message.toLowerCase();
   return (
     s.includes("overloaded_error") ||
@@ -664,7 +780,9 @@ export function isPiUsageLimitShape(message: string, providerID: string): boolea
 }
 
 /** First jsonl line of a pi session file (the v3 header), bounded read. */
-function readSessionHeader(path: string): { type?: string; id?: string } | null {
+function readSessionHeader(
+  path: string,
+): { type?: string; id?: string } | null {
   let fd: number | null = null;
   try {
     fd = openSync(path, "r");
@@ -685,7 +803,10 @@ function readSessionHeader(path: string): { type?: string; id?: string } | null 
 }
 
 /** Find the session jsonl whose header id matches — resume-by-piSessionId. */
-function findPiSessionFile(sessionDir: string, piSessionId: string): string | null {
+function findPiSessionFile(
+  sessionDir: string,
+  piSessionId: string,
+): string | null {
   try {
     const names = readdirSync(sessionDir)
       .filter((n) => n.endsWith(".jsonl"))
@@ -707,14 +828,20 @@ function findPiSessionFile(sessionDir: string, piSessionId: string): string | nu
  *  is registered (transcript-forward.ts): the batch is relayed to the server
  *  over the run-host protocol instead, keeping transcripts.db single-writer
  *  and giving sandboxed/detached pi runs host-side persistence. */
-function piAppend(engineSessionId: string, lines: Record<string, unknown>[]): void {
+function piAppend(
+  engineSessionId: string,
+  lines: Record<string, unknown>[],
+): void {
   const forward = transcriptForwarder();
   if (forward) {
     forward(engineSessionId, lines);
     return;
   }
   void appendTranscriptEntries(engineSessionId, lines).catch((error) => {
-    console.error(`[pi] Transcript append failed for ${engineSessionId}:`, error);
+    console.error(
+      `[pi] Transcript append failed for ${engineSessionId}:`,
+      error,
+    );
   });
 }
 
@@ -724,7 +851,7 @@ function piAppend(engineSessionId: string, lines: Record<string, unknown>[]): vo
  *  never take the run down. */
 function persistEntries(
   engineSessionId: string | undefined,
-  entries: TranscriptEntry[]
+  entries: TranscriptEntry[],
 ): void {
   if (!entries.length || !engineSessionId) return;
   try {
@@ -732,7 +859,7 @@ function persistEntries(
       .map((e) =>
         e.type === "system"
           ? transcriptLineRunnerNotice(e.content, e.id, e.timestamp)
-          : transcriptLineForEntry(e)
+          : transcriptLineForEntry(e),
       )
       .filter((l): l is Record<string, unknown> => !!l);
     piAppend(engineSessionId, lines);
@@ -762,7 +889,10 @@ const BLOCKED_PATH_ROOTS = ["/proc", "/sys", "/dev"];
  * result to sit under `realRoot`. Throws with a model-facing message on
  * escape. Returns the fully-resolved path it validated.
  */
-export function assertContainedPiPath(rawPath: string, realRoot: string): string {
+export function assertContainedPiPath(
+  rawPath: string,
+  realRoot: string,
+): string {
   const resolved = resolve(rawPath);
   let probe = resolved;
   const pendingSuffix: string[] = [];
@@ -790,7 +920,7 @@ export function assertContainedPiPath(rawPath: string, realRoot: string): string
   if (full !== realRoot && !full.startsWith(realRoot + sep)) {
     throw new Error(
       `Path is outside the session workspace (${rawPath}). ` +
-        "Local file tools are contained to the session's working directory."
+        "Local file tools are contained to the session's working directory.",
     );
   }
   return full;
@@ -805,9 +935,15 @@ function sniffImageMime(path: string): string | undefined {
       const buf = Buffer.alloc(16);
       const n = readSync(fd, buf, 0, 16, 0);
       if (n < 4) return undefined;
-      if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47)
+      if (
+        buf[0] === 0x89 &&
+        buf[1] === 0x50 &&
+        buf[2] === 0x4e &&
+        buf[3] === 0x47
+      )
         return "image/png";
-      if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+      if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)
+        return "image/jpeg";
       if (buf.toString("ascii", 0, 4) === "GIF8") return "image/gif";
       if (
         n >= 12 &&
@@ -882,7 +1018,7 @@ export function makeGuardedToolOps(cwd: string) {
       glob: async (
         pattern: string,
         searchPath: string,
-        options: { ignore: string[]; limit: number }
+        options: { ignore: string[]; limit: number },
       ): Promise<string[]> => {
         guard(searchPath);
         // fd (pi's default) matches bare patterns against basenames while
@@ -946,7 +1082,7 @@ const GREP_OUTPUT_CAP = 50 * 1024;
 export function makeGuardedGrepExecute(
   cwd: string,
   env: Record<string, string>,
-  guard: (p: string) => string
+  guard: (p: string) => string,
 ) {
   return async function execute(
     _toolCallId: string,
@@ -959,12 +1095,16 @@ export function makeGuardedGrepExecute(
       context?: unknown;
       limit?: unknown;
     },
-    signal?: AbortSignal
-  ): Promise<{ content: Array<{ type: "text"; text: string }>; details: undefined }> {
+    signal?: AbortSignal,
+  ): Promise<{
+    content: Array<{ type: "text"; text: string }>;
+    details: undefined;
+  }> {
     const pattern = String(params?.pattern ?? "");
     if (!pattern) throw new Error("grep: pattern is required");
     if (signal?.aborted) throw new Error("Operation aborted");
-    const rawPath = typeof params?.path === "string" && params.path ? params.path : ".";
+    const rawPath =
+      typeof params?.path === "string" && params.path ? params.path : ".";
     const searchPath = resolve(cwd, rawPath);
     guard(searchPath);
     const rgPath = Bun.which("rg");
@@ -973,12 +1113,19 @@ export function makeGuardedGrepExecute(
     if (!st) throw new Error(`Path not found: ${searchPath}`);
     const isDir = st.isDirectory();
 
-    const args = ["--line-number", "--color=never", "--hidden", "--with-filename"];
+    const args = [
+      "--line-number",
+      "--color=never",
+      "--hidden",
+      "--with-filename",
+    ];
     if (params?.ignoreCase) args.push("--ignore-case");
     if (params?.literal) args.push("--fixed-strings");
-    if (typeof params?.glob === "string" && params.glob) args.push("--glob", params.glob);
+    if (typeof params?.glob === "string" && params.glob)
+      args.push("--glob", params.glob);
     const ctxN = Number(params?.context);
-    if (Number.isFinite(ctxN) && ctxN > 0) args.push("--context", String(Math.floor(ctxN)));
+    if (Number.isFinite(ctxN) && ctxN > 0)
+      args.push("--context", String(Math.floor(ctxN)));
     const limit = Math.max(1, Number(params?.limit) || GREP_DEFAULT_LIMIT);
     // Directory searches run from the search root with "." so rg prints
     // workspace-relative paths (pi's output shape); file targets run from the
@@ -1062,7 +1209,11 @@ export function makeGuardedGrepExecute(
     }
 
     let text = out.trimEnd();
-    if (!text) return { content: [{ type: "text", text: "No matches found" }], details: undefined };
+    if (!text)
+      return {
+        content: [{ type: "text", text: "No matches found" }],
+        details: undefined,
+      };
     if (text.length > GREP_OUTPUT_CAP) {
       text = `${text.slice(0, GREP_OUTPUT_CAP)}\n\n[Truncated: 50KB limit reached]`;
     }
@@ -1115,16 +1266,27 @@ const AUDITED_COMMAND_KINDS = new Set([
 ]);
 
 /** Keep command observability useful without recording arguments or text. */
-function summarizeBashAuditCommand(command: string): Omit<
+function summarizeBashAuditCommand(
+  command: string,
+): Omit<
   PiBashAuditEvent,
-  "phase" | "timeout_s" | "duration_ms" | "exit_code" | "timed_out" | "cancelled" | "outcome"
+  | "phase"
+  | "timeout_s"
+  | "duration_ms"
+  | "exit_code"
+  | "timed_out"
+  | "cancelled"
+  | "outcome"
 > {
-  const firstWord = command.trim().match(/^(?:[A-Za-z_]\w*=[^\s]+\s+)*([A-Za-z][\w.-]*)/)?.[1];
-  const commandKind = firstWord && AUDITED_COMMAND_KINDS.has(firstWord) ? firstWord : "shell";
+  const firstWord = command
+    .trim()
+    .match(/^(?:[A-Za-z_]\w*=[^\s]+\s+)*([A-Za-z][\w.-]*)/)?.[1];
+  const commandKind =
+    firstWord && AUDITED_COMMAND_KINDS.has(firstWord) ? firstWord : "shell";
   let sleepCalls = 0;
   let sleepSeconds = 0;
   for (const match of command.matchAll(
-    /(?:^|[;&|]\s*|\n\s*)sleep\s+(\d+(?:\.\d+)?)([smhd]?)(?=\s|[;&|]|$)/g
+    /(?:^|[;&|]\s*|\n\s*)sleep\s+(\d+(?:\.\d+)?)([smhd]?)(?=\s|[;&|]|$)/g,
   )) {
     sleepCalls++;
     const factor = { s: 1, m: 60, h: 3_600, d: 86_400 }[match[2] || "s"] ?? 1;
@@ -1134,7 +1296,26 @@ function summarizeBashAuditCommand(command: string): Omit<
     command_sha256: createHash("sha256").update(command).digest("hex"),
     command_bytes: new TextEncoder().encode(command).byteLength,
     command_kind: commandKind,
-    ...(sleepCalls > 0 ? { sleep_calls: sleepCalls, sleep_seconds: sleepSeconds } : {}),
+    ...(sleepCalls > 0
+      ? { sleep_calls: sleepCalls, sleep_seconds: sleepSeconds }
+      : {}),
+  };
+}
+
+export function piBashHomeEnv(input: {
+  runKey: string;
+  scratchDir?: string;
+  isolated: boolean;
+  hostHome?: string;
+}): Record<string, string> {
+  if (!input.isolated) return input.hostHome ? { HOME: input.hostHome } : {};
+  const home = `${input.scratchDir || "/tmp"}/automation-home-${input.runKey.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+  return {
+    HOME: home,
+    XDG_CONFIG_HOME: `${home}/.config`,
+    AWS_CONFIG_FILE: `${home}/.aws/config`,
+    AWS_SHARED_CREDENTIALS_FILE: `${home}/.aws/credentials`,
+    GH_CONFIG_DIR: `${home}/.config/gh`,
   };
 }
 
@@ -1159,6 +1340,7 @@ export function makePiBashTool(input: {
   unattended: boolean;
   sessionId?: string;
   runKind?: string;
+  publicationPolicy?: PublicationPolicy;
   /** Immutable Open Session run cancellation. Kept separate from Pi's tool
    * signal because AgentSession.abort() can leave an active tool signal live. */
   runSignal?: AbortSignal;
@@ -1188,6 +1370,10 @@ export function makePiBashTool(input: {
         const reason = askBashDenyReason(command);
         if (reason) throw new Error(reason);
       }
+      const publicationDenial = input.publicationPolicy
+        ? publicationPolicyDenyReason(command, input.publicationPolicy)
+        : undefined;
+      if (publicationDenial) throw new Error(publicationDenial);
       if (input.gated) {
         const reply = bashAskPolicyReply(
           { permission: "bash", metadata: { command } },
@@ -1196,12 +1382,12 @@ export function makePiBashTool(input: {
             gated: true,
             sessionId: input.sessionId,
             runKind: input.runKind,
-          }
+          },
         );
         if (reply !== "once") {
           throw new Error(
             "This command was blocked by the org command policy for unattended runs. " +
-              "Propose the exact command in your note or summary and let a human run it."
+              "Propose the exact command in your note or summary and let a human run it.",
           );
         }
       }
@@ -1211,7 +1397,8 @@ export function makePiBashTool(input: {
           ? Math.min(rawTimeout, BASH_MAX_TIMEOUT_S)
           : BASH_DEFAULT_TIMEOUT_S;
 
-      const aborted = () => Boolean(signal?.aborted || input.runSignal?.aborted);
+      const aborted = () =>
+        Boolean(signal?.aborted || input.runSignal?.aborted);
       if (aborted()) throw new Error("Command aborted");
       const commandAudit = summarizeBashAuditCommand(command);
       const commandStartedAt = Date.now();
@@ -1221,25 +1408,29 @@ export function makePiBashTool(input: {
       // when the timeout fires). Absent setsid (macOS), degrade to the
       // direct-child kill.
       const setsidPath = Bun.which("setsid");
+      const directCommand = setsidPath
+        ? [setsidPath, "/bin/bash", "-c", command]
+        : ["/bin/bash", "-c", command];
+      const scoped = controlPlaneWorkloadCommand(
+        directCommand,
+        `opensession-agent-cmd-${crypto.randomUUID().slice(0, 13)}`,
+        { env: input.env },
+      );
       let timedOut = false;
       let exitCode: number | null = null;
       try {
-        const proc = Bun.spawn(
-          setsidPath
-            ? [setsidPath, "/bin/bash", "-c", command]
-            : ["/bin/bash", "-c", command],
-          {
-            cwd: input.cwd,
-            env: input.env,
-            stdin: "ignore",
-            stdout: "pipe",
-            stderr: "pipe",
-          }
-        );
+        const proc = Bun.spawn(scoped.command, {
+          cwd: input.cwd,
+          env: scoped.env,
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+        });
         const killTree = () => {
+          if (scoped.unit) stopUserScope(scoped.unit);
           const killGroup = (sig: "SIGTERM" | "SIGKILL") => {
             try {
-              if (setsidPath) process.kill(-proc.pid, sig);
+              if (!scoped.unit && setsidPath) process.kill(-proc.pid, sig);
               else proc.kill(sig);
             } catch {}
           };
@@ -1293,9 +1484,13 @@ export function makePiBashTool(input: {
           killTree();
         }, timeoutS * 1000);
         const onAbort = () => killTree();
-        const abortSignals = [...new Set([signal, input.runSignal].filter(
-          (candidate): candidate is AbortSignal => !!candidate,
-        ))];
+        const abortSignals = [
+          ...new Set(
+            [signal, input.runSignal].filter(
+              (candidate): candidate is AbortSignal => !!candidate,
+            ),
+          ),
+        ];
         for (const abortSignal of abortSignals)
           abortSignal.addEventListener("abort", onAbort, { once: true });
         // addEventListener does not replay an abort that raced spawn/listener
@@ -1327,9 +1522,13 @@ export function makePiBashTool(input: {
             : "") + out;
         if (aborted()) throw new Error("Command aborted");
         if (timedOut)
-          throw new Error(`${text}\nCommand timed out after ${timeoutS}s`.trim());
+          throw new Error(
+            `${text}\nCommand timed out after ${timeoutS}s`.trim(),
+          );
         if (exitCode !== 0)
-          throw new Error(`${text}\nCommand exited with code ${exitCode}`.trim());
+          throw new Error(
+            `${text}\nCommand exited with code ${exitCode}`.trim(),
+          );
         return {
           content: [{ type: "text", text: text || "(no output)" }],
           details: { exitCode, truncatedChars: droppedChars || undefined },
@@ -1344,7 +1543,13 @@ export function makePiBashTool(input: {
           exit_code: exitCode,
           timed_out: timedOut,
           cancelled,
-          outcome: cancelled ? "cancelled" : timedOut ? "timed_out" : exitCode === 0 ? "ok" : "failed",
+          outcome: cancelled
+            ? "cancelled"
+            : timedOut
+              ? "timed_out"
+              : exitCode === 0
+                ? "ok"
+                : "failed",
         });
       }
     },
@@ -1373,7 +1578,7 @@ interface PiAccountWalk {
  * attempt. Everything else has user-visible or durable meaning and makes
  * replay unsafe. Exported so the in-band usage-limit regression stays pinned. */
 export function piStreamEventBlocksAccountRotation(
-  event: Pick<StreamEvent, "type">
+  event: Pick<StreamEvent, "type">,
 ): boolean {
   return event.type !== "init" && event.type !== "usage_snapshot";
 }
@@ -1399,7 +1604,7 @@ export function piStreamEventBlocksAccountRotation(
  */
 export async function* runPi(
   opts: RunAgentOpts,
-  model: string
+  model: string,
 ): AsyncGenerator<StreamEvent> {
   const walk: PiAccountWalk = { excluded: new Set(), rotate: false };
   for (;;) {
@@ -1412,14 +1617,14 @@ export async function* runPi(
 async function* runPiAttempt(
   opts: RunAgentOpts,
   model: string,
-  walk: PiAccountWalk
+  walk: PiAccountWalk,
 ): AsyncGenerator<StreamEvent> {
   // Config gate first: the clearest refusal when the engine is off entirely.
   if (!piEngineEnabled()) {
     yield {
       type: "error",
       content:
-        "The Pi engine is not enabled (~/.opensession-pi.json). Set {\"enabled\": true} there to turn it on.",
+        'The Pi engine is not enabled (~/.opensession-pi.json). Set {"enabled": true} there to turn it on.',
       provider: PROVIDER,
       model,
     };
@@ -1475,7 +1680,8 @@ async function* runPiAttempt(
     return;
   }
 
-  const { prompt, cwd, mode, mcpServers, confirmTools, journal, user, author } = opts;
+  const { prompt, cwd, mode, mcpServers, confirmTools, journal, user, author } =
+    opts;
   // `user` remains the exact prompt sender for MCP/GitHub policy and audit.
   // Provider accounts are different: synthetic continuation senders inherit
   // the interactive session owner's personal subscription.
@@ -1487,7 +1693,10 @@ async function* runPiAttempt(
   // Open Session ids are reusable aliases, so they must never fence a delayed
   // cancel against a successor turn.
   const runKey =
-    opts.startToken || opts.sessionId || journal?.osSessionId || crypto.randomUUID();
+    opts.startToken ||
+    opts.sessionId ||
+    journal?.osSessionId ||
+    crypto.randomUUID();
   const registeredKeys = new Set<string>([runKey]);
   if (opts.sessionId) registeredKeys.add(opts.sessionId);
   if (journal?.osSessionId) registeredKeys.add(journal.osSessionId);
@@ -1521,7 +1730,12 @@ async function* runPiAttempt(
   const endTurn = (fields: Record<string, unknown>) => {
     if (turnEnded) return;
     turnEnded = true;
-    audit({ ...auditBase, direction: "out", duration_ms: Date.now() - started, ...fields });
+    audit({
+      ...auditBase,
+      direction: "out",
+      duration_ms: Date.now() - started,
+      ...fields,
+    });
   };
 
   let piSessionId: string | undefined;
@@ -1600,7 +1814,7 @@ async function* runPiAttempt(
       accountUser,
       opts.accountId,
       opts.accountStrict,
-      new Set([...walk.excluded, pickedOpenai.id])
+      new Set([...walk.excluded, pickedOpenai.id]),
     );
     if ("error" in next) return undefined;
     return next;
@@ -1615,7 +1829,7 @@ async function* runPiAttempt(
     if (!next) return false;
     console.warn(
       `[pi-runner] usage limit on codex account "${pickedOpenai.name}" ` +
-        `(${parsed.modelID}): retrying this turn on "${next.name}"`
+        `(${parsed.modelID}): retrying this turn on "${next.name}"`,
     );
     audit({
       ...auditBase,
@@ -1646,7 +1860,7 @@ async function* runPiAttempt(
       prompt,
       opts.promptEntryId || walk.promptEntryId,
       undefined,
-      opts.images
+      opts.images,
     );
     walk.promptEntryId ??= String(userLine.uuid);
     if (journal?.osSessionId) {
@@ -1669,7 +1883,7 @@ async function* runPiAttempt(
           accountStrict: opts.accountStrict,
           usageCredits: opts.usageCredits,
           kind: journal.kind,
-        })
+        }),
       );
       await storeAppendUserLineEarly(journal.osSessionId, userLine, {
         required: true,
@@ -1683,7 +1897,8 @@ async function* runPiAttempt(
     });
     // Command-policy gate: kind-based like previous runner (NOT policy.unattended) —
     // the trusted-human loops carry deniedTools but shouldn't trip the gate.
-    const bashGated = isUnattendedKind(baseJournalKind(journal?.kind)) && !isAsk;
+    const bashGated =
+      isUnattendedKind(baseJournalKind(journal?.kind)) && !isAsk;
     const interactiveGithub =
       !policy.unattended &&
       INTERACTIVE_KINDS.has(baseJournalKind(journal?.kind));
@@ -1811,9 +2026,17 @@ async function* runPiAttempt(
     // Minimal bash env, the security invariant this engine hangs on. The
     // server env is NEVER inherited; every entry is explicit.
     const awsEnv = opts.aws ? await ensureAgentAwsCredsFile() : {};
+    const homeEnv = piBashHomeEnv({
+      runKey,
+      scratchDir: opts.scratchDir,
+      isolated: Boolean(opts.publicationPolicy),
+      hostHome: process.env.HOME,
+    });
+    if (opts.publicationPolicy && homeEnv.HOME)
+      mkdirSync(homeEnv.HOME, { recursive: true, mode: 0o700 });
     const bashEnv: Record<string, string> = {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
-      ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+      ...homeEnv,
       ...(process.env.LANG ? { LANG: process.env.LANG } : {}),
       // Session-scoped scratch (session-scratch.ts): temp files follow the
       // session's lifecycle instead of accumulating in shared /tmp.
@@ -1878,7 +2101,7 @@ async function* runPiAttempt(
           baseCustomTools.push(
             sdk.createReadToolDefinition(cwd, {
               operations: guardedOps.read,
-            }) as ToolDefinition<any, any, any>
+            }) as ToolDefinition<any, any, any>,
           );
           break;
         case "grep": {
@@ -1893,28 +2116,28 @@ async function* runPiAttempt(
           baseCustomTools.push(
             sdk.createFindToolDefinition(cwd, {
               operations: guardedOps.find,
-            }) as ToolDefinition<any, any, any>
+            }) as ToolDefinition<any, any, any>,
           );
           break;
         case "ls":
           baseCustomTools.push(
             sdk.createLsToolDefinition(cwd, {
               operations: guardedOps.ls,
-            }) as ToolDefinition<any, any, any>
+            }) as ToolDefinition<any, any, any>,
           );
           break;
         case "edit":
           baseCustomTools.push(
             sdk.createEditToolDefinition(cwd, {
               operations: guardedOps.edit,
-            }) as ToolDefinition<any, any, any>
+            }) as ToolDefinition<any, any, any>,
           );
           break;
         case "write":
           baseCustomTools.push(
             sdk.createWriteToolDefinition(cwd, {
               operations: guardedOps.write,
-            }) as ToolDefinition<any, any, any>
+            }) as ToolDefinition<any, any, any>,
           );
           break;
         case "bash":
@@ -1927,6 +2150,7 @@ async function* runPiAttempt(
               unattended: policy.unattended,
               sessionId: journal?.osSessionId,
               runKind: journal?.kind,
+              publicationPolicy: opts.publicationPolicy,
               runSignal: abort.signal,
               onAudit: (event) =>
                 audit({
@@ -1938,7 +2162,7 @@ async function* runPiAttempt(
                   model,
                   ...event,
                 }),
-            })
+            }),
           );
           break;
       }
@@ -1979,7 +2203,8 @@ async function* runPiAttempt(
               agent: "oracle",
               // A workspace preset that restated a built-in tier keeps its
               // own label — that is the name the person picked.
-              presetLabel: resolved.workspacePreset?.label || resolved.dial.label,
+              presetLabel:
+                resolved.workspacePreset?.label || resolved.dial.label,
               mainLabel: parsed.modelID,
               oracleLabel:
                 DIAL_ORACLE_AGENTS[dialOracleAgent]?.label || dialOracleAgent,
@@ -1991,20 +2216,22 @@ async function* runPiAttempt(
       // instructions naming a tool the run does not have read as a broken
       // tool (the codex-direct rule). An orchestrator preset without it
       // still keeps its effort override.
-      orchestrator: resolved?.orchestrator && opts.inProcessMcp?.["opensession-sessions"]
-        ? {
-            presetLabel:
-              resolved.workspacePreset?.label || resolved.orchestrator.label,
-            mainLabel: piModelLabel(resolved.orchestrator.model),
-            workers: resolved.orchestrator.workerAgents.map((name) => ({
-              agent: name,
-              label: ORCHESTRATOR_WORKER_AGENTS[name]?.label || name,
-              modelLabel:
-                orchestratorWorkerForBridge(name, parsed.providerID)?.label || name,
-            })),
-            tool: "sessions",
-          }
-        : undefined,
+      orchestrator:
+        resolved?.orchestrator && opts.inProcessMcp?.["opensession-sessions"]
+          ? {
+              presetLabel:
+                resolved.workspacePreset?.label || resolved.orchestrator.label,
+              mainLabel: piModelLabel(resolved.orchestrator.model),
+              workers: resolved.orchestrator.workerAgents.map((name) => ({
+                agent: name,
+                label: ORCHESTRATOR_WORKER_AGENTS[name]?.label || name,
+                modelLabel:
+                  orchestratorWorkerForBridge(name, parsed.providerID)?.label ||
+                  name,
+              })),
+              tool: "sessions",
+            }
+          : undefined,
     });
 
     // The resolution of the `tools` scope runOnModel already logged: what
@@ -2108,9 +2335,11 @@ async function* runPiAttempt(
     let resumeMissNote: string | null = null;
     if (opts.sessionId && !resumePath && unifiedSessionId) {
       try {
-        const tail = (transcriptForwarder()
-          ? opts.seedTranscriptEntries || []
-          : (await transcript.readTail(unifiedSessionId, 200)).entries)
+        const tail = (
+          transcriptForwarder()
+            ? opts.seedTranscriptEntries || []
+            : (await transcript.readTail(unifiedSessionId, 200)).entries
+        )
           // This turn's own prompt was already early-persisted — the model
           // gets it as the actual prompt, not as history.
           .filter((e) => e.id !== String(userLine.uuid));
@@ -2192,7 +2421,8 @@ async function* runPiAttempt(
 
     // Map pi→unified BEFORE any engine-keyed append (the W1 import-first gate
     // resolves through this map; unmapped appends are dropped + degraded).
-    if (unifiedSessionId) recordEngineSessionOwner(piSessionId, unifiedSessionId);
+    if (unifiedSessionId)
+      recordEngineSessionOwner(piSessionId, unifiedSessionId);
 
     // Journal upgrade: the record now carries the engine id (still no
     // serverKey — boot must take the continuation re-prompt path).
@@ -2216,7 +2446,7 @@ async function* runPiAttempt(
           accountStrict: opts.accountStrict,
           usageCredits: opts.usageCredits,
           kind: journal.kind,
-        })
+        }),
       );
     }
 
@@ -2249,7 +2479,12 @@ async function* runPiAttempt(
       void liveSession.steer(steerText, piImages(images)).catch((e) => {
         console.warn("[pi-runner] steer failed:", e);
       });
-      audit({ ...auditBase, direction: "in", kind: "steer_queued", ...summarizeText(text) });
+      audit({
+        ...auditBase,
+        direction: "in",
+        kind: "steer_queued",
+        ...summarizeText(text),
+      });
     };
     handle.retractSteer = (steerId) =>
       retractPendingSteer(pendingSteers, steerId, (remaining) => {
@@ -2259,9 +2494,11 @@ async function* runPiAttempt(
         steeringBoundaryPending = remaining.length > 0;
         liveSession.clearQueue();
         for (const steer of remaining) {
-          void liveSession.steer(steer.text, piImages(steer.images)).catch((e) => {
-            console.warn("[pi-runner] steer replay failed:", e);
-          });
+          void liveSession
+            .steer(steer.text, piImages(steer.images))
+            .catch((e) => {
+              console.warn("[pi-runner] steer replay failed:", e);
+            });
         }
         audit({
           ...auditBase,
@@ -2300,7 +2537,12 @@ async function* runPiAttempt(
         "Continuing in a fresh one with the recent transcript.";
       push({ type: "runner_notice", text: notice });
       persistRunEntries([
-        { id: crypto.randomUUID(), type: "system", content: notice, timestamp: nowIso() },
+        {
+          id: crypto.randomUUID(),
+          type: "system",
+          content: notice,
+          timestamp: nowIso(),
+        },
       ]);
     }
     // What the ENGINE receives; journal/store keep the raw prompt. Fenced the
@@ -2312,7 +2554,10 @@ async function* runPiAttempt(
     // works, which is what the composer's "/" menu inserts, and this text
     // stays identical to the user message pi echoes back, which the
     // steer-delivery check below compares against.
-    const promptWithSkill = expandSkillCommand(prompt, loader.getSkills().skills);
+    const promptWithSkill = expandSkillCommand(
+      prompt,
+      loader.getSkills().skills,
+    );
     const promptForEngine = resumeMissNote
       ? `${wrapContext(resumeMissNote, "handoff")}\n\n${promptWithSkill}`
       : promptWithSkill;
@@ -2335,7 +2580,7 @@ async function* runPiAttempt(
     // Renderable content blocks (real text or tool calls) of the LATEST
     // assistant message; -1 = none seen yet. Providers occasionally return a
     // well-formed completion with ZERO content blocks and stopReason "stop"
-    // (2026-08-21 os-01a02486: stealth/ox-alpha via OpenRouter ended a
+    // (2026-08-21 os-01a02486: GLM-5.3's pre-release OpenRouter route ended a
     // 10-minute turn on content:[] with all-zero usage). pi settles that as a
     // clean turn, so the session goes idle with no summary and the user has
     // to ask "done?". The pump loop retries such finishes once.
@@ -2352,7 +2597,13 @@ async function* runPiAttempt(
         switch (ev.type) {
           case "message_update": {
             const ame = (ev as any).assistantMessageEvent;
-            if (ame?.type === "text_delta" && typeof ame.delta === "string") {
+            if (
+              (ame?.type === "text_delta" || ame?.type === "thinking_delta") &&
+              typeof ame.delta === "string"
+            ) {
+              // The live transcript has one prose stream. Thinking and ordinary
+              // model output both ride it rather than leaving reasoning blank
+              // until message_end persists the provider's separate blocks.
               push({ type: "text_chunk", text: ame.delta });
             }
             break;
@@ -2386,12 +2637,14 @@ async function* runPiAttempt(
             const msg = (ev as any).message;
             if (!msg) break;
             const ts = new Date(
-              typeof msg.timestamp === "number" ? msg.timestamp : Date.now()
+              typeof msg.timestamp === "number" ? msg.timestamp : Date.now(),
             ).toISOString();
             if (msg.role === "assistant") {
               lastStopReason = msg.stopReason;
               lastErrorMessage = msg.errorMessage;
-              lastAssistantRenderableBlocks = assistantRenderableBlockCount(msg.content);
+              lastAssistantRenderableBlocks = assistantRenderableBlockCount(
+                msg.content,
+              );
               const u = msg.usage;
               if (u && typeof u.input === "number") {
                 sawUsage = true;
@@ -2400,45 +2653,22 @@ async function* runPiAttempt(
                 usageTotal.outputTokens += u.output || 0;
                 usageTotal.cacheReadTokens += u.cacheRead || 0;
                 usageTotal.cacheCreationTokens += u.cacheWrite || 0;
-                usageTotal.costUsd = (usageTotal.costUsd || 0) + (u.cost?.total || 0);
+                usageTotal.costUsd =
+                  (usageTotal.costUsd || 0) + (u.cost?.total || 0);
                 usageTotal.contextTokens =
                   (u.input || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0);
                 push({ type: "usage_snapshot", usage: { ...usageTotal } });
               }
-              // Persist text + tool calls now (messages have no SDK id —
-              // mint one per message; block ids are the model's, stable).
+              // Persist thinking, text, and tool calls now (messages have no
+              // SDK id, while block ids are the model's and stay stable).
               // Error-stopped attempts are skipped: auto-retry replays them
               // and the terminal error carries the failure text — persisting
               // each attempt would stack duplicate partial bubbles. Aborted
               // partials DO persist (parity with pi's own jsonl).
               if (msg.stopReason !== "error") {
-                const out: TranscriptEntry[] = [];
-                const msgId = crypto.randomUUID();
-                let textIdx = 0;
-                for (const b of msg.content || []) {
-                  if (!b || typeof b !== "object") continue;
-                  if (b.type === "text" && b.text) {
-                    out.push({
-                      id: textIdx === 0 ? msgId : `${msgId}-b${textIdx}`,
-                      type: "assistant",
-                      content: b.text,
-                      timestamp: ts,
-                      model: parsed.modelID,
-                    });
-                    textIdx++;
-                  } else if (b.type === "toolCall" && b.id) {
-                    out.push({
-                      id: String(b.id),
-                      type: "tool_use",
-                      content: "",
-                      timestamp: ts,
-                      toolName: String(b.name || "tool"),
-                      toolInput: b.arguments ?? {},
-                      toolUseId: String(b.id),
-                    });
-                  }
-                }
-                persistRunEntries(out);
+                persistRunEntries(
+                  piAssistantTranscriptEntries(msg.content, ts, parsed.modelID),
+                );
               }
             } else if (msg.role === "toolResult" && msg.toolCallId) {
               const { text, images } = contentToTextAndImages(msg.content);
@@ -2487,7 +2717,7 @@ async function* runPiAttempt(
                   const srcs = images.length
                     ? images
                     : (steer.images || []).map(
-                        (im) => `data:${im.mediaType};base64,${im.data}`
+                        (im) => `data:${im.mediaType};base64,${im.data}`,
                       );
                   persistRunEntries([
                     {
@@ -2514,7 +2744,7 @@ async function* runPiAttempt(
                   transcriptLineCompactionSummary(
                     String(ce.result.summary),
                     crypto.randomUUID(),
-                    nowIso()
+                    nowIso(),
                   ),
                 ]);
               } catch {}
@@ -2556,7 +2786,7 @@ async function* runPiAttempt(
               // Make the silent wait visible — pi retries transient provider
               // errors (3x, exponential from 2s) with no output in between.
               const notice = `pi auto-retry ${r.attempt}/${r.maxAttempts} in ${Math.round(
-                (r.delayMs || 0) / 1000
+                (r.delayMs || 0) / 1000,
               )}s — ${errText.slice(0, 300)}`;
               push({ type: "runner_notice", text: notice });
               persistRunEntries([
@@ -2606,7 +2836,7 @@ async function* runPiAttempt(
         })
         .then(
           () => settlePrompt({ ok: true }),
-          (e: unknown) => settlePrompt({ ok: false, error: e })
+          (e: unknown) => settlePrompt({ ok: false, error: e }),
         );
     }
 
@@ -2637,7 +2867,7 @@ async function* runPiAttempt(
             .then(() => liveSession.agent.continue())
             .then(
               () => settlePrompt({ ok: true }),
-              (e: unknown) => settlePrompt({ ok: false, error: e })
+              (e: unknown) => settlePrompt({ ok: false, error: e }),
             );
           continue;
         }
@@ -2659,7 +2889,7 @@ async function* runPiAttempt(
             })
             .then(
               () => settlePrompt({ ok: true }),
-              (e: unknown) => settlePrompt({ ok: false, error: e })
+              (e: unknown) => settlePrompt({ ok: false, error: e }),
             );
           continue;
         }
@@ -2686,7 +2916,11 @@ async function* runPiAttempt(
 
     // ── Terminal (at most one; user cancels end with none) ──────────────────
     const failed: { ok: boolean; error?: unknown } = promptOutcome!;
-    if (failed.ok && lastStopReason === "stop" && lastAssistantRenderableBlocks === 0) {
+    if (
+      failed.ok &&
+      lastStopReason === "stop" &&
+      lastAssistantRenderableBlocks === 0
+    ) {
       // The retry (if it ran) also came back empty — never end silently on a
       // provider glitch; leave a visible chip explaining the missing reply.
       persistRunEntries([
@@ -2734,10 +2968,12 @@ async function* runPiAttempt(
         content: `pi: ${message}`,
         provider: PROVIDER,
         model,
+        ...(sawUsage ? { usage: { ...usageTotal } } : {}),
         ...(usageLimit ? { usageLimitExhausted: true } : {}),
       };
     } else if (lastStopReason === "error" || lastStopReason === "aborted") {
-      const message = lastErrorMessage || `run ended with stopReason ${lastStopReason}`;
+      const message =
+        lastErrorMessage || `run ended with stopReason ${lastStopReason}`;
       const usageLimit = isPiUsageLimitShape(message, parsed.providerID);
       terminalUsageLimit = usageLimit;
       sidelineOnUsageLimit(usageLimit);
@@ -2746,6 +2982,7 @@ async function* runPiAttempt(
         content: `pi: ${message}`,
         provider: PROVIDER,
         model,
+        ...(sawUsage ? { usage: { ...usageTotal } } : {}),
         ...(usageLimit ? { usageLimitExhausted: true } : {}),
       };
     } else {
@@ -2805,12 +3042,18 @@ async function* runPiAttempt(
     // usage-limit shape in one of those must not burn a healthy account.
     if (e?.usageLimitExhausted === true && takeAccountRotation(message)) return;
     reachedTerminal = true;
-    endTurn({ ok: false, pi_session_id: piSessionId, ...usageAuditFields(), error: message });
+    endTurn({
+      ok: false,
+      pi_session_id: piSessionId,
+      ...usageAuditFields(),
+      error: message,
+    });
     yield {
       type: "error",
       content: `pi: ${message}`,
       provider: PROVIDER,
       model,
+      ...(sawUsage ? { usage: { ...usageTotal } } : {}),
       ...(usageLimit ? { usageLimitExhausted: true } : {}),
     };
   } finally {
@@ -2886,10 +3129,18 @@ export interface PiSmokeResult {
  * Never throws; real turns are wall-capped via cancelPiRun.
  */
 export async function runPiSmokeTurn(
-  opts: { dryRun?: boolean; timeoutMs?: number; prompt?: string; model?: string } = {}
+  opts: {
+    dryRun?: boolean;
+    timeoutMs?: number;
+    prompt?: string;
+    model?: string;
+  } = {},
 ): Promise<PiSmokeResult> {
   const prompt = opts.prompt || "Reply with exactly the single word: ok";
-  const timeoutMs = Math.max(5_000, Math.min(opts.timeoutMs ?? 120_000, 600_000));
+  const timeoutMs = Math.max(
+    5_000,
+    Math.min(opts.timeoutMs ?? 120_000, 600_000),
+  );
   // Optional model override so the smoke can exercise either provider path
   // (pi/anthropic via the bridge, pi/openai via the codex pool). A provided
   // id that doesn't parse is an explicit error, never a silent fallback —
@@ -2966,7 +3217,7 @@ export async function runPiSmokeTurn(
         mcpServers: [],
         journal: { osSessionId: sessionId, kind: "pi-smoke" },
       },
-      smokeModel
+      smokeModel,
     )) {
       eventTypes.push(ev.type);
       if (ev.type === "init") engineSessionId = ev.sessionId;

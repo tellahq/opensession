@@ -98,8 +98,16 @@ export interface AccountUsage {
   // 5h/7-day windows — an account can be 100% on one of these while its overall
   // capacity is barely touched, which is exactly what makes it look "fine" in
   // the UI while runs on that model get turned away. `label` is the model name.
-  scopedLimits?: { label: string; utilization: number | null; resetsAt: string | null }[];
-  extraUsage?: { enabled: boolean; usedCredits: number; monthlyLimit: number } | null;
+  scopedLimits?: {
+    label: string;
+    utilization: number | null;
+    resetsAt: string | null;
+  }[];
+  extraUsage?: {
+    enabled: boolean;
+    usedCredits: number;
+    monthlyLimit: number;
+  } | null;
   // Set when the snapshot came from a live Meridian proxy's /v1/usage/quota
   // (SDK-observed rate-limit events) rather than the OAuth usage endpoint —
   // the fallback for setup-token accounts that 403 on USAGE_URL.
@@ -159,7 +167,8 @@ function sidelines(): Map<string, number> {
       const parsed = JSON.parse(readFileSync(path, "utf-8"));
       const now = Date.now();
       for (const [k, until] of Object.entries(parsed?.exhaustedUntil || {})) {
-        if (typeof until === "number" && until > now) exhaustedUntil.set(k, until);
+        if (typeof until === "number" && until > now)
+          exhaustedUntil.set(k, until);
       }
     }
   } catch {}
@@ -220,7 +229,9 @@ function releaseDisprovenSidelines(
     if (u !== null && u !== undefined && u < EXHAUSTED_UTILIZATION) {
       map.delete(exhaustionKey(account.id));
       changed = true;
-      console.log(`[claude-accounts] ${account.name} usable again (5h at ${u}%${via})`);
+      console.log(
+        `[claude-accounts] ${account.name} usable again (5h at ${u}%${via})`,
+      );
     }
   }
   const prefix = `${account.id}:`;
@@ -232,7 +243,7 @@ function releaseDisprovenSidelines(
       map.delete(key);
       changed = true;
       console.log(
-        `[claude-accounts] ${account.name} usable again for ${model} (${scoped}%${via})`
+        `[claude-accounts] ${account.name} usable again for ${model} (${scoped}%${via})`,
       );
     }
   }
@@ -303,7 +314,9 @@ async function fetchUsage(
             ? Math.min(retryAfter * 1000, MAX_RATE_LIMIT_WAIT_MS)
             : DEFAULT_RATE_LIMIT_WAIT_MS;
         usageRateLimitedUntil.set(rateLimitKey, Date.now() + waitMs);
-        console.warn(`[claude-accounts] usage endpoint rate-limited for ${rateLimitKey}; backing off ${Math.round(waitMs / 60000)}m`);
+        console.warn(
+          `[claude-accounts] usage endpoint rate-limited for ${rateLimitKey}; backing off ${Math.round(waitMs / 60000)}m`,
+        );
       }
       return {
         fetchedAt: new Date().toISOString(),
@@ -315,14 +328,17 @@ async function fetchUsage(
     }
     const body: any = await res.json();
     const window = (w: any): UsageWindow | null =>
-      w ? { utilization: w.utilization ?? null, resetsAt: w.resets_at ?? null } : null;
+      w
+        ? { utilization: w.utilization ?? null, resetsAt: w.resets_at ?? null }
+        : null;
     // The `limits` array carries per-model weekly caps (kind "weekly_scoped",
     // e.g. Fable) that the top-level five_hour/seven_day fields don't expose.
     const scopedLimits = Array.isArray(body.limits)
       ? body.limits
           .filter((l: any) => l?.kind === "weekly_scoped")
           .map((l: any) => ({
-            label: l?.scope?.model?.display_name || l?.scope?.surface || "scoped",
+            label:
+              l?.scope?.model?.display_name || l?.scope?.surface || "scoped",
             utilization: typeof l?.percent === "number" ? l.percent : null,
             resetsAt: l?.resets_at ?? null,
           }))
@@ -364,7 +380,9 @@ async function fetchUsage(
 // our AccountUsage uses 0..100 and ISO strings — converted at this boundary.
 type MeridianQuotaEndpoint = { accountId: string; url: string; key: string };
 let meridianQuotaProvider: (() => MeridianQuotaEndpoint[]) | null = null;
-export function registerMeridianQuotaProvider(fn: () => MeridianQuotaEndpoint[]): void {
+export function registerMeridianQuotaProvider(
+  fn: () => MeridianQuotaEndpoint[],
+): void {
   meridianQuotaProvider = fn;
 }
 
@@ -377,8 +395,13 @@ const MERIDIAN_SCOPED_LABELS: Record<string, string> = {
 function meridianBucketWindow(b: any): UsageWindow {
   return {
     utilization:
-      typeof b?.utilization === "number" ? Math.round(b.utilization * 1000) / 10 : null,
-    resetsAt: typeof b?.resetsAt === "number" ? new Date(b.resetsAt).toISOString() : null,
+      typeof b?.utilization === "number"
+        ? Math.round(b.utilization * 1000) / 10
+        : null,
+    resetsAt:
+      typeof b?.resetsAt === "number"
+        ? new Date(b.resetsAt).toISOString()
+        : null,
   };
 }
 
@@ -386,7 +409,9 @@ async function fetchMeridianUsage(
   accountId: string,
   signal?: AbortSignal,
 ): Promise<AccountUsage | null> {
-  const endpoints = (meridianQuotaProvider?.() ?? []).filter((e) => e.accountId === accountId);
+  const endpoints = (meridianQuotaProvider?.() ?? []).filter(
+    (e) => e.accountId === accountId,
+  );
   for (const ep of endpoints.slice(0, 2)) {
     try {
       const res = await fetch(`${ep.url}/v1/usage/quota`, {
@@ -402,10 +427,16 @@ async function fetchMeridianUsage(
       const fiveHour = buckets.find((b) => b?.type === "five_hour");
       const sevenDay = buckets.find((b) => b?.type === "seven_day");
       const scoped = buckets
-        .filter((b) => typeof b?.type === "string" && b.type.startsWith("seven_day_") && has(b))
+        .filter(
+          (b) =>
+            typeof b?.type === "string" &&
+            b.type.startsWith("seven_day_") &&
+            has(b),
+        )
         .map((b) => ({
           label:
-            MERIDIAN_SCOPED_LABELS[b.type] || b.type.slice("seven_day_".length).replace(/_/g, " "),
+            MERIDIAN_SCOPED_LABELS[b.type] ||
+            b.type.slice("seven_day_".length).replace(/_/g, " "),
           ...meridianBucketWindow(b),
         }));
       // Nothing observed yet (fresh server, no requests served) — not a snapshot.
@@ -446,14 +477,19 @@ async function refreshMeridianUsage(
   releaseDisprovenSidelines(account, usage, " via meridian");
 }
 
-async function fetchProfile(token: string): Promise<{ email?: string; plan?: string }> {
+async function fetchProfile(
+  token: string,
+): Promise<{ email?: string; plan?: string }> {
   try {
     const res = await fetchWithTimeout(PROFILE_URL, token);
     if (!res.ok) return {};
     const body: any = await res.json();
     return {
       email: body.account?.email || undefined,
-      plan: body.organization?.rate_limit_tier || body.organization?.organization_type || undefined,
+      plan:
+        body.organization?.rate_limit_tier ||
+        body.organization?.organization_type ||
+        undefined,
     };
   } catch {
     return {};
@@ -478,7 +514,10 @@ function readCredsFile(path: string): OauthCreds | null {
       refreshTokenExpiresAt: Number(o.refreshTokenExpiresAt) || undefined,
     };
   } catch (e) {
-    console.warn(`[claude-accounts] Failed to read credentials file ${path}:`, e);
+    console.warn(
+      `[claude-accounts] Failed to read credentials file ${path}:`,
+      e,
+    );
     return null;
   }
 }
@@ -498,15 +537,23 @@ function readCredsFile(path: string): OauthCreds | null {
  */
 const credsRefreshInFlight = new Map<string, Promise<OauthCreds | null>>();
 
-function refreshCredsFile(path: string, creds: OauthCreds): Promise<OauthCreds | null> {
+function refreshCredsFile(
+  path: string,
+  creds: OauthCreds,
+): Promise<OauthCreds | null> {
   const inFlight = credsRefreshInFlight.get(path);
   if (inFlight) return inFlight;
-  const p = doRefreshCredsFile(path, creds).finally(() => credsRefreshInFlight.delete(path));
+  const p = doRefreshCredsFile(path, creds).finally(() =>
+    credsRefreshInFlight.delete(path),
+  );
   credsRefreshInFlight.set(path, p);
   return p;
 }
 
-async function doRefreshCredsFile(path: string, staleCreds: OauthCreds): Promise<OauthCreds | null> {
+async function doRefreshCredsFile(
+  path: string,
+  staleCreds: OauthCreds,
+): Promise<OauthCreds | null> {
   const blockedUntil = credentialsRefreshBlockedUntil.get(path) ?? 0;
   if (Date.now() < blockedUntil) return null;
   const creds = readCredsFile(path) ?? staleCreds;
@@ -531,7 +578,9 @@ async function doRefreshCredsFile(path: string, staleCreds: OauthCreds): Promise
             ? DEFAULT_RATE_LIMIT_WAIT_MS
             : FAILED_REFRESH_WAIT_MS;
       credentialsRefreshBlockedUntil.set(path, Date.now() + waitMs);
-      console.warn(`[claude-accounts] Token refresh for ${path} failed: HTTP ${res.status}`);
+      console.warn(
+        `[claude-accounts] Token refresh for ${path} failed: HTTP ${res.status}`,
+      );
       return null;
     }
     const body: any = await res.json();
@@ -553,7 +602,10 @@ async function doRefreshCredsFile(path: string, staleCreds: OauthCreds): Promise
     credentialsRefreshBlockedUntil.delete(path);
     return next;
   } catch (e) {
-    credentialsRefreshBlockedUntil.set(path, Date.now() + DEFAULT_RATE_LIMIT_WAIT_MS);
+    credentialsRefreshBlockedUntil.set(
+      path,
+      Date.now() + DEFAULT_RATE_LIMIT_WAIT_MS,
+    );
     console.warn(`[claude-accounts] Token refresh for ${path} failed:`, e);
     return null;
   }
@@ -585,7 +637,11 @@ function syncOauthRunToken(path: string, accessToken: string): void {
 async function usageToken(
   account: ClaudeAccount,
   signal?: AbortSignal,
-): Promise<{ token: string; source: "credentials" | "setup-token" } | { error: string } | null> {
+): Promise<
+  | { token: string; source: "credentials" | "setup-token" }
+  | { error: string }
+  | null
+> {
   if (account.credentialsPath) {
     const creds = readCredsFile(account.credentialsPath);
     if (creds) {
@@ -610,7 +666,8 @@ async function usageToken(
       if (creds.expiresAt > Date.now()) {
         return { token: creds.accessToken, source: "credentials" };
       }
-      const blockedUntil = credentialsRefreshBlockedUntil.get(account.credentialsPath) ?? 0;
+      const blockedUntil =
+        credentialsRefreshBlockedUntil.get(account.credentialsPath) ?? 0;
       if (Date.now() < blockedUntil) {
         return {
           error: `OAuth token refresh is cooling down after a failed refresh; retrying after ${new Date(blockedUntil).toLocaleTimeString("en-GB", { timeZone: "UTC" })} UTC.`,
@@ -621,7 +678,9 @@ async function usageToken(
           "OAuth credentials expired and refresh failed. Reconnect usage from Settings → Providers (account menu → Sign in with Claude), or re-login on the VPS and update the credentials path.",
       };
     }
-    return { error: `Couldn't read OAuth credentials at ${account.credentialsPath}` };
+    return {
+      error: `Couldn't read OAuth credentials at ${account.credentialsPath}`,
+    };
   }
   if (account.usageScope === "missing") return null;
   return { token: account.token, source: "setup-token" };
@@ -634,7 +693,9 @@ function markUsageScopeMissing(id: string): void {
   if (idx === -1 || accounts[idx].usageScope === "missing") return;
   accounts[idx] = { ...accounts[idx], usageScope: "missing" };
   writeStore(accounts);
-  console.log(`[claude-accounts] ${accounts[idx].name} token lacks user:profile scope; usage polling disabled`);
+  console.log(
+    `[claude-accounts] ${accounts[idx].name} token lacks user:profile scope; usage polling disabled`,
+  );
 }
 
 /** Refresh cached usage for one account; clears exhausted state once reset has passed. */
@@ -651,7 +712,11 @@ async function refreshAccountUsage(
     // real utilization instead of nothing.
     const observed = await fetchMeridianUsage(account.id, signal);
     const usage = {
-      ...(observed ?? { fetchedAt: new Date().toISOString(), fiveHour: null, sevenDay: null }),
+      ...(observed ?? {
+        fetchedAt: new Date().toISOString(),
+        fiveHour: null,
+        sevenDay: null,
+      }),
       error: tok.error,
     };
     usageCache.set(account.id, usage);
@@ -698,9 +763,13 @@ export function startUsagePoller(): void {
     void refreshAllUsage();
   }
   pollTimer = setInterval(() => {
-    void refreshAllUsage().catch((e) => console.error("[claude-accounts] Poll failed:", e));
+    void refreshAllUsage().catch((e) =>
+      console.error("[claude-accounts] Poll failed:", e),
+    );
   }, POLL_INTERVAL_MS);
-  console.log(`[claude-accounts] Usage poller started (${accounts.length} account(s), every ${POLL_INTERVAL_MS / 60000}m)`);
+  console.log(
+    `[claude-accounts] Usage poller started (${accounts.length} account(s), every ${POLL_INTERVAL_MS / 60000}m)`,
+  );
 }
 
 function isExhausted(id: string): boolean {
@@ -720,7 +789,11 @@ function isModelExhausted(id: string, model?: string): boolean {
  */
 function hasCreditHeadroom(a: ClaudeAccount): boolean {
   const extra = usageCache.get(a.id)?.extraUsage;
-  return !!extra?.enabled && extra.monthlyLimit > 0 && extra.usedCredits < extra.monthlyLimit;
+  return (
+    !!extra?.enabled &&
+    extra.monthlyLimit > 0 &&
+    extra.usedCredits < extra.monthlyLimit
+  );
 }
 
 // Model families that can carry their own weekly cap, matched against the
@@ -730,15 +803,22 @@ const SCOPED_MODEL_FAMILIES = ["fable", "opus", "sonnet", "haiku"];
 
 function scopedEntryForModel(
   usage: AccountUsage | undefined,
-  model?: string
-): { label: string; utilization: number | null; resetsAt: string | null } | null {
+  model?: string,
+): {
+  label: string;
+  utilization: number | null;
+  resetsAt: string | null;
+} | null {
   if (!usage?.scopedLimits?.length || !model) return null;
   const m = model.toLowerCase();
   const family = m.includes("mythos")
     ? "fable"
     : SCOPED_MODEL_FAMILIES.find((f) => m.includes(f));
   if (!family) return null;
-  return usage.scopedLimits.find((l) => l.label.toLowerCase().includes(family)) ?? null;
+  return (
+    usage.scopedLimits.find((l) => l.label.toLowerCase().includes(family)) ??
+    null
+  );
 }
 
 /**
@@ -749,7 +829,7 @@ function scopedEntryForModel(
  * after its window resets, which is what let a dry pool cascade for hours.
  */
 function currentUtilization(
-  w: { utilization: number | null; resetsAt: string | null } | null | undefined
+  w: { utilization: number | null; resetsAt: string | null } | null | undefined,
 ): number {
   if (!w) return 0;
   if (w.resetsAt) {
@@ -759,7 +839,10 @@ function currentUtilization(
   return w.utilization ?? 0;
 }
 
-function scopedLimitForModel(usage: AccountUsage | undefined, model?: string): number | null {
+function scopedLimitForModel(
+  usage: AccountUsage | undefined,
+  model?: string,
+): number | null {
   const entry = scopedEntryForModel(usage, model);
   if (!entry) return null;
   if (entry.utilization === null) return null;
@@ -768,7 +851,9 @@ function scopedLimitForModel(usage: AccountUsage | undefined, model?: string): n
 
 export type ClaudeModelRequirement = string | readonly string[];
 
-function requiredModels(model?: ClaudeModelRequirement): Array<string | undefined> {
+function requiredModels(
+  model?: ClaudeModelRequirement,
+): Array<string | undefined> {
   if (Array.isArray(model)) {
     const unique = [...new Set(model.filter(Boolean))];
     return unique.length ? unique : [undefined];
@@ -776,7 +861,10 @@ function requiredModels(model?: ClaudeModelRequirement): Array<string | undefine
   return [model as string | undefined];
 }
 
-function accountUtilization(a: ClaudeAccount, model?: ClaudeModelRequirement): number {
+function accountUtilization(
+  a: ClaudeAccount,
+  model?: ClaudeModelRequirement,
+): number {
   const usage = usageCache.get(a.id);
   // Meridian reconstructs these windows from SDK rate-limit events. They are
   // useful telemetry, but not authoritative account state: its scoped bucket
@@ -786,7 +874,9 @@ function accountUtilization(a: ClaudeAccount, model?: ClaudeModelRequirement): n
   const fiveHour = currentUtilization(usage?.fiveHour);
   return Math.max(
     fiveHour,
-    ...requiredModels(model).map((required) => scopedLimitForModel(usage, required) ?? 0)
+    ...requiredModels(model).map(
+      (required) => scopedLimitForModel(usage, required) ?? 0,
+    ),
   );
 }
 
@@ -800,7 +890,7 @@ function accountUtilization(a: ClaudeAccount, model?: ClaudeModelRequirement): n
 function isAccountUsableFor(
   a: ClaudeAccount,
   model?: ClaudeModelRequirement,
-  allowExtraUsage?: boolean
+  allowExtraUsage?: boolean,
 ): boolean {
   if (isExhausted(a.id)) return false;
   // OAuth access tokens are short-lived. The startup/usage poll refreshes an
@@ -808,7 +898,12 @@ function isAccountUsableFor(
   // small window before that refresh finishes.
   if (a.authKind === "oauth") {
     const creds = a.credentialsPath ? readCredsFile(a.credentialsPath) : null;
-    if (!creds || creds.expiresAt <= Date.now() || creds.accessToken !== a.token) return false;
+    if (
+      !creds ||
+      creds.expiresAt <= Date.now() ||
+      creds.accessToken !== a.token
+    )
+      return false;
   }
   const models = requiredModels(model);
   if (models.some((required) => isModelExhausted(a.id, required))) return false;
@@ -860,10 +955,15 @@ function toPublic(a: ClaudeAccount): ClaudeAccountPublic {
     usage,
     noUsageScope: a.usageScope === "missing" && !a.credentialsPath,
     credentialsPath: a.credentialsPath,
-    exhaustedUntil: until !== undefined && until > Date.now() ? new Date(until).toISOString() : null,
+    exhaustedUntil:
+      until !== undefined && until > Date.now()
+        ? new Date(until).toISOString()
+        : null,
     usable:
       !isExhausted(a.id) &&
-      (usage?.source === "meridian" || fiveHour === null || fiveHour < EXHAUSTED_UTILIZATION),
+      (usage?.source === "meridian" ||
+        fiveHour === null ||
+        fiveHour < EXHAUSTED_UTILIZATION),
   };
 }
 
@@ -885,7 +985,7 @@ export function listAccountsPublic(): ClaudeAccountPublic[] {
 export function getUsableAccountById(
   id: string,
   model?: ClaudeModelRequirement,
-  allowExtraUsage?: boolean
+  allowExtraUsage?: boolean,
 ): ClaudeAccount | undefined {
   const a = readStore().find((x) => x.id === id);
   return a && isAccountUsableFor(a, model, allowExtraUsage) ? a : undefined;
@@ -905,7 +1005,7 @@ export async function addAccount(
   name: string,
   token: string,
   owner?: string,
-  credentialsPath?: string
+  credentialsPath?: string,
 ): Promise<ClaudeAccountPublic | { error: string }> {
   const trimmedName = name.trim();
   // Strip ALL whitespace, not just the ends — a token copied from the
@@ -916,7 +1016,10 @@ export async function addAccount(
   const trimmedCredentialsPath = credentialsPath?.trim() || undefined;
   if (!trimmedName) return { error: "Name is required" };
   if (!/^sk-ant-/.test(trimmedToken)) {
-    return { error: "Token doesn't look like a Claude OAuth token (expected sk-ant-…). Generate one with `claude setup-token`." };
+    return {
+      error:
+        "Token doesn't look like a Claude OAuth token (expected sk-ant-…). Generate one with `claude setup-token`.",
+    };
   }
   const accounts = readStore();
   if (accounts.some((a) => a.name === trimmedName)) {
@@ -935,7 +1038,9 @@ export async function addAccount(
     return { error: `Token validation failed: ${usage.error}` };
   }
   if (usage.error) {
-    console.warn(`[claude-accounts] Adding ${trimmedName} without usage validation: ${usage.error}`);
+    console.warn(
+      `[claude-accounts] Adding ${trimmedName} without usage validation: ${usage.error}`,
+    );
   }
   const profile = await fetchProfile(trimmedToken);
 
@@ -947,13 +1052,15 @@ export async function addAccount(
     plan: profile.plan,
     createdAt: new Date().toISOString(),
     ...(trimmedOwner ? { owner: trimmedOwner } : {}),
-    ...(trimmedCredentialsPath ? { credentialsPath: trimmedCredentialsPath } : {}),
+    ...(trimmedCredentialsPath
+      ? { credentialsPath: trimmedCredentialsPath }
+      : {}),
     ...(usage.errorStatus === 403 ? { usageScope: "missing" as const } : {}),
   };
   writeStore([...accounts, account]);
   if (!usage.error) usageCache.set(account.id, usage);
   console.log(
-    `[claude-accounts] Added account ${trimmedName} (${profile.email || "unknown email"})${trimmedOwner ? ` — personal sub of ${trimmedOwner}` : " — shared pool"}`
+    `[claude-accounts] Added account ${trimmedName} (${profile.email || "unknown email"})${trimmedOwner ? ` — personal sub of ${trimmedOwner}` : " — shared pool"}`,
   );
   return toPublic(account);
 }
@@ -962,7 +1069,7 @@ export async function addAccount(
 export function setAccountOwner(
   id: string,
   owner: string | undefined,
-  credentialsPath?: string | undefined
+  credentialsPath?: string | undefined,
 ): ClaudeAccountPublic | null {
   const accounts = readStore();
   const idx = accounts.findIndex((a) => a.id === id);
@@ -976,13 +1083,14 @@ export function setAccountOwner(
     if (trimmedPath) next.credentialsPath = trimmedPath;
     else delete next.credentialsPath;
     usageCache.delete(id);
-    if (accounts[idx].credentialsPath) credentialsRefreshBlockedUntil.delete(accounts[idx].credentialsPath);
+    if (accounts[idx].credentialsPath)
+      credentialsRefreshBlockedUntil.delete(accounts[idx].credentialsPath);
     if (trimmedPath) credentialsRefreshBlockedUntil.delete(trimmedPath);
   }
   accounts[idx] = next;
   writeStore(accounts);
   console.log(
-    `[claude-accounts] ${next.name} is now ${trimmed ? `the personal sub of ${trimmed}` : "a shared pool account"}`
+    `[claude-accounts] ${next.name} is now ${trimmed ? `the personal sub of ${trimmed}` : "a shared pool account"}`,
   );
   return toPublic(next);
 }
@@ -997,7 +1105,7 @@ export function setAccountOwner(
 export function setAccountUsageCredentials(
   id: string,
   path: string,
-  email?: string
+  email?: string,
 ): ClaudeAccountPublic | null {
   const accounts = readStore();
   const idx = accounts.findIndex((a) => a.id === id);
@@ -1054,7 +1162,7 @@ function selectAccount(
   recordPick = true,
 ): ClaudeAccount | undefined {
   const eligible = readStore().filter(
-    (a) => !exclude?.has(a.id) && isAccountUsableFor(a, model, allowExtraUsage)
+    (a) => !exclude?.has(a.id) && isAccountUsableFor(a, model, allowExtraUsage),
   );
   const best = (list: ClaudeAccount[]): ClaudeAccount | undefined =>
     list
@@ -1065,7 +1173,11 @@ function selectAccount(
       }))
       // Credit-headroom accounts sort by their (high) utilization bucket, so
       // subscription capacity is always drained before paid credits.
-      .filter(({ a, bucket }) => bucket * 10 < EXHAUSTED_UTILIZATION || (!!allowExtraUsage && hasCreditHeadroom(a)))
+      .filter(
+        ({ a, bucket }) =>
+          bucket * 10 < EXHAUSTED_UTILIZATION ||
+          (!!allowExtraUsage && hasCreditHeadroom(a)),
+      )
       .sort((x, y) => x.bucket - y.bucket || x.picked - y.picked)[0]?.a;
   const personal = user
     ? best(eligible.filter((a) => a.owner && userMatchesAny(user, [a.owner])))
@@ -1097,7 +1209,12 @@ export function peekAccount(
 
 /** Which step of the ordered policy produced the account — for callers that
  *  log or report the route a run authenticated by. */
-export type PickReason = "pinned" | "sticky" | "designated" | "personal" | "pool";
+export type PickReason =
+  | "pinned"
+  | "sticky"
+  | "designated"
+  | "personal"
+  | "pool";
 
 /**
  * Why nothing could serve, structured rather than worded. The engine runners
@@ -1203,11 +1320,22 @@ export function resolveAccount(req: AccountRequest): AccountResolution {
       const a = usableForRun(id);
       if (a) return { account: a, reason: "designated" };
     }
-    return { refusal: { kind: "designated-dry", tried: ids.map(nameOf).join(", ") } };
+    return {
+      refusal: { kind: "designated-dry", tried: ids.map(nameOf).join(", ") },
+    };
   }
-  const picked = selectAccount(excluded, user, model, allowExtraUsage, req.recordPick ?? true);
-  if (picked) return { account: picked, reason: picked.owner ? "personal" : "pool" };
-  return { refusal: hasAccounts() ? { kind: "pool-dry" } : { kind: "none-configured" } };
+  const picked = selectAccount(
+    excluded,
+    user,
+    model,
+    allowExtraUsage,
+    req.recordPick ?? true,
+  );
+  if (picked)
+    return { account: picked, reason: picked.owner ? "personal" : "pool" };
+  return {
+    refusal: hasAccounts() ? { kind: "pool-dry" } : { kind: "none-configured" },
+  };
 }
 
 /**
@@ -1223,8 +1351,12 @@ export function resolveAccount(req: AccountRequest): AccountResolution {
  *    own personal accounts. Another user's personal account is never included;
  *    runs with no user (automations — refused sandboxing anyway) get pool only.
  */
-export function accountsForRemoteUpload(user?: string, accountId?: string): ClaudeAccount[] {
-  const allowed = (a: ClaudeAccount) => !a.owner || (!!user && userMatchesAny(user, [a.owner]));
+export function accountsForRemoteUpload(
+  user?: string,
+  accountId?: string,
+): ClaudeAccount[] {
+  const allowed = (a: ClaudeAccount) =>
+    !a.owner || (!!user && userMatchesAny(user, [a.owner]));
   const all = readStore();
   if (accountId) {
     const pinned = all.find((a) => a.id === accountId);
@@ -1298,17 +1430,16 @@ export async function refreshUsageIfNearLimit(
     else await nearLimitRefresher(account, signal);
     return !signal?.aborted;
   } finally {
-    if (
-      signal?.aborted &&
-      nearLimitRefreshAt.get(id) === refreshStartedAt
-    ) {
+    if (signal?.aborted && nearLimitRefreshAt.get(id) === refreshStartedAt) {
       nearLimitRefreshAt.delete(id);
     }
   }
 }
 
 /** Test seam: replace the network refresh (null restores the real one). */
-export function __setNearLimitRefresherForTest(fn: UsageRefresher | null): void {
+export function __setNearLimitRefresherForTest(
+  fn: UsageRefresher | null,
+): void {
   nearLimitRefresher = fn ?? refreshAccountUsage;
   nearLimitRefreshAt.clear();
 }
@@ -1338,9 +1469,10 @@ export function markExhausted(
     : cached?.fiveHour?.resetsAt
       ? Date.parse(cached.fiveHour.resetsAt)
       : NaN;
-  const cachedUntil = Number.isFinite(resetsAt) && resetsAt > Date.now()
-    ? resetsAt
-    : Date.now() + DEFAULT_EXHAUST_MS;
+  const cachedUntil =
+    Number.isFinite(resetsAt) && resetsAt > Date.now()
+      ? resetsAt
+      : Date.now() + DEFAULT_EXHAUST_MS;
   // Attribute provider limits to the model that returned them. A bare id
   // benches the subscription for every model, even when only one independent
   // weekly bucket is spent. Callers without a model retain that account-wide
@@ -1350,7 +1482,7 @@ export function markExhausted(
   sidelines().set(exhaustionKey(id, model), until);
   persistSidelines();
   console.warn(
-    `[claude-accounts] ${account?.name || id}${model ? ` (${model})` : ""} marked exhausted until ${new Date(until).toISOString()}`
+    `[claude-accounts] ${account?.name || id}${model ? ` (${model})` : ""} marked exhausted until ${new Date(until).toISOString()}`,
   );
   if (account) void refreshAccountUsage(account);
 }
@@ -1372,7 +1504,7 @@ export function markWedged(id: string): boolean {
   map.set(exhaustionKey(id), until);
   persistSidelines();
   console.warn(
-    `[claude-accounts] ${account?.name || id} sidelined until ${new Date(until).toISOString()} after a bridge wedge`
+    `[claude-accounts] ${account?.name || id} sidelined until ${new Date(until).toISOString()} after a bridge wedge`,
   );
   return true;
 }
@@ -1414,7 +1546,12 @@ export function earliestPoolReset(
   if (candidates.length === 0) return null;
   let min: number | null = null;
   const consider = (t: number | null | undefined) => {
-    if (typeof t === "number" && Number.isFinite(t) && t > now && (min === null || t < min)) {
+    if (
+      typeof t === "number" &&
+      Number.isFinite(t) &&
+      t > now &&
+      (min === null || t < min)
+    ) {
       min = t;
     }
   };
@@ -1427,7 +1564,8 @@ export function earliestPoolReset(
       }
     }
     const usage = usageCache.get(a.id);
-    if (usage?.fiveHour?.resetsAt) consider(Date.parse(usage.fiveHour.resetsAt));
+    if (usage?.fiveHour?.resetsAt)
+      consider(Date.parse(usage.fiveHour.resetsAt));
     for (const required of requiredModels(model)) {
       const scoped = scopedEntryForModel(usage, required);
       if (scoped?.resetsAt) consider(Date.parse(scoped.resetsAt));

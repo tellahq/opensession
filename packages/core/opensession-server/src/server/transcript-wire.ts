@@ -20,7 +20,8 @@ export function clampV2InitEntries(entries: SeqEntry[]): SeqEntry[] {
   if (
     !entries.some(
       (entry, index) =>
-        entry.content.length > initClampBytes(entry, foldedAssistants.has(index))
+        entry.content.length >
+        initClampBytes(entry, foldedAssistants.has(index)),
     )
   ) {
     return entries;
@@ -44,7 +45,7 @@ export function clampV2InitEntries(entries: SeqEntry[]): SeqEntry[] {
  */
 export function v2SnapshotEntryWeight(
   kind: string,
-  storedBytes: number
+  storedBytes: number,
 ): number {
   const wireBudget =
     kind === "tool_result"

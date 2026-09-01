@@ -36,19 +36,19 @@ export function createTurnMcpServer(ctx: TurnToolContext) {
   const tools = [
     tool(
       "finish_silently",
-      "End this run without reporting anything. ONLY for a scheduled or event-driven run — a poll, a digest check, a triage pass — that genuinely found nothing worth saying. For a check like that silence IS the success case, so call this instead of posting a \"nothing to report\" note. Calling it is what separates \"looked, nothing there\" from \"stopped early\", which otherwise look identical from outside; a run that ends quietly without calling it gets logged as a papercut for a human to check. If you did post a note, send a message, publish a report or ask a teammate, you do NOT need this — that already counts as reporting.",
+      'End this run without reporting anything. ONLY for a scheduled or event-driven run — a poll, a digest check, a triage pass — that genuinely found nothing worth saying. For a check like that silence IS the success case, so call this instead of posting a "nothing to report" note. Calling it is what separates "looked, nothing there" from "stopped early", which otherwise look identical from outside; a run that ends quietly without calling it gets logged as a papercut for a human to check. If you did post a note, send a message, publish a report or ask a teammate, you do NOT need this — that already counts as reporting.',
       {
         reason: z
           .string()
           .optional()
           .describe(
-            "One short phrase on why there was nothing to report. Recorded for the audit log and never delivered to anyone."
+            "One short phrase on why there was nothing to report. Recorded for the audit log and never delivered to anyone.",
           ),
       },
       async (args: { reason?: string }) => {
         if (ctx.attended) {
           return text(
-            "[no-op] finish_silently is for unattended runs; somebody is waiting on this turn — just answer them."
+            "[no-op] finish_silently is for unattended runs; somebody is waiting on this turn — just answer them.",
           );
         }
         recordDeclaration(ctx.turnKey, {
@@ -56,7 +56,7 @@ export function createTurnMcpServer(ctx: TurnToolContext) {
           reason: args.reason,
         });
         return text("Noted — finishing without reporting anything.");
-      }
+      },
     ),
     tool(
       "stay_silent",
@@ -64,7 +64,9 @@ export function createTurnMcpServer(ctx: TurnToolContext) {
       {
         reason: z
           .string()
-          .describe("Why you are not replying. Logged for review, never delivered."),
+          .describe(
+            "Why you are not replying. Logged for review, never delivered.",
+          ),
       },
       async (args: { reason: string }) => {
         recordDeclaration(ctx.turnKey, {
@@ -72,7 +74,7 @@ export function createTurnMcpServer(ctx: TurnToolContext) {
           reason: args.reason,
         });
         return text("Noted — ending this turn without replying.");
-      }
+      },
     ),
   ];
 

@@ -13,7 +13,7 @@ export const MOD_ENTER_LABEL = isApple ? "⌘ Enter" : "Ctrl Enter";
 export const MOD_ENTER_GLYPH = isApple ? "⌘↩" : "Ctrl ↩";
 
 export function sendKeyLabel(pref: SendKeyPref): string {
-	return pref === "mod-enter" ? MOD_ENTER_LABEL : "Enter";
+  return pref === "mod-enter" ? MOD_ENTER_LABEL : "Enter";
 }
 
 /**
@@ -22,8 +22,8 @@ export function sendKeyLabel(pref: SendKeyPref): string {
  * block can't be typed at all. Closing the fence sends as usual.
  */
 export function insideOpenFence(text: string, caret: number): boolean {
-	const fences = text.slice(0, caret).match(/```/g);
-	return !!fences && fences.length % 2 === 1;
+  const fences = text.slice(0, caret).match(/```/g);
+  return !!fences && fences.length % 2 === 1;
 }
 
 /**
@@ -38,18 +38,18 @@ export function insideOpenFence(text: string, caret: number): boolean {
  * and the same account keeps Enter-to-send on the desktop.
  */
 export function effectiveSendKey(
-	pref: SendKeyPref,
-	touch: boolean = isTouchPrimary,
+  pref: SendKeyPref,
+  touch: boolean = isTouchPrimary,
 ): SendKeyPref {
-	return touch ? "mod-enter" : pref;
+  return touch ? "mod-enter" : pref;
 }
 
 /** True when this keydown should send under the given preference. */
 export function isSendCombo(
-	e: { key: string; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean },
-	pref: SendKeyPref,
+  e: { key: string; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean },
+  pref: SendKeyPref,
 ): boolean {
-	if (e.key !== "Enter") return false;
-	if (pref === "mod-enter") return e.metaKey || e.ctrlKey;
-	return !e.shiftKey;
+  if (e.key !== "Enter") return false;
+  if (pref === "mod-enter") return e.metaKey || e.ctrlKey;
+  return !e.shiftKey;
 }

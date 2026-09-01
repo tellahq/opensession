@@ -77,11 +77,10 @@ export function engineCallView(call: FakeCall) {
 export function enginePolicyView(call: FakeCall) {
   const opts = call.opts;
   const gateReason = runGateReason({ journal: opts.journal });
-  const mcp = filterMcpServers(
-    opts.mcpServers,
+  const mcp = filterMcpServers(opts.mcpServers, opts.user, [
+    opts.mcpGrantUser,
     opts.user,
-    [opts.mcpGrantUser, opts.user],
-  );
+  ]);
   const policy = runToolPolicy({
     deniedTools: opts.deniedTools,
     confirmTools: opts.confirmTools,
@@ -114,7 +113,9 @@ export function transcriptEntryView(entry: TranscriptEntry) {
     // system entries otherwise, and a fixture that cannot tell them apart
     // cannot show a regression in either.
     ...(entry.noticeKind ? { noticeKind: entry.noticeKind } : {}),
-    ...(entry.contextInjection ? { contextSource: entry.contextInjection.source } : {}),
+    ...(entry.contextInjection
+      ? { contextSource: entry.contextInjection.source }
+      : {}),
     content: entry.content,
     ...(entry.toolName ? { toolName: entry.toolName } : {}),
     ...(entry.toolInput !== undefined ? { toolInput: entry.toolInput } : {}),

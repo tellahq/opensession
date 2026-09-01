@@ -75,7 +75,11 @@ export function claimShippedChangeAnnouncement(
   try {
     writeFileSync(
       receiptPath,
-      JSON.stringify({ status: "pending", claimId, at: new Date(now).toISOString() }),
+      JSON.stringify({
+        status: "pending",
+        claimId,
+        at: new Date(now).toISOString(),
+      }),
       { flag: "wx" },
     );
   } catch (error: any) {
@@ -129,9 +133,11 @@ export function validWalkthroughScreenshot(
     const root = realpathSync(resolve(uploadsRoot, "walkthrough", sessionId));
     const candidate = realpathSync(path);
     const within = relative(root, candidate);
-    if (within.startsWith("..") || resolve(root, within) !== candidate) return false;
+    if (within.startsWith("..") || resolve(root, within) !== candidate)
+      return false;
     const dot = candidate.lastIndexOf(".");
-    if (dot < 0 || !SCREENSHOT_EXTS.has(candidate.slice(dot).toLowerCase())) return false;
+    if (dot < 0 || !SCREENSHOT_EXTS.has(candidate.slice(dot).toLowerCase()))
+      return false;
     const stat = statSync(candidate);
     return stat.isFile() && stat.size > 0 && stat.size <= MAX_SCREENSHOT_BYTES;
   } catch {
@@ -140,32 +146,41 @@ export function validWalkthroughScreenshot(
 }
 
 export function validFeaturedScreenshot(path: string): boolean {
-	try {
-		const candidate = realpathSync(path);
-		const scoped = candidate.startsWith("/tmp/") || candidate.startsWith(`${homeDir()}/`);
-		if (!scoped) return false;
-		const dot = candidate.lastIndexOf(".");
-		if (dot < 0 || !SCREENSHOT_EXTS.has(candidate.slice(dot).toLowerCase())) return false;
-		const stat = statSync(candidate);
-		return stat.isFile() && stat.size > 0 && stat.size <= MAX_SCREENSHOT_BYTES;
-	} catch {
-		return false;
-	}
+  try {
+    const candidate = realpathSync(path);
+    const scoped =
+      candidate.startsWith("/tmp/") || candidate.startsWith(`${homeDir()}/`);
+    if (!scoped) return false;
+    const dot = candidate.lastIndexOf(".");
+    if (dot < 0 || !SCREENSHOT_EXTS.has(candidate.slice(dot).toLowerCase()))
+      return false;
+    const stat = statSync(candidate);
+    return stat.isFile() && stat.size > 0 && stat.size <= MAX_SCREENSHOT_BYTES;
+  } catch {
+    return false;
+  }
 }
 
 export function selectShippedVisualChange(
   session: UnifiedSession,
-  fileExists: (path: string, sessionId: string) => boolean = validWalkthroughScreenshot,
+  fileExists: (
+    path: string,
+    sessionId: string,
+  ) => boolean = validWalkthroughScreenshot,
   requestedScreenshots?: string[],
 ): ShippedVisualChange | null {
-  const walkthroughScreenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
-  const screenshots = [...new Set(
-    requestedScreenshots === undefined
-      ? walkthroughScreenshot && fileExists(walkthroughScreenshot, session.id)
-        ? [walkthroughScreenshot]
-        : []
-      : requestedScreenshots.filter(validFeaturedScreenshot),
-  )].slice(0, 10);
+  const walkthroughScreenshot = session.walkthrough?.shots?.find(
+    (shot) => shot.after,
+  )?.after;
+  const screenshots = [
+    ...new Set(
+      requestedScreenshots === undefined
+        ? walkthroughScreenshot && fileExists(walkthroughScreenshot, session.id)
+          ? [walkthroughScreenshot]
+          : []
+        : requestedScreenshots.filter(validFeaturedScreenshot),
+    ),
+  ].slice(0, 10);
   if (!screenshots.length) return null;
   return {
     sessionId: session.id,
@@ -181,7 +196,9 @@ export function shippedChangeOneLiner(markdown: string, max = 280): string {
     .map((part) => part.trim())
     .filter(Boolean);
   const prose =
-    paragraphs.find((part) => !/^#{1,6}\s/.test(part) && !/^[-*]\s*$/.test(part)) || "";
+    paragraphs.find(
+      (part) => !/^#{1,6}\s/.test(part) && !/^[-*]\s*$/.test(part),
+    ) || "";
   const plain = prose
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
@@ -196,21 +213,28 @@ export function shippedChangeOneLiner(markdown: string, max = 280): string {
 }
 
 function slackText(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 export function shippedChangeChannels(): ShippedChangeChannel[] {
   const names = configuredIntegration("slack").channelNames;
   if (!names || typeof names !== "object" || Array.isArray(names)) return [];
   return Object.entries(names)
-    .filter(([id, name]) => /^C[A-Z0-9]+$/.test(id) && typeof name === "string" && name.trim())
+    .filter(
+      ([id, name]) =>
+        /^C[A-Z0-9]+$/.test(id) && typeof name === "string" && name.trim(),
+    )
     .map(([id, name]) => ({ id, name: String(name).trim() }));
 }
 
 export function normalizeShippedChangeMessage(value: unknown): string {
   if (typeof value !== "string") return "";
   const message = value.replace(/\s+/g, " ").trim();
-  if (message.length > 500) throw new Error("Slack message must be 500 characters or fewer");
+  if (message.length > 500)
+    throw new Error("Slack message must be 500 characters or fewer");
   return message;
 }
 
@@ -249,7 +273,9 @@ export async function shareShippedVisualChange(opts: {
     throw new Error("Choose a configured Slack channel");
   }
   if (!opts.slackToken) {
-    throw new Error("Connect your Slack account in Settings → Account to post as yourself");
+    throw new Error(
+      "Connect your Slack account in Settings → Account to post as yourself",
+    );
   }
   const visual = selectShippedVisualChange(
     opts.session,
@@ -257,7 +283,8 @@ export async function shareShippedVisualChange(opts: {
     opts.screenshots,
   );
   const title = opts.pr.title.replace(/\|/g, "¦");
-  const message = normalizeShippedChangeMessage(opts.message) ||
+  const message =
+    normalizeShippedChangeMessage(opts.message) ||
     shippedChangeOneLiner(visual?.summary || "");
   if (!message) throw new Error("Write a short Slack message first");
   const comment = slackText(message);
@@ -274,17 +301,33 @@ export async function shareShippedVisualChange(opts: {
   let ts: string | undefined;
   try {
     if (visual) {
-      const completed = await postSlackFiles(channel, visual.screenshots, comment, {
-        title: `${title} · shipped`,
-        altText: `Screenshot of the shipped visual change: ${title}`,
-      }, opts.slackToken);
+      const completed = await postSlackFiles(
+        channel,
+        visual.screenshots,
+        comment,
+        {
+          title: `${title} · shipped`,
+          altText: `Screenshot of the shipped visual change: ${title}`,
+        },
+        opts.slackToken,
+      );
       ts = await slackUploadTs(completed, channel, opts.slackToken);
     } else {
-      const posted = await sendSlackMessage(channel, comment, undefined, opts.slackToken);
-      if (!posted?.ok) throw new Error(`Slack message failed: ${posted?.error || "invalid response"}`);
+      const posted = await sendSlackMessage(
+        channel,
+        comment,
+        undefined,
+        opts.slackToken,
+      );
+      if (!posted?.ok)
+        throw new Error(
+          `Slack message failed: ${posted?.error || "invalid response"}`,
+        );
       ts = typeof posted.ts === "string" ? posted.ts : undefined;
     }
-    permalink = ts ? await slackPermalink(channel, ts, opts.slackToken) : undefined;
+    permalink = ts
+      ? await slackPermalink(channel, ts, opts.slackToken)
+      : undefined;
     settleShippedChangeAnnouncement(
       announcementKey,
       claimId,

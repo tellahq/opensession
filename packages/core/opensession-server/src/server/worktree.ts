@@ -1,9 +1,23 @@
 import { $ } from "bun";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, unlinkSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  unlinkSync,
+} from "fs";
 import { resolve as resolvePath } from "path";
 import type { UnifiedSession } from "./types";
 import { stopPreview } from "./preview";
-import { canonicalRepoId, configuredPaths, configuredRepos, configuredSelfDev, defaultRepo, type Repo } from "./config";
+import {
+  canonicalRepoId,
+  configuredPaths,
+  configuredRepos,
+  configuredSelfDev,
+  defaultRepo,
+  type Repo,
+} from "./config";
 import { stateDir } from "./paths";
 
 // The Repo type + registry defaults live in config.ts now. Re-exported so existing
@@ -21,19 +35,22 @@ const worktreesDir = () => configuredPaths().worktreesDir;
  * ones this module can't touch — stay correct when config adds or overrides
  * a repo without a restart. New code should prefer `configuredRepos()`.
  */
-export const REPOS: Record<string, Repo> = new Proxy({} as Record<string, Repo>, {
-  get: (_t, prop) =>
-    typeof prop === "string" ? configuredRepos()[prop] : undefined,
-  has: (_t, prop) => typeof prop === "string" && prop in configuredRepos(),
-  ownKeys: () => Object.keys(configuredRepos()),
-  getOwnPropertyDescriptor: (_t, prop) => {
-    if (typeof prop !== "string") return undefined;
-    const repo = configuredRepos()[prop];
-    return repo
-      ? { value: repo, enumerable: true, configurable: true, writable: true }
-      : undefined;
+export const REPOS: Record<string, Repo> = new Proxy(
+  {} as Record<string, Repo>,
+  {
+    get: (_t, prop) =>
+      typeof prop === "string" ? configuredRepos()[prop] : undefined,
+    has: (_t, prop) => typeof prop === "string" && prop in configuredRepos(),
+    ownKeys: () => Object.keys(configuredRepos()),
+    getOwnPropertyDescriptor: (_t, prop) => {
+      if (typeof prop !== "string") return undefined;
+      const repo = configuredRepos()[prop];
+      return repo
+        ? { value: repo, enumerable: true, configurable: true, writable: true }
+        : undefined;
+    },
   },
-});
+);
 
 export function getRepo(id?: string): Repo {
   if (!id) return defaultRepo();
@@ -73,7 +90,9 @@ export function repoForPath(p: string): Repo {
  *
  *  `gitdir` is the raw pointer target; worktree-reaper needs it to run
  *  `git worktree remove` through the owning checkout. */
-export function repoFromGitPointer(dir: string): { repo: Repo; gitdir: string } | null {
+export function repoFromGitPointer(
+  dir: string,
+): { repo: Repo; gitdir: string } | null {
   let pointer: string;
   try {
     pointer = readFileSync(`${dir}/.git`, "utf8");
@@ -156,7 +175,10 @@ export function isSharedCheckoutDir(dir: string | null | undefined): boolean {
   if (!dir) return false;
   const cd = canonicalPath(dir);
   for (const r of Object.values(configuredRepos())) {
-    if (cd === canonicalPath(r.repo) || cd === canonicalPath(`${worktreesDir()}/${r.wtPrefix}-ask-checkout`))
+    if (
+      cd === canonicalPath(r.repo) ||
+      cd === canonicalPath(`${worktreesDir()}/${r.wtPrefix}-ask-checkout`)
+    )
       return true;
   }
   return false;
@@ -175,12 +197,26 @@ export function sharedCheckoutForNewSessions(repo: Repo): boolean {
   return !!repo.sharedCheckout && configuredSelfDev() !== "worktree";
 }
 
+/** Apply a person's explicit new-session choice on top of the repository's
+ * workspace-wide default. Unknown values are deliberately treated as default
+ * so older and non-web clients keep the configured behavior. */
+export function sharedCheckoutForSessionCreate(
+  repo: Repo,
+  checkoutMode: unknown,
+): boolean {
+  if (checkoutMode === "checkout") return true;
+  if (checkoutMode === "worktree") return false;
+  return sharedCheckoutForNewSessions(repo);
+}
+
 /** Actual HEAD branch of a checkout/worktree, or null (detached/missing). Sync
  *  + cheap (two tiny file reads, no git subprocess): follows the `.git`
  *  file/dir to its HEAD ref. An agent can switch branches inside its worktree
  *  mid-run, so the session record's `branch` is a claim, not a fact — use this
  *  when the actual branch matters (PR lookups, review handoff, merge notify). */
-export function worktreeHeadBranch(dir: string | null | undefined): string | null {
+export function worktreeHeadBranch(
+  dir: string | null | undefined,
+): string | null {
   if (!dir) return null;
   try {
     let gitDir = `${dir}/.git`;
@@ -189,7 +225,9 @@ export function worktreeHeadBranch(dir: string | null | undefined): string | nul
       if (!m) return null;
       gitDir = resolvePath(dir, m[1].trim());
     }
-    const ref = readFileSync(`${gitDir}/HEAD`, "utf-8").match(/^ref: refs\/heads\/(.+)$/m);
+    const ref = readFileSync(`${gitDir}/HEAD`, "utf-8").match(
+      /^ref: refs\/heads\/(.+)$/m,
+    );
     return ref ? ref[1].trim() : null;
   } catch {
     return null;
@@ -222,7 +260,9 @@ const STALE_REVIEW_INDEX_LOCK_MS = 5 * 60_000;
 async function clearStaleReviewIndexLock(wtPath: string): Promise<boolean> {
   let lockPath: string;
   try {
-    const gitdir = readFileSync(`${wtPath}/.git`, "utf8").match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+    const gitdir = readFileSync(`${wtPath}/.git`, "utf8")
+      .match(/^gitdir:\s*(.+)$/m)?.[1]
+      ?.trim();
     if (!gitdir) return false;
     lockPath = resolvePath(wtPath, gitdir, "index.lock");
   } catch {
@@ -251,7 +291,10 @@ async function clearStaleReviewIndexLock(wtPath: string): Promise<boolean> {
   } catch (error) {
     // Another process may have recreated the lock between lsof and unlink.
     // The following Git command remains the authority, so do not hide errors.
-    console.warn(`[worktree] could not remove stale review index lock ${lockPath}:`, error);
+    console.warn(
+      `[worktree] could not remove stale review index lock ${lockPath}:`,
+      error,
+    );
     return false;
   }
 }
@@ -289,12 +332,19 @@ async function seedAndInstallWorktree(
     const { seedWorktreeFromWarmTemplate } = await import("./warm-template");
     await seedWorktreeFromWarmTemplate(repo, wtPath);
   } catch (e) {
-    console.warn(`[worktree] warm-template seeding failed for ${branchLabel} (continuing):`, e);
+    console.warn(
+      `[worktree] warm-template seeding failed for ${branchLabel} (continuing):`,
+      e,
+    );
   }
   await installWorktreeDeps(repo, wtPath, branchLabel);
 }
 
-export async function installWorktreeDeps(repo: Repo, wtPath: string, branchLabel: string): Promise<void> {
+export async function installWorktreeDeps(
+  repo: Repo,
+  wtPath: string,
+  branchLabel: string,
+): Promise<void> {
   try {
     // `.agents/setup` — the repo lifecycle provision hook (same dir preview.ts
     // resolves; docs/repo-lifecycle.md).
@@ -318,7 +368,8 @@ export async function listWorktrees(repoId?: string): Promise<WorktreeInfo[]> {
   const repo = getRepo(repoId);
   const prefix = `${worktreesDir()}/${repo.wtPrefix}-`;
   try {
-    const result = await $`git -C ${repo.repo} worktree list --porcelain`.text();
+    const result =
+      await $`git -C ${repo.repo} worktree list --porcelain`.text();
     const worktrees: WorktreeInfo[] = [];
     let currentPath = "";
     let currentBranch = "";
@@ -416,16 +467,22 @@ export function invalidateAskCheckoutRefresh(repoId: string): void {
   askCheckoutRefreshedAt.delete(repoId);
 }
 
-async function refreshAskCheckoutLocked(repo: Repo, dir: string): Promise<void> {
+async function refreshAskCheckoutLocked(
+  repo: Repo,
+  dir: string,
+): Promise<void> {
   const fetch =
-    await $`git -C ${dir} fetch origin ${repo.defaultBranch} --quiet`.quiet().nothrow();
+    await $`git -C ${dir} fetch origin ${repo.defaultBranch} --quiet`
+      .quiet()
+      .nothrow();
   if (fetch.exitCode !== 0) {
     throw new Error(
       `Could not fetch ${repo.id}'s default branch ${repo.defaultBranch}: ${fetch.stderr.toString().trim()}`,
     );
   }
-  const reset =
-    await $`git -C ${dir} reset --hard origin/${repo.defaultBranch}`.quiet().nothrow();
+  const reset = await $`git -C ${dir} reset --hard origin/${repo.defaultBranch}`
+    .quiet()
+    .nothrow();
   if (reset.exitCode !== 0) {
     throw new Error(
       `Could not pin ${repo.id}'s Ask checkout to ${repo.defaultBranch}: ${reset.stderr.toString().trim()}`,
@@ -441,7 +498,9 @@ function refreshAskCheckout(
   const existing = askCheckoutRefreshes.get(repo.id);
   if (existing && existing.version >= version) return existing.promise;
 
-  const promise = withGitLock(() => refreshAskCheckoutLocked(repo, dir)).finally(() => {
+  const promise = withGitLock(() =>
+    refreshAskCheckoutLocked(repo, dir),
+  ).finally(() => {
     if (askCheckoutRefreshes.get(repo.id)?.promise === promise) {
       askCheckoutRefreshes.delete(repo.id);
     }
@@ -457,7 +516,8 @@ export async function ensureAskCheckout(repoId?: string): Promise<string> {
   const requiredVersion = askCheckoutInvalidationVersion.get(repo.id) || 0;
   if (existsSync(dir)) {
     const last = askCheckoutRefreshedAt.get(repo.id) || 0;
-    const force = requiredVersion > (askCheckoutAppliedVersion.get(repo.id) || 0);
+    const force =
+      requiredVersion > (askCheckoutAppliedVersion.get(repo.id) || 0);
     if (force || Date.now() - last > ASK_REFRESH_MS) {
       askCheckoutRefreshedAt.set(repo.id, Date.now());
       const refresh = refreshAskCheckout(repo, dir, requiredVersion);
@@ -466,7 +526,10 @@ export async function ensureAskCheckout(repoId?: string): Promise<string> {
         askCheckoutAppliedVersion.set(repo.id, requiredVersion);
       } else {
         void refresh.catch((error) => {
-          console.warn(`[worktree] Ask checkout refresh failed for ${repo.id}:`, error);
+          console.warn(
+            `[worktree] Ask checkout refresh failed for ${repo.id}:`,
+            error,
+          );
         });
       }
     }
@@ -503,14 +566,19 @@ export async function ensureAskCheckout(repoId?: string): Promise<string> {
   });
 }
 
-export async function removeWorktree(branch: string, repoId?: string): Promise<void> {
+export async function removeWorktree(
+  branch: string,
+  repoId?: string,
+): Promise<void> {
   const repo = getRepo(repoId);
   try {
     const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
     // Stop any running dev server before removing the directory — reads the
     // PGID from .ports/dev-pgid (written by ensure-up.sh) so it works even
     // after a opensession restart or when the server was started by an agent.
-    try { await stopPreview(wtPath); } catch {}
+    try {
+      await stopPreview(wtPath);
+    } catch {}
     await $`git -C ${repo.repo} worktree remove ${wtPath} --force`.quiet();
   } catch (e) {
     console.error(`Failed to remove worktree for ${branch}:`, e);
@@ -521,7 +589,10 @@ export async function removeWorktree(branch: string, repoId?: string): Promise<v
 // No uncommitted/untracked changes, and every commit reachable from some
 // remote ref (covers both pushed branches and branches merged to origin/main).
 // Stale remote refs err on the safe side: recently-pushed work looks unpushed.
-async function isWorktreeClean(wtPath: string, branch: string): Promise<boolean> {
+async function isWorktreeClean(
+  wtPath: string,
+  branch: string,
+): Promise<boolean> {
   const status = await $`git -C ${wtPath} status --porcelain`.text();
   if (status.trim() !== "") return false;
   const unpushed =
@@ -536,7 +607,7 @@ async function isWorktreeClean(wtPath: string, branch: string): Promise<boolean>
 export async function worktreeHasWork(
   wtPath: string,
   branch: string,
-  repoId?: string
+  repoId?: string,
 ): Promise<boolean> {
   const repo = getRepo(repoId);
   try {
@@ -559,7 +630,7 @@ export async function worktreeHasWork(
  */
 export async function sweepArchivedWorktrees(
   sessions: UnifiedSession[],
-  days: number
+  days: number,
 ): Promise<string[]> {
   const cutoff = Date.now() - days * 86_400_000;
   const inUse = new Set<string>();
@@ -574,7 +645,7 @@ export async function sweepArchivedWorktrees(
   }
 
   const existing = new Map(
-    (await listWorktrees()).map((w) => [w.branch, w.path])
+    (await listWorktrees()).map((w) => [w.branch, w.path]),
   );
   const removed: string[] = [];
 
@@ -601,7 +672,10 @@ export async function sweepArchivedWorktrees(
  * path is identical to the original, so claude session resume keeps working
  * (transcripts are keyed by cwd).
  */
-export async function reviveWorktree(branch: string, repoId?: string): Promise<string> {
+export async function reviveWorktree(
+  branch: string,
+  repoId?: string,
+): Promise<string> {
   const repo = getRepo(repoId);
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
   if (existsSync(wtPath)) return wtPath;
@@ -609,32 +683,43 @@ export async function reviveWorktree(branch: string, repoId?: string): Promise<s
   return withGitLock(async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
     if (existsSync(wtPath)) return wtPath;
-    const owner = (await listWorktrees(repo.id)).find((w) => w.branch === branch);
+    const owner = (await listWorktrees(repo.id)).find(
+      (w) => w.branch === branch,
+    );
     if (owner) {
       throw new Error(
         `Branch ${JSON.stringify(branch)} is already checked out at ${owner.path}; cannot recreate ${wtPath}`,
       );
     }
     const hasBranch =
-      (await $`git -C ${repo.repo} show-ref --verify --quiet refs/heads/${branch}`.nothrow()).exitCode === 0;
+      (
+        await $`git -C ${repo.repo} show-ref --verify --quiet refs/heads/${branch}`.nothrow()
+      ).exitCode === 0;
     let add;
     if (hasBranch) {
-      add = await $`git -C ${repo.repo} worktree add ${wtPath} ${branch}`.quiet().nothrow();
-    } else {
-      const fetchBranch = await $`git -C ${repo.repo} fetch origin +refs/heads/${branch}:refs/remotes/origin/${branch} --quiet`
+      add = await $`git -C ${repo.repo} worktree add ${wtPath} ${branch}`
         .quiet()
         .nothrow();
+    } else {
+      const fetchBranch =
+        await $`git -C ${repo.repo} fetch origin +refs/heads/${branch}:refs/remotes/origin/${branch} --quiet`
+          .quiet()
+          .nothrow();
       const hasRemote =
         fetchBranch.exitCode === 0 &&
-        (await $`git -C ${repo.repo} show-ref --verify --quiet refs/remotes/origin/${branch}`.nothrow())
-          .exitCode === 0;
+        (
+          await $`git -C ${repo.repo} show-ref --verify --quiet refs/remotes/origin/${branch}`.nothrow()
+        ).exitCode === 0;
       if (!hasRemote) {
         await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`;
       }
-      const startPoint = hasRemote ? `origin/${branch}` : `origin/${repo.defaultBranch}`;
-      add = await $`git -C ${repo.repo} worktree add -b ${branch} ${wtPath} ${startPoint}`
-        .quiet()
-        .nothrow();
+      const startPoint = hasRemote
+        ? `origin/${branch}`
+        : `origin/${repo.defaultBranch}`;
+      add =
+        await $`git -C ${repo.repo} worktree add -b ${branch} ${wtPath} ${startPoint}`
+          .quiet()
+          .nothrow();
     }
     if (add.exitCode !== 0) {
       throw new Error(
@@ -686,7 +771,10 @@ async function fetchBranchesWithTracking(
  * there's no un-pushed local work to lose). Push back with
  * `git push origin HEAD:<headRef>`.
  */
-export async function createWorktreeForPrBranch(headRef: string, repoId?: string): Promise<string> {
+export async function createWorktreeForPrBranch(
+  headRef: string,
+  repoId?: string,
+): Promise<string> {
   const repo = getRepo(repoId);
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${headRef}-os`;
 
@@ -696,7 +784,9 @@ export async function createWorktreeForPrBranch(headRef: string, repoId?: string
       await $`git -C ${wtPath} fetch origin ${headRef} --quiet`
         .env(await githubServiceGitEnv(repo.ghRepo))
         .nothrow();
-      await $`git -C ${wtPath} reset --hard origin/${headRef}`.quiet().nothrow();
+      await $`git -C ${wtPath} reset --hard origin/${headRef}`
+        .quiet()
+        .nothrow();
       return true;
     }
     await $`git -C ${repo.repo} worktree prune`.quiet();
@@ -729,7 +819,12 @@ export async function createReviewWorktreeForPrHead(
   const repo = getRepo(repoId);
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${headRef}-os-review`;
   return withGitLock(async () => {
-    await fetchBranchesWithTracking(repo.repo, repo.ghRepo, headRef, baseRef || repo.defaultBranch);
+    await fetchBranchesWithTracking(
+      repo.repo,
+      repo.ghRepo,
+      headRef,
+      baseRef || repo.defaultBranch,
+    );
     if (existsSync(wtPath)) {
       // A code session recovering from a deleted worktree may have borrowed this
       // path and switched it onto the source branch. Restore review ownership.
@@ -743,8 +838,11 @@ export async function createReviewWorktreeForPrHead(
         // but before it finishes the index. That checkout is disposable. Once
         // no active index lock can be present, replace it instead of retrying
         // the same permanently half-initialized directory on every PR push.
-        if (!repairAllowed || !(await clearStaleReviewIndexLock(wtPath))) throw error;
-        console.warn(`[worktree] recreating unusable review worktree: ${wtPath}`);
+        if (!repairAllowed || !(await clearStaleReviewIndexLock(wtPath)))
+          throw error;
+        console.warn(
+          `[worktree] recreating unusable review worktree: ${wtPath}`,
+        );
         await $`git -C ${repo.repo} worktree remove --force --force ${wtPath}`.quiet();
         await $`git -C ${repo.repo} worktree prune`.quiet();
       }
@@ -770,7 +868,9 @@ export async function createWorktreeForFollowup(
   repoId?: string,
 ): Promise<string> {
   const repo = getRepo(repoId);
-  const existing = (await listWorktrees(repo.id)).find((w) => w.branch === branch);
+  const existing = (await listWorktrees(repo.id)).find(
+    (w) => w.branch === branch,
+  );
   if (existing) return existing.path;
 
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
@@ -779,8 +879,9 @@ export async function createWorktreeForFollowup(
     if (existsSync(wtPath)) return; // pruned stale registration; dir already usable
     await $`git -C ${repo.repo} fetch origin ${baseRef} --quiet`.nothrow();
     const startPoint =
-      (await $`git -C ${repo.repo} rev-parse --verify --quiet origin/${baseRef}`.nothrow())
-        .exitCode === 0
+      (
+        await $`git -C ${repo.repo} rev-parse --verify --quiet origin/${baseRef}`.nothrow()
+      ).exitCode === 0
         ? `origin/${baseRef}`
         : `origin/${repo.defaultBranch}`;
     await $`git -C ${repo.repo} worktree add -b ${branch} ${wtPath} ${startPoint}`;
@@ -811,7 +912,9 @@ export async function createWorktreeForExistingBranch(
 ): Promise<string> {
   const repo = getRepo(repoId);
   const shell = gitEnv ? $.env({ ...process.env, ...gitEnv }) : $;
-  const existing = (await listWorktrees(repo.id)).find((w) => w.branch === branch);
+  const existing = (await listWorktrees(repo.id)).find(
+    (w) => w.branch === branch,
+  );
   if (existing) return existing.path;
 
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
@@ -820,8 +923,9 @@ export async function createWorktreeForExistingBranch(
     if (existsSync(wtPath)) return; // pruned stale registration; dir already usable
     await shell`git -C ${repo.repo} fetch origin ${branch} --quiet`.nothrow();
     const hasLocal =
-      (await $`git -C ${repo.repo} show-ref --verify --quiet refs/heads/${branch}`.nothrow())
-        .exitCode === 0;
+      (
+        await $`git -C ${repo.repo} show-ref --verify --quiet refs/heads/${branch}`.nothrow()
+      ).exitCode === 0;
     if (hasLocal) {
       await $`git -C ${repo.repo} worktree add ${wtPath} ${branch}`;
     } else {
@@ -846,10 +950,15 @@ async function resolveStartPoint(
   base: string,
   defaultBranch: string,
 ): Promise<string> {
-  if ((await $`git -C ${repoDir} rev-parse --verify --quiet ${base}`.nothrow()).exitCode === 0)
+  if (
+    (await $`git -C ${repoDir} rev-parse --verify --quiet ${base}`.nothrow())
+      .exitCode === 0
+  )
     return base;
   if (
-    (await $`git -C ${repoDir} rev-parse --verify --quiet origin/${base}`.nothrow()).exitCode === 0
+    (
+      await $`git -C ${repoDir} rev-parse --verify --quiet origin/${base}`.nothrow()
+    ).exitCode === 0
   )
     return `origin/${base}`;
   return `origin/${defaultBranch}`;
@@ -864,8 +973,36 @@ async function resolveStartPoint(
 async function defaultStartPoint(repo: Repo): Promise<string> {
   const remote = `origin/${repo.defaultBranch}`;
   const hasRemote =
-    (await $`git -C ${repo.repo} show-ref --verify --quiet refs/remotes/${remote}`.nothrow()).exitCode === 0;
-  return hasRemote ? remote : repo.defaultBranch;
+    (
+      await $`git -C ${repo.repo} rev-parse --verify --quiet ${remote}^{commit}`.nothrow()
+    ).exitCode === 0;
+  if (hasRemote) return remote;
+
+  const hasLocal =
+    (
+      await $`git -C ${repo.repo} rev-parse --verify --quiet ${repo.defaultBranch}^{commit}`.nothrow()
+    ).exitCode === 0;
+  if (hasLocal) return repo.defaultBranch;
+
+  // An empty remote has no commit from which Git can cut a worktree. Give its
+  // configured default branch a local root commit so the first session gets a
+  // normal linked worktree. This deliberately does not push: publishing the
+  // new repository remains an explicit action by the session.
+  const anyCommit = (
+    await $`git -C ${repo.repo} rev-list --all --max-count=1`.quiet().nothrow()
+  ).stdout
+    .toString()
+    .trim();
+  if (!anyCommit) {
+    const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+    const initialCommit = (
+      await $`git -C ${repo.repo} -c user.name=${"Open Session"} -c user.email=${"assistant@opensession.dev"} commit-tree ${emptyTree} -m ${"Initial commit"}`.quiet()
+    )
+      .text()
+      .trim();
+    await $`git -C ${repo.repo} update-ref refs/heads/${repo.defaultBranch} ${initialCommit}`.quiet();
+  }
+  return repo.defaultBranch;
 }
 
 /**
@@ -968,7 +1105,9 @@ export async function createWorktree(
   const base = opts?.base;
 
   await withGitLock(async () => {
-    await shell`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`.nothrow();
+    await shell`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`
+      .quiet()
+      .nothrow();
     let startPoint = await defaultStartPoint(repo);
     if (base) {
       // Stacked worktree: fetch the base (it may be remote-only), then branch off it.
@@ -989,8 +1128,9 @@ export async function createWorktree(
     // adopt it.
     const stderr = add.stderr.toString();
     const branchExists =
-      (await $`git -C ${repo.repo} show-ref --verify --quiet refs/heads/${branch}`.nothrow())
-        .exitCode === 0;
+      (
+        await $`git -C ${repo.repo} show-ref --verify --quiet refs/heads/${branch}`.nothrow()
+      ).exitCode === 0;
     if (branchExists) {
       const ahead = (
         await $`git -C ${repo.repo} rev-list --count ${startPoint}..${branch}`.nothrow()
@@ -998,7 +1138,9 @@ export async function createWorktree(
         .toString()
         .trim();
       await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
-      const registered = (await listWorktrees(repo.id)).some((w) => w.branch === branch);
+      const registered = (await listWorktrees(repo.id)).some(
+        (w) => w.branch === branch,
+      );
       if (ahead === "0" && !registered && !existsSync(wtPath)) {
         console.warn(
           `[worktree] adopting orphan branch ${branch} (0 commits ahead of ${startPoint}, no worktree) — likely a killed create attempt`,
@@ -1036,9 +1178,13 @@ export async function prepareAttachedWorktree(
 ): Promise<{ repo: string; branch: string; dir: string }> {
   const repo = getRepo(repoId);
   if (sharedCheckoutForNewSessions(repo)) {
-    throw new Error(`${repo.id} is a shared-checkout repo and can't be attached as an isolated worktree`);
+    throw new Error(
+      `${repo.id} is a shared-checkout repo and can't be attached as an isolated worktree`,
+    );
   }
-  const existing = (await listWorktrees(repo.id)).find((w) => w.branch === branch);
+  const existing = (await listWorktrees(repo.id)).find(
+    (w) => w.branch === branch,
+  );
   const dir =
     existing?.path ||
     (await createWorktree(branch, repo.id, gitEnv ? { gitEnv } : undefined));

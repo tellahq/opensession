@@ -21,17 +21,16 @@ type EffectExecutors = {
 /** Causal predecessor is still pending. Retry without consuming poison budget. */
 export class SessionEffectDeferredError extends Error {}
 
-function recordPayload(kind: string, payload: unknown): Record<string, unknown> {
+function recordPayload(
+  kind: string,
+  payload: unknown,
+): Record<string, unknown> {
   if (!payload || typeof payload !== "object" || Array.isArray(payload))
     throw new Error(`Invalid ${kind} effect payload`);
   return payload as Record<string, unknown>;
 }
 
-function requiredString(
-  kind: string,
-  value: unknown,
-  field: string,
-): string {
+function requiredString(kind: string, value: unknown, field: string): string {
   if (typeof value !== "string" || value.length === 0)
     throw new Error(`Invalid ${kind} effect payload: ${field}`);
   return value;
@@ -65,16 +64,15 @@ function creationBase(kind: string, value: Record<string, unknown>) {
   };
 }
 
-function creationPayload<K extends Exclude<
-  SessionActorEffectKind,
-  | "human_ask_deliver"
-  | "delivery_interrupt_cancel"
-  | "turn_cancel"
-  | "turn_outcome_project"
->>(
-  kind: K,
-  payload: unknown,
-): SessionActorEffectFor<K>["payload"] {
+function creationPayload<
+  K extends Exclude<
+    SessionActorEffectKind,
+    | "human_ask_deliver"
+    | "delivery_interrupt_cancel"
+    | "turn_cancel"
+    | "turn_outcome_project"
+  >,
+>(kind: K, payload: unknown): SessionActorEffectFor<K>["payload"] {
   const value = recordPayload(kind, payload);
   const base = creationBase(kind, value);
   switch (kind) {
@@ -129,7 +127,11 @@ function creationPayload<K extends Exclude<
         credentialPrincipal:
           value.credentialPrincipal === undefined
             ? undefined
-            : requiredString(kind, value.credentialPrincipal, "credentialPrincipal"),
+            : requiredString(
+                kind,
+                value.credentialPrincipal,
+                "credentialPrincipal",
+              ),
         mode: value.mode,
       } as SessionActorEffectFor<K>["payload"];
     case "creation_sandbox_prepare":
@@ -234,7 +236,8 @@ function deliveryInterruptCancelPayload(
     (runIds?.length ?? 0) > 8 ||
     !Number.isSafeInteger(value.runGeneration) ||
     Number(value.runGeneration) < 0
-  ) throw new Error(`Invalid ${kind} effect payload: run fence`);
+  )
+    throw new Error(`Invalid ${kind} effect payload: run fence`);
   return {
     interruptId: requiredString(kind, value.interruptId, "interruptId"),
     ...(dispatchId ? { dispatchId } : {}),
@@ -251,7 +254,8 @@ function turnCancelPayload(
   if (
     !Number.isSafeInteger(value.runGeneration) ||
     Number(value.runGeneration) < 0
-  ) throw new Error(`Invalid ${kind} effect payload: run fence`);
+  )
+    throw new Error(`Invalid ${kind} effect payload: run fence`);
   return {
     cancelId: requiredString(kind, value.cancelId, "cancelId"),
     dispatchId: requiredString(kind, value.dispatchId, "dispatchId"),
@@ -271,7 +275,8 @@ function turnOutcomeProjectPayload(
     typeof value.noticePersisted !== "boolean" ||
     typeof value.projectedAt !== "string" ||
     !Number.isFinite(Date.parse(value.projectedAt))
-  ) throw new Error(`Invalid ${kind} effect payload: outcome fence`);
+  )
+    throw new Error(`Invalid ${kind} effect payload: outcome fence`);
   return {
     projectionId: requiredString(kind, value.projectionId, "projectionId"),
     runId: requiredString(kind, value.runId, "runId"),
@@ -289,7 +294,9 @@ function turnOutcomeProjectPayload(
     noticePersisted: value.noticePersisted,
     ...(value.noticeLabel === undefined
       ? {}
-      : { noticeLabel: requiredString(kind, value.noticeLabel, "noticeLabel") }),
+      : {
+          noticeLabel: requiredString(kind, value.noticeLabel, "noticeLabel"),
+        }),
     projectedAt: value.projectedAt,
   };
 }
@@ -383,9 +390,10 @@ const globalRegistry = globalThis as typeof globalThis & {
 const registry = (globalRegistry.__opensessionSessionEffectExecutors ??=
   new SessionEffectExecutorRegistry());
 
-export function registerSessionEffectExecutor<
-  K extends SessionActorEffectKind,
->(kind: K, executor: EffectExecutor<K>): () => void {
+export function registerSessionEffectExecutor<K extends SessionActorEffectKind>(
+  kind: K,
+  executor: EffectExecutor<K>,
+): () => void {
   return registry.register(kind, executor);
 }
 

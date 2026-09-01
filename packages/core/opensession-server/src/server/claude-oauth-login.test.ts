@@ -40,7 +40,8 @@ beforeEach(() => {
       });
     }
     if (url.endsWith("/api/oauth/usage")) {
-      if (!usageConnected) return new Response("missing scope", { status: 403 });
+      if (!usageConnected)
+        return new Response("missing scope", { status: 403 });
       return Response.json({
         five_hour: { utilization: 12, resets_at: null },
         seven_day: { utilization: 34, resets_at: null },

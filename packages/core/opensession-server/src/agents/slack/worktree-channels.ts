@@ -47,7 +47,7 @@ export async function loadWorktreeChannels(): Promise<void> {
         branchToChannel.set(branch, channelId);
       }
       console.log(
-        `[slack] Loaded ${worktreeChannels.size} worktree channel mapping(s)`
+        `[slack] Loaded ${worktreeChannels.size} worktree channel mapping(s)`,
       );
     }
   } catch (e) {
@@ -97,7 +97,7 @@ export async function findSlackChannel(name: string): Promise<string | null> {
 
     const response = await fetchWithTimeout(
       `https://slack.com/api/conversations.list?${params}`,
-      { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } }
+      { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } },
     );
     const data = (await response.json()) as any;
 
@@ -121,16 +121,19 @@ export async function findSlackChannel(name: string): Promise<string | null> {
 // ---------------------------------------------------------------------------
 
 export async function createSlackChannel(
-  name: string
+  name: string,
 ): Promise<{ ok: boolean; channelId?: string; error?: string }> {
-  const response = await fetchWithTimeout("https://slack.com/api/conversations.create", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+  const response = await fetchWithTimeout(
+    "https://slack.com/api/conversations.create",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({ name, is_private: false }),
     },
-    body: JSON.stringify({ name, is_private: false }),
-  });
+  );
   const data = (await response.json()) as any;
 
   if (data.ok) {
@@ -145,12 +148,12 @@ export async function createSlackChannel(
       // Create with a numeric suffix instead
       const infoResp = await fetchWithTimeout(
         `https://slack.com/api/conversations.info?channel=${existing}`,
-        { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } }
+        { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } },
       );
       const info = (await infoResp.json()) as any;
       if (info.ok && info.channel?.is_archived) {
         console.log(
-          `[slack] Channel #${name} is archived, creating with suffix`
+          `[slack] Channel #${name} is archived, creating with suffix`,
         );
         const suffixed = name.slice(0, 76) + `-${Date.now() % 10000}`;
         return createSlackChannel(suffixed);
@@ -166,9 +169,7 @@ export async function createSlackChannel(
 // Archive a Slack channel
 // ---------------------------------------------------------------------------
 
-export async function archiveSlackChannel(
-  channelId: string
-): Promise<boolean> {
+export async function archiveSlackChannel(channelId: string): Promise<boolean> {
   const response = await fetchWithTimeout(
     "https://slack.com/api/conversations.archive",
     {
@@ -178,7 +179,7 @@ export async function archiveSlackChannel(
         Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
       },
       body: JSON.stringify({ channel: channelId }),
-    }
+    },
   );
   const data = (await response.json()) as any;
   if (!data.ok && data.error !== "already_archived") {
@@ -194,7 +195,7 @@ export async function archiveSlackChannel(
 
 export async function setChannelTopic(
   channelId: string,
-  topic: string
+  topic: string,
 ): Promise<void> {
   await fetchWithTimeout("https://slack.com/api/conversations.setTopic", {
     method: "POST",
@@ -211,14 +212,17 @@ export async function setChannelTopic(
 // ---------------------------------------------------------------------------
 
 export async function inviteBotToChannel(channelId: string): Promise<void> {
-  const joinResp = await fetchWithTimeout("https://slack.com/api/conversations.join", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+  const joinResp = await fetchWithTimeout(
+    "https://slack.com/api/conversations.join",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({ channel: channelId }),
     },
-    body: JSON.stringify({ channel: channelId }),
-  });
+  );
   const joinData = (await joinResp.json()) as any;
   if (!joinData.ok) {
     console.error("[slack] conversations.join error:", joinData.error);

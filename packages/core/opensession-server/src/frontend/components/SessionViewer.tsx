@@ -2,17 +2,17 @@ import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
 import { utilityClassName } from "../ui/cn";
 import { BASE_PATH } from "../lib/base";
 import React, {
-	useCallback,
-	useEffect,
-	useEffectEvent,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-	useSyncExternalStore,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion, Reorder } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { duration, ease } from "../ui/motion";
 import { EmptyState, InlineAlert, TranscriptSkeleton } from "../ui/state";
 import { LiveTurnStore } from "../lib/live-turn-store";
@@ -21,106 +21,84 @@ import { randomUUID } from "../lib/random-uuid";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
 import { TranscriptViewStore } from "../lib/transcript-view-store";
 import {
-	measureSessionPerf,
-	recordSessionPerf,
+  measureSessionPerf,
+  recordSessionPerf,
+  scheduleTranscriptDomNodeSample,
 } from "../lib/session-performance";
-import { AGENT_NAME, DEFAULT_DOC_TITLE, sessionSourceName } from "../lib/brand";
-import { brandLogo } from "../brand-logos";
+import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { withQuotes, type Quote } from "../lib/quotes";
 import {
-	absoluteLink,
-	sessionPath,
-	workspacePanePath,
+  absoluteLink,
+  sessionPath,
+  workspacePanePath,
 } from "../lib/share-link";
 import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
 import { plainThreadUrl } from "./PlainThreadPanel";
-import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
-import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
 import type {
-	UnifiedSession,
-	GitStatusInfo,
-	SessionNote,
-	SessionSlackShare,
-	TranscriptEntry,
-	WSServerMessage,
-	AskQuestion,
+  UnifiedSession,
+  GitStatusInfo,
+  SessionNote,
+  SessionSlackShare,
+  TranscriptEntry,
 } from "../lib/types";
 import {
-	classifyQueuedContent,
-	isClientVisibleQueuedContent,
-	mergeTranscriptEntries,
-	orderTranscriptEntries,
-	queueAttribution,
-	summarizeInFlightContent,
+  mergeTranscriptEntries,
+  orderTranscriptEntries,
 } from "../lib/transcript-state";
 import {
-	HISTORY_PAGE_ENTRIES,
-	shouldContinueHistoryReveal,
+  HISTORY_PAGE_ENTRIES,
+  shouldContinueHistoryReveal,
 } from "../lib/transcript-history";
-import { SessionTranscript } from "./SessionTranscript";
-import type { NewTabMorphOrigin } from "./SessionTabs";
 import { MessageRail } from "./MessageRail";
 import { collectSentMessages } from "../lib/sent-messages";
+import { canonicalToolName, type LiveSubagent } from "./ToolCallBlock";
 import {
-	mergeTranscriptIndexEntries,
-	transcriptIndexEntryFromPayload,
-	type TranscriptIndexedRange,
-} from "../lib/transcript-index";
-import {
-	canonicalToolName,
-	LiveSubagentsProvider,
-	OpenAssetProvider,
-	ToolPathRootsProvider,
-	type LiveSubagent,
-} from "./ToolCallBlock";
-import { parsePlanItems, type PlanItem } from "@tellahq/opensession-protocol/todo-plan";
+  parsePlanItems,
+  type PlanItem,
+} from "@tellahq/opensession-protocol/todo-plan";
 import { ReplySuggestions } from "./ReplySuggestions";
 import { SessionSafetyNotice } from "./SessionSafetyNotice";
 import {
-	getReplySuggestionsPref,
-	onReplySuggestionsChanged,
-	type ReplySuggestion,
+  getReplySuggestionsPref,
+  onReplySuggestionsChanged,
+  type ReplySuggestion,
 } from "../lib/reply-suggestions";
 import {
-	getNextChatButtonPref,
-	onNextChatButtonChanged,
+  getNextChatButtonPref,
+  onNextChatButtonChanged,
 } from "../lib/next-chat-pref";
-import { OpenAssetPathsProvider } from "../lib/open-asset";
 import { SubagentPane, type SubagentRef } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
 import { getCurrentUser, useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import {
-	deleteSessionApi,
-	archiveSessionApi,
-	fetchModels,
-	fetchProviderAccounts,
-	fetchFileMentions,
-	fetchMentionSuggestions,
-	fetchSkillMentions,
-	fetchSessionSubagents,
-	promoteSessionApi,
-	fetchSessionNotesApi,
-	postSessionNoteApi,
-	fetchPr,
-	fetchGitStatus,
-	fetchPreview,
-	moveSessionToBranchApi,
-	portalActionApi,
-	startPortalRecipeApi,
-	type WorkspaceMediaItem,
-	type ModelOption,
-	type ProviderAccountOption,
-	type SessionSubagentSnapshot,
-	type PreviewPortalRecipe,
-	type PreviewStatus,
+  deleteSessionApi,
+  archiveSessionApi,
+  fetchModels,
+  fetchProviderAccounts,
+  fetchFileMentions,
+  fetchMentionSuggestions,
+  fetchSkillMentions,
+  fetchSessionSubagents,
+  promoteSessionApi,
+  fetchSessionNotesApi,
+  postSessionNoteApi,
+  fetchPr,
+  fetchGitStatus,
+  fetchPreview,
+  moveSessionToBranchApi,
+  portalActionApi,
+  startPortalRecipeApi,
+  type WorkspaceMediaItem,
+  type ModelOption,
+  type ProviderAccountOption,
+  type SessionSubagentSnapshot,
+  type PreviewPortalRecipe,
+  type PreviewStatus,
 } from "../lib/api";
-import {
-	pollWhileVisible,
-	PR_WEBHOOK_FALLBACK_POLL_MS,
-} from "../lib/poll";
+import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
 import { refChipText, refLabel, refTone, worstPrRef } from "../lib/pr-refs";
 import { prPhoneChipClass } from "../lib/pr-tone-classes";
@@ -128,30 +106,34 @@ import type { PrFocus } from "../lib/pr-focus";
 import { reviewLoopResult } from "../lib/review-loop";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
 import { repairPausedSession } from "../lib/api/session-safety";
+import { ApiError } from "../lib/api/request";
 import { safetyContinuationPrompt } from "../lib/session-safety";
 import {
-	cancelSlackComposer,
-	fetchSlackChannels,
-	openSlackComposer,
-	reconnectSlack,
-	sendSlackComposer,
-	shareShippedChange,
-	undoShippedChange,
-	undoSlackComposer,
+  cancelSlackComposer,
+  fetchSlackChannels,
+  openSlackComposer,
+  reconnectSlack,
+  sendSlackComposer,
+  shareShippedChange,
+  undoShippedChange,
+  undoSlackComposer,
 } from "../lib/api/shipped-changes";
 import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
 import {
-	dismissSlackShare,
-	isSlackShareDismissed,
-	onSlackShareDismissChanged,
-	slackShareDismissKey,
+  dismissSlackShare,
+  isSlackShareDismissed,
+  onSlackShareDismissChanged,
+  slackShareDismissKey,
 } from "../lib/slack-share-dismiss";
 import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { useBackSwipe } from "../hooks/useBackSwipe";
+import { useNavigation } from "../hooks/useNavigation";
+import { useSessionSocket } from "../hooks/useSessionSocket";
+import { useSessionRuntime } from "../hooks/useSessionRuntime";
 import {
-	dedupeViewers,
-	facepileAvatarStyle,
-	otherViewers,
+  dedupeViewers,
+  facepileAvatarStyle,
+  otherViewers,
 } from "../lib/presence";
 import { otherTypingUsers } from "../lib/typing";
 import { personKey, prReviewCompletion } from "../lib/review-queue";
@@ -161,46 +143,41 @@ import { ComposerAgents } from "./ComposerAgents";
 import { UsageMeter } from "./UsageMeter";
 import { SchedulePromptButton } from "./SchedulePrompt";
 import {
-	ShippedChangeComposer,
-	SlackSentNotice,
-	type SlackSent,
+  ShippedChangeComposer,
+  SlackSentNotice,
+  type SlackSent,
 } from "./ShippedChangeComposer";
 import { BrandMark } from "./BrandMark";
+import { SessionHeader } from "./session/SessionHeader";
+import { SidePanelHost } from "./session/SidePanelHost";
+import { TranscriptView } from "./session/TranscriptView";
 import { splitAttachments, type FileAttachment } from "../lib/images";
 import { cropImageRegionFile } from "../lib/image-region-comment";
 import {
-	registerImageRegionCommentHandler,
-	type ImageRegionCommentRequest,
+  registerImageRegionCommentHandler,
+  type ImageRegionCommentRequest,
 } from "../lib/image-region-comment-registry";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import {
-	attachToDraft,
-	dropStagingAttachments,
-	sameFiles,
-	sameImages,
+  attachToDraft,
+  dropStagingAttachments,
+  sameFiles,
+  sameImages,
 } from "../lib/attachments";
 import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
+import { foregroundFileComposerOpen, hasDraggedFiles } from "../lib/file-drag";
 import {
-	foregroundFileComposerOpen,
-	hasDraggedFiles,
-} from "../lib/file-drag";
-import {
-	isHiddenForSession,
-	onHidesChanged,
-	unhideForSession,
+  isHiddenForSession,
+  onHidesChanged,
+  unhideForSession,
 } from "../lib/hides";
 import {
-	markPendingBusy,
-	markPendingStarted,
-	type OptimisticPendingPrompt,
-	optimisticOutboxFallbacks,
-	reconcilePending,
-	withoutPendingTranscriptEchoes,
+  markPendingBusy,
+  markPendingStarted,
+  type OptimisticPendingPrompt,
+  reconcilePending,
 } from "../lib/pending-reconcile";
-import {
-	promptOutbox,
-	type PromptOutboxItem,
-} from "../lib/prompt-outbox";
+import { promptOutbox, type PromptOutboxItem } from "../lib/prompt-outbox";
 import { withPreviewPath } from "../lib/preview-url";
 import { DiffPanel, useSessionDiff } from "./DiffPanel";
 import { RepoBar } from "./RepoBar";
@@ -208,139 +185,105 @@ import { RepoTile } from "./RepoTile";
 import { SandboxBadge } from "./SandboxBadge";
 import { ModelMenuRow } from "./ModelMenuRow";
 import {
-	EFFORTS,
-	baseModelId,
-	friendlyModelSlug,
-	routedModelParts,
-	workspacePresetLabel,
+  EFFORTS,
+  baseModelId,
+  friendlyModelSlug,
+  routedModelParts,
+  workspacePresetLabel,
 } from "./ModelEffortSelect";
 
 import {
-	metadataModelLabel,
-	modelIsCodex,
-	prettyModel,
-	switchDividerText,
+  metadataModelLabel,
+  modelIsCodex,
+  prettyModel,
+  switchDividerText,
 } from "./session-viewer/model-labels";
 import { withModelSwitches } from "./session-viewer/model-switches";
 import {
-	cacheTranscriptView,
-	cachedTranscriptView,
-	peekCachedTranscriptView,
+  cacheTranscriptView,
+  cachedTranscriptView,
+  peekCachedTranscriptView,
 } from "./session-viewer/transcript-cache";
 import {
-	holdTranscriptAnchor,
-	pickScrollAnchor,
-	readFollowingLive,
+  pickScrollAnchor,
+  readFollowingLive,
 } from "./session-viewer/transcript-anchor";
 import { useLivePlan } from "./session-viewer/use-live-plan";
 import {
-	BusyInline,
-	ConversationLoading,
-	WorkspaceSetup,
-	WorkspaceWaiting,
+  useTranscript,
+  useTranscriptIndexAnchor,
+} from "../hooks/useTranscript";
+import {
+  BusyInline,
+  ConversationLoading,
+  WorkspaceSetup,
+  WorkspaceWaiting,
 } from "./session-viewer/busy-indicators";
 import { AskCard } from "./AskCard";
-import { PrPanel } from "./PrPanel";
+import { PrPanel, type PrReviewPage } from "./PrPanel";
 import { PrStatusBar } from "./PrStatusBar";
 
 import { ConversationPane } from "./ConversationPane";
-import { FeedWebPane, type RefWebPanel } from "./FeedWebPane";
+import { FeedWebPane } from "./FeedWebPane";
 import { SlackChannelPane } from "./SlackChannelPane";
 import { feedForRefKind } from "../lib/feeds-meta";
 import { WorkflowPanel } from "./WorkflowPanel";
 import { AssetsPanel, useSessionAssets } from "./AssetsPanel";
 import { AssetOverlay } from "./AssetView";
-import {
-	SessionReportsPanel,
-	useSessionReports,
-} from "./SessionReportsPanel";
-import type { NewSessionPrefill } from "../lib/new-session-link";
+import { SessionReportsPanel, useSessionReports } from "./SessionReportsPanel";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { PreviewPane } from "./PreviewPane";
 import { PortalPane } from "./PortalPane";
 import { PortalsPage } from "./PortalsPanel";
-import { portalTargetFor, type PortalTarget } from "../lib/portals";
+import { portalTargetFor } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
-import {
-	WorkspaceSummary,
-	WorkspaceSummaryBody,
-} from "./WorkspaceSummary";
+import { WorkspaceSummary, WorkspaceSummaryBody } from "./WorkspaceSummary";
 import { SpinOffMenu } from "./SpinOffMenu";
 import { DeleteSessionDialog } from "./DeleteSessionDialog";
 import {
-	IconSidebarRight,
-	IconTrash,
-	IconArchive,
-	IconCheck,
-	IconChevronDown,
-	IconPlus,
-	IconPencil,
-	IconArrowDown,
-	IconArrowRight,
-	IconArrowUp,
-	IconArrowUpToLine,
-	IconDesk,
-	IconDotsHorizontal,
-	IconEye,
-	IconInbox,
-	IconBranches,
-	IconNewBranch,
-	IconPullRequest,
-	IconLink,
-	IconSparkle,
-	IconTerminal,
-	IconCopy,
-	IconChevronRight,
-	IconHistory,
-	IconFile,
-	IconListCircles,
-	IconGlobe,
-	IconRobot,
-	IconMessage,
-	IconArrowUpRight,
-	IconStack,
+  IconSidebarRight,
+  IconTrash,
+  IconArchive,
+  IconCheck,
+  IconPlus,
+  IconPencil,
+  IconArrowDown,
+  IconArrowRight,
+  IconArrowUp,
+  IconArrowUpToLine,
+  IconDesk,
+  IconDotsHorizontal,
+  IconEye,
+  IconNewBranch,
+  IconPullRequest,
+  IconLink,
+  IconSparkle,
+  IconTerminal,
+  IconCopy,
+  IconChevronRight,
+  IconHistory,
+  IconFile,
+  IconListCircles,
+  IconGlobe,
+  IconRobot,
+  IconMessage,
+  IconArrowUpRight,
 } from "./icons";
-import { SessionRelations, type RelatedSession } from "./SessionRelations";
-import {
-	SOURCE_CHIP,
-	sourceChipTone,
-} from "../lib/source-chip-classes";
-import { sessionWasAgentStarted } from "../lib/sidebar-placement";
+import { KeepInSidebarIcon } from "./sidebar/KeepInSidebarMark";
 import { Button } from "../ui/button";
+import { SessionQueue } from "./SessionQueue";
+import { deriveSessionQueue, type QueueReceipt } from "../lib/session-queue";
 import { useConfirm } from "../ui/confirm";
 import {
-	TopBar,
-	TopBarAction,
-	TopBarActions,
-	TopBarBack,
-	TopBarLeading,
-	TopBarTitle,
+  TopBar,
+  TopBarAction,
+  TopBarActions,
+  TopBarBack,
+  TopBarTitle,
 } from "../ui/top-bar";
 import { cn } from "../ui/cn";
-import {
-	composerMenuIcon,
-	composerMenuItem,
-	composerQueue,
-	composerQueueAction,
-	composerQueueActionDanger,
-	composerQueueActionSteer,
-	composerQueueActions,
-	composerQueueBody,
-	composerQueueBodyTone,
-	composerQueueContent,
-	composerQueueFrom,
-	composerQueueImage,
-	composerQueueImageCount,
-	composerQueueImageThumb,
-	composerQueueItem,
-	composerQueueItemDraggable,
-	composerQueueItemSeparated,
-	composerQueueList,
-	composerQueueSendingShimmer,
-	composerQueueSendingStatus,
-	composerQueueTitle,
-} from "../lib/composer-classes";
+import { composerMenuIcon, composerMenuItem } from "../lib/composer-classes";
 import { msgRow } from "../lib/msg-classes";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal } from "../ui/modal";
@@ -351,722 +294,530 @@ import { copySessionTranscript } from "../lib/transcript-copy";
 import { onTranscriptDisclosure } from "../lib/transcript-disclosures";
 import { takePendingSessionFork } from "../lib/pending-session-fork";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
-import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
+import { getLane, onLanesChanged } from "../lib/lanes";
 import { ownedBy } from "../lib/sidebar-lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
-import { useShortcutKeys, useShortcutLabel } from "../hooks/useShortcutBindings";
+import {
+  useShortcutKeys,
+  useShortcutLabel,
+} from "../hooks/useShortcutBindings";
 import { useSidePanel } from "../hooks/useSidePanel";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import {
-	workspaceSummaryOpen,
-	WS_SUMMARY_ROOM_W,
-	workspaceSummaryShift,
+  workspaceSummaryOpen,
+  WS_SUMMARY_ROOM_W,
+  workspaceSummaryShift,
 } from "../lib/workspace-summary-open";
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
-import { OverflowFadeText } from "../ui/overflow-fade-text";
-import {
-	PANEL_BODY,
-	PANEL_TAB,
-	PANEL_TABS,
-	PANEL_INFO_TOP,
-	PANEL_OVERLAY,
-	PANEL_SHELL,
-} from "../lib/session-panel-classes";
 import { TURN_SPACER } from "../lib/app-shell-classes";
 import {
-	SESSION_BANNERS,
-	SESSION_DELETE_LABEL,
-	SESSION_LINK,
-	SESSION_LINK_LINEAR,
-	SESSION_LINK_PLAIN,
-	PILL_CENTRED,
-	ACTION_CLEARANCE,
-	ACTION_WITH_REPLIES_CLEARANCE,
-	SCROLL_ACTION_CLEARANCE,
-	SUGGESTIONS_CLEARANCE,
-	TRANSCRIPT_ICON_BUTTON,
-	TRANSCRIPT_PILL_BUTTON,
-	TRANSCRIPT_PILL_LOADING,
-	TRANSCRIPT_PILL_SPINNER,
-	TRANSCRIPT_PILL_TOP,
-	VIEWER_ACTION_ROW,
-	VIEWER_ACTION_ROW_WITH_SCROLL,
-	VIEWER_BRANCH,
-	VIEWER_BRANCH_EDITABLE,
-	VIEWER_BRANCH_RENAME,
-	VIEWER_CRUMB_UP,
-	VIEWER_HEADER,
-	VIEWER_HEADER_ACTIONS,
-	VIEWER_INPUT,
-	VIEWER_MENU_SEP,
-	VIEWER_MESSAGES,
-	VIEWER_MESSAGES_REGION,
-	VIEWER_OVERFLOW,
-	VIEWER_PRESENCE,
-	VIEWER_PRESENCE_AVATAR,
-	VIEWER_REVIEW_MAIN,
-	VIEWER_SUGGESTIONS,
-	VIEWER_SUGGESTIONS_ROW,
-	VIEWER_SUGGESTIONS_ROW_INLINE,
-	VIEWER_SUMMARY_STEP,
-	VIEWER_TITLE,
-	INFO_CONTENT,
-	INFO_HERO,
-	INFO_NAME,
-	INFO_PAGE,
-	INFO_SECTION,
-	INFO_SUB,
-	INFO_SUMMARY_CARD,
-	infoTopbarClass,
-	infoTopbarTitleClass,
+  SESSION_BANNERS,
+  SESSION_DELETE_LABEL,
+  SESSION_LINK,
+  SESSION_LINK_LINEAR,
+  SESSION_LINK_PLAIN,
+  PILL_CENTRED,
+  ACTION_CLEARANCE,
+  ACTION_WITH_REPLIES_CLEARANCE,
+  SCROLL_ACTION_CLEARANCE,
+  SUGGESTIONS_CLEARANCE,
+  TRANSCRIPT_ICON_BUTTON,
+  TRANSCRIPT_PILL_BUTTON,
+  TRANSCRIPT_PILL_LOADING,
+  TRANSCRIPT_PILL_SPINNER,
+  TRANSCRIPT_PILL_TOP,
+  VIEWER_ACTION_ROW,
+  VIEWER_ACTION_ROW_WITH_SCROLL,
+  VIEWER_INPUT,
+  VIEWER_MENU_SEP,
+  VIEWER_MESSAGES,
+  VIEWER_MESSAGES_REGION,
+  VIEWER_OVERFLOW,
+  VIEWER_PRESENCE,
+  VIEWER_PRESENCE_AVATAR,
+  VIEWER_REVIEW_MAIN,
+  VIEWER_SUGGESTIONS,
+  VIEWER_SUGGESTIONS_ROW,
+  VIEWER_SUGGESTIONS_ROW_INLINE,
+  VIEWER_SUMMARY_STEP,
+  INFO_CONTENT,
+  INFO_HERO,
+  INFO_NAME,
+  INFO_PAGE,
+  INFO_SECTION,
+  INFO_SUB,
+  INFO_SUMMARY_CARD,
+  infoTopbarClass,
+  infoTopbarTitleClass,
 } from "../lib/session-viewer-classes";
 import {
-	HEADER_SESSIONBAR,
-	HEADER_SESSIONBAR_MODEL,
-	HEADER_SESSIONBAR_SEP,
-	HEADER_SESSIONBAR_USAGE,
-	MOBILE_CONTROL_GLASS,
+  HEADER_SESSIONBAR,
+  HEADER_SESSIONBAR_MODEL,
+  HEADER_SESSIONBAR_SEP,
+  HEADER_SESSIONBAR_USAGE,
+  MOBILE_CONTROL_GLASS,
 } from "../lib/app-header-classes";
+import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	flexNone: {
-			flex: "none"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	flex: {
-			display: "flex"
-	},
-	flexWrap: {
-			flexWrap: "wrap"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap2: {
-			gap: "calc(4px * 2)"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	flex1: {
-			flex: "1"
-	},
-	textRed: {
-			color: "var(--red)"
-	},
-	relative: {
-			position: "relative"
-	},
-	hFull: {
-			height: "100%"
-	},
-	minH0: {
-			minHeight: "0"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	absolute: {
-			position: "absolute"
-	},
-	inset0: {
-			inset: "0"
-	},
-	z30: {
-			zIndex: "30"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	gap14px: {
-			gap: "14px"
-	},
-	roundedXl: {
-			borderRadius: "calc(18px * var(--rf))",
-
-		cornerShape: "var(--cs)",},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	borderLine: {
-			borderColor: "var(--border)"
-	},
-	bgPanel: {
-			backgroundColor: "var(--bg-panel)"
-	},
-	px8: {
-			paddingInline: "calc(4px * 8)"
-	},
-	py26px: {
-			paddingBlock: "26px"
-	},
-	size30px: {
-			width: "30px",
-			height: "30px"
-	},
-	animateSpin08sLinearInfinite: {
-			animation: "spin 0.8s linear infinite"
-	},
-	roundedFull: {
-			borderRadius: "calc(infinity * 1px)",
-
-		cornerShape: "round",},
-	border2: {
-			borderStyle: "solid",
-			borderWidth: "2px"
-	},
-	borderLineStrong: {
-			borderColor: "var(--border-strong)"
-	},
-	borderTAccent: {
-			borderTopColor: "var(--accent)"
-	},
-	textPretty: {
-			textWrap: "pretty"
-	},
-	fontNormal: {
-			fontWeight: "var(--font-weight-normal)"
-	},
-	leadingRelaxed: {
-			lineHeight: "var(--leading-relaxed)"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	grow: {
-			flexGrow: "1"
-	},
-	mr15: {
-			marginRight: "calc(4px * 1.5)"
-	},
-	minW240px: {
-			minWidth: "240px"
-	},
-	maxW320px: {
-			maxWidth: "320px"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	gap15: {
-			gap: "calc(4px * 1.5)"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	truncate: {
-			overflow: "hidden",
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap"
-	},
-	Rotate90: {
-			rotate: "calc(90deg * -1)"
-	},
-	Mx1: {
-			marginInline: "calc(4px * -1)"
-	},
-	inlineFlex: {
-			display: "inline-flex"
-	},
-	Ml1: {
-			marginLeft: "calc(4px * -1)"
-	},
-	size6: {
-			width: "calc(4px * 6)",
-			height: "calc(4px * 6)"
-	},
-	roundedControl: {
-			borderRadius: "calc(12px * var(--rf))",
-
-		cornerShape: "var(--cs)",},
-	transitionColors: {
-			transitionProperty: "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
-			transitionTimingFunction: "var(--tw-ease, var(--ease))",
-			transitionDuration: "var(--tw-duration, var(--dur-micro))"
-	},
-	durationVarDurMicro: {
-			transitionDuration: "var(--dur-micro)"
-	},
-	easeVarEase: {
-			transitionTimingFunction: "var(--ease)"
-	},
-	gap05: {
-			gap: "calc(4px * 0.5)"
-	},
-	z1: {
-			zIndex: "1"
-	},
-	minH11: {
-			minHeight: "calc(4px * 11)"
-	},
-	px15: {
-			paddingInline: "calc(4px * 1.5)"
-	},
-	rounded2xl: {
-			borderRadius: "calc(22px * var(--rf))",
-
-		cornerShape: "var(--cs)",},
-	px5: {
-			paddingInline: "calc(4px * 5)"
-	},
-	py2: {
-			paddingBlock: "calc(4px * 2)"
-	},
-	maxWFull: {
-			maxWidth: "100%"
-	},
-	overflowHidden: {
-			overflow: "hidden"
-	},
-	textEllipsis: {
-			textOverflow: "ellipsis"
-	},
-	whitespaceNowrap: {
-			whiteSpace: "nowrap"
-	},
-	px3: {
-			paddingInline: "calc(4px * 3)"
-	},
-	py3px: {
-			paddingBlock: "3px"
-	},
-	borderB: {
-			borderBottomStyle: "solid",
-			borderBottomWidth: "1px"
-	},
-	py15: {
-			paddingBlock: "calc(4px * 1.5)"
-	},
-	textXs: {
-			fontSize: "var(--type-label)",
-			lineHeight: "var(--tw-leading, var(--text-xs--line-height))"
-	},
-	mlAuto: {
-			marginLeft: "auto"
-	},
-	gap3: {
-			gap: "calc(4px * 3)"
-	},
-	gap1: {
-			gap: "4px"
-	},
-	border0: {
-			borderStyle: "solid",
-			borderWidth: "0px"
-	},
-	bgSurface: {
-			backgroundColor: "var(--bg)"
-	},
-	gap4: {
-			gap: "calc(4px * 4)"
-	},
-	p8: {
-			padding: "calc(4px * 8)"
-	},
-	textCenter: {
-			textAlign: "center"
-	},
-	textBase: {
-			fontSize: "var(--type-body)",
-			lineHeight: "var(--tw-leading, var(--text-base--line-height))"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	roundedMd: {
-			borderRadius: "calc(7px * var(--rf))",
-
-		cornerShape: "var(--cs)",},
-	px4: {
-			paddingInline: "calc(4px * 4)"
-	},
-	textSm: {
-			fontSize: "var(--type-label)",
-			lineHeight: "var(--tw-leading, var(--text-sm--line-height))"
-	},
-	maxWXs: {
-			maxWidth: "var(--container-xs)"
-	},
-	pointerEventsNone: {
-			pointerEvents: "none"
-	},
-	fixed: {
-			position: "fixed"
-	},
-	z12000: {
-			zIndex: "12000"
-	},
-	px6: {
-			paddingInline: "calc(4px * 6)"
-	},
-	mt4: {
-			marginTop: "calc(4px * 4)"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-	mt1: {
-			marginTop: "4px"
-	},
-	srOnly: {
-			position: "absolute",
-			width: "1px",
-			height: "1px",
-			padding: "0",
-			margin: "-1px",
-			overflow: "hidden",
-			clipPath: "inset(50%)",
-			whiteSpace: "nowrap",
-			borderWidth: "0"
-	},
-	py10: {
-			paddingBlock: "calc(4px * 10)"
-	},
-	minHFull: {
-			minHeight: "100%"
-	},
-	wFull: {
-			width: "100%"
-	},
-	maxW840px: {
-			maxWidth: "840px"
-	},
-	mxAuto: {
-			marginInline: "auto"
-	},
-	mb4: {
-			marginBottom: "calc(4px * 4)"
-	},
-	maxW340px: {
-			maxWidth: "340px"
-	},
-	leadingSnug: {
-			lineHeight: "var(--leading-snug)"
-	},
-	mb3: {
-			marginBottom: "calc(4px * 3)"
-	},
-	maxW200px: {
-			maxWidth: "200px"
-	},
-	mt3: {
-			marginTop: "calc(4px * 3)"
-	},
-	maxWVarSessionCol: {
-			maxWidth: "var(--session-col)"
-	},
-	maxW2xl: {
-		maxWidth: "42rem",
-	},
-	transitionTransform: {
-			transitionProperty: "transform, translate, scale, rotate",
-			transitionTimingFunction: "var(--tw-ease, var(--ease))",
-			transitionDuration: "var(--tw-duration, var(--dur-micro))"
-	},
-	mb2: {
-			marginBottom: "calc(4px * 2)"
-	},
-	justifyBetween: {
-			justifyContent: "space-between"
-	},
-	py7px: {
-			paddingBlock: "7px"
-	},
-	cursorPointer: {
-			cursor: "pointer"
-	},
-	bgTransparent: {
-			backgroundColor: "transparent"
-	},
-	colStart2: {
-			gridColumnStart: "2"
-	},
-	rowStart1: {
-			gridRowStart: "1"
-	},
-	justifySelfCenter: {
-			justifySelf: "center"
-	},
-	colStart3: {
-			gridColumnStart: "3"
-	},
-	justifySelfEnd: {
-			justifySelf: "flex-end"
-	},
-	minH10: {
-			minHeight: "calc(4px * 10)"
-	},
-	size11: {
-			width: "calc(4px * 11)",
-			height: "calc(4px * 11)"
-	},
-	CornerShapeSquircle: {
-			cornerShape: "squircle"
-	},
-	mx05: {
-			marginInline: "calc(4px * 0.5)"
-	},
-	h5: {
-			height: "calc(4px * 5)"
-	},
-	wPx: {
-			width: "1px"
-	},
-	mb1: {
-			marginBottom: "4px"
-	},
-	maxWCalcVarSessionCol40px: {
-			maxWidth: "calc(var(--session-col) + 40px)"
-	},
-	textYellow: {
-			color: "var(--yellow)"
-	},
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  hFull: {
+    height: "100%",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  z30: {
+    zIndex: "30",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  bgColorMixInSrgbVarBg72Transparent: {
+    backgroundColor: "color-mix(in srgb,var(--bg) 72%,transparent)",
+  },
+  gap14px: {
+    gap: "14px",
+  },
+  roundedXl: {
+    borderRadius: "calc(18px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  px8: {
+    paddingInline: "calc(4px * 8)",
+  },
+  py26px: {
+    paddingBlock: "26px",
+  },
+  smoothShadowLg: {
+    boxShadow:
+      "0 4px 12px -4px color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent), 0 18px 48px -14px color-mix(in srgb, var(--smooth-shadow-color) 11%, transparent)",
+  },
+  size30px: {
+    width: "30px",
+    height: "30px",
+  },
+  animateSpin08sLinearInfinite: {
+    animation: "spin 0.8s linear infinite",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  border2: {
+    borderStyle: "solid",
+    borderWidth: "2px",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  borderTAccent: {
+    borderTopColor: "var(--accent)",
+  },
+  m0: {
+    margin: "0",
+  },
+  textPretty: {
+    textWrap: "pretty",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  grow: {
+    flexGrow: "1",
+  },
+  mr15: {
+    marginRight: "calc(4px * 1.5)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  minW240px: {
+    minWidth: "240px",
+  },
+  maxW320px: {
+    maxWidth: "320px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  maxWMin300pxCalc100vw24px: {
+    maxWidth: "min(300px, calc(100vw - 24px))",
+  },
+  contents: {
+    display: "contents",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  phoneOrder2: {
+    "@media (max-width: 720px)": {
+      order: "2",
+    },
+  },
+  phoneH38px: {
+    "@media (max-width: 720px)": {
+      height: "38px",
+    },
+  },
+  phoneMinH38px: {
+    "@media (max-width: 720px)": {
+      minHeight: "38px",
+    },
+  },
+  phoneW38px: {
+    "@media (max-width: 720px)": {
+      width: "38px",
+    },
+  },
+  phoneBgColorMixInSrgbVarAccent12Transparent: {
+    "@media (max-width: 720px)": {
+      backgroundColor: "color-mix(in srgb,var(--accent) 12%,transparent)",
+    },
+  },
+  z1: {
+    zIndex: "1",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  minH11: {
+    minHeight: "calc(4px * 11)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  rounded2xl: {
+    borderRadius: "calc(22px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  textEllipsis: {
+    textOverflow: "ellipsis",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py3px: {
+    paddingBlock: "3px",
+  },
+  flex1: {
+    flex: "1",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  p8: {
+    padding: "calc(4px * 8)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  textBase: {
+    fontSize: "var(--type-body)",
+    lineHeight: "var(--tw-leading, var(--text-base--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  hoverBgPanel: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--bg-panel)",
+      },
+    },
+  },
+  maxWXs: {
+    maxWidth: "var(--container-xs)",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  fixed: {
+    position: "fixed",
+  },
+  z12000: {
+    zIndex: "12000",
+  },
+  bgColorMixInSrgbVarBgPanel68Transparent: {
+    backgroundColor: "color-mix(in srgb,var(--bg-panel) 68%,transparent)",
+  },
+  px6: {
+    paddingInline: "calc(4px * 6)",
+  },
+  mt4: {
+    marginTop: "calc(4px * 4)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  py10: {
+    paddingBlock: "calc(4px * 10)",
+  },
+  minHFull: {
+    minHeight: "100%",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxW840px: {
+    maxWidth: "840px",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  mb4: {
+    marginBottom: "calc(4px * 4)",
+  },
+  maxW340px: {
+    maxWidth: "340px",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  maxW200px: {
+    maxWidth: "200px",
+  },
+  mt3: {
+    marginTop: "calc(4px * 3)",
+  },
+  maxW2xl: {
+    maxWidth: "var(--container-2xl)",
+  },
+  transitionTransform: {
+    transitionProperty: "transform, translate, scale, rotate",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  maxWVarSessionCol: {
+    maxWidth: "var(--session-col)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  borderColorMixInSrgbVarAccent40Transparent: {
+    borderColor: "color-mix(in srgb,var(--accent) 40%,transparent)",
+  },
+  bgColorMixInSrgbVarAccent12Transparent: {
+    backgroundColor: "color-mix(in srgb,var(--accent) 12%,transparent)",
+  },
+  py7px: {
+    paddingBlock: "7px",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  pointerEventsAuto: {
+    pointerEvents: "auto",
+  },
+  colStart2: {
+    gridColumnStart: "2",
+  },
+  rowStart1: {
+    gridRowStart: "1",
+  },
+  justifySelfCenter: {
+    justifySelf: "center",
+  },
+  colStart3: {
+    gridColumnStart: "3",
+  },
+  justifySelfEnd: {
+    justifySelf: "flex-end",
+  },
+  minH10: {
+    minHeight: "calc(4px * 10)",
+  },
+  hoverBorderLine: {
+    "@media (hover: hover)": {
+      ":hover": {
+        borderColor: "var(--border)",
+      },
+    },
+  },
+  size11: {
+    width: "calc(4px * 11)",
+    height: "calc(4px * 11)",
+  },
+  CornerShapeSquircle: {
+    cornerShape: "squircle",
+  },
+  mx05: {
+    marginInline: "calc(4px * 0.5)",
+  },
+  h5: {
+    height: "calc(4px * 5)",
+  },
+  wPx: {
+    width: "1px",
+  },
+  bgDivider: {
+    backgroundColor: "var(--divider)",
+  },
+  mb1: {
+    marginBottom: "4px",
+  },
+  maxWCalcVarSessionCol40px: {
+    maxWidth: "calc(var(--session-col) + 40px)",
+  },
 });
-
-type QueueReceipt = {
-	id?: string;
-	content: string;
-	user?: string;
-	images?: string[];
-	files?: unknown;
-	contextSessions?: string[];
-	editable?: boolean;
-	editing?: boolean;
-	/** Steer receipts only: when the engine accepted the fold-in (epoch ms). */
-	steeredAt?: number;
-};
-
-interface Props {
-	session: UnifiedSession;
-	/** Verified workspace role from the ordinary auth bootstrap. */
-	canRepairSafety?: boolean;
-	/** Only the focused pane in a desktop tab split owns global shortcuts/title. */
-	focused?: boolean;
-	/** The unfocused half of a split keeps its conversation chrome-free. */
-	hideHeader?: boolean;
-	hideRightPanel?: boolean;
-	onBack: () => void;
-	/** Open the next chat needing attention, or continue through the sidebar. */
-	onNextChat?: () => void;
-	/** Archive through the sidebar so the nearest visible row becomes active. */
-	onArchive?: () => void;
-	/** Called after a successful archive (not unarchive), with whether archiving
-	    gracefully stopped an in-flight owned turn — so the parent can toast. */
-	onArchived?: (stoppedRun: boolean) => void;
-	send: (msg: any) => void;
-	setTyping: (sessionId: string, active: boolean) => void;
-	addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
-	connected: boolean;
-	/** A client-minted session whose server record is still being persisted. */
-	pendingCreation?: boolean;
-	/** A client-minted blank tab in an existing, already-ready workspace. */
-	optimisticEmpty?: boolean;
-	/** Opening prompt shown while a just-created session is still catching up
-	    through the session poll. Reconciles away when the transcript arrives. */
-	initialPending?: {
-		content: string;
-		user: string;
-		sentAt: number;
-		images?: string[];
-	};
-	/** App-level top-bar node above the tab strip; when present the header renders
-	    there (name-on-top layout) instead of inline. */
-	topbarEl?: HTMLElement | null;
-	/** Right-side slot inside the mobile top bar (next to the centered title).
-	    On phones the header actions portal there — a single iOS-style nav bar —
-	    instead of rendering as their own row. Desktop ignores it. */
-	headerActionsEl?: HTMLElement | null;
-	/** Centered slot under the mobile top-bar title. On phones the composer's
-	    model pill is hidden, so a compact tap-to-switch model selector portals
-	    here instead. Desktop ignores it. */
-	headerModelEl?: HTMLElement | null;
-	/** Leading slot inside the mobile top-bar title pill. The repo tile portals
-	    here so it sits in front of the title (Slack-header style); an archived
-	    session replaces it with its archive mark. Desktop ignores it. */
-	headerRepoEl?: HTMLElement | null;
-	/** App-level right-column node (sibling of the left sidebar); when present the
-	    workspace/sub-agent panel portals here so it spans the full height from the
-	    top, instead of opening only below the session. */
-	rightPanelEl?: HTMLElement | null;
-	/** Bumped by the tab-bar + to start a fresh session in this same session: clears
-	    the composer and jumps to the live edge. A visual reset — same thread. */
-	newSessionSeq?: number;
-	/** One-shot pulse set when this session was opened by picking its workspace
-	    in the sidebar — focus the composer on open so you can type right away.
-	    Ignored on phones (would pop the keyboard over the session). */
-	autoFocusComposer?: boolean;
-	/** One-shot draft text appended from another surface, such as Checks. */
-	composerPrefillExternal?: { seq: number; text: string } | null;
-	onComposerPrefillConsumed?: (seq: number) => void;
-	/** Rename this session (double-click the header title); empty resets it to
-	    the derived title. Same handler the tab strip and sidebar use. */
-	onRename?: (id: string, title: string) => void;
-	/**
-	 * The workspace this session belongs to. When set, the header titles the
-	 * WORKSPACE (every sibling session shows the same name — per-session titles live
-	 * on the tabs) and double-click renames the workspace, not the session.
-	 */
-	workspaceName?: string;
-	onRenameWorkspace?: (name: string) => void;
-	/** The header overflow is workspace-scoped; session lifecycle belongs to its tab. */
-	onArchiveWorkspace?: () => void;
-	onDeleteWorkspace?: () => void | Promise<void>;
-	/** Sibling sessions in this session's workspace (the tab strip's list, oldest
-	    first) — feeds the floating overview panel's cross-session media. */
-	workspaceSessions?: UnifiedSession[];
-	/** Claim this workspace into your own per-user sidebar lanes ("mine"), or
-	    release it (null) — the ⋯ menu's twin of the sidebar row's action. */
-	onSetStatus?: (sessions: UnifiedSession[], status: Lane | null) => void;
-	/** Every session — the pool the workspace-context picker and the PR panel
-	    draw their sibling sessions from. */
-	allSessions?: UnifiedSession[];
-	/** Start a new session in this workspace. Phone surfaces it in More. */
-	onNewSession?: (
-		mode: "share" | "stack" | "ask",
-		origin?: NewTabMorphOrigin,
-	) => void;
-	/** Start a session in a new workspace. Phone surfaces it as +. */
-	onNewWorkspace?: () => void;
-	/** Open a sibling session with selected transcript text in its composer. */
-	onStartNewChat: (prompt: string) => void;
-	/** True when the tab strip is on screen (2+ sessions, an open view tab, or a
-	    split). The strip carries its own "+", so the header one stands down
-	    rather than showing a second plus a few pixels above it. */
-	tabStripVisible?: boolean;
-	/** This workspace's closed sessions, newest activity first. With no strip
-	    there is no history button, so the ⋯ menu carries the list instead. */
-	archivedSessions?: UnifiedSession[];
-	/** Un-archive a closed session, putting it back among the tabs. */
-	onRestoreSession?: (session: UnifiedSession) => void;
-	/** Orchestrator this session was delegated from (when it's a worker
-	    sub-session), and the worker sessions it in turn spawned. Powers the
-	    header relationship chips. */
-	parentSession?: RelatedSession | null;
-	workerSessions?: RelatedSession[];
-	/** Navigate to another session (used by the relationship chips). `created` is
-	    the server's copy of a session the panel just made (Auto-fix), so the app can
-	    open it without a loading placeholder. */
-	onOpenSession?: (id: string, created?: UnifiedSession | null) => void;
-	onOpenNewSession: (prefill: NewSessionPrefill) => void;
-	/** Mirror live run state into the app-level session list for sidebar rows. */
-	onRunningChange?: (id: string, isRunning: boolean) => void;
-	/** Mirror a reviewer pick / sign-off into the app-level session list so the
-	    sidebar's review bands flip immediately instead of waiting for a poll. */
-	onReviewChange?: (
-		id: string,
-		req: { to: string; by: string; at: string; accepted?: { by: string; at: string } } | null,
-	) => void;
-	/**
-	 * Whether the Review pane is foregrounded — driven by the top tab strip's
-	 * Review view-tab (App state), replacing the old inline Session|Review toggle.
-	 * When false, the session transcript shows.
-	 */
-	showReview?: boolean;
-	/** Open/foreground this session's Review view-tab (PR/review triggers). */
-	onOpenReview?: () => void;
-	/**
-	 * Which PR the Review pane should land on, pulsed by the app when a sidebar
-	 * row or a `repo#123` chip opened it: a workspace can carry several PRs,
-	 * and the one you clicked says which you meant. `seq` re-applies the same
-	 * PR after you've switched targets by hand. Branch and number are both
-	 * optional — see lib/pr-focus.ts for what each caller knows.
-	 */
-	reviewFocusPr?: {
-		repo: string;
-		branch?: string;
-		number?: number;
-		seq: number;
-	} | null;
-	/**
-	 * Whether the Preview environment pane (the PR's Vercel preview, full-width) is
-	 * foregrounded — driven by the top tab strip's Preview environment view-tab (App state).
-	 */
-	showStaging?: boolean;
-	/** Open/foreground this session's Preview environment view-tab. */
-	onOpenStaging?: () => void;
-	/** Close this session's Preview environment view-tab (the deploy vanished, e.g. PR merged). */
-	onCloseStaging?: () => void;
-	/**
-	 * Whether the Assets pane (the session's scratch artifacts, full-width) is
-	 * foregrounded — driven by the top tab strip's Assets view-tab (App state).
-	 */
-	showAssets?: boolean;
-	/** Open/foreground this session's Assets view-tab (the Info panel's Assets button). */
-	onOpenAssets?: () => void;
-	/** Close this session's Assets view-tab (its last asset was deleted). */
-	onCloseAssets?: () => void;
-	/**
-	 * Whether the Terminal pane (interactive shells in this session's
-	 * workspace) is foregrounded — driven by the top tab strip's Terminal
-	 * view-tab (App state).
-	 */
-	showTerminal?: boolean;
-	/** Open/foreground this session's Terminal view-tab (the Info panel's row). */
-	onOpenTerminal?: () => void;
-	/** Close this session's Terminal view-tab, tearing its shells down. */
-	onCloseTerminal?: () => void;
-	/**
-	 * Whether the Terminal tab is present in the strip at all — distinct from
-	 * `showTerminal`, which is only true while it is foregrounded. The shells
-	 * stay mounted (and their PTYs alive) whenever the tab exists, so that
-	 * switching away and back returns to the same session; closing the tab is
-	 * what tears them down.
-	 */
-	terminalTabOpen?: boolean;
-	/**
-	 * Whether the Conversation pane (the workspace's Plain support-ticket
-	 * thread, full-width) is foregrounded — driven by the top tab strip's
-	 * Conversation view-tab (App state).
-	 */
-	showConversation?: boolean;
-	/** The Plain thread the Conversation pane renders (workspace or session). */
-	conversationThreadId?: string | null;
-	/** Whether the feed web panel (Video view-tab) is foregrounded (App state). */
-	showVideo?: boolean;
-	/** The web panel spec of the workspace's feed-item ref (the feeds design). */
-	videoPanel?: RefWebPanel | null;
-	/** The feed item's title (pane header). */
-	videoTitle?: string | null;
-	/** Foregrounded full-width local-dev Preview view-tab (App state). */
-	showPreviewTab?: boolean;
-	/** Open/foreground the Preview view-tab (header Preview button). */
-	onOpenPreviewTab?: () => void;
-	/** Open another PR in the review panel (stack map layer links). */
-	onOpenPr?: (repo: string, branch: string) => void;
-	/** Close the Preview view-tab (its Stop button / tab close). */
-	onClosePreviewTab?: () => void;
-	/** Foregrounded browser pane for a service selected in Portals. */
-	showPortal?: boolean;
-	/** The service currently loaded in the center-panel browser. */
-	portalTarget?: PortalTarget | null;
-	/** Open a running service in the center-panel browser. */
-	onOpenPortal?: (target: PortalTarget) => void;
-	/** Return from a view-tab (Review/Preview environment/Assets) to this workspace's active session. */
-	onOpenWorkspace?: () => void;
-	/**
-	 * Whether the sub-agent pane (a Task drill-in from this session's transcript,
-	 * full-width) is foregrounded — driven by the top tab strip's sub-agent
-	 * view-tab (App state).
-	 */
-	showSubagent?: boolean;
-	/** Breadcrumb of opened sub-agents; the last entry is the one shown. */
-	subagentStack?: SubagentRef[];
-	/** Open/foreground a sub-agent (a Task call's "Watch" affordance). */
-	onOpenSubagent?: (sessionId: string, agentId: string, label: string) => void;
-	/** Pop back to the sub-agent that spawned the current one. */
-	onSubagentBack?: (sessionId: string) => void;
-	/** The name the pane read off a sub-agent's transcript, for its tab: a link
-	 *  carries agent ids only, so this is where a linked tab gets its label. */
-	onSubagentLabel?: (sessionId: string, agentId: string, label: string) => void;
-}
 
 // Stable identity for "no sub-agent open", so the default prop doesn't hand
 // the memoized transcript a fresh array on every render.
@@ -1074,45 +825,45 @@ const NO_SUBAGENTS: SubagentRef[] = [];
 const NO_WORKFLOW_RUNS: WorkflowRunSnapshot[] = [];
 
 class SessionShellTiming {
-	private recorded = false;
-	constructor(private readonly startedAt: number) {}
-	record() {
-		if (this.recorded) return;
-		this.recorded = true;
-		measureSessionPerf("shell_to_transcript_ms", this.startedAt);
-	}
+  private recorded = false;
+  constructor(private readonly startedAt: number) {}
+  record() {
+    if (this.recorded) return;
+    this.recorded = true;
+    measureSessionPerf("shell_to_transcript_ms", this.startedAt);
+  }
 }
 
 function reviewReposFromKey(key: string) {
-	return key.split("\u0000").map((repo, index) => ({
-		repo,
-		primary: index === 0,
-	}));
+  return key.split("\u0000").map((repo, index) => ({
+    repo,
+    primary: index === 0,
+  }));
 }
 
 function discoveredPrsFromKey(key: string) {
-	if (!key) return [];
-	return key.split("\u0001").map((encoded) => {
-		const [repo, branch, number, url, title] = encoded.split("\u0000");
-		return {
-			repo,
-			branch,
-			number: number ? Number(number) : undefined,
-			url: url || undefined,
-			title: title || undefined,
-		};
-	});
+  if (!key) return [];
+  return key.split("\u0001").map((encoded) => {
+    const [repo, branch, number, url, title] = encoded.split("\u0000");
+    return {
+      repo,
+      branch,
+      number: number ? Number(number) : undefined,
+      url: url || undefined,
+      title: title || undefined,
+    };
+  });
 }
 
 function toolPathRootsFromKey(key: string) {
-	const [primaryDir = "", ...attached] = key.split("\u0001");
-	return [
-		{ dir: primaryDir },
-		...attached.map((encoded) => {
-			const [dir, label] = encoded.split("\u0000");
-			return { dir, label };
-		}),
-	].filter((root) => Boolean(root.dir));
+  const [primaryDir = "", ...attached] = key.split("\u0001");
+  return [
+    { dir: primaryDir },
+    ...attached.map((encoded) => {
+      const [dir, label] = encoded.split("\u0000");
+      return { dir, label };
+    }),
+  ].filter((root) => Boolean(root.dir));
 }
 // Same reason: the empty row is set on every stream_start, and a fresh array
 // each time would re-render the composer block for nothing.
@@ -1128,11 +879,13 @@ const HIDDEN_REOPEN_MS = 30_000;
 // late: on the iOS PWA the WebSocket only reconnects after visibility, so what
 // streamed while backgrounded arrives moments after the visibilitychange.
 const RESUME_GROWTH_WINDOW_MS = 8_000;
-// Let fast transcript hydration settle out of sight, but never leave readable
-// rows hidden behind the opening curtain while a slow outline or range request
-// catches up. The virtualizer preserves the live-edge position as that older
-// content grows above it.
-const OPEN_SETTLE_MAX_MS = 350;
+// Positive settlement normally lifts the opening curtain first. These deadlines
+// are fail-safes: legacy transcripts have no structural outline callback, while
+// an indexed transcript must never stay invisible if its index or visible-range
+// callback is delayed or lost. Indexed opens get longer to avoid exposing the
+// bounded tail just before the complete outline lands on a busy phone.
+const LEGACY_OPEN_SETTLE_MAX_MS = 350;
+const INDEXED_OPEN_SETTLE_MAX_MS = 2_500;
 // "Jump to the start of the session" walks the backlog a page at a time rather
 // than asking for it in one frame: a multi-thousand-entry transcript would be a
 // tens-of-MB payload and one giant reconciliation. Fat pages keep the number of
@@ -1142,4954 +895,4497 @@ const OPEN_SETTLE_MAX_MS = 350;
 const JUMP_PAGE_ENTRIES = HISTORY_PAGE_ENTRIES;
 const JUMP_MAX_ENTRIES = 4_000;
 const EMPTY_TRANSCRIPT_ENTRIES: TranscriptEntry[] = [];
-// One visible range can span several actor pages. Keep the client comfortably
-// below the per-session mailbox bound so a reconnect cannot enqueue a whole
-// outline at once and crowd out live transcript reads for the same session.
-const TRANSCRIPT_RANGE_CONCURRENCY = 6;
-
 export function SessionViewer({
-	session,
-	canRepairSafety = false,
-	focused = true,
-	hideHeader = false,
-	hideRightPanel = false,
-	onBack,
-	onNextChat,
-	onArchive,
-	onArchived,
-	send,
-	setTyping,
-	addHandler,
-	connected,
-	pendingCreation = false,
-	optimisticEmpty = false,
-	initialPending,
-	topbarEl,
-	headerRepoEl,
-	headerActionsEl,
-	headerModelEl,
-	rightPanelEl,
-	newSessionSeq,
-	autoFocusComposer,
-	composerPrefillExternal,
-	onComposerPrefillConsumed,
-	onRename,
-	workspaceName,
-	onRenameWorkspace,
-	onArchiveWorkspace,
-	onDeleteWorkspace,
-	workspaceSessions,
-	onSetStatus,
-	allSessions,
-	onNewSession,
-	onNewWorkspace,
-	onStartNewChat,
-	tabStripVisible,
-	archivedSessions,
-	onRestoreSession,
-	parentSession,
-	workerSessions,
-	onOpenSession,
-	onOpenNewSession,
-	onRunningChange,
-	onReviewChange,
-	showReview = false,
-	onOpenReview,
-	reviewFocusPr,
-	showStaging = false,
-	onOpenStaging,
-	onCloseStaging,
-	showAssets = false,
-	showTerminal = false,
-	terminalTabOpen = false,
-	showConversation = false,
-	conversationThreadId = null,
-	showVideo = false,
-	videoPanel = null,
-	videoTitle = null,
-	showPreviewTab = false,
-	onOpenPreviewTab,
-	onOpenPr,
-	onClosePreviewTab,
-	showPortal = false,
-	portalTarget = null,
-	onOpenPortal,
-	onOpenAssets,
-	onCloseAssets,
-	onOpenTerminal,
-	onCloseTerminal,
-	onOpenWorkspace,
-	showSubagent = false,
-	subagentStack = NO_SUBAGENTS,
-	onOpenSubagent,
-	onSubagentBack,
-	onSubagentLabel,
-}: Props) {
-	// Repos the Review tab can target: the session's own, then each attached
-	// one. Keyed on the contents like the PR lists below, and for a sharper
-	// reason than they have — this was a bare literal, so it handed PrPanel a
-	// new array on every render, and its `targets` memo could never bail no
-	// matter what else downstream was stable.
-	const reviewReposKey = [
-		session.repo || "repository",
-		...(session.attachedRepos || []).map((repo) => repo.repo),
-	].join("\u0000");
-	const reviewRepos = useMemo(
-		() => reviewReposFromKey(reviewReposKey),
-		[reviewReposKey],
-	);
-	const prPresentation = useMemo(
-		() => sessionPrPresentation(session.prs),
-		[session.prs],
-	);
-	const worktreeDiffSource: "worktree" | undefined =
-		onOpenReview && (prPresentation.primary || prPresentation.additional.length)
-			? "worktree"
-			: undefined;
-	const changeWorktreeDiffSource = (next: "pull-request" | "worktree") => {
-		if (next === "pull-request") onOpenReview?.();
-	};
-	const mergedPrValue =
-		prPresentation.primary?.state === "MERGED"
-			? prPresentation.primary
-			: undefined;
-	const prNumber = mergedPrValue?.number;
-	const prRepo = mergedPrValue?.repo;
-	const prBranch = mergedPrValue?.branch;
-	const prTitle = mergedPrValue?.title;
-	// The sessions poll rebuilds session.prs every tick, so `primary` is a new
-	// object on every render. Everything downstream memoizes on it, including
-	// the Slack share the memoized transcript takes as a prop, so key it on the
-	// fields those readers use, the way the walkthrough below does.
-	const mergedPrKey = mergedPrValue
-		? [
-				mergedPrValue.number,
-				mergedPrValue.repo,
-				mergedPrValue.branch ?? "",
-				mergedPrValue.title ?? "",
-			].join("\u0000")
-		: "";
-	// Rebuilt from the key's own leaves so the memo callback reads only its
-	// deps: identity stays stable across poll ticks that change nothing.
-	const mergedPr = useMemo(
-		() =>
-			mergedPrKey
-				? {
-						number: prNumber,
-						repo: prRepo,
-						branch: prBranch,
-						title: prTitle,
-					}
-				: undefined,
-		[mergedPrKey, prNumber, prRepo, prBranch, prTitle],
-	);
-	const [shippedChangeStatus, setShippedChangeStatus] = useState<
-		"idle" | "sharing"
-	>("idle");
-	const [shippedSlackReconnectRequired, setShippedSlackReconnectRequired] = useState(false);
-	// The share this view just made. The persisted receipt on the session is the
-	// same thing after a reload; this only covers the gap before it refreshes.
-	const [shippedShare, setShippedShare] = useState<SessionSlackShare | null>(null);
-	const walkthroughScreenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
-	useEffect(
-		() => {
-			setShippedChangeStatus("idle");
-			setShippedSlackReconnectRequired(false);
-			setShippedShare(null);
-		},
-		[session.id, mergedPr?.number],
-	);
-	// Closing the card is a decision about this PR, not a fold, so it sticks
-	// across reloads and devices (lib/slack-share-dismiss). The next merged PR
-	// in the same session gets its own card, and "Send to Slack…" in the
-	// composer menu still opens a composer, so closing loses nothing.
-	const shareDismissKey = mergedPr?.number
-		? slackShareDismissKey(session.id, mergedPr.number)
-		: "";
-	const [shareDismissed, setShareDismissed] = useState(() =>
-		isSlackShareDismissed(shareDismissKey),
-	);
-	const isSessionFocused = useEffectEvent(() => focused);
-	useEffect(() => {
-		const sync = () => setShareDismissed(isSlackShareDismissed(shareDismissKey));
-		sync();
-		return onSlackShareDismissChanged(sync);
-	}, [shareDismissKey]);
-	const dismissShippedChangeShare = useCallback(
-		() => dismissSlackShare(shareDismissKey),
-		[shareDismissKey],
-	);
-	const sendShippedChangeToSlack = useCallback(async (message: string, channel: string, screenshots: string[]) => {
-		if (!mergedPr) return;
-		setShippedChangeStatus("sharing");
-		try {
-			const result = await shareShippedChange(session.id, {
-				repo: mergedPr.repo,
-				branch: mergedPr.branch,
-				message,
-				channel,
-				screenshots,
-			});
-			setShippedChangeStatus("idle");
-			setShippedSlackReconnectRequired(false);
-			if (result.share) setShippedShare(result.share);
-			else toast("This post was already sent");
-		} catch (error: any) {
-			setShippedChangeStatus("idle");
-			if (error?.status === 403 && /Reconnect Slack/.test(error?.message || "")) {
-				setShippedSlackReconnectRequired(true);
-				toast("Reconnect Slack to add image access");
-			} else {
-				toast(error?.message || "Couldn't share the shipped update");
-			}
-		}
-	}, [mergedPr, session.id]);
-	// Undo deletes the message in Slack and drops the receipt, so the card can
-	// offer the send again. Slack only lets someone delete their own message, so
-	// a teammate's post fails here rather than silently doing nothing.
-	const undoShippedChangeShare = useCallback(async (at: string) => {
-		try {
-			await undoShippedChange(session.id, at);
-			setShippedShare(null);
-			toast("Removed from Slack");
-		} catch (error: any) {
-			toast(error?.message || "Couldn't undo the Slack message");
-		}
-	}, [session.id]);
-	const reconnectShippedSlack = useCallback(async () => {
-		try {
-			await reconnectSlack();
-			setShippedSlackReconnectRequired(false);
-			toast("Approve image access in Slack, then send again");
-		} catch (error: any) {
-			toast(error?.message || "Couldn't reconnect Slack");
-		}
-	}, []);
-	const promotedPr =
-		prPresentation.primary?.source !== "primary"
-			? prPresentation.primary
-			: undefined;
-	// The one PR a phone's top bar shows. The primary if there is one, else the
-	// series' worst state, so a failing attached-repo PR is not hidden behind a
-	// green one. Undefined when the session has no PR at all — the bar then
-	// carries nothing rather than a chip that says "none".
-	const phonePr =
-		prPresentation.primary ?? worstPrRef(prPresentation.additional);
-	// PRs the server matched to this session through their body's attribution
-	// footer — opened on a branch the session doesn't own, so they'd otherwise
-	// have no Review tab of their own.
-	//
-	// Keyed on the contents, the way mergedPr above is: the poll rebuilds
-	// session.prs on every tick that changed any session, so this list arrives
-	// as a new array with the same PRs in it. It is a dep of PrPanel's
-	// `targets` memo, which a fresh identity re-runs. Every field the
-	// projection carries is in the key, not only the three that memo reads:
-	// LinkedPrEntry is shared with the linked-PR path, so a reader of `title`
-	// or `url` should not be handed a stale one.
-	const discoveredPrsKey = (session.prs || [])
-		.filter((ref) => ref.source === "discovered")
-		.map((ref) =>
-			[
-				ref.repo,
-				ref.branch,
-				ref.number ?? "",
-				ref.url ?? "",
-				ref.title ?? "",
-			].join("\u0000"),
-		)
-		.join("\u0001");
-	const discoveredPrs = useMemo(
-		() => discoveredPrsFromKey(discoveredPrsKey),
-		[discoveredPrsKey],
-	);
-	// Which PR the Review tab should open on, set by the PR chips in the
-	// Workspace strip (seq lets the same chip re-focus after a manual switch).
-	const [reviewFocus, setReviewFocus] = useState<PrFocus | undefined>(undefined);
-	const focusPrInReview = useCallback(
-		(ref?: { repo: string; branch: string }, view?: "checks") => {
-			if (ref || view)
-				setReviewFocus((prev) => ({ ...ref, view, seq: (prev?.seq ?? 0) + 1 }));
-			onOpenReview?.();
-		},
-		[onOpenReview],
-	);
-	// The app opened Review on a specific PR (a sidebar PR row, or a workspace
-	// row whose PR isn't this session's primary). Re-sequenced locally so it
-	// shares one monotonic counter with the chips above.
-	const syncReviewFocus = useEffectEvent(() => {
-		if (!reviewFocusPr) return;
-		setReviewFocus((prev) => ({
-			repo: reviewFocusPr.repo,
-			branch: reviewFocusPr.branch,
-			number: reviewFocusPr.number,
-			seq: (prev?.seq ?? 0) + 1,
-		}));
-	});
-	useEffect(() => {
-		syncReviewFocus();
-	}, [reviewFocusPr?.seq]);
-	// Worktree roots for the transcript's tool rows: paths inside them render
-	// repo-relative instead of as a long absolute path (see tidyPath).
-	//
-	// Keyed on the contents, the way mergedPr above is: a poll that changed any
-	// session re-parses the whole list, so `attachedRepos` is a new array on
-	// most ticks with the same repos in it. This one is a context value, which
-	// no memo downstream can stop, so a fresh identity re-renders every tool
-	// row in the transcript. tidyPath reads dir and label, and nothing else.
-	const toolPathRootsKey = [
-		session.worktreeDir || "",
-		...(session.attachedRepos || []).map(
-			(repo) => `${repo.dir}\u0000${repo.repo}`,
-		),
-	].join("\u0001");
-	const toolPathRoots = useMemo(
-		() => toolPathRootsFromKey(toolPathRootsKey),
-		[toolPathRootsKey],
-	);
-	const githubReviewRepos = reviewRepos;
-	// With no session-owned primary, workspace PRs are the only real review
-	// targets. This includes the multi-PR case where no single ref was promoted;
-	// leaving the current repo target first opened an empty “Create PR” canvas.
-	const workspaceOnlyPrs =
-		!prPresentation.primary && prPresentation.additional.length > 0;
-	const panelReviewRepos =
-		promotedPr || workspaceOnlyPrs ? NO_REVIEW_REPOS : githubReviewRepos;
-	const [shellTiming] = useState(() => new SessionShellTiming(performance.now()));
-	// A full-width view-tab (Review, Staging, Assets, a sub-agent) takes over the
-	// session column, so the session DOM isn't mounted while any is up — the scroll /
-	// history / scroll-restore effects below must bail in all cases.
-	const subagentOpen = showSubagent && subagentStack.length > 0;
-	const sessionHidden =
-		showReview ||
-		showStaging ||
-		showAssets ||
-		showTerminal ||
-		showPreviewTab ||
-		(showPortal && !!portalTarget) ||
-		subagentOpen ||
-		(showConversation && !!conversationThreadId) ||
-		(showVideo && !!videoPanel);
-	const [cachedTranscript] = useState(() => peekCachedTranscriptView(session.id));
-	// App keys SessionViewer by session id, so this store is created once for
-	// the mounted session and cannot be replaced by polling model metadata.
-	const [transcriptViewStore] = useState(
-		() =>
-			new TranscriptViewStore(
-				withModelSwitches(
-					peekCachedTranscriptView(session.id)?.entries ?? [],
-					session.modelHistory,
-				),
-			),
-	);
-	const entries = useSyncExternalStore(
-		transcriptViewStore.subscribe,
-		transcriptViewStore.getSnapshot,
-		transcriptViewStore.getServerSnapshot,
-	);
-	const shippedScreenshot = walkthroughScreenshot || latestFeaturedScreenshot(entries);
-	const setEntries = useCallback(
-		(
-			update:
-				| TranscriptEntry[]
-				| ((previous: TranscriptEntry[]) => TranscriptEntry[]),
-		) => transcriptViewStore.update(update),
-		[transcriptViewStore],
-	);
-	// The message rail's index. useMemo on purpose (against the house rule):
-	// this is a full scan of a transcript that runs to several thousand
-	// entries, not the routine allocation the rule is about.
-	const sentMessages = useMemo(() => collectSentMessages(entries), [entries]);
-	const liveTurnStore = useMemo(() => {
-		// Read (and discard) the session id so the reset key is explicit.
-		void session.id;
-		return new LiveTurnStore();
-	}, [session.id]);
-	const transcriptCommitCount = useRef(0);
-	const onTranscriptRender = useCallback(
-		(
-			_: string,
-			phase: "mount" | "update" | "nested-update",
-			actualDuration: number,
-		) => {
-			recordSessionPerf("react_transcript_commit_ms", actualDuration, {
-				phase,
-				entries: transcriptViewStore.getSnapshot().length,
-			});
-			transcriptCommitCount.current++;
-			if (phase === "mount" || transcriptCommitCount.current % 20 === 0) {
-				recordSessionPerf(
-					"transcript_dom_nodes",
-					document.querySelectorAll(".viewer-messages [data-eid]").length,
-				);
-			}
-		},
-		[transcriptViewStore],
-	);
-	// Initial scrolling must wait for this session's transcript_init. During a
-	// session switch, entries from the previous session remain rendered until the
-	// WebSocket response arrives and must not consume the new session's scroll.
-	const transcriptReadySessionRef = useRef<string | null>(
-		cachedTranscript ? session.id : null,
-	);
-	// Reconnect resume cursor: endOffset/rev of the last transcript frame the
-	// server sent (transcript_init/append). On a re-watch of the SAME session
-	// with entries still mounted, it rides the watch message as
-	// sinceOffset/sinceRev so the server replays only the gap from the mirror
-	// jsonl instead of replacing the whole tail.
-	const transcriptCursorRef = useRef<{
-		sessionId: string;
-		rev: string;
-		offset: number;
-	} | null>(cachedTranscript?.cursor ?? null);
-	// Transcript v2 seq mode (docs/transcripts.md): when init/append
-	// frames carry seq fields the server is serving from the owned store —
-	// resume watches with sinceSeq, page older history with beforeSeq, and
-	// ignore offset/rev cursors while in this mode. null = legacy mode (old
-	// server or ineligible session): behavior byte-identical to pre-v2.
-	// lastSeq tracks the newest seq seen (max — upsert republishes reuse old
-	// seqs); firstSeq the earliest loaded (the "load earlier" cursor).
-	const transcriptSeqRef = useRef<{
-		sessionId: string;
-		lastSeq: number;
-		firstSeq: number | null;
-		lastChangeSeq: number;
-	} | null>(cachedTranscript?.seq ?? null);
-	// Existing engine-backed sessions can load from the owned transcript store even
-	// when no mirror file exists. Fresh sessions never ran, so they still render
-	// the empty canvas without flashing a loader. `ran` and not the engine ids:
-	// this is the FIRST render, before the session's detail has hydrated, and
-	// the list row carries the answer where it no longer carries the ids.
-	const [loading, setLoading] = useState(!cachedTranscript && !!session.ran);
-	// Cached transcripts stay visible while the watch handshake catches them up.
-	// That background sync is intentionally silent: it does not block reading or
-	// sending, and a loader at the live edge looks like part of the conversation.
-	// The initial transcript is the tail only when the file is large; these drive
-	// the "load earlier history" affordance at the top of the conversation.
-	const [historyTruncated, setHistoryTruncated] = useState(
-		cachedTranscript?.historyTruncated ?? false,
-	);
-	const [loadingHistory, setLoadingHistory] = useState(false);
-	// The whole-history actions walk backward a page at a time. The walk is
-	// driven from the transcript_history handler (each page schedules the next),
-	// so its state lives in a ref; `loaded` enforces the ceiling and
-	// `cursor` catches a backlog that stops receding (a transcript whose
-	// earliest surviving entry isn't seq 1 reports "truncated" forever).
-	const historyWalkRef = useRef<{
-		sessionId: string;
-		loaded: number;
-		cursor: number | null;
-	} | null>(null);
-	// An ordinary history load walks until it reaches a user/system boundary.
-	// A raw page can otherwise land wholly inside one collapsed work turn, which
-	// makes a successful load look like a no-op. This stays separate from the
-	// explicit whole-history walk and has its own small ceiling.
-	const historyRevealRef = useRef<{
-		sessionId: string;
-		loaded: number;
-		cursor: number | null;
-	} | null>(null);
-	// One extra page downloads after the initial view settles. It starts only
-	// while the reader is still at the live edge; an upward gesture adopts the
-	// in-flight request into historyRevealRef and gives it the normal scroll hold.
-	const backgroundHistoryRef = useRef(false);
-	const backgroundHistoryAttemptedRef = useRef(false);
-	const [loadingAllHistory, setLoadingAllHistory] = useState(false);
-	const [transcriptIndexState, setTranscriptIndexState] = useState<{
-		sessionId: string;
-		entries: TranscriptIndexEntry[];
-	} | null>(() =>
-		cachedTranscript?.index
-			? { sessionId: session.id, entries: cachedTranscript.index }
-			: null,
-	);
-	const transcriptIndexStateRef = useRef(transcriptIndexState);
-	useLayoutEffect(() => {
-		transcriptIndexStateRef.current = transcriptIndexState;
-	}, [transcriptIndexState]);
-	const [transcriptIndexExpected, setTranscriptIndexExpected] = useState(
-		Boolean(cachedTranscript?.index),
-	);
-	const transcriptIndexExpectedRef = useRef(Boolean(cachedTranscript?.index));
-	const transcriptIndex =
-		transcriptIndexState?.sessionId === session.id
-			? transcriptIndexState.entries
-			: null;
-	const transcriptIndexEpochRef = useRef<number | null>(
-		cachedTranscript?.indexEpoch ?? null,
-	);
-	// A bounded v2 init only describes its loaded tail. The full outline is what
-	// proves every unloaded range lies above or below the opening fold, so do not
-	// accept a virtualizer "visible rows ready" signal until that frame arrives.
-	const [transcriptOutlineReady, setTranscriptOutlineReady] = useState(
-		!cachedTranscript?.index || cachedTranscript.indexEpoch !== null,
-	);
-	const transcriptRangeDemandReadyRef = useRef(false);
-	const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
-		useState(0);
-	const indexAnchorHoldCancelRef = useRef<(() => void) | null>(null);
-	// Retire the bounded index-anchor hold on an explicit return to the live
-	// edge. The hold repositions scrollTop toward the pre-refresh anchor every
-	// frame and only stops on gestures aimed at the scroller itself — a Send
-	// click or the jump pill happens outside it, so without this the hold drags
-	// the reader back up for the rest of its window while they watch their own
-	// message fail to stay in view.
-	function cancelIndexAnchorHold() {
-		indexAnchorHoldCancelRef.current?.();
-		indexAnchorHoldCancelRef.current = null;
-	}
-	const pendingIndexPositionRef = useRef<{
-		sessionId: string;
-		keepLiveEdge: boolean;
-		bottomGap: number | null;
-		anchorEid: string | null;
-		anchorTop: number | null;
-	} | null>(null);
-	const completedTranscriptRangeKeysRef = useRef(new Set<string>());
-	const transcriptRangeRequestsRef = useRef(
-		new Map<
-			string,
-			{
-				range: TranscriptIndexedRange;
-				requestId: string;
-				timer: ReturnType<typeof setTimeout>;
-			}
-		>(),
-	);
-	// Byte offset the loaded history begins at — the "load earlier" pagination
-	// cursor (server: parseTranscriptTail/parseTranscriptWindow startOffset).
-	// null = unknown (old server) → load_history falls back to the full resend.
-	const historyStartRef = useRef<number | null>(
-		cachedTranscript?.historyStart ?? null,
-	);
-	// Scroll anchor for "Load earlier history":
-	// older entries prepend above the viewport, so keep the reader on the same
-	// content. See startHistoryHold below — a DOM-element anchor plus a short
-	// rAF hold, because a one-shot scrollTop restore breaks in three ways:
-	// bottom growth (streaming) skews scrollHeight math, prepended bubbles
-	// enter at their content-visibility estimate (80px) and re-size as they
-	// render, and Safari has no native scroll anchoring to compensate.
-	const historyHoldRef = useRef<{
-		node: HTMLElement;
-		top: number;
-		eid: string | null;
-		eidTop: number | null;
-		until: number;
-		raf: number;
-		fallback: { height: number; top: number } | null;
-	} | null>(null);
-	// The composer draft lives INSIDE Composer (uncontrolled mode) so keystrokes
-	// don't re-render this whole component; the text arrives via handleSend.
-	// Same fix as the CommentableDiff draft-text gotcha.
-	// Text + attachments persist in the draft store (keyed per session) so
-	// switching to another session/workspace — which remounts this component —
-	// doesn't lose typed work. Text rides Composer's `draftKey`; the staged
-	// images/files live here, seeded from and mirrored into the same draft.
-	const draftKey = `session:${session.id}`;
-	const [images, setImages] = useState<string[]>(() => loadDraft(draftKey).images);
-	const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(draftKey).files);
-	const uploads = useAttachmentUploads();
-	const uploadStaging = uploads.staging;
-	const dragDepthRef = useRef(0);
-	const fileDragPresentRef = useRef(false);
-	const cancelledFileDragRef = useRef(false);
-	const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const [fileDragActive, setFileDragActive] = useState(false);
-	useEffect(() => {
-		saveDraft(draftKey, { images, files });
-	}, [draftKey, images, files]);
-	// When set, the next send forks a new session branching from this message
-	// instead of continuing this one.
-	const [forkFrom, setForkFrom] = useState<string | null>(null);
-	useEffect(() => {
-		const messageId = takePendingSessionFork(session.id);
-		if (messageId) setForkFrom(messageId);
-	}, [session.id]);
-	const [isStreaming, setIsStreaming] = useState(false);
-	const [isRunningLive, setIsRunningLive] = useState(session.isRunning);
-	const [safety, setSafety] = useState(session.safety);
-	useEffect(() => {
-		setSafety(session.safety);
-		if (session.safety) setIsRunningLive(false);
-	}, [session.id, session.safety]);
-	// Bumped on git pushes and matching GitHub webhook events so every mounted PR
-	// surface revalidates immediately.
-	const [gitRefreshTick, setGitRefreshTick] = useState(0);
-	const sessionPrTargetsRef = useRef<Set<string>>(new Set());
-	useLayoutEffect(() => {
-		sessionPrTargetsRef.current = new Set([
-			`${session.repo || "repository"}\0${session.branch}`,
-			...(session.attachedRepos || []).map((repo) => `${repo.repo}\0${repo.branch}`),
-			...(session.prs || []).map((ref) => `${ref.repo}\0${ref.branch}`),
-		]);
-	}, [session.repo, session.branch, session.attachedRepos, session.prs]);
-	const [viewers, setViewers] = useState<string[]>([]);
-	const [typingUsers, setTypingUsers] = useState<string[]>([]);
-	// The create run is still preparing this session's worktree (new workspaces
-	// announce the session before the slow git work). While true the conversation
-	// shows creation progress, and the opening message holds above the composer.
-	// Flipped off by the workspace_status event, kept in sync with
-	// the sessions poll otherwise.
-	const [workspacePreparing, setWorkspacePreparing] = useState(
-		!!session.workspacePreparing,
-	);
-	useEffect(() => {
-		setWorkspacePreparing(!!session.workspacePreparing);
-	}, [session.workspacePreparing]);
-	const [queued, setQueued] = useState<QueueReceipt[]>([]);
-	// Drag-to-reorder bookkeeping. onReorder fires continuously during a drag, so
-	// we only reorder locally then flush the final order to the server on drop —
-	// broadcasting mid-drag would swap the item references out from under Motion
-	// and drop the gesture. draggingQueueRef gates the incoming queue_update the
-	// same way, so an unrelated broadcast can't yank the list while dragging.
-	const draggingQueueRef = useRef(false);
-	const pendingReorderRef = useRef<QueueReceipt[] | null>(null);
-	// Delivery ownership stays server-side, but sent steering messages live in
-	// the conversation. These ids only give their bubbles a quiet pending
-	// treatment until the engine confirms it has read them.
-	const [steered, setSteered] = useState<QueueReceipt[]>([]);
-	const [pendingDeliveryIds, setPendingDeliveryIds] = useState<string[]>([]);
-	// One-shot draft injection into the Composer (bump seq to apply) — how
-	// "edit queued message" puts the text back into the input.
-	const [composerPrefill, setComposerPrefill] = useState<{
-		seq: number;
-		text: string;
-		replace?: boolean;
-	} | null>(null);
-	// Quick-reply chips for the turn that just ended (components/ReplySuggestions).
-	// Server-generated and server-cleared; a picked chip retires the row here.
-	const [replySuggestions, setReplySuggestions] =
-		useState<ReplySuggestion[]>(EMPTY_SUGGESTIONS);
-	// Settings → Preferences, default on. Only hides the row: the server keeps
-	// its own switch (OPENSESSION_REPLY_SUGGESTIONS=0) for the generation.
-	const [showReplySuggestions, setShowReplySuggestions] = useState(
-		getReplySuggestionsPref,
-	);
-	useEffect(
-		() =>
-			onReplySuggestionsChanged(() =>
-				setShowReplySuggestions(getReplySuggestionsPref()),
-			),
-		[],
-	);
-	// Settings → Preferences, default on. This only hides the visible button;
-	// the keyboard shortcut and command palette action remain available.
-	const [showNextChatButton, setShowNextChatButton] = useState(
-		getNextChatButtonPref,
-	);
-	useEffect(
-		() =>
-			onNextChatButtonChanged(() =>
-				setShowNextChatButton(getNextChatButtonPref()),
-			),
-		[],
-	);
-	// Optimistic just-sent messages, shown instantly and reconciled once the real
-	// turn lands (transcript) or the server confirms it as queued (busy path).
-	// `busyMode` marks a send made while the run was busy: it renders inside the
-	// queue flap (as "Queueing…") instead of as a transcript bubble.
-	const [pending, setPending] = useState<OptimisticPendingPrompt[]>(() =>
-		initialPending
-			? [{ id: `pending-initial-${session.id}`, ...initialPending }]
-			: [],
-	);
-	// Read by the reconcile effect below, which must not re-run on every send.
-	const pendingRef = useRef(pending);
-	useLayoutEffect(() => {
-		pendingRef.current = pending;
-	}, [pending]);
-	// Pending ids the server has CONFIRMED (transcript entry or queue/steer
-	// receipt). Their durable outbox row is hidden, so one message can't render
-	// as a transcript bubble and a "Sending" flap row at the same time.
-	const [landedOutboxIds, setLandedOutboxIds] = useState<Set<string>>(
-		() => new Set(),
-	);
-	const [outboxItems, setOutboxItems] = useState<PromptOutboxItem[]>(() =>
-		promptOutbox.list(session.id),
-	);
-	useEffect(() => {
-		const stopObserving = promptOutbox.observeDelivery((item, result) => {
-			if (item.sessionId !== session.id) return;
-			const pendingId = `outbox-${item.clientId}`;
-			const deliveredPrompt: OptimisticPendingPrompt = {
-				id: pendingId,
-				content: item.content,
-				user: item.user || getCurrentUser(),
-				sentAt: item.createdAt,
-				...(item.images?.length ? { images: item.images } : {}),
-			};
-			if (result.status === "started") {
-				// Placement guessed from local running state can lose a turn-end race.
-				// The server started a turn, so this is an optimistic transcript bubble,
-				// not a queued row.
-				setPending((current) =>
-					markPendingStarted(current, deliveredPrompt),
-				);
-				setIsRunningLive(true);
-				return;
-			}
-			if (result.status === "queued" || result.status === "steered") {
-				// Queued messages stay above the composer. A steer is already sent, so
-				// it stays in the conversation while the engine catches up.
-				setPending((current) =>
-					markPendingBusy(
-						current,
-						deliveredPrompt,
-						result.status === "queued" ? "queue" : "steer",
-					),
-				);
-				setIsRunningLive(true);
-				return;
-			}
-			if (result.status !== "handled") return;
-			// Slash commands are consumed by Open Session, so no user transcript
-			// entry or queue echo will ever reconcile their optimistic row. The old
-			// WebSocket composer received an inline notice; preserve that feedback
-			// now that sends travel through the durable REST outbox.
-			setPending((current) =>
-				current.filter((entry) => entry.id !== pendingId),
-			);
-			const noticeId = `prompt-delivery-${result.deliveryId || item.clientId}`;
-			setEntries((current) =>
-				current.some((entry) => entry.id === noticeId)
-					? current
-					: [
-							...current,
-							{
-								id: noticeId,
-								type: "system",
-								content: result.message,
-								timestamp: new Date().toISOString(),
-							},
-						],
-			);
-		});
-		const sync = () => {
-			const items = promptOutbox.list(session.id);
-			setOutboxItems(items);
-			// Forget claims the outbox no longer holds (delivered, discarded, or
-			// another session's), so the set can't grow for the life of the tab.
-			setLandedOutboxIds((prev) => {
-				if (prev.size === 0) return prev;
-				const live = new Set(items.map((i) => `outbox-${i.clientId}`));
-				const next = new Set([...prev].filter((id) => live.has(id)));
-				return next.size === prev.size ? prev : next;
-			});
-		};
-		sync();
-		const unsubscribe = promptOutbox.subscribe(sync);
-		void promptOutbox.flush();
-		return () => {
-			unsubscribe();
-			stopObserving();
-		};
-	}, [session.id, setEntries]);
-	useEffect(() => {
-		if (connected) void promptOutbox.flush();
-	}, [connected]);
-	useEffect(() => {
-		if (!initialPending) return;
-		const content = initialPending.content.trim();
-		setPending((prev) => {
-			if (prev.some((p) => p.id === `pending-initial-${session.id}`))
-				return prev;
-			if (
-				entries.some(
-					(e) => e.type === "user" && (!content || e.content.trim() === content),
-				)
-			) {
-				return prev;
-			}
-			return [
-				...prev,
-				{
-					id: `pending-initial-${session.id}`,
-					...initialPending,
-				},
-			];
-		});
-	}, [entries, initialPending, session.id, setEntries]);
-	const [ask, setAsk] = useState<{
-		questionId: string;
-		questions: AskQuestion[];
-	} | null>(null);
-	const [slackComposer, setSlackComposer] = useState<{
-		id: string;
-		message: string;
-		channel?: string;
-		images: string[];
-	} | null>(null);
-	const [slackComposerStatus, setSlackComposerStatus] = useState<"idle" | "sharing">("idle");
-	const [slackComposerReconnect, setSlackComposerReconnect] = useState(false);
-	const [slackComposerSent, setSlackComposerSent] = useState<SlackSent | null>(null);
-	const { copied, share: shareLink } = useCopy();
-	// Inline rename of the header title (double-click), mirroring the tab strip.
-	// `null` = not editing; a string = the working draft.
-	const [renameDraft, setRenameDraft] = useState<string | null>(null);
-	const [pinned, setPinned] = useState(() => isPinned(session.id));
-	// Main session-area view: the transcript+composer vs. the full-width PR review
-	// that takes over the whole session column. Which one shows is now owned by App
-	// (the top tab strip's Review view-tab) and passed in as `showReview`; the
-	// open triggers call onOpenReview. Only meaningful on a code session
-	// (hasWorkspace) — App only offers the Review tab there.
-	// Sub-agents open as their own view-tab (App owns the breadcrumb stack, like
-	// every other tab) — a sub-agent run is a conversation, so it gets the session
-	// column rather than the right sidebar.
-	// Phones fold the desktop Workspace panel into the title-opened detail page.
-	// Keeping this state near panelOpen lets the shared diff poll serve either
-	// surface without mounting a second copy of the data hook.
-	const [infoPageOpen, setInfoPageOpen] = useState(false);
-	const [infoPageScrolled, setInfoPageScrolled] = useState(false);
-	// Stable identity so the memoized TranscriptBlocks bails out on unrelated
-	// re-renders (e.g. toggling the workspace panel) instead of re-rendering the
-	// whole transcript.
-	const openSubagent = useCallback(
-		(agentId: string, label: string) =>
-			onOpenSubagent?.(session.id, agentId, label),
-		[onOpenSubagent, session.id],
-	);
-	const nameSubagent = useCallback(
-		(agentId: string, label: string) =>
-			onSubagentLabel?.(session.id, agentId, label),
-		[onSubagentLabel, session.id],
-	);
-	// The agent-published walkthrough, rendered inline in the session as well as in
-	// the Review tab. Keyed on its contents so the object identity only changes
-	// when the walkthrough actually does — the sessions poll hands back a fresh
-	// session object every tick, and an unstable prop here would re-render the
-	// whole (expensive) transcript each time.
-	const wt = session.walkthrough;
-	const wtSummary = wt?.summary ?? "";
-	const wtVideo = wt?.video;
-	const wtVideoTitle = wt?.videoTitle;
-	const wtShots = wt?.shots;
-	const wtPublishedAt = wt?.publishedAt ?? "";
-	const wtPublishedBy = wt?.publishedBy;
-	const wtPublishedEntryId = wt?.publishedEntryId;
-	const walkthroughKey = session.walkthrough
-		? [
-				session.walkthrough.publishedAt,
-				session.walkthrough.video || "",
-				session.walkthrough.summary.length,
-				session.walkthrough.shots?.length || 0,
-			].join("|")
-		: "";
-	// Same rebuild-from-key-leaves trick as mergedPr above.
-	const hasWalkthrough = !!wt;
-	const sessionWalkthrough = useMemo(
-		() =>
-			hasWalkthrough
-				? {
-						summary: wtSummary,
-						video: wtVideo,
-						videoTitle: wtVideoTitle,
-						shots: wtShots,
-						publishedAt: wtPublishedAt,
-						publishedBy: wtPublishedBy,
-						publishedEntryId: wtPublishedEntryId,
-					}
-				: undefined,
-		[
-			hasWalkthrough,
-			wtSummary,
-			wtVideo,
-			wtVideoTitle,
-			wtShots,
-			wtPublishedAt,
-			wtPublishedBy,
-			wtPublishedEntryId,
-		],
-	);
-	// The PR verdict on the transcript's last review loop, keyed the same way:
-	// it is built fresh from the polled session on every render, and an
-	// unstable prop here re-renders the whole transcript on every poll tick.
-	const reviewResultValue = reviewLoopResult(session);
-	const reviewResultKey = JSON.stringify(reviewResultValue ?? null);
-	const reviewResult = useMemo(
-		() =>
-			reviewResultKey === "null"
-				? undefined
-				: (JSON.parse(reviewResultKey) as ReturnType<typeof reviewLoopResult>),
-		[reviewResultKey],
-	);
-	// Open state + width of the right panel. Browser-level, and shared with the
-	// session-less workspace route so the chosen summary card or panel follows
-	// the person between workspaces (hooks/useSidePanel).
-	const {
-		open: panelOpen,
-		setOpen: setPanelOpen,
-		style: panelStyle,
-		resizeHandle: panelResizeHandle,
-	} = useSidePanel();
-	// Review starts with a clear canvas without overwriting the browser-wide
-	// workspace-panel preference. Its own toggle can open the panel for this view,
-	// while returning to a session restores that session's ordinary panel state.
-	const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
-	const activePanelOpen = showReview ? reviewPanelOpen : panelOpen;
-	const setActivePanelOpen = showReview ? setReviewPanelOpen : setPanelOpen;
-	// The desktop panel starts on Changes, then keeps the selected tool when it
-	// closes so reopening returns to the person's last place. Phones still use
-	// null for their Workspace details overview and push Changes from that page.
-	const [panelPage, setPanelPage] = useState<
-		null | "changes" | "portals" | "agents" | "terminal"
-	>(null);
-	// Start a panel terminal only after its tab is opened. Keep it mounted while
-	// switching tabs, then drop it when the panel closes.
-	const [panelTerminalMounted, setPanelTerminalMounted] = useState(false);
-	useEffect(() => {
-		if (!activePanelOpen) setPanelTerminalMounted(false);
-	}, [activePanelOpen]);
-	// Closing the host that shows pages returns to the overview; that effect
-	// needs `isPhone` to know which host to watch, so it lives beside the
-	// viewport state further down.
-	useEffect(() => {
-		setPanelPage(null);
-	}, [session.id]);
-	// Session scratch assets (Assets tab): fetched once per session + on
-	// assets_changed broadcasts; the tab only appears once files exist.
-	const { files: assetFiles, refresh: refreshAssets } = useSessionAssets(
-		session.id,
-		addHandler,
-	);
-	const assetPaths = useMemo(
-		() => assetFiles.map((file) => file.path),
-		[assetFiles],
-	);
-	// Which asset the main-area Assets view-tab previews. Controlled here so a
-	// tree selection and a later overlay promotion never drift apart.
-	const [selectedAssetPath, setSelectedAssetPath] = useState<string | null>(
-		null,
-	);
-	// One file, lifted over the conversation. Every way into an asset — a
-	// transcript chip, a tool row, the Info panel's list — lands here, so the
-	// file behaves the same whichever one you used; the Assets tab is where you
-	// go deliberately, and the overlay's own header is how you get promoted
-	// into it.
-	const [overlayAssetPath, setOverlayAssetPath] = useState<string | null>(null);
-	// Through a ref because `onOpenAssets` is a fresh closure on every App
-	// render, and this reaches the memoized transcript as a context value —
-	// an unstable one would re-render the whole thing on every sessions poll.
-	const openAssetsRef = useRef(onOpenAssets);
-	useLayoutEffect(() => {
-		openAssetsRef.current = onOpenAssets;
-	}, [onOpenAssets]);
-	const openAssetFromTranscript = useCallback((path: string) => {
-		setOverlayAssetPath(path);
-	}, []);
-	const closeAssetOverlay = useCallback(() => setOverlayAssetPath(null), []);
-	// The overlay's "Open as tab": the file it was showing becomes the Assets
-	// tab's selection, and the overlay gets out of the way.
-	const promoteAssetToTab = useCallback((path: string) => {
-		setSelectedAssetPath(path);
-		setOverlayAssetPath(null);
-		openAssetsRef.current?.();
-	}, []);
-	const sessionReports = useSessionReports(session.id, addHandler);
-	// Team notes — human-to-human messages on this session, interleaved into
-	// the transcript as NoteBubbles. The agent never sees them; they're posted
-	// from the composer's note mode (⌘N).
-	const [notes, setNotes] = useState<SessionNote[]>([]);
-	const [noteMode, setNoteMode] = useState(false);
-	async function addSessionAttachments(picked: FileList | File[]) {
-		const selected = Array.from(picked);
-		const noteImageTypes = new Set([
-			"image/png",
-			"image/jpeg",
-			"image/gif",
-			"image/webp",
-		]);
-		const disallowed = noteMode
-			? selected.filter((file) => !noteImageTypes.has(file.type))
-			: [];
-		const accepted = noteMode
-			? selected.filter((file) => noteImageTypes.has(file.type))
-			: selected;
-		const results = await uploads.upload(accepted, (file, signal) =>
-			attachToDraft(draftKey, [file], signal),
-		);
-		if (results.some((result) => result.applied)) {
-			const stored = loadDraft(draftKey);
-			setImages((current) =>
-				sameImages(current, stored.images) ? current : stored.images,
-			);
-			setFiles((current) =>
-				sameFiles(current, stored.files) ? current : stored.files,
-			);
-		}
-		const failures = [
-			...results.flatMap((result) => result.rejected),
-			...disallowed.map(
-				(file) =>
-					`${file.name} (notes accept PNG, JPEG, GIF, or WebP images)`,
-			),
-		];
-		if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
-	}
-
-	function resetFileDrag() {
-		dragDepthRef.current = 0;
-		setFileDragActive(false);
-	}
-	function finishFileDrag() {
-		if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
-		fileDragWatchdogRef.current = null;
-		resetFileDrag();
-		fileDragPresentRef.current = false;
-		cancelledFileDragRef.current = false;
-	}
-	function armFileDragWatchdog() {
-		if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
-		fileDragWatchdogRef.current = setTimeout(finishFileDrag, 500);
-	}
-	const dropAttachments = useEffectEvent((picked: FileList | File[]) =>
-		addSessionAttachments(picked),
-	);
-	useEffect(() => {
-		// Own external file drags at the window, not on the conversation node.
-		// Dialogs and sheets portal to document.body, so a node-scoped handler
-		// loses the drag as soon as it crosses their backdrop. Only the focused
-		// conversation subscribes, which also keeps split panes from attaching the
-		// same drop twice.
-		if (!focused || sessionHidden) {
-			finishFileDrag();
-			return;
-		}
-		function cancelFileDrag(event: KeyboardEvent) {
-			if (event.key !== "Escape" || !fileDragPresentRef.current) return;
-			event.preventDefault();
-			event.stopPropagation();
-			cancelledFileDragRef.current = true;
-			resetFileDrag();
-			armFileDragWatchdog();
-		}
-		function finishNativeDrag() {
-			finishFileDrag();
-		}
-		function handleFileDragEnter(event: DragEvent) {
-			if (!hasDraggedFiles(event.dataTransfer)) return;
-			if (foregroundFileComposerOpen()) {
-				finishFileDrag();
-				return;
-			}
-			event.preventDefault();
-			armFileDragWatchdog();
-			if (cancelledFileDragRef.current) return;
-			if (!fileDragPresentRef.current) {
-				fileDragPresentRef.current = true;
-				dragDepthRef.current = 0;
-			}
-			dragDepthRef.current += 1;
-			setFileDragActive(true);
-		}
-		function handleFileDragLeave(event: DragEvent) {
-			if (!hasDraggedFiles(event.dataTransfer)) return;
-			if (foregroundFileComposerOpen()) {
-				finishFileDrag();
-				return;
-			}
-			const next = event.relatedTarget;
-			const leftApp =
-				!(next instanceof Node) || !document.documentElement.contains(next);
-			if (cancelledFileDragRef.current) {
-				if (leftApp) finishFileDrag();
-				else resetFileDrag();
-				return;
-			}
-			// Escape during an external file drag is owned by the browser on some
-			// platforms. Its observable signal is a final leave with no drop effect.
-			if (event.dataTransfer?.dropEffect === "none") {
-				finishFileDrag();
-				return;
-			}
-			if (leftApp) {
-				finishFileDrag();
-				return;
-			}
-			dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-			if (dragDepthRef.current === 0) setFileDragActive(false);
-		}
-		function handleFileDragOver(event: DragEvent) {
-			if (!hasDraggedFiles(event.dataTransfer)) return;
-			if (foregroundFileComposerOpen()) {
-				finishFileDrag();
-				return;
-			}
-			event.preventDefault();
-			armFileDragWatchdog();
-			if (cancelledFileDragRef.current) {
-				if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
-				return;
-			}
-			if (!fileDragPresentRef.current) {
-				fileDragPresentRef.current = true;
-				dragDepthRef.current = 1;
-				setFileDragActive(true);
-			}
-			if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-		}
-		function handleFileDrop(event: DragEvent) {
-			if (!hasDraggedFiles(event.dataTransfer)) return;
-			if (foregroundFileComposerOpen()) {
-				finishFileDrag();
-				return;
-			}
-			event.preventDefault();
-			event.stopPropagation();
-			const cancelled = cancelledFileDragRef.current;
-			const dropped = event.dataTransfer?.files;
-			finishFileDrag();
-			if (!cancelled && dropped?.length) void dropAttachments(dropped);
-		}
-		// Capture before modal backdrops and the composer. Listen for keyup too:
-		// Chromium can consume keydown while it owns a native OS drag.
-		window.addEventListener("keydown", cancelFileDrag, true);
-		window.addEventListener("keyup", cancelFileDrag, true);
-		window.addEventListener("dragenter", handleFileDragEnter, true);
-		window.addEventListener("dragleave", handleFileDragLeave, true);
-		window.addEventListener("dragover", handleFileDragOver, true);
-		window.addEventListener("drop", handleFileDrop, true);
-		window.addEventListener("dragend", finishNativeDrag, true);
-		return () => {
-			finishFileDrag();
-			window.removeEventListener("keydown", cancelFileDrag, true);
-			window.removeEventListener("keyup", cancelFileDrag, true);
-			window.removeEventListener("dragenter", handleFileDragEnter, true);
-			window.removeEventListener("dragleave", handleFileDragLeave, true);
-			window.removeEventListener("dragover", handleFileDragOver, true);
-			window.removeEventListener("drop", handleFileDrop, true);
-			window.removeEventListener("dragend", finishNativeDrag, true);
-		};
-	}, [focused, sessionHidden, draftKey, noteMode]);
-	useEffect(() => {
-		setNotes([]);
-		setNoteMode(false);
-		let cancelled = false;
-		fetchSessionNotesApi(session.id)
-			.then((loaded) => {
-				if (!cancelled && loaded.length) setNotes(loaded);
-			})
-			.catch(() => {});
-		return () => {
-			cancelled = true;
-		};
-	}, [session.id]);
-	useEffect(
-		() =>
-			addHandler((msg) => {
-				if (
-					(msg.type !== "session_note" &&
-						msg.type !== "session_note_deleted") ||
-					msg.sessionId !== session.id
-				)
-					return;
-				if (msg.type === "session_note_deleted") {
-					setNotes((prev) => prev.filter((n) => n.id !== msg.noteId));
-					return;
-				}
-				setNotes((prev) => {
-					const i = prev.findIndex((n) => n.id === msg.note.id);
-					if (i < 0) return [...prev, msg.note];
-					// An edit re-broadcasts the whole note under the same id.
-					const next = [...prev];
-					next[i] = msg.note;
-					return next;
-				});
-			}),
-		[addHandler, session.id],
-	);
-	// Viewing the session marks its notes read (an unread indicator keys off
-	// this stamp).
-	useEffect(() => {
-		if (!notes.length) return;
-		markNotesRead(session.id, notes[notes.length - 1]!.ts);
-	}, [notes, session.id]);
-	// Opening the session is what clears an @-mention of you: looking at it is
-	// what "seen" means, so there is no separate dismiss. Runs on the session
-	// id alone — a mention that lands while you are already here clears too,
-	// which is right: you are looking at it.
-	useEffect(() => {
-		clearMention(session.id);
-		return onMentionsChanged(() => clearMention(session.id));
-	}, [session.id]);
-	// Intent-aware scrolling: stick to the live edge only while the reader is there,
-	// pin new turns near the top, and surface a "Jump to latest" affordance.
-	const {
-		containerRef: messagesRef,
-		setContainerRef: setMessagesRef,
-		spacerRef,
-		followingLive,
-		following,
-		showScrollToBottom,
-		atTop,
-		scrollToLatest,
-		leaveLatest,
-		endTurn,
-		relayout,
-		suspendEndMaintenance,
-		onScroll,
-	} = useSessionScroll(true);
-	// An explicit send first resumes live-edge following immediately, then needs
-	// one more positioning pass after React has committed the optimistic row.
-	// Scrolling only in the event handler targets the old scrollHeight; the row
-	// does not exist in the DOM yet, so selection/disclosure guards or delayed
-	// virtualizer measurement can otherwise leave part of it below the composer.
-	const sentPromptNeedsLayoutScrollRef = useRef(false);
-
-	// A fold toggle (turn work blocks, tool-call details, review loops) changes
-	// block heights above the reader. Hold the live-edge glue off for the two
-	// frames the layout needs to settle so it cannot drag the reader off the
-	// block they just opened or read the movement as intent to leave.
-	useEffect(
-		() => onTranscriptDisclosure(suspendEndMaintenance),
-		[suspendEndMaintenance],
-	);
-
-	// Open-settle curtain: positive proof lifts it as soon as the complete outline
-	// and near-visible payload settle. The deadline is equally load-bearing: an
-	// incomplete or slow hydration must not turn already-rendered transcript rows
-	// into an apparently empty page.
-	const [openSettlePending, setOpenSettlePending] = useState(true);
-	const transcriptRendered =
-		!loading && (entries.length > 0 || Boolean(transcriptIndex));
-	useEffect(() => {
-		if (!transcriptRendered) return;
-		const timer = window.setTimeout(
-			() => setOpenSettlePending(false),
-			OPEN_SETTLE_MAX_MS,
-		);
-		return () => window.clearTimeout(timer);
-	}, [transcriptRendered]);
-	const settledIndexRef = useRef<TranscriptIndexEntry[] | null>(null);
-	const onVisibleRangesSettled = useCallback(() => {
-		if (!transcriptOutlineReady) return;
-		setOpenSettlePending(false);
-		// Keep the pre-refresh message anchor through the final row measurements.
-		// Two paints later every visible real row has reported its geometry, so the
-		// bounded index hold can retire without letting a last correction jump the
-		// reader. The identity guard cannot cancel a newer refresh's hold.
-		const settledHold = indexAnchorHoldCancelRef.current;
-		if (settledHold) {
-			requestAnimationFrame(() =>
-				requestAnimationFrame(() => {
-					if (indexAnchorHoldCancelRef.current !== settledHold) return;
-					settledHold();
-					indexAnchorHoldCancelRef.current = null;
-				}),
-			);
-		}
-		if (settledIndexRef.current === transcriptIndex) return;
-		settledIndexRef.current = transcriptIndex;
-		if (readFollowingLive(followingLive)) scrollToLatest("auto");
-	}, [followingLive, scrollToLatest, transcriptIndex, transcriptOutlineReady]);
-	const [viewerInput, setViewerInput] = useState<HTMLDivElement | null>(null);
-	// The focused phone composer is fixed above the keyboard, so it contributes
-	// no height to the transcript's flex layout. Publish its real height without
-	// re-rendering on each draft line: the scroll padding can then clear the
-	// whole composer instead of assuming the resting one-row pill.
-	useLayoutEffect(() => {
-		if (!viewerInput || typeof ResizeObserver === "undefined") return;
-		const region = viewerInput.parentElement;
-		if (!region) return;
-		const measure = () => {
-			region.style.setProperty(
-				"--viewer-input-height",
-				`${Math.ceil(viewerInput.getBoundingClientRect().height)}px`,
-			);
-			relayout();
-		};
-		measure();
-		const observer = new ResizeObserver(measure);
-		// Keyboard focus changes the wrapper's padding, not its content box.
-		observer.observe(viewerInput, { box: "border-box" });
-		return () => {
-			observer.disconnect();
-			region.style.removeProperty("--viewer-input-height");
-		};
-	}, [relayout, viewerInput]);
-
-	useLayoutEffect(() => {
-		const pending = pendingIndexPositionRef.current;
-		if (!pending || transcriptIndexState?.sessionId !== pending.sessionId) return;
-		pendingIndexPositionRef.current = null;
-		const container = messagesRef.current;
-		if (pending.keepLiveEdge) {
-			scrollToLatest("auto");
-		} else if (container && pending.bottomGap !== null) {
-			container.scrollTop = Math.max(
-				0,
-				container.scrollHeight - container.clientHeight - pending.bottomGap,
-			);
-			if (pending.anchorEid && pending.anchorTop !== null) {
-				indexAnchorHoldCancelRef.current?.();
-				let cancelIndexHold = () => {};
-				cancelIndexHold = holdTranscriptAnchor(
-					container,
-					pending.anchorEid,
-					pending.anchorTop,
-					pending.bottomGap,
-					leaveLatest,
-					() => {
-						if (indexAnchorHoldCancelRef.current === cancelIndexHold)
-							indexAnchorHoldCancelRef.current = null;
-					},
-					15_000,
-				);
-				indexAnchorHoldCancelRef.current = cancelIndexHold;
-			}
-		}
-		requestAnimationFrame(() => {
-			transcriptRangeDemandReadyRef.current = true;
-			setTranscriptRangeRetryGeneration((generation) => generation + 1);
-		});
-	}, [
-		leaveLatest,
-		messagesRef,
-		scrollToLatest,
-		transcriptIndexState,
-	]);
-
-	// Keep the cached snapshot current as live frames and history pages land.
-	// Scroll position is updated synchronously in handleMessagesScroll below;
-	// the anchor is carried rather than recomputed, because this runs on every
-	// streamed frame and pickScrollAnchor reads a rect per [data-eid] node.
-	useEffect(() => {
-		if (transcriptReadySessionRef.current !== session.id) return;
-		const previous = cachedTranscriptView(session.id);
-		const el = messagesRef.current;
-		cacheTranscriptView(session.id, {
-			entries,
-			cursor: transcriptCursorRef.current,
-			seq: transcriptSeqRef.current,
-			historyTruncated,
-			historyStart: historyStartRef.current,
-			index: transcriptIndex,
-			indexEpoch: transcriptIndexEpochRef.current,
-			scrollTop: el?.scrollTop ?? previous?.scrollTop ?? 0,
-			following,
-			anchorEid: previous?.anchorEid ?? null,
-			anchorTop: previous?.anchorTop ?? null,
-		});
-	}, [
-		entries,
-		following,
-		historyTruncated,
-		messagesRef,
-		session.id,
-		transcriptIndex,
-	]);
-	// Where the anchor is computed. Nothing reads it until this session is
-	// opened again, and pickScrollAnchor reads a rect per [data-eid] node, so
-	// it runs once the reader settles instead of on every scroll event and
-	// every streamed frame.
-	const captureScrollAnchor = useCallback(() => {
-		const el = messagesRef.current;
-		const cached = peekCachedTranscriptView(session.id);
-		if (!el || !cached) return;
-		// Nothing qualifying at the top edge clears the pair, rather than
-		// leaving one the reader has scrolled away from.
-		const anchor = pickScrollAnchor(el);
-		cacheTranscriptView(session.id, {
-			...cached,
-			scrollTop: el.scrollTop,
-			following: readFollowingLive(followingLive),
-			anchorEid: anchor?.dataset.eid ?? null,
-			anchorTop: anchor
-				? anchor.getBoundingClientRect().top - el.getBoundingClientRect().top
-				: null,
-		});
-	}, [followingLive, messagesRef, session.id]);
-	const anchorCaptureRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const scheduleAnchorCapture = useCallback(() => {
-		if (anchorCaptureRef.current) clearTimeout(anchorCaptureRef.current);
-		anchorCaptureRef.current = setTimeout(captureScrollAnchor, 250);
-	}, [captureScrollAnchor]);
-	// And once more on the way out, so the last thing the reader did is what a
-	// switch back restores to. App keys SessionViewer on the session id
-	// (App.tsx), so this cleanup still sees the transcript it measures: React
-	// commits deletions before insertions.
-	useLayoutEffect(() => {
-		return () => {
-			if (anchorCaptureRef.current) clearTimeout(anchorCaptureRef.current);
-			anchorCaptureRef.current = null;
-			captureScrollAnchor();
-		};
-	}, [captureScrollAnchor]);
-	useEffect(() => {
-		setEntries((prev) => withModelSwitches(prev, session.modelHistory));
-	}, [session.modelHistory, setEntries]);
-
-	// The hold: keep an anchor element at a stable content offset while history
-	// prepends above it and the new bubbles' heights settle (content-visibility
-	// estimates resolve to real sizes as they render). `overflow-anchor: none`
-	// for the duration so Chrome's native scroll anchoring doesn't compensate
-	// the same shift twice; Safari has no native anchoring, so without this
-	// hold it loses the reader's position outright. Content-space offsets
-	// (rect relative to container + scrollTop) are scroll-invariant, so the
-	// reader's own scrolling composes cleanly with the compensation.
-	const stopHistoryHold = useCallback(() => {
-		const h = historyHoldRef.current;
-		if (!h) return;
-		cancelAnimationFrame(h.raf);
-		historyHoldRef.current = null;
-		const el = messagesRef.current;
-		if (el) el.style.overflowAnchor = "";
-	}, [messagesRef]);
-	// Ref mirror keeps rapid clicks from sending duplicate history requests
-	// before React re-renders with the disabled button.
-	const loadingHistoryRef = useRef(false);
-	useEffect(() => {
-		loadingHistoryRef.current = loadingHistory;
-	}, [loadingHistory]);
-	// One page request. `whole` is the whole-history variant: a fat page in seq
-	// mode, and in legacy mode the deliberately cursor-less request the server
-	// answers with the entire transcript in one transcript_init — byte-window
-	// paging has no cheap way to walk a backlog, and that full resend has always
-	// been its fallback.
-	const requestHistoryPage = useCallback(
-		(whole = false) => {
-			const seqState = transcriptSeqRef.current;
-			if (seqState?.sessionId === session.id) {
-				// Seq mode (transcript v2): page backwards from the earliest seq we
-				// hold. Without a usable cursor the server falls back to a full
-				// legacy resend, same as the legacy no-offset case below.
-				send({
-					type: "load_history",
-					sessionId: session.id,
-					...(seqState.firstSeq !== null && seqState.firstSeq > 1
-						? { beforeSeq: seqState.firstSeq }
-						: {}),
-					limit: whole ? JUMP_PAGE_ENTRIES : HISTORY_PAGE_ENTRIES,
-				});
-				return;
-			}
-			const cursor = transcriptCursorRef.current;
-			send({
-				type: "load_history",
-				sessionId: session.id,
-				...(!whole &&
-				historyStartRef.current !== null &&
-				historyStartRef.current > 0
-					? {
-							beforeOffset: historyStartRef.current,
-							beforeRev:
-								cursor?.sessionId === session.id ? cursor.rev : undefined,
-						}
-					: {}),
-			});
-		},
-		[send, session.id],
-	);
-	// The whole backlog, one click: each page's arrival schedules the next (see
-	// the transcript_history handler). `loadingHistory` deliberately stays true
-	// across the gaps, which is what keeps the auto-load sentinel and a second
-	// click from interleaving requests of their own.
-	const finishHistoryWalk = useCallback(() => {
-		if (!historyWalkRef.current) return;
-		historyWalkRef.current = null;
-		setLoadingAllHistory(false);
-		stopHistoryHold();
-	}, [stopHistoryHold]);
-
-	const startHistoryHold = useCallback(
-		(
-			node: HTMLElement,
-			ms: number,
-			fallback: { height: number; top: number } | null,
-		) => {
-			const el = messagesRef.current;
-			if (!el) return;
-			stopHistoryHold();
-			el.style.overflowAnchor = "none";
-			const contentTopOf = (n: HTMLElement, c: HTMLElement) =>
-				n.getBoundingClientRect().top -
-				c.getBoundingClientRect().top +
-				c.scrollTop;
-			// Two anchor layers: the tight node for frame-to-frame deltas, and its
-			// nearest [data-eid] ancestor as a *recovery identity* — when a prepend
-			// merges into the anchor's turn block the whole block remounts (its key
-			// is its first item id) and every DOM node dies, but the same entry
-			// re-renders under the same data-eid.
-			const idEl = (node.closest?.("[data-eid]") as HTMLElement | null) ?? null;
-			const hold = {
-				node,
-				top: contentTopOf(node, el),
-				eid: idEl?.dataset.eid ?? null,
-				eidTop: idEl ? contentTopOf(idEl, el) : null,
-				until: performance.now() + ms,
-				raf: 0,
-				fallback,
-			};
-			historyHoldRef.current = hold;
-			const tick = () => {
-				const h = historyHoldRef.current;
-				const c = messagesRef.current;
-				if (!h || h !== hold || !c) return;
-				if (performance.now() > h.until || readFollowingLive(followingLive)) {
-					stopHistoryHold();
-					return;
-				}
-				if (h.node.isConnected) {
-					const t = contentTopOf(h.node, c);
-					const d = t - h.top;
-					if (d !== 0) c.scrollTop += d;
-					h.top = t;
-					// Keep the recovery identity fresh: cheap ancestor walk, and the
-					// content offset re-measured so a later remount recovers to the
-					// reader's latest position, not the hold's starting one.
-					const id2 = h.node.closest?.("[data-eid]") as HTMLElement | null;
-					h.eid = id2?.dataset.eid ?? h.eid;
-					h.eidTop = id2 ? contentTopOf(id2, c) : h.eidTop;
-				} else {
-					// Anchor DOM died (block remount). Recover through the entry id:
-					// same content, new nodes — shift by how far it moved.
-					const revived =
-						h.eid && typeof CSS !== "undefined"
-							? c.querySelector<HTMLElement>(
-									`[data-eid="${CSS.escape(h.eid)}"]`,
-								)
-							: null;
-					if (revived && h.eidTop !== null) {
-						const d = contentTopOf(revived, c) - h.eidTop;
-						if (d !== 0) c.scrollTop += d;
-					} else if (h.fallback) {
-						// Last resort: height math. Skewed by content-visibility
-						// estimate resets, but better than staying at a raw offset.
-						c.scrollTop = c.scrollHeight - h.fallback.height + h.fallback.top;
-					}
-					h.fallback = null;
-					const next = revived ?? pickScrollAnchor(c);
-					if (!next) {
-						stopHistoryHold();
-						return;
-					}
-					const nid = (next.closest?.("[data-eid]") as HTMLElement | null) ?? null;
-					h.node = next;
-					h.top = contentTopOf(next, c);
-					h.eid = nid?.dataset.eid ?? null;
-					h.eidTop = nid ? contentTopOf(nid, c) : null;
-				}
-				h.raf = requestAnimationFrame(tick);
-			};
-			hold.raf = requestAnimationFrame(tick);
-		},
-		[messagesRef, stopHistoryHold, followingLive],
-	);
-	// A page's worth of settling outlives its arrival, not the request: slow
-	// fetches shouldn't burn the hold window, so extend it when a load lands.
-	useEffect(() => {
-		if (loadingHistory) return;
-		const h = historyHoldRef.current;
-		if (h) h.until = Math.max(h.until, performance.now() + 2500);
-	}, [loadingHistory]);
-	useEffect(() => stopHistoryHold, [session.id, stopHistoryHold]);
-	// Switching sessions abandons an in-flight whole-history walk (its pages are
-	// session-guarded anyway) — without this the flag would outlive it and keep
-	// the control stuck in its loading state.
-	useEffect(() => {
-		return () => {
-			historyWalkRef.current = null;
-			historyRevealRef.current = null;
-			backgroundHistoryRef.current = false;
-			setLoadingAllHistory(false);
-		};
-	}, [session.id]);
-
-	// Immersive reading on phones: scrolling down through the transcript hides
-	// secondary chat chrome such as docked tabs, while the navigation bar stays
-	// fixed so Back and its actions remain reachable. Scrolling back up, or
-	// reaching the top or live edge, restores the secondary chrome. Toggles
-	// body.chrome-collapsed, which mobile CSS reads (inert on desktop).
-	useEffect(() => {
-		const el = messagesRef.current;
-		if (!el) return;
-		const mq = window.matchMedia("(max-width: 720px)");
-		let lastY = el.scrollTop;
-		let collapsed = false;
-		let ticking = false;
-		const set = (v: boolean) => {
-			if (v === collapsed) return;
-			collapsed = v;
-			document.body.classList.toggle("chrome-collapsed", v);
-		};
-		const onDir = () => {
-			if (ticking) return;
-			ticking = true;
-			requestAnimationFrame(() => {
-				ticking = false;
-				if (!mq.matches) {
-					set(false);
-					lastY = el.scrollTop;
-					return;
-				}
-				const y = el.scrollTop;
-				const max = el.scrollHeight - el.clientHeight;
-				const dy = y - lastY;
-				lastY = y;
-				// Keep the chrome up near the top and the live edge so the controls
-				// stay reachable; otherwise follow the scroll direction (with a small
-				// dead-zone so tiny jitters don't flip it).
-				if (y < 48 || max - y < 64) set(false);
-				else if (dy > 6) set(true);
-				else if (dy < -6) set(false);
-			});
-		};
-		el.addEventListener("scroll", onDir, { passive: true });
-		return () => {
-			el.removeEventListener("scroll", onDir);
-			document.body.classList.remove("chrome-collapsed");
-		};
-	}, [messagesRef, session.id]);
-
-	// Per-session model (switchable from the composer; "" = default)
-	const [model, setModel] = useState(session.model || "");
-	const [models, setModels] = useState<ModelOption[]>([]);
-	const [defaultModel, setDefaultModel] = useState("");
-	// Pinnable Claude/Codex accounts + this session's pin ("" = auto pool).
-	const [accounts, setAccounts] = useState<ProviderAccountOption[]>([]);
-	const [accountId, setAccountId] = useState(session.accountId || "");
-	// Live token/cost accounting — seeded from the session, updated per run via
-	// the `usage_update` broadcast. Powers the phone header's cost/context pill.
-	const [usage, setUsage] = useState(session.usage);
-	// Reasoning effort — a composer control mirroring the new-session palette.
-	// Persisted on the session server-side and enforced per run (Claude effort /
-	// Codex modelReasoningEffort), so seed from the session's stored value.
-	const [effort, setEffort] = useState(session.effort || "high");
-	const [fastMode, setFastMode] = useState(session.fastMode || false);
-	// Optimistic goal: reflects a just-set/cleared goal instantly (the /goal
-	// command persists server-side but doesn't broadcast a live session update).
-	// `undefined` = defer to session.goal; a string/null = the pending override.
-	const [goalOverride, setGoalOverride] = useState<string | null | undefined>(
-		undefined,
-	);
-	// Drop the override once the server-side session catches up (or we switch).
-	useEffect(() => setGoalOverride(undefined), [session.id, session.goal]);
-	const currentGoal =
-		goalOverride !== undefined ? goalOverride : session.goal ?? null;
-	useEffect(() => {
-		fetchModels(session.workspaceId || undefined)
-			.then((m) => {
-				setModels(m.models);
-				setDefaultModel(m.default);
-			})
-			.catch(() => {});
-		fetchProviderAccounts()
-			.then(setAccounts)
-			.catch(() => {});
-	}, [session.workspaceId]);
-	useEffect(() => {
-		setModel(session.model || "");
-	}, [session.id, session.model]);
-	useEffect(() => {
-		setAccountId(session.accountId || "");
-	}, [session.id, session.accountId]);
-	useEffect(() => {
-		setEffort(session.effort || "high");
-	}, [session.id, session.effort]);
-	useEffect(() => {
-		setFastMode(session.fastMode || false);
-	}, [session.id, session.fastMode]);
-	useEffect(() => {
-		setUsage(session.usage);
-	}, [session.id, session.usage]);
-
-	// Dynamic workflow runs (opensession-workflows MCP): seeded by a fetch on
-	// open/session switch, then kept live by workflow_update broadcasts. Powers
-	// the Agents tab — hidden entirely while empty.
-	const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSnapshot[]>([]);
-	// True once the seed fetch for the current session has settled — the
-	// runs-vanished fallback below must not flip tabs off an empty [] mid-fetch.
-	const [workflowsLoaded, setWorkflowsLoaded] = useState(false);
-	useEffect(() => {
-		let stale = false;
-		setWorkflowRuns([]);
-		setWorkflowsLoaded(false);
-		fetch(`${BASE_PATH}/api/sessions/${encodeURIComponent(session.id)}/workflows`)
-			.then((r) => (r.ok ? r.json() : null))
-			.then((d) => {
-				if (stale) return;
-				if (Array.isArray(d?.runs)) {
-					const fetched = d.runs as WorkflowRunSnapshot[];
-					// WS upserts may have landed while the fetch was in flight — those
-					// snapshots are newer than the seed, so keep them and only add
-					// fetched runs we don't have yet (the panel re-sorts by startedAt).
-					setWorkflowRuns((prev) => {
-						const have = new Set(prev.map((r) => r.runId));
-						const added = fetched.filter((r) => !have.has(r.runId));
-						return added.length ? [...prev, ...added] : prev;
-					});
-				}
-				setWorkflowsLoaded(true);
-			})
-			.catch(() => {
-				if (!stale) setWorkflowsLoaded(true);
-			});
-		return () => {
-			stale = true;
-		};
-	}, [session.id]);
-	function cancelWorkflowRun(runId: string) {
-		// Fire-and-forget: the workflow_update echo flips the card to cancelled.
-		fetch(`${BASE_PATH}/api/workflows/${encodeURIComponent(runId)}/cancel`, {
-			method: "POST",
-		}).catch(() => {});
-	}
-
-	// Sub-agents the session spawned directly (pi task-tool children /
-	// SDK Task agents) — shown in the Agents tab next to workflow runs. Seeded
-	// here; the polling effect below (after isBusy exists) keeps them live.
-	const [subagents, setSubagents] = useState<SessionSubagentSnapshot[]>([]);
-	useEffect(() => setSubagents([]), [session.id]);
-
-	// Keep the pin star in sync with the store (changes can come from the tab bar
-	// or the Home screen) and reset when switching sessions.
-	const currentUser = useCurrentUser();
-	useEffect(() => setPinned(isPinned(session.id)), [session.id]);
-	useEffect(
-		() => onPinsChanged(() => setPinned(isPinned(session.id))),
-		[session.id],
-	);
-
-	// Claimed into your own sidebar lanes (lib/lanes.ts) — the whole workspace,
-	// since that's the unit the sidebar row claims. Lanes live in a module cache
-	// like pins, so mirror it into state and re-read on every change.
-	const claimSessions = workspaceSessions?.length ? workspaceSessions : [session];
-	const claimIds = claimSessions.map((c) => c.id).join(",");
-	const claimedGlobally = claimSessions.some((c) => !!c.manualStatus);
-	const [claimedLane, setClaimedLane] = useState(false);
-	useEffect(() => {
-		const read = () =>
-			setClaimedLane(claimIds.split(",").some((id) => !!getLane(id)));
-		read();
-		return onLanesChanged(read);
-	}, [claimIds]);
-	const claimed = claimedLane || claimedGlobally;
-	const hiddenFromSidebar = useSyncExternalStore(
-		onHidesChanged,
-		() => isHiddenForSession(session),
-		() => false,
-	);
-	// A linked session can be open without belonging to your sidebar: teammate
-	// work, automation runs and agent-spawned probes all stay out until claimed.
-	// A normal session you started (or a workspace with one) is already yours.
-	const naturallyInSidebar = claimSessions.some(
-		(c) => !c.spawnedBy && !c.automation && ownedBy(c, currentUser),
-	);
-	const canAddToSidebar =
-		!session.archived &&
-		!!onSetStatus &&
-		(hiddenFromSidebar || (!claimed && !naturallyInSidebar));
-	function addToSidebar() {
-		unhideForSession(session);
-		if (!claimed && !naturallyInSidebar) onSetStatus?.(claimSessions, "mine");
-	}
-	useEffect(() => {
-		function onKeyDown(e: KeyboardEvent) {
-			if (
-				!focused ||
-				e.defaultPrevented ||
-				!matchesShortcut(e, "session-pin") ||
-				blockingOverlayOpen()
-			) {
-				return;
-			}
-			e.preventDefault();
-			togglePin(session.id);
-		}
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [focused, session.id]);
-
-	// Switching modes is immediate in the interface. The only slow part is the
-	// workspace setup behind it, so code affordances appear now and show their
-	// own setup state until the server has cut the branch.
-	const [promoting, setPromoting] = useState(false);
-	const [promotionReady, setPromotionReady] = useState(false);
-	const codeMode = session.mode === "code" || promoting || promotionReady;
-	const isAsk = session.mode === "ask" && !codeMode;
-	const hasWorkspace = sessionHasWorkspace(session) || codeMode;
-	// Everything that only makes sense against a repo: the diff, the Changes
-	// tab, the PR strip, the repo switch/attach bar. A repo-less session still
-	// has a workspace (terminal, agents, assets run in its scratch dir), so
-	// these ride their own flag rather than `hasWorkspace`. Promotion gives a
-	// repo-less Ask session the selected/default repo on the server.
-	const hasRepoWork = hasWorkspace && (!session.repoLess || codeMode);
-	async function handlePromote(onDone?: () => void) {
-		if (promoting) return;
-		setPromoting(true);
-		onDone?.();
-		try {
-			await promoteSessionApi(session.id);
-			setPromotionReady(true);
-			setPromoting(false);
-		} catch (e) {
-			toast(e instanceof Error ? e.message : "Could not switch to code mode");
-			setPromoting(false);
-		}
-	}
-	// A linked Plain thread gets a read-only conversation sidebar (+ jump-to-Plain),
-	// available even for ask-mode sessions that have no code workspace.
-	const hasPlain = Boolean(session.plainThreadId);
-	const plainUrl = session.plainThreadId
-		? plainThreadUrl(session.plainThreadId)
-		: "";
-	// Feed-item link (a video, a dashboard, …): the same
-	// jump-out affordance Plain has, generic over the session's externalRefs.
-	const feedRef = (session.externalRefs || []).find((r) => r.url);
-	const feedRefLabel = feedRef
-		? feedForRefKind(feedRef.kind)?.title ||
-			feedRef.kind.charAt(0).toUpperCase() + feedRef.kind.slice(1)
-		: "";
-	// Workflow runs open the panel too: ask-mode sessions without a workspace
-	// or Plain thread still need somewhere to show the Agents tab.
-	const panelAvailable =
-		!hideRightPanel &&
-		(hasWorkspace ||
-			hasPlain ||
-			workflowRuns.length > 0 ||
-			subagents.length > 0 ||
-			sessionReports.length > 0);
-	const isBusy = !safety && (isRunningLive || isStreaming);
-	// Sub-agent list: fetch on open, then re-poll while the session runs so
-	// live task-tool spawns appear/settle. Keyed on isBusy too: a run starting
-	// after mount restarts the poll loop, and the flip back to idle lands one
-	// final fetch that settles statuses.
-	useEffect(() => {
-		let stale = false;
-		let timer: number | undefined;
-		const load = async () => {
-			try {
-				const d = await fetchSessionSubagents(session.id);
-				if (stale) return;
-				// Keep the previous array when nothing changed: downstream memos
-				// (and the LiveSubagents context feeding every ToolCallBlock)
-				// only re-render on real updates, not on every 4s poll tick.
-				setSubagents((prev) =>
-					JSON.stringify(prev) === JSON.stringify(d.subagents)
-						? prev
-						: d.subagents,
-				);
-				if (d.sessionRunning) timer = window.setTimeout(load, 4000);
-			} catch {
-				// Transient (auth refresh, reload) — the next poll or session
-				// switch retries.
-			}
-		};
-		load();
-		return () => {
-			stale = true;
-			if (timer) window.clearTimeout(timer);
-		};
-	}, [session.id, isBusy]);
-	// Task rows learn their child session id from this map while the call is
-	// still running (the result text that normally carries it doesn't exist
-	// yet), enabling the mid-run "Watch ↗" drill-in.
-	const liveSubagents = useMemo(() => {
-		const m = new Map<string, LiveSubagent>();
-		for (const s of subagents)
-			if (s.toolUseId) m.set(s.toolUseId, { id: s.id, status: s.status });
-		return m;
-	}, [subagents]);
-	// Derived, not the raw flag: transcript content or streaming text means the
-	// opening run already started, so the worktree is done — this guards against
-	// a stale sessions poll re-asserting the flag after the workspace_status
-	// event already cleared it.
-	const waitingForWorkspace =
-		promoting ||
-		(workspacePreparing && entries.length === 0 && !liveTurnStore.hasText());
-	// A sibling session already owns a ready workspace, so its optimistic shell
-	// can show the blank conversation and composer immediately. A genuinely new
-	// workspace keeps the setup state until its worktree is ready.
-	const settingUpWorkspace = waitingForWorkspace && !optimisticEmpty;
-
-	// Live worktree diff, handed to the Changes page as `diff=` so opening it
-	// reads the poll the panel already runs rather than starting a second one.
-	// Parked unless a workspace surface is open on a code session: the panel
-	// column on desktop, the info page on a phone. A client-minted session is not
-	// queryable until create persistence lands; leaving the resource parked makes
-	// Changes use its ordinary empty state instead of flashing a transient 404.
-	const diffState = useSessionDiff(session.id, {
-		enabled:
-			!pendingCreation && hasRepoWork && (activePanelOpen || infoPageOpen),
-		isRunning: isBusy,
-	});
-
-	// Anchor for the agent-working elapsed timer. A run that starts
-	// while we're watching anchors to now; opening a session mid-run anchors to
-	// the server's journaled run start (runStartedAt — survives switches and
-	// refreshes), falling back to the turn's user prompt in the transcript, so
-	// the timer shows the run's real age, not time-since-I-opened-the-tab. The
-	// ref tracks which case we're in: it stays true until we've observed the
-	// session idle.
-	const [busySince, setBusySince] = useState<number | null>(null);
-	// When the Stop was asked for, so the click can be acknowledged locally at
-	// once. The server's isRunning:false only lands after the aborted turn
-	// actually unwinds — an abort signal is observed at the next await, so a
-	// long bash command, an MCP call or a retrying model request holds it for
-	// seconds — and until then this row went on counting up as if the click had
-	// never happened. 18% of stops in the audit log are a second stop on the
-	// same session within a minute (median 1.9s apart): people clicking again
-	// because the first click showed them nothing.
-	const [stopRequestedAt, setStopRequestedAt] = useState<number | null>(null);
-	const anchorFromTranscript = useRef(session.isRunning);
-	useEffect(() => {
-		anchorFromTranscript.current = true;
-		setBusySince(null);
-		setStopRequestedAt(null);
-	}, [session.id]);
-	useEffect(() => {
-		if (!isBusy) {
-			anchorFromTranscript.current = false;
-			setBusySince(null);
-			setStopRequestedAt(null);
-			return;
-		}
-		// The journaled run start is authoritative whenever we have it — for a
-		// run that starts while watching it's ~now anyway (App stamps it on the
-		// status flip), and mid-run it's the real start even when a stale
-		// isRunning=false at mount already flipped the anchor ref.
-		if (session.runStartedAt) {
-			const t = Date.parse(session.runStartedAt);
-			if (Number.isFinite(t)) {
-				setBusySince((prev) => prev ?? t);
-				return;
-			}
-		}
-		// Mid-run open: wait for the transcript so we can find the turn's prompt.
-		if (anchorFromTranscript.current && loading) return;
-		setBusySince((prev) => {
-			if (prev != null) return prev;
-			if (anchorFromTranscript.current) {
-				for (let i = entries.length - 1; i >= 0; i--) {
-					if (entries[i].type !== "user") continue;
-					const t = new Date(entries[i].timestamp).getTime();
-					if (Number.isFinite(t)) return t;
-					break;
-				}
-			}
-			return Date.now();
-		});
-	}, [isBusy, loading, entries, session.runStartedAt]);
-
-	// Session-wide composer shortcuts. ⌘/Ctrl+N toggles team-note mode even when
-	// the composer is not focused; Ctrl+R focuses it directly.
-	const archiveShortcutLabel = useShortcutLabel("session-archive");
-	const copyTranscriptLabel = useShortcutLabel("session-copy-transcript");
-	const nextChatKeys = useShortcutKeys("workspace-next-unread");
-	const newSiblingKeys = useShortcutKeys("session-new-sibling");
-	const transcriptDownKeys = useShortcutKeys("transcript-down");
-	const composerRef = useRef<HTMLTextAreaElement | null>(null);
-	useEffect(() => {
-		function onKeyDown(e: KeyboardEvent) {
-			if (!focused) return;
-			if (
-				!e.defaultPrevented &&
-				!e.repeat &&
-				matchesShortcut(e, "composer-note") &&
-				!blockingOverlayOpen()
-			) {
-				e.preventDefault();
-				setNoteMode((on) => !on);
-				queueMicrotask(() => composerRef.current?.focus());
-				return;
-			}
-			if (matchesShortcut(e, "composer-focus")) {
-				e.preventDefault();
-				composerRef.current?.focus();
-			}
-		}
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [focused]);
-
-	// ⌘⌥↑/⌘⌥↓ step the reasoning effort through the current model's supported
-	// levels (up = more thinking), wrapping at the ends. Resolves the same
-	// effective effort as the ModelEffortSelect pill (stored value when the
-	// model offers it, else "high", else the model's first level), so the step
-	// always starts from what the pill displays. Fires with the composer
-	// focused too — the Alt modifier keeps it clear of plain ⌘↑/⌘↓ (workspace
-	// cycling in the Sidebar, and caret start/end moves in the textarea).
-	useEffect(() => {
-		function onKeyDown(e: KeyboardEvent) {
-			if (!focused) return;
-			if (e.defaultPrevented) return;
-			const dir = matchesShortcut(e, "effort-up")
-				? 1
-				: matchesShortcut(e, "effort-down")
-					? -1
-					: 0;
-			if (dir === 0) return;
-			const effectiveModel = model || defaultModel;
-			const supportedIds =
-				models.find((m) => m.id === effectiveModel)?.efforts ?? [];
-			const supported = EFFORTS.filter((ef) => supportedIds.includes(ef.id));
-			if (supported.length < 2) return;
-			const effective = supportedIds.includes(effort)
-				? effort
-				: supportedIds.includes("high")
-					? "high"
-					: supported[0].id;
-			const idx = supported.findIndex((ef) => ef.id === effective);
-			const next =
-				supported[(idx + dir + supported.length) % supported.length];
-			if (!next) return;
-			e.preventDefault();
-			setEffort(next.id);
-		}
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [focused, models, defaultModel, model, effort]);
-
-	// ⌃⇧↑/⌃⇧↓ page the transcript up/down — keyboard scrolling that works while
-	// the composer is focused. A programmatic scroll carries no reader gesture,
-	// so useSessionScroll won't re-engage auto-follow from it: a Down that would
-	// land at the live edge goes through scrollToLatest, which resumes following.
-	useEffect(() => {
-		function onKeyDown(e: KeyboardEvent) {
-			if (!focused) return;
-			if (e.defaultPrevented) return;
-			const up = matchesShortcut(e, "transcript-up");
-			const down = matchesShortcut(e, "transcript-down");
-			if (!up && !down) return;
-			const el = messagesRef.current;
-			if (!el) return;
-			e.preventDefault();
-			const delta = Math.max(120, el.clientHeight * 0.8);
-			if (down) {
-				const remaining = el.scrollHeight - el.clientHeight - el.scrollTop;
-				if (remaining - delta < 48) {
-					scrollToLatest();
-					return;
-				}
-			}
-			if (up) leaveLatest();
-			el.scrollBy({
-				top: up ? -delta : delta,
-				behavior: "smooth",
-			});
-		}
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [focused, messagesRef, scrollToLatest, leaveLatest]);
-
-	// A "new tab" while this session is open is a fresh session *in this session*:
-	// clear the composer and jump to the live edge. We skip the first run (and
-	// session switches, which remount this with whatever the counter's at) and
-	// only react to real bumps from the tab-bar +.
-	const [composerResetSeq, setComposerResetSeq] = useState(newSessionSeq);
-	useLayoutEffect(() => {
-		if (newSessionSeq === composerResetSeq) return;
-		// Clear storage before changing the Composer key. The layout update causes
-		// its replacement to initialize only after the stale draft is gone.
-		clearDraft(draftKey);
-		dropStagingAttachments(draftKey);
-		setImages([]);
-		setFiles([]);
-		setForkFrom(null);
-		setComposerResetSeq(newSessionSeq);
-		scrollToLatest("smooth");
-		composerRef.current?.focus();
-	}, [newSessionSeq, composerResetSeq, draftKey, scrollToLatest]);
-
-	// Browser tab title follows the workspace, the same name the header shows.
-	// The session's own title names a tab inside it, not the page.
-	useEffect(() => {
-		if (!focused) return;
-		document.title = workspaceName || session.title || DEFAULT_DOC_TITLE;
-		return () => {
-			document.title = DEFAULT_DOC_TITLE;
-		};
-	}, [focused, workspaceName, session.title]);
-
-	// "Add session transcripts" chips on a fresh session's blank canvas: sibling
-	// workspace sessions the user can attach as context — selected ids ride the
-	// first send as `contextSessions` and the server inlines a fenced transcript
-	// digest of each. One-shot: cleared once a send consumes them.
-	const [contextSessions, setContextSessions] = useState<string[]>([]);
-
-	// Subscribe to WebSocket messages
-	const loadTranscriptRanges = useCallback(
-		(ranges: TranscriptIndexedRange[]) => {
-			const epoch = transcriptIndexEpochRef.current;
-			if (epoch === null || !transcriptRangeDemandReadyRef.current) return;
-			let capacity = Math.max(
-				0,
-				TRANSCRIPT_RANGE_CONCURRENCY -
-					transcriptRangeRequestsRef.current.size,
-			);
-			for (const range of ranges) {
-				if (capacity <= 0) break;
-				const key = `${range.firstSeq}:${range.lastSeq}`;
-				if (
-					completedTranscriptRangeKeysRef.current.has(key) ||
-					transcriptRangeRequestsRef.current.has(key)
-				)
-					continue;
-				const requestId = randomUUID();
-				const timer = setTimeout(() => {
-					transcriptRangeRequestsRef.current.delete(key);
-					setTranscriptRangeRetryGeneration((generation) => generation + 1);
-				}, 15_000);
-				transcriptRangeRequestsRef.current.set(key, {
-					range,
-					requestId,
-					timer,
-				});
-				capacity -= 1;
-				send({
-					type: "load_transcript_range",
-					sessionId: session.id,
-					requestId,
-					firstSeq: range.firstSeq,
-					lastSeq: range.lastSeq,
-					epoch,
-				});
-			}
-		},
-		[send, session.id],
-	);
-
-	const subscribeToSession = useEffectEvent(() => {
-		if (!connected) return;
-
-		// Resume rather than re-snapshot when this exact session's transcript is
-		// still mounted (a reconnect blip, not a session switch) and we hold a
-		// cursor from a previous frame. Seq mode (transcript v2) resumes with
-		// sinceSeq; legacy with the byte cursor. supportsSeq advertises the
-		// capability — old servers ignore it and behave exactly as before.
-		const cursor = transcriptCursorRef.current;
-		const seqState = transcriptSeqRef.current;
-		const ready = transcriptReadySessionRef.current === session.id;
-		const resume =
-			ready && seqState?.sessionId === session.id
-				? {
-						sinceSeq: seqState.lastSeq,
-						sinceChangeSeq: seqState.lastChangeSeq,
-					}
-				: ready && cursor?.sessionId === session.id
-					? { sinceOffset: cursor.offset, sinceRev: cursor.rev }
-					: {};
-		const unsubscribe = addHandler((msg) => {
-			// Session-scoped messages carry the session id — drop anything meant
-			// for a different session. Without this, a socket race (or a lingering
-			// creator-side direct send from a session you navigated away from) bleeds
-			// another session's stream into this view. Messages without a
-			// sessionId (direct replies like slash-command notices) pass through.
-			if (
-				"sessionId" in msg &&
-				msg.sessionId &&
-				msg.sessionId !== session.id
-			) {
-				return;
-			}
-			switch (msg.type) {
-				case "workflow_update": {
-					// Dynamic workflows: upsert the live run snapshot (already
-					// session-filtered by the sessionId gate above).
-					const run = msg.run;
-					setWorkflowRuns((prev) =>
-						prev.some((r) => r.runId === run.runId)
-							? prev.map((r) => (r.runId === run.runId ? run : r))
-							: [run, ...prev],
-					);
-					break;
-				}
-				case "transcript_init": {
-					// Weave persisted model switches into the conversation as dividers.
-					const merged = withModelSwitches(msg.entries, session.modelHistory);
-					transcriptReadySessionRef.current = session.id;
-					// Mode detection (transcript v2): an init carrying seq fields
-					// switches this session into seq mode; one without switches it
-					// back to legacy (e.g. the flag was turned off — the resume
-					// falls back to a full legacy snapshot). Init frames are
-					// authoritative for the mode.
-					const v2 = msg.v2 === true && typeof msg.lastSeq === "number";
-					const existingIndex =
-						v2 && transcriptIndexStateRef.current?.sessionId === session.id
-							? transcriptIndexStateRef.current.entries
-							: null;
-					transcriptIndexExpectedRef.current = v2;
-					setTranscriptIndexExpected(v2);
-					setTranscriptOutlineReady(!v2);
-					if (v2) {
-						transcriptSeqRef.current = {
-							sessionId: session.id,
-							lastSeq: msg.lastSeq!,
-							firstSeq:
-								typeof msg.firstSeq === "number" && msg.firstSeq > 0
-									? msg.firstSeq
-									: null,
-							lastChangeSeq:
-								typeof msg.lastChangeSeq === "number"
-									? msg.lastChangeSeq
-									: msg.lastSeq!,
-						};
-						// Seq mode ignores offset/rev cursors entirely.
-						transcriptCursorRef.current = null;
-					} else {
-						transcriptSeqRef.current = null;
-						if (typeof msg.endOffset === "number" && msg.rev) {
-							transcriptCursorRef.current = {
-								sessionId: session.id,
-								rev: msg.rev,
-								offset: msg.endOffset,
-							};
-						} else {
-							transcriptCursorRef.current = null;
-						}
-					}
-					if (v2) {
-						const tailIndex = msg.entries
-							.map(transcriptIndexEntryFromPayload)
-							.filter(
-								(entry): entry is TranscriptIndexEntry => entry !== null,
-							);
-						setTranscriptIndexState({
-							sessionId: session.id,
-							entries: existingIndex
-								? mergeTranscriptIndexEntries(existingIndex, tailIndex)
-								: tailIndex,
-						});
-						transcriptIndexEpochRef.current = null;
-						transcriptRangeDemandReadyRef.current = false;
-						pendingIndexPositionRef.current = null;
-						indexAnchorHoldCancelRef.current?.();
-						indexAnchorHoldCancelRef.current = null;
-						for (const request of transcriptRangeRequestsRef.current.values())
-							clearTimeout(request.timer);
-						transcriptRangeRequestsRef.current.clear();
-						completedTranscriptRangeKeysRef.current.clear();
-					}
-					if (v2 && existingIndex)
-						transcriptViewStore.merge(merged, true, true);
-					else transcriptViewStore.replace(merged, true, v2);
-					setHistoryTruncated(!!msg.truncated);
-					backgroundHistoryRef.current = false;
-					historyRevealRef.current = null;
-					loadingHistoryRef.current = false;
-					setLoadingHistory(false);
-					setLoading(false);
-					// A whole-history walk ends here when the server answers with the
-					// whole transcript — the legacy path's only way to serve a backlog,
-					// and the seq path's fallback when a store read fails. A TRUNCATED
-					// init is a re-snapshot of the tail instead (a reconnect landing
-					// mid-walk), so cancel that quietly rather than parking the reader
-					// at the top of a tail they didn't ask for.
-					if (historyWalkRef.current?.sessionId === session.id) {
-						if (msg.truncated) {
-							historyWalkRef.current = null;
-							setLoadingAllHistory(false);
-						} else {
-							finishHistoryWalk();
-						}
-					}
-					shellTiming.record();
-					// Pagination cursor for "load earlier" (the byte offset the shipped
-					// tail begins at). Each history page arrives as transcript_history
-					// below. Seq mode pages with
-					// beforeSeq instead, so the byte cursor stays untouched there.
-					if (!v2 && typeof msg.startOffset === "number") {
-						historyStartRef.current = msg.startOffset;
-					}
-					break;
-				}
-				case "transcript_index": {
-					const scrollContainer = messagesRef.current;
-					// `following` can be silently dropped by a layout-driven scroll
-					// event (only a real gesture re-engages it), so a reader visually
-					// parked at the bottom still counts as at the live edge. Treating
-					// them as a history reader armed a long anchor hold at the
-					// pre-refresh position, which then fought the next send's jump and
-					// crawled the transcript back up.
-					const keepLiveEdge =
-						followingLive.current ||
-						(!!scrollContainer &&
-							scrollContainer.scrollHeight -
-								scrollContainer.scrollTop -
-								scrollContainer.clientHeight <
-								90);
-					const previousBottomGap =
-						!keepLiveEdge && scrollContainer
-							? Math.max(
-									0,
-									scrollContainer.scrollHeight -
-										scrollContainer.scrollTop -
-										scrollContainer.clientHeight,
-								)
-							: null;
-					const previousAnchor =
-						!keepLiveEdge && scrollContainer
-							? pickScrollAnchor(scrollContainer)
-							: null;
-					const previousAnchorEid = previousAnchor?.dataset.eid ?? null;
-					const previousAnchorTop =
-						previousAnchor && scrollContainer
-							? previousAnchor.getBoundingClientRect().top -
-								scrollContainer.getBoundingClientRect().top
-							: null;
-					pendingIndexPositionRef.current = {
-						sessionId: session.id,
-						keepLiveEdge,
-						bottomGap: previousBottomGap,
-						anchorEid: previousAnchorEid,
-						anchorTop: previousAnchorTop,
-					};
-					transcriptIndexExpectedRef.current = true;
-					setTranscriptIndexExpected(true);
-					transcriptIndexEpochRef.current = msg.epoch;
-					setTranscriptOutlineReady(true);
-					setTranscriptIndexState({ sessionId: session.id, entries: msg.entries });
-					setHistoryTruncated(false);
-					backgroundHistoryRef.current = false;
-					historyRevealRef.current = null;
-					loadingHistoryRef.current = false;
-					setLoadingHistory(false);
-					transcriptRangeDemandReadyRef.current = false;
-					break;
-				}
-				case "transcript_range": {
-					if (msg.epoch !== transcriptIndexEpochRef.current) break;
-					const found = [...transcriptRangeRequestsRef.current.entries()].find(
-						([, request]) => request.requestId === msg.requestId,
-					);
-					if (!found) break;
-					transcriptViewStore.mergeRange(msg.entries);
-					const [key, request] = found;
-					clearTimeout(request.timer);
-					if (msg.complete) {
-						completedTranscriptRangeKeysRef.current.add(key);
-						transcriptRangeRequestsRef.current.delete(key);
-						setTranscriptRangeRetryGeneration(
-							(generation) => generation + 1,
-						);
-					} else {
-						request.timer = setTimeout(() => {
-							transcriptRangeRequestsRef.current.delete(key);
-							setTranscriptRangeRetryGeneration((generation) => generation + 1);
-						}, 15_000);
-						send({
-							type: "load_transcript_range",
-							sessionId: session.id,
-							requestId: request.requestId,
-							firstSeq: request.range.firstSeq,
-							lastSeq: request.range.lastSeq,
-							afterSeq: msg.coveredThroughSeq,
-							epoch: msg.epoch,
-						});
-					}
-					break;
-				}
-				case "transcript_history": {
-					// Older entries from a "load earlier" page: merge by id and re-sort
-					// by time — mergeEntries
-					// appends, which is wrong for content older than what's shown.
-					transcriptViewStore.prepend(msg.entries, msg.v2 === true);
-					setHistoryTruncated(!!msg.truncated);
-					const seqState = transcriptSeqRef.current;
-					const inSeqMode = seqState?.sessionId === session.id;
-					if (
-						inSeqMode &&
-						msg.v2 === true &&
-						typeof msg.firstSeq === "number" &&
-						msg.firstSeq > 0
-					) {
-						// Older-page cursor: earliest seq loaded so far (min).
-						seqState.firstSeq =
-							seqState.firstSeq === null
-								? msg.firstSeq
-								: Math.min(seqState.firstSeq, msg.firstSeq);
-					} else if (!inSeqMode && typeof msg.startOffset === "number") {
-						historyStartRef.current =
-							historyStartRef.current === null
-								? msg.startOffset
-								: Math.min(historyStartRef.current, msg.startOffset);
-					}
-					// Whole-history walk: this page's cursor is now in place, so ask
-					// for the next one straight from here — leaving loadingHistory
-					// true across the gap. Stop on a whole transcript, an empty page,
-					// a cursor that stopped receding, or the ceiling.
-					const jump = historyWalkRef.current;
-					if (jump && jump.sessionId === session.id) {
-						jump.loaded += msg.entries.length;
-						const cursor = inSeqMode
-							? seqState.firstSeq
-							: historyStartRef.current;
-						if (
-							msg.truncated &&
-							msg.entries.length > 0 &&
-							cursor !== null &&
-							cursor !== jump.cursor &&
-							jump.loaded < JUMP_MAX_ENTRIES
-						) {
-							jump.cursor = cursor;
-							requestHistoryPage(true);
-							break;
-						}
-						finishHistoryWalk();
-					}
-					const reveal = historyRevealRef.current;
-					if (reveal && reveal.sessionId === session.id && inSeqMode) {
-						reveal.loaded += msg.entries.length;
-						const cursor = seqState.firstSeq;
-						if (
-							shouldContinueHistoryReveal({
-								entries: msg.entries,
-								truncated: !!msg.truncated,
-								loaded: reveal.loaded,
-								cursor,
-								previousCursor: reveal.cursor,
-							})
-						) {
-							reveal.cursor = cursor;
-							requestHistoryPage();
-							break;
-						}
-						historyRevealRef.current = null;
-					}
-					if (backgroundHistoryRef.current) scrollToLatest("auto");
-					backgroundHistoryRef.current = false;
-					loadingHistoryRef.current = false;
-					setLoadingHistory(false);
-					break;
-				}
-				case "transcript_append": {
-					const seqState = transcriptSeqRef.current;
-					const inSeqMode = seqState?.sessionId === session.id;
-					if (inSeqMode) {
-						// Seq mode: track the resume cursor as a max — upsert
-						// republishes reuse the entry's ORIGINAL seq, so a frame's
-						// lastSeq can sit below what we already hold. Offset/rev
-						// fields (if any) are ignored while in this mode.
-						if (
-							msg.v2 === true &&
-							typeof msg.lastSeq === "number" &&
-							msg.lastSeq > 0
-						) {
-							seqState.lastSeq = Math.max(seqState.lastSeq, msg.lastSeq);
-						}
-						if (typeof msg.lastChangeSeq === "number") {
-							seqState.lastChangeSeq = Math.max(
-								seqState.lastChangeSeq,
-								msg.lastChangeSeq,
-							);
-						}
-					} else if (typeof msg.endOffset === "number" && msg.rev) {
-						transcriptCursorRef.current = {
-							sessionId: session.id,
-							rev: msg.rev,
-							offset: msg.endOffset,
-						};
-					}
-					transcriptViewStore.merge(msg.entries, inSeqMode, true);
-					if (inSeqMode && transcriptIndexEpochRef.current !== null) {
-						const projected = msg.entries
-							.map(transcriptIndexEntryFromPayload)
-							.filter((entry): entry is TranscriptIndexEntry => entry !== null);
-						setTranscriptIndexState((current) =>
-							current?.sessionId === session.id
-								? {
-									...current,
-									entries: mergeTranscriptIndexEntries(
-										current.entries,
-										projected,
-									),
-								}
-								: current,
-						);
-						if (msg.entries.length === 0 && typeof msg.firstSeq === "number") {
-							send({ type: "load_transcript_index", sessionId: session.id });
-						}
-					}
-					// The live stream and the transcript tail both carry assistant text.
-					// stream_text accumulates whole blocks until stream_done (end of the
-					// run), so a mid-run text block would otherwise show twice: as the
-					// persisted entry above later tool steps AND in the streaming bubble
-					// at the bottom. Once a block lands as an entry, drop it from the
-					// stream buffer.
-					const landed = msg.entries.filter(
-						(e) => e.type === "assistant" && e.content,
-					);
-					if (landed.length) {
-						liveTurnStore.land(
-							landed.map((e) => ({ id: e.id, content: e.content })),
-						);
-					}
-					break;
-				}
-				case "presence":
-					if (msg.sessionId === session.id) setViewers(msg.viewers);
-					break;
-				case "typing":
-					if (msg.sessionId === session.id)
-						setTypingUsers(otherTypingUsers(msg.users, getCurrentUser()));
-					break;
-				case "queue_update":
-					if (msg.sessionId === session.id) {
-						// Don't let a broadcast rewrite the list mid-drag (see
-						// draggingQueueRef) — the drop will send our order and the
-						// server's echo reconciles it right after.
-						if (!draggingQueueRef.current) setQueued(msg.queued);
-						setSteered(msg.steered || []);
-						setPendingDeliveryIds(msg.pendingDeliveryIds || []);
-					}
-					break;
-				case "queued_prompt_taken": {
-					if (msg.sessionId !== session.id) break;
-					if (!msg.item) {
-						setSteered((current) =>
-							current.map((item) =>
-								item.id === msg.queueId ? { ...item, editing: false } : item,
-							),
-						);
-						toast(msg.message || "That queued message could not be edited");
-						break;
-					}
-					const item = msg.item as QueueReceipt;
-					const existing = loadDraft(draftKey);
-					setImages((current) => [...current, ...(item.images ?? [])]);
-					const restoredFiles = Array.isArray(item.files)
-						? item.files.flatMap((file) => {
-							if (!file || typeof file !== "object") return [];
-							const value = file as Record<string, unknown>;
-							if (typeof value.name !== "string") return [];
-							return [{
-								name: value.name,
-								type: typeof value.type === "string"
-									? value.type
-									: "application/octet-stream",
-								...(typeof value.path === "string" ? { path: value.path } : {}),
-								...(typeof value.dataUrl === "string" ? { dataUrl: value.dataUrl } : {}),
-							}];
-						})
-						: [];
-					setFiles((current) => [...current, ...restoredFiles]);
-					setContextSessions((current) => [
-						...new Set([...current, ...(item.contextSessions ?? [])]),
-					]);
-					setComposerPrefill((current) => ({
-						seq: (current?.seq ?? 0) + 1,
-						text: item.content,
-						replace: !existing.text.trim(),
-					}));
-					break;
-				}
-				case "ask_question":
-					if (msg.sessionId === session.id) {
-						setAsk({ questionId: msg.questionId, questions: msg.questions });
-					}
-					break;
-				case "ask_resolved":
-					if (msg.sessionId === session.id) {
-						setAsk((prev) =>
-							prev?.questionId === msg.questionId ? null : prev,
-						);
-					}
-					break;
-				case "reply_suggestions":
-					// Null retires the row (the turn they answered has been answered).
-					if (msg.sessionId === session.id)
-						setReplySuggestions(msg.suggestions ?? []);
-					break;
-				case "slack_composer":
-					if (msg.sessionId === session.id) {
-						setSlackComposer(msg.request);
-						setSlackComposerStatus("idle");
-						setSlackComposerReconnect(false);
-						if (msg.request) setSlackComposerSent(null);
-					}
-					break;
-				case "slack_composer_resolved":
-					if (msg.sessionId === session.id) {
-						setSlackComposer((current) => current?.id === msg.requestId ? null : current);
-						if (msg.status === "sent" && msg.channel) {
-							setSlackComposerSent({
-								channelName: msg.channel.name,
-								permalink: msg.permalink,
-								receiptKey: msg.requestId,
-								channelId: msg.channel.id,
-								ts: msg.ts,
-							});
-						}
-					}
-					break;
-				case "session_status": {
-					const running = !!msg.isRunning && !msg.safety;
-					setSafety(msg.safety);
-					setIsRunningLive(running);
-					if (!running) {
-						// Every isRunning:false broadcast follows its run's stream_done,
-						// so a live turn never gets cut here. This clears the stale case:
-						// a socket that died mid-stream (server restart) reconnects, the
-						// re-watch hello reports the turn already over, and the spinner
-						// from the dead stream would otherwise stay up forever.
-						setIsStreaming(false);
-						liveTurnStore.finish();
-					}
-					onRunningChange?.(session.id, running);
-					break;
-				}
-				case "git_pushed":
-					if (msg.sessionId === session.id) setGitRefreshTick((t) => t + 1);
-					break;
-				case "pr_updated":
-					// Include PR-backed workspace branches: legacy review sessions keep a
-					// synthetic checkout branch that differs from the real PR head.
-					if (sessionPrTargetsRef.current.has(`${msg.repo}\0${msg.branch}`))
-						setGitRefreshTick((t) => t + 1);
-					break;
-				case "workspace_status":
-					if (msg.sessionId === session.id)
-						setWorkspacePreparing(!msg.ready);
-					break;
-				case "stream_start":
-					setIsStreaming(true);
-					// A new turn is never the stopped one: clear the pending stop so
-					// its label can't bleed into the run that follows it.
-					setStopRequestedAt(null);
-					liveTurnStore.start(msg.by);
-					// A new turn answers the last one's chips. The server clears its
-					// copy on the same event; this is what stops the row lingering
-					// for the seconds before that broadcast lands.
-					setReplySuggestions(EMPTY_SUGGESTIONS);
-					break;
-				case "stream_text": {
-					if (isTimelineOnlyRunnerNotice(msg.text)) break;
-					// Live typing is per viewer (Settings > Preferences), default off.
-					// Dropping the frame is the whole implementation: the durable
-					// entry for the block still lands over the transcript feed, which
-					// is what filled the transcript before streaming existed. Read per
-					// frame rather than captured, so a toggle takes on the running turn.
-					if (!getLiveTypingPref()) break;
-					liveTurnStore.append(msg.text, msg.blockId);
-					break;
-				}
-				case "stream_tool_use":
-				case "stream_tool_result":
-					transcriptViewStore.merge([msg.entry]);
-					break;
-				case "stream_done": {
-					setIsStreaming(false);
-					liveTurnStore.finish();
-					break;
-				}
-				case "model_changed":
-					if (msg.sessionId !== session.id) break;
-					setModel(msg.model);
-					if (msg.by && msg.by !== getCurrentUser()) {
-						setEntries((prev) => [
-							...prev,
-							{
-								id: `model-switch-live-${Date.now()}`,
-								type: "system",
-								content: switchDividerText(msg.model, msg.from, msg.by),
-								timestamp: new Date().toISOString(),
-							},
-						]);
-					}
-					break;
-				case "subscription_changed":
-					// Keep every viewer's Subscription submenu in sync; the /sub
-					// notice in the transcript carries the human-readable detail.
-					if (msg.sessionId !== session.id) break;
-					setAccountId(msg.accountId || "");
-					break;
-				case "usage_update":
-					if (msg.sessionId !== session.id) break;
-					setUsage(msg.usage);
-					break;
-				case "cache_warning":
-					if (msg.sessionId !== session.id) break;
-					toast("Prompt cache missed");
-					break;
-				case "notice":
-					setEntries((prev) => [
-						...prev,
-						{
-							id: randomUUID(),
-							type: "system",
-							content: msg.message,
-							timestamp: new Date().toISOString(),
-						},
-					]);
-					break;
-				case "error":
-					setIsStreaming(false);
-					liveTurnStore.finish();
-					// Show the failure where the reply would have been — otherwise a
-					// failed run looks like a send that silently went nowhere.
-					if (msg.message) {
-						setEntries((prev) => [
-							...prev,
-							{
-								id: randomUUID(),
-								type: "system",
-								content: `⚠ Run failed: ${msg.message}`,
-								timestamp: new Date().toISOString(),
-							},
-						]);
-					}
-					break;
-			}
-		});
-		// Register first: `watch` synchronously receives a presence snapshot. On a
-		// reconnect, sending before this handler exists can drop the empty snapshot
-		// and leave a departed viewer's face rendered indefinitely.
-		send({
-			type: "watch",
-			sessionId: session.id,
-			user: getCurrentUser(),
-			supportsSeq: true,
-			supportsChangeSeq: true,
-			supportsTranscriptIndex: true,
-			...resume,
-		});
-		return () => {
-			unsubscribe();
-			// Tell the server we stopped watching, so it can drop the transcript
-			// stream and our presence entry (otherwise we linger as a ghost viewer).
-			// send() is a no-op unless the socket is OPEN, so a dropped connection
-			// (the usual reason this effect re-runs) never throws here.
-			send({ type: "unwatch", sessionId: session.id });
-		};
-		// `ran` in deps: new sessions start with no engine conversation and no
-		// transcript file — re-watch once the first run makes one so the live
-		// tail attaches. It stands in for `transcriptPath`, which said the same
-		// thing a moment later but is detail-only now: reading it here would
-		// re-watch every session ONCE MORE the instant its detail hydrated.
-	});
-	useEffect(() => subscribeToSession(), [
-		session.id,
-		connected,
-		session.ran,
-		liveTurnStore,
-	]);
-
-	// Drop optimistic bubbles once their real turn shows up. Each pending message
-	// is claimed (one-to-one) either by a transcript user entry recorded around or
-	// after we sent it, or by a server-confirmed queued entry (the busy path).
-	// A long-unmatched bubble is dropped so a dead send never sticks as "sending…".
-	useEffect(() => {
-		const { landed, expired } = reconcilePending(
-			pendingRef.current,
-			entries,
-			[...queued, ...steered],
-			Date.now(),
-		);
-		if (landed.size === 0 && expired.size === 0) return;
-		setPending((prev) =>
-			prev.filter((p) => !landed.has(p.id) && !expired.has(p.id)),
-		);
-		// Only a CONFIRMED claim retires the durable outbox row below. An expired
-		// bubble is merely hidden: its prompt may still be in flight, and the
-		// outbox is localStorage-backed and shared across tabs, so anything that
-		// looks like a discard has to be earned by a real server confirmation.
-		if (landed.size > 0)
-			setLandedOutboxIds((prev) => {
-				const next = new Set(prev);
-				for (const id of landed) next.add(id);
-				return next;
-			});
-	}, [entries, queued, steered, setEntries]);
-
-	// Forget optimistic bubbles and live state when switching sessions. This
-	// component is retained between tabs, so carrying a busy flag from the prior
-	// session makes an idle prompt render as queued until the new watch handshake
-	// arrives. Reset in layout, before the next session can accept input, so an
-	// idle send paints directly in the transcript on its first frame.
-	const resetOptimisticState = useEffectEvent(() => {
-		setPending(
-			initialPending
-				? [{ id: `pending-initial-${session.id}`, ...initialPending }]
-				: [],
-		);
-		setIsRunningLive(session.isRunning);
-		setPendingDeliveryIds([]);
-		liveTurnStore.clear();
-		setIsStreaming(false);
-	});
-	useLayoutEffect(() => {
-		resetOptimisticState();
-	}, [session.id, liveTurnStore]);
-
-	// Every session opens at the live edge. Do this in a layout effect so the
-	// transcript never paints at scrollTop 0 before moving to the end.
-	const initiallyScrolledSessionRef = useRef<string | null>(null);
-	const [initialScrollSession, setInitialScrollSession] = useState<string | null>(
-		null,
-	);
-	useLayoutEffect(() => {
-		const el = messagesRef.current;
-		if (
-			!el ||
-			transcriptReadySessionRef.current !== session.id ||
-			initiallyScrolledSessionRef.current === session.id ||
-			entries.length === 0
-		)
-			return;
-		initiallyScrolledSessionRef.current = session.id;
-		scrollToLatest("auto");
-		setInitialScrollSession(session.id);
-	}, [entries, session.id, sessionHidden, scrollToLatest, messagesRef]);
-	// Message blocks use content-visibility with estimated heights. Those estimates
-	// resolve after the first scroll calculation without a React update, growing the
-	// transcript above the viewport. Hold the bottom through that initial browser
-	// layout pass, but release immediately if the reader touches the transcript.
-	useLayoutEffect(() => {
-		if (initialScrollSession !== session.id) return;
-		const el = messagesRef.current;
-		if (!el) return;
-
-		let stopped = false;
-		const keepAtLatest = () => {
-			if (!stopped) el.scrollTop = el.scrollHeight;
-		};
-		const sizes = new ResizeObserver(keepAtLatest);
-		const observeChildren = () => {
-			for (const child of el.children) sizes.observe(child);
-		};
-		const children = new MutationObserver(() => {
-			observeChildren();
-			keepAtLatest();
-		});
-		let expiry: ReturnType<typeof setTimeout> | undefined;
-		const stop = () => {
-			if (stopped) return;
-			stopped = true;
-			sizes.disconnect();
-			children.disconnect();
-			if (expiry) clearTimeout(expiry);
-			el.removeEventListener("wheel", stop);
-			el.removeEventListener("touchstart", stop);
-			el.removeEventListener("pointerdown", stop);
-			window.removeEventListener("keydown", stopForScrollKey);
-		};
-		const stopForScrollKey = (event: KeyboardEvent) => {
-			if (!isSessionFocused()) return;
-			if (
-				["PageUp", "PageDown", "Home", "End"].includes(event.key) ||
-				(event.ctrlKey &&
-					event.shiftKey &&
-					(event.key === "ArrowUp" || event.key === "ArrowDown"))
-			)
-				stop();
-		};
-
-		observeChildren();
-		children.observe(el, { childList: true });
-		el.addEventListener("wheel", stop, { passive: true });
-		el.addEventListener("touchstart", stop, { passive: true });
-		el.addEventListener("pointerdown", stop, { passive: true });
-		window.addEventListener("keydown", stopForScrollKey);
-		expiry = setTimeout(stop, 3000);
-		keepAtLatest();
-		return stop;
-	}, [initialScrollSession, session.id, sessionHidden, messagesRef]);
-	// Returning to the app reads like reopening the session, not resuming a
-	// paused one. On the iOS PWA the page survives backgrounding with the scroll
-	// parked wherever it was; on desktop a hidden tab keeps streaming below the
-	// fold. So when the tab turns visible again, jump to the live edge if the
-	// transcript grew while hidden — or if we were away long enough that this is
-	// a reopen, not a glance at another app. Growth often only lands moments
-	// AFTER visibility (the PWA's WebSocket reconnects first, then backfills),
-	// so a short watch window catches late arrivals. A real reader gesture
-	// cancels the pending jump — their hands on the transcript always win.
-	const lastEntryIdRef = useRef<string | null>(null);
-	const streamLenRef = useRef(0);
-	useLayoutEffect(() => {
-		lastEntryIdRef.current = entries.length > 0 ? entries[entries.length - 1].id : null;
-		streamLenRef.current = liveTurnStore.textLength();
-	}, [entries, liveTurnStore]);
-	const hiddenSnapRef = useRef<{
-		at: number;
-		lastEntryId: string | null;
-		streamLen: number;
-	} | null>(null);
-	const resumeWatchRef = useRef<{
-		until: number;
-		lastEntryId: string | null;
-		streamLen: number;
-	} | null>(null);
-	useEffect(() => {
-		hiddenSnapRef.current = null;
-		resumeWatchRef.current = null;
-	}, [session.id]);
-	useEffect(() => {
-		const onVisibility = () => {
-			if (document.visibilityState === "hidden") {
-				hiddenSnapRef.current = {
-					at: Date.now(),
-					lastEntryId: lastEntryIdRef.current,
-					streamLen: streamLenRef.current,
-				};
-				resumeWatchRef.current = null;
-				return;
-			}
-			const snap = hiddenSnapRef.current;
-			hiddenSnapRef.current = null;
-			if (!snap) return;
-			const grew =
-				lastEntryIdRef.current !== snap.lastEntryId ||
-				streamLenRef.current > snap.streamLen;
-			if (grew || Date.now() - snap.at >= HIDDEN_REOPEN_MS) {
-				scrollToLatest("auto");
-			} else {
-				resumeWatchRef.current = {
-					until: performance.now() + RESUME_GROWTH_WINDOW_MS,
-					lastEntryId: snap.lastEntryId,
-					streamLen: snap.streamLen,
-				};
-			}
-		};
-		document.addEventListener("visibilitychange", onVisibility);
-		return () =>
-			document.removeEventListener("visibilitychange", onVisibility);
-	}, [scrollToLatest]);
-	// The late-arrival half of the resume jump: growth landing inside the watch
-	// window (WS backfill after a PWA resume) completes the jump to the edge.
-	useEffect(() => {
-		const watch = resumeWatchRef.current;
-		if (!watch) return;
-		if (performance.now() > watch.until) {
-			resumeWatchRef.current = null;
-			return;
-		}
-		if (lastEntryIdRef.current !== watch.lastEntryId) {
-			resumeWatchRef.current = null;
-			scrollToLatest("auto");
-		}
-	}, [entries, scrollToLatest]);
-	useEffect(
-		() =>
-			liveTurnStore.subscribe(() => {
-				streamLenRef.current = liveTurnStore.textLength();
-				const watch = resumeWatchRef.current;
-				if (
-					watch &&
-					performance.now() <= watch.until &&
-					streamLenRef.current > watch.streamLen
-				) {
-					resumeWatchRef.current = null;
-					scrollToLatest("auto");
-				}
-			}),
-		[liveTurnStore, scrollToLatest],
-	);
-	useEffect(() => {
-		const el = messagesRef.current;
-		if (!el) return;
-		const cancelResumeJump = () => {
-			resumeWatchRef.current = null;
-		};
-		el.addEventListener("touchstart", cancelResumeJump, { passive: true });
-		el.addEventListener("wheel", cancelResumeJump, { passive: true });
-		return () => {
-			el.removeEventListener("touchstart", cancelResumeJump);
-			el.removeEventListener("wheel", cancelResumeJump);
-		};
-	}, [messagesRef]);
-
-	// After any content change: keep a following reader at the live edge, or maintain
-	// the pinned-turn spacer for a turn streaming into the space below (principles 4–6).
-	// Layout effect so the adjustment happens before the browser paints — no flicker.
-	useLayoutEffect(() => {
-		relayout();
-		if (!sentPromptNeedsLayoutScrollRef.current) return;
-		sentPromptNeedsLayoutScrollRef.current = false;
-		scrollToLatest("auto");
-	}, [
-		entries,
-		queued,
-		steered,
-		pending,
-		relayout,
-		scrollToLatest,
-	]);
-
-	// Shared preamble: stop tracking the live edge, and pin the reader to the
-	// content they're on while the page prepends above it.
-	const beginHistoryLoad = useCallback((holdMs = 8000) => {
-		leaveLatest();
-		const el = messagesRef.current;
-		if (el) {
-			// Anchor on the tightest element at the viewport top — it sits below
-			// everything the prepend inserts, so its content offset shifts by
-			// exactly the added height (what native scroll anchoring would pick).
-			const node = pickScrollAnchor(el);
-			if (node)
-				startHistoryHold(node, holdMs, {
-					height: el.scrollHeight,
-					top: el.scrollTop,
-				});
-		}
-		setLoadingHistory(true);
-	}, [leaveLatest, messagesRef, startHistoryHold]);
-	const loadEarlierHistory = useCallback(() => {
-		if (transcriptIndexExpectedRef.current || !historyTruncated) return;
-		if (loadingHistoryRef.current) {
-			// The deferred page is already on the wire. Adopt it rather than making
-			// the first upward gesture look ignored, and let its response continue
-			// until a visible conversation boundary lands.
-			if (backgroundHistoryRef.current) {
-				backgroundHistoryRef.current = false;
-				if (transcriptSeqRef.current?.sessionId === session.id) {
-					historyRevealRef.current = {
-						sessionId: session.id,
-						loaded: 0,
-						cursor: null,
-					};
-				}
-				beginHistoryLoad();
-			}
-			return;
-		}
-		loadingHistoryRef.current = true;
-		if (transcriptSeqRef.current?.sessionId === session.id) {
-			historyRevealRef.current = {
-				sessionId: session.id,
-				loaded: 0,
-				cursor: null,
-			};
-		}
-		beginHistoryLoad();
-		requestHistoryPage();
-	}, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
-	const loadAllHistory = useCallback(() => {
-		if (
-			transcriptIndexExpectedRef.current ||
-			!historyTruncated ||
-			loadingHistoryRef.current
-		)
-			return;
-		loadingHistoryRef.current = true;
-		historyRevealRef.current = null;
-		backgroundHistoryRef.current = false;
-		historyWalkRef.current = {
-			sessionId: session.id,
-			loaded: 0,
-			cursor: null,
-		};
-		setLoadingAllHistory(true);
-		beginHistoryLoad(60_000);
-		requestHistoryPage(true);
-	}, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
-
-	// Preserve the fast opening snapshot, then download one fuller page once the
-	// browser has had time to paint it. This only runs at the live edge in seq
-	// mode. A reader who starts moving first wins and uses the interactive path.
-	useEffect(() => {
-		if (
-			loading ||
-			transcriptIndexExpected ||
-			!historyTruncated ||
-			loadingHistory ||
-			sessionHidden ||
-			backgroundHistoryAttemptedRef.current ||
-			transcriptSeqRef.current?.sessionId !== session.id
-		)
-			return;
-		let attempts = 0;
-		let timer = 0;
-		const tryPrefetch = () => {
-			const el = messagesRef.current;
-			if (!el || el.scrollHeight - el.scrollTop - el.clientHeight > 4) {
-				// Opening scroll restoration can settle after the first transcript
-				// paint. Give it a short window without chasing a reader who moved up.
-				attempts += 1;
-				if (attempts < 12) timer = window.setTimeout(tryPrefetch, 500);
-				return;
-			}
-			backgroundHistoryAttemptedRef.current = true;
-			backgroundHistoryRef.current = true;
-			loadingHistoryRef.current = true;
-			setLoadingHistory(true);
-			requestHistoryPage();
-		};
-		timer = window.setTimeout(tryPrefetch, 1_500);
-		return () => window.clearTimeout(timer);
-	}, [
-		historyTruncated,
-		loading,
-		transcriptIndexExpected,
-		loadingHistory,
-		messagesRef,
-		requestHistoryPage,
-		session.id,
-		sessionHidden,
-	]);
-
-	// Auto-load is driven by upward reader intent, never by viewport geometry
-	// alone. That keeps initial hydration and programmatic bottom settling from
-	// fetching history while still preloading a page as the reader approaches it.
-	const historyGestureUntilRef = useRef(0);
-	const historyGestureConsumedRef = useRef(true);
-	const lastHistoryWheelAtRef = useRef(0);
-	const lastHistoryScrollTopRef = useRef(0);
-	const handleMessagesScroll = useCallback(() => {
-		const el = messagesRef.current;
-		const previous = lastHistoryScrollTopRef.current;
-		const current = el?.scrollTop ?? previous;
-		lastHistoryScrollTopRef.current = current;
-		onScroll();
-		const cached = peekCachedTranscriptView(session.id);
-		// Only the cheap fields here: a scroll event must not walk the
-		// transcript. The anchor follows once the reader settles.
-		if (el && cached) {
-			cacheTranscriptView(session.id, {
-				...cached,
-				scrollTop: current,
-				following: followingLive.current,
-			});
-			scheduleAnchorCapture();
-		}
-		if (el && current < previous - 1 && backgroundHistoryRef.current) {
-			loadEarlierHistory();
-		}
-		if (
-			el &&
-			current < previous - 1 &&
-			current <= 600 &&
-			!historyGestureConsumedRef.current &&
-			performance.now() <= historyGestureUntilRef.current
-		) {
-			historyGestureConsumedRef.current = true;
-			historyGestureUntilRef.current = 0;
-			loadEarlierHistory();
-		}
-	}, [
-		followingLive,
-		loadEarlierHistory,
-		messagesRef,
-		onScroll,
-		scheduleAnchorCapture,
-		session.id,
-	]);
-	useEffect(() => {
-		const el = messagesRef.current;
-		if (!el || sessionHidden) return;
-		historyGestureUntilRef.current = 0;
-		historyGestureConsumedRef.current = true;
-		lastHistoryWheelAtRef.current = 0;
-		lastHistoryScrollTopRef.current = el.scrollTop;
-		let touchY: number | null = null;
-		const nearHistory = () => {
-			if (historyGestureConsumedRef.current || el.scrollTop > 600) return;
-			historyGestureConsumedRef.current = true;
-			historyGestureUntilRef.current = 0;
-			loadEarlierHistory();
-		};
-		const onWheel = (event: WheelEvent) => {
-			if (event.deltaY >= 0) return;
-			if (backgroundHistoryRef.current) loadEarlierHistory();
-			const now = performance.now();
-			if (now - lastHistoryWheelAtRef.current > 200)
-				historyGestureConsumedRef.current = false;
-			lastHistoryWheelAtRef.current = now;
-			historyGestureUntilRef.current = now + 1200;
-			nearHistory();
-		};
-		const onTouchStart = (event: TouchEvent) => {
-			touchY = event.touches[0]?.clientY ?? null;
-			historyGestureConsumedRef.current = false;
-		};
-		const onTouchMove = (event: TouchEvent) => {
-			const y = event.touches[0]?.clientY;
-			if (y === undefined || touchY === null) return;
-			if (y > touchY + 1) {
-				if (backgroundHistoryRef.current) loadEarlierHistory();
-				historyGestureUntilRef.current = performance.now() + 6000;
-				nearHistory();
-			}
-			touchY = y;
-		};
-		const onPointerDown = (event: PointerEvent) => {
-			// Classic scrollbar drags hit the container beyond its content box.
-			if (
-				event.target === el &&
-				(event.offsetX >= el.clientWidth || event.offsetY >= el.clientHeight)
-			) {
-				historyGestureConsumedRef.current = false;
-				historyGestureUntilRef.current = performance.now() + 1500;
-			}
-		};
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (!focused) return;
-			const upward =
-				event.ctrlKey &&
-				event.shiftKey &&
-				!event.metaKey &&
-				!event.altKey &&
-				event.key === "ArrowUp";
-			if (!upward) return;
-			if (backgroundHistoryRef.current) loadEarlierHistory();
-			historyGestureConsumedRef.current = false;
-			historyGestureUntilRef.current = performance.now() + 1200;
-			nearHistory();
-		};
-		el.addEventListener("wheel", onWheel, { passive: true });
-		el.addEventListener("touchstart", onTouchStart, { passive: true });
-		el.addEventListener("touchmove", onTouchMove, { passive: true });
-		el.addEventListener("pointerdown", onPointerDown, { passive: true });
-		window.addEventListener("keydown", onKeyDown);
-		return () => {
-			el.removeEventListener("wheel", onWheel);
-			el.removeEventListener("touchstart", onTouchStart);
-			el.removeEventListener("touchmove", onTouchMove);
-			el.removeEventListener("pointerdown", onPointerDown);
-			window.removeEventListener("keydown", onKeyDown);
-		};
-	}, [focused, session.id, sessionHidden, loadEarlierHistory, messagesRef]);
-
-	// When a turn finishes, release the spacer so the layout settles back.
-	const wasBusyRef = useRef(false);
-	useEffect(() => {
-		if (wasBusyRef.current && !isBusy) endTurn();
-		wasBusyRef.current = isBusy;
-	});
-
-	// Codex-model sessions start fresh threads server-side; only Claude-model
-	// sessions need an existing claude session id to resume.
-	const effectiveModel = model || defaultModel;
-	const isCodexModel = modelIsCodex(effectiveModel, models);
-	// A opensession session with no engine ids is a *fresh* session (e.g. a new sibling
-	// from the tab strip's +): the composer stays enabled — its first prompt
-	// starts a new engine conversation server-side (see runSessionPrompt). Only
-	// non-opensession sources with no engine to resume stay read-only.
-	const noEngine =
-		!isCodexModel && !session.ran && session.source !== "opensession";
-	const latestAssistantMessage = entries.findLast(
-		(entry) => entry.type === "assistant" && entry.content.trim(),
-	)?.content.trim() || "";
-	const shippedSentValue =
-		shippedShare ||
-		(mergedPr
-			? session.slackShares?.findLast((share) => share.prNumber === mergedPr.number)
-			: undefined);
-	// Same reason as mergedPr above: a receipt read off the polled session is a
-	// fresh object every tick, and the share below is a transcript prop.
-	const sentChannelName = shippedSentValue?.channelName ?? "";
-	const sentPermalink = shippedSentValue?.permalink;
-	const sentAt = shippedSentValue?.at ?? "";
-	const sentTs = shippedSentValue?.ts;
-	const shippedSentKey = shippedSentValue
-		? [
-				shippedSentValue.channelName,
-				shippedSentValue.permalink,
-				shippedSentValue.at,
-				shippedSentValue.ts,
-			].join("\u0000")
-		: "";
-	const shippedSent = useMemo(() => {
-		if (!shippedSentKey) return undefined;
-		return {
-			channelName: sentChannelName,
-			permalink: sentPermalink,
-			at: sentAt,
-			ts: sentTs,
-		};
-	}, [shippedSentKey, sentChannelName, sentPermalink, sentAt, sentTs]);
-	const shippedChangeShare = useMemo(
-		() =>
-			mergedPr && !shareDismissed
-				? {
-						prNumber: mergedPr.number!,
-						sessionId: session.id,
-						defaultMessage: suggestedShippedChangeMessage(
-							mergedPr.title || "an update",
-							session.walkthrough?.summary,
-						),
-						screenshot: shippedScreenshot,
-						reconnectRequired: shippedSlackReconnectRequired,
-						status: shippedChangeStatus,
-						onShare: sendShippedChangeToSlack,
-						onReconnectSlack: reconnectShippedSlack,
-						onCancel: dismissShippedChangeShare,
-						nextMessage: latestAssistantMessage,
-						...(shippedSent
-							? {
-									sent: {
-										channelName: shippedSent.channelName,
-										permalink: shippedSent.permalink,
-										receiptKey: shippedSent.at,
-									},
-									...(shippedSent.ts
-										? { onUndo: () => undoShippedChangeShare(shippedSent.at) }
-										: {}),
-								}
-							: {}),
-					}
-				: undefined,
-		[
-			mergedPr,
-			shippedSlackReconnectRequired,
-			shippedScreenshot,
-			session.id,
-			session.walkthrough?.summary,
-			sendShippedChangeToSlack,
-			reconnectShippedSlack,
-			undoShippedChangeShare,
-			dismissShippedChangeShare,
-			shareDismissed,
-			shippedChangeStatus,
-			shippedSent,
-			latestAssistantMessage,
-		],
-	);
-	const sendComposedSlackMessage = useCallback(async (message: string, channel: string, screenshots: string[]) => {
-		if (!slackComposer) return;
-		setSlackComposerStatus("sharing");
-		try {
-			const result = await sendSlackComposer(session.id, {
-				requestId: slackComposer.id,
-				message,
-				channel,
-				screenshots,
-			});
-			setSlackComposer(null);
-			setSlackComposerStatus("idle");
-			setSlackComposerSent({
-				channelName: result.channel.name,
-				permalink: result.permalink,
-				receiptKey: slackComposer.id,
-				channelId: result.channel.id,
-				ts: result.ts,
-			});
-		} catch (error: any) {
-			setSlackComposerStatus("idle");
-			if (error?.status === 403 && /Reconnect Slack/.test(error?.message || "")) {
-				setSlackComposerReconnect(true);
-				toast("Reconnect Slack to add image access");
-			} else {
-				toast(error?.message || "Couldn't send to Slack");
-			}
-		}
-	}, [session.id, slackComposer]);
-	// Slack accepts a delete only from the account that posted, which is the
-	// person's own grant token, so an undo here can never touch someone else's
-	// message.
-	const undoComposedSlackMessage = useCallback(async (sent: SlackSent) => {
-		if (!sent.channelId || !sent.ts) return;
-		try {
-			await undoSlackComposer(session.id, { channel: sent.channelId, ts: sent.ts });
-			setSlackComposerSent(null);
-			toast("Removed from Slack");
-		} catch (error: any) {
-			toast(error?.message || "Couldn't undo the Slack message");
-		}
-	}, [session.id]);
-	const cancelComposedSlackMessage = useCallback(async () => {
-		if (!slackComposer) return;
-		try {
-			await cancelSlackComposer(session.id, slackComposer.id);
-			setSlackComposer(null);
-		} catch (error: any) {
-			toast(error?.message || "Couldn't close the Slack composer");
-		}
-	}, [session.id, slackComposer]);
-	// Exact engine-state forks use Claude's SDK forkSession. Other backends can
-	// still fork as a new sibling with a transcript handoff.
-	const canForkSession = session.source === "opensession" && !!session.ran;
-
-	const handleFork = useCallback((messageId: string) => {
-		setForkFrom(messageId);
-	}, []);
-
-	// "Continue" under a failed run's notice. An ordinary prompt, so it steers,
-	// notices and broadcasts like anything else a person sends — the failure
-	// notice tells you to send the prompt again, and this is that press.
-	const continueAfterFailure = useCallback(() => {
-		send({
-			type: "prompt",
-			sessionId: session.id,
-			content: CONTINUE_AFTER_FAILURE_PROMPT,
-			user: getCurrentUser(),
-		});
-	}, [send, session.id]);
-
-	const continuePausedSession = useCallback(() => {
-		const lastMessageId = entries.findLast(
-			(entry) => entry.type === "assistant" || entry.type === "user",
-		)?.id;
-		const carriedImages = queued.flatMap((item) => item.images || []);
-		send({
-			type: "create_session",
-			branch: "",
-			prompt: safetyContinuationPrompt(session.title, queued),
-			user: getCurrentUser(),
-			forkFrom: {
-				sourceId: session.id,
-				...(lastMessageId ? { messageId: lastMessageId } : {}),
-			},
-			...(carriedImages.length ? { images: carriedImages } : {}),
-		});
-	}, [entries, queued, send, session.id, session.title]);
-
-	const repairSafetyPause = useCallback(async () => {
-		await repairPausedSession(session.id);
-		setSafety(undefined);
-		setIsRunningLive(false);
-		onRunningChange?.(session.id, false);
-		toast("Session repaired");
-	}, [onRunningChange, session.id]);
-
-	// Session and asset links navigate on a delegated click. markdown.ts renders
-	// them into dangerouslySetInnerHTML, where they cannot carry React handlers;
-	// data attributes identify which in-app surface should open.
-	const handleMessagesClick = useCallback(
-		(e: React.MouseEvent) => {
-			const target = e.target as HTMLElement;
-			const assetEl = target.closest?.("[data-asset-path]") as HTMLElement | null;
-			const assetPath = assetEl?.dataset.assetPath;
-			if (assetPath) {
-				// Modified clicks keep the anchor's raw-file fallback and native new-tab
-				// behaviour. A normal click stays in context, in the asset preview.
-				if (
-					(e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) &&
-					assetEl?.getAttribute("href")
-				)
-					return;
-				e.preventDefault();
-				openAssetFromTranscript(assetPath);
-				return;
-			}
-			const el = target.closest?.(
-				"[data-session-id]",
-			) as HTMLElement | null;
-			const id = el?.dataset.sessionId;
-			if (!id || !onOpenSession) return;
-			// Modified clicks on href-carrying chips (markdown links to session
-			// URLs) keep native browser behavior (open in new tab, etc.).
-			if ((e.metaKey || e.ctrlKey || e.shiftKey) && el?.getAttribute("href"))
-				return;
-			e.preventDefault();
-			onOpenSession(id);
-		},
-		[onOpenSession, openAssetFromTranscript],
-	);
-
-
-	// The transcript passage explicitly attached to the next message. It stays
-	// highlighted until the message sends or the person removes it.
-	const [quote, setQuote] = useState<Quote | null>(null);
-	const clearQuote = useCallback(() => setQuote(null), []);
-	// Whether a draft is in the way of reopening a message in the composer, read
-	// through a ref. Every value it reads changes as you type or attach, and
-	// the transcript's onEditMessage has to keep one identity across all of
-	// that: the memoized TranscriptBlocks is what stands between a keystroke
-	// and a re-render of the whole conversation.
-	const composerDraftRef = useRef({
-		draftKey,
-		images,
-		files,
-		quote,
-		contextSessions,
-	});
-	useLayoutEffect(() => {
-		composerDraftRef.current = {
-			draftKey,
-			images,
-			files,
-			quote,
-			contextSessions,
-		};
-	}, [draftKey, images, files, quote, contextSessions]);
-	const composerHasDraft = useCallback(() => {
-		const current = composerDraftRef.current;
-		const stored = loadDraft(current.draftKey);
-		return Boolean(
-			stored.text.trim() ||
-				stored.pastedTexts.length ||
-				current.images.length ||
-				current.files.length ||
-				current.quote ||
-				current.contextSessions.length,
-		);
-	}, []);
-	// Switching sessions drops staged selections: they quote THAT transcript.
-	useEffect(() => {
-		setQuote(null);
-	}, [session.id]);
-	// Full-width view tabs unmount the transcript and its visible highlight. Do
-	// not leave that context invisibly attached when the conversation returns.
-	useEffect(() => {
-		if (sessionHidden) setQuote(null);
-	}, [sessionHidden]);
-	const [showAllContextSessions, setShowAllContextSessions] = useState(false);
-	const contextSessionOptions = useMemo(() => {
-		// Whole workspace, archived sessions included — the common case is exactly a
-		// closed (archived-after-merge) sibling whose context the new session needs.
-		// workspaceSessions (the live tab strip) is the fallback when the session has no
-		// workspace id of its own.
-		const siblings = session.workspaceId
-			? (allSessions || []).filter((c) => c.workspaceId === session.workspaceId)
-			: workspaceSessions || [];
-		return siblings
-			.filter(
-				(c) =>
-					c.id !== session.id &&
-					// Legacy hidden sessions are not valid workspace context options.
-					// Only sessions with something to hand over — a session that has
-					// actually run a turn. These are LIST rows, so `ran` is the only
-					// form of that answer they carry.
-					c.ran,
-			)
-			.sort((a, b) =>
-				(b.lastActivity || "").localeCompare(a.lastActivity || ""),
-			);
-	}, [allSessions, workspaceSessions, session.id, session.workspaceId]);
-	useEffect(() => {
-		setContextSessions([]);
-		setShowAllContextSessions(false);
-	}, [session.id]);
-
-	// Whose Desk this is. Every Desk is titled "Desk" and carries no repo, so
-	// the owner is the only thing that tells one apart from another — see the
-	// mobile title pill's leading slot.
-	const deskOwner = session.desk ? session.startedBy || "" : "";
-	// The review request is stored per session, but the sidebar's "Awaiting/Needs
-	// review" bands group by workspace — so a request set on a sibling session lit
-	// the band while the open session's Reviewer chip read empty. Surface the
-	// workspace's request in the chip: the open session's own if it has one, else a
-	// sibling's, carrying the owner id so clear/re-assign target the right session.
-	// GitHub reviews can complete an explicit request; GitHub's own requested
-	// reviewers ride alongside as `prReviewRequested`, since being added as a
-	// reviewer on the PR is the other way a review lands on you. It writes no
-	// Open Session request — only the picker does that — so the chip reads both.
-	const effectiveReview = (() => {
-		const owner = session.reviewRequest
-			? session
-			: (workspaceSessions || []).find((c) => c.reviewRequest);
-		const request = owner?.reviewRequest ?? null;
-		const completion =
-			owner && request ? prReviewCompletion(request, owner) : null;
-		return {
-			req: request
-				? completion
-					? { ...request, accepted: completion }
-					: request
-				: null,
-			ownerId: owner?.id ?? session.id,
-			acceptedFromPr: !!completion,
-			// A workspace can span several PRs; a request on any of them is a
-			// request on the workspace, which is the unit the chip speaks for.
-			prReviewRequested: [
-				...new Set(
-					(workspaceSessions?.length ? workspaceSessions : [session]).flatMap(
-						(c) => c.prReviewRequested || [],
-					),
-				),
-			],
-		};
-	})();
-
-	// Returns true when the message was consumed, so the (uncontrolled)
-	// Composer knows to clear its draft; false keeps it for a retry.
-	function handleSend(
-		raw: string,
-		opts?: { steer?: boolean },
-		/** A region comment is already a complete message. Its derived crop must
-		 *  not consume or inherit anything waiting in the main composer. */
-		isolatedImages?: string[],
-	): boolean | Promise<boolean> {
-		const sendStartedAt = performance.now();
-		const typed = raw.trim();
-		const isolated = isolatedImages !== undefined;
-		// Quoted transcript selections lead a normal composer message. A region
-		// comment carries its own visual context and leaves the draft untouched.
-		const text = isolated ? typed : withQuotes(quote ? [quote] : [], typed);
-		const imgs = isolatedImages ?? images;
-		const fls = isolated ? [] : files;
-		if (!typed && imgs.length === 0 && fls.length === 0) return false;
-
-		// Note mode: post a team note on this session — never a prompt. The
-		// server broadcast echoes it back into `notes` for every viewer, so
-		// nothing is rendered optimistically here. Notes carry the quoted
-		// selection too (as "> " lines, the same shape a prompt sends).
-		if (!isolated && noteMode) {
-			if (!typed && imgs.length === 0) return false;
-			return postSessionNoteApi(session.id, text, getCurrentUser(), imgs).then(
-				() => {
-					dropStagingAttachments(draftKey);
-					setImages([]);
-					setQuote(null);
-					return true;
-				},
-				() => {
-					toast("Failed to add note");
-					return false;
-				},
-			);
-		}
-
-		const user = getCurrentUser();
-		// Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
-		const filePayload = fls.map((f) =>
-			f.path ? { name: f.name, path: f.path } : { name: f.name, dataUrl: f.dataUrl },
-		);
-
-		// Fork mode: branch a brand-new session from the selected message, keeping
-		// the real conversation history. App navigates into it on session_created.
-		if (!isolated && forkFrom) {
-			send({
-				type: "create_session",
-				branch: "",
-				prompt: text || "Continue from here.",
-				user,
-				forkFrom: { sourceId: session.id, messageId: forkFrom },
-				...(imgs.length ? { images: imgs } : {}),
-				...(fls.length ? { files: filePayload } : {}),
-			});
-			setForkFrom(null);
-			dropStagingAttachments(draftKey);
-			setImages([]);
-			setFiles([]);
-			setQuote(null);
-			return true;
-		}
-
-		if (noEngine) return false;
-		// Two follow-up behaviors while busy: plain send QUEUES (parked until
-		// the run FULLY finishes — including any auto-continue turns the server
-		// holds the queue behind), and the steer button / ⌘Ctrl+Enter STEERS
-		// (folds into the LIVE run at its next step boundary — busyMode:"steer",
-		// real in-band steering since 2026-07-12; the server falls back to the
-		// queue when nothing is steerable or files are attached). The turn keeps
-		// running on both paths: no abort, no lost work. Idle: just run it.
-		// Attachments ride along on every path — images fold into the run as
-		// content blocks; files route to the queue server-side.
-		const steerNow = isBusy && !!opts?.steer;
-		let outboxItem: PromptOutboxItem;
-		try {
-			outboxItem = promptOutbox.enqueue({
-				sessionId: session.id,
-				content: text,
-				user,
-				effort,
-				fastMode,
-				busyMode: isBusy ? (steerNow ? "steer" : "queue") : undefined,
-				...(imgs.length ? { images: imgs } : {}),
-				...(fls.length ? { files: filePayload } : {}),
-				...(!isolated && contextSessions.length ? { contextSessions } : {}),
-			});
-		} catch (error) {
-			toast(error instanceof Error ? error.message : "Couldn't save this message for delivery.");
-			return false;
-		}
-		// Prompting in a session you'd hidden from your sidebar brings its row back
-		// — you're working in it again (see lib/hides.ts).
-		unhideForSession(session);
-		if (!isBusy || steerNow) {
-			if (!isBusy) {
-				setIsRunningLive(true);
-				onRunningChange?.(session.id, true);
-			}
-			// Sent messages always enter the conversation immediately. A busy steer
-			// keeps its delivery mode only so the bubble can remain slightly muted
-			// until the engine reads it.
-			sentPromptNeedsLayoutScrollRef.current = true;
-			setPending((p) => [
-				...p,
-				{
-					id: `outbox-${outboxItem.clientId}`,
-					content: text,
-					user,
-					sentAt: Date.now(),
-					images: imgs.length ? imgs : undefined,
-					...(steerNow ? { busyMode: "steer" as const } : {}),
-				},
-			]);
-			requestAnimationFrame(() =>
-				measureSessionPerf("send_to_optimistic_paint_ms", sendStartedAt),
-			);
-		} else {
-			// Only deliberately queued messages live above the composer.
-			setPending((p) => [
-				...p,
-				{
-					id: `outbox-${outboxItem.clientId}`,
-					content: text,
-					user,
-					sentAt: Date.now(),
-					images: imgs.length ? imgs : undefined,
-					busyMode: "queue" as const,
-				},
-			]);
-		}
-		// Your own send always lands in view. relayout's glue only runs while
-		// `following`, so once the reader has scrolled up into history the
-		// optimistic bubble arrives below the fold with nothing moving — and a
-		// send is unambiguous intent to watch this turn. Instant, not smooth: the
-		// glue that follows sets scrollTop directly and would fight an animation.
-		cancelIndexAnchorHold();
-		scrollToLatest("auto");
-		if (!isolated) {
-			dropStagingAttachments(draftKey);
-			setImages([]);
-			setFiles([]);
-			setQuote(null);
-			setContextSessions([]);
-		}
-		measureSessionPerf("send_handler_ms", sendStartedAt);
-		return true;
-	}
-
-	const imageRegionCommentRef = useRef<
-		(request: ImageRegionCommentRequest) => Promise<void>
-	>(async () => {});
-	useLayoutEffect(() => {
-		imageRegionCommentRef.current = async (request) => {
-			if (request.sessionId !== session.id) throw new Error("That session changed");
-			const crop = await cropImageRegionFile(request.src, request.region);
-			const staged = await splitAttachments([crop]);
-			if (staged.images.length === 0)
-				throw new Error(staged.rejected[0] || "Could not attach the selected image");
-			const sent = await handleSend(request.text, undefined, staged.images);
-			if (!sent) throw new Error("Could not send this comment");
-		};
-	});
-	useEffect(() => {
-		if (noEngine) return;
-		return registerImageRegionCommentHandler(session.id, (request) =>
-			imageRegionCommentRef.current(request),
-		);
-	}, [noEngine, session.id]);
-
-	function queueHasFiles(item: QueueReceipt): boolean {
-		return Array.isArray(item.files) && item.files.length > 0;
-	}
-
-	function discardOutbox(item: PromptOutboxItem) {
-		setPending((current) =>
-			current.filter((entry) => entry.id !== `outbox-${item.clientId}`),
-		);
-		promptOutbox.discard(item.clientId);
-	}
-
-	function editOutboxInComposer(item: PromptOutboxItem) {
-		setImages(item.images ?? []);
-		setFiles((item.files ?? []) as FileAttachment[]);
-		setContextSessions(item.contextSessions ?? []);
-		if (item.effort) setEffort(item.effort);
-		if (typeof item.fastMode === "boolean") setFastMode(item.fastMode);
-		setComposerPrefill((current) => ({
-			seq: (current?.seq ?? 0) + 1,
-			text: item.content,
-		}));
-		discardOutbox(item);
-	}
-
-	/** What removing a queued row means, said in its own terms: a person's
-	 *  message is deleted, routed traffic is dismissed. */
-	function queueDeleteLabel(
-		isReview: boolean,
-		isWorker: boolean,
-		isSessionMessage: boolean,
-	): string {
-		if (isReview) return "Dismiss review feedback";
-		if (isWorker) return "Dismiss worker report";
-		if (isSessionMessage) return "Dismiss session message";
-		return "Delete queued message";
-	}
-
-	function renderQueueContent(
-		item: QueueReceipt,
-		classified: TranscriptEntry,
-		opts: { github?: boolean; tone?: keyof typeof composerQueueBodyTone } = {},
-	) {
-		const firstImage = item.images?.[0];
-		const extraImages = Math.max(0, (item.images?.length ?? 0) - 1);
-		const isReview = classified.notice?.kind === "review-handoff";
-		// Who or what this is from, when it isn't the driver typing: a teammate's
-		// name, or a notice's title — but only when that title is a LABEL. A
-		// title-only notice (a workflow nudge, a runner line) is its own body, and
-		// printing it twice is just noise.
-		const from = isReview ? null : queueAttribution(classified, currentUser);
-		const body = isReview
-			? `${classified.notice!.title} · Runs after this turn`
-			: classified.content;
-		return (
-			<div className={composerQueueContent}>
-				{isReview && <IconPullRequest size={18} className={mergeStylexOverrideClassName("", sx.flexNone, sx.textFaint)} />}
-				{firstImage && (
-					<div className={composerQueueImage}>
-						<img className={composerQueueImageThumb} src={firstImage} alt="" />
-						{extraImages > 0 && (
-							<span className={composerQueueImageCount}>+{extraImages}</span>
-						)}
-					</div>
-				)}
-				<div
-					className={cn(
-						composerQueueBody,
-						composerQueueBodyTone[opts.tone ?? "default"],
-					)}
-				>
-					{from && <span className={composerQueueFrom}>{from}</span>}
-					{opts.github && !isReview && (
-						<span className={composerQueueFrom}>GitHub</span>
-					)}
-					{body}
-				</div>
-			</div>
-		);
-	}
-
-	function editQueuedInComposer(q: QueueReceipt, steering = false) {
-		if (composerHasDraft()) {
-			toast("Send or clear your draft before editing a message");
-			return;
-		}
-		if (!q.id) return;
-		if (steering) {
-			setSteered((current) =>
-				current.map((item) =>
-					item.id === q.id ? { ...item, editing: true } : item,
-				),
-			);
-		}
-		send({
-			type: steering ? "take_steered_prompt" : "take_queued_prompt",
-			sessionId: session.id,
-			queueId: q.id,
-		});
-	}
-
-	// Stable identity: this is a prop of the memoized transcript, so a fresh
-	// function each render would re-render every bubble on every poll tick.
-	const editSentMessageInComposer = useCallback((entry: TranscriptEntry) => {
-		if (composerHasDraft()) {
-			toast("Send or clear your draft before editing a message");
-			return;
-		}
-		setImages(entry.images ?? []);
-		setFiles((entry.files ?? []).map((file) => ({
-			...file,
-			type: "application/octet-stream",
-		})));
-		setComposerPrefill((current) => ({
-			seq: (current?.seq ?? 0) + 1,
-			text: entry.content,
-			replace: true,
-		}));
-	}, [composerHasDraft]);
-
-	function handleQueueReorder(next: QueueReceipt[]) {
-		pendingReorderRef.current = next;
-		setQueued(next);
-	}
-
-	function commitQueueReorder() {
-		draggingQueueRef.current = false;
-		const next = pendingReorderRef.current;
-		pendingReorderRef.current = null;
-		if (!next) return;
-		const order = next
-			.map((q) => q.id)
-			.filter((id): id is string => typeof id === "string");
-		if (order.length > 1) {
-			send({ type: "reorder_queued_prompt", sessionId: session.id, order });
-		}
-	}
-
-	// Only deliberately queued sends live above the composer. Idle sends and
-	// steers are conversation messages immediately; both reconcile through the
-	// same transcript path. Workspace setup still holds everything in the flap.
-	const failedOutboxIds = new Set(
-		outboxItems
-			.filter((item) => item.state === "failed")
-			.map((item) => `outbox-${item.clientId}`),
-	);
-	const reconciliationNow = Date.now();
-	const deliveryEchoes = [...queued, ...steered];
-	const pendingReconciliation = reconcilePending(
-		pending,
-		entries,
-		deliveryEchoes,
-		reconciliationNow,
-	);
-	const visiblePending = pending.filter(
-		(item) =>
-			!failedOutboxIds.has(item.id) &&
-			!pendingReconciliation.landed.has(item.id) &&
-			!pendingReconciliation.expired.has(item.id),
-	);
-	// React pending state, transcript frames, queue echoes and the REST outbox
-	// settle on independent clocks. If the local row drops first, keep a pristine
-	// idle outbox item on the same optimistic surface instead of flashing its
-	// transport-only "Waiting to send" state between two copies of the bubble.
-	const fallbackCandidates = optimisticOutboxFallbacks(
-		outboxItems,
-		new Set(pending.map((item) => item.id)),
-		landedOutboxIds,
-	);
-	const fallbackReconciliation = reconcilePending(
-		fallbackCandidates,
-		entries,
-		deliveryEchoes,
-		reconciliationNow,
-	);
-	const fallbackPending = fallbackCandidates.filter(
-		(item) =>
-			!fallbackReconciliation.landed.has(item.id) &&
-			!fallbackReconciliation.expired.has(item.id),
-	);
-	const pendingQueue = [
-		...visiblePending.filter(
-			(p) => p.busyMode === "queue" || settingUpWorkspace,
-		),
-		...(settingUpWorkspace ? fallbackPending : []),
-	];
-	const pendingBubbles = [
-		...visiblePending.filter(
-			(p) => p.busyMode !== "queue" && !settingUpWorkspace,
-		),
-		...(settingUpWorkspace ? [] : fallbackPending),
-	];
-	const optimisticTranscriptEntries: TranscriptEntry[] =
-		pendingBubbles.length === 0
-			? EMPTY_TRANSCRIPT_ENTRIES
-			: pendingBubbles.map((pending) => ({
-					id: pending.id,
-					type: "user",
-					content: pending.content,
-					timestamp: new Date(pending.sentAt).toISOString(),
-					...(pending.images?.length ? { images: pending.images } : {}),
-				}));
-	const pendingTranscriptDeliveryIds = [
-		...pendingDeliveryIds,
-		...pendingBubbles
-			.filter((pending) => pending.busyMode === "steer")
-			.map((pending) => pending.id),
-	];
-	// Retried, failed and authoritatively busy prompts keep the explicit outbox
-	// surface. A pristine idle item is already represented by the fallback above.
-	const fallbackIds = new Set(fallbackCandidates.map((item) => item.id));
-	const durableOutbox = outboxItems.filter(
-		(item) =>
-			item.state === "failed" ||
-			(!fallbackIds.has(`outbox-${item.clientId}`) &&
-				!pending.some((entry) => entry.id === `outbox-${item.clientId}`) &&
-				!landedOutboxIds.has(`outbox-${item.clientId}`)),
-	);
-	const hasLiveConversation =
-		pendingBubbles.length > 0 || liveTurnStore.hasText() || isBusy || !!ask;
-	// recordRunOutcome normally writes a system chip into the transcript. Opening
-	// failures can happen before an engine transcript exists, and a wedged session
-	// mailbox can reject that best-effort append. The session list still carries
-	// the same durable error, so use it as an inline fallback instead of leaving
-	// the conversation blank while only the sidebar hover card explains why.
-	const inlineRunFailure =
-		!safety &&
-		!isBusy &&
-		session.lastRunError &&
-		!entries.some(
-			(entry) =>
-				entry.type === "system" &&
-				entry.content.includes(session.lastRunError!.message),
-		)
-			? session.lastRunError
-			: null;
-	// Server-side filtering is authoritative; this guard keeps model-routing
-	// plumbing out of the message surface during a rolling deploy. An idle send
-	// is durably queued before actor admission, so its queue echo can arrive before
-	// the REST result says whether it started or parked. Keep that receipt off the
-	// queue surface for as long as the same message is an optimistic transcript
-	// bubble. If the bubble expires, the durable row becomes visible again.
-	const shownQueued = withoutPendingTranscriptEchoes(
-		queued.filter((item) =>
-			isClientVisibleQueuedContent(item.content, item.user),
-		),
-		pendingBubbles,
-	);
-	// Classified once, read by both the counts and the rows, so the chip's
-	// tally and what each row renders as can't disagree.
-	const queuedClassified = shownQueued.map((item) =>
-		classifyQueuedContent(item.content, item.user),
-	);
-	const queuedSummary = summarizeInFlightContent(queuedClassified);
-	const reviewCount = queuedSummary.reviews;
-	const workerCount = queuedSummary.workerReports;
-	const sessionMessageCount = queuedSummary.sessionMessages;
-	const queueCount =
-		shownQueued.length + pendingQueue.length + durableOutbox.length;
-	const queuedMessageCount =
-		queuedSummary.messages + pendingQueue.length + durableOutbox.length;
-	const queueTitle = settingUpWorkspace
-		? `Setting up workspace · ${queueCount} queued`
-		: [
-				queuedMessageCount
-					? `${queuedMessageCount} ${queuedMessageCount === 1 ? "message" : "messages"} queued`
-					: null,
-				reviewCount
-					? `${reviewCount} PR ${reviewCount === 1 ? "review" : "reviews"} waiting`
-					: null,
-				workerCount
-					? `${workerCount} worker ${workerCount === 1 ? "report" : "reports"} waiting`
-					: null,
-				sessionMessageCount
-					? `${sessionMessageCount} session ${sessionMessageCount === 1 ? "message" : "messages"} waiting`
-					: null,
-			]
-				.filter(Boolean)
-				.join(" · ");
-	const attachedQueue =
-		queueCount > 0 ? (
-			<div
-				// Stacked under the agents flap, this is a middle section of the
-				// same box, so it drops its own rounded top — only the topmost
-				// flap keeps one.
-				className={cn(composerQueue, "[&:not(:first-child)]:rounded-t-none")}
-				aria-label="Queued messages"
-			>
-				<div className={composerQueueTitle}>{queueTitle}</div>
-				<Reorder.Group
-					as="div"
-					axis="y"
-					values={shownQueued}
-					onReorder={handleQueueReorder}
-					className={composerQueueList}
-				>
-				{shownQueued.map((q, i) => {
-					const c = queuedClassified[i];
-					const isGitHub = isGitHubAttribution(q.user);
-					const isReview = c.notice?.kind === "review-handoff";
-					// Agent-to-agent traffic drives the next turn, but nobody typed it,
-					// so it gets none of the composer edit or reorder gestures.
-					const isWorker = c.notice?.kind === "worker-report";
-					const isSessionMessage = c.notice?.kind === "session-notice";
-					const isDelegated = isWorker || isSessionMessage;
-					const id = q.id;
-					const key = id || `queued-${i}`;
-					const canSteer =
-						!isGitHub && !queueHasFiles(q) && !q.contextSessions?.length;
-					const canEdit =
-						!isGitHub &&
-						!isDelegated &&
-						q.editable === true &&
-						personKey(q.user || "") === personKey(currentUser);
-					// A one-item queue has nothing to reorder — leave drag off so the
-					// lone message still selects/clicks normally.
-					const canReorder = shownQueued.length > 1 && !isGitHub && !isDelegated;
-					return (
-						<Reorder.Item
-							as="div"
-							key={key}
-							value={q}
-							dragListener={canReorder}
-							onDragStart={() => {
-								draggingQueueRef.current = true;
-							}}
-							onDragEnd={commitQueueReorder}
-							whileDrag={{ scale: 1.01, zIndex: 2 }}
-							className={cn(
-								composerQueueItem,
-								i > 0 && composerQueueItemSeparated,
-								canReorder && composerQueueItemDraggable,
-							)}
-						>
-							<div className={composerQueueActions}>
-								{canEdit ? (
-										<Tooltip label="Edit in composer">
-											<button
-												type="button"
-												className={composerQueueAction}
-											onClick={() => editQueuedInComposer(q)}
-											>
-												<IconPencil size={20} />
-											</button>
-										</Tooltip>
-								) : null}
-								<Tooltip
-									label={queueDeleteLabel(isReview, isWorker, isSessionMessage)}
-								>
-									<button
-										type="button"
-										aria-label={queueDeleteLabel(
-											isReview,
-											isWorker,
-											isSessionMessage,
-										)}
-										className={cn(
-											composerQueueAction,
-											composerQueueActionDanger,
-										)}
-										onClick={() =>
-											send({
-												type: "delete_queued_prompt",
-												sessionId: session.id,
-												queueId: id,
-												queueIndex: i,
-											})
-										}
-									>
-										<IconTrash size={20} />
-									</button>
-								</Tooltip>
-								{!isGitHub && (
-									<Tooltip
-										label={
-											canSteer
-												? "Send now: add to the conversation and deliver after the current step"
-												: "Messages with files must remain queued"
-										}
-									>
-										<button
-											type="button"
-											className={cn(
-												composerQueueAction,
-												composerQueueActionSteer,
-											)}
-											aria-label="Send now"
-											disabled={!canSteer}
-											onClick={() =>
-												send({
-													type: "steer_queued_prompt",
-													sessionId: session.id,
-													queueId: id,
-													queueIndex: i,
-												})
-											}
-										>
-											<IconArrowUp size={20} />
-										</button>
-									</Tooltip>
-								)}
-							</div>
-							{renderQueueContent(q, c, {
-								github: isGitHub,
-								// github outranks human: both were equally specific in the
-								// stylesheet and github came last.
-								tone: isGitHub ? "github" : c.senderVia ? "human" : "default",
-							})}
-						</Reorder.Item>
-					);
-				})}
-				</Reorder.Group>
-
-				{/* Deliberately queued sends stay here while their server echo settles. */}
-				{pendingQueue.map((p, i) => (
-					<div
-						key={p.id}
-						className={cn(
-							composerQueueItem,
-							i > 0 && composerQueueItemSeparated,
-						)}
-					>
-						<div className={composerQueueActions}>
-							<span className={composerQueueSendingStatus} role="status">
-								{settingUpWorkspace ? (
-									"Queued"
-								) : (
-									<span className={composerQueueSendingShimmer}>Queueing</span>
-								)}
-							</span>
-						</div>
-						{renderQueueContent(p, classifyQueuedContent(p.content, p.user), {
-							tone: "sending",
-						})}
-					</div>
-				))}
-				{durableOutbox.map((item, i) => (
-					<div
-						key={item.clientId}
-						className={cn(
-							composerQueueItem,
-							item.state === "failed" && utilityClassName("flex-col items-stretch gap-1.5"),
-							(i > 0 || pendingQueue.length > 0) && composerQueueItemSeparated,
-						)}
-					>
-						{item.state !== "failed" && (
-							<div className={composerQueueActions}>
-								<span className={composerQueueSendingStatus} role="status">
-									<span className={composerQueueSendingShimmer}>
-										{item.state === "sending" ? "Sending" : "Waiting to send"}
-									</span>
-								</span>
-							</div>
-						)}
-						{renderQueueContent(
-							{
-								id: item.clientId,
-								content: item.content,
-								user: item.user,
-								images: item.images,
-								files: item.files,
-							},
-							classifyQueuedContent(item.content, item.user),
-							{ tone: "sending" },
-						)}
-						{item.state === "failed" && (
-							<div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap2)}>
-								<span {...stylex.props(sx.minW0, sx.flex1, sx.textRed, typography.meta)} role="alert">
-									{item.error || "This message could not be delivered."}
-								</span>
-								<Button variant="soft" size="sm" onClick={() => promptOutbox.retry(item.clientId)}>
-									Retry
-								</Button>
-								<Button variant="soft" size="sm" onClick={() => editOutboxInComposer(item)}>
-									Edit
-								</Button>
-								<Button
-									variant="danger"
-									size="sm"
-									onClick={() => discardOutbox(item)}
-								>
-									Discard
-								</Button>
-							</div>
-						)}
-					</div>
-				))}
-			</div>
-		) : null;
-
-	function handleCancel() {
-		// Local acknowledgement first: the gesture must land visibly whether or
-		// not the engine can drop what it is doing this instant.
-		setStopRequestedAt((prev) => prev ?? Date.now());
-		send({ type: "cancel", sessionId: session.id });
-	}
-
-	function handleShareWorkspace() {
-		const path = session.workspaceId
-			? `${BASE_PATH}/workspace/${encodeURIComponent(session.workspaceId)}`
-			: sessionPath(session);
-		shareLink(absoluteLink(path), {
-			toast: "Link copied",
-			title: workspaceName || session.title || undefined,
-		});
-	}
-
-	function handleShare() {
-		// Share the workspace pane on screen rather than the session that happened
-		// to host it. Session and sub-agent links keep their existing canonical form.
-		const pane = showReview
-			? "review"
-			: showConversation
-				? "conversation"
-				: showVideo
-					? "video"
-					: null;
-		const path =
-			pane && session.workspaceId
-				? workspacePanePath(session.workspaceId, pane)
-				: sessionPath(
-						session,
-						subagentOpen ? subagentStack.map((s) => s.agentId) : [],
-					);
-		const link = absoluteLink(path);
-		// Phone: native share sheet. Desktop: copy, with the inline check on
-		// the button + a floating "Link copied" toast.
-		// The native sheet titles the link with the workspace, matching the header.
-		shareLink(link, {
-			toast: "Link copied",
-			title: workspaceName || session.title || undefined,
-		});
-	}
-
-	async function handleOpenSlackComposer() {
-		setOverflowOpen(false);
-		try {
-			const request = await openSlackComposer(session.id, latestAssistantMessage);
-			setSlackComposer(request);
-			setSlackComposerStatus("idle");
-			setSlackComposerReconnect(false);
-			setSlackComposerSent(null);
-			requestAnimationFrame(() => scrollToLatest("smooth"));
-		} catch (error: any) {
-			toast(error?.message || "Couldn't open the Slack composer");
-		}
-	}
-
-	function commitRename() {
-		if (renameDraft !== null) {
-			// When the header titles the workspace, renaming edits the workspace —
-			// every sibling session picks the new name up. Session titles live on tabs.
-			// A worker's header titles the WORKER (the workspace is the crumb before
-			// it), so the same edit there renames just this session.
-			if (session.workspaceId && onRenameWorkspace)
-				onRenameWorkspace(renameDraft.trim());
-			else onRename?.(session.id, renameDraft.trim());
-		}
-		setRenameDraft(null);
-	}
-
-	// Drop an in-progress rename when switching sessions so the draft never bleeds
-	// into the next session's header.
-	useEffect(() => setRenameDraft(null), [session.id]);
-
-	function handleModelChange(next: string) {
-		const target = next || defaultModel;
-		if (!target || target === (model || defaultModel)) return;
-		setModel(next);
-		// Routed through the /model slash command so it persists, notices, and
-		// broadcasts to other viewers.
-		send({
-			type: "prompt",
-			sessionId: session.id,
-			content: `/model ${target}`,
-			user: getCurrentUser(),
-		});
-	}
-
-	// Pin (or clear, "" = auto) the current provider account for this session.
-	// Same shape as the model switch: /account persists, notices,
-	// and broadcasts subscription_changed to every viewer.
-	function handleAccountChange(next: string) {
-		if (next === (accountId || "")) return;
-		setAccountId(next);
-		const target = next ? accounts.find((a) => a.id === next) : null;
-		if (target?.kind === "api_key") setFastMode(false);
-		send({
-			type: "prompt",
-			sessionId: session.id,
-			// The name reads better in the transcript; the command matches by
-			// id first, then case-insensitive name, so either form works.
-			content: next ? `/account ${target?.id || next}` : "/account auto",
-			user: getCurrentUser(),
-		});
-	}
-
-	// Pin or clear the session goal from the composer's Goal button. Routed
-	// through the /goal slash command (handled backstage-side, not a real turn);
-	// optimistically reflected via goalOverride until the session file catches up.
-	function handleSetGoal(goal: string | null) {
-		setGoalOverride(goal);
-		send({
-			type: "prompt",
-			sessionId: session.id,
-			content: goal ? `/goal ${goal}` : "/goal clear",
-			user: getCurrentUser(),
-		});
-	}
-
-	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-	const [confirm, confirmDialog] = useConfirm();
-	const [deleting, setDeleting] = useState(false);
-	const [archiving, setArchiving] = useState(false);
-	const [deleteLabel, setDeleteLabel] = useState("");
-
-	// Responsive header: when the top bar gets narrow (small window, sidebar +
-	// workspace panel both open), the title truncates first (CSS), then the
-	// Share button collapses into the ⋯ menu so it never overlaps the title.
-	// (Pin stays inline beside Preview on desktop; Spin off lives in the ⋯ menu.) Measured on the
-	// header element itself so it tracks the real available width regardless
-	// of the surrounding chrome.
-	const headerRef = useRef<HTMLDivElement>(null);
-	const headerActionsRef = useRef<HTMLDivElement>(null);
-	const [headerW, setHeaderW] = useState(0);
-	// Whether the header's workspace-summary card is up. The transcript and
-	// composer shift out from under it while it is, and the header's own PR
-	// strip and preview globe stand down, so this lives here rather than inside
-	// the card. Seeded from the stored preference rather than starting shut: the
-	// card reports itself an effect later, and a frame of the strip it replaces
-	// is the thing this is here to prevent.
-	const [summaryOpen, setSummaryOpen] = useState(workspaceSummaryOpen);
-	useLayoutEffect(() => {
-		const el = headerRef.current;
-		if (!el) return;
-		// Once by hand, before the first paint: the observer's own opening callback
-		// lands after it, and this width decides whether the summary card has room
-		// to stand open. A frame late is a frame of a card lying across a narrow
-		// transcript. Content box, to match what the observer reports below.
-		const box = getComputedStyle(el);
-		setHeaderW(
-			el.clientWidth -
-				parseFloat(box.paddingLeft) -
-				parseFloat(box.paddingRight),
-		);
-		const ro = new ResizeObserver((entries) => {
-			for (const e of entries) setHeaderW(e.contentRect.width);
-		});
-		ro.observe(el);
-		return () => ro.disconnect();
-	}, [topbarEl]);
-	// Collapse before the inline row can overrun: the title's non-shrinkable
-	// floor (source chip + Working pill) plus the inline actions (facepile,
-	// links, Share) needs ~740px, so below that Share moves into the ⋯ menu.
-	const compactHeader = headerW > 0 && headerW < 740;
-
-	// Phone layout (same 720px breakpoint as the CSS page-stack): the header
-	// actions portal into the top bar next to the centered title, and every
-	// secondary action folds into the ⋯ menu so the bar holds just ⋯ + Workspace.
-	const [isPhone, setIsPhone] = useState(
-		() =>
-			typeof window !== "undefined" &&
-			window.matchMedia("(max-width: 720px)").matches,
-	);
-	useEffect(() => {
-		const mq = window.matchMedia("(max-width: 720px)");
-		const onChange = () => setIsPhone(mq.matches);
-		mq.addEventListener("change", onChange);
-		return () => mq.removeEventListener("change", onChange);
-	}, []);
-	// Whether the pane can hold the card beside the reading column instead of
-	// over it. Unmeasured counts as room: the width lands in a layout effect
-	// before the first paint, and assuming the common case keeps a pinned card
-	// from blinking on wide panes. Below the threshold the card hides itself and
-	// the header takes back the strip it had stood down for.
-	const summaryHasRoom = headerW === 0 || headerW >= WS_SUMMARY_ROOM_W;
-	const summaryVisible =
-		summaryOpen &&
-		summaryHasRoom &&
-		!activePanelOpen &&
-		!isPhone &&
-		hasRepoWork;
-	// Keep a visible left step whenever the card is up. This composes the card,
-	// transcript and composer as two sides of one pane instead of letting the
-	// reading column drift back to centre as the window grows.
-	const summaryStep = summaryVisible ? workspaceSummaryShift(headerW) : 0;
-	const summaryStepStyle =
-		summaryStep > 0
-			? ({ "--ws-summary-step": `-${summaryStep}px` } as React.CSSProperties)
-			: undefined;
-	// Phone drill-ins return to Workspace details when their page closes. The
-	// desktop panel deliberately keeps its selected tab while it is closed.
-	useEffect(() => {
-		if (isPhone && !infoPageOpen) setPanelPage(null);
-	}, [isPhone, infoPageOpen]);
-	const focusComposerForQuote = useCallback(() => {
-		const composer = composerRef.current;
-		composer?.focus({ preventScroll: true });
-		return composer;
-	}, []);
-
-	// Run-status flap above the composer (ComposerAgents): the tappable
-	// pill → mini-card → full-panel progression, reusing the queue flap's
-	// tuck-under styling. It carries two things at different breakpoints.
-	//
-	// Agents — phone-only. On desktop the Agents panel tab (with its pulsing
-	// dot) is always visible; on a phone the right panel overlays the session and
-	// is closed by default, so a running workflow fan-out has no glance.
-	const runningWorkflowRuns = workflowRuns.filter((r) => r.status === "running");
-	// Sub-agents ride along only while one is live, so a finished batch doesn't
-	// pad a later workflow's tallies (their statuses clamp to done once the
-	// session's run ends, so the flap can't stick around stale either).
-	const anySubagentRunning = subagents.some((s) => s.status === "running");
-	const showAgents =
-		isPhone && (runningWorkflowRuns.length > 0 || anySubagentRunning);
-	// Plan — every width, since the model's todowrite checklist has no other
-	// home at any size (in the transcript it's one dim row inside a turn fold
-	// that's collapsed by default).
-	const livePlan = useLivePlan(entries, isBusy);
-	const agentBubble =
-		showAgents || livePlan.length > 0 ? (
-			<ComposerAgents
-				runs={showAgents ? runningWorkflowRuns : NO_WORKFLOW_RUNS}
-				subagents={showAgents && anySubagentRunning ? subagents : undefined}
-				plan={livePlan}
-				// The Agents list is a section of the workspace panel now, so this
-				// just opens it — the phone's info page on a phone, the side panel
-				// on desktop (this flap rides the composer at every width).
-				onOpenPanel={() => {
-					if (isPhone) setInfoPageOpen(true);
-					else setPanelOpen(true);
-				}}
-			/>
-		) : null;
-	// The composer takes a single `attached` node; stack the agents flap above
-	// the queue flap when both are live.
-	const attachedComposer =
-		agentBubble || attachedQueue ? (
-			<>
-				{agentBubble}
-				{attachedQueue}
-			</>
-		) : null;
-
-	// Opened by picking this session's workspace in the sidebar: focus the
-	// composer so you can start typing immediately. Runs on mount (a new session
-	// remounts this component) and when the pulse re-fires for the already-open
-	// session. Skipped on phones so we don't shove the keyboard over the session.
-	useEffect(() => {
-		if (autoFocusComposer && !isPhone) composerRef.current?.focus();
-	}, [autoFocusComposer, isPhone]);
-
-	useEffect(() => {
-		if (!composerPrefillExternal) return;
-		setComposerPrefill(composerPrefillExternal);
-		onComposerPrefillConsumed?.(composerPrefillExternal.seq);
-		if (!isPhone) composerRef.current?.focus();
-	}, [composerPrefillExternal, onComposerPrefillConsumed, isPhone]);
-
-	const [overflowOpen, setOverflowOpen] = useState(false);
-	const [overflowGit, setOverflowGit] = useState<{
-		sessionId: string;
-		status: GitStatusInfo | null;
-	} | null>(null);
-	const [branchActionBusy, setBranchActionBusy] = useState<
-		"move" | "create" | null
-	>(null);
-	const [branchConfirmOpen, setBranchConfirmOpen] = useState(false);
-	const [branchConfirmMode, setBranchConfirmMode] = useState<
-		"move" | "create"
-	>("move");
-	const [mobileActionMenuEl, setMobileActionMenuEl] =
-		useState<HTMLDivElement | null>(null);
-	const primaryPrNumber = prPresentation.primary?.number;
-	// PR actions are tucked into the overflow menu. Fetch once when the session
-	// branch changes so the menu does not open first and add its actions later.
-	useEffect(() => {
-		if (!hasRepoWork || primaryPrNumber) return;
-		let stale = false;
-		fetchGitStatus(session.id, session.repo || undefined)
-			.then((status) => {
-				if (!stale) setOverflowGit({ sessionId: session.id, status });
-			})
-			.catch(() => {
-				if (!stale) setOverflowGit({ sessionId: session.id, status: null });
-			});
-		return () => {
-			stale = true;
-		};
-	}, [
-		hasRepoWork,
-		primaryPrNumber,
-		session.id,
-		session.repo,
-		session.branch,
-	]);
-	useEffect(() => {
-		setOverflowGit(null);
-		setBranchActionBusy(null);
-		setBranchConfirmOpen(false);
-		setBranchConfirmMode("move");
-	}, [session.id]);
-
-	async function moveToBranchFromMenu() {
-		if (isBusy || branchActionBusy) return;
-		setBranchActionBusy("move");
-		try {
-			const result = await moveSessionToBranchApi(session.id);
-			setOverflowOpen(false);
-			setBranchConfirmOpen(false);
-			toast(
-				result.copiedFiles
-					? `Moved to ${result.branch} · ${result.copiedFiles} file${result.copiedFiles === 1 ? "" : "s"} copied`
-					: `Moved to ${result.branch}`,
-			);
-		} catch (error) {
-			toast(error instanceof Error ? error.message : "Could not move to a branch");
-		}
-		setBranchActionBusy(null);
-	}
-
-	function requestCreatePr() {
-		if (!connected) return;
-		send({
-			type: "prompt",
-			sessionId: session.id,
-			user: getCurrentUser(),
-			content: "Commit any remaining work, push the branch, and open a PR for it.",
-		});
-	}
-
-	function createPrFromMenu() {
-		setOverflowOpen(false);
-		requestCreatePr();
-	}
-
-	async function moveAndCreatePr() {
-		if (!connected || isBusy || branchActionBusy) return;
-		setBranchActionBusy("create");
-		try {
-			const result = await moveSessionToBranchApi(session.id);
-			setBranchConfirmOpen(false);
-			requestCreatePr();
-			toast(`Moved to ${result.branch}. Creating PR…`);
-		} catch (error) {
-			toast(
-				error instanceof Error
-					? error.message
-					: "Could not move to a branch",
-			);
-		}
-		setBranchActionBusy(null);
-	}
-	// Left-edge swipe on phones pops the topmost overlay before the page stack:
-	// the info page registers as a higher-priority back-swipe layer, so the
-	// gesture closes it instead of popping the whole session back to the
-	// sidebar (App's layer, priority 0).
-	const infoPageRef = useRef<HTMLDivElement | null>(null);
-	const infoHeroNameRef = useRef<HTMLHeadingElement | null>(null);
-	useBackSwipe({
-		active: isPhone && infoPageOpen,
-		onBack: () => setInfoPageOpen(false),
-		paneRef: infoPageRef,
-		priority: 2,
-	});
-	useEffect(() => {
-		if (!infoPageOpen || panelPage !== null) {
-			setInfoPageScrolled(false);
-			return;
-		}
-		const root = infoPageRef.current;
-		const title = infoHeroNameRef.current;
-		if (!root || !title) return;
-		const topbar = root.querySelector<HTMLElement>(".session-info-topbar");
-		const topInset = Math.ceil(topbar?.getBoundingClientRect().height || 52);
-		const observer = new IntersectionObserver(
-			([entry]) => setInfoPageScrolled(!entry.isIntersecting),
-			{
-				root,
-				rootMargin: `-${topInset}px 0px 0px`,
-				threshold: 0,
-			},
-		);
-		observer.observe(title);
-		return () => observer.disconnect();
-	}, [infoPageOpen, isPhone, panelPage]);
-	useEffect(() => {
-		if (!infoPageOpen) return;
-		const app = document.querySelector<HTMLElement>(".app");
-		app?.setAttribute("inert", "");
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setInfoPageOpen(false);
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => {
-			window.removeEventListener("keydown", onKeyDown);
-			app?.removeAttribute("inert");
-		};
-	}, [infoPageOpen]);
-	// The mobile top-bar title (rendered by App, outside this component) opens the
-	// same settings menu — it toggles via a window event so it doesn't need a prop
-	// thread through App's render.
-	useEffect(() => {
-		const toggle = () =>
-			setInfoPageOpen((open) => {
-				if (!open) {
-					setInfoPageScrolled(false);
-				}
-				return !open;
-			});
-		window.addEventListener("opensession:toggle-session-settings", toggle);
-		return () =>
-			window.removeEventListener("opensession:toggle-session-settings", toggle);
-	}, [session.id]);
-	// The menu's contents change across the breakpoint — don't leave it stuck open.
-	useEffect(() => {
-		setOverflowOpen(false);
-		setInfoPageOpen(false);
-	}, [compactHeader]);
-
-	const me = getCurrentUser();
-	// The pile is about the people you can't see, so your own sockets come out
-	// first (lib/presence.ts documents why, and is tested).
-	const others = otherViewers(viewers, me);
-
-	// Media queued for the current turn has not reached the workspace overview
-	// yet, so carry it into the phone summary directly.
-	const liveOverviewMedia = useMemo<WorkspaceMediaItem[]>(() => {
-		const fromImages = (
-			items: Array<{ images?: string[]; sentAt?: number }>,
-		): WorkspaceMediaItem[] =>
-			items.flatMap((item) =>
-				(item.images || []).map((src, i) => ({
-					kind: "image" as const,
-					src,
-					sessionId: session.id,
-					sessionTitle: session.title,
-					at: new Date((item.sentAt || Date.now()) + i).toISOString(),
-				})),
-			);
-		return [
-			...fromImages(pending),
-			...fromImages(queued),
-		];
-	}, [pending, queued, session.id, session.title]);
-
-	async function handleDelete(cleanWorktree: boolean) {
-		setDeleteLabel(
-			cleanWorktree ? "Deleting session and worktree…" : "Deleting session…",
-		);
-		setDeleting(true);
-		try {
-			await deleteSessionApi(session.id, cleanWorktree);
-			// Leave the overlay up through the navigation so it never flashes back to
-			// the (now-deleted) session view.
-			onBack();
-		} catch (e: any) {
-			alert(`Delete failed: ${e.message}`);
-			setDeleting(false);
-			setShowDeleteConfirm(false);
-		}
-	}
-
-	// Archive is the reversible "I'm done with this" — unlike delete it keeps the
-	// session (and worktree) and just tucks it into the Archived view, so no
-	// confirm step. Unarchiving from here keeps the session selected as it moves
-	// back into the live sidebar.
-	const handleArchive = useCallback(async () => {
-		const next = !session.archived;
-		setArchiving(true);
-		setOverflowOpen(false);
-		if (next && onArchive) {
-			onArchive();
-			return;
-		}
-		try {
-			const { stoppedRun } = await archiveSessionApi(session.id, next);
-			if (next) {
-				onArchived?.(stoppedRun);
-				onBack();
-			}
-		} catch (e: any) {
-			alert(`${next ? "Archive" : "Unarchive"} failed: ${e.message}`);
-			setArchiving(false);
-		}
-	}, [
-		onArchive,
-		onArchived,
-		onBack,
-		session.archived,
-		session.id,
-		setArchiving,
-		setOverflowOpen,
-	]);
-
-	useEffect(() => {
-		function onKeyDown(e: KeyboardEvent) {
-			if (!focused) return;
-			if (e.defaultPrevented || blockingOverlayOpen()) {
-				return;
-			}
-			// Same composer exemption as the sidebar's archive chords: the
-			// composer autofocuses, so an unconditional editable-focus bail
-			// would leave ⌘E dead almost always. Other inputs keep the guard.
-			const target = e.target as HTMLElement | null;
-			const editable = target?.closest(
-				"input, textarea, select, [contenteditable='true'], [contenteditable='']",
-			);
-			if (editable && !editable.classList.contains("composer-textarea")) {
-				return;
-			}
-			if (matchesShortcut(e, "workspace-next-unread") && onNextChat) {
-				e.preventDefault();
-				onNextChat();
-				return;
-			}
-			// The sidebar handles live sessions when it can, because it knows which
-			// visible row comes next. Keep this listener as the route-level fallback:
-			// the viewer remains mounted even when the sidebar cannot handle the open
-			// session. `defaultPrevented` above ensures only one handler fires.
-			if (matchesShortcut(e, "session-archive") && !archiving) {
-				e.preventDefault();
-				void handleArchive();
-			}
-		}
-		window.addEventListener("keydown", onKeyDown, true);
-		return () => window.removeEventListener("keydown", onKeyDown, true);
-	}, [
-		focused,
-		archiving,
-		handleArchive,
-		onNextChat,
-		session.archived,
-	]);
-
-	// Preview environment for the ⌘O chord — mirrors StagingLink's poll (same
-	// relevance gate; the server caches PR details for 30s, so the duplicate
-	// fetch stays cheap). Kept here because StagingLink mounts per layout
-	// variant, so a window listener inside it would register multiple times.
-	const stagingRelevant = phonePr
-		? (phonePr.state ??
-				(phonePr.source === "primary" ? session.prState : undefined)) === "OPEN"
-		: !!session.prUrl && session.prState === "OPEN";
-	const [staging, setStaging] = useState<{
-		url: string;
-		status: string;
-		embeddable?: boolean;
-	} | null>(null);
-	// True once the PR fetch has resolved at least once for this session — lets us
-	// tell "staging genuinely absent" from "not loaded yet" (the fetch starts null
-	// and fills in async), so the Preview environment view-tab auto-closes only on the former
-	// rather than flicker-closing during load.
-	const [stagingSettled, setStagingSettled] = useState(false);
-	useEffect(() => {
-		setStagingSettled(false);
-		if (!stagingRelevant) {
-			setStaging(null);
-			setStagingSettled(true);
-			return;
-		}
-		let alive = true;
-		const load = () =>
-			fetchPr(session.id, phonePr?.repo, phonePr?.branch)
-				.then((pr) => {
-					if (alive) {
-						setStaging(pr?.staging ?? null);
-						setStagingSettled(true);
-					}
-				})
-				.catch(() => {});
-		load();
-		const stop = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
-		return () => {
-			alive = false;
-			stop();
-		};
-	}, [
-		session.id,
-		stagingRelevant,
-		gitRefreshTick,
-		phonePr?.repo,
-		phonePr?.branch,
-	]);
-	const stagingUrl = staging
-		? withPreviewPath(staging.url, session.previewPath)
-		: null;
-	// The Preview environment pane is a top-strip view-tab now (App owns whether it's
-	// foregrounded). If the deploy vanishes while its tab is open+active — PR
-	// merged/closed, so `stagingRelevant` drops and the fetch settles with no
-	// staging — close the tab rather than leave it pointing at nothing.
-	useEffect(() => {
-		if (showStaging && stagingSettled && !stagingUrl) onCloseStaging?.();
-	}, [showStaging, stagingSettled, stagingUrl, onCloseStaging]);
-	// The Assets pane is a top-strip view-tab too (App owns whether it's
-	// foregrounded). If the last asset is deleted while its tab is up, close it
-	// rather than leave an empty pane pointing at nothing.
-	useEffect(() => {
-		if (showAssets && assetFiles.length === 0) onCloseAssets?.();
-	}, [showAssets, assetFiles.length, onCloseAssets]);
-	const [previewStatus, setPreviewStatus] = useState<PreviewStatus | null>(null);
-	useEffect(() => setPreviewStatus(null), [session.id]);
-	async function startDeclaredPortal(recipe: PreviewPortalRecipe) {
-		if (!recipe.command) {
-			if (!recipe.skill) throw new Error("This Portal has no start command.");
-			send({
-				type: "prompt",
-				sessionId: session.id,
-				user: getCurrentUser(),
-				content: `Use the $${recipe.skill} skill to start the “${recipe.name}” Portal, then verify it is ready.`,
-			});
-			return;
-		}
-		setPreviewStatus(await startPortalRecipeApi(session.id, recipe.id));
-	}
-	// Services with a route we can open: what the panel's tab strip reports
-	// beside Portals, so the count is the openable ones rather than every port
-	// the repository declares.
-	const livePortals = (previewStatus?.services ?? []).filter((service) =>
-		portalTargetFor(session.id, service),
-	).length;
-	// Same reading beside Agents: how many are working right now. A finished
-	// run stays on its page rather than keeping a number on the bar.
-	const runningAgents =
-		workflowRuns.reduce(
-			(n, run) => n + run.agents.filter((a) => a.status === "running").length,
-			0,
-		) + subagents.filter((s) => s.status === "running").length;
-	// The header preview control used to keep this status warm. Now that the
-	// launcher lives in the overflow menu. Keep status warm while Preview or the
-	// portal browser is up, and while the workspace panel is open. Its bottom
-	// bar counts live portals and its portals page lists them. Status requests
-	// also renew the authenticated Caddy routes for remote sandbox services.
-	useEffect(() => {
-		if (
-			(!showPreviewTab && !showPortal && !activePanelOpen && !infoPageOpen) ||
-			!session.worktreeDir
-		)
-			return;
-		let alive = true;
-		const load = () =>
-			fetchPreview(session.id)
-				.then((status) => {
-					if (alive) setPreviewStatus(status);
-				})
-				.catch(() => {});
-		load();
-		const stop = pollWhileVisible(load, 3000);
-		return () => {
-			alive = false;
-			stop();
-		};
-	}, [
-		showPreviewTab,
-		showPortal,
-		activePanelOpen,
-		infoPageOpen,
-		session.id,
-		session.worktreeDir,
-	]);
-
-	// ⌘O opens the PR's preview environment (the Vercel preview StagingLink's globe
-	// points at); ⌘G opens its GitHub PR. Chords without a target (no staging
-	// deploy / no PR) fall through to the browser.
-	useEffect(() => {
-		function onKeyDown(e: KeyboardEvent) {
-			if (!focused) return;
-			const openPr = matchesShortcut(e, "open-pr");
-			const openPreview = matchesShortcut(e, "open-preview");
-			if (
-				e.defaultPrevented ||
-				(!openPr && !openPreview) ||
-				blockingOverlayOpen()
-			) {
-				return;
-			}
-			// Same composer exemption as the archive chords above: the composer
-			// autofocuses, so an unconditional editable-focus bail would leave
-			// these dead almost always. Other inputs keep the guard.
-			const target = e.target as HTMLElement | null;
-			const editable = target?.closest(
-				"input, textarea, select, [contenteditable='true'], [contenteditable='']",
-			);
-			if (editable && !editable.classList.contains("composer-textarea")) {
-				return;
-			}
-			if (openPr) {
-				// Primary branch's PR, falling back to the first attached/linked
-				// repo PR on multi-repo sessions.
-				const prUrl = session.prUrl ?? session.prs?.find((p) => p.url)?.url;
-				if (!prUrl) return;
-				e.preventDefault();
-				window.open(prUrl, "_blank", "noopener");
-			} else if (openPreview && staging) {
-				e.preventDefault();
-				// Match the globe's click semantics: before the first deploy goes
-				// Ready the branch alias 404s, so swallow the chord with the same
-				// explanatory toast instead of opening a dead link. (A rebuild
-				// after a push keeps status Ready and stays openable — the alias
-				// serves the previous deploy until the new one lands.)
-				if (staging.status !== "Ready") {
-					toast(
-						`Preview environment is ${staging.status.toLowerCase()}. The link goes live once the first deploy finishes.`,
-					);
-					return;
-				}
-				window.open(
-					withPreviewPath(staging.url, session.previewPath),
-					"_blank",
-					"noopener",
-				);
-			}
-		}
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [focused, session.prUrl, session.prs, session.previewPath, staging]);
-
-	// ⌘. asks to stop the running turn from anywhere in the session. Escape
-	// asks the same question, but only with the composer focused — which is
-	// exactly where you are not when you have been reading the transcript.
-	//
-	// Both land on the composer's own confirmation. The dialog, and the rule
-	// that it goes away when the turn finishes on its own rather than stopping
-	// the next one, live there; this only asks for it, through a counter, so
-	// there is no second copy of any of that here. (The stop BUTTON stays
-	// immediate: pressing it is already deliberate.)
-	const [stopRequest, setStopRequest] = useState(0);
-	useEffect(() => {
-		function onKeyDown(e: KeyboardEvent) {
-			if (!focused || e.defaultPrevented) return;
-			if (!matchesShortcut(e, "run-stop")) return;
-			// Nothing running: leave the chord alone rather than swallowing it.
-			if (!isBusy || forkFrom) return;
-			e.preventDefault();
-			setStopRequest((n) => n + 1);
-		}
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [focused, isBusy, forkFrom]);
-
-	/* Quick replies for the turn that just ended. Off while a run is live (they
+  session,
+  composer: {
+    setTyping,
+    resetSeq: newSessionSeq,
+    autoFocus: autoFocusComposer,
+    prefill: composerPrefillExternal,
+    onPrefillConsumed: onComposerPrefillConsumed,
+  },
+  availability: {
+    canRepairSafety = false,
+    canOpenNextChat,
+    canStartNewSession,
+    canOpenNewWorkspace,
+    canOpenSession,
+    canOpenReview,
+    canOpenAssets,
+    canOpenPr,
+    canOpenPortal,
+    canOpenWorkspace,
+  },
+  lifecycle: {
+    connected,
+    pendingCreation = false,
+    optimisticEmpty = false,
+    initialPending,
+    onArchive,
+    onArchived,
+    onRename,
+    onRunningChange,
+    onReviewChange,
+  },
+  chrome: {
+    focused = true,
+    hideHeader = false,
+    hideRightPanel = false,
+    topbarEl,
+    headerRepoEl,
+    headerActionsEl,
+    headerModelEl,
+    rightPanelEl,
+  },
+  workspace: {
+    workspaceName,
+    onRenameWorkspace,
+    onArchiveWorkspace,
+    onDeleteWorkspace,
+    workspaceSessions,
+    onSetStatus,
+    allSessions,
+    tabStripVisible,
+    archivedSessions,
+    onRestoreSession,
+  },
+  viewTabs: {
+    showReview = false,
+    reviewFocusPr,
+    showStaging = false,
+    onCloseStaging,
+    showAssets = false,
+    onCloseAssets,
+    showTerminal = false,
+    onCloseTerminal,
+    terminalTabOpen = false,
+    showConversation = false,
+    conversationThreadId = null,
+    showVideo = false,
+    videoPanel = null,
+    videoTitle = null,
+    showPreviewTab = false,
+    onClosePreviewTab,
+    showPortal = false,
+    portalTarget = null,
+  },
+  subagents: {
+    parentSession,
+    workerSessions,
+    showSubagent = false,
+    subagentStack = NO_SUBAGENTS,
+    onOpenSubagent,
+    onSubagentBack,
+    onSubagentLabel,
+  },
+}: SessionViewerProps) {
+  const navigation = useNavigation();
+  const { send, addHandler } = useSessionSocket();
+  const goBack = navigation.goBack;
+  const openNextChat = canOpenNextChat ? navigation.openNextChat : undefined;
+  const openNewSession = canStartNewSession
+    ? navigation.openNewSessionInWorkspace
+    : undefined;
+  const openNewWorkspace = canOpenNewWorkspace
+    ? navigation.openNewWorkspace
+    : undefined;
+  const openSession = canOpenSession ? navigation.openSession : undefined;
+  const openReview = canOpenReview ? navigation.openReview : undefined;
+  const openAssets = canOpenAssets ? navigation.openAssets : undefined;
+  const openPr = canOpenPr ? navigation.openPr : undefined;
+  const openPortal = canOpenPortal ? navigation.openPortal : undefined;
+  const openCurrentWorkspace = canOpenWorkspace
+    ? navigation.openCurrentWorkspace
+    : undefined;
+
+  // Repos the Review tab can target: the session's own, then each attached
+  // one. Keyed on the contents like the PR lists below, and for a sharper
+  // reason than they have — this was a bare literal, so it handed PrPanel a
+  // new array on every render, and its `targets` memo could never bail no
+  // matter what else downstream was stable.
+  const reviewReposKey = [
+    session.repo || "repository",
+    ...(session.attachedRepos || []).map((repo) => repo.repo),
+  ].join("\u0000");
+  const reviewRepos = useMemo(
+    () => reviewReposFromKey(reviewReposKey),
+    [reviewReposKey],
+  );
+  const prPresentation = useMemo(
+    () => sessionPrPresentation(session.prs),
+    [session.prs],
+  );
+  const worktreeDiffSource: "worktree" | undefined =
+    openReview && (prPresentation.primary || prPresentation.additional.length)
+      ? "worktree"
+      : undefined;
+  const changeWorktreeDiffSource = (next: "pull-request" | "worktree") => {
+    if (next === "pull-request") openReview?.();
+  };
+  const mergedPrValue =
+    prPresentation.primary?.state === "MERGED"
+      ? prPresentation.primary
+      : undefined;
+  const prNumber = mergedPrValue?.number;
+  const prRepo = mergedPrValue?.repo;
+  const prBranch = mergedPrValue?.branch;
+  const prTitle = mergedPrValue?.title;
+  // The sessions poll rebuilds session.prs every tick, so `primary` is a new
+  // object on every render. Everything downstream memoizes on it, including
+  // the Slack share the memoized transcript takes as a prop, so key it on the
+  // fields those readers use, the way the walkthrough below does.
+  const mergedPrKey = mergedPrValue
+    ? [
+        mergedPrValue.number,
+        mergedPrValue.repo,
+        mergedPrValue.branch ?? "",
+        mergedPrValue.title ?? "",
+      ].join("\u0000")
+    : "";
+  // Rebuilt from the key's own leaves so the memo callback reads only its
+  // deps: identity stays stable across poll ticks that change nothing.
+  const mergedPr = useMemo(
+    () =>
+      mergedPrKey
+        ? {
+            number: prNumber,
+            repo: prRepo,
+            branch: prBranch,
+            title: prTitle,
+          }
+        : undefined,
+    [mergedPrKey, prNumber, prRepo, prBranch, prTitle],
+  );
+  const [shippedChangeStatus, setShippedChangeStatus] = useState<
+    "idle" | "sharing"
+  >("idle");
+  const [shippedSlackReconnectRequired, setShippedSlackReconnectRequired] =
+    useState(false);
+  // The share this view just made. The persisted receipt on the session is the
+  // same thing after a reload; this only covers the gap before it refreshes.
+  const [shippedShare, setShippedShare] = useState<SessionSlackShare | null>(
+    null,
+  );
+  const walkthroughScreenshot = session.walkthrough?.shots?.find(
+    (shot) => shot.after,
+  )?.after;
+  useEffect(() => {
+    setShippedChangeStatus("idle");
+    setShippedSlackReconnectRequired(false);
+    setShippedShare(null);
+  }, [session.id, mergedPr?.number]);
+  // Closing the card is a decision about this PR, not a fold, so it sticks
+  // across reloads and devices (lib/slack-share-dismiss). The next merged PR
+  // in the same session gets its own card, and "Send to Slack…" in the
+  // composer menu still opens a composer, so closing loses nothing.
+  const shareDismissKey = mergedPr?.number
+    ? slackShareDismissKey(session.id, mergedPr.number)
+    : "";
+  const [shareDismissed, setShareDismissed] = useState(() =>
+    isSlackShareDismissed(shareDismissKey),
+  );
+  const isSessionFocused = useEffectEvent(() => focused);
+  useEffect(() => {
+    const sync = () =>
+      setShareDismissed(isSlackShareDismissed(shareDismissKey));
+    sync();
+    return onSlackShareDismissChanged(sync);
+  }, [shareDismissKey]);
+  const dismissShippedChangeShare = useCallback(
+    () => dismissSlackShare(shareDismissKey),
+    [shareDismissKey],
+  );
+  const sendShippedChangeToSlack = useCallback(
+    async (message: string, channel: string, screenshots: string[]) => {
+      if (!mergedPr) return;
+      setShippedChangeStatus("sharing");
+      try {
+        const result = await shareShippedChange(session.id, {
+          repo: mergedPr.repo,
+          branch: mergedPr.branch,
+          message,
+          channel,
+          screenshots,
+        });
+        setShippedChangeStatus("idle");
+        setShippedSlackReconnectRequired(false);
+        if (result.share) setShippedShare(result.share);
+        else toast("This post was already sent");
+      } catch (error) {
+        setShippedChangeStatus("idle");
+        if (
+          error instanceof ApiError &&
+          error.status === 403 &&
+          /Reconnect Slack/.test(error.message)
+        ) {
+          setShippedSlackReconnectRequired(true);
+          toast("Reconnect Slack to add image access");
+        } else {
+          toast(
+            error instanceof Error
+              ? error.message
+              : "Couldn't share the shipped update",
+          );
+        }
+      }
+    },
+    [mergedPr, session.id],
+  );
+  // Undo deletes the message in Slack and drops the receipt, so the card can
+  // offer the send again. Slack only lets someone delete their own message, so
+  // a teammate's post fails here rather than silently doing nothing.
+  const undoShippedChangeShare = useCallback(
+    async (at: string) => {
+      try {
+        await undoShippedChange(session.id, at);
+        setShippedShare(null);
+        toast("Removed from Slack");
+      } catch (error) {
+        toast(
+          error instanceof Error
+            ? error.message
+            : "Couldn't undo the Slack message",
+        );
+      }
+    },
+    [session.id],
+  );
+  const reconnectShippedSlack = useCallback(async () => {
+    try {
+      await reconnectSlack();
+      setShippedSlackReconnectRequired(false);
+      toast("Approve image access in Slack, then send again");
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "Couldn't reconnect Slack",
+      );
+    }
+  }, []);
+  const promotedPr =
+    prPresentation.primary?.source !== "primary"
+      ? prPresentation.primary
+      : undefined;
+  // The one PR a phone's top bar shows. The primary if there is one, else the
+  // series' worst state, so a failing attached-repo PR is not hidden behind a
+  // green one. Undefined when the session has no PR at all — the bar then
+  // carries nothing rather than a chip that says "none".
+  const phonePr =
+    prPresentation.primary ?? worstPrRef(prPresentation.additional);
+  // PRs the server matched to this session through their body's attribution
+  // footer — opened on a branch the session doesn't own, so they'd otherwise
+  // have no Review tab of their own.
+  //
+  // Keyed on the contents, the way mergedPr above is: the poll rebuilds
+  // session.prs on every tick that changed any session, so this list arrives
+  // as a new array with the same PRs in it. It is a dep of PrPanel's
+  // `targets` memo, which a fresh identity re-runs. Every field the
+  // projection carries is in the key, not only the three that memo reads:
+  // LinkedPrEntry is shared with the linked-PR path, so a reader of `title`
+  // or `url` should not be handed a stale one.
+  const discoveredPrsKey = (session.prs || [])
+    .filter((ref) => ref.source === "discovered")
+    .map((ref) =>
+      [
+        ref.repo,
+        ref.branch,
+        ref.number ?? "",
+        ref.url ?? "",
+        ref.title ?? "",
+      ].join("\u0000"),
+    )
+    .join("\u0001");
+  const discoveredPrs = useMemo(
+    () => discoveredPrsFromKey(discoveredPrsKey),
+    [discoveredPrsKey],
+  );
+  // Which PR the Review tab should open on, set by the PR chips in the
+  // Workspace strip (seq lets the same chip re-focus after a manual switch).
+  const [reviewFocus, setReviewFocus] = useState<PrFocus | undefined>(
+    undefined,
+  );
+  // Wide Review moves this navigation into the standing workspace summary.
+  // Keep the page in the host so the summary and review canvas cannot diverge.
+  const [reviewPage, setReviewPage] = useState<PrReviewPage>("files");
+  const focusPrInReview = useCallback(
+    (ref?: { repo: string; branch: string }, view?: "checks") => {
+      if (ref || view)
+        setReviewFocus((prev) => ({ ...ref, view, seq: (prev?.seq ?? 0) + 1 }));
+      openReview?.();
+    },
+    [openReview],
+  );
+  // The app opened Review on a specific PR (a sidebar PR row, or a workspace
+  // row whose PR isn't this session's primary). Re-sequenced locally so it
+  // shares one monotonic counter with the chips above.
+  const syncReviewFocus = useEffectEvent(() => {
+    if (!reviewFocusPr) return;
+    setReviewFocus((prev) => ({
+      repo: reviewFocusPr.repo,
+      branch: reviewFocusPr.branch,
+      number: reviewFocusPr.number,
+      seq: (prev?.seq ?? 0) + 1,
+    }));
+  });
+  useEffect(() => {
+    syncReviewFocus();
+  }, [reviewFocusPr?.seq]);
+  // Worktree roots for the transcript's tool rows: paths inside them render
+  // repo-relative instead of as a long absolute path (see tidyPath).
+  //
+  // Keyed on the contents, the way mergedPr above is: a poll that changed any
+  // session re-parses the whole list, so `attachedRepos` is a new array on
+  // most ticks with the same repos in it. This one is a context value, which
+  // no memo downstream can stop, so a fresh identity re-renders every tool
+  // row in the transcript. tidyPath reads dir and label, and nothing else.
+  const toolPathRootsKey = [
+    session.worktreeDir || "",
+    ...(session.attachedRepos || []).map(
+      (repo) => `${repo.dir}\u0000${repo.repo}`,
+    ),
+  ].join("\u0001");
+  const toolPathRoots = useMemo(
+    () => toolPathRootsFromKey(toolPathRootsKey),
+    [toolPathRootsKey],
+  );
+  const githubReviewRepos = reviewRepos;
+  // With no session-owned primary, workspace PRs are the only real review
+  // targets. This includes the multi-PR case where no single ref was promoted;
+  // leaving the current repo target first opened an empty “Create PR” canvas.
+  const workspaceOnlyPrs =
+    !prPresentation.primary && prPresentation.additional.length > 0;
+  const panelReviewRepos =
+    promotedPr || workspaceOnlyPrs ? NO_REVIEW_REPOS : githubReviewRepos;
+  const [shellTiming] = useState(
+    () => new SessionShellTiming(performance.now()),
+  );
+  // A full-width view-tab (Review, Staging, Assets, a sub-agent) takes over the
+  // session column, so the session DOM isn't mounted while any is up — the scroll /
+  // history / scroll-restore effects below must bail in all cases.
+  const subagentOpen = showSubagent && subagentStack.length > 0;
+  const sessionHidden =
+    showReview ||
+    showStaging ||
+    showAssets ||
+    showTerminal ||
+    showPreviewTab ||
+    (showPortal && !!portalTarget) ||
+    subagentOpen ||
+    (showConversation && !!conversationThreadId) ||
+    (showVideo && !!videoPanel);
+  const [cachedTranscript] = useState(() =>
+    peekCachedTranscriptView(session.id),
+  );
+  // App keys SessionViewer by session id, so this store is created once for
+  // the mounted session and cannot be replaced by polling model metadata.
+  const [transcriptViewStore] = useState(
+    () =>
+      new TranscriptViewStore(
+        withModelSwitches(
+          peekCachedTranscriptView(session.id)?.entries ?? [],
+          session.modelHistory,
+        ),
+      ),
+  );
+  const entries = useSyncExternalStore(
+    transcriptViewStore.subscribe,
+    transcriptViewStore.getSnapshot,
+    transcriptViewStore.getServerSnapshot,
+  );
+  const shippedScreenshot =
+    walkthroughScreenshot || latestFeaturedScreenshot(entries);
+  const setEntries = useCallback(
+    (
+      update:
+        | TranscriptEntry[]
+        | ((previous: TranscriptEntry[]) => TranscriptEntry[]),
+    ) => transcriptViewStore.update(update),
+    [transcriptViewStore],
+  );
+  // The message rail's index. useMemo on purpose (against the house rule):
+  // this is a full scan of a transcript that runs to several thousand
+  // entries, not the routine allocation the rule is about.
+  const sentMessages = useMemo(() => collectSentMessages(entries), [entries]);
+  const liveTurnStore = useMemo(() => {
+    // Read (and discard) the session id so the reset key is explicit.
+    void session.id;
+    return new LiveTurnStore();
+  }, [session.id]);
+  const transcriptCommitCount = useRef(0);
+  const onTranscriptRender = useCallback(
+    (
+      _: string,
+      phase: "mount" | "update" | "nested-update",
+      actualDuration: number,
+    ) => {
+      recordSessionPerf("react_transcript_commit_ms", actualDuration, {
+        phase,
+        entries: transcriptViewStore.getSnapshot().length,
+      });
+      transcriptCommitCount.current++;
+      if (phase === "mount" || transcriptCommitCount.current % 20 === 0)
+        scheduleTranscriptDomNodeSample();
+    },
+    [transcriptViewStore],
+  );
+  // Initial scrolling must wait for this session's transcript_init. During a
+  // session switch, entries from the previous session remain rendered until the
+  // WebSocket response arrives and must not consume the new session's scroll.
+  const transcriptReadySessionRef = useRef<string | null>(
+    cachedTranscript ? session.id : null,
+  );
+  // Reconnect resume cursor: endOffset/rev of the last transcript frame the
+  // server sent (transcript_init/append). On a re-watch of the SAME session
+  // with entries still mounted, it rides the watch message as
+  // sinceOffset/sinceRev so the server replays only the gap from the mirror
+  // jsonl instead of replacing the whole tail.
+  const transcriptCursorRef = useRef<{
+    sessionId: string;
+    rev: string;
+    offset: number;
+  } | null>(cachedTranscript?.cursor ?? null);
+  // Transcript v2 seq mode (docs/transcripts.md): when init/append
+  // frames carry seq fields the server is serving from the owned store —
+  // resume watches with sinceSeq, page older history with beforeSeq, and
+  // ignore offset/rev cursors while in this mode. null = legacy mode (old
+  // server or ineligible session): behavior byte-identical to pre-v2.
+  // lastSeq tracks the newest seq seen (max — upsert republishes reuse old
+  // seqs); firstSeq the earliest loaded (the "load earlier" cursor).
+  const transcriptSeqRef = useRef<{
+    sessionId: string;
+    lastSeq: number;
+    firstSeq: number | null;
+    lastChangeSeq: number;
+  } | null>(cachedTranscript?.seq ?? null);
+  // Existing engine-backed sessions can load from the owned transcript store even
+  // when no mirror file exists. Fresh sessions never ran, so they still render
+  // the empty canvas without flashing a loader. `ran` and not the engine ids:
+  // this is the FIRST render, before the session's detail has hydrated, and
+  // the list row carries the answer where it no longer carries the ids.
+  const [loading, setLoading] = useState(!cachedTranscript && !!session.ran);
+  // Cached transcripts stay visible while the watch handshake catches them up.
+  // That background sync is intentionally silent: it does not block reading or
+  // sending, and a loader at the live edge looks like part of the conversation.
+  // The initial transcript is the tail only when the file is large; these drive
+  // the "load earlier history" affordance at the top of the conversation.
+  const [historyTruncated, setHistoryTruncated] = useState(
+    cachedTranscript?.historyTruncated ?? false,
+  );
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  // The whole-history actions walk backward a page at a time. The walk is
+  // driven from the transcript_history handler (each page schedules the next),
+  // so its state lives in a ref; `loaded` enforces the ceiling and
+  // `cursor` catches a backlog that stops receding (a transcript whose
+  // earliest surviving entry isn't seq 1 reports "truncated" forever).
+  const historyWalkRef = useRef<{
+    sessionId: string;
+    loaded: number;
+    cursor: number | null;
+  } | null>(null);
+  // An ordinary history load walks until it reaches a user/system boundary.
+  // A raw page can otherwise land wholly inside one collapsed work turn, which
+  // makes a successful load look like a no-op. This stays separate from the
+  // explicit whole-history walk and has its own small ceiling.
+  const historyRevealRef = useRef<{
+    sessionId: string;
+    loaded: number;
+    cursor: number | null;
+  } | null>(null);
+  // One extra page downloads after the initial view settles. It starts only
+  // while the reader is still at the live edge; an upward gesture adopts the
+  // in-flight request into historyRevealRef and gives it the normal scroll hold.
+  const backgroundHistoryRef = useRef(false);
+  const backgroundHistoryAttemptedRef = useRef(false);
+  const [loadingAllHistory, setLoadingAllHistory] = useState(false);
+  const {
+    index: transcriptIndex,
+    indexState: transcriptIndexState,
+    indexExpected: transcriptIndexExpected,
+    indexExpectedRef: transcriptIndexExpectedRef,
+    indexEpochRef: transcriptIndexEpochRef,
+    rangeRetryGeneration: transcriptRangeRetryGeneration,
+    existingIndexForInit,
+    setIndexMode,
+    acceptInitTail,
+    replaceIndex,
+    acceptRange,
+    projectAppend,
+    loadRanges: loadTranscriptRanges,
+    cancelIndexAnchorHold,
+    restorePendingIndexPosition,
+    settleVisibleRanges,
+  } = useTranscript({
+    sessionId: session.id,
+    cachedTranscript,
+    send,
+    transcriptViewStore,
+  });
+  // Byte offset the loaded history begins at — the "load earlier" pagination
+  // cursor (server: parseTranscriptTail/parseTranscriptWindow startOffset).
+  // null = unknown (old server) → load_history falls back to the full resend.
+  const historyStartRef = useRef<number | null>(
+    cachedTranscript?.historyStart ?? null,
+  );
+  // Scroll anchor for "Load earlier history":
+  // older entries prepend above the viewport, so keep the reader on the same
+  // content. See startHistoryHold below — a DOM-element anchor plus a short
+  // rAF hold, because a one-shot scrollTop restore breaks in three ways:
+  // bottom growth (streaming) skews scrollHeight math, prepended bubbles
+  // enter at their content-visibility estimate (80px) and re-size as they
+  // render, and Safari has no native scroll anchoring to compensate.
+  const historyHoldRef = useRef<{
+    node: HTMLElement;
+    top: number;
+    eid: string | null;
+    eidTop: number | null;
+    until: number;
+    raf: number;
+    fallback: { height: number; top: number } | null;
+  } | null>(null);
+  // The composer draft lives INSIDE Composer (uncontrolled mode) so keystrokes
+  // don't re-render this whole component; the text arrives via handleSend.
+  // Same fix as the CommentableDiff draft-text gotcha.
+  // Text + attachments persist in the draft store (keyed per session) so
+  // switching to another session/workspace — which remounts this component —
+  // doesn't lose typed work. Text rides Composer's `draftKey`; the staged
+  // images/files live here, seeded from and mirrored into the same draft.
+  const draftKey = `session:${session.id}`;
+  const [images, setImages] = useState<string[]>(
+    () => loadDraft(draftKey).images,
+  );
+  const [files, setFiles] = useState<FileAttachment[]>(
+    () => loadDraft(draftKey).files,
+  );
+  const uploads = useAttachmentUploads();
+  const uploadStaging = uploads.staging;
+  const dragDepthRef = useRef(0);
+  const fileDragPresentRef = useRef(false);
+  const cancelledFileDragRef = useRef(false);
+  const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const [fileDragActive, setFileDragActive] = useState(false);
+  useEffect(() => {
+    saveDraft(draftKey, { images, files });
+  }, [draftKey, images, files]);
+  // When set, the next send forks a new session from either the current tip or
+  // a specific earlier message instead of continuing this one.
+  const [forkFrom, setForkFrom] = useState<
+    { kind: "tip" } | { kind: "message"; messageId: string } | null
+  >(null);
+  useEffect(() => {
+    const messageId = takePendingSessionFork(session.id);
+    if (messageId) setForkFrom({ kind: "message", messageId });
+  }, [session.id]);
+  const [
+    {
+      isStreaming,
+      isRunningLive,
+      safety,
+      queued,
+      steered,
+      pendingDeliveryIds,
+      ask,
+      model,
+      usage,
+    },
+    dispatchSessionRuntime,
+  ] = useSessionRuntime({
+    isRunning: session.isRunning,
+    safety: session.safety,
+    model: session.model || "",
+    usage: session.usage,
+  });
+  useEffect(() => {
+    dispatchSessionRuntime({ type: "sync_safety", safety: session.safety });
+  }, [dispatchSessionRuntime, session.id, session.safety]);
+  // Bumped on git pushes and matching GitHub webhook events so every mounted PR
+  // surface revalidates immediately.
+  const [gitRefreshTick, setGitRefreshTick] = useState(0);
+  const sessionPrTargetsRef = useRef<Set<string>>(new Set());
+  useLayoutEffect(() => {
+    sessionPrTargetsRef.current = new Set([
+      `${session.repo || "repository"}\0${session.branch}`,
+      ...(session.attachedRepos || []).map(
+        (repo) => `${repo.repo}\0${repo.branch}`,
+      ),
+      ...(session.prs || []).map((ref) => `${ref.repo}\0${ref.branch}`),
+    ]);
+  }, [session.repo, session.branch, session.attachedRepos, session.prs]);
+  const [viewers, setViewers] = useState<string[]>([]);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  // The create run is still preparing this session's worktree (new workspaces
+  // announce the session before the slow git work). While true the conversation
+  // shows creation progress, and the opening message holds above the composer.
+  // Flipped off by the workspace_status event, kept in sync with
+  // the sessions poll otherwise.
+  const [workspacePreparing, setWorkspacePreparing] = useState(
+    !!session.workspacePreparing,
+  );
+  useEffect(() => {
+    setWorkspacePreparing(!!session.workspacePreparing);
+  }, [session.workspacePreparing]);
+  // Drag-to-reorder bookkeeping. onReorder fires continuously during a drag, so
+  // we only reorder locally then flush the final order to the server on drop —
+  // broadcasting mid-drag would swap the item references out from under Motion
+  // and drop the gesture. draggingQueueRef gates the incoming queue_update the
+  // same way, so an unrelated broadcast can't yank the list while dragging.
+  const draggingQueueRef = useRef(false);
+  const pendingReorderRef = useRef<QueueReceipt[] | null>(null);
+  // Delivery ownership stays server-side, but sent steering messages live in
+  // the conversation. These ids only give their bubbles a quiet pending
+  // treatment until the engine confirms it has read them.
+  // One-shot draft injection into the Composer (bump seq to apply) — how
+  // "edit queued message" puts the text back into the input.
+  const [composerPrefill, setComposerPrefill] = useState<{
+    seq: number;
+    text: string;
+    replace?: boolean;
+  } | null>(null);
+  // Quick-reply chips for the turn that just ended (components/ReplySuggestions).
+  // Server-generated and server-cleared; a picked chip retires the row here.
+  const [replySuggestions, setReplySuggestions] =
+    useState<ReplySuggestion[]>(EMPTY_SUGGESTIONS);
+  // Settings → Preferences, default on. Only hides the row: the server keeps
+  // its own switch (OPENSESSION_REPLY_SUGGESTIONS=0) for the generation.
+  const [showReplySuggestions, setShowReplySuggestions] = useState(
+    getReplySuggestionsPref,
+  );
+  useEffect(
+    () =>
+      onReplySuggestionsChanged(() =>
+        setShowReplySuggestions(getReplySuggestionsPref()),
+      ),
+    [],
+  );
+  // Settings → Preferences, default on. This only hides the visible button;
+  // the keyboard shortcut and command palette action remain available.
+  const [showNextChatButton, setShowNextChatButton] = useState(
+    getNextChatButtonPref,
+  );
+  useEffect(
+    () =>
+      onNextChatButtonChanged(() =>
+        setShowNextChatButton(getNextChatButtonPref()),
+      ),
+    [],
+  );
+  // Optimistic just-sent messages, shown instantly and reconciled once the real
+  // turn lands (transcript) or the server confirms it as queued (busy path).
+  // `busyMode` marks a send made while the run was busy: it renders inside the
+  // queue flap (as "Queueing…") instead of as a transcript bubble.
+  const [pending, setPending] = useState<OptimisticPendingPrompt[]>(() =>
+    initialPending
+      ? [
+          {
+            id: `pending-initial-${session.id}`,
+            transcriptAfterEntryId: null,
+            ...initialPending,
+          },
+        ]
+      : [],
+  );
+  // Read by the reconcile effect below, which must not re-run on every send.
+  const pendingRef = useRef(pending);
+  useLayoutEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
+  // Pending ids the server has CONFIRMED (transcript entry or queue/steer
+  // receipt). Their durable outbox row is hidden, so one message can't render
+  // as a transcript bubble and a "Sending" flap row at the same time.
+  const [landedOutboxIds, setLandedOutboxIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [outboxItems, setOutboxItems] = useState<PromptOutboxItem[]>(() =>
+    promptOutbox.list(session.id),
+  );
+  useEffect(() => {
+    const stopObserving = promptOutbox.observeDelivery((item, result) => {
+      if (item.sessionId !== session.id) return;
+      const pendingId = `outbox-${item.clientId}`;
+      const deliveredPrompt: OptimisticPendingPrompt = {
+        id: pendingId,
+        content: item.content,
+        user: item.user || getCurrentUser(),
+        sentAt: item.createdAt,
+        transcriptAfterEntryId: item.transcriptAfterEntryId,
+        transcriptAfterSeq: item.transcriptAfterSeq,
+        ...(item.images?.length ? { images: item.images } : {}),
+      };
+      if (result.status === "started") {
+        // Placement guessed from local running state can lose a turn-end race.
+        // The server started a turn, so this is an optimistic transcript bubble,
+        // not a queued row.
+        setPending((current) => markPendingStarted(current, deliveredPrompt));
+        dispatchSessionRuntime({ type: "mark_running" });
+        return;
+      }
+      if (result.status === "queued" || result.status === "steered") {
+        // Queued messages stay above the composer. A steer is already sent, so
+        // it stays in the conversation while the engine catches up.
+        setPending((current) =>
+          markPendingBusy(
+            current,
+            deliveredPrompt,
+            result.status === "queued" ? "queue" : "steer",
+          ),
+        );
+        dispatchSessionRuntime({ type: "mark_running" });
+        return;
+      }
+      if (result.status !== "handled") return;
+      // Slash commands are consumed by Open Session, so no user transcript
+      // entry or queue echo will ever reconcile their optimistic row. The old
+      // WebSocket composer received an inline notice; preserve that feedback
+      // now that sends travel through the durable REST outbox.
+      setPending((current) =>
+        current.filter((entry) => entry.id !== pendingId),
+      );
+      const noticeId = `prompt-delivery-${result.deliveryId || item.clientId}`;
+      setEntries((current) =>
+        current.some((entry) => entry.id === noticeId)
+          ? current
+          : [
+              ...current,
+              {
+                id: noticeId,
+                type: "system",
+                content: result.message,
+                timestamp: new Date().toISOString(),
+              },
+            ],
+      );
+    });
+    const sync = () => {
+      const items = promptOutbox.list(session.id);
+      setOutboxItems(items);
+      // Forget claims the outbox no longer holds (delivered, discarded, or
+      // another session's), so the set can't grow for the life of the tab.
+      setLandedOutboxIds((prev) => {
+        if (prev.size === 0) return prev;
+        const live = new Set(items.map((i) => `outbox-${i.clientId}`));
+        const next = new Set([...prev].filter((id) => live.has(id)));
+        return next.size === prev.size ? prev : next;
+      });
+    };
+    sync();
+    const unsubscribe = promptOutbox.subscribe(sync);
+    void promptOutbox.flush();
+    return () => {
+      unsubscribe();
+      stopObserving();
+    };
+  }, [dispatchSessionRuntime, session.id, setEntries]);
+  useEffect(() => {
+    if (connected) void promptOutbox.flush();
+  }, [connected]);
+  useEffect(() => {
+    if (!initialPending) return;
+    const content = initialPending.content.trim();
+    setPending((prev) => {
+      if (prev.some((p) => p.id === `pending-initial-${session.id}`))
+        return prev;
+      if (
+        entries.some(
+          (e) =>
+            e.type === "user" && (!content || e.content.trim() === content),
+        )
+      ) {
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          id: `pending-initial-${session.id}`,
+          transcriptAfterEntryId: null,
+          ...initialPending,
+        },
+      ];
+    });
+  }, [entries, initialPending, session.id, setEntries]);
+  const [slackComposer, setSlackComposer] = useState<{
+    id: string;
+    message: string;
+    channel?: string;
+    images: string[];
+  } | null>(null);
+  const [slackComposerStatus, setSlackComposerStatus] = useState<
+    "idle" | "sharing"
+  >("idle");
+  const [slackComposerReconnect, setSlackComposerReconnect] = useState(false);
+  const [slackComposerSent, setSlackComposerSent] = useState<SlackSent | null>(
+    null,
+  );
+  const { copied, share: shareLink } = useCopy();
+  // Inline rename of the header title (double-click), mirroring the tab strip.
+  // `null` = not editing; a string = the working draft.
+  const [renameDraft, setRenameDraft] = useState<string | null>(null);
+  const [pinned, setPinned] = useState(() => isPinned(session.id));
+  // Main session-area view: the transcript+composer vs. the full-width PR review
+  // that takes over the whole session column. Which one shows is now owned by App
+  // (the top tab strip's Review view-tab) and passed in as `showReview`; the
+  // open triggers call openReview. Only meaningful on a code session
+  // (hasWorkspace) — App only offers the Review tab there.
+  // Sub-agents open as their own view-tab (App owns the breadcrumb stack, like
+  // every other tab) — a sub-agent run is a conversation, so it gets the session
+  // column rather than the right sidebar.
+  // Phones fold the desktop Workspace panel into the title-opened detail page.
+  // Keeping this state near panelOpen lets the shared diff poll serve either
+  // surface without mounting a second copy of the data hook.
+  const [infoPageOpen, setInfoPageOpen] = useState(false);
+  const [infoPageScrolled, setInfoPageScrolled] = useState(false);
+  // Stable identity so the memoized TranscriptBlocks bails out on unrelated
+  // re-renders (e.g. toggling the workspace panel) instead of re-rendering the
+  // whole transcript.
+  const openSubagent = useCallback(
+    (agentId: string, label: string) =>
+      onOpenSubagent?.(session.id, agentId, label),
+    [onOpenSubagent, session.id],
+  );
+  const nameSubagent = useCallback(
+    (agentId: string, label: string) =>
+      onSubagentLabel?.(session.id, agentId, label),
+    [onSubagentLabel, session.id],
+  );
+  // The agent-published walkthrough, rendered inline in the session as well as in
+  // the Review tab. Keyed on its contents so the object identity only changes
+  // when the walkthrough actually does — the sessions poll hands back a fresh
+  // session object every tick, and an unstable prop here would re-render the
+  // whole (expensive) transcript each time.
+  const wt = session.walkthrough;
+  const wtSummary = wt?.summary ?? "";
+  const wtVideo = wt?.video;
+  const wtVideoTitle = wt?.videoTitle;
+  const wtShots = wt?.shots;
+  const wtPublishedAt = wt?.publishedAt ?? "";
+  const wtPublishedBy = wt?.publishedBy;
+  const wtPublishedEntryId = wt?.publishedEntryId;
+  const walkthroughKey = session.walkthrough
+    ? [
+        session.walkthrough.publishedAt,
+        session.walkthrough.video || "",
+        session.walkthrough.summary.length,
+        session.walkthrough.shots?.length || 0,
+      ].join("|")
+    : "";
+  // Same rebuild-from-key-leaves trick as mergedPr above.
+  const hasWalkthrough = !!wt;
+  const sessionWalkthrough = useMemo(
+    () =>
+      hasWalkthrough
+        ? {
+            summary: wtSummary,
+            video: wtVideo,
+            videoTitle: wtVideoTitle,
+            shots: wtShots,
+            publishedAt: wtPublishedAt,
+            publishedBy: wtPublishedBy,
+            publishedEntryId: wtPublishedEntryId,
+          }
+        : undefined,
+    [
+      hasWalkthrough,
+      wtSummary,
+      wtVideo,
+      wtVideoTitle,
+      wtShots,
+      wtPublishedAt,
+      wtPublishedBy,
+      wtPublishedEntryId,
+    ],
+  );
+  // The PR verdict on the transcript's last review loop, keyed the same way:
+  // it is built fresh from the polled session on every render, and an
+  // unstable prop here re-renders the whole transcript on every poll tick.
+  const reviewResultValue = reviewLoopResult(session);
+  const reviewResultKey = JSON.stringify(reviewResultValue ?? null);
+  const reviewResult = useMemo(
+    () =>
+      reviewResultKey === "null"
+        ? undefined
+        : (JSON.parse(reviewResultKey) as ReturnType<typeof reviewLoopResult>),
+    [reviewResultKey],
+  );
+  // Open state + width of the right panel. Browser-level, and shared with the
+  // session-less workspace route so the chosen summary card or panel follows
+  // the person between workspaces (hooks/useSidePanel).
+  const {
+    open: panelOpen,
+    setOpen: setPanelOpen,
+    page: desktopPanelPage,
+    setPage: setDesktopPanelPage,
+    style: panelStyle,
+    resizeHandle: panelResizeHandle,
+  } = useSidePanel();
+  // Review starts with a clear canvas without overwriting the browser-wide
+  // workspace-panel preference. Its own toggle can open the panel for this view,
+  // while returning to a session restores that session's ordinary panel state.
+  const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
+  const activePanelOpen = showReview ? reviewPanelOpen : panelOpen;
+  const setActivePanelOpen = showReview ? setReviewPanelOpen : setPanelOpen;
+  // Phones use null for their Workspace details overview and push tools from
+  // that page. The desktop selection comes from useSidePanel so the open panel
+  // stays on the same tool while its session changes.
+  const [panelPage, setPanelPage] = useState<
+    null | "changes" | "portals" | "agents" | "terminal"
+  >(null);
+  // Start a panel terminal only after its tab is opened. Keep it mounted while
+  // switching tabs, then drop it when the panel closes.
+  const [panelTerminalMounted, setPanelTerminalMounted] = useState(
+    () => activePanelOpen && desktopPanelPage === "terminal",
+  );
+  // Session scratch assets (Assets tab): fetched once per session + on
+  // assets_changed broadcasts; the tab only appears once files exist.
+  const { files: assetFiles, refresh: refreshAssets } = useSessionAssets(
+    session.id,
+    addHandler,
+  );
+  const assetPaths = useMemo(
+    () => assetFiles.map((file) => file.path),
+    [assetFiles],
+  );
+  // Which asset the main-area Assets view-tab previews. Controlled here so a
+  // tree selection and a later overlay promotion never drift apart.
+  const [selectedAssetPath, setSelectedAssetPath] = useState<string | null>(
+    null,
+  );
+  // One file, lifted over the conversation. Every way into an asset — a
+  // transcript chip, a tool row, the Info panel's list — lands here, so the
+  // file behaves the same whichever one you used; the Assets tab is where you
+  // go deliberately, and the overlay's own header is how you get promoted
+  // into it.
+  const [overlayAssetPath, setOverlayAssetPath] = useState<string | null>(null);
+  // Through a ref because this reaches the memoized transcript as a context
+  // value — changing action availability must not re-render the whole thing.
+  const openAssetsRef = useRef(openAssets);
+  useLayoutEffect(() => {
+    openAssetsRef.current = openAssets;
+  }, [openAssets]);
+  const openAssetFromTranscript = useCallback((path: string) => {
+    setOverlayAssetPath(path);
+  }, []);
+  const closeAssetOverlay = useCallback(() => setOverlayAssetPath(null), []);
+  // The overlay's "Open as tab": the file it was showing becomes the Assets
+  // tab's selection, and the overlay gets out of the way.
+  const promoteAssetToTab = useCallback((path: string) => {
+    setSelectedAssetPath(path);
+    setOverlayAssetPath(null);
+    openAssetsRef.current?.();
+  }, []);
+  const sessionReports = useSessionReports(session.id, addHandler);
+  // Team notes — human-to-human messages on this session, interleaved into
+  // the transcript as NoteBubbles. The agent never sees them; they're posted
+  // from the composer's note mode.
+  const [notes, setNotes] = useState<SessionNote[]>([]);
+  const [noteMode, setNoteMode] = useState(false);
+  async function addSessionAttachments(picked: FileList | File[]) {
+    const selected = Array.from(picked);
+    const noteImageTypes = new Set([
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+    ]);
+    const disallowed = noteMode
+      ? selected.filter((file) => !noteImageTypes.has(file.type))
+      : [];
+    const accepted = noteMode
+      ? selected.filter((file) => noteImageTypes.has(file.type))
+      : selected;
+    const results = await uploads.upload(accepted, (file, signal) =>
+      attachToDraft(draftKey, [file], signal),
+    );
+    if (results.some((result) => result.applied)) {
+      const stored = loadDraft(draftKey);
+      setImages((current) =>
+        sameImages(current, stored.images) ? current : stored.images,
+      );
+      setFiles((current) =>
+        sameFiles(current, stored.files) ? current : stored.files,
+      );
+    }
+    const failures = [
+      ...results.flatMap((result) => result.rejected),
+      ...disallowed.map(
+        (file) => `${file.name} (notes accept PNG, JPEG, GIF, or WebP images)`,
+      ),
+    ];
+    if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
+  }
+
+  function resetFileDrag() {
+    dragDepthRef.current = 0;
+    setFileDragActive(false);
+  }
+  function finishFileDrag() {
+    if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
+    fileDragWatchdogRef.current = null;
+    resetFileDrag();
+    fileDragPresentRef.current = false;
+    cancelledFileDragRef.current = false;
+  }
+  function armFileDragWatchdog() {
+    if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
+    fileDragWatchdogRef.current = setTimeout(finishFileDrag, 500);
+  }
+  const dropAttachments = useEffectEvent((picked: FileList | File[]) =>
+    addSessionAttachments(picked),
+  );
+  useEffect(() => {
+    // Own external file drags at the window, not on the conversation node.
+    // Dialogs and sheets portal to document.body, so a node-scoped handler
+    // loses the drag as soon as it crosses their backdrop. Only the focused
+    // conversation subscribes, which also keeps split panes from attaching the
+    // same drop twice.
+    if (!focused || sessionHidden) {
+      finishFileDrag();
+      return;
+    }
+    function cancelFileDrag(event: KeyboardEvent) {
+      if (event.key !== "Escape" || !fileDragPresentRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      cancelledFileDragRef.current = true;
+      resetFileDrag();
+      armFileDragWatchdog();
+    }
+    function finishNativeDrag() {
+      finishFileDrag();
+    }
+    function handleFileDragEnter(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (foregroundFileComposerOpen()) {
+        finishFileDrag();
+        return;
+      }
+      event.preventDefault();
+      armFileDragWatchdog();
+      if (cancelledFileDragRef.current) return;
+      if (!fileDragPresentRef.current) {
+        fileDragPresentRef.current = true;
+        dragDepthRef.current = 0;
+      }
+      dragDepthRef.current += 1;
+      setFileDragActive(true);
+    }
+    function handleFileDragLeave(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (foregroundFileComposerOpen()) {
+        finishFileDrag();
+        return;
+      }
+      const next = event.relatedTarget;
+      const leftApp =
+        !(next instanceof Node) || !document.documentElement.contains(next);
+      if (cancelledFileDragRef.current) {
+        if (leftApp) finishFileDrag();
+        else resetFileDrag();
+        return;
+      }
+      // Escape during an external file drag is owned by the browser on some
+      // platforms. Its observable signal is a final leave with no drop effect.
+      if (event.dataTransfer?.dropEffect === "none") {
+        finishFileDrag();
+        return;
+      }
+      if (leftApp) {
+        finishFileDrag();
+        return;
+      }
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      if (dragDepthRef.current === 0) setFileDragActive(false);
+    }
+    function handleFileDragOver(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (foregroundFileComposerOpen()) {
+        finishFileDrag();
+        return;
+      }
+      event.preventDefault();
+      armFileDragWatchdog();
+      if (cancelledFileDragRef.current) {
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
+        return;
+      }
+      if (!fileDragPresentRef.current) {
+        fileDragPresentRef.current = true;
+        dragDepthRef.current = 1;
+        setFileDragActive(true);
+      }
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    }
+    function handleFileDrop(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (foregroundFileComposerOpen()) {
+        finishFileDrag();
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const cancelled = cancelledFileDragRef.current;
+      const dropped = event.dataTransfer?.files;
+      finishFileDrag();
+      if (!cancelled && dropped?.length) void dropAttachments(dropped);
+    }
+    // Capture before modal backdrops and the composer. Listen for keyup too:
+    // Chromium can consume keydown while it owns a native OS drag.
+    window.addEventListener("keydown", cancelFileDrag, true);
+    window.addEventListener("keyup", cancelFileDrag, true);
+    window.addEventListener("dragenter", handleFileDragEnter, true);
+    window.addEventListener("dragleave", handleFileDragLeave, true);
+    window.addEventListener("dragover", handleFileDragOver, true);
+    window.addEventListener("drop", handleFileDrop, true);
+    window.addEventListener("dragend", finishNativeDrag, true);
+    return () => {
+      finishFileDrag();
+      window.removeEventListener("keydown", cancelFileDrag, true);
+      window.removeEventListener("keyup", cancelFileDrag, true);
+      window.removeEventListener("dragenter", handleFileDragEnter, true);
+      window.removeEventListener("dragleave", handleFileDragLeave, true);
+      window.removeEventListener("dragover", handleFileDragOver, true);
+      window.removeEventListener("drop", handleFileDrop, true);
+      window.removeEventListener("dragend", finishNativeDrag, true);
+    };
+  }, [focused, sessionHidden, draftKey, noteMode]);
+  useEffect(() => {
+    setNotes([]);
+    setNoteMode(false);
+    let cancelled = false;
+    fetchSessionNotesApi(session.id)
+      .then((loaded) => {
+        if (!cancelled && loaded.length) setNotes(loaded);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [session.id]);
+  useEffect(
+    () =>
+      addHandler((msg) => {
+        if (
+          (msg.type !== "session_note" &&
+            msg.type !== "session_note_deleted") ||
+          msg.sessionId !== session.id
+        )
+          return;
+        if (msg.type === "session_note_deleted") {
+          setNotes((prev) => prev.filter((n) => n.id !== msg.noteId));
+          return;
+        }
+        setNotes((prev) => {
+          const i = prev.findIndex((n) => n.id === msg.note.id);
+          if (i < 0) return [...prev, msg.note];
+          // An edit re-broadcasts the whole note under the same id.
+          const next = [...prev];
+          next[i] = msg.note;
+          return next;
+        });
+      }),
+    [addHandler, session.id],
+  );
+  // Viewing the session marks its notes read (an unread indicator keys off
+  // this stamp).
+  useEffect(() => {
+    if (!notes.length) return;
+    markNotesRead(session.id, notes[notes.length - 1]!.ts);
+  }, [notes, session.id]);
+  // Opening the session is what clears an @-mention of you: looking at it is
+  // what "seen" means, so there is no separate dismiss. Runs on the session
+  // id alone — a mention that lands while you are already here clears too,
+  // which is right: you are looking at it.
+  useEffect(() => {
+    clearMention(session.id);
+    return onMentionsChanged(() => clearMention(session.id));
+  }, [session.id]);
+  // Intent-aware scrolling: stick to the live edge only while the reader is there,
+  // pin new turns near the top, and surface a "Jump to latest" affordance.
+  const {
+    containerRef: messagesRef,
+    setContainerRef: setMessagesRef,
+    spacerRef,
+    followingLive,
+    following,
+    showScrollToBottom,
+    atTop,
+    scrollToLatest,
+    leaveLatest,
+    endTurn,
+    shouldMaintainEnd,
+    relayout,
+    suspendEndMaintenance,
+    onScroll,
+  } = useSessionScroll(true);
+  // An explicit tail action first resumes live-edge following immediately,
+  // then needs one more positioning pass after React commits its DOM change.
+  // Scrolling only in the event handler targets the old scrollHeight: a sent
+  // row does not exist yet, while an answered ask is about to disappear.
+  // Either transition can otherwise leave the response below the composer.
+  const tailActionNeedsLayoutScrollRef = useRef(false);
+
+  // A fold toggle (turn work blocks, tool-call details, review loops) changes
+  // block heights above the reader. Hold the live-edge glue off for the two
+  // frames the layout needs to settle so it cannot drag the reader off the
+  // block they just opened or read the movement as intent to leave.
+  useEffect(
+    () => onTranscriptDisclosure(suspendEndMaintenance),
+    [suspendEndMaintenance],
+  );
+
+  // Open-settle curtain: indexed transcripts normally lift on positive proof
+  // that their complete outline and real near-visible rows have settled. On a
+  // phone under CPU pressure transcript_index can arrive seconds after the
+  // bounded init, so its fallback is deliberately longer than legacy mode's.
+  // It is still bounded: a dropped index frame or a virtualizer that cannot
+  // report visible rows must reveal the readable tail instead of leaving an
+  // apparently empty conversation forever.
+  const [openSettlePending, setOpenSettlePending] = useState(true);
+  const transcriptRendered =
+    !loading && (entries.length > 0 || Boolean(transcriptIndex));
+  useEffect(() => {
+    if (!transcriptRendered) return;
+    const timer = window.setTimeout(
+      () => setOpenSettlePending(false),
+      transcriptIndexExpected
+        ? INDEXED_OPEN_SETTLE_MAX_MS
+        : LEGACY_OPEN_SETTLE_MAX_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [transcriptIndexExpected, transcriptRendered]);
+  const onVisibleRangesSettled = useCallback(() => {
+    settleVisibleRanges({
+      followingLive,
+      scrollToLatest,
+      onSettled: () => setOpenSettlePending(false),
+    });
+  }, [followingLive, scrollToLatest, settleVisibleRanges]);
+  const [viewerInput, setViewerInput] = useState<HTMLDivElement | null>(null);
+  // The focused phone composer is fixed above the keyboard, so it contributes
+  // no height to the transcript's flex layout. Publish its real height without
+  // re-rendering on each draft line: the scroll padding can then clear the
+  // whole composer instead of assuming the resting one-row pill.
+  useLayoutEffect(() => {
+    if (!viewerInput || typeof ResizeObserver === "undefined") return;
+    const region = viewerInput.parentElement;
+    if (!region) return;
+    const measure = () => {
+      region.style.setProperty(
+        "--viewer-input-height",
+        `${Math.ceil(viewerInput.getBoundingClientRect().height)}px`,
+      );
+      relayout();
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    // Keyboard focus changes the wrapper's padding, not its content box.
+    observer.observe(viewerInput, { box: "border-box" });
+    return () => {
+      observer.disconnect();
+      region.style.removeProperty("--viewer-input-height");
+    };
+  }, [relayout, viewerInput]);
+
+  useTranscriptIndexAnchor({
+    indexState: transcriptIndexState,
+    restorePendingIndexPosition,
+    containerRef: messagesRef,
+    scrollToLatest,
+    leaveLatest,
+  });
+
+  // Keep the cached snapshot current as live frames and history pages land.
+  // Scroll position is updated synchronously in handleMessagesScroll below;
+  // the anchor is carried rather than recomputed, because this runs on every
+  // streamed frame and pickScrollAnchor reads a rect per [data-eid] node.
+  useEffect(() => {
+    if (transcriptReadySessionRef.current !== session.id) return;
+    const previous = cachedTranscriptView(session.id);
+    const el = messagesRef.current;
+    cacheTranscriptView(session.id, {
+      entries,
+      cursor: transcriptCursorRef.current,
+      seq: transcriptSeqRef.current,
+      historyTruncated,
+      historyStart: historyStartRef.current,
+      index: transcriptIndex,
+      indexEpoch: transcriptIndexEpochRef.current,
+      scrollTop: el?.scrollTop ?? previous?.scrollTop ?? 0,
+      following,
+      anchorEid: previous?.anchorEid ?? null,
+      anchorTop: previous?.anchorTop ?? null,
+    });
+  }, [
+    entries,
+    following,
+    historyTruncated,
+    messagesRef,
+    session.id,
+    transcriptIndex,
+    transcriptIndexEpochRef,
+  ]);
+  // Where the anchor is computed. Nothing reads it until this session is
+  // opened again, and pickScrollAnchor reads a rect per [data-eid] node, so
+  // it runs once the reader settles instead of on every scroll event and
+  // every streamed frame.
+  const captureScrollAnchor = useCallback(() => {
+    const el = messagesRef.current;
+    const cached = peekCachedTranscriptView(session.id);
+    if (!el || !cached) return;
+    // Nothing qualifying at the top edge clears the pair, rather than
+    // leaving one the reader has scrolled away from.
+    const anchor = pickScrollAnchor(el);
+    cacheTranscriptView(session.id, {
+      ...cached,
+      scrollTop: el.scrollTop,
+      following: readFollowingLive(followingLive),
+      anchorEid: anchor?.dataset.eid ?? null,
+      anchorTop: anchor
+        ? anchor.getBoundingClientRect().top - el.getBoundingClientRect().top
+        : null,
+    });
+  }, [followingLive, messagesRef, session.id]);
+  const anchorCaptureRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleAnchorCapture = useCallback(() => {
+    if (anchorCaptureRef.current) clearTimeout(anchorCaptureRef.current);
+    anchorCaptureRef.current = setTimeout(captureScrollAnchor, 250);
+  }, [captureScrollAnchor]);
+  // And once more on the way out, so the last thing the reader did is what a
+  // switch back restores to. App keys SessionViewer on the session id
+  // (App.tsx), so this cleanup still sees the transcript it measures: React
+  // commits deletions before insertions.
+  useLayoutEffect(() => {
+    return () => {
+      if (anchorCaptureRef.current) clearTimeout(anchorCaptureRef.current);
+      anchorCaptureRef.current = null;
+      captureScrollAnchor();
+    };
+  }, [captureScrollAnchor]);
+  useEffect(() => {
+    setEntries((prev) => withModelSwitches(prev, session.modelHistory));
+  }, [session.modelHistory, setEntries]);
+
+  // The hold: keep an anchor element at a stable content offset while history
+  // prepends above it and the new bubbles' heights settle (content-visibility
+  // estimates resolve to real sizes as they render). `overflow-anchor: none`
+  // for the duration so Chrome's native scroll anchoring doesn't compensate
+  // the same shift twice; Safari has no native anchoring, so without this
+  // hold it loses the reader's position outright. Content-space offsets
+  // (rect relative to container + scrollTop) are scroll-invariant, so the
+  // reader's own scrolling composes cleanly with the compensation.
+  const stopHistoryHold = useCallback(() => {
+    const h = historyHoldRef.current;
+    if (!h) return;
+    cancelAnimationFrame(h.raf);
+    historyHoldRef.current = null;
+    const el = messagesRef.current;
+    if (el) el.style.overflowAnchor = "";
+  }, [messagesRef]);
+  // Ref mirror keeps rapid clicks from sending duplicate history requests
+  // before React re-renders with the disabled button.
+  const loadingHistoryRef = useRef(false);
+  useEffect(() => {
+    loadingHistoryRef.current = loadingHistory;
+  }, [loadingHistory]);
+  // One page request. `whole` is the whole-history variant: a fat page in seq
+  // mode, and in legacy mode the deliberately cursor-less request the server
+  // answers with the entire transcript in one transcript_init — byte-window
+  // paging has no cheap way to walk a backlog, and that full resend has always
+  // been its fallback.
+  const requestHistoryPage = useCallback(
+    (whole = false) => {
+      const seqState = transcriptSeqRef.current;
+      if (seqState?.sessionId === session.id) {
+        // Seq mode (transcript v2): page backwards from the earliest seq we
+        // hold. Without a usable cursor the server falls back to a full
+        // legacy resend, same as the legacy no-offset case below.
+        send({
+          type: "load_history",
+          sessionId: session.id,
+          ...(seqState.firstSeq !== null && seqState.firstSeq > 1
+            ? { beforeSeq: seqState.firstSeq }
+            : {}),
+          limit: whole ? JUMP_PAGE_ENTRIES : HISTORY_PAGE_ENTRIES,
+        });
+        return;
+      }
+      const cursor = transcriptCursorRef.current;
+      send({
+        type: "load_history",
+        sessionId: session.id,
+        ...(!whole &&
+        historyStartRef.current !== null &&
+        historyStartRef.current > 0
+          ? {
+              beforeOffset: historyStartRef.current,
+              beforeRev:
+                cursor?.sessionId === session.id ? cursor.rev : undefined,
+            }
+          : {}),
+      });
+    },
+    [send, session.id],
+  );
+  // The whole backlog, one click: each page's arrival schedules the next (see
+  // the transcript_history handler). `loadingHistory` deliberately stays true
+  // across the gaps, which is what keeps the auto-load sentinel and a second
+  // click from interleaving requests of their own.
+  const finishHistoryWalk = useCallback(() => {
+    if (!historyWalkRef.current) return;
+    historyWalkRef.current = null;
+    setLoadingAllHistory(false);
+    stopHistoryHold();
+  }, [stopHistoryHold]);
+
+  const startHistoryHold = useCallback(
+    (
+      node: HTMLElement,
+      ms: number,
+      fallback: { height: number; top: number } | null,
+    ) => {
+      const el = messagesRef.current;
+      if (!el) return;
+      stopHistoryHold();
+      el.style.overflowAnchor = "none";
+      const contentTopOf = (n: HTMLElement, c: HTMLElement) =>
+        n.getBoundingClientRect().top -
+        c.getBoundingClientRect().top +
+        c.scrollTop;
+      // Two anchor layers: the tight node for frame-to-frame deltas, and its
+      // nearest [data-eid] ancestor as a *recovery identity* — when a prepend
+      // merges into the anchor's turn block the whole block remounts (its key
+      // is its first item id) and every DOM node dies, but the same entry
+      // re-renders under the same data-eid.
+      const idEl = (node.closest?.("[data-eid]") as HTMLElement | null) ?? null;
+      const hold = {
+        node,
+        top: contentTopOf(node, el),
+        eid: idEl?.dataset.eid ?? null,
+        eidTop: idEl ? contentTopOf(idEl, el) : null,
+        until: performance.now() + ms,
+        raf: 0,
+        fallback,
+      };
+      historyHoldRef.current = hold;
+      const tick = () => {
+        const h = historyHoldRef.current;
+        const c = messagesRef.current;
+        if (!h || h !== hold || !c) return;
+        if (performance.now() > h.until || readFollowingLive(followingLive)) {
+          stopHistoryHold();
+          return;
+        }
+        if (h.node.isConnected) {
+          const t = contentTopOf(h.node, c);
+          const d = t - h.top;
+          if (d !== 0) c.scrollTop += d;
+          h.top = t;
+          // Keep the recovery identity fresh: cheap ancestor walk, and the
+          // content offset re-measured so a later remount recovers to the
+          // reader's latest position, not the hold's starting one.
+          const id2 = h.node.closest?.("[data-eid]") as HTMLElement | null;
+          h.eid = id2?.dataset.eid ?? h.eid;
+          h.eidTop = id2 ? contentTopOf(id2, c) : h.eidTop;
+        } else {
+          // Anchor DOM died (block remount). Recover through the entry id:
+          // same content, new nodes — shift by how far it moved.
+          const revived =
+            h.eid && typeof CSS !== "undefined"
+              ? c.querySelector<HTMLElement>(
+                  `[data-eid="${CSS.escape(h.eid)}"]`,
+                )
+              : null;
+          if (revived && h.eidTop !== null) {
+            const d = contentTopOf(revived, c) - h.eidTop;
+            if (d !== 0) c.scrollTop += d;
+          } else if (h.fallback) {
+            // Last resort: height math. Skewed by content-visibility
+            // estimate resets, but better than staying at a raw offset.
+            c.scrollTop = c.scrollHeight - h.fallback.height + h.fallback.top;
+          }
+          h.fallback = null;
+          const next = revived ?? pickScrollAnchor(c);
+          if (!next) {
+            stopHistoryHold();
+            return;
+          }
+          const nid =
+            (next.closest?.("[data-eid]") as HTMLElement | null) ?? null;
+          h.node = next;
+          h.top = contentTopOf(next, c);
+          h.eid = nid?.dataset.eid ?? null;
+          h.eidTop = nid ? contentTopOf(nid, c) : null;
+        }
+        h.raf = requestAnimationFrame(tick);
+      };
+      hold.raf = requestAnimationFrame(tick);
+    },
+    [messagesRef, stopHistoryHold, followingLive],
+  );
+  // A page's worth of settling outlives its arrival, not the request: slow
+  // fetches shouldn't burn the hold window, so extend it when a load lands.
+  useEffect(() => {
+    if (loadingHistory) return;
+    const h = historyHoldRef.current;
+    if (h) h.until = Math.max(h.until, performance.now() + 2500);
+  }, [loadingHistory]);
+  useEffect(() => stopHistoryHold, [session.id, stopHistoryHold]);
+  // Switching sessions abandons an in-flight whole-history walk (its pages are
+  // session-guarded anyway) — without this the flag would outlive it and keep
+  // the control stuck in its loading state.
+  useEffect(() => {
+    return () => {
+      historyWalkRef.current = null;
+      historyRevealRef.current = null;
+      backgroundHistoryRef.current = false;
+      setLoadingAllHistory(false);
+    };
+  }, [session.id]);
+
+  // Per-session model (switchable from the composer; "" = default)
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [defaultModel, setDefaultModel] = useState("");
+  // Pinnable Claude/Codex accounts + this session's pin ("" = auto pool).
+  const [accounts, setAccounts] = useState<ProviderAccountOption[]>([]);
+  const [accountId, setAccountId] = useState(session.accountId || "");
+  // Live token/cost accounting is seeded from the session and updated per run
+  // through the `usage_update` broadcast in useSessionRuntime.
+  // Reasoning effort — a composer control mirroring the new-session palette.
+  // Persisted on the session server-side and enforced per run (Claude effort /
+  // Codex modelReasoningEffort), so seed from the session's stored value.
+  const [effort, setEffort] = useState(session.effort || "high");
+  const [fastMode, setFastMode] = useState(session.fastMode || false);
+  // Optimistic goal: reflects a just-set/cleared goal instantly (the /goal
+  // command persists server-side but doesn't broadcast a live session update).
+  // `undefined` = defer to session.goal; a string/null = the pending override.
+  const [goalOverride, setGoalOverride] = useState<string | null | undefined>(
+    undefined,
+  );
+  // Drop the override once the server-side session catches up (or we switch).
+  useEffect(() => setGoalOverride(undefined), [session.id, session.goal]);
+  const currentGoal =
+    goalOverride !== undefined ? goalOverride : (session.goal ?? null);
+  useEffect(() => {
+    fetchModels(session.workspaceId || undefined)
+      .then((m) => {
+        setModels(m.models);
+        setDefaultModel(m.default);
+      })
+      .catch(() => {});
+    fetchProviderAccounts()
+      .then(setAccounts)
+      .catch(() => {});
+  }, [session.workspaceId]);
+  useEffect(() => {
+    dispatchSessionRuntime({
+      type: "sync_model",
+      model: session.model || "",
+    });
+  }, [dispatchSessionRuntime, session.id, session.model]);
+  useEffect(() => {
+    setAccountId(session.accountId || "");
+  }, [session.id, session.accountId]);
+  useEffect(() => {
+    setEffort(session.effort || "high");
+  }, [session.id, session.effort]);
+  useEffect(() => {
+    setFastMode(session.fastMode || false);
+  }, [session.id, session.fastMode]);
+  useEffect(() => {
+    dispatchSessionRuntime({ type: "sync_usage", usage: session.usage });
+  }, [dispatchSessionRuntime, session.id, session.usage]);
+
+  // Dynamic workflow runs (opensession-workflows MCP): seeded by a fetch on
+  // open/session switch, then kept live by workflow_update broadcasts. Powers
+  // the Agents tab — hidden entirely while empty.
+  const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSnapshot[]>([]);
+  // True once the seed fetch for the current session has settled — the
+  // runs-vanished fallback below must not flip tabs off an empty [] mid-fetch.
+  const [workflowsLoaded, setWorkflowsLoaded] = useState(false);
+  useEffect(() => {
+    let stale = false;
+    setWorkflowRuns([]);
+    setWorkflowsLoaded(false);
+    fetch(
+      `${BASE_PATH}/api/sessions/${encodeURIComponent(session.id)}/workflows`,
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (stale) return;
+        if (Array.isArray(d?.runs)) {
+          const fetched = d.runs as WorkflowRunSnapshot[];
+          // WS upserts may have landed while the fetch was in flight — those
+          // snapshots are newer than the seed, so keep them and only add
+          // fetched runs we don't have yet (the panel re-sorts by startedAt).
+          setWorkflowRuns((prev) => {
+            const have = new Set(prev.map((r) => r.runId));
+            const added = fetched.filter((r) => !have.has(r.runId));
+            return added.length ? [...prev, ...added] : prev;
+          });
+        }
+        setWorkflowsLoaded(true);
+      })
+      .catch(() => {
+        if (!stale) setWorkflowsLoaded(true);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [session.id]);
+  function workflowAction(
+    runId: string,
+    action: "cancel" | "pause" | "resume" | "skip" | "retry",
+    seq?: number,
+  ) {
+    // Fire-and-forget: workflow_update echoes every state transition. Resume
+    // after a process restart may create a new run, which arrives as another
+    // workflow_update on the same session.
+    const suffix =
+      action === "skip" || action === "retry"
+        ? `/agents/${seq}/${action}`
+        : `/${action}`;
+    fetch(`${BASE_PATH}/api/workflows/${encodeURIComponent(runId)}${suffix}`, {
+      method: "POST",
+    }).catch(() => {});
+  }
+
+  // Sub-agents the session spawned directly (pi task-tool children /
+  // SDK Task agents) — shown in the Agents tab next to workflow runs. Seeded
+  // here; the polling effect below (after isBusy exists) keeps them live.
+  const [subagents, setSubagents] = useState<SessionSubagentSnapshot[]>([]);
+  useEffect(() => setSubagents([]), [session.id]);
+
+  // Keep the pin star in sync with the store (changes can come from the tab bar
+  // or the Home screen) and reset when switching sessions.
+  const currentUser = useCurrentUser();
+  useEffect(() => setPinned(isPinned(session.id)), [session.id]);
+  useEffect(
+    () => onPinsChanged(() => setPinned(isPinned(session.id))),
+    [session.id],
+  );
+
+  // Claimed into your own sidebar lanes (lib/lanes.ts) — the whole workspace,
+  // since that's the unit the sidebar row claims. Lanes live in a module cache
+  // like pins, so mirror it into state and re-read on every change.
+  const claimSessions = workspaceSessions?.length
+    ? workspaceSessions
+    : [session];
+  const claimIds = claimSessions.map((c) => c.id).join(",");
+  const claimedGlobally = claimSessions.some((c) => !!c.manualStatus);
+  const [claimedLane, setClaimedLane] = useState(false);
+  useEffect(() => {
+    const read = () =>
+      setClaimedLane(claimIds.split(",").some((id) => !!getLane(id)));
+    read();
+    return onLanesChanged(read);
+  }, [claimIds]);
+  const claimed = claimedLane || claimedGlobally;
+  const hiddenFromSidebar = useSyncExternalStore(
+    onHidesChanged,
+    () => isHiddenForSession(session),
+    () => false,
+  );
+  // A linked session can be open without belonging to your sidebar: teammate
+  // work, automation runs and agent-spawned probes all stay out until claimed.
+  // A session you started (or a workspace with one) already renders in your
+  // sidebar bands without a lane claim, so it must not offer Add to sidebar.
+  const naturallyInSidebar = claimSessions.some(
+    (c) => !c.spawnedBy && !c.automation && ownedBy(c, currentUser),
+  );
+  const canKeepInSidebar =
+    !session.archived &&
+    !!onSetStatus &&
+    (hiddenFromSidebar || (!claimed && !naturallyInSidebar));
+  function keepInSidebar() {
+    unhideForSession(session);
+    if (!claimed && !naturallyInSidebar) onSetStatus?.(claimSessions, "mine");
+  }
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (
+        !focused ||
+        e.defaultPrevented ||
+        !matchesShortcut(e, "session-pin") ||
+        blockingOverlayOpen()
+      ) {
+        return;
+      }
+      e.preventDefault();
+      togglePin(session.id);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focused, session.id]);
+
+  // Switching modes is immediate in the interface. The only slow part is the
+  // workspace setup behind it, so code affordances appear now and show their
+  // own setup state until the server has cut the branch.
+  const [promoting, setPromoting] = useState(false);
+  const [promotionReady, setPromotionReady] = useState(false);
+  const codeMode = session.mode === "code" || promoting || promotionReady;
+  const isAsk = session.mode === "ask" && !codeMode;
+  const hasWorkspace = sessionHasWorkspace(session) || codeMode;
+  // Everything that only makes sense against a repo: the diff, the Changes
+  // tab, the PR strip, the repo switch/attach bar. A repo-less session still
+  // has a workspace (terminal, agents, assets run in its scratch dir), so
+  // these ride their own flag rather than `hasWorkspace`. Promotion gives a
+  // repo-less Ask session the selected/default repo on the server.
+  const hasRepoWork = hasWorkspace && (!session.repoLess || codeMode);
+  async function handlePromote(onDone?: () => void) {
+    if (promoting) return;
+    setPromoting(true);
+    onDone?.();
+    try {
+      await promoteSessionApi(session.id);
+      setPromotionReady(true);
+      setPromoting(false);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not switch to code mode");
+      setPromoting(false);
+    }
+  }
+  // A linked Plain thread gets a read-only conversation sidebar (+ jump-to-Plain),
+  // available even for ask-mode sessions that have no code workspace.
+  const hasPlain = Boolean(session.plainThreadId);
+  const plainUrl = session.plainThreadId
+    ? plainThreadUrl(session.plainThreadId)
+    : "";
+  // Feed-item link (a video, a dashboard, …): the same
+  // jump-out affordance Plain has, generic over the session's externalRefs.
+  const feedRef = (session.externalRefs || []).find((r) => r.url);
+  const feedRefLabel = feedRef
+    ? feedForRefKind(feedRef.kind)?.title ||
+      feedRef.kind.charAt(0).toUpperCase() + feedRef.kind.slice(1)
+    : "";
+  // Workflow runs open the panel too: ask-mode sessions without a workspace
+  // or Plain thread still need somewhere to show the Agents tab.
+  const panelAvailable =
+    !hideRightPanel &&
+    (hasWorkspace ||
+      hasPlain ||
+      workflowRuns.length > 0 ||
+      subagents.length > 0 ||
+      sessionReports.length > 0);
+  const isBusy = !safety && (isRunningLive || isStreaming);
+  // Sub-agent list: fetch on open, then re-poll while the session runs so
+  // live task-tool spawns appear/settle. Keyed on isBusy too: a run starting
+  // after mount restarts the poll loop, and the flip back to idle lands one
+  // final fetch that settles statuses.
+  useEffect(() => {
+    let stale = false;
+    let timer: number | undefined;
+    const load = async () => {
+      try {
+        const d = await fetchSessionSubagents(session.id);
+        if (stale) return;
+        // Keep the previous array when nothing changed: downstream memos
+        // (and the LiveSubagents context feeding every ToolCallBlock)
+        // only re-render on real updates, not on every 4s poll tick.
+        setSubagents((prev) =>
+          JSON.stringify(prev) === JSON.stringify(d.subagents)
+            ? prev
+            : d.subagents,
+        );
+        if (d.sessionRunning) timer = window.setTimeout(load, 4000);
+      } catch {
+        // Transient (auth refresh, reload) — the next poll or session
+        // switch retries.
+      }
+    };
+    load();
+    return () => {
+      stale = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [session.id, isBusy]);
+  // Task rows learn their child session id from this map while the call is
+  // still running (the result text that normally carries it doesn't exist
+  // yet), enabling the mid-run "Watch ↗" drill-in.
+  const liveSubagents = useMemo(() => {
+    const m = new Map<string, LiveSubagent>();
+    for (const s of subagents)
+      if (s.toolUseId) m.set(s.toolUseId, { id: s.id, status: s.status });
+    return m;
+  }, [subagents]);
+  // Derived, not the raw flag: transcript content or streaming text means the
+  // opening run already started, so the worktree is done — this guards against
+  // a stale sessions poll re-asserting the flag after the workspace_status
+  // event already cleared it.
+  const waitingForWorkspace =
+    promoting ||
+    (workspacePreparing && entries.length === 0 && !liveTurnStore.hasText());
+  // A sibling session already owns a ready workspace, so its optimistic shell
+  // can show the blank conversation and composer immediately. A genuinely new
+  // workspace keeps the setup state until its worktree is ready.
+  const settingUpWorkspace = waitingForWorkspace && !optimisticEmpty;
+
+  // Live worktree diff, handed to the Changes page as `diff=` so opening it
+  // reads the poll the panel already runs rather than starting a second one.
+  // Parked unless a workspace surface is open on a code session: the panel
+  // column on desktop, the info page on a phone. A client-minted session is not
+  // queryable until create persistence lands; leaving the resource parked makes
+  // Changes use its ordinary empty state instead of flashing a transient 404.
+  const diffState = useSessionDiff(session.id, {
+    enabled:
+      !pendingCreation && hasRepoWork && (activePanelOpen || infoPageOpen),
+    isRunning: isBusy,
+  });
+
+  // Anchor for the agent-working elapsed timer. A run that starts
+  // while we're watching anchors to now; opening a session mid-run anchors to
+  // the server's journaled run start (runStartedAt — survives switches and
+  // refreshes), falling back to the turn's user prompt in the transcript, so
+  // the timer shows the run's real age, not time-since-I-opened-the-tab. The
+  // ref tracks which case we're in: it stays true until we've observed the
+  // session idle.
+  const [busySince, setBusySince] = useState<number | null>(null);
+  // When the Stop was asked for, so the click can be acknowledged locally at
+  // once. The server's isRunning:false only lands after the aborted turn
+  // actually unwinds — an abort signal is observed at the next await, so a
+  // long bash command, an MCP call or a retrying model request holds it for
+  // seconds — and until then this row went on counting up as if the click had
+  // never happened. 18% of stops in the audit log are a second stop on the
+  // same session within a minute (median 1.9s apart): people clicking again
+  // because the first click showed them nothing.
+  const [stopRequestedAt, setStopRequestedAt] = useState<number | null>(null);
+  const anchorFromTranscript = useRef(session.isRunning);
+  useEffect(() => {
+    anchorFromTranscript.current = true;
+    setBusySince(null);
+    setStopRequestedAt(null);
+  }, [session.id]);
+  useEffect(() => {
+    if (!isBusy) {
+      anchorFromTranscript.current = false;
+      setBusySince(null);
+      setStopRequestedAt(null);
+      return;
+    }
+    // The journaled run start is authoritative whenever we have it — for a
+    // run that starts while watching it's ~now anyway (App stamps it on the
+    // status flip), and mid-run it's the real start even when a stale
+    // isRunning=false at mount already flipped the anchor ref.
+    if (session.runStartedAt) {
+      const t = Date.parse(session.runStartedAt);
+      if (Number.isFinite(t)) {
+        setBusySince((prev) => prev ?? t);
+        return;
+      }
+    }
+    // Mid-run open: wait for the transcript so we can find the turn's prompt.
+    if (anchorFromTranscript.current && loading) return;
+    setBusySince((prev) => {
+      if (prev != null) return prev;
+      if (anchorFromTranscript.current) {
+        for (let i = entries.length - 1; i >= 0; i--) {
+          if (entries[i].type !== "user") continue;
+          const t = new Date(entries[i].timestamp).getTime();
+          if (Number.isFinite(t)) return t;
+          break;
+        }
+      }
+      return Date.now();
+    });
+  }, [isBusy, loading, entries, session.runStartedAt]);
+
+  // Ctrl+R focuses the session composer directly.
+  const archiveShortcutLabel = useShortcutLabel("session-archive");
+  const copyTranscriptLabel = useShortcutLabel("session-copy-transcript");
+  const nextChatKeys = useShortcutKeys("workspace-next-unread");
+  const newSiblingKeys = useShortcutKeys("session-new-sibling");
+  const transcriptDownKeys = useShortcutKeys("transcript-down");
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!focused) return;
+      if (matchesShortcut(e, "composer-focus")) {
+        e.preventDefault();
+        composerRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focused]);
+
+  // ⌘⌥↑/⌘⌥↓ step the reasoning effort through the current model's supported
+  // levels (up = more thinking), wrapping at the ends. Resolves the same
+  // effective effort as the ModelEffortSelect pill (stored value when the
+  // model offers it, else "high", else the model's first level), so the step
+  // always starts from what the pill displays. Fires with the composer
+  // focused too — the Alt modifier keeps it clear of plain ⌘↑/⌘↓ (workspace
+  // cycling in the Sidebar, and caret start/end moves in the textarea).
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!focused) return;
+      if (e.defaultPrevented) return;
+      const dir = matchesShortcut(e, "effort-up")
+        ? 1
+        : matchesShortcut(e, "effort-down")
+          ? -1
+          : 0;
+      if (dir === 0) return;
+      const effectiveModel = model || defaultModel;
+      const supportedIds =
+        models.find((m) => m.id === effectiveModel)?.efforts ?? [];
+      const supported = EFFORTS.filter((ef) => supportedIds.includes(ef.id));
+      if (supported.length < 2) return;
+      const effective = supportedIds.includes(effort)
+        ? effort
+        : supportedIds.includes("high")
+          ? "high"
+          : supported[0].id;
+      const idx = supported.findIndex((ef) => ef.id === effective);
+      const next = supported[(idx + dir + supported.length) % supported.length];
+      if (!next) return;
+      e.preventDefault();
+      setEffort(next.id);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focused, models, defaultModel, model, effort]);
+
+  // ⌃⇧↑/⌃⇧↓ page the transcript up/down — keyboard scrolling that works while
+  // the composer is focused. A programmatic scroll carries no reader gesture,
+  // so useSessionScroll won't re-engage auto-follow from it: a Down that would
+  // land at the live edge goes through scrollToLatest, which resumes following.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!focused) return;
+      if (e.defaultPrevented) return;
+      const up = matchesShortcut(e, "transcript-up");
+      const down = matchesShortcut(e, "transcript-down");
+      if (!up && !down) return;
+      const el = messagesRef.current;
+      if (!el) return;
+      e.preventDefault();
+      const delta = Math.max(120, el.clientHeight * 0.8);
+      if (down) {
+        const remaining = el.scrollHeight - el.clientHeight - el.scrollTop;
+        if (remaining - delta < 48) {
+          scrollToLatest();
+          return;
+        }
+      }
+      if (up) leaveLatest();
+      el.scrollBy({
+        top: up ? -delta : delta,
+        behavior: "smooth",
+      });
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focused, messagesRef, scrollToLatest, leaveLatest]);
+
+  // A "new tab" while this session is open is a fresh session *in this session*:
+  // clear the composer and jump to the live edge. We skip the first run (and
+  // session switches, which remount this with whatever the counter's at) and
+  // only react to real bumps from the tab-bar +.
+  const [composerResetSeq, setComposerResetSeq] = useState(newSessionSeq);
+  useLayoutEffect(() => {
+    if (newSessionSeq === composerResetSeq) return;
+    // Clear storage before changing the Composer key. The layout update causes
+    // its replacement to initialize only after the stale draft is gone.
+    clearDraft(draftKey);
+    dropStagingAttachments(draftKey);
+    setImages([]);
+    setFiles([]);
+    setForkFrom(null);
+    setComposerResetSeq(newSessionSeq);
+    scrollToLatest("smooth");
+    composerRef.current?.focus();
+  }, [newSessionSeq, composerResetSeq, draftKey, scrollToLatest]);
+
+  // Browser tab title follows the workspace, the same name the header shows.
+  // The session's own title names a tab inside it, not the page.
+  useEffect(() => {
+    if (!focused) return;
+    document.title = workspaceName || session.title || DEFAULT_DOC_TITLE;
+    return () => {
+      document.title = DEFAULT_DOC_TITLE;
+    };
+  }, [focused, workspaceName, session.title]);
+
+  // "Add session transcripts" chips on a fresh session's blank canvas: sibling
+  // workspace sessions the user can attach as context — selected ids ride the
+  // first send as `contextSessions` and the server inlines a fenced transcript
+  // digest of each. One-shot: cleared once a send consumes them.
+  const [contextSessions, setContextSessions] = useState<string[]>([]);
+
+  // Subscribe to WebSocket messages
+  const subscribeToSession = useEffectEvent(() => {
+    if (!connected) return;
+
+    // Resume rather than re-snapshot when this exact session's transcript is
+    // still mounted (a reconnect blip, not a session switch) and we hold a
+    // cursor from a previous frame. Seq mode (transcript v2) resumes with
+    // sinceSeq; legacy with the byte cursor. supportsSeq advertises the
+    // capability — old servers ignore it and behave exactly as before.
+    const cursor = transcriptCursorRef.current;
+    const seqState = transcriptSeqRef.current;
+    const ready = transcriptReadySessionRef.current === session.id;
+    const resume =
+      ready && seqState?.sessionId === session.id
+        ? {
+            sinceSeq: seqState.lastSeq,
+            sinceChangeSeq: seqState.lastChangeSeq,
+          }
+        : ready && cursor?.sessionId === session.id
+          ? { sinceOffset: cursor.offset, sinceRev: cursor.rev }
+          : {};
+    const unsubscribe = addHandler((msg) => {
+      // Session-scoped messages carry the session id — drop anything meant
+      // for a different session. Without this, a socket race (or a lingering
+      // creator-side direct send from a session you navigated away from) bleeds
+      // another session's stream into this view. Messages without a
+      // sessionId (direct replies like slash-command notices) pass through.
+      if ("sessionId" in msg && msg.sessionId && msg.sessionId !== session.id) {
+        return;
+      }
+      switch (msg.type) {
+        case "workflow_update": {
+          // Dynamic workflows: upsert the live run snapshot (already
+          // session-filtered by the sessionId gate above).
+          const run = msg.run;
+          setWorkflowRuns((prev) =>
+            prev.some((r) => r.runId === run.runId)
+              ? prev.map((r) => (r.runId === run.runId ? run : r))
+              : [run, ...prev],
+          );
+          break;
+        }
+        case "transcript_init": {
+          // Weave persisted model switches into the conversation as dividers.
+          const merged = withModelSwitches(msg.entries, session.modelHistory);
+          transcriptReadySessionRef.current = session.id;
+          // Mode detection (transcript v2): an init carrying seq fields
+          // switches this session into seq mode; one without switches it
+          // back to legacy (e.g. the flag was turned off — the resume
+          // falls back to a full legacy snapshot). Init frames are
+          // authoritative for the mode.
+          const v2 = msg.v2 === true && typeof msg.lastSeq === "number";
+          const existingIndex = existingIndexForInit(v2);
+          setIndexMode(v2);
+          if (v2) {
+            transcriptSeqRef.current = {
+              sessionId: session.id,
+              lastSeq: msg.lastSeq!,
+              firstSeq:
+                typeof msg.firstSeq === "number" && msg.firstSeq > 0
+                  ? msg.firstSeq
+                  : null,
+              lastChangeSeq:
+                typeof msg.lastChangeSeq === "number"
+                  ? msg.lastChangeSeq
+                  : msg.lastSeq!,
+            };
+            // Seq mode ignores offset/rev cursors entirely.
+            transcriptCursorRef.current = null;
+          } else {
+            transcriptSeqRef.current = null;
+            if (typeof msg.endOffset === "number" && msg.rev) {
+              transcriptCursorRef.current = {
+                sessionId: session.id,
+                rev: msg.rev,
+                offset: msg.endOffset,
+              };
+            } else {
+              transcriptCursorRef.current = null;
+            }
+          }
+          if (v2) acceptInitTail(msg.entries, existingIndex);
+          if (v2 && existingIndex)
+            transcriptViewStore.merge(merged, true, true);
+          else transcriptViewStore.replace(merged, true, v2);
+          setHistoryTruncated(!!msg.truncated);
+          backgroundHistoryRef.current = false;
+          historyRevealRef.current = null;
+          loadingHistoryRef.current = false;
+          setLoadingHistory(false);
+          setLoading(false);
+          // A whole-history walk ends here when the server answers with the
+          // whole transcript — the legacy path's only way to serve a backlog,
+          // and the seq path's fallback when a store read fails. A TRUNCATED
+          // init is a re-snapshot of the tail instead (a reconnect landing
+          // mid-walk), so cancel that quietly rather than parking the reader
+          // at the top of a tail they didn't ask for.
+          if (historyWalkRef.current?.sessionId === session.id) {
+            if (msg.truncated) {
+              historyWalkRef.current = null;
+              setLoadingAllHistory(false);
+            } else {
+              finishHistoryWalk();
+            }
+          }
+          shellTiming.record();
+          // Pagination cursor for "load earlier" (the byte offset the shipped
+          // tail begins at). Each history page arrives as transcript_history
+          // below. Seq mode pages with
+          // beforeSeq instead, so the byte cursor stays untouched there.
+          if (!v2 && typeof msg.startOffset === "number") {
+            historyStartRef.current = msg.startOffset;
+          }
+          break;
+        }
+        case "transcript_index": {
+          replaceIndex(msg, messagesRef.current, followingLive.current);
+          setHistoryTruncated(false);
+          backgroundHistoryRef.current = false;
+          historyRevealRef.current = null;
+          loadingHistoryRef.current = false;
+          setLoadingHistory(false);
+          break;
+        }
+        case "transcript_range": {
+          acceptRange(msg);
+          break;
+        }
+        case "transcript_history": {
+          // Older entries from a "load earlier" page: merge by id and re-sort
+          // by time — mergeEntries
+          // appends, which is wrong for content older than what's shown.
+          transcriptViewStore.prepend(msg.entries, msg.v2 === true);
+          setHistoryTruncated(!!msg.truncated);
+          const seqState = transcriptSeqRef.current;
+          const inSeqMode = seqState?.sessionId === session.id;
+          if (
+            inSeqMode &&
+            msg.v2 === true &&
+            typeof msg.firstSeq === "number" &&
+            msg.firstSeq > 0
+          ) {
+            // Older-page cursor: earliest seq loaded so far (min).
+            seqState.firstSeq =
+              seqState.firstSeq === null
+                ? msg.firstSeq
+                : Math.min(seqState.firstSeq, msg.firstSeq);
+          } else if (!inSeqMode && typeof msg.startOffset === "number") {
+            historyStartRef.current =
+              historyStartRef.current === null
+                ? msg.startOffset
+                : Math.min(historyStartRef.current, msg.startOffset);
+          }
+          // Whole-history walk: this page's cursor is now in place, so ask
+          // for the next one straight from here — leaving loadingHistory
+          // true across the gap. Stop on a whole transcript, an empty page,
+          // a cursor that stopped receding, or the ceiling.
+          const jump = historyWalkRef.current;
+          if (jump && jump.sessionId === session.id) {
+            jump.loaded += msg.entries.length;
+            const cursor = inSeqMode
+              ? seqState.firstSeq
+              : historyStartRef.current;
+            if (
+              msg.truncated &&
+              msg.entries.length > 0 &&
+              cursor !== null &&
+              cursor !== jump.cursor &&
+              jump.loaded < JUMP_MAX_ENTRIES
+            ) {
+              jump.cursor = cursor;
+              requestHistoryPage(true);
+              break;
+            }
+            finishHistoryWalk();
+          }
+          const reveal = historyRevealRef.current;
+          if (reveal && reveal.sessionId === session.id && inSeqMode) {
+            reveal.loaded += msg.entries.length;
+            const cursor = seqState.firstSeq;
+            if (
+              shouldContinueHistoryReveal({
+                entries: msg.entries,
+                truncated: !!msg.truncated,
+                loaded: reveal.loaded,
+                cursor,
+                previousCursor: reveal.cursor,
+              })
+            ) {
+              reveal.cursor = cursor;
+              requestHistoryPage();
+              break;
+            }
+            historyRevealRef.current = null;
+          }
+          if (backgroundHistoryRef.current) scrollToLatest("auto");
+          backgroundHistoryRef.current = false;
+          loadingHistoryRef.current = false;
+          setLoadingHistory(false);
+          break;
+        }
+        case "transcript_append": {
+          const seqState = transcriptSeqRef.current;
+          const inSeqMode = seqState?.sessionId === session.id;
+          if (inSeqMode) {
+            // Seq mode: track the resume cursor as a max — upsert
+            // republishes reuse the entry's ORIGINAL seq, so a frame's
+            // lastSeq can sit below what we already hold. Offset/rev
+            // fields (if any) are ignored while in this mode.
+            if (
+              msg.v2 === true &&
+              typeof msg.lastSeq === "number" &&
+              msg.lastSeq > 0
+            ) {
+              seqState.lastSeq = Math.max(seqState.lastSeq, msg.lastSeq);
+            }
+            if (typeof msg.lastChangeSeq === "number") {
+              seqState.lastChangeSeq = Math.max(
+                seqState.lastChangeSeq,
+                msg.lastChangeSeq,
+              );
+            }
+          } else if (typeof msg.endOffset === "number" && msg.rev) {
+            transcriptCursorRef.current = {
+              sessionId: session.id,
+              rev: msg.rev,
+              offset: msg.endOffset,
+            };
+          }
+          transcriptViewStore.merge(msg.entries, inSeqMode, true);
+          if (inSeqMode) projectAppend(msg.entries, msg.firstSeq);
+          // The live stream and the transcript tail both carry assistant text.
+          // stream_text accumulates whole blocks until stream_done (end of the
+          // run), so a mid-run text block would otherwise show twice: as the
+          // persisted entry above later tool steps AND in the streaming bubble
+          // at the bottom. Once a block lands as an entry, drop it from the
+          // stream buffer.
+          const landed = msg.entries.filter(
+            (e) => e.type === "assistant" && e.content,
+          );
+          if (landed.length) {
+            liveTurnStore.land(
+              landed.map((e) => ({ id: e.id, content: e.content })),
+            );
+          }
+          break;
+        }
+        case "presence":
+          if (msg.sessionId === session.id) setViewers(msg.viewers);
+          break;
+        case "typing":
+          if (msg.sessionId === session.id)
+            setTypingUsers(otherTypingUsers(msg.users, getCurrentUser()));
+          break;
+        case "queue_update":
+          if (msg.sessionId === session.id) {
+            // Don't let a broadcast rewrite the list mid-drag (see
+            // draggingQueueRef) — the drop will send our order and the
+            // server's echo reconciles it right after.
+            dispatchSessionRuntime({
+              type: "frame",
+              frame: msg,
+              acceptQueueUpdate: !draggingQueueRef.current,
+            });
+          }
+          break;
+        case "queued_prompt_taken": {
+          if (msg.sessionId !== session.id) break;
+          if (!msg.item) {
+            dispatchSessionRuntime({ type: "frame", frame: msg });
+            toast(msg.message || "That queued message could not be edited");
+            break;
+          }
+          const item = msg.item as QueueReceipt;
+          const existing = loadDraft(draftKey);
+          setImages((current) => [...current, ...(item.images ?? [])]);
+          const restoredFiles = Array.isArray(item.files)
+            ? item.files.flatMap((file) => {
+                if (!file || typeof file !== "object") return [];
+                const value = file as Record<string, unknown>;
+                if (typeof value.name !== "string") return [];
+                return [
+                  {
+                    name: value.name,
+                    type:
+                      typeof value.type === "string"
+                        ? value.type
+                        : "application/octet-stream",
+                    ...(typeof value.path === "string"
+                      ? { path: value.path }
+                      : {}),
+                    ...(typeof value.dataUrl === "string"
+                      ? { dataUrl: value.dataUrl }
+                      : {}),
+                  },
+                ];
+              })
+            : [];
+          setFiles((current) => [...current, ...restoredFiles]);
+          setContextSessions((current) => [
+            ...new Set([...current, ...(item.contextSessions ?? [])]),
+          ]);
+          setComposerPrefill((current) => ({
+            seq: (current?.seq ?? 0) + 1,
+            text: item.content,
+            replace: !existing.text.trim(),
+          }));
+          break;
+        }
+        case "ask_question":
+        case "ask_resolved":
+          if (msg.sessionId === session.id)
+            dispatchSessionRuntime({ type: "frame", frame: msg });
+          break;
+        case "reply_suggestions":
+          // Null retires the row (the turn they answered has been answered).
+          if (msg.sessionId === session.id)
+            setReplySuggestions(msg.suggestions ?? []);
+          break;
+        case "slack_composer":
+          if (msg.sessionId === session.id) {
+            setSlackComposer(msg.request);
+            setSlackComposerStatus("idle");
+            setSlackComposerReconnect(false);
+            if (msg.request) setSlackComposerSent(null);
+          }
+          break;
+        case "slack_composer_resolved":
+          if (msg.sessionId === session.id) {
+            setSlackComposer((current) =>
+              current?.id === msg.requestId ? null : current,
+            );
+            if (msg.status === "sent" && msg.channel) {
+              setSlackComposerSent({
+                channelName: msg.channel.name,
+                permalink: msg.permalink,
+                receiptKey: msg.requestId,
+                channelId: msg.channel.id,
+                ts: msg.ts,
+              });
+            }
+          }
+          break;
+        case "session_status": {
+          const running = !!msg.isRunning && !msg.safety;
+          dispatchSessionRuntime({ type: "frame", frame: msg });
+          if (!running) {
+            // Every isRunning:false broadcast follows its run's stream_done,
+            // so a live turn never gets cut here. This clears the stale case:
+            // a socket that died mid-stream (server restart) reconnects, the
+            // re-watch hello reports the turn already over, and the spinner
+            // from the dead stream would otherwise stay up forever.
+            liveTurnStore.finish();
+          }
+          onRunningChange?.(session.id, running);
+          break;
+        }
+        case "git_pushed":
+          if (msg.sessionId === session.id) setGitRefreshTick((t) => t + 1);
+          break;
+        case "pr_updated":
+          // Include PR-backed workspace branches: legacy review sessions keep a
+          // synthetic checkout branch that differs from the real PR head.
+          if (sessionPrTargetsRef.current.has(`${msg.repo}\0${msg.branch}`))
+            setGitRefreshTick((t) => t + 1);
+          break;
+        case "workspace_status":
+          if (msg.sessionId === session.id) setWorkspacePreparing(!msg.ready);
+          break;
+        case "stream_start":
+          dispatchSessionRuntime({ type: "frame", frame: msg });
+          // A new turn is never the stopped one: clear the pending stop so
+          // its label can't bleed into the run that follows it.
+          setStopRequestedAt(null);
+          liveTurnStore.start(msg.by);
+          // A new turn answers the last one's chips. The server clears its
+          // copy on the same event; this is what stops the row lingering
+          // for the seconds before that broadcast lands.
+          setReplySuggestions(EMPTY_SUGGESTIONS);
+          break;
+        case "stream_text": {
+          if (isTimelineOnlyRunnerNotice(msg.text)) break;
+          // Live typing is per viewer (Settings > Preferences), default off.
+          // Dropping the frame is the whole implementation: the durable
+          // entry for the block still lands over the transcript feed, which
+          // is what filled the transcript before streaming existed. Read per
+          // frame rather than captured, so a toggle takes on the running turn.
+          if (!getLiveTypingPref()) break;
+          liveTurnStore.append(msg.text, msg.blockId);
+          break;
+        }
+        case "stream_tool_use":
+        case "stream_tool_result":
+          transcriptViewStore.merge([msg.entry]);
+          break;
+        case "stream_done": {
+          dispatchSessionRuntime({ type: "frame", frame: msg });
+          liveTurnStore.finish();
+          break;
+        }
+        case "model_changed":
+          if (msg.sessionId !== session.id) break;
+          dispatchSessionRuntime({ type: "frame", frame: msg });
+          if (msg.by && msg.by !== getCurrentUser()) {
+            setEntries((prev) => [
+              ...prev,
+              {
+                id: `model-switch-live-${Date.now()}`,
+                type: "system",
+                content: switchDividerText(msg.model, msg.from, msg.by),
+                timestamp: new Date().toISOString(),
+              },
+            ]);
+          }
+          break;
+        case "subscription_changed":
+          // Keep every viewer's Subscription submenu in sync; the /sub
+          // notice in the transcript carries the human-readable detail.
+          if (msg.sessionId !== session.id) break;
+          setAccountId(msg.accountId || "");
+          break;
+        case "usage_update":
+          if (msg.sessionId !== session.id) break;
+          dispatchSessionRuntime({ type: "frame", frame: msg });
+          break;
+        case "cache_warning":
+          if (msg.sessionId !== session.id) break;
+          toast("Prompt cache missed");
+          break;
+        case "notice":
+          setEntries((prev) => [
+            ...prev,
+            {
+              id: randomUUID(),
+              type: "system",
+              content: msg.message,
+              timestamp: new Date().toISOString(),
+            },
+          ]);
+          break;
+        case "error":
+          dispatchSessionRuntime({ type: "frame", frame: msg });
+          liveTurnStore.finish();
+          // Show the failure where the reply would have been — otherwise a
+          // failed run looks like a send that silently went nowhere.
+          if (msg.message) {
+            setEntries((prev) => [
+              ...prev,
+              {
+                id: randomUUID(),
+                type: "system",
+                content: `⚠ Run failed: ${msg.message}`,
+                timestamp: new Date().toISOString(),
+              },
+            ]);
+          }
+          break;
+      }
+    });
+    // Register first: `watch` synchronously receives a presence snapshot. On a
+    // reconnect, sending before this handler exists can drop the empty snapshot
+    // and leave a departed viewer's face rendered indefinitely.
+    send({
+      type: "watch",
+      sessionId: session.id,
+      user: getCurrentUser(),
+      supportsSeq: true,
+      supportsChangeSeq: true,
+      supportsTranscriptIndex: true,
+      ...resume,
+    });
+    return () => {
+      unsubscribe();
+      // Tell the server we stopped watching, so it can drop the transcript
+      // stream and our presence entry (otherwise we linger as a ghost viewer).
+      // send() is a no-op unless the socket is OPEN, so a dropped connection
+      // (the usual reason this effect re-runs) never throws here.
+      send({ type: "unwatch", sessionId: session.id });
+    };
+    // `ran` in deps: new sessions start with no engine conversation and no
+    // transcript file — re-watch once the first run makes one so the live
+    // tail attaches. It stands in for `transcriptPath`, which said the same
+    // thing a moment later but is detail-only now: reading it here would
+    // re-watch every session ONCE MORE the instant its detail hydrated.
+  });
+  useEffect(
+    () => subscribeToSession(),
+    [session.id, connected, session.ran, liveTurnStore],
+  );
+
+  // Drop optimistic bubbles once their real turn shows up. Each pending message
+  // is claimed (one-to-one) either by a transcript user entry recorded around or
+  // after we sent it, or by a server-confirmed queued entry (the busy path).
+  // A long-unmatched bubble is dropped so a dead send never sticks as "sending…".
+  useEffect(() => {
+    const { landed, expired } = reconcilePending(
+      pendingRef.current,
+      entries,
+      [...queued, ...steered],
+      Date.now(),
+    );
+    if (landed.size === 0 && expired.size === 0) return;
+    setPending((prev) =>
+      prev.filter((p) => !landed.has(p.id) && !expired.has(p.id)),
+    );
+    // Only a CONFIRMED claim retires the durable outbox row below. An expired
+    // bubble is merely hidden: its prompt may still be in flight, and the
+    // outbox is localStorage-backed and shared across tabs, so anything that
+    // looks like a discard has to be earned by a real server confirmation.
+    if (landed.size > 0)
+      setLandedOutboxIds((prev) => {
+        const next = new Set(prev);
+        for (const id of landed) next.add(id);
+        return next;
+      });
+  }, [entries, queued, steered, setEntries]);
+
+  // Forget optimistic bubbles and live state when switching sessions. This
+  // component is retained between tabs, so carrying a busy flag from the prior
+  // session makes an idle prompt render as queued until the new watch handshake
+  // arrives. Reset in layout, before the next session can accept input, so an
+  // idle send paints directly in the transcript on its first frame.
+  const resetOptimisticState = useEffectEvent(() => {
+    setPending(
+      initialPending
+        ? [
+            {
+              id: `pending-initial-${session.id}`,
+              transcriptAfterEntryId: null,
+              ...initialPending,
+            },
+          ]
+        : [],
+    );
+    dispatchSessionRuntime({
+      type: "reset_live",
+      isRunning: session.isRunning,
+    });
+    liveTurnStore.clear();
+  });
+  useLayoutEffect(() => {
+    resetOptimisticState();
+  }, [session.id, liveTurnStore]);
+
+  // Every session opens at the live edge. Do this in a layout effect so the
+  // transcript never paints at scrollTop 0 before moving to the end.
+  const initiallyScrolledSessionRef = useRef<string | null>(null);
+  const [initialScrollSession, setInitialScrollSession] = useState<
+    string | null
+  >(null);
+  useLayoutEffect(() => {
+    const el = messagesRef.current;
+    if (
+      !el ||
+      transcriptReadySessionRef.current !== session.id ||
+      initiallyScrolledSessionRef.current === session.id ||
+      entries.length === 0
+    )
+      return;
+    initiallyScrolledSessionRef.current = session.id;
+    scrollToLatest("auto");
+    setInitialScrollSession(session.id);
+  }, [entries, session.id, sessionHidden, scrollToLatest, messagesRef]);
+  // Message blocks use content-visibility with estimated heights. Those estimates
+  // resolve after the first scroll calculation without a React update, growing the
+  // transcript above the viewport. Hold the bottom through that initial browser
+  // layout pass, but release immediately if the reader touches the transcript.
+  useLayoutEffect(() => {
+    if (initialScrollSession !== session.id) return;
+    const el = messagesRef.current;
+    if (!el) return;
+
+    let stopped = false;
+    const keepAtLatest = () => {
+      if (!stopped) el.scrollTop = el.scrollHeight;
+    };
+    const sizes = new ResizeObserver(keepAtLatest);
+    const observeChildren = () => {
+      for (const child of el.children) sizes.observe(child);
+    };
+    const children = new MutationObserver(() => {
+      observeChildren();
+      keepAtLatest();
+    });
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      sizes.disconnect();
+      children.disconnect();
+      if (expiry) clearTimeout(expiry);
+      el.removeEventListener("wheel", stop);
+      el.removeEventListener("touchstart", stop);
+      el.removeEventListener("pointerdown", stop);
+      window.removeEventListener("keydown", stopForScrollKey);
+    };
+    const stopForScrollKey = (event: KeyboardEvent) => {
+      if (!isSessionFocused()) return;
+      if (
+        ["PageUp", "PageDown", "Home", "End"].includes(event.key) ||
+        (event.ctrlKey &&
+          event.shiftKey &&
+          (event.key === "ArrowUp" || event.key === "ArrowDown"))
+      )
+        stop();
+    };
+
+    observeChildren();
+    children.observe(el, { childList: true });
+    el.addEventListener("wheel", stop, { passive: true });
+    el.addEventListener("touchstart", stop, { passive: true });
+    el.addEventListener("pointerdown", stop, { passive: true });
+    window.addEventListener("keydown", stopForScrollKey);
+    expiry = setTimeout(stop, 3000);
+    keepAtLatest();
+    return stop;
+  }, [initialScrollSession, session.id, sessionHidden, messagesRef]);
+  // Returning to the app reads like reopening the session, not resuming a
+  // paused one. On the iOS PWA the page survives backgrounding with the scroll
+  // parked wherever it was; on desktop a hidden tab keeps streaming below the
+  // fold. So when the tab turns visible again, jump to the live edge if the
+  // transcript grew while hidden — or if we were away long enough that this is
+  // a reopen, not a glance at another app. Growth often only lands moments
+  // AFTER visibility (the PWA's WebSocket reconnects first, then backfills),
+  // so a short watch window catches late arrivals. A real reader gesture
+  // cancels the pending jump — their hands on the transcript always win.
+  const lastEntryIdRef = useRef<string | null>(null);
+  const streamLenRef = useRef(0);
+  useLayoutEffect(() => {
+    lastEntryIdRef.current =
+      entries.length > 0 ? entries[entries.length - 1].id : null;
+    streamLenRef.current = liveTurnStore.textLength();
+  }, [entries, liveTurnStore]);
+  const hiddenSnapRef = useRef<{
+    at: number;
+    lastEntryId: string | null;
+    streamLen: number;
+  } | null>(null);
+  const resumeWatchRef = useRef<{
+    until: number;
+    lastEntryId: string | null;
+    streamLen: number;
+  } | null>(null);
+  useEffect(() => {
+    hiddenSnapRef.current = null;
+    resumeWatchRef.current = null;
+  }, [session.id]);
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenSnapRef.current = {
+          at: Date.now(),
+          lastEntryId: lastEntryIdRef.current,
+          streamLen: streamLenRef.current,
+        };
+        resumeWatchRef.current = null;
+        return;
+      }
+      const snap = hiddenSnapRef.current;
+      hiddenSnapRef.current = null;
+      if (!snap) return;
+      const grew =
+        lastEntryIdRef.current !== snap.lastEntryId ||
+        streamLenRef.current > snap.streamLen;
+      if (grew || Date.now() - snap.at >= HIDDEN_REOPEN_MS) {
+        scrollToLatest("auto");
+      } else {
+        resumeWatchRef.current = {
+          until: performance.now() + RESUME_GROWTH_WINDOW_MS,
+          lastEntryId: snap.lastEntryId,
+          streamLen: snap.streamLen,
+        };
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [scrollToLatest]);
+  // The late-arrival half of the resume jump: growth landing inside the watch
+  // window (WS backfill after a PWA resume) completes the jump to the edge.
+  useEffect(() => {
+    const watch = resumeWatchRef.current;
+    if (!watch) return;
+    if (performance.now() > watch.until) {
+      resumeWatchRef.current = null;
+      return;
+    }
+    if (lastEntryIdRef.current !== watch.lastEntryId) {
+      resumeWatchRef.current = null;
+      scrollToLatest("auto");
+    }
+  }, [entries, scrollToLatest]);
+  useEffect(
+    () =>
+      liveTurnStore.subscribe(() => {
+        streamLenRef.current = liveTurnStore.textLength();
+        const watch = resumeWatchRef.current;
+        if (
+          watch &&
+          performance.now() <= watch.until &&
+          streamLenRef.current > watch.streamLen
+        ) {
+          resumeWatchRef.current = null;
+          scrollToLatest("auto");
+        }
+      }),
+    [liveTurnStore, scrollToLatest],
+  );
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const cancelResumeJump = () => {
+      resumeWatchRef.current = null;
+    };
+    el.addEventListener("touchstart", cancelResumeJump, { passive: true });
+    el.addEventListener("wheel", cancelResumeJump, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", cancelResumeJump);
+      el.removeEventListener("wheel", cancelResumeJump);
+    };
+  }, [messagesRef]);
+
+  // After any content change: keep a following reader at the live edge, or maintain
+  // the pinned-turn spacer for a turn streaming into the space below (principles 4–6).
+  // Layout effect so the adjustment happens before the browser paints — no flicker.
+  useLayoutEffect(() => {
+    relayout();
+    if (!tailActionNeedsLayoutScrollRef.current) return;
+    tailActionNeedsLayoutScrollRef.current = false;
+    scrollToLatest("auto");
+  }, [entries, queued, steered, pending, ask, relayout, scrollToLatest]);
+
+  // Shared preamble: stop tracking the live edge, and pin the reader to the
+  // content they're on while the page prepends above it.
+  const beginHistoryLoad = useCallback(
+    (holdMs = 8000) => {
+      leaveLatest();
+      const el = messagesRef.current;
+      if (el) {
+        // Anchor on the tightest element at the viewport top — it sits below
+        // everything the prepend inserts, so its content offset shifts by
+        // exactly the added height (what native scroll anchoring would pick).
+        const node = pickScrollAnchor(el);
+        if (node)
+          startHistoryHold(node, holdMs, {
+            height: el.scrollHeight,
+            top: el.scrollTop,
+          });
+      }
+      setLoadingHistory(true);
+    },
+    [leaveLatest, messagesRef, startHistoryHold],
+  );
+  const loadEarlierHistory = useCallback(() => {
+    if (transcriptIndexExpectedRef.current || !historyTruncated) return;
+    if (loadingHistoryRef.current) {
+      // The deferred page is already on the wire. Adopt it rather than making
+      // the first upward gesture look ignored, and let its response continue
+      // until a visible conversation boundary lands.
+      if (backgroundHistoryRef.current) {
+        backgroundHistoryRef.current = false;
+        if (transcriptSeqRef.current?.sessionId === session.id) {
+          historyRevealRef.current = {
+            sessionId: session.id,
+            loaded: 0,
+            cursor: null,
+          };
+        }
+        beginHistoryLoad();
+      }
+      return;
+    }
+    loadingHistoryRef.current = true;
+    if (transcriptSeqRef.current?.sessionId === session.id) {
+      historyRevealRef.current = {
+        sessionId: session.id,
+        loaded: 0,
+        cursor: null,
+      };
+    }
+    beginHistoryLoad();
+    requestHistoryPage();
+  }, [
+    beginHistoryLoad,
+    historyTruncated,
+    requestHistoryPage,
+    session.id,
+    transcriptIndexExpectedRef,
+  ]);
+  const loadAllHistory = useCallback(() => {
+    if (
+      transcriptIndexExpectedRef.current ||
+      !historyTruncated ||
+      loadingHistoryRef.current
+    )
+      return;
+    loadingHistoryRef.current = true;
+    historyRevealRef.current = null;
+    backgroundHistoryRef.current = false;
+    historyWalkRef.current = {
+      sessionId: session.id,
+      loaded: 0,
+      cursor: null,
+    };
+    setLoadingAllHistory(true);
+    beginHistoryLoad(60_000);
+    requestHistoryPage(true);
+  }, [
+    beginHistoryLoad,
+    historyTruncated,
+    requestHistoryPage,
+    session.id,
+    transcriptIndexExpectedRef,
+  ]);
+
+  // Preserve the fast opening snapshot, then download one fuller page once the
+  // browser has had time to paint it. This only runs at the live edge in seq
+  // mode. A reader who starts moving first wins and uses the interactive path.
+  useEffect(() => {
+    if (
+      loading ||
+      transcriptIndexExpected ||
+      !historyTruncated ||
+      loadingHistory ||
+      sessionHidden ||
+      backgroundHistoryAttemptedRef.current ||
+      transcriptSeqRef.current?.sessionId !== session.id
+    )
+      return;
+    let attempts = 0;
+    let timer = 0;
+    const tryPrefetch = () => {
+      const el = messagesRef.current;
+      if (!el || el.scrollHeight - el.scrollTop - el.clientHeight > 4) {
+        // Opening scroll restoration can settle after the first transcript
+        // paint. Give it a short window without chasing a reader who moved up.
+        attempts += 1;
+        if (attempts < 12) timer = window.setTimeout(tryPrefetch, 500);
+        return;
+      }
+      backgroundHistoryAttemptedRef.current = true;
+      backgroundHistoryRef.current = true;
+      loadingHistoryRef.current = true;
+      setLoadingHistory(true);
+      requestHistoryPage();
+    };
+    timer = window.setTimeout(tryPrefetch, 1_500);
+    return () => window.clearTimeout(timer);
+  }, [
+    historyTruncated,
+    loading,
+    transcriptIndexExpected,
+    loadingHistory,
+    messagesRef,
+    requestHistoryPage,
+    session.id,
+    sessionHidden,
+  ]);
+
+  // Auto-load is driven by upward reader intent, never by viewport geometry
+  // alone. That keeps initial hydration and programmatic bottom settling from
+  // fetching history while still preloading a page as the reader approaches it.
+  const historyGestureUntilRef = useRef(0);
+  const historyGestureConsumedRef = useRef(true);
+  const lastHistoryWheelAtRef = useRef(0);
+  const lastHistoryScrollTopRef = useRef(0);
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesRef.current;
+    const previous = lastHistoryScrollTopRef.current;
+    const current = el?.scrollTop ?? previous;
+    lastHistoryScrollTopRef.current = current;
+    onScroll();
+    const cached = peekCachedTranscriptView(session.id);
+    // Only the cheap fields here: a scroll event must not walk the
+    // transcript. The anchor follows once the reader settles.
+    if (el && cached) {
+      cacheTranscriptView(session.id, {
+        ...cached,
+        scrollTop: current,
+        following: followingLive.current,
+      });
+      scheduleAnchorCapture();
+    }
+    if (el && current < previous - 1 && backgroundHistoryRef.current) {
+      loadEarlierHistory();
+    }
+    if (
+      el &&
+      current < previous - 1 &&
+      current <= 600 &&
+      !historyGestureConsumedRef.current &&
+      performance.now() <= historyGestureUntilRef.current
+    ) {
+      historyGestureConsumedRef.current = true;
+      historyGestureUntilRef.current = 0;
+      loadEarlierHistory();
+    }
+  }, [
+    followingLive,
+    loadEarlierHistory,
+    messagesRef,
+    onScroll,
+    scheduleAnchorCapture,
+    session.id,
+  ]);
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el || sessionHidden) return;
+    historyGestureUntilRef.current = 0;
+    historyGestureConsumedRef.current = true;
+    lastHistoryWheelAtRef.current = 0;
+    lastHistoryScrollTopRef.current = el.scrollTop;
+    let touchY: number | null = null;
+    const nearHistory = () => {
+      if (historyGestureConsumedRef.current || el.scrollTop > 600) return;
+      historyGestureConsumedRef.current = true;
+      historyGestureUntilRef.current = 0;
+      loadEarlierHistory();
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY >= 0) return;
+      if (backgroundHistoryRef.current) loadEarlierHistory();
+      const now = performance.now();
+      if (now - lastHistoryWheelAtRef.current > 200)
+        historyGestureConsumedRef.current = false;
+      lastHistoryWheelAtRef.current = now;
+      historyGestureUntilRef.current = now + 1200;
+      nearHistory();
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      touchY = event.touches[0]?.clientY ?? null;
+      historyGestureConsumedRef.current = false;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      const y = event.touches[0]?.clientY;
+      if (y === undefined || touchY === null) return;
+      if (y > touchY + 1) {
+        if (backgroundHistoryRef.current) loadEarlierHistory();
+        historyGestureUntilRef.current = performance.now() + 6000;
+        nearHistory();
+      }
+      touchY = y;
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      // Classic scrollbar drags hit the container beyond its content box.
+      if (
+        event.target === el &&
+        (event.offsetX >= el.clientWidth || event.offsetY >= el.clientHeight)
+      ) {
+        historyGestureConsumedRef.current = false;
+        historyGestureUntilRef.current = performance.now() + 1500;
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!focused) return;
+      const upward =
+        event.ctrlKey &&
+        event.shiftKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.key === "ArrowUp";
+      if (!upward) return;
+      if (backgroundHistoryRef.current) loadEarlierHistory();
+      historyGestureConsumedRef.current = false;
+      historyGestureUntilRef.current = performance.now() + 1200;
+      nearHistory();
+    };
+    el.addEventListener("wheel", onWheel, { passive: true });
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("pointerdown", onPointerDown, { passive: true });
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [focused, session.id, sessionHidden, loadEarlierHistory, messagesRef]);
+
+  // When a turn finishes, release the spacer so the layout settles back.
+  const wasBusyRef = useRef(false);
+  useEffect(() => {
+    if (wasBusyRef.current && !isBusy) endTurn();
+    wasBusyRef.current = isBusy;
+  });
+
+  // Codex-model sessions start fresh threads server-side; only Claude-model
+  // sessions need an existing claude session id to resume.
+  const effectiveModel = model || defaultModel;
+  const isCodexModel = modelIsCodex(effectiveModel, models);
+  // A opensession session with no engine ids is a *fresh* session (e.g. a new sibling
+  // from the tab strip's +): the composer stays enabled — its first prompt
+  // starts a new engine conversation server-side (see runSessionPrompt). Only
+  // non-opensession sources with no engine to resume stay read-only.
+  const noEngine =
+    !isCodexModel && !session.ran && session.source !== "opensession";
+  const latestAssistantMessage =
+    entries
+      .findLast((entry) => entry.type === "assistant" && entry.content.trim())
+      ?.content.trim() || "";
+  const shippedSentValue =
+    shippedShare ||
+    (mergedPr
+      ? session.slackShares?.findLast(
+          (share) => share.prNumber === mergedPr.number,
+        )
+      : undefined);
+  // Same reason as mergedPr above: a receipt read off the polled session is a
+  // fresh object every tick, and the share below is a transcript prop.
+  const sentChannelName = shippedSentValue?.channelName ?? "";
+  const sentPermalink = shippedSentValue?.permalink;
+  const sentAt = shippedSentValue?.at ?? "";
+  const sentTs = shippedSentValue?.ts;
+  const shippedSentKey = shippedSentValue
+    ? [
+        shippedSentValue.channelName,
+        shippedSentValue.permalink,
+        shippedSentValue.at,
+        shippedSentValue.ts,
+      ].join("\u0000")
+    : "";
+  const shippedSent = useMemo(() => {
+    if (!shippedSentKey) return undefined;
+    return {
+      channelName: sentChannelName,
+      permalink: sentPermalink,
+      at: sentAt,
+      ts: sentTs,
+    };
+  }, [shippedSentKey, sentChannelName, sentPermalink, sentAt, sentTs]);
+  const shippedChangeShare = useMemo(
+    () =>
+      mergedPr && !shareDismissed
+        ? {
+            prNumber: mergedPr.number!,
+            sessionId: session.id,
+            defaultMessage: suggestedShippedChangeMessage(
+              mergedPr.title || "an update",
+              session.walkthrough?.summary,
+            ),
+            screenshot: shippedScreenshot,
+            reconnectRequired: shippedSlackReconnectRequired,
+            status: shippedChangeStatus,
+            onShare: sendShippedChangeToSlack,
+            onReconnectSlack: reconnectShippedSlack,
+            onCancel: dismissShippedChangeShare,
+            nextMessage: latestAssistantMessage,
+            ...(shippedSent
+              ? {
+                  sent: {
+                    channelName: shippedSent.channelName,
+                    permalink: shippedSent.permalink,
+                    receiptKey: shippedSent.at,
+                  },
+                  ...(shippedSent.ts
+                    ? { onUndo: () => undoShippedChangeShare(shippedSent.at) }
+                    : {}),
+                }
+              : {}),
+          }
+        : undefined,
+    [
+      mergedPr,
+      shippedSlackReconnectRequired,
+      shippedScreenshot,
+      session.id,
+      session.walkthrough?.summary,
+      sendShippedChangeToSlack,
+      reconnectShippedSlack,
+      undoShippedChangeShare,
+      dismissShippedChangeShare,
+      shareDismissed,
+      shippedChangeStatus,
+      shippedSent,
+      latestAssistantMessage,
+    ],
+  );
+  const sendComposedSlackMessage = useCallback(
+    async (message: string, channel: string, screenshots: string[]) => {
+      if (!slackComposer) return;
+      setSlackComposerStatus("sharing");
+      try {
+        const result = await sendSlackComposer(session.id, {
+          requestId: slackComposer.id,
+          message,
+          channel,
+          screenshots,
+        });
+        setSlackComposer(null);
+        setSlackComposerStatus("idle");
+        setSlackComposerSent({
+          channelName: result.channel.name,
+          permalink: result.permalink,
+          receiptKey: slackComposer.id,
+          channelId: result.channel.id,
+          ts: result.ts,
+        });
+      } catch (error) {
+        setSlackComposerStatus("idle");
+        if (
+          error instanceof ApiError &&
+          error.status === 403 &&
+          /Reconnect Slack/.test(error.message)
+        ) {
+          setSlackComposerReconnect(true);
+          toast("Reconnect Slack to add image access");
+        } else {
+          toast(
+            error instanceof Error ? error.message : "Couldn't send to Slack",
+          );
+        }
+      }
+    },
+    [session.id, slackComposer],
+  );
+  // Slack accepts a delete only from the account that posted, which is the
+  // person's own grant token, so an undo here can never touch someone else's
+  // message.
+  const undoComposedSlackMessage = useCallback(
+    async (sent: SlackSent) => {
+      if (!sent.channelId || !sent.ts) return;
+      try {
+        await undoSlackComposer(session.id, {
+          channel: sent.channelId,
+          ts: sent.ts,
+        });
+        setSlackComposerSent(null);
+        toast("Removed from Slack");
+      } catch (error) {
+        toast(
+          error instanceof Error
+            ? error.message
+            : "Couldn't undo the Slack message",
+        );
+      }
+    },
+    [session.id],
+  );
+  const cancelComposedSlackMessage = useCallback(async () => {
+    if (!slackComposer) return;
+    try {
+      await cancelSlackComposer(session.id, slackComposer.id);
+      setSlackComposer(null);
+    } catch (error) {
+      toast(
+        error instanceof Error
+          ? error.message
+          : "Couldn't close the Slack composer",
+      );
+    }
+  }, [session.id, slackComposer]);
+  // Exact engine-state forks use Claude's SDK forkSession. Other backends can
+  // still fork as a new sibling with a transcript handoff.
+  const canForkSession = session.source === "opensession" && !!session.ran;
+
+  const handleFork = useCallback(
+    (messageId?: string) => {
+      if (!messageId) {
+        void navigation.duplicateSession();
+        return;
+      }
+      setForkFrom({ kind: "message", messageId });
+    },
+    [navigation],
+  );
+
+  // "Continue" under a failed run's notice. An ordinary prompt, so it steers,
+  // notices and broadcasts like anything else a person sends — the failure
+  // notice tells you to send the prompt again, and this is that press.
+  const continueAfterFailure = useCallback(() => {
+    send({
+      type: "prompt",
+      sessionId: session.id,
+      content: CONTINUE_AFTER_FAILURE_PROMPT,
+      user: getCurrentUser(),
+    });
+  }, [send, session.id]);
+
+  const continuePausedSession = useCallback(() => {
+    const lastMessageId = entries.findLast(
+      (entry) => entry.type === "assistant" || entry.type === "user",
+    )?.id;
+    const carriedImages = queued.flatMap((item) => item.images || []);
+    send({
+      type: "create_session",
+      branch: "",
+      prompt: safetyContinuationPrompt(session.title, queued),
+      user: getCurrentUser(),
+      forkFrom: {
+        sourceId: session.id,
+        ...(lastMessageId ? { messageId: lastMessageId } : {}),
+      },
+      ...(carriedImages.length ? { images: carriedImages } : {}),
+    });
+  }, [entries, queued, send, session.id, session.title]);
+
+  const repairSafetyPause = useCallback(async () => {
+    await repairPausedSession(session.id);
+    dispatchSessionRuntime({ type: "repair_safety" });
+    onRunningChange?.(session.id, false);
+    toast("Session repaired");
+  }, [dispatchSessionRuntime, onRunningChange, session.id]);
+
+  // Session and asset links navigate on a delegated click. markdown.ts renders
+  // them into dangerouslySetInnerHTML, where they cannot carry React handlers;
+  // data attributes identify which in-app surface should open.
+  const handleMessagesClick = useCallback(
+    (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const assetEl = target.closest?.(
+        "[data-asset-path]",
+      ) as HTMLElement | null;
+      const assetPath = assetEl?.dataset.assetPath;
+      if (assetPath) {
+        // Modified clicks keep the anchor's raw-file fallback and native new-tab
+        // behaviour. A normal click stays in context, in the asset preview.
+        if (
+          (e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) &&
+          assetEl?.getAttribute("href")
+        )
+          return;
+        e.preventDefault();
+        openAssetFromTranscript(assetPath);
+        return;
+      }
+      const el = target.closest?.("[data-session-id]") as HTMLElement | null;
+      const id = el?.dataset.sessionId;
+      if (!id || !openSession) return;
+      // Modified clicks on href-carrying chips (markdown links to session
+      // URLs) keep native browser behavior (open in new tab, etc.).
+      if ((e.metaKey || e.ctrlKey || e.shiftKey) && el?.getAttribute("href"))
+        return;
+      e.preventDefault();
+      openSession(id);
+    },
+    [openSession, openAssetFromTranscript],
+  );
+
+  // The transcript passage explicitly attached to the next message. It stays
+  // highlighted until the message sends or the person removes it.
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const clearQuote = useCallback(() => setQuote(null), []);
+  // Whether a draft is in the way of reopening a message in the composer, read
+  // through a ref. Every value it reads changes as you type or attach, and
+  // the transcript's onEditMessage has to keep one identity across all of
+  // that: the memoized TranscriptBlocks is what stands between a keystroke
+  // and a re-render of the whole conversation.
+  const composerDraftRef = useRef({
+    draftKey,
+    images,
+    files,
+    quote,
+    contextSessions,
+  });
+  useLayoutEffect(() => {
+    composerDraftRef.current = {
+      draftKey,
+      images,
+      files,
+      quote,
+      contextSessions,
+    };
+  }, [draftKey, images, files, quote, contextSessions]);
+  const composerHasDraft = useCallback(() => {
+    const current = composerDraftRef.current;
+    const stored = loadDraft(current.draftKey);
+    return Boolean(
+      stored.text.trim() ||
+      stored.pastedTexts.length ||
+      current.images.length ||
+      current.files.length ||
+      current.quote ||
+      current.contextSessions.length,
+    );
+  }, []);
+  // Switching sessions drops staged selections: they quote THAT transcript.
+  useEffect(() => {
+    setQuote(null);
+  }, [session.id]);
+  // Full-width view tabs unmount the transcript and its visible highlight. Do
+  // not leave that context invisibly attached when the conversation returns.
+  useEffect(() => {
+    if (sessionHidden) setQuote(null);
+  }, [sessionHidden]);
+  const [showAllContextSessions, setShowAllContextSessions] = useState(false);
+  const contextSessionOptions = useMemo(() => {
+    // Whole workspace, archived sessions included — the common case is exactly a
+    // closed (archived-after-merge) sibling whose context the new session needs.
+    // workspaceSessions (the live tab strip) is the fallback when the session has no
+    // workspace id of its own.
+    const siblings = session.workspaceId
+      ? (allSessions || []).filter((c) => c.workspaceId === session.workspaceId)
+      : workspaceSessions || [];
+    return siblings
+      .filter(
+        (c) =>
+          c.id !== session.id &&
+          // Legacy hidden sessions are not valid workspace context options.
+          // Only sessions with something to hand over — a session that has
+          // actually run a turn. These are LIST rows, so `ran` is the only
+          // form of that answer they carry.
+          c.ran,
+      )
+      .sort((a, b) =>
+        (b.lastActivity || "").localeCompare(a.lastActivity || ""),
+      );
+  }, [allSessions, workspaceSessions, session.id, session.workspaceId]);
+  useEffect(() => {
+    setContextSessions([]);
+    setShowAllContextSessions(false);
+  }, [session.id]);
+
+  // Whose Desk this is. Every Desk is titled "Desk" and carries no repo, so
+  // the owner is the only thing that tells one apart from another — see the
+  // mobile title pill's leading slot.
+  const deskOwner = session.desk ? session.startedBy || "" : "";
+  // The review request is stored per session, but the sidebar's "Awaiting/Needs
+  // review" bands group by workspace — so a request set on a sibling session lit
+  // the band while the open session's Reviewer chip read empty. Surface the
+  // workspace's request in the chip: the open session's own if it has one, else a
+  // sibling's, carrying the owner id so clear/re-assign target the right session.
+  // GitHub reviews can complete an explicit request; GitHub's own requested
+  // reviewers ride alongside as `prReviewRequested`, since being added as a
+  // reviewer on the PR is the other way a review lands on you. It writes no
+  // Open Session request — only the picker does that — so the chip reads both.
+  const effectiveReview = (() => {
+    const owner = session.reviewRequest
+      ? session
+      : (workspaceSessions || []).find((c) => c.reviewRequest);
+    const request = owner?.reviewRequest ?? null;
+    const completion =
+      owner && request ? prReviewCompletion(request, owner) : null;
+    return {
+      req: request
+        ? completion
+          ? { ...request, accepted: completion }
+          : request
+        : null,
+      ownerId: owner?.id ?? session.id,
+      acceptedFromPr: !!completion,
+      // A workspace can span several PRs; a request on any of them is a
+      // request on the workspace, which is the unit the chip speaks for.
+      prReviewRequested: [
+        ...new Set(
+          (workspaceSessions?.length ? workspaceSessions : [session]).flatMap(
+            (c) => c.prReviewRequested || [],
+          ),
+        ),
+      ],
+    };
+  })();
+
+  // Returns true when the message was consumed, so the (uncontrolled)
+  // Composer knows to clear its draft; false keeps it for a retry.
+  function handleSend(
+    raw: string,
+    opts?: { steer?: boolean },
+    /** A region comment is already a complete message. Its derived crop must
+     *  not consume or inherit anything waiting in the main composer. */
+    isolatedImages?: string[],
+  ): boolean | Promise<boolean> {
+    const sendStartedAt = performance.now();
+    const typed = raw.trim();
+    const isolated = isolatedImages !== undefined;
+    // Quoted transcript selections lead a normal composer message. A region
+    // comment carries its own visual context and leaves the draft untouched.
+    const text = isolated ? typed : withQuotes(quote ? [quote] : [], typed);
+    const imgs = isolatedImages ?? images;
+    const fls = isolated ? [] : files;
+    if (!typed && imgs.length === 0 && fls.length === 0) return false;
+
+    // Note mode: post a team note on this session — never a prompt. The
+    // server broadcast echoes it back into `notes` for every viewer, so
+    // nothing is rendered optimistically here. Notes carry the quoted
+    // selection too (as "> " lines, the same shape a prompt sends).
+    if (!isolated && noteMode) {
+      if (!typed && imgs.length === 0) return false;
+      return postSessionNoteApi(session.id, text, getCurrentUser(), imgs).then(
+        () => {
+          dropStagingAttachments(draftKey);
+          setImages([]);
+          setQuote(null);
+          return true;
+        },
+        () => {
+          toast("Failed to add note");
+          return false;
+        },
+      );
+    }
+
+    const user = getCurrentUser();
+    // Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
+    const filePayload = fls.map((f) =>
+      f.path
+        ? { name: f.name, path: f.path }
+        : { name: f.name, dataUrl: f.dataUrl },
+    );
+
+    // Fork mode: branch a brand-new session from the current tip or selected
+    // message, keeping the real conversation history. App navigates into it on
+    // session_created.
+    if (!isolated && forkFrom) {
+      send({
+        type: "create_session",
+        branch: "",
+        prompt: text || "Continue from here.",
+        user,
+        forkFrom: {
+          sourceId: session.id,
+          ...(forkFrom.kind === "message"
+            ? { messageId: forkFrom.messageId }
+            : {}),
+        },
+        ...(imgs.length ? { images: imgs } : {}),
+        ...(fls.length ? { files: filePayload } : {}),
+      });
+      setForkFrom(null);
+      dropStagingAttachments(draftKey);
+      setImages([]);
+      setFiles([]);
+      setQuote(null);
+      return true;
+    }
+
+    if (noEngine) return false;
+    // Two follow-up behaviors while busy: plain send QUEUES (parked until
+    // the run FULLY finishes — including any auto-continue turns the server
+    // holds the queue behind), and the steer button / ⌘Ctrl+Enter STEERS
+    // (folds into the LIVE run at its next step boundary — busyMode:"steer",
+    // real in-band steering since 2026-07-12; the server falls back to the
+    // queue when nothing is steerable or files are attached). The turn keeps
+    // running on both paths: no abort, no lost work. Idle: just run it.
+    // Attachments ride along on every path — images fold into the run as
+    // content blocks; files route to the queue server-side.
+    const steerNow = isBusy && !!opts?.steer;
+    const optimisticTail = [...pendingRef.current]
+      .reverse()
+      .find((item) => item.busyMode !== "queue");
+    const transcriptTail = transcriptViewStore.getSnapshot().at(-1);
+    const transcriptAfterEntryId = optimisticTail
+      ? optimisticTail.id.startsWith("outbox-")
+        ? optimisticTail.id.slice("outbox-".length)
+        : optimisticTail.id
+      : (transcriptTail?.id ?? null);
+    const transcriptAfterSeq =
+      transcriptSeqRef.current?.sessionId === session.id
+        ? transcriptSeqRef.current.lastSeq
+        : undefined;
+    let outboxItem: PromptOutboxItem;
+    try {
+      outboxItem = promptOutbox.enqueue({
+        sessionId: session.id,
+        content: text,
+        user,
+        effort,
+        fastMode,
+        busyMode: isBusy ? (steerNow ? "steer" : "queue") : undefined,
+        transcriptAfterEntryId,
+        transcriptAfterSeq,
+        ...(imgs.length ? { images: imgs } : {}),
+        ...(fls.length ? { files: filePayload } : {}),
+        ...(!isolated && contextSessions.length ? { contextSessions } : {}),
+      });
+    } catch (error) {
+      toast(
+        error instanceof Error
+          ? error.message
+          : "Couldn't save this message for delivery.",
+      );
+      return false;
+    }
+    // Prompting in a session you'd hidden from your sidebar brings its row back
+    // — you're working in it again (see lib/hides.ts).
+    unhideForSession(session);
+    if (!isBusy || steerNow) {
+      if (!isBusy) {
+        dispatchSessionRuntime({ type: "mark_running" });
+        onRunningChange?.(session.id, true);
+      }
+      // Sent messages always enter the conversation immediately. A busy steer
+      // keeps its delivery mode only so the bubble can remain slightly muted
+      // until the engine reads it.
+      tailActionNeedsLayoutScrollRef.current = true;
+      setPending((p) => [
+        ...p,
+        {
+          id: `outbox-${outboxItem.clientId}`,
+          content: text,
+          user,
+          sentAt: outboxItem.createdAt,
+          transcriptAfterEntryId,
+          transcriptAfterSeq,
+          images: imgs.length ? imgs : undefined,
+          ...(steerNow ? { busyMode: "steer" as const } : {}),
+        },
+      ]);
+      requestAnimationFrame(() =>
+        measureSessionPerf("send_to_optimistic_paint_ms", sendStartedAt),
+      );
+    } else {
+      // Only deliberately queued messages live above the composer.
+      setPending((p) => [
+        ...p,
+        {
+          id: `outbox-${outboxItem.clientId}`,
+          content: text,
+          user,
+          sentAt: outboxItem.createdAt,
+          transcriptAfterEntryId,
+          transcriptAfterSeq,
+          images: imgs.length ? imgs : undefined,
+          busyMode: "queue" as const,
+        },
+      ]);
+    }
+    // Your own send always lands in view. relayout's glue only runs while
+    // `following`, so once the reader has scrolled up into history the
+    // optimistic bubble arrives below the fold with nothing moving — and a
+    // send is unambiguous intent to watch this turn. Instant, not smooth: the
+    // glue that follows sets scrollTop directly and would fight an animation.
+    cancelIndexAnchorHold();
+    scrollToLatest("auto");
+    if (!isolated) {
+      dropStagingAttachments(draftKey);
+      setImages([]);
+      setFiles([]);
+      setQuote(null);
+      setContextSessions([]);
+    }
+    measureSessionPerf("send_handler_ms", sendStartedAt);
+    return true;
+  }
+
+  const imageRegionCommentRef = useRef<
+    (request: ImageRegionCommentRequest) => Promise<void>
+  >(async () => {});
+  useLayoutEffect(() => {
+    imageRegionCommentRef.current = async (request) => {
+      if (request.sessionId !== session.id)
+        throw new Error("That session changed");
+      const crop = await cropImageRegionFile(request.src, request.region);
+      const staged = await splitAttachments([crop]);
+      if (staged.images.length === 0)
+        throw new Error(
+          staged.rejected[0] || "Could not attach the selected image",
+        );
+      const sent = await handleSend(request.text, undefined, staged.images);
+      if (!sent) throw new Error("Could not send this comment");
+    };
+  });
+  useEffect(() => {
+    if (noEngine) return;
+    return registerImageRegionCommentHandler(session.id, (request) =>
+      imageRegionCommentRef.current(request),
+    );
+  }, [noEngine, session.id]);
+
+  function discardOutbox(item: PromptOutboxItem) {
+    setPending((current) =>
+      current.filter((entry) => entry.id !== `outbox-${item.clientId}`),
+    );
+    promptOutbox.discard(item.clientId);
+  }
+
+  function editOutboxInComposer(item: PromptOutboxItem) {
+    setImages(item.images ?? []);
+    setFiles((item.files ?? []) as FileAttachment[]);
+    setContextSessions(item.contextSessions ?? []);
+    if (item.effort) setEffort(item.effort);
+    if (typeof item.fastMode === "boolean") setFastMode(item.fastMode);
+    setComposerPrefill((current) => ({
+      seq: (current?.seq ?? 0) + 1,
+      text: item.content,
+    }));
+    discardOutbox(item);
+  }
+
+  function editQueuedInComposer(q: QueueReceipt, steering = false) {
+    if (composerHasDraft()) {
+      toast("Send or clear your draft before editing a message");
+      return;
+    }
+    if (!q.id) return;
+    if (steering) {
+      dispatchSessionRuntime({
+        type: "set_steered_editing",
+        queueId: q.id,
+        editing: true,
+      });
+    }
+    send({
+      type: steering ? "take_steered_prompt" : "take_queued_prompt",
+      sessionId: session.id,
+      queueId: q.id,
+    });
+  }
+
+  // Stable identity: this is a prop of the memoized transcript, so a fresh
+  // function each render would re-render every bubble on every poll tick.
+  const editSentMessageInComposer = useCallback(
+    (entry: TranscriptEntry) => {
+      if (composerHasDraft()) {
+        toast("Send or clear your draft before editing a message");
+        return;
+      }
+      setImages(entry.images ?? []);
+      setFiles(
+        (entry.files ?? []).map((file) => ({
+          ...file,
+          type: "application/octet-stream",
+        })),
+      );
+      setComposerPrefill((current) => ({
+        seq: (current?.seq ?? 0) + 1,
+        text: entry.content,
+        replace: true,
+      }));
+    },
+    [composerHasDraft],
+  );
+
+  function handleQueueReorder(next: QueueReceipt[]) {
+    pendingReorderRef.current = next;
+    dispatchSessionRuntime({ type: "reorder_queue", queued: next });
+  }
+
+  function commitQueueReorder() {
+    draggingQueueRef.current = false;
+    const next = pendingReorderRef.current;
+    pendingReorderRef.current = null;
+    if (!next) return;
+    const order = next
+      .map((q) => q.id)
+      .filter((id): id is string => typeof id === "string");
+    if (order.length > 1) {
+      send({ type: "reorder_queued_prompt", sessionId: session.id, order });
+    }
+  }
+
+  const {
+    pendingQueue,
+    pendingBubbles,
+    optimisticTranscriptEntries,
+    pendingTranscriptDeliveryIds,
+    durableOutbox,
+    shownQueued,
+    queuedClassified,
+    queueCount,
+    queueTitle,
+  } = deriveSessionQueue({
+    queued,
+    steered,
+    pending,
+    pendingDeliveryIds,
+    outboxItems,
+    landedOutboxIds,
+    entries,
+    settingUpWorkspace,
+    now: Date.now(),
+  });
+  const hasLiveConversation =
+    pendingBubbles.length > 0 || liveTurnStore.hasText() || isBusy || !!ask;
+  // Fall back to the durable session error if its best-effort transcript notice
+  // could not be written during startup.
+  const inlineRunFailure =
+    !safety &&
+    !isBusy &&
+    session.lastRunError &&
+    !entries.some(
+      (entry) =>
+        entry.type === "system" &&
+        entry.content.includes(session.lastRunError!.message),
+    )
+      ? session.lastRunError
+      : null;
+  const attachedQueue = queueCount ? (
+    <SessionQueue
+      currentUser={currentUser}
+      queueTitle={queueTitle}
+      shownQueued={shownQueued}
+      queuedClassified={queuedClassified}
+      pendingQueue={pendingQueue}
+      durableOutbox={durableOutbox}
+      settingUpWorkspace={settingUpWorkspace}
+      onReorder={handleQueueReorder}
+      onReorderStart={() => {
+        draggingQueueRef.current = true;
+      }}
+      onReorderEnd={commitQueueReorder}
+      onEditQueued={editQueuedInComposer}
+      onDeleteQueued={(queueId, queueIndex) =>
+        send({
+          type: "delete_queued_prompt",
+          sessionId: session.id,
+          queueId,
+          queueIndex,
+        })
+      }
+      onSteerQueued={(queueId, queueIndex) =>
+        send({
+          type: "steer_queued_prompt",
+          sessionId: session.id,
+          queueId,
+          queueIndex,
+        })
+      }
+      onRetryOutbox={(clientId) => promptOutbox.retry(clientId)}
+      onEditOutbox={editOutboxInComposer}
+      onDiscardOutbox={discardOutbox}
+    />
+  ) : null;
+
+  function handleCancel() {
+    // Local acknowledgement first: the gesture must land visibly whether or
+    // not the engine can drop what it is doing this instant.
+    setStopRequestedAt((prev) => prev ?? Date.now());
+    send({ type: "cancel", sessionId: session.id });
+  }
+
+  function handleShareWorkspace() {
+    const path = session.workspaceId
+      ? `${BASE_PATH}/workspace/${encodeURIComponent(session.workspaceId)}`
+      : sessionPath(session);
+    shareLink(absoluteLink(path), {
+      toast: "Link copied",
+      title: workspaceName || session.title || undefined,
+    });
+  }
+
+  function handleShare() {
+    // Share the workspace pane on screen rather than the session that happened
+    // to host it. Session and sub-agent links keep their existing canonical form.
+    const pane = showReview
+      ? "review"
+      : showConversation
+        ? "conversation"
+        : showVideo
+          ? "video"
+          : null;
+    const path =
+      pane && session.workspaceId
+        ? workspacePanePath(session.workspaceId, pane)
+        : sessionPath(
+            session,
+            subagentOpen ? subagentStack.map((s) => s.agentId) : [],
+          );
+    const link = absoluteLink(path);
+    // Phone: native share sheet. Desktop: copy, with the inline check on
+    // the button + a floating "Link copied" toast.
+    // The native sheet titles the link with the workspace, matching the header.
+    shareLink(link, {
+      toast: "Link copied",
+      title: workspaceName || session.title || undefined,
+    });
+  }
+
+  async function handleOpenSlackComposer() {
+    setOverflowOpen(false);
+    try {
+      const request = await openSlackComposer(
+        session.id,
+        latestAssistantMessage,
+      );
+      setSlackComposer(request);
+      setSlackComposerStatus("idle");
+      setSlackComposerReconnect(false);
+      setSlackComposerSent(null);
+      requestAnimationFrame(() => scrollToLatest("smooth"));
+    } catch (error) {
+      toast(
+        error instanceof Error
+          ? error.message
+          : "Couldn't open the Slack composer",
+      );
+    }
+  }
+
+  function commitRename() {
+    if (renameDraft !== null) {
+      // When the header titles the workspace, renaming edits the workspace —
+      // every sibling session picks the new name up. Session titles live on tabs.
+      // A worker's header titles the WORKER (the workspace is the crumb before
+      // it), so the same edit there renames just this session.
+      if (session.workspaceId && onRenameWorkspace)
+        onRenameWorkspace(renameDraft.trim());
+      else onRename?.(session.id, renameDraft.trim());
+    }
+    setRenameDraft(null);
+  }
+
+  // Drop an in-progress rename when switching sessions so the draft never bleeds
+  // into the next session's header.
+  useEffect(() => setRenameDraft(null), [session.id]);
+
+  function handleModelChange(next: string) {
+    const target = next || defaultModel;
+    if (!target || target === (model || defaultModel)) return;
+    dispatchSessionRuntime({ type: "select_model", model: next });
+    // Routed through the /model slash command so it persists, notices, and
+    // broadcasts to other viewers.
+    send({
+      type: "prompt",
+      sessionId: session.id,
+      content: `/model ${target}`,
+      user: getCurrentUser(),
+    });
+  }
+
+  // Pin (or clear, "" = auto) the current provider account for this session.
+  // Same shape as the model switch: /account persists, notices,
+  // and broadcasts subscription_changed to every viewer.
+  function handleAccountChange(next: string) {
+    if (next === (accountId || "")) return;
+    setAccountId(next);
+    const target = next ? accounts.find((a) => a.id === next) : null;
+    if (target?.kind === "api_key") setFastMode(false);
+    send({
+      type: "prompt",
+      sessionId: session.id,
+      // The name reads better in the transcript; the command matches by
+      // id first, then case-insensitive name, so either form works.
+      content: next ? `/account ${target?.id || next}` : "/account auto",
+      user: getCurrentUser(),
+    });
+  }
+
+  // Pin or clear the session goal from the composer's Goal button. Routed
+  // through the /goal slash command (handled backstage-side, not a real turn);
+  // optimistically reflected via goalOverride until the session file catches up.
+  function handleSetGoal(goal: string | null) {
+    setGoalOverride(goal);
+    send({
+      type: "prompt",
+      sessionId: session.id,
+      content: goal ? `/goal ${goal}` : "/goal clear",
+      user: getCurrentUser(),
+    });
+  }
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
+  const [deleting, setDeleting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [deleteLabel, setDeleteLabel] = useState("");
+
+  // Responsive header: when the top bar gets narrow (small window, sidebar +
+  // workspace panel both open), the title truncates first (CSS), then the
+  // Share button collapses into the ⋯ menu so it never overlaps the title.
+  // (Pin stays inline beside Preview on desktop; Spin off lives in the ⋯ menu.) Measured on the
+  // header element itself so it tracks the real available width regardless
+  // of the surrounding chrome.
+  const headerRef = useRef<HTMLDivElement>(null);
+  const headerActionsRef = useRef<HTMLDivElement>(null);
+  const [reviewSessionActionTarget, setReviewSessionActionTarget] =
+    useState<HTMLDivElement | null>(null);
+  const desktopChangesRef = useRef<HTMLDivElement>(null);
+  const [headerW, setHeaderW] = useState(0);
+  // Whether the header's workspace-summary card is up. The transcript and
+  // composer shift out from under it while it is, and the header's own PR
+  // strip and preview globe stand down, so this lives here rather than inside
+  // the card. Seeded from the stored preference rather than starting shut: the
+  // card reports itself an effect later, and a frame of the strip it replaces
+  // is the thing this is here to prevent.
+  const [summaryOpen, setSummaryOpen] = useState(workspaceSummaryOpen);
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    // Once by hand, before the first paint: the observer's own opening callback
+    // lands after it, and this width decides whether the summary card has room
+    // to stand open. A frame late is a frame of a card lying across a narrow
+    // transcript. Content box, to match what the observer reports below.
+    const box = getComputedStyle(el);
+    setHeaderW(
+      el.clientWidth -
+        parseFloat(box.paddingLeft) -
+        parseFloat(box.paddingRight),
+    );
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) setHeaderW(e.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [topbarEl]);
+  // Collapse before the inline row can overrun: the title's non-shrinkable
+  // floor (source chip + Working pill) plus the inline actions (facepile,
+  // links, Share) needs ~740px, so below that Share moves into the ⋯ menu.
+  const compactHeader = headerW > 0 && headerW < 740;
+
+  // Phone layout (same 720px breakpoint as the CSS page-stack): the header
+  // actions portal into the top bar next to the centered title, and every
+  // secondary action folds into the ⋯ menu so the bar holds just ⋯ + Workspace.
+  const [isPhone, setIsPhone] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 720px)").matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 720px)");
+    const onChange = () => setIsPhone(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  useEffect(() => {
+    if (!activePanelOpen) {
+      setPanelTerminalMounted(false);
+    } else if (!isPhone && desktopPanelPage === "terminal") {
+      // A newly mounted session inherits the selected tab and starts its own
+      // terminal, just as selecting Terminal in-place would.
+      setPanelTerminalMounted(true);
+    }
+  }, [activePanelOpen, desktopPanelPage, isPhone]);
+  // Whether the pane can hold the card beside the reading column instead of
+  // over it. Unmeasured counts as room: the width lands in a layout effect
+  // before the first paint, and assuming the common case keeps a pinned card
+  // from blinking on wide panes. Below the threshold the card hides itself and
+  // the header takes back the strip it had stood down for.
+  const summaryHasRoom = headerW === 0 || headerW >= WS_SUMMARY_ROOM_W;
+  const summaryVisible =
+    summaryOpen &&
+    summaryHasRoom &&
+    !activePanelOpen &&
+    !isPhone &&
+    hasRepoWork;
+  // Keep a visible left step whenever the card is up. This composes the card,
+  // transcript and composer as two sides of one pane instead of letting the
+  // reading column drift back to centre as the window grows.
+  const summaryStep = summaryVisible ? workspaceSummaryShift(headerW) : 0;
+  const summaryStepStyle =
+    summaryStep > 0
+      ? ({ "--ws-summary-step": `-${summaryStep}px` } as React.CSSProperties)
+      : undefined;
+  // Phone drill-ins return to Workspace details when their page closes. The
+  // desktop panel deliberately keeps its selected tab while it is closed.
+  useEffect(() => {
+    if (isPhone && !infoPageOpen) setPanelPage(null);
+  }, [isPhone, infoPageOpen]);
+  const focusComposerForQuote = useCallback(() => {
+    const composer = composerRef.current;
+    composer?.focus({ preventScroll: true });
+    return composer;
+  }, []);
+
+  // Run-status flap above the composer (ComposerAgents): the tappable
+  // pill → mini-card → full-panel progression, reusing the queue flap's
+  // tuck-under styling. It carries two things at different breakpoints.
+  //
+  // Agents — phone-only. On desktop the Agents panel tab (with its pulsing
+  // dot) is always visible; on a phone the right panel overlays the session and
+  // is closed by default, so a running workflow fan-out has no glance.
+  const runningWorkflowRuns = workflowRuns.filter(
+    (r) => r.status === "running" || r.status === "paused",
+  );
+  // Sub-agents ride along only while one is live, so a finished batch doesn't
+  // pad a later workflow's tallies (their statuses clamp to done once the
+  // session's run ends, so the flap can't stick around stale either).
+  const anySubagentRunning = subagents.some((s) => s.status === "running");
+  const showAgents =
+    isPhone && (runningWorkflowRuns.length > 0 || anySubagentRunning);
+  // Plan — every width, since the model's todowrite checklist has no other
+  // home at any size (in the transcript it's one dim row inside a turn fold
+  // that's collapsed by default).
+  const livePlan = useLivePlan(entries, isBusy);
+  const agentBubble =
+    showAgents || livePlan.length > 0 ? (
+      <ComposerAgents
+        runs={showAgents ? runningWorkflowRuns : NO_WORKFLOW_RUNS}
+        subagents={showAgents && anySubagentRunning ? subagents : undefined}
+        plan={livePlan}
+        // The Agents list is a section of the workspace panel now, so this
+        // just opens it — the phone's info page on a phone, the side panel
+        // on desktop (this flap rides the composer at every width).
+        onOpenPanel={() => {
+          if (isPhone) setInfoPageOpen(true);
+          else setPanelOpen(true);
+        }}
+      />
+    ) : null;
+  // The composer takes a single `attached` node; stack the agents flap above
+  // the queue flap when both are live.
+  const attachedComposer =
+    agentBubble || attachedQueue ? (
+      <>
+        {agentBubble}
+        {attachedQueue}
+      </>
+    ) : null;
+
+  // Opened by picking this session's workspace in the sidebar: focus the
+  // composer so you can start typing immediately. Runs on mount (a new session
+  // remounts this component) and when the pulse re-fires for the already-open
+  // session. Skipped on phones so we don't shove the keyboard over the session.
+  useEffect(() => {
+    if (autoFocusComposer && !isPhone) composerRef.current?.focus();
+  }, [autoFocusComposer, isPhone]);
+
+  useEffect(() => {
+    if (!composerPrefillExternal) return;
+    setComposerPrefill(composerPrefillExternal);
+    onComposerPrefillConsumed?.(composerPrefillExternal.seq);
+    if (!isPhone) composerRef.current?.focus();
+  }, [composerPrefillExternal, onComposerPrefillConsumed, isPhone]);
+
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [overflowGit, setOverflowGit] = useState<{
+    sessionId: string;
+    status: GitStatusInfo | null;
+  } | null>(null);
+  const [branchActionBusy, setBranchActionBusy] = useState<
+    "move" | "create" | null
+  >(null);
+  const [branchConfirmOpen, setBranchConfirmOpen] = useState(false);
+  const [branchConfirmMode, setBranchConfirmMode] = useState<"move" | "create">(
+    "move",
+  );
+  const [mobileActionMenuEl, setMobileActionMenuEl] =
+    useState<HTMLDivElement | null>(null);
+  const primaryPrNumber = prPresentation.primary?.number;
+  // PR actions are tucked into the overflow menu. Fetch once when the session
+  // branch changes so the menu does not open first and add its actions later.
+  useEffect(() => {
+    if (!hasRepoWork || primaryPrNumber) return;
+    let stale = false;
+    fetchGitStatus(session.id, session.repo || undefined)
+      .then((status) => {
+        if (!stale) setOverflowGit({ sessionId: session.id, status });
+      })
+      .catch(() => {
+        if (!stale) setOverflowGit({ sessionId: session.id, status: null });
+      });
+    return () => {
+      stale = true;
+    };
+  }, [hasRepoWork, primaryPrNumber, session.id, session.repo, session.branch]);
+  useEffect(() => {
+    setOverflowGit(null);
+    setBranchActionBusy(null);
+    setBranchConfirmOpen(false);
+    setBranchConfirmMode("move");
+  }, [session.id]);
+
+  async function moveToBranchFromMenu() {
+    if (isBusy || branchActionBusy) return;
+    setBranchActionBusy("move");
+    try {
+      const result = await moveSessionToBranchApi(session.id);
+      setOverflowOpen(false);
+      setBranchConfirmOpen(false);
+      toast(
+        result.copiedFiles
+          ? `Moved to ${result.branch} · ${result.copiedFiles} file${result.copiedFiles === 1 ? "" : "s"} copied`
+          : `Moved to ${result.branch}`,
+      );
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "Could not move to a branch",
+      );
+    }
+    setBranchActionBusy(null);
+  }
+
+  function requestCreatePr() {
+    if (!connected) return;
+    send({
+      type: "prompt",
+      sessionId: session.id,
+      user: getCurrentUser(),
+      content:
+        "Commit any remaining work, push the branch, and open a PR for it.",
+    });
+  }
+
+  function createPrFromMenu() {
+    setOverflowOpen(false);
+    requestCreatePr();
+  }
+
+  async function moveAndCreatePr() {
+    if (!connected || isBusy || branchActionBusy) return;
+    setBranchActionBusy("create");
+    try {
+      const result = await moveSessionToBranchApi(session.id);
+      setBranchConfirmOpen(false);
+      requestCreatePr();
+      toast(`Moved to ${result.branch}. Creating PR…`);
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "Could not move to a branch",
+      );
+    }
+    setBranchActionBusy(null);
+  }
+  // Left-edge swipe on phones pops the topmost overlay before the page stack:
+  // the info page registers as a higher-priority back-swipe layer, so the
+  // gesture closes it instead of popping the whole session back to the
+  // sidebar (App's layer, priority 0).
+  const infoPageRef = useRef<HTMLDivElement | null>(null);
+  const infoHeroNameRef = useRef<HTMLHeadingElement | null>(null);
+  useBackSwipe({
+    active: isPhone && infoPageOpen,
+    onBack: () => setInfoPageOpen(false),
+    paneRef: infoPageRef,
+    priority: 2,
+  });
+  useEffect(() => {
+    if (!infoPageOpen || panelPage !== null) {
+      setInfoPageScrolled(false);
+      return;
+    }
+    const root = infoPageRef.current;
+    const title = infoHeroNameRef.current;
+    if (!root || !title) return;
+    const topbar = root.querySelector<HTMLElement>(".session-info-topbar");
+    const topInset = Math.ceil(topbar?.getBoundingClientRect().height || 52);
+    const observer = new IntersectionObserver(
+      ([entry]) => setInfoPageScrolled(!entry.isIntersecting),
+      {
+        root,
+        rootMargin: `-${topInset}px 0px 0px`,
+        threshold: 0,
+      },
+    );
+    observer.observe(title);
+    return () => observer.disconnect();
+  }, [infoPageOpen, isPhone, panelPage]);
+  useEffect(() => {
+    if (!infoPageOpen) return;
+    const app = document.querySelector<HTMLElement>(".app");
+    app?.setAttribute("inert", "");
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setInfoPageOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      app?.removeAttribute("inert");
+    };
+  }, [infoPageOpen]);
+  // The mobile top-bar title (rendered by App, outside this component) opens the
+  // same settings menu — it toggles via a window event so it doesn't need a prop
+  // thread through App's render.
+  useEffect(() => {
+    const toggle = () =>
+      setInfoPageOpen((open) => {
+        if (!open) {
+          setInfoPageScrolled(false);
+        }
+        return !open;
+      });
+    window.addEventListener("opensession:toggle-session-settings", toggle);
+    return () =>
+      window.removeEventListener("opensession:toggle-session-settings", toggle);
+  }, [session.id]);
+  // The menu's contents change across the breakpoint — don't leave it stuck open.
+  useEffect(() => {
+    setOverflowOpen(false);
+    setInfoPageOpen(false);
+  }, [compactHeader]);
+
+  const me = getCurrentUser();
+  // The pile is about the people you can't see, so your own sockets come out
+  // first (lib/presence.ts documents why, and is tested).
+  const others = otherViewers(viewers, me);
+
+  // Media queued for the current turn has not reached the workspace overview
+  // yet, so carry it into the phone summary directly.
+  const liveOverviewMedia = useMemo<WorkspaceMediaItem[]>(() => {
+    const fromImages = (
+      items: Array<{ images?: string[]; sentAt?: number }>,
+    ): WorkspaceMediaItem[] =>
+      items.flatMap((item) =>
+        (item.images || []).map((src, i) => ({
+          kind: "image" as const,
+          src,
+          sessionId: session.id,
+          sessionTitle: session.title,
+          at: new Date((item.sentAt || Date.now()) + i).toISOString(),
+        })),
+      );
+    return [...fromImages(pending), ...fromImages(queued)];
+  }, [pending, queued, session.id, session.title]);
+
+  async function handleDelete(cleanWorktree: boolean) {
+    setDeleteLabel(
+      cleanWorktree ? "Deleting session and worktree…" : "Deleting session…",
+    );
+    setDeleting(true);
+    try {
+      await deleteSessionApi(session.id, cleanWorktree);
+      // Leave the overlay up through the navigation so it never flashes back to
+      // the (now-deleted) session view.
+      goBack();
+    } catch (error) {
+      alert(
+        `Delete failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
+  // Archive is the reversible "I'm done with this" — unlike delete it keeps the
+  // session (and worktree) and just tucks it into the Archived view, so no
+  // confirm step. Unarchiving from here keeps the session selected as it moves
+  // back into the live sidebar.
+  const handleArchive = useCallback(async () => {
+    const next = !session.archived;
+    setArchiving(true);
+    setOverflowOpen(false);
+    if (next && onArchive) {
+      onArchive();
+      return;
+    }
+    try {
+      const { stoppedRun } = await archiveSessionApi(session.id, next);
+      if (next) {
+        onArchived?.(stoppedRun);
+        goBack();
+      }
+    } catch (error) {
+      alert(
+        `${next ? "Archive" : "Unarchive"} failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      setArchiving(false);
+    }
+  }, [
+    onArchive,
+    onArchived,
+    goBack,
+    session.archived,
+    session.id,
+    setArchiving,
+    setOverflowOpen,
+  ]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!focused) return;
+      if (e.defaultPrevented || blockingOverlayOpen()) {
+        return;
+      }
+      // Same composer exemption as the sidebar's archive chords: the
+      // composer autofocuses, so an unconditional editable-focus bail
+      // would leave ⌘E dead almost always. Other inputs keep the guard.
+      const target = e.target as HTMLElement | null;
+      const editable = target?.closest(
+        "input, textarea, select, [contenteditable='true'], [contenteditable='']",
+      );
+      if (editable && !editable.classList.contains("composer-textarea")) {
+        return;
+      }
+      if (matchesShortcut(e, "workspace-next-unread") && openNextChat) {
+        e.preventDefault();
+        openNextChat();
+        return;
+      }
+      // The sidebar handles live sessions when it can, because it knows which
+      // visible row comes next. Keep this listener as the route-level fallback:
+      // the viewer remains mounted even when the sidebar cannot handle the open
+      // session. `defaultPrevented` above ensures only one handler fires.
+      if (matchesShortcut(e, "session-archive") && !archiving) {
+        e.preventDefault();
+        void handleArchive();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [focused, archiving, handleArchive, openNextChat, session.archived]);
+
+  // Preview environment for the ⌘O chord — mirrors StagingLink's poll (same
+  // relevance gate; the server caches PR details for 30s, so the duplicate
+  // fetch stays cheap). Kept here because StagingLink mounts per layout
+  // variant, so a window listener inside it would register multiple times.
+  const stagingRelevant = phonePr
+    ? (phonePr.state ??
+        (phonePr.source === "primary" ? session.prState : undefined)) === "OPEN"
+    : !!session.prUrl && session.prState === "OPEN";
+  const [staging, setStaging] = useState<{
+    url: string;
+    status: string;
+    embeddable?: boolean;
+  } | null>(null);
+  // True once the PR fetch has resolved at least once for this session — lets us
+  // tell "staging genuinely absent" from "not loaded yet" (the fetch starts null
+  // and fills in async), so the Preview environment view-tab auto-closes only on the former
+  // rather than flicker-closing during load.
+  const [stagingSettled, setStagingSettled] = useState(false);
+  useEffect(() => {
+    setStagingSettled(false);
+    if (!stagingRelevant) {
+      setStaging(null);
+      setStagingSettled(true);
+      return;
+    }
+    let alive = true;
+    const load = () =>
+      fetchPr(session.id, phonePr?.repo, phonePr?.branch)
+        .then((pr) => {
+          if (alive) {
+            setStaging(pr?.staging ?? null);
+            setStagingSettled(true);
+          }
+        })
+        .catch(() => {});
+    load();
+    const stop = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, [
+    session.id,
+    stagingRelevant,
+    gitRefreshTick,
+    phonePr?.repo,
+    phonePr?.branch,
+  ]);
+  const stagingUrl = staging
+    ? withPreviewPath(staging.url, session.previewPath)
+    : null;
+  // The Preview environment pane is a top-strip view-tab now (App owns whether it's
+  // foregrounded). If the deploy vanishes while its tab is open+active — PR
+  // merged/closed, so `stagingRelevant` drops and the fetch settles with no
+  // staging — close the tab rather than leave it pointing at nothing.
+  useEffect(() => {
+    if (showStaging && stagingSettled && !stagingUrl) onCloseStaging?.();
+  }, [showStaging, stagingSettled, stagingUrl, onCloseStaging]);
+  // The Assets pane is a top-strip view-tab too (App owns whether it's
+  // foregrounded). If the last asset is deleted while its tab is up, close it
+  // rather than leave an empty pane pointing at nothing.
+  useEffect(() => {
+    if (showAssets && assetFiles.length === 0) onCloseAssets?.();
+  }, [showAssets, assetFiles.length, onCloseAssets]);
+  const [previewStatus, setPreviewStatus] = useState<PreviewStatus | null>(
+    null,
+  );
+  useEffect(() => setPreviewStatus(null), [session.id]);
+  async function startDeclaredPortal(recipe: PreviewPortalRecipe) {
+    if (!recipe.command) {
+      if (!recipe.skill) throw new Error("This Portal has no start command.");
+      send({
+        type: "prompt",
+        sessionId: session.id,
+        user: getCurrentUser(),
+        content: `Use the $${recipe.skill} skill to start the “${recipe.name}” Portal, then verify it is ready.`,
+      });
+      return;
+    }
+    setPreviewStatus(await startPortalRecipeApi(session.id, recipe.id));
+  }
+  // Services with a route we can open: what the panel's tab strip reports
+  // beside Portals, so the count is the openable ones rather than every port
+  // the repository declares.
+  const livePortals = (previewStatus?.services ?? []).filter((service) =>
+    portalTargetFor(session.id, service),
+  ).length;
+  // Same reading beside Agents: how many are working right now. A finished
+  // run stays on its page rather than keeping a number on the bar.
+  const runningAgents =
+    workflowRuns.reduce(
+      (n, run) => n + run.agents.filter((a) => a.status === "running").length,
+      0,
+    ) + subagents.filter((s) => s.status === "running").length;
+  // The header preview control used to keep this status warm. Now that the
+  // launcher lives in the overflow menu. Keep status warm while Preview or the
+  // portal browser is up, and while the workspace panel is open. Its bottom
+  // bar counts live portals and its portals page lists them. Status requests
+  // also renew the authenticated Caddy routes for remote sandbox services.
+  useEffect(() => {
+    if (
+      (!showPreviewTab && !showPortal && !activePanelOpen && !infoPageOpen) ||
+      !session.worktreeDir
+    )
+      return;
+    let alive = true;
+    const load = () =>
+      fetchPreview(session.id)
+        .then((status) => {
+          if (alive) setPreviewStatus(status);
+        })
+        .catch(() => {});
+    load();
+    const stop = pollWhileVisible(load, 3000);
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, [
+    showPreviewTab,
+    showPortal,
+    activePanelOpen,
+    infoPageOpen,
+    session.id,
+    session.worktreeDir,
+  ]);
+
+  // ⌘O opens the PR's preview environment (the Vercel preview StagingLink's globe
+  // points at); ⌘G opens its GitHub PR. Chords without a target (no staging
+  // deploy / no PR) fall through to the browser.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!focused) return;
+      const openPr = matchesShortcut(e, "open-pr");
+      const openPreview = matchesShortcut(e, "open-preview");
+      if (
+        e.defaultPrevented ||
+        (!openPr && !openPreview) ||
+        blockingOverlayOpen()
+      ) {
+        return;
+      }
+      // Same composer exemption as the archive chords above: the composer
+      // autofocuses, so an unconditional editable-focus bail would leave
+      // these dead almost always. Other inputs keep the guard.
+      const target = e.target as HTMLElement | null;
+      const editable = target?.closest(
+        "input, textarea, select, [contenteditable='true'], [contenteditable='']",
+      );
+      if (editable && !editable.classList.contains("composer-textarea")) {
+        return;
+      }
+      if (openPr) {
+        // Primary branch's PR, falling back to the first attached/linked
+        // repo PR on multi-repo sessions.
+        const prUrl = session.prUrl ?? session.prs?.find((p) => p.url)?.url;
+        if (!prUrl) return;
+        e.preventDefault();
+        window.open(prUrl, "_blank", "noopener");
+      } else if (openPreview && staging) {
+        e.preventDefault();
+        // Match the globe's click semantics: before the first deploy goes
+        // Ready the branch alias 404s, so swallow the chord with the same
+        // explanatory toast instead of opening a dead link. (A rebuild
+        // after a push keeps status Ready and stays openable — the alias
+        // serves the previous deploy until the new one lands.)
+        if (staging.status !== "Ready") {
+          toast(
+            `Preview environment is ${staging.status.toLowerCase()}. The link goes live once the first deploy finishes.`,
+          );
+          return;
+        }
+        window.open(
+          withPreviewPath(staging.url, session.previewPath),
+          "_blank",
+          "noopener",
+        );
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focused, session.prUrl, session.prs, session.previewPath, staging]);
+
+  // ⌘. asks to stop the running turn from anywhere in the session. Escape
+  // asks the same question, but only with the composer focused — which is
+  // exactly where you are not when you have been reading the transcript.
+  //
+  // Both land on the composer's own confirmation. The dialog, and the rule
+  // that it goes away when the turn finishes on its own rather than stopping
+  // the next one, live there; this only asks for it, through a counter, so
+  // there is no second copy of any of that here. (The stop BUTTON stays
+  // immediate: pressing it is already deliberate.)
+  const [stopRequest, setStopRequest] = useState(0);
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!focused || e.defaultPrevented) return;
+      if (!matchesShortcut(e, "run-stop")) return;
+      // Nothing running: leave the chord alone rather than swallowing it.
+      if (!isBusy || forkFrom) return;
+      e.preventDefault();
+      setStopRequest((n) => n + 1);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focused, isBusy, forkFrom]);
+
+  /* Quick replies for the turn that just ended. Off while a run is live (they
 	   answer a finished turn), while an ask card is up (that card already offers
 	   the choices, in the agent's own wording), and while forking (the point
 	   there is a new direction, not a follow-up).
@@ -6097,1264 +5393,1241 @@ export function SessionViewer({
 	   The row floats on the transcript rather than sitting between it and the
 	   composer, so it is also what the transcript pads for and what the
 	   scroll-to-bottom pill has to clear. One flag, read in three places. */
-	const quickReplies =
-		showReplySuggestions &&
-		!isBusy &&
-		!ask &&
-		!forkFrom &&
-		replySuggestions.length > 0;
+  const quickReplies =
+    showReplySuggestions &&
+    !isBusy &&
+    !ask &&
+    !forkFrom &&
+    replySuggestions.length > 0;
 
-	/* Desktop shows reading controls between quick replies and Next. Phone keeps
+  /* Desktop shows reading controls between quick replies and Next. Phone keeps
 	   its existing standalone reading control and centered session toolbar. */
-	const nextAction = showNextChatButton && !!onNextChat;
-	const scrollAction = showScrollToBottom && entries.length > 0;
-	const actionBand = quickReplies || nextAction || scrollAction || isPhone;
-	const actionClearance = !actionBand
-		? undefined
-		: nextAction || isPhone
-			? isPhone && quickReplies
-				? ACTION_WITH_REPLIES_CLEARANCE
-				: ACTION_CLEARANCE
-			: scrollAction
-				? SCROLL_ACTION_CLEARANCE
-				: SUGGESTIONS_CLEARANCE;
-	// This class changes the scroller's bottom padding. Session metadata can make
-	// Next appear after a cached transcript has already settled; re-pin before
-	// that larger scroll height paints, but never move a reader in history.
-	useLayoutEffect(() => {
-		if (readFollowingLive(followingLive)) scrollToLatest("auto");
-	}, [actionClearance, followingLive, scrollToLatest]);
+  const nextAction = showNextChatButton && !!openNextChat;
+  const scrollAction = showScrollToBottom && entries.length > 0;
+  const actionBand = quickReplies || nextAction || scrollAction || isPhone;
+  const actionClearance = !actionBand
+    ? undefined
+    : nextAction || isPhone
+      ? isPhone && quickReplies
+        ? ACTION_WITH_REPLIES_CLEARANCE
+        : ACTION_CLEARANCE
+      : scrollAction
+        ? SCROLL_ACTION_CLEARANCE
+        : SUGGESTIONS_CLEARANCE;
+  // This class changes the scroller's bottom padding. Session metadata can make
+  // Next appear after a cached transcript has already settled; re-pin before
+  // that larger scroll height paints, but never move a reader in history.
+  useLayoutEffect(() => {
+    if (readFollowingLive(followingLive)) scrollToLatest("auto");
+  }, [actionClearance, followingLive, scrollToLatest]);
 
-	const pickReplySuggestion = (text: string) => {
-		setComposerPrefill((current) => ({
-			seq: (current?.seq ?? 0) + 1,
-			text,
-			replace: false,
-		}));
-		setReplySuggestions(EMPTY_SUGGESTIONS);
-		if (!isPhone) composerRef.current?.focus();
-	};
+  const pickReplySuggestion = (text: string) => {
+    setComposerPrefill((current) => ({
+      seq: (current?.seq ?? 0) + 1,
+      text,
+      replace: false,
+    }));
+    setReplySuggestions(EMPTY_SUGGESTIONS);
+    if (!isPhone) composerRef.current?.focus();
+  };
 
-	return (
-		<div {...stylex.props(sx.relative, sx.flex, sx.hFull, sx.minH0, sx.flexCol)}>
-			{deleting && (
-				<div
-					/* `session-delete-overlay` stays on the markup as a bare hook with
+  return (
+    <div
+      {...stylex.props(sx.relative, sx.flex, sx.hFull, sx.minH0, sx.flexCol)}
+    >
+      {deleting && (
+        <div
+          /* `session-delete-overlay` stays on the markup as a bare hook with
 					   no rule behind it: the Escape/outside-click handlers above ask
 					   `closest('.palette-backdrop, .composer-schedule-modal-backdrop,
 					   .session-delete-overlay')` whether a click landed on a blocking
 					   surface. Drop the name and a click through this overlay starts
 					   dismissing what's underneath it. */
-					{...mergeStylexProps("session-delete-overlay bg-[color-mix(in_srgb,var(--bg)_72%,transparent)] backdrop-blur-[2px]", sx.absolute, sx.inset0, sx.z30, sx.flex, sx.itemsCenter, sx.justifyCenter)}
-					role="status"
-					aria-live="polite"
-				>
-					<div {...mergeStylexProps("smooth-shadow-lg", sx.flex, sx.flexCol, sx.itemsCenter, sx.gap14px, sx.roundedXl, sx.border, sx.borderLine, sx.bgPanel, sx.px8, sx.py26px)} >
-						{/* `rounded-full` rather than `rounded-[50%]`: base.css grants the
+          {...mergeStylexProps(
+            "session-delete-overlay backdrop-blur-[2px]",
+            sx.absolute,
+            sx.inset0,
+            sx.z30,
+            sx.flex,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.bgColorMixInSrgbVarBg72Transparent,
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.flexCol,
+              sx.itemsCenter,
+              sx.gap14px,
+              sx.roundedXl,
+              sx.border,
+              sx.borderLine,
+              sx.bgPanel,
+              sx.px8,
+              sx.py26px,
+              sx.smoothShadowLg,
+            )}
+          >
+            {/* `rounded-full` rather than `rounded-[50%]`: base.css grants the
 						    squircle to every `rounded-*` class EXCEPT `rounded-full`, and
 						    this ring was a bare `border-radius: 50%` with no corner-shape.
 						    It serialises as a clamped huge px value instead of 50%, which
 						    on a square box is the same circle. */}
-					<div {...stylex.props(sx.size30px, sx.animateSpin08sLinearInfinite, sx.roundedFull, sx.border2, sx.borderLineStrong, sx.borderTAccent)} />
-						<span className={SESSION_DELETE_LABEL}>{deleteLabel}</span>
-					</div>
-				</div>
-			)}
-			{confirmDialog}
-			<DeleteSessionDialog
-				open={showDeleteConfirm}
-				onOpenChange={setShowDeleteConfirm}
-				hasWorktree={Boolean(session.worktreeDir && !isAsk)}
-				deleting={deleting}
-				onDelete={(cleanWorktree) => void handleDelete(cleanWorktree)}
-			/>
-			<Modal.Root
-				open={branchConfirmOpen}
-				onOpenChange={(open) => {
-					if (!branchActionBusy) setBranchConfirmOpen(open);
-				}}
-				disablePointerDismissal={branchActionBusy !== null}
-			>
-				<Modal.Content>
-					<Modal.Header title="Move to a branch?" />
-					<Modal.Description className={mergeStylexOverrideClassName("m-0", sx.textPretty, sx.fontNormal, sx.leadingRelaxed, sx.textDim, typography.supporting)} >
-						{branchConfirmMode === "create"
-							? "You need to move this session to a branch before you can create a PR."
-							: "Copies this session’s changes to a new branch without removing them from the shared checkout."}
-					</Modal.Description>
-					<Modal.Footer>
-						<Modal.Close
-							render={
-								<Button variant="ghost" disabled={branchActionBusy !== null}>
-									Cancel
-								</Button>
-							}
-						/>
-						<Button
-							variant="primary"
-							disabled={
-								isBusy ||
-								branchActionBusy !== null ||
-								(branchConfirmMode === "create" && !connected)
-							}
-							onClick={() =>
-								void (branchConfirmMode === "create"
-									? moveAndCreatePr()
-									: moveToBranchFromMenu())
-							}
-						>
-							{branchActionBusy
-								? "Moving…"
-								: branchConfirmMode === "create"
-									? "Move and create PR"
-									: "Move to branch"}
-						</Button>
-					</Modal.Footer>
-				</Modal.Content>
-			</Modal.Root>
-			{!hideHeader && (() => {
-				const workspaceScopedMenu = Boolean(session.workspaceId);
-				const addToSidebarAction = (inMenu: boolean) =>
-					canAddToSidebar &&
-					(inMenu ? (
-						<Menu.Item onClick={addToSidebar} title="Keep this workspace in your sidebar">
-							<IconInbox size={20} className={MENU_ICON} />
-							<span {...stylex.props(sx.grow)}>Add to sidebar</span>
-						</Menu.Item>
-					) : (
-						<Button
-							size="md"
-							variant="default"
-							className={mergeStylexOverrideClassName("", sx.mr15)}
-							icon={<IconInbox size={20} />}
-							onClick={addToSidebar}
-							title="Keep this workspace in your sidebar"
-						>
-							Add to sidebar
-						</Button>
-					));
-				// Share rides inline on a wide header but tucks into the ⋯ overflow
-				// menu when it gets narrow. Both spellings use the link glyph, since
-				// the action copies a link rather than opening a share sheet. Inline
-				// it's icon-only (the header is dense, and the glyph carries it); in
-				// the menu it keeps a label so it lines up with the other rows. The
-				// copied confirmation is CopyCheck's green checkmark in both.
-				const shareAction = (inMenu: boolean) =>
-					inMenu ? (
-						<Menu.Item
-							onClick={workspaceScopedMenu ? handleShareWorkspace : handleShare}
-							title={
-								workspaceScopedMenu
-									? "Copy a link to this workspace"
-									: "Copy a link to this session"
-							}
-						>
-							<CopyCheck copied={copied} idle={<IconLink size={20} />} size={20} className={MENU_ICON} />
-							<span {...stylex.props(sx.grow)}>
-								{copied
-									? "Copied"
-									: workspaceScopedMenu
-										? "Share workspace"
-										: "Share"}
-							</span>
-						</Menu.Item>
-					) : (
-						<Button
-							size="md"
-							variant="ghost"
-							// 22 = the icon scale's "standard standalone" step, so it reads
-							// level with the ⋯ and side-panel glyphs beside it.
-							icon={<CopyCheck copied={copied} idle={<IconLink size={22} />} size={22} />}
-							onClick={handleShare}
-							title="Copy a link to this session"
-							aria-label="Share"
-						/>
-					);
-				// The tab strip hides on phones, so More carries its
-				// sibling-session action.
-				const newSessionAction = isPhone && onNewSession && (
-					<Menu.Item
-						onClick={() => {
-							setOverflowOpen(false);
-							onNewSession("share");
-						}}
-						title="Start a new session in this workspace"
-					>
-						<IconPlus size={20} className={MENU_ICON} />
-						<span {...stylex.props(sx.grow)}>New session in workspace</span>
-					</Menu.Item>
-				);
-				// Closed sessions of this workspace. They normally hang off the tab
-				// strip's history button, so this appears exactly when there is no
-				// strip to hold it — a lone session, which is when someone is most
-				// likely to go looking for what was closed.
-				const archivedActions =
-					!tabStripVisible &&
-					!!archivedSessions?.length &&
-					onOpenSession &&
-					onRestoreSession && (
-						<Menu.SubmenuRoot>
-							<Menu.SubmenuTrigger title="Closed sessions in this workspace">
-								<IconHistory size={20} className={MENU_ICON} />
-								<span {...stylex.props(sx.grow)}>Archived sessions</span>
-								<IconChevronRight size={16} className={mergeStylexOverrideClassName("", sx.textFaint)} />
-							</Menu.SubmenuTrigger>
-							<Menu.Popup className={mergeStylexOverrideClassName("", sx.minW240px, sx.maxW320px)}>
-								<ArchivedSessionItems
-									sessions={archivedSessions}
-									onSelect={(s) => {
-										setOverflowOpen(false);
-										onOpenSession(s.id);
-									}}
-									onRestore={(s) => {
-										setOverflowOpen(false);
-										onRestoreSession(s);
-									}}
-								/>
-							</Menu.Popup>
-						</Menu.SubmenuRoot>
-					);
-				// Copy transcript. These normally live on a tab's right-click menu,
-				// but a lone-session workspace has no tab strip (and phones hide it at
-				// every count), so the only place to grab this session's full text is the
-				// ⋯ menu — surface both modes here when the strip isn't offering them.
-				const showTranscriptActions =
-					isPhone || (workspaceSessions?.length ?? 1) <= 1;
-				const transcriptActions = showTranscriptActions && (
-					<Menu.SubmenuRoot>
-						<Menu.SubmenuTrigger title="Copy this session's transcript">
-							<IconCopy size={20} className={MENU_ICON} />
-							<span {...stylex.props(sx.grow)}>Copy transcript</span>
-							<IconChevronRight size={16} className={mergeStylexOverrideClassName("", sx.textFaint)} />
-						</Menu.SubmenuTrigger>
-						<Menu.Popup>
-							<Menu.Item
-								onClick={() => {
-									setOverflowOpen(false);
-									void copySessionTranscript(session, "concise", toast);
-								}}
-								title="Copy a trimmed transcript of this session"
-							>
-								<IconListCircles size={20} className={MENU_ICON} />
-								<span {...stylex.props(sx.grow)}>Concise</span>
-								{copyTranscriptLabel && (
-								<Menu.Shortcut>{copyTranscriptLabel}</Menu.Shortcut>
-							)}
-							</Menu.Item>
-							<Menu.Item
-								onClick={() => {
-									setOverflowOpen(false);
-									void copySessionTranscript(session, "full", toast);
-								}}
-								title="Copy the complete transcript of this session"
-							>
-								<IconFile size={20} className={MENU_ICON} />
-								<span {...stylex.props(sx.grow)}>Full</span>
-							</Menu.Item>
-						</Menu.Popup>
-					</Menu.SubmenuRoot>
-				);
-				// Portals is a workspace tool, not the lead fact on the phone's
-				// workspace overview. Keep it reachable from the shared ⋯ menu at
-				// every width; desktop opens its panel page, phone opens the drill-in.
-				const portalsAction = hasWorkspace && (
-					<Menu.Item
-						onClick={() => {
-							setOverflowOpen(false);
-							setPanelPage("portals");
-							if (isPhone) {
-								setInfoPageScrolled(false);
-								setInfoPageOpen(true);
-							} else {
-								setActivePanelOpen(true);
-							}
-						}}
-					>
-						<IconGlobe size={20} className={MENU_ICON} />
-						<span {...stylex.props(sx.grow)}>Portals</span>
-						{livePortals > 0 && (
-							<span {...mergeStylexProps("tabular-nums", sx.shrink0, sx.textFaint)} >
-								{livePortals} live
-							</span>
-						)}
-					</Menu.Item>
-				);
-				const menuGit =
-					overflowGit?.sessionId === session.id ? overflowGit.status : null;
-				const branchAction =
-					!primaryPrNumber && menuGit ? (
-						menuGit.sharedCheckout ? (
-							<>
-								<Menu.Item
-									disabled={isBusy || branchActionBusy !== null}
-									onClick={() => {
-										setOverflowOpen(false);
-										setBranchConfirmMode("move");
-										setBranchConfirmOpen(true);
-									}}
-									title="Move this session into an isolated worktree"
-								>
-									<IconNewBranch size={20} className={MENU_ICON} />
-									<span {...stylex.props(sx.grow)}>
-										{branchActionBusy === "move" ? "Moving…" : "Move to branch"}
-									</span>
-								</Menu.Item>
-								<Menu.Item
-									disabled={!connected || isBusy || branchActionBusy !== null}
-									onClick={() => {
-										setOverflowOpen(false);
-										setBranchConfirmMode("create");
-										setBranchConfirmOpen(true);
-									}}
-									title="Move to a branch and create a pull request"
-								>
-									<IconPullRequest size={20} className={MENU_ICON} />
-									<span {...stylex.props(sx.grow)}>Create PR</span>
-								</Menu.Item>
-							</>
-						) : menuGit.branch ? (
-							<Menu.Item
-								disabled={!connected}
-								onClick={createPrFromMenu}
-								title="Ask this session to create a pull request"
-							>
-								<IconPullRequest size={20} className={MENU_ICON} />
-								<span {...stylex.props(sx.grow)}>Create PR</span>
-							</Menu.Item>
-						) : null
-					) : null;
-				// What this workspace is to you: its name, and whether it sits in your
-				// sidebar. These lead the menu because they describe the session rather
-				// than doing something with it. Pin used to lead here too and no longer
-				// does: the sidebar row already offers it, and ⌘P still works from the
-				// keyboard whether or not a menu spells it out.
-				const placementActions = (
-					<>
-						{/* Rename. The title has always been double-clickable, which
+            <div
+              {...stylex.props(
+                sx.size30px,
+                sx.animateSpin08sLinearInfinite,
+                sx.roundedFull,
+                sx.border2,
+                sx.borderLineStrong,
+                sx.borderTAccent,
+              )}
+            />
+            <span className={SESSION_DELETE_LABEL}>{deleteLabel}</span>
+          </div>
+        </div>
+      )}
+      {confirmDialog}
+      <DeleteSessionDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        hasWorktree={Boolean(session.worktreeDir && !isAsk)}
+        deleting={deleting}
+        onDelete={(cleanWorktree) => void handleDelete(cleanWorktree)}
+      />
+      <Modal.Root
+        open={branchConfirmOpen}
+        onOpenChange={(open) => {
+          if (!branchActionBusy) setBranchConfirmOpen(open);
+        }}
+        disablePointerDismissal={branchActionBusy !== null}
+      >
+        <Modal.Content>
+          <Modal.Header title="Move to a branch?" />
+          <Modal.Description
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.m0,
+              sx.textPretty,
+              sx.fontNormal,
+              sx.leadingRelaxed,
+              sx.textDim,
+              typography.supporting,
+            )}
+          >
+            {branchConfirmMode === "create"
+              ? "You need to move this session to a branch before you can create a PR."
+              : "Copies this session’s changes to a new branch without removing them from the shared checkout."}
+          </Modal.Description>
+          <Modal.Footer>
+            <Modal.Close
+              render={
+                <Button variant="ghost" disabled={branchActionBusy !== null}>
+                  Cancel
+                </Button>
+              }
+            />
+            <Button
+              variant="primary"
+              disabled={
+                isBusy ||
+                branchActionBusy !== null ||
+                (branchConfirmMode === "create" && !connected)
+              }
+              onClick={() =>
+                void (branchConfirmMode === "create"
+                  ? moveAndCreatePr()
+                  : moveToBranchFromMenu())
+              }
+            >
+              {branchActionBusy
+                ? "Moving…"
+                : branchConfirmMode === "create"
+                  ? "Move and create PR"
+                  : "Move to branch"}
+            </Button>
+          </Modal.Footer>
+        </Modal.Content>
+      </Modal.Root>
+      {!hideHeader &&
+        (() => {
+          const workspaceScopedMenu = Boolean(session.workspaceId);
+          const keepInSidebarAction = (inMenu: boolean) =>
+            canKeepInSidebar &&
+            (inMenu ? (
+              <Menu.Item onClick={keepInSidebar} title="Add to sidebar">
+                <KeepInSidebarIcon className={MENU_ICON} />
+                <span {...stylex.props(sx.grow)}>Add to sidebar</span>
+              </Menu.Item>
+            ) : (
+              <Button
+                size="md"
+                variant="default"
+                className={mergeStylexOverrideClassName("", sx.mr15, sx.textFg)}
+                icon={<KeepInSidebarIcon />}
+                iconTone="full"
+                onClick={keepInSidebar}
+                title="Add to sidebar"
+              >
+                Add to sidebar
+              </Button>
+            ));
+          // Share rides inline on a wide header but tucks into the ⋯ overflow
+          // menu when it gets narrow. Both spellings use the link glyph, since
+          // the action copies a link rather than opening a share sheet. Inline
+          // it's icon-only (the header is dense, and the glyph carries it); in
+          // the menu it keeps a label so it lines up with the other rows. The
+          // copied confirmation is CopyCheck's green checkmark in both.
+          const shareAction = (inMenu: boolean) =>
+            inMenu ? (
+              <Menu.Item
+                onClick={
+                  workspaceScopedMenu ? handleShareWorkspace : handleShare
+                }
+                title={
+                  workspaceScopedMenu
+                    ? "Copy a link to this workspace"
+                    : "Copy a link to this session"
+                }
+              >
+                <CopyCheck
+                  copied={copied}
+                  idle={<IconLink size={20} />}
+                  size={20}
+                  className={MENU_ICON}
+                />
+                <span {...stylex.props(sx.grow)}>
+                  {copied
+                    ? "Copied"
+                    : workspaceScopedMenu
+                      ? "Share workspace"
+                      : "Share"}
+                </span>
+              </Menu.Item>
+            ) : (
+              <Button
+                size="md"
+                variant="ghost"
+                // 22 = the icon scale's "standard standalone" step, so it reads
+                // level with the ⋯ and side-panel glyphs beside it.
+                icon={
+                  <CopyCheck
+                    copied={copied}
+                    idle={<IconLink size={22} />}
+                    size={22}
+                  />
+                }
+                onClick={handleShare}
+                title="Copy a link to this session"
+                aria-label="Share"
+              />
+            );
+          // The tab strip hides on phones, so More carries its
+          // sibling-session action.
+          const newSessionAction = isPhone && openNewSession && (
+            <Menu.Item
+              onClick={() => {
+                setOverflowOpen(false);
+                void openNewSession("share");
+              }}
+              title="Start a new session in this workspace"
+            >
+              <IconPlus size={20} className={MENU_ICON} />
+              <span {...stylex.props(sx.grow)}>New session in workspace</span>
+            </Menu.Item>
+          );
+          // Closed sessions of this workspace. They normally hang off the tab
+          // strip's history button, so this appears exactly when there is no
+          // strip to hold it — a lone session, which is when someone is most
+          // likely to go looking for what was closed.
+          const archivedActions = !tabStripVisible &&
+            !!archivedSessions?.length &&
+            openSession &&
+            onRestoreSession && (
+              <Menu.SubmenuRoot>
+                <Menu.SubmenuTrigger title="Closed sessions in this workspace">
+                  <IconHistory size={20} className={MENU_ICON} />
+                  <span {...stylex.props(sx.grow)}>Archived sessions</span>
+                  <IconChevronRight
+                    size={16}
+                    className={mergeStylexOverrideClassName("", sx.textFaint)}
+                  />
+                </Menu.SubmenuTrigger>
+                <Menu.Popup
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.minW240px,
+                    sx.maxW320px,
+                  )}
+                >
+                  <ArchivedSessionItems
+                    sessions={archivedSessions}
+                    onSelect={(s) => {
+                      setOverflowOpen(false);
+                      openSession(s.id);
+                    }}
+                    onRestore={(s) => {
+                      setOverflowOpen(false);
+                      onRestoreSession(s);
+                    }}
+                  />
+                </Menu.Popup>
+              </Menu.SubmenuRoot>
+            );
+          // Copy transcript. These normally live on a tab's right-click menu,
+          // but a lone-session workspace has no tab strip (and phones hide it at
+          // every count), so the only place to grab this session's full text is the
+          // ⋯ menu — surface both modes here when the strip isn't offering them.
+          const showTranscriptActions =
+            isPhone || (workspaceSessions?.length ?? 1) <= 1;
+          const transcriptActions = showTranscriptActions && (
+            <Menu.SubmenuRoot>
+              <Menu.SubmenuTrigger title="Copy this session's transcript">
+                <IconCopy size={20} className={MENU_ICON} />
+                <span {...stylex.props(sx.grow)}>Copy transcript</span>
+                <IconChevronRight
+                  size={16}
+                  className={mergeStylexOverrideClassName("", sx.textFaint)}
+                />
+              </Menu.SubmenuTrigger>
+              <Menu.Popup>
+                <Menu.Item
+                  onClick={() => {
+                    setOverflowOpen(false);
+                    void copySessionTranscript(session, "concise", toast);
+                  }}
+                  title="Copy a trimmed transcript of this session"
+                >
+                  <IconListCircles size={20} className={MENU_ICON} />
+                  <span {...stylex.props(sx.grow)}>Concise</span>
+                  {copyTranscriptLabel && (
+                    <Menu.Shortcut>{copyTranscriptLabel}</Menu.Shortcut>
+                  )}
+                </Menu.Item>
+                <Menu.Item
+                  onClick={() => {
+                    setOverflowOpen(false);
+                    void copySessionTranscript(session, "full", toast);
+                  }}
+                  title="Copy the complete transcript of this session"
+                >
+                  <IconFile size={20} className={MENU_ICON} />
+                  <span {...stylex.props(sx.grow)}>Full</span>
+                </Menu.Item>
+              </Menu.Popup>
+            </Menu.SubmenuRoot>
+          );
+          // Portals is a workspace tool, not the lead fact on the phone's
+          // workspace overview. Keep it reachable from the shared ⋯ menu at
+          // every width; desktop opens its panel page, phone opens the drill-in.
+          const portalsAction = hasWorkspace && (
+            <Menu.Item
+              onClick={() => {
+                setOverflowOpen(false);
+                if (isPhone) {
+                  setPanelPage("portals");
+                  setInfoPageScrolled(false);
+                  setInfoPageOpen(true);
+                } else {
+                  setDesktopPanelPage("portals");
+                  setActivePanelOpen(true);
+                }
+              }}
+            >
+              <IconGlobe size={20} className={MENU_ICON} />
+              <span {...stylex.props(sx.grow)}>Portals</span>
+              {livePortals > 0 && (
+                <span
+                  {...mergeStylexProps(
+                    "tabular-nums",
+                    sx.shrink0,
+                    sx.textFaint,
+                  )}
+                >
+                  {livePortals} live
+                </span>
+              )}
+            </Menu.Item>
+          );
+          const menuGit =
+            overflowGit?.sessionId === session.id ? overflowGit.status : null;
+          const branchAction =
+            !primaryPrNumber && menuGit ? (
+              menuGit.sharedCheckout ? (
+                <>
+                  <Menu.Item
+                    disabled={isBusy || branchActionBusy !== null}
+                    onClick={() => {
+                      setOverflowOpen(false);
+                      setBranchConfirmMode("move");
+                      setBranchConfirmOpen(true);
+                    }}
+                    title="Move this session into an isolated worktree"
+                  >
+                    <IconNewBranch size={20} className={MENU_ICON} />
+                    <span {...stylex.props(sx.grow)}>
+                      {branchActionBusy === "move"
+                        ? "Moving…"
+                        : "Move to branch"}
+                    </span>
+                  </Menu.Item>
+                  <Menu.Item
+                    disabled={!connected || isBusy || branchActionBusy !== null}
+                    onClick={() => {
+                      setOverflowOpen(false);
+                      setBranchConfirmMode("create");
+                      setBranchConfirmOpen(true);
+                    }}
+                    title="Move to a branch and create a pull request"
+                  >
+                    <IconPullRequest size={20} className={MENU_ICON} />
+                    <span {...stylex.props(sx.grow)}>Create PR</span>
+                  </Menu.Item>
+                </>
+              ) : menuGit.branch ? (
+                <Menu.Item
+                  disabled={!connected}
+                  onClick={createPrFromMenu}
+                  title="Ask this session to create a pull request"
+                >
+                  <IconPullRequest size={20} className={MENU_ICON} />
+                  <span {...stylex.props(sx.grow)}>Create PR</span>
+                </Menu.Item>
+              ) : null
+            ) : null;
+          // What this workspace is to you: its name, and whether it sits in your
+          // sidebar. These lead the menu because they describe the session rather
+          // than doing something with it. Pin used to lead here too and no longer
+          // does: the sidebar row already offers it, and ⌘P still works from the
+          // keyboard whether or not a menu spells it out.
+          const placementActions = (
+            <>
+              {/* Rename. The title has always been double-clickable, which
 						    nobody finds; this is the same inline editor, reachable. It
 						    edits the workspace name when the header is titled by one,
 						    exactly as the double-click does. */}
-						{onRename && (
-							<Menu.Item
-								onClick={() => setRenameDraft(workspaceName || session.title)}
-								title={
-									workspaceScopedMenu
-										? "Rename this workspace"
-										: "Rename this session"
-								}
-							>
-								<IconPencil size={20} className={MENU_ICON} />
-								<span {...stylex.props(sx.grow)}>
-									{workspaceScopedMenu ? "Rename workspace" : "Rename session"}
-								</span>
-							</Menu.Item>
-						)}
-					</>
-				);
-				// Fork: a new session carrying this one's history up to its last
-				// answer, so you can take the same context somewhere else without
-				// disturbing this transcript. Forking from a specific message stays on
-				// that message's own menu; this is the "from here" case, which is what
-				// people mean from the header. Both land in the same composer mode.
-				const lastAssistantId = entries.findLast(
-					(e) => e.type === "assistant",
-				)?.id;
-				const forkAction = canForkSession && lastAssistantId && (
-					<Menu.Item
-						onClick={() => {
-							setOverflowOpen(false);
-							handleFork(lastAssistantId);
-						}}
-						title="Start a new session from this one's history"
-					>
-						<IconBranches size={20} className={MENU_ICON} />
-						<span {...stylex.props(sx.grow)}>Fork session</span>
-					</Menu.Item>
-				);
-				// Start something from this session. Renders nothing until the session
-				// has an assistant turn to spin off.
-				const spinOffAction = (
-					<SpinOffMenu
-						session={session}
-						entries={entries}
-						send={send}
-						connected={connected}
-						onOpenNewSession={onOpenNewSession}
-					/>
-				);
-				// Archive is the reversible primary "done with this" action — it sits
-				// above Delete in the menu so the safe choice reads first. When the
-				// session is already archived this becomes Unarchive.
-				const archiveAction = (
-					<Menu.Item
-						onClick={handleArchive}
-						disabled={archiving}
-						title={
-							session.archived
-								? archiveShortcutLabel
-									? `Unarchive session (${archiveShortcutLabel})`
-									: "Unarchive session"
-								: archiveShortcutLabel
-										? `Archive session (${archiveShortcutLabel})`
-										: "Archive session"
-						}
-					>
-						<IconArchive size={20} className={MENU_ICON} />
-						<span {...stylex.props(sx.grow)}>
-							{archiving
-								? session.archived
-									? "Unarchiving…"
-									: "Archiving…"
-								: session.archived
-									? "Unarchive session"
-									: "Archive session"}
-						</span>
-						{archiveShortcutLabel && (
-							<Menu.Shortcut>{archiveShortcutLabel}</Menu.Shortcut>
-						)}
-					</Menu.Item>
-				);
-				// Delete is destructive, so it never rides in the visible action bar —
-				// it always lives inside the ⋯ menu, one deliberate hop away.
-				const deleteAction = (
-					<Menu.Item
-						// Red at rest, not only under the cursor. This is the one row in
-						// the menu that cannot be undone, and a row that looks ordinary
-						// until you are already on it announces that too late.
-						className={mergeStylexOverrideClassName("data-[highlighted]:bg-red-soft data-[highlighted]:text-red", sx.textRed)}
-						onClick={() => setShowDeleteConfirm(true)}
-						title="Delete session"
-					>
-						<IconTrash size={20} />
-						<span {...stylex.props(sx.grow)}>Delete session</span>
-					</Menu.Item>
-				);
-				const workspaceLifecycleActions = workspaceScopedMenu && (
-					<>
-						{onArchiveWorkspace && (workspaceSessions?.length ?? 0) > 0 && (
-							<Menu.Item onClick={onArchiveWorkspace}>
-								<IconArchive size={20} className={MENU_ICON} />
-								<span {...stylex.props(sx.grow)}>Archive workspace</span>
-							</Menu.Item>
-						)}
-						{onDeleteWorkspace && (
-							<Menu.Item
-								className={mergeStylexOverrideClassName("data-[highlighted]:bg-red-soft data-[highlighted]:text-red", sx.textRed)}
-								onClick={() =>
-									confirm({
-										title: `Delete workspace "${workspaceName || session.title}"?`,
-										description: "All sessions in this workspace will be permanently deleted.",
-										confirmLabel: "Delete",
-										destructive: true,
-										onConfirm: () => void onDeleteWorkspace(),
-									})
-								}
-								title="Delete workspace"
-							>
-								<IconTrash size={20} />
-								<span {...stylex.props(sx.grow)}>Delete workspace</span>
-							</Menu.Item>
-						)}
-					</>
-				);
-				// Secondary header controls (Linear/Plain links). Inline on desktop;
-				// on phones they fold into the ⋯ menu so the single top bar holds only
-				// ⋯ + the Workspace toggle beside the centered title. The code
-				// affordances (Preview, Staging) sit as state-colored icons just left
-				// of the panel toggle on desktop; PR status rides its own row.
-				const secondaryActions = (inMenu: boolean) => (
-					<>
-						{/* The automation that produced this session rides in the title row
+              {onRename && (
+                <Menu.Item
+                  onClick={() => setRenameDraft(workspaceName || session.title)}
+                  title={
+                    workspaceScopedMenu
+                      ? "Rename this workspace"
+                      : "Rename this session"
+                  }
+                >
+                  <IconPencil size={20} className={MENU_ICON} />
+                  <span {...stylex.props(sx.grow)}>
+                    {workspaceScopedMenu
+                      ? "Rename workspace"
+                      : "Rename session"}
+                  </span>
+                </Menu.Item>
+              )}
+            </>
+          );
+          // Fork: a new session carrying this one's history at the current tip,
+          // so you can take the same context somewhere else without disturbing
+          // this transcript. Forking from a specific message stays on that
+          // message's own menu. Both land in the same composer mode.
+          const forkAction = canForkSession && (
+            <Menu.Item
+              onClick={() => {
+                setOverflowOpen(false);
+                handleFork();
+              }}
+              title="Duplicate this session with its current context"
+            >
+              <IconCopy size={20} className={MENU_ICON} />
+              <span {...stylex.props(sx.grow)}>Duplicate session</span>
+            </Menu.Item>
+          );
+          // Start something from this session. Renders nothing until the session
+          // has an assistant turn to spin off.
+          const spinOffAction = (
+            <SpinOffMenu
+              session={session}
+              entries={entries}
+              send={send}
+              connected={connected}
+              onOpenNewSession={navigation.openPrefilledSession}
+            />
+          );
+          // Archive is the reversible primary "done with this" action — it sits
+          // above Delete in the menu so the safe choice reads first. When the
+          // session is already archived this becomes Unarchive.
+          const archiveAction = (
+            <Menu.Item
+              onClick={handleArchive}
+              disabled={archiving}
+              title={
+                session.archived
+                  ? archiveShortcutLabel
+                    ? `Unarchive session (${archiveShortcutLabel})`
+                    : "Unarchive session"
+                  : archiveShortcutLabel
+                    ? `Archive session (${archiveShortcutLabel})`
+                    : "Archive session"
+              }
+            >
+              <IconArchive size={20} className={MENU_ICON} />
+              <span {...stylex.props(sx.grow)}>
+                {archiving
+                  ? session.archived
+                    ? "Unarchiving…"
+                    : "Archiving…"
+                  : session.archived
+                    ? "Unarchive session"
+                    : "Archive session"}
+              </span>
+              {archiveShortcutLabel && (
+                <Menu.Shortcut>{archiveShortcutLabel}</Menu.Shortcut>
+              )}
+            </Menu.Item>
+          );
+          // Delete is destructive, so it never rides in the visible action bar —
+          // it always lives inside the ⋯ menu, one deliberate hop away.
+          const deleteAction = (
+            <Menu.Item
+              // Red at rest, not only under the cursor. This is the one row in
+              // the menu that cannot be undone, and a row that looks ordinary
+              // until you are already on it announces that too late.
+              className={mergeStylexOverrideClassName(
+                "data-[highlighted]:bg-red-soft data-[highlighted]:text-red",
+                sx.textRed,
+              )}
+              onClick={() => setShowDeleteConfirm(true)}
+              title="Delete session"
+            >
+              <IconTrash size={20} />
+              <span {...stylex.props(sx.grow)}>Delete session</span>
+            </Menu.Item>
+          );
+          const workspaceLifecycleActions = workspaceScopedMenu && (
+            <>
+              {onArchiveWorkspace && (workspaceSessions?.length ?? 0) > 0 && (
+                <Menu.Item onClick={onArchiveWorkspace}>
+                  <IconArchive size={20} className={MENU_ICON} />
+                  <span {...stylex.props(sx.grow)}>Archive workspace</span>
+                </Menu.Item>
+              )}
+              {onDeleteWorkspace && (
+                <Menu.Item
+                  className={mergeStylexOverrideClassName(
+                    "data-[highlighted]:bg-red-soft data-[highlighted]:text-red",
+                    sx.textRed,
+                  )}
+                  onClick={() =>
+                    confirm({
+                      title: `Delete workspace "${workspaceName || session.title}"?`,
+                      description:
+                        "All sessions in this workspace will be permanently deleted.",
+                      confirmLabel: "Delete",
+                      destructive: true,
+                      onConfirm: () => void onDeleteWorkspace(),
+                    })
+                  }
+                  title="Delete workspace"
+                >
+                  <IconTrash size={20} />
+                  <span {...stylex.props(sx.grow)}>Delete workspace</span>
+                </Menu.Item>
+              )}
+            </>
+          );
+          // Secondary header controls (Linear/Plain links). Inline on desktop;
+          // on phones they fold into the ⋯ menu so the single top bar holds only
+          // ⋯ + the Workspace toggle beside the centered title. The code
+          // affordances (Preview, Staging) sit as state-colored icons just left
+          // of the panel toggle on desktop; PR status rides its own row.
+          const secondaryActions = (inMenu: boolean) => (
+            <>
+              {/* The automation that produced this session rides in the title row
 						    beside the workspace name on desktop — it names the session, it
 						    isn't an action. .viewer-title is hidden on phones, so the ⋯
 						    menu keeps carrying it there. */}
-						{session.automation && inMenu && !workspaceScopedMenu && (
-							<Menu.Item
-								render={<a href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`} />}
-								title={session.automation}
-							>
-								<IconRobot size={20} className={MENU_ICON} />
-								<span {...stylex.props(sx.grow)}>Automation</span>
-							</Menu.Item>
-						)}
-						{session.linearIssue?.url && (inMenu ? (
-							<Menu.Item
-								render={<a href={session.linearIssue.url} target="_blank" rel="noopener" />}
-							>
-								<span {...stylex.props(sx.grow)}>{session.linearIssue.identifier}</span>
-							</Menu.Item>
-						) : (
-							<a
-								href={session.linearIssue.url}
-								target="_blank"
-								rel="noopener"
-								className={cn(SESSION_LINK, SESSION_LINK_LINEAR)}
-							>
-								{session.linearIssue.identifier}
-							</a>
-						))}
-						{hasPlain && plainUrl && (inMenu ? (
-							<Menu.Item render={<a href={plainUrl} target="_blank" rel="noopener" />}>
-								<span {...stylex.props(sx.grow)}>Plain ↗</span>
-							</Menu.Item>
-						) : (
-							<a
-								href={plainUrl}
-								target="_blank"
-								rel="noopener"
-								className={cn(SESSION_LINK, SESSION_LINK_PLAIN)}
-							>
-								Plain ↗
-							</a>
-						))}
-						{feedRef && (inMenu ? (
-							<Menu.Item render={<a href={feedRef.url} target="_blank" rel="noopener" />}>
-								<span {...stylex.props(sx.grow)}>{feedRefLabel} ↗</span>
-							</Menu.Item>
-						) : (
-							<a
-								href={feedRef.url}
-								target="_blank"
-								rel="noopener"
-								className={cn(SESSION_LINK, SESSION_LINK_PLAIN)}
-							>
-								{feedRefLabel} ↗
-							</a>
-						))}
-					</>
-				);
-				// The ⋯ menu. One instance, placed by width: on desktop it rides at the
-				// end of the title cluster, where it reads as this workspace's own menu
-				// and leaves the right end of the bar to status. On phones its trigger
-				// moves into the centered action bar above the composer.
-				//
-				// The order runs: where this workspace sits for you, then what you can
-				// start from it, then where else it lives, then how it ends. Archive
-				// and Delete stay together at the bottom so the destructive end of the
-				// menu is one place rather than two.
-				const overflowMenu = (
-					<Menu.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
-						<div className={VIEWER_OVERFLOW}>
-							<Menu.Trigger
-								// Rendered AS the Button primitive rather than restyled to
-								// look like one, so the box, radius, hover wash, transition
-								// and press scale are identical to the share and side-panel
-								// buttons by construction instead of by hand-matching.
-								render={
-									infoPageOpen ? (
-										<TopBarAction floating icon={<IconDotsHorizontal size={22} />} />
-									) : (
-										<Button
-											variant="ghost"
-											size="md"
-											icon={<IconDotsHorizontal size={22} />}
-										/>
-									)
-								}
-								className={cn(
-									!infoPageOpen && "[corner-shape:squircle]",
-									!infoPageOpen &&
-										isPhone &&
-										utilityClassName("size-11 min-h-11 rounded-control border-transparent text-dim shadow-none [corner-shape:squircle]"),
-									overflowOpen && utilityClassName("bg-hover text-fg"),
-								)}
-								title="More actions"
-								aria-label="More actions"
-							/>
-							<Menu.Popup
-								// Desktop: opens rightward from a trigger that now sits at the
-								// left of the bar. Phones keep it flush with the right edge.
-								align={isPhone ? "end" : "start"}
-								sideOffset={6}
-								className={mergeStylexOverrideClassName("max-w-[min(300px,calc(100vw-24px))]", sx.minW240px)}
-							>
-								{/* Quick session actions use the same focus, spacing, collision,
+              {session.automation && inMenu && !workspaceScopedMenu && (
+                <Menu.Item
+                  render={
+                    <a
+                      href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
+                    />
+                  }
+                  title={session.automation}
+                >
+                  <IconRobot size={20} className={MENU_ICON} />
+                  <span {...stylex.props(sx.grow)}>Automation</span>
+                </Menu.Item>
+              )}
+              {session.linearIssue?.url &&
+                (inMenu ? (
+                  <Menu.Item
+                    render={
+                      <a
+                        href={session.linearIssue.url}
+                        target="_blank"
+                        rel="noopener"
+                      />
+                    }
+                  >
+                    <span {...stylex.props(sx.grow)}>
+                      {session.linearIssue.identifier}
+                    </span>
+                  </Menu.Item>
+                ) : (
+                  <a
+                    href={session.linearIssue.url}
+                    target="_blank"
+                    rel="noopener"
+                    className={cn(SESSION_LINK, SESSION_LINK_LINEAR)}
+                  >
+                    {session.linearIssue.identifier}
+                  </a>
+                ))}
+              {hasPlain &&
+                plainUrl &&
+                (inMenu ? (
+                  <Menu.Item
+                    render={
+                      <a href={plainUrl} target="_blank" rel="noopener" />
+                    }
+                  >
+                    <span {...stylex.props(sx.grow)}>Plain ↗</span>
+                  </Menu.Item>
+                ) : (
+                  <a
+                    href={plainUrl}
+                    target="_blank"
+                    rel="noopener"
+                    className={cn(SESSION_LINK, SESSION_LINK_PLAIN)}
+                  >
+                    Plain ↗
+                  </a>
+                ))}
+              {feedRef &&
+                (inMenu ? (
+                  <Menu.Item
+                    render={
+                      <a href={feedRef.url} target="_blank" rel="noopener" />
+                    }
+                  >
+                    <span {...stylex.props(sx.grow)}>{feedRefLabel} ↗</span>
+                  </Menu.Item>
+                ) : (
+                  <a
+                    href={feedRef.url}
+                    target="_blank"
+                    rel="noopener"
+                    className={cn(SESSION_LINK, SESSION_LINK_PLAIN)}
+                  >
+                    {feedRefLabel} ↗
+                  </a>
+                ))}
+            </>
+          );
+          // The ⋯ menu. One instance, placed by width: on desktop it rides at the
+          // end of the title cluster, where it reads as this workspace's own menu
+          // and leaves the right end of the bar to status. On phones its trigger
+          // moves into the centered action bar above the composer.
+          //
+          // The order runs: where this workspace sits for you, then what you can
+          // start from it, then where else it lives, then how it ends. Archive
+          // and Delete stay together at the bottom so the destructive end of the
+          // menu is one place rather than two.
+          const overflowMenu = (
+            <Menu.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
+              <div className={VIEWER_OVERFLOW}>
+                <Menu.Trigger
+                  // Rendered AS the Button primitive rather than restyled to
+                  // look like one, so the box, radius, hover wash, transition
+                  // and press scale are identical to the share and side-panel
+                  // buttons by construction instead of by hand-matching.
+                  render={
+                    infoPageOpen ? (
+                      <TopBarAction
+                        floating
+                        icon={<IconDotsHorizontal size={22} />}
+                      />
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="md"
+                        icon={<IconDotsHorizontal size={22} />}
+                      />
+                    )
+                  }
+                  className={cn(
+                    !infoPageOpen &&
+                      utilityClassName("[corner-shape:squircle]"),
+                    !infoPageOpen &&
+                      isPhone &&
+                      utilityClassName(
+                        "size-11 min-h-11 rounded-control border-transparent text-dim shadow-none [corner-shape:squircle]",
+                      ),
+                    overflowOpen && utilityClassName("bg-hover text-fg"),
+                  )}
+                  title="More actions"
+                  aria-label="More actions"
+                />
+                <Menu.Popup
+                  // Desktop: opens rightward from a trigger that now sits at the
+                  // left of the bar. Phones keep it flush with the right edge.
+                  align={isPhone ? "end" : "start"}
+                  sideOffset={6}
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.minW240px,
+                    sx.maxWMin300pxCalc100vw24px,
+                  )}
+                >
+                  {/* Quick session actions use the same focus, spacing, collision,
 								    and dismissal behavior as every other app menu. Each group is
 								    conditional, so the rules between them collapse themselves
 								    rather than being predicted here (VIEWER_MENU_SEP). */}
-								{placementActions}
-								{isPhone && addToSidebarAction(true)}
-								{(compactHeader || isPhone) && shareAction(true)}
-								<Menu.Separator className={VIEWER_MENU_SEP} />
-								{newSessionAction}
-								{!workspaceScopedMenu && forkAction}
-								{!workspaceScopedMenu && spinOffAction}
-								{!workspaceScopedMenu && transcriptActions}
-								{portalsAction}
-								{branchAction && (
-									<>
-										<Menu.Separator className={VIEWER_MENU_SEP} />
-										{branchAction}
-									</>
-								)}
-								<Menu.Separator className={VIEWER_MENU_SEP} />
-								{isPhone && secondaryActions(true)}
-								{archivedActions}
-								<Menu.Separator className={VIEWER_MENU_SEP} />
-								{workspaceScopedMenu
-									? workspaceLifecycleActions
-									: (
-										<>
-											{(!isPhone || session.archived) && archiveAction}
-											{deleteAction}
-										</>
-									)}
-							</Menu.Popup>
-						</div>
-					</Menu.Root>
-				);
-				const header = (
-					<TopBar
-						className={VIEWER_HEADER}
-						ref={headerRef}
-					>
-						<TopBarLeading className={VIEWER_TITLE}>
-					{!session.desk &&
-						session.worktreeDir &&
-						hasWorkspace &&
-						// Repo-less sessions get a static tile instead of the repo
-						// switch/attach menu: scratch names the feed it came from,
-						// an Ask session with the repo turned off says so.
-						(session.repoLess ? (
-							<span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap15)}>
-								<span
-									{...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap15, sx.fontMedium, sx.textDim, typography.label)}
-									title={
-										session.mode === "scratch"
-											? "Scratch session · no repo"
-											: "Ask session · no repo"
-									}
-								>
-									{session.mode === "scratch" ? (
-										<RepoTile
-											name={session.externalRefs?.[0]?.kind || "scratch"}
-										/>
-									) : (
-										<IconEye size={16} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} />
-									)}
-									<span {...stylex.props(sx.truncate)}>
-										{session.mode === "scratch"
-											? session.externalRefs?.[0]?.kind || "scratch"
-											: "No repo"}
-									</span>
-								</span>
-								<IconChevronDown
-									size={18}
-									className={mergeStylexOverrideClassName("", sx.shrink0, sx.Rotate90, sx.textFaint)}
-								/>
-							</span>
-						) : (
-							<RepoBar
-								sessionId={session.id}
-								primaryRepo={session.repo || "repository"}
-								branch={session.branch}
-								initialAttached={session.attachedRepos || []}
-							/>
-						))}
-					{/* A worker session sits UNDER the session that spawned it, so the
-					    bar reads repo > session > worker and the middle crumb is the way
-					    back up. It replaces the "worker of …" chip that used to trail the
-					    title while a temporary tab said the same thing again in the strip. */}
-					{parentSession && onOpenSession && (
-						<>
-							<button
-								type="button"
-								className={cn(VIEWER_BRANCH, VIEWER_CRUMB_UP)}
-								onClick={() => onOpenSession(parentSession.id)}
-								title={`Back to ${workspaceName || parentSession.title}`}
-							>
-								{workspaceName || parentSession.title}
-							</button>
-							<IconChevronDown
-								size={18}
-								className={mergeStylexOverrideClassName("", sx.Mx1, sx.shrink0, sx.Rotate90, sx.textFaint)}
-								aria-hidden="true"
-							/>
-						</>
-					)}
-					{session.archived && (
-						<Tooltip label="Archived" side="bottom">
-							<span
-								{...stylex.props(sx.inlineFlex, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textDim)}
-								role="img"
-								aria-label="Archived"
-							>
-								<IconArchive size={20} />
-							</span>
-						</Tooltip>
-					)}
-					{renameDraft !== null ? (
-						<input
-							className={VIEWER_BRANCH_RENAME}
-							value={renameDraft}
-							autoFocus
-							onChange={(e) => setRenameDraft(e.target.value)}
-							onFocus={(e) => e.target.select()}
-							onBlur={commitRename}
-							onKeyDown={(e) => {
-								if (e.key === "Enter") commitRename();
-								else if (e.key === "Escape") setRenameDraft(null);
-								e.stopPropagation();
-							}}
-						/>
-					) : (
-						<OverflowFadeText
-							className={`${VIEWER_BRANCH} ${onRename ? VIEWER_BRANCH_EDITABLE : ""}`}
-							title={
-								parentSession
-									? onRename
-										? `${session.title} · double-click to rename`
-										: session.title
-									: workspaceName
-										? `${session.title} · double-click to rename the workspace`
-										: onRename
-											? "Double-click to rename"
-											: session.title
-							}
-							onDoubleClick={
-								onRename
-									? () =>
-											setRenameDraft(
-												parentSession
-													? session.title
-													: workspaceName || session.title,
-											)
-									: undefined
-							}
-						>
-							{parentSession ? session.title : workspaceName || session.title}
-						</OverflowFadeText>
-					)}
-					{/* Where the session came FROM, as a quiet mark AFTER the name. It
-					    used to be a tinted pill at the head of the row, which made the
-					    loudest thing in the bar a fact you read once — and put it in
-					    front of the repo, where it read as part of the path. Origins
-					    with a brand mark draw it in the same faint ink as the
-					    automation and sandbox glyphs beside it; the rest keep the
-					    worded chip. Ask mode isn't an origin — it's a mode you can
-					    change — so it rides the composer toolbar next to the model
-					    pill instead, where the switch is one click from where you're
-					    typing. "opensession" is the default origin (web UI): as a chip
-					    it's noise, and for backstage-repo sessions it read as the repo
-					    said twice. */}
-					{session.source !== "opensession" &&
-						(brandLogo(session.source) ? (
-							<span
-								{...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.textFaint)}
-								title={`From ${sessionSourceName(session.source)}`}
-								aria-label={`From ${sessionSourceName(session.source)}`}
-								role="img"
-							>
-								<BrandMark name={session.source} size={14} />
-							</span>
-						) : (
-							<span className={cn(SOURCE_CHIP, sourceChipTone(session.source))}>
-								{session.source}
-							</span>
-						))}
-					{/* A quiet robot after the title says the opening turn came from an
-					    agent action. Named automation runs link to their settings; report
-					    tasks and delegated sessions keep the same mark without pretending
-					    they are owned by that automation. */}
-					{session.automation ? (
-						<Tooltip label={`Automation · ${session.automation}`} side="bottom">
-							<a
-								href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
-								{...mergeStylexProps("hover:bg-hover hover:text-fg", sx.Ml1, sx.inlineFlex, sx.size6, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedControl, sx.textFaint, sx.transitionColors, sx.durationVarDurMicro, sx.easeVarEase)}
-								aria-label={`Open ${session.automation} automation settings`}
-							>
-								<IconRobot size={18} />
-							</a>
-						</Tooltip>
-					) : sessionWasAgentStarted(session) ? (
-						<span
-							{...stylex.props(sx.Ml1, sx.inlineFlex, sx.size6, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textFaint)}
-							role="img"
-							aria-label="Started by an agent"
-							title="Started by an agent"
-						>
-							<IconRobot size={18} />
-						</span>
-					) : null}
-					{/* Sandbox badge: this session's runs execute inside an isolated
-					    container (docker/daytona/e2b). Renders nothing for host sessions
-					    — purely from session fields, no container polling. */}
-					<SandboxBadge sessionId={session.id} sandbox={session.sandbox} runner={session.runner} />
-					{/* The parent edge is the crumb before the title; this is the other
-					    direction, the workers this session delegated to. */}
-					{onOpenSession && !!workerSessions?.length && (
-						<SessionRelations
-							workers={workerSessions}
-							models={models}
-							onOpen={onOpenSession}
-						/>
-					)}
-					{/* This workspace's own controls, at the end of its own cluster: the
-					    ⋯ menu, then the lone-session "+ New tab". The menu used to sit at
-					    the far right of the bar, a whole header away from the thing it
-					    acts on and mixed in with the status controls; here it reads as
-					    belonging to the name, and the right end is left to say what the
-					    workspace is doing. The two are 32px ghost squares, so they take
-					    the icon cluster's own 2px gap rather than the row's 10px and read
-					    as one pair, and the pair is pulled in a little because each
-					    button already pads its own glyph. */}
-					{!isPhone && (
-						<div {...stylex.props(sx.Ml1, sx.flex, sx.flexNone, sx.itemsCenter, sx.gap05)}>
-							{overflowMenu}
-							{/* With no tab strip on screen the affordance to spawn a sibling
-							    session lives here beside the title (⌘⌥N does the same). The
-							    moment the strip appears, whether from a second session, an
-							    open view tab like Review, or a split, its own + takes over
-							    and this disappears, so the two never stack. Phone keeps this
-							    sibling-session action in More. Rendered AS the Button
-							    primitive, like the ⋯ beside it and the side-panel control at
-							    the other end of the bar, so the 32px square, radius, hover
-							    wash and press scale match by construction rather than by
-							    hand-matching a chip. */}
-							{/* Not on a worker: its header is a level below the workspace, and
-							    a new tab belongs to the session above it. */}
-							{!session.desk &&
-								onNewSession &&
-								!tabStripVisible &&
-								!parentSession &&
-								workspaceSessions?.length === 1 && (
-									<Tooltip
-										label="New tab in this workspace"
-										shortcut={
-											newSiblingKeys ?? undefined
-										}
-									>
-										<Button
-											variant="ghost"
-											size="md"
-											className={mergeStylexOverrideClassName("", sx.flexNone, sx.roundedControl)}
-											onClick={(event) => {
-												const animate =
-													event.detail > 0 &&
-													!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-												const rect = animate
-													? event.currentTarget.getBoundingClientRect()
-													: null;
-												onNewSession(
-													"share",
-													rect
-														? {
-																left: rect.left,
-																top: rect.top,
-																width: rect.width,
-																height: rect.height,
-															}
-														: undefined,
-												);
-											}}
-											aria-label="New tab"
-											// 22, the standard standalone step the ⋯ and side-panel
-											// glyphs use. IconPlus now draws the set's 14.5 span, so
-											// it lands at their size and weight without a bump.
-											icon={<IconPlus size={22} />}
-										/>
-									</Tooltip>
-								)}
-						</div>
-					)}
-				</TopBarLeading>
-				<TopBarActions className={VIEWER_HEADER_ACTIONS} ref={headerActionsRef}>
-					{!isPhone && secondaryActions(false)}
-					{!isPhone && addToSidebarAction(false)}
-					{/* Whoever ELSE has the session open, right before Share. Your
+                  {placementActions}
+                  {isPhone && keepInSidebarAction(true)}
+                  {(compactHeader || isPhone) && shareAction(true)}
+                  <Menu.Separator className={VIEWER_MENU_SEP} />
+                  {newSessionAction}
+                  {/* Fork always applies to the open session, even when the
+                      rest of this menu is scoped to its workspace. */}
+                  {forkAction}
+                  {!workspaceScopedMenu && spinOffAction}
+                  {!workspaceScopedMenu && transcriptActions}
+                  {portalsAction}
+                  {branchAction && (
+                    <>
+                      <Menu.Separator className={VIEWER_MENU_SEP} />
+                      {branchAction}
+                    </>
+                  )}
+                  <Menu.Separator className={VIEWER_MENU_SEP} />
+                  {isPhone && secondaryActions(true)}
+                  {archivedActions}
+                  <Menu.Separator className={VIEWER_MENU_SEP} />
+                  {workspaceScopedMenu ? (
+                    // The workspace-scoped menu swaps in workspace lifecycle
+                    // actions, but an archived session still needs its way back:
+                    // keep Unarchive reachable here.
+                    <>
+                      {session.archived && archiveAction}
+                      {workspaceLifecycleActions}
+                    </>
+                  ) : (
+                    <>
+                      {(!isPhone || session.archived) && archiveAction}
+                      {deleteAction}
+                    </>
+                  )}
+                </Menu.Popup>
+              </div>
+            </Menu.Root>
+          );
+          const header = (
+            <SessionHeader
+              session={session}
+              hasWorkspace={hasWorkspace}
+              workspaceName={workspaceName}
+              parentSession={parentSession}
+              workerSessions={workerSessions}
+              models={models}
+              openSession={openSession}
+              archiving={archiving}
+              onArchive={() => void handleArchive()}
+              renameDraft={renameDraft}
+              onRenameDraftChange={setRenameDraft}
+              onCommitRename={commitRename}
+              onCancelRename={() => setRenameDraft(null)}
+              canRename={Boolean(onRename)}
+              menu={overflowMenu}
+              menuTrailing={
+                !isPhone && showReview ? (
+                  <div
+                    ref={setReviewSessionActionTarget}
+                    {...stylex.props(sx.contents)}
+                  />
+                ) : undefined
+              }
+              isPhone={isPhone}
+              openNewSession={openNewSession}
+              tabStripVisible={tabStripVisible}
+              workspaceSessionCount={workspaceSessions?.length}
+              newSiblingKeys={newSiblingKeys}
+              headerRef={headerRef}
+              headerActionsRef={headerActionsRef}
+              topbarEl={topbarEl}
+              headerActionsEl={headerActionsEl}
+              actions={
+                <>
+                  {!isPhone && secondaryActions(false)}
+                  {!isPhone && keepInSidebarAction(false)}
+                  {/* Whoever ELSE has the session open, right before Share. Your
 					    own face used to sit here too, which meant every session
 					    you opened showed a face permanently — the one thing a
 					    presence pile must never do, since it reads as somebody
 					    standing behind you. You know you're here; this row is for
 					    the people you can't see. (The native app has always
 					    filtered its own name out — this matches it.) */}
-					{!isPhone && others.length > 0 && (
-						<div className={VIEWER_PRESENCE} title={`Viewing: ${others.join(", ")}`}>
-							{dedupeViewers(others).map((v, index, viewers) => (
-								<UserAvatar
-									key={v.name}
-									name={v.name}
-									size={24}
-									className={VIEWER_PRESENCE_AVATAR}
-									style={facepileAvatarStyle(index, viewers.length, "var(--bg)")}
-								/>
-							))}
-						</div>
-					)}
-					{/* Share rides inline when there's room, else collapses into the ⋯
+                  {!isPhone && others.length > 0 && (
+                    <div
+                      className={VIEWER_PRESENCE}
+                      title={`Viewing: ${others.join(", ")}`}
+                    >
+                      {dedupeViewers(others).map((v, index, viewers) => (
+                        <UserAvatar
+                          key={v.name}
+                          name={v.name}
+                          size={24}
+                          className={VIEWER_PRESENCE_AVATAR}
+                          style={facepileAvatarStyle(
+                            index,
+                            viewers.length,
+                            "var(--bg)",
+                          )}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {/* Share rides inline when there's room, else collapses into the ⋯
 					    menu so it never crowds the title. It sits before Workspace so
 					    the Workspace toggle stays rightmost. On phones the secondary
 					    controls fold in too. */}
-					{!compactHeader && !isPhone && shareAction(false)}
-					{/* Phones portal this menu into the action bar above the composer. */}
-					{isPhone &&
-						!infoPageOpen &&
-						mobileActionMenuEl &&
-						createPortal(overflowMenu, mobileActionMenuEl)}
-					{/* Code-workspace testing affordances dock immediately left of the
+                  {!compactHeader && !isPhone && shareAction(false)}
+                  {/* Phones portal this menu into the action bar above the composer. */}
+                  {isPhone &&
+                    !infoPageOpen &&
+                    mobileActionMenuEl &&
+                    createPortal(overflowMenu, mobileActionMenuEl)}
+                  {/* Code-workspace testing affordances dock immediately left of the
 					    side-panel toggle. The local preview launcher lives in the ⋯ menu;
 					    the globe rides here only while nothing else is showing it. The
 					    panel carries it in its PR row, the summary card as a row of its
 					    own, so it is never in two places at once. */}
-					{!isPhone && !showReview && !panelOpen && !summaryVisible && (
-						<StagingLink
-							session={session}
-							variant="header"
-							refreshTick={gitRefreshTick}
-						/>
-					)}
-					{/* Panel closed → surface the PR chip + its primary action (Merge/
+                  {!isPhone && !showReview && !panelOpen && !summaryVisible && (
+                    <StagingLink
+                      session={session}
+                      variant="header"
+                      refreshTick={gitRefreshTick}
+                    />
+                  )}
+                  {/* Panel closed → surface the PR chip + its primary action (Merge/
 					    Push/Resolve) inline, grouped with the globe directly left of
 					    the side-panel toggle. Review owns that action in its own header,
 					    so the global copy steps out while Review is open. So does the
 					    summary card below, which says the same three things in rows with
 					    room for the rest of them. */}
-					{!isPhone &&
-						hasRepoWork &&
-						!panelOpen &&
-						!showReview &&
-						!summaryVisible && (
-							<PrStatusBar
-								sessionId={session.id}
-								repo={session.repo || undefined}
-								archived={session.archived}
-								prs={session.prs}
-								send={connected ? send : undefined}
-								onOpenPrTab={focusPrInReview}
-								onOpenChecksTab={() => focusPrInReview(undefined, "checks")}
-								onArchive={handleArchive}
-								variant="header"
-								running={isRunningLive}
-								refreshTick={gitRefreshTick}
-							/>
-						)}
-					{/* The compact Workspace summary keeps the card's quiet row grammar.
+                  {!isPhone &&
+                    hasRepoWork &&
+                    !workspacePreparing &&
+                    !panelOpen &&
+                    !showReview &&
+                    !summaryVisible && (
+                      <PrStatusBar
+                        sessionId={session.id}
+                        repo={session.repo || undefined}
+                        archived={session.archived}
+                        prs={session.prs}
+                        send={connected ? send : undefined}
+                        onOpenPrTab={focusPrInReview}
+                        onOpenChecksTab={() =>
+                          focusPrInReview(undefined, "checks")
+                        }
+                        onArchive={handleArchive}
+                        variant="header"
+                        running={isRunningLive}
+                        refreshTick={gitRefreshTick}
+                      />
+                    )}
+                  {/* The compact Workspace summary keeps the card's quiet row grammar.
 					    Detailed comments, files and tools open in the full side panel. */}
-					{!isPhone && hasRepoWork && !activePanelOpen && (
-						<WorkspaceSummary
-							session={session}
-							anchor={headerActionsRef}
-							// Changes opens beside the card. Review rows go to the full Review
-							// canvas now that the side panel contains tools only.
-							onOpenPanelTab={(tab) => {
-								if (tab === "changes") {
-									setPanelPage("changes");
-									setActivePanelOpen(true);
-								} else {
-									onOpenReview?.();
-								}
-							}}
-							onOpenPr={() => focusPrInReview()}
-							onOpenStackPr={onOpenPr}
-							onOpenChecks={() => focusPrInReview(undefined, "checks")}
-							onOpenAsset={openAssetFromTranscript}
-							onOpenAssets={onOpenAssets}
-							onOpenSession={onOpenSession}
-							onArchive={handleArchive}
-							// Already resolved across the workspace's sessions (the
-							// request may live on a sibling), and already folded
-							// together with a GitHub review that completes it.
-							reviewRequest={effectiveReview?.req ?? null}
-							prReviewRequested={effectiveReview?.prReviewRequested}
-							running={isRunningLive}
-							send={connected ? send : undefined}
-							refreshTick={gitRefreshTick}
-							onOpenChange={setSummaryOpen}
-							tabStripVisible={tabStripVisible}
-							reviewMode={showReview}
-							// Too narrow for both, and the card gets out of the way
-							// until someone asks for it from the same button.
-							hasRoom={summaryHasRoom}
-						/>
-					)}
-					{/* Phones have no workspace panel and no status strip, so the PR
+                  {!isPhone && hasRepoWork && !activePanelOpen && (
+                    <WorkspaceSummary
+                      session={session}
+                      anchor={headerActionsRef}
+                      // Changes opens beside the card. Review rows go to the full Review
+                      // canvas now that the side panel contains tools only.
+                      onOpenPanelTab={(tab) => {
+                        if (tab === "changes") {
+                          setDesktopPanelPage("changes");
+                          setActivePanelOpen(true);
+                        } else {
+                          openReview?.();
+                        }
+                      }}
+                      onOpenPr={() => focusPrInReview()}
+                      onOpenStackPr={openPr}
+                      onOpenChecks={() => focusPrInReview(undefined, "checks")}
+                      onOpenAsset={openAssetFromTranscript}
+                      onOpenAssets={openAssets}
+                      onOpenSession={openSession}
+                      onArchive={handleArchive}
+                      // Already resolved across the workspace's sessions (the
+                      // request may live on a sibling), and already folded
+                      // together with a GitHub review that completes it.
+                      reviewRequest={effectiveReview?.req ?? null}
+                      reviewRequestSessionId={effectiveReview?.ownerId}
+                      onReviewChange={onReviewChange}
+                      prReviewRequested={effectiveReview?.prReviewRequested}
+                      running={isRunningLive}
+                      workspacePreparing={workspacePreparing}
+                      send={connected ? send : undefined}
+                      refreshTick={gitRefreshTick}
+                      onOpenChange={setSummaryOpen}
+                      tabStripVisible={tabStripVisible}
+                      reviewMode={showReview}
+                      // Too narrow for both, and the card gets out of the way
+                      // until someone asks for it from the same button.
+                      hasRoom={summaryHasRoom}
+                    />
+                  )}
+                  {/* Phones have no workspace panel and no status strip, so the PR
 					    state had nowhere to show: you had to open the info page to
 					    learn whether checks were red. One toned chip in the bar's
 					    right slot says the number and the state in its colour, and
 					    tapping it opens Review on that PR. Only when the session
 					    actually has one: a chip that says "no PR" is chrome. */}
-					{isPhone && phonePr && (
-						<button
-							type="button"
-							className={prPhoneChipClass(refTone(phonePr))}
-							title={refLabel(phonePr)}
-							aria-label={refLabel(phonePr)}
-							onClick={() =>
-								focusPrInReview({
-									repo: phonePr.repo,
-									branch: phonePr.branch,
-								})
-							}
-						>
-							{refChipText(phonePr, session.repo || undefined)}
-						</button>
-					)}
-					{!isPhone && panelAvailable && (
-						<Tooltip
-							label="Toggle workspace panel"
-						>
-							<Button
-								variant="ghost"
-								size="md"
-								// No height/width overrides: the primitive's icon-only box is
-								// already the 32px square the ⋯ and share buttons use.
-								// text-dim, not text-faint: the share and ⋯ buttons beside it
-								// are dim, and a lighter ink made this read as disabled.
-								// No negative margin after the ⋯ either: that -4px pull dated
-								// from when both were narrow padded controls, and now that all
-								// three are equal squares it just made this gap 4px where the
-								// share → ⋯ one is the row's 8px.
-								className={mergeStylexOverrideClassName("hover:bg-hover hover:text-fg phone:order-2 phone:h-[38px] phone:min-h-[38px] phone:w-[38px] phone:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:text-accent", sx.roundedControl, sx.textDim)}
-								onClick={() => setActivePanelOpen(!activePanelOpen)}
-								aria-label="Toggle side panel"
-								// Iconic sidebar-right glyph — reads as "right side panel".
-								// Passed as `icon` (not children) so the primitive uses its
-								// icon-only square; as a child it counts as a label and gets
-								// the text button's px-3, which made it 50px wide.
-								icon={<IconSidebarRight size={22} />}
-							/>
-						</Tooltip>
-					)}
-				</TopBarActions>
-			</TopBar>
-				);
-				// Phones: the whole header rides in the top bar's right slot (the
-				// title row is CSS-hidden there — the centered bar title replaces
-				// it), giving one iOS-style nav bar instead of a second chrome row.
-				const phoneInfoPage =
-					isPhone && infoPageOpen ? (
-						createPortal(
-							<div
-								className={INFO_PAGE}
-								ref={infoPageRef}
-								role="dialog"
-								aria-modal="true"
-								aria-label={
-									panelPage === "changes"
-										? "Changes"
-										: panelPage === "portals"
-											? "Portals"
-											: "Workspace details"
-								}
-							>
-								{/* The phone's drill-in: this page is the workspace panel here,
+                  {isPhone && phonePr && (
+                    <button
+                      type="button"
+                      className={prPhoneChipClass(refTone(phonePr))}
+                      title={refLabel(phonePr)}
+                      aria-label={refLabel(phonePr)}
+                      onClick={() =>
+                        focusPrInReview({
+                          repo: phonePr.repo,
+                          branch: phonePr.branch,
+                        })
+                      }
+                    >
+                      {refChipText(phonePr, session.repo || undefined)}
+                    </button>
+                  )}
+                  {!isPhone && panelAvailable && (
+                    <Tooltip label="Toggle workspace panel">
+                      <Button
+                        variant="ghost"
+                        size="md"
+                        // No height/width overrides: the primitive's icon-only box is
+                        // already the 32px square the ⋯ and share buttons use.
+                        // text-dim, not text-faint: the share and ⋯ buttons beside it
+                        // are dim, and a lighter ink made this read as disabled.
+                        // No negative margin after the ⋯ either: that -4px pull dated
+                        // from when both were narrow padded controls, and now that all
+                        // three are equal squares it just made this gap 4px where the
+                        // share → ⋯ one is the row's 8px.
+                        className={mergeStylexOverrideClassName(
+                          "phone:text-accent",
+                          sx.roundedControl,
+                          sx.textDim,
+                          sx.hoverBgHover,
+                          sx.hoverTextFg,
+                          sx.phoneOrder2,
+                          sx.phoneH38px,
+                          sx.phoneMinH38px,
+                          sx.phoneW38px,
+                          sx.phoneBgColorMixInSrgbVarAccent12Transparent,
+                        )}
+                        onClick={() => setActivePanelOpen(!activePanelOpen)}
+                        aria-label="Toggle side panel"
+                        // Iconic sidebar-right glyph — reads as "right side panel".
+                        // Passed as `icon` (not children) so the primitive uses its
+                        // icon-only square; as a child it counts as a label and gets
+                        // the text button's px-3, which made it 50px wide.
+                        icon={<IconSidebarRight size={22} />}
+                      />
+                    </Tooltip>
+                  )}
+                </>
+              }
+            />
+          );
+          const phoneInfoPage =
+            isPhone && infoPageOpen
+              ? createPortal(
+                  <div
+                    className={INFO_PAGE}
+                    ref={infoPageRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={
+                      panelPage === "changes"
+                        ? "Changes"
+                        : panelPage === "portals"
+                          ? "Portals"
+                          : "Workspace details"
+                    }
+                  >
+                    {/* The phone's drill-in: this page is the workspace panel here,
 								    so Changes navigates it rather than opening a column. The
 								    workspace title moves into this bar as its large identity
 								    header scrolls away, like chat info on a phone. */}
-								<TopBar
-									as="header"
-									className={infoTopbarClass(
-										infoPageScrolled || panelPage !== null,
-									)}
-								>
-									<TopBarBack
-										floating
-										className={mergeStylexOverrideClassName("", sx.relative, sx.z1)}
-										onClick={() =>
-											panelPage
-												? setPanelPage(null)
-												: setInfoPageOpen(false)
-										}
-										aria-label={
-											panelPage
-												? "Back to workspace details"
-												: "Back to session"
-										}
-										autoFocus
-									/>
-									<TopBarTitle
-										className={infoTopbarTitleClass(
-											infoPageScrolled || panelPage !== null,
-										)}
-									>
-										{panelPage === "changes"
-											? "Changes"
-											: panelPage === "portals"
-												? "Portals"
-												: workspaceName || session.title}
-									</TopBarTitle>
-									{/* The same session menu moves with the person into Workspace
+                    <TopBar
+                      as="header"
+                      className={infoTopbarClass(
+                        infoPageScrolled || panelPage !== null,
+                      )}
+                    >
+                      <TopBarBack
+                        floating
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.relative,
+                          sx.z1,
+                        )}
+                        onClick={() =>
+                          panelPage
+                            ? setPanelPage(null)
+                            : setInfoPageOpen(false)
+                        }
+                        aria-label={
+                          panelPage
+                            ? "Back to workspace details"
+                            : "Back to session"
+                        }
+                        autoFocus
+                      />
+                      <TopBarTitle
+                        className={infoTopbarTitleClass(
+                          infoPageScrolled || panelPage !== null,
+                        )}
+                      >
+                        {panelPage === "changes"
+                          ? "Changes"
+                          : panelPage === "portals"
+                            ? "Portals"
+                            : workspaceName || session.title}
+                      </TopBarTitle>
+                      {/* The same session menu moves with the person into Workspace
 									    details instead of remaining behind the full-screen page. */}
-									<TopBarActions className={mergeStylexOverrideClassName("", sx.relative, sx.z1)}>
-										{overflowMenu}
-									</TopBarActions>
-								</TopBar>
-								{panelPage === "changes" ? (
-									waitingForWorkspace ? (
-										<WorkspaceWaiting detail="This takes a moment." />
-									) : (
-										// The Changes toolbar clears this page's taller bar
-										// (52px plus the notch); file titles add its own height.
-										<div className="[--diff-panel-top:calc(env(safe-area-inset-top,0px)+52px)]">
-											<DiffPanel
-												sessionId={session.id}
-												isRunning={isBusy}
-												canSend={connected && !isBusy && !noEngine}
-												send={send}
-												diff={diffState}
-												showFileList={false}
-												source={worktreeDiffSource}
-												onSourceChange={changeWorktreeDiffSource}
-											/>
-										</div>
-									)
-								) : panelPage === "portals" ? (
-									<PortalsPage
-										sessionId={session.id}
-										status={previewStatus}
-										activePortal={portalTarget}
-										onBack={() => setPanelPage(null)}
-										hideHeader
-										onOpenPortal={(target) => {
-											setInfoPageOpen(false);
-											onOpenPortal?.(target);
-										}}
-										onStartPortal={startDeclaredPortal}
-										onPortalAction={async (name, action) => {
-											setPreviewStatus(await portalActionApi(session.id, name, action));
-										}}
-									/>
-								) : (
-									<>
-										<div className={INFO_HERO}>
-											{session.desk ? (
-												<IconDesk size={40} className={mergeStylexOverrideClassName("", sx.textDim)} />
-											) : (
-												<RepoTile name={session.repo || "repository"} size={40} />
-											)}
-											<h1 className={INFO_NAME} ref={infoHeroNameRef}>
-												{workspaceName || session.title}
-											</h1>
-											<div className={INFO_SUB}>
-												{!session.desk && hasRepoWork && (
-													<RepoBar
-														sessionId={session.id}
-														primaryRepo={session.repo || "repository"}
-														branch={session.branch}
-														initialAttached={session.attachedRepos || []}
-														variant="hero"
-													/>
-												)}
-												{!session.desk && hasRepoWork && models.length > 0 && (
-													<span aria-hidden="true">·</span>
-												)}
-												{session.source === "opensession" && models.length > 0 ? (
-													<ModelMenuRow
-														models={models}
-														model={model}
-														defaultModel={defaultModel}
-														onChange={handleModelChange}
-														prettyLabel={prettyModel}
-														effort={effort}
-														onEffortChange={setEffort}
-														fastMode={fastMode}
-														onFastModeChange={setFastMode}
-														accounts={accounts}
-														accountId={accountId}
-														onAccountChange={handleAccountChange}
-														usage={usage}
-														variant="hero"
-													/>
-												) : models.length > 0 ? (
-													<span {...stylex.props(sx.inlineFlex, sx.minH11, sx.itemsCenter, sx.px15)}>
-														{metadataModelLabel(effectiveModel, models)}
-													</span>
-												) : null}
-											</div>
-										</div>
-										<div className={INFO_CONTENT}>
-										<div className={INFO_SUMMARY_CARD}>
-											{session.sandbox && (
-												<div {...stylex.props(sx.flex, sx.minH11, sx.itemsCenter, sx.rounded2xl, sx.bgPanel, sx.px5, sx.py2)}>
-													<SandboxBadge
-														sessionId={session.id}
-														sandbox={session.sandbox}
-													/>
-												</div>
-											)}
-											<WorkspaceSummaryBody
-												embedded
-												session={session}
-												onOpenPanelTab={(tab) => {
-													if (tab === "changes") {
-														setPanelPage("changes");
-														return;
-													}
-													setInfoPageOpen(false);
-													focusPrInReview();
-												}}
-												onOpenPr={() => {
-													setInfoPageOpen(false);
-													focusPrInReview();
-												}}
-												onOpenStackPr={(repo, branch) => {
-													setInfoPageOpen(false);
-													onOpenPr?.(repo, branch);
-												}}
-												onOpenChecks={() => {
-													setInfoPageOpen(false);
-													focusPrInReview(undefined, "checks");
-												}}
-												onOpenAsset={openAssetFromTranscript}
-												onOpenAssets={() => {
-													setInfoPageOpen(false);
-													onOpenAssets?.();
-												}}
-												onOpenSession={onOpenSession}
-												onArchive={handleArchive}
-												reviewRequest={effectiveReview?.req ?? null}
-												prReviewRequested={effectiveReview?.prReviewRequested}
-												running={isRunningLive}
-												send={connected ? send : undefined}
-												refreshTick={gitRefreshTick}
-												liveMedia={liveOverviewMedia}
-												close={() => setInfoPageOpen(false)}
-											/>
-										</div>
-										{(workflowRuns.length > 0 || subagents.length > 0) && (
-											<div className={INFO_SECTION}>
-												<WorkflowPanel
-													sessionId={session.id}
-													runs={workflowRuns}
-													onCancel={cancelWorkflowRun}
-													subagents={subagents}
-													onOpenSubagent={(agentId, label) => {
-														setInfoPageOpen(false);
-														openSubagent(agentId, label);
-													}}
-												/>
-											</div>
-										)}
-											{sessionReports.length > 0 && (
-												<div className={INFO_SECTION}>
-													<SessionReportsPanel
-														reports={sessionReports}
-														onOpenNewSession={onOpenNewSession}
-													/>
-												</div>
-											)}
-										</div>
-									</>
-								)}
-							</div>,
-							document.body,
-						)
-					) : null;
-				const placedHeader =
-					isPhone && headerActionsEl
-						? createPortal(header, headerActionsEl)
-						: topbarEl
-							? createPortal(header, topbarEl)
-							: header;
-				return (
-					<>
-						{placedHeader}
-						{phoneInfoPage}
-					</>
-				);
-			})()}
+                      <TopBarActions
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.relative,
+                          sx.z1,
+                        )}
+                      >
+                        {overflowMenu}
+                      </TopBarActions>
+                    </TopBar>
+                    {panelPage === "changes" ? (
+                      waitingForWorkspace ? (
+                        <WorkspaceWaiting detail="This takes a moment." />
+                      ) : (
+                        // The Changes toolbar clears this page's taller bar
+                        // (52px plus the notch); file titles add its own height.
+                        <div className="[--diff-panel-top:calc(env(safe-area-inset-top,0px)+52px)]">
+                          <DiffPanel
+                            sessionId={session.id}
+                            isRunning={isBusy}
+                            canSend={connected && !isBusy && !noEngine}
+                            send={send}
+                            diff={diffState}
+                            showFileList={false}
+                            source={worktreeDiffSource}
+                            onSourceChange={changeWorktreeDiffSource}
+                          />
+                        </div>
+                      )
+                    ) : panelPage === "portals" ? (
+                      <PortalsPage
+                        sessionId={session.id}
+                        status={previewStatus}
+                        activePortal={portalTarget}
+                        onBack={() => setPanelPage(null)}
+                        hideHeader
+                        onOpenPortal={(target) => {
+                          setInfoPageOpen(false);
+                          openPortal?.(target);
+                        }}
+                        onStartPortal={startDeclaredPortal}
+                        onPortalAction={async (name, action) => {
+                          setPreviewStatus(
+                            await portalActionApi(session.id, name, action),
+                          );
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <div className={INFO_HERO}>
+                          {session.desk ? (
+                            <IconDesk
+                              size={40}
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.textDim,
+                              )}
+                            />
+                          ) : (
+                            <RepoTile
+                              name={session.repo || "repository"}
+                              size={40}
+                            />
+                          )}
+                          <h1 className={INFO_NAME} ref={infoHeroNameRef}>
+                            {workspaceName || session.title}
+                          </h1>
+                          <div className={INFO_SUB}>
+                            {!session.desk && hasRepoWork && (
+                              <RepoBar
+                                sessionId={session.id}
+                                primaryRepo={session.repo || "repository"}
+                                branch={session.branch}
+                                initialAttached={session.attachedRepos || []}
+                                variant="hero"
+                              />
+                            )}
+                            {!session.desk &&
+                              hasRepoWork &&
+                              models.length > 0 && (
+                                <span aria-hidden="true">·</span>
+                              )}
+                            {session.source === "opensession" &&
+                            models.length > 0 ? (
+                              <ModelMenuRow
+                                models={models}
+                                model={model}
+                                defaultModel={defaultModel}
+                                onChange={handleModelChange}
+                                prettyLabel={prettyModel}
+                                effort={effort}
+                                onEffortChange={setEffort}
+                                fastMode={fastMode}
+                                onFastModeChange={setFastMode}
+                                accounts={accounts}
+                                accountId={accountId}
+                                onAccountChange={handleAccountChange}
+                                usage={usage}
+                                variant="hero"
+                              />
+                            ) : models.length > 0 ? (
+                              <span
+                                {...stylex.props(
+                                  sx.inlineFlex,
+                                  sx.minH11,
+                                  sx.itemsCenter,
+                                  sx.px15,
+                                )}
+                              >
+                                {metadataModelLabel(effectiveModel, models)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className={INFO_CONTENT}>
+                          <div className={INFO_SUMMARY_CARD}>
+                            {session.sandbox && (
+                              <div
+                                {...stylex.props(
+                                  sx.flex,
+                                  sx.minH11,
+                                  sx.itemsCenter,
+                                  sx.rounded2xl,
+                                  sx.bgPanel,
+                                  sx.px5,
+                                  sx.py2,
+                                )}
+                              >
+                                <SandboxBadge
+                                  sessionId={session.id}
+                                  sandbox={session.sandbox}
+                                />
+                              </div>
+                            )}
+                            <WorkspaceSummaryBody
+                              embedded
+                              session={session}
+                              onOpenPanelTab={(tab) => {
+                                if (tab === "changes") {
+                                  setPanelPage("changes");
+                                  return;
+                                }
+                                setInfoPageOpen(false);
+                                focusPrInReview();
+                              }}
+                              onOpenPr={() => {
+                                setInfoPageOpen(false);
+                                focusPrInReview();
+                              }}
+                              onOpenStackPr={(repo, branch) => {
+                                setInfoPageOpen(false);
+                                openPr?.(repo, branch);
+                              }}
+                              onOpenChecks={() => {
+                                setInfoPageOpen(false);
+                                focusPrInReview(undefined, "checks");
+                              }}
+                              onOpenAsset={openAssetFromTranscript}
+                              onOpenAssets={() => {
+                                setInfoPageOpen(false);
+                                openAssets?.();
+                              }}
+                              onOpenSession={openSession}
+                              onArchive={handleArchive}
+                              reviewRequest={effectiveReview?.req ?? null}
+                              reviewRequestSessionId={effectiveReview?.ownerId}
+                              onReviewChange={onReviewChange}
+                              prReviewRequested={
+                                effectiveReview?.prReviewRequested
+                              }
+                              running={isRunningLive}
+                              workspacePreparing={workspacePreparing}
+                              send={connected ? send : undefined}
+                              refreshTick={gitRefreshTick}
+                              liveMedia={liveOverviewMedia}
+                              close={() => setInfoPageOpen(false)}
+                            />
+                          </div>
+                          {(workflowRuns.length > 0 ||
+                            subagents.length > 0) && (
+                            <div className={INFO_SECTION}>
+                              <WorkflowPanel
+                                sessionId={session.id}
+                                runs={workflowRuns}
+                                onAction={workflowAction}
+                                subagents={subagents}
+                                onOpenSubagent={(agentId, label) => {
+                                  setInfoPageOpen(false);
+                                  openSubagent(agentId, label);
+                                }}
+                                onOpenSession={
+                                  openSession
+                                    ? (id) => {
+                                        setInfoPageOpen(false);
+                                        openSession(id);
+                                      }
+                                    : undefined
+                                }
+                              />
+                            </div>
+                          )}
+                          {sessionReports.length > 0 && (
+                            <div className={INFO_SECTION}>
+                              <SessionReportsPanel
+                                reports={sessionReports}
+                                onOpenNewSession={
+                                  navigation.openPrefilledSession
+                                }
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>,
+                  document.body,
+                )
+              : null;
+          return (
+            <>
+              {header}
+              {phoneInfoPage}
+            </>
+          );
+        })()}
 
-			{/* Repo tile leads the mobile title pill (Slack-header style), except
+      {/* Repo tile leads the mobile title pill (Slack-header style), except
 			    when an archive mark replaces it for an archived session. A Desk
 			    has no repo, and every Desk is titled just "Desk": opening a
 			    teammate's from the People band gave a pill with nothing in front
@@ -7362,1208 +6635,1536 @@ export function SessionViewer({
 			    against the pill's edge where the tile's spacing should be. Their
 			    face answers both; your own Desk gets the lamp instead of a
 			    picture of yourself. */}
-			{isPhone &&
-				headerRepoEl &&
-				(session.archived || session.desk || session.repo || hasWorkspace) &&
-				createPortal(
-					session.archived ? (
-						<span role="img" aria-label="Archived" title="Archived">
-							<IconArchive size={20} className={mergeStylexOverrideClassName("", sx.textDim)} />
-						</span>
-					) : session.desk ? (
-						deskOwner && personKey(deskOwner) !== personKey(currentUser) ? (
-							<UserAvatar
-								name={deskOwner}
-								size={18}
-								title={`${deskOwner}'s Desk`}
-							/>
-						) : (
-							// 20, not the tile's 18: these 24-grid glyphs are clamped
-							// at 20 (MIN_SIZE in icons.tsx) and only ink ~60% of
-							// their box, so the lamp still reads smaller than a face.
-							<IconDesk size={20} className={mergeStylexOverrideClassName("", sx.textDim)} />
-						)
-					) : (
-						<RepoTile name={session.repo || "repository"} size={18} round />
-					),
-					headerRepoEl,
-				)}
+      {isPhone &&
+        headerRepoEl &&
+        (session.archived || session.desk || session.repo || hasWorkspace) &&
+        createPortal(
+          session.archived ? (
+            <span role="img" aria-label="Archived" title="Archived">
+              <IconArchive
+                size={20}
+                className={mergeStylexOverrideClassName("", sx.textDim)}
+              />
+            </span>
+          ) : session.desk ? (
+            deskOwner && personKey(deskOwner) !== personKey(currentUser) ? (
+              <UserAvatar
+                name={deskOwner}
+                size={18}
+                title={`${deskOwner}'s Desk`}
+              />
+            ) : (
+              // 20, not the tile's 18: these 24-grid glyphs are clamped
+              // at 20 (MIN_SIZE in icons.tsx) and only ink ~60% of
+              // their box, so the lamp still reads smaller than a face.
+              <IconDesk
+                size={20}
+                className={mergeStylexOverrideClassName("", sx.textDim)}
+              />
+            )
+          ) : (
+            <RepoTile name={session.repo || "repository"} size={18} round />
+          ),
+          headerRepoEl,
+        )}
 
-			{/* Compact "session bar" under the mobile top-bar title: it just *shows*
+      {/* Compact "session bar" under the mobile top-bar title: it just *shows*
 			    the session's model (no per-item dropdowns) — tapping it (or the
 			    title above) opens the settings menu where they, and every other
 			    workspace/session setting, can be changed. */}
-			{isPhone &&
-				headerModelEl &&
-				(hasWorkspace || effectiveModel || models.length > 0) &&
-				createPortal(
-					<span
-						className={`${HEADER_SESSIONBAR} session-settings-trigger`}
-						role="button"
-						tabIndex={0}
-						title="Workspace & session settings"
-						onClick={() =>
-							// The metadata line is a React portal, so its clicks bubble
-							// through this component's tree — not App's title button. Fire
-							// the same event so tapping repo/model/cost opens the info page.
-							window.dispatchEvent(
-								new Event("opensession:toggle-session-settings"),
-							)
-						}
-					>
-						{/* The engine-running status dot rides the metadata line on
+      {isPhone &&
+        headerModelEl &&
+        (hasWorkspace || effectiveModel || models.length > 0) &&
+        createPortal(
+          <span
+            className={`${HEADER_SESSIONBAR} session-settings-trigger`}
+            role="button"
+            tabIndex={0}
+            title="Workspace & session settings"
+            onClick={() =>
+              // The metadata line is a React portal, so its clicks bubble
+              // through this component's tree — not App's title button. Fire
+              // the same event so tapping repo/model/cost opens the info page.
+              window.dispatchEvent(
+                new Event("opensession:toggle-session-settings"),
+              )
+            }
+          >
+            {/* The engine-running status dot rides the metadata line on
 						    phones (it used to sit next to the title) so the name stays
 						    steady and the working state reads alongside model · cost. */}
-						{isRunningLive && <PulseDot size={7} />}
-						{/* Repo now leads the pill (portaled into headerRepoEl in front of
+            {isRunningLive && <PulseDot size={7} />}
+            {/* Repo now leads the pill (portaled into headerRepoEl in front of
 						    the title), so the metadata line is just model · cost. The id
 						    has its own friendly fallback, so the optimistic shell can name
 						    it before this view's catalog fetch finishes. */}
-						{effectiveModel && (
-							<span className={HEADER_SESSIONBAR_MODEL}>
-								{/* Drop the "Claude " prefix — "Opus 4.8" reads fine in the
+            {effectiveModel && (
+              <span className={HEADER_SESSIONBAR_MODEL}>
+                {/* Drop the "Claude " prefix — "Opus 4.8" reads fine in the
 								    thin subtitle and leaves room for the cost meter. */}
-								{metadataModelLabel(effectiveModel, models).replace(
-									/^Claude[\s-]+/i,
-									"",
-								)}
-							</span>
-						)}
-						{/* Cost/context stays in the phone session bar, after the model and
+                {metadataModelLabel(effectiveModel, models).replace(
+                  /^Claude[\s-]+/i,
+                  "",
+                )}
+              </span>
+            )}
+            {/* Cost/context stays in the phone session bar, after the model and
 						    restyled to the subtitle's size and colour. The cache rate stays
 						    off: the line
 						    is a pill capped by the screen, and "92% cached" was winning
 						    that fight against the model name — the thing you actually
 						    read to know what you are talking to. The full breakdown is
 						    one tap away in the meter's own popup. */}
-						{usage && usage.turns > 0 && (
-							<>
-								<span className={HEADER_SESSIONBAR_SEP} aria-hidden="true">
-									·
-								</span>
-								<UsageMeter
-									usage={usage}
-									className={HEADER_SESSIONBAR_USAGE}
-								/>
-							</>
-						)}
-					</span>,
-					headerModelEl,
-				)}
+            {usage && usage.turns > 0 && (
+              <>
+                <span className={HEADER_SESSIONBAR_SEP} aria-hidden="true">
+                  ·
+                </span>
+                <UsageMeter usage={usage} className={HEADER_SESSIONBAR_USAGE} />
+              </>
+            )}
+          </span>,
+          headerModelEl,
+        )}
 
-			{(session.goal || session.loop) && (
-				<div className={SESSION_BANNERS}>
-					{session.goal && (
-						<span
-							{...stylex.props(sx.inlineFlex, sx.maxWFull, sx.itemsCenter, sx.gap15, sx.overflowHidden, sx.textEllipsis, sx.whitespaceNowrap, sx.roundedFull, sx.border, sx.borderLine, sx.bgPanel, sx.px3, sx.py3px, sx.textDim, typography.label)}
-							title="Cleared with /goal clear"
-						>
-							🎯 {session.goal}
-						</span>
-					)}
-					{session.loop && (
-						<span
-							{...stylex.props(sx.inlineFlex, sx.maxWFull, sx.itemsCenter, sx.gap15, sx.overflowHidden, sx.textEllipsis, sx.whitespaceNowrap, sx.roundedFull, sx.border, sx.borderLine, sx.bgPanel, sx.px3, sx.py3px, sx.textDim, typography.label)}
-							title={`"${session.loop.prompt}" · stop with /loop stop`}
-						>
-							⟳ every {session.loop.intervalMinutes}m ·{" "}
-							{session.loop.prompt.slice(0, 60)}
-							{session.loop.prompt.length > 60 ? "…" : ""}
-						</span>
-					)}
-				</div>
-			)}
+      {(session.goal || session.loop) && (
+        <div className={SESSION_BANNERS}>
+          {session.goal && (
+            <span
+              {...stylex.props(
+                sx.inlineFlex,
+                sx.maxWFull,
+                sx.itemsCenter,
+                sx.gap15,
+                sx.overflowHidden,
+                sx.textEllipsis,
+                sx.whitespaceNowrap,
+                sx.roundedFull,
+                sx.border,
+                sx.borderLine,
+                sx.bgPanel,
+                sx.px3,
+                sx.py3px,
+                sx.textDim,
+                typography.label,
+              )}
+              title="Cleared with /goal clear"
+            >
+              🎯 {session.goal}
+            </span>
+          )}
+          {session.loop && (
+            <span
+              {...stylex.props(
+                sx.inlineFlex,
+                sx.maxWFull,
+                sx.itemsCenter,
+                sx.gap15,
+                sx.overflowHidden,
+                sx.textEllipsis,
+                sx.whitespaceNowrap,
+                sx.roundedFull,
+                sx.border,
+                sx.borderLine,
+                sx.bgPanel,
+                sx.px3,
+                sx.py3px,
+                sx.textDim,
+                typography.label,
+              )}
+              title={`"${session.loop.prompt}" · stop with /loop stop`}
+            >
+              ⟳ every {session.loop.intervalMinutes}m ·{" "}
+              {session.loop.prompt.slice(0, 60)}
+              {session.loop.prompt.length > 60 ? "…" : ""}
+            </span>
+          )}
+        </div>
+      )}
 
-			<div {...stylex.props(sx.flex, sx.minH0, sx.flex1)}>
-				<div
-					/* The last class is what the floating action band covers, paid for
+      <div {...stylex.props(sx.flex, sx.minH0, sx.flex1)}>
+        <div
+          /* The last class is what the floating action band covers, paid for
 					   by the transcript's bottom padding and by the scroll-to-bottom
 					   pill's offset. Set here so both read one value. */
-					className={cn(
-						utilityClassName("flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]"),
-						actionClearance,
-					)}
-				>
-					{showPortal && portalTarget ? (
-						<div className={VIEWER_REVIEW_MAIN}>
-							<PortalPane target={portalTarget} />
-						</div>
-					) : showPreviewTab ? (
-						<div className={VIEWER_REVIEW_MAIN}>
-							<PreviewPane
-								session={session}
-								status={previewStatus}
-								onClose={() => onClosePreviewTab?.()}
-							/>
-						</div>
-					) : showStaging && stagingUrl ? (
-						staging?.embeddable ? (
-							// This deploy opts into being framed by this app (its CSP
-							// frame-ancestors names our origin), so we embed it inline.
-							// When the deploy's session cookie is scoped to a parent
-							// domain this app also sits under (SameSite=None; Secure), it
-							// rides into the frame on every device, iOS included, so a
-							// logged-in reviewer sees the deploy directly. A
-							// logged-OUT one gets a blank frame (staging redirects to
-							// WorkOS AuthKit, which refuses framing), so the header keeps a
-							// first-party "Open" break-out to log in, then come back.
-							<div className={VIEWER_REVIEW_MAIN}>
-								<div {...stylex.props(sx.flex, sx.hFull, sx.flexCol)}>
-									<div {...mergeStylexProps("border-divider", sx.flex, sx.itemsCenter, sx.gap2, sx.borderB, sx.bgPanel, sx.px3, sx.py15, sx.textXs, sx.textDim)} >
-										<IconGlobe size={14} />
-										<span {...stylex.props(sx.truncate)}>
-											Preview environment
-											{staging.status !== "Ready"
-												? ` · ${staging.status.toLowerCase()}…`
-												: ""}
-										</span>
-										<div {...stylex.props(sx.mlAuto, sx.flex, sx.itemsCenter, sx.gap3)}>
-											<button
-												type="button"
-												onClick={() =>
-													shareLink(stagingUrl, { toast: "Link copied" })
-												}
-												{...mergeStylexProps("hover:text-fg", sx.inlineFlex, sx.itemsCenter, sx.gap1, sx.transitionColors)}
-											>
-												<IconCopy size={13} />
-												Copy link
-											</button>
-											<a
-												href={stagingUrl}
-												target="_blank"
-												rel="noopener"
-												title="Open first-party in a new tab. Needed if the frame is blank because you aren't logged in to the preview environment yet."
-												{...mergeStylexProps("hover:text-fg", sx.inlineFlex, sx.itemsCenter, sx.gap1, sx.transitionColors)}
-											>
-												Open
-												<IconArrowUpRight size={13} />
-											</a>
-										</div>
-									</div>
-									<iframe
-										key={stagingUrl}
-										src={stagingUrl}
-										title="Preview environment"
-										{...stylex.props(sx.minH0, sx.flex1, sx.border0, sx.bgSurface)}
-										allow="camera; microphone; display-capture; fullscreen; autoplay; clipboard-write"
-									/>
-								</div>
-							</div>
-						) : (
-							// Deploy hasn't opted into being framed (older preview, or the
-							// fusion CSP change hasn't reached it yet) — open it
-							// first-party in a new tab rather than show a blocked frame.
-							<div className={VIEWER_REVIEW_MAIN}>
-								<div {...stylex.props(sx.flex, sx.flex1, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.gap4, sx.p8, sx.textCenter)}>
-									<IconGlobe size={40} className={mergeStylexOverrideClassName("", sx.textDim)} />
-									<div {...stylex.props(sx.flex, sx.flexCol, sx.itemsCenter, sx.gap1)}>
-										<div {...stylex.props(sx.textBase, sx.fontMedium, sx.textFg)}>
-											Preview environment
-										</div>
-										<div {...stylex.props(sx.textXs, sx.textDim)}>
-											{staging?.status === "Ready"
-												? "Test this PR on real infra"
-												: `Deploy is ${(staging?.status ?? "building").toLowerCase()}…`}
-										</div>
-									</div>
-									<a
-										href={stagingUrl}
-										target="_blank"
-										rel="noopener"
-										{...mergeStylexProps("hover:bg-panel", sx.inlineFlex, sx.itemsCenter, sx.gap2, sx.roundedMd, sx.border, sx.borderLine, sx.bgSurface, sx.px4, sx.py2, sx.textSm, sx.fontMedium, sx.textFg, sx.transitionColors)}
-									>
-										<IconGlobe size={16} />
-										Open staging
-										<IconArrowUpRight size={16} />
-									</a>
-									<button
-										type="button"
-										onClick={() =>
-											shareLink(stagingUrl, { toast: "Link copied" })
-										}
-										{...mergeStylexProps("hover:text-fg", sx.inlineFlex, sx.itemsCenter, sx.gap15, sx.textXs, sx.textDim, sx.transitionColors)}
-									>
-										<IconCopy size={14} />
-										Copy link
-									</button>
-									<div {...stylex.props(sx.maxWXs, sx.textXs, sx.leadingRelaxed, sx.textDim)}>
-										Opens in a new tab. This deploy isn&apos;t set up to
-										embed here yet.
-									</div>
-								</div>
-							</div>
-						)
-					) : showAssets ? (
-						// The session's scratch assets, full-width (same component
-						// the Info panel's Assets button opens). AssetsPanel is
-						// `h-full`, so the flex-column viewer-review-main gives it
-						// height exactly like the Review PrPanel.
-						<div className={VIEWER_REVIEW_MAIN}>
-							<AssetsPanel
-								sessionId={session.id}
-								files={assetFiles}
-								refresh={refreshAssets}
-								selectedPath={selectedAssetPath}
-								onSelectPath={setSelectedAssetPath}
-								onOpenNewSession={onOpenNewSession}
-							/>
-						</div>
-					) : subagentOpen ? (
-						// A sub-agent's conversation, full-width like Review — it reads
-						// as a conversation, so it gets the session column instead of being
-						// squeezed into the right sidebar. Nested Task calls push onto
-						// the same tab's breadcrumb.
-						<div className={VIEWER_REVIEW_MAIN}>
-							<SubagentPane
-								sessionId={session.id}
-								stack={subagentStack}
-								onOpenSubagent={openSubagent}
-								onBack={() => onSubagentBack?.(session.id)}
-								onLabel={nameSubagent}
-							/>
-						</div>
-					) : showConversation && conversationThreadId ? (
-						// The workspace's Plain ticket thread, full-width — same
-						// ConversationPane the session-less workspace route renders, so
-						// the session stays mounted underneath exactly like Review.
-						<div className={VIEWER_REVIEW_MAIN}>
-							<ConversationPane
-								threadId={conversationThreadId}
-								onOpenSession={() => {}}
-								hideTriage
-							/>
-						</div>
-					) : showVideo && videoPanel ? (
-						// The workspace's feed panel: a web embed or a custom
-						// component (Slack channel Conversation) via the panel
-						// registry (the feeds design).
-						<div className={VIEWER_REVIEW_MAIN}>
-							{videoPanel.component === "slack-channel" ? (
-								<SlackChannelPane channelId={videoPanel.refId} />
-							) : (
-								<FeedWebPane
-									panel={videoPanel}
-									title={videoTitle || undefined}
-								/>
-							)}
-						</div>
-					) : showTerminal ? (
-						// Nothing here on purpose: the shells are mounted once below,
-						// outside this chain, so switching tabs doesn't kill their PTYs.
-						// This branch only stops the transcript rendering under them.
-						waitingForWorkspace ? (
-							<div className={VIEWER_REVIEW_MAIN}>
-								<WorkspaceWaiting detail="This takes a moment." />
-							</div>
-						) : null
-					) : showReview && hasWorkspace ? (
-						<div className={VIEWER_REVIEW_MAIN}>
-							<PrPanel
-									onOpenPr={onOpenPr}
-									sessionId={session.id}
-									send={send}
-									addHandler={addHandler}
-									sessions={allSessions || workspaceSessions || []}
-									onOpenSessionById={onOpenSession}
-									editGate={connected && !isBusy && !noEngine}
-									onOpenSession={onOpenWorkspace}
-									onAddToInput={(text) =>
-										setComposerPrefill((p) => ({
-											seq: (p?.seq ?? 0) + 1,
-											text,
-										}))
-									}
-									repos={panelReviewRepos}
-									linkedPrs={session.linkedPrs}
-									discoveredPrs={discoveredPrs}
-									focusTarget={reviewFocus}
-									hideWideOverviewRail
-									linkable
-									walkthrough={session.walkthrough}
-									compactToolbar={summaryVisible}
-									flushToolbarTop={!tabStripVisible}
-								/>
-						</div>
-					) : (
-					<div {...stylex.props(sx.relative, sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
-					{fileDragActive &&
-						createPortal(
-							<>
-								<motion.div
-									{...mergeStylexProps("bg-[color-mix(in_srgb,var(--bg-panel)_68%,transparent)]", sx.pointerEventsNone, sx.fixed, sx.inset0, sx.z12000, sx.flex, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.px6, sx.textCenter)}
-									initial={{ opacity: 0 }}
-									animate={{ opacity: 1 }}
-									transition={{ type: "tween", duration: duration.base, ease }}
-									aria-hidden="true"
-									data-file-drop-overlay
-								>
-									<IconArrowUpToLine size={40} className={mergeStylexOverrideClassName("", sx.textFg)} />
-									<div {...mergeStylexProps("text-title", sx.mt4, sx.fontSemibold, sx.textFg)} >Add files</div>
-									<div {...stylex.props(sx.mt1, sx.textDim, typography.label)}>
-										Drop here to attach them to your message.
-									</div>
-								</motion.div>
-								<span {...stylex.props(sx.srOnly)} role="status">
-									Drop files to attach
-								</span>
-							</>,
-							document.body,
-						)}
-					{/* The step lives here rather than on the scroller alone, so the
+          className={cn(
+            utilityClassName(
+              "flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]",
+            ),
+            actionClearance,
+          )}
+        >
+          {showPortal && portalTarget ? (
+            <div className={VIEWER_REVIEW_MAIN}>
+              <PortalPane target={portalTarget} />
+            </div>
+          ) : showPreviewTab ? (
+            <div className={VIEWER_REVIEW_MAIN}>
+              <PreviewPane
+                session={session}
+                status={previewStatus}
+                onClose={() => onClosePreviewTab?.()}
+              />
+            </div>
+          ) : showStaging && stagingUrl ? (
+            staging?.embeddable ? (
+              // This deploy opts into being framed by this app (its CSP
+              // frame-ancestors names our origin), so we embed it inline.
+              // When the deploy's session cookie is scoped to a parent
+              // domain this app also sits under (SameSite=None; Secure), it
+              // rides into the frame on every device, iOS included, so a
+              // logged-in reviewer sees the deploy directly. A
+              // logged-OUT one gets a blank frame (staging redirects to
+              // WorkOS AuthKit, which refuses framing), so the header keeps a
+              // first-party "Open" break-out to log in, then come back.
+              <div className={VIEWER_REVIEW_MAIN}>
+                <div {...stylex.props(sx.flex, sx.hFull, sx.flexCol)}>
+                  <div
+                    {...stylex.props(
+                      sx.flex,
+                      sx.itemsCenter,
+                      sx.gap2,
+                      sx.borderB,
+                      sx.borderDivider,
+                      sx.bgPanel,
+                      sx.px3,
+                      sx.py15,
+                      sx.textXs,
+                      sx.textDim,
+                    )}
+                  >
+                    <IconGlobe size={14} />
+                    <span {...stylex.props(sx.truncate)}>
+                      Preview environment
+                      {staging.status !== "Ready"
+                        ? ` · ${staging.status.toLowerCase()}…`
+                        : ""}
+                    </span>
+                    <div
+                      {...stylex.props(
+                        sx.mlAuto,
+                        sx.flex,
+                        sx.itemsCenter,
+                        sx.gap3,
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          shareLink(stagingUrl, { toast: "Link copied" })
+                        }
+                        {...stylex.props(
+                          sx.inlineFlex,
+                          sx.itemsCenter,
+                          sx.gap1,
+                          sx.transitionColors,
+                          sx.hoverTextFg,
+                        )}
+                      >
+                        <IconCopy size={13} />
+                        Copy link
+                      </button>
+                      <a
+                        href={stagingUrl}
+                        target="_blank"
+                        rel="noopener"
+                        title="Open first-party in a new tab. Needed if the frame is blank because you aren't logged in to the preview environment yet."
+                        {...stylex.props(
+                          sx.inlineFlex,
+                          sx.itemsCenter,
+                          sx.gap1,
+                          sx.transitionColors,
+                          sx.hoverTextFg,
+                        )}
+                      >
+                        Open
+                        <IconArrowUpRight size={13} />
+                      </a>
+                    </div>
+                  </div>
+                  <iframe
+                    key={stagingUrl}
+                    src={stagingUrl}
+                    title="Preview environment"
+                    {...stylex.props(
+                      sx.minH0,
+                      sx.flex1,
+                      sx.border0,
+                      sx.bgSurface,
+                    )}
+                    allow="camera; microphone; display-capture; fullscreen; autoplay; clipboard-write"
+                  />
+                </div>
+              </div>
+            ) : (
+              // Deploy hasn't opted into being framed (older preview, or the
+              // fusion CSP change hasn't reached it yet) — open it
+              // first-party in a new tab rather than show a blocked frame.
+              <div className={VIEWER_REVIEW_MAIN}>
+                <div
+                  {...stylex.props(
+                    sx.flex,
+                    sx.flex1,
+                    sx.flexCol,
+                    sx.itemsCenter,
+                    sx.justifyCenter,
+                    sx.gap4,
+                    sx.p8,
+                    sx.textCenter,
+                  )}
+                >
+                  <IconGlobe
+                    size={40}
+                    className={mergeStylexOverrideClassName("", sx.textDim)}
+                  />
+                  <div
+                    {...stylex.props(
+                      sx.flex,
+                      sx.flexCol,
+                      sx.itemsCenter,
+                      sx.gap1,
+                    )}
+                  >
+                    <div
+                      {...stylex.props(sx.textBase, sx.fontMedium, sx.textFg)}
+                    >
+                      Preview environment
+                    </div>
+                    <div {...stylex.props(sx.textXs, sx.textDim)}>
+                      {staging?.status === "Ready"
+                        ? "Test this PR on real infra"
+                        : `Deploy is ${(staging?.status ?? "building").toLowerCase()}…`}
+                    </div>
+                  </div>
+                  <a
+                    href={stagingUrl}
+                    target="_blank"
+                    rel="noopener"
+                    {...stylex.props(
+                      sx.inlineFlex,
+                      sx.itemsCenter,
+                      sx.gap2,
+                      sx.roundedMd,
+                      sx.border,
+                      sx.borderLine,
+                      sx.bgSurface,
+                      sx.px4,
+                      sx.py2,
+                      sx.textSm,
+                      sx.fontMedium,
+                      sx.textFg,
+                      sx.transitionColors,
+                      sx.hoverBgPanel,
+                    )}
+                  >
+                    <IconGlobe size={16} />
+                    Open staging
+                    <IconArrowUpRight size={16} />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      shareLink(stagingUrl, { toast: "Link copied" })
+                    }
+                    {...stylex.props(
+                      sx.inlineFlex,
+                      sx.itemsCenter,
+                      sx.gap15,
+                      sx.textXs,
+                      sx.textDim,
+                      sx.transitionColors,
+                      sx.hoverTextFg,
+                    )}
+                  >
+                    <IconCopy size={14} />
+                    Copy link
+                  </button>
+                  <div
+                    {...stylex.props(
+                      sx.maxWXs,
+                      sx.textXs,
+                      sx.leadingRelaxed,
+                      sx.textDim,
+                    )}
+                  >
+                    Opens in a new tab. This deploy isn&apos;t set up to embed
+                    here yet.
+                  </div>
+                </div>
+              </div>
+            )
+          ) : showAssets ? (
+            // The session's scratch assets, full-width (same component
+            // the Info panel's Assets button opens). AssetsPanel is
+            // `h-full`, so the flex-column viewer-review-main gives it
+            // height exactly like the Review PrPanel.
+            <div className={VIEWER_REVIEW_MAIN}>
+              <AssetsPanel
+                sessionId={session.id}
+                files={assetFiles}
+                refresh={refreshAssets}
+                selectedPath={selectedAssetPath}
+                onSelectPath={setSelectedAssetPath}
+                onOpenNewSession={navigation.openPrefilledSession}
+              />
+            </div>
+          ) : subagentOpen ? (
+            // A sub-agent's conversation, full-width like Review — it reads
+            // as a conversation, so it gets the session column instead of being
+            // squeezed into the right sidebar. Nested Task calls push onto
+            // the same tab's breadcrumb.
+            <div className={VIEWER_REVIEW_MAIN}>
+              <SubagentPane
+                sessionId={session.id}
+                stack={subagentStack}
+                onOpenSubagent={openSubagent}
+                onBack={() => onSubagentBack?.(session.id)}
+                onLabel={nameSubagent}
+              />
+            </div>
+          ) : showConversation && conversationThreadId ? (
+            // The workspace's Plain ticket thread, full-width — same
+            // ConversationPane the session-less workspace route renders, so
+            // the session stays mounted underneath exactly like Review.
+            <div className={VIEWER_REVIEW_MAIN}>
+              <ConversationPane
+                threadId={conversationThreadId}
+                onOpenSession={() => {}}
+                hideTriage
+              />
+            </div>
+          ) : showVideo && videoPanel ? (
+            // The workspace's feed panel: a web embed or a custom
+            // component (Slack channel Conversation) via the panel
+            // registry (the feeds design).
+            <div className={VIEWER_REVIEW_MAIN}>
+              {videoPanel.component === "slack-channel" ? (
+                <SlackChannelPane channelId={videoPanel.refId} />
+              ) : (
+                <FeedWebPane
+                  panel={videoPanel}
+                  title={videoTitle || undefined}
+                />
+              )}
+            </div>
+          ) : showTerminal ? (
+            // Nothing here on purpose: the shells are mounted once below,
+            // outside this chain, so switching tabs doesn't kill their PTYs.
+            // This branch only stops the transcript rendering under them.
+            waitingForWorkspace ? (
+              <div className={VIEWER_REVIEW_MAIN}>
+                <WorkspaceWaiting detail="This takes a moment." />
+              </div>
+            ) : null
+          ) : showReview && hasWorkspace ? (
+            <div className={VIEWER_REVIEW_MAIN}>
+              <PrPanel
+                onOpenPr={openPr}
+                sessionId={session.id}
+                sessions={allSessions || workspaceSessions || []}
+                onOpenSessionById={openSession}
+                sessionActionTarget={
+                  isPhone ? undefined : reviewSessionActionTarget
+                }
+                editGate={connected && !isBusy && !noEngine}
+                onOpenSession={openCurrentWorkspace}
+                onAddToInput={(text) =>
+                  setComposerPrefill((p) => ({
+                    seq: (p?.seq ?? 0) + 1,
+                    text,
+                  }))
+                }
+                repos={panelReviewRepos}
+                linkedPrs={session.linkedPrs}
+                discoveredPrs={discoveredPrs}
+                focusTarget={reviewFocus}
+                hideWideOverviewRail
+                linkable
+                walkthrough={session.walkthrough}
+                page={reviewPage}
+                onPageChange={setReviewPage}
+                compactToolbar={summaryVisible}
+                flushToolbarTop={!tabStripVisible}
+              />
+            </div>
+          ) : (
+            <div
+              {...stylex.props(
+                sx.relative,
+                sx.flex,
+                sx.minH0,
+                sx.flex1,
+                sx.flexCol,
+              )}
+            >
+              {fileDragActive &&
+                createPortal(
+                  <>
+                    <motion.div
+                      {...stylex.props(
+                        sx.pointerEventsNone,
+                        sx.fixed,
+                        sx.inset0,
+                        sx.z12000,
+                        sx.flex,
+                        sx.flexCol,
+                        sx.itemsCenter,
+                        sx.justifyCenter,
+                        sx.bgColorMixInSrgbVarBgPanel68Transparent,
+                        sx.px6,
+                        sx.textCenter,
+                      )}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{
+                        type: "tween",
+                        duration: duration.base,
+                        ease,
+                      }}
+                      aria-hidden="true"
+                      data-file-drop-overlay
+                    >
+                      <IconArrowUpToLine
+                        size={40}
+                        className={mergeStylexOverrideClassName("", sx.textFg)}
+                      />
+                      <div
+                        {...mergeStylexProps(
+                          "text-title",
+                          sx.mt4,
+                          sx.fontSemibold,
+                          sx.textFg,
+                        )}
+                      >
+                        Add files
+                      </div>
+                      <div
+                        {...stylex.props(sx.mt1, sx.textDim, typography.label)}
+                      >
+                        Drop here to attach them to your message.
+                      </div>
+                    </motion.div>
+                    <span {...stylex.props(sx.srOnly)} role="status">
+                      Drop files to attach
+                    </span>
+                  </>,
+                  document.body,
+                )}
+              {/* The step lives here rather than on the scroller alone, so the
 					    pills floating beside it inherit it too and stay on the reading
 					    column instead of the middle of the pane. */}
-					<div className={VIEWER_MESSAGES_REGION} style={summaryStepStyle}>
-						{/* Selecting transcript text offers actions without changing either
+              <div className={VIEWER_MESSAGES_REGION} style={summaryStepStyle}>
+                {/* Selecting transcript text offers actions without changing either
 						    composer until the person chooses where to use it. */}
-						<QuoteSelection
-							containerRef={messagesRef}
-							disabled={noEngine}
-							quote={quote}
-							onQuote={setQuote}
-							onStartNewChat={(selection) =>
-								onStartNewChat(withQuotes([selection], ""))
-							}
-							onClear={clearQuote}
-							onInputIntent={focusComposerForQuote}
-						/>
-						<div
-							className={cn(
-								VIEWER_MESSAGES,
-								// The open card and the reading column share the pane, so the
-								// messages take a visible step left instead of staying under
-								// the card's side of the composition.
-								summaryStep > 0 && VIEWER_SUMMARY_STEP,
-							)}
-							ref={setMessagesRef}
-							data-lightbox-session-id={session.id}
-							onScroll={handleMessagesScroll}
-							onClick={handleMessagesClick}
-						>
-							<AnimatePresence initial={false} mode="popLayout">
-							{settingUpWorkspace ? (
-								<WorkspaceSetup key="workspace-setup" />
-							) : loading ? (
-								<ConversationLoading key="conversation-loading" />
-							) : entries.length === 0 &&
-								!hasLiveConversation &&
-								!inlineRunFailure &&
-								!session.transcriptPath ? (
-								// A fresh session with no run yet is just an empty conversation —
-								// blank canvas, the composer below is the UI. Only a session
-								// that *ran*, has no transcript file, and has nothing in flight
-								// gets the notice: the first turn of a just-created session
-								// flips `ran` the moment it starts, seconds before its first
-								// entry lands, so a live conversation reads as "no transcript"
-								// unless it wins here. A session with anything live falls
-								// through to the transcript below, which is where the sent
-								// bubble and the streaming reply render. When the workspace has
-								// sibling sessions, the canvas offers their transcripts as
-								// attachable context for the first message.
-								session.ran ? (
-									<div {...stylex.props(sx.py10, sx.textCenter, sx.textFaint)}>
-										No transcript available for this session
-									</div>
-								) : contextSessionOptions.length > 0 ? (
-									// Simple centered empty state: the whole region centers the
-									// heading + attachable-context chips so a fresh session reads as a
-									// calm blank canvas rather than a top-left form.
-									<div {...stylex.props(sx.minHFull, sx.flex, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.textCenter, sx.wFull, sx.maxW840px, sx.mxAuto, sx.px4)}>
-										<div {...stylex.props(sx.mb4)}>
-											<div {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}>
-												New session in
-											</div>
-											<div {...stylex.props(sx.maxW340px, sx.mxAuto, sx.fontSemibold, sx.leadingSnug, sx.textFg, typography.itemTitle)}>
-												{workspaceName || session.branch || "this workspace"}
-											</div>
-										</div>
-										<div {...stylex.props(sx.textDim, sx.mb3)}>Add session transcripts</div>
-										<div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.justifyCenter, sx.gap2)}>
-											{(showAllContextSessions
-												? contextSessionOptions
-												: contextSessionOptions.slice(0, 4)
-											).map((c) => {
-												const selected = contextSessions.includes(c.id);
-												const codex =
-													(c.model || "").startsWith("gpt") ||
-													(c.model || "").startsWith("codex");
-												const ChipIcon = selected
-													? IconCheck
-													: codex
-														? IconTerminal
-														: IconSparkle;
-												return (
-													<Button
-														key={c.id}
-														variant="ghost"
-														icon={
-															<ChipIcon
-																size={16}
-																className={selected ? "text-green" : undefined}
-															/>
-														}
-														onClick={() =>
-															setContextSessions((prev) =>
-																prev.includes(c.id)
-																	? prev.filter((id) => id !== c.id)
-																	: [...prev, c.id],
-															)
-														}
-														title={
-															selected
-																? "Attached · its transcript rides along with your first message"
-																: "Attach this session's transcript as context"
-														}
-														className={
-															selected
-																? utilityClassName("bg-pressed text-fg hover:bg-pressed")
-																: utilityClassName("bg-hover/50")
-														}
-													>
-														<span {...stylex.props(sx.maxW200px, sx.truncate)}>
-															{c.title || "Untitled session"}
-														</span>
-													</Button>
-												);
-											})}
-											{!showAllContextSessions && contextSessionOptions.length > 4 && (
-												<Button
-													variant="ghost"
-													onClick={() => setShowAllContextSessions(true)}
-												>
-													+{contextSessionOptions.length - 4} more
-												</Button>
-											)}
-										</div>
-									</div>
-								) : (
-									<EmptyState
-										icon={<IconMessage size={22} />}
-										title="Start a conversation"
-										className={mergeStylexOverrideClassName("", sx.minHFull, sx.px4)}
-									>
-										Ask a question or describe your task.
-									</EmptyState>
-								)
-							) : entries.length === 0 &&
-								!hasLiveConversation &&
-								!inlineRunFailure ? (
-								<div {...stylex.props(sx.py10, sx.textCenter, sx.textFaint)}>Empty transcript</div>
-							) : (
-								<div
-									className={cn(
-										utilityClassName("w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150"),
-										openSettlePending && utilityClassName("opacity-0"),
-									)}
-								>
-									<OpenAssetPathsProvider value={assetPaths}>
-										<React.Profiler
-											id="transcript"
-											onRender={onTranscriptRender}
-										>
-											<ToolPathRootsProvider value={toolPathRoots}>
-												<LiveSubagentsProvider value={liveSubagents}>
-													<OpenAssetProvider value={openAssetFromTranscript}>
-												<SessionTranscript
-													entries={entries}
-													optimisticEntries={optimisticTranscriptEntries}
-													pendingDeliveryIds={pendingTranscriptDeliveryIds}
-													transcriptIndex={transcriptIndex ?? undefined}
-													transcriptRangeRetryGeneration={
-														transcriptRangeRetryGeneration
-													}
-													onLoadTranscriptRanges={loadTranscriptRanges}
-													onVisibleRangesSettled={onVisibleRangesSettled}
-													live={isBusy}
-													sessionId={session.id}
-													liveTurnStore={liveTurnStore}
-													onLiveLayout={relayout}
-															reviewResult={reviewResult}
-															onEditMessage={editSentMessageInComposer}
-															// Same gate the composer sends under: a busy session
-															// is already continuing, and one you cannot type into
-															// must not offer a button that types for you.
-															onContinue={
-																connected && !isBusy && !noEngine
-																	? continueAfterFailure
-																	: undefined
-															}
-															walkthrough={sessionWalkthrough}
-															notes={notes}
-															slackShare={shippedChangeShare}
-															onFork={canForkSession ? handleFork : undefined}
-															onOpenSubagent={openSubagent}
-															// For automation-owned sessions (e.g. a GitHub PR run), the
-															// automation never *types* a user turn — humans steer them.
-															// So don't credit un-attributed turns to the automation
-															// ("GitHub (automation)"); leave the owner unset so they read
-															// as "You" (explicit [Name] steers still show the teammate).
-															owner={
-																session.automation
-																	? undefined
-																	: session.startedBy || undefined
-															}
-														/>
-													</OpenAssetProvider>
-												</LiveSubagentsProvider>
-											</ToolPathRootsProvider>
-										</React.Profiler>
-									</OpenAssetPathsProvider>
-								</div>
-							)}
-							</AnimatePresence>
+                <QuoteSelection
+                  containerRef={messagesRef}
+                  disabled={noEngine}
+                  quote={quote}
+                  onQuote={setQuote}
+                  onStartNewChat={(selection) =>
+                    navigation.startNewChat(
+                      session,
+                      withQuotes([selection], ""),
+                    )
+                  }
+                  onClear={clearQuote}
+                  onInputIntent={focusComposerForQuote}
+                />
+                <div
+                  className={cn(
+                    VIEWER_MESSAGES,
+                    // The open card and the reading column share the pane, so the
+                    // messages take a visible step left instead of staying under
+                    // the card's side of the composition.
+                    summaryStep > 0 && VIEWER_SUMMARY_STEP,
+                  )}
+                  ref={setMessagesRef}
+                  data-lightbox-session-id={session.id}
+                  onScroll={handleMessagesScroll}
+                  onClick={handleMessagesClick}
+                >
+                  {/* The outgoing setup/loading canvas owns min-h-full. Waiting for its
+							    short fade before mounting transcript rows prevents both surfaces
+							    occupying the phone scroller for one frame and pushing a just-sent
+							    message from the composer edge to the top. */}
+                  <AnimatePresence initial={false} mode="wait">
+                    {settingUpWorkspace ? (
+                      <WorkspaceSetup key="workspace-setup" />
+                    ) : loading ? (
+                      <ConversationLoading key="conversation-loading" />
+                    ) : entries.length === 0 &&
+                      !hasLiveConversation &&
+                      !inlineRunFailure &&
+                      !session.transcriptPath ? (
+                      // A fresh session with no run yet is just an empty conversation —
+                      // blank canvas, the composer below is the UI. Only a session
+                      // that *ran*, has no transcript file, and has nothing in flight
+                      // gets the notice: the first turn of a just-created session
+                      // flips `ran` the moment it starts, seconds before its first
+                      // entry lands, so a live conversation reads as "no transcript"
+                      // unless it wins here. A session with anything live falls
+                      // through to the transcript below, which is where the sent
+                      // bubble and the streaming reply render. When the workspace has
+                      // sibling sessions, the canvas offers their transcripts as
+                      // attachable context for the first message.
+                      session.ran ? (
+                        <div
+                          {...stylex.props(
+                            sx.py10,
+                            sx.textCenter,
+                            sx.textFaint,
+                          )}
+                        >
+                          No transcript available for this session
+                        </div>
+                      ) : contextSessionOptions.length > 0 ? (
+                        // Simple centered empty state: the whole region centers the
+                        // heading + attachable-context chips so a fresh session reads as a
+                        // calm blank canvas rather than a top-left form.
+                        <div
+                          {...stylex.props(
+                            sx.minHFull,
+                            sx.flex,
+                            sx.flexCol,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.textCenter,
+                            sx.wFull,
+                            sx.maxW840px,
+                            sx.mxAuto,
+                            sx.px4,
+                          )}
+                        >
+                          <div {...stylex.props(sx.mb4)}>
+                            <div
+                              {...stylex.props(
+                                sx.fontMedium,
+                                sx.textDim,
+                                typography.label,
+                              )}
+                            >
+                              New session in
+                            </div>
+                            <div
+                              {...stylex.props(
+                                sx.maxW340px,
+                                sx.mxAuto,
+                                sx.fontSemibold,
+                                sx.leadingSnug,
+                                sx.textFg,
+                                typography.itemTitle,
+                              )}
+                            >
+                              {workspaceName ||
+                                session.branch ||
+                                "this workspace"}
+                            </div>
+                          </div>
+                          <div {...stylex.props(sx.textDim, sx.mb3)}>
+                            Add session transcripts
+                          </div>
+                          <div
+                            {...stylex.props(
+                              sx.flex,
+                              sx.flexWrap,
+                              sx.itemsCenter,
+                              sx.justifyCenter,
+                              sx.gap2,
+                            )}
+                          >
+                            {(showAllContextSessions
+                              ? contextSessionOptions
+                              : contextSessionOptions.slice(0, 4)
+                            ).map((c) => {
+                              const selected = contextSessions.includes(c.id);
+                              const codex =
+                                (c.model || "").startsWith("gpt") ||
+                                (c.model || "").startsWith("codex");
+                              const ChipIcon = selected
+                                ? IconCheck
+                                : codex
+                                  ? IconTerminal
+                                  : IconSparkle;
+                              return (
+                                <Button
+                                  key={c.id}
+                                  variant="ghost"
+                                  icon={
+                                    <ChipIcon
+                                      size={16}
+                                      className={
+                                        selected
+                                          ? utilityClassName("text-green")
+                                          : undefined
+                                      }
+                                    />
+                                  }
+                                  onClick={() =>
+                                    setContextSessions((prev) =>
+                                      prev.includes(c.id)
+                                        ? prev.filter((id) => id !== c.id)
+                                        : [...prev, c.id],
+                                    )
+                                  }
+                                  title={
+                                    selected
+                                      ? "Attached · its transcript rides along with your first message"
+                                      : "Attach this session's transcript as context"
+                                  }
+                                  className={
+                                    selected
+                                      ? utilityClassName(
+                                          "bg-pressed text-fg hover:bg-pressed",
+                                        )
+                                      : utilityClassName("bg-hover/50")
+                                  }
+                                >
+                                  <span
+                                    {...stylex.props(sx.maxW200px, sx.truncate)}
+                                  >
+                                    {c.title || "Untitled session"}
+                                  </span>
+                                </Button>
+                              );
+                            })}
+                            {!showAllContextSessions &&
+                              contextSessionOptions.length > 4 && (
+                                <Button
+                                  variant="ghost"
+                                  onClick={() =>
+                                    setShowAllContextSessions(true)
+                                  }
+                                >
+                                  +{contextSessionOptions.length - 4} more
+                                </Button>
+                              )}
+                          </div>
+                        </div>
+                      ) : (
+                        <EmptyState
+                          icon={<IconMessage size={22} />}
+                          title="Start a conversation"
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.minHFull,
+                            sx.px4,
+                          )}
+                        >
+                          Ask a question or describe your task.
+                        </EmptyState>
+                      )
+                    ) : entries.length === 0 &&
+                      !hasLiveConversation &&
+                      !inlineRunFailure ? (
+                      <div
+                        {...stylex.props(sx.py10, sx.textCenter, sx.textFaint)}
+                      >
+                        Empty transcript
+                      </div>
+                    ) : (
+                      <TranscriptView
+                        openSettlePending={openSettlePending}
+                        assetPaths={assetPaths}
+                        toolPathRoots={toolPathRoots}
+                        liveSubagents={liveSubagents}
+                        openAsset={openAssetFromTranscript}
+                        onRender={onTranscriptRender}
+                        entries={entries}
+                        optimisticEntries={optimisticTranscriptEntries}
+                        pendingDeliveryIds={pendingTranscriptDeliveryIds}
+                        transcriptIndex={transcriptIndex ?? undefined}
+                        transcriptRangeRetryGeneration={
+                          transcriptRangeRetryGeneration
+                        }
+                        onLoadTranscriptRanges={loadTranscriptRanges}
+                        onVisibleRangesSettled={onVisibleRangesSettled}
+                        live={isBusy}
+                        sessionId={session.id}
+                        liveTurnStore={liveTurnStore}
+                        shouldMaintainEnd={shouldMaintainEnd}
+                        onLayout={relayout}
+                        reviewResult={reviewResult}
+                        onEditMessage={editSentMessageInComposer}
+                        // Same gate the composer sends under: a busy session
+                        // is already continuing, and one you cannot type into
+                        // must not offer a button that types for you.
+                        onContinue={
+                          connected && !isBusy && !noEngine
+                            ? continueAfterFailure
+                            : undefined
+                        }
+                        walkthrough={sessionWalkthrough}
+                        notes={notes}
+                        slackShare={shippedChangeShare}
+                        onFork={canForkSession ? handleFork : undefined}
+                        onOpenSubagent={openSubagent}
+                        // For automation-owned sessions (e.g. a GitHub PR run), the
+                        // automation never *types* a user turn — humans steer them.
+                        // So don't credit un-attributed turns to the automation
+                        // ("GitHub (automation)"); leave the owner unset so they read
+                        // as "You" (explicit [Name] steers still show the teammate).
+                        owner={
+                          session.automation
+                            ? undefined
+                            : session.startedBy || undefined
+                        }
+                      />
+                    )}
+                  </AnimatePresence>
 
-							{safety && (
-								<SessionSafetyNotice
-									safety={safety}
-									onContinue={continuePausedSession}
-									onRepair={canRepairSafety ? repairSafetyPause : undefined}
-								/>
-							)}
+                  {safety && (
+                    <SessionSafetyNotice
+                      safety={safety}
+                      onContinue={continuePausedSession}
+                      onRepair={canRepairSafety ? repairSafetyPause : undefined}
+                    />
+                  )}
 
-							{inlineRunFailure && (
-								<InlineAlert
-									title="Run failed"
-									className={mergeStylexOverrideClassName("[&>div>div]:leading-snug [&>div>div+div]:mt-0", sx.mxAuto, sx.mt3, sx.maxW2xl, sx.rounded2xl, sx.border0, sx.textCenter)}
-								>
-									{inlineRunFailure.message}
-								</InlineAlert>
-							)}
+                  {inlineRunFailure && (
+                    <InlineAlert
+                      title="Run failed"
+                      className={mergeStylexOverrideClassName(
+                        "[&>div>div]:leading-snug [&>div>div+div]:mt-0",
+                        sx.mxAuto,
+                        sx.mt3,
+                        sx.maxW2xl,
+                        sx.rounded2xl,
+                        sx.border0,
+                        sx.textCenter,
+                      )}
+                    >
+                      {inlineRunFailure.message}
+                    </InlineAlert>
+                  )}
 
-							{isBusy && !settingUpWorkspace && (
-								<BusyInline
-									since={busySince}
-									stoppingSince={stopRequestedAt}
-								/>
-							)}
+                  <AnimatePresence initial={false}>
+                    {isBusy && !settingUpWorkspace && (
+                      <BusyInline
+                        key="busy"
+                        since={busySince}
+                        stoppingSince={stopRequestedAt}
+                        liveTurnStore={liveTurnStore}
+                        onLayout={relayout}
+                      />
+                    )}
+                  </AnimatePresence>
 
-							{ask && (
-								<AskCard
-									key={ask.questionId}
-									questions={ask.questions}
-									onAnswer={(answers) =>
-										send({
-											type: "answer_question",
-											sessionId: session.id,
-											questionId: ask.questionId,
-											answers,
-										})
-									}
-								/>
-							)}
+                  {ask && (
+                    <AskCard
+                      key={ask.questionId}
+                      questions={ask.questions}
+                      onAnswer={(answers) => {
+                        tailActionNeedsLayoutScrollRef.current = true;
+                        send({
+                          type: "answer_question",
+                          sessionId: session.id,
+                          questionId: ask.questionId,
+                          answers,
+                        });
+                        // Answering is explicit intent to watch the resumed
+                        // turn, even if the ask was only partly in view.
+                        cancelIndexAnchorHold();
+                        scrollToLatest("auto");
+                      }}
+                    />
+                  )}
 
-							{slackComposer && (
-								<ShippedChangeComposer
-									key={slackComposer.id}
-									sessionId={session.id}
-									defaultMessage={slackComposer.message}
-									initialScreenshots={slackComposer.images}
-									defaultChannel={slackComposer.channel}
-									status={slackComposerStatus}
-									reconnectRequired={slackComposerReconnect}
-									loadChannels={() => fetchSlackChannels(session.id)}
-									onShare={sendComposedSlackMessage}
-									onReconnectSlack={async () => {
-										await reconnectSlack();
-										setSlackComposerReconnect(false);
-										toast("Approve image access in Slack, then send again");
-									}}
-									onCancel={cancelComposedSlackMessage}
-								/>
-							)}
+                  {slackComposer && (
+                    <ShippedChangeComposer
+                      key={slackComposer.id}
+                      sessionId={session.id}
+                      defaultMessage={slackComposer.message}
+                      initialScreenshots={slackComposer.images}
+                      defaultChannel={slackComposer.channel}
+                      draftId={slackComposer.id}
+                      status={slackComposerStatus}
+                      reconnectRequired={slackComposerReconnect}
+                      loadChannels={() => fetchSlackChannels(session.id)}
+                      onShare={sendComposedSlackMessage}
+                      onReconnectSlack={async () => {
+                        await reconnectSlack();
+                        setSlackComposerReconnect(false);
+                        toast("Approve image access in Slack, then send again");
+                      }}
+                      onCancel={cancelComposedSlackMessage}
+                    />
+                  )}
 
-							{!slackComposer && slackComposerSent && (
-								<SlackSentNotice
-									{...slackComposerSent}
-									onSendAnother={handleOpenSlackComposer}
-									onUndo={
-										slackComposerSent.channelId && slackComposerSent.ts
-											? () => undoComposedSlackMessage(slackComposerSent)
-											: undefined
-									}
-								/>
-							)}
+                  {!slackComposer && slackComposerSent && (
+                    <SlackSentNotice
+                      {...slackComposerSent}
+                      onSendAnother={handleOpenSlackComposer}
+                      onUndo={
+                        slackComposerSent.channelId && slackComposerSent.ts
+                          ? () => undoComposedSlackMessage(slackComposerSent)
+                          : undefined
+                      }
+                    />
+                  )}
 
-
-							{/* Reserves room so a freshly-sent turn can sit near the top while its
+                  {/* Reserves room so a freshly-sent turn can sit near the top while its
                 reply streams into the space below; sized by the scroll hook. */}
-							<div ref={spacerRef} className={TURN_SPACER} aria-hidden="true" />
-						</div>
+                  <div
+                    ref={spacerRef}
+                    className={TURN_SPACER}
+                    aria-hidden="true"
+                  />
+                </div>
 
-							{/* Sibling of the scroller, not a child: a press on the rail
+                {/* Sibling of the scroller, not a child: a press on the rail
 							    must never reach the transcript container, whose scroll hook
 							    reads one in the scrollbar strip as "the reader took over". */}
-							{!loading && (
-								<MessageRail
-									messages={sentMessages}
-									containerRef={messagesRef}
-									leaveLatest={leaveLatest}
-								/>
-							)}
+                {!loading && (
+                  <MessageRail
+                    messages={sentMessages}
+                    containerRef={messagesRef}
+                    leaveLatest={leaveLatest}
+                  />
+                )}
 
-							{/* The pill belongs to the head of the transcript, so it only
+                {/* The pill belongs to the head of the transcript, so it only
 							    shows while the reader is in reach of it. Over the live tail
 							    it was an offer for something far above, floating across
 							    whatever was being read. The loading state ignores the gate:
 							    the prepend it reports pushes the reader away from the top,
 							    and hiding the pill mid-load takes the feedback with it. */}
-							{!transcriptIndexExpected &&
-								historyTruncated &&
-								(atTop || loadingHistory) && (
-								<div className={TRANSCRIPT_PILL_TOP}>
-									{loadingHistory ? (
-										<div className={TRANSCRIPT_PILL_LOADING}>
-											<span
-												className={TRANSCRIPT_PILL_SPINNER}
-												aria-hidden
-											/>
-											<span>
-												{loadingAllHistory
-													? "Loading all messages…"
-													: "Loading older messages…"}
-											</span>
-										</div>
-									) : (
-										<button
-											type="button"
-											onClick={loadAllHistory}
-											className={cn(
-												TRANSCRIPT_PILL_BUTTON,
-												utilityClassName("pointer-events-auto"),
-											)}
-										>
-											<IconArrowUp
-												size={13}
-												className={mergeStylexOverrideClassName("group-hover:-translate-y-px", sx.textDim, sx.transitionTransform)}
-												aria-hidden
-											/>
-											Load all
-										</button>
-									)}
-								</div>
-							)}
+                {!transcriptIndexExpected &&
+                  historyTruncated &&
+                  (atTop || loadingHistory) && (
+                    <div className={TRANSCRIPT_PILL_TOP}>
+                      {loadingHistory ? (
+                        <div className={TRANSCRIPT_PILL_LOADING}>
+                          <span
+                            className={TRANSCRIPT_PILL_SPINNER}
+                            aria-hidden
+                          />
+                          <span>
+                            {loadingAllHistory
+                              ? "Loading all messages…"
+                              : "Loading older messages…"}
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={loadAllHistory}
+                          className={cn(
+                            TRANSCRIPT_PILL_BUTTON,
+                            utilityClassName("pointer-events-auto"),
+                          )}
+                        >
+                          <IconArrowUp
+                            size={13}
+                            className={mergeStylexOverrideClassName(
+                              "group-hover:-translate-y-px",
+                              sx.textDim,
+                              sx.transitionTransform,
+                            )}
+                            aria-hidden
+                          />
+                          Load all
+                        </button>
+                      )}
+                    </div>
+                  )}
 
-							{scrollAction && isPhone && (
-								/* Phone keeps this above its stacked action rows. Desktop
+                {scrollAction && isPhone && (
+                  /* Phone keeps this above its stacked action rows. Desktop
 								   places the same control inside the shared row below. */
-								<Tooltip
-									label="Scroll to the bottom"
-									shortcut={transcriptDownKeys ?? undefined}
-								>
-									<button
-										className={cn(
-											TRANSCRIPT_ICON_BUTTON,
-											utilityClassName(`absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-[5] ${PILL_CENTRED}`),
-										)}
-										type="button"
-										aria-label="Scroll to the bottom"
-										onClick={() => {
-											cancelIndexAnchorHold();
-											scrollToLatest("auto");
-										}}
-									>
-										<IconArrowDown
-											size={13}
-											className={mergeStylexOverrideClassName("group-hover:translate-y-px", sx.textDim, sx.transitionTransform)}
-											aria-hidden
-										/>
-									</button>
-								</Tooltip>
-							)}
-							</div>
+                  <Tooltip
+                    label="Scroll to the bottom"
+                    shortcut={transcriptDownKeys ?? undefined}
+                  >
+                    <button
+                      className={cn(
+                        TRANSCRIPT_ICON_BUTTON,
+                        utilityClassName(
+                          `absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-[5] ${PILL_CENTRED}`,
+                        ),
+                      )}
+                      type="button"
+                      aria-label="Scroll to the bottom"
+                      onClick={() => {
+                        cancelIndexAnchorHold();
+                        scrollToLatest("auto");
+                      }}
+                    >
+                      <IconArrowDown
+                        size={13}
+                        className={mergeStylexOverrideClassName(
+                          "group-hover:translate-y-px",
+                          sx.textDim,
+                          sx.transitionTransform,
+                        )}
+                        aria-hidden
+                      />
+                    </button>
+                  </Tooltip>
+                )}
+              </div>
 
-							<div
-								ref={setViewerInput}
-								className={cn(
-									VIEWER_INPUT,
-									// Moves with the transcript above it, or the composer would
-									// sit off the column it belongs to.
-									summaryStep > 0 && VIEWER_SUMMARY_STEP,
-								)}
-								style={summaryStepStyle}
-							>
-								{noEngine ? (
-									<div {...stylex.props(sx.mxAuto, sx.maxWVarSessionCol, sx.textFaint, typography.label)}>
-										No engine session to resume
-									</div>
-								) : (
-									<>
-										{forkFrom && (
-											<div {...mergeStylexProps("border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)]", sx.mb2, sx.flex, sx.itemsCenter, sx.justifyBetween, sx.gap3, sx.roundedControl, sx.border, sx.px3, sx.py7px, sx.textFg, typography.supporting)} >
-												<span>
-													⑂ Forking a new session from the selected message. Type
-													the new direction.
-												</span>
-												<button
-													{...mergeStylexProps("hover:text-fg", sx.cursorPointer, sx.bgTransparent, sx.textDim, typography.label)}
-													onClick={() => setForkFrom(null)}
-												>
-											Cancel
-										</button>
-									</div>
-								)}
-								{/* Session actions float above the composer. Desktop pairs quick
+              <div
+                ref={setViewerInput}
+                className={cn(
+                  VIEWER_INPUT,
+                  // Moves with the transcript above it, or the composer would
+                  // sit off the column it belongs to.
+                  summaryStep > 0 && VIEWER_SUMMARY_STEP,
+                )}
+                style={summaryStepStyle}
+              >
+                {noEngine ? (
+                  <div
+                    {...stylex.props(
+                      sx.mxAuto,
+                      sx.maxWVarSessionCol,
+                      sx.textFaint,
+                      typography.label,
+                    )}
+                  >
+                    No engine session to resume
+                  </div>
+                ) : (
+                  <>
+                    {forkFrom && (
+                      <div
+                        {...stylex.props(
+                          sx.mb2,
+                          sx.flex,
+                          sx.itemsCenter,
+                          sx.justifyBetween,
+                          sx.gap3,
+                          sx.roundedControl,
+                          sx.border,
+                          sx.borderColorMixInSrgbVarAccent40Transparent,
+                          sx.bgColorMixInSrgbVarAccent12Transparent,
+                          sx.px3,
+                          sx.py7px,
+                          sx.textFg,
+                          typography.supporting,
+                        )}
+                      >
+                        <span>
+                          {forkFrom.kind === "tip"
+                            ? "Duplicating this session from the current context. Type the new direction."
+                            : "Duplicating this session from the selected message. Type the new direction."}
+                        </span>
+                        <button
+                          {...stylex.props(
+                            sx.cursorPointer,
+                            sx.bgTransparent,
+                            sx.textDim,
+                            sx.hoverTextFg,
+                            typography.label,
+                          )}
+                          onClick={() => setForkFrom(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    {/* Session actions float above the composer. Desktop pairs quick
 								    replies with Next. Phone centers the visible actions, with quick
 								    replies on their own row when present. */}
-								{actionBand && (
-									<div className={VIEWER_SUGGESTIONS}>
-										<div
-											className={cn(
-												VIEWER_ACTION_ROW,
-												scrollAction && VIEWER_ACTION_ROW_WITH_SCROLL,
-											)}
-										>
-											{quickReplies && (
-												<ReplySuggestions
-													className={cn(
-														nextAction && !isPhone
-															? VIEWER_SUGGESTIONS_ROW_INLINE
-															: VIEWER_SUGGESTIONS_ROW,
-														utilityClassName("desktop:col-start-1 desktop:row-start-1 desktop:w-full"),
-														isPhone && utilityClassName("w-full flex-none self-stretch"),
-													)}
-													suggestions={replySuggestions}
-													onPick={pickReplySuggestion}
-												/>
-											)}
-											{scrollAction && !isPhone && (
-												<div {...mergeStylexProps("pointer-events-auto", sx.colStart2, sx.rowStart1, sx.shrink0, sx.justifySelfCenter)} >
-													<Tooltip
-														label="Scroll to the bottom"
-														shortcut={transcriptDownKeys ?? undefined}
-													>
-														<button
-															className={TRANSCRIPT_ICON_BUTTON}
-															type="button"
-															aria-label="Scroll to the bottom"
-															onClick={() => {
-																cancelIndexAnchorHold();
-																scrollToLatest("auto");
-															}}
-														>
-															<IconArrowDown
-																size={13}
-																className={mergeStylexOverrideClassName("group-hover:translate-y-px", sx.textDim, sx.transitionTransform)}
-																aria-hidden
-															/>
-														</button>
-													</Tooltip>
-												</div>
-											)}
-											{nextAction && !isPhone && (
-												<div {...mergeStylexProps("pointer-events-auto", sx.colStart3, sx.rowStart1, sx.shrink0, sx.justifySelfEnd)} >
-													<Tooltip
-														label="Next chat"
-														shortcut={nextChatKeys ?? undefined}
-													>
-														<Button
-															size="lg"
-															className={mergeStylexOverrideClassName("border-divider hover:border-line", sx.minH10, sx.shrink0)}
-															trailing={<IconChevronRight size={18} aria-hidden />}
-															aria-label="Next chat"
-															onClick={onNextChat}
-														>
-															Next
-														</Button>
-													</Tooltip>
-												</div>
-											)}
-											{isPhone && (
-												<div
-													className={cn(
-														utilityClassName("pointer-events-auto mx-auto hidden h-12 shrink-0 items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-0.5 text-dim shadow-[var(--mobile-header-control-shadow)] phone:flex phone:[body.kb-open_&]:hidden"),
-														MOBILE_CONTROL_GLASS,
-													)}
-												>
-													{!session.archived && (
-														<Button
-															variant="ghost"
-															size="lg"
-															className={mergeStylexOverrideClassName("", sx.size11, sx.minH11, sx.roundedControl, sx.CornerShapeSquircle)}
-															icon={<IconArchive size={22} aria-hidden />}
-															aria-label="Archive and open next chat"
-															disabled={archiving}
-															onClick={() => void handleArchive()}
-														/>
-													)}
-													<div ref={setMobileActionMenuEl} {...stylex.props(sx.inlineFlex, sx.size11)} />
-													<span {...mergeStylexProps("bg-divider", sx.mx05, sx.h5, sx.wPx, sx.shrink0)}  aria-hidden />
-													<Button
-														variant="ghost"
-														size="lg"
-														className={mergeStylexOverrideClassName("", sx.size11, sx.minH11, sx.roundedControl, sx.CornerShapeSquircle)}
-														icon={<IconPlus size={22} aria-hidden />}
-														aria-label="New workspace"
-														disabled={!onNewWorkspace}
-														onClick={onNewWorkspace}
-													/>
-													{showNextChatButton && (
-														<Button
-															variant="ghost"
-															size="lg"
-															className={mergeStylexOverrideClassName("", sx.size11, sx.minH11, sx.roundedControl, sx.CornerShapeSquircle)}
-															icon={<IconArrowRight size={22} aria-hidden />}
-															aria-label="Next chat"
-															disabled={!onNextChat}
-															onClick={onNextChat}
-														/>
-													)}
-												</div>
-											)}
-										</div>
-									</div>
-								)}
-								<TypingIndicator
-									users={typingUsers}
-									className={mergeStylexOverrideClassName("", sx.mxAuto, sx.mb1, sx.wFull, sx.maxWCalcVarSessionCol40px, sx.px5)}
-								/>
-								<Composer
-									// Uncontrolled: the draft lives in the Composer (persisted
-									// per session via draftKey). Remount on the tab-bar +
-									// after its persisted draft has been cleared.
-									key={composerResetSeq ?? 0}
-									draftKey={draftKey}
-									onSend={handleSend}
-									onTyping={(active) => setTyping(session.id, active)}
-									images={images}
-									onImagesChange={setImages}
-									files={files}
-									onFilesChange={setFiles}
-									staging={uploadStaging}
-									onAddAttachments={addSessionAttachments}
-									onRemovePendingImage={uploads.cancelPendingImage}
-									onRemovePendingFile={uploads.cancelPendingFile}
-									attachmentShortcutActive={focused}
-									quote={quote}
-									onQuoteClear={clearQuote}
-									placeholder={
-										safety
-											? "Paused for safety"
-											: settingUpWorkspace
-												? "Queue while workspace sets up…"
-											: !connected
-												? "Send when reconnected…"
-											: forkFrom
-												? "New direction…"
-												: promoting
-													? "Setting up code workspace…"
-													: isBusy
-														? "Queue for when it finishes…"
-														: isAsk
-																? `Ask ${AGENT_NAME}, read-only…`
-																: `Ask ${AGENT_NAME}…`
-									}
-									disabled={!!safety || (!connected && !!forkFrom)}
-									sendDisabled={(text) =>
-										!!safety ||
-										promoting ||
-										(!text.trim() &&
-											images.length === 0 &&
-											(noteMode || files.length === 0) &&
-											!forkFrom)
-									}
-									// Tints the composer green and names the mode in a chip above
-									// the field. Only opensession sessions can promote (the
-									// server owns that rule), so elsewhere the chip keeps the
-									// label and drops the ✕ rather than offering a dead end.
-									askMode={isAsk}
-									onAskModeExit={
-										isAsk && session.source === "opensession"
-											? () => void handlePromote()
-											: undefined
-									}
-									askExitPending={promoting}
-									// Team notes: the send posts to the transcript for the
-									// humans reading it, never to the agent (⌘N, or the "+").
-									noteMode={noteMode}
-									onNoteModeChange={setNoteMode}
-									busy={isBusy && !forkFrom}
-									onStop={handleCancel}
-									stopping={stopRequestedAt != null}
-									// Bumped by the ⌘. listener above; the composer opens the
-									// same confirmation Escape does.
-									stopRequest={stopRequest}
-									// Leaving ask mode is a setting of this session, so it sits in
-									// the composer's "+" with the rest of them. It disappears as
-									// soon as selected; workspace setup reports progress on the
-									// code surfaces that are waiting for it.
-									menuExtra={({ close }) => (
-										<>
-											<button
-												type="button"
-												className={composerMenuItem}
-												disabled={!!slackComposer}
-												title="Review a message before sending it to Slack"
-												onClick={() => {
-													close();
-													void handleOpenSlackComposer();
-												}}
-											>
-												<span className={composerMenuIcon}>
-													<BrandMark name="slack" size={16} />
-												</span>
-												<span {...stylex.props(sx.grow, sx.whitespaceNowrap)}>Send to Slack…</span>
-											</button>
-											{isAsk && session.source === "opensession" && (
-												<button
-													type="button"
-													className={composerMenuItem}
-													disabled={promoting}
-													title="Ask mode: this session can read the code but not change it"
-													onClick={() => void handlePromote(close)}
-												>
-													<span className={composerMenuIcon}>
-														<IconEye size={22} />
-													</span>
-													{promoting ? "Switching to code…" : "Switch to code"}
-												</button>
-											)}
-										</>
-									)}
-									attached={attachedComposer}
-									prefill={composerPrefill}
-									models={models}
-									defaultModel={defaultModel}
-									model={model}
-									onModelChange={handleModelChange}
-									modelDisabled={
-										session.source !== "opensession" &&
-										session.source !== "slack"
-									}
-									modelTitle={
-										session.source === "opensession" ||
-										session.source === "slack"
-											? "Switch the model for this session"
-											: "Set the model from the owning agent (its session file is agent-owned)"
-									}
-									effort={effort}
-									onEffortChange={setEffort}
-									fastMode={fastMode}
-									onFastModeChange={setFastMode}
-									// Account pinning is a backstage-session affordance. The
-									// picker filters the combined pool by the active model.
-									accounts={
-										session.source === "opensession"
-											? accounts
-											: undefined
-									}
-									accountId={accountId}
-									onAccountChange={
-										session.source === "opensession"
-											? handleAccountChange
-											: undefined
-									}
-									goal={currentGoal}
-									onSetGoal={
-										session.source === "opensession" ? handleSetGoal : undefined
-									}
-									usage={usage}
-									mentionFetch={(q) => fetchFileMentions(q, session.id)}
-									paletteFetch={(q) =>
-										fetchMentionSuggestions(q, session.id, getCurrentUser())
-									}
-									skillsFetch={(q) => fetchSkillMentions(q, session.id)}
-									textareaRef={composerRef}
-									sendMenu={
-										session.source === "opensession"
-											? ({ text, disabled, onScheduled }) => (
-													<SchedulePromptButton
-														sessionId={session.id}
-														text={withQuotes(quote ? [quote] : [], text)}
-														disabled={disabled}
-														onScheduled={() => {
-															clearQuote();
-															onScheduled();
-														}}
-														variant="menu-item"
-													/>
-												)
-											: undefined
-									}
-								/>
-							</>
-						)}
-					</div>
-					</div>
-					)}
-					{/* Shells keep their PTYs alive across view-tab switches: mounted
+                    {actionBand && (
+                      <div className={VIEWER_SUGGESTIONS}>
+                        <div
+                          className={cn(
+                            VIEWER_ACTION_ROW,
+                            scrollAction && VIEWER_ACTION_ROW_WITH_SCROLL,
+                          )}
+                        >
+                          {quickReplies && (
+                            <ReplySuggestions
+                              className={cn(
+                                nextAction && !isPhone
+                                  ? VIEWER_SUGGESTIONS_ROW_INLINE
+                                  : VIEWER_SUGGESTIONS_ROW,
+                                utilityClassName(
+                                  "desktop:col-start-1 desktop:row-start-1 desktop:w-full",
+                                ),
+                                isPhone &&
+                                  utilityClassName(
+                                    "w-full flex-none self-stretch",
+                                  ),
+                              )}
+                              suggestions={replySuggestions}
+                              onPick={pickReplySuggestion}
+                            />
+                          )}
+                          {scrollAction && !isPhone && (
+                            <div
+                              {...stylex.props(
+                                sx.pointerEventsAuto,
+                                sx.colStart2,
+                                sx.rowStart1,
+                                sx.shrink0,
+                                sx.justifySelfCenter,
+                              )}
+                            >
+                              <Tooltip
+                                label="Scroll to the bottom"
+                                shortcut={transcriptDownKeys ?? undefined}
+                              >
+                                <button
+                                  className={TRANSCRIPT_ICON_BUTTON}
+                                  type="button"
+                                  aria-label="Scroll to the bottom"
+                                  onClick={() => {
+                                    cancelIndexAnchorHold();
+                                    scrollToLatest("auto");
+                                  }}
+                                >
+                                  <IconArrowDown
+                                    size={13}
+                                    className={mergeStylexOverrideClassName(
+                                      "group-hover:translate-y-px",
+                                      sx.textDim,
+                                      sx.transitionTransform,
+                                    )}
+                                    aria-hidden
+                                  />
+                                </button>
+                              </Tooltip>
+                            </div>
+                          )}
+                          {nextAction && !isPhone && (
+                            <div
+                              {...stylex.props(
+                                sx.pointerEventsAuto,
+                                sx.colStart3,
+                                sx.rowStart1,
+                                sx.shrink0,
+                                sx.justifySelfEnd,
+                              )}
+                            >
+                              <Tooltip
+                                label="Next chat"
+                                shortcut={nextChatKeys ?? undefined}
+                              >
+                                <Button
+                                  size="lg"
+                                  className={mergeStylexOverrideClassName(
+                                    "",
+                                    sx.minH10,
+                                    sx.shrink0,
+                                    sx.borderDivider,
+                                    sx.hoverBorderLine,
+                                  )}
+                                  trailing={
+                                    <IconChevronRight size={18} aria-hidden />
+                                  }
+                                  aria-label="Next chat"
+                                  onClick={openNextChat}
+                                >
+                                  Next
+                                </Button>
+                              </Tooltip>
+                            </div>
+                          )}
+                          {isPhone && (
+                            <div
+                              className={cn(
+                                utilityClassName(
+                                  "pointer-events-auto mx-auto hidden h-12 shrink-0 items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-0.5 text-dim shadow-[var(--mobile-header-control-shadow)] phone:flex phone:[body.kb-open_&]:hidden",
+                                ),
+                                MOBILE_CONTROL_GLASS,
+                              )}
+                            >
+                              {!session.archived && (
+                                <Button
+                                  variant="ghost"
+                                  size="lg"
+                                  className={mergeStylexOverrideClassName(
+                                    "",
+                                    sx.size11,
+                                    sx.minH11,
+                                    sx.roundedControl,
+                                    sx.CornerShapeSquircle,
+                                  )}
+                                  icon={<IconArchive size={22} aria-hidden />}
+                                  aria-label="Archive and open next chat"
+                                  disabled={archiving}
+                                  onClick={() => void handleArchive()}
+                                />
+                              )}
+                              <div
+                                ref={setMobileActionMenuEl}
+                                {...stylex.props(sx.inlineFlex, sx.size11)}
+                              />
+                              <span
+                                {...stylex.props(
+                                  sx.mx05,
+                                  sx.h5,
+                                  sx.wPx,
+                                  sx.shrink0,
+                                  sx.bgDivider,
+                                )}
+                                aria-hidden
+                              />
+                              <Button
+                                variant="ghost"
+                                size="lg"
+                                className={mergeStylexOverrideClassName(
+                                  "",
+                                  sx.size11,
+                                  sx.minH11,
+                                  sx.roundedControl,
+                                  sx.CornerShapeSquircle,
+                                )}
+                                icon={<IconPlus size={22} aria-hidden />}
+                                aria-label="New workspace"
+                                disabled={!openNewWorkspace}
+                                onClick={openNewWorkspace}
+                              />
+                              {showNextChatButton && (
+                                <Button
+                                  variant="ghost"
+                                  size="lg"
+                                  className={mergeStylexOverrideClassName(
+                                    "",
+                                    sx.size11,
+                                    sx.minH11,
+                                    sx.roundedControl,
+                                    sx.CornerShapeSquircle,
+                                  )}
+                                  icon={
+                                    <IconArrowRight size={22} aria-hidden />
+                                  }
+                                  aria-label="Next chat"
+                                  disabled={!openNextChat}
+                                  onClick={openNextChat}
+                                />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <TypingIndicator
+                      users={typingUsers}
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.mxAuto,
+                        sx.mb1,
+                        sx.wFull,
+                        sx.maxWCalcVarSessionCol40px,
+                        sx.px5,
+                      )}
+                    />
+                    <Composer
+                      // Uncontrolled: the draft lives in the Composer (persisted
+                      // per session via draftKey). Remount on the tab-bar +
+                      // after its persisted draft has been cleared.
+                      key={composerResetSeq ?? 0}
+                      onTyping={(active) => setTyping(session.id, active)}
+                      config={{
+                        draftKey,
+                        images,
+                        files,
+                        staging: uploadStaging,
+                        attachmentShortcutActive: focused,
+                        quote,
+                        placeholder: safety
+                          ? "Paused for safety"
+                          : settingUpWorkspace
+                            ? "Queue while workspace sets up…"
+                            : !connected
+                              ? "Send when reconnected…"
+                              : forkFrom
+                                ? "New direction…"
+                                : promoting
+                                  ? "Setting up code workspace…"
+                                  : isBusy
+                                    ? "Queue for when it finishes…"
+                                    : isAsk
+                                      ? `Ask ${AGENT_NAME}, read-only…`
+                                      : `Ask ${AGENT_NAME}…`,
+                        disabled: !!safety || (!connected && !!forkFrom),
+                        sendDisabled: (text) =>
+                          !!safety ||
+                          promoting ||
+                          (!text.trim() &&
+                            images.length === 0 &&
+                            (noteMode || files.length === 0) &&
+                            !forkFrom),
+                        // Tints the composer green and names the mode in a chip above
+                        // the field. Only opensession sessions can promote.
+                        askMode: isAsk,
+                        askExitPending: promoting,
+                        // Team notes post to the human transcript, never to the agent.
+                        noteMode,
+                        busy: isBusy && !forkFrom,
+                        stopping: stopRequestedAt != null,
+                        // Bumped by the ⌘. listener above; the composer opens the
+                        // same confirmation Escape does.
+                        stopRequest,
+                        prefill: composerPrefill,
+                        models,
+                        defaultModel,
+                        model,
+                        modelDisabled:
+                          session.source !== "opensession" &&
+                          session.source !== "slack",
+                        modelTitle:
+                          session.source === "opensession" ||
+                          session.source === "slack"
+                            ? "Switch the model for this session"
+                            : "Set the model from the owning agent (its session file is agent-owned)",
+                        effort,
+                        fastMode,
+                        // Account pinning is a backstage-session affordance. The
+                        // picker filters the combined pool by the active model.
+                        accounts:
+                          session.source === "opensession"
+                            ? accounts
+                            : undefined,
+                        accountId,
+                        goal: currentGoal,
+                        usage,
+                        textareaRef: composerRef,
+                      }}
+                      actions={{
+                        onSend: handleSend,
+                        onImagesChange: setImages,
+                        onFilesChange: setFiles,
+                        onAddAttachments: addSessionAttachments,
+                        onRemovePendingImage: uploads.cancelPendingImage,
+                        onRemovePendingFile: uploads.cancelPendingFile,
+                        onQuoteClear: clearQuote,
+                        onAskModeExit:
+                          isAsk && session.source === "opensession"
+                            ? () => void handlePromote()
+                            : undefined,
+                        onNoteModeChange: setNoteMode,
+                        onStop: handleCancel,
+                        onModelChange: handleModelChange,
+                        onEffortChange: setEffort,
+                        onFastModeChange: setFastMode,
+                        onAccountChange:
+                          session.source === "opensession"
+                            ? handleAccountChange
+                            : undefined,
+                        onSetGoal:
+                          session.source === "opensession"
+                            ? handleSetGoal
+                            : undefined,
+                        mentionFetch: (query) =>
+                          fetchFileMentions(query, session.id),
+                        paletteFetch: (query) =>
+                          fetchMentionSuggestions(
+                            query,
+                            session.id,
+                            getCurrentUser(),
+                          ),
+                        skillsFetch: (query) =>
+                          fetchSkillMentions(query, session.id),
+                      }}
+                      // Leaving ask mode is a setting of this session, so it sits in
+                      // the composer's "+" with the rest of them. It disappears as
+                      // soon as selected; workspace setup reports progress on the
+                      // code surfaces that are waiting for it.
+                      menuExtra={({ close }) => (
+                        <>
+                          <button
+                            type="button"
+                            className={composerMenuItem}
+                            disabled={!!slackComposer}
+                            title="Review a message before sending it to Slack"
+                            onClick={() => {
+                              close();
+                              void handleOpenSlackComposer();
+                            }}
+                          >
+                            <span className={composerMenuIcon}>
+                              <BrandMark name="slack" size={16} />
+                            </span>
+                            <span
+                              {...stylex.props(sx.grow, sx.whitespaceNowrap)}
+                            >
+                              Send to Slack…
+                            </span>
+                          </button>
+                          {isAsk && session.source === "opensession" && (
+                            <button
+                              type="button"
+                              className={composerMenuItem}
+                              disabled={promoting}
+                              title="Ask mode: this session can read the code but not change it"
+                              onClick={() => void handlePromote(close)}
+                            >
+                              <span className={composerMenuIcon}>
+                                <IconEye size={22} />
+                              </span>
+                              {promoting
+                                ? "Switching to code…"
+                                : "Switch to code"}
+                            </button>
+                          )}
+                        </>
+                      )}
+                      attached={attachedComposer}
+                      sendMenu={
+                        session.source === "opensession"
+                          ? ({ text, disabled, onScheduled }) => (
+                              <SchedulePromptButton
+                                sessionId={session.id}
+                                text={withQuotes(quote ? [quote] : [], text)}
+                                disabled={disabled}
+                                onScheduled={() => {
+                                  clearQuote();
+                                  onScheduled();
+                                }}
+                                variant="menu-item"
+                              />
+                            )
+                          : undefined
+                      }
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+          {/* Shells keep their PTYs alive across view-tab switches: mounted
 					    for as long as the Terminal tab exists, hidden while another
 					    surface is in front. Closing the tab unmounts them, which is what
 					    tears the PTYs down; they also die with the socket. */}
-					{hasWorkspace && !waitingForWorkspace && terminalTabOpen ? (
-						<div className={showTerminal ? VIEWER_REVIEW_MAIN : utilityClassName("hidden")}>
-							<ShellPanel
-								sessionId={session.id}
-								send={send}
-								addHandler={addHandler}
-								visible={showTerminal}
-							/>
-						</div>
-					) : null}
-				</div>
+          {hasWorkspace && !waitingForWorkspace && terminalTabOpen ? (
+            <div
+              className={
+                showTerminal ? VIEWER_REVIEW_MAIN : utilityClassName("hidden")
+              }
+            >
+              <ShellPanel sessionId={session.id} visible={showTerminal} />
+            </div>
+          ) : null}
+        </div>
 
-				{/* Right region: the Workspace panel. Portaled to an app-level slot so
+        {/* Right region: the Workspace panel. Portaled to an app-level slot so
             it opens as a full-height column beside the left sidebar (not just
             below the session header). */}
-				{(() => {
-				const desktopPanelPage = panelPage ?? "changes";
-				const rightRegion = (
-					<>
-				{!isPhone && panelAvailable && activePanelOpen && (
-					<div className={PANEL_OVERLAY} onClick={() => setActivePanelOpen(false)} />
-				)}
-				{!isPhone && panelAvailable && activePanelOpen ? (
-					<div className={PANEL_SHELL} style={panelStyle}>
-						{panelResizeHandle}
-						{hasWorkspace && (
-							<div className={PANEL_TABS}>
-								<button
-									type="button"
-									aria-pressed={desktopPanelPage === "changes"}
-									className={cn(
-										PANEL_TAB,
-										desktopPanelPage === "changes" && utilityClassName("bg-hover text-fg"),
-									)}
-									onClick={() => setPanelPage("changes")}
-								>
-									<IconFile size={15} className={mergeStylexOverrideClassName("", sx.shrink0)} />
-									<span className="@max-[380px]:hidden">Changes</span>
-								</button>
-								<button
-									type="button"
-									aria-pressed={desktopPanelPage === "portals"}
-									className={cn(
-										PANEL_TAB,
-										desktopPanelPage === "portals" && utilityClassName("bg-hover text-fg"),
-									)}
-									onClick={() => setPanelPage("portals")}
-								>
-									<IconGlobe size={15} className={mergeStylexOverrideClassName("", sx.shrink0)} />
-									<span className="@max-[380px]:hidden">Portals</span>
-									{livePortals > 0 && (
-										<span {...mergeStylexProps("tabular-nums @max-[380px]:hidden", sx.shrink0, sx.textFaint)} >
-											{livePortals}
-										</span>
-									)}
-								</button>
-								<button
-									type="button"
-									aria-pressed={desktopPanelPage === "agents"}
-									className={cn(
-										PANEL_TAB,
-										desktopPanelPage === "agents" && utilityClassName("bg-hover text-fg"),
-									)}
-									onClick={() => setPanelPage("agents")}
-								>
-									<IconStack size={15} className={mergeStylexOverrideClassName("", sx.shrink0)} />
-									<span className="@max-[380px]:hidden">Agents</span>
-									{runningAgents > 0 && (
-										<span {...mergeStylexProps("tabular-nums @max-[380px]:hidden", sx.shrink0, sx.textYellow)} >
-											{runningAgents}
-										</span>
-									)}
-								</button>
-								<button
-									type="button"
-									aria-pressed={desktopPanelPage === "terminal"}
-									className={cn(
-										PANEL_TAB,
-										desktopPanelPage === "terminal" && utilityClassName("bg-hover text-fg"),
-									)}
-									onClick={() => {
-										setPanelTerminalMounted(true);
-										setPanelPage("terminal");
-									}}
-								>
-									<IconTerminal size={15} className={mergeStylexOverrideClassName("", sx.shrink0)} />
-									<span className="@max-[380px]:hidden">Terminal</span>
-								</button>
-							</div>
-						)}
-						<div className={PANEL_BODY}>
-							{desktopPanelPage === "changes" ? (
-								waitingForWorkspace ? (
-									<WorkspaceWaiting detail="This takes a moment." />
-								) : (
-									<DiffPanel
-										sessionId={session.id}
-										isRunning={isBusy}
-										canSend={connected && !isBusy && !noEngine}
-										send={send}
-										diff={diffState}
-										showFileList={false}
-										source={worktreeDiffSource}
-										onSourceChange={changeWorktreeDiffSource}
-									/>
-								)
-							) : desktopPanelPage === "portals" ? (
-								<PortalsPage
-									sessionId={session.id}
-									status={previewStatus}
-									activePortal={portalTarget}
-									onBack={() => setActivePanelOpen(false)}
-									hideHeader
-									onOpenPortal={onOpenPortal}
-									onStartPortal={startDeclaredPortal}
-									onPortalAction={async (name, action) => {
-										setPreviewStatus(
-											await portalActionApi(session.id, name, action),
-										);
-									}}
-								/>
-							) : desktopPanelPage === "agents" ? (
-								<WorkflowPanel
-									sessionId={session.id}
-									runs={workflowRuns}
-									onCancel={cancelWorkflowRun}
-									subagents={subagents}
-									onOpenSubagent={openSubagent}
-									onBack={() => setActivePanelOpen(false)}
-									hideHeader
-								/>
-							) : null}
-							{/* Keep terminals mounted while switching panel tabs so their PTYs
-							    survive. Closing the panel still closes its terminals. */}
-							{hasWorkspace && panelTerminalMounted && (
-								<div
-									className={
-										desktopPanelPage === "terminal"
-											? utilityClassName("flex h-full min-h-0 flex-col")
-											: utilityClassName("hidden")
-									}
-								>
-									<div {...stylex.props(sx.minH0, sx.flex1)}>
-										<ShellPanel
-											sessionId={session.id}
-											send={send}
-											addHandler={addHandler}
-											visible={desktopPanelPage === "terminal"}
-										/>
-									</div>
-								</div>
-							)}
-						</div>
-					</div>
-				) : null}
-					</>
-				);
-				if (hideRightPanel) return null;
-				return rightPanelEl ? createPortal(rightRegion, rightPanelEl) : rightRegion;
-				})()}
-			</div>
-			{/* Portals to the body, so it sits over the whole viewer rather than
+        <SidePanelHost
+          hidden={hideRightPanel}
+          isPhone={isPhone}
+          available={panelAvailable}
+          open={activePanelOpen}
+          onOpenChange={setActivePanelOpen}
+          portalTarget={rightPanelEl}
+          style={panelStyle}
+          resizeHandle={panelResizeHandle}
+          hasWorkspace={hasWorkspace}
+          page={desktopPanelPage}
+          onPageChange={setDesktopPanelPage}
+          livePortals={livePortals}
+          runningAgents={runningAgents}
+          terminalMounted={panelTerminalMounted}
+          onTerminalMount={() => setPanelTerminalMounted(true)}
+          sessionId={session.id}
+          changes={
+            <>
+              <section
+                aria-label="Workspace summary"
+                {...stylex.props(
+                  sx.flex,
+                  sx.flexCol,
+                  sx.borderB,
+                  sx.borderDivider,
+                  sx.py2,
+                )}
+              >
+                <WorkspaceSummaryBody
+                  session={session}
+                  onOpenPanelTab={(tab) => {
+                    if (tab === "changes") {
+                      desktopChangesRef.current?.scrollIntoView({
+                        block: "start",
+                      });
+                      return;
+                    }
+                    focusPrInReview();
+                  }}
+                  onOpenPr={() => focusPrInReview()}
+                  onOpenStackPr={openPr}
+                  onOpenChecks={() => focusPrInReview(undefined, "checks")}
+                  onOpenAsset={openAssetFromTranscript}
+                  onOpenAssets={openAssets}
+                  onOpenSession={openSession}
+                  onArchive={handleArchive}
+                  reviewRequest={effectiveReview?.req ?? null}
+                  reviewRequestSessionId={effectiveReview?.ownerId}
+                  onReviewChange={onReviewChange}
+                  prReviewRequested={effectiveReview?.prReviewRequested}
+                  running={isRunningLive}
+                  workspacePreparing={workspacePreparing}
+                  send={connected ? send : undefined}
+                  refreshTick={gitRefreshTick}
+                  liveMedia={liveOverviewMedia}
+                  close={() => setActivePanelOpen(false)}
+                />
+              </section>
+              <div ref={desktopChangesRef}>
+                {waitingForWorkspace ? (
+                  <WorkspaceWaiting detail="This takes a moment." />
+                ) : (
+                  <DiffPanel
+                    sessionId={session.id}
+                    isRunning={isBusy}
+                    canSend={connected && !isBusy && !noEngine}
+                    send={send}
+                    diff={diffState}
+                    showFileList={false}
+                    source={worktreeDiffSource}
+                    onSourceChange={changeWorktreeDiffSource}
+                  />
+                )}
+              </div>
+            </>
+          }
+          portals={
+            <PortalsPage
+              sessionId={session.id}
+              status={previewStatus}
+              activePortal={portalTarget}
+              onBack={() => setActivePanelOpen(false)}
+              hideHeader
+              onOpenPortal={openPortal}
+              onStartPortal={startDeclaredPortal}
+              onPortalAction={async (name, action) => {
+                setPreviewStatus(
+                  await portalActionApi(session.id, name, action),
+                );
+              }}
+            />
+          }
+          agents={
+            <WorkflowPanel
+              sessionId={session.id}
+              runs={workflowRuns}
+              onAction={workflowAction}
+              subagents={subagents}
+              onOpenSubagent={openSubagent}
+              onOpenSession={openSession}
+              onBack={() => setActivePanelOpen(false)}
+              hideHeader
+            />
+          }
+        />
+      </div>
+      {/* Portals to the body, so it sits over the whole viewer rather than
 			    inside whichever column opened it. */}
-			<AssetOverlay
-				sessionId={session.id}
-				path={overlayAssetPath}
-				files={assetFiles}
-				refresh={refreshAssets}
-				onClose={closeAssetOverlay}
-				onSelectPath={setOverlayAssetPath}
-				onOpenAsTab={onOpenAssets ? promoteAssetToTab : undefined}
-				onOpenNewSession={onOpenNewSession}
-			/>
-		</div>
-	);
+      <AssetOverlay
+        sessionId={session.id}
+        path={overlayAssetPath}
+        files={assetFiles}
+        refresh={refreshAssets}
+        onClose={closeAssetOverlay}
+        onSelectPath={setOverlayAssetPath}
+        onOpenAsTab={openAssets ? promoteAssetToTab : undefined}
+        onOpenNewSession={navigation.openPrefilledSession}
+      />
+    </div>
+  );
 }
 
 // Placeholder for regions that need the session's worktree while the create

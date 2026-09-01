@@ -94,11 +94,15 @@ describe("activeIntegrations", () => {
 
 describe("envRequired", () => {
   const slack = findIntegration("slack")!;
-  const signingSecret = slack.env.find((e) => e.name === "SLACK_SIGNING_SECRET")!;
+  const signingSecret = slack.env.find(
+    (e) => e.name === "SLACK_SIGNING_SECRET",
+  )!;
   const botToken = slack.env.find((e) => e.name === "SLACK_BOT_TOKEN")!;
 
   test("Socket Mode does not require the HTTP signing secret", () => {
-    expect(envRequired(signingSecret, (name) => name === "SLACK_APP_TOKEN")).toBe(false);
+    expect(
+      envRequired(signingSecret, (name) => name === "SLACK_APP_TOKEN"),
+    ).toBe(false);
   });
 
   test("the HTTP transport requires its signing secret", () => {

@@ -25,15 +25,23 @@ describe("fixtures", () => {
     const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
     expect(files.length).toBeGreaterThanOrEqual(7);
     for (const f of files) {
-      const c = parseBenchConversation(JSON.parse(readFileSync(join(dir, f), "utf8")), f);
+      const c = parseBenchConversation(
+        JSON.parse(readFileSync(join(dir, f), "utf8")),
+        f,
+      );
       expect(c.turns.length).toBeGreaterThan(0);
     }
   });
 
   test("malformed conversations are rejected with the source name", () => {
-    expect(() => parseBenchConversation({ id: "x" }, "broken.json")).toThrow(/broken\.json/);
+    expect(() => parseBenchConversation({ id: "x" }, "broken.json")).toThrow(
+      /broken\.json/,
+    );
     expect(() =>
-      parseBenchConversation({ id: "x", description: "d", turns: [{ input: "hi" }] }, "b.json")
+      parseBenchConversation(
+        { id: "x", description: "d", turns: [{ input: "hi" }] },
+        "b.json",
+      ),
     ).toThrow(/malformed turn/);
   });
 });
@@ -53,20 +61,27 @@ describe("parseFacts", () => {
 
 describe("foldFacts", () => {
   test("appends, dedupes case-insensitively, drops empties", () => {
-    const n1 = foldFacts([], ["Owns billing", "owns BILLING", "", "Prefers terse replies"]);
+    const n1 = foldFacts(
+      [],
+      ["Owns billing", "owns BILLING", "", "Prefers terse replies"],
+    );
     expect(n1).toEqual(["Owns billing", "Prefers terse replies"]);
     const n2 = foldFacts(n1, ["Owns billing", "New fact"]);
     expect(n2).toEqual(["Owns billing", "Prefers terse replies", "New fact"]);
   });
 
   test("strips stray bullet prefixes and collapses whitespace", () => {
-    expect(foldFacts([], ["- Uses  Zed   editor"])).toEqual(["Uses Zed editor"]);
+    expect(foldFacts([], ["- Uses  Zed   editor"])).toEqual([
+      "Uses Zed editor",
+    ]);
   });
 });
 
 describe("curator actions (agent-only strategy)", () => {
   test("parses REMEMBER/FORGET and ignores everything else", () => {
-    expect(parseCuratorActions("REMEMBER: Uses Zed\nFORGET 2\nchatter\nNONE")).toEqual([
+    expect(
+      parseCuratorActions("REMEMBER: Uses Zed\nFORGET 2\nchatter\nNONE"),
+    ).toEqual([
       { kind: "remember", text: "Uses Zed" },
       { kind: "forget", index: 2 },
     ]);
@@ -87,7 +102,9 @@ describe("curator actions (agent-only strategy)", () => {
 describe("consolidation actions", () => {
   test("parses UPDATE/DELETE/ADD case-insensitively", () => {
     expect(
-      parseConsolidationActions("UPDATE 2: Billing is named tabkeeper\ndelete 3\nADD: New fact\nNONE")
+      parseConsolidationActions(
+        "UPDATE 2: Billing is named tabkeeper\ndelete 3\nADD: New fact\nNONE",
+      ),
     ).toEqual([
       { kind: "update", index: 2, text: "Billing is named tabkeeper" },
       { kind: "delete", index: 3 },
@@ -96,19 +113,29 @@ describe("consolidation actions", () => {
   });
 
   test("applies against 1-based indices; adds dedupe against survivors", () => {
-    const notebook = ["In Eastern time", "Service named ledgerd", "Sync Mondays 10am"];
+    const notebook = [
+      "In Eastern time",
+      "Service named ledgerd",
+      "Sync Mondays 10am",
+    ];
     const next = applyConsolidationActions(notebook, [
       { kind: "update", index: 2, text: "Service named tabkeeper" },
       { kind: "delete", index: 1 },
       { kind: "add", text: "In Pacific time" },
       { kind: "add", text: "service named TABKEEPER" },
     ]);
-    expect(next).toEqual(["Service named tabkeeper", "Sync Mondays 10am", "In Pacific time"]);
+    expect(next).toEqual([
+      "Service named tabkeeper",
+      "Sync Mondays 10am",
+      "In Pacific time",
+    ]);
   });
 
   test("empty or NONE output leaves the notebook untouched", () => {
     const notebook = ["A fact"];
-    expect(applyConsolidationActions(notebook, parseConsolidationActions("NONE"))).toEqual(notebook);
+    expect(
+      applyConsolidationActions(notebook, parseConsolidationActions("NONE")),
+    ).toEqual(notebook);
   });
 });
 
@@ -122,11 +149,14 @@ describe("strategies (with a scripted fake model)", () => {
         { input: "moved — Pacific now", reply: "Updated" },
       ],
     },
-    "inline"
+    "inline",
   );
 
   test("per-turn accumulates extracted facts across turns with dedup", async () => {
-    const outputs = ["- In Eastern time", "- In Pacific time\n- In Eastern time"];
+    const outputs = [
+      "- In Eastern time",
+      "- In Pacific time\n- In Eastern time",
+    ];
     const oneShot: OneShot = async () => outputs.shift() ?? "NONE";
     const strategy = BENCH_STRATEGIES.find((s) => s.name === "per-turn")!;
     expect(await strategy.run(conversation, oneShot)).toEqual([
@@ -139,19 +169,27 @@ describe("strategies (with a scripted fake model)", () => {
     const calls: string[] = [];
     const oneShot: OneShot = async (system) => {
       calls.push(system.slice(0, 20));
-      if (calls.length <= 2) return calls.length === 1 ? "- In Eastern time" : "- In Pacific time";
+      if (calls.length <= 2)
+        return calls.length === 1 ? "- In Eastern time" : "- In Pacific time";
       return "UPDATE 1: In Pacific time\nDELETE 2";
     };
     const strategy = BENCH_STRATEGIES.find((s) => s.name === "consolidated")!;
-    expect(await strategy.run(conversation, oneShot)).toEqual(["In Pacific time"]);
+    expect(await strategy.run(conversation, oneShot)).toEqual([
+      "In Pacific time",
+    ]);
     expect(calls.length).toBe(3);
   });
 
   test("agent-only lets the curator forget stale facts", async () => {
-    const outputs = ["REMEMBER: In Eastern time", "FORGET 1\nREMEMBER: In Pacific time"];
+    const outputs = [
+      "REMEMBER: In Eastern time",
+      "FORGET 1\nREMEMBER: In Pacific time",
+    ];
     const oneShot: OneShot = async () => outputs.shift() ?? "NONE";
     const strategy = BENCH_STRATEGIES.find((s) => s.name === "agent-only")!;
-    expect(await strategy.run(conversation, oneShot)).toEqual(["In Pacific time"]);
+    expect(await strategy.run(conversation, oneShot)).toEqual([
+      "In Pacific time",
+    ]);
   });
 
   test("a failed model call (null) is treated as no-op, not a crash", async () => {
@@ -165,9 +203,14 @@ describe("strategies (with a scripted fake model)", () => {
 describe("judge parsing and reporting", () => {
   test("parses the verdict object out of surrounding prose and clamps scores", () => {
     const v = parseJudgeVerdict(
-      'Sure! {"signalToNoise": 12, "staleness": -2, "inferenceVsObservation": 7.6, "notes": "ok"}'
+      'Sure! {"signalToNoise": 12, "staleness": -2, "inferenceVsObservation": 7.6, "notes": "ok"}',
     );
-    expect(v).toEqual({ signalToNoise: 10, staleness: 0, inferenceVsObservation: 8, notes: "ok" });
+    expect(v).toEqual({
+      signalToNoise: 10,
+      staleness: 0,
+      inferenceVsObservation: 8,
+      notes: "ok",
+    });
     expect(() => parseJudgeVerdict("no json here")).toThrow(/no JSON object/);
   });
 
@@ -177,23 +220,42 @@ describe("judge parsing and reporting", () => {
         strategy: "a",
         conversationId: "c1",
         notebook: "",
-        verdict: { signalToNoise: 8, staleness: 8, inferenceVsObservation: 8, notes: "" },
+        verdict: {
+          signalToNoise: 8,
+          staleness: 8,
+          inferenceVsObservation: 8,
+          notes: "",
+        },
       },
       {
         strategy: "a",
         conversationId: "c2",
         notebook: "",
-        verdict: { signalToNoise: 6, staleness: 6, inferenceVsObservation: 6, notes: "" },
+        verdict: {
+          signalToNoise: 6,
+          staleness: 6,
+          inferenceVsObservation: 6,
+          notes: "",
+        },
       },
       {
         strategy: "b",
         conversationId: "c1",
         notebook: "",
-        verdict: { signalToNoise: 9, staleness: 9, inferenceVsObservation: 9, notes: "" },
+        verdict: {
+          signalToNoise: 9,
+          staleness: 9,
+          inferenceVsObservation: 9,
+          notes: "",
+        },
       },
     ]);
     expect(rows[0]!.strategy).toBe("b");
-    expect(rows[1]).toMatchObject({ strategy: "a", conversations: 2, overall: 7 });
+    expect(rows[1]).toMatchObject({
+      strategy: "a",
+      conversations: 2,
+      overall: 7,
+    });
   });
 
   test("renderers produce the shapes the prompts describe", () => {
@@ -201,7 +263,7 @@ describe("judge parsing and reporting", () => {
     expect(numberedNotebook(["A", "B"])).toBe("1. A\n2. B");
     const conversation = parseBenchConversation(
       { id: "x", description: "d", turns: [{ input: "hi", reply: "yo" }] },
-      "inline"
+      "inline",
     );
     expect(renderJudgeInput(conversation, "")).toContain("(empty)");
     expect(formatTable(summarize([]))).toContain("strategy");

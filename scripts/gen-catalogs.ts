@@ -74,13 +74,17 @@ function inputSummary(schema: unknown): string {
   if (!props || !Object.keys(props).length) return "none";
   const required = new Set(s?.required || []);
   return Object.entries(props)
-    .map(([name, spec]) => `\`${name}\` (${schemaType(spec)}${required.has(name) ? ", required" : ""})`)
+    .map(
+      ([name, spec]) =>
+        `\`${name}\` (${schemaType(spec)}${required.has(name) ? ", required" : ""})`,
+    )
     .join(", ");
 }
 
 function schemaType(spec: any): string {
   if (!spec || typeof spec !== "object") return "any";
-  if (Array.isArray(spec.enum)) return spec.enum.map((v: unknown) => JSON.stringify(v)).join(" | ");
+  if (Array.isArray(spec.enum))
+    return spec.enum.map((v: unknown) => JSON.stringify(v)).join(" | ");
   if (spec.type === "array") return `${schemaType(spec.items)}[]`;
   if (Array.isArray(spec.anyOf)) return spec.anyOf.map(schemaType).join(" | ");
   if (typeof spec.type === "string") return spec.type;
@@ -104,8 +108,10 @@ interface ListedTool {
 
 async function listTools(server: { instance: unknown }): Promise<ListedTool[]> {
   const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
-  const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const { InMemoryTransport } =
+    await import("@modelcontextprotocol/sdk/inMemory.js");
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "gen-catalogs", version: "1.0.0" });
   await (server.instance as any).connect(serverTransport);
   await client.connect(clientTransport);
@@ -130,11 +136,15 @@ const RUN_CLASS_LABEL: Record<string, string> = {
 };
 
 async function renderMcpTools(): Promise<string> {
-  const { MCP_SERVER_CATALOG } = await import(`${REPO_ROOT}/packages/core/opensession-server/src/server/mcp-catalog.ts`);
+  const { MCP_SERVER_CATALOG } = await import(
+    `${REPO_ROOT}/packages/core/opensession-server/src/server/mcp-catalog.ts`
+  );
   const { AUTOMATION_DENIED_TOOLS } = await import(
     `${REPO_ROOT}/packages/core/opensession-server/src/server/automation-denied-tools.ts`
   );
-  const { STRIPE_CONFIRM_TOOLS } = await import(`${REPO_ROOT}/packages/core/opensession-server/src/server/runner-shared.ts`);
+  const { STRIPE_CONFIRM_TOOLS } = await import(
+    `${REPO_ROOT}/packages/core/opensession-server/src/server/runner-shared.ts`
+  );
 
   const out: string[] = [
     header(
@@ -180,12 +190,28 @@ async function renderMcpTools(): Promise<string> {
   out.push("## Servers", "");
   out.push("| Server | Tools | Runs | Condition |");
   out.push("| --- | --- | --- | --- |");
-  const built: Array<{ entry: any; tools: ListedTool[]; variants: Array<{ label: string; tools: ListedTool[]; runClasses: string[] }> }> = [];
+  const built: Array<{
+    entry: any;
+    tools: ListedTool[];
+    variants: Array<{
+      label: string;
+      tools: ListedTool[];
+      runClasses: string[];
+    }>;
+  }> = [];
   for (const entry of MCP_SERVER_CATALOG) {
     const tools = await listTools(entry.build());
-    const variants: Array<{ label: string; tools: ListedTool[]; runClasses: string[] }> = [];
+    const variants: Array<{
+      label: string;
+      tools: ListedTool[];
+      runClasses: string[];
+    }> = [];
     for (const v of entry.variants || []) {
-      variants.push({ label: v.label, tools: await listTools(v.build()), runClasses: v.runClasses });
+      variants.push({
+        label: v.label,
+        tools: await listTools(v.build()),
+        runClasses: v.runClasses,
+      });
     }
     built.push({ entry, tools, variants });
     out.push(
@@ -197,18 +223,16 @@ async function renderMcpTools(): Promise<string> {
     );
   }
   const total = built.reduce((n, b) => n + b.tools.length, 0);
-  out.push(
-    "",
-    `${built.length} servers, ${total} tools.`,
-    "",
-  );
+  out.push("", `${built.length} servers, ${total} tools.`, "");
 
   for (const { entry, tools, variants } of built) {
     out.push(`## ${entry.name}`, "", entry.summary, "");
     out.push(`- **Source** \`${entry.source}\``);
     out.push(
       `- **Wired in** ${
-        entry.wiring.length ? entry.wiring.map((w: string) => `\`${w}\``).join(", ") : "nowhere"
+        entry.wiring.length
+          ? entry.wiring.map((w: string) => `\`${w}\``).join(", ")
+          : "nowhere"
       }`,
     );
     out.push(
@@ -218,33 +242,53 @@ async function renderMcpTools(): Promise<string> {
     if (entry.note) out.push(`- **Note** ${entry.note}`);
     const denied = tools
       .map((t) => `mcp__${entry.name}__${t.name}`)
-      .filter((id) => id in AUTOMATION_DENIED_TOOLS || id in STRIPE_CONFIRM_TOOLS);
+      .filter(
+        (id) => id in AUTOMATION_DENIED_TOOLS || id in STRIPE_CONFIRM_TOOLS,
+      );
     if (denied.length) {
-      out.push(`- **Stripped from unattended runs** ${denied.map((d) => `\`${d}\``).join(", ")}`);
+      out.push(
+        `- **Stripped from unattended runs** ${denied.map((d) => `\`${d}\``).join(", ")}`,
+      );
     }
     out.push("");
     for (const t of tools) {
       out.push(`### \`${t.name}\``, "");
-      out.push(`\`mcp__${entry.name}__${t.name}\` · input: ${inputSummary(t.inputSchema)}`, "");
+      out.push(
+        `\`mcp__${entry.name}__${t.name}\` · input: ${inputSummary(t.inputSchema)}`,
+        "",
+      );
       if (t.description) out.push(oneParagraph(t.description), "");
     }
     for (const v of variants) {
       const names = new Set(tools.map((t) => t.name));
-      const extra = v.tools.filter((t) => !names.has(t.name)).map((t) => t.name);
-      const missing = tools.filter((t) => !v.tools.some((x) => x.name === t.name)).map((t) => t.name);
+      const extra = v.tools
+        .filter((t) => !names.has(t.name))
+        .map((t) => t.name);
+      const missing = tools
+        .filter((t) => !v.tools.some((x) => x.name === t.name))
+        .map((t) => t.name);
       out.push(
         `### Variant · ${v.label}`,
         "",
         `Built for: ${v.runClasses.map((r: string) => RUN_CLASS_LABEL[r] || r).join(", ")}. ` +
           `${v.tools.length} tools` +
-          (missing.length ? `, without ${missing.map((m) => `\`${m}\``).join(", ")}` : "") +
-          (extra.length ? `, plus ${extra.map((m) => `\`${m}\``).join(", ")}` : "") +
+          (missing.length
+            ? `, without ${missing.map((m) => `\`${m}\``).join(", ")}`
+            : "") +
+          (extra.length
+            ? `, plus ${extra.map((m) => `\`${m}\``).join(", ")}`
+            : "") +
           ".",
         "",
       );
     }
   }
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
+  return (
+    out
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trimEnd() + "\n"
+  );
 }
 
 // ── engines.md ───────────────────────────────────────────────────────────────
@@ -263,11 +307,12 @@ export const ENGINE_NOTES: Record<
     gate: "`enabled` in `piConfigPath()` (normally `~/.opensession/pi.json`; an existing legacy `~/.opensession-pi.json` is still honored). A missing config disables Pi, while first-run onboarding creates it enabled.",
     note:
       "In-process engine. `pi/anthropic/*` turns reach the Claude Agent SDK through the native " +
-      "in-process provider by default (`anthropicTransport`, `\"bridge\"` for the loopback rollback).",
+      'in-process provider by default (`anthropicTransport`, `"bridge"` for the loopback rollback).',
   },
   fake: {
     title: "fake (tests only)",
-    adapter: "packages/core/opensession-server/src/server/agent-runner.ts — the __setEngineForTest seam; fixture implementation in packages/core/opensession-server/src/server/testing/fake-engine.ts; coverage in packages/core/opensession-server/src/server/fake-engine.test.ts",
+    adapter:
+      "packages/core/opensession-server/src/server/agent-runner.ts — the __setEngineForTest seam; fixture implementation in packages/core/opensession-server/src/server/testing/fake-engine.ts; coverage in packages/core/opensession-server/src/server/fake-engine.test.ts",
     prefix: "– (intercepts every model id)",
     gate:
       "Not config-gated and not reachable in production: it is a module-local test seam, set only " +
@@ -279,7 +324,9 @@ export const ENGINE_NOTES: Record<
 };
 
 async function renderEngines(): Promise<string> {
-  const models = await import(`${REPO_ROOT}/packages/core/opensession-server/src/server/models.ts`);
+  const models = await import(
+    `${REPO_ROOT}/packages/core/opensession-server/src/server/models.ts`
+  );
   const ENGINE_IDS = ["pi"] as const;
   // Read the ids from the engine registry so a new one cannot be missed, but
   // lead with the default engine rather than the union's alphabetical order.
@@ -329,7 +376,10 @@ async function renderEngines(): Promise<string> {
   const rows: Array<{ id: string; label: string }> = [
     ...models.KNOWN_MODELS.map((m: any) => ({ id: m.id, label: m.label })),
     ...models.DIAL_PRESETS.map((p: any) => ({ id: p.id, label: p.label })),
-    ...models.ORCHESTRATOR_PRESETS.map((p: any) => ({ id: p.id, label: p.label })),
+    ...models.ORCHESTRATOR_PRESETS.map((p: any) => ({
+      id: p.id,
+      label: p.label,
+    })),
   ];
   for (const row of rows) {
     const route = models.routeModel(row.id);
@@ -353,7 +403,12 @@ async function renderEngines(): Promise<string> {
     out.push(`| \`${example}\` | ${route.engine} |`);
   }
   out.push("");
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
+  return (
+    out
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trimEnd() + "\n"
+  );
 }
 
 function steerLabel(models: any, id: string): string {
@@ -378,13 +433,22 @@ export async function renderCatalogs(): Promise<Record<string, string>> {
 async function main() {
   const args = process.argv.slice(2);
   const outIdx = args.indexOf("--out");
-  const outDir = outIdx >= 0 ? resolve(args[outIdx + 1]!) : join(REPO_ROOT, "docs/generated");
+  const outDir =
+    outIdx >= 0
+      ? resolve(args[outIdx + 1]!)
+      : join(REPO_ROOT, "docs/generated");
 
   // Hermetic config + state, so the catalog describes the shipped defaults and
   // is byte-identical everywhere. Set BEFORE the first server-module import.
   const sandbox = mkdtempSync(join(tmpdir(), "gen-catalogs-"));
-  writeFileSync(join(sandbox, "config.json"), JSON.stringify(FIXTURE_CONFIG, null, 2));
-  writeFileSync(join(sandbox, "mcp-config.json"), JSON.stringify({ mcpServers: {} }, null, 2));
+  writeFileSync(
+    join(sandbox, "config.json"),
+    JSON.stringify(FIXTURE_CONFIG, null, 2),
+  );
+  writeFileSync(
+    join(sandbox, "mcp-config.json"),
+    JSON.stringify({ mcpServers: {} }, null, 2),
+  );
   process.env.OPENSESSION_CONFIG = join(sandbox, "config.json");
   process.env.OPENSESSION_MCP_CONFIG = join(sandbox, "mcp-config.json");
   process.env.OPENSESSION_STATE_DIR = sandbox;
@@ -396,7 +460,9 @@ async function main() {
     mkdirSync(outDir, { recursive: true });
     for (const [name, content] of Object.entries(files)) {
       writeFileSync(join(outDir, name), content);
-      console.log(`${join(outDir, name)} — ${content.split("\n").length} lines`);
+      console.log(
+        `${join(outDir, name)} — ${content.split("\n").length} lines`,
+      );
     }
   } finally {
     rmSync(sandbox, { recursive: true, force: true });

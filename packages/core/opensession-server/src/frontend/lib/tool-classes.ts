@@ -1,160 +1,4 @@
-
-import * as stylex from "@stylexjs/stylex";
-import { mergeStylexClassName } from "../ui/cn";
-import { type as typography } from "../styles/typography.stylex";
-
-const sx = stylex.create({
-	m0: {
-		"margin": "0"
-	},
-	maxH80: {
-		"maxHeight": "320px"
-	},
-	overflowYAuto: {
-		"overflowY": "auto"
-	},
-	fontMono: {
-		"fontFamily": "var(--mono)"
-	},
-	leading15: {
-		"--tw-leading": "1.5",
-		"lineHeight": "1.5"
-	},
-	whitespacePreWrap: {
-		"whiteSpace": "pre-wrap"
-	},
-	WordBreakBreakWord: {
-		"wordBreak": "break-word"
-	},
-	TabSize2: {
-		"tabSize": "2"
-	},
-	textDim: {
-		"color": "var(--text-dim)"
-	},
-	overflowXAuto: {
-		"overflowX": "auto"
-	},
-	roundedMd: {
-		"borderRadius": "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	border: {
-		"borderStyle": "var(--tw-border-style)",
-		"borderWidth": "1px"
-	},
-	borderCodeWellLine: {
-		"borderColor": "var(--code-well-line)"
-	},
-	bgCodeWell: {
-		"backgroundColor": "var(--code-well)"
-	},
-	px25: {
-		"paddingInline": "10px"
-	},
-	py2: {
-		"paddingBlock": "8px"
-	},
-	mt15: {
-		"marginTop": "6px"
-	},
-	flex: {
-		"display": "flex"
-	},
-	flexWrap: {
-		"flexWrap": "wrap"
-	},
-	gap2: {
-		"gap": "8px"
-	},
-	inlineFlex: {
-		"display": "inline-flex"
-	},
-	flexShrink0: {
-		"flexShrink": "0"
-	},
-	selfCenter: {
-		"alignSelf": "center"
-	},
-	itemsCenter: {
-		"alignItems": "center"
-	},
-	gap05: {
-		"gap": "2px"
-	},
-	roundedControl: {
-		"borderRadius": "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgHover: {
-		"backgroundColor": "var(--hover)"
-	},
-	py2px: {
-		"paddingBlock": "2px"
-	},
-	pl2: {
-		"paddingLeft": "8px"
-	},
-	pr1: {
-		"paddingRight": "4px"
-	},
-	fontMedium: {
-		"--tw-font-weight": "var(--font-weight-medium)",
-		"fontWeight": "var(--font-weight-medium)"
-	},
-	leading4: {
-		"--tw-leading": "calc(4px * 4)",
-		"lineHeight": "16px"
-	},
-	hoverBgPressed: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--hover-strong)"
-			}
-		}
-	},
-	hoverTextFg: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text)"
-			}
-		}
-	},
-	activeScale096: {
-		":active": {
-			"scale": ".96"
-		}
-	},
-	focusRing: {
-		":focusVisible": {
-			"outline": "2px solid var(--accent-ink)",
-			"outlineOffset": "2px"
-		},
-		"@media (forced-colors: active)": {
-			":focusVisible": {
-				"outlineColor": "highlight"
-			}
-		}
-	},
-	gap1: {
-		"gap": "4px"
-	},
-	textFaint: {
-		"color": "var(--text-faint)"
-	},
-	transitionColors: {
-		"transitionProperty": "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-
-	transitionColorBackgroundColorScale: {
-		"transitionProperty": "color,background-color,scale",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-});
-
+import { utilityClassName } from "../ui/cn";
 /**
  * The tool call block's code surfaces.
  *
@@ -183,15 +27,21 @@ const sx = stylex.create({
  * out-runs a phone-width pane — the run of tabs hangs past the edge instead
  * of wrapping. */
 export const TOOL_PRE =
-	mergeStylexClassName("tool-pre", sx.m0, sx.maxH80, sx.overflowYAuto, sx.fontMono, typography.meta, sx.leading15) + " " +
-	mergeStylexClassName("", sx.whitespacePreWrap, sx.WordBreakBreakWord, sx.TabSize2, sx.textDim);
+  utilityClassName(
+    "tool-pre m-0 max-h-80 overflow-y-auto font-mono text-meta leading-[1.5] ",
+  ) +
+  utilityClassName(
+    "whitespace-pre-wrap [word-break:break-word] [tab-size:2] text-dim",
+  );
 
 /** The sunk surface a snippet sits on. */
 export const TOOL_CODE_WELL =
-	mergeStylexClassName("", sx.overflowXAuto, sx.roundedMd, sx.border, sx.borderCodeWellLine, sx.bgCodeWell) + " " +
-	mergeStylexClassName("", sx.px25, sx.py2, sx.TabSize2) + " " +
-	"[&_.tool-pre]:text-code-well-ink [&.tool-pre]:text-code-well-ink " +
-	"[&_.shiki-gutter]:text-code-well-gutter";
+  utilityClassName(
+    "overflow-x-auto rounded-md border border-code-well-line bg-code-well ",
+  ) +
+  utilityClassName("px-2.5 py-2 [tab-size:2] ") +
+  "[&_.tool-pre]:text-code-well-ink [&.tool-pre]:text-code-well-ink " +
+  "[&_.shiki-gutter]:text-code-well-gutter";
 
 /**
  * The highlighter's output wrapper. Shiki emits its own `pre.shiki` with a
@@ -199,15 +49,17 @@ export const TOOL_CODE_WELL =
  * that so the snippet inherits the well instead.
  */
 export const TOOL_PRE_CODE =
-	`${TOOL_PRE} ` +
-	"[&_pre.shiki]:m-0 [&_pre.shiki]:p-0 [&_pre.shiki]:!bg-transparent " +
-	"[&_pre.shiki]:font-[inherit] [&_pre.shiki]:text-[length:inherit] " +
-	"[&_pre.shiki]:leading-[inherit] [&_pre.shiki]:whitespace-pre-wrap " +
-	"[&_pre.shiki]:[word-break:break-word] " +
-	"[&_pre.shiki_code]:font-[inherit] [&_pre.shiki_code]:text-[length:inherit]";
+  `${TOOL_PRE} ` +
+  "[&_pre.shiki]:m-0 [&_pre.shiki]:p-0 [&_pre.shiki]:!bg-transparent " +
+  "[&_pre.shiki]:font-[inherit] [&_pre.shiki]:text-[length:inherit] " +
+  "[&_pre.shiki]:leading-[inherit] [&_pre.shiki]:whitespace-pre-wrap " +
+  "[&_pre.shiki]:[word-break:break-word] " +
+  "[&_pre.shiki_code]:font-[inherit] [&_pre.shiki_code]:text-[length:inherit]";
 
 /** Image and video grids under a tool result. */
-export const TOOL_RESULT_MEDIA = mergeStylexClassName("", sx.mt15, sx.flex, sx.flexWrap, sx.gap2);
+export const TOOL_RESULT_MEDIA = utilityClassName(
+  "mt-1.5 flex flex-wrap gap-2",
+);
 
 /**
  * The tool row's trailing drill-in chip — "Open ↗" on a file the call wrote,
@@ -216,10 +68,16 @@ export const TOOL_RESULT_MEDIA = mergeStylexClassName("", sx.mt15, sx.flex, sx.f
  * translucent plate instead of a hairline box that reads like an input.
  */
 export const TOOL_ROW_CHIP =
-	mergeStylexClassName("", sx.inlineFlex, sx.flexShrink0, sx.selfCenter, sx.itemsCenter, sx.gap05, sx.roundedControl) + " " +
-	mergeStylexClassName("", sx.bgHover, sx.py2px, sx.pl2, sx.pr1, typography.meta, sx.fontMedium, sx.leading4, sx.textDim) + " " +
-	mergeStylexClassName("", sx.transitionColorBackgroundColorScale, sx.hoverBgPressed, sx.hoverTextFg) + " " +
-	mergeStylexClassName("", sx.activeScale096, sx.focusRing);
+  utilityClassName(
+    "inline-flex flex-shrink-0 self-center items-center gap-0.5 rounded-control ",
+  ) +
+  utilityClassName(
+    "bg-hover py-[2px] pl-2 pr-1 text-meta font-medium leading-4 text-dim ",
+  ) +
+  utilityClassName(
+    "transition-[color,background-color,scale] hover:bg-pressed hover:text-fg ",
+  ) +
+  utilityClassName("active:scale-[0.96] focus-ring");
 
 /**
  * Says a collapsed row is holding media the agent didn't ask to show — a Read
@@ -229,5 +87,9 @@ export const TOOL_ROW_CHIP =
  * competing with the "Open ↗" chip beside it.
  */
 export const TOOL_ROW_MEDIA_HINT =
-	mergeStylexClassName("", sx.inlineFlex, sx.flexShrink0, sx.selfCenter, sx.itemsCenter, sx.gap1, typography.meta) + " " +
-	mergeStylexClassName("group-hover:text-dim", sx.leading4, sx.textFaint, sx.transitionColors);
+  utilityClassName(
+    "inline-flex flex-shrink-0 self-center items-center gap-1 text-meta ",
+  ) +
+  utilityClassName(
+    "leading-4 text-faint transition-colors group-hover:text-dim",
+  );

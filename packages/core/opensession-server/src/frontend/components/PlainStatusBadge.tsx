@@ -1,9 +1,9 @@
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import {
-	STATUS_LABEL,
-	plainStatusClass,
-	plainStatusIcon,
+  STATUS_LABEL,
+  plainStatusClass,
+  plainStatusIcon,
 } from "../lib/plain-status";
 
 /**
@@ -16,23 +16,23 @@ import {
  * it (`PlainThreadActions`), which is why this is a `span` with no tab stop.
  */
 export function PlainStatusBadge({
-	status,
-	className,
+  status,
+  className,
 }: {
-	status: string;
-	className?: string;
+  status: string;
+  className?: string;
 }) {
-	const label = STATUS_LABEL[status] || status;
-	const Icon = plainStatusIcon(status);
-	return (
-		<Tooltip label={label}>
-			<span
-				className={cn(plainStatusClass(status), className)}
-				role="img"
-				aria-label={`Status: ${label}`}
-			>
-				<Icon size={20} />
-			</span>
-		</Tooltip>
-	);
+  const label = STATUS_LABEL[status] || status;
+  const Icon = plainStatusIcon(status);
+  return (
+    <Tooltip label={label}>
+      <span
+        className={cn(plainStatusClass(status), className)}
+        role="img"
+        aria-label={`Status: ${label}`}
+      >
+        <Icon size={20} />
+      </span>
+    </Tooltip>
+  );
 }

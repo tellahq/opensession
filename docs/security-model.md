@@ -146,8 +146,8 @@ entry points fail closed before starting an agent run or steering a session:
 - label-triggered review, auto-fix, simplify, and adversarial runs require the
   label actor on the roster.
 - automatic review on open/reopen/push/ready events requires a rostered sender
-  or configured bot. The reconcile sweep applies the same gate and will not
-  infer trust merely from a label that lacks a persisted trusted requester.
+  or configured bot for same-repository PRs. An external fork is the only
+  exception: it may start the isolated public-review path described below.
 - merge automations and deploy-workflow session notifications require a
   rostered actor or configured bot.
 - startup recovery revalidates persisted requesters, so a previously accepted
@@ -155,6 +155,46 @@ entry points fail closed before starting an agent run or steering a session:
 
 Keep every trusted GitHub login in the identity roster. An empty roster disables
 human GitHub commands rather than making the integration public.
+
+### Isolated public PR reviews
+
+External fork PRs can receive an automatic semantic review without running
+GitHub Actions or placing contributor code in a host worktree:
+
+1. GitHub REST supplies the PR identity and a size-bounded patch, pinned by base
+   repository, PR number, base SHA, head repository and head SHA.
+2. A fresh disposable Daytona Executor anonymously fetches
+   `refs/pull/<number>/head` plus the immutable base SHA, verifies both commits
+   and checks out the head with Git hooks disabled. The source-verification
+   profile refuses prewarmed and project-template resources and skips runner
+   bootstrap, dial-back, private workspace seed files, and repository
+   setup/resume hooks. Any mismatch fails closed. Provider deletion must be
+   confirmed before model inference.
+3. A tool-less one-shot model receives only the bounded immutable patch. Model
+   and GitHub credentials never enter the guest, and untrusted repository text
+   never reaches a host-side shell, filesystem tool or MCP server.
+4. The control plane rechecks the live head SHA before posting bounded summary
+   and inline comments through the GitHub App. Public comments contain no
+   private session link and advertise no write-capable actions.
+
+Public reviews never run repository setup from the fork, tests, autofix,
+simplify, adversarial review, conversational commands, pushes or handoffs.
+Review policy comes from the registered base checkout. The path is limited by
+file count, changed lines, patch bytes, attempts per SHA, reviews per author and
+a repository-wide daily budget. The `OPENSESSION_PUBLIC_REVIEW_*` environment
+settings can lower or raise those bounded defaults. If Executor provisioning,
+immutable ref verification, strict disposal, or the model call fails, there is no host-agent
+fallback.
+
+Public intake is an operator-controlled launch, not an App permission. Before a
+human repository administrator changes GitHub's PR creation policy to allow all
+users, operators must qualify the Daytona provider, enable the review
+automation, and keep fork-origin GitHub Actions disabled or approval-gated. The
+shipped PR workflows additionally skip every job whose head repository differs
+from the base repository. The GitHub App intentionally has no repository
+Administration permission; changing
+and auditing those GitHub settings is a one-time human-admin task, not runtime
+authority.
 
 ## GitHub credential scoping (out-of-org writes fail server-side)
 

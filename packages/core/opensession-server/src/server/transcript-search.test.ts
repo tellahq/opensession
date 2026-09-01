@@ -37,16 +37,20 @@ describe("transcript search", () => {
   }
 
   function append(sessionId: string, entries: TranscriptEntry[]): void {
-    const store = new TranscriptStore(sessionKernelSessionDbPath(sessionId, root));
+    const store = new TranscriptStore(
+      sessionKernelSessionDbPath(sessionId, root),
+    );
     stores.push(store);
     store.appendTranscriptEvents(sessionId, entries);
   }
 
   test("matches visible text in requested session order from read-only actor files", () => {
-    append("newer", [entry("tool", "Ran a command", {
-      type: "tool_use",
-      toolInput: { command: "echo NEEDLE" },
-    })]);
+    append("newer", [
+      entry("tool", "Ran a command", {
+        type: "tool_use",
+        toolInput: { command: "echo NEEDLE" },
+      }),
+    ]);
     append("older", [entry("answer", "The needle is here")]);
     append("metadata", [entry("needle-only-id", "Nothing visible")]);
 
@@ -61,9 +65,15 @@ describe("transcript search", () => {
   });
 
   test("pages beyond the newest 24 rows within the global budget", () => {
-    append("deep", Array.from({ length: 60 }, (_, i) =>
-      entry(`deep-${i}`, i === 10 ? "older needle survives paging" : `ordinary row ${i}`),
-    ));
+    append(
+      "deep",
+      Array.from({ length: 60 }, (_, i) =>
+        entry(
+          `deep-${i}`,
+          i === 10 ? "older needle survives paging" : `ordinary row ${i}`,
+        ),
+      ),
+    );
     const result = searchStoredTranscripts({
       isolatedRoot: root,
       query: "older needle",
@@ -96,24 +106,33 @@ describe("transcript search", () => {
 
   test("enforces total session and candidate-row budgets", () => {
     for (const id of ["one", "two", "three"])
-      append(id, Array.from({ length: 4 }, (_, i) => entry(`${id}-${i}`, "shared phrase")));
-    expect(searchStoredTranscripts({
-      isolatedRoot: root,
-      query: "shared phrase",
-      sessionIds: ["one", "two", "three"],
-      maxMatches: 10,
-      maxSessions: 2,
-    })).toMatchObject({
+      append(
+        id,
+        Array.from({ length: 4 }, (_, i) =>
+          entry(`${id}-${i}`, "shared phrase"),
+        ),
+      );
+    expect(
+      searchStoredTranscripts({
+        isolatedRoot: root,
+        query: "shared phrase",
+        sessionIds: ["one", "two", "three"],
+        maxMatches: 10,
+        maxSessions: 2,
+      }),
+    ).toMatchObject({
       searchedSessions: 2,
       exhausted: "sessions",
     });
-    expect(searchStoredTranscripts({
-      isolatedRoot: root,
-      query: "shared phrase",
-      sessionIds: ["one", "two", "three"],
-      maxMatches: 10,
-      maxRows: 1,
-    })).toMatchObject({
+    expect(
+      searchStoredTranscripts({
+        isolatedRoot: root,
+        query: "shared phrase",
+        sessionIds: ["one", "two", "three"],
+        maxMatches: 10,
+        maxRows: 1,
+      }),
+    ).toMatchObject({
       candidateRows: 1,
       exhausted: "rows",
     });
@@ -122,17 +141,23 @@ describe("transcript search", () => {
   test("enforces a wall-clock budget", () => {
     append("one", [entry("a", "needle")]);
     let tick = 0;
-    const result = searchStoredTranscripts({
-      isolatedRoot: root,
-      query: "needle",
-      sessionIds: ["one", "two"],
-      maxMs: 1,
-    }, () => tick++);
+    const result = searchStoredTranscripts(
+      {
+        isolatedRoot: root,
+        query: "needle",
+        sessionIds: ["one", "two"],
+        maxMs: 1,
+      },
+      () => tick++,
+    );
     expect(result).toMatchObject({ searchedSessions: 0, exhausted: "time" });
   });
 
   test("global route dispatches a worker instead of scanning actor mailboxes", () => {
-    const route = readFileSync(join(import.meta.dir, "routes/sessions.ts"), "utf8");
+    const route = readFileSync(
+      join(import.meta.dir, "routes/sessions.ts"),
+      "utf8",
+    );
     const search = route.slice(
       route.indexOf("async function searchStoredTranscripts"),
       route.indexOf("async function ripgrepFiles"),

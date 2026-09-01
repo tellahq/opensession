@@ -87,7 +87,7 @@ const REACH_TOOL_IDS: ReadonlySet<string> = new Set(
   REACH_TOOLS.flatMap((name) => {
     const m = name.match(/^mcp__(.+?)__(.+)$/);
     return m ? [name, `${m[1]}_${m[2]}`] : [name];
-  }).map((id) => id.toLowerCase())
+  }).map((id) => id.toLowerCase()),
 );
 
 export function isReachTool(toolName: string | undefined): boolean {
@@ -101,11 +101,13 @@ const SILENCE_TOOL_IDS: ReadonlyMap<string, SilenceTool> = new Map(
       [
         [`mcp__opensession-turn__${tool}`, tool],
         [`opensession-turn_${tool}`, tool],
-      ] as Array<[string, SilenceTool]>
-  )
+      ] as Array<[string, SilenceTool]>,
+  ),
 );
 
-export function silenceToolFor(toolName: string | undefined): SilenceTool | undefined {
+export function silenceToolFor(
+  toolName: string | undefined,
+): SilenceTool | undefined {
   return toolName ? SILENCE_TOOL_IDS.get(toolName.toLowerCase()) : undefined;
 }
 
@@ -176,7 +178,7 @@ export function observedToolCall(event: {
  */
 export function observeToolCall(
   key: string | undefined,
-  event: { toolName?: string; toolInput?: unknown }
+  event: { toolName?: string; toolInput?: unknown },
 ): void {
   if (!key) return;
   const call = observedToolCall(event);
@@ -207,7 +209,12 @@ export function observeToolCall(
  */
 // "action" is the retired Actions feature — kept so historical runs still
 // classify the way they did when they ran.
-const CHECKED_KINDS = new Set(["automation", "plain", "action", "security-scan"]);
+const CHECKED_KINDS = new Set([
+  "automation",
+  "plain",
+  "action",
+  "security-scan",
+]);
 
 export function isCheckedKind(journalKind: string | undefined): boolean {
   const base = (journalKind || "").replace(/(-(resume|rerun|fallback))+$/, "");
@@ -274,7 +281,7 @@ export function recordEffect(key: string | undefined, toolName: string): void {
  */
 export function recordDeclaration(
   key: string | undefined,
-  declaration: TurnDeclaration
+  declaration: TurnDeclaration,
 ): void {
   const ledger = getTurn(key);
   if (!ledger || ledger.closed) return;
@@ -303,7 +310,7 @@ export function verdictFor(ledger: {
  */
 export function endTurn(
   key: string | undefined,
-  ctx?: { repo?: string; model?: string; by?: string }
+  ctx?: { repo?: string; model?: string; by?: string },
 ): TurnOutcome | undefined {
   const ledger = getTurn(key);
   if (!ledger) return undefined;

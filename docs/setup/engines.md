@@ -61,10 +61,10 @@ tries another eligible account before considering a model fallback.
 
 The UI writes these files with mode `0600`:
 
-| File | Contents |
-| --- | --- |
-| `~/.opensession/claude-accounts.json` | Claude setup tokens and optional usage credentials |
-| `~/.opensession/codex-accounts.json` | ChatGPT sign-ins and OpenAI API keys |
+| File                                  | Contents                                                                            |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| `~/.opensession/claude-accounts.json` | Claude setup tokens and optional usage credentials                                  |
+| `~/.opensession/codex-accounts.json`  | ChatGPT sign-ins and OpenAI API keys                                                |
 | `~/.opensession/model-providers.json` | Third-party provider keys, base URLs, picker models, and optional pool restrictions |
 
 Legacy top-level counterparts such as `~/.opensession-claude-accounts.json`

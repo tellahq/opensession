@@ -36,7 +36,7 @@ let n = 0;
 function entry(
   id: string,
   content: string,
-  extra: Partial<TranscriptEntry> = {}
+  extra: Partial<TranscriptEntry> = {},
 ): TranscriptEntry {
   return {
     id,
@@ -61,9 +61,13 @@ describe("append + read roundtrip", () => {
 
     const tail = store.readTail(sid, 50);
     expect(tail.entries.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5]);
-    expect(tail.entries.map((e) => e.content)).toEqual(
-      ["msg 1", "msg 2", "msg 3", "msg 4", "msg 5"]
-    );
+    expect(tail.entries.map((e) => e.content)).toEqual([
+      "msg 1",
+      "msg 2",
+      "msg 3",
+      "msg 4",
+      "msg 5",
+    ]);
     expect(tail.firstSeq).toBe(1);
     expect(tail.lastSeq).toBe(5);
   });
@@ -84,7 +88,11 @@ describe("append + read roundtrip", () => {
   });
 
   test("entries without an id are skipped, not thrown", async () => {
-    const bad = { type: "system", content: "no id", timestamp: "" } as unknown as TranscriptEntry;
+    const bad = {
+      type: "system",
+      content: "no id",
+      timestamp: "",
+    } as unknown as TranscriptEntry;
     expect(await store.appendTranscriptEvents("bks-badid", [bad])).toBeNull();
     expect(store.getLastSeq("bks-badid")).toBe(0);
   });
@@ -113,7 +121,10 @@ describe("uuid dedup + upsert", () => {
   const sid = "bks-dedup";
 
   test("re-append of the same entry mints no new seq", async () => {
-    await store.appendTranscriptEvents(sid, [entry("a", "one"), entry("b", "two")]);
+    await store.appendTranscriptEvents(sid, [
+      entry("a", "one"),
+      entry("b", "two"),
+    ]);
     expect(store.getLastSeq(sid)).toBe(2);
 
     const res = await store.appendTranscriptEvents(sid, [entry("a", "one")]);
@@ -168,11 +179,11 @@ describe("big-entry bounding", () => {
     try {
       const row = raw
         .query(
-          "SELECT data, full_ref FROM transcript_events WHERE session_id = ? AND uuid = ?"
+          "SELECT data, full_ref FROM transcript_events WHERE session_id = ? AND uuid = ?",
         )
         .get(sid, "big-1") as { data: string; full_ref: number | null };
       expect(Buffer.byteLength(row.data)).toBeLessThanOrEqual(
-        TRANSCRIPT_DATA_MAX_BYTES
+        TRANSCRIPT_DATA_MAX_BYTES,
       );
       expect(row.full_ref).not.toBeNull();
     } finally {
@@ -207,7 +218,7 @@ describe("big-entry bounding", () => {
     try {
       const row = raw
         .query(
-          "SELECT full_ref FROM transcript_events WHERE session_id = ? AND uuid = ?"
+          "SELECT full_ref FROM transcript_events WHERE session_id = ? AND uuid = ?",
         )
         .get(sid, "small-1") as { full_ref: number | null };
       expect(row.full_ref).toBeNull();
@@ -219,15 +230,21 @@ describe("big-entry bounding", () => {
   });
 
   test("upsert that shrinks below the bound drops the stale blob", async () => {
-    await store.appendTranscriptEvents(sid, [entry("big-1", "now small", { type: "tool_use", toolName: "Bash" })]);
+    await store.appendTranscriptEvents(sid, [
+      entry("big-1", "now small", { type: "tool_use", toolName: "Bash" }),
+    ]);
     const raw = new Database(dbPath, { readonly: true });
     try {
       const blob = raw
-        .query("SELECT id FROM transcript_blobs WHERE session_id = ? AND uuid = ?")
+        .query(
+          "SELECT id FROM transcript_blobs WHERE session_id = ? AND uuid = ?",
+        )
         .get(sid, "big-1");
       expect(blob).toBeNull();
       const row = raw
-        .query("SELECT seq, full_ref FROM transcript_events WHERE session_id = ? AND uuid = ?")
+        .query(
+          "SELECT seq, full_ref FROM transcript_events WHERE session_id = ? AND uuid = ?",
+        )
         .get(sid, "big-1") as { seq: number; full_ref: number | null };
       expect(row.seq).toBe(1); // still the original seq
       expect(row.full_ref).toBeNull();
@@ -244,7 +261,7 @@ describe("paging: readSince / readBefore", () => {
   test("setup + readSince returns strictly-after entries ascending", async () => {
     await store.appendTranscriptEvents(
       sid,
-      [1, 2, 3, 4, 5, 6].map((i) => entry(`p${i}`, `p ${i}`))
+      [1, 2, 3, 4, 5, 6].map((i) => entry(`p${i}`, `p ${i}`)),
     );
     const since = store.readSince(sid, 2, 3);
     expect(since.entries.map((e) => e.seq)).toEqual([3, 4, 5]);
@@ -266,27 +283,36 @@ describe("paging: readSince / readBefore", () => {
 });
 
 describe("message-aware tail windows", () => {
-	test("bounds engine handoffs without hydrating full blobs", async () => {
-		const sid = "bks-handoff-window";
-		await store.appendTranscriptEvents(sid, [
-			entry("handoff-old-user", "old question", { type: "user" }),
-			...Array.from({ length: 520 }, (_, i) =>
-				entry(`handoff-tool-${i}`, `step ${i}`, { type: "tool_use" })
-			),
-			entry("handoff-recent-user", "recent question", { type: "user" }),
-			entry("handoff-large-assistant", "x".repeat(TRANSCRIPT_DATA_MAX_BYTES * 2)),
-		]);
+  test("bounds engine handoffs without hydrating full blobs", async () => {
+    const sid = "bks-handoff-window";
+    await store.appendTranscriptEvents(sid, [
+      entry("handoff-old-user", "old question", { type: "user" }),
+      ...Array.from({ length: 520 }, (_, i) =>
+        entry(`handoff-tool-${i}`, `step ${i}`, { type: "tool_use" }),
+      ),
+      entry("handoff-recent-user", "recent question", { type: "user" }),
+      entry(
+        "handoff-large-assistant",
+        "x".repeat(TRANSCRIPT_DATA_MAX_BYTES * 2),
+      ),
+    ]);
 
-		const page = store.readHandoffTail(sid);
-		expect(page.entries.length).toBeLessThanOrEqual(512);
-		expect(page.entries.some((row) => row.id === "handoff-old-user")).toBe(false);
-		expect(page.entries.some((row) => row.id === "handoff-recent-user")).toBe(true);
-		const assistant = page.entries.find(
-			(row) => row.id === "handoff-large-assistant"
-		)!;
-		expect(assistant.content.length).toBeLessThan(TRANSCRIPT_DATA_MAX_BYTES * 2);
-		expect(assistant.contentClamped).toBe(true);
-	});
+    const page = store.readHandoffTail(sid);
+    expect(page.entries.length).toBeLessThanOrEqual(512);
+    expect(page.entries.some((row) => row.id === "handoff-old-user")).toBe(
+      false,
+    );
+    expect(page.entries.some((row) => row.id === "handoff-recent-user")).toBe(
+      true,
+    );
+    const assistant = page.entries.find(
+      (row) => row.id === "handoff-large-assistant",
+    )!;
+    expect(assistant.content.length).toBeLessThan(
+      TRANSCRIPT_DATA_MAX_BYTES * 2,
+    );
+    expect(assistant.contentClamped).toBe(true);
+  });
 
   test("extends past the entry floor until it reaches conversation", async () => {
     const sid = "bks-tail-window-messages";
@@ -294,7 +320,7 @@ describe("message-aware tail windows", () => {
       entry("tw-u", "question", { type: "user" }),
       entry("tw-a", "answer"),
       ...Array.from({ length: 10 }, (_, i) =>
-        entry(`tw-tool-${i}`, `step ${i}`, { type: "tool_use" })
+        entry(`tw-tool-${i}`, `step ${i}`, { type: "tool_use" }),
       ),
     ]);
 
@@ -318,7 +344,7 @@ describe("message-aware tail windows", () => {
       entry("tu-a1", "still working"),
       entry("tu-a2", "nearly done"),
       ...Array.from({ length: 6 }, (_, i) =>
-        entry(`tu-tool-${i}`, `step ${i}`, { type: "tool_use" })
+        entry(`tu-tool-${i}`, `step ${i}`, { type: "tool_use" }),
       ),
     ]);
 
@@ -339,7 +365,7 @@ describe("message-aware tail windows", () => {
       entry("tb-u", "old question", { type: "user" }),
       entry("tb-a", "old answer"),
       ...Array.from({ length: 8 }, (_, i) =>
-        entry(`tb-tool-${i}`, `step ${i}`, { type: "tool_use" })
+        entry(`tb-tool-${i}`, `step ${i}`, { type: "tool_use" }),
       ),
     ]);
 
@@ -365,7 +391,7 @@ describe("message-aware tail windows", () => {
     await store.appendTranscriptEvents(sid, [
       entry("tr-u", "old question", { type: "user" }),
       ...Array.from({ length: 10 }, (_, i) =>
-        entry(`tr-tool-${i}`, `step ${i}`, { type: "tool_use" })
+        entry(`tr-tool-${i}`, `step ${i}`, { type: "tool_use" }),
       ),
     ]);
 
@@ -402,7 +428,7 @@ describe("message-aware tail windows", () => {
     try {
       const row = raw
         .query(
-          "SELECT length(CAST(data AS BLOB)) AS bytes FROM transcript_events WHERE session_id = ?"
+          "SELECT length(CAST(data AS BLOB)) AS bytes FROM transcript_events WHERE session_id = ?",
         )
         .get(sid) as { bytes: number };
       expect(measured).toBe(row.bytes);
@@ -417,7 +443,12 @@ describe("import-first gate + legacy import", () => {
   test("import then live-append: history seqs precede live seqs", async () => {
     const sid = "bks-import-order";
     const history = [1, 2, 3].map((i) => entry(`h${i}`, `hist ${i}`));
-    const res = await store.importLegacyTranscript(sid, history, "mirror", 4096);
+    const res = await store.importLegacyTranscript(
+      sid,
+      history,
+      "mirror",
+      4096,
+    );
     expect(res).toEqual({ inserted: 3, updated: 0 });
     expect(store.hasImported(sid)).toBe(true);
     expect(store.needsImport(sid)).toBe(false);
@@ -442,7 +473,7 @@ describe("import-first gate + legacy import", () => {
       sid,
       [entry("h2", "hist 2 edited"), entry("h5", "hist 5 new")],
       "merged",
-      8192
+      8192,
     );
     expect(res).toEqual({ inserted: 1, updated: 1 });
     const tail = store.readTail(sid);
@@ -454,7 +485,9 @@ describe("import-first gate + legacy import", () => {
 
   test("chunked import handles > 500 rows in one call", async () => {
     const sid = "bks-import-chunks";
-    const many = Array.from({ length: 1203 }, (_, i) => entry(`m${i}`, `m ${i}`));
+    const many = Array.from({ length: 1203 }, (_, i) =>
+      entry(`m${i}`, `m ${i}`),
+    );
     const res = await store.importLegacyTranscript(sid, many, "mirror", null);
     expect(res.inserted).toBe(1203);
     expect(store.getLastSeq(sid)).toBe(1203);
@@ -465,9 +498,16 @@ describe("import-first gate + legacy import", () => {
     let calls = 0;
     const ensureImported = (s: string) => {
       calls++;
-      (store as any).importLegacyTranscriptOwned(s, [entry("g1", "old 1"), entry("g2", "old 2")], "mirror", 100);
+      (store as any).importLegacyTranscriptOwned(
+        s,
+        [entry("g1", "old 1"), entry("g2", "old 2")],
+        "mirror",
+        100,
+      );
     };
-    await store.appendTranscriptEvents(sid, [entry("g-live", "live")], { ensureImported });
+    await store.appendTranscriptEvents(sid, [entry("g-live", "live")], {
+      ensureImported,
+    });
     expect(calls).toBe(1);
     expect(store.readTail(sid).entries.map((e) => [e.seq, e.id])).toEqual([
       [1, "g1"],
@@ -475,7 +515,9 @@ describe("import-first gate + legacy import", () => {
       [3, "g-live"],
     ]);
     // Gate is one-time: hook is not called again.
-    await store.appendTranscriptEvents(sid, [entry("g-live2", "live 2")], { ensureImported });
+    await store.appendTranscriptEvents(sid, [entry("g-live2", "live 2")], {
+      ensureImported,
+    });
     expect(calls).toBe(1);
   });
 
@@ -555,7 +597,9 @@ describe("bus + append hook", () => {
       throw new Error("hook boom");
     });
     try {
-      const res = await store.appendTranscriptEvents(sid, [entry("hk1", "user msg", { type: "user" })]);
+      const res = await store.appendTranscriptEvents(sid, [
+        entry("hk1", "user msg", { type: "user" }),
+      ]);
       expect(res!.inserted).toBe(1);
       await Promise.resolve();
       expect(seen).toEqual([[sid, 1]]);
@@ -583,10 +627,18 @@ describe("deleteSessionTranscript", () => {
     const raw = new Database(dbPath, { readonly: true });
     try {
       expect(
-        raw.query("SELECT COUNT(*) AS n FROM transcript_blobs WHERE session_id = ?").get(sid)
+        raw
+          .query(
+            "SELECT COUNT(*) AS n FROM transcript_blobs WHERE session_id = ?",
+          )
+          .get(sid),
       ).toEqual({ n: 0 });
       expect(
-        raw.query("SELECT COUNT(*) AS n FROM transcript_events WHERE session_id = ?").get(sid)
+        raw
+          .query(
+            "SELECT COUNT(*) AS n FROM transcript_events WHERE session_id = ?",
+          )
+          .get(sid),
       ).toEqual({ n: 0 });
     } finally {
       raw.close();
@@ -606,6 +658,11 @@ describe("transcript outline and random-access ranges", () => {
         type: "system",
         contextInjection: { source: "repos" },
       }),
+      entry("wait", "private wait context", {
+        type: "system",
+        noticeKind: "context-injection",
+        contextInjection: { source: "background-wait", turnId: "wait-turn" },
+      }),
       entry("human", "Please investigate", { type: "user" }),
       entry("tool", "Using Read", {
         type: "tool_use",
@@ -617,38 +674,44 @@ describe("transcript outline and random-access ranges", () => {
         toolUseId: "call-1",
       }),
       entry("answer", "Done"),
-      entry(
-        "handoff",
-        "[GitHub] <!--os:review-handoff-->\nReview PR #42",
-        { type: "user" },
-      ),
+      entry("handoff", "[GitHub] <!--os:review-handoff-->\nReview PR #42", {
+        type: "user",
+      }),
     ]);
 
     const outline = store.readTranscriptIndex(sid);
     expect(outline.entries.map((row) => row.role)).toEqual([
       "hidden",
       "user",
+      "user",
       "tool_use",
       "tool_result",
       "assistant",
       "review_handoff",
     ]);
-    expect(outline.entries[5]).toMatchObject({ reviewPrNumber: 42 });
+    expect(outline.entries[6]).toMatchObject({ reviewPrNumber: 42 });
     expect(outline.entries[1]).toMatchObject({
-      id: "human",
+      id: "wait",
       seq: 2,
+      contentLength: 0,
+    });
+    expect(outline.entries[2]).toMatchObject({
+      id: "human",
+      seq: 3,
       contentLength: "Please investigate".length,
     });
     expect(JSON.stringify(outline)).not.toContain("large result");
     expect(outline.firstSeq).toBe(1);
-    expect(outline.lastSeq).toBe(6);
+    expect(outline.lastSeq).toBe(7);
   });
 
   test("updates an old outline row in place when its role changes", async () => {
     const sid = "bks-outline-upsert";
     await store.appendTranscriptEvents(sid, [entry("same", "draft")]);
     const before = store.readTranscriptIndex(sid).entries[0];
-    await store.appendTranscriptEvents(sid, [entry("same", "now a person", { type: "user" })]);
+    await store.appendTranscriptEvents(sid, [
+      entry("same", "now a person", { type: "user" }),
+    ]);
     const after = store.readTranscriptIndex(sid).entries[0];
     expect(after.seq).toBe(before.seq);
     expect(after.changeSeq).toBeGreaterThan(before.changeSeq);
@@ -659,7 +722,9 @@ describe("transcript outline and random-access ranges", () => {
     const sid = "bks-range";
     await store.appendTranscriptEvents(
       sid,
-      Array.from({ length: 5 }, (_, index) => entry(`range-${index + 1}`, `row ${index + 1}`)),
+      Array.from({ length: 5 }, (_, index) =>
+        entry(`range-${index + 1}`, `row ${index + 1}`),
+      ),
     );
     const first = store.readRange(sid, 2, 5, 1, 2);
     expect(first.entries.map((row) => row.seq)).toEqual([2, 3]);
@@ -716,7 +781,8 @@ describe("transcript outline and random-access ranges", () => {
   test("backfill preserves oversized row roles and original lengths", async () => {
     const sid = "bks-outline-full-blob";
     const content =
-      "[GitHub] <!--os:review-handoff-->\nReview PR #42\n" + "x".repeat(100_000);
+      "[GitHub] <!--os:review-handoff-->\nReview PR #42\n" +
+      "x".repeat(100_000);
     await store.appendTranscriptEvents(sid, [
       entry("large-handoff", content, { type: "user" }),
     ]);

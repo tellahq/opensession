@@ -16,10 +16,10 @@ subscriptions. Treat the bind address as the security boundary.
 Open Session has a private app for people and a separate public endpoint for
 external services. Configuring one never exposes the other.
 
-| Connection | Used by | Address | Setup |
-| --- | --- | --- | --- |
-| **Private app** | Teammates and server administrators | A private-network or access-controlled HTTPS address | Use Tailscale, an SSH tunnel, or an identity-gated private tunnel |
-| **Public callbacks** | GitHub webhooks and remote Sandboxes | A different public HTTPS address | Choose Cloudflare Tunnel or Direct HTTPS with Caddy |
+| Connection           | Used by                              | Address                                              | Setup                                                             |
+| -------------------- | ------------------------------------ | ---------------------------------------------------- | ----------------------------------------------------------------- |
+| **Private app**      | Teammates and server administrators  | A private-network or access-controlled HTTPS address | Use Tailscale, an SSH tunnel, or an identity-gated private tunnel |
+| **Public callbacks** | GitHub webhooks and remote Sandboxes | A different public HTTPS address                     | Choose Cloudflare Tunnel or Direct HTTPS with Caddy               |
 
 Tailscale keeps teammate and server traffic private. Cloudflare Tunnel can front
 the private app only when Cloudflare Access or an equivalent identity policy
@@ -28,12 +28,12 @@ the private app.
 
 ### Private app quick reference
 
-| | |
-| --- | --- |
-| Default | binds `127.0.0.1`, reachable only from the box itself |
-| Sharing with a team | bind a **Tailscale** IP, or keep loopback behind an identity-gated private tunnel |
-| Occasional access | leave it on `127.0.0.1`, use an **SSH tunnel** |
-| Never | expose port 3850 with `HOST=0.0.0.0`, a bare Cloudflare Tunnel, or an unprotected public reverse proxy |
+|                     |                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| Default             | binds `127.0.0.1`, reachable only from the box itself                                                  |
+| Sharing with a team | bind a **Tailscale** IP, or keep loopback behind an identity-gated private tunnel                      |
+| Occasional access   | leave it on `127.0.0.1`, use an **SSH tunnel**                                                         |
+| Never               | expose port 3850 with `HOST=0.0.0.0`, a bare Cloudflare Tunnel, or an unprotected public reverse proxy |
 
 ## Tailscale for private access (recommended)
 
@@ -299,10 +299,10 @@ attempts are limited to 30 per client IP per minute.
 
 Choose exactly one way to publish that callback listener:
 
-| Method | Address | Inbound ports | Best when |
-| --- | --- | --- | --- |
-| **Cloudflare Tunnel** | Your domain | None | Your DNS is on Cloudflare and you do not want to open ports |
-| **Direct HTTPS with Caddy** | Your domain | 80 and 443 | You use any DNS provider and can expose the server directly |
+| Method                      | Address     | Inbound ports | Best when                                                   |
+| --------------------------- | ----------- | ------------- | ----------------------------------------------------------- |
+| **Cloudflare Tunnel**       | Your domain | None          | Your DNS is on Cloudflare and you do not want to open ports |
+| **Direct HTTPS with Caddy** | Your domain | 80 and 443    | You use any DNS provider and can expose the server directly |
 
 Each registered route keeps its own authentication. Provider webhooks verify
 their configured signatures, including `GITHUB_WEBHOOK_SECRET`,

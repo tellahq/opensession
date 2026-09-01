@@ -84,7 +84,9 @@ export function listGoals(): Goal[] {
   for (const file of readdirSync(GOALS_DIR)) {
     if (!file.endsWith(".json")) continue;
     try {
-      out.push(JSON.parse(readFileSync(`${GOALS_DIR}/${file}`, "utf-8")) as Goal);
+      out.push(
+        JSON.parse(readFileSync(`${GOALS_DIR}/${file}`, "utf-8")) as Goal,
+      );
     } catch {}
   }
   out.sort((a, b) => a.name.localeCompare(b.name));
@@ -128,7 +130,9 @@ const MIN_WAKE_FLOOR = 5; // never allow a cadence under 5 minutes
 
 function sanitizeMcpList(list?: unknown): string[] | undefined {
   if (!Array.isArray(list)) return undefined;
-  return list.filter((s): s is string => typeof s === "string" && !!s.trim()).map((s) => s.trim());
+  return list
+    .filter((s): s is string => typeof s === "string" && !!s.trim())
+    .map((s) => s.trim());
 }
 
 export function createGoal(input: {
@@ -151,14 +155,17 @@ export function createGoal(input: {
   let nextWakeAt = new Date().toISOString();
   if (input.firstWakeAt?.trim()) {
     const t = Date.parse(input.firstWakeAt.trim());
-    if (Number.isNaN(t)) return { error: `Invalid firstWakeAt: "${input.firstWakeAt}"` };
+    if (Number.isNaN(t))
+      return { error: `Invalid firstWakeAt: "${input.firstWakeAt}"` };
     nextWakeAt = new Date(t).toISOString();
   }
 
   const id = `goal-${randomUUIDv7()}`;
   const minWakeMinutes = Math.max(
     MIN_WAKE_FLOOR,
-    typeof input.minWakeMinutes === "number" && input.minWakeMinutes > 0 ? input.minWakeMinutes : 30
+    typeof input.minWakeMinutes === "number" && input.minWakeMinutes > 0
+      ? input.minWakeMinutes
+      : 30,
   );
 
   const g: Goal = {
@@ -191,7 +198,7 @@ export function createGoal(input: {
       `This is the durable, authoritative record of this goal's work: baselines, ` +
       `decisions, shipped PRs and their measured effect. The agent reads it first ` +
       `every wake and appends to it last. It survives context compaction.\n\n` +
-      `## Mission\n\n${g.mission}\n`
+      `## Mission\n\n${g.mission}\n`,
   );
   return g;
 }
@@ -218,12 +225,13 @@ export function updateGoal(
       | "pauseReason"
       | "doneReason"
     >
-  >
+  >,
 ): Goal | { error: string } {
   const g = getGoal(id);
   if (!g) return { error: "Goal not found" };
   const next: Goal = { ...g, ...patch };
-  if ("mcpServers" in patch) next.mcpServers = sanitizeMcpList(patch.mcpServers);
+  if ("mcpServers" in patch)
+    next.mcpServers = sanitizeMcpList(patch.mcpServers);
   if (typeof next.minWakeMinutes === "number") {
     next.minWakeMinutes = Math.max(MIN_WAKE_FLOOR, next.minWakeMinutes);
   }
@@ -232,7 +240,10 @@ export function updateGoal(
 }
 
 /** Resume a paused/done goal: mark active and (re)schedule a wake. */
-export function resumeGoal(id: string, firstWakeAt?: string): Goal | { error: string } {
+export function resumeGoal(
+  id: string,
+  firstWakeAt?: string,
+): Goal | { error: string } {
   const g = getGoal(id);
   if (!g) return { error: "Goal not found" };
   let nextWakeAt = new Date().toISOString();

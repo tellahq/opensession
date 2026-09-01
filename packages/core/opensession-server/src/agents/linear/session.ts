@@ -18,7 +18,10 @@ import {
 } from "../../server/worktree";
 import { unlinkSync } from "fs";
 import { homeDir } from "../../server/paths";
-import { gitIdentityFor, gitIdentityEnv } from "../../server/shared/user-mappings";
+import {
+  gitIdentityFor,
+  gitIdentityEnv,
+} from "../../server/shared/user-mappings";
 import { createAgentActivity } from "./api";
 import type { LinearTokens } from "./oauth";
 import { getValidToken } from "./oauth";
@@ -36,7 +39,12 @@ export interface Participant {
   email: string | null;
 }
 
-const PHASES = ["awaiting_direction", "planning", "awaiting_implementation", "working"] as const;
+const PHASES = [
+  "awaiting_direction",
+  "planning",
+  "awaiting_implementation",
+  "working",
+] as const;
 
 /**
  * Where a session is in its lifecycle. One value at a time, so a combination
@@ -91,7 +99,9 @@ export const processedSessions = new Set<string>();
 // --- Utilities ---
 
 export function extractPrUrl(result: string): string | null {
-  const prUrlMatch = result.match(/https:\/\/github\.com\/[^\/]+\/[^\/]+\/pull\/\d+/);
+  const prUrlMatch = result.match(
+    /https:\/\/github\.com\/[^\/]+\/[^\/]+\/pull\/\d+/,
+  );
   return prUrlMatch ? prUrlMatch[0] : null;
 }
 
@@ -100,17 +110,20 @@ export function formatConversationHistory(
     role: "agent" | "user";
     content: string;
     timestamp: string;
-  }>
+  }>,
 ): string {
   if (conversation.length === 0) return "";
   return conversation
-    .map((msg) => `**${msg.role === "user" ? "User" : personaName()}:** ${msg.content}`)
+    .map(
+      (msg) =>
+        `**${msg.role === "user" ? "User" : personaName()}:** ${msg.content}`,
+    )
     .join("\n\n");
 }
 
 export function buildParticipantSections(
   participants: Participant[],
-  lastActiveUser: Participant | null
+  lastActiveUser: Participant | null,
 ): { participantsSection: string; coAuthorInstruction: string } {
   let participantsSection = "";
   let coAuthorInstruction = "";
@@ -121,7 +134,8 @@ export function buildParticipantSections(
   }
 
   if (lastActiveUser) {
-    const email = lastActiveUser.email || `${lastActiveUser.id}@users.linear.app`;
+    const email =
+      lastActiveUser.email || `${lastActiveUser.id}@users.linear.app`;
     coAuthorInstruction = `IMPORTANT: When creating commits, include this Co-Authored-By line:
 Co-Authored-By: ${lastActiveUser.name} <${email}>`;
   }
@@ -131,7 +145,10 @@ Co-Authored-By: ${lastActiveUser.name} <${email}>`;
 
 // --- Branch & Worktree ---
 
-export function generateBranchName(title: string, issueIdentifier?: string): string {
+export function generateBranchName(
+  title: string,
+  issueIdentifier?: string,
+): string {
   // Heuristic: take first 1-2 words from title, lowercased, hyphen-separated, no special chars
   // Avoids a full Haiku query just for a branch name.
   const words = title
@@ -158,7 +175,7 @@ export async function createWorktree(
   _ticketId: string,
   _title: string,
   _description: string,
-  _url: string
+  _url: string,
 ): Promise<string> {
   const worktreeDir = await createRepoWorktree(branch, defaultRepo().id);
   console.log(`[linear] Created worktree: ${branch}`);
@@ -191,7 +208,10 @@ function emptyStored(branch: string): StoredSession {
  * never cleared, so on those files it means "awaiting direction" only while
  * there is no engine session id: once a turn has run, direction was given.
  */
-function storedFromFile(branch: string, raw: Record<string, any>): StoredSession {
+function storedFromFile(
+  branch: string,
+  raw: Record<string, any>,
+): StoredSession {
   const claudeSessionId = raw.claudeSessionId ?? null;
   const phase: SessionPhase = (PHASES as readonly string[]).includes(raw.phase)
     ? raw.phase
@@ -226,10 +246,10 @@ function storedFromFile(branch: string, raw: Record<string, any>): StoredSession
  */
 export async function saveSessionInfo(
   branch: string,
-  patch: Partial<StoredSession>
+  patch: Partial<StoredSession>,
 ): Promise<void> {
   const defined = Object.fromEntries(
-    Object.entries(patch).filter(([, v]) => v !== undefined)
+    Object.entries(patch).filter(([, v]) => v !== undefined),
   ) as Partial<StoredSession>;
 
   const existing = await loadSessionInfo(branch);
@@ -243,7 +263,9 @@ export async function saveSessionInfo(
   writeJsonAtomic(`${SESSION_DIR}/${branch}.json`, data);
 }
 
-export async function loadSessionInfo(branch: string): Promise<StoredSession | null> {
+export async function loadSessionInfo(
+  branch: string,
+): Promise<StoredSession | null> {
   try {
     const file = Bun.file(`${SESSION_DIR}/${branch}.json`);
     if (await file.exists()) {
@@ -273,19 +295,24 @@ export function deleteWorktree(branch: string): void {
 
 /** Base URL of the Open Session web UI, linked from Linear sessions. */
 export const OPENSESSION_UI_BASE =
-  process.env.OPENSESSION_UI_BASE ||
-  configuredServer().publicBaseUrl;
+  process.env.OPENSESSION_UI_BASE || configuredServer().publicBaseUrl;
 
 export function opensessionSessionUrl(branch: string): string {
   return `${OPENSESSION_UI_BASE}/session/${encodeURIComponent(`linear-${branch}`)}`;
 }
 
 /** Compact action row for a tool call: { action: "Read", parameter: "src/foo.ts" }. */
-function summarizeAction(name: string, input: any): { action: string; parameter: string } {
+function summarizeAction(
+  name: string,
+  input: any,
+): { action: string; parameter: string } {
   const inp = input || {};
   const mcp = name.match(/^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/);
   if (mcp) {
-    return { action: mcp[1], parameter: `${mcp[2]} ${clip(JSON.stringify(inp))}`.trim() };
+    return {
+      action: mcp[1],
+      parameter: `${mcp[2]} ${clip(JSON.stringify(inp))}`.trim(),
+    };
   }
   switch (name) {
     case "Read":
@@ -293,14 +320,26 @@ function summarizeAction(name: string, input: any): { action: string; parameter:
     case "Write":
       return { action: name, parameter: inp.file_path || "" };
     case "Bash":
-      return { action: "Ran", parameter: clip((inp.command || "").split("\n")[0]) };
+      return {
+        action: "Ran",
+        parameter: clip((inp.command || "").split("\n")[0]),
+      };
     case "Grep":
-      return { action: "Searched", parameter: clip(`${inp.pattern || ""} ${inp.path || inp.glob || ""}`) };
+      return {
+        action: "Searched",
+        parameter: clip(`${inp.pattern || ""} ${inp.path || inp.glob || ""}`),
+      };
     case "Glob":
-      return { action: "Globbed", parameter: clip(`${inp.pattern || ""} ${inp.path || ""}`) };
+      return {
+        action: "Globbed",
+        parameter: clip(`${inp.pattern || ""} ${inp.path || ""}`),
+      };
     case "Task":
     case "Agent":
-      return { action: "Spawned agent", parameter: clip(inp.description || inp.subagent_type || "") };
+      return {
+        action: "Spawned agent",
+        parameter: clip(inp.description || inp.subagent_type || ""),
+      };
     case "WebFetch":
       return { action: "Fetched", parameter: clip(inp.url || "") };
     case "WebSearch":
@@ -330,8 +369,10 @@ function makeActionStreamer(accessToken: string, linearSessionId: string) {
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const post = (a: { action: string; parameter: string }) => {
-    createAgentActivity(accessToken, linearSessionId, { type: "action", ...a })
-      .catch((e) => console.error("[linear] Failed to send action:", e));
+    createAgentActivity(accessToken, linearSessionId, {
+      type: "action",
+      ...a,
+    }).catch((e) => console.error("[linear] Failed to send action:", e));
   };
 
   return {
@@ -345,14 +386,17 @@ function makeActionStreamer(accessToken: string, linearSessionId: string) {
       }
       pending = a;
       if (!timer) {
-        timer = setTimeout(() => {
-          timer = null;
-          if (pending) {
-            lastSent = Date.now();
-            post(pending);
-            pending = null;
-          }
-        }, ACTION_MIN_GAP_MS - (now - lastSent));
+        timer = setTimeout(
+          () => {
+            timer = null;
+            if (pending) {
+              lastSent = Date.now();
+              post(pending);
+              pending = null;
+            }
+          },
+          ACTION_MIN_GAP_MS - (now - lastSent),
+        );
       }
     },
     stop() {
@@ -371,9 +415,11 @@ export async function runAgentHeadless(
   linearSessionId: string,
   accessToken: string,
   resumeClaudeId?: string,
-  session?: ActiveSession
+  session?: ActiveSession,
 ): Promise<{ result: string; claudeSessionId: string }> {
-  console.log(`[linear] Running agent in ${worktreeDir}${resumeClaudeId ? ` (resuming ${resumeClaudeId})` : ""}`);
+  console.log(
+    `[linear] Running agent in ${worktreeDir}${resumeClaudeId ? ` (resuming ${resumeClaudeId})` : ""}`,
+  );
 
   // Attribute commits this run makes to the Linear issue creator.
   const commitAuthor = gitIdentityFor(session?.issueCreator?.email);
@@ -425,7 +471,9 @@ export async function runAgentHeadless(
       // the UI knows this session by (sessions.ts scanLinearSessions:
       // `linear-<branch>`). Map-only — journal/resume/run-state semantics are
       // untouched (see RunAgentOpts.transcriptSessionId).
-      transcriptSessionId: session?.branch ? `linear-${session.branch}` : undefined,
+      transcriptSessionId: session?.branch
+        ? `linear-${session.branch}`
+        : undefined,
       // Money-moving Stripe tools need the per-call human confirmation the
       // interactive runner provides; this path has no approval card, so they
       // are stripped from the tool list with this guidance.
@@ -433,7 +481,7 @@ export async function runAgentHeadless(
         Object.keys(STRIPE_CONFIRM_TOOLS).map((name) => [
           name,
           `This Stripe action requires human confirmation — open this session in ${productName()} and retry there; the approval card will appear in that UI.`,
-        ])
+        ]),
       ),
     })) {
       if (abortController.signal.aborted) break;
@@ -499,7 +547,7 @@ export async function createPrWithAttribution(
   issueUrl: string,
   issueTitle: string,
   participants: Participant[],
-  reviewer?: string | null
+  reviewer?: string | null,
 ): Promise<string | null> {
   let participantsLine = "";
   if (participants.length > 0) {
@@ -521,7 +569,15 @@ ${participantsLine ? `\n${participantsLine}\n` : ""}
 🤖 Generated with [Claude Code](https://claude.com/claude-code)`;
 
   try {
-    const args = ["gh", "pr", "create", "--title", `${issueIdentifier}: ${issueTitle}`, "--body", prBody];
+    const args = [
+      "gh",
+      "pr",
+      "create",
+      "--title",
+      `${issueIdentifier}: ${issueTitle}`,
+      "--body",
+      prBody,
+    ];
     if (reviewer) {
       args.push("--reviewer", reviewer);
     }
@@ -555,7 +611,9 @@ ${participantsLine ? `\n${participantsLine}\n` : ""}
 
 // --- Startup ---
 
-export async function loadActiveSessionsOnStartup(tokens: LinearTokens): Promise<void> {
+export async function loadActiveSessionsOnStartup(
+  tokens: LinearTokens,
+): Promise<void> {
   console.log("[linear] Loading active sessions from disk...");
 
   try {
@@ -601,7 +659,7 @@ export async function loadActiveSessionsOnStartup(tokens: LinearTokens): Promise
           activeSessions.set(stored.linearSessionId, session);
 
           console.log(
-            `[linear] Restored session: ${branch} (Claude: ${stored.claudeSessionId}, Linear: ${stored.linearSessionId})`
+            `[linear] Restored session: ${branch} (Claude: ${stored.claudeSessionId}, Linear: ${stored.linearSessionId})`,
           );
         }
       } catch (e) {
@@ -609,7 +667,9 @@ export async function loadActiveSessionsOnStartup(tokens: LinearTokens): Promise
       }
     }
     if (skippedStale > 0) {
-      console.log(`[linear] Skipped ${skippedStale} stale session file(s) (idle > 7 days)`);
+      console.log(
+        `[linear] Skipped ${skippedStale} stale session file(s) (idle > 7 days)`,
+      );
     }
   } catch {
     console.log("[linear] No active sessions to load");

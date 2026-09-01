@@ -38,41 +38,57 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
-const SHEET = join(ROOT, "packages/core/opensession-server/src/frontend/styles/legacy.css");
+const SHEET = join(
+  ROOT,
+  "packages/core/opensession-server/src/frontend/styles/legacy.css",
+);
 /** Scanned for identifiers — deliberately wide, so a class referenced from
  *  anywhere at all keeps its rule. Being wrong here deletes a live rule. */
-const SCAN_DIRS = ["packages/core/opensession-server/src", "packages/clients/chrome", "packages/clients/website"];
+const SCAN_DIRS = [
+  "packages/core/opensession-server/src",
+  "packages/clients/chrome",
+  "packages/clients/website",
+];
 /** Scanned for runtime-built class prefixes. Only the directories that render
  *  markup: `src/server` builds plenty of hyphenated strings that are not class
  *  names (`auto-${randomUUIDv7()}` for automation ids), and harvesting those
  *  as prefixes holds real dead rules hostage — `.auto-status-ok` was kept
  *  alive by an id generator. */
-const MARKUP_DIRS = ["packages/core/opensession-server/src/frontend", "packages/clients/chrome", "packages/clients/website"];
+const MARKUP_DIRS = [
+  "packages/core/opensession-server/src/frontend",
+  "packages/clients/chrome",
+  "packages/clients/website",
+];
 const SCAN_EXT = /\.(tsx?|jsx?|html)$/;
 
 const argv = new Set(process.argv.slice(2));
 
 // ── gather every identifier the source could produce ────────────────────────
 function sourceFiles(dir: string, out: string[] = []): string[] {
-	let entries: string[];
-	try {
-		entries = readdirSync(dir);
-	} catch {
-		return out;
-	}
-	for (const name of entries) {
-		if (name === "node_modules" || name === ".git" || name.startsWith(".frontend-dist")) continue;
-		const p = join(dir, name);
-		let st: ReturnType<typeof statSync>;
-		try {
-			st = statSync(p);
-		} catch {
-			continue;
-		}
-		if (st.isDirectory()) sourceFiles(p, out);
-		else if (SCAN_EXT.test(name)) out.push(p);
-	}
-	return out;
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return out;
+  }
+  for (const name of entries) {
+    if (
+      name === "node_modules" ||
+      name === ".git" ||
+      name.startsWith(".frontend-dist")
+    )
+      continue;
+    const p = join(dir, name);
+    let st: ReturnType<typeof statSync>;
+    try {
+      st = statSync(p);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) sourceFiles(p, out);
+    else if (SCAN_EXT.test(name)) out.push(p);
+  }
+  return out;
 }
 
 /**
@@ -84,54 +100,61 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
  * without being inside braces, which this treats as code and keeps.
  */
 function stripComments(src: string): string {
-	let out = "";
-	let quote: string | null = null;
-	for (let i = 0; i < src.length; i++) {
-		const c = src[i];
-		if (quote) {
-			out += c;
-			if (c === "\\") out += src[++i] ?? "";
-			else if (c === quote) quote = null;
-			continue;
-		}
-		if (c === '"' || c === "'" || c === "`") {
-			quote = c;
-			out += c;
-			continue;
-		}
-		if (c === "/" && src[i + 1] === "*") {
-			const end = src.indexOf("*/", i + 2);
-			i = end < 0 ? src.length : end + 1;
-			continue;
-		}
-		if (c === "/" && src[i + 1] === "/") {
-			const end = src.indexOf("\n", i);
-			i = end < 0 ? src.length : end - 1;
-			continue;
-		}
-		out += c;
-	}
-	return out;
+  let out = "";
+  let quote: string | null = null;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (quote) {
+      out += c;
+      if (c === "\\") out += src[++i] ?? "";
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      quote = c;
+      out += c;
+      continue;
+    }
+    if (c === "/" && src[i + 1] === "*") {
+      const end = src.indexOf("*/", i + 2);
+      i = end < 0 ? src.length : end + 1;
+      continue;
+    }
+    if (c === "/" && src[i + 1] === "/") {
+      const end = src.indexOf("\n", i);
+      i = end < 0 ? src.length : end - 1;
+      continue;
+    }
+    out += c;
+  }
+  return out;
 }
 
 /** Source files with uncommitted edits, as they read at HEAD. */
 function dirtySourcesAtHead(): { path: string; text: string }[] {
-	let status: string;
-	try {
-		status = spawnSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf8" }).stdout ?? "";
-	} catch {
-		return [];
-	}
-	const out: { path: string; text: string }[] = [];
-	for (const line of status.split("\n")) {
-		// " M path" / "MM path"; skip additions, which have no HEAD version.
-		const path = line.slice(3).trim();
-		if (!path || line.startsWith("??") || !SCAN_EXT.test(path)) continue;
-		if (!SCAN_DIRS.some((d) => path.startsWith(d + "/"))) continue;
-		const blob = spawnSync("git", ["show", `HEAD:${path}`], { cwd: ROOT, encoding: "utf8" });
-		if (blob.status === 0 && blob.stdout) out.push({ path, text: blob.stdout });
-	}
-	return out;
+  let status: string;
+  try {
+    status =
+      spawnSync("git", ["status", "--porcelain"], {
+        cwd: ROOT,
+        encoding: "utf8",
+      }).stdout ?? "";
+  } catch {
+    return [];
+  }
+  const out: { path: string; text: string }[] = [];
+  for (const line of status.split("\n")) {
+    // " M path" / "MM path"; skip additions, which have no HEAD version.
+    const path = line.slice(3).trim();
+    if (!path || line.startsWith("??") || !SCAN_EXT.test(path)) continue;
+    if (!SCAN_DIRS.some((d) => path.startsWith(d + "/"))) continue;
+    const blob = spawnSync("git", ["show", `HEAD:${path}`], {
+      cwd: ROOT,
+      encoding: "utf8",
+    });
+    if (blob.status === 0 && blob.stdout) out.push({ path, text: blob.stdout });
+  }
+  return out;
 }
 
 /**
@@ -171,11 +194,11 @@ const IDENTITY_INTERP = /^(\w+\.)?(id|_?id|uuid|key|index|i|n|idx)$/i;
  * DOM — not a rule to drop. Pruning still goes by `idents`.
  */
 function harvestTokens(text: string, into: Set<string>) {
-	for (const raw of text.split(/[^\w/-]+/)) {
-		// A trailing "_" is Tailwind's escaped space, not part of the name.
-		const tok = raw.replace(/_+$/, "");
-		if (tok && !tok.includes("/")) into.add(tok);
-	}
+  for (const raw of text.split(/[^\w/-]+/)) {
+    // A trailing "_" is Tailwind's escaped space, not part of the name.
+    const tok = raw.replace(/_+$/, "");
+    if (tok && !tok.includes("/")) into.add(tok);
+  }
 }
 
 const markup = new Set(MARKUP_DIRS.flatMap((d) => sourceFiles(join(ROOT, d))));
@@ -185,23 +208,25 @@ const prefixes = new Set<string>();
 const literals = new Set<string>();
 const tokens = new Set<string>();
 for (const dir of SCAN_DIRS) {
-	for (const f of sourceFiles(join(ROOT, dir))) {
-		let text: string;
-		try {
-			text = stripComments(readFileSync(f, "utf8"));
-		} catch {
-			continue;
-		}
-		for (const m of text.matchAll(/[a-zA-Z][a-zA-Z0-9_-]*/g)) idents.add(m[0]);
-		for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g)) literals.add(m[1]);
-		harvestTokens(text, tokens);
-		if (!markup.has(f)) continue;
-		// `foo-bar-${x}` / `a b c-${x}` -> the "c-" prefix such a literal can build
-		for (const m of text.matchAll(/`([a-zA-Z0-9 _-]*)\$\{([^}]*)\}/g)) {
-			const tail = m[1].split(/\s+/).pop() ?? "";
-			if (/[a-z]-$/.test(tail) && !IDENTITY_INTERP.test(m[2].trim())) prefixes.add(tail);
-		}
-	}
+  for (const f of sourceFiles(join(ROOT, dir))) {
+    let text: string;
+    try {
+      text = stripComments(readFileSync(f, "utf8"));
+    } catch {
+      continue;
+    }
+    for (const m of text.matchAll(/[a-zA-Z][a-zA-Z0-9_-]*/g)) idents.add(m[0]);
+    for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g))
+      literals.add(m[1]);
+    harvestTokens(text, tokens);
+    if (!markup.has(f)) continue;
+    // `foo-bar-${x}` / `a b c-${x}` -> the "c-" prefix such a literal can build
+    for (const m of text.matchAll(/`([a-zA-Z0-9 _-]*)\$\{([^}]*)\}/g)) {
+      const tail = m[1].split(/\s+/).pop() ?? "";
+      if (/[a-z]-$/.test(tail) && !IDENTITY_INTERP.test(m[2].trim()))
+        prefixes.add(tail);
+    }
+  }
 }
 
 /**
@@ -215,10 +240,11 @@ for (const dir of SCAN_DIRS) {
  * committed.
  */
 for (const f of dirtySourcesAtHead()) {
-	const text = stripComments(f.text);
-	for (const m of text.matchAll(/[a-zA-Z][a-zA-Z0-9_-]*/g)) idents.add(m[0]);
-	for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g)) literals.add(m[1]);
-	harvestTokens(text, tokens);
+  const text = stripComments(f.text);
+  for (const m of text.matchAll(/[a-zA-Z][a-zA-Z0-9_-]*/g)) idents.add(m[0]);
+  for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g))
+    literals.add(m[1]);
+  harvestTokens(text, tokens);
 }
 
 // ── classify the classes defined in the sheet ───────────────────────────────
@@ -227,9 +253,13 @@ const css = readFileSync(SHEET, "utf8");
 // (".sidebar-item.is-selected .count"), and counting those as defined classes
 // reports them as dead rules that don't exist.
 const defined = new Set(
-	[...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1]),
+  [
+    ...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/\.(-?[_a-zA-Z][\w-]*)/g),
+  ].map((m) => m[1]),
 );
-const keyframes = new Set([...css.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]));
+const keyframes = new Set(
+  [...css.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]),
+);
 
 const dead = new Set<string>();
 /**
@@ -242,74 +272,88 @@ const dead = new Set<string>();
 const loose: string[] = [];
 const held: [string, string][] = [];
 for (const c of defined) {
-	if (idents.has(c)) {
-		if (!tokens.has(c) && !keyframes.has(c)) loose.push(c);
-		continue;
-	}
-	if (keyframes.has(c)) held.push([c, "@keyframes name"]);
-	else if (literals.has(c)) held.push([c, "string literal in source"]);
-	else {
-		const p = [...prefixes].find((x) => c.startsWith(x));
-		if (p) held.push([c, `built at runtime via \`${p}\${...}\``]);
-		else dead.add(c);
-	}
+  if (idents.has(c)) {
+    if (!tokens.has(c) && !keyframes.has(c)) loose.push(c);
+    continue;
+  }
+  if (keyframes.has(c)) held.push([c, "@keyframes name"]);
+  else if (literals.has(c)) held.push([c, "string literal in source"]);
+  else {
+    const p = [...prefixes].find((x) => c.startsWith(x));
+    if (p) held.push([c, `built at runtime via \`${p}\${...}\``]);
+    else dead.add(c);
+  }
 }
 
 if (argv.has("--list")) {
-	for (const c of [...dead].sort()) console.log(c);
-	process.exit(0);
+  for (const c of [...dead].sort()) console.log(c);
+  process.exit(0);
 }
 if (argv.has("--loose")) {
-	for (const c of loose.sort()) console.log(c);
-	process.exit(0);
+  for (const c of loose.sort()) console.log(c);
+  process.exit(0);
 }
 
 const reachable = defined.size - dead.size - held.length;
 console.log(`sheet:            ${SHEET.replace(ROOT + "/", "")}`);
 console.log(`classes defined:  ${defined.size}`);
-console.log(`  reachable:      ${reachable}${loose.length ? `  (${loose.length} of them only loosely — see --loose)` : ""}`);
-console.log(`  held back:      ${held.length}  (indirection — never delete these)`);
+console.log(
+  `  reachable:      ${reachable}${loose.length ? `  (${loose.length} of them only loosely — see --loose)` : ""}`,
+);
+console.log(
+  `  held back:      ${held.length}  (indirection — never delete these)`,
+);
 console.log(`  unreachable:    ${dead.size}`);
 if (held.length && argv.has("--verbose")) {
-	console.log("\nheld back:");
-	for (const [c, why] of held.sort()) console.log(`  ${c.padEnd(36)} ${why}`);
+  console.log("\nheld back:");
+  for (const [c, why] of held.sort()) console.log(`  ${c.padEnd(36)} ${why}`);
 }
 if (loose.length && argv.has("--verbose")) {
-	console.log("\nloose (name appears in source, but never as a class token):");
-	for (const c of loose.sort()) console.log(`  ${c}`);
-	console.log("Verify against the running DOM before deleting — getElementsByClassName");
-	console.log("on the route that would use it. This bucket is a lead, not a verdict.");
+  console.log("\nloose (name appears in source, but never as a class token):");
+  for (const c of loose.sort()) console.log(`  ${c}`);
+  console.log(
+    "Verify against the running DOM before deleting — getElementsByClassName",
+  );
+  console.log(
+    "on the route that would use it. This bucket is a lead, not a verdict.",
+  );
 }
 
 // ── prune ───────────────────────────────────────────────────────────────────
 const COMMENT = /\/\*[\s\S]*?\*\//g;
-const OPAQUE = new Set(["@keyframes", "@-webkit-keyframes", "@property", "@font-face", "@counter-style"]);
+const OPAQUE = new Set([
+  "@keyframes",
+  "@-webkit-keyframes",
+  "@property",
+  "@font-face",
+  "@counter-style",
+]);
 
 /** Split a selector list on top-level commas (not inside (), [] or strings). */
 function splitSelectors(sel: string): string[] {
-	const out: string[] = [];
-	let buf = "";
-	let depth = 0;
-	let quote: string | null = null;
-	for (const ch of sel) {
-		if (quote) {
-			buf += ch;
-			if (ch === quote) quote = null;
-			continue;
-		}
-		if (ch === '"' || ch === "'") (quote = ch), (buf += ch);
-		else if (ch === "(" || ch === "[") depth++, (buf += ch);
-		else if (ch === ")" || ch === "]") depth--, (buf += ch);
-		else if (ch === "," && depth === 0) out.push(buf), (buf = "");
-		else buf += ch;
-	}
-	out.push(buf);
-	return out;
+  const out: string[] = [];
+  let buf = "";
+  let depth = 0;
+  let quote: string | null = null;
+  for (const ch of sel) {
+    if (quote) {
+      buf += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") ((quote = ch), (buf += ch));
+    else if (ch === "(" || ch === "[") (depth++, (buf += ch));
+    else if (ch === ")" || ch === "]") (depth--, (buf += ch));
+    else if (ch === "," && depth === 0) (out.push(buf), (buf = ""));
+    else buf += ch;
+  }
+  out.push(buf);
+  return out;
 }
 
 const isDead = (sel: string) => {
-	const names = [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1]);
-	return names.length > 0 && names.some((n) => dead.has(n));
+  const names = [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1]);
+  return names.length > 0 && names.some((n) => dead.has(n));
 };
 
 /**
@@ -319,118 +363,123 @@ const isDead = (sel: string) => {
  * closing brace, silently merging it with everything after it.
  */
 function blockEnd(s: string, i: number): number {
-	let depth = 0;
-	let quote: string | null = null;
-	for (let j = i; j < s.length; j++) {
-		const ch = s[j];
-		if (quote) {
-			if (ch === "\\") j++;
-			else if (ch === quote) quote = null;
-		} else if (s.startsWith("/*", j)) {
-			const k = s.indexOf("*/", j + 2);
-			j = k < 0 ? s.length : k + 1;
-		} else if (ch === '"' || ch === "'") quote = ch;
-		else if (ch === "{") depth++;
-		else if (ch === "}" && --depth === 0) return j + 1;
-	}
-	return s.length;
+  let depth = 0;
+  let quote: string | null = null;
+  for (let j = i; j < s.length; j++) {
+    const ch = s[j];
+    if (quote) {
+      if (ch === "\\") j++;
+      else if (ch === quote) quote = null;
+    } else if (s.startsWith("/*", j)) {
+      const k = s.indexOf("*/", j + 2);
+      j = k < 0 ? s.length : k + 1;
+    } else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) return j + 1;
+  }
+  return s.length;
 }
 
 let removedRules = 0;
 let removedSelectors = 0;
 
 function prune(s: string): string {
-	let out = "";
-	let i = 0;
-	while (i < s.length) {
-		if (s.startsWith("/*", i)) {
-			const k = s.indexOf("*/", i + 2);
-			const end = k < 0 ? s.length : k + 2;
-			out += s.slice(i, end);
-			i = end;
-			continue;
-		}
-		// Scan the prelude up to "{" (a rule) or ";" (an at-statement).
-		let j = i;
-		let quote: string | null = null;
-		for (; j < s.length; j++) {
-			const ch = s[j];
-			if (quote) {
-				if (ch === "\\") j++;
-				else if (ch === quote) quote = null;
-			} else if (s.startsWith("/*", j)) {
-				const k = s.indexOf("*/", j + 2);
-				j = k < 0 ? s.length : k + 1;
-			} else if (ch === '"' || ch === "'") quote = ch;
-			else if (ch === "{" || ch === ";") break;
-		}
-		if (j >= s.length) {
-			out += s.slice(i);
-			break;
-		}
-		if (s[j] === ";") {
-			out += s.slice(i, j + 1);
-			i = j + 1;
-			continue;
-		}
+  let out = "";
+  let i = 0;
+  while (i < s.length) {
+    if (s.startsWith("/*", i)) {
+      const k = s.indexOf("*/", i + 2);
+      const end = k < 0 ? s.length : k + 2;
+      out += s.slice(i, end);
+      i = end;
+      continue;
+    }
+    // Scan the prelude up to "{" (a rule) or ";" (an at-statement).
+    let j = i;
+    let quote: string | null = null;
+    for (; j < s.length; j++) {
+      const ch = s[j];
+      if (quote) {
+        if (ch === "\\") j++;
+        else if (ch === quote) quote = null;
+      } else if (s.startsWith("/*", j)) {
+        const k = s.indexOf("*/", j + 2);
+        j = k < 0 ? s.length : k + 1;
+      } else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === "{" || ch === ";") break;
+    }
+    if (j >= s.length) {
+      out += s.slice(i);
+      break;
+    }
+    if (s[j] === ";") {
+      out += s.slice(i, j + 1);
+      i = j + 1;
+      continue;
+    }
 
-		const prelude = s.slice(i, j);
-		const end = blockEnd(s, j);
-		const body = s.slice(j + 1, end - 1);
-		// Strip comments before deciding at-rule vs style rule. A documented
-		// block ("/* Mobile: card rows */\n@media (max-width: 720px) {") starts
-		// its prelude with the comment, and testing that for "@" silently
-		// classifies the whole media query as one style rule — so nothing
-		// inside it is ever walked, and every dead rule in it survives.
-		const head = prelude.replace(COMMENT, "").trim();
+    const prelude = s.slice(i, j);
+    const end = blockEnd(s, j);
+    const body = s.slice(j + 1, end - 1);
+    // Strip comments before deciding at-rule vs style rule. A documented
+    // block ("/* Mobile: card rows */\n@media (max-width: 720px) {") starts
+    // its prelude with the comment, and testing that for "@" silently
+    // classifies the whole media query as one style rule — so nothing
+    // inside it is ever walked, and every dead rule in it survives.
+    const head = prelude.replace(COMMENT, "").trim();
 
-		if (head.startsWith("@")) {
-			if (OPAQUE.has(head.split(/\s/)[0].toLowerCase())) out += s.slice(i, end);
-			else {
-				const inner = prune(body);
-				if (inner.trim()) out += `${prelude}{${inner}}`;
-			}
-			i = end;
-			continue;
-		}
+    if (head.startsWith("@")) {
+      if (OPAQUE.has(head.split(/\s/)[0].toLowerCase())) out += s.slice(i, end);
+      else {
+        const inner = prune(body);
+        if (inner.trim()) out += `${prelude}{${inner}}`;
+      }
+      i = end;
+      continue;
+    }
 
-		// Comments must leave the prelude BEFORE the selector list is split, or
-		// a comma inside one chops it into an unterminated fragment.
-		const comments = prelude.match(COMMENT) ?? [];
-		const selText = prelude.replace(COMMENT, "");
-		const parts = splitSelectors(selText).filter((p) => p.trim());
-		const keep = parts.filter((p) => !isDead(p));
-		const dropped = parts.length - keep.length;
+    // Comments must leave the prelude BEFORE the selector list is split, or
+    // a comma inside one chops it into an unterminated fragment.
+    const comments = prelude.match(COMMENT) ?? [];
+    const selText = prelude.replace(COMMENT, "");
+    const parts = splitSelectors(selText).filter((p) => p.trim());
+    const keep = parts.filter((p) => !isDead(p));
+    const dropped = parts.length - keep.length;
 
-		if (!keep.length) {
-			removedRules++;
-			removedSelectors += dropped;
-		} else if (dropped) {
-			removedSelectors += dropped;
-			const lead = selText.slice(0, selText.length - selText.trimStart().length);
-			// Keep one-per-line formatting; collapsing 40 selectors onto one
-			// line makes the diff unreviewable.
-			const m = selText.match(/,[ \t]*\n([ \t]*)/);
-			const joiner = m ? `,\n${m[1]}` : ", ";
-			const doc = comments.map((c) => `${c}\n`).join("");
-			out += `${lead}${doc}${keep.map((p) => p.trim()).join(joiner)} {${body}}`;
-		} else {
-			out += s.slice(i, end);
-		}
-		i = end;
-	}
-	return out;
+    if (!keep.length) {
+      removedRules++;
+      removedSelectors += dropped;
+    } else if (dropped) {
+      removedSelectors += dropped;
+      const lead = selText.slice(
+        0,
+        selText.length - selText.trimStart().length,
+      );
+      // Keep one-per-line formatting; collapsing 40 selectors onto one
+      // line makes the diff unreviewable.
+      const m = selText.match(/,[ \t]*\n([ \t]*)/);
+      const joiner = m ? `,\n${m[1]}` : ", ";
+      const doc = comments.map((c) => `${c}\n`).join("");
+      out += `${lead}${doc}${keep.map((p) => p.trim()).join(joiner)} {${body}}`;
+    } else {
+      out += s.slice(i, end);
+    }
+    i = end;
+  }
+  return out;
 }
 
 if (argv.has("--prune")) {
-	const next = prune(css).replace(/\n{4,}/g, "\n\n\n");
-	writeFileSync(SHEET, next);
-	const before = css.split("\n").length;
-	const after = next.split("\n").length;
-	console.log(`\npruned: ${removedRules} rules, ${removedSelectors} selectors`);
-	console.log(`lines:  ${before} -> ${after}  (-${before - after})`);
-	console.log("\nVerify before committing: the CSSOM diff and the screenshot");
-	console.log("gate are what caught real breakage here, not the text diff.");
+  const next = prune(css).replace(/\n{4,}/g, "\n\n\n");
+  writeFileSync(SHEET, next);
+  const before = css.split("\n").length;
+  const after = next.split("\n").length;
+  console.log(`\npruned: ${removedRules} rules, ${removedSelectors} selectors`);
+  console.log(`lines:  ${before} -> ${after}  (-${before - after})`);
+  console.log("\nVerify before committing: the CSSOM diff and the screenshot");
+  console.log("gate are what caught real breakage here, not the text diff.");
 } else if (dead.size) {
-	console.log("\nRun with --prune to delete them, --verbose to see what was held back.");
+  console.log(
+    "\nRun with --prune to delete them, --verbose to see what was held back.",
+  );
 }

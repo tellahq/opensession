@@ -24,13 +24,7 @@
 
 import { homeDir } from "./paths";
 import { canonicalRepoId, defaultRepo } from "./config";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-} from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "fs";
 import { readdir, readFile } from "fs/promises";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { randomUUID } from "crypto";
@@ -82,26 +76,158 @@ export interface WorkspaceDraft {
  * feature flags: removing one removes it, and new combinations use this shape. */
 export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
   presets: [
-    { id: "dial-ultra", label: "Dial · Ultra", group: "dial", lead: { model: "pi/anthropic/claude-fable-5", effort: "high" }, supporting: [{ model: "pi/openai/gpt-5.6-sol", effort: "xhigh", role: "Read-only oracle" }], instructions: "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself." },
-    { id: "dial-high", label: "Dial · High", group: "dial", lead: { model: "pi/openai/gpt-5.6-sol", effort: "xhigh" }, supporting: [{ model: "pi/anthropic/claude-fable-5", effort: "high", role: "Read-only oracle" }], instructions: "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself." },
-    { id: "dial-medium", label: "Dial · Medium", group: "dial", lead: { model: "pi/openai/gpt-5.6-sol", effort: "high" }, supporting: [{ model: "pi/openai/gpt-5.6-sol", effort: "xhigh", role: "Read-only oracle" }], instructions: "Use the oracle for a second opinion when extra scrutiny helps." },
-    { id: "dial-low", label: "Dial · Low", group: "dial", lead: { model: "pi/openai/gpt-5.6-luna", effort: "high" }, supporting: [{ model: "pi/openai/gpt-5.6-sol", effort: "xhigh", role: "Read-only oracle" }], instructions: "Use the oracle only when the task needs a second opinion." },
-    { id: "opus-fable", label: "Opus 5 + Fable oracle", group: "custom", lead: { model: "pi/anthropic/claude-opus-5", effort: "xhigh" }, supporting: [{ model: "pi/anthropic/claude-fable-5", effort: "high", role: "Read-only oracle" }], instructions: "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself." },
-    { id: "ultracode", label: "Ultracode", group: "custom", lead: { model: "pi/anthropic/claude-fable-5", effort: "xhigh" }, instructions: "Plan a workflow for every substantive task instead of working through it turn by turn. Fan the work out with run_workflow, have a separate agent verify each finding, and read the result back with workflow_status. Route the judgement steps (verification, ranking, synthesis) to claude-fable-5 and leave mechanical extraction on the default worker model. Keep quick questions and single edits in the conversation." },
-    { id: "orchestrator-fable", label: "Orchestrator · Fable 5", group: "orchestrator", lead: { model: "pi/anthropic/claude-fable-5", effort: "high" }, supporting: [{ model: "pi/anthropic/claude-sonnet-5", effort: "medium", role: "Implementation worker" }, { model: "pi/anthropic/claude-haiku-4-5", effort: "high", role: "Fast worker" }], instructions: "Plan, review, and integrate. Delegate focused implementation work to supporting workers with self-contained briefs, then verify their results." },
-    { id: "orchestrator-sol", label: "Orchestrator · Sol", group: "orchestrator", lead: { model: "pi/openai/gpt-5.6-sol", effort: "xhigh" }, supporting: [{ model: "pi/openai/gpt-5.6-terra", effort: "medium", role: "Implementation worker" }, { model: "pi/openai/gpt-5.6-luna", effort: "low", role: "Fast worker" }], instructions: "Plan, review, and integrate. Delegate focused implementation work to supporting workers with self-contained briefs, then verify their results." },
+    {
+      id: "dial-ultra",
+      label: "Dial · Ultra",
+      group: "dial",
+      lead: { model: "pi/anthropic/claude-fable-5", effort: "high" },
+      supporting: [
+        {
+          model: "pi/openai/gpt-5.6-sol",
+          effort: "xhigh",
+          role: "Read-only oracle",
+        },
+      ],
+      instructions:
+        "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself.",
+    },
+    {
+      id: "dial-high",
+      label: "Dial · High",
+      group: "dial",
+      lead: { model: "pi/openai/gpt-5.6-sol", effort: "xhigh" },
+      supporting: [
+        {
+          model: "pi/anthropic/claude-fable-5",
+          effort: "high",
+          role: "Read-only oracle",
+        },
+      ],
+      instructions:
+        "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself.",
+    },
+    {
+      id: "dial-medium",
+      label: "Dial · Medium",
+      group: "dial",
+      lead: { model: "pi/openai/gpt-5.6-sol", effort: "high" },
+      supporting: [
+        {
+          model: "pi/openai/gpt-5.6-sol",
+          effort: "xhigh",
+          role: "Read-only oracle",
+        },
+      ],
+      instructions:
+        "Use the oracle for a second opinion when extra scrutiny helps.",
+    },
+    {
+      id: "dial-low",
+      label: "Dial · Low",
+      group: "dial",
+      lead: { model: "pi/openai/gpt-5.6-luna", effort: "high" },
+      supporting: [
+        {
+          model: "pi/openai/gpt-5.6-sol",
+          effort: "xhigh",
+          role: "Read-only oracle",
+        },
+      ],
+      instructions: "Use the oracle only when the task needs a second opinion.",
+    },
+    {
+      id: "opus-fable",
+      label: "Opus 5 + Fable oracle",
+      group: "custom",
+      lead: { model: "pi/anthropic/claude-opus-5", effort: "xhigh" },
+      supporting: [
+        {
+          model: "pi/anthropic/claude-fable-5",
+          effort: "high",
+          role: "Read-only oracle",
+        },
+      ],
+      instructions:
+        "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself.",
+    },
+    {
+      id: "ultracode",
+      label: "Ultracode",
+      group: "custom",
+      lead: { model: "pi/anthropic/claude-fable-5", effort: "xhigh" },
+      instructions:
+        "Plan a workflow for every substantive task instead of working through it turn by turn. Fan the work out with run_workflow, have a separate agent verify each finding, and read the result back with workflow_status. Route the judgement steps (verification, ranking, synthesis) to claude-fable-5 and leave mechanical extraction on the default worker model. Keep quick questions and single edits in the conversation.",
+    },
+    {
+      id: "orchestrator-fable",
+      label: "Orchestrator · Fable 5",
+      group: "orchestrator",
+      lead: { model: "pi/anthropic/claude-fable-5", effort: "high" },
+      supporting: [
+        {
+          model: "pi/anthropic/claude-sonnet-5",
+          effort: "medium",
+          role: "Implementation worker",
+        },
+        {
+          model: "pi/anthropic/claude-haiku-4-5",
+          effort: "high",
+          role: "Fast worker",
+        },
+      ],
+      instructions:
+        "Plan, review, and integrate. Delegate focused implementation work to supporting workers with self-contained briefs, then verify their results.",
+    },
+    {
+      id: "orchestrator-fable-sol",
+      label: "Orchestrator · Fable + Sol",
+      group: "orchestrator",
+      lead: { model: "pi/anthropic/claude-fable-5", effort: "high" },
+      supporting: [
+        {
+          model: "pi/openai/gpt-5.6-sol",
+          effort: "high",
+          role: "Implementation worker",
+        },
+      ],
+      instructions:
+        "Use Fable to plan, review, and integrate. Delegate focused implementation work to Sol with self-contained briefs, then verify its results.",
+    },
+    {
+      id: "orchestrator-sol",
+      label: "Orchestrator · Sol",
+      group: "orchestrator",
+      lead: { model: "pi/openai/gpt-5.6-sol", effort: "xhigh" },
+      supporting: [
+        {
+          model: "pi/openai/gpt-5.6-terra",
+          effort: "medium",
+          role: "Implementation worker",
+        },
+        { model: "pi/openai/gpt-5.6-luna", effort: "low", role: "Fast worker" },
+      ],
+      instructions:
+        "Plan, review, and integrate. Delegate focused implementation work to supporting workers with self-contained briefs, then verify their results.",
+    },
   ],
 };
 
-function copyModelSettings(settings: WorkspaceModelSettings): WorkspaceModelSettings {
+function copyModelSettings(
+  settings: WorkspaceModelSettings,
+): WorkspaceModelSettings {
   return JSON.parse(JSON.stringify(settings)) as WorkspaceModelSettings;
 }
 
 /** A workspace without its own modelSettings inherits the current defaults.
  *  Nothing materializes defaults into workspace files or list payloads; a
  *  workspace stores modelSettings only once someone saves an edit. */
-export function workspaceModelSettings(workspace?: Workspace | null): WorkspaceModelSettings {
-  return workspace?.modelSettings || copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS);
+export function workspaceModelSettings(
+  workspace?: Workspace | null,
+): WorkspaceModelSettings {
+  return (
+    workspace?.modelSettings ||
+    copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS)
+  );
 }
 
 export interface Workspace {
@@ -151,7 +277,8 @@ export interface Workspace {
 }
 
 function ensureDir(): void {
-  if (!existsSync(workspacesDir())) mkdirSync(workspacesDir(), { recursive: true });
+  if (!existsSync(workspacesDir()))
+    mkdirSync(workspacesDir(), { recursive: true });
 }
 
 function fileFor(id: string): string {
@@ -194,9 +321,14 @@ export function listWorkspaces(): Workspace[] {
   if (
     workspaceListCache?.dir === dir &&
     workspaceListCache.generation === workspaceNameGeneration
-  ) return workspaceListCache.workspaces.slice();
+  )
+    return workspaceListCache.workspaces.slice();
   if (!existsSync(dir)) {
-    workspaceListCache = { dir, generation: workspaceNameGeneration, workspaces: [] };
+    workspaceListCache = {
+      dir,
+      generation: workspaceNameGeneration,
+      workspaces: [],
+    };
     return [];
   }
   const out: Workspace[] = [];
@@ -215,9 +347,14 @@ export function listWorkspaces(): Workspace[] {
   out.sort(
     (a, b) =>
       (a.order ?? (Date.parse(a.createdAt) || 0)) -
-        (b.order ?? (Date.parse(b.createdAt) || 0)) || a.name.localeCompare(b.name),
+        (b.order ?? (Date.parse(b.createdAt) || 0)) ||
+      a.name.localeCompare(b.name),
   );
-  workspaceListCache = { dir, generation: workspaceNameGeneration, workspaces: out };
+  workspaceListCache = {
+    dir,
+    generation: workspaceNameGeneration,
+    workspaces: out,
+  };
   return out.slice();
 }
 
@@ -292,6 +429,14 @@ export async function warmWorkspaceNamesAsync(): Promise<void> {
   }
 }
 
+/** Read-only name projection for bulk consumers. Resolve it once per list
+ * response: workspaceName() intentionally re-resolves the active state root on
+ * every call for test/dev root changes, which is wasteful across thousands of
+ * rows in production. */
+export function workspaceNameSnapshot(): ReadonlyMap<string, string> {
+  return workspaceNameMap();
+}
+
 /** The workspace's display name, or null when there is no such workspace. */
 export function workspaceName(id: string): string | null {
   if (!safeId(id)) return null;
@@ -312,9 +457,9 @@ export function getWorkspace(id: string): Workspace | null {
   if (!safeId(id)) return null;
   const f = fileFor(id);
   if (!existsSync(f)) return null;
-	try {
-		return fromDisk(JSON.parse(readFileSync(f, "utf8")) as Workspace);
-	} catch {
+  try {
+    return fromDisk(JSON.parse(readFileSync(f, "utf8")) as Workspace);
+  } catch {
     return null;
   }
 }
@@ -339,7 +484,9 @@ export function createWorkspace(input: {
   ensureDir();
   const workspace: Workspace = {
     id: input.id || `ws-${randomUUID()}`,
-    name: (input.name || "Untitled workspace").trim().slice(0, 120) || "Untitled workspace",
+    name:
+      (input.name || "Untitled workspace").trim().slice(0, 120) ||
+      "Untitled workspace",
     repo: input.repo === "auto" ? defaultRepo().id : input.repo,
     color: input.color,
     createdBy: input.createdBy || "Anonymous",
@@ -356,7 +503,12 @@ export function createWorkspace(input: {
       ? { attachedRepos: input.attachedRepos }
       : {}),
     ...(input.draft
-      ? { draft: { ...input.draft, text: input.draft.text.slice(0, MAX_DRAFT_LENGTH) } }
+      ? {
+          draft: {
+            ...input.draft,
+            text: input.draft.text.slice(0, MAX_DRAFT_LENGTH),
+          },
+        }
       : {}),
   };
   return saveWorkspace(workspace);
@@ -473,7 +625,8 @@ export function stampWorkspaceIdentity(
   const addRef =
     patch.externalRef &&
     !(cur.externalRefs || []).some(
-      (r) => r.kind === patch.externalRef!.kind && r.id === patch.externalRef!.id,
+      (r) =>
+        r.kind === patch.externalRef!.kind && r.id === patch.externalRef!.id,
     )
       ? [...(cur.externalRefs || []), patch.externalRef]
       : null;
@@ -512,7 +665,17 @@ export function stampWorkspaceIdentity(
 export function updateWorkspace(
   id: string,
   patch: Partial<
-    Pick<Workspace, "name" | "repo" | "color" | "order" | "branch" | "worktreeDir" | "attachedRepos" | "modelSettings">
+    Pick<
+      Workspace,
+      | "name"
+      | "repo"
+      | "color"
+      | "order"
+      | "branch"
+      | "worktreeDir"
+      | "attachedRepos"
+      | "modelSettings"
+    >
   > & { draft?: WorkspaceDraft | null },
 ): Workspace | null {
   const cur = getWorkspace(id);
@@ -525,7 +688,10 @@ export function updateWorkspace(
     nextDraft = undefined;
   } else if (patch.draft !== undefined) {
     if (!cur.draft || patch.draft.updatedAt >= cur.draft.updatedAt) {
-      nextDraft = { ...patch.draft, text: patch.draft.text.slice(0, MAX_DRAFT_LENGTH) };
+      nextDraft = {
+        ...patch.draft,
+        text: patch.draft.text.slice(0, MAX_DRAFT_LENGTH),
+      };
       draftApplied = nextDraft;
     }
   }
@@ -547,13 +713,18 @@ export function updateWorkspace(
     (!cur.draft || cur.draft.autoName !== false)
   ) {
     const firstLine =
-      draftApplied.text.split("\n").find((l) => l.trim())?.trim() ?? "";
+      draftApplied.text
+        .split("\n")
+        .find((l) => l.trim())
+        ?.trim() ?? "";
     if (firstLine) followedName = firstLine.slice(0, 80);
   }
 
   const next: Workspace = {
     ...cur,
-    ...(patch.name !== undefined ? { name: patch.name.trim().slice(0, 120) || cur.name } : {}),
+    ...(patch.name !== undefined
+      ? { name: patch.name.trim().slice(0, 120) || cur.name }
+      : {}),
     ...(followedName ? { name: followedName } : {}),
     ...(patch.repo !== undefined
       ? { repo: patch.repo === "auto" ? defaultRepo().id : patch.repo }
@@ -561,9 +732,15 @@ export function updateWorkspace(
     ...(patch.color !== undefined ? { color: patch.color } : {}),
     ...(patch.order !== undefined ? { order: patch.order } : {}),
     ...(patch.branch !== undefined ? { branch: patch.branch } : {}),
-    ...(patch.worktreeDir !== undefined ? { worktreeDir: patch.worktreeDir } : {}),
-    ...(patch.attachedRepos !== undefined ? { attachedRepos: patch.attachedRepos } : {}),
-    ...(patch.modelSettings !== undefined ? { modelSettings: patch.modelSettings } : {}),
+    ...(patch.worktreeDir !== undefined
+      ? { worktreeDir: patch.worktreeDir }
+      : {}),
+    ...(patch.attachedRepos !== undefined
+      ? { attachedRepos: patch.attachedRepos }
+      : {}),
+    ...(patch.modelSettings !== undefined
+      ? { modelSettings: patch.modelSettings }
+      : {}),
     draft: nextDraft,
   };
   return saveWorkspace(next);

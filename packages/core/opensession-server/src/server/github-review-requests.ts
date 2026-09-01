@@ -18,8 +18,9 @@ interface ReviewTeamCacheEntry {
 }
 
 const REVIEW_TEAM_CACHE_TTL = 30 * 60_000;
-const reviewTeamCache: Map<string, ReviewTeamCacheEntry> =
-  ((globalThis as any).__osReviewTeamCache ||= new Map());
+const reviewTeamCache: Map<string, ReviewTeamCacheEntry> = ((
+  globalThis as any
+).__osReviewTeamCache ||= new Map());
 
 export function normalizeReviewTeamSlug(slug: string): string {
   return slug.split("/").filter(Boolean).at(-1) || slug;
@@ -56,18 +57,24 @@ export function reviewRequestRemovalSpecs(
   requests: ReviewRequestRef[],
   owner: string,
 ): string[] {
-  const specs = requests.map((request) =>
-    request.login ||
-    (request.slug
-      ? `${owner}/${normalizeReviewTeamSlug(request.slug)}`
-      : null),
+  const specs = requests.map(
+    (request) =>
+      request.login ||
+      (request.slug
+        ? `${owner}/${normalizeReviewTeamSlug(request.slug)}`
+        : null),
   );
   return [...new Set(specs.filter((spec): spec is string => !!spec))];
 }
 
-export function cachedReviewTeamLogins(owner: string, slug: string): string[] | null {
+export function cachedReviewTeamLogins(
+  owner: string,
+  slug: string,
+): string[] | null {
   const teamSlug = normalizeReviewTeamSlug(slug);
-  const entry = reviewTeamCache.get(`${owner.toLowerCase()}/${teamSlug.toLowerCase()}`);
+  const entry = reviewTeamCache.get(
+    `${owner.toLowerCase()}/${teamSlug.toLowerCase()}`,
+  );
   return entry?.expiresAt && entry.expiresAt > Date.now() ? entry.logins : null;
 }
 
@@ -102,7 +109,8 @@ export async function fetchReviewTeamLogins(
           (response.headers.get("x-ratelimit-remaining") === "0" ||
             isGhRateLimitMsg(body))
         ) {
-          const reset = Number(response.headers.get("x-ratelimit-reset")) * 1000;
+          const reset =
+            Number(response.headers.get("x-ratelimit-reset")) * 1000;
           noteGhRateLimited(
             "pr-review-team",
             Number.isFinite(reset) ? reset : undefined,
@@ -116,7 +124,9 @@ export async function fetchReviewTeamLogins(
       for (const member of members) {
         if (typeof member?.login === "string") logins.push(member.login);
       }
-      const next = response.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/i);
+      const next = response.headers
+        .get("link")
+        ?.match(/<([^>]+)>;\s*rel="next"/i);
       url = next?.[1] || null;
     }
   } catch {

@@ -10,7 +10,12 @@ import { copyFileSync, existsSync } from "fs";
 import { runCommand } from "../../server/run-command";
 
 import { markdownToSlack } from "../../server/shared/markdown";
-import { configuredServer, defaultRepo, personaName, productName } from "../../server/config";
+import {
+  configuredServer,
+  defaultRepo,
+  personaName,
+  productName,
+} from "../../server/config";
 import { SLACK_SYSTEM_PROMPT_APPEND } from "./prompts";
 import {
   sendSlackMessage,
@@ -71,7 +76,10 @@ import {
   cancelAgentRun,
   restartContinuationPrompt,
 } from "../../server/agent-runner";
-import { shouldPersistModelSwitch, type ImageInput } from "../../server/run-events";
+import {
+  shouldPersistModelSwitch,
+  type ImageInput,
+} from "../../server/run-events";
 import {
   registerSessionMcpServers,
   unregisterSessionMcpServers,
@@ -162,7 +170,8 @@ async function activateLinkedSession(
   slackUserId: string,
 ): Promise<{ status: string; message: string }> {
   const control = tryGetSessionControl();
-  if (!control) return { status: "error", message: "Session control unavailable." };
+  if (!control)
+    return { status: "error", message: "Session control unavailable." };
   const res = await control.deliverToSession(
     sessionId,
     text,
@@ -176,7 +185,10 @@ async function activateLinkedSession(
   if (res.status !== "error") {
     pinSlackSession(sessionId, slackUserId);
     await postOpenSessionCard(channel, threadTs, sessionId).catch((e) =>
-      console.warn(`[slack] Failed to post linked-session card for ${sessionId}:`, e),
+      console.warn(
+        `[slack] Failed to post linked-session card for ${sessionId}:`,
+        e,
+      ),
     );
   }
   return res;
@@ -190,10 +202,16 @@ const adminMcpServersCache = new Map<
 >();
 
 // Cache worktree existence checks per worktree dir (30s TTL)
-const worktreeExistsCache = new Map<string, { exists: boolean; expiresAt: number }>();
+const worktreeExistsCache = new Map<
+  string,
+  { exists: boolean; expiresAt: number }
+>();
 
 // Cache thread context per channel+threadTs (30s TTL)
-const threadContextCache = new Map<string, { context: ThreadContext; expiresAt: number }>();
+const threadContextCache = new Map<
+  string,
+  { context: ThreadContext; expiresAt: number }
+>();
 
 // Cached worktree existence check (TTL 30s) — avoids repeated fs.existsSync calls on every message
 function cachedWorktreeExists(dir: string): boolean {
@@ -205,7 +223,10 @@ function cachedWorktreeExists(dir: string): boolean {
 }
 
 // Cached thread context (TTL 30s) — avoids refetching the same thread multiple times
-async function cachedFetchThreadContext(channel: string, threadTs: string): Promise<ThreadContext> {
+async function cachedFetchThreadContext(
+  channel: string,
+  threadTs: string,
+): Promise<ThreadContext> {
   const cacheKey = `${channel}:${threadTs}`;
   const cached = threadContextCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.context;
@@ -221,7 +242,7 @@ async function cachedFetchThreadContext(channel: string, threadTs: string): Prom
  */
 function mergeFileRefs(
   own: SlackFileRef[],
-  threadFiles: SlackFileRef[] | undefined
+  threadFiles: SlackFileRef[] | undefined,
 ): SlackFileRef[] | undefined {
   const seen = new Set(own.map((f) => f.id));
   const merged = [
@@ -260,7 +281,7 @@ async function branchExists(branch: string): Promise<boolean> {
     // Check if branch exists in git (local or registered worktree)
     const gitCheck = await runCommand(
       ["git", "show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
-      { cwd: DEFAULT_CWD }
+      { cwd: DEFAULT_CWD },
     );
     return gitCheck.status === 0;
   } catch {
@@ -270,7 +291,7 @@ async function branchExists(branch: string): Promise<boolean> {
 
 async function generateBranchName(
   text: string,
-  context?: string
+  context?: string,
 ): Promise<string> {
   // The trigger message is often filler ("plz fix") while the real task
   // lives in the thread context — ask a one-shot for a descriptive name
@@ -284,7 +305,7 @@ async function generateBranchName(
   if (source) {
     const out = await oneShot(
       `Name a git branch for this task: 2-4 words, kebab-case, lowercase letters/digits/hyphens only, max 30 chars, describing the actual task (never filler like "plz-fix" or "try-again"). Output ONLY the branch name, nothing else.\n\nTask:\n"""\n${source}\n"""`,
-      { label: "slack-branch-name" }
+      { label: "slack-branch-name" },
     );
     if (out) {
       baseName = out
@@ -326,7 +347,7 @@ async function generateBranchName(
 async function createWorktree(
   branch: string,
   _userId: string,
-  _message: string
+  _message: string,
 ): Promise<string> {
   try {
     const worktreeDir = await createRepoWorktree(branch, defaultRepo().id);
@@ -346,7 +367,7 @@ async function handleAskUserQuestion(
   sessionKey: string,
   input: Record<string, unknown>,
   channel: string,
-  threadTs: string
+  threadTs: string,
 ): Promise<Awaited<ReturnType<AskUserHandler>>> {
   const questions = input.questions as Array<{
     question: string;
@@ -386,7 +407,7 @@ async function handleAskUserQuestion(
       const descriptionLines = q.options
         .map(
           (opt, i) =>
-            `*${i + 1}. ${opt.label}*${opt.description ? ` \u2014 ${opt.description}` : ""}`
+            `*${i + 1}. ${opt.label}*${opt.description ? ` \u2014 ${opt.description}` : ""}`,
         )
         .join("\n");
       blocks.push({
@@ -425,41 +446,44 @@ async function handleAskUserQuestion(
       channel,
       `Question: ${q.question}`,
       blocks,
-      threadTs
+      threadTs,
     );
     const blockMsgTs = postResult?.ts || "";
 
     // Create promise to wait for answer
     const answer = await new Promise<string>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        const pending = pendingAnswers.get(questionId);
-        if (pending) {
-          pendingAnswers.delete(questionId);
-          // Update the message to show it timed out
-          updateSlackBlocks(
-            channel,
-            blockMsgTs,
-            `Question timed out: ${q.question}`,
-            [
-              {
-                type: "section",
-                text: {
-                  type: "mrkdwn",
-                  text: `~${q.question}~\n_Timed out \u2014 skipped_`,
+      const timeoutId = setTimeout(
+        () => {
+          const pending = pendingAnswers.get(questionId);
+          if (pending) {
+            pendingAnswers.delete(questionId);
+            // Update the message to show it timed out
+            updateSlackBlocks(
+              channel,
+              blockMsgTs,
+              `Question timed out: ${q.question}`,
+              [
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: `~${q.question}~\n_Timed out \u2014 skipped_`,
+                  },
                 },
-              },
-            ]
-          ).catch(() => {});
-          // Tell the thread what was skipped and that we're proceeding anyway,
-          // so a silent thread doesn't look stuck.
-          sendSlackMessage(
-            channel,
-            `:hourglass_flowing_sand: No answer in 5 min, so I'm skipping *"${q.question}"* and proceeding with my best assumption. Reply anytime if I got it wrong.`,
-            threadTs
-          ).catch(() => {});
-          resolve("__TIMED_OUT__");
-        }
-      }, 5 * 60 * 1000); // 5 minute timeout
+              ],
+            ).catch(() => {});
+            // Tell the thread what was skipped and that we're proceeding anyway,
+            // so a silent thread doesn't look stuck.
+            sendSlackMessage(
+              channel,
+              `:hourglass_flowing_sand: No answer in 5 min, so I'm skipping *"${q.question}"* and proceeding with my best assumption. Reply anytime if I got it wrong.`,
+              threadTs,
+            ).catch(() => {});
+            resolve("__TIMED_OUT__");
+          }
+        },
+        5 * 60 * 1000,
+      ); // 5 minute timeout
 
       pendingAnswers.set(questionId, {
         resolve,
@@ -529,7 +553,7 @@ export async function handleModelCommand(
   sessionKey: string,
   text: string,
   channel: string,
-  threadTs: string
+  threadTs: string,
 ): Promise<boolean> {
   if (!/^\/model(\s|$)/i.test(text.trim())) return false;
 
@@ -539,14 +563,17 @@ export async function handleModelCommand(
     if (session) activeSessions.set(sessionKey, session);
   }
 
-  const arg = text.trim().replace(/^\/model\s*/i, "").trim();
+  const arg = text
+    .trim()
+    .replace(/^\/model\s*/i, "")
+    .trim();
 
   if (!arg || arg === "show" || arg === "list") {
     const current = session?.model || getDefaultModel();
     await sendSlackMessage(
       channel,
       `Current model: \`${current}\`${session?.model ? "" : " (default)"}\n\nAvailable (set with \`/model <name>\`):\n\`\`\`\n${formatModelList(session?.model)}\n\`\`\``,
-      threadTs
+      threadTs,
     );
     return true;
   }
@@ -556,7 +583,7 @@ export async function handleModelCommand(
     await sendSlackMessage(
       channel,
       `Unknown model \`${arg}\`. Available:\n\`\`\`\n${formatModelList(session?.model)}\n\`\`\``,
-      threadTs
+      threadTs,
     );
     return true;
   }
@@ -565,7 +592,7 @@ export async function handleModelCommand(
     await sendSlackMessage(
       channel,
       `No session in this thread yet — send the task first, then \`/model ${resolved.id}\`. (New sessions start on \`${getDefaultModel()}\`.)`,
-      threadTs
+      threadTs,
     );
     return true;
   }
@@ -588,7 +615,7 @@ export async function handleModelCommand(
   await sendSlackMessage(
     channel,
     `Model set to \`${resolved.id}\`. Applies from the next message.${note}`,
-    threadTs
+    threadTs,
   );
   return true;
 }
@@ -650,7 +677,7 @@ function provisionalTitle(text: string): string {
 
 export async function processMessage(
   sessionKey: string,
-  msg: QueuedMessage
+  msg: QueuedMessage,
 ): Promise<void> {
   const { prompt, channel, userName, isNewSession } = msg;
   const threadTs = msg.threadTs;
@@ -773,7 +800,7 @@ export async function processMessage(
     session.branch
   ) {
     console.log(
-      `[slack] [revive] Worktree ${session.branch} was cleaned up, recreating...`
+      `[slack] [revive] Worktree ${session.branch} was cleaned up, recreating...`,
     );
     // Transient activity line, not the header — otherwise the card stays stuck
     // on "Recreating worktree…" for the whole run after the (quick) recreate.
@@ -804,8 +831,14 @@ export async function processMessage(
         const haveBranch =
           (
             await runCommand(
-              ["git", "show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
-              { cwd: DEFAULT_CWD }
+              [
+                "git",
+                "show-ref",
+                "--verify",
+                "--quiet",
+                `refs/heads/${branch}`,
+              ],
+              { cwd: DEFAULT_CWD },
             )
           ).status === 0;
         const addResult = haveBranch
@@ -815,12 +848,12 @@ export async function processMessage(
             })
           : await runCommand(
               ["git", "worktree", "add", "-b", branch, wtPath, "main"],
-              { cwd: DEFAULT_CWD, timeoutMs: 60000 }
+              { cwd: DEFAULT_CWD, timeoutMs: 60000 },
             );
 
         if (addResult.status !== 0) {
           throw new Error(
-            `git worktree add failed: ${addResult.stderr?.trim() || addResult.stdout?.trim()}`
+            `git worktree add failed: ${addResult.stderr?.trim() || addResult.stdout?.trim()}`,
           );
         }
 
@@ -833,7 +866,10 @@ export async function processMessage(
         // Copy env files (quick, no bun install — Claude can do that if needed)
         const envFiles = [
           [".envrc", ".envrc"],
-          ["packages/core/webapp/.env.local", "packages/core/webapp/.env.local"],
+          [
+            "packages/core/webapp/.env.local",
+            "packages/core/webapp/.env.local",
+          ],
           ["packages/core/instant/.env", "packages/core/instant/.env"],
           ["packages/core/temporal/.env", "packages/core/temporal/.env"],
         ];
@@ -851,7 +887,7 @@ export async function processMessage(
     } catch (e) {
       console.error(
         `[slack] [revive] Failed to recreate worktree ${session.branch}:`,
-        e
+        e,
       );
       await streamer.error(`Failed to recreate worktree: ${e}`);
       await streamer.clearStatus();
@@ -863,7 +899,7 @@ export async function processMessage(
   const cwd = session.worktreeDir || DEFAULT_CWD;
 
   console.log(
-    `[slack] Running agent for ${sessionKey} in ${cwd}${session.claudeSessionId ? ` (resuming ${session.claudeSessionId})` : ""}`
+    `[slack] Running agent for ${sessionKey} in ${cwd}${session.claudeSessionId ? ` (resuming ${session.claudeSessionId})` : ""}`,
   );
 
   let resultText = "";
@@ -885,7 +921,10 @@ export async function processMessage(
       isPrivate: kind.isPrivate,
     };
     memoryAppend = await renderMemoryForPrompt(memCtx, msg.prompt);
-    const memoryHash = `${channel}:${msg.userId}:${memoryAppend}`.substring(0, 40); // Simple hash
+    const memoryHash = `${channel}:${msg.userId}:${memoryAppend}`.substring(
+      0,
+      40,
+    ); // Simple hash
 
     // Check cache: reuse admin tools if memory hasn't changed
     const cached = adminMcpServersCache.get(sessionKey);
@@ -916,7 +955,10 @@ export async function processMessage(
           isAdmin,
         }),
       };
-      adminMcpServersCache.set(sessionKey, { tools: adminMcpServers, memoryHash });
+      adminMcpServersCache.set(sessionKey, {
+        tools: adminMcpServers,
+        memoryHash,
+      });
     }
   } catch (e) {
     console.warn("[slack] failed to build admin tools / memory:", e);
@@ -930,20 +972,20 @@ export async function processMessage(
     "and MCP connections (list/add/remove_mcp_server). When a user asks you to remember something, " +
     "set up a recurring job, schedule a reminder or future task, or connect a tool, use these tools rather than just describing how." +
     `\n\n## GitHub PR actions\nWhen asked to review, auto-fix, simplify, or adversarially review a ${defaultRepo().label} PR ` +
-    "(e.g. \"review PR 4296\", \"auto-fix PR 4296\", \"adversarial review PR 4296\"), use the opensession-github MCP tools " +
+    '(e.g. "review PR 4296", "auto-fix PR 4296", "adversarial review PR 4296"), use the opensession-github MCP tools ' +
     "(review_pr / auto_fix_pr / simplify_pr / adversarial_review_pr) — they run the same actions as the PR labels and " +
     "post the results on the PR. Pass the PR number; the tool starts it and reports back, so just relay what it says." +
     `\n\n## Managing other sessions\nYou can see and steer every other ${productName()} session via the opensession-sessions MCP tools. ` +
     "Use list_sessions (filter 'waiting' to find sessions blocked on a question, 'active' for what's running) and get_session " +
     "to inspect state and transcripts. For trusted users: answer_session_question unblocks a session paused on a question, " +
     "send_to_session messages/redirects a running or idle session, cancel_session stops a run, and create_session spins up a new " +
-    "ask- or code-mode session. When asked things like \"what's still running?\", \"what's waiting on me?\", or \"tell session X to …\", " +
+    'ask- or code-mode session. When asked things like "what\'s still running?", "what\'s waiting on me?", or "tell session X to …", ' +
     "use these tools. Combine with the gh CLI (Bash) for deeper PR status (CI checks, review state) beyond the PR link list_sessions already shows." +
     `\n\n## Human in the loop\nYou can pull a teammate into the loop via the opensession-humans MCP: ask_human DMs them (as you, ${personaName()}) and folds their reply back into this session. ` +
     "Use mode 'block' when you can't continue without the answer (your turn pauses until they reply — e.g. \"ask Grant for the copy\"), or 'async' (default) to keep working while you wait. " +
     "For async, deliver_when controls timing: 'now', 'when_done' (when this session next goes idle), 'on_pr' (once a PR is open — best for \"ask John for a review when done\"), or 'at_time' with a natural-language at_time. " +
     "Pass `options` for one-tap button choices, and `context` to attach background (the copy slot, a diff, a screen). Use list_pending_asks / cancel_ask to manage outstanding ones. " +
-    "When the user says things like \"ask Grant for X\", \"get John to review when I'm done\", or \"check with Jaap before shipping\", use ask_human rather than just telling them to do it.";
+    'When the user says things like "ask Grant for X", "get John to review when I\'m done", or "check with Jaap before shipping", use ask_human rather than just telling them to do it.';
 
   // In-process MCP for this run: the slack-context server set (channel memory,
   // github report-back, slack ask handler). Pi reaches these through the
@@ -1033,7 +1075,7 @@ export async function processMessage(
         Object.keys(STRIPE_CONFIRM_TOOLS).map((name) => [
           name,
           `This Stripe action requires human confirmation — open this session in ${productName()} and retry there; the approval card will appear in that UI.`,
-        ])
+        ]),
       ),
       // Claude-path runs (bridge-off degraded mode) keep the native
       // AskUserQuestion flowing to the same Slack question card.
@@ -1059,13 +1101,13 @@ export async function processMessage(
           session.model = event.toModel;
           await persistSession(session);
         }
-        await sendSlackMessage(
-          channel,
-          durable
-            ? `:warning: \`${event.fromModel}\` is out of usage on all accounts — continuing on \`${event.toModel}\`.`
-            : `:warning: \`${event.fromModel}\` ${event.switchReason || "fell back"} — using \`${event.toModel}\` for this turn only.`,
-          threadTs
-        ).catch(() => {});
+        if (!durable) {
+          await sendSlackMessage(
+            channel,
+            `:warning: \`${event.fromModel}\` ${event.switchReason || "fell back"} — using \`${event.toModel}\` for this turn only.`,
+            threadTs,
+          ).catch(() => {});
+        }
       }
 
       // Assistant prose -> the card's narration line (Linear-style). Chunks
@@ -1097,7 +1139,7 @@ export async function processMessage(
           const status = buildToolStatus(name, input);
           progress.setAction(
             status,
-            name === "Bash" ? String(input?.command || "") : undefined
+            name === "Bash" ? String(input?.command || "") : undefined,
           );
           await streamer.setStatus(status);
         }
@@ -1108,13 +1150,15 @@ export async function processMessage(
         const cmd = bashCommands.get(event.toolUseId);
         if (cmd?.includes("gh pr create")) {
           const prMatch = String(event.content || "").match(
-            /github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/
+            /github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/,
           );
           if (prMatch) {
             const prNumber = parseInt(prMatch[1], 10);
-            console.log(`[slack] PR #${prNumber} created, polling for Vercel preview`);
+            console.log(
+              `[slack] PR #${prNumber} created, polling for Vercel preview`,
+            );
             pollForVercelPreview(prNumber, channel, threadTs).catch((e) =>
-              console.error(`[slack] [vercel] Preview poll error:`, e)
+              console.error(`[slack] [vercel] Preview poll error:`, e),
             );
           }
         }
@@ -1141,7 +1185,9 @@ export async function processMessage(
 
   if (abortController.signal.aborted) {
     if (isRestartAbort(abortController.signal)) {
-      console.log(`[slack] run interrupted by server restart for ${sessionKey}`);
+      console.log(
+        `[slack] run interrupted by server restart for ${sessionKey}`,
+      );
       await streamer.clearStatus();
       await progress.restarting();
       return;
@@ -1169,9 +1215,9 @@ export async function processMessage(
     ? formatted.length > 3000
       ? formatted.substring(0, 3000) + "...(truncated)"
       : formatted
-    // A reply that is only a marker line has already said everything it has to
-    // say; the upload is the message.
-    : shown.media.length > 0
+    : // A reply that is only a marker line has already said everything it has to
+      // say; the upload is the message.
+      shown.media.length > 0
       ? ""
       : "Done! (no text output)";
 
@@ -1203,14 +1249,21 @@ export async function handleMessageEvent(event: any): Promise<void> {
   // (matchReply only matches the exact person asked, in that ask's DM). Runs
   // before the allow-list gate below for exactly that reason; it's tightly
   // scoped and every accepted reply is audited.
-  const matchedAsk = matchHumanAskReply({ channel, user, threadTs: thread_ts, text });
+  const matchedAsk = matchHumanAskReply({
+    channel,
+    user,
+    threadTs: thread_ts,
+    text,
+  });
   if (matchedAsk) {
-    console.log(`[slack] Routed reply from ${user} into session ${matchedAsk.sessionId} (ask ${matchedAsk.id})`);
+    console.log(
+      `[slack] Routed reply from ${user} into session ${matchedAsk.sessionId} (ask ${matchedAsk.id})`,
+    );
     await addReaction(channel, ts, "white_check_mark").catch(() => {});
     await sendSlackMessage(
       channel,
       ":inbox_tray: Got it — passing that straight to the session. Thanks!",
-      thread_ts || ts
+      thread_ts || ts,
     ).catch(() => {});
     return;
   }
@@ -1223,7 +1276,7 @@ export async function handleMessageEvent(event: any): Promise<void> {
   const sessionKey = getSessionKey(channel, threadTs);
 
   console.log(
-    `[slack] Message from ${user} in ${channel}: ${text.substring(0, 50)}...`
+    `[slack] Message from ${user} in ${channel}: ${text.substring(0, 50)}...`,
   );
 
   // A DM reply under a message a opensession session posted (automation DMs like
@@ -1235,11 +1288,19 @@ export async function handleMessageEvent(event: any): Promise<void> {
   if (thread_ts) {
     const threadSessionId = sessionForThread(channel, thread_ts);
     if (threadSessionId) {
-      if (await maybeRetriggerAutomation(threadSessionId, text, channel, ts, thread_ts))
+      if (
+        await maybeRetriggerAutomation(
+          threadSessionId,
+          text,
+          channel,
+          ts,
+          thread_ts,
+        )
+      )
         return;
       if (tryGetSessionControl()) {
         console.log(
-          `[slack] DM thread reply in ${channel}/${thread_ts} → session ${threadSessionId}`
+          `[slack] DM thread reply in ${channel}/${thread_ts} → session ${threadSessionId}`,
         );
         void addReaction(channel, ts, "eyes").catch(() => {});
         const res = await activateLinkedSession(
@@ -1255,7 +1316,7 @@ export async function handleMessageEvent(event: any): Promise<void> {
         // Stale link (session deleted) → fall through to the normal DM flow.
         if (res.status !== "error") return;
         console.warn(
-          `[slack] Thread-linked session ${threadSessionId} rejected delivery (${res.message}) — falling back`
+          `[slack] Thread-linked session ${threadSessionId} rejected delivery (${res.message}) — falling back`,
         );
       }
     }
@@ -1274,7 +1335,7 @@ export async function handleMessageEvent(event: any): Promise<void> {
       await sendSlackMessage(
         channel,
         "Cancelled. Queue cleared.",
-        threadTs || ts
+        threadTs || ts,
       );
     } else {
       await sendSlackMessage(channel, "Nothing to cancel.", threadTs || ts);
@@ -1341,7 +1402,7 @@ I'm now in a worktree (branch: ${branch}) for this task. Please analyze what nee
       await sendSlackMessage(
         channel,
         `${MESSAGES.error} Failed to create worktree: ${e}`,
-        threadTs || ts
+        threadTs || ts,
       );
       await removeReaction(channel, ts, "eyes").catch(() => {});
       return;
@@ -1368,17 +1429,24 @@ I'm now in a worktree (branch: ${branch}) for this task. Please analyze what nee
 // ---------------------------------------------------------------------------
 
 const UI_BASE =
-  process.env.OPENSESSION_UI_BASE ||
-  configuredServer().publicBaseUrl;
+  process.env.OPENSESSION_UI_BASE || configuredServer().publicBaseUrl;
 
 /**
  * Slack card for a triggered PR action. While running: "Open in Open Session" + Stop.
  * Once done: Stop is dropped (it's useless) and a "finished" note is added.
  */
-function prActionCardBlocks(message: string, bksId: string, running: boolean): any[] {
+function prActionCardBlocks(
+  message: string,
+  bksId: string,
+  running: boolean,
+): any[] {
   const opensessionButton = {
     type: "button",
-    text: { type: "plain_text", text: `:desktop_computer: Open in ${productName()}`, emoji: true },
+    text: {
+      type: "plain_text",
+      text: `:desktop_computer: Open in ${productName()}`,
+      emoji: true,
+    },
     url: `${UI_BASE}/session/${bksId}`,
     action_id: `opensession:${bksId}`,
   };
@@ -1418,24 +1486,27 @@ async function maybeRetriggerAutomation(
   if (!/^retrigger\b/i.test(replyText.trim())) return false;
   // Dynamic import: handlers.ts is pulled in by the agent loop at startup and
   // automations.ts pulls in several slack tool modules — avoid a load cycle.
-  const { retriggerAutomationSession } = await import("../../server/automations");
+  const { retriggerAutomationSession } =
+    await import("../../server/automations");
   const res = retriggerAutomationSession(threadSessionId);
   if (res.ok) {
     console.log(
-      `[slack] Retrigger in ${channel}/${threadTs} → automation "${res.name}"`
+      `[slack] Retrigger in ${channel}/${threadTs} → automation "${res.name}"`,
     );
     await addReaction(channel, ts, "repeat");
     await sendSlackMessage(
       channel,
       `:repeat: Re-running *${res.name}* with the original trigger — it'll post fresh results when done.`,
-      threadTs
+      threadTs,
     );
   } else {
-    console.warn(`[slack] Retrigger in ${channel}/${threadTs} failed: ${res.reason}`);
+    console.warn(
+      `[slack] Retrigger in ${channel}/${threadTs} failed: ${res.reason}`,
+    );
     await sendSlackMessage(
       channel,
       `:warning: Couldn't retrigger this run: ${res.reason}`,
-      threadTs
+      threadTs,
     );
   }
   return true;
@@ -1453,7 +1524,7 @@ export async function handleMentionEvent(event: any): Promise<void> {
   if (!cleanText) return;
 
   console.log(
-    `[slack] Mention from ${user} in ${channel}: ${cleanText?.substring(0, 50)}...`
+    `[slack] Mention from ${user} in ${channel}: ${cleanText?.substring(0, 50)}...`,
   );
 
   // Worktree channels bypass the ALLOWED_USER_ID check so the whole team can
@@ -1482,11 +1553,19 @@ export async function handleMentionEvent(event: any): Promise<void> {
   // — if the automation run is still going, the follow-up waits for it rather
   // than steering (the in-thread answer mirror rides the queued message).
   if (threadSessionId) {
-    if (await maybeRetriggerAutomation(threadSessionId, cleanText, channel, ts, thread_ts))
+    if (
+      await maybeRetriggerAutomation(
+        threadSessionId,
+        cleanText,
+        channel,
+        ts,
+        thread_ts,
+      )
+    )
       return;
     if (tryGetSessionControl()) {
       console.log(
-        `[slack] Thread reply in ${channel}/${thread_ts} → session ${threadSessionId}`
+        `[slack] Thread reply in ${channel}/${thread_ts} → session ${threadSessionId}`,
       );
       void addReaction(channel, ts, "eyes").catch(() => {});
       const res = await activateLinkedSession(
@@ -1501,7 +1580,7 @@ export async function handleMentionEvent(event: any): Promise<void> {
       // to the normal mention flow instead of eating the message.
       if (res.status !== "error") return;
       console.warn(
-        `[slack] Thread-linked session ${threadSessionId} rejected delivery (${res.message}) — falling back`
+        `[slack] Thread-linked session ${threadSessionId} rejected delivery (${res.message}) — falling back`,
       );
     }
   }
@@ -1539,7 +1618,7 @@ export async function handleMentionEvent(event: any): Promise<void> {
     const branch = worktreeChannels.get(channel)!;
 
     console.log(
-      `[slack] Worktree channel mention from ${userName} for branch ${branch} (session: ${sessionKey})`
+      `[slack] Worktree channel mention from ${userName} for branch ${branch} (session: ${sessionKey})`,
     );
 
     // Check for existing session
@@ -1622,18 +1701,33 @@ Please help with this request. Start by exploring the codebase to understand wha
 
   if (intent && intent.action !== "none" && intent.prNumber) {
     // Carry the message text as steer so any specific guidance reaches the run.
-    const res = await triggerPrAction(intent.action, intent.prNumber, user, cleanText);
+    const res = await triggerPrAction(
+      intent.action,
+      intent.prNumber,
+      user,
+      cleanText,
+    );
     if (res.ok && res.bksId) {
       const msg = `On it — ${res.message}`;
       const bksId = res.bksId;
-      const posted = await postSlackBlocks(channel, msg, prActionCardBlocks(msg, bksId, true), threadTs);
+      const posted = await postSlackBlocks(
+        channel,
+        msg,
+        prActionCardBlocks(msg, bksId, true),
+        threadTs,
+      );
       const cardTs = posted?.ts;
       // When the run finishes: drop the Stop button and report back in-thread.
       if (res.done) {
         const url = res.url;
         void res.done.finally(() => {
           if (cardTs) {
-            void updateSlackBlocks(channel, cardTs, msg, prActionCardBlocks(msg, bksId, false)).catch(() => {});
+            void updateSlackBlocks(
+              channel,
+              cardTs,
+              msg,
+              prActionCardBlocks(msg, bksId, false),
+            ).catch(() => {});
           }
           void sendSlackMessage(
             channel,
@@ -1653,20 +1747,27 @@ Please help with this request. Start by exploring the codebase to understand wha
   // ask checkout (opensession → its live shared checkout).
   if (intent?.mode === "ask") {
     let askSession: SlackSession | undefined =
-      activeSessions.get(sessionKey) ?? (await loadSession(sessionKey)) ?? undefined;
+      activeSessions.get(sessionKey) ??
+      (await loadSession(sessionKey)) ??
+      undefined;
     if (askSession) activeSessions.set(sessionKey, askSession);
     let askCwd: string | undefined;
     if (!isDefaultRepo && !askSession) {
       try {
         askCwd = await ensureAskCheckout(repo.id);
       } catch (e) {
-        console.warn(`[slack] ask-checkout for ${repo.id} failed (falling back to default):`, e);
+        console.warn(
+          `[slack] ask-checkout for ${repo.id} failed (falling back to default):`,
+          e,
+        );
       }
     }
     const intro = context
       ? `${userName} asked me in a Slack thread (with context):\n\n---\n${context}\n---\n\nTheir question: "${cleanText}"`
       : `${userName} asked me in Slack: "${cleanText}"`;
-    const repoNote = askCwd ? ` I'm in the ${repo.id} repo's checkout for this.` : "";
+    const repoNote = askCwd
+      ? ` I'm in the ${repo.id} repo's checkout for this.`
+      : "";
     enqueueMessage(sessionKey, {
       prompt: `${intro}\n\nThis is a question/discussion, not a coding task — don't create a branch or change code. Read the codebase as needed for context and answer concisely.${repoNote}`,
       cardTitle: cleanText,
@@ -1691,7 +1792,9 @@ Please help with this request. Start by exploring the codebase to understand wha
   // in the UI as a dead session). A conversational session falls through: the
   // worktree created below is adopted onto it by processMessage.
   const existingCodeSession: SlackSession | undefined =
-    activeSessions.get(sessionKey) ?? (await loadSession(sessionKey)) ?? undefined;
+    activeSessions.get(sessionKey) ??
+    (await loadSession(sessionKey)) ??
+    undefined;
   if (existingCodeSession) activeSessions.set(sessionKey, existingCodeSession);
   if (existingCodeSession?.worktreeDir) {
     const intro = context
@@ -1727,7 +1830,10 @@ Please help with this request. Start by exploring the codebase to understand wha
       worktreeDir = repo.repo;
       where = `This task is in the ${repo.id} repo — I'm working directly in its live shared checkout on ${repo.defaultBranch} (shared with other sessions: stage only my own files, commit + push directly, never reset or switch branches).`;
     } else {
-      branch = await resolveUniqueBranch(await generateBranchName(cleanText, context), repo.id);
+      branch = await resolveUniqueBranch(
+        await generateBranchName(cleanText, context),
+        repo.id,
+      );
       worktreeDir = await createRepoWorktree(branch, repo.id);
       where = `This task is in the ${repo.id} repo — I'm in a worktree (branch: ${branch}). Commit and open a PR against ${repo.ghRepo} when done.`;
     }
@@ -1749,7 +1855,7 @@ ${where} Please help with this request. Start by exploring the codebase to under
     await sendSlackMessage(
       channel,
       `${MESSAGES.error} Failed to create worktree: ${e}`,
-      threadTs
+      threadTs,
     );
     await removeReaction(channel, ts, "eyes").catch(() => {});
     return;

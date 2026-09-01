@@ -47,7 +47,12 @@ import {
   sandboxWsMessage,
   sandboxWsOpen,
 } from "./run-ws";
-import { handleSandboxPortalRelayUpgrade, sandboxPortalRelayClose, sandboxPortalRelayMessage, sandboxPortalRelayOpen } from "./sandbox-portal-relay";
+import {
+  handleSandboxPortalRelayUpgrade,
+  sandboxPortalRelayClose,
+  sandboxPortalRelayMessage,
+  sandboxPortalRelayOpen,
+} from "./sandbox-portal-relay";
 import { configuredIngress } from "./config";
 import { publicIngressConfig } from "./sandbox/config";
 import { handleWorkloadIdentityRequest } from "./workload-identity";
@@ -132,7 +137,10 @@ interface IngressServer {
   requestIP?(req: Request): { address: string } | null;
 }
 
-async function ingressFetch(req: Request, server: IngressServer): Promise<Response | undefined> {
+async function ingressFetch(
+  req: Request,
+  server: IngressServer,
+): Promise<Response | undefined> {
   let path: string;
   try {
     path = new URL(req.url).pathname;
@@ -142,7 +150,10 @@ async function ingressFetch(req: Request, server: IngressServer): Promise<Respon
   if (path === "/ingress-health") {
     return new Response("ok");
   }
-  if (path === "/workload-identity/token" && rateLimited(clientIp(req, server))) {
+  if (
+    path === "/workload-identity/token" &&
+    rateLimited(clientIp(req, server))
+  ) {
     return new Response(null, {
       status: 429,
       headers: { "retry-after": String(Math.ceil(WINDOW_MS / 1000)) },
@@ -220,7 +231,8 @@ export function startPublicIngress(overrides?: {
         if (!sandboxPortalRelayOpen(ws)) sandboxWsOpen(ws);
       },
       message(ws, message) {
-        if (!sandboxPortalRelayMessage(ws, message as any)) sandboxWsMessage(ws, message as any);
+        if (!sandboxPortalRelayMessage(ws, message as any))
+          sandboxWsMessage(ws, message as any);
       },
       close(ws) {
         if (!sandboxPortalRelayClose(ws)) sandboxWsClose(ws);
@@ -232,13 +244,16 @@ export function startPublicIngress(overrides?: {
     hostname: server.hostname ?? "127.0.0.1",
     stop: (closeActive?: boolean) => {
       server.stop(closeActive);
-      if (g.__publicIngressServer === handle) g.__publicIngressServer = undefined;
+      if (g.__publicIngressServer === handle)
+        g.__publicIngressServer = undefined;
     },
   };
   g.__publicIngressServer = handle;
   console.log(
     `[public-ingress] public gateway on ${handle.hostname}:${handle.port}` +
-      (configuredIngress().publicBaseUrl ? ` (public base ${configuredIngress().publicBaseUrl})` : ""),
+      (configuredIngress().publicBaseUrl
+        ? ` (public base ${configuredIngress().publicBaseUrl})`
+        : ""),
   );
   return handle;
 }

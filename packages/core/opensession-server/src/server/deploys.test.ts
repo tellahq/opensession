@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,7 +23,8 @@ beforeEach(async () => {
   process.env.OPENSESSION_DEPLOYS_REGISTRY = join(ROOT, "registry.json");
   dp = await import("./deploys");
   dp.__resetDeploysForTest();
-  if (existsSync(join(ROOT, "registry.json"))) rmSync(join(ROOT, "registry.json"));
+  if (existsSync(join(ROOT, "registry.json")))
+    rmSync(join(ROOT, "registry.json"));
   src = mkdtempSync(join(tmpdir(), "deploys-src-"));
   writeFileSync(join(src, "server.ts"), "// app\n");
 });
@@ -41,7 +48,16 @@ describe("names", () => {
   });
 
   test("rejects anything that would break /d/<name>/ or read as a path", () => {
-    for (const bad of ["", "-lead", "trail-", "Upper", "has space", "a/b", "a".repeat(41), "a_b"]) {
+    for (const bad of [
+      "",
+      "-lead",
+      "trail-",
+      "Upper",
+      "has space",
+      "a/b",
+      "a".repeat(41),
+      "a_b",
+    ]) {
       expect(dp.isValidDeployName(bad), bad).toBe(false);
     }
   });
@@ -49,7 +65,12 @@ describe("names", () => {
 
 describe("entrypoint validation", () => {
   test("single commands are accepted", () => {
-    for (const ok of ["bun server.ts", "node index.js", "python3 -u app.py", "sh start.sh"]) {
+    for (const ok of [
+      "bun server.ts",
+      "node index.js",
+      "python3 -u app.py",
+      "sh start.sh",
+    ]) {
       expect(dp.compoundEntrypointError(ok), ok).toBeNull();
     }
   });
@@ -84,7 +105,9 @@ describe("snapshot filter", () => {
 });
 
 describe("publish bookkeeping", () => {
-  const publish = (over: Partial<Parameters<typeof dp.publishDeploy>[0]> = {}) =>
+  const publish = (
+    over: Partial<Parameters<typeof dp.publishDeploy>[0]> = {},
+  ) =>
     dp.publishDeploy({
       dir: src,
       // `true` exits 0 immediately: enough to exercise versioning and the
@@ -100,7 +123,9 @@ describe("publish bookkeeping", () => {
     expect(r.version).toBe(1);
     expect(r.deploy.port).toBeGreaterThanOrEqual(7100);
     expect(r.deploy.port).toBeLessThanOrEqual(7899);
-    expect(existsSync(join(dp.versionDir(r.deploy.id, 1), "server.ts"))).toBe(true);
+    expect(existsSync(join(dp.versionDir(r.deploy.id, 1), "server.ts"))).toBe(
+      true,
+    );
     expect(dp.listDeploys()).toHaveLength(1);
   });
 
@@ -141,14 +166,22 @@ describe("publish bookkeeping", () => {
   test("renaming onto a name another app already holds is refused", () => {
     publish({ name: "one" });
     publish({ name: "two" });
-    expect(() => publish({ name: "one", renameFrom: "two" })).toThrow(/already taken/);
+    expect(() => publish({ name: "one", renameFrom: "two" })).toThrow(
+      /already taken/,
+    );
   });
 
   test("bad input is rejected before anything is written", () => {
     expect(() => publish({ name: "Bad Name" })).toThrow(/name must be/);
-    expect(() => publish({ entrypoint: "  " })).toThrow(/entrypoint is required/);
-    expect(() => publish({ entrypoint: "cd x && node y" })).toThrow(/single command/);
-    expect(() => publish({ dir: join(ROOT, "does-not-exist") })).toThrow(/does not exist/);
+    expect(() => publish({ entrypoint: "  " })).toThrow(
+      /entrypoint is required/,
+    );
+    expect(() => publish({ entrypoint: "cd x && node y" })).toThrow(
+      /single command/,
+    );
+    expect(() => publish({ dir: join(ROOT, "does-not-exist") })).toThrow(
+      /does not exist/,
+    );
     expect(dp.listDeploys()).toHaveLength(0);
   });
 

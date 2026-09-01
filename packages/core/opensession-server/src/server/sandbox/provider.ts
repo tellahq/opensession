@@ -2,8 +2,8 @@
  * Sandbox seam (docs/self-hosting-sandboxes.md): the interfaces every execution
  * backend implements. A "sandbox" is where a session's work happens — a git
  * worktree on this host (LocalProvider, src/server/sandbox/local.ts), a
- * Docker container or local microVM per session, or a remote
- * Daytona/E2B/Box/Modal sandbox, all behind these two interfaces.
+ * Docker container, AWS Lambda MicroVM, or a remote Daytona/E2B/Box/Modal
+ * sandbox, all behind these two interfaces.
  *
  * Deliberately small, mirroring the existing run-host layer's idioms:
  *  - `launchRun` takes the same serializable `RunHostSpec` the detached
@@ -29,6 +29,7 @@ export type SandboxProviderId =
   | "e2b"
   | "box"
   | "modal"
+  /** Parsed only so persisted legacy sessions fail explicitly at dispatch. */
   | "microvm"
   | "lambda-microvm";
 
@@ -73,6 +74,13 @@ export interface SandboxSessionSpec {
   trustProfile?: "interactive" | "automation";
   /** Hostnames, IPs, CIDRs, or URLs permitted for automation egress. */
   egressAllowlist?: string[];
+  /** Force a credential-free HTTPS clone. Public untrusted-source jobs must
+   * never receive the configured repository clone credential. */
+  cloneCredential?: "configured" | "none";
+  /** Prepare only a fresh credential-free source checkout for immutable
+   * verification. Skips templates, private seed files, runner bootstrap,
+   * dial-back, and repository lifecycle hooks. */
+  sourceVerification?: boolean;
 }
 
 export interface ExecOpts {
@@ -188,7 +196,10 @@ export interface Sandbox {
    * only backends whose launch can fail out-of-process implement it; the local
    * provider's in-process launch has nothing to await.
    */
-  launchRunEager?(spec: RunHostSpec, cb?: RunHandleCallbacks): Promise<RunHandle>;
+  launchRunEager?(
+    spec: RunHostSpec,
+    cb?: RunHandleCallbacks,
+  ): Promise<RunHandle>;
   /** Preview ports (sandbox port → host port). `requestedPorts` lets providers
    *  with dynamic tunnels publish services a session added to .ports.conf. */
   ports(requestedPorts?: number[]): Promise<PortMap>;
@@ -210,6 +221,7 @@ export interface SandboxProvider {
    * Providers whose stopped sandboxes retain disk do not need this hook. */
   checkpoint?(sandboxId: string): Promise<void>;
   /** Tear the sandbox down (session delete/archive). Workspace data outlives
-   *  it where the provider stores it on the host (local worktrees always do). */
-  destroy(sandboxId: string): Promise<void>;
+   *  it where the provider stores it on the host (local worktrees always do).
+   *  Strict cleanup rejects unless disposal is confirmed. */
+  destroy(sandboxId: string, options?: { strict?: boolean }): Promise<void>;
 }

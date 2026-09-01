@@ -24,21 +24,21 @@ command first, then delete the automation in the UI.
 
 ## What ships here
 
-| Recipe | What it does | Needs |
-| --- | --- | --- |
-| `github-pr-review` | Reviews eligible opened/updated PRs and posts findings | GitHub integration |
-| `instance-health` | Hourly check that this install is alive and not out of disk | — |
-| `stale-pr-monitor` | Weekly list of PRs that have gone quiet | GitHub integration |
-| `code-cleanup-sweep` | Weekly dead-code and duplication pass, as a PR | — |
-| `docs-spell-check` | Weekly typo and broken-link pass over docs, as a PR | — |
-| `production-error-sweep` | Weekday triage of new production errors | an error-tracking MCP |
-| `nightly-reflection` | Nightly retro over yesterday's audit log; may open one fix PR and refine its own prompt (`selfImprove`) | — |
+| Recipe                   | What it does                                                                                            | Needs                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- | --------------------- |
+| `github-pr-review`       | Reviews eligible opened/updated PRs and posts findings                                                  | GitHub integration    |
+| `instance-health`        | Hourly check that this install is alive and not out of disk                                             | —                     |
+| `stale-pr-monitor`       | Weekly list of PRs that have gone quiet                                                                 | GitHub integration    |
+| `code-cleanup-sweep`     | Weekly dead-code and duplication pass, as a PR                                                          | —                     |
+| `docs-spell-check`       | Weekly typo and broken-link pass over docs, as a PR                                                     | —                     |
+| `production-error-sweep` | Weekday triage of new production errors                                                                 | an error-tracking MCP |
+| `nightly-reflection`     | Nightly retro over yesterday's audit log; may open one fix PR and refine its own prompt (`selfImprove`) | —                     |
 
 `github-pr-review` and `instance-health` are offered during `opensession
 onboard`. The PR review one is the highest-leverage thing here: it is the
 automation most other workflows end up hanging off.
 
-## What does *not* belong here
+## What does _not_ belong here
 
 The line is whether the recipe is about **software** or about **your company**.
 
@@ -120,7 +120,7 @@ Drop a JSON file in `automations/`:
 
 The recipes here are written to a house style, and it is worth matching:
 
-- Say what to do, then what *not* to do. The negative half is what keeps an
+- Say what to do, then what _not_ to do. The negative half is what keeps an
   automation from being annoying.
 - Give it an explicit bar for what is worth reporting, and permission to report
   nothing. "If nothing is wrong, say so in one line" prevents the failure mode

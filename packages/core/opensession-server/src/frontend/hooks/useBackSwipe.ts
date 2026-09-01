@@ -311,8 +311,7 @@ function onEnd(e: TouchEvent) {
   const px = m ? parseFloat(m[1]) : 0;
   // A rightward flick pops even a short drag (and a leftward flick cancels
   // even a long one); a slow release falls back to the halfway rule.
-  const pop =
-    vx > FLICK_VX ? px > 24 : vx < -FLICK_VX ? false : px > width / 2;
+  const pop = vx > FLICK_VX ? px > 24 : vx < -FLICK_VX ? false : px > width / 2;
   settle(pop);
 }
 

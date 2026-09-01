@@ -40,7 +40,9 @@ describe("splitSlackMedia", () => {
 
   test("reads a marker an agent dressed up, and drops the whole line", () => {
     const shot = write("my_final_shot.png");
-    const split = splitSlackMedia(`Done.\n\n**OPENSESSION_IMAGE: ${shot}**\n\nTop is now.`);
+    const split = splitSlackMedia(
+      `Done.\n\n**OPENSESSION_IMAGE: ${shot}**\n\nTop is now.`,
+    );
     expect(split.media).toEqual([{ path: shot, kind: "image" }]);
     expect(split.text).toBe("Done.\n\nTop is now.");
   });

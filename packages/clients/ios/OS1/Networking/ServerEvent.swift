@@ -6,6 +6,7 @@ import Foundation
 /// Sendable so large frames can decode off the main actor (see OS1Socket).
 enum ServerEvent: Sendable {
     case hello(bootId: String)
+    case serverRestarting
     case pong
     case transcriptInit(sessionId: String, entries: [TranscriptEntry], cursor: HistoryCursor)
     case transcriptHistory(sessionId: String, entries: [TranscriptEntry], cursor: HistoryCursor)
@@ -21,7 +22,11 @@ enum ServerEvent: Sendable {
     case streamText(sessionId: String, text: String, blockId: String?)
     case streamEntry(sessionId: String, entry: TranscriptEntry)
     case streamDone(sessionId: String)
-    case sessionStatus(sessionId: String, isRunning: Bool)
+    case sessionStatus(
+        sessionId: String,
+        isRunning: Bool,
+        safety: SessionSafetyState? = nil
+    )
     /// The create run is still preparing this session's worktree (git fetch,
     /// worktree add, dep install). While not ready the viewer says so instead
     /// of looking like an ordinary idle session with a missing transcript.
@@ -38,7 +43,12 @@ enum ServerEvent: Sendable {
     /// resolves a two-device teammate to their most recent session). Broadcast
     /// to every client on change, and once at the handshake.
     case globalPresence(viewing: [PresenceEntry])
-    case queueUpdate(sessionId: String, queued: [QueueItem], steered: [QueueItem])
+    case queueUpdate(
+        sessionId: String,
+        queued: [QueueItem],
+        steered: [QueueItem],
+        pendingDeliveryIds: [String] = []
+    )
     case queuedPromptTaken(sessionId: String, queueId: String, item: QueueItem?, message: String?)
     /// Cost and context for the whole conversation, refolded by the server
     /// after each turn (and mid-run, as snapshots arrive).
@@ -76,6 +86,8 @@ enum ServerEvent: Sendable {
         switch frame.type {
         case "hello":
             return .hello(bootId: frame.bootId ?? "")
+        case "server_restarting":
+            return .serverRestarting
         case "pong":
             return .pong
         case "transcript_init":
@@ -113,7 +125,11 @@ enum ServerEvent: Sendable {
             return .streamDone(sessionId: id)
         case "session_status":
             guard let id = frame.sessionId else { return .ignored }
-            return .sessionStatus(sessionId: id, isRunning: frame.isRunning ?? false)
+            return .sessionStatus(
+                sessionId: id,
+                isRunning: frame.isRunning ?? false,
+                safety: frame.safety
+            )
         case "workspace_status":
             guard let id = frame.sessionId else { return .ignored }
             return .workspaceStatus(sessionId: id, ready: frame.ready ?? true)
@@ -136,7 +152,8 @@ enum ServerEvent: Sendable {
             return .queueUpdate(
                 sessionId: id,
                 queued: (frame.queued ?? []).map(QueueItem.init),
-                steered: (frame.steered ?? []).map(QueueItem.init)
+                steered: (frame.steered ?? []).map(QueueItem.init),
+                pendingDeliveryIds: frame.pendingDeliveryIds ?? []
             )
         case "queued_prompt_taken":
             guard let id = frame.sessionId, let queueId = frame.queueId else { return .ignored }
@@ -454,6 +471,7 @@ private struct RawFrame: Decodable {
     }
 
     let isRunning: Bool?
+    let safety: SessionSafetyState?
     let ready: Bool?
     let model: String?
     let by: String?
@@ -462,6 +480,7 @@ private struct RawFrame: Decodable {
     let viewing: [WireViewing]?
     let queued: [WireQueueItem]?
     let steered: [WireQueueItem]?
+    let pendingDeliveryIds: [String]?
     let item: WireQueueItem?
     let usage: SessionUsage?
     let questionId: String?

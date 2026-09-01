@@ -40,7 +40,7 @@ flowchart LR
 
   kernel["session kernel service :3849<br/>authoritative session decisions"]
   launch["run orchestration<br/>fixed-policy executor for<br/>Linux system-scope local runs"]
-  runner["Pi turn<br/>detached run host, Sandbox runner,<br/>or in-process fallback"]
+  runner["Pi turn<br/>detached run host or<br/>Sandbox runner"]
 
   clients --> http
   hooks -->|webhooks and OAuth| wh
@@ -138,7 +138,7 @@ the UI and API; it does not change the fact that a session executes arbitrary
 code on your machine. Keep the network boundary and treat sign-in as defence in
 depth.
 
-Inside that boundary, safety comes from least-privilege scoping of what *runs*
+Inside that boundary, safety comes from least-privilege scoping of what _runs_
 can do, enforced at the tool, environment, and credential layers rather than in
 prompts:
 
@@ -163,26 +163,27 @@ that touches them.
 
 ## Pages
 
-| Page | Covers |
-| --- | --- |
-| [install.md](install.md) | installer → onboarding → env vars → config.json → accounts → systemd → health |
-| [../instance-configuration.md](../instance-configuration.md) | repos, identity, branding, policy, seeds, and integration settings in `~/.opensession/config.json` |
-| [networking.md](networking.md) | **keeping it private** — Tailscale, SSH tunnels, verifying exposure |
-| [ec2.md](ec2.md) | provisioning a clean EC2 box, networking, SSH debugging |
-| [../../recipes/README.md](../../recipes/README.md) | bundled automation recipes, and what belongs in the repo |
-| [slack.md](slack.md) | Slack app, token, scopes, event intake, admin gating |
-| [github.md](github.md) | GitHub App, public ingress, PR agent, deploy script |
-| [codestorage.md](codestorage.md) | code.storage as an alternative git host — signing key, repos, branch reviews |
-| [linear.md](linear.md) | Linear OAuth app, webhooks, the Linear agent |
-| [plain.md](plain.md) | Plain support tickets, the triage automation |
-| [integrations-misc.md](integrations-misc.md) | Stripe, WorkOS, Grafana/Sentry/Tinybird, web push, voice |
-| [engines.md](engines.md) | the Pi engine, account pools, provider keys, run isolation |
-| [../self-hosting-sandboxes.md](../self-hosting-sandboxes.md) | certified Docker, Daytona, Box, Modal, and local MicroVM sandboxes; implemented E2B and Lambda adapters remain unavailable pending certification |
-| [../runners.md](../runners.md) | attaching a Mac/Linux/Windows box as a Runner |
-| [../worktrees.md](../worktrees.md) | how sessions map to git worktrees, and where the disk goes |
-| [../../CLIENTS.md](../../CLIENTS.md) | web UI, PWA, Electron shell, Swift app, Chrome extension |
-| [../security-model.md](../security-model.md) | automation, credential, connector, webhook, and self-management boundaries |
-| [../extending.md](../extending.md) | MCP servers, feeds, recipes, integrations, providers, skills |
+| Page                                                         | Covers                                                                                                                            |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| [install.md](install.md)                                     | installer → onboarding → env vars → config.json → accounts → systemd → health                                                     |
+| [../instance-configuration.md](../instance-configuration.md) | repos, identity, branding, policy, seeds, and integration settings in `~/.opensession/config.json`                                |
+| [networking.md](networking.md)                               | **keeping it private** — Tailscale, SSH tunnels, verifying exposure                                                               |
+| [ec2.md](ec2.md)                                             | provisioning a clean EC2 box, networking, SSH debugging                                                                           |
+| [../../recipes/README.md](../../recipes/README.md)           | bundled automation recipes, and what belongs in the repo                                                                          |
+| [slack.md](slack.md)                                         | Slack app, token, scopes, event intake, admin gating                                                                              |
+| [github.md](github.md)                                       | GitHub App, public ingress, PR agent, deploy script                                                                               |
+| [codestorage.md](codestorage.md)                             | code.storage as an alternative git host — signing key, repos, branch reviews                                                      |
+| [linear.md](linear.md)                                       | Linear OAuth app, webhooks, the Linear agent                                                                                      |
+| [plain.md](plain.md)                                         | Plain support tickets, the triage automation                                                                                      |
+| [integrations-misc.md](integrations-misc.md)                 | Stripe, WorkOS, Grafana/Sentry/Tinybird, web push, voice                                                                          |
+| [apple-mobile.md](apple-mobile.md)                           | SwiftPM/xtool development builds and user-restricted Xcode release tools                                                          |
+| [engines.md](engines.md)                                     | the Pi engine, account pools, provider keys, run isolation                                                                        |
+| [../self-hosting-sandboxes.md](../self-hosting-sandboxes.md) | certified Docker, Daytona, Box, and Modal sandboxes; implemented E2B and Lambda adapters remain unavailable pending certification |
+| [../runners.md](../runners.md)                               | attaching a Mac/Linux/Windows box as a Runner                                                                                     |
+| [../worktrees.md](../worktrees.md)                           | how sessions map to git worktrees, and where the disk goes                                                                        |
+| [../../CLIENTS.md](../../CLIENTS.md)                         | web UI, PWA, Electron shell, Swift app, Chrome extension                                                                          |
+| [../security-model.md](../security-model.md)                 | automation, credential, connector, webhook, and self-management boundaries                                                        |
+| [../extending.md](../extending.md)                           | MCP servers, feeds, recipes, integrations, providers, skills                                                                      |
 
 Implementation references include [transcripts.md](../transcripts.md), which
 covers the transcript store and serve protocol, and

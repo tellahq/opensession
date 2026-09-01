@@ -26,7 +26,11 @@
  *   bun scripts/memory-supersede.ts --apply    # write it
  */
 import { readdirSync } from "fs";
-import { loadScope, saveScope, type MemoryEntry } from "../packages/core/opensession-server/src/agents/slack/memory";
+import {
+  loadScope,
+  saveScope,
+  type MemoryEntry,
+} from "../packages/core/opensession-server/src/agents/slack/memory";
 import { memoryDir } from "../packages/core/opensession-server/src/agents/slack/memory";
 
 /** Verbs that assert the named entry is wrong. */
@@ -36,7 +40,8 @@ const ADDITIVE = /\b(REFINES|EXTENDS|UPDATES|SHARPENS|RELATED)\b/;
 /** Only the preamble names targets; ids deeper in the body are usually just
  *  cross-references ("see memory X for the recipe"). */
 const PREAMBLE_CHARS = 240;
-const ID = /\b[0-9a-f]{8}(?:-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\b/g;
+const ID =
+  /\b[0-9a-f]{8}(?:-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\b/g;
 
 interface Plan {
   scope: string;
@@ -64,7 +69,11 @@ async function main() {
   }
 
   const plans: Plan[] = [];
-  const review: Array<{ scope: string; entry: MemoryEntry; targets: string[] }> = [];
+  const review: Array<{
+    scope: string;
+    entry: MemoryEntry;
+    targets: string[];
+  }> = [];
 
   for (const [scope, entries] of byScope) {
     for (const entry of entries) {
@@ -73,15 +82,27 @@ async function main() {
       const archiving = ARCHIVING.test(preamble);
       const additive = ADDITIVE.test(preamble);
       if (!archiving && !additive) continue;
-      const ids = [...new Set(preamble.match(ID) || [])].filter((id) => id !== entry.id);
-      const found = ids.map((id) => index.get(id)).filter((hit): hit is NonNullable<typeof hit> => !!hit);
+      const ids = [...new Set(preamble.match(ID) || [])].filter(
+        (id) => id !== entry.id,
+      );
+      const found = ids
+        .map((id) => index.get(id))
+        .filter((hit): hit is NonNullable<typeof hit> => !!hit);
       if (!found.length) continue;
       // "CORRECTS ... but EXTENDS ..." is ambiguous; treat any additive verb
       // in the same preamble as a reason for a human to look.
       if (archiving && !additive) {
-        plans.push({ scope, correction: entry, targets: found.map((f) => f.entry) });
+        plans.push({
+          scope,
+          correction: entry,
+          targets: found.map((f) => f.entry),
+        });
       } else {
-        review.push({ scope, entry, targets: found.map((f) => `${f.entry.id} (${f.scope})`) });
+        review.push({
+          scope,
+          entry,
+          targets: found.map((f) => `${f.entry.id} (${f.scope})`),
+        });
       }
     }
   }
@@ -90,20 +111,30 @@ async function main() {
   console.log(`\n=== archive (${plans.length} corrections) ===`);
   for (const plan of plans) {
     console.log(`\n[${plan.correction.id}] ${plan.scope}`);
-    console.log(`  says: ${plan.correction.text.slice(0, 120).replace(/\s+/g, " ")}…`);
+    console.log(
+      `  says: ${plan.correction.text.slice(0, 120).replace(/\s+/g, " ")}…`,
+    );
     for (const target of plan.targets) {
       reclaimed += target.text.length;
-      console.log(`  archives [${target.id}] (${target.text.length} chars): ${target.text.slice(0, 90).replace(/\s+/g, " ")}…`);
+      console.log(
+        `  archives [${target.id}] (${target.text.length} chars): ${target.text.slice(0, 90).replace(/\s+/g, " ")}…`,
+      );
     }
   }
 
-  console.log(`\n=== needs a human (${review.length} additive references, nothing archived) ===`);
+  console.log(
+    `\n=== needs a human (${review.length} additive references, nothing archived) ===`,
+  );
   for (const item of review) {
-    console.log(`[${item.entry.id}] ${item.scope} -> ${item.targets.join(", ")}`);
+    console.log(
+      `[${item.entry.id}] ${item.scope} -> ${item.targets.join(", ")}`,
+    );
     console.log(`  ${item.entry.text.slice(0, 110).replace(/\s+/g, " ")}…`);
   }
 
-  const total = [...byScope.values()].flat().reduce((n, e) => n + (e.archivedAt ? 0 : e.text.length), 0);
+  const total = [...byScope.values()]
+    .flat()
+    .reduce((n, e) => n + (e.archivedAt ? 0 : e.text.length), 0);
   console.log(
     `\n${reclaimed.toLocaleString()} chars (~${Math.round(reclaimed / 4).toLocaleString()} tokens) ` +
       `of ${total.toLocaleString()} come out of every prompt.`,
@@ -125,7 +156,9 @@ async function main() {
       if (owner) touched.add(owner);
     }
     const ids = plan.targets.map((t) => t.id);
-    plan.correction.supersedes = [...new Set([...(plan.correction.supersedes || []), ...ids])];
+    plan.correction.supersedes = [
+      ...new Set([...(plan.correction.supersedes || []), ...ids]),
+    ];
     touched.add(plan.scope);
   }
   for (const scope of touched) await saveScope(scope, byScope.get(scope)!);

@@ -44,13 +44,17 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
         const creds = listCredentials();
         if (!creds.length) {
           return text(
-            "The keychain is empty. Credentials are registered by their owner in the Open Session UI (Settings → Account) — never paste a secret into a session."
+            "The keychain is empty. Credentials are registered by their owner in the Open Session UI (Settings → Account) — never paste a secret into a session.",
           );
         }
         const lines = creds.map((c) => {
           const limits = [
-            c.allowedMethods?.length ? `methods ${c.allowedMethods.join("/")}` : null,
-            c.allowedPathPrefixes?.length ? `paths ${c.allowedPathPrefixes.join(", ")}` : null,
+            c.allowedMethods?.length
+              ? `methods ${c.allowedMethods.join("/")}`
+              : null,
+            c.allowedPathPrefixes?.length
+              ? `paths ${c.allowedPathPrefixes.join(", ")}`
+              : null,
           ]
             .filter(Boolean)
             .join("; ");
@@ -61,7 +65,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
           );
         });
         return text(`Credentials in the keychain:\n${lines.join("\n")}`);
-      }
+      },
     ),
     tool(
       "request_credential",
@@ -73,16 +77,20 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
         purpose: z
           .string()
           .describe(
-            "What you need it for, one specific sentence the owner can judge — e.g. 'read the project's latest deployment status to diagnose the failing preview'."
+            "What you need it for, one specific sentence the owner can judge — e.g. 'read the project's latest deployment status to diagnose the failing preview'.",
           ),
         mode: z
           .enum(["once", "standing"])
           .optional()
           .describe(
-            "'once' (default) = a single broker call, expires in an hour. 'standing' = repeated calls for up to 7 days; the owner can approve either regardless of what you request."
+            "'once' (default) = a single broker call, expires in an hour. 'standing' = repeated calls for up to 7 days; the owner can approve either regardless of what you request.",
           ),
       },
-      async (args: { credential: string; purpose: string; mode?: "once" | "standing" }) => {
+      async (args: {
+        credential: string;
+        purpose: string;
+        mode?: "once" | "standing";
+      }) => {
         const result = requestCredential({
           credential: args.credential,
           sessionId: ctx.sessionId,
@@ -98,11 +106,11 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
         const answer = await awaitBlockingAnswer(result.transport.id);
         if (answer === null) {
           return text(
-            `${result.ask.owner} hasn't answered yet — the ask stays open (${result.ask.id}) and their reply will arrive in this session as a message. Carry on with what doesn't need this credential, or stop and say what you're blocked on.`
+            `${result.ask.owner} hasn't answered yet — the ask stays open (${result.ask.id}) and their reply will arrive in this session as a message. Carry on with what doesn't need this credential, or stop and say what you're blocked on.`,
           );
         }
         return text(answer);
-      }
+      },
     ),
     tool(
       "list_grants",
@@ -111,29 +119,35 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
       async () => {
         const grants = listGrants({ sessionId: ctx.sessionId });
         const pending = listKeychainAsks({ sessionId: ctx.sessionId }).filter(
-          (a) => a.status === "pending"
+          (a) => a.status === "pending",
         );
         if (!grants.length && !pending.length) {
-          return text("This session holds no keychain grants and has no pending asks.");
+          return text(
+            "This session holds no keychain grants and has no pending asks.",
+          );
         }
         const creds = new Map(listCredentials().map((c) => [c.id, c]));
         const lines = grants.map((g) => {
           const service = creds.get(g.credentialId)?.service || g.credentialId;
-          const when = g.status === "active" ? `expires ${g.expiresAt}` : g.status;
+          const when =
+            g.status === "active" ? `expires ${g.expiresAt}` : g.status;
           return `- ${service} (${g.mode}) — ${when} — grant \`${g.id}\` — purpose: ${g.purpose}`;
         });
         const pendingLines = pending.map(
-          (a) => `- ${a.id}: awaiting ${a.owner}'s answer — purpose: ${a.purpose}`
+          (a) =>
+            `- ${a.id}: awaiting ${a.owner}'s answer — purpose: ${a.purpose}`,
         );
         return text(
           [
             grants.length ? `Grants:\n${lines.join("\n")}` : "",
-            pendingLines.length ? `Pending asks:\n${pendingLines.join("\n")}` : "",
+            pendingLines.length
+              ? `Pending asks:\n${pendingLines.join("\n")}`
+              : "",
           ]
             .filter(Boolean)
-            .join("\n\n")
+            .join("\n\n"),
         );
-      }
+      },
     ),
   ];
 

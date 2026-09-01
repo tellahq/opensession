@@ -18,12 +18,12 @@
  *  - registers steer/interrupt/cancel controls in host-registry so the normal
  *    steerAgentRun/cancelAgentRun/isAgentSessionBusy paths treat hosted runs
  *    like in-process ones,
- *  - reconnects on socket drops, transparently respawns a crashed host to
- *    resume its engine session, and falls back to an in-process runAgent when
- *    spawning is impossible (or the kill-switch file is present).
+ *  - reconnects on socket drops and transparently respawns a crashed host to
+ *    resume its engine session.
  *
- * Kill switch: `touch ~/.opensession-sessions/disable-run-hosts` — checked per run,
- * no restart needed; new runs go back in-process (old hosts finish normally).
+ * Kill switch: `touch ~/.opensession-sessions/disable-run-hosts` — checked per
+ * run. On a systemd host it fails new runs closed instead of moving agent work
+ * into the gateway control-plane cgroup; old hosts finish normally.
  */
 
 import type { McpScope } from "./runner-shared";
@@ -48,12 +48,12 @@ import {
   registerActiveRunProbe,
   type ActiveRunRecord,
 } from "./run-journal";
-import {
-  shouldPersistModelSwitch,
-  type ImageInput,
-} from "./run-events";
+import { shouldPersistModelSwitch, type ImageInput } from "./run-events";
 import type { TranscriptEntry } from "./types";
-import { applyForwardedTranscriptStrict } from "./transcript-persistence";
+import {
+  appendTranscriptEntries,
+  applyForwardedTranscriptStrict,
+} from "./transcript-persistence";
 import { sameProcess } from "./process-identity";
 import type { GitIdentity } from "./shared/user-mappings";
 import { modelSupportsSteer, providerFor } from "./models";
@@ -98,6 +98,10 @@ const HOSTED_KERNEL_RETRY_ATTEMPTS = 3;
 // Wait just beyond it so a retry reaches the recovered lane instead of failing
 // immediately against the same open breaker.
 const HOSTED_KERNEL_RETRY_DELAY_MS = 10_100;
+// Hosts from before the catchup_complete frame resend transcript history
+// immediately after an ended hello. Keep that rolling-deploy path open long
+// enough to consume the local replay instead of closing on the hello itself.
+const ENDED_HELLO_CATCHUP_FALLBACK_MS = 2_000;
 
 export async function retryHostedKernelCall<T>(
   call: () => T | Promise<T>,
@@ -149,10 +153,12 @@ const DISABLE_FILE = `${OPENSESSION_SESSIONS_DIR}/disable-run-hosts`;
 // starting. Reserve its key before launch so takeInterruptedRuns does not
 // attach a second HostHandle to a run this process already drives. HostHandle
 // registration takes over once launch completes.
-const activeHostedRunKeys: Set<string> = ((globalThis as any)
-  .__activeHostedRunKeys ??= new Set());
-const pendingRunHostAdmissions: Set<symbol> = ((globalThis as any)
-  .__pendingRunHostAdmissions ??= new Set());
+const activeHostedRunKeys: Set<string> = ((
+  globalThis as any
+).__activeHostedRunKeys ??= new Set());
+const pendingRunHostAdmissions: Set<symbol> = ((
+  globalThis as any
+).__pendingRunHostAdmissions ??= new Set());
 registerActiveRunProbe(
   (runKey) => activeHostedRunKeys.has(runKey) || hostRunBusy(runKey),
 );
@@ -171,6 +177,10 @@ export function localRunHostsSupported(
   systemdBooted = existsSync("/run/systemd/system"),
   commandLookup: (command: string) => string | null = Bun.which,
 ): boolean {
+  // Hermetic end-to-end fixtures have scratch state but no matching privileged
+  // run-host installation. They exercise the same runner in-process instead of
+  // reaching the live VPS executor or fixed helper.
+  if (process.env.OPENSESSION_TEST_IN_PROCESS_RUNS === "1") return false;
   return (
     platform === "linux" &&
     systemdBooted &&
@@ -181,27 +191,6 @@ export function localRunHostsSupported(
 
 function runHostsEnabled(): boolean {
   return localRunHostsSupported() && !existsSync(DISABLE_FILE);
-}
-
-// ── Bounded spawn-failure fallback ─────────────────────────────────────────
-// When run hosts are the configured path, an in-process fallback is meant to
-// save the occasional run from a transient launch hiccup. At fleet scale it
-// inverts: exactly when the executor is unhealthy, every launch would migrate
-// its engine INTO the gateway process, multiplying gateway memory/CPU at the
-// worst possible moment. Cap concurrent fallback runs; beyond the cap the
-// launch fails visibly (lastRunError + queue restore) instead of silently
-// overloading the process every other session depends on. Platforms without
-// run hosts are exempt — there, in-process is the normal path, not a fallback.
-const MAX_IN_PROCESS_FALLBACK_RUNS = (() => {
-  const raw = Number(process.env.OPENSESSION_MAX_INPROCESS_FALLBACKS ?? 8);
-  return Number.isInteger(raw) && raw >= 1 ? raw : 8;
-})();
-const activeInProcessFallbackRuns: Set<string> = ((globalThis as any)
-  .__activeInProcessFallbackRuns ??= new Set());
-
-/** Exported for tests. */
-export function inProcessFallbackSaturated(): boolean {
-  return activeInProcessFallbackRuns.size >= MAX_IN_PROCESS_FALLBACK_RUNS;
 }
 
 /** Options for a hosted run: RunAgentOpts minus the non-serializable bits,
@@ -231,6 +220,7 @@ export interface HostedRunOpts {
   proxyMcpServers?: string[];
   reposNote?: string;
   deniedTools?: Record<string, string>;
+  publicationPolicy?: { repo: string; branch: string; headBranch: string };
   confirmTools?: Record<string, string>;
   aws?: boolean;
   /** Pool credentials for trusted run-spawned CLI tools (deepsec scans). */
@@ -239,6 +229,8 @@ export interface HostedRunOpts {
   author?: GitIdentity | null;
   user?: string;
   fallbackModel?: string;
+  /** Stable provider-account affinity for internal fan-out workers. */
+  accountAffinityKey?: string;
   /** Reasoning effort / service tier / account pinning for the run (see the
    *  matching RunHostSpec fields). */
   effort?: string;
@@ -256,103 +248,159 @@ export interface HostedRunOpts {
   resumeAttempts?: number;
   lastResumeAt?: string;
   onAskUser?: RunAgentOpts["onAskUser"];
+  /** Reports the engine id even when its live init frame preceded attachment. */
+  onEngineSession?: (engineSessionId: string) => void;
   /** Fences cancellation admitted while the detached host is still launching. */
   shouldCancel?: () => boolean;
   /** A steer arrived too late at the host — queue it so it isn't dropped. */
   onSteerFailed?: (text: string) => void;
-  /** Rebuilds the in-process SDK MCP servers if we fall back to runAgent. */
+  /** Builds SDK MCP servers only on platforms without detached run hosts. */
   fallbackInProcessMcp?: () => Record<string, unknown> | undefined;
 }
 
 /**
  * Run a prompt in a detached run host, yielding the same StreamEvents as
- * runAgent. Falls back to an in-process runAgent when hosts are disabled or
- * the spawn fails — a run should never be lost to infrastructure.
+ * runAgent. A Linux host never falls back into the gateway: launch failure is
+ * visible and retryable, while non-systemd platforms retain in-process mode.
  */
-export async function* runAgentHosted(opts: HostedRunOpts): AsyncGenerator<StreamEvent> {
+export async function* runAgentHosted(
+  opts: HostedRunOpts,
+): AsyncGenerator<StreamEvent> {
   if (opts.shouldCancel?.()) return;
-  if (runHostsEnabled()) {
-    // Machine-capacity admission before the engine process exists. Waits with
-    // backoff while the host is full (the queue claim and journal are already
-    // durable, so a crash mid-wait re-admits the turn) and fails closed after
-    // the configured patience: an in-process fallback would consume the same
-    // scarce memory, so RunHostAdmissionError deliberately propagates.
-    const admission = Symbol(opts.osSessionId);
-    if (
-      (await waitForRunHostAdmission({
-        sessionId: opts.osSessionId,
-        activeHosts: activeRunHostCount,
-        pendingHosts: () => pendingRunHostAdmissions.size,
-        onAdmit: () => pendingRunHostAdmissions.add(admission),
-        shouldCancel: opts.shouldCancel,
-      })) === "cancelled"
-    )
-      return;
+  if (!runHostsEnabled()) {
+    if (localRunHostsSupported()) {
+      throw new Error(
+        "Detached run hosts are disabled; refusing to run agent work inside the gateway",
+      );
+    }
+    yield* runAgentInProcess(opts);
+    return;
+  }
+
+  // Machine-capacity admission before the engine process exists. Waits with
+  // backoff while the host is full and fails closed after the configured
+  // patience. In-process execution would consume the control plane's reserve.
+  const admission = Symbol(opts.osSessionId);
+  if (
+    (await waitForRunHostAdmission({
+      sessionId: opts.osSessionId,
+      activeHosts: activeRunHostCount,
+      pendingHosts: () => pendingRunHostAdmissions.size,
+      onAdmit: () => pendingRunHostAdmissions.add(admission),
+      shouldCancel: opts.shouldCancel,
+    })) === "cancelled"
+  )
+    return;
+  if (opts.shouldCancel?.()) {
+    pendingRunHostAdmissions.delete(admission);
+    return;
+  }
+
+  let spawned: { handle: HostHandle; spec: RunHostSpec };
+  try {
+    // spawnHostRun reserves activeHostedRunKeys synchronously before its first
+    // await. Transfer the admission reservation without opening a race.
+    const launch = spawnHostRun(opts);
+    pendingRunHostAdmissions.delete(admission);
+    spawned = await launch;
+  } catch (error) {
+    pendingRunHostAdmissions.delete(admission);
+    throw error;
+  }
+
+  try {
     if (opts.shouldCancel?.()) {
-      pendingRunHostAdmissions.delete(admission);
-      return;
-    }
-    let spawned: { handle: HostHandle; spec: RunHostSpec } | null = null;
-    try {
-      // spawnHostRun reserves activeHostedRunKeys synchronously before its first
-      // await. Transfer the admission reservation without opening a race.
-      const launch = spawnHostRun(opts);
-      pendingRunHostAdmissions.delete(admission);
-      spawned = await launch;
-    } catch (e) {
-      pendingRunHostAdmissions.delete(admission);
-      if (e instanceof ExecutorProtocolError && e.ambiguousLaunch) throw e;
-      console.error("[host-client] spawn failed — falling back to in-process run:", e);
-    }
-    if (spawned) {
-      try {
-        if (opts.shouldCancel?.()) {
-          spawned.handle.requestCancel();
-          // Drain through the host's `end`, not merely its terminal event: the
-          // source owns cleanup and may still be waiting to close its transport.
-          for await (const _event of spawned.handle.events()) {}
-          return;
-        }
-        yield* hostedEventsWithJournal(spawned.handle, spawned.spec);
-      } finally {
-        activeHostedRunKeys.delete(spawned.spec.hostId);
+      spawned.handle.requestCancel();
+      // Drain through the host's `end`, not merely its terminal event: the
+      // source owns cleanup and may still be waiting to close its transport.
+      for await (const _event of spawned.handle.events()) {
       }
       return;
     }
-    // Spawn-failure fallback: bounded so a sick executor degrades launches
-    // instead of migrating the whole fleet's engines into the gateway.
-    if (inProcessFallbackSaturated()) {
-      audit({
-        msg: "in_process_fallback_rejected",
-        session_id: opts.osSessionId,
-        active: activeInProcessFallbackRuns.size,
-        limit: MAX_IN_PROCESS_FALLBACK_RUNS,
-      });
-      throw new Error(
-        `Run host launch failed and ${activeInProcessFallbackRuns.size} in-process fallback runs are already active (limit ${MAX_IN_PROCESS_FALLBACK_RUNS}). Not absorbing this run into the gateway; retry when run hosts recover.`,
-      );
-    }
-    const fallbackKey = `${opts.osSessionId}:${crypto.randomUUID()}`;
-    activeInProcessFallbackRuns.add(fallbackKey);
-    audit({
-      msg: "in_process_fallback_started",
-      session_id: opts.osSessionId,
-      active: activeInProcessFallbackRuns.size,
-      limit: MAX_IN_PROCESS_FALLBACK_RUNS,
-    });
-    try {
-      yield* runAgentInProcess(opts);
-    } finally {
-      activeInProcessFallbackRuns.delete(fallbackKey);
-    }
-    return;
+    yield* hostedEventsWithJournal(spawned.handle, spawned.spec);
+  } finally {
+    activeHostedRunKeys.delete(spawned.spec.hostId);
   }
-  yield* runAgentInProcess(opts);
 }
 
-/** The shared in-process execution tail: the normal path on platforms without
- *  run hosts, and the (bounded) fallback when a host spawn fails. */
-async function* runAgentInProcess(opts: HostedRunOpts): AsyncGenerator<StreamEvent> {
+export interface AuxiliaryHostedRunOpts extends HostedRunOpts {
+  /** Auxiliary workers keep either their standalone engine transcript or, for
+   *  session-like background jobs, project onto the parent session. */
+  transcriptTarget?: "session" | "engine" | "none";
+  signal?: AbortSignal;
+}
+
+/**
+ * Run internal fan-out work in the same workload-isolated transient units as
+ * ordinary turns, without claiming the parent session's authoritative run
+ * slot. Linux hosts fail closed if detached execution is deliberately disabled
+ * or cannot launch; absorbing workers into the gateway would defeat the
+ * control-plane cgroup boundary this API exists to preserve.
+ */
+export async function* runAuxiliaryAgentHosted(
+  opts: AuxiliaryHostedRunOpts,
+): AsyncGenerator<StreamEvent> {
+  const shouldCancel = () =>
+    Boolean(opts.signal?.aborted || opts.shouldCancel?.());
+  if (!runHostsEnabled()) {
+    if (localRunHostsSupported()) {
+      throw new Error(
+        "Detached run hosts are disabled; refusing to run auxiliary agent work inside the gateway",
+      );
+    }
+    yield* runAgentInProcess({ ...opts, shouldCancel }, "auxiliary");
+    return;
+  }
+  if (shouldCancel()) return;
+
+  const admission = Symbol(opts.osSessionId);
+  if (
+    (await waitForRunHostAdmission({
+      sessionId: opts.osSessionId,
+      activeHosts: activeRunHostCount,
+      pendingHosts: () => pendingRunHostAdmissions.size,
+      onAdmit: () => pendingRunHostAdmissions.add(admission),
+      shouldCancel,
+    })) === "cancelled"
+  )
+    return;
+  if (shouldCancel()) {
+    pendingRunHostAdmissions.delete(admission);
+    return;
+  }
+
+  let spawned: { handle: HostHandle; spec: RunHostSpec };
+  try {
+    const launch = spawnHostRun(
+      { ...opts, shouldCancel },
+      "auxiliary",
+      opts.transcriptTarget ?? "none",
+    );
+    pendingRunHostAdmissions.delete(admission);
+    spawned = await launch;
+  } catch (error) {
+    pendingRunHostAdmissions.delete(admission);
+    throw error;
+  }
+
+  const cancel = () => spawned.handle.requestCancel();
+  opts.signal?.addEventListener("abort", cancel, { once: true });
+  let completed = false;
+  try {
+    if (shouldCancel()) cancel();
+    for await (const event of spawned.handle.events()) yield event;
+    completed = true;
+  } finally {
+    opts.signal?.removeEventListener("abort", cancel);
+    if (!completed && !spawned.handle.ended) cancel();
+  }
+}
+
+/** The in-process execution tail for platforms without local run-host support. */
+async function* runAgentInProcess(
+  opts: HostedRunOpts,
+  lifecycle: "session" | "auxiliary" = "session",
+): AsyncGenerator<StreamEvent> {
   yield* runAgent({
     prompt: opts.prompt,
     promptEntryId: opts.promptEntryId,
@@ -370,6 +418,7 @@ async function* runAgentInProcess(opts: HostedRunOpts): AsyncGenerator<StreamEve
     inProcessMcp: opts.fallbackInProcessMcp?.(),
     reposNote: opts.reposNote,
     deniedTools: opts.deniedTools,
+    publicationPolicy: opts.publicationPolicy,
     confirmTools: opts.confirmTools,
     aws: opts.aws,
     claudeCliEnv: opts.claudeCliEnv,
@@ -377,6 +426,7 @@ async function* runAgentInProcess(opts: HostedRunOpts): AsyncGenerator<StreamEve
     author: opts.author,
     user: opts.user,
     fallbackModel: opts.fallbackModel,
+    accountAffinityKey: opts.accountAffinityKey,
     effort: opts.effort,
     fastMode: opts.fastMode,
     accountId: opts.accountId,
@@ -384,7 +434,7 @@ async function* runAgentInProcess(opts: HostedRunOpts): AsyncGenerator<StreamEve
     usageCredits: opts.usageCredits,
     prReviewer: opts.prReviewer,
     journal: {
-      osSessionId: opts.osSessionId,
+      ...(lifecycle === "auxiliary" ? {} : { osSessionId: opts.osSessionId }),
       kind: opts.journalKind || "prompt",
       firstJournaledAt: opts.firstJournaledAt,
       resumeAttempts: opts.resumeAttempts,
@@ -415,7 +465,9 @@ async function* hostedEventsWithJournal(
   if (
     owner.currentRunId &&
     owner.currentRunId !== record.runKey &&
-    ["running", "ask_blocked", "interrupted", "reattaching"].includes(owner.state)
+    ["running", "ask_blocked", "interrupted", "reattaching"].includes(
+      owner.state,
+    )
   ) {
     handle.requestCancel();
     audit({
@@ -428,7 +480,9 @@ async function* hostedEventsWithJournal(
   }
   handle.setHostChangeHandler(async (hostId) => {
     record.hostId = hostId;
-    await hostedKernelCall(spec, "host_change_journal", () => journalSet(record));
+    await hostedKernelCall(spec, "host_change_journal", () =>
+      journalSet(record),
+    );
   });
   await hostedKernelCall(spec, "initial_journal", () => journalSet(record));
   let sourceCompleted = false;
@@ -448,7 +502,11 @@ async function* hostedEventsWithJournal(
         });
         continue;
       }
-      if (ev.type === "init" && ev.sessionId && ev.sessionId !== record.claudeSessionId) {
+      if (
+        ev.type === "init" &&
+        ev.sessionId &&
+        ev.sessionId !== record.claudeSessionId
+      ) {
         record.claudeSessionId = ev.sessionId;
         await hostedKernelCall(spec, "engine_session_journal", () =>
           journalSet(record),
@@ -467,7 +525,8 @@ async function* hostedEventsWithJournal(
     }
     sourceCompleted = true;
   } finally {
-    if (handle.ended && sourceCompleted && sawTerminal) journalClear(record.runKey);
+    if (handle.ended && sourceCompleted && sawTerminal)
+      journalClear(record.runKey);
     else if (handle.ended && sourceCompleted)
       await hostedKernelCall(spec, "abnormal_completion_journal", () =>
         journalRecordAbnormalCompletion(record),
@@ -488,6 +547,7 @@ function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
     mcpServers: spec.mcpServers,
     user: spec.user,
     deniedTools: spec.deniedTools,
+    publicationPolicy: spec.publicationPolicy,
     confirmTools: spec.confirmTools,
     aws: spec.aws,
     claudeCliEnv: spec.claudeCliEnv,
@@ -515,15 +575,20 @@ function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
 
 async function spawnHostRun(
   opts: HostedRunOpts,
+  lifecycle: "session" | "auxiliary" = "session",
+  transcriptTarget: "session" | "engine" | "none" = "session",
 ): Promise<{ handle: HostHandle; spec: RunHostSpec }> {
   const hostId = opts.startToken || `rh-${Bun.randomUUIDv7()}`;
   const dir = `${HOSTS_DIR}/${hostId}`;
   mkdirSync(dir, { recursive: true });
 
-  const rpcToken = opts.proxyMcpServers?.length ? crypto.randomUUID() : undefined;
+  const rpcToken = opts.proxyMcpServers?.length
+    ? crypto.randomUUID()
+    : undefined;
   const spec: RunHostSpec = {
     hostId,
     osSessionId: opts.osSessionId,
+    ...(lifecycle === "auxiliary" ? { lifecycle, transcriptTarget } : {}),
     prompt: opts.prompt,
     promptEntryId: opts.promptEntryId,
     seedTranscriptEntries: opts.seedTranscriptEntries,
@@ -540,6 +605,7 @@ async function spawnHostRun(
     rpcToken,
     reposNote: opts.reposNote,
     deniedTools: opts.deniedTools,
+    publicationPolicy: opts.publicationPolicy,
     confirmTools: opts.confirmTools,
     aws: opts.aws,
     claudeCliEnv: opts.claudeCliEnv,
@@ -547,6 +613,7 @@ async function spawnHostRun(
     author: opts.author,
     user: opts.user,
     fallbackModel: opts.fallbackModel,
+    accountAffinityKey: opts.accountAffinityKey,
     effort: opts.effort,
     fastMode: opts.fastMode,
     accountId: opts.accountId,
@@ -560,17 +627,24 @@ async function spawnHostRun(
     lastResumeAt: opts.lastResumeAt,
   };
   writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec);
-  if (rpcToken) registerRunToken(rpcToken, { sessionId: opts.osSessionId, user: opts.user });
+  if (rpcToken)
+    registerRunToken(rpcToken, {
+      sessionId: opts.osSessionId,
+      user: opts.user,
+    });
 
   let handle: HostHandle | undefined;
   let launchCompleted = false;
-  // Reserve before journalSet. The server accepts prompts while boot recovery
-  // is starting, and the sweep must not adopt a host launched by this process.
-  activeHostedRunKeys.add(hostId);
+  // Session-owned hosts enter the shared recovery journal. Auxiliary workers
+  // are owned by their caller's workflow journal instead: registering them as
+  // the parent session's physical run would race its real run generation.
+  if (lifecycle === "session") activeHostedRunKeys.add(hostId);
   try {
-    // Persist before launch. If opensession restarts between systemd-run and
-    // socket attachment, the boot sweep can still find the surviving host.
-    await journalSet(hostedRunRecord(spec));
+    if (lifecycle === "session") {
+      // Persist before launch. If opensession restarts between systemd-run and
+      // socket attachment, the boot sweep can still find the surviving host.
+      await journalSet(hostedRunRecord(spec));
+    }
     try {
       await launchHostUnit(hostId, dir);
     } catch (error) {
@@ -579,6 +653,7 @@ async function spawnHostRun(
       }
       handle = new HostHandle(dir, spec, {
         onAskUser: opts.onAskUser,
+        onEngineSession: opts.onEngineSession,
         onSteerFailed: opts.onSteerFailed,
       });
       try {
@@ -591,6 +666,7 @@ async function spawnHostRun(
     launchCompleted = true;
     handle = new HostHandle(dir, spec, {
       onAskUser: opts.onAskUser,
+      onEngineSession: opts.onEngineSession,
       onSteerFailed: opts.onSteerFailed,
     });
     await handle.connectWithWait(20_000);
@@ -605,11 +681,11 @@ async function spawnHostRun(
       }
     }
     if (!(error instanceof ExecutorProtocolError && error.ambiguousLaunch)) {
-      activeHostedRunKeys.delete(hostId);
+      if (lifecycle === "session") activeHostedRunKeys.delete(hostId);
       // The HostHandle ctor registered its host-registry control. Drop it only
       // after absence is proven; uncertain launches must remain visibly busy.
       handle?.abandon();
-      journalClear(spec.hostId);
+      if (lifecycle === "session") journalClear(spec.hostId);
       unregisterRunToken(rpcToken);
       try {
         rmSync(dir, { recursive: true, force: true });
@@ -640,7 +716,10 @@ async function launchHostUnit(hostId: string, dir: string): Promise<void> {
   }
 }
 
-async function stopAndVerifyHostAbsent(hostId: string, dir: string): Promise<void> {
+async function stopAndVerifyHostAbsent(
+  hostId: string,
+  dir: string,
+): Promise<void> {
   try {
     await stopHostUnitDirect(hostId);
   } catch {}
@@ -653,7 +732,10 @@ async function stopAndVerifyHostAbsent(hostId: string, dir: string): Promise<voi
         const matches = sameProcess(meta);
         if (matches !== undefined) processAlive = matches;
         else {
-          try { process.kill(meta.pid, 0); processAlive = true; } catch {}
+          try {
+            process.kill(meta.pid, 0);
+            processAlive = true;
+          } catch {}
         }
       }
       if (
@@ -710,7 +792,9 @@ export interface HostLauncher {
   /** Stop a disconnected host and prove it absent before ownership is cleared. */
   stop?(hostId: string, dir: string): Promise<void>;
   /** Inspect durable host evidence before destructive reconciliation. */
-  evidence?(dir: string): Promise<HostExecutionEvidence> | HostExecutionEvidence;
+  evidence?(
+    dir: string,
+  ): Promise<HostExecutionEvidence> | HostExecutionEvidence;
   /**
    * Transport override: how the handle reaches the launched host. Default
    * (undefined return) = the unix socket at `<dir>/host.sock`. The WS
@@ -818,8 +902,12 @@ const systemdHostLauncher: HostLauncher = {
     if (!meta?.pid) return false;
     const matches = sameProcess(meta);
     if (matches !== undefined) return matches;
-    try { process.kill(meta.pid, 0); return true; }
-    catch { return false; }
+    try {
+      process.kill(meta.pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
   },
   newRunDir: (hostId) => `${HOSTS_DIR}/${hostId}`,
   launch: launchHostUnit,
@@ -829,7 +917,9 @@ const systemdHostLauncher: HostLauncher = {
     const privateRun = readHostJournal(dir);
     return {
       started: !!meta?.pid || !!privateRun,
-      ...(meta?.engineSessionId ? { engineSessionId: meta.engineSessionId } : {}),
+      ...(meta?.engineSessionId
+        ? { engineSessionId: meta.engineSessionId }
+        : {}),
       ...(meta?.done ? { done: meta.done } : {}),
     };
   },
@@ -851,7 +941,8 @@ class AsyncEventQueue {
   end(): void {
     if (this.closed) return;
     this.closed = true;
-    for (const w of this.waiters.splice(0)) w({ value: undefined as any, done: true });
+    for (const w of this.waiters.splice(0))
+      w({ value: undefined as any, done: true });
   }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<StreamEvent> {
@@ -862,7 +953,7 @@ class AsyncEventQueue {
       }
       if (this.closed) return;
       const r = await new Promise<IteratorResult<StreamEvent>>((res) =>
-        this.waiters.push(res)
+        this.waiters.push(res),
       );
       if (r.done) return;
       yield r.value;
@@ -872,6 +963,7 @@ class AsyncEventQueue {
 
 export interface HandleCallbacks {
   onAskUser?: RunAgentOpts["onAskUser"];
+  onEngineSession?: (engineSessionId: string) => void;
   onSteerFailed?: (text: string) => void;
 }
 
@@ -883,6 +975,8 @@ export class HostHandle {
   private endedClean = false;
   private sawTerminal = false;
   private terminalEvent?: StreamEvent;
+  private pendingEndedHello = false;
+  private endedHelloFallback?: ReturnType<typeof setTimeout>;
   private connectedBefore = false;
   private reportedSelectedModel?: string;
   private effectiveModel?: string;
@@ -890,7 +984,10 @@ export class HostHandle {
   private handlingAsks = new Set<string>();
   private steerRetractions = new Map<
     string,
-    { resolve: (retracted: boolean) => void; timer: ReturnType<typeof setTimeout> }
+    {
+      resolve: (retracted: boolean) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
   >();
   /** Sent steer ids awaiting their host-forwarded user transcript row. Active
    * hosts from an older release still mint a random uuid for that row; this
@@ -930,8 +1027,11 @@ export class HostHandle {
         if (
           sent &&
           steerId &&
-          !this.pendingSteerTranscripts.some((pending) => pending.id === steerId)
-        ) this.pendingSteerTranscripts.push({ id: steerId, text });
+          !this.pendingSteerTranscripts.some(
+            (pending) => pending.id === steerId,
+          )
+        )
+          this.pendingSteerTranscripts.push({ id: steerId, text });
         return sent;
       },
       retractSteer: (steerId) => this.retractSteer(steerId),
@@ -941,7 +1041,12 @@ export class HostHandle {
       cancel: () => this.cancelHost(),
     };
     registerHostRun(
-      [logicalRunId, spec.hostId, spec.osSessionId, spec.engineSessionId],
+      [
+        logicalRunId,
+        spec.hostId,
+        ...(spec.lifecycle === "auxiliary" ? [] : [spec.osSessionId]),
+        spec.engineSessionId,
+      ],
       this.ctl,
     );
     if (spec.engineSessionId) this.engineSessionId = spec.engineSessionId;
@@ -991,7 +1096,9 @@ export class HostHandle {
     return this.stopRequested || this.endedClean;
   }
 
-  setHostChangeHandler(handler: (hostId: string) => void | Promise<void>): void {
+  setHostChangeHandler(
+    handler: (hostId: string) => void | Promise<void>,
+  ): void {
     this.onHostChanged = handler;
   }
 
@@ -1008,7 +1115,9 @@ export class HostHandle {
     const meta = readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`);
     return {
       started: !!meta?.pid,
-      ...(meta?.engineSessionId ? { engineSessionId: meta.engineSessionId } : {}),
+      ...(meta?.engineSessionId
+        ? { engineSessionId: meta.engineSessionId }
+        : {}),
       ...(meta?.done ? { done: meta.done } : {}),
     };
   }
@@ -1020,8 +1129,7 @@ export class HostHandle {
     if (this.ended) return true;
     this.send({ t: "cancel" });
     const deadline = Date.now() + timeoutMs;
-    while (!this.ended && Date.now() < deadline)
-      await Bun.sleep(50);
+    while (!this.ended && Date.now() < deadline) await Bun.sleep(50);
     if (this.ended) return true;
     if (!this.launcher.stop) return false;
     try {
@@ -1047,7 +1155,8 @@ export class HostHandle {
     // while all of its now-stale frames are rejected.
     this.stopRequested = true;
     void (async () => {
-      if (delivered && this.cancelGraceMs > 0) await Bun.sleep(this.cancelGraceMs);
+      if (delivered && this.cancelGraceMs > 0)
+        await Bun.sleep(this.cancelGraceMs);
       if (this.endedClean) return;
       try {
         await this.launcher.stop!(this.ctl.hostId, this.dir);
@@ -1106,7 +1215,9 @@ export class HostHandle {
           new Promise<"stall">((res) => setTimeout(() => res("stall"), 5_000)),
         ]);
         if (r === "ok") return;
-        lastErr = new Error("connect attempt stalled >5s (promise never settled)");
+        lastErr = new Error(
+          "connect attempt stalled >5s (promise never settled)",
+        );
         console.warn(
           `[host-client] ${this.spec.hostId.slice(0, 11)}: connect attempt ${attempts} stalled >5s`,
         );
@@ -1115,7 +1226,7 @@ export class HostHandle {
       }
       if (Date.now() >= deadline) {
         throw new Error(
-          `run host ${this.spec.hostId} never became connectable after ${attempts} attempt(s): ${lastErr}`
+          `run host ${this.spec.hostId} never became connectable after ${attempts} attempt(s): ${lastErr}`,
         );
       }
       await new Promise((r) => setTimeout(r, 300));
@@ -1139,9 +1250,13 @@ export class HostHandle {
     if (!id || id === this.engineSessionId) return;
     this.engineSessionId = id;
     addHostRunKey(id, this.ctl);
+    try {
+      this.cb.onEngineSession?.(id);
+    } catch {}
   }
 
   private acceptsSideEffectFrame(frameType: string): boolean {
+    if (this.spec.lifecycle === "auxiliary") return true;
     const kernel = sessionKernel(this.spec.osSessionId);
     if (kernel.isCurrentRunProjection(this.logicalRunId)) return true;
     // Transcript frames are idempotent uuid-keyed upserts of history the host
@@ -1211,7 +1326,8 @@ export class HostHandle {
     if (this.pendingSteerTranscripts.length === 0) return lines;
     return lines.map((line) => {
       if (line.type !== "user") return line;
-      const content = (line.message as { content?: unknown } | undefined)?.content;
+      const content = (line.message as { content?: unknown } | undefined)
+        ?.content;
       const text = Array.isArray(content)
         ? content
             .filter(
@@ -1224,10 +1340,8 @@ export class HostHandle {
             .map((block) => block.text)
             .join("\n")
         : "";
-      if (
-        line.uuid === this.spec.promptEntryId ||
-        text === this.spec.prompt
-      ) return line;
+      if (line.uuid === this.spec.promptEntryId || text === this.spec.prompt)
+        return line;
       let index = this.pendingSteerTranscripts.findIndex(
         (pending) => pending.text === text,
       );
@@ -1240,16 +1354,43 @@ export class HostHandle {
     });
   }
 
+  private deferEndedHelloFinish(): void {
+    this.pendingEndedHello = true;
+    if (this.endedHelloFallback) clearTimeout(this.endedHelloFallback);
+    this.endedHelloFallback = setTimeout(() => {
+      this.endedHelloFallback = undefined;
+      // Older hosts have no catchup_complete marker. Their socket replay is
+      // synchronous, so an idle window after the last transcript frame is the
+      // compatibility fence. Still serialize cleanup behind every projection
+      // received before that window closed. A frame arriving while those
+      // projections drain re-arms the timer and cancels this cleanup attempt.
+      this.enqueueProjectionFrame(() => {
+        if (this.pendingEndedHello && !this.endedHelloFallback) this.finish();
+      }, true);
+    }, ENDED_HELLO_CATCHUP_FALLBACK_MS);
+  }
+
+  private clearEndedHelloFallback(): void {
+    if (this.endedHelloFallback) clearTimeout(this.endedHelloFallback);
+    this.endedHelloFallback = undefined;
+    this.pendingEndedHello = false;
+  }
+
   private handleMsg(msg: HostToClientMsg): void {
+    if (msg.t === "transcript" && this.pendingEndedHello) {
+      this.deferEndedHelloFinish();
+    }
     if (
       msg.t !== "transcript" &&
       (this.projectionTail || this.projectionFailure)
     ) {
-      // End is cleanup, not another projection. It must close the stream even
-      // when the transcript projection ahead of it failed. Every other frame
-      // remains fenced after the failed tail settles: projectionFailure is a
-      // permanent authority failure for this handle, not just queue state.
-      this.enqueueProjectionFrame(() => this.handleMsgNow(msg), msg.t === "end");
+      // Terminal frames are cleanup, not another projection. They must close
+      // the stream even when the transcript projection ahead of them failed.
+      // Every other frame remains fenced after the failed tail settles:
+      // projectionFailure is a permanent authority failure for this handle,
+      // not just queue state.
+      const cleanupFrame = msg.t === "end" || msg.t === "catchup_complete";
+      this.enqueueProjectionFrame(() => this.handleMsgNow(msg), cleanupFrame);
       return;
     }
     this.handleMsgNow(msg);
@@ -1286,15 +1427,23 @@ export class HostHandle {
           });
         }
         this.connectedBefore = true;
-        if (msg.pendingAsks?.length && this.acceptsSideEffectFrame("hello.pendingAsks"))
-          for (const ask of msg.pendingAsks) this.handleAsk(ask.askId, ask.input);
+        if (
+          msg.pendingAsks?.length &&
+          this.acceptsSideEffectFrame("hello.pendingAsks")
+        )
+          for (const ask of msg.pendingAsks)
+            this.handleAsk(ask.askId, ask.input);
         if (msg.state === "ended") {
           if (msg.done && !this.sawTerminal) {
             this.sawTerminal = true;
             this.terminalEvent = msg.done;
             this.queue.push(msg.done);
           }
-          this.finish();
+          // A detached host sends hello before replaying transcript frames.
+          // Finishing here closes the socket and discards summaries produced
+          // while the gateway was down. catchup_complete is the exact fence;
+          // the timer only supports hosts from before that frame existed.
+          this.deferEndedHelloFinish();
         }
         break;
       }
@@ -1306,7 +1455,8 @@ export class HostHandle {
           this.effectiveModel = ev.toModel;
           this.transientFallback = ev.temporaryFallback === true;
           this.ctl.steerable = modelSupportsSteer(ev.toModel);
-          if (shouldPersistModelSwitch(ev)) this.reportedSelectedModel = ev.toModel;
+          if (shouldPersistModelSwitch(ev))
+            this.reportedSelectedModel = ev.toModel;
         }
         if (ev.type === "done" || ev.type === "error") {
           this.sawTerminal = true;
@@ -1323,13 +1473,17 @@ export class HostHandle {
         // Transcript frames bypass the StreamEvent queue, so fence them here
         // against the same run generation as ordinary host events.
         if (!this.acceptsSideEffectFrame("transcript")) break;
-        this.enqueueProjectionFrame(() =>
-          applyForwardedTranscriptStrict(
-            this.spec.osSessionId,
-            msg.engineSessionId,
-            this.alignSteerTranscriptIds(msg.lines),
-          )
-        );
+        this.enqueueProjectionFrame(() => {
+          const lines = this.alignSteerTranscriptIds(msg.lines);
+          if (this.spec.transcriptTarget === "none") return;
+          return this.spec.transcriptTarget === "engine"
+            ? appendTranscriptEntries(msg.engineSessionId, lines)
+            : applyForwardedTranscriptStrict(
+                this.spec.osSessionId,
+                msg.engineSessionId,
+                lines,
+              );
+        });
         break;
       case "steer_failed":
         if (this.acceptsSideEffectFrame("steer_failed")) {
@@ -1363,6 +1517,9 @@ export class HostHandle {
         this.finish();
         break;
       }
+      case "catchup_complete":
+        if (this.pendingEndedHello) this.finish();
+        break;
     }
   }
 
@@ -1405,6 +1562,7 @@ export class HostHandle {
   abandon(): void {
     if (this.endedClean) return;
     this.endedClean = true;
+    this.clearEndedHelloFallback();
     this.queue.end();
     this.settleSteerRetractions();
     unregisterHostRun(this.ctl);
@@ -1416,6 +1574,7 @@ export class HostHandle {
   private finish(): void {
     if (this.endedClean) return;
     this.endedClean = true;
+    this.clearEndedHelloFallback();
     this.send({ t: "shutdown" });
     this.queue.end();
     this.settleSteerRetractions();
@@ -1453,11 +1612,13 @@ export class HostHandle {
     // to resume it — transparent to whoever is consuming events().
     const journal = readHostJournal(this.dir);
     const engineId =
-      journal?.claudeSessionId || this.engineSessionId || this.spec.engineSessionId;
+      journal?.claudeSessionId ||
+      this.engineSessionId ||
+      this.spec.engineSessionId;
     if (engineId && this.respawns < 2) {
       this.respawns++;
       console.warn(
-        `[host-client] run host ${this.spec.hostId} died mid-run — respawning to resume ${this.spec.osSessionId}`
+        `[host-client] run host ${this.spec.hostId} died mid-run — respawning to resume ${this.spec.osSessionId}`,
       );
       try {
         await this.respawn(engineId, meta);
@@ -1491,7 +1652,10 @@ export class HostHandle {
     this.finish();
   }
 
-  private async respawn(engineId: string, meta?: RunHostMeta | null): Promise<void> {
+  private async respawn(
+    engineId: string,
+    meta?: RunHostMeta | null,
+  ): Promise<void> {
     const oldDir = this.dir;
     const hostId = `rh-${Bun.randomUUIDv7()}`;
     const dir = this.launcher.newRunDir(hostId);
@@ -1558,7 +1722,9 @@ export async function* reconcileUncertainHostEvents(
   let reportedUncertain = false;
   while (!handle.ended) {
     try {
-      await handle.connectWithWait(Math.min(30_000, Math.max(1_000, deadline - Date.now())));
+      await handle.connectWithWait(
+        Math.min(30_000, Math.max(1_000, deadline - Date.now())),
+      );
       yield* handle.events();
       return;
     } catch (error) {
@@ -1587,9 +1753,10 @@ export async function* reconcileUncertainHostEvents(
         }
         yield {
           type: "error",
-          content: evidence.started || finalEvidence.started
-            ? `${label} may have executed before it was stopped. Recovery evidence was retained.`
-            : `${label} was not observed and its process was stopped.`,
+          content:
+            evidence.started || finalEvidence.started
+              ? `${label} may have executed before it was stopped. Recovery evidence was retained.`
+              : `${label} was not observed and its process was stopped.`,
         };
         return;
       }
@@ -1616,7 +1783,9 @@ function readJsonSafe<T>(path: string): T | null {
 }
 
 function readHostJournal(dir: string): ActiveRunRecord | null {
-  const j = readJsonSafe<Record<string, ActiveRunRecord>>(`${dir}/${HOST_JOURNAL_NAME}`);
+  const j = readJsonSafe<Record<string, ActiveRunRecord>>(
+    `${dir}/${HOST_JOURNAL_NAME}`,
+  );
   if (!j) return null;
   const records = Object.values(j);
   return records[0] || null;
@@ -1631,7 +1800,9 @@ export function resolveInactiveHostRecovery(
   | { kind: "uncertain" }
   | { kind: "replay" } {
   const engineSessionId =
-    meta?.engineSessionId || privateJournal?.claudeSessionId || sharedEngineSessionId;
+    meta?.engineSessionId ||
+    privateJournal?.claudeSessionId ||
+    sharedEngineSessionId;
   if (engineSessionId) return { kind: "resume", engineSessionId };
   if (meta || privateJournal) return { kind: "uncertain" };
   return { kind: "replay" };
@@ -1709,9 +1880,18 @@ export async function resumeLocalHostRun(
     return null;
   }
   if (spec.rpcToken) {
-    registerRunToken(spec.rpcToken, { sessionId: spec.osSessionId, user: spec.user });
+    registerRunToken(spec.rpcToken, {
+      sessionId: spec.osSessionId,
+      user: spec.user,
+    });
   }
-  const handle = new HostHandle(dir, spec, callbacks, systemdHostLauncher, run.runKey);
+  const handle = new HostHandle(
+    dir,
+    spec,
+    callbacks,
+    systemdHostLauncher,
+    run.runKey,
+  );
   handle.setHostChangeHandler(async (hostId) => {
     run.hostId = hostId;
     await hostedKernelCall(spec, "reattach_host_change_journal", () =>
@@ -1721,7 +1901,10 @@ export async function resumeLocalHostRun(
   try {
     await handle.connectWithWait(20_000);
   } catch (e) {
-    console.warn(`[host-client] local host reattach failed for ${run.hostId}:`, e);
+    console.warn(
+      `[host-client] local host reattach failed for ${run.hostId}:`,
+      e,
+    );
     handle.abandon();
     try {
       if (await hostUnitActive(run.hostId)) return "uncertain";
@@ -1761,7 +1944,8 @@ export async function resumeLocalHostRun(
         if (event.type === "model_switch" && event.toModel) {
           run.model = event.toModel;
           run.transientFallback = event.temporaryFallback === true;
-          if (shouldPersistModelSwitch(event)) run.selectedModel = event.toModel;
+          if (shouldPersistModelSwitch(event))
+            run.selectedModel = event.toModel;
           changed = true;
         }
         if (changed) await journalSet({ ...run, claimedAt: undefined });

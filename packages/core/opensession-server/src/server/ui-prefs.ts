@@ -19,64 +19,68 @@ import { userStore } from "./shared/user-store";
 // entry count — this is a preferences file, not a datastore.
 const KEY_RE = /^[a-z][a-zA-Z0-9-]{0,40}$/;
 const MAX_VALUE_LEN = 200;
-const LONG_VALUE_KEYS = new Set(["repo-order", "shortcuts"]);
+const LONG_VALUE_KEYS = new Set([
+  "repo-order",
+  "session-checkouts",
+  "shortcuts",
+]);
 const MAX_LONG_VALUE_LEN = 16_384;
 const MAX_ENTRIES = 100;
 
 export function maxValueLength(key: string): number {
-	return LONG_VALUE_KEYS.has(key) ? MAX_LONG_VALUE_LEN : MAX_VALUE_LEN;
+  return LONG_VALUE_KEYS.has(key) ? MAX_LONG_VALUE_LEN : MAX_VALUE_LEN;
 }
 
 export type UiPrefs = Record<string, string>;
 
 export function normalizedUiPrefValue(key: string, value: string): string {
-	// Automatic repository selection was retired. An old preference now means
-	// "use the workspace default", represented by the ordinary empty value.
-	return key === "default-repo" && value === "auto" ? "" : value;
+  // Automatic repository selection was retired. An old preference now means
+  // "use the workspace default", represented by the ordinary empty value.
+  return key === "default-repo" && value === "auto" ? "" : value;
 }
 
 /** Keep only valid key → short-string entries. */
 function clean(input: unknown): UiPrefs {
-	const out: UiPrefs = {};
-	if (input && typeof input === "object") {
-		for (const [key, value] of Object.entries(
-			input as Record<string, unknown>,
-		)) {
-			if (Object.keys(out).length >= MAX_ENTRIES) break;
-			if (
-				KEY_RE.test(key) &&
-				typeof value === "string" &&
-				value.length <= maxValueLength(key)
-			) {
-				out[key] = normalizedUiPrefValue(key, value);
-			}
-		}
-	}
-	return out;
+  const out: UiPrefs = {};
+  if (input && typeof input === "object") {
+    for (const [key, value] of Object.entries(
+      input as Record<string, unknown>,
+    )) {
+      if (Object.keys(out).length >= MAX_ENTRIES) break;
+      if (
+        KEY_RE.test(key) &&
+        typeof value === "string" &&
+        value.length <= maxValueLength(key)
+      ) {
+        out[key] = normalizedUiPrefValue(key, value);
+      }
+    }
+  }
+  return out;
 }
 
 const store = userStore<UiPrefs>({ name: "ui-prefs", field: "prefs", clean });
 
 export function getUiPrefs(user: string): UiPrefs {
-	return store.get(user);
+  return store.get(user);
 }
 
 export function expectedUiPrefsMatch(
-	current: UiPrefs,
-	expected: unknown,
+  current: UiPrefs,
+  expected: unknown,
 ): boolean {
-	if (!expected || typeof expected !== "object") return true;
-	for (const [key, value] of Object.entries(
-		expected as Record<string, unknown>,
-	)) {
-		if (!KEY_RE.test(key)) return false;
-		if (value === null) {
-			if (key in current) return false;
-		} else if (typeof value !== "string" || current[key] !== value) {
-			return false;
-		}
-	}
-	return true;
+  if (!expected || typeof expected !== "object") return true;
+  for (const [key, value] of Object.entries(
+    expected as Record<string, unknown>,
+  )) {
+    if (!KEY_RE.test(key)) return false;
+    if (value === null) {
+      if (key in current) return false;
+    } else if (typeof value !== "string" || current[key] !== value) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -84,21 +88,21 @@ export function expectedUiPrefsMatch(
  * stored map after the merge.
  */
 export function patchUiPrefs(
-	user: string,
-	patch: unknown,
-	expected?: unknown,
+  user: string,
+  patch: unknown,
+  expected?: unknown,
 ): UiPrefs {
-	const current = getUiPrefs(user);
-	if (!expectedUiPrefsMatch(current, expected)) return current;
-	if (patch && typeof patch === "object") {
-		for (const [key, value] of Object.entries(
-			patch as Record<string, unknown>,
-		)) {
-			if (!KEY_RE.test(key)) continue;
-			if (value === null) delete current[key];
-			else if (typeof value === "string" && value.length <= maxValueLength(key))
-				current[key] = normalizedUiPrefValue(key, value);
-		}
-	}
-	return store.set(user, current);
+  const current = getUiPrefs(user);
+  if (!expectedUiPrefsMatch(current, expected)) return current;
+  if (patch && typeof patch === "object") {
+    for (const [key, value] of Object.entries(
+      patch as Record<string, unknown>,
+    )) {
+      if (!KEY_RE.test(key)) continue;
+      if (value === null) delete current[key];
+      else if (typeof value === "string" && value.length <= maxValueLength(key))
+        current[key] = normalizedUiPrefValue(key, value);
+    }
+  }
+  return store.set(user, current);
 }

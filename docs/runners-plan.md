@@ -12,11 +12,11 @@ remote terminal.
 
 The target design adds a third execution shape:
 
-| Execution target | Best for | Lifecycle |
-| --- | --- | --- |
-| **This machine** | Fast, trusted local worktree work | The current Open Session host/worktree. |
-| **Sandbox** | Isolated, reproducible, resumable remote work | Per-session, provider-backed compute. |
-| **Runner** | Persistent hardware, platform/toolchain/GPU-specific work | A workspace-owned machine attached on purpose. |
+| Execution target | Best for                                                  | Lifecycle                                      |
+| ---------------- | --------------------------------------------------------- | ---------------------------------------------- |
+| **This machine** | Fast, trusted local worktree work                         | The current Open Session host/worktree.        |
+| **Sandbox**      | Isolated, reproducible, resumable remote work             | Per-session, provider-backed compute.          |
+| **Runner**       | Persistent hardware, platform/toolchain/GPU-specific work | A workspace-owned machine attached on purpose. |
 
 **Current product status:** Runners support scoped, audited command delegation
 from interactive sessions. They cannot yet be selected as a session execution
@@ -24,7 +24,7 @@ target. Full Runner sessions, Runner terminals, and Runner Portals are not
 shipped.
 
 The product should not automatically treat a Runner as a safer Sandbox. A
-Runner is normally *more trusted* and less isolated: it runs as its owner's
+Runner is normally _more trusted_ and less isolated: it runs as its owner's
 local user and may hold local credentials, caches, and hardware access.
 
 ## Existing foundation
@@ -118,7 +118,10 @@ Capabilities should be structured as well as searchable. For example:
 {
   "platform": "darwin",
   "toolchains": ["xcode", "swift", "bun"],
-  "hardware": { "gpu": { "kind": "nvidia", "model": "RTX 4090", "vramGb": 24 }, "memoryGb": 64 },
+  "hardware": {
+    "gpu": { "kind": "nvidia", "model": "RTX 4090", "vramGb": 24 },
+    "memoryGb": 64
+  },
   "tags": ["ios", "office", "interactive"]
 }
 ```
@@ -157,11 +160,11 @@ security and service-management documentation.
 
 The connection choice is presented before any command:
 
-| Choice | Use when | What happens |
-| --- | --- | --- |
-| **Connect on this machine** | Someone can use the target Mac/Linux/Windows machine directly. | Copy one pairing command; the installer detects capabilities and installs the reconnecting service. |
-| **Migrate an SSH-reachable machine** | The workspace already administers a machine such as the Mac mini through SSH. | Select the preconfigured host, verify its fingerprint, bootstrap the service, then pair it as a Runner. |
-| **Connect a Kubernetes GPU Runner** | A persistent GPU devbox is currently managed with `kubectl`. | Select the preconfigured cluster context and dedicated namespace; Open Session deploys or upgrades the Runner workload, which then pairs outbound. |
+| Choice                               | Use when                                                                      | What happens                                                                                                                                       |
+| ------------------------------------ | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Connect on this machine**          | Someone can use the target Mac/Linux/Windows machine directly.                | Copy one pairing command; the installer detects capabilities and installs the reconnecting service.                                                |
+| **Migrate an SSH-reachable machine** | The workspace already administers a machine such as the Mac mini through SSH. | Select the preconfigured host, verify its fingerprint, bootstrap the service, then pair it as a Runner.                                            |
+| **Connect a Kubernetes GPU Runner**  | A persistent GPU devbox is currently managed with `kubectl`.                  | Select the preconfigured cluster context and dedicated namespace; Open Session deploys or upgrades the Runner workload, which then pairs outbound. |
 
 Each path ends with a clear success state: Runner name, detected hardware,
 permissions, and “online” status. Failure states show the exact failed phase

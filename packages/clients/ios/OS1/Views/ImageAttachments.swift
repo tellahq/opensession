@@ -6,6 +6,73 @@ import UniformTypeIdentifiers
 import UIKit
 #endif
 
+struct ImageAttachmentRegion: Equatable {
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double
+
+    var clamped: ImageAttachmentRegion {
+        let left = min(1, max(0, x))
+        let top = min(1, max(0, y))
+        let right = min(1, max(left, x + width))
+        let bottom = min(1, max(top, y + height))
+        return ImageAttachmentRegion(
+            x: left, y: top, width: right - left, height: bottom - top
+        )
+    }
+}
+
+enum ImageAttachmentComments {
+    private static let pattern =
+        #"\[Image (\d+) · (\d+)–(\d+)% × (\d+)–(\d+)%\][ \t]?"#
+
+    static func reference(imageIndex: Int, region: ImageAttachmentRegion) -> String {
+        let region = region.clamped
+        func percent(_ value: Double) -> Int {
+            min(100, max(0, Int((value * 100).rounded())))
+        }
+        return "[Image \(imageIndex + 1) · \(percent(region.x))–\(percent(region.x + region.width))% × \(percent(region.y))–\(percent(region.y + region.height))%]"
+    }
+
+    static func appending(
+        to draft: String,
+        imageIndex: Int,
+        region: ImageAttachmentRegion,
+        comment: String
+    ) -> String {
+        let comment = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !comment.isEmpty else { return draft }
+        let line = "\(reference(imageIndex: imageIndex, region: region)) \(comment)"
+        let base = draft.replacingOccurrences(of: #"\s+$"#, with: "", options: .regularExpression)
+        return base.isEmpty ? line : "\(base)\n\(line)"
+    }
+
+    static func rebasing(_ draft: String, removingImageAt removedIndex: Int) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return draft }
+        let removedNumber = removedIndex + 1
+        let source = draft as NSString
+        var result = draft
+        for match in regex.matches(
+            in: draft, range: NSRange(location: 0, length: source.length)
+        ).reversed() {
+            guard match.numberOfRanges > 1 else { continue }
+            let number = Int(source.substring(with: match.range(at: 1))) ?? 0
+            let replacement: String
+            if number == removedNumber {
+                replacement = ""
+            } else if number > removedNumber {
+                replacement = source.substring(with: match.range)
+                    .replacingOccurrences(of: "Image \(number)", with: "Image \(number - 1)")
+            } else {
+                continue
+            }
+            result = (result as NSString).replacingCharacters(in: match.range, with: replacement)
+        }
+        return result
+    }
+}
+
 /// Paperclip button that appends picked images to a binding. iOS picks from
 /// the photo library (PhotosPicker); macOS opens the file panel — the natural
 /// source on each platform.
@@ -161,6 +228,7 @@ struct PreviewImage: Identifiable, Equatable {
 struct AttachedImagesRow: View {
     let images: [AttachedImage]
     let onRemove: (AttachedImage) -> Void
+    var onComment: ((_ imageIndex: Int, _ region: ImageAttachmentRegion, _ text: String) -> Void)? = nil
 
     @State private var previewing: AttachedImage?
 
@@ -193,20 +261,30 @@ struct AttachedImagesRow: View {
             .padding(.vertical, 2)
         }
         .scrollIndicators(.hidden)
+        #if DEBUG && os(iOS)
+        .task {
+            if ProcessInfo.processInfo.environment["OS1_SHOW_ATTACHMENT_ANNOTATION"] == "1",
+               previewing == nil {
+                previewing = images.first
+            }
+        }
+        #endif
         // `item:` rather than a bool, on both: the presentation renders the
         // image it was opened with even if the strip changes underneath it.
         #if os(iOS)
         .fullScreenCover(item: $previewing) { image in
             FullScreenImagePreview(
                 items: gallery,
-                index: images.firstIndex(of: image) ?? 0
+                index: images.firstIndex(of: image) ?? 0,
+                onAttachmentComment: onComment
             )
         }
         #else
         .sheet(item: $previewing) { image in
             MacImagePreview(
                 images: images.map(\.jpegData),
-                index: images.firstIndex(of: image) ?? 0
+                index: images.firstIndex(of: image) ?? 0,
+                onAttachmentComment: onComment
             )
         }
         #endif
@@ -498,6 +576,197 @@ struct ConversationImageStrip: View {
     }
 }
 
+/// Selects an image-space rectangle and keeps accepting comments until Done.
+/// The fitted image bounds, rather than the surrounding preview well, define
+/// percentages so letterboxing never becomes part of a model reference.
+private struct AttachmentAnnotationEditor: View {
+    let data: Data
+    let imageIndex: Int
+    let onComment: (ImageAttachmentRegion, String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selection = CGRect(x: 0.2, y: 0.2, width: 0.45, height: 0.35)
+    @State private var dragStart: CGPoint?
+    @State private var comment = ""
+    @State private var lastAdded: String?
+    @State private var installedScreenshotFixture = false
+    @FocusState private var commentFocused: Bool
+
+    private var imageSize: CGSize {
+        #if os(iOS)
+        UIImage(data: data)?.size ?? CGSize(width: 1, height: 1)
+        #else
+        NSImage(data: data)?.size ?? CGSize(width: 1, height: 1)
+        #endif
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("Comment on image \(imageIndex + 1)")
+                    .font(.headline)
+                Spacer()
+                Button("Done") { dismiss() }
+            }
+            .padding(.horizontal)
+
+            GeometryReader { geometry in
+                let fitted = aspectFit(imageSize, in: geometry.size)
+                ZStack(alignment: .topLeading) {
+                    Color.clear
+                    DataImage(data: data)
+                        .scaledToFit()
+                        .frame(width: fitted.width, height: fitted.height)
+                        .position(x: fitted.midX, y: fitted.midY)
+
+                    Rectangle()
+                        .fill(Color.black.opacity(0.22))
+                        .overlay { Rectangle().stroke(.white, lineWidth: 2) }
+                        .frame(
+                            width: selection.width * fitted.width,
+                            height: selection.height * fitted.height
+                        )
+                        .offset(
+                            x: fitted.minX + selection.minX * fitted.width,
+                            y: fitted.minY + selection.minY * fitted.height
+                        )
+                        .accessibilityElement()
+                        .accessibilityLabel("Selected image region")
+                        .accessibilityValue(accessibilitySelection)
+                        .accessibilityAdjustableAction { direction in
+                            resizeSelection(direction == .increment ? 0.05 : -0.05)
+                        }
+                }
+                .contentShape(Rectangle())
+                .gesture(selectionGesture(in: fitted))
+                .accessibilityHint("Drag to select a region. Swipe up or down to resize it.")
+            }
+
+            if let lastAdded {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Added to draft")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(lastAdded)
+                        .font(.callout.monospaced())
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+                .accessibilityElement(children: .combine)
+            }
+
+            HStack(spacing: 8) {
+                TextField("Add a comment", text: $comment)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($commentFocused)
+                    .onSubmit { addComment() }
+                    .accessibilityLabel("Image region comment")
+                Button("Add") { addComment() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(.horizontal)
+        }
+        .padding(.vertical)
+        #if os(iOS)
+        .presentationDetents([.large])
+        #if DEBUG
+        .onAppear {
+            guard ProcessInfo.processInfo.environment["OS1_SHOW_ATTACHMENT_ANNOTATION"] == "1",
+                  !installedScreenshotFixture
+            else { return }
+            installedScreenshotFixture = true
+            let text = "Increase contrast on this button"
+            onComment(currentRegion, text)
+            lastAdded = "\(ImageAttachmentComments.reference(imageIndex: imageIndex, region: currentRegion)) \(text)"
+        }
+        #endif
+        #else
+        .frame(minWidth: 560, idealWidth: 760, minHeight: 500, idealHeight: 680)
+        #endif
+    }
+
+    private var accessibilitySelection: String {
+        ImageAttachmentComments.reference(
+            imageIndex: imageIndex,
+            region: ImageAttachmentRegion(
+                x: selection.minX, y: selection.minY,
+                width: selection.width, height: selection.height
+            )
+        )
+    }
+
+    private func aspectFit(_ image: CGSize, in box: CGSize) -> CGRect {
+        guard image.width > 0, image.height > 0, box.width > 0, box.height > 0
+        else { return .zero }
+        let scale = min(box.width / image.width, box.height / image.height)
+        let size = CGSize(width: image.width * scale, height: image.height * scale)
+        return CGRect(
+            x: (box.width - size.width) / 2,
+            y: (box.height - size.height) / 2,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    private func selectionGesture(in fitted: CGRect) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let point = CGPoint(
+                    x: min(fitted.maxX, max(fitted.minX, value.location.x)),
+                    y: min(fitted.maxY, max(fitted.minY, value.location.y))
+                )
+                let normalized = CGPoint(
+                    x: (point.x - fitted.minX) / max(fitted.width, 1),
+                    y: (point.y - fitted.minY) / max(fitted.height, 1)
+                )
+                if dragStart == nil { dragStart = normalized }
+                guard let start = dragStart else { return }
+                selection = CGRect(
+                    x: min(start.x, normalized.x),
+                    y: min(start.y, normalized.y),
+                    width: abs(normalized.x - start.x),
+                    height: abs(normalized.y - start.y)
+                )
+            }
+            .onEnded { _ in
+                dragStart = nil
+                if selection.width < 0.02 || selection.height < 0.02 {
+                    selection = CGRect(x: 0.2, y: 0.2, width: 0.45, height: 0.35)
+                }
+                commentFocused = true
+            }
+    }
+
+    private var currentRegion: ImageAttachmentRegion {
+        ImageAttachmentRegion(
+            x: selection.minX, y: selection.minY,
+            width: selection.width, height: selection.height
+        )
+    }
+
+    private func resizeSelection(_ delta: CGFloat) {
+        let width = min(1, max(0.1, selection.width + delta))
+        let height = min(1, max(0.1, selection.height + delta))
+        selection = CGRect(
+            x: min(1 - width, max(0, selection.midX - width / 2)),
+            y: min(1 - height, max(0, selection.midY - height / 2)),
+            width: width,
+            height: height
+        )
+    }
+
+    private func addComment() {
+        let text = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        onComment(currentRegion, text)
+        lastAdded = "\(ImageAttachmentComments.reference(imageIndex: imageIndex, region: currentRegion)) \(text)"
+        comment = ""
+        commentFocused = true
+    }
+}
+
 #if os(macOS)
 /// A staged picture, large enough to check before it goes out.
 ///
@@ -517,13 +786,20 @@ struct ConversationImageStrip: View {
 /// without saying so. A composer's attachments are always bytes in hand.
 struct MacImagePreview: View {
     let images: [Data]
+    var onAttachmentComment: ((_ imageIndex: Int, _ region: ImageAttachmentRegion, _ text: String) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var index: Int
+    @State private var annotating = false
     private let idealHeight: CGFloat
 
-    init(images: [Data], index: Int) {
+    init(
+        images: [Data],
+        index: Int,
+        onAttachmentComment: ((_ imageIndex: Int, _ region: ImageAttachmentRegion, _ text: String) -> Void)? = nil
+    ) {
         self.images = images
+        self.onAttachmentComment = onAttachmentComment
         _index = State(initialValue: min(max(index, 0), max(images.count - 1, 0)))
         idealHeight = Self.idealHeight(for: images.first)
     }
@@ -535,6 +811,13 @@ struct MacImagePreview: View {
             controls
         }
         .frame(minWidth: 480, idealWidth: Self.idealWidth, minHeight: 380, idealHeight: idealHeight)
+        .sheet(isPresented: $annotating) {
+            if images.indices.contains(index), let onAttachmentComment {
+                AttachmentAnnotationEditor(data: images[index], imageIndex: index) { region, text in
+                    onAttachmentComment(index, region, text)
+                }
+            }
+        }
     }
 
     private static let idealWidth: CGFloat = 760
@@ -588,6 +871,12 @@ struct MacImagePreview: View {
                     .accessibilityLabel("Next image")
             }
             Spacer()
+            if onAttachmentComment != nil {
+                Button("Comment", systemImage: "rectangle.and.pencil.and.ellipsis") {
+                    annotating = true
+                }
+                .accessibilityHint("Select a region and add it to the draft")
+            }
             Button("Done") { dismiss() }
                 .keyboardShortcut(.cancelAction)
         }
@@ -611,6 +900,7 @@ struct MacImagePreview: View {
 /// keeps them to pan the photo.
 struct FullScreenImagePreview: View {
     let items: [PreviewImage]
+    var onAttachmentComment: ((_ imageIndex: Int, _ region: ImageAttachmentRegion, _ text: String) -> Void)?
     /// Where the picture came from, shown in the top bar the way Photos shows
     /// the day it was taken: opening an image from a workspace should not lose
     /// which workspace you were in. Absent for viewers whose context is
@@ -628,6 +918,7 @@ struct FullScreenImagePreview: View {
     /// on the picture in front of you without fetching it again.
     @State private var loaded: [String: UIImage] = [:]
     @State private var copied = false
+    @State private var annotating = false
 
     /// The close-button row, below the top safe area.
     private static let topBarHeight: CGFloat = 68
@@ -637,11 +928,13 @@ struct FullScreenImagePreview: View {
         items: [PreviewImage],
         index: Int,
         title: String? = nil,
-        topLeading: AnyView? = nil
+        topLeading: AnyView? = nil,
+        onAttachmentComment: ((_ imageIndex: Int, _ region: ImageAttachmentRegion, _ text: String) -> Void)? = nil
     ) {
         self.items = items
         self.title = title?.isEmpty == true ? nil : title
         self.topLeading = topLeading
+        self.onAttachmentComment = onAttachmentComment
         _index = State(initialValue: min(max(index, 0), max(items.count - 1, 0)))
     }
 
@@ -683,6 +976,23 @@ struct FullScreenImagePreview: View {
         .preferredColorScheme(.dark)
         .statusBarHidden(!chromeVisible)
         .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
+        .sheet(isPresented: $annotating) {
+            if items.indices.contains(index), let image = currentImage,
+               let data = image.jpegData(compressionQuality: 0.95),
+               let onAttachmentComment {
+                AttachmentAnnotationEditor(data: data, imageIndex: index) { region, text in
+                    onAttachmentComment(index, region, text)
+                }
+            }
+        }
+        #if DEBUG
+        .onChange(of: currentImage != nil) { _, loaded in
+            if loaded,
+               ProcessInfo.processInfo.environment["OS1_SHOW_ATTACHMENT_ANNOTATION"] == "1" {
+                annotating = true
+            }
+        }
+        #endif
     }
 
     /// A full-screen cover deliberately ignores SwiftUI's safe area, which
@@ -877,9 +1187,22 @@ struct FullScreenImagePreview: View {
                 .frame(maxWidth: .infinity)
             copyButton
                 .frame(maxWidth: .infinity)
+            if onAttachmentComment != nil {
+                Button {
+                    annotating = true
+                } label: {
+                    actionIcon("rectangle.and.pencil.and.ellipsis")
+                }
+                .buttonStyle(.plain)
+                .disabled(currentImage == nil)
+                .opacity(currentImage == nil ? 0.35 : 1)
+                .accessibilityLabel("Comment on image region")
+                .accessibilityHint("Selects a region and adds the comment to the draft")
+                .frame(maxWidth: .infinity)
+            }
         }
         .padding(4)
-        .frame(width: 152)
+        .frame(width: onAttachmentComment == nil ? 152 : 228)
         .background(.black.opacity(0.55), in: Capsule())
         .overlay {
             Capsule().stroke(.white.opacity(0.1), lineWidth: 0.5)

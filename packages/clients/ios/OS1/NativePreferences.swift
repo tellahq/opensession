@@ -15,6 +15,7 @@ enum NativePreferences {
     private static var pendingLocalWrites = 0
     private static let identityKey = "os1.preferences.identity"
     private static let bucketKey = "os1.preferences.bucket"
+    static let sessionCheckoutsStorageKey = "os1.composer.sessionCheckouts"
 
     static func context() -> Context {
         let config = ServerConfig.shared
@@ -91,6 +92,20 @@ enum NativePreferences {
         let previousBucket = defaults.string(forKey: bucketKey)
         let changedIdentity = previousIdentity != identity || previousBucket != bucket
 
+        set(
+            normalizedDefaultRepository(prefs["default-repo"]),
+            default: "",
+            key: "os1.composer.defaultRepo",
+            resetMissing: true,
+            in: defaults
+        )
+        set(
+            validatedSessionCheckouts(prefs["session-checkouts"]),
+            default: "",
+            key: sessionCheckoutsStorageKey,
+            resetMissing: true,
+            in: defaults
+        )
         set(
             prefs["default-model"],
             default: "",
@@ -222,6 +237,69 @@ enum NativePreferences {
 
     private static func bucket(for context: Context) -> String {
         "\(context.server)|\(context.user.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+    }
+
+    /// Older web clients briefly stored `auto` as a picker sentinel. It was
+    /// never a repository id, so it reads exactly like an explicit reset.
+    /// Missing remains nil so `set` can apply the account-level empty default.
+    static func normalizedDefaultRepository(_ value: String?) -> String? {
+        guard let value else { return nil }
+        return value == "auto" ? "" : value
+    }
+
+    /// The web stores one JSON object whose keys are repository ids. Invalid
+    /// entries are dropped independently so one newer or damaged value cannot
+    /// hide the valid choices for other repositories.
+    static func validatedSessionCheckouts(_ value: String?) -> String? {
+        guard let value else { return nil }
+        guard !value.isEmpty else { return "" }
+        guard let data = value.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let entries = object as? [String: Any]
+        else { return nil }
+        let valid = entries.compactMapValues { entry -> String? in
+            guard let entry = entry as? String,
+                  entry == "checkout" || entry == "worktree"
+            else { return nil }
+            return entry
+        }.filter { !$0.key.isEmpty }
+        return encodeSessionCheckouts(valid)
+    }
+
+    static func sessionCheckoutMode(for repository: String, in value: String?) -> String {
+        sessionCheckoutPreferences(value)[repository] ?? "default"
+    }
+
+    static func settingSessionCheckout(
+        _ mode: String,
+        for repository: String,
+        in value: String?
+    ) -> String {
+        var preferences = sessionCheckoutPreferences(value)
+        if mode == "checkout" || mode == "worktree" {
+            preferences[repository] = mode
+        } else {
+            preferences.removeValue(forKey: repository)
+        }
+        return encodeSessionCheckouts(preferences)
+    }
+
+    private static func sessionCheckoutPreferences(_ value: String?) -> [String: String] {
+        guard let normalized = validatedSessionCheckouts(value), !normalized.isEmpty,
+              let decoded = try? JSONDecoder().decode(
+                  [String: String].self,
+                  from: Data(normalized.utf8)
+              )
+        else { return [:] }
+        return decoded
+    }
+
+    private static func encodeSessionCheckouts(_ preferences: [String: String]) -> String {
+        guard !preferences.isEmpty else { return "" }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(preferences) else { return "" }
+        return String(decoding: data, as: UTF8.self)
     }
 
     private static func validated(_ value: String?, allowed: Set<String>) -> String? {

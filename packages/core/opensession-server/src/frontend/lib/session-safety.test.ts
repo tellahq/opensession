@@ -9,9 +9,9 @@ describe("paused session continuation", () => {
     ]);
 
     expect(prompt).toContain("avoid repeating uncertain side effects");
-    expect(prompt.indexOf("Ada: Please include the mobile layout")).toBeLessThan(
-      prompt.indexOf("User: (attachment only)"),
-    );
+    expect(
+      prompt.indexOf("Ada: Please include the mobile layout"),
+    ).toBeLessThan(prompt.indexOf("User: (attachment only)"));
     expect(prompt).toContain("1 attachment");
   });
 

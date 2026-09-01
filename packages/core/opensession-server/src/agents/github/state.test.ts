@@ -1,5 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
+import {
+  nextReviewDebounce,
+  reviewBurstStart,
+  reviewDebounceDelay,
+  reviewRetryDelay,
+} from "./review-debounce";
 import { homedir, tmpdir } from "os";
 import { join } from "path";
 
@@ -30,7 +36,7 @@ afterAll(() => {
   // every root it could have resolved to, so no run leaves state behind.
   for (const root of [SCRATCH, savedRoot, process.env.HOME, homedir()]) {
     if (!root) continue;
-    for (const pr of [PR, PR + 1, PR + 2])
+    for (const pr of [PR, PR + 1, PR + 2, PR + 3])
       rmSync(`${root}/.opensession-github/${pr}.json`, { force: true });
   }
 });
@@ -51,7 +57,9 @@ describe("concurrent writers on one PR's state", () => {
   test("a review-lane commit keeps a mention marker that landed mid-flight", () => {
     // The review's early read, taken before its (slow) model run.
     const snapshot = getOrInitPrState(PR, HEAD);
-    updatePrState(PR, HEAD, (s) => { s.summaryCommentId = 11; });
+    updatePrState(PR, HEAD, (s) => {
+      s.summaryCommentId = 11;
+    });
 
     // A mention webhook arrives while the review is still awaiting.
     setPendingMention(PR, pendingMention(7));
@@ -80,7 +88,11 @@ describe("concurrent writers on one PR's state", () => {
   test("a code-lane commit keeps the review verdict written during its run", () => {
     const pr = PR + 1;
     updatePrState(pr, HEAD, (s) => {
-      s.autoFix = { active: true, iterations: 1, startedAt: new Date().toISOString() };
+      s.autoFix = {
+        active: true,
+        iterations: 1,
+        startedAt: new Date().toISOString(),
+      };
     });
 
     // The review lane records its verdict while the auto-fix loop is running.
@@ -93,11 +105,19 @@ describe("concurrent writers on one PR's state", () => {
 
     // The loop's own locals win for its own fields, and nothing else is touched.
     updatePrState(pr, HEAD, (s) => {
-      if (s.autoFix) { s.autoFix.active = false; s.autoFix.iterations = 3; s.autoFix.lastPushedSha = "ddddddd"; }
+      if (s.autoFix) {
+        s.autoFix.active = false;
+        s.autoFix.iterations = 3;
+        s.autoFix.lastPushedSha = "ddddddd";
+      }
     });
 
     const after = readPrState(pr)!;
-    expect(after.autoFix).toMatchObject({ active: false, iterations: 3, lastPushedSha: "ddddddd" });
+    expect(after.autoFix).toMatchObject({
+      active: false,
+      iterations: 3,
+      lastPushedSha: "ddddddd",
+    });
     expect(after.lastReview?.sha).toBe("ccccccc");
     expect(after.lastReviewedSha).toBe("ccccccc");
   });
@@ -116,5 +136,56 @@ describe("concurrent writers on one PR's state", () => {
     expect(activeRunCancellationRequested(pr, "review")).toBe(true);
     expect(requestActiveRunCancellation(pr, HEAD, "simplify")).toBe(false);
     expect(readPrState(pr)?.activeRun?.cancelRequestedAt).toBeTruthy();
+  });
+
+  test("a review commit preserves a newer debounced head", () => {
+    const pr = PR + 3;
+    updatePrState(pr, HEAD, (s) => {
+      s.pendingReview = {
+        headRef: HEAD,
+        headSha: "new-head",
+        title: "A newer push",
+        firstPushAt: new Date(1_000).toISOString(),
+        dueAt: new Date(5_000).toISOString(),
+      };
+    });
+
+    recordReviewed(pr, HEAD, "old-head", {
+      findings: 0,
+      blocking: 0,
+      sha: "old-head",
+      at: new Date().toISOString(),
+    });
+
+    expect(readPrState(pr)?.pendingReview?.headSha).toBe("new-head");
+  });
+});
+
+describe("review debounce timing", () => {
+  test("keeps the quiet period but caps a continuous push burst", () => {
+    const first = nextReviewDebounce(undefined, 1_000, 4_000, 10_000);
+    expect(first).toEqual({ firstPushAt: 1_000, dueAt: 5_000 });
+
+    const second = nextReviewDebounce(first.firstPushAt, 3_000, 4_000, 10_000);
+    expect(second).toEqual({ firstPushAt: 1_000, dueAt: 7_000 });
+
+    const capped = nextReviewDebounce(first.firstPushAt, 9_500, 4_000, 10_000);
+    expect(capped).toEqual({ firstPushAt: 1_000, dueAt: 11_000 });
+    expect(reviewDebounceDelay(capped.dueAt, 12_000)).toBe(0);
+  });
+
+  test("starts a fresh burst after work was attempted", () => {
+    expect(reviewBurstStart({ firstPushAt: 1_000, attempts: 0 }, 8_000)).toBe(
+      1_000,
+    );
+    expect(reviewBurstStart({ firstPushAt: 1_000, attempts: 1 }, 8_000)).toBe(
+      8_000,
+    );
+  });
+
+  test("backs retries off exponentially with a cap", () => {
+    expect(reviewRetryDelay(1, 15_000, 300_000)).toBe(15_000);
+    expect(reviewRetryDelay(4, 15_000, 300_000)).toBe(120_000);
+    expect(reviewRetryDelay(10, 15_000, 300_000)).toBe(300_000);
   });
 });

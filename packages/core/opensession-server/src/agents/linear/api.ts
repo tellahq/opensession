@@ -6,7 +6,11 @@ import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 
 const LINEAR_GQL = "https://api.linear.app/graphql";
 
-async function gql(accessToken: string, query: string, variables: Record<string, unknown> = {}): Promise<any> {
+async function gql(
+  accessToken: string,
+  query: string,
+  variables: Record<string, unknown> = {},
+): Promise<any> {
   const response = await fetchWithTimeout(LINEAR_GQL, {
     method: "POST",
     headers: {
@@ -19,13 +23,20 @@ async function gql(accessToken: string, query: string, variables: Record<string,
 }
 
 /** Fetch a Linear user's details */
-export async function fetchLinearUser(accessToken: string, userId: string): Promise<Participant | null> {
+export async function fetchLinearUser(
+  accessToken: string,
+  userId: string,
+): Promise<Participant | null> {
   try {
-    const data = await gql(accessToken, `
+    const data = await gql(
+      accessToken,
+      `
       query GetUser($userId: String!) {
         user(id: $userId) { id name email }
       }
-    `, { userId });
+    `,
+      { userId },
+    );
 
     const user = data?.data?.user;
     if (user) {
@@ -52,22 +63,26 @@ export async function createAgentActivity(
   accessToken: string,
   sessionId: string,
   content: AgentActivityContent,
-  ephemeral?: boolean
+  ephemeral?: boolean,
 ): Promise<void> {
-  const result = await gql(accessToken, `
+  const result = await gql(
+    accessToken,
+    `
     mutation CreateAgentActivity($input: AgentActivityCreateInput!) {
       agentActivityCreate(input: $input) {
         success
         agentActivity { id }
       }
     }
-  `, {
-    input: {
-      agentSessionId: sessionId,
-      content,
-      ...(ephemeral ? { ephemeral: true } : {}),
+  `,
+    {
+      input: {
+        agentSessionId: sessionId,
+        content,
+        ...(ephemeral ? { ephemeral: true } : {}),
+      },
     },
-  });
+  );
 
   if (!result.data?.agentActivityCreate?.success) {
     console.error("[linear] Failed to create agent activity:", result);
@@ -89,31 +104,45 @@ export async function updateAgentSession(
   input: {
     addedExternalUrls?: Array<{ url: string; label: string }>;
     plan?: PlanStep[];
-  }
+  },
 ): Promise<boolean> {
-  const result = await gql(accessToken, `
+  const result = await gql(
+    accessToken,
+    `
     mutation UpdateAgentSession($id: String!, $input: AgentSessionUpdateInput!) {
       agentSessionUpdate(id: $id, input: $input) { success }
     }
-  `, { id: sessionId, input });
+  `,
+    { id: sessionId, input },
+  );
 
   if (!result.data?.agentSessionUpdate?.success) {
-    console.error("[linear] Failed to update agent session:", JSON.stringify(result));
+    console.error(
+      "[linear] Failed to update agent session:",
+      JSON.stringify(result),
+    );
     return false;
   }
   return true;
 }
 
 /** Fetch issue status and team */
-export async function getIssueStatus(accessToken: string, issueId: string): Promise<{ status: string; teamId: string }> {
-  const result = await gql(accessToken, `
+export async function getIssueStatus(
+  accessToken: string,
+  issueId: string,
+): Promise<{ status: string; teamId: string }> {
+  const result = await gql(
+    accessToken,
+    `
     query GetIssue($id: String!) {
       issue(id: $id) {
         state { name }
         team { id }
       }
     }
-  `, { id: issueId });
+  `,
+    { id: issueId },
+  );
 
   const status = result.data?.issue?.state?.name || "Unknown";
   const teamId = result.data?.issue?.team?.id || "";
@@ -122,15 +151,23 @@ export async function getIssueStatus(accessToken: string, issueId: string): Prom
 }
 
 /** Post a comment to a Linear issue */
-export async function postComment(accessToken: string, issueId: string, body: string): Promise<boolean> {
-  const result = await gql(accessToken, `
+export async function postComment(
+  accessToken: string,
+  issueId: string,
+  body: string,
+): Promise<boolean> {
+  const result = await gql(
+    accessToken,
+    `
     mutation CreateComment($input: CommentCreateInput!) {
       commentCreate(input: $input) {
         success
         comment { id }
       }
     }
-  `, { input: { issueId, body } });
+  `,
+    { input: { issueId, body } },
+  );
 
   if (!result.data?.commentCreate?.success) {
     console.error("[linear] Failed to create comment:", result);
@@ -141,25 +178,37 @@ export async function postComment(accessToken: string, issueId: string, body: st
 }
 
 /** Check if issue has a plan in comments */
-export async function issueHasPlan(accessToken: string, issueId: string): Promise<boolean> {
-  const result = await gql(accessToken, `
+export async function issueHasPlan(
+  accessToken: string,
+  issueId: string,
+): Promise<boolean> {
+  const result = await gql(
+    accessToken,
+    `
     query GetIssueComments($id: String!) {
       issue(id: $id) {
         comments { nodes { body } }
       }
     }
-  `, { id: issueId });
+  `,
+    { id: issueId },
+  );
 
   const comments = result.data?.issue?.comments?.nodes || [];
-  const hasPlan = comments.some((c: { body: string }) =>
-    c.body.includes("# Implementation Plan") || c.body.includes("## Implementation Plan")
+  const hasPlan = comments.some(
+    (c: { body: string }) =>
+      c.body.includes("# Implementation Plan") ||
+      c.body.includes("## Implementation Plan"),
   );
   console.log(`[linear] Issue ${issueId} has plan: ${hasPlan}`);
   return hasPlan;
 }
 
 /** Get full issue details */
-export async function getIssueDetails(accessToken: string, issueId: string): Promise<{
+export async function getIssueDetails(
+  accessToken: string,
+  issueId: string,
+): Promise<{
   status: string;
   teamId: string;
   title: string;
@@ -168,7 +217,9 @@ export async function getIssueDetails(accessToken: string, issueId: string): Pro
   identifier: string;
   creator: Participant | null;
 }> {
-  const result = await gql(accessToken, `
+  const result = await gql(
+    accessToken,
+    `
     query GetIssueDetails($id: String!) {
       issue(id: $id) {
         identifier
@@ -180,7 +231,9 @@ export async function getIssueDetails(accessToken: string, issueId: string): Pro
         creator { id name email }
       }
     }
-  `, { id: issueId });
+  `,
+    { id: issueId },
+  );
 
   const issue = result.data?.issue;
   const creator = issue?.creator;
@@ -191,33 +244,52 @@ export async function getIssueDetails(accessToken: string, issueId: string): Pro
     description: issue?.description || "",
     url: issue?.url || "",
     identifier: issue?.identifier || "",
-    creator: creator ? { id: creator.id, name: creator.name, email: creator.email || null } : null,
+    creator: creator
+      ? { id: creator.id, name: creator.name, email: creator.email || null }
+      : null,
   };
 }
 
 /** Move issue to a specific status */
-export async function moveToStatus(accessToken: string, issueId: string, teamId: string, statusName: string): Promise<boolean> {
-  const result = await gql(accessToken, `
+export async function moveToStatus(
+  accessToken: string,
+  issueId: string,
+  teamId: string,
+  statusName: string,
+): Promise<boolean> {
+  const result = await gql(
+    accessToken,
+    `
     query GetStatuses($teamId: String!) {
       team(id: $teamId) {
         states { nodes { id name } }
       }
     }
-  `, { teamId });
+  `,
+    { teamId },
+  );
 
   const states = result.data?.team?.states?.nodes || [];
-  const targetState = states.find((s: any) => s.name.toLowerCase() === statusName.toLowerCase());
+  const targetState = states.find(
+    (s: any) => s.name.toLowerCase() === statusName.toLowerCase(),
+  );
 
   if (!targetState) {
-    console.error(`[linear] Status "${statusName}" not found for team ${teamId}. Available: ${states.map((s: any) => s.name).join(", ")}`);
+    console.error(
+      `[linear] Status "${statusName}" not found for team ${teamId}. Available: ${states.map((s: any) => s.name).join(", ")}`,
+    );
     return false;
   }
 
-  const updateResult = await gql(accessToken, `
+  const updateResult = await gql(
+    accessToken,
+    `
     mutation UpdateIssue($id: String!, $input: IssueUpdateInput!) {
       issueUpdate(id: $id, input: $input) { success }
     }
-  `, { id: issueId, input: { stateId: targetState.id } });
+  `,
+    { id: issueId, input: { stateId: targetState.id } },
+  );
 
   if (!updateResult.data?.issueUpdate?.success) {
     console.error("[linear] Failed to move issue to status:", updateResult);

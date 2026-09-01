@@ -70,6 +70,19 @@ final class TeamDirectory {
         return fullNames[key] ?? name
     }
 
+    /// The directory boundary used by Team activity. Each member carries every
+    /// spelling the sessions payload can use, so a full name or GitHub login
+    /// resolves to the roster entry rather than becoming an invented person.
+    var activityMembers: [TeamActivity.Member] {
+        names.map { name in
+            let key = Self.key(name) ?? name.lowercased()
+            return TeamActivity.Member(
+                name: name,
+                aliases: [name, fullNames[key], githubLogins[key]].compactMap { $0 }
+            )
+        }
+    }
+
     /// Fetch the roster unless it is already loaded or in flight. Failures
     /// retry after a cooldown instead of hammering a server that is down —
     /// a missing directory only costs initials.

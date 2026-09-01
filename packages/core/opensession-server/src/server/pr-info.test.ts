@@ -12,16 +12,28 @@ import type { UnifiedSession } from "./types";
 
 describe("isNoPrError", () => {
   test("only accepts GitHub's explicit no-PR response", () => {
-    expect(isNoPrError('no pull requests found for branch "missing"')).toBe(true);
-    expect(isNoPrError("Could not resolve to a PullRequest with the number of 999")).toBe(true);
+    expect(isNoPrError('no pull requests found for branch "missing"')).toBe(
+      true,
+    );
+    expect(
+      isNoPrError("Could not resolve to a PullRequest with the number of 999"),
+    ).toBe(true);
     expect(isNoPrError("Could not resolve host: api.github.com")).toBe(false);
-    expect(isNoPrError("Could not resolve to a Repository with the name 'owner/repo'")).toBe(false);
+    expect(
+      isNoPrError(
+        "Could not resolve to a Repository with the name 'owner/repo'",
+      ),
+    ).toBe(false);
   });
 });
 
 describe("prApiErrorMessage", () => {
   test("explains GitHub rate limits without exposing CLI output", () => {
-    expect(prApiErrorMessage("GraphQL: API rate limit already exceeded for user ID 123")).toBe(
+    expect(
+      prApiErrorMessage(
+        "GraphQL: API rate limit already exceeded for user ID 123",
+      ),
+    ).toBe(
       "GitHub's API rate limit has been reached. Try again after it resets.",
     );
   });
@@ -101,7 +113,11 @@ describe("cached session PR details", () => {
   } as UnifiedSession;
 
   test("serves the known merged PR when the detail query is unavailable", () => {
-    const fallback = cachedPrDetailsForSession(session, "tella-fusion", "feature");
+    const fallback = cachedPrDetailsForSession(
+      session,
+      "tella-fusion",
+      "feature",
+    );
 
     expect(fallback?.state).toBe("MERGED");
     expect(fallback?.number).toBe(5016);
@@ -172,9 +188,13 @@ describe("ghApiErrorMessage", () => {
   });
 
   test("falls back to stderr, then to the caller's fallback", () => {
-    expect(ghApiErrorMessage("not json", "gh: Not Found (HTTP 404)", "gh api failed")).toBe(
-      "gh: Not Found (HTTP 404)",
-    );
+    expect(
+      ghApiErrorMessage(
+        "not json",
+        "gh: Not Found (HTTP 404)",
+        "gh api failed",
+      ),
+    ).toBe("gh: Not Found (HTTP 404)");
     expect(ghApiErrorMessage("", "", "gh api failed")).toBe("gh api failed");
   });
 });
@@ -183,8 +203,12 @@ describe("durable PR detail restart grace", () => {
   test("does not replay an expired rich refresh immediately after boot", async () => {
     const { shouldRefreshPrDetails } = await import("./pr-info");
     const now = 1_000_000;
-    expect(shouldRefreshPrDetails(now - 6 * 60_000, now, now - 30_000)).toBe(false);
-    expect(shouldRefreshPrDetails(now - 6 * 60_000, now, now - 11 * 60_000)).toBe(true);
+    expect(shouldRefreshPrDetails(now - 6 * 60_000, now, now - 30_000)).toBe(
+      false,
+    );
+    expect(
+      shouldRefreshPrDetails(now - 6 * 60_000, now, now - 11 * 60_000),
+    ).toBe(true);
   });
 
   test("keeps a still-fresh durable row fresh regardless of process age", async () => {

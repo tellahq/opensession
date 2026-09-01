@@ -25,12 +25,12 @@ writeFileSync(
       mkAccount("personal", "Alex"),
       mkAccount("blind-personal", "Jaap"),
     ],
-  })
+  }),
 );
 
 const usage = (
   fiveHourPct: number,
-  extra?: { enabled: boolean; usedCredits: number; monthlyLimit: number }
+  extra?: { enabled: boolean; usedCredits: number; monthlyLimit: number },
 ) => ({
   fetchedAt: new Date().toISOString(),
   fiveHour: { utilization: fiveHourPct, resetsAt: null },
@@ -49,47 +49,63 @@ describe("pickAccount usage-credits policy", () => {
     accounts.__setUsageCacheForTest("fresh", usage(50));
     accounts.__setUsageCacheForTest(
       "maxed",
-      usage(100, { enabled: true, usedCredits: 0, monthlyLimit: 100_000 })
+      usage(100, { enabled: true, usedCredits: 0, monthlyLimit: 100_000 }),
     );
     expect(accounts.pickAccount(new Set(["fresh"]))?.id).toBeUndefined();
   });
 
   test("allowExtraUsage picks a maxed account with credit headroom", () => {
-    expect(accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true)?.id).toBe("maxed");
+    expect(
+      accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true)?.id,
+    ).toBe("maxed");
   });
 
   test("prefers subscription capacity over credits when both are available", () => {
-    expect(accounts.pickAccount(undefined, undefined, undefined, true)?.id).toBe("fresh");
+    expect(
+      accounts.pickAccount(undefined, undefined, undefined, true)?.id,
+    ).toBe("fresh");
   });
 
   test("no headroom when extra usage is off or the monthly cap is spent", () => {
     accounts.__setUsageCacheForTest(
       "maxed",
-      usage(100, { enabled: false, usedCredits: 0, monthlyLimit: 100_000 })
+      usage(100, { enabled: false, usedCredits: 0, monthlyLimit: 100_000 }),
     );
-    expect(accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true)).toBeUndefined();
+    expect(
+      accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true),
+    ).toBeUndefined();
 
     accounts.__setUsageCacheForTest(
       "maxed",
-      usage(100, { enabled: true, usedCredits: 100_001, monthlyLimit: 100_000 })
+      usage(100, {
+        enabled: true,
+        usedCredits: 100_001,
+        monthlyLimit: 100_000,
+      }),
     );
-    expect(accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true)).toBeUndefined();
+    expect(
+      accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true),
+    ).toBeUndefined();
 
     // A zero monthly cap fails closed — this gate exists to bound spend.
     accounts.__setUsageCacheForTest(
       "maxed",
-      usage(100, { enabled: true, usedCredits: 0, monthlyLimit: 0 })
+      usage(100, { enabled: true, usedCredits: 0, monthlyLimit: 0 }),
     );
-    expect(accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true)).toBeUndefined();
+    expect(
+      accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true),
+    ).toBeUndefined();
   });
 
   test("getUsableAccountById honors allowExtraUsage the same way", () => {
     accounts.__setUsageCacheForTest(
       "maxed",
-      usage(100, { enabled: true, usedCredits: 50_000, monthlyLimit: 100_000 })
+      usage(100, { enabled: true, usedCredits: 50_000, monthlyLimit: 100_000 }),
     );
     expect(accounts.getUsableAccountById("maxed")).toBeUndefined();
-    expect(accounts.getUsableAccountById("maxed", undefined, true)?.id).toBe("maxed");
+    expect(accounts.getUsableAccountById("maxed", undefined, true)?.id).toBe(
+      "maxed",
+    );
   });
 
   test("getAccountById returns records regardless of usability", () => {
@@ -104,15 +120,15 @@ describe("pickAccount usage-credits policy", () => {
       scopedLimits: [{ label: "Fable", utilization: 100, resetsAt: null }],
       source: "meridian",
     });
-    expect(accounts.pickAccount(new Set(["fresh"]), undefined, "claude-fable-5")?.id).toBe(
-      "maxed"
-    );
+    expect(
+      accounts.pickAccount(new Set(["fresh"]), undefined, "claude-fable-5")?.id,
+    ).toBe("maxed");
     accounts.__setUsageCacheForTest("maxed", usage(100));
   });
 
   test("allows a blind personal account for a singleton Fable requirement", () => {
     expect(
-      accounts.pickAccount(undefined, "Jaap", ["claude-fable-5"])?.id
+      accounts.pickAccount(undefined, "Jaap", ["claude-fable-5"])?.id,
     ).toBe("blind-personal");
   });
 
@@ -125,22 +141,20 @@ describe("pickAccount usage-credits policy", () => {
       ],
     });
     expect(
-      accounts.pickAccount(new Set(["maxed"]), undefined, "claude-opus-5")?.id
+      accounts.pickAccount(new Set(["maxed"]), undefined, "claude-opus-5")?.id,
     ).toBe("fresh");
     expect(
-      accounts.pickAccount(
-        new Set(["maxed"]),
-        undefined,
-        ["claude-opus-5", "claude-fable-5"]
-      )
+      accounts.pickAccount(new Set(["maxed"]), undefined, [
+        "claude-opus-5",
+        "claude-fable-5",
+      ]),
     ).toBeUndefined();
     accounts.__setUsageCacheForTest("fresh", usage(20));
     expect(
-      accounts.pickAccount(
-        new Set(["maxed"]),
-        undefined,
-        ["claude-opus-5", "claude-fable-5"]
-      )
+      accounts.pickAccount(new Set(["maxed"]), undefined, [
+        "claude-opus-5",
+        "claude-fable-5",
+      ]),
     ).toBeUndefined();
     accounts.__setUsageCacheForTest("fresh", usage(50));
   });
@@ -149,9 +163,11 @@ describe("pickAccount usage-credits policy", () => {
     accounts.__setUsageCacheForTest("personal", usage(0));
     accounts.__setUsageCacheForTest(
       "maxed",
-      usage(100, { enabled: false, usedCredits: 0, monthlyLimit: 0 })
+      usage(100, { enabled: false, usedCredits: 0, monthlyLimit: 0 }),
     );
-    expect(accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true)).toBeUndefined();
+    expect(
+      accounts.pickAccount(new Set(["fresh"]), undefined, undefined, true),
+    ).toBeUndefined();
   });
 });
 
@@ -167,7 +183,10 @@ describe("resolveAccount owner gate", () => {
 
   test("a pinned foreign personal account is refused in pool mode", () => {
     seedUsable();
-    const soft = accounts.resolveAccount({ user: "Robin", pinnedId: "personal" });
+    const soft = accounts.resolveAccount({
+      user: "Robin",
+      pinnedId: "personal",
+    });
     expect(soft).not.toHaveProperty("refusal");
     expect((soft as any).account.id).not.toBe("personal");
     expect((soft as any).reason).toBe("pool");
@@ -225,22 +244,35 @@ describe("resolveAccount owner gate", () => {
 
   test("a foreign sticky account falls through to the pool", () => {
     seedUsable();
-    const resolved = accounts.resolveAccount({ user: "Robin", stickyId: "personal" });
+    const resolved = accounts.resolveAccount({
+      user: "Robin",
+      stickyId: "personal",
+    });
     expect((resolved as any).account.id).not.toBe("personal");
     expect((resolved as any).reason).toBe("pool");
-    const owner = accounts.resolveAccount({ user: "Alex", stickyId: "personal" });
+    const owner = accounts.resolveAccount({
+      user: "Alex",
+      stickyId: "personal",
+    });
     expect((owner as any).account.id).toBe("personal");
     expect((owner as any).reason).toBe("sticky");
   });
 
   test("reports the reason for the path that produced the account", () => {
     seedUsable();
-    expect((accounts.resolveAccount({ pinnedId: "fresh" }) as any).reason).toBe("pinned");
-    expect((accounts.resolveAccount({ stickyId: "maxed" }) as any).reason).toBe("sticky");
+    expect((accounts.resolveAccount({ pinnedId: "fresh" }) as any).reason).toBe(
+      "pinned",
+    );
+    expect((accounts.resolveAccount({ stickyId: "maxed" }) as any).reason).toBe(
+      "sticky",
+    );
     expect(
-      (accounts.resolveAccount({ designatedIds: ["maxed", "fresh"] }) as any).reason
+      (accounts.resolveAccount({ designatedIds: ["maxed", "fresh"] }) as any)
+        .reason,
     ).toBe("designated");
-    expect((accounts.resolveAccount({ user: "Alex" }) as any).reason).toBe("personal");
+    expect((accounts.resolveAccount({ user: "Alex" }) as any).reason).toBe(
+      "personal",
+    );
     expect((accounts.resolveAccount({}) as any).reason).toBe("pool");
   });
 
@@ -250,8 +282,11 @@ describe("resolveAccount owner gate", () => {
     // peek must leave the next pick's answer unchanged.
     accounts.__setUsageCacheForTest("maxed", usage(50));
     const first = (accounts.resolveAccount({}) as any).account.id;
-    const peeked = (accounts.resolveAccount({ recordPick: false }) as any).account.id;
-    expect((accounts.resolveAccount({ recordPick: false }) as any).account.id).toBe(peeked);
+    const peeked = (accounts.resolveAccount({ recordPick: false }) as any)
+      .account.id;
+    expect(
+      (accounts.resolveAccount({ recordPick: false }) as any).account.id,
+    ).toBe(peeked);
     expect(first).not.toBe(peeked);
   });
 });
@@ -270,21 +305,27 @@ describe("dry-pool backpressure", () => {
     accounts.__setUsageCacheForTest("fresh", usage(50));
     accounts.__setUsageCacheForTest(
       "maxed",
-      maxedWindow(new Date(Date.now() - 60_000).toISOString())
+      maxedWindow(new Date(Date.now() - 60_000).toISOString()),
     );
     expect(accounts.pickAccount(new Set(["fresh"]))?.id).toBe("maxed");
     // A window that resets in the future still sidelines it.
     accounts.__setUsageCacheForTest(
       "maxed",
-      maxedWindow(new Date(Date.now() + 60_000).toISOString())
+      maxedWindow(new Date(Date.now() + 60_000).toISOString()),
     );
     expect(accounts.pickAccount(new Set(["fresh"]))).toBeUndefined();
   });
 
   test("earliestPoolReset reports the sidelined window's reset", () => {
     const resetAt = Date.now() + 5 * 60_000;
-    accounts.__setUsageCacheForTest("fresh", maxedWindow(new Date(resetAt).toISOString()));
-    accounts.__setUsageCacheForTest("maxed", maxedWindow(new Date(resetAt + 60_000).toISOString()));
+    accounts.__setUsageCacheForTest(
+      "fresh",
+      maxedWindow(new Date(resetAt).toISOString()),
+    );
+    accounts.__setUsageCacheForTest(
+      "maxed",
+      maxedWindow(new Date(resetAt + 60_000).toISOString()),
+    );
     const earliest = accounts.earliestPoolReset();
     expect(earliest).not.toBeNull();
     expect(Math.abs((earliest as number) - resetAt)).toBeLessThan(1000);
@@ -300,7 +341,9 @@ describe("dry-pool backpressure", () => {
   test("earliestPoolReset excludes accounts outside the designated bridge set", () => {
     accounts.__setUsageCacheForTest("fresh", usage(10));
     expect(
-      accounts.earliestPoolReset(undefined, undefined, "fresh", false, ["maxed"]),
+      accounts.earliestPoolReset(undefined, undefined, "fresh", false, [
+        "maxed",
+      ]),
     ).toBeNull();
   });
 
@@ -367,7 +410,10 @@ describe("pickBridgeAccount renders the owner-gate refusals", () => {
   const saved = process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
   let bridge: typeof import("./anthropic-bridge");
   const designate = (ids: string[]) =>
-    writeFileSync(ocConfig, JSON.stringify({ enabled: true, bridge: { accounts: ids } }));
+    writeFileSync(
+      ocConfig,
+      JSON.stringify({ enabled: true, bridge: { accounts: ids } }),
+    );
 
   beforeAll(async () => {
     process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = ocConfig;
@@ -375,20 +421,25 @@ describe("pickBridgeAccount renders the owner-gate refusals", () => {
   });
 
   afterAll(() => {
-    if (saved === undefined) delete process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
+    if (saved === undefined)
+      delete process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
     else process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = saved;
   });
 
   test("a designation of only someone else's personal account is dry", () => {
     accounts.__setUsageCacheForTest("personal", usage(0));
     designate(["personal"]);
-    const picked = bridge.pickBridgeAccount("claude-sonnet-5", { user: "Robin" });
+    const picked = bridge.pickBridgeAccount("claude-sonnet-5", {
+      user: "Robin",
+    });
     const error = (picked as any).error as string;
-    expect(error).toBe("no designated bridge account is currently usable (tried: personal)");
+    expect(error).toBe(
+      "no designated bridge account is currently usable (tried: personal)",
+    );
     expect(error.toLowerCase()).toContain("no designated bridge account");
     // Its owner still gets served.
     expect(
-      (bridge.pickBridgeAccount("claude-sonnet-5", { user: "Alex" }) as any).id
+      (bridge.pickBridgeAccount("claude-sonnet-5", { user: "Alex" }) as any).id,
     ).toBe("personal");
   });
 
@@ -479,7 +530,10 @@ describe("refreshUsageIfNearLimit", () => {
 describe("sidelines survive a restart", () => {
   // Both accounts are usageScope "missing" with no credentials file, so
   // markExhausted's background usage refresh returns before any network call.
-  const blind = (id: string) => ({ ...mkAccount(id), usageScope: "missing" as const });
+  const blind = (id: string) => ({
+    ...mkAccount(id),
+    usageScope: "missing" as const,
+  });
   const originalStore = readFileSync(storePath, "utf-8");
 
   beforeAll(() => {
@@ -493,7 +547,7 @@ describe("sidelines survive a restart", () => {
           blind("reboot-model"),
           blind("reboot-opus"),
         ],
-      })
+      }),
     );
     const fableSpent = {
       ...usage(10),
@@ -521,20 +575,36 @@ describe("sidelines survive a restart", () => {
     expect(rebooted?.exhaustedUntil).not.toBeNull();
     expect(rebooted?.usable).toBe(false);
     expect(
-      accounts.pickAccount(new Set(["fresh", "maxed", "reboot-model", "reboot-opus"]))
+      accounts.pickAccount(
+        new Set(["fresh", "maxed", "reboot-model", "reboot-opus"]),
+      ),
     ).toBeUndefined();
   });
 
   test("a model-scoped sideline survives, and only for that model", () => {
-    const rebooted = accounts.listAccountsPublic().find((a) => a.id === "reboot-model");
+    const rebooted = accounts
+      .listAccountsPublic()
+      .find((a) => a.id === "reboot-model");
     expect(rebooted?.exhaustedUntil).toBeNull();
-    const fable = accounts.earliestPoolReset(undefined, "claude-fable-5", "reboot-model");
+    const fable = accounts.earliestPoolReset(
+      undefined,
+      "claude-fable-5",
+      "reboot-model",
+    );
     expect(fable).not.toBeNull();
     expect((fable as number) - Date.now()).toBeGreaterThan(1000);
-    const sonnet = accounts.earliestPoolReset(undefined, "claude-sonnet-5", "reboot-model");
+    const sonnet = accounts.earliestPoolReset(
+      undefined,
+      "claude-sonnet-5",
+      "reboot-model",
+    );
     expect((sonnet as number) - Date.now()).toBeLessThan(1000);
 
-    const opus = accounts.earliestPoolReset(undefined, "claude-opus-5", "reboot-opus");
+    const opus = accounts.earliestPoolReset(
+      undefined,
+      "claude-opus-5",
+      "reboot-opus",
+    );
     expect((opus as number) - Date.now()).toBeGreaterThan(60 * 60 * 1000);
     const otherModel = accounts.earliestPoolReset(
       undefined,

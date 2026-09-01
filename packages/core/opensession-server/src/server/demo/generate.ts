@@ -190,7 +190,10 @@ export function generateDemoData(
   // expects (`<worktreesDir>/<wtPrefix>-<branch>`), which is what lets
   // repoForPath() attribute this checkout to the demo repo.
   const worktreesDir = join(demoRoot, "worktrees");
-  const worktreeDir = join(worktreesDir, `${DEMO_REPO_WT_PREFIX}-${DEMO_BRANCH}`);
+  const worktreeDir = join(
+    worktreesDir,
+    `${DEMO_REPO_WT_PREFIX}-${DEMO_BRANCH}`,
+  );
   const now = Date.now();
 
   if (existsSync(markerPath)) {

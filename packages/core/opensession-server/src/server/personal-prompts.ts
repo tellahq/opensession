@@ -22,38 +22,43 @@ import { resolveTeammate } from "./shared/user-mappings";
 const MAX_PROMPT_LEN = 8000;
 
 /** Identity-resolved store key shared by personal run preferences. */
-export function personalIdentityKey(user: string | undefined | null): string | null {
-	const trimmed = user?.trim();
-	if (!trimmed) return null;
-	const teammate = resolveTeammate(trimmed);
-	if (teammate) return `user-${teammate.slackId}`;
-	const key = trimmed.toLowerCase().replace(/[^a-z0-9@._-]+/g, "-").slice(0, 64);
-	return key ? `user-${key}` : null;
+export function personalIdentityKey(
+  user: string | undefined | null,
+): string | null {
+  const trimmed = user?.trim();
+  if (!trimmed) return null;
+  const teammate = resolveTeammate(trimmed);
+  if (teammate) return `user-${teammate.slackId}`;
+  const key = trimmed
+    .toLowerCase()
+    .replace(/[^a-z0-9@._-]+/g, "-")
+    .slice(0, 64);
+  return key ? `user-${key}` : null;
 }
 
 const store = userStore<string>({
-	name: "personal-prompts",
-	field: "prompt",
-	clean: (raw) =>
-		typeof raw === "string" ? raw.trim().slice(0, MAX_PROMPT_LEN) : "",
-	identity: personalIdentityKey,
-	extra: () => ({ updatedAt: new Date().toISOString() }),
+  name: "personal-prompts",
+  field: "prompt",
+  clean: (raw) =>
+    typeof raw === "string" ? raw.trim().slice(0, MAX_PROMPT_LEN) : "",
+  identity: personalIdentityKey,
+  extra: () => ({ updatedAt: new Date().toISOString() }),
 });
 
 export function getPersonalPrompt(user: string | undefined | null): string {
-	try {
-		return store.get(user ?? "");
-	} catch {
-		return "";
-	}
+  try {
+    return store.get(user ?? "");
+  } catch {
+    return "";
+  }
 }
 
 /** Store a user's personal prompt (trimmed, length-capped). Empty clears it. */
 export function setPersonalPrompt(
-	user: string | undefined | null,
-	prompt: unknown,
+  user: string | undefined | null,
+  prompt: unknown,
 ): string {
-	return store.set(user ?? "", String(prompt ?? ""));
+  return store.set(user ?? "", String(prompt ?? ""));
 }
 
 /**
@@ -61,16 +66,16 @@ export function setPersonalPrompt(
  * personal prompt. Never throws — a store failure must not block a run.
  */
 export function personalPromptNoteFor(user: string | undefined | null): string {
-	try {
-		const prompt = getPersonalPrompt(user);
-		if (!prompt) return "";
-		return [
-			"## Personal instructions from the prompting user",
-			"They keep these standing instructions in Settings → Personal prompt; apply them alongside your other instructions (they never override safety or repo rules).",
-			"",
-			prompt,
-		].join("\n");
-	} catch {
-		return "";
-	}
+  try {
+    const prompt = getPersonalPrompt(user);
+    if (!prompt) return "";
+    return [
+      "## Personal instructions from the prompting user",
+      "They keep these standing instructions in Settings → Personal prompt; apply them alongside your other instructions (they never override safety or repo rules).",
+      "",
+      prompt,
+    ].join("\n");
+  } catch {
+    return "";
+  }
 }

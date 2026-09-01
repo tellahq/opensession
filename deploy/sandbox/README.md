@@ -7,17 +7,17 @@ session's git worktree **bind-mounted at its identical host path**.
 
 ## What it contains
 
-| Component | Purpose | Pin |
-| --- | --- | --- |
-| `bun` | runs the runner bundle + Bun `$` exec | `1.4.0` (host) |
-| Node.js LTS | native-dep builds, tooling | `24.x` |
-| `git`, `gh` | clone / status / diff / push / PR | apt latest |
-| `ripgrep` | @-mention file search | apt |
-| `python3`, `build-essential` | worktree `bun install` native deps | apt |
-| `just`, `direnv`, `lsof` | common repo dev-server bring-up chains (in-sandbox previews) | apt / pinned release |
-| Claude Code CLI | baked at the identical host CLI path for session-resume parity | `2.1.218` (host); build FAILS on version mismatch |
-| runner bundle | `/home/ubuntu/projects/opensession`: root manifests, lockfile, patches and `tsconfig.json`; copied protocol and server packages; `scripts/workload-identity-client.ts`; installed dependencies | from lockfile |
-| minimal `~/.claude/settings.json` | so `settingSources:["user"]` doesn't error | `{}` |
+| Component                         | Purpose                                                                                                                                                                                        | Pin                                               |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `bun`                             | runs the runner bundle + Bun `$` exec                                                                                                                                                          | `1.4.0` (host)                                    |
+| Node.js LTS                       | native-dep builds, tooling                                                                                                                                                                     | `24.x`                                            |
+| `git`, `gh`                       | clone / status / diff / push / PR                                                                                                                                                              | apt latest                                        |
+| `ripgrep`                         | @-mention file search                                                                                                                                                                          | apt                                               |
+| `python3`, `build-essential`      | worktree `bun install` native deps                                                                                                                                                             | apt                                               |
+| `just`, `direnv`, `lsof`          | common repo dev-server bring-up chains (in-sandbox previews)                                                                                                                                   | apt / pinned release                              |
+| Claude Code CLI                   | baked at the identical host CLI path for session-resume parity                                                                                                                                 | `2.1.218` (host); build FAILS on version mismatch |
+| runner bundle                     | `/home/ubuntu/projects/opensession`: root manifests, lockfile, patches and `tsconfig.json`; copied protocol and server packages; `scripts/workload-identity-client.ts`; installed dependencies | from lockfile                                     |
+| minimal `~/.claude/settings.json` | so `settingSources:["user"]` doesn't error                                                                                                                                                     | `{}`                                              |
 
 Runs as uid **1000** user `ubuntu` (matches the host uid) so bind-mounted
 worktrees keep sane ownership. Default `CMD` is `sleep infinity` — the provider
@@ -68,18 +68,18 @@ top-level entry remains supported when it exists and its canonical
 
 Mounts (rationale in the docker.ts header):
 
-| Mount | Mode | Why |
-| --- | --- | --- |
-| named vol → `~/.claude`, `~/.codex` | rw | engine session state survives; NEVER a volume at `/home/ubuntu` (would shadow the baked CLI + bundle) |
-| session worktree at identical path | rw | diff/files/status/push/preview unchanged host-side |
-| main checkout `.git` at identical path | rw | worktrees aren't self-contained (`rev-parse --git-common-dir`); accepted Phase 1 tradeoff |
-| host `~/.claude/projects/<munged-cwd>` | rw | engine transcripts stay host-visible (viewer tail, resume continuity) |
-| `~/.opensession/sessions/opensession-rpc.sock` | rw | opensession-* stdio proxies (socket filename kept for protocol compat); goes stale across a server restart until the container restarts |
-| `~/.ssh`, `~/.gitconfig`, `~/.config/gh` | ro | git push / PR parity — interactive-level ambient trust, same as host runs today; automations use the separate MicroVM-only trust profile |
-| `mcp-config.json`, `~/.opensession/claude-accounts.json` | ro | external MCP servers + in-container account-pool selection |
-| `~/.opensession/codex-accounts.json`, each home account's `<CODEX_HOME>/auth.json` | ro | seed access-token-only Pi/OpenAI authentication |
-| `~/.opensession/model-providers.json` → `~/.opensession-model-providers.json`; `~/.opensession/pi.json` → `~/.opensession-pi.json` | ro | model-provider and Pi configuration, readable in the sandbox |
-| `~/.opensession/audit` | rw | one audit jsonl stream for host + sandboxed runs |
+| Mount                                                                                                                              | Mode | Why                                                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| named vol → `~/.claude`, `~/.codex`                                                                                                | rw   | engine session state survives; NEVER a volume at `/home/ubuntu` (would shadow the baked CLI + bundle)                                    |
+| session worktree at identical path                                                                                                 | rw   | diff/files/status/push/preview unchanged host-side                                                                                       |
+| main checkout `.git` at identical path                                                                                             | rw   | worktrees aren't self-contained (`rev-parse --git-common-dir`); accepted Phase 1 tradeoff                                                |
+| host `~/.claude/projects/<munged-cwd>`                                                                                             | rw   | engine transcripts stay host-visible (viewer tail, resume continuity)                                                                    |
+| `~/.opensession/sessions/opensession-rpc.sock`                                                                                     | rw   | opensession-* stdio proxies (socket filename kept for protocol compat); goes stale across a server restart until the container restarts  |
+| `~/.ssh`, `~/.gitconfig`, `~/.config/gh`                                                                                           | ro   | git push / PR parity — interactive-level ambient trust, same as host runs today; automations use the separate MicroVM-only trust profile |
+| `mcp-config.json`, `~/.opensession/claude-accounts.json`                                                                           | ro   | external MCP servers + in-container account-pool selection                                                                               |
+| `~/.opensession/codex-accounts.json`, each home account's `<CODEX_HOME>/auth.json`                                                 | ro   | seed access-token-only Pi/OpenAI authentication                                                                                          |
+| `~/.opensession/model-providers.json` → `~/.opensession-model-providers.json`; `~/.opensession/pi.json` → `~/.opensession-pi.json` | ro   | model-provider and Pi configuration, readable in the sandbox                                                                             |
+| `~/.opensession/audit`                                                                                                             | rw   | one audit jsonl stream for host + sandboxed runs                                                                                         |
 
 Known Phase 1 caveats: external MCP servers spawn inside the container, so
 host-only dependencies will not work. Full writable Codex account homes are not
@@ -101,7 +101,7 @@ profile.
   started for a read). With bind mounts this is redundant by design — it's
   the seam volume workspaces and Phase 3 remote providers run through.
 - **Volume workspaces** (`~/.opensession/sandbox.json` → `"workspace":
-  "volume"`, default `"bind"`): new sandboxes whose canonical worktree path
+"volume"`, default `"bind"`): new sandboxes whose canonical worktree path
   has no host dir get a per-session `<name>-ws` volume mounted at that path
   and cloned **inside** the container from the repo's origin (ro-mounted
   creds do the auth; a local-path origin is mounted ro — that's the verify
@@ -116,7 +116,7 @@ profile.
   `.git` are now bind-mounted rw at identical paths; changing the attach set
   recreates the container on the next ensure (mounts are create-time).
 - **Preview ports** (`"previewPorts": [3300, …]`, default `[3300, 3301,
-  3302]`): each container port in the set is published to a random
+3302]`): each container port in the set is published to a random
   **loopback** host port at container create; `sandbox.ports()` reads the
   live map and preview.ts routes the same Caddy tailnet-HTTPS front at the
   published port. Selecting a sandbox is the explicit opt-in for in-sandbox
@@ -300,22 +300,8 @@ needed after changing it.
   Daytona Tier 1/2 orgs restrict sandbox egress, which blocks the WS
   dial-back entirely — launchRun there needs a Tier 3 org or self-hosted
   Daytona.
-- **Local Firecracker adapter** (`provider: "microvm"`): restores a
-  credential-free golden from `/opt/firecracker/sandbox-store`; the selected
-  engine and workspace both run inside the guest through the same run-ws/rpc-ws
-  transport as remote providers. The payload-baked golden design layers
-  `Dockerfile.runner` over `Dockerfile.workspace`. Runtime recognizes only the
-  exact `~/.bks-bootstrapped` marker. A mismatch triggers the normal
-  incremental `bootstrapRemoteSandbox` path.
-
-  Golden refresh is currently unavailable in this checkout. Do not run
-  `deploy/sandbox/microvm/refresh-sandbox-golden.sh` until it is repaired: its
-  Bun snippet imports obsolete root `src/` paths, and metadata generation
-  references an unset `RUNNER_PIN`. The attempted `golden.json` is build
-  metadata only; no runtime staleness reader consumes it. Never reuse the
-  preview-pool golden in `/opt/firecracker/store`.
 - `deploy/sandbox/conformance.ts` — the provider conformance matrix
-  (`bun run deploy/sandbox/conformance.ts [docker-socket|docker-ws|daytona|e2b|box|modal|microvm|lambda-microvm]`):
+  (`bun run deploy/sandbox/conformance.ts [docker-socket|docker-ws|daytona|e2b|box|modal|lambda-microvm]`):
   verify.ts's checks parameterized over providers. Docker entries always run
   and must stay green; configured providers otherwise skip when their required
   credentials are not discovered. The harness currently reads live sandbox

@@ -73,9 +73,15 @@ export async function removeSessionScratch(sessionId: string): Promise<void> {
   const name = scratchName(sessionId);
   if (!name) return;
   try {
-    await rm(join(sessionScratchRoot(), name), { recursive: true, force: true });
+    await rm(join(sessionScratchRoot(), name), {
+      recursive: true,
+      force: true,
+    });
   } catch (e) {
-    console.warn(`[session-scratch] failed to remove scratch for ${sessionId}:`, e);
+    console.warn(
+      `[session-scratch] failed to remove scratch for ${sessionId}:`,
+      e,
+    );
   }
 }
 

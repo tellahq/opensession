@@ -2,7 +2,7 @@ import { resolve } from "path";
 
 /** The server-side RPC socket the MCP proxy talks to. Stable path. */
 export function rpcSocketPath(sessionsDir: string): string {
-	return `${sessionsDir}/opensession-rpc.sock`;
+  return `${sessionsDir}/opensession-rpc.sock`;
 }
 
 /** Absolute paths used by Codex MCP stdio proxy config. */
@@ -13,8 +13,8 @@ export const REPO_ROOT = resolve(import.meta.dir, "../../../../..");
  * no src/ tree next to it, and the shell points this at the prebundled
  * mcp-proxy.js it ships alongside. Unset everywhere else. */
 export const MCP_PROXY_ENTRY =
-	process.env.OPENSESSION_MCP_PROXY_ENTRY?.trim() ||
-	resolve(import.meta.dir, "../runner-host/mcp-proxy.ts");
+  process.env.OPENSESSION_MCP_PROXY_ENTRY?.trim() ||
+  resolve(import.meta.dir, "../runner-host/mcp-proxy.ts");
 
 /** Loopback streamable-HTTP MCP listener (run-rpc.ts startMcpHttpServer):
  * host-local pi runs consume the in-process opensession-* servers as
@@ -25,10 +25,10 @@ export const MCP_PROXY_ENTRY =
  * socket path. (3851 belongs to the PR-video agent; 3850/3854/3855/3860
  * are also taken on this box.) */
 export const MCP_HTTP_PORT = parseInt(
-	process.env.OPENSESSION_MCP_HTTP_PORT || "3852",
-	10,
+  process.env.OPENSESSION_MCP_HTTP_PORT || "3852",
+  10,
 );
 
 export function mcpHttpUrl(serverName: string): string {
-	return `http://127.0.0.1:${MCP_HTTP_PORT}/mcp/${serverName}`;
+  return `http://127.0.0.1:${MCP_HTTP_PORT}/mcp/${serverName}`;
 }

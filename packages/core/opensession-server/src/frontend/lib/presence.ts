@@ -21,25 +21,29 @@ import { personKey } from "./review-queue";
 
 /** Presence viewers minus your own devices. */
 export function otherViewers(viewers: string[], me?: string | null): string[] {
-	const mine = personKey(me || "");
-	if (!mine) return [...viewers];
-	return viewers.filter((v) => personKey(v) !== mine);
+  const mine = personKey(me || "");
+  if (!mine) return [...viewers];
+  return viewers.filter((v) => personKey(v) !== mine);
 }
 
 /** One entry per person, in first-seen order, with how many devices they have. */
 export function dedupeViewers(
-	viewers: string[],
+  viewers: string[],
 ): Array<{ name: string; count: number }> {
-	const counts = new Map<string, number>();
-	for (const v of viewers) counts.set(v, (counts.get(v) || 0) + 1);
-	return Array.from(counts, ([name, count]) => ({ name, count }));
+  const counts = new Map<string, number>();
+  for (const v of viewers) counts.set(v, (counts.get(v) || 0) + 1);
+  return Array.from(counts, ([name, count]) => ({ name, count }));
 }
 
 /** Match Feed's pile: reading order is also front-to-back, and every squircle
  * cuts a full ring in the surface beneath it. */
-export function facepileAvatarStyle(index: number, count: number, ring: string) {
-	return {
-		zIndex: count - index,
-		boxShadow: `var(--avatar-edge), 0 0 0 2px ${ring}`,
-	};
+export function facepileAvatarStyle(
+  index: number,
+  count: number,
+  ring: string,
+) {
+  return {
+    zIndex: count - index,
+    boxShadow: `var(--avatar-edge), 0 0 0 2px ${ring}`,
+  };
 }

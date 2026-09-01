@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { toast } from "../ui/toast";
 import { AGENT_NAME } from "../lib/brand";
 import React, { useRef, useState } from "react";
@@ -5,7 +7,11 @@ import { Button } from "../ui/button";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal } from "../ui/modal";
 import { IconChevronRight, IconSparkle } from "./icons";
-import type { UnifiedSession, TranscriptEntry } from "../lib/types";
+import type {
+  TranscriptEntry,
+  UnifiedSession,
+  WSClientMessage,
+} from "../lib/types";
 import { getCurrentUser } from "./UserPicker";
 import { Field, fieldClasses } from "../ui/input";
 import { noAutofill } from "../lib/composer-autofill";
@@ -13,116 +19,49 @@ import { composerSessionRef } from "../lib/share-link";
 import type { NewSessionPrefill } from "../lib/new-session-link";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
-import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
-import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	grow: {
-			flexGrow: "1"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	w80: {
-			width: "320px"
-	},
-	overflowHidden: {
-			overflow: "hidden"
-	},
-	p0: {
-			padding: "0"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	leading14: {
-			lineHeight: "1.4"
-	},
-	flex1: {
-			flex: "1"
-	},
-	borderAccent: {
-			borderColor: "var(--accent)"
-	},
-	bgAccentSoft: {
-			backgroundColor: "var(--accent-soft)"
-	},
-	textAccent: {
-			color: "var(--accent-ink)"
-	},
-
-	h10: {
-		"height": "40px"
-	},
-	resizeY: {
-		"resize": "vertical"
-	},
-	py2: {
-		"paddingBlock": "8px"
-	},
-	leadingRelaxed: {
-		"--tw-leading": "var(--leading-relaxed)",
-		"lineHeight": "var(--leading-relaxed)"
-	},
-
-	hoverBorderAccent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"borderColor": "var(--accent)"
-			}
-		}
-	},
-	hoverTextAccent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--accent-ink)"
-			}
-		}
-	},
-
-	flexCol: {
-		"flexDirection": "column"
-	},
-	itemsStart: {
-		"alignItems": "flex-start"
-	},
-	gap05: {
-		"gap": "2px"
-	},
-	roundedNone: {
-		"borderRadius": "0"
-	,
-		cornerShape: "var(--cs)"},
-	borderB: {
-		"borderBottomStyle": "var(--tw-border-style)",
-		"borderBottomWidth": "1px"
-	},
-	borderLine: {
-		"borderColor": "var(--border)"
-	},
-	px35: {
-		"paddingInline": "14px"
-	},
-	py25: {
-		"paddingBlock": "10px"
-	},
-	borderLineStrong: {
-		"borderColor": "var(--border-strong)"
-	},
-	textSm: {
-		"fontSize": "var(--type-label)",
-		"lineHeight": "var(--tw-leading,var(--text-sm--line-height))"
-	},
-	focusShadow0003pxVarAccentSoft: {
-		":focus": {
-			"--tw-shadow": "0 0 0 3px var(--tw-shadow-color,var(--accent-soft))",
-			"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
-		}
-	},
+  grow: {
+    flexGrow: "1",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  w80: {
+    width: "calc(4px * 80)",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  p0: {
+    padding: "0",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  leading14: {
+    lineHeight: "1.4",
+  },
+  flex1: {
+    flex: "1",
+  },
+  borderAccent: {
+    borderColor: "var(--accent)",
+  },
+  bgAccentSoft: {
+    backgroundColor: "var(--accent-soft)",
+  },
+  hoverBorderAccent: {
+    "@media (hover: hover)": {
+      ":hover": {
+        borderColor: "var(--accent)",
+      },
+    },
+  },
 });
 
 type Flavor = "build" | "learnings" | "analyze";
@@ -130,7 +69,7 @@ type Flavor = "build" | "learnings" | "analyze";
 interface Props {
   session: UnifiedSession;
   entries: TranscriptEntry[];
-  send: (msg: any) => void;
+  send: (msg: WSClientMessage) => void;
   connected: boolean;
   /** Open the new-session composer prefilled — the one flavor that writes no
       prompt of its own. */
@@ -196,62 +135,66 @@ export function SpinOffMenu({
     const me = getCurrentUser();
 
     try {
-    if (flavor === "analyze") {
-      send({
-        type: "create_session",
-        mode: "ask",
-        branch: "",
-        user: me,
-        createWorkspace: {},
-        prompt:
-          `Analyze this finished ${AGENT_NAME} session ("${session.title}") and report:\n` +
-          `1. What was asked and what was delivered.\n` +
-          `2. What went wrong or was wasted effort (wrong paths, retries, misunderstandings).\n` +
-          `3. A rewritten version of the original prompt that would likely have succeeded in one shot.\n` +
-          `4. Whether any repo docs (docs/kb/**, AGENTS.md, CLAUDE.md) could be updated to prevent ` +
-          `the mistakes you found. Quote the concrete text you would add.\n\n` +
-          `## Conversation\n\n${context}`,
-      });
-      return;
-    }
+      if (flavor === "analyze") {
+        send({
+          type: "create_session",
+          mode: "ask",
+          branch: "",
+          user: me,
+          createWorkspace: {},
+          prompt:
+            `Analyze this finished ${AGENT_NAME} session ("${session.title}") and report:\n` +
+            `1. What was asked and what was delivered.\n` +
+            `2. What went wrong or was wasted effort (wrong paths, retries, misunderstandings).\n` +
+            `3. A rewritten version of the original prompt that would likely have succeeded in one shot.\n` +
+            `4. Whether any repo docs (docs/kb/**, AGENTS.md, CLAUDE.md) could be updated to prevent ` +
+            `the mistakes you found. Quote the concrete text you would add.\n\n` +
+            `## Conversation\n\n${context}`,
+        });
+        return;
+      }
 
-    if (flavor === "learnings") {
+      if (flavor === "learnings") {
+        send({
+          type: "create_session",
+          mode: "code",
+          branch,
+          user: me,
+          createWorkspace: {},
+          prompt:
+            `Feed the durable learnings from a ${AGENT_NAME} session back into this repo's documentation.\n\n` +
+            `## Conversation (session "${session.title}")\n\n${context}\n\n## Task\n\n` +
+            `Extract durable, non-obvious learnings from the conversation above: gotchas, architecture facts, ` +
+            `runbook steps, conventions, anything a teammate or future agent session would benefit from knowing. ` +
+            `Check whether each is already documented; skip session-specific noise. Add the genuinely new ones to ` +
+            `the right place (docs/kb/**, AGENTS.md, CLAUDE.md, or a package README), keeping each addition ` +
+            `short and factual, matching the surrounding style.` +
+            (task.trim()
+              ? `\n\nExtra guidance from ${me}: ${task.trim()}`
+              : "") +
+            `\n\nWhen done, commit on this branch and open a PR titled "docs: learnings from ${AGENT_NAME} session" ` +
+            `with a body summarizing what you added and why. Do NOT merge the PR.`,
+        });
+        return;
+      }
+
+      // build
       send({
         type: "create_session",
         mode: "code",
         branch,
         user: me,
-        createWorkspace: {},
         prompt:
-          `Feed the durable learnings from a ${AGENT_NAME} session back into this repo's documentation.\n\n` +
-          `## Conversation (session "${session.title}")\n\n${context}\n\n## Task\n\n` +
-          `Extract durable, non-obvious learnings from the conversation above: gotchas, architecture facts, ` +
-          `runbook steps, conventions, anything a teammate or future agent session would benefit from knowing. ` +
-          `Check whether each is already documented; skip session-specific noise. Add the genuinely new ones to ` +
-          `the right place (docs/kb/**, AGENTS.md, CLAUDE.md, or a package README), keeping each addition ` +
-          `short and factual, matching the surrounding style.` +
-          (task.trim() ? `\n\nExtra guidance from ${me}: ${task.trim()}` : "") +
-          `\n\nWhen done, commit on this branch and open a PR titled "docs: learnings from ${AGENT_NAME} session" ` +
-          `with a body summarizing what you added and why. Do NOT merge the PR.`,
+          `This coding session was spun off from an Ask session ("${session.title}"). ` +
+          `The conversation below is context. The codebase exploration already happened there, ` +
+          `so trust its conclusions but re-verify file paths before editing.\n\n` +
+          `## Ask conversation\n\n${context}\n\n## Task\n\n${task.trim() || "Implement what was discussed above."}`,
       });
-      return;
-    }
-
-    // build
-    send({
-      type: "create_session",
-      mode: "code",
-      branch,
-      user: me,
-      prompt:
-        `This coding session was spun off from an Ask session ("${session.title}"). ` +
-        `The conversation below is context. The codebase exploration already happened there, ` +
-        `so trust its conclusions but re-verify file paths before editing.\n\n` +
-        `## Ask conversation\n\n${context}\n\n## Task\n\n${task.trim() || "Implement what was discussed above."}`,
-    });
     } catch (error) {
       setStarting(false);
-      toast(error instanceof Error ? error.message : String(error), { variant: "error" });
+      toast(error instanceof Error ? error.message : String(error), {
+        variant: "error",
+      });
     }
   }
 
@@ -259,14 +202,15 @@ export function SpinOffMenu({
   const canStart = connected && !starting && (!needsBranch || branch.trim());
 
   // Two-line rows in a flush-edged popup (no inner padding, divider between rows).
-  const itemCls =
-    mergeStylexClassName("last:border-b-0", sx.flexCol, sx.itemsStart, sx.gap05, sx.roundedNone, sx.borderB, sx.borderLine, sx.px35, sx.py25);
+  const itemCls = utilityClassName(
+    "flex-col items-start gap-0.5 rounded-none border-b border-line px-3.5 py-2.5 last:border-b-0",
+  );
 
   // The menu's own field look — the primitive's corner/fill/focus, plus the
   // accent halo this surface authored.
   const fieldCls = fieldClasses(
     "lg",
-    mergeStylexClassName("", sx.borderLineStrong, sx.textSm, sx.focusShadow0003pxVarAccentSoft),
+    "border-line-strong text-sm focus:shadow-[0_0_0_3px_var(--accent-soft)]",
   );
 
   const flavorMeta: Record<Flavor, { title: string; description: string }> = {
@@ -280,7 +224,8 @@ export function SpinOffMenu({
     },
     analyze: {
       title: "Analyze session",
-      description: "What went well, what didn't, and a prompt that would have worked in one shot.",
+      description:
+        "What went well, what didn't, and a prompt that would have worked in one shot.",
     },
   };
 
@@ -293,28 +238,100 @@ export function SpinOffMenu({
               a fresh agent run rather than branching this one. */}
           <IconSparkle size={20} className={MENU_ICON} />
           <span {...stylex.props(sx.grow)}>Spin off</span>
-          <IconChevronRight size={16} className={mergeStylexOverrideClassName("", sx.textFaint)} />
+          <IconChevronRight
+            size={16}
+            className={mergeStylexOverrideClassName("", sx.textFaint)}
+          />
         </Menu.SubmenuTrigger>
-        <Menu.Popup className={mergeStylexOverrideClassName("", sx.w80, sx.overflowHidden, sx.p0)}>
+        <Menu.Popup
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.w80,
+            sx.overflowHidden,
+            sx.p0,
+          )}
+        >
           {isAsk && (
-            <Menu.Item closeOnClick={false} onClick={() => pick("build")} className={itemCls}>
-              <span {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}>Build this</span>
-              <span {...stylex.props(sx.leading14, sx.textFaint, typography.supporting)}>Start a coding session with this conversation as context</span>
+            <Menu.Item
+              closeOnClick={false}
+              onClick={() => pick("build")}
+              className={itemCls}
+            >
+              <span
+                {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}
+              >
+                Build this
+              </span>
+              <span
+                {...stylex.props(
+                  sx.leading14,
+                  sx.textFaint,
+                  typography.supporting,
+                )}
+              >
+                Start a coding session with this conversation as context
+              </span>
             </Menu.Item>
           )}
-          <Menu.Item closeOnClick={false} onClick={() => pick("learnings")} className={itemCls}>
-            <span {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}>Capture learnings → docs PR</span>
-            <span {...stylex.props(sx.leading14, sx.textFaint, typography.supporting)}>{AGENT_NAME} adds what was learned here to {session.repo || "the repository"} docs</span>
+          <Menu.Item
+            closeOnClick={false}
+            onClick={() => pick("learnings")}
+            className={itemCls}
+          >
+            <span
+              {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}
+            >
+              Capture learnings → docs PR
+            </span>
+            <span
+              {...stylex.props(
+                sx.leading14,
+                sx.textFaint,
+                typography.supporting,
+              )}
+            >
+              {AGENT_NAME} adds what was learned here to{" "}
+              {session.repo || "the repository"} docs
+            </span>
           </Menu.Item>
-          <Menu.Item closeOnClick={false} onClick={() => pick("analyze")} className={itemCls}>
-            <span {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}>Analyze session</span>
-            <span {...stylex.props(sx.leading14, sx.textFaint, typography.supporting)}>What went well, what didn't, and a better prompt</span>
+          <Menu.Item
+            closeOnClick={false}
+            onClick={() => pick("analyze")}
+            className={itemCls}
+          >
+            <span
+              {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}
+            >
+              Analyze session
+            </span>
+            <span
+              {...stylex.props(
+                sx.leading14,
+                sx.textFaint,
+                typography.supporting,
+              )}
+            >
+              What went well, what didn't, and a better prompt
+            </span>
           </Menu.Item>
           {/* Closes the whole menu rather than opening the form above: there is
               nothing to fill in here, the composer IS the form. */}
           <Menu.Item onClick={openLinkedSession} className={itemCls}>
-            <span {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}>Reference this session</span>
-            <span {...stylex.props(sx.leading14, sx.textFaint, typography.supporting)}>Opens the new-session composer with a link to this one — you write the prompt</span>
+            <span
+              {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}
+            >
+              Reference this session
+            </span>
+            <span
+              {...stylex.props(
+                sx.leading14,
+                sx.textFaint,
+                typography.supporting,
+              )}
+            >
+              Opens the new-session composer with a link to this one — you write
+              the prompt
+            </span>
           </Menu.Item>
         </Menu.Popup>
       </Menu.SubmenuRoot>
@@ -333,7 +350,7 @@ export function SpinOffMenu({
         disablePointerDismissal={starting}
       >
         <Modal.Content
-          widthClassName={mergeStylexClassName("", sharedClassStyles.maxW28rem)}
+          widthClassName={utilityClassName("max-w-[28rem]")}
           initialFocus={needsBranch ? branchRef : undefined}
         >
           <Modal.Header
@@ -345,7 +362,7 @@ export function SpinOffMenu({
             <Field label="Branch">
               <input
                 ref={branchRef}
-                className={[fieldCls, mergeStylexClassName("", sx.h10)].filter(Boolean).join(" ")}
+                className={utilityClassName(`${fieldCls} h-10`)}
                 value={branch}
                 onChange={(e) => setBranch(e.target.value)}
                 disabled={starting}
@@ -354,15 +371,23 @@ export function SpinOffMenu({
           )}
 
           {flavor !== "analyze" && (
-            <Field label={flavor === "build" ? "Task" : "Extra guidance (optional)"}>
+            <Field
+              label={flavor === "build" ? "Task" : "Extra guidance (optional)"}
+            >
               <textarea
-                className={[fieldCls, mergeStylexClassName("", sx.resizeY, sx.py2, sx.leadingRelaxed)].filter(Boolean).join(" ")}
+                className={utilityClassName(
+                  `${fieldCls} resize-y py-2 leading-relaxed`,
+                )}
                 value={task}
                 onChange={(e) => setTask(e.target.value)}
                 rows={3}
                 {...noAutofill}
                 disabled={starting}
-                placeholder={flavor === "learnings" ? "e.g. focus on the deploy gotchas we hit" : ""}
+                placeholder={
+                  flavor === "learnings"
+                    ? "e.g. focus on the deploy gotchas we hit"
+                    : ""
+                }
               />
             </Field>
           )}
@@ -377,7 +402,13 @@ export function SpinOffMenu({
             <Button onClick={() => setFlavor(null)} disabled={starting}>
               Cancel
             </Button>
-            <Button {...mergeStylexProps("", sx.hoverBorderAccent, sx.hoverTextAccent, sx.borderAccent, sx.bgAccentSoft, sx.textAccent)}
+            <Button
+              className={mergeStylexOverrideClassName(
+                "text-accent hover:text-accent",
+                sx.borderAccent,
+                sx.bgAccentSoft,
+                sx.hoverBorderAccent,
+              )}
               onClick={start}
               disabled={!canStart}
             >
@@ -411,7 +442,11 @@ function buildContext(entries: TranscriptEntry[], budget: number): string {
     used += turns[i].length;
   }
   const skipped = turns.length - 1 - rest.length;
-  return [first, skipped > 0 ? `*(… ${skipped} earlier messages omitted …)*` : null, ...rest]
+  return [
+    first,
+    skipped > 0 ? `*(… ${skipped} earlier messages omitted …)*` : null,
+    ...rest,
+  ]
     .filter(Boolean)
     .join("\n\n");
 }
@@ -421,7 +456,11 @@ function truncate(s: string, max: number): string {
 }
 
 function suggestBranch(title: string): string {
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32);
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 32);
   return slug ? `${slug}` : `from-ask-${dateStamp()}`;
 }
 

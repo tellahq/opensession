@@ -174,8 +174,8 @@ agent-react-devtools status  # Should show 1 connected app
 
 ## References
 
-| File | When to read |
-|------|-------------|
-| [commands.md](references/commands.md) | Full command reference with all flags and edge cases |
-| [profiling-guide.md](references/profiling-guide.md) | Step-by-step profiling workflows and interpreting results |
-| [setup.md](references/setup.md) | How to connect different frameworks (Vite, Next.js, Expo, CRA) |
+| File                                                | When to read                                                   |
+| --------------------------------------------------- | -------------------------------------------------------------- |
+| [commands.md](references/commands.md)               | Full command reference with all flags and edge cases           |
+| [profiling-guide.md](references/profiling-guide.md) | Step-by-step profiling workflows and interpreting results      |
+| [setup.md](references/setup.md)                     | How to connect different frameworks (Vite, Next.js, Expo, CRA) |

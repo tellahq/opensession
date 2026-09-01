@@ -23,7 +23,10 @@ export class LinearAgent implements AgentModule {
   name = "linear";
 
   getRoutes(): Map<string, (req: Request, url: URL) => Promise<Response>> {
-    const routes = new Map<string, (req: Request, url: URL) => Promise<Response>>();
+    const routes = new Map<
+      string,
+      (req: Request, url: URL) => Promise<Response>
+    >();
 
     // Webhook endpoint
     routes.set("POST /webhook", async (req) => {
@@ -31,7 +34,8 @@ export class LinearAgent implements AgentModule {
       try {
         body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
       } catch (error) {
-        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
+        if (error instanceof RequestBodyTooLargeError)
+          return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
         throw error;
       }
       const signature = req.headers.get("linear-signature") || "";
@@ -44,7 +48,10 @@ export class LinearAgent implements AgentModule {
       const payload = JSON.parse(body);
       console.log(`[linear] Webhook: ${payload.type} - ${payload.action}`);
 
-      if (payload.type === "AgentSessionEvent" || payload.type === "AgentSession") {
+      if (
+        payload.type === "AgentSessionEvent" ||
+        payload.type === "AgentSession"
+      ) {
         return handleAgentSession(payload as AgentSessionWebhook, tokens);
       }
 

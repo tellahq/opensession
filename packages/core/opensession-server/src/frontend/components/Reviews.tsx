@@ -1,8 +1,14 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import { cleanSessionTitle } from "../lib/session-title";
 import { AGENT_NAME } from "../lib/brand";
 import React, { useEffect, useState } from "react";
-import type { UnifiedSession, WSServerMessage } from "../lib/types";
+import type {
+  UnifiedSession,
+  WSClientMessage,
+  WSServerMessage,
+} from "../lib/types";
 import { relativeTime } from "../lib/api";
 import { PrPanel } from "./PrPanel";
 import { providerFromUrl, avatarUrl } from "../lib/provider";
@@ -10,559 +16,332 @@ import { EmptyState } from "../ui/state";
 import { Badge } from "../ui/badge";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
-import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
-import { motionStyles } from "../styles/animations.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	inlineFlex: {
-			display: "inline-flex"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap7px: {
-			gap: "7px"
-	},
-	h1: {
-			height: "4px"
-	},
-	w46px: {
-			width: "46px"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	overflowHidden: {
-			overflow: "hidden"
-	},
-	roundedFull: {
-			borderRadius: "calc(infinity * 1px)"
-	,
-		cornerShape: "round"},
-	bgActive: {
-			backgroundColor: "var(--bg-active)"
-	},
-	hFull: {
-			height: "100%"
-	},
-	bgGreen: {
-			backgroundColor: "var(--green)"
-	},
-	bgRed: {
-			backgroundColor: "var(--red)"
-	},
-	bgYellow: {
-			backgroundColor: "var(--yellow)"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	gap1: {
-			gap: "4px"
-	},
-	textGreen: {
-			color: "var(--green)"
-	},
-	textRed: {
-			color: "var(--red)"
-	},
-	gap05: {
-			gap: "2px"
-	},
-	size2: {
-			width: "8px",
-			height: "8px"
-	},
-	roundedXs: {
-			borderRadius: "calc(2px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgLineStrong: {
-			backgroundColor: "var(--border-strong)"
-	},
-	flex: {
-			display: "flex"
-	},
-	minH0: {
-			minHeight: "0"
-	},
-	bgSurface: {
-			backgroundColor: "var(--bg)"
-	},
-	hidden: {
-			display: "none"
-	},
-	borderB: {
-			borderBottomStyle: "solid",
-			borderBottomWidth: "1px"
-	},
-	borderDivider: {
-			borderColor: "var(--divider)"
-	},
-	px3: {
-			paddingInline: "12px"
-	},
-	py2: {
-			paddingBlock: "8px"
-	},
-	gap15: {
-			gap: "6px"
-	},
-	roundedControl: {
-			borderRadius: "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	border0: {
-			borderStyle: "solid",
-			borderWidth: "0"
-	},
-	bgTransparent: {
-			backgroundColor: "transparent"
-	},
-	px2: {
-			paddingInline: "8px"
-	},
-	py15: {
-			paddingBlock: "6px"
-	},
-	textSm: {
-			fontSize: "var(--type-label)",
-			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	flex1: {
-			flex: "1"
-	},
-	relative: {
-			position: "relative"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	overflowYAuto: {
-			overflowY: "auto"
-	},
-	sticky: {
-			position: "sticky"
-	},
-	top0: {
-			top: "0"
-	},
-	z3: {
-			zIndex: "3"
-	},
-	px22px: {
-			paddingInline: "22px"
-	},
-	pt4: {
-			paddingTop: "16px"
-	},
-	mb3: {
-			marginBottom: "12px"
-	},
-	justifyBetween: {
-			justifyContent: "space-between"
-	},
-	gap4: {
-			gap: "16px"
-	},
-	m0: {
-			margin: "0"
-	},
-	fontTitle: {
-			fontWeight: "var(--title-weight)",
-		"--settings-leading": "1.1"
-	},
-	tracking001em: {
-			letterSpacing: "-.01em"
-	},
-	w60: {
-			width: "240px"
-	},
-	roundedMd: {
-			borderRadius: "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	borderLine: {
-			borderColor: "var(--border)"
-	},
-	bgRaised: {
-			backgroundColor: "var(--bg-raised)"
-	},
-	px25: {
-			paddingInline: "10px"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	outlineNone: {
-			outlineStyle: "none"
-	},
-	Mx22px: {
-			marginInline: "-22px"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	whitespaceNowrap: {
-			whiteSpace: "nowrap"
-	},
-	itemsBaseline: {
-			alignItems: "baseline"
-	},
-	gap2: {
-			gap: "8px"
-	},
-	truncate: {
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap",
-			overflow: "hidden"
-	},
-	leading13: {
-			lineHeight: "1.3"
-	},
-	selfCenter: {
-			alignSelf: "center"
-	},
-	roundedSm: {
-			borderRadius: "calc(4px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	p05: {
-			padding: "2px"
-	},
-	opacity0: {
-			opacity: "0"
-	},
-	transitionOpacity: {
-			transitionProperty: "opacity",
-			transitionTimingFunction: "var(--tw-ease,var(--ease))",
-			transitionDuration: "var(--tw-duration,var(--dur-micro))"
-	},
-	gap3: {
-			gap: "12px"
-	},
-	maxWFull: {
-			maxWidth: "100%"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	tracking002em: {
-			letterSpacing: ".02em"
-	},
-	textYellow: {
-			color: "var(--yellow)"
-	},
-	size22px: {
-			width: "22px",
-			height: "22px"
-	},
-	roundedAvatar: {
-			borderRadius: "calc(32% * var(--rp))"
-	,
-		cornerShape: "var(--cs)"},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-
-	MbPx: {
-		"marginBottom": "-1px"
-	},
-	borderB2: {
-		"borderBottomStyle": "var(--tw-border-style)",
-		"borderBottomWidth": "2px"
-	},
-	px13px: {
-		"paddingInline": "13px"
-	},
-	pt2: {
-		"paddingTop": "8px"
-	},
-	pb11px: {
-		"paddingBottom": "11px"
-	},
-	transitionColors: {
-		"transitionProperty": "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	phoneShrink0: {
-		"@media (max-width: 720px)": {
-			"flexShrink": "0"
-		}
-	},
-	phonePx35: {
-		"@media (max-width: 720px)": {
-			"paddingInline": "14px"
-		}
-	},
-	phonePt11px: {
-		"@media (max-width: 720px)": {
-			"paddingTop": "11px"
-		}
-	},
-	phonePb13px: {
-		"@media (max-width: 720px)": {
-			"paddingBottom": "13px"
-		}
-	},
-	phoneTextItemTitle: {
-		"@media (max-width: 720px)": {
-			"fontSize": "var(--type-item-title)"
-		}
-	},
-	phoneWhitespaceNowrap: {
-		"@media (max-width: 720px)": {
-			"whiteSpace": "nowrap"
-		}
-	},
-	minW5: {
-		"minWidth": "20px"
-	},
-	px7px: {
-		"paddingInline": "7px"
-	},
-	pyPx: {
-		"paddingBlock": "1px"
-	},
-	textCenter: {
-		"textAlign": "center"
-	},
-	py9px: {
-		"paddingBlock": "9px"
-	},
-	phoneHidden: {
-		"@media (max-width: 720px)": {
-			"display": "none"
-		}
-	},
-	cursorPointer: {
-		"cursor": "pointer"
-	},
-	py11px: {
-		"paddingBlock": "11px"
-	},
-	hoverBgHover: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--hover)"
-			}
-		}
-	},
-	phoneFlex: {
-		"@media (max-width: 720px)": {
-			"display": "flex"
-		}
-	},
-	phoneFlexWrap: {
-		"@media (max-width: 720px)": {
-			"flexWrap": "wrap"
-		}
-	},
-	phoneItemsCenter: {
-		"@media (max-width: 720px)": {
-			"alignItems": "center"
-		}
-	},
-	phoneGapX3: {
-		"@media (max-width: 720px)": {
-			"columnGap": "12px"
-		}
-	},
-	phoneGapY9px: {
-		"@media (max-width: 720px)": {
-			"rowGap": "9px"
-		}
-	},
-	phonePx4: {
-		"@media (max-width: 720px)": {
-			"paddingInline": "16px"
-		}
-	},
-	phonePy35: {
-		"@media (max-width: 720px)": {
-			"paddingBlock": "14px"
-		}
-	},
-
-	borderBAccent: {
-		"borderBottomColor": "var(--accent)"
-	},
-	borderBTransparent: {
-		"borderBottomColor": "transparent"
-	},
-	hoverTextFg: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text)"
-			}
-		}
-	},
-	bgAccentSoft: {
-		"backgroundColor": "var(--accent-soft)"
-	},
-	textAccent: {
-		"color": "var(--accent-ink)"
-	},
-
-	animatePulse14sEaseInOutInfinite: {
-		"animation": "1.4s ease-in-out infinite pulse"
-	},
-	tabularNums: {
-		"--tw-numeric-spacing": "tabular-nums",
-		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
-	},
-	phoneOverflowXHidden: {
-		"@media (max-width: 720px)": {
-			"overflowX": "hidden"
-		}
-	},
-	transitionBorderColorBackgroundColor: {
-		"transitionProperty": "border-color,background-color",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	focusWithinBorderLineStrong: {
-		":focusWithin": {
-			"borderColor": "var(--border-strong)"
-		}
-	},
-	focusWithinBgPanel: {
-		":focusWithin": {
-			"backgroundColor": "var(--bg-panel)"
-		}
-	},
-	placeholderTextFaint: {
-		"::placeholder": {
-			"color": "var(--text-faint)"
-		}
-	},
-	phoneOverflowXAuto: {
-		"@media (max-width: 720px)": {
-			"overflowX": "auto"
-		}
-	},
-	phoneScrollbarWidthNone: {
-		"@media (max-width: 720px)": {
-			"scrollbarWidth": "none"
-		}
-	},
-	grid: {
-		"display": "grid"
-	},
-	wFull: {
-		"width": "100%"
-	},
-	gridCols92pxMinmax01fr156px132px116px132px78px: {
-		"gridTemplateColumns": "92px minmax(0,1fr) 156px 132px 116px 132px 78px"
-	},
-	gap35: {
-		"gap": "14px"
-	},
-	textLeft: {
-		"textAlign": "left"
-	},
-	max1180pxGridCols88pxMinmax01fr150px118px78px: {
-		"@media not all and (min-width: 1180px)": {
-			"gridTemplateColumns": "88px minmax(0,1fr) 150px 118px 78px"
-		}
-	},
-	phoneOrder1: {
-		"@media (max-width: 720px)": {
-			"order": "1"
-		}
-	},
-	gap3px: {
-		"gap": "3px"
-	},
-	phoneOrder2: {
-		"@media (max-width: 720px)": {
-			"order": "2"
-		}
-	},
-	phoneFlex11Calc10090px: {
-		"@media (max-width: 720px)": {
-			"flex": "calc(100% - 90px)"
-		}
-	},
-	phoneOrder3: {
-		"@media (max-width: 720px)": {
-			"order": "3"
-		}
-	},
-	phoneInlineFlex: {
-		"@media (max-width: 720px)": {
-			"display": "inline-flex"
-		}
-	},
-	desktopMax1180pxHidden: {
-		"@media (min-width: 721px)": {
-			"@media not all and (min-width: 1180px)": {
-				"display": "none"
-			}
-		}
-	},
-	phoneOrder5: {
-		"@media (max-width: 720px)": {
-			"order": "5"
-		}
-	},
-	phoneOrder4: {
-		"@media (max-width: 720px)": {
-			"order": "4"
-		}
-	},
-	phoneFlexRow: {
-		"@media (max-width: 720px)": {
-			"flexDirection": "row"
-		}
-	},
-	phoneGap2: {
-		"@media (max-width: 720px)": {
-			"gap": "8px"
-		}
-	},
-	phoneOrder6: {
-		"@media (max-width: 720px)": {
-			"order": "6"
-		}
-	},
-	phoneOrder7: {
-		"@media (max-width: 720px)": {
-			"order": "7"
-		}
-	},
-	phoneMlAuto: {
-		"@media (max-width: 720px)": {
-			"marginLeft": "auto"
-		}
-	},
-	textPurple: {
-		"color": "var(--purple)"
-	},
-	focusVisibleOpacity100: {
-		":focusVisible": {
-			"opacity": "1"
-		}
-	},
-	hoverTextLink: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--link)"
-			}
-		}
-	},
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap7px: {
+    gap: "7px",
+  },
+  h1: {
+    height: "4px",
+  },
+  w46px: {
+    width: "46px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
+  hFull: {
+    height: "100%",
+  },
+  bgGreen: {
+    backgroundColor: "var(--green)",
+  },
+  bgRed: {
+    backgroundColor: "var(--red)",
+  },
+  bgYellow: {
+    backgroundColor: "var(--yellow)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  size2: {
+    width: "calc(4px * 2)",
+    height: "calc(4px * 2)",
+  },
+  roundedXs: {
+    borderRadius: "calc(2px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgLineStrong: {
+    backgroundColor: "var(--border-strong)",
+  },
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  hidden: {
+    display: "none",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  phoneFlex: {
+    "@media (max-width: 720px)": {
+      display: "flex",
+    },
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  flex1: {
+    flex: "1",
+  },
+  relative: {
+    position: "relative",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  phoneOverflowXHidden: {
+    "@media (max-width: 720px)": {
+      overflowX: "hidden",
+    },
+  },
+  sticky: {
+    position: "sticky",
+  },
+  top0: {
+    top: "0",
+  },
+  z3: {
+    zIndex: "3",
+  },
+  px22px: {
+    paddingInline: "22px",
+  },
+  pt4: {
+    paddingTop: "calc(4px * 4)",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  m0: {
+    margin: "0",
+  },
+  fontTitle: {
+    fontWeight: "var(--title-weight)",
+  },
+  tracking001em: {
+    letterSpacing: "-0.01em",
+  },
+  w60: {
+    width: "calc(4px * 60)",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  bgRaised: {
+    backgroundColor: "var(--bg-raised)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  transitionBorderColorBackgroundColor: {
+    transitionProperty: "border-color,background-color",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  focusWithinBorderLineStrong: {
+    ":focus-within": {
+      borderColor: "var(--border-strong)",
+    },
+  },
+  focusWithinBgPanel: {
+    ":focus-within": {
+      backgroundColor: "var(--bg-panel)",
+    },
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  placeholderTextFaint: {
+    "::placeholder": {
+      color: "var(--text-faint)",
+    },
+  },
+  Mx22px: {
+    marginInline: "calc(22px * -1)",
+  },
+  phoneOverflowXAuto: {
+    "@media (max-width: 720px)": {
+      overflowX: "auto",
+    },
+  },
+  phoneScrollbarWidthNone: {
+    "@media (max-width: 720px)": {
+      scrollbarWidth: "none",
+    },
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  leading13: {
+    lineHeight: "1.3",
+  },
+  selfCenter: {
+    alignSelf: "center",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  p05: {
+    padding: "calc(4px * 0.5)",
+  },
+  opacity0: {
+    opacity: "0%",
+  },
+  transitionOpacity: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  focusVisibleOpacity100: {
+    ":focus-visible": {
+      opacity: "100%",
+    },
+  },
+  hoverTextLink: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--link)",
+      },
+    },
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  tracking002em: {
+    letterSpacing: "0.02em",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  size22px: {
+    width: "22px",
+    height: "22px",
+  },
+  roundedAvatar: {
+    borderRadius: "calc(32% * var(--rp))",
+    cornerShape: "var(--cs)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
 });
 
 interface Props {
@@ -573,7 +352,7 @@ interface Props {
   /** Open another PR in the review panel (stack map layer links). */
   onOpenPr?: (repo: string, branch: string) => void;
   onAddToInput: (id: string, text: string) => void;
-  send?: (msg: any) => void;
+  send?: (msg: WSClientMessage) => void;
   addHandler?: (handler: (msg: WSServerMessage) => void) => () => void;
 }
 
@@ -592,30 +371,37 @@ const STATE_RANK: Record<string, number> = { OPEN: 0, CLOSED: 1, MERGED: 2 };
    `desktop:max-[1180px]` keeps it independent of how Tailwind happens to
    order two max-* variants against each other. */
 const ROW =
-	mergeStylexClassName("", sx.grid, sx.wFull, sx.gridCols92pxMinmax01fr156px132px116px132px78px, sx.itemsCenter, sx.gap35, sx.borderB, sx.borderLine, sx.px22px, sx.textLeft, sx.max1180pxGridCols88pxMinmax01fr150px118px78px);
+  "grid w-full grid-cols-[92px_minmax(0,1fr)_156px_132px_116px_132px_78px] items-center gap-3.5 border-b border-line px-[22px] text-left max-[1180px]:grid-cols-[88px_minmax(0,1fr)_150px_118px_78px]";
 
-const C_STATE = mergeStylexClassName("", sx.flex, sx.itemsCenter, sx.gap7px, typography.meta, sx.fontMedium, sx.phoneOrder1);
-const C_TITLE =
-	mergeStylexClassName("", sx.flex, sx.minW0, sx.flexCol, sx.gap3px, sx.phoneOrder2, sx.phoneFlex11Calc10090px);
-const C_CHECKS = mergeStylexClassName("", sx.phoneOrder3, sx.phoneInlineFlex);
-const C_CHANGES =
-	mergeStylexClassName("", sx.phoneOrder4, sx.phoneInlineFlex, sx.phoneFlexRow, sx.phoneItemsCenter, sx.phoneGap2);
-const C_REVIEW =
-	mergeStylexClassName("", sx.desktopMax1180pxHidden, sx.phoneOrder5, sx.phoneInlineFlex);
-const C_AUTHOR =
-	mergeStylexClassName("", sx.flex, sx.minW0, sx.itemsCenter, sx.gap2, sx.desktopMax1180pxHidden, sx.phoneOrder6, sx.phoneInlineFlex);
-const C_UPDATED =
-	mergeStylexClassName("", typography.meta, sx.whitespaceNowrap, sx.textFaint, sx.tabularNums, sx.phoneOrder7, sx.phoneMlAuto);
+const C_STATE = utilityClassName(
+  "flex items-center gap-[7px] text-meta font-medium phone:order-1",
+);
+const C_TITLE = utilityClassName(
+  "flex min-w-0 flex-col gap-[3px] phone:order-2 phone:flex-[1_1_calc(100%-90px)]",
+);
+const C_CHECKS = utilityClassName("phone:order-3 phone:inline-flex");
+const C_CHANGES = utilityClassName(
+  "phone:order-4 phone:inline-flex phone:flex-row phone:items-center phone:gap-2",
+);
+const C_REVIEW = utilityClassName(
+  "desktop:max-[1180px]:hidden phone:order-5 phone:inline-flex",
+);
+const C_AUTHOR = utilityClassName(
+  "flex min-w-0 items-center gap-2 desktop:max-[1180px]:hidden phone:order-6 phone:inline-flex",
+);
+const C_UPDATED = utilityClassName(
+  "text-meta whitespace-nowrap text-faint tabular-nums phone:order-7 phone:ml-auto",
+);
 
 /** "—" and other absent values, wherever a cell has nothing to say. */
-const DIM = mergeStylexClassName("", typography.meta, sx.textFaint);
+const DIM = utilityClassName("text-meta text-faint");
 
 /** Ink per PR state — replaces the render-time `rv-state-${key}`. */
 const STATE_TONE: Record<string, string> = {
-	open: mergeStylexClassName("", sx.textGreen),
-	draft: mergeStylexClassName("", sx.textDim),
-	merged: mergeStylexClassName("", sx.textPurple),
-	closed: mergeStylexClassName("", sx.textRed),
+  open: "text-green",
+  draft: "text-dim",
+  merged: "text-purple",
+  closed: "text-red",
 };
 
 type ChecksTone = "pass" | "fail" | "pending";
@@ -626,12 +412,12 @@ type ChecksTone = "pass" | "fail" | "pending";
  *  in the reduced-motion exceptions, so dropping it would freeze the one dot
  *  that means "still running". */
 const CHECKS_TONE: Record<ChecksTone, { dot: string; label: string }> = {
-	pass: { dot: mergeStylexClassName("", sx.bgGreen), label: mergeStylexClassName("", sx.textGreen) },
-	fail: { dot: mergeStylexClassName("", sx.bgRed), label: mergeStylexClassName("", sx.textRed) },
-	pending: {
-		dot: mergeStylexClassName("rv-check-dot-pending", sx.bgYellow, sx.animatePulse14sEaseInOutInfinite),
-		label: mergeStylexClassName("", sx.textYellow),
-	},
+  pass: { dot: "bg-green", label: "text-green" },
+  fail: { dot: "bg-red", label: "text-red" },
+  pending: {
+    dot: "bg-yellow rv-check-dot-pending animate-[pulse_1.4s_ease-in-out_infinite]",
+    label: "text-yellow",
+  },
 };
 
 function prNum(s: UnifiedSession): string | null {
@@ -667,7 +453,12 @@ function needsReview(s: UnifiedSession): boolean {
 
 /** A GitHub-style icon for a PR's open/merged/closed/draft state. */
 function StateIcon({ kind }: { kind: string }) {
-  const common = { width: 15, height: 15, viewBox: "0 0 16 16", fill: "currentColor" as const };
+  const common = {
+    width: 15,
+    height: 15,
+    viewBox: "0 0 16 16",
+    fill: "currentColor" as const,
+  };
   if (kind === "merged")
     return (
       <svg {...common} aria-hidden>
@@ -692,7 +483,8 @@ function StateIcon({ kind }: { kind: string }) {
 function ChecksCell({ s }: { s: UnifiedSession }) {
   const c = s.prChecks;
   if (!c || c.total === 0) return <span className={DIM}>–</span>;
-  const tone: ChecksTone = c.failed > 0 ? "fail" : c.pending > 0 ? "pending" : "pass";
+  const tone: ChecksTone =
+    c.failed > 0 ? "fail" : c.pending > 0 ? "pending" : "pass";
   const label =
     tone === "fail"
       ? `${c.failed} failing`
@@ -702,17 +494,51 @@ function ChecksCell({ s }: { s: UnifiedSession }) {
   const pct = (n: number) => `${(n / c.total) * 100}%`;
   return (
     <span
-      {...stylex.props(sx.inlineFlex, sx.itemsCenter, sx.gap7px, typography.meta)}
+      {...stylex.props(
+        sx.inlineFlex,
+        sx.itemsCenter,
+        sx.gap7px,
+        typography.meta,
+      )}
       title={`${c.passed} passed · ${c.failed} failed · ${c.pending} pending · ${c.total} total`}
     >
-      <span className={[mergeStylexClassName("", sx.size2, sx.shrink0, sx.roundedFull), CHECKS_TONE[tone].dot].filter(Boolean).join(" ")} />
-      <span className={[mergeStylexClassName("", sx.whitespaceNowrap), CHECKS_TONE[tone].label].filter(Boolean).join(" ")}>{label}</span>
-      <span {...mergeStylexProps("", sx.phoneHidden, sx.inlineFlex, sx.h1, sx.w46px, sx.shrink0, sx.overflowHidden, sx.roundedFull, sx.bgActive)}
+      <span
+        className={utilityClassName(
+          `size-2 shrink-0 rounded-full ${CHECKS_TONE[tone].dot}`,
+        )}
+      />
+      <span
+        className={utilityClassName(
+          `whitespace-nowrap ${CHECKS_TONE[tone].label}`,
+        )}
+      >
+        {label}
+      </span>
+      <span
+        {...stylex.props(
+          sx.inlineFlex,
+          sx.h1,
+          sx.w46px,
+          sx.shrink0,
+          sx.overflowHidden,
+          sx.roundedFull,
+          sx.bgActive,
+          sx.phoneHidden,
+        )}
         aria-hidden
       >
-        <span {...stylex.props(sx.hFull, sx.bgGreen)} style={{ width: pct(c.passed) }} />
-        <span {...stylex.props(sx.hFull, sx.bgRed)} style={{ width: pct(c.failed) }} />
-        <span {...stylex.props(sx.hFull, sx.bgYellow)} style={{ width: pct(c.pending) }} />
+        <span
+          {...stylex.props(sx.hFull, sx.bgGreen)}
+          style={{ width: pct(c.passed) }}
+        />
+        <span
+          {...stylex.props(sx.hFull, sx.bgRed)}
+          style={{ width: pct(c.failed) }}
+        />
+        <span
+          {...stylex.props(sx.hFull, sx.bgYellow)}
+          style={{ width: pct(c.pending) }}
+        />
       </span>
     </span>
   );
@@ -720,13 +546,25 @@ function ChecksCell({ s }: { s: UnifiedSession }) {
 
 function ReviewCell({ s }: { s: UnifiedSession }) {
   const d = s.prReviewDecision || "";
-  const review = mergeStylexClassName("", typography.meta, sx.fontMedium, sx.whitespaceNowrap);
+  const review = "text-meta font-medium whitespace-nowrap";
   if ((s.prState || "OPEN") !== "OPEN") return <span className={DIM}>–</span>;
-  if (d === "APPROVED") return <span className={[review, mergeStylexClassName("", sx.textGreen)].filter(Boolean).join(" ")}>Approved</span>;
+  if (d === "APPROVED")
+    return (
+      <span className={utilityClassName(`${review} text-green`)}>Approved</span>
+    );
   if (d === "CHANGES_REQUESTED")
-    return <span className={[review, mergeStylexClassName("", sx.textYellow)].filter(Boolean).join(" ")}>Changes</span>;
-  if (s.prIsDraft) return <span className={[review, mergeStylexClassName("", sx.textFaint)].filter(Boolean).join(" ")}>Draft</span>;
-  return <span className={[review, mergeStylexClassName("", sx.textFaint)].filter(Boolean).join(" ")}>Review required</span>;
+    return (
+      <span className={utilityClassName(`${review} text-yellow`)}>Changes</span>
+    );
+  if (s.prIsDraft)
+    return (
+      <span className={utilityClassName(`${review} text-faint`)}>Draft</span>
+    );
+  return (
+    <span className={utilityClassName(`${review} text-faint`)}>
+      Review required
+    </span>
+  );
 }
 
 function ChangesCell({ s }: { s: UnifiedSession }) {
@@ -744,19 +582,35 @@ function ChangesCell({ s }: { s: UnifiedSession }) {
       {...stylex.props(sx.inlineFlex, sx.flexCol, sx.gap1)}
       title={`${files} file${files === 1 ? "" : "s"} changed`}
     >
-      <span {...mergeStylexProps("", sx.tabularNums, sx.inlineFlex, sx.gap7px, typography.meta)}>
+      <span
+        {...mergeStylexProps(
+          "tabular-nums",
+          sx.inlineFlex,
+          sx.gap7px,
+          typography.meta,
+        )}
+      >
         <span {...stylex.props(sx.textGreen)}>+{add}</span>
         <span {...stylex.props(sx.textRed)}>−{del}</span>
       </span>
       <span {...stylex.props(sx.inlineFlex, sx.gap05)} aria-hidden>
         {Array.from({ length: greens }).map((_, i) => (
-          <span key={`g${i}`} {...stylex.props(sx.size2, sx.roundedXs, sx.bgGreen)} />
+          <span
+            key={`g${i}`}
+            {...stylex.props(sx.size2, sx.roundedXs, sx.bgGreen)}
+          />
         ))}
         {Array.from({ length: reds }).map((_, i) => (
-          <span key={`r${i}`} {...stylex.props(sx.size2, sx.roundedXs, sx.bgRed)} />
+          <span
+            key={`r${i}`}
+            {...stylex.props(sx.size2, sx.roundedXs, sx.bgRed)}
+          />
         ))}
         {Array.from({ length: grays }).map((_, i) => (
-          <span key={`n${i}`} {...stylex.props(sx.size2, sx.roundedXs, sx.bgLineStrong)} />
+          <span
+            key={`n${i}`}
+            {...stylex.props(sx.size2, sx.roundedXs, sx.bgLineStrong)}
+          />
         ))}
       </span>
     </span>
@@ -783,19 +637,31 @@ export function Reviews({
     for (const s of sessions) {
       if (!s.prUrl || s.archived) continue;
       const existing = byPr.get(s.prUrl);
-      if (!existing || new Date(s.lastActivity) > new Date(existing.lastActivity)) {
+      if (
+        !existing ||
+        new Date(s.lastActivity) > new Date(existing.lastActivity)
+      ) {
         byPr.set(s.prUrl, s);
       }
     }
     return [...byPr.values()].sort((a, b) => {
-      const r = (STATE_RANK[a.prState || ""] ?? 1) - (STATE_RANK[b.prState || ""] ?? 1);
+      const r =
+        (STATE_RANK[a.prState || ""] ?? 1) - (STATE_RANK[b.prState || ""] ?? 1);
       if (r !== 0) return r;
-      return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime();
+      return (
+        new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+      );
     });
   })();
 
   const counts = (() => {
-    const c = { review: 0, open: 0, merged: 0, closed: 0, all: prSessions.length };
+    const c = {
+      review: 0,
+      open: 0,
+      merged: 0,
+      closed: 0,
+      all: prSessions.length,
+    };
     for (const s of prSessions) {
       const state = s.prState || "OPEN";
       if (state === "OPEN") c.open++;
@@ -843,7 +709,13 @@ export function Reviews({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      )
+        return;
       onSelect("");
     };
     window.addEventListener("keydown", onKey);
@@ -851,7 +723,8 @@ export function Reviews({
   }, [hasSelection, onSelect]);
 
   // Only label rows with their repo when the list actually spans repos.
-  const multiRepo = (new Set(prSessions.map((s) => s.repo || "repository")).size > 1);
+  const multiRepo =
+    new Set(prSessions.map((s) => s.repo || "repository")).size > 1;
 
   const TABS: Array<{ key: FilterKey; label: string; count: number }> = [
     { key: "review", label: "Needs review", count: counts.review },
@@ -868,12 +741,45 @@ export function Reviews({
   // the app sidebar.
   if (selected) {
     return (
-      <div {...stylex.props(sx.flex, sx.hFull, sx.minH0, sx.flexCol, sx.bgSurface)}>
-        <div {...mergeStylexProps("", sx.phoneFlex, sx.hidden, sx.shrink0, sx.itemsCenter, sx.borderB, sx.borderDivider, sx.px3, sx.py2)}>
-          <button {...mergeStylexProps("", sx.hoverBgHover, sx.inlineFlex, sx.itemsCenter, sx.gap15, sx.roundedControl, sx.border0, sx.bgTransparent, sx.px2, sx.py15, sx.textSm, sx.fontMedium, sx.textFg)}
+      <div
+        {...stylex.props(sx.flex, sx.hFull, sx.minH0, sx.flexCol, sx.bgSurface)}
+      >
+        <div
+          {...stylex.props(
+            sx.hidden,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px3,
+            sx.py2,
+            sx.phoneFlex,
+          )}
+        >
+          <button
+            {...stylex.props(
+              sx.inlineFlex,
+              sx.itemsCenter,
+              sx.gap15,
+              sx.roundedControl,
+              sx.border0,
+              sx.bgTransparent,
+              sx.px2,
+              sx.py15,
+              sx.textSm,
+              sx.fontMedium,
+              sx.textFg,
+              sx.hoverBgHover,
+            )}
             onClick={() => onSelect("")}
           >
-            <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden
+            >
               <path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 1 1 1.06 1.06L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06Z" />
             </svg>
             Pull requests
@@ -899,15 +805,83 @@ export function Reviews({
 
   return (
     <div {...stylex.props(sx.relative, sx.flex, sx.minH0, sx.flex1)}>
-      <div {...mergeStylexProps("", sx.phoneOverflowXHidden, sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.overflowYAuto)}>
-        <div {...stylex.props(sx.sticky, sx.top0, sx.z3, sx.bgSurface, sx.px22px, sx.pt4)}>
-          <div {...stylex.props(sx.mb3, sx.flex, sx.itemsCenter, sx.justifyBetween, sx.gap4)}>
-            <h1 {...stylex.props(sx.m0, sx.fontTitle, sx.tracking001em, typography.sectionTitle)}>Reviews</h1>
-            <div {...mergeStylexProps("", sx.transitionBorderColorBackgroundColor, sx.focusWithinBorderLineStrong, sx.focusWithinBgPanel, sx.flex, sx.w60, sx.itemsCenter, sx.gap7px, sx.roundedMd, sx.border, sx.borderLine, sx.bgRaised, sx.px25, sx.py15, sx.textFaint)}>
-              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.minW0,
+          sx.flex1,
+          sx.flexCol,
+          sx.overflowYAuto,
+          sx.phoneOverflowXHidden,
+        )}
+      >
+        <div
+          {...stylex.props(
+            sx.sticky,
+            sx.top0,
+            sx.z3,
+            sx.bgSurface,
+            sx.px22px,
+            sx.pt4,
+          )}
+        >
+          <div
+            {...stylex.props(
+              sx.mb3,
+              sx.flex,
+              sx.itemsCenter,
+              sx.justifyBetween,
+              sx.gap4,
+            )}
+          >
+            <h1
+              {...stylex.props(
+                sx.m0,
+                sx.fontTitle,
+                sx.tracking001em,
+                typography.sectionTitle,
+              )}
+            >
+              Reviews
+            </h1>
+            <div
+              {...stylex.props(
+                sx.flex,
+                sx.w60,
+                sx.itemsCenter,
+                sx.gap7px,
+                sx.roundedMd,
+                sx.border,
+                sx.borderLine,
+                sx.bgRaised,
+                sx.px25,
+                sx.py15,
+                sx.textFaint,
+                sx.transitionBorderColorBackgroundColor,
+                sx.focusWithinBorderLineStrong,
+                sx.focusWithinBgPanel,
+              )}
+            >
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                aria-hidden
+              >
                 <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z" />
               </svg>
-              <input {...mergeStylexProps("", sx.placeholderTextFaint, sx.minW0, sx.flex1, sx.border0, sx.bgTransparent, sx.textFg, sx.outlineNone, typography.label)}
+              <input
+                {...stylex.props(
+                  sx.minW0,
+                  sx.flex1,
+                  sx.border0,
+                  sx.bgTransparent,
+                  sx.textFg,
+                  sx.outlineNone,
+                  sx.placeholderTextFaint,
+                  typography.label,
+                )}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search pull requests…"
@@ -919,18 +893,40 @@ export function Reviews({
               underline sits on top of it. The negative margin cancels the
               header's 22px padding. Five tabs + counts don't fit a phone, so
               below 720px the strip scrolls edge to edge instead. */}
-          <div {...mergeStylexProps("phone:[&::-webkit-scrollbar]:hidden", sx.phoneOverflowXAuto, sx.phoneScrollbarWidthNone, sx.Mx22px, sx.flex, sx.gap05, sx.borderB, sx.borderDivider, sx.px22px)}>
+          <div
+            {...mergeStylexProps(
+              "phone:[&::-webkit-scrollbar]:hidden",
+              sx.Mx22px,
+              sx.flex,
+              sx.gap05,
+              sx.borderB,
+              sx.borderDivider,
+              sx.px22px,
+              sx.phoneOverflowXAuto,
+              sx.phoneScrollbarWidthNone,
+            )}
+          >
             {TABS.map((t) => {
               const on = filter === t.key;
               return (
                 <button
                   key={t.key}
-                  className={[mergeStylexClassName("", sx.MbPx, sx.flex, sx.itemsCenter, sx.gap7px, sx.borderB2, sx.px13px, sx.pt2, sx.pb11px, typography.label, sx.fontMedium, sx.transitionColors, sx.phoneShrink0, sx.phonePx35, sx.phonePt11px, sx.phonePb13px, sx.phoneTextItemTitle, sx.phoneWhitespaceNowrap), on ? mergeStylexClassName("", sx.borderBAccent, sx.textFg) : mergeStylexClassName("", sx.borderBTransparent, sx.textDim, sx.hoverTextFg)].filter(Boolean).join(" ")}
+                  className={utilityClassName(
+                    `-mb-px flex items-center gap-[7px] border-b-2 px-[13px] pt-2 pb-[11px] text-label font-medium transition-colors phone:shrink-0 phone:px-3.5 phone:pt-[11px] phone:pb-[13px] phone:text-item-title phone:whitespace-nowrap ${
+                      on
+                        ? "border-b-accent text-fg"
+                        : "border-b-transparent text-dim hover:text-fg"
+                    }`,
+                  )}
                   onClick={() => setFilter(t.key)}
                 >
                   {t.label}
                   <span
-                    className={[mergeStylexClassName("", sx.minW5, sx.roundedFull, sx.px7px, sx.pyPx, sx.textCenter, typography.meta, sx.fontSemibold), on ? mergeStylexClassName("", sx.bgAccentSoft, sx.textAccent) : mergeStylexClassName("", sx.bgActive, sx.textDim)].filter(Boolean).join(" ")}
+                    className={utilityClassName(
+                      `min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold ${
+                        on ? "bg-accent-soft text-accent" : "bg-active text-dim"
+                      }`,
+                    )}
                   >
                     {t.count}
                   </span>
@@ -943,7 +939,9 @@ export function Reviews({
               divider spans the full width. */}
           {filtered.length > 0 && (
             <div
-              className={[ROW, mergeStylexClassName("", sx.Mx22px, sx.bgSurface, sx.py9px, typography.meta, sx.fontSemibold, sx.tracking001em, sx.textFaint, sx.phoneHidden)].filter(Boolean).join(" ")}
+              className={utilityClassName(
+                `${ROW} -mx-[22px] bg-surface py-[9px] text-meta font-semibold tracking-[-0.01em] text-faint phone:hidden`,
+              )}
               role="row"
             >
               <span className={C_STATE}>Status</span>
@@ -958,9 +956,20 @@ export function Reviews({
         </div>
 
         {filtered.length === 0 ? (
-          <div {...stylex.props(sx.flex, sx.flex1, sx.itemsCenter, sx.justifyCenter)}>
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.flex1,
+              sx.itemsCenter,
+              sx.justifyCenter,
+            )}
+          >
             <EmptyState
-              title={prSessions.length === 0 ? "No pull requests yet" : "Nothing here"}
+              title={
+                prSessions.length === 0
+                  ? "No pull requests yet"
+                  : "Nothing here"
+              }
             >
               {prSessions.length === 0
                 ? `Pull requests opened by ${AGENT_NAME} sessions show up here.`
@@ -976,55 +985,147 @@ export function Reviews({
               return (
                 <button
                   key={s.prUrl}
-                  className={[ROW, mergeStylexClassName("group", sx.cursorPointer, sx.py11px, typography.itemTitle, sx.textFg, sx.hoverBgHover, sx.phoneFlex, sx.phoneFlexWrap, sx.phoneItemsCenter, sx.phoneGapX3, sx.phoneGapY9px, sx.phonePx4, sx.phonePy35)].filter(Boolean).join(" ")}
+                  className={utilityClassName(
+                    `${ROW} group cursor-pointer py-[11px] text-item-title text-fg hover:bg-hover phone:flex phone:flex-wrap phone:items-center phone:gap-x-3 phone:gap-y-[9px] phone:px-4 phone:py-3.5`,
+                  )}
                   onClick={() => onSelect(s.id)}
                   role="row"
                 >
-                  <span className={`${C_STATE} ${STATE_TONE[meta.key]}`} role="cell">
+                  <span
+                    className={`${C_STATE} ${STATE_TONE[meta.key]}`}
+                    role="cell"
+                  >
                     <StateIcon kind={meta.key} />
-                    <span {...stylex.props(sx.whitespaceNowrap)}>{meta.label}</span>
+                    <span {...stylex.props(sx.whitespaceNowrap)}>
+                      {meta.label}
+                    </span>
                   </span>
                   <span className={C_TITLE} role="cell">
-                    <span {...stylex.props(sx.flex, sx.minW0, sx.itemsBaseline, sx.gap2)}>
-                      <span {...stylex.props(sx.truncate, sx.leading13, sx.fontMedium, typography.itemTitle)}>
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.minW0,
+                        sx.itemsBaseline,
+                        sx.gap2,
+                      )}
+                    >
+                      <span
+                        {...stylex.props(
+                          sx.truncate,
+                          sx.leading13,
+                          sx.fontMedium,
+                          typography.itemTitle,
+                        )}
+                      >
                         {cleanTitle(s)}
                       </span>
                       {prNum(s) && (
-                        <span {...mergeStylexProps("", sx.tabularNums, sx.shrink0, sx.textFaint, typography.meta)}>
+                        <span
+                          {...mergeStylexProps(
+                            "tabular-nums",
+                            sx.shrink0,
+                            sx.textFaint,
+                            typography.meta,
+                          )}
+                        >
                           {prNum(s)}
                         </span>
                       )}
                       {s.prUrl && (
-                        <span {...mergeStylexProps("group-hover:opacity-100", sx.focusVisibleOpacity100, sx.hoverTextLink, sx.inlineFlex, sx.shrink0, sx.itemsCenter, sx.selfCenter, sx.roundedSm, sx.p05, sx.textFaint, sx.opacity0, sx.transitionOpacity)}
+                        <span
+                          {...mergeStylexProps(
+                            "group-hover:opacity-100",
+                            sx.inlineFlex,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.selfCenter,
+                            sx.roundedSm,
+                            sx.p05,
+                            sx.textFaint,
+                            sx.opacity0,
+                            sx.transitionOpacity,
+                            sx.focusVisibleOpacity100,
+                            sx.hoverTextLink,
+                          )}
                           title={`Open on ${providerFromUrl(s.prUrl).name}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             window.open(s.prUrl, "_blank", "noopener");
                           }}
                         >
-                          <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 16 16"
+                            fill="currentColor"
+                            aria-hidden
+                          >
                             <path d="M3.75 2h3.5a.75.75 0 0 1 0 1.5h-3.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-3.5a.75.75 0 0 1 1.5 0v3.5A1.75 1.75 0 0 1 12.25 14h-8.5A1.75 1.75 0 0 1 2 12.25v-8.5C2 2.784 2.784 2 3.75 2Zm6.854-1h4.146a.25.25 0 0 1 .25.25v4.146a.25.25 0 0 1-.427.177L13.03 4.03 9.28 7.78a.751.751 0 0 1-1.06-1.06l3.75-3.75-1.543-1.543A.25.25 0 0 1 10.604 1Z" />
                           </svg>
                         </span>
                       )}
                     </span>
-                    <span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap3, sx.textFaint, typography.meta)}>
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.minW0,
+                        sx.itemsCenter,
+                        sx.gap3,
+                        sx.textFaint,
+                        typography.meta,
+                      )}
+                    >
                       {multiRepo && (
-                        <Badge>{s.repo ? repoLabel(s.repo) : "repository"}</Badge>
+                        <Badge>
+                          {s.repo ? repoLabel(s.repo) : "repository"}
+                        </Badge>
                       )}
                       {s.branch && (
-                        <span {...mergeStylexProps("[&>svg]:shrink-0 [&>svg]:opacity-70", sx.inlineFlex, sx.minW0, sx.maxWFull, sx.itemsCenter, sx.gap1, sx.overflowHidden, sx.textDim, typography.meta)}>
-                          <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                        <span
+                          {...mergeStylexProps(
+                            "[&>svg]:shrink-0 [&>svg]:opacity-70",
+                            sx.inlineFlex,
+                            sx.minW0,
+                            sx.maxWFull,
+                            sx.itemsCenter,
+                            sx.gap1,
+                            sx.overflowHidden,
+                            sx.textDim,
+                            typography.meta,
+                          )}
+                        >
+                          <svg
+                            width="17"
+                            height="17"
+                            viewBox="0 0 16 16"
+                            fill="currentColor"
+                            aria-hidden
+                          >
                             <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z" />
                           </svg>
                           <span {...stylex.props(sx.truncate)}>{s.branch}</span>
                         </span>
                       )}
                       {s.linearIssue && (
-                        <Badge className={mergeStylexOverrideClassName("", sx.tracking002em)}>{s.linearIssue.identifier}</Badge>
+                        <Badge
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.tracking002em,
+                          )}
+                        >
+                          {s.linearIssue.identifier}
+                        </Badge>
                       )}
                       {s.isRunning && (
-                        <span {...stylex.props(sx.shrink0, sx.textYellow, typography.meta)}>● running</span>
+                        <span
+                          {...stylex.props(
+                            sx.shrink0,
+                            sx.textYellow,
+                            typography.meta,
+                          )}
+                        >
+                          ● running
+                        </span>
                       )}
                     </span>
                   </span>
@@ -1043,24 +1144,52 @@ export function Reviews({
                         {(() => {
                           // Hosts without user avatars (code.storage) fall back
                           // to an initial instead of a broken <img src="">.
-                          const src = avatarUrl(s.prAuthor, providerFromUrl(s.prUrl), 40);
+                          const src = avatarUrl(
+                            s.prAuthor,
+                            providerFromUrl(s.prUrl),
+                            40,
+                          );
                           return src ? (
                             <img
-                              {...stylex.props(sx.size22px, sx.shrink0, sx.roundedAvatar, sx.bgActive)}
+                              {...stylex.props(
+                                sx.size22px,
+                                sx.shrink0,
+                                sx.roundedAvatar,
+                                sx.bgActive,
+                              )}
                               src={src}
                               alt=""
                               loading="lazy"
                             />
                           ) : (
                             <span
-                              {...stylex.props(sx.inlineFlex, sx.size22px, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedAvatar, sx.bgActive, sx.fontSemibold, sx.textFaint, typography.meta)}
+                              {...stylex.props(
+                                sx.inlineFlex,
+                                sx.size22px,
+                                sx.shrink0,
+                                sx.itemsCenter,
+                                sx.justifyCenter,
+                                sx.roundedAvatar,
+                                sx.bgActive,
+                                sx.fontSemibold,
+                                sx.textFaint,
+                                typography.meta,
+                              )}
                               aria-hidden
                             >
                               {s.prAuthor.charAt(0).toUpperCase()}
                             </span>
                           );
                         })()}
-                        <span {...stylex.props(sx.truncate, sx.textDim, typography.meta)}>{s.prAuthor}</span>
+                        <span
+                          {...stylex.props(
+                            sx.truncate,
+                            sx.textDim,
+                            typography.meta,
+                          )}
+                        >
+                          {s.prAuthor}
+                        </span>
                       </>
                     ) : (
                       <span className={DIM}>–</span>
@@ -1075,7 +1204,6 @@ export function Reviews({
           </div>
         )}
       </div>
-
     </div>
   );
 }

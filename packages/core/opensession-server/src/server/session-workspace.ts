@@ -62,7 +62,9 @@ import type { UnifiedSession } from "./types";
  * on globalThis so a hot reload doesn't lose the in-flight assignments.
  */
 const pending: Map<string, string> = ((
-  globalThis as unknown as { __ocPendingSessionWorkspaces?: Map<string, string> }
+  globalThis as unknown as {
+    __ocPendingSessionWorkspaces?: Map<string, string>;
+  }
 ).__ocPendingSessionWorkspaces ??= new Map());
 
 /**
@@ -151,7 +153,10 @@ export function settleProvisionalNames(sessions: UnifiedSession[]): void {
     try {
       updateWorkspace(session.workspaceId, { name: session.title });
     } catch (e) {
-      console.error(`[session-workspace] failed to name ${session.workspaceId}:`, e);
+      console.error(
+        `[session-workspace] failed to name ${session.workspaceId}:`,
+        e,
+      );
     }
   }
 }

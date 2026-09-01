@@ -9,7 +9,10 @@ export function stripHtmlComments(body: string): string {
   return body.replace(/<!--[\s\S]*?-->/g, "").trim();
 }
 
-export function formatPrCommentPrompt(comment: PrComment, pr: PrDetails): string {
+export function formatPrCommentPrompt(
+  comment: PrComment,
+  pr: PrDetails,
+): string {
   const author = comment.author ? ` from ${comment.author}` : "";
   const link = comment.url ? `\nURL: ${comment.url}` : "";
   return `Please address this PR comment${author} on PR #${pr.number} (${pr.title}).${link}\n\n${trimCommentBody(comment.body)}`;

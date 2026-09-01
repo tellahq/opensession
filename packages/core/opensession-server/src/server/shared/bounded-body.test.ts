@@ -15,7 +15,12 @@ function post(body: BodyInit | null, headers?: HeadersInit): Request {
 describe("readRequestTextWithinLimit", () => {
   it("preserves the exact UTF-8 text within the byte limit", async () => {
     const body = '{"message":"hello 👋"}';
-    expect(await readRequestTextWithinLimit(post(body), new TextEncoder().encode(body).byteLength)).toBe(body);
+    expect(
+      await readRequestTextWithinLimit(
+        post(body),
+        new TextEncoder().encode(body).byteLength,
+      ),
+    ).toBe(body);
   });
 
   it("rejects an oversized declared Content-Length before reading the stream", async () => {
@@ -28,9 +33,14 @@ describe("readRequestTextWithinLimit", () => {
         throw new Error("the declared-size fast path must not read the stream");
       },
     } as unknown as ReadableStream<Uint8Array>;
-    const request = { headers: new Headers({ "content-length": "1001" }), body } as Request;
+    const request = {
+      headers: new Headers({ "content-length": "1001" }),
+      body,
+    } as Request;
 
-    await expect(readRequestTextWithinLimit(request, 1000)).rejects.toBeInstanceOf(RequestBodyTooLargeError);
+    await expect(
+      readRequestTextWithinLimit(request, 1000),
+    ).rejects.toBeInstanceOf(RequestBodyTooLargeError);
     expect(readerRequested).toBe(false);
   });
 
@@ -46,7 +56,9 @@ describe("readRequestTextWithinLimit", () => {
       },
     });
 
-    await expect(readRequestTextWithinLimit(post(stream), 5)).rejects.toBeInstanceOf(RequestBodyTooLargeError);
+    await expect(
+      readRequestTextWithinLimit(post(stream), 5),
+    ).rejects.toBeInstanceOf(RequestBodyTooLargeError);
     expect(cancelled).toBe(true);
   });
 });

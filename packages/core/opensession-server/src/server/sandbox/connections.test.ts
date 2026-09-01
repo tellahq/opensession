@@ -1,10 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -26,13 +21,17 @@ beforeEach(() => {
   oldConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
   oldSecrets = process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   process.env.OPENSESSION_SANDBOX_CONFIG = join(scratch, "sandbox.json");
-  process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
+  process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(
+    scratch,
+    "secrets.json",
+  );
 });
 
 afterEach(() => {
   if (oldConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = oldConfig;
-  if (oldSecrets === undefined) delete process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
+  if (oldSecrets === undefined)
+    delete process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   else process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = oldSecrets;
   rmSync(scratch, { recursive: true, force: true });
 });
@@ -41,17 +40,25 @@ describe("workspace sandbox connections", () => {
   test("stores Daytona credentials behind an opaque reference and never returns it", () => {
     connectSandboxProvider("daytona", {
       secret: "daytona-secret-value",
-      settings: { apiUrl: "https://daytona.example.test", snapshot: "team-large" },
+      settings: {
+        apiUrl: "https://daytona.example.test",
+        snapshot: "team-large",
+      },
     });
 
-    const configText = readFileSync(process.env.OPENSESSION_SANDBOX_CONFIG!, "utf-8");
+    const configText = readFileSync(
+      process.env.OPENSESSION_SANDBOX_CONFIG!,
+      "utf-8",
+    );
     expect(configText).not.toContain("daytona-secret-value");
     expect(configText).toContain("wssec-");
     expect(sandboxProviderCredential("daytona")).toEqual({
       apiKey: "daytona-secret-value",
     });
 
-    const safe = safeSandboxConnections().find((value) => value.provider === "daytona")!;
+    const safe = safeSandboxConnections().find(
+      (value) => value.provider === "daytona",
+    )!;
     expect(safe.hasCredentials).toBe(true);
     expect(safe.state).toBe("checking");
     expect(safe).not.toHaveProperty("credentialRef");
@@ -63,10 +70,17 @@ describe("workspace sandbox connections", () => {
       secret: "box-secret-value",
       settings: { apiUrl: "https://box.example.test/v1" },
     });
-    const configText = readFileSync(process.env.OPENSESSION_SANDBOX_CONFIG!, "utf-8");
+    const configText = readFileSync(
+      process.env.OPENSESSION_SANDBOX_CONFIG!,
+      "utf-8",
+    );
     expect(configText).not.toContain("box-secret-value");
-    expect(sandboxProviderCredential("box")).toEqual({ apiKey: "box-secret-value" });
-    expect(safeSandboxConnections().find((value) => value.provider === "box")).toMatchObject({
+    expect(sandboxProviderCredential("box")).toEqual({
+      apiKey: "box-secret-value",
+    });
+    expect(
+      safeSandboxConnections().find((value) => value.provider === "box"),
+    ).toMatchObject({
       hasCredentials: true,
       state: "checking",
       settings: { apiUrl: "https://box.example.test/v1" },
@@ -104,7 +118,8 @@ describe("workspace sandbox connections", () => {
     });
     expect(sandboxConnectionReady("docker")).toBe(true);
     expect(
-      safeSandboxConnections().find((value) => value.provider === "docker")?.state,
+      safeSandboxConnections().find((value) => value.provider === "docker")
+        ?.state,
     ).toBe("ready");
   });
 
@@ -122,7 +137,8 @@ describe("workspace sandbox connections", () => {
 
     expect(sandboxConnectionReady("daytona")).toBe(true);
     expect(
-      safeSandboxConnections().find((value) => value.provider === "daytona")?.state,
+      safeSandboxConnections().find((value) => value.provider === "daytona")
+        ?.state,
     ).toBe("ready");
   });
 
@@ -139,7 +155,8 @@ describe("workspace sandbox connections", () => {
 
     expect(sandboxConnectionReady("docker")).toBe(false);
     expect(
-      safeSandboxConnections().find((value) => value.provider === "docker")?.state,
+      safeSandboxConnections().find((value) => value.provider === "docker")
+        ?.state,
     ).toBe("needs_attention");
   });
 });

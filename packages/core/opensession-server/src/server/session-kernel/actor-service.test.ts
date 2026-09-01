@@ -1,10 +1,4 @@
-import {
-  afterAll,
-  beforeAll,
-  describe,
-  expect,
-  test,
-} from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -89,62 +83,75 @@ describe("session kernel actor service", () => {
     const call = async (
       request: KernelActorTransportEnvelope["request"],
       epoch?: string,
-    ) => fetch(`${isolatedService.url}/rpc`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        version: SESSION_KERNEL_TRANSPORT_VERSION,
-        actorVersion: SESSION_KERNEL_ACTOR_VERSION,
-        ...(epoch ? { serviceEpoch: epoch } : {}),
-        request,
-      }),
-    });
+    ) =>
+      fetch(`${isolatedService.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: SESSION_KERNEL_TRANSPORT_VERSION,
+          actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+          ...(epoch ? { serviceEpoch: epoch } : {}),
+          request,
+        }),
+      });
     try {
       const helloResponse = await call({
         t: "hello",
         rpcId: "mailbox-handshake",
         version: SESSION_KERNEL_ACTOR_VERSION,
       });
-      const hello = await helloResponse.json() as { serviceEpoch: string };
+      const hello = (await helloResponse.json()) as { serviceEpoch: string };
       expect(helloResponse.status).toBe(200);
 
-      const responses = await Promise.all(Array.from({ length: 40 }, (_, index) =>
-        call({
-          t: "call",
-          rpcId: `burst-read-${index}`,
-          outputBytes: 1024,
-          request: {
-            t: "store",
-            method: "turnSnapshot",
-            args: ["busy-session"],
-          },
-        }, hello.serviceEpoch)
-      ));
+      const responses = await Promise.all(
+        Array.from({ length: 40 }, (_, index) =>
+          call(
+            {
+              t: "call",
+              rpcId: `burst-read-${index}`,
+              outputBytes: 1024,
+              request: {
+                t: "store",
+                method: "turnSnapshot",
+                args: ["busy-session"],
+              },
+            },
+            hello.serviceEpoch,
+          ),
+        ),
+      );
       expect(responses.map((response) => response.status)).toEqual(
         Array.from({ length: 40 }, () => 200),
       );
 
-      const mutations = await Promise.all(Array.from({ length: 10 }, (_, index) =>
-        call({
-          t: "call",
-          rpcId: `burst-mutation-${index}`,
-          outputBytes: 1024,
-          request: {
-            t: "store",
-            method: "setRunState",
-            args: [{
-              sessionId: "busy-session",
-              state: "idle",
-              since: new Date(0).toISOString(),
-              generation: index,
-              changeSeq: index,
-            }],
-          },
-        }, hello.serviceEpoch)
-      ));
+      const mutations = await Promise.all(
+        Array.from({ length: 10 }, (_, index) =>
+          call(
+            {
+              t: "call",
+              rpcId: `burst-mutation-${index}`,
+              outputBytes: 1024,
+              request: {
+                t: "store",
+                method: "setRunState",
+                args: [
+                  {
+                    sessionId: "busy-session",
+                    state: "idle",
+                    since: new Date(0).toISOString(),
+                    generation: index,
+                    changeSeq: index,
+                  },
+                ],
+              },
+            },
+            hello.serviceEpoch,
+          ),
+        ),
+      );
       expect(mutations.map((response) => response.status).sort()).toEqual(
         [...Array.from({ length: 9 }, () => 200), 429].sort(),
       );
@@ -153,54 +160,65 @@ describe("session kernel actor service", () => {
     }
   });
 
-  test("global runtime work does not wait for an active read-only session turn", async () => {
+  test("runtime work uses session lanes without waiting for an unrelated turn", async () => {
     const isolatedService = await startSessionKernelService({
       port: 0,
       token,
-      workerCount: 1,
+      workerCount: 2,
       responseTimeoutMs: 700,
       workerUrl: new URL("./testing/read-barrier-worker.ts", import.meta.url),
     });
     const call = async (
       request: KernelActorTransportEnvelope["request"],
       epoch?: string,
-    ) => fetch(`${isolatedService.url}/rpc`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        version: SESSION_KERNEL_TRANSPORT_VERSION,
-        actorVersion: SESSION_KERNEL_ACTOR_VERSION,
-        ...(epoch ? { serviceEpoch: epoch } : {}),
-        request,
-      }),
-    });
+    ) =>
+      fetch(`${isolatedService.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: SESSION_KERNEL_TRANSPORT_VERSION,
+          actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+          ...(epoch ? { serviceEpoch: epoch } : {}),
+          request,
+        }),
+      });
     try {
       const helloResponse = await call({
         t: "hello",
         rpcId: "read-barrier-handshake",
         version: SESSION_KERNEL_ACTOR_VERSION,
       });
-      const hello = await helloResponse.json() as { serviceEpoch: string };
-      const read = call({
-        t: "call",
-        rpcId: "slow-session-read",
-        outputBytes: 1024,
-        request: { t: "store", method: "turnSnapshot", args: ["busy-session"] },
-      }, hello.serviceEpoch);
+      const hello = (await helloResponse.json()) as { serviceEpoch: string };
+      const read = call(
+        {
+          t: "call",
+          rpcId: "slow-session-read",
+          outputBytes: 1024,
+          request: {
+            t: "store",
+            method: "turnSnapshot",
+            args: ["busy-session"],
+          },
+        },
+        hello.serviceEpoch,
+      );
       await Bun.sleep(25);
 
       const startedAt = Date.now();
-      const runtime = await call({
-        t: "runtime_work",
-        rpcId: "runtime-during-read",
-        now: Date.now(),
-        timerKinds: [],
-        effectKinds: [],
-        limit: 100,
-      }, hello.serviceEpoch);
+      const runtime = await call(
+        {
+          t: "runtime_work",
+          rpcId: "runtime-during-read",
+          now: Date.now(),
+          timerKinds: [],
+          effectKinds: [],
+          limit: 100,
+        },
+        hello.serviceEpoch,
+      );
       expect(runtime.status).toBe(200);
       expect(Date.now() - startedAt).toBeLessThan(150);
       expect(await runtime.json()).toMatchObject({
@@ -212,6 +230,66 @@ describe("session kernel actor service", () => {
     } finally {
       isolatedService.stop();
     }
+  });
+
+  test("catalog discovery never opens a candidate session database", async () => {
+    const sessionId = `runtime-lane-${crypto.randomUUID()}`;
+    const ready = async () =>
+      (await (await fetch(`${service.url}/ready`)).json()) as {
+        lanes: Array<{
+          index: number;
+          turnsCompleted: number;
+          kernelStoreCacheMisses: number;
+        }>;
+      };
+    const before = await ready();
+    const catalogMisses = before.lanes.find(
+      (lane) => lane.index === 0,
+    )?.kernelStoreCacheMisses;
+    await rpc({
+      t: "call",
+      rpcId: "runtime-lane-schedule",
+      outputBytes: 256 * 1024,
+      request: {
+        t: "store",
+        method: "scheduleTimer",
+        args: [
+          {
+            sessionId,
+            timerId: "wake",
+            kind: "runtime_lane_timer",
+            dueAt: Date.now() - 1,
+            payload: null,
+          },
+        ],
+      },
+    });
+
+    const work = await rpc({
+      t: "runtime_work",
+      rpcId: "runtime-lane-claim",
+      now: Date.now(),
+      timerKinds: ["runtime_lane_timer"],
+      effectKinds: [],
+      limit: 100,
+    });
+    expect(work).toMatchObject({
+      t: "runtime_work_result",
+      timers: [expect.objectContaining({ sessionId, timerId: "wake" })],
+    });
+    const after = await ready();
+    expect(
+      after.lanes.find((lane) => lane.index === 0)?.kernelStoreCacheMisses,
+    ).toBe(catalogMisses);
+    expect(
+      after.lanes
+        .slice(1)
+        .some(
+          (lane, index) =>
+            lane.turnsCompleted >
+            (before.lanes[index + 1]?.turnsCompleted ?? 0),
+        ),
+    ).toBe(true);
   });
 
   test("restarts the catalog lane instead of the service after a read timeout", async () => {
@@ -239,7 +317,7 @@ describe("session kernel actor service", () => {
           },
         }),
       });
-      const hello = await helloResponse.json() as { serviceEpoch: string };
+      const hello = (await helloResponse.json()) as { serviceEpoch: string };
       expect(helloResponse.status).toBe(200);
 
       const timedOut = await fetch(`${isolatedService.url}/rpc`, {
@@ -288,20 +366,22 @@ describe("session kernel actor service", () => {
       { type: "module" },
     );
     try {
-      const response = new Promise<Record<string, unknown>>((resolve, reject) => {
-        const timeout = setTimeout(
-          () => reject(new Error("transport worker handshake timed out")),
-          2_000,
-        );
-        worker.addEventListener("message", (event: MessageEvent) => {
-          clearTimeout(timeout);
-          resolve(event.data as Record<string, unknown>);
-        });
-        worker.addEventListener("error", (event) => {
-          clearTimeout(timeout);
-          reject(new Error(event.message));
-        });
-      });
+      const response = new Promise<Record<string, unknown>>(
+        (resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error("transport worker handshake timed out")),
+            2_000,
+          );
+          worker.addEventListener("message", (event: MessageEvent) => {
+            clearTimeout(timeout);
+            resolve(event.data as Record<string, unknown>);
+          });
+          worker.addEventListener("error", (event) => {
+            clearTimeout(timeout);
+            reject(new Error(event.message));
+          });
+        },
+      );
       worker.postMessage({
         t: "hello",
         rpcId: "immediate-worker-handshake",
@@ -343,10 +423,14 @@ describe("session kernel actor service", () => {
         responseTimeoutMs: 700,
         databasePath: join(stateDir, "sessions", "session-kernel.sqlite"),
       });
-      await expect(client.callAsync(
-        { t: "store", method: "creationState", args: ["after-restart"] },
-        "creationState",
-      )).resolves.toBeUndefined();
+      // rpc() caches the prior incarnation after its first handshake.
+      serviceEpoch = undefined;
+      await expect(
+        client.callAsync(
+          { t: "store", method: "creationState", args: ["after-restart"] },
+          "creationState",
+        ),
+      ).resolves.toBeUndefined();
     } finally {
       client.terminate();
       if (previousToken === undefined)
@@ -371,7 +455,8 @@ describe("session kernel actor service", () => {
       const send = (message: Record<string, unknown>) =>
         new Promise<Record<string, any>>((resolve, reject) => {
           const timeout = setTimeout(
-            () => reject(new Error(`transport request ${message.rpcId} timed out`)),
+            () =>
+              reject(new Error(`transport request ${message.rpcId} timed out`)),
             2_000,
           );
           const onMessage = (event: MessageEvent) => {
@@ -399,69 +484,80 @@ describe("session kernel actor service", () => {
         version: SESSION_KERNEL_ACTOR_VERSION,
       });
       const sessionId = "async-outbox-settlement";
-      const enqueued = result(await send({
-        t: "store",
-        rpcId: "async-settlement-enqueue",
-        method: "enqueueOutbox",
-        args: [
-          sessionId,
-          "human_ask_deliver",
-          { askId: "ask-one", skipUi: false },
-          "deliver-one",
-        ],
-      }));
+      const enqueued = result(
+        await send({
+          t: "store",
+          rpcId: "async-settlement-enqueue",
+          method: "enqueueOutbox",
+          args: [
+            sessionId,
+            "human_ask_deliver",
+            { askId: "ask-one", skipUi: false },
+            "deliver-one",
+          ],
+        }),
+      );
       expect(enqueued.ok).toBe(true);
       const id = Number(enqueued.result);
 
-      const wrongSession = result(await send({
-        t: "reduce",
-        rpcId: "async-settlement-wrong-session",
-        command: {
-          kind: "core",
-          commandId: crypto.randomUUID(),
-          request: { op: "ack_outbox", id, sessionId: "wrong-session" },
-        },
-      }));
+      const wrongSession = result(
+        await send({
+          t: "reduce",
+          rpcId: "async-settlement-wrong-session",
+          command: {
+            kind: "core",
+            commandId: crypto.randomUUID(),
+            request: { op: "ack_outbox", id, sessionId: "wrong-session" },
+          },
+        }),
+      );
       expect(wrongSession).toMatchObject({
         ok: false,
         error: `Outbox ${id} crossed session ownership`,
       });
 
-      const settled = result(await send({
-        t: "reduce",
-        rpcId: "async-settlement-correct-session",
-        command: {
-          kind: "core",
-          commandId: crypto.randomUUID(),
-          request: { op: "ack_outbox", id, sessionId },
-        },
-      }));
+      const settled = result(
+        await send({
+          t: "reduce",
+          rpcId: "async-settlement-correct-session",
+          command: {
+            kind: "core",
+            commandId: crypto.randomUUID(),
+            request: { op: "ack_outbox", id, sessionId },
+          },
+        }),
+      );
       expect(settled.ok).toBe(true);
 
-      const replayedSettlement = result(await send({
-        t: "reduce",
-        rpcId: "async-settlement-replayed",
-        command: {
-          kind: "core",
-          commandId: crypto.randomUUID(),
-          request: { op: "ack_outbox", id, sessionId },
-        },
-      }));
+      const replayedSettlement = result(
+        await send({
+          t: "reduce",
+          rpcId: "async-settlement-replayed",
+          command: {
+            kind: "core",
+            commandId: crypto.randomUUID(),
+            request: { op: "ack_outbox", id, sessionId },
+          },
+        }),
+      );
       expect(replayedSettlement.ok).toBe(true);
 
       const pending = await send({
-        t: "runtime_work",
+        t: "runtime_session_work",
         rpcId: "async-settlement-pending",
+        sessionId,
+        candidateCount: 1,
         now: Date.now(),
         timerKinds: [],
         effectKinds: ["human_ask_deliver"],
         limit: 100,
       });
-      expect(pending.t).toBe("runtime_work_result");
-      expect((pending as { outbox: Array<{ id: number }> }).outbox.some(
-        (item) => item.id === id,
-      ))
-        .toBe(false);
+      expect(pending.t).toBe("runtime_session_work_result");
+      expect(
+        (pending as { outbox: Array<{ id: number }> }).outbox.some(
+          (item) => item.id === id,
+        ),
+      ).toBe(false);
     } finally {
       worker.terminate();
       if (previousToken === undefined)
@@ -479,6 +575,7 @@ describe("session kernel actor service", () => {
     expect(live.status).toBe(200);
     expect(await ready.json()).toMatchObject({
       ready: true,
+      component: "session-kernel",
       actorVersion: SESSION_KERNEL_ACTOR_VERSION,
       transportVersion: SESSION_KERNEL_TRANSPORT_VERSION,
     });
@@ -659,7 +756,8 @@ describe("session kernel actor service", () => {
       result: {
         result: {
           kind: "deliver",
-          promptEntryId: "large-entry",
+          // A one-item batch keeps the queued receipt's durable identity.
+          promptEntryId: "large",
           items: [{ id: "large", content }],
         },
       },
@@ -681,11 +779,7 @@ describe("session kernel actor service", () => {
       expect(created).toMatchObject({ t: "call_result", status: 1 });
     }
 
-    const isolatedRoot = join(
-      stateDir,
-      "sessions",
-      "session-kernel-sessions",
-    );
+    const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
     const lockedPath = sessionKernelSessionDbPath(
       "locked-pool-session",
       isolatedRoot,
@@ -708,12 +802,14 @@ describe("session kernel actor service", () => {
         request: {
           t: "store",
           method: "setRunState",
-          args: [{
-            sessionId: "locked-pool-session",
-            state: "running",
-            event: "blocked",
-            currentRunId: "locked-run",
-          }],
+          args: [
+            {
+              sessionId: "locked-pool-session",
+              state: "running",
+              event: "blocked",
+              currentRunId: "locked-run",
+            },
+          ],
         },
       });
       await Bun.sleep(50);
@@ -726,12 +822,14 @@ describe("session kernel actor service", () => {
         request: {
           t: "store",
           method: "setRunState",
-          args: [{
-            sessionId: "healthy-pool-session",
-            state: "running",
-            event: "healthy",
-            currentRunId: "healthy-run",
-          }],
+          args: [
+            {
+              sessionId: "healthy-pool-session",
+              state: "running",
+              event: "healthy",
+              currentRunId: "healthy-run",
+            },
+          ],
         },
       });
       expect(healthy).toMatchObject({ t: "call_result", status: 1 });
@@ -760,7 +858,9 @@ describe("session kernel actor service", () => {
       },
     });
     const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
-    const lock = new Database(sessionKernelSessionDbPath(sessionId, isolatedRoot));
+    const lock = new Database(
+      sessionKernelSessionDbPath(sessionId, isolatedRoot),
+    );
     lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
     try {
       const blocked = rpc({
@@ -830,7 +930,9 @@ describe("session kernel actor service", () => {
       },
     });
     const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
-    const lock = new Database(sessionKernelSessionDbPath(sessionId, isolatedRoot));
+    const lock = new Database(
+      sessionKernelSessionDbPath(sessionId, isolatedRoot),
+    );
     lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
     const order: string[] = [];
     try {
@@ -854,11 +956,15 @@ describe("session kernel actor service", () => {
           method: "setRunState",
           args: [{ sessionId, state: "idle", event: "ordinary" }],
         },
-      }).then(() => { order.push("ordinary"); });
+      }).then(() => {
+        order.push("ordinary");
+      });
       const global = rpc({
         t: "stats",
         rpcId: "barrier-global",
-      }).then(() => { order.push("global"); });
+      }).then(() => {
+        order.push("global");
+      });
       const stop = rpc({
         t: "call",
         rpcId: "barrier-stop",
@@ -876,7 +982,9 @@ describe("session kernel actor service", () => {
             },
           },
         },
-      }).then(() => { order.push("stop"); });
+      }).then(() => {
+        order.push("stop");
+      });
       await Bun.sleep(50);
       lock.exec("COMMIT;");
       await Promise.all([active, ordinary, global, stop]);
@@ -889,7 +997,7 @@ describe("session kernel actor service", () => {
     }
   });
 
-  test("a global barrier fails fast while a session mailbox is wedged", async () => {
+  test("runtime discovery does not create a global barrier for a wedged mailbox", async () => {
     const sessionId = "barrier-timeout-session";
     await rpc({
       t: "call",
@@ -902,7 +1010,9 @@ describe("session kernel actor service", () => {
       },
     });
     const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
-    const lock = new Database(sessionKernelSessionDbPath(sessionId, isolatedRoot));
+    const lock = new Database(
+      sessionKernelSessionDbPath(sessionId, isolatedRoot),
+    );
     lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
     try {
       const active = rpc({
@@ -917,26 +1027,30 @@ describe("session kernel actor service", () => {
       });
       await Bun.sleep(25);
       const catalogReadStartedAt = Date.now();
-      expect(await rpc({
-        t: "call",
-        rpcId: "barrier-timeout-quarantines",
-        outputBytes: 256 * 1024,
-        request: {
-          t: "store",
-          method: "quarantinedSessions",
-          args: [100, 0],
-        },
-      })).toMatchObject({ t: "call_result", status: 1 });
-      expect(await rpc({
-        t: "call",
-        rpcId: "barrier-timeout-asks",
-        outputBytes: 256 * 1024,
-        request: {
-          t: "store",
-          method: "askEntries",
-          args: [],
-        },
-      })).toMatchObject({ t: "call_result", status: 1 });
+      expect(
+        await rpc({
+          t: "call",
+          rpcId: "barrier-timeout-quarantines",
+          outputBytes: 256 * 1024,
+          request: {
+            t: "store",
+            method: "quarantinedSessions",
+            args: [100, 0],
+          },
+        }),
+      ).toMatchObject({ t: "call_result", status: 1 });
+      expect(
+        await rpc({
+          t: "call",
+          rpcId: "barrier-timeout-asks",
+          outputBytes: 256 * 1024,
+          request: {
+            t: "store",
+            method: "askEntries",
+            args: [],
+          },
+        }),
+      ).toMatchObject({ t: "call_result", status: 1 });
       expect(Date.now() - catalogReadStartedAt).toBeLessThan(400);
 
       const startedAt = Date.now();
@@ -960,13 +1074,15 @@ describe("session kernel actor service", () => {
           },
         }),
       });
-      expect(response.status).toBe(429);
+      expect(response.status).toBe(200);
       expect(Date.now() - startedAt).toBeLessThan(400);
       expect(await response.json()).toMatchObject({
-        error: expect.stringContaining("global barrier timed out"),
+        t: "runtime_work_result",
+        timers: [],
+        outbox: [],
       });
       lock.exec("COMMIT;");
-      expect(await active).toMatchObject({ t: "call_result", status: 1 });
+      expect(await active).toMatchObject({ t: "call_result", status: -1 });
     } finally {
       try {
         lock.exec("ROLLBACK;");
@@ -988,7 +1104,9 @@ describe("session kernel actor service", () => {
       },
     });
     const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
-    const lock = new Database(sessionKernelSessionDbPath(sessionId, isolatedRoot));
+    const lock = new Database(
+      sessionKernelSessionDbPath(sessionId, isolatedRoot),
+    );
     lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
     const order: string[] = [];
     try {
@@ -1012,25 +1130,31 @@ describe("session kernel actor service", () => {
           method: "setRunState",
           args: [{ sessionId, state: "idle", event: "ordinary" }],
         },
-      }).then(() => { order.push("ordinary"); });
-      const priority = Array.from({ length: 8 }, (_, index) => rpc({
-        t: "call",
-        rpcId: `fairness-priority-${index}`,
-        outputBytes: 256 * 1024,
-        request: {
-          t: "reduce",
-          command: {
-            kind: "turn",
-            commandId: `fairness-command-${index}`,
-            request: {
-              op: "request_cancel_command",
-              sessionId,
-              requestId: `fairness-request-${index}`,
-              fallbackRunId: null,
+      }).then(() => {
+        order.push("ordinary");
+      });
+      const priority = Array.from({ length: 8 }, (_, index) =>
+        rpc({
+          t: "call",
+          rpcId: `fairness-priority-${index}`,
+          outputBytes: 256 * 1024,
+          request: {
+            t: "reduce",
+            command: {
+              kind: "turn",
+              commandId: `fairness-command-${index}`,
+              request: {
+                op: "request_cancel_command",
+                sessionId,
+                requestId: `fairness-request-${index}`,
+                fallbackRunId: null,
+              },
             },
           },
-        },
-      }).then(() => { order.push(`priority-${index}`); }));
+        }).then(() => {
+          order.push(`priority-${index}`);
+        }),
+      );
       await Bun.sleep(50);
       lock.exec("COMMIT;");
       await Promise.all([active, ordinary, ...priority]);
@@ -1047,11 +1171,14 @@ describe("session kernel actor service", () => {
     const sessionId = "ambiguous-critical-session";
     const centralPath = join(stateDir, "sessions", "session-kernel.sqlite");
     const seed = new Database(centralPath);
-    seed.run(`
+    seed.run(
+      `
       INSERT INTO session_kernel_state
         (session_id, run_state, run_since, last_event, generation, change_seq, updated_at)
       VALUES (?, 'idle', ?, 'legacy-seed', 0, 0, ?)
-    `, [sessionId, new Date().toISOString(), Date.now()]);
+    `,
+      [sessionId, new Date().toISOString(), Date.now()],
+    );
     seed.close();
     await rpc({
       t: "call",
@@ -1125,9 +1252,13 @@ describe("session kernel actor service", () => {
         sessionId,
       });
       const evidence = new Database(centralPath, { readonly: true });
-      expect(evidence.query(
-        "SELECT reason FROM session_kernel_quarantine WHERE session_id = ?",
-      ).get(sessionId)).toBeTruthy();
+      expect(
+        evidence
+          .query(
+            "SELECT reason FROM session_kernel_quarantine WHERE session_id = ?",
+          )
+          .get(sessionId),
+      ).toBeTruthy();
       evidence.close();
       expect((await fetch(`${service.url}/ready`)).status).toBe(200);
     } finally {
@@ -1140,65 +1271,77 @@ describe("session kernel actor service", () => {
 
   test("acknowledges a completed command receipt while the session is quarantined", async () => {
     const sessionId = "quarantined-ack-session";
-    expect(await rpc({
-      t: "call",
-      rpcId: "quarantined-ack-request",
-      outputBytes: 256 * 1024,
-      request: {
-        t: "reduce",
-        command: {
-          kind: "gateway",
-          commandId: "quarantined-ack-request-command",
-          request: {
-            op: "request",
-            sessionId,
-            requestId: "quarantined-ack-write",
-            operation: "websocket_command",
-            identity: { command: "prompt" },
+    expect(
+      await rpc({
+        t: "call",
+        rpcId: "quarantined-ack-request",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "reduce",
+          command: {
+            kind: "gateway",
+            commandId: "quarantined-ack-request-command",
+            request: {
+              op: "request",
+              sessionId,
+              requestId: "quarantined-ack-write",
+              operation: "websocket_command",
+              identity: { command: "prompt" },
+            },
           },
         },
-      },
-    })).toMatchObject({ t: "call_result", status: 1 });
-    expect(await rpc({
-      t: "call",
-      rpcId: "quarantined-ack-complete",
-      outputBytes: 256 * 1024,
-      request: {
-        t: "reduce",
-        command: {
-          kind: "gateway",
-          commandId: "quarantined-ack-complete-command",
-          request: {
-            op: "complete",
-            sessionId,
-            requestId: "quarantined-ack-write",
-            operation: "websocket_command",
-            result: "done",
+      }),
+    ).toMatchObject({ t: "call_result", status: 1 });
+    expect(
+      await rpc({
+        t: "call",
+        rpcId: "quarantined-ack-complete",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "reduce",
+          command: {
+            kind: "gateway",
+            commandId: "quarantined-ack-complete-command",
+            request: {
+              op: "complete",
+              sessionId,
+              requestId: "quarantined-ack-write",
+              operation: "websocket_command",
+              result: "done",
+            },
           },
         },
-      },
-    })).toMatchObject({ t: "call_result", status: 1 });
-    expect(await rpc({
-      t: "call",
-      rpcId: "quarantined-ack-quarantine",
-      outputBytes: 256 * 1024,
-      request: {
-        t: "store",
-        method: "quarantineSession",
-        args: [sessionId, "actor restarted after execution began", "transcript:append"],
-      },
-    })).toMatchObject({ t: "call_result", status: 1 });
+      }),
+    ).toMatchObject({ t: "call_result", status: 1 });
+    expect(
+      await rpc({
+        t: "call",
+        rpcId: "quarantined-ack-quarantine",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "quarantineSession",
+          args: [
+            sessionId,
+            "actor restarted after execution began",
+            "transcript:append",
+          ],
+        },
+      }),
+    ).toMatchObject({ t: "call_result", status: 1 });
 
     // Acknowledging only stamps acknowledged_at on an already-completed
     // receipt, so the quarantine fence must not reject it: fencing it turned
     // every quarantined session into an endless client ack-retry loop
     // (`Internal error handling "command_ack"` on every reconnect).
-    expect(await rpc({
-      t: "acknowledge",
-      rpcId: "quarantined-ack",
-      sessionId,
-      requestId: "quarantined-ack-write",
-    })).toMatchObject({ t: "acknowledge_result" });
+    expect(
+      await rpc({
+        t: "acknowledge",
+        rpcId: "quarantined-ack",
+        sessionId,
+        requestId: "quarantined-ack-write",
+      }),
+    ).toMatchObject({ t: "acknowledge_result" });
 
     const record = await rpc({
       t: "call",

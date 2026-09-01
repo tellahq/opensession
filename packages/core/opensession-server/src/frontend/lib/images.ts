@@ -86,7 +86,8 @@ async function convertImageToJpeg(source: Blob): Promise<Blob> {
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     return await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(
-        (blob) => blob ? resolve(blob) : reject(new Error("Image conversion failed")),
+        (blob) =>
+          blob ? resolve(blob) : reject(new Error("Image conversion failed")),
         "image/jpeg",
         0.88,
       );
@@ -109,24 +110,28 @@ export async function preparePromptImages(
   images?: string[],
 ): Promise<string[] | undefined> {
   if (!images?.length) return undefined;
-  return Promise.all(images.map(async (image) => {
-    if (image.startsWith("/media?")) return image;
-    const match = image.match(/^data:([^;]+);base64,([\s\S]+)$/);
-    if (match && STAGEABLE_IMAGE_TYPES[match[1]]) return image;
-    if (!match?.[1].startsWith("image/")) throw unsupportedPromptImage();
-    try {
-      const response = await fetch(image);
-      const jpeg = await convertImageToJpeg(await response.blob());
-      return await readFileAsDataUrl(jpeg);
-    } catch {
-      throw unsupportedPromptImage();
-    }
-  }));
+  return Promise.all(
+    images.map(async (image) => {
+      if (image.startsWith("/media?")) return image;
+      const match = image.match(/^data:([^;]+);base64,([\s\S]+)$/);
+      if (match && STAGEABLE_IMAGE_TYPES[match[1]]) return image;
+      if (!match?.[1].startsWith("image/")) throw unsupportedPromptImage();
+      try {
+        const response = await fetch(image);
+        const jpeg = await convertImageToJpeg(await response.blob());
+        return await readFileAsDataUrl(jpeg);
+      } catch {
+        throw unsupportedPromptImage();
+      }
+    }),
+  );
 }
 
 function unsupportedPromptImage(): Error & { status: number } {
   return Object.assign(
-    new Error("This image format isn't supported. Attach a PNG, JPEG, GIF, or WebP image."),
+    new Error(
+      "This image format isn't supported. Attach a PNG, JPEG, GIF, or WebP image.",
+    ),
     { status: 400 },
   );
 }
@@ -151,7 +156,9 @@ async function stageImage(
   signal?: AbortSignal,
 ): Promise<string | null> {
   if (file.size > MAX_UPLOAD_BYTES) {
-    rejected.push(`${file.name || "image"} (too large, max ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB)`);
+    rejected.push(
+      `${file.name || "image"} (too large, max ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB)`,
+    );
     return null;
   }
   let stageable = file;
@@ -169,14 +176,18 @@ async function stageImage(
   const inline = () => readFileAsDataUrl(stageable);
   try {
     const { path } = await uploadFile(
-      new File([stageable], imageUploadName(stageable), { type: stageable.type }),
+      new File([stageable], imageUploadName(stageable), {
+        type: stageable.type,
+      }),
       signal,
     );
     return `/media?path=${encodeURIComponent(path)}`;
   } catch (e) {
     if (signal?.aborted) return null;
     if (file.size <= MAX_INLINE_IMAGE_BYTES) return inline();
-    rejected.push(`${file.name || "image"} (${(e as Error)?.message || "upload failed"})`);
+    rejected.push(
+      `${file.name || "image"} (${(e as Error)?.message || "upload failed"})`,
+    );
     return null;
   }
 }
@@ -206,7 +217,9 @@ export async function splitAttachments(
   const uploaded = await Promise.all(
     otherFiles.map(async (f): Promise<FileAttachment | null> => {
       if (f.size > MAX_UPLOAD_BYTES) {
-        rejected.push(`${f.name} (too large, max ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB)`);
+        rejected.push(
+          `${f.name} (too large, max ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB)`,
+        );
         return null;
       }
       try {
@@ -214,7 +227,9 @@ export async function splitAttachments(
         return { name, type: f.type, path };
       } catch (e) {
         if (signal?.aborted) return null;
-        rejected.push(`${f.name} (${(e as Error)?.message || "upload failed"})`);
+        rejected.push(
+          `${f.name} (${(e as Error)?.message || "upload failed"})`,
+        );
         return null;
       }
     }),

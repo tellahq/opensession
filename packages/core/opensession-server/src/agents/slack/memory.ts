@@ -16,7 +16,10 @@
 
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
-import { writeFileAtomic, writeJsonAtomic } from "../../server/shared/atomic-write";
+import {
+  writeFileAtomic,
+  writeJsonAtomic,
+} from "../../server/shared/atomic-write";
 import { join } from "path";
 import { unlinkSync } from "fs";
 import { stateDir } from "../../server/paths";
@@ -47,11 +50,16 @@ export function memoryImportDirs(): string[] {
 const MEMORY_V2_DIRTY_MARKER = ".memory-v2-dirty";
 
 export function markMemoryImportDirty(): void {
-  writeFileAtomic(join(memoryDir(), MEMORY_V2_DIRTY_MARKER), new Date().toISOString());
+  writeFileAtomic(
+    join(memoryDir(), MEMORY_V2_DIRTY_MARKER),
+    new Date().toISOString(),
+  );
 }
 
 export function memoryImportIsDirty(sourceDirs: string[]): boolean {
-  return sourceDirs.some((directory) => existsSync(join(directory, MEMORY_V2_DIRTY_MARKER)));
+  return sourceDirs.some((directory) =>
+    existsSync(join(directory, MEMORY_V2_DIRTY_MARKER)),
+  );
 }
 
 export function clearMemoryImportDirty(sourceDirs: string[]): void {
@@ -112,7 +120,8 @@ function resolveScopes(ctx: MemoryContext): {
   writable: string;
   sharedReadonly: string | null;
 } {
-  if (ctx.isDM) return { writable: `user-${ctx.userId}`, sharedReadonly: "workspace" };
+  if (ctx.isDM)
+    return { writable: `user-${ctx.userId}`, sharedReadonly: "workspace" };
   if (ctx.isPrivate)
     return { writable: `channel-${ctx.channel}`, sharedReadonly: "workspace" };
   return { writable: "workspace", sharedReadonly: null };
@@ -136,7 +145,10 @@ export async function loadScope(scope: string): Promise<MemoryEntry[]> {
   return [];
 }
 
-export async function saveScope(scope: string, entries: MemoryEntry[]): Promise<void> {
+export async function saveScope(
+  scope: string,
+  entries: MemoryEntry[],
+): Promise<void> {
   const runtime = await import("../../server/memory-v2/runtime");
   const mode = runtime.memoryRolloutMode();
   if (mode === "legacy" || mode === "shadow") markMemoryImportDirty();
@@ -148,12 +160,13 @@ export async function saveScope(scope: string, entries: MemoryEntry[]): Promise<
 export async function addMemory(
   ctx: MemoryContext,
   text: string,
-  by: string
+  by: string,
 ): Promise<MemoryEntry> {
   const { writable } = resolveScopes(ctx);
   const { memoryRolloutMode } = await import("../../server/memory-v2/runtime");
   if (memoryRolloutMode() === "v2") {
-    const { ensureMemoryV2Ready, legacySummary } = await import("../../server/memory-v2");
+    const { ensureMemoryV2Ready, legacySummary } =
+      await import("../../server/memory-v2");
     const { store } = await ensureMemoryV2Ready();
     const summary = legacySummary(text);
     const record = store.create({
@@ -207,12 +220,14 @@ export async function listMemory(ctx: MemoryContext): Promise<MemoryView> {
           { scopeKeys: [scopeKey], states: ["active"] },
           { cursor, limit: 100 },
         );
-        out.push(...page.items.map((record) => ({
-          id: record.id,
-          text: record.summary,
-          by: record.source.type,
-          at: record.createdAt,
-        })));
+        out.push(
+          ...page.items.map((record) => ({
+            id: record.id,
+            text: record.summary,
+            by: record.source.type,
+            at: record.createdAt,
+          })),
+        );
         cursor = page.nextCursor;
       } while (cursor && out.length < 50);
       return out.slice(0, 50);
@@ -226,7 +241,9 @@ export async function listMemory(ctx: MemoryContext): Promise<MemoryView> {
   // Archived entries are excluded everywhere a human or a prompt reads memory;
   // only the maintenance surfaces ask for them explicitly.
   const local = activeMemories(await loadScope(writable));
-  const shared = sharedReadonly ? activeMemories(await loadScope(sharedReadonly)) : [];
+  const shared = sharedReadonly
+    ? activeMemories(await loadScope(sharedReadonly))
+    : [];
   return { local, shared, localIsWorkspace: writable === "workspace" };
 }
 
@@ -237,7 +254,7 @@ export type ForgetResult =
 /** Remove an entry by id from the writable store for this context. */
 export async function forgetMemory(
   ctx: MemoryContext,
-  id: string
+  id: string,
 ): Promise<ForgetResult> {
   const { writable, sharedReadonly } = resolveScopes(ctx);
   const { memoryRolloutMode } = await import("../../server/memory-v2/runtime");
@@ -253,7 +270,10 @@ export async function forgetMemory(
             "That entry is workspace memory and is read-only here. Change it from a public channel or Memory settings.",
         };
       }
-      return { ok: false, error: `No memory entry with id "${id}" in this scope.` };
+      return {
+        ok: false,
+        error: `No memory entry with id "${id}" in this scope.`,
+      };
     }
     store.delete(id);
     return {
@@ -281,7 +301,10 @@ export async function forgetMemory(
         };
       }
     }
-    return { ok: false, error: `No memory entry with id "${id}" in this scope.` };
+    return {
+      ok: false,
+      error: `No memory entry with id "${id}" in this scope.`,
+    };
   }
   const [removed] = entries.splice(idx, 1);
   await saveScope(writable, entries);
@@ -317,7 +340,11 @@ export async function renderMemoryForPrompt(
   const lines: string[] = [
     "\n\n## Channel memory",
     "Facts remembered for this " +
-      (ctx.isDM ? "DM" : localIsWorkspace ? "workspace (public channels)" : "channel") +
+      (ctx.isDM
+        ? "DM"
+        : localIsWorkspace
+          ? "workspace (public channels)"
+          : "channel") +
       ". Treat these as standing context. The user can change them via the remember/forget tools.",
   ];
   const fmt = (e: MemoryEntry) => `- [${e.id}] ${e.text}`;

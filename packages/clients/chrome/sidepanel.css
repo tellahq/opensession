@@ -12,17 +12,26 @@
   --red: #f87171;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   margin: 0;
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.5 system-ui, -apple-system, sans-serif;
+  font:
+    13px/1.5 system-ui,
+    -apple-system,
+    sans-serif;
 }
 
-body { display: flex; flex-direction: column; }
+body {
+  display: flex;
+  flex-direction: column;
+}
 
 header {
   display: flex;
@@ -32,7 +41,11 @@ header {
   border-bottom: 1px solid var(--line);
   flex: none;
 }
-.logo { width: 20px; height: 20px; border-radius: 5px; }
+.logo {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+}
 #account-picker {
   width: min(118px, 34vw);
   min-width: 76px;
@@ -43,7 +56,11 @@ header {
   text-overflow: ellipsis;
   cursor: pointer;
 }
-nav { display: flex; gap: 2px; flex: 1; }
+nav {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
 .tab {
   background: none;
   border: none;
@@ -53,8 +70,14 @@ nav { display: flex; gap: 2px; flex: 1; }
   border-radius: 6px;
   cursor: pointer;
 }
-.tab:hover { color: var(--text); background: var(--panel-2); }
-.tab.active { color: var(--text); background: var(--panel-2); }
+.tab:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+.tab.active {
+  color: var(--text);
+  background: var(--panel-2);
+}
 
 .icon-btn {
   background: none;
@@ -67,7 +90,10 @@ nav { display: flex; gap: 2px; flex: 1; }
   text-decoration: none;
   line-height: 1;
 }
-.icon-btn:hover { color: var(--text); background: var(--panel-2); }
+.icon-btn:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
 
 .view {
   flex: 1;
@@ -77,11 +103,19 @@ nav { display: flex; gap: 2px; flex: 1; }
   flex-direction: column;
   gap: 8px;
 }
-.view[hidden] { display: none; }
+.view[hidden] {
+  display: none;
+}
 
 /* ── Composer ── */
-#ctx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-#ctx-chips:empty { display: none; }
+#ctx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+#ctx-chips:empty {
+  display: none;
+}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -101,7 +135,11 @@ nav { display: flex; gap: 2px; flex: 1; }
   max-width: 200px;
   color: var(--text);
 }
-.chip img { height: 26px; border-radius: 4px; display: block; }
+.chip img {
+  height: 26px;
+  border-radius: 4px;
+  display: block;
+}
 .chip .x {
   cursor: pointer;
   color: var(--dim);
@@ -110,11 +148,22 @@ nav { display: flex; gap: 2px; flex: 1; }
   font: inherit;
   padding: 0 2px;
 }
-.chip .x:hover { color: var(--red); }
+.chip .x:hover {
+  color: var(--red);
+}
 
-.capture-row, .opts-row, .account-actions { display: flex; gap: 6px; }
-.account-actions > * { flex: 1; }
-.cap-btn.danger { color: var(--red); }
+.capture-row,
+.opts-row,
+.account-actions {
+  display: flex;
+  gap: 6px;
+}
+.account-actions > * {
+  flex: 1;
+}
+.cap-btn.danger {
+  color: var(--red);
+}
 .cap-btn {
   flex: 1;
   background: var(--panel);
@@ -126,8 +175,14 @@ nav { display: flex; gap: 2px; flex: 1; }
   font-size: 12.5px;
   cursor: pointer;
 }
-.cap-btn:hover { background: var(--panel-2); border-color: var(--accent-dim); }
-.cap-btn.busy { color: var(--accent); border-color: var(--accent-dim); }
+.cap-btn:hover {
+  background: var(--panel-2);
+  border-color: var(--accent-dim);
+}
+.cap-btn.busy {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
 
 textarea {
   width: 100%;
@@ -140,12 +195,15 @@ textarea {
   font: inherit;
   padding: 8px 10px;
 }
-textarea:focus, input:focus, select:focus {
+textarea:focus,
+input:focus,
+select:focus {
   outline: none;
   border-color: var(--accent-dim);
 }
 
-select, input[type="text"] {
+select,
+input[type="text"] {
   width: 100%;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -155,7 +213,10 @@ select, input[type="text"] {
   font-size: 12.5px;
   padding: 6px 8px;
 }
-.opts-row select { flex: 1; min-width: 0; }
+.opts-row select {
+  flex: 1;
+  min-width: 0;
+}
 
 .primary {
   background: var(--accent);
@@ -167,12 +228,26 @@ select, input[type="text"] {
   padding: 8px 12px;
   cursor: pointer;
 }
-.primary:hover { filter: brightness(1.1); }
-.primary:disabled { opacity: 0.5; cursor: default; }
+.primary:hover {
+  filter: brightness(1.1);
+}
+.primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 
-.status { font-size: 12px; color: var(--dim); min-height: 1em; }
-.status.err { color: var(--red); }
-.status:empty { display: none; min-height: 0; }
+.status {
+  font-size: 12px;
+  color: var(--dim);
+  min-height: 1em;
+}
+.status.err {
+  color: var(--red);
+}
+.status:empty {
+  display: none;
+  min-height: 0;
+}
 
 /* ── Sessions list ── */
 .sess-row {
@@ -185,7 +260,10 @@ select, input[type="text"] {
   background: var(--panel);
   cursor: pointer;
 }
-.sess-row:hover { background: var(--panel-2); border-color: var(--accent-dim); }
+.sess-row:hover {
+  background: var(--panel-2);
+  border-color: var(--accent-dim);
+}
 .dot {
   width: 8px;
   height: 8px;
@@ -193,10 +271,22 @@ select, input[type="text"] {
   background: var(--dim);
   flex: none;
 }
-.dot.running { background: var(--green); animation: pulse 1.4s infinite; }
-.dot.waiting { background: var(--orange); }
-@keyframes pulse { 50% { opacity: 0.35; } }
-.sess-main { flex: 1; min-width: 0; }
+.dot.running {
+  background: var(--green);
+  animation: pulse 1.4s infinite;
+}
+.dot.waiting {
+  background: var(--orange);
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.sess-main {
+  flex: 1;
+  min-width: 0;
+}
 .sess-title {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -212,7 +302,12 @@ select, input[type="text"] {
 }
 
 /* ── Detail ── */
-.detail-head { display: flex; align-items: center; gap: 6px; flex: none; }
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
 .detail-title {
   flex: 1;
   min-width: 0;
@@ -224,7 +319,9 @@ select, input[type="text"] {
 }
 /* :not([hidden]) — a bare #view-detail rule would out-specify .view[hidden]
    and bleed this view's chrome (back bar, follow-up box) into every view. */
-#view-detail:not([hidden]) { display: flex; }
+#view-detail:not([hidden]) {
+  display: flex;
+}
 #transcript {
   flex: 1;
   overflow-y: auto;
@@ -233,7 +330,9 @@ select, input[type="text"] {
   gap: 8px;
   padding-bottom: 4px;
 }
-.msg { max-width: 100%; }
+.msg {
+  max-width: 100%;
+}
 .msg .who {
   font-size: 10.5px;
   text-transform: uppercase;
@@ -250,7 +349,10 @@ select, input[type="text"] {
   word-break: break-word;
   font-size: 12.5px;
 }
-.msg.user .body { background: var(--panel-2); border-color: var(--accent-dim); }
+.msg.user .body {
+  background: var(--panel-2);
+  border-color: var(--accent-dim);
+}
 .msg.tool {
   color: var(--dim);
   font-size: 11.5px;
@@ -259,15 +361,36 @@ select, input[type="text"] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.followup { display: flex; gap: 6px; align-items: flex-end; flex: none; }
-.followup textarea { min-height: 38px; flex: 1; }
-.followup .primary { padding: 8px 12px; }
+.followup {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  flex: none;
+}
+.followup textarea {
+  min-height: 38px;
+  flex: 1;
+}
+.followup .primary {
+  padding: 8px 12px;
+}
 
 /* ── Settings ── */
-h2 { margin: 0; font-size: 14px; }
-label { display: flex; flex-direction: column; gap: 4px; color: var(--dim); font-size: 12px; }
+h2 {
+  margin: 0;
+  font-size: 14px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--dim);
+  font-size: 12px;
+}
 .device-code {
-  font: 700 22px ui-monospace, monospace;
+  font:
+    700 22px ui-monospace,
+    monospace;
   letter-spacing: 0.12em;
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -276,7 +399,20 @@ label { display: flex; flex-direction: column; gap: 4px; color: var(--dim); font
   text-align: center;
   user-select: all;
 }
-#device-flow { display: flex; flex-direction: column; gap: 8px; }
-#device-flow[hidden] { display: none; }
-#auth-box { display: flex; flex-direction: column; gap: 8px; }
-.fineprint { color: var(--dim); font-size: 11px; }
+#device-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#device-flow[hidden] {
+  display: none;
+}
+#auth-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fineprint {
+  color: var(--dim);
+  font-size: 11px;
+}

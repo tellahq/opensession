@@ -35,6 +35,10 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var fastMode: Bool?
     var isRunning: Bool?
     var runState: String?
+    /// Present when the server fenced an ambiguous operation rather than risk
+    /// repeating it. Optional on every generation of server and every field is
+    /// tolerant so a partial safety projection still leaves the session usable.
+    var safety: SessionSafetyState?
     /// Journaled start of the current run — only present while running.
     var runStartedAt: String?
     var waitingForInput: Bool?
@@ -220,7 +224,7 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
         Self.parseISO(runStartedAt)
     }
 
-    enum Status {
+    enum Status: Equatable {
         case needsInput
         case running
         case idle
@@ -235,9 +239,12 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     /// like a blocked question. A live run means a retry is underway, so the
     /// stale flag never overrides running states. Mirrors the web's
     /// runNeedsAttention (frontend/lib/sidebar-lanes.tsx).
-    var runNeedsAttention: Bool { lastRunError != nil && isRunning != true }
+    var runNeedsAttention: Bool {
+        safety != nil || (lastRunError != nil && isRunning != true)
+    }
 
     var status: Status {
+        if safety != nil { return .needsInput }
         if waitingForInput == true { return .needsInput }
         if runNeedsAttention { return .needsInput }
         if isRunning == true { return .running }
@@ -261,6 +268,7 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     }
 
     var lane: Lane {
+        if safety != nil { return .needsInput }
         if waitingForInput == true { return .needsInput }
         if runNeedsAttention { return .needsInput }
         if isRunning == true { return .inProgress }
@@ -317,6 +325,18 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
             values[key] = value
         }
     }
+}
+
+/// Public, user-facing safety state shared by REST session rows and
+/// `session_status` socket frames. Fields remain optional for forward and
+/// backward compatibility; unknown additions are ignored by Codable.
+struct SessionSafetyState: Codable, Equatable, Hashable, Sendable {
+    var status: String?
+    var explanation: String?
+    var automaticReconciliationRunning: Bool?
+    var pausedAt: String?
+    var operation: String?
+    var repairAvailable: Bool?
 }
 
 struct PrChecksSummary: Decodable, Equatable, Hashable {
@@ -461,15 +481,21 @@ extension Session {
 /// either way it means "not a person's session". Tolerant of both shapes.
 struct AutomationFlag: Decodable, Equatable, Hashable {
     let isAutomation: Bool
+    /// The configured automation name, when the wire sent the string form.
+    /// Team activity uses it to file a run under that automation's owner.
+    let name: String?
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let flag = try? container.decode(Bool.self) {
             isAutomation = flag
-        } else if let name = try? container.decode(String.self) {
-            isAutomation = !name.isEmpty
+            name = nil
+        } else if let value = try? container.decode(String.self) {
+            isAutomation = !value.isEmpty
+            name = value.isEmpty ? nil : value
         } else {
             isAutomation = false
+            name = nil
         }
     }
 }

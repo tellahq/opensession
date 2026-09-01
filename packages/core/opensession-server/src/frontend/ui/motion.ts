@@ -14,12 +14,12 @@ import { MotionGlobalConfig, type Transition } from "motion/react";
  * both.
  */
 export const duration = {
-	/** In-place state change: colour, opacity, a caret flip. */
-	micro: 0.15,
-	/** The default. Small anchored movement — popups, chips, short slides. */
-	base: 0.2,
-	/** Spatial: sheets, drawers, the settings pager. */
-	large: 0.28,
+  /** In-place state change: colour, opacity, a caret flip. */
+  micro: 0.15,
+  /** The default. Small anchored movement — popups, chips, short slides. */
+  base: 0.2,
+  /** Spatial: sheets, drawers, the settings pager. */
+  large: 0.28,
 } as const;
 
 /**
@@ -49,9 +49,9 @@ export const ease: [number, number, number, number] = [0.32, 0.72, 0, 1];
  * in components/Composer.tsx.
  */
 export const composerMorph: Transition = {
-	type: "spring",
-	duration: duration.large,
-	bounce: 0,
+  type: "spring",
+  duration: duration.large,
+  bounce: 0,
 };
 
 /**
@@ -66,9 +66,9 @@ export const composerMorph: Transition = {
  * shape change. It fades at the chip duration, from near its own size.
  */
 export const composerChipMotion = {
-	initial: { opacity: 0, scale: 0.96 },
-	animate: { opacity: 1, scale: 1 },
-	transition: { type: "tween", duration: duration.base, ease },
+  initial: { opacity: 0, scale: 0.96 },
+  animate: { opacity: 1, scale: 1 },
+  transition: { type: "tween", duration: duration.base, ease },
 } as const;
 
 /**
@@ -86,11 +86,11 @@ export const composerChipMotion = {
  * change settles instantly too, before normal animation resumes.
  */
 export function suppressLayoutAnimations(): () => void {
-	const prev = MotionGlobalConfig.instantAnimations;
-	MotionGlobalConfig.instantAnimations = true;
-	return () => {
-		requestAnimationFrame(() => {
-			MotionGlobalConfig.instantAnimations = prev;
-		});
-	};
+  const prev = MotionGlobalConfig.instantAnimations;
+  MotionGlobalConfig.instantAnimations = true;
+  return () => {
+    requestAnimationFrame(() => {
+      MotionGlobalConfig.instantAnimations = prev;
+    });
+  };
 }

@@ -17,16 +17,17 @@ export const GATEWAY_COMMAND_OPERATIONS = [
   "transcript_delete",
 ] as const;
 
-export type GatewayCommandOperation = (typeof GATEWAY_COMMAND_OPERATIONS)[number];
+export type GatewayCommandOperation =
+  (typeof GATEWAY_COMMAND_OPERATIONS)[number];
 
 /** Only operations whose destination consumes the same immutable request id may
  * be re-admitted after an ambiguous process loss. Projection callbacks are not. */
-export const DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS = new Set<GatewayCommandOperation>([
-  "websocket_command",
-  "delete_session",
-  "transcript_destination_append",
-]);
-
+export const DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS =
+  new Set<GatewayCommandOperation>([
+    "websocket_command",
+    "delete_session",
+    "transcript_destination_append",
+  ]);
 
 export type GatewayCommandRequest =
   | {
@@ -52,12 +53,13 @@ export type GatewayCommandRequest =
       retryable: boolean;
     };
 
-export type GatewayCommandResult<T extends GatewayCommandRequest> =
-  T extends { op: "request" }
-    ?
-        | { status: "execute" }
-        | { status: "in_progress" }
-        | { status: "completed"; result: unknown; duplicate: true }
-    : T extends { op: "complete" }
-      ? unknown
-      : void;
+export type GatewayCommandResult<T extends GatewayCommandRequest> = T extends {
+  op: "request";
+}
+  ?
+      | { status: "execute" }
+      | { status: "in_progress" }
+      | { status: "completed"; result: unknown; duplicate: true }
+  : T extends { op: "complete" }
+    ? unknown
+    : void;

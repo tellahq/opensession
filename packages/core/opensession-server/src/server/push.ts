@@ -87,7 +87,10 @@ export function listPushSubscriptions(user?: string): PushSubscriptionRecord[] {
 
 export function addPushSubscription(input: {
   user: string;
-  subscription: { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+  subscription: {
+    endpoint?: string;
+    keys?: { p256dh?: string; auth?: string };
+  };
   userAgent?: string;
 }): { ok: true } | { error: string } {
   const { endpoint, keys } = input.subscription || {};
@@ -95,7 +98,9 @@ export function addPushSubscription(input: {
   if (!endpoint || !keys?.p256dh || !keys?.auth)
     return { error: "subscription must carry endpoint + p256dh/auth keys" };
   const store = readSubs();
-  store.subscriptions = store.subscriptions.filter((s) => s.endpoint !== endpoint);
+  store.subscriptions = store.subscriptions.filter(
+    (s) => s.endpoint !== endpoint,
+  );
   store.subscriptions.push({
     user: input.user.trim(),
     endpoint,
@@ -110,7 +115,9 @@ export function addPushSubscription(input: {
 export function removePushSubscription(endpoint: string): boolean {
   const store = readSubs();
   const before = store.subscriptions.length;
-  store.subscriptions = store.subscriptions.filter((s) => s.endpoint !== endpoint);
+  store.subscriptions = store.subscriptions.filter(
+    (s) => s.endpoint !== endpoint,
+  );
   if (store.subscriptions.length === before) return false;
   writeJsonAtomic(SUBS_PATH, store);
   return true;

@@ -59,10 +59,19 @@ function oneLine(a: HumanAsk): string {
   // A uiFirst ask is "scheduled" right up until the Slack fallback fires, which
   // reads as "nothing has happened yet" — say where it actually is.
   const state =
-    a.state === "scheduled" && a.uiOfferedAt ? "live in this session's UI" : a.state;
-  const bits = [`\`${a.id}\` → *${a.person.name}*`, state, a.mode, describeDeliver(a.deliver)];
+    a.state === "scheduled" && a.uiOfferedAt
+      ? "live in this session's UI"
+      : a.state;
+  const bits = [
+    `\`${a.id}\` → *${a.person.name}*`,
+    state,
+    a.mode,
+    describeDeliver(a.deliver),
+  ];
   if (a.state === "answered" && a.answer) {
-    bits.push(`answered: "${a.answer.slice(0, 60)}${a.answer.length > 60 ? "…" : ""}"`);
+    bits.push(
+      `answered: "${a.answer.slice(0, 60)}${a.answer.length > 60 ? "…" : ""}"`,
+    );
   }
   return `• ${bits.join(" · ")}\n   _${a.question.slice(0, 120)}_`;
 }
@@ -76,7 +85,9 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
         include_answered: z
           .boolean()
           .optional()
-          .describe("Also include asks that have already been answered/cancelled."),
+          .describe(
+            "Also include asks that have already been answered/cancelled.",
+          ),
         all_sessions: z
           .boolean()
           .optional()
@@ -88,8 +99,10 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
           includeAnswered: args.include_answered,
         });
         if (!list.length) return text("No outstanding human asks.");
-        return text([`${list.length} ask(s):`, "", ...list.map(oneLine)].join("\n"));
-      }
+        return text(
+          [`${list.length} ask(s):`, "", ...list.map(oneLine)].join("\n"),
+        );
+      },
     ),
   ];
 
@@ -118,9 +131,16 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
           "- 'at_time' — ping at a future time given in at_time (e.g. 'in 3 hours', 'tomorrow 9am').",
         ].join("\n"),
         {
-          person: z.string().describe("Teammate to ask: first name, full name, or Slack id."),
-          question: z.string().describe("The specific, self-contained question."),
-          context: z.string().optional().describe("Extra background to include in the DM."),
+          person: z
+            .string()
+            .describe("Teammate to ask: first name, full name, or Slack id."),
+          question: z
+            .string()
+            .describe("The specific, self-contained question."),
+          context: z
+            .string()
+            .optional()
+            .describe("Extra background to include in the DM."),
           options: z
             .array(z.string())
             .optional()
@@ -128,7 +148,9 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
           mode: z
             .enum(["block", "async"])
             .optional()
-            .describe("'block' = pause and wait; 'async' (default) = keep going, answer comes back later."),
+            .describe(
+              "'block' = pause and wait; 'async' (default) = keep going, answer comes back later.",
+            ),
           deliver_when: z
             .enum(["now", "when_done", "on_pr", "at_time"])
             .optional()
@@ -136,7 +158,9 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
           at_time: z
             .string()
             .optional()
-            .describe("Required when deliver_when='at_time': a natural-language time, e.g. 'in 3 hours'."),
+            .describe(
+              "Required when deliver_when='at_time': a natural-language time, e.g. 'in 3 hours'.",
+            ),
         },
         async (args: {
           person: string;
@@ -153,12 +177,12 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
           }
           const person = resolveTeammate(args.person);
           if (!person) {
-            const examples = configuredIdentity().team
-              .slice(0, 4)
+            const examples = configuredIdentity()
+              .team.slice(0, 4)
               .map((member) => member.aliases?.[0] || member.name)
               .join(", ");
             return text(
-              `I don't know who "${args.person}" is — give me a configured teammate name${examples ? ` (for example: ${examples})` : ""} or their Slack id.`
+              `I don't know who "${args.person}" is — give me a configured teammate name${examples ? ` (for example: ${examples})` : ""} or their Slack id.`,
             );
           }
 
@@ -170,11 +194,15 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
             const dw = args.deliver_when || "now";
             if (dw === "at_time") {
               if (!args.at_time?.trim()) {
-                return text("deliver_when='at_time' needs an at_time like 'in 3 hours'.");
+                return text(
+                  "deliver_when='at_time' needs an at_time like 'in 3 hours'.",
+                );
               }
               const iso = await parseWhen(args.at_time);
               if (!iso) {
-                return text(`I couldn't read "${args.at_time}" as a future time. Try 'in 3 hours' or 'tomorrow 9am'.`);
+                return text(
+                  `I couldn't read "${args.at_time}" as a future time. Try 'in 3 hours' or 'tomorrow 9am'.`,
+                );
               }
               deliver = { atIso: iso };
             } else {
@@ -215,14 +243,19 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
               (answers) => {
                 if (!answers) return;
                 const v = Object.values(answers).filter(Boolean).join("\n");
-                if (v) resolveAskFromUI(ask.id, v, ctx.createdBy || "the session driver");
-              }
+                if (v)
+                  resolveAskFromUI(
+                    ask.id,
+                    v,
+                    ctx.createdBy || "the session driver",
+                  );
+              },
             );
             try {
               const answer = await awaitBlockingAnswer(ask.id);
               if (answer === null) {
                 return text(
-                  `No reply from ${person.name} within the wait window. I've left the question open (\`${ask.id}\`) — when they answer, it'll come back into this session. For now, proceed with your best judgment and note the open question.`
+                  `No reply from ${person.name} within the wait window. I've left the question open (\`${ask.id}\`) — when they answer, it'll come back into this session. For now, proceed with your best judgment and note the open question.`,
                 );
               }
               return text(`${person.name} replied:\n\n${answer}`);
@@ -235,13 +268,13 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
             return text(
               `Asked ${person.name} — the question is up in this session, where they're already watching. ` +
                 `\`${ask.id}\` — if nobody answers it here in the next few minutes I'll DM them on Slack. ` +
-                `Either way their reply comes back into this session; keep working.`
+                `Either way their reply comes back into this session; keep working.`,
             );
           }
           return text(
-            `Asked ${person.name} (${describeDeliver(deliver)}). \`${ask.id}\` — I'll keep working; their reply will come back into this session as a new message.`
+            `Asked ${person.name} (${describeDeliver(deliver)}). \`${ask.id}\` — I'll keep working; their reply will come back into this session as a new message.`,
           );
-        }
+        },
       ),
       tool(
         "cancel_ask",
@@ -249,11 +282,19 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
         { id: z.string().describe("The ask id, e.g. 'ask-…'.") },
         async (args: { id: string }) => {
           const ok = cancelAsk(args.id);
-          return text(ok ? `Cancelled \`${args.id}\`.` : `Nothing to cancel for \`${args.id}\`.`);
-        }
-      )
+          return text(
+            ok
+              ? `Cancelled \`${args.id}\`.`
+              : `Nothing to cancel for \`${args.id}\`.`,
+          );
+        },
+      ),
     );
   }
 
-  return createSdkMcpServer({ name: "opensession-humans", version: "1.0.0", tools });
+  return createSdkMcpServer({
+    name: "opensession-humans",
+    version: "1.0.0",
+    tools,
+  });
 }

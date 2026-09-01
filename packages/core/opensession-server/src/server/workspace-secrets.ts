@@ -24,7 +24,10 @@ interface WorkspaceSecretStore {
 }
 
 function storePath(): string {
-  return process.env.OPENSESSION_WORKSPACE_SECRETS_STORE || stateDir("workspace-secrets.json");
+  return (
+    process.env.OPENSESSION_WORKSPACE_SECRETS_STORE ||
+    stateDir("workspace-secrets.json")
+  );
 }
 
 function readStore(): WorkspaceSecretStore {
@@ -37,7 +40,9 @@ function readStore(): WorkspaceSecretStore {
       secrets: raw.secrets.filter(
         (entry: unknown): entry is WorkspaceSecretRecord => {
           const value = entry as WorkspaceSecretRecord;
-          return Boolean(value?.id && value?.purpose && typeof value?.value === "string");
+          return Boolean(
+            value?.id && value?.purpose && typeof value?.value === "string",
+          );
         },
       ),
     };
@@ -51,7 +56,11 @@ function persist(store: WorkspaceSecretStore): void {
   chmodSync(storePath(), 0o600);
 }
 
-export function putWorkspaceSecret(purpose: string, value: string, ref?: string): string {
+export function putWorkspaceSecret(
+  purpose: string,
+  value: string,
+  ref?: string,
+): string {
   if (!purpose.trim()) throw new Error("workspace secret purpose is required");
   if (!value) throw new Error("workspace secret is empty");
   const store = readStore();
@@ -63,7 +72,13 @@ export function putWorkspaceSecret(purpose: string, value: string, ref?: string)
     existing.purpose = purpose.trim();
     existing.updatedAt = now;
   } else {
-    store.secrets.push({ id, purpose: purpose.trim(), value, createdAt: now, updatedAt: now });
+    store.secrets.push({
+      id,
+      purpose: purpose.trim(),
+      value,
+      createdAt: now,
+      updatedAt: now,
+    });
   }
   persist(store);
   return id;

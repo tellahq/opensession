@@ -91,7 +91,7 @@ Two behaviours of the task decide how an always-on box has to be set up:
 ### Elevation, and running exactly one instance
 
 A delegated command runs with a UAC-filtered token. `whoami /groups` reports
-`BUILTIN\Administrators` as *"Group used for deny only"* even when the account
+`BUILTIN\Administrators` as _"Group used for deny only"_ even when the account
 is an administrator, and
 
 ```powershell
@@ -100,13 +100,13 @@ is an administrator, and
 
 returns `False`. The boundary does not fall where the command names suggest:
 
-| Works unelevated | Needs elevation |
-| --- | --- |
-| `powercfg /change standby-timeout-ac 0` | `powercfg /hibernate off` |
-| installing and querying the scheduled task | `New-NetFirewallRule`, `Set-NetFirewallRule` |
-| writes under `HKCU` | writes under `HKLM` |
-| | `Get-NetAdapterPowerManagement`, even to read |
-| | installing a service, such as a VNC server |
+| Works unelevated                           | Needs elevation                               |
+| ------------------------------------------ | --------------------------------------------- |
+| `powercfg /change standby-timeout-ac 0`    | `powercfg /hibernate off`                     |
+| installing and querying the scheduled task | `New-NetFirewallRule`, `Set-NetFirewallRule`  |
+| writes under `HKCU`                        | writes under `HKLM`                           |
+|                                            | `Get-NetAdapterPowerManagement`, even to read |
+|                                            | installing a service, such as a VNC server    |
 
 So the awake settings, the firewall rules and a VNC server all have to be
 driven from a Runner that was started elevated. Start one from an
@@ -127,7 +127,7 @@ per-user task. A Runner left permanently elevated gives every delegated command
 administrator rights it does not need.
 
 **One instance, always.** `MultipleInstancesPolicy: IgnoreNew` only stops the
-*task* from starting a second copy of itself. It does nothing about a
+_task_ from starting a second copy of itself. It does nothing about a
 foreground `opensession runner run` started alongside a task that is already
 going. Two live Runners share one identity and take turns owning the control
 connection, each knocking the other off. The symptom is distinctive rather than

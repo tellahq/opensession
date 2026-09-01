@@ -63,8 +63,9 @@ export const GITHUB_REPO = defaultRepo().ghRepo;
 // Parked on globalThis: the engine-id sync (server/agent-session-sync.ts)
 // writes into this map from outside the Slack loop, and a hot reload must not
 // fork the loop's copy from the writer's.
-export const activeSessions: Map<string, SlackSession> = ((globalThis as any)
-	.__slackActiveSessions ??= new Map());
+export const activeSessions: Map<string, SlackSession> = ((
+  globalThis as any
+).__slackActiveSessions ??= new Map());
 export const pendingAnswers = new Map<string, PendingAnswer>();
 
 // Inbound Slack event dedup, persisted across restarts. Slack retries a delivery
@@ -90,9 +91,12 @@ function persistProcessedEvents(): void {
 export function loadProcessedEvents(): void {
   try {
     if (!existsSync(PROCESSED_EVENTS_STORE)) return;
-    const entries = JSON.parse(readFileSync(PROCESSED_EVENTS_STORE, "utf-8")) as [string, number][];
+    const entries = JSON.parse(
+      readFileSync(PROCESSED_EVENTS_STORE, "utf-8"),
+    ) as [string, number][];
     const now = Date.now();
-    for (const [id, exp] of entries) if (exp > now) processedEventExpiry.set(id, exp);
+    for (const [id, exp] of entries)
+      if (exp > now) processedEventExpiry.set(id, exp);
   } catch (e) {
     console.error("[slack] Failed to load processed events:", e);
   }
@@ -113,7 +117,8 @@ export function isEventProcessed(id: string): boolean {
 export function markEventProcessed(id: string): void {
   const now = Date.now();
   processedEventExpiry.set(id, now + PROCESSED_EVENT_TTL_MS);
-  for (const [k, exp] of processedEventExpiry) if (exp <= now) processedEventExpiry.delete(k);
+  for (const [k, exp] of processedEventExpiry)
+    if (exp <= now) processedEventExpiry.delete(k);
   persistProcessedEvents();
 }
 
@@ -149,7 +154,7 @@ export async function saveSession(session: SlackSession): Promise<void> {
   const sessionFile = `${SESSION_DIR}/${key}.json`;
   const existing: SlackSessionFile = (await loadSession(key)) ?? {};
   const patch = Object.fromEntries(
-    Object.entries(session).filter(([, v]) => v !== undefined)
+    Object.entries(session).filter(([, v]) => v !== undefined),
   );
   writeJsonAtomic(sessionFile, {
     ...existing,
@@ -159,9 +164,7 @@ export async function saveSession(session: SlackSession): Promise<void> {
   });
 }
 
-export async function loadSession(
-  key: string
-): Promise<SlackSession | null> {
+export async function loadSession(key: string): Promise<SlackSession | null> {
   try {
     const sessionFile = `${SESSION_DIR}/${key}.json`;
     const file = Bun.file(sessionFile);
@@ -185,7 +188,7 @@ export async function loadActiveSessionsOnStartup(): Promise<void> {
 
   try {
     const files = readdirSync(SESSION_DIR).filter((f: string) =>
-      f.endsWith(".json")
+      f.endsWith(".json"),
     );
 
     let skippedStale = 0;
@@ -195,7 +198,9 @@ export async function loadActiveSessionsOnStartup(): Promise<void> {
         const session = await loadSession(key);
 
         if (session && session.claudeSessionId) {
-          let lastActive = Date.parse(session.lastActivity || session.createdAt || "");
+          let lastActive = Date.parse(
+            session.lastActivity || session.createdAt || "",
+          );
           if (!lastActive) {
             try {
               lastActive = statSync(`${SESSION_DIR}/${file}`).mtimeMs;
@@ -213,7 +218,9 @@ export async function loadActiveSessionsOnStartup(): Promise<void> {
       }
     }
     if (skippedStale > 0) {
-      console.log(`[slack] Skipped ${skippedStale} stale session file(s) (idle > 7 days)`);
+      console.log(
+        `[slack] Skipped ${skippedStale} stale session file(s) (idle > 7 days)`,
+      );
     }
   } catch {
     console.log("[slack] No active sessions to load");

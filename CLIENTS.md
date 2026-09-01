@@ -3,13 +3,13 @@
 Open Session is one server with several front ends. Only the first is required;
 everything else is optional.
 
-| Client | Where | Needs building? |
-| --- | --- | --- |
-| Web UI | `packages/core/opensession-server/src/frontend/` | no, the server serves it |
-| PWA | same web UI, installed to a home screen | no |
-| Electron desktop shell | `packages/clients/mac/` | yes |
-| Native Swift app (iOS + macOS) | `packages/clients/ios/` | yes, with Xcode |
-| Chrome extension | `packages/clients/chrome/` | no, load unpacked for development |
+| Client                         | Where                                            | Needs building?                   |
+| ------------------------------ | ------------------------------------------------ | --------------------------------- |
+| Web UI                         | `packages/core/opensession-server/src/frontend/` | no, the server serves it          |
+| PWA                            | same web UI, installed to a home screen          | no                                |
+| Electron desktop shell         | `packages/clients/mac/`                          | yes                               |
+| Native Swift app (iOS + macOS) | `packages/clients/ios/`                          | yes, with Xcode                   |
+| Chrome extension               | `packages/clients/chrome/`                       | no, load unpacked for development |
 
 The Web UI and installed PWA use the server origin that serves them. Electron,
 Swift, and Chrome default to `http://127.0.0.1:3850` and let you save and switch

@@ -11,9 +11,12 @@ import { oldSideRanges, prNumberFromSubject } from "./missed-bugs";
 describe("review options", () => {
   it("falls back to defaults on garbage", () => {
     expect(normalizeReviewOptions(null)).toEqual(REVIEW_OPTION_DEFAULTS);
-    expect(normalizeReviewOptions({ minInlineSeverity: "P9", summaryOnlyOverFiles: -1 })).toEqual(
-      REVIEW_OPTION_DEFAULTS,
-    );
+    expect(
+      normalizeReviewOptions({
+        minInlineSeverity: "P9",
+        summaryOnlyOverFiles: -1,
+      }),
+    ).toEqual(REVIEW_OPTION_DEFAULTS);
   });
 
   it("accepts valid overrides (case-insensitive severity)", () => {
@@ -44,12 +47,21 @@ describe("review options", () => {
   });
 
   it("matches skip keywords case-insensitively", () => {
-    expect(titleHasSkipKeyword("WIP [Skip-Review] big refactor", REVIEW_OPTION_DEFAULTS)).toBe(true);
-    expect(titleHasSkipKeyword("normal title", REVIEW_OPTION_DEFAULTS)).toBe(false);
+    expect(
+      titleHasSkipKeyword(
+        "WIP [Skip-Review] big refactor",
+        REVIEW_OPTION_DEFAULTS,
+      ),
+    ).toBe(true);
+    expect(titleHasSkipKeyword("normal title", REVIEW_OPTION_DEFAULTS)).toBe(
+      false,
+    );
   });
 
   it("matches ignore globs", () => {
-    const o = normalizeReviewOptions({ ignoreGlobs: ["**/*.lock", "generated/**"] });
+    const o = normalizeReviewOptions({
+      ignoreGlobs: ["**/*.lock", "generated/**"],
+    });
     expect(pathIgnored("bun.lock", o)).toBe(true);
     expect(pathIgnored("packages/app/yarn.lock", o)).toBe(true);
     expect(pathIgnored("generated/api/client.ts", o)).toBe(true);
@@ -74,7 +86,9 @@ describe("missed-bug helpers", () => {
   });
 
   it("extracts PR numbers from squash-merge subjects", () => {
-    expect(prNumberFromSubject("fix: handle empty upload queue (#4913)")).toBe(4913);
+    expect(prNumberFromSubject("fix: handle empty upload queue (#4913)")).toBe(
+      4913,
+    );
     expect(prNumberFromSubject("fix without suffix")).toBeNull();
   });
 });

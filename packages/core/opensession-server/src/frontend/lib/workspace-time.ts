@@ -11,23 +11,23 @@ const KEY = "opensession-ws-time";
 const CHANGE_EVENT = "opensession-ws-time-changed";
 
 export function getWsTimePref(): WsTimePref {
-	const v = localStorage.getItem(KEY);
-	// "hover" is the default, so its absence is the stored form.
-	return v === "always" || v === "off" ? v : "hover";
+  const v = localStorage.getItem(KEY);
+  // "hover" is the default, so its absence is the stored form.
+  return v === "always" || v === "off" ? v : "hover";
 }
 
 export function setWsTimePref(pref: WsTimePref) {
-	if (pref === "hover") localStorage.removeItem(KEY);
-	else localStorage.setItem(KEY, pref);
-	window.dispatchEvent(new Event(CHANGE_EVENT));
+  if (pref === "hover") localStorage.removeItem(KEY);
+  else localStorage.setItem(KEY, pref);
+  window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
 export function onWsTimeChanged(handler: () => void): () => void {
-	window.addEventListener(CHANGE_EVENT, handler);
-	return () => window.removeEventListener(CHANGE_EVENT, handler);
+  window.addEventListener(CHANGE_EVENT, handler);
+  return () => window.removeEventListener(CHANGE_EVENT, handler);
 }
 
 // Mirror changes made in another tab (storage events don't fire same-tab).
 window.addEventListener("storage", (e) => {
-	if (e.key === KEY) window.dispatchEvent(new Event(CHANGE_EVENT));
+  if (e.key === KEY) window.dispatchEvent(new Event(CHANGE_EVENT));
 });

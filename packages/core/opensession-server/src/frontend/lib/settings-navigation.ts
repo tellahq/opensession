@@ -1,7 +1,7 @@
 export type SettingsReturn = {
-	path: string;
-	depth: number | null;
-	steps: number;
+  path: string;
+  depth: number | null;
+  steps: number;
 };
 
 /**
@@ -10,29 +10,29 @@ export type SettingsReturn = {
  * skip all of them and return to the page that opened it.
  */
 export function settingsReturnForNavigation({
-	currentIsSettings,
-	nextIsSettings,
-	currentReturn,
-	currentPath,
-	currentDepth,
-	replace,
+  currentIsSettings,
+  nextIsSettings,
+  currentReturn,
+  currentPath,
+  currentDepth,
+  replace,
 }: {
-	currentIsSettings: boolean;
-	nextIsSettings: boolean;
-	currentReturn?: SettingsReturn;
-	currentPath: string;
-	currentDepth: number | null;
-	replace: boolean;
+  currentIsSettings: boolean;
+  nextIsSettings: boolean;
+  currentReturn?: SettingsReturn;
+  currentPath: string;
+  currentDepth: number | null;
+  replace: boolean;
 }): SettingsReturn | undefined {
-	if (!nextIsSettings) return undefined;
-	if (!currentIsSettings)
-		return {
-			path: currentPath,
-			depth: currentDepth,
-			steps: replace ? 0 : 1,
-		};
-	if (!currentReturn) return undefined;
-	return replace
-		? currentReturn
-		: { ...currentReturn, steps: currentReturn.steps + 1 };
+  if (!nextIsSettings) return undefined;
+  if (!currentIsSettings)
+    return {
+      path: currentPath,
+      depth: currentDepth,
+      steps: replace ? 0 : 1,
+    };
+  if (!currentReturn) return undefined;
+  return replace
+    ? currentReturn
+    : { ...currentReturn, steps: currentReturn.steps + 1 };
 }

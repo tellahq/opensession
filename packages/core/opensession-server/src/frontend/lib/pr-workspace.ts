@@ -6,15 +6,15 @@ type PrIdentity = { repo: string; number?: number; branch?: string };
 
 /** Whether the workspace record itself identifies this PR. */
 export function workspaceCarriesPr(
-	workspace: Workspace,
-	pr: PrIdentity,
+  workspace: Workspace,
+  pr: PrIdentity,
 ): boolean {
-	const repo = workspace.repo || DEFAULT_REPO_ID;
-	if (repo !== pr.repo) return false;
-	return (
-		(pr.number !== undefined && workspace.prNumber === pr.number) ||
-		(!!pr.branch && workspace.branch === pr.branch)
-	);
+  const repo = workspace.repo || DEFAULT_REPO_ID;
+  if (repo !== pr.repo) return false;
+  return (
+    (pr.number !== undefined && workspace.prNumber === pr.number) ||
+    (!!pr.branch && workspace.branch === pr.branch)
+  );
 }
 
 /**
@@ -32,30 +32,30 @@ export function workspaceCarriesPr(
  * server's job, so an unknown PR returns null and the caller asks it.
  */
 export function findPrWorkspaceId(
-	workspaces: Workspace[],
-	sessions: UnifiedSession[],
-	pr: PrIdentity,
+  workspaces: Workspace[],
+  sessions: UnifiedSession[],
+  pr: PrIdentity,
 ): string | null {
-	if (pr.number !== undefined) {
-		const byNumber = workspaces.find((workspace) =>
-			workspaceCarriesPr(workspace, { repo: pr.repo, number: pr.number }),
-		);
-		if (byNumber) return byNumber.id;
-	}
-	if (pr.branch) {
-		const byBranch = workspaces.find((workspace) =>
-			workspaceCarriesPr(workspace, { repo: pr.repo, branch: pr.branch }),
-		);
-		if (byBranch) return byBranch.id;
-	}
-	// Newest first: the same preference the server's session lookup uses, so a
-	// PR reopened in a later session lands where the server would put it.
-	const carrier = [...sessions]
-		.filter((s) => !s.archived && !!s.workspaceId && sessionCarriesPr(s, pr))
-		.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))[0];
-	const id = carrier?.workspaceId;
-	// Only answer with a workspace this client can actually render. Navigating
-	// to an id the list has not caught up with would trade the spinner for a
-	// "Workspace not found", which is worse.
-	return id && workspaces.some((w) => w.id === id) ? id : null;
+  if (pr.number !== undefined) {
+    const byNumber = workspaces.find((workspace) =>
+      workspaceCarriesPr(workspace, { repo: pr.repo, number: pr.number }),
+    );
+    if (byNumber) return byNumber.id;
+  }
+  if (pr.branch) {
+    const byBranch = workspaces.find((workspace) =>
+      workspaceCarriesPr(workspace, { repo: pr.repo, branch: pr.branch }),
+    );
+    if (byBranch) return byBranch.id;
+  }
+  // Newest first: the same preference the server's session lookup uses, so a
+  // PR reopened in a later session lands where the server would put it.
+  const carrier = [...sessions]
+    .filter((s) => !s.archived && !!s.workspaceId && sessionCarriesPr(s, pr))
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))[0];
+  const id = carrier?.workspaceId;
+  // Only answer with a workspace this client can actually render. Navigating
+  // to an id the list has not caught up with would trade the spinner for a
+  // "Workspace not found", which is worse.
+  return id && workspaces.some((w) => w.id === id) ? id : null;
 }

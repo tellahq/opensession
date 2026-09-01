@@ -17,21 +17,33 @@ import * as stylex from "@stylexjs/stylex";
 const normalWeight = "var(--font-weight-normal)";
 
 export const type = stylex.create({
-	meta: { fontSize: "var(--type-meta)", fontWeight: normalWeight },
-	label: { fontSize: "var(--type-label)" },
-	supporting: { fontSize: "var(--type-label)", fontWeight: normalWeight },
-	controlLabel: { fontSize: "var(--type-label)" },
-	body: { fontSize: "var(--type-body)" },
-	itemTitle: { fontSize: "var(--type-item-title)", "--settings-leading": "1.1" },
-	dialogTitle: { fontSize: "var(--type-dialog-title)", "--settings-leading": "1.1" },
-	sectionTitle: { fontSize: "var(--type-section-title)", "--settings-leading": "1.1" },
-	pageTitle: { fontSize: "var(--type-page-title)", "--settings-leading": "1.1" },
-	/** Not a step: iOS Safari zooms when a focused input is under 16px. */
-	inputPhone: { fontSize: "var(--type-input-phone)" },
-	stat: {
-		fontSize: "var(--type-stat)",
-		"--settings-leading": "1.1",
-		lineHeight: "var(--type-stat-line)",
-		letterSpacing: "-0.025em",
-	},
+  meta: { fontSize: "var(--type-meta)", fontWeight: normalWeight },
+  label: { fontSize: "var(--type-label)" },
+  supporting: { fontSize: "var(--type-label)", fontWeight: normalWeight },
+  controlLabel: { fontSize: "var(--type-label)" },
+  body: { fontSize: "var(--type-body)" },
+  itemTitle: {
+    fontSize: "var(--type-item-title)",
+    "--settings-leading": "1.1",
+  },
+  dialogTitle: {
+    fontSize: "var(--type-dialog-title)",
+    "--settings-leading": "1.1",
+  },
+  sectionTitle: {
+    fontSize: "var(--type-section-title)",
+    "--settings-leading": "1.1",
+  },
+  pageTitle: {
+    fontSize: "var(--type-page-title)",
+    "--settings-leading": "1.1",
+  },
+  /** Not a step: iOS Safari zooms when a focused input is under 16px. */
+  inputPhone: { fontSize: "var(--type-input-phone)" },
+  stat: {
+    fontSize: "var(--type-stat)",
+    "--settings-leading": "1.1",
+    lineHeight: "var(--type-stat-line)",
+    letterSpacing: "-0.025em",
+  },
 });

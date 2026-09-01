@@ -13,7 +13,19 @@ import { existsSync } from "fs";
 import { basename, isAbsolute, join, resolve } from "path";
 import { readConfig, writeConfig } from "./config-edit";
 import { CONFIG_PATH, HOME } from "./paths";
-import { ask, bold, dim, fail, heading, info, ok, run, runInherit, warn, wrote } from "./ui";
+import {
+  ask,
+  bold,
+  dim,
+  fail,
+  heading,
+  info,
+  ok,
+  run,
+  runInherit,
+  warn,
+  wrote,
+} from "./ui";
 
 type RepoEntry = {
   label?: string;
@@ -27,13 +39,27 @@ type RepoEntry = {
 };
 
 async function detectBranch(dir: string): Promise<string> {
-  const { code, stdout } = await run(["git", "-C", dir, "symbolic-ref", "--short", "HEAD"]);
+  const { code, stdout } = await run([
+    "git",
+    "-C",
+    dir,
+    "symbolic-ref",
+    "--short",
+    "HEAD",
+  ]);
   return code === 0 && stdout ? stdout : "main";
 }
 
 /** `owner/name` from a github.com remote URL, in either ssh or https form. */
 async function detectGhRepo(dir: string): Promise<string | undefined> {
-  const { code, stdout } = await run(["git", "-C", dir, "remote", "get-url", "origin"]);
+  const { code, stdout } = await run([
+    "git",
+    "-C",
+    dir,
+    "remote",
+    "get-url",
+    "origin",
+  ]);
   if (code !== 0) return undefined;
   const match = stdout.match(/github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?$/);
   return match?.[1];
@@ -45,8 +71,17 @@ const CS_ORIGIN_RE =
   /^https:\/\/(?:t:[^@]*@)?([A-Za-z0-9][A-Za-z0-9-]*)\.code\.storage\/(.+?)(?:\.git)?\/?$/;
 
 /** {org, repoId} from a code.storage remote URL, or undefined. */
-async function detectCsRepo(dir: string): Promise<{ org: string; repoId: string } | undefined> {
-  const { code, stdout } = await run(["git", "-C", dir, "remote", "get-url", "origin"]);
+async function detectCsRepo(
+  dir: string,
+): Promise<{ org: string; repoId: string } | undefined> {
+  const { code, stdout } = await run([
+    "git",
+    "-C",
+    dir,
+    "remote",
+    "get-url",
+    "origin",
+  ]);
   if (code !== 0) return undefined;
   const match = stdout.trim().match(CS_ORIGIN_RE);
   if (!match) return undefined;
@@ -66,7 +101,11 @@ async function list(): Promise<number> {
   const repos = (config.repos ?? {}) as Record<string, RepoEntry>;
   const ids = Object.keys(repos);
   if (!ids.length) {
-    info(dim(`none registered — sessions need at least one: ${bold("opensession repos add")}`));
+    info(
+      dim(
+        `none registered — sessions need at least one: ${bold("opensession repos add")}`,
+      ),
+    );
     return 0;
   }
   for (const [id, entry] of Object.entries(repos)) {
@@ -92,13 +131,20 @@ async function add(spec?: string): Promise<number> {
   }
   if (!spec) {
     fail("usage: opensession repos add <owner/name | path>");
-    info(dim("  owner/name clones from GitHub via gh; a path registers an existing checkout"));
+    info(
+      dim(
+        "  owner/name clones from GitHub via gh; a path registers an existing checkout",
+      ),
+    );
     return 1;
   }
 
   const repos = (config.repos ??= {}) as Record<string, RepoEntry>;
   const isLocal =
-    isAbsolute(spec) || spec.startsWith(".") || spec.startsWith("~") || existsSync(resolve(spec));
+    isAbsolute(spec) ||
+    spec.startsWith(".") ||
+    spec.startsWith("~") ||
+    existsSync(resolve(spec));
 
   let checkout: string;
   let ghRepo: string | undefined;
@@ -118,7 +164,10 @@ async function add(spec?: string): Promise<number> {
     // set up, and the failure mode for a signed-out box is instructive.
     const auth = await run(["gh", "auth", "status"]);
     if (auth.code !== 0) {
-      fail("gh is not signed in to GitHub", "run `gh auth login` for this bootstrap command");
+      fail(
+        "gh is not signed in to GitHub",
+        "run `gh auth login` for this bootstrap command",
+      );
       info(
         dim(
           "  Or configure the GitHub App in Settings and add repositories from the UI.\n" +
@@ -131,7 +180,9 @@ async function add(spec?: string): Promise<number> {
     checkout = ask("Clone to", join(HOME, "checkouts", spec.split("/")[1]));
     if (existsSync(join(checkout, ".git"))) {
       info(dim(`already cloned at ${checkout} — registering it`));
-    } else if ((await runInherit(["gh", "repo", "clone", spec, checkout])) !== 0) {
+    } else if (
+      (await runInherit(["gh", "repo", "clone", spec, checkout])) !== 0
+    ) {
       fail(`could not clone ${spec}`);
       return 1;
     }
@@ -142,7 +193,10 @@ async function add(spec?: string): Promise<number> {
 
   const id = ask("Repo id", basename(checkout));
   if (repos[id]) {
-    warn(`repo '${id}' is already registered`, "pick another id or edit config.json");
+    warn(
+      `repo '${id}' is already registered`,
+      "pick another id or edit config.json",
+    );
     return 1;
   }
 
@@ -172,7 +226,11 @@ async function add(spec?: string): Promise<number> {
       ),
     );
   } else if (!ghRepo) {
-    info(dim("  no github.com or code.storage origin detected, so PR operations are off for this repo"));
+    info(
+      dim(
+        "  no github.com or code.storage origin detected, so PR operations are off for this repo",
+      ),
+    );
   }
   return 0;
 }
@@ -181,6 +239,9 @@ export async function repos(args: string[]): Promise<number> {
   const [sub, ...rest] = args;
   if (!sub) return await list();
   if (sub === "add") return await add(rest[0]);
-  fail(`unknown subcommand '${sub}'`, "usage: opensession repos [add <owner/name | path>]");
+  fail(
+    `unknown subcommand '${sub}'`,
+    "usage: opensession repos [add <owner/name | path>]",
+  );
   return 1;
 }

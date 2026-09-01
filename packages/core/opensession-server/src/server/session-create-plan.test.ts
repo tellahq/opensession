@@ -20,13 +20,17 @@ function writeLegacyPlan(root: string, plan: DurableCreatePlan) {
   const dir = join(root, "create-plans");
   mkdirSync(dir, { recursive: true });
   writeFileSync(
-    join(dir, `${String(plan.sessionId).replace(/[^a-zA-Z0-9._-]/g, "_")}.json`),
+    join(
+      dir,
+      `${String(plan.sessionId).replace(/[^a-zA-Z0-9._-]/g, "_")}.json`,
+    ),
     JSON.stringify(plan),
   );
   return plan;
 }
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
 
 describe("durable create plan", () => {
@@ -96,7 +100,9 @@ describe("durable create plan", () => {
         requestId: plan.identity,
         type: "create_session",
       });
-      store.completeCommand(plan.sessionId, plan.identity, { id: plan.sessionId });
+      store.completeCommand(plan.sessionId, plan.identity, {
+        id: plan.sessionId,
+      });
       expect(
         pruneCreatePlans(
           store,
@@ -128,7 +134,9 @@ describe("durable create plan", () => {
           Date.parse(retryable.createdAt) + 365 * 24 * 60 * 60_000,
         ),
       ).toBe(0);
-      expect(readCreatePlan(retryable.sessionId, retryable.identity)).toBeDefined();
+      expect(
+        readCreatePlan(retryable.sessionId, retryable.identity),
+      ).toBeDefined();
     } finally {
       store.close();
       __setSessionsDirForTest(previous);
@@ -147,12 +155,14 @@ describe("durable create plan", () => {
         createdAt: new Date().toISOString(),
         branch: "feature/stable",
         workspaceId: createPlanWorkspaceId("os-create"),
-        attachments: [{
-          attachmentId: "attachment-one",
-          name: "brief.pdf",
-          sourceRef: "uploads:staged%2Fbrief.pdf",
-          digest: "sha256:brief",
-        }],
+        attachments: [
+          {
+            attachmentId: "attachment-one",
+            name: "brief.pdf",
+            sourceRef: "uploads:staged%2Fbrief.pdf",
+            digest: "sha256:brief",
+          },
+        ],
         resolved: {
           model: "pi/openai/gpt-5.5",
           sandboxProvider: "docker",

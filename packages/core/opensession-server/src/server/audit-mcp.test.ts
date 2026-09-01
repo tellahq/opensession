@@ -6,7 +6,7 @@ import { type AuditDigestDeps, auditDigestPayload } from "./audit-mcp";
  *  reach the filename. */
 function deps(
   digest: Record<string, unknown> | null,
-  asked: string[] = []
+  asked: string[] = [],
 ): AuditDigestDeps & { asked: string[] } {
   return {
     asked,
@@ -39,7 +39,9 @@ describe("auditDigestPayload", () => {
   it("defaults to yesterday (UTC) when no date is given", () => {
     const d = deps(DIGEST);
     auditDigestPayload(undefined, d);
-    expect(d.asked).toEqual([new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)]);
+    expect(d.asked).toEqual([
+      new Date(Date.now() - 86_400_000).toISOString().slice(0, 10),
+    ]);
   });
 
   it("rejects malformed dates without reaching the log", () => {
@@ -65,7 +67,9 @@ describe("auditDigestPayload", () => {
   it("treats a blank date as an omitted one", () => {
     const d = deps(DIGEST);
     expect(auditDigestPayload("  ", d).ok).toBe(true);
-    expect(d.asked).toEqual([new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)]);
+    expect(d.asked).toEqual([
+      new Date(Date.now() - 86_400_000).toISOString().slice(0, 10),
+    ]);
   });
 
   it("says so, with the days it does have, when there is no log", () => {
@@ -96,12 +100,17 @@ describe("auditDigestPayload", () => {
   it("drops detail sections when the capped digest is still outsized", () => {
     const huge = {
       ...DIGEST,
-      sessions: Array.from({ length: 40 }, (_, i) => ({ id: `os-${i}`, firstPrompt: "x".repeat(4000) })),
+      sessions: Array.from({ length: 40 }, (_, i) => ({
+        id: `os-${i}`,
+        firstPrompt: "x".repeat(4000),
+      })),
     };
     const out = auditDigestPayload("2026-08-18", deps(huge));
     expect(JSON.stringify(out).length).toBeLessThan(120_000);
     expect(out.sessions).toEqual([]);
-    expect((out.truncated as Record<string, { kept: number }>).sessions.kept).toBe(0);
+    expect(
+      (out.truncated as Record<string, { kept: number }>).sessions.kept,
+    ).toBe(0);
     // Totals survive whatever gets dropped.
     expect(out.totals).toEqual(DIGEST.totals);
   });

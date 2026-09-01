@@ -18,7 +18,9 @@
     <main>
       <img class="mark" src="mark.png" width="76" height="76" alt="" />
       <h1 id="title">Connect to your server</h1>
-      <p class="message">Enter the address of the Open Session server you use.</p>
+      <p class="message">
+        Enter the address of the Open Session server you use.
+      </p>
       <form id="form" autocomplete="off">
         <input
           class="field"
@@ -33,8 +35,12 @@
         />
         <div class="actions">
           <button class="button" id="submit" type="submit">Continue</button>
-          <button class="button ghost" id="anyway" type="button" hidden>Use anyway</button>
-          <button class="button ghost" id="cancel" type="button" hidden>Cancel</button>
+          <button class="button ghost" id="anyway" type="button" hidden>
+            Use anyway
+          </button>
+          <button class="button ghost" id="cancel" type="button" hidden>
+            Cancel
+          </button>
         </div>
       </form>
       <p id="status" role="status" aria-live="polite"></p>
@@ -57,7 +63,8 @@
 
       field.value = params.get("url") || "";
       if (changing) {
-        document.getElementById("title").textContent = mode === "add" ? "Add organization" : "Change server";
+        document.getElementById("title").textContent =
+          mode === "add" ? "Add organization" : "Change server";
         submit.textContent = mode === "add" ? "Connect" : "Save";
         cancel.hidden = false;
       } else {
@@ -68,7 +75,9 @@
 
       function host(value) {
         try {
-          return new URL(/^https?:\/\//i.test(value) ? value : "https://" + value).host;
+          return new URL(
+            /^https?:\/\//i.test(value) ? value : "https://" + value,
+          ).host;
         } catch {
           return value;
         }
@@ -91,13 +100,16 @@
         busy = true;
         submit.disabled = true;
         anyway.hidden = true;
-        status.textContent = check ? "Checking " + host(value) + "…" : "Connecting…";
+        status.textContent = check
+          ? "Checking " + host(value) + "…"
+          : "Connecting…";
         try {
           let address = value;
           if (check) {
             const reached = await server.probe(value);
             if (!reached.ok) {
-              status.textContent = reached.error || "Couldn't reach " + host(value) + ".";
+              status.textContent =
+                reached.error || "Couldn't reach " + host(value) + ".";
               anyway.hidden = false;
               return;
             }
@@ -110,7 +122,8 @@
           const saved = await server.save(address);
           // On success the shell navigates away or restarts, so there is
           // nothing left for this page to say.
-          if (!saved.ok) status.textContent = saved.error || "Couldn't save that address.";
+          if (!saved.ok)
+            status.textContent = saved.error || "Couldn't save that address.";
         } finally {
           busy = false;
           submit.disabled = false;

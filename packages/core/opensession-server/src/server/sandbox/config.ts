@@ -31,10 +31,7 @@ export const DEFAULT_SANDBOX_PREVIEW_PORTS = [3300, 3301, 3302] as const;
 // read fresh per run). Read per call, not at module load, so a test can flip
 // the env var without re-importing this module.
 function configPath(): string {
-  return (
-    process.env.OPENSESSION_SANDBOX_CONFIG ||
-    stateDir("sandbox.json")
-  );
+  return process.env.OPENSESSION_SANDBOX_CONFIG || stateDir("sandbox.json");
 }
 
 export function sandboxConfigPath(): string {
@@ -178,26 +175,6 @@ export interface SandboxAwsLambdaMicrovmConfig {
   logGroup?: string;
 }
 
-export interface SandboxFirecrackerMicrovmConfig {
-  /** Explicit opt-in: the provider owns root-level Firecracker/netns resources. */
-  enabled: boolean;
-  /** Credential-free golden store built by refresh-sandbox-golden.sh. */
-  storeDir: string;
-  /** Disjoint from preview-pool clone indexes (defaults 64..127). */
-  indexStart: number;
-  indexEnd: number;
-}
-
-export interface SandboxAutomationConfig {
-  /** Automation isolation currently requires the locally enforceable network
-   *  boundary of Firecracker. Other providers are admitted only after their
-   *  native egress controls pass the same conformance case. */
-  provider: "microvm";
-  /** Additional HTTPS endpoints/CIDRs an automation may contact. Model, git,
-   *  and the Open Session callback endpoints are added by the launcher. */
-  egressAllowlist?: string[];
-}
-
 export interface SandboxConfig {
   provider: SandboxProviderId;
   /** Shared default for NEW interactive sessions. Absent/"none" = host. */
@@ -242,10 +219,6 @@ export interface SandboxConfig {
   modal?: SandboxModalConfig;
   /** AWS Lambda MicroVM adapter (provider "lambda-microvm"). */
   awsLambdaMicrovm?: SandboxAwsLambdaMicrovmConfig;
-  /** Local Firecracker adapter (provider "microvm"). */
-  firecrackerMicrovm?: SandboxFirecrackerMicrovmConfig;
-  /** Credential-minimal unattended-run profile. */
-  automation?: SandboxAutomationConfig;
   /** Clone auth for remote-provider workspaces + runner bootstrap. The selected
    *  live GitHub service credential takes precedence; App mode never falls back
    *  to a persisted token because it may be stale static authority. */
@@ -270,7 +243,6 @@ const PROVIDER_IDS = new Set<string>([
   "e2b",
   "box",
   "modal",
-  "microvm",
   "lambda-microvm",
 ]);
 
@@ -302,7 +274,10 @@ export function sandboxConfig(): SandboxConfig {
       const previewPorts = Array.isArray(raw?.previewPorts)
         ? raw.previewPorts.filter(
             (p: unknown): p is number =>
-              typeof p === "number" && Number.isInteger(p) && p > 0 && p < 65536,
+              typeof p === "number" &&
+              Number.isInteger(p) &&
+              p > 0 &&
+              p < 65536,
           )
         : [];
       const str = (v: unknown): string | undefined =>
@@ -320,9 +295,11 @@ export function sandboxConfig(): SandboxConfig {
           typeof raw?.idleStopMinutes === "number" && raw.idleStopMinutes > 0
             ? raw.idleStopMinutes
             : undefined,
-        cpus: typeof raw?.cpus === "number" && raw.cpus > 0 ? raw.cpus : undefined,
+        cpus:
+          typeof raw?.cpus === "number" && raw.cpus > 0 ? raw.cpus : undefined,
         memory:
-          typeof raw?.memory === "string" && /^\d+(\.\d+)?[kmg]b?$/i.test(raw.memory.trim())
+          typeof raw?.memory === "string" &&
+          /^\d+(\.\d+)?[kmg]b?$/i.test(raw.memory.trim())
             ? raw.memory.trim()
             : undefined,
         workspace: raw?.workspace === "volume" ? "volume" : undefined,
@@ -368,8 +345,12 @@ export function sandboxConfig(): SandboxConfig {
                 imageVersion: str(raw.awsLambdaMicrovm.imageVersion),
                 executionRoleArn: str(raw.awsLambdaMicrovm.executionRoleArn),
                 region: str(raw.awsLambdaMicrovm.region),
-                ingressConnectorArn: str(raw.awsLambdaMicrovm.ingressConnectorArn),
-                egressConnectorArn: str(raw.awsLambdaMicrovm.egressConnectorArn),
+                ingressConnectorArn: str(
+                  raw.awsLambdaMicrovm.ingressConnectorArn,
+                ),
+                egressConnectorArn: str(
+                  raw.awsLambdaMicrovm.egressConnectorArn,
+                ),
                 controlPort:
                   typeof raw.awsLambdaMicrovm.controlPort === "number" &&
                   Number.isInteger(raw.awsLambdaMicrovm.controlPort) &&
@@ -378,90 +359,66 @@ export function sandboxConfig(): SandboxConfig {
                     ? raw.awsLambdaMicrovm.controlPort
                     : undefined,
                 maximumDurationSeconds:
-                  typeof raw.awsLambdaMicrovm.maximumDurationSeconds === "number" &&
-                  raw.awsLambdaMicrovm.maximumDurationSeconds > 0
-                    ? Math.min(28_800, Math.floor(raw.awsLambdaMicrovm.maximumDurationSeconds))
+                  typeof raw.awsLambdaMicrovm.maximumDurationSeconds ===
+                    "number" && raw.awsLambdaMicrovm.maximumDurationSeconds > 0
+                    ? Math.min(
+                        28_800,
+                        Math.floor(raw.awsLambdaMicrovm.maximumDurationSeconds),
+                      )
                     : undefined,
                 idleSuspendSeconds:
                   typeof raw.awsLambdaMicrovm.idleSuspendSeconds === "number" &&
                   raw.awsLambdaMicrovm.idleSuspendSeconds >= 60
-                    ? Math.min(28_800, Math.floor(raw.awsLambdaMicrovm.idleSuspendSeconds))
+                    ? Math.min(
+                        28_800,
+                        Math.floor(raw.awsLambdaMicrovm.idleSuspendSeconds),
+                      )
                     : undefined,
                 suspendedDurationSeconds:
-                  typeof raw.awsLambdaMicrovm.suspendedDurationSeconds === "number" &&
+                  typeof raw.awsLambdaMicrovm.suspendedDurationSeconds ===
+                    "number" &&
                   raw.awsLambdaMicrovm.suspendedDurationSeconds > 0
                     ? Math.floor(raw.awsLambdaMicrovm.suspendedDurationSeconds)
                     : undefined,
                 logGroup: str(raw.awsLambdaMicrovm.logGroup),
               }
             : undefined,
-        firecrackerMicrovm:
-          raw?.firecrackerMicrovm && typeof raw.firecrackerMicrovm === "object"
-            ? {
-                enabled: raw.firecrackerMicrovm.enabled === true,
-                storeDir:
-                  str(raw.firecrackerMicrovm.storeDir) ||
-                  "/opt/firecracker/sandbox-store",
-                indexStart:
-                  typeof raw.firecrackerMicrovm.indexStart === "number" &&
-                  Number.isInteger(raw.firecrackerMicrovm.indexStart) &&
-                  raw.firecrackerMicrovm.indexStart >= 1 &&
-                  raw.firecrackerMicrovm.indexStart <= 253
-                    ? raw.firecrackerMicrovm.indexStart
-                    : 64,
-                indexEnd:
-                  typeof raw.firecrackerMicrovm.indexEnd === "number" &&
-                  Number.isInteger(raw.firecrackerMicrovm.indexEnd) &&
-                  raw.firecrackerMicrovm.indexEnd >= 1 &&
-                  raw.firecrackerMicrovm.indexEnd <= 253
-                    ? raw.firecrackerMicrovm.indexEnd
-                    : 127,
-              }
-            : undefined,
-        automation:
-          raw?.automation && typeof raw.automation === "object"
-            ? {
-                provider: "microvm",
-                egressAllowlist: Array.isArray(raw.automation.egressAllowlist)
-                  ? raw.automation.egressAllowlist
-                      .filter(
-                        (value: unknown): value is string =>
-                          typeof value === "string" &&
-                          value.trim().length > 0 &&
-                          value.trim().length <= 512,
-                      )
-                      .map((value: string) => value.trim())
-                      .slice(0, 128)
-                  : undefined,
-              }
-            : undefined,
         cloneCredential:
           raw?.cloneCredential?.type === "https-token" ||
           raw?.cloneCredential?.type === "none"
-            ? { type: raw.cloneCredential.type, token: str(raw.cloneCredential.token) }
+            ? {
+                type: raw.cloneCredential.type,
+                token: str(raw.cloneCredential.token),
+              }
             : undefined,
         prewarm:
           raw?.prewarm && typeof raw.prewarm === "object"
             ? {
                 enabled:
-                  typeof raw.prewarm.enabled === "boolean" ? raw.prewarm.enabled : undefined,
+                  typeof raw.prewarm.enabled === "boolean"
+                    ? raw.prewarm.enabled
+                    : undefined,
                 ttlMinutes:
-                  typeof raw.prewarm.ttlMinutes === "number" && raw.prewarm.ttlMinutes > 0
+                  typeof raw.prewarm.ttlMinutes === "number" &&
+                  raw.prewarm.ttlMinutes > 0
                     ? raw.prewarm.ttlMinutes
                     : undefined,
                 maxLive:
-                  typeof raw.prewarm.maxLive === "number" && raw.prewarm.maxLive >= 1
+                  typeof raw.prewarm.maxLive === "number" &&
+                  raw.prewarm.maxLive >= 1
                     ? Math.floor(raw.prewarm.maxLive)
                     : undefined,
                 keepReady: Array.isArray(raw.prewarm.keepReady)
                   ? raw.prewarm.keepReady
                       .filter(
-                        (target: unknown): target is { provider: string; repoId: string } =>
+                        (
+                          target: unknown,
+                        ): target is { provider: string; repoId: string } =>
                           Boolean(
                             target &&
-                              typeof target === "object" &&
-                              typeof (target as any).provider === "string" &&
-                              typeof (target as any).repoId === "string",
+                            typeof target === "object" &&
+                            typeof (target as any).provider === "string" &&
+                            typeof (target as any).repoId === "string",
                           ),
                       )
                       .map((target: { provider: string; repoId: string }) => ({
@@ -506,11 +463,10 @@ export function sandboxPrewarmConfig(): SandboxPrewarmConfig {
     sandboxConfigPresent() &&
     Boolean(
       normalizedConnectionConfigured("daytona") === true ||
-        normalizedConnectionConfigured("box") === true ||
-        cfg.e2b?.apiKey ||
-        process.env.E2B_API_KEY ||
-        sandboxProviderConfigured("modal") ||
-        sandboxProviderConfigured("microvm"),
+      normalizedConnectionConfigured("box") === true ||
+      cfg.e2b?.apiKey ||
+      process.env.E2B_API_KEY ||
+      sandboxProviderConfigured("modal"),
     );
   return {
     enabled: cfg.prewarm?.enabled ?? prewarmProviderConfigured,
@@ -519,7 +475,8 @@ export function sandboxPrewarmConfig(): SandboxPrewarmConfig {
     keepReady: Array.isArray(cfg.prewarm?.keepReady)
       ? cfg.prewarm.keepReady.filter(
           (target): target is { provider: string; repoId: string } =>
-            typeof target?.provider === "string" && typeof target?.repoId === "string",
+            typeof target?.provider === "string" &&
+            typeof target?.repoId === "string",
         )
       : PREWARM_DEFAULTS.keepReady,
   };
@@ -531,13 +488,6 @@ export function sandboxTransport(): SandboxTransport {
   return sandboxConfig().transport === "ws" ? "ws" : "socket";
 }
 
-/** Effective unattended-run policy. The provider is deliberately not a
- *  generic selector yet: MicroVM is the only backend whose outbound policy is
- *  enforced by Open Session rather than asserted by an external control plane. */
-export function sandboxAutomationConfig(): SandboxAutomationConfig {
-  return sandboxConfig().automation || { provider: "microvm" };
-}
-
 // ── Provider capability status (per-session provider picker) ────────────────
 
 /** The providers a session can explicitly pick ("local" = no sandbox). */
@@ -547,10 +497,10 @@ export const RUNNABLE_SANDBOX_PROVIDERS = [
   "e2b",
   "box",
   "modal",
-  "microvm",
   "lambda-microvm",
 ] as const;
-export type RunnableSandboxProviderId = (typeof RUNNABLE_SANDBOX_PROVIDERS)[number];
+export type RunnableSandboxProviderId =
+  (typeof RUNNABLE_SANDBOX_PROVIDERS)[number];
 
 export interface SandboxProviderCertification {
   certified: boolean;
@@ -567,10 +517,13 @@ export interface SandboxProviderCertification {
 function certification(
   evidence: Omit<SandboxProviderCertification, "certified" | "lastPassedAt">,
 ): SandboxProviderCertification {
-  const passed = Boolean(evidence.behavioralPassedAt && evidence.warmRestorePassedAt);
-  const dates = [evidence.behavioralPassedAt, evidence.warmRestorePassedAt].filter(
-    (date): date is string => Boolean(date),
+  const passed = Boolean(
+    evidence.behavioralPassedAt && evidence.warmRestorePassedAt,
   );
+  const dates = [
+    evidence.behavioralPassedAt,
+    evidence.warmRestorePassedAt,
+  ].filter((date): date is string => Boolean(date));
   return {
     ...evidence,
     certified: passed,
@@ -592,7 +545,9 @@ export const SANDBOX_PROVIDER_CERTIFICATIONS: Record<
     warmRestorePassedAt: "2026-08-11",
     note: "live provider snapshot restore and full remote-run matrix passed",
   }),
-  e2b: certification({ note: "live matrix has not run on a funded E2B account" }),
+  e2b: certification({
+    note: "live matrix has not run on a funded E2B account",
+  }),
   box: certification({
     behavioralPassedAt: "2026-08-13",
     warmRestorePassedAt: "2026-08-13",
@@ -603,16 +558,14 @@ export const SANDBOX_PROVIDER_CERTIFICATIONS: Record<
     warmRestorePassedAt: "2026-08-11",
     note: "live filesystem-image restore and full remote-run matrix passed",
   }),
-  microvm: certification({
-    behavioralPassedAt: "2026-08-10",
-    warmRestorePassedAt: "2026-08-10",
-  }),
   "lambda-microvm": certification({
     note: "live matrix has not run against a provisioned Lambda MicroVM image",
   }),
 };
 
-export function sandboxProviderCertified(id: RunnableSandboxProviderId): boolean {
+export function sandboxProviderCertified(
+  id: RunnableSandboxProviderId,
+): boolean {
   return SANDBOX_PROVIDER_CERTIFICATIONS[id].certified;
 }
 
@@ -629,7 +582,9 @@ export function setWorkspaceSandboxDefault(
     normalized !== "none" &&
     sandboxProviderUsability(normalized).state !== "usable"
   ) {
-    throw new Error(`Sandbox provider "${normalized}" is not currently available`);
+    throw new Error(
+      `Sandbox provider "${normalized}" is not currently available`,
+    );
   }
   const path = configPath();
   // Absence already means None; do not create a config file merely to record
@@ -638,7 +593,8 @@ export function setWorkspaceSandboxDefault(
   let raw: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(readFileSync(path, "utf-8"));
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+      raw = parsed;
   } catch {}
   raw.sessionDefault = normalized;
   mkdirSync(dirname(path), { recursive: true });
@@ -646,7 +602,9 @@ export function setWorkspaceSandboxDefault(
   return normalized as RunnableSandboxProviderId | "none";
 }
 
-export function isRunnableSandboxProvider(v: unknown): v is RunnableSandboxProviderId {
+export function isRunnableSandboxProvider(
+  v: unknown,
+): v is RunnableSandboxProviderId {
   return (
     typeof v === "string" &&
     (RUNNABLE_SANDBOX_PROVIDERS as readonly string[]).includes(v)
@@ -657,13 +615,12 @@ export function isRunnableSandboxProvider(v: unknown): v is RunnableSandboxProvi
  *  volume-style (cloned inside the sandbox; no host fallback for runs). */
 export function isRemoteSandboxProvider(
   v: unknown,
-): v is "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm" {
+): v is "daytona" | "e2b" | "box" | "modal" | "lambda-microvm" {
   return (
     v === "daytona" ||
     v === "e2b" ||
     v === "box" ||
     v === "modal" ||
-    v === "microvm" ||
     v === "lambda-microvm"
   );
 }
@@ -673,7 +630,13 @@ export function isRemoteSandboxProvider(
  * The self-hosted MicroVM adapter has a private host path and deliberately
  * stays on the direct branch, just like Docker. */
 export function usesOutboundSandboxPortalRelay(v: unknown): boolean {
-	return v === "daytona" || v === "e2b" || v === "box" || v === "modal" || v === "lambda-microvm";
+  return (
+    v === "daytona" ||
+    v === "e2b" ||
+    v === "box" ||
+    v === "modal" ||
+    v === "lambda-microvm"
+  );
 }
 
 /** True when a sandbox config file exists and parses — the operator has set
@@ -708,12 +671,16 @@ function normalizedConnectionSelection(
       : raw?.connections && typeof raw.connections === "object"
         ? Object.values(raw.connections)
         : [];
-    const connection = values.find((value: any) => value?.provider === id) as any;
+    const connection = values.find(
+      (value: any) => value?.provider === id,
+    ) as any;
     if (!connection) return undefined;
     const qualification = connection.qualification?.status;
     return {
       enabled: connection.enabled !== false,
-      ...(qualification === "checking" || qualification === "ready" || qualification === "failed"
+      ...(qualification === "checking" ||
+      qualification === "ready" ||
+      qualification === "failed"
         ? { qualification }
         : {}),
     };
@@ -722,7 +689,9 @@ function normalizedConnectionSelection(
   }
 }
 
-function normalizedConnectionConfigured(id: RunnableSandboxProviderId): boolean | undefined {
+function normalizedConnectionConfigured(
+  id: RunnableSandboxProviderId,
+): boolean | undefined {
   return normalizedConnectionSelection(id)?.enabled;
 }
 
@@ -782,13 +751,16 @@ export const SANDBOX_MODEL_FAMILIES: SandboxModelFamily[] = [
 ];
 
 /** The family a model (or the current default) falls into. */
-export function sandboxModelFamilyFor(model?: string | null): SandboxModelFamily {
+export function sandboxModelFamilyFor(
+  model?: string | null,
+): SandboxModelFamily {
   const raw = (model || "").trim() || getDefaultModel();
   const canonical = resolveModel(raw)?.id ?? raw;
   const provider = providerFor(canonical);
   return (
-    SANDBOX_MODEL_FAMILIES.find((family) => family.match.provider === provider) ??
-    SANDBOX_MODEL_FAMILIES[SANDBOX_MODEL_FAMILIES.length - 1]
+    SANDBOX_MODEL_FAMILIES.find(
+      (family) => family.match.provider === provider,
+    ) ?? SANDBOX_MODEL_FAMILIES[SANDBOX_MODEL_FAMILIES.length - 1]
   );
 }
 
@@ -820,7 +792,9 @@ export interface SandboxCapabilityStatus {
   modelFamilies: SandboxModelFamily[];
 }
 
-function sandboxProviderSelectionError(id: RunnableSandboxProviderId): string | undefined {
+function sandboxProviderSelectionError(
+  id: RunnableSandboxProviderId,
+): string | undefined {
   const usability = sandboxProviderUsability(id);
   if (usability.state === "usable") return undefined;
   if (usability.state === "unqualified") {
@@ -842,30 +816,25 @@ function sandboxProviderSelectionError(id: RunnableSandboxProviderId): string | 
           ? "connect Box in Workspace > Sandboxes"
           : id === "modal"
             ? "connect Modal in Workspace > Sandboxes"
-            : id === "microvm"
-              ? "run opensession sandbox enable microvm"
-              : id === "lambda-microvm"
-                ? 'set {"awsLambdaMicrovm":{"imageIdentifier":"arn:aws:lambda:...:microvm-image/..."}} in ~/.opensession-sandbox.json'
-                : 'set {"e2b":{"apiKey":"..."}} in ~/.opensession-sandbox.json (or E2B_API_KEY)';
+            : id === "lambda-microvm"
+              ? 'set {"awsLambdaMicrovm":{"imageIdentifier":"arn:aws:lambda:...:microvm-image/..."}} in ~/.opensession-sandbox.json'
+              : 'set {"e2b":{"apiKey":"..."}} in ~/.opensession-sandbox.json (or E2B_API_KEY)';
   return `Sandbox provider "${id}" is not configured: ${hint}.`;
 }
 
 /** Whether the provider has enabled connection configuration. */
-export function sandboxProviderConfigured(id: RunnableSandboxProviderId): boolean {
+export function sandboxProviderConfigured(
+  id: RunnableSandboxProviderId,
+): boolean {
   if (!sandboxConfigPresent()) return false;
   const normalized = normalizedConnectionConfigured(id);
   if (normalized !== undefined) return normalized;
   const cfg = sandboxConfig();
-  if (
-    id === "docker" ||
-    id === "daytona" ||
-    id === "box" ||
-    id === "modal" ||
-    id === "microvm"
-  ) {
+  if (id === "docker" || id === "daytona" || id === "box" || id === "modal") {
     return false;
   }
-  if (id === "lambda-microvm") return Boolean(cfg.awsLambdaMicrovm?.imageIdentifier);
+  if (id === "lambda-microvm")
+    return Boolean(cfg.awsLambdaMicrovm?.imageIdentifier);
   return Boolean(cfg.e2b?.apiKey || process.env.E2B_API_KEY);
 }
 
@@ -893,13 +862,16 @@ export function sandboxProviderUsability(
 export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
   const enabled = sandboxConfigPresent();
   const cfg = sandboxConfig();
-  const daytonaConfigured = enabled && normalizedConnectionConfigured("daytona") === true;
+  const daytonaConfigured =
+    enabled && normalizedConnectionConfigured("daytona") === true;
   const e2bConfigured =
     enabled && Boolean(cfg.e2b?.apiKey || process.env.E2B_API_KEY);
-  const boxConfigured = enabled && normalizedConnectionConfigured("box") === true;
-  const modalConfigured = enabled && normalizedConnectionConfigured("modal") === true;
-  const lambdaMicrovmConfigured = enabled && Boolean(cfg.awsLambdaMicrovm?.imageIdentifier);
-  const firecrackerMicrovmConfigured = enabled && normalizedConnectionConfigured("microvm") === true;
+  const boxConfigured =
+    enabled && normalizedConnectionConfigured("box") === true;
+  const modalConfigured =
+    enabled && normalizedConnectionConfigured("modal") === true;
+  const lambdaMicrovmConfigured =
+    enabled && Boolean(cfg.awsLambdaMicrovm?.imageIdentifier);
   // Remote sandboxes must dial back over WS: healthy = a public-ingress URL or
   // an explicit callbackBaseUrl is configured, and then the row shows no note.
   // Only an actually-missing dial-back URL surfaces a caveat (no static
@@ -940,36 +912,36 @@ export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
       ...(modalConfigured ? remoteNote : {}),
     },
     {
-      id: "microvm",
-      configured: firecrackerMicrovmConfigured,
-    },
-    {
       id: "lambda-microvm",
       configured: lambdaMicrovmConfigured,
       ...(lambdaMicrovmConfigured ? remoteNote : {}),
     },
   ];
-  const providers = providersWithoutCertification.map((provider): SandboxProviderStatusEntry => {
-    const certification = SANDBOX_PROVIDER_CERTIFICATIONS[provider.id];
-    const usability = sandboxProviderUsability(provider.id);
-    const notes = [
-      provider.note,
-      usability.state === "unqualified"
-        ? "has not passed workspace qualification"
-        : undefined,
-      !certification.certified && usability.configured
-        ? `not available for new sessions — ${certification.note || "live matrix has not passed"}`
-        : undefined,
-    ].filter((note): note is string => Boolean(note));
-    return {
-      ...provider,
-      configured: usability.configured,
-      usability: usability.state,
-      certified: certification.certified,
-      ...(certification.lastPassedAt ? { lastPassedAt: certification.lastPassedAt } : {}),
-      ...(notes.length ? { note: notes.join("; ") } : {}),
-    };
-  });
+  const providers = providersWithoutCertification.map(
+    (provider): SandboxProviderStatusEntry => {
+      const certification = SANDBOX_PROVIDER_CERTIFICATIONS[provider.id];
+      const usability = sandboxProviderUsability(provider.id);
+      const notes = [
+        provider.note,
+        usability.state === "unqualified"
+          ? "has not passed workspace qualification"
+          : undefined,
+        !certification.certified && usability.configured
+          ? `not available for new sessions — ${certification.note || "live matrix has not passed"}`
+          : undefined,
+      ].filter((note): note is string => Boolean(note));
+      return {
+        ...provider,
+        configured: usability.configured,
+        usability: usability.state,
+        certified: certification.certified,
+        ...(certification.lastPassedAt
+          ? { lastPassedAt: certification.lastPassedAt }
+          : {}),
+        ...(notes.length ? { note: notes.join("; ") } : {}),
+      };
+    },
+  );
   const configuredDefault = cfg.provider || "local";
   const defaultProvider =
     configuredDefault !== "local" &&
@@ -1001,10 +973,14 @@ export function resolveRequestedSandbox(
   requested: boolean | string | undefined | null,
   repoId?: string,
   model?: string | null,
-): { ok: true; provider: SandboxProviderId | null } | { ok: false; error: string } {
+):
+  | { ok: true; provider: SandboxProviderId | null }
+  | { ok: false; error: string } {
   const withModelCheck = (
     provider: SandboxProviderId | null,
-  ): { ok: true; provider: SandboxProviderId | null } | { ok: false; error: string } => {
+  ):
+    | { ok: true; provider: SandboxProviderId | null }
+    | { ok: false; error: string } => {
     if (!provider || provider === "local") return { ok: true, provider };
     if (isRunnableSandboxProvider(provider)) {
       const error = sandboxProviderSelectionError(provider);

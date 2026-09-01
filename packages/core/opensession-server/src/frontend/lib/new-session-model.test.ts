@@ -15,11 +15,19 @@ describe("preferredNewSessionModel", () => {
     expect(preferredNewSessionModel(base)).toBe("");
   });
   test("preselects a valid personal model", () => {
-    expect(preferredNewSessionModel({ ...base, modelPref: "pi/anthropic/claude-fable-5" }))
-      .toBe("pi/anthropic/claude-fable-5");
+    expect(
+      preferredNewSessionModel({
+        ...base,
+        modelPref: "pi/anthropic/claude-fable-5",
+      }),
+    ).toBe("pi/anthropic/claude-fable-5");
   });
   test("retains a workspace preset default", () => {
-    expect(preferredNewSessionModel({ ...base, default: "pi/workspace-preset/ws-1/opus-fable" }))
-      .toBe("pi/workspace-preset/ws-1/opus-fable");
+    expect(
+      preferredNewSessionModel({
+        ...base,
+        default: "pi/workspace-preset/ws-1/opus-fable",
+      }),
+    ).toBe("pi/workspace-preset/ws-1/opus-fable");
   });
 });

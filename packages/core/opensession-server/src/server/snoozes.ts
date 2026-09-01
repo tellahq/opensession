@@ -22,44 +22,44 @@ export type Snoozes = Record<string, string>;
 
 /** Keep only string-key entries whose value is a wake time or Someday. */
 function clean(input: unknown): Snoozes {
-	const out: Snoozes = {};
-	if (input && typeof input === "object") {
-		for (const [key, until] of Object.entries(
-			input as Record<string, unknown>,
-		)) {
-			if (
-				typeof key === "string" &&
-				key.length > 0 &&
-				key.length <= 128 &&
-				typeof until === "string" &&
-				(until === SNOOZE_SOMEDAY || !Number.isNaN(Date.parse(until)))
-			) {
-				out[key] = until;
-			}
-		}
-	}
-	return out;
+  const out: Snoozes = {};
+  if (input && typeof input === "object") {
+    for (const [key, until] of Object.entries(
+      input as Record<string, unknown>,
+    )) {
+      if (
+        typeof key === "string" &&
+        key.length > 0 &&
+        key.length <= 128 &&
+        typeof until === "string" &&
+        (until === SNOOZE_SOMEDAY || !Number.isNaN(Date.parse(until)))
+      ) {
+        out[key] = until;
+      }
+    }
+  }
+  return out;
 }
 
 const store = userStore<Snoozes>({ name: "snoozes", field: "snoozes", clean });
 
 export function getSnoozes(user: string): Snoozes {
-	const current = store.get(user);
-	const settlements = getSettlements(user);
-	if (Object.keys(settlements).length === 0) return current;
+  const current = store.get(user);
+  const settlements = getSettlements(user);
+  if (Object.keys(settlements).length === 0) return current;
 
-	// Settled was retired in favour of an indefinite snooze. Migrate each
-	// person's explicit Settled rows exactly once, preserving a more specific
-	// snooze they already chose. Clearing the old map makes Unsnooze stick.
-	const migrated = { ...current };
-	for (const [key, record] of Object.entries(settlements))
-		if (record.state === "settled" && !(key in migrated))
-			migrated[key] = SNOOZE_SOMEDAY;
-	setSettlements(user, {});
-	return store.set(user, migrated);
+  // Settled was retired in favour of an indefinite snooze. Migrate each
+  // person's explicit Settled rows exactly once, preserving a more specific
+  // snooze they already chose. Clearing the old map makes Unsnooze stick.
+  const migrated = { ...current };
+  for (const [key, record] of Object.entries(settlements))
+    if (record.state === "settled" && !(key in migrated))
+      migrated[key] = SNOOZE_SOMEDAY;
+  setSettlements(user, {});
+  return store.set(user, migrated);
 }
 
 /** Replace a user's snoozes (validated). Returns the stored map. */
 export function setSnoozes(user: string, snoozes: unknown): Snoozes {
-	return store.set(user, snoozes);
+  return store.set(user, snoozes);
 }

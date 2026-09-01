@@ -16,6 +16,9 @@ struct TranscriptRow: View {
     let expansionState: (String, Bool) -> TurnFoldState
     /// Where a turn's work rests, and whether that includes its tool calls.
     var activity = TurnActivity.standard
+    /// True only for a trailing standalone reasoning row in a live transcript.
+    /// Work turns derive the same state from `WorkTurn.isLive`.
+    var isActiveReasoning = false
     /// Who started this session, for crediting turns that carry no explicit
     /// sender (see `UserBubble`). Nil for automations and sub-agents.
     var owner: String?
@@ -25,6 +28,7 @@ struct TranscriptRow: View {
     var onDeleteUnsent: ((Outbox.Item) -> Void)?
     var onEditNote: ((SessionNote, String) async throws -> Void)?
     var onDeleteNote: ((SessionNote) async throws -> Void)?
+    var onForkMessage: ((TranscriptEntry) -> Void)?
     var failureContinuation: FailureContinuationAction? = nil
 
     var body: some View {
@@ -55,13 +59,17 @@ struct TranscriptRow: View {
                     outbox: outbox,
                     onEdit: onEditMessage,
                     onEditUnsent: onEditUnsent,
-                    onDeleteUnsent: onDeleteUnsent
+                    onDeleteUnsent: onDeleteUnsent,
+                    onFork: onForkMessage
                 )
+            } else if entry.isAssistant, entry.isReasoning == true {
+                ReasoningSummaryRow(entry: entry, isActive: isActiveReasoning)
             } else if entry.isAssistant {
                 AssistantMessage(
                     entry: entry,
                     sessionId: sessionId,
-                    state: expansionState("body-\(entry.id)", false)
+                    state: expansionState("body-\(entry.id)", false),
+                    onFork: onForkMessage
                 )
             } else {
                 // A system entry from a server too old to classify it.
@@ -326,6 +334,7 @@ struct UserBubble: View {
     var onEdit: ((TranscriptEntry) -> Void)?
     var onEditUnsent: ((Outbox.Item) -> Void)?
     var onDeleteUnsent: ((Outbox.Item) -> Void)?
+    var onFork: ((TranscriptEntry) -> Void)? = nil
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -418,6 +427,13 @@ struct UserBubble: View {
                                     Label("Edit and send again", systemImage: "square.and.pencil")
                                 }
                             }
+                            if outboxItem == nil, let onFork {
+                                Button {
+                                    onFork(entry)
+                                } label: {
+                                    Label("Fork from here", systemImage: "arrow.triangle.branch")
+                                }
+                            }
                             TimestampLabel(date: entry.timestampDate)
                         }
                 }
@@ -508,12 +524,101 @@ private struct OutboxMessageStatus: View {
     }
 }
 
+/// Provider reasoning is visible activity, not an answer. A generated bold
+/// heading is normalized to regular-weight quiet text; any body keeps markdown
+/// structure at the same dimmed hierarchy.
+struct ReasoningSummaryRow: View {
+    let entry: TranscriptEntry
+    var isActive = false
+
+    private var display: ReasoningSummaryDisplay {
+        ReasoningSummaryDisplay(entry.text)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let title = display.activityTitle(isActive: isActive) {
+                if isActive {
+                    ActiveReasoningTitle(title: title)
+                } else {
+                    Text(title)
+                        .font(.body)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                }
+            }
+            if !display.body.isEmpty {
+                MarkdownBody(display.body, dimmed: true)
+            }
+        }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
+        .contextMenu {
+            Button {
+                copyToPasteboard(entry.text)
+            } label: {
+                Label("Copy reasoning summary", systemImage: "doc.on.doc")
+            }
+            TimestampLabel(date: entry.timestampDate)
+        }
+        .accessibilityLabel(isActive ? "Active reasoning" : "Reasoning summary")
+        .accessibilityValue(entry.text)
+    }
+}
+
+/// A small isolated animation subtree. Its timeline redraws only this title,
+/// never the transcript row or lazy stack around it. Reduce Motion does not
+/// instantiate a timeline and uses the brighter, static endpoint instead.
+private struct ActiveReasoningTitle: View {
+    let title: String
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Group {
+            if reduceMotion {
+                label.foregroundStyle(OS1VisualStyle.text)
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                    let cycle = context.date.timeIntervalSinceReferenceDate
+                        .truncatingRemainder(dividingBy: 1.8) / 1.8
+                    label
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .overlay {
+                            label
+                                .foregroundStyle(OS1VisualStyle.text)
+                                .mask {
+                                    GeometryReader { geometry in
+                                        let width = max(36, geometry.size.width * 0.42)
+                                        LinearGradient(
+                                            colors: [.clear, .black, .clear],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                        .frame(width: width)
+                                        .offset(x: (geometry.size.width + width) * cycle - width)
+                                    }
+                                }
+                        }
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+    }
+
+    private var label: some View {
+        Text(title).font(.body)
+    }
+}
+
 /// The agent's answer renders plain — no bubble, the shape modern AI chat
 /// apps converge on, since only the person's own messages need containing.
 struct AssistantMessage: View {
     let entry: TranscriptEntry
     let sessionId: String
     let state: TurnFoldState
+    var onFork: ((TranscriptEntry) -> Void)? = nil
 
     /// Markdown parsing is superlinear, so only this much is parsed up front;
     /// the rest waits behind an explicit tap. Phones are the constrained end
@@ -558,6 +663,13 @@ struct AssistantMessage: View {
                 copyToPasteboard(fullText ?? entry.text)
             } label: {
                 Label("Copy message", systemImage: "doc.on.doc")
+            }
+            if let onFork {
+                Button {
+                    onFork(entry)
+                } label: {
+                    Label("Fork from here", systemImage: "arrow.triangle.branch")
+                }
             }
             TimestampLabel(date: entry.timestampDate)
             if let model = entry.model, !model.isEmpty {
@@ -842,9 +954,17 @@ struct StreamingBubble: View {
     let text: String
 
     var body: some View {
-        StreamingMarkdownBody(text)
-            .padding(.vertical, 2)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        Group {
+            if let heading = ReasoningSummaryDisplay.liveHeading(text) {
+                ActiveReasoningTitle(title: heading)
+                    .accessibilityLabel("Active reasoning")
+                    .accessibilityValue(heading)
+            } else {
+                StreamingMarkdownBody(text)
+            }
+        }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

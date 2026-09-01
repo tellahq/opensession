@@ -76,7 +76,8 @@ export async function bind(address?: string): Promise<number> {
     // The public URL follows only while it points at the old bind address —
     // a reverse-proxied or custom-domain URL is a deliberate choice we keep.
     const oldOrigin = `http://${oldHost === "0.0.0.0" ? "127.0.0.1" : oldHost}:${port}`;
-    const followUrl = !server.publicBaseUrl || server.publicBaseUrl === oldOrigin;
+    const followUrl =
+      !server.publicBaseUrl || server.publicBaseUrl === oldOrigin;
     if (followUrl) server.publicBaseUrl = newOrigin;
     await writeConfig(config);
     wrote(CONFIG_PATH, `host ${oldHost} -> ${target}`);
@@ -87,7 +88,10 @@ export async function bind(address?: string): Promise<number> {
       const env = await Bun.file(ENV_PATH).text();
       let next = env.replace(/^HOST=.*$/m, `HOST=${target}`);
       if (followUrl) {
-        next = next.replace(/^OPENSESSION_UI_BASE=.*$/m, `OPENSESSION_UI_BASE=${newOrigin}`);
+        next = next.replace(
+          /^OPENSESSION_UI_BASE=.*$/m,
+          `OPENSESSION_UI_BASE=${newOrigin}`,
+        );
       }
       if (next !== env) {
         backup(ENV_PATH);
@@ -108,12 +112,19 @@ export async function bind(address?: string): Promise<number> {
       if (await responding(target, port, 15_000)) {
         ok(`listening on ${target}:${port}`);
       } else {
-        warn(`nothing answering on ${target}:${port} yet`, "`opensession logs` to see why");
+        warn(
+          `nothing answering on ${target}:${port} yet`,
+          "`opensession logs` to see why",
+        );
         return 1;
       }
     }
   } else {
-    info(dim("no service installed — restart your foreground server to pick this up"));
+    info(
+      dim(
+        "no service installed — restart your foreground server to pick this up",
+      ),
+    );
   }
 
   info(`\n  Open ${bold(publicUrl)}`);

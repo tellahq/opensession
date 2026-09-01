@@ -11,7 +11,11 @@ import {
   sandboxProviderConfigured,
   setWorkspaceSandboxDefault,
 } from "./config";
-import { getSandboxConnection, isWorkspaceSandboxProvider, sandboxConnectionReady } from "./connections";
+import {
+  getSandboxConnection,
+  isWorkspaceSandboxProvider,
+  sandboxConnectionReady,
+} from "./connections";
 
 export type WorkspaceSandboxDefault = RunnableSandboxProviderId | "none";
 export type PersonalSandboxDefault = WorkspaceSandboxDefault | "workspace";
@@ -38,7 +42,8 @@ export function workspaceSandboxDefault(): WorkspaceSandboxDefault {
 
 export function personalSandboxDefault(user: string): PersonalSandboxDefault {
   const value = getUiPrefs(user || "Anonymous")[PERSONAL_PREF_KEY];
-  if (value === "none" || value === "workspace" || runnable(value)) return value;
+  if (value === "none" || value === "workspace" || runnable(value))
+    return value;
   return "workspace";
 }
 
@@ -59,7 +64,9 @@ export function effectiveSandboxDefault(
   return personal === "workspace" ? workspace : personal;
 }
 
-function assertAvailable(value: string): asserts value is RunnableSandboxProviderId {
+function assertAvailable(
+  value: string,
+): asserts value is RunnableSandboxProviderId {
   if (!runnable(value)) throw new Error(`Unknown sandbox provider "${value}"`);
   if (
     isWorkspaceSandboxProvider(value) &&
@@ -73,7 +80,9 @@ function assertAvailable(value: string): asserts value is RunnableSandboxProvide
   }
 }
 
-export function saveWorkspaceSandboxDefault(value: string): SandboxDefaultsStatus {
+export function saveWorkspaceSandboxDefault(
+  value: string,
+): SandboxDefaultsStatus {
   const normalized = value.trim().toLowerCase();
   if (normalized !== "none") assertAvailable(normalized);
   setWorkspaceSandboxDefault(normalized);
@@ -85,7 +94,8 @@ export function savePersonalSandboxDefault(
   value: string,
 ): SandboxDefaultsStatus {
   const normalized = value.trim().toLowerCase();
-  if (normalized !== "workspace" && normalized !== "none") assertAvailable(normalized);
+  if (normalized !== "workspace" && normalized !== "none")
+    assertAvailable(normalized);
   patchUiPrefs(user || "Anonymous", { [PERSONAL_PREF_KEY]: normalized });
   return sandboxDefaultsStatus(user || "Anonymous");
 }
@@ -104,5 +114,9 @@ export function resolveInteractiveSandbox(
     return resolveRequestedSandbox(requested, repoId, model);
   }
   const selected = sandboxDefaultsStatus(user || "Anonymous").effective;
-  return resolveRequestedSandbox(selected === "none" ? "local" : selected, repoId, model);
+  return resolveRequestedSandbox(
+    selected === "none" ? "local" : selected,
+    repoId,
+    model,
+  );
 }

@@ -26,20 +26,25 @@ const SERVER_ROOT = join(import.meta.dir, "..", "..");
 const FRONTEND_SRC_STYLEX = resolve(SERVER_ROOT, "src", "frontend");
 
 type StylexRule = [
-	string,
-	{ ltr: string; rtl?: string | null; constKey?: string; constVal?: string | number },
-	number,
+  string,
+  {
+    ltr: string;
+    rtl?: string | null;
+    constKey?: string;
+    constVal?: string | number;
+  },
+  number,
 ];
 
 export type StylexCollector = {
-	/** Raw compiler rules keyed by class hash. Keep the priority metadata: the
-	 * official processor uses it to place base, pseudo and media rules in the
-	 * cascade independently of Bun's module traversal order. */
-	rules: Map<string, StylexRule>;
+  /** Raw compiler rules keyed by class hash. Keep the priority metadata: the
+   * official processor uses it to place base, pseudo and media rules in the
+   * cascade independently of Bun's module traversal order. */
+  rules: Map<string, StylexRule>;
 };
 
 export function newStylexCollector(): StylexCollector {
-	return { rules: new Map() };
+  return { rules: new Map() };
 }
 
 /**
@@ -52,34 +57,34 @@ export function newStylexCollector(): StylexCollector {
  * :root variable definitions the same way, keyed by file hash.
  */
 function collectStylexRules(collector: StylexCollector, node: unknown): void {
-	if (Array.isArray(node)) {
-		const looksLikeRule =
-			node.length >= 2 &&
-			typeof node[0] === "string" &&
-			!!node[1] &&
-			typeof node[1] === "object" &&
-			typeof (node[1] as { ltr?: unknown }).ltr === "string";
-		if (looksLikeRule) {
-			const [className, rule, priority] = node as StylexRule;
-			if (rule.ltr && typeof priority === "number") {
-				collector.rules.set(className, [className, rule, priority]);
-			}
-			return;
-		}
-		for (const child of node) collectStylexRules(collector, child);
-	} else if (node && typeof node === "object") {
-		for (const child of Object.values(node as Record<string, unknown>)) {
-			collectStylexRules(collector, child);
-		}
-	}
+  if (Array.isArray(node)) {
+    const looksLikeRule =
+      node.length >= 2 &&
+      typeof node[0] === "string" &&
+      !!node[1] &&
+      typeof node[1] === "object" &&
+      typeof (node[1] as { ltr?: unknown }).ltr === "string";
+    if (looksLikeRule) {
+      const [className, rule, priority] = node as StylexRule;
+      if (rule.ltr && typeof priority === "number") {
+        collector.rules.set(className, [className, rule, priority]);
+      }
+      return;
+    }
+    for (const child of node) collectStylexRules(collector, child);
+  } else if (node && typeof node === "object") {
+    for (const child of Object.values(node as Record<string, unknown>)) {
+      collectStylexRules(collector, child);
+    }
+  }
 }
 
 /** The stylesheet produced by one build: every collected rule in first-seen
  *  order (deterministic for identical inputs), ready to write hashed. */
 export function stylexCss(collector: StylexCollector): string {
-	return stylexBabelPlugin.processStylexRules([...collector.rules.values()], {
-		useLayers: false,
-	});
+  return stylexBabelPlugin.processStylexRules([...collector.rules.values()], {
+    useLayers: false,
+  });
 }
 
 /**
@@ -89,48 +94,48 @@ export function stylexCss(collector: StylexCollector): string {
  * the result to the next pass (oxc React Compiler) with the original loader.
  */
 export function stylexTransform(
-	path: string,
-	sourceText: string,
-	collector: StylexCollector,
+  path: string,
+  sourceText: string,
+  collector: StylexCollector,
 ): string {
-	if (!path.startsWith(FRONTEND_SRC_STYLEX)) return sourceText;
-	if (!sourceText.includes("@stylexjs/stylex")) return sourceText;
-	// The plugin's shipped types do not line up with @babel/core's; the
-	// runtime contract is the standard [plugin, options] pair.
-	const result = transformSync(sourceText, {
-		filename: path,
-		// Syntax only: nothing is stripped, JSX survives untouched.
-		parserOpts: { plugins: ["typescript", "jsx"] },
-		plugins: [
-			[
-				stylexBabelPlugin as never,
-				{
-					dev: false,
-					runtimeInjection: false,
-					genConditionalClasses: true,
-					// The plugin's cross-file evaluator mutates shared style objects
-					// while sorting media keys. Reusing a shared StyleX map across the
-					// next transform then throws "Invalid media query syntax". Open
-					// Session has one non-overlapping phone/desktop boundary, and
-					// processStylexRules still orders emitted rules by priority.
-					enableMediaQueryOrder: false,
-					treeshakeCompensation: true,
-					// Cross-file tokens (styles/tokens.stylex.ts) need the import
-					// resolved to a canonical path; commonJS mode walks
-					// node_modules-style relative paths, which is all the
-					// frontend uses.
-					unstable_moduleResolution: {
-						type: "commonJS",
-						rootDir: FRONTEND_SRC_STYLEX,
-					},
-				},
-			],
-		],
-		configFile: false,
-		babelrc: false,
-	});
-	if (!result?.code) return sourceText;
-	const meta = (result.metadata ?? {}) as { stylex?: unknown };
-	collectStylexRules(collector, meta.stylex);
-	return result.code;
+  if (!path.startsWith(FRONTEND_SRC_STYLEX)) return sourceText;
+  if (!sourceText.includes("@stylexjs/stylex")) return sourceText;
+  // The plugin's shipped types do not line up with @babel/core's; the
+  // runtime contract is the standard [plugin, options] pair.
+  const result = transformSync(sourceText, {
+    filename: path,
+    // Syntax only: nothing is stripped, JSX survives untouched.
+    parserOpts: { plugins: ["typescript", "jsx"] },
+    plugins: [
+      [
+        stylexBabelPlugin as never,
+        {
+          dev: false,
+          runtimeInjection: false,
+          genConditionalClasses: true,
+          // The plugin's cross-file evaluator mutates shared style objects
+          // while sorting media keys. Reusing a shared StyleX map across the
+          // next transform then throws "Invalid media query syntax". Open
+          // Session has one non-overlapping phone/desktop boundary, and
+          // processStylexRules still orders emitted rules by priority.
+          enableMediaQueryOrder: false,
+          treeshakeCompensation: true,
+          // Cross-file tokens (styles/tokens.stylex.ts) need the import
+          // resolved to a canonical path; commonJS mode walks
+          // node_modules-style relative paths, which is all the
+          // frontend uses.
+          unstable_moduleResolution: {
+            type: "commonJS",
+            rootDir: FRONTEND_SRC_STYLEX,
+          },
+        },
+      ],
+    ],
+    configFile: false,
+    babelrc: false,
+  });
+  if (!result?.code) return sourceText;
+  const meta = (result.metadata ?? {}) as { stylex?: unknown };
+  collectStylexRules(collector, meta.stylex);
+  return result.code;
 }

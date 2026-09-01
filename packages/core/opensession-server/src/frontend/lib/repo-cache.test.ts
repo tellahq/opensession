@@ -5,9 +5,9 @@ import { expect, test } from "bun:test";
 // on nothing. Stand one up before the module reads it.
 const store = new Map<string, string>();
 (globalThis as { localStorage?: unknown }).localStorage ??= {
-	getItem: (key: string) => store.get(key) ?? null,
-	setItem: (key: string, value: string) => void store.set(key, String(value)),
-	removeItem: (key: string) => void store.delete(key),
+  getItem: (key: string) => store.get(key) ?? null,
+  setItem: (key: string, value: string) => void store.set(key, String(value)),
+  removeItem: (key: string) => void store.delete(key),
 };
 
 import { cachedNewSessionRepo, cachedRepos, rememberRepos } from "./repo-cache";
@@ -19,61 +19,66 @@ import { cachedNewSessionRepo, cachedRepos, rememberRepos } from "./repo-cache";
 // to leave the picker.
 
 test("a remembered list reads back with its workspace default", () => {
-	rememberRepos(
-		[
-			{
-				id: "tella-fusion",
-				defaultBranch: "main",
-				sharedCheckout: false,
-				color: "#009a69",
-			},
-		],
-		"tella-fusion",
-	);
+  rememberRepos(
+    [
+      {
+        id: "tella-fusion",
+        defaultBranch: "main",
+        sharedCheckout: false,
+        color: "#009a69",
+      },
+    ],
+    "tella-fusion",
+  );
 
-	expect(cachedRepos()).toEqual([
-		{
-			id: "tella-fusion",
-			defaultBranch: "main",
-			sharedCheckout: false,
-			color: "#009a69",
-		},
-	]);
-	expect(cachedNewSessionRepo()).toBe("tella-fusion");
-	// Stored, not just held in memory: the point is the NEXT load.
-	expect(JSON.parse(localStorage.getItem("opensession-repos") || "null")).toEqual({
-		repos: [
-			{
-				id: "tella-fusion",
-				defaultBranch: "main",
-				sharedCheckout: false,
-				color: "#009a69",
-			},
-		],
-		newSessionRepo: "tella-fusion",
-	});
+  expect(cachedRepos()).toEqual([
+    {
+      id: "tella-fusion",
+      defaultBranch: "main",
+      sharedCheckout: false,
+      color: "#009a69",
+    },
+  ]);
+  expect(cachedNewSessionRepo()).toBe("tella-fusion");
+  // Stored, not just held in memory: the point is the NEXT load.
+  expect(
+    JSON.parse(localStorage.getItem("opensession-repos") || "null"),
+  ).toEqual({
+    repos: [
+      {
+        id: "tella-fusion",
+        defaultBranch: "main",
+        sharedCheckout: false,
+        color: "#009a69",
+      },
+    ],
+    newSessionRepo: "tella-fusion",
+  });
 });
 
 test("a later answer replaces the remembered one", () => {
-	rememberRepos([{ id: "gitops", defaultBranch: "main", sharedCheckout: false }], "");
+  rememberRepos(
+    [{ id: "gitops", defaultBranch: "main", sharedCheckout: false }],
+    "",
+  );
 
-	expect(cachedRepos().map((repo) => repo.id)).toEqual(["gitops"]);
-	expect(cachedNewSessionRepo()).toBe("gitops");
+  expect(cachedRepos().map((repo) => repo.id)).toEqual(["gitops"]);
+  expect(cachedNewSessionRepo()).toBe("gitops");
 });
 
 test("retired automatic defaults fall back to a real repository", () => {
-	rememberRepos(
-		[
-			{ id: "app", defaultBranch: "main", sharedCheckout: false },
-			{
-				id: "docs",
-				defaultBranch: "main",
-				sharedCheckout: false,
-				default: true,
-			},
-		],
-		"auto",
-	);
+  rememberRepos(
+    [
+      { id: "app", defaultBranch: "main", sharedCheckout: false },
+      {
+        id: "docs",
+        defaultBranch: "main",
+        sharedCheckout: false,
+        default: true,
+      },
+    ],
+    "auto",
+  );
 
-	expect(cachedNewSessionRepo()).toBe("docs");
+  expect(cachedNewSessionRepo()).toBe("docs");
 });

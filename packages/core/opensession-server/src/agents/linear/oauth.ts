@@ -48,7 +48,10 @@ export async function saveTokens(tokens: LinearTokens): Promise<void> {
   writeJsonAtomic(TOKENS_FILE, tokens);
 }
 
-export async function refreshToken(orgId: string, tokens: LinearTokens): Promise<boolean> {
+export async function refreshToken(
+  orgId: string,
+  tokens: LinearTokens,
+): Promise<boolean> {
   const tokenData = tokens[orgId];
   if (!tokenData?.refreshToken) {
     console.error(`[linear] No refresh token for org: ${orgId}`);
@@ -58,16 +61,19 @@ export async function refreshToken(orgId: string, tokens: LinearTokens): Promise
   console.log(`[linear] Refreshing token for org: ${orgId}`);
 
   try {
-    const response = await fetchWithTimeout("https://api.linear.app/oauth/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: LINEAR_CLIENT_ID,
-        client_secret: LINEAR_CLIENT_SECRET,
-        refresh_token: tokenData.refreshToken,
-        grant_type: "refresh_token",
-      }),
-    });
+    const response = await fetchWithTimeout(
+      "https://api.linear.app/oauth/token",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: LINEAR_CLIENT_ID,
+          client_secret: LINEAR_CLIENT_SECRET,
+          refresh_token: tokenData.refreshToken,
+          grant_type: "refresh_token",
+        }),
+      },
+    );
 
     const data = await response.json();
     if (data.access_token) {
@@ -89,11 +95,15 @@ export async function refreshToken(orgId: string, tokens: LinearTokens): Promise
   }
 }
 
-export async function getValidToken(orgId: string, tokens: LinearTokens): Promise<string | null> {
+export async function getValidToken(
+  orgId: string,
+  tokens: LinearTokens,
+): Promise<string | null> {
   const tokenData = tokens[orgId];
   if (!tokenData) return null;
 
-  const isExpired = tokenData.expiresAt && tokenData.expiresAt < Date.now() + 5 * 60 * 1000;
+  const isExpired =
+    tokenData.expiresAt && tokenData.expiresAt < Date.now() + 5 * 60 * 1000;
   if (isExpired) {
     const refreshed = await refreshToken(orgId, tokens);
     if (!refreshed) return null;
@@ -120,7 +130,10 @@ function statesMatch(actual: string | null, expected: string | null): boolean {
   if (!actual || !expected) return false;
   const actualBytes = Buffer.from(actual);
   const expectedBytes = Buffer.from(expected);
-  return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
+  return (
+    actualBytes.length === expectedBytes.length &&
+    timingSafeEqual(actualBytes, expectedBytes)
+  );
 }
 
 function consumeState(response: Response): Response {
@@ -161,39 +174,55 @@ function failed(message: string): Response {
   });
 }
 
-export async function handleCallback(req: Request, url: URL, tokens: LinearTokens): Promise<Response> {
+export async function handleCallback(
+  req: Request,
+  url: URL,
+  tokens: LinearTokens,
+): Promise<Response> {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const expectedState = cookieValue(req, STATE_COOKIE);
   if (!statesMatch(state, expectedState)) {
-    return consumeState(failed("The authorization could not be verified. Start again."));
+    return consumeState(
+      failed("The authorization could not be verified. Start again."),
+    );
   }
   if (!code) {
-    return consumeState(failed("The redirect came back without a code, so nothing was authorized."));
+    return consumeState(
+      failed(
+        "The redirect came back without a code, so nothing was authorized.",
+      ),
+    );
   }
 
-  const response = await fetchWithTimeout("https://api.linear.app/oauth/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: LINEAR_CLIENT_ID,
-      client_secret: LINEAR_CLIENT_SECRET,
-      code,
-      redirect_uri: redirectUri(),
-      grant_type: "authorization_code",
-    }),
-  });
+  const response = await fetchWithTimeout(
+    "https://api.linear.app/oauth/token",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: LINEAR_CLIENT_ID,
+        client_secret: LINEAR_CLIENT_SECRET,
+        code,
+        redirect_uri: redirectUri(),
+        grant_type: "authorization_code",
+      }),
+    },
+  );
 
   const data = await response.json();
   if (data.access_token) {
-    const orgResponse = await fetchWithTimeout("https://api.linear.app/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${data.access_token}`,
+    const orgResponse = await fetchWithTimeout(
+      "https://api.linear.app/graphql",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data.access_token}`,
+        },
+        body: JSON.stringify({ query: "{ organization { id name } }" }),
       },
-      body: JSON.stringify({ query: "{ organization { id name } }" }),
-    });
+    );
     const orgData = await orgResponse.json();
     const orgId = orgData.data?.organization?.id;
     const orgName = orgData.data?.organization?.name;
@@ -205,20 +234,26 @@ export async function handleCallback(req: Request, url: URL, tokens: LinearToken
         expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
       };
       await saveTokens(tokens);
-      return consumeState(connectResultPage({
-        ok: true,
-        server: "linear",
-        title: "Linear authorized",
-        message: `${personaName()} can pick up tickets in ${orgName} now.`,
-        action: { close: true },
-      }));
+      return consumeState(
+        connectResultPage({
+          ok: true,
+          server: "linear",
+          title: "Linear authorized",
+          message: `${personaName()} can pick up tickets in ${orgName} now.`,
+          action: { close: true },
+        }),
+      );
     }
-    return consumeState(failed("Linear authorized, but did not say which workspace. Try again."));
+    return consumeState(
+      failed("Linear authorized, but did not say which workspace. Try again."),
+    );
   }
 
-  return consumeState(failed(
-    data?.error_description ||
-      data?.error ||
-      "Linear did not return an access token.",
-  ));
+  return consumeState(
+    failed(
+      data?.error_description ||
+        data?.error ||
+        "Linear did not return an access token.",
+    ),
+  );
 }

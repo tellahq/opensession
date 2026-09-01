@@ -11,7 +11,10 @@ import { oneShot } from "../../server/one-shot";
 
 const WHEN_MODEL = process.env.SCHEDULE_WHEN_MODEL || "claude-haiku-4-5";
 
-export async function parseWhen(when: string, now = new Date()): Promise<string | null> {
+export async function parseWhen(
+  when: string,
+  now = new Date(),
+): Promise<string | null> {
   const text = (when || "").trim();
   if (!text) return null;
 

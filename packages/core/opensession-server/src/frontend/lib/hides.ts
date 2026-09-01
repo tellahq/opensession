@@ -30,34 +30,34 @@ const CHANGE_EVENT = "opensession-hides-changed";
 // importable outside a browser, which `partitionHidden` below is unit-tested
 // through.
 const store = makeUserMap<string>({
-	changeEvent: CHANGE_EVENT,
-	fetchMap: fetchHides,
-	saveDelta: saveHidesApi,
+  changeEvent: CHANGE_EVENT,
+  fetchMap: fetchHides,
+  saveDelta: saveHidesApi,
 });
 
 export function getHides(): Record<string, string> {
-	return store.get();
+  return store.get();
 }
 
 export function isHiddenForSession(
-	session: {
-		id: string;
-		workspaceId?: string | null;
-		worktreeDir?: string | null;
-	},
-	hides = store.get(),
+  session: {
+    id: string;
+    workspaceId?: string | null;
+    worktreeDir?: string | null;
+  },
+  hides = store.get(),
 ): boolean {
-	return [
-		session.id,
-		...(session.workspaceId ? [`workspace:${session.workspaceId}`] : []),
-		...(session.worktreeDir ? [`wt:${session.worktreeDir}`] : []),
-	].some((key) => key in hides);
+  return [
+    session.id,
+    ...(session.workspaceId ? [`workspace:${session.workspaceId}`] : []),
+    ...(session.worktreeDir ? [`wt:${session.worktreeDir}`] : []),
+  ].some((key) => key in hides);
 }
 
 export function setHide(key: string): void {
-	store.update((hides) =>
-		key in hides ? null : { ...hides, [key]: new Date().toISOString() },
-	);
+  store.update((hides) =>
+    key in hides ? null : { ...hides, [key]: new Date().toISOString() },
+  );
 }
 
 /**
@@ -65,13 +65,13 @@ export function setHide(key: string): void {
  * rows in one write; idempotent, since multiple tabs race to clear the same key.
  */
 export function clearHides(keys: string[]): void {
-	store.update((hides) => {
-		const doomed = keys.filter((k) => k in hides);
-		if (!doomed.length) return null;
-		const next = { ...hides };
-		for (const k of doomed) delete next[k];
-		return next;
-	});
+  store.update((hides) => {
+    const doomed = keys.filter((k) => k in hides);
+    if (!doomed.length) return null;
+    const next = { ...hides };
+    for (const k of doomed) delete next[k];
+    return next;
+  });
 }
 
 /**
@@ -82,19 +82,19 @@ export function clearHides(keys: string[]): void {
  * reads as a bug. Opening a hidden session deliberately does NOT unhide it.
  */
 export function unhideForSession(session: {
-	id: string;
-	workspaceId?: string | null;
-	worktreeDir?: string | null;
+  id: string;
+  workspaceId?: string | null;
+  worktreeDir?: string | null;
 }): void {
-	clearHides([
-		session.id,
-		...(session.workspaceId ? [`workspace:${session.workspaceId}`] : []),
-		...(session.worktreeDir ? [`wt:${session.worktreeDir}`] : []),
-	]);
+  clearHides([
+    session.id,
+    ...(session.workspaceId ? [`workspace:${session.workspaceId}`] : []),
+    ...(session.worktreeDir ? [`wt:${session.worktreeDir}`] : []),
+  ]);
 }
 
 export function onHidesChanged(handler: () => void): () => void {
-	return store.onChanged(handler);
+  return store.onChanged(handler);
 }
 
 /**
@@ -106,15 +106,15 @@ export function onHidesChanged(handler: () => void): () => void {
  * flickering as questions get asked and answered.
  */
 export function partitionHidden<T extends { key: string; status: string }>(
-	rows: T[],
-	hides: Record<string, string>,
+  rows: T[],
+  hides: Record<string, string>,
 ): { hiddenKeys: Set<string>; resurfaced: T[] } {
-	const hiddenKeys = new Set<string>();
-	const resurfaced: T[] = [];
-	for (const row of rows) {
-		if (!(row.key in hides)) continue;
-		if (row.status === "needsinput") resurfaced.push(row);
-		else hiddenKeys.add(row.key);
-	}
-	return { hiddenKeys, resurfaced };
+  const hiddenKeys = new Set<string>();
+  const resurfaced: T[] = [];
+  for (const row of rows) {
+    if (!(row.key in hides)) continue;
+    if (row.status === "needsinput") resurfaced.push(row);
+    else hiddenKeys.add(row.key);
+  }
+  return { hiddenKeys, resurfaced };
 }

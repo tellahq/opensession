@@ -8,13 +8,13 @@ import type { RouteContext } from "./context";
 import { listLibrary } from "../library";
 
 export async function handleLibraryRoutes(
-	ctx: RouteContext,
+  ctx: RouteContext,
 ): Promise<Response | undefined> {
-	const { req, path } = ctx;
+  const { req, path } = ctx;
 
-	if (path === "/api/library" && req.method === "GET") {
-		return Response.json({ entries: listLibrary() });
-	}
+  if (path === "/api/library" && req.method === "GET") {
+    return Response.json({ entries: listLibrary() });
+  }
 
-	return undefined;
+  return undefined;
 }

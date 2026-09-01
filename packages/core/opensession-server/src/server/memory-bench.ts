@@ -63,11 +63,22 @@ export interface BenchSummaryRow {
 }
 
 /** A strategy is a fold over turns; the runner owns the model calls. */
-export type OneShot = (system: string, prompt: string) => Promise<string | null>;
+export type OneShot = (
+  system: string,
+  prompt: string,
+) => Promise<string | null>;
 
-export function parseBenchConversation(raw: unknown, source: string): BenchConversation {
+export function parseBenchConversation(
+  raw: unknown,
+  source: string,
+): BenchConversation {
   const o = raw as Partial<BenchConversation> | null;
-  if (!o || typeof o.id !== "string" || typeof o.description !== "string" || !Array.isArray(o.turns)) {
+  if (
+    !o ||
+    typeof o.id !== "string" ||
+    typeof o.description !== "string" ||
+    !Array.isArray(o.turns)
+  ) {
     throw new Error(`malformed bench conversation in ${source}`);
   }
   for (const t of o.turns) {
@@ -160,7 +171,9 @@ export const AGENT_CURATOR_PROMPT = [
   "If nothing should change, output exactly: NONE",
 ].join("\n");
 
-export type CuratorAction = { kind: "remember"; text: string } | { kind: "forget"; index: number };
+export type CuratorAction =
+  | { kind: "remember"; text: string }
+  | { kind: "forget"; index: number };
 
 export function parseCuratorActions(out: string): CuratorAction[] {
   const actions: CuratorAction[] = [];
@@ -178,12 +191,19 @@ export function parseCuratorActions(out: string): CuratorAction[] {
   return actions;
 }
 
-export function applyCuratorActions(notebook: string[], actions: CuratorAction[]): string[] {
-  const drop = new Set(actions.filter((a) => a.kind === "forget").map((a) => (a as { index: number }).index));
+export function applyCuratorActions(
+  notebook: string[],
+  actions: CuratorAction[],
+): string[] {
+  const drop = new Set(
+    actions
+      .filter((a) => a.kind === "forget")
+      .map((a) => (a as { index: number }).index),
+  );
   const kept = notebook.filter((_, i) => !drop.has(i + 1));
   return foldFacts(
     kept,
-    actions.flatMap((a) => (a.kind === "remember" ? [a.text] : []))
+    actions.flatMap((a) => (a.kind === "remember" ? [a.text] : [])),
   );
 }
 
@@ -241,7 +261,7 @@ export function parseConsolidationActions(out: string): ConsolidationAction[] {
 
 export function applyConsolidationActions(
   notebook: string[],
-  actions: ConsolidationAction[]
+  actions: ConsolidationAction[],
 ): string[] {
   const updates = new Map<number, string>();
   const deletes = new Set<number>();
@@ -286,7 +306,10 @@ export const BENCH_STRATEGIES: BenchStrategy[] = [
           `You replied:\n${turn.reply}`,
         ].join("\n");
         const out = await oneShot(AGENT_CURATOR_PROMPT, prompt);
-        notebook = applyCuratorActions(notebook, parseCuratorActions(out ?? ""));
+        notebook = applyCuratorActions(
+          notebook,
+          parseCuratorActions(out ?? ""),
+        );
       }
       return notebook;
     },
@@ -313,8 +336,14 @@ export const BENCH_STRATEGIES: BenchStrategy[] = [
         notebook = foldFacts(notebook, parseFacts(out ?? ""));
       }
       if (notebook.length) {
-        const out = await oneShot(MEMORY_CONSOLIDATION_PROMPT, numberedNotebook(notebook));
-        notebook = applyConsolidationActions(notebook, parseConsolidationActions(out ?? ""));
+        const out = await oneShot(
+          MEMORY_CONSOLIDATION_PROMPT,
+          numberedNotebook(notebook),
+        );
+        notebook = applyConsolidationActions(
+          notebook,
+          parseConsolidationActions(out ?? ""),
+        );
       }
       return notebook;
     },
@@ -339,8 +368,13 @@ export const JUDGE_PROMPT = [
   '"inferenceVsObservation": n, "notes": "<one or two sentences>"}',
 ].join("\n");
 
-export function renderJudgeInput(conversation: BenchConversation, notebook: string): string {
-  const transcript = conversation.turns.map((t) => `USER: ${t.input}\nASSISTANT: ${t.reply}`).join("\n\n");
+export function renderJudgeInput(
+  conversation: BenchConversation,
+  notebook: string,
+): string {
+  const transcript = conversation.turns
+    .map((t) => `USER: ${t.input}\nASSISTANT: ${t.reply}`)
+    .join("\n\n");
   return [
     `Conversation (${conversation.id}: ${conversation.description}):`,
     transcript,
@@ -357,7 +391,8 @@ function clampScore(n: unknown): number {
 
 export function parseJudgeVerdict(out: string): JudgeVerdict {
   const match = /\{[\s\S]*\}/.exec(out);
-  if (!match) throw new Error(`judge output had no JSON object: ${out.slice(0, 200)}`);
+  if (!match)
+    throw new Error(`judge output had no JSON object: ${out.slice(0, 200)}`);
   const o = JSON.parse(match[0]) as Partial<JudgeVerdict>;
   return {
     signalToNoise: clampScore(o.signalToNoise),
@@ -379,7 +414,9 @@ export function summarize(results: BenchResult[]): BenchSummaryRow[] {
   const rows: BenchSummaryRow[] = [];
   for (const [strategy, list] of byStrategy) {
     const avg = (pick: (v: JudgeVerdict) => number) =>
-      Math.round((list.reduce((s, r) => s + pick(r.verdict), 0) / list.length) * 10) / 10;
+      Math.round(
+        (list.reduce((s, r) => s + pick(r.verdict), 0) / list.length) * 10,
+      ) / 10;
     const signalToNoise = avg((v) => v.signalToNoise);
     const staleness = avg((v) => v.staleness);
     const inferenceVsObservation = avg((v) => v.inferenceVsObservation);
@@ -389,14 +426,24 @@ export function summarize(results: BenchResult[]): BenchSummaryRow[] {
       signalToNoise,
       staleness,
       inferenceVsObservation,
-      overall: Math.round(((signalToNoise + staleness + inferenceVsObservation) / 3) * 10) / 10,
+      overall:
+        Math.round(
+          ((signalToNoise + staleness + inferenceVsObservation) / 3) * 10,
+        ) / 10,
     });
   }
   return rows.sort((a, b) => b.overall - a.overall);
 }
 
 export function formatTable(rows: BenchSummaryRow[]): string {
-  const header = ["strategy", "convs", "signal/noise", "staleness", "infer-vs-obs", "overall"];
+  const header = [
+    "strategy",
+    "convs",
+    "signal/noise",
+    "staleness",
+    "infer-vs-obs",
+    "overall",
+  ];
   const data = rows.map((r) => [
     r.strategy,
     String(r.conversations),
@@ -405,7 +452,14 @@ export function formatTable(rows: BenchSummaryRow[]): string {
     r.inferenceVsObservation.toFixed(1),
     r.overall.toFixed(1),
   ]);
-  const widths = header.map((h, i) => Math.max(h.length, ...data.map((row) => row[i]!.length)));
-  const line = (cells: string[]) => cells.map((c, i) => c.padEnd(widths[i]!)).join("  ");
-  return [line(header), line(widths.map((w) => "-".repeat(w))), ...data.map(line)].join("\n");
+  const widths = header.map((h, i) =>
+    Math.max(h.length, ...data.map((row) => row[i]!.length)),
+  );
+  const line = (cells: string[]) =>
+    cells.map((c, i) => c.padEnd(widths[i]!)).join("  ");
+  return [
+    line(header),
+    line(widths.map((w) => "-".repeat(w))),
+    ...data.map(line),
+  ].join("\n");
 }

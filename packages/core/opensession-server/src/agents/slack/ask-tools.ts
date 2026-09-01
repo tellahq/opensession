@@ -17,7 +17,9 @@ import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { z } from "zod";
 
 /** Same shape as claude-runner's onAskUser / opensession.ts makeAskHandler. */
-export type AskUserHandler = (input: Record<string, unknown>) => Promise<
+export type AskUserHandler = (
+  input: Record<string, unknown>,
+) => Promise<
   | { behavior: "allow"; updatedInput: Record<string, unknown> }
   | { behavior: "deny"; message: string }
 >;
@@ -42,20 +44,26 @@ export function createAskUserMcpServer(ctx: { ask: AskUserHandler }) {
             z.object({
               question: z
                 .string()
-                .describe("The complete question to ask, ending with a question mark."),
+                .describe(
+                  "The complete question to ask, ending with a question mark.",
+                ),
               header: z
                 .string()
                 .optional()
-                .describe("Very short topic chip shown above the question (max ~12 chars)."),
+                .describe(
+                  "Very short topic chip shown above the question (max ~12 chars).",
+                ),
               options: z
                 .array(
                   z.object({
-                    label: z.string().describe("Concise choice text (1-5 words)."),
+                    label: z
+                      .string()
+                      .describe("Concise choice text (1-5 words)."),
                     description: z
                       .string()
                       .optional()
                       .describe("What picking this option means."),
-                  })
+                  }),
                 )
                 .optional()
                 .describe("Concrete choices; omit for a free-text question."),
@@ -63,7 +71,7 @@ export function createAskUserMcpServer(ctx: { ask: AskUserHandler }) {
                 .boolean()
                 .optional()
                 .describe("Allow picking multiple options."),
-            })
+            }),
           )
           .min(1)
           .max(4)
@@ -75,16 +83,23 @@ export function createAskUserMcpServer(ctx: { ask: AskUserHandler }) {
           return text(result.message);
         }
         const answers =
-          (result.updatedInput as { answers?: Record<string, string> }).answers || {};
-        const lines = Object.entries(answers).map(([q, a]) => `Q: ${q}\nA: ${a}`);
+          (result.updatedInput as { answers?: Record<string, string> })
+            .answers || {};
+        const lines = Object.entries(answers).map(
+          ([q, a]) => `Q: ${q}\nA: ${a}`,
+        );
         return text(
           lines.length
             ? `The human answered:\n\n${lines.join("\n\n")}`
-            : "The question was acknowledged but no answer text came back — proceed with your best judgment and note the assumption."
+            : "The question was acknowledged but no answer text came back — proceed with your best judgment and note the assumption.",
         );
-      }
+      },
     ),
   ];
 
-  return createSdkMcpServer({ name: "opensession-ask", version: "1.0.0", tools });
+  return createSdkMcpServer({
+    name: "opensession-ask",
+    version: "1.0.0",
+    tools,
+  });
 }

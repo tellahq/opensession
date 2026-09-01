@@ -1,25 +1,32 @@
-import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { mergeStylexOverrideClassName } from "../ui/cn";
 import { utilityClassName } from "../ui/cn";
 import React, {
-	useEffect,
-	useEffectEvent,
-	useLayoutEffect,
-	useRef,
-	useState,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
 } from "react";
 import {
   useShortcutKeys,
   useShortcutLabel,
 } from "../hooks/useShortcutBindings";
-import type { ModelOption, FileMention, ProviderAccountOption } from "../lib/api";
-import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
-import { clearDraft, loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
-import { appendDictation } from "../lib/dictation";
+import { splitAttachments, imageFilesFromPaste } from "../lib/images";
 import {
-  attachingLabel,
-  isStaging,
-  type StagingCount,
-} from "../lib/attachments";
+  appendImageAttachmentComment,
+  deleteImageAttachmentComment,
+  parseImageAttachmentComments,
+  rebaseImageAttachmentReferences,
+  updateImageAttachmentComment,
+} from "../lib/image-attachment-comment";
+import {
+  clearDraft,
+  loadDraft,
+  onDraftsChanged,
+  saveDraft,
+} from "../lib/drafts";
+import { appendDictation } from "../lib/dictation";
+import { attachingLabel, isStaging } from "../lib/attachments";
 import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import {
   composerHighlightHtml,
@@ -36,11 +43,11 @@ import {
 import { useSessionNameProjection } from "../hooks/useSessionNameProjection";
 import { usePeople } from "../lib/people";
 import { ImageThumbs } from "./ImageThumbs";
+import type { ImageRegionAnnotation } from "../lib/media-lightbox";
 import { FileChips } from "./FileChips";
 import { QuoteContext } from "./QuoteContext";
 import { PastedTextContext } from "./PastedTextContext";
 import { ComposerContextChip } from "./ComposerContextChip";
-import type { Quote } from "../lib/quotes";
 import {
   composePastedText,
   createPastedTextAttachment,
@@ -81,16 +88,10 @@ import {
   composerTextareaPaddingMinimized,
   composerToolbar,
   composerToolbarMinimized,
-  composerToolbarPill,
   composerToolbarScrollDivider,
-  composerToolbarSelect,
 } from "../lib/composer-classes";
 import { noAutofill } from "../lib/composer-autofill";
-import {
-  paletteIconBtn,
-  paletteIconBtnRound,
-  palettePill,
-} from "../lib/palette-classes";
+import { paletteIconBtn, paletteIconBtnRound } from "../lib/palette-classes";
 import { askSurface, noteSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
@@ -107,7 +108,6 @@ import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { useDefaultModelPreference } from "../hooks/useDefaultModelPreference";
 import { isApple } from "../lib/platform";
 import { matchesShortcut } from "../lib/shortcuts";
-import { VoiceInput } from "./VoiceInput";
 import {
   getBusySendPrefs,
   onBusySendChanged,
@@ -118,204 +118,231 @@ import { getVimModePref, onVimModeChanged } from "../lib/vim-pref";
 import { useVimMode } from "../hooks/useVimMode";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { motion, AnimatePresence } from "motion/react";
-import { composerMorph, composerChipMotion } from "../ui/motion";
-import { ModelEffortSelect, shortModelLabel } from "./ModelEffortSelect";
-import type { SessionUsage } from "../lib/types";
+import { composerMorph } from "../ui/motion";
+import { shortModelLabel } from "./ModelEffortSelect";
+import type { ComposerActions, ComposerConfig } from "../lib/composer-types";
+import { ModelRow } from "./composer/ModelRow";
+import { VoiceControl } from "./composer/VoiceControl";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	minH120px: {
-			minHeight: "120px"
-	},
-	wFull: {
-			width: "100%"
-	},
-	resizeY: {
-			resize: "vertical"
-	},
-	roundedLg: {
-			borderRadius: "calc(14px * var(--rf))",
-
-		cornerShape: "var(--cs)",},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	borderLineStrong: {
-			borderColor: "var(--border-strong)"
-	},
-	bgSurface: {
-			backgroundColor: "var(--bg)"
-	},
-	px4: {
-			paddingInline: "calc(4px * 4)"
-	},
-	py35: {
-			paddingBlock: "calc(4px * 3.5)"
-	},
-	leadingRelaxed: {
-			lineHeight: "var(--leading-relaxed)"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	outlineNone: {
-			outlineStyle: "none"
-	},
-	flex1: {
-			flex: "1"
-	},
-	px5: {
-			paddingInline: "calc(4px * 5)"
-	},
-	gap5: {
-			gap: "calc(4px * 5)"
-	},
-	p7: {
-			padding: "calc(4px * 7)"
-	},
-	flex: {
-			display: "flex"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	textBalance: {
-			textWrap: "balance"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-	leadingTight: {
-			lineHeight: "var(--leading-tight)"
-	},
-	tracking001em: {
-			letterSpacing: "-0.01em"
-	},
-	mt2: {
-			marginTop: "calc(4px * 2)"
-	},
-	textPretty: {
-			textWrap: "pretty"
-	},
-	textBase: {
-			fontSize: "var(--type-body)",
-			lineHeight: "var(--tw-leading, var(--text-base--line-height))"
-	},
-	fontNormal: {
-			fontWeight: "var(--font-weight-normal)"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	mt3: {
-			marginTop: "calc(4px * 3)"
-	},
-	gap3: {
-			gap: "calc(4px * 3)"
-	},
-	mxAuto: {
-			marginInline: "auto"
-	},
-	maxWCalcVarSessionCol40px: {
-			maxWidth: "calc(var(--session-col) + 40px)"
-	},
-	pointerEventsNone: {
-			pointerEvents: "none"
-	},
-	Absolute: {
-			position: "absolute !important"
-	},
-	inset0: {
-			inset: "0"
-	},
-	Z6: {
-			zIndex: "6 !important"
-	},
-	absolute: {
-			position: "absolute"
-	},
-	right3: {
-			right: "calc(4px * 3)"
-	},
-	top2: {
-			top: "calc(4px * 2)"
-	},
-	z2: {
-			zIndex: "2"
-	},
-	roundedSm: {
-			borderRadius: "calc(4px * var(--rf))",
-
-		cornerShape: "var(--cs)",},
-	borderLine: {
-			borderColor: "var(--border)"
-	},
-	px15: {
-			paddingInline: "calc(4px * 1.5)"
-	},
-	py05: {
-			paddingBlock: "calc(4px * 0.5)"
-	},
-	trackingWider: {
-			letterSpacing: "var(--tracking-wider)"
-	},
-	flexWrap: {
-			flexWrap: "wrap"
-	},
-	itemsStart: {
-			alignItems: "flex-start"
-	},
-	srOnly: {
-			position: "absolute",
-			width: "1px",
-			height: "1px",
-			padding: "0",
-			margin: "-1px",
-			overflow: "hidden",
-			clipPath: "inset(50%)",
-			whiteSpace: "nowrap",
-			borderWidth: "0"
-	},
-	grow: {
-			flexGrow: "1"
-	},
-	whitespaceNowrap: {
-			whiteSpace: "nowrap"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	basis0: {
-			flexBasis: "0"
-	},
-	minW230px: {
-			minWidth: "230px"
-	},
-	mt15: {
-			marginTop: "calc(4px * 1.5)"
-	},
-	gap15: {
-			gap: "calc(4px * 1.5)"
-	},
-	borderT: {
-			borderTopStyle: "solid",
-			borderTopWidth: "1px"
-	},
-	pt15: {
-			paddingTop: "calc(4px * 1.5)"
-	},
-	mt7px: {
-			marginTop: "7px"
-	},
-	textCenter: {
-			textAlign: "center"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
+  minH120px: {
+    minHeight: "120px",
+  },
+  wFull: {
+    width: "100%",
+  },
+  resizeY: {
+    resize: "vertical",
+  },
+  roundedLg: {
+    borderRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py35: {
+    paddingBlock: "calc(4px * 3.5)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  flex1: {
+    flex: "1",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  gap5: {
+    gap: "calc(4px * 5)",
+  },
+  p7: {
+    padding: "calc(4px * 7)",
+  },
+  phoneWCalc100vw15rem: {
+    "@media (max-width: 720px)": {
+      width: "calc(100vw - 1.5rem)",
+    },
+  },
+  phoneP6: {
+    "@media (max-width: 720px)": {
+      padding: "calc(4px * 6)",
+    },
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  m0: {
+    margin: "0",
+  },
+  textBalance: {
+    textWrap: "balance",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  leadingTight: {
+    lineHeight: "var(--leading-tight)",
+  },
+  tracking001em: {
+    letterSpacing: "-0.01em",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  textPretty: {
+    textWrap: "pretty",
+  },
+  textBase: {
+    fontSize: "var(--type-body)",
+    lineHeight: "var(--tw-leading, var(--text-base--line-height))",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mt3: {
+    marginTop: "calc(4px * 3)",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  maxWCalcVarSessionCol40px: {
+    maxWidth: "calc(var(--session-col) + 40px)",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  Absolute: {
+    position: "absolute !important",
+  },
+  inset0: {
+    inset: "0",
+  },
+  Z6: {
+    zIndex: "6 !important",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  right3: {
+    right: "calc(4px * 3)",
+  },
+  top2: {
+    top: "calc(4px * 2)",
+  },
+  z2: {
+    zIndex: "2",
+  },
+  selectNone: {
+    WebkitUserSelect: "none",
+    userSelect: "none",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  py05: {
+    paddingBlock: "calc(4px * 0.5)",
+  },
+  trackingWider: {
+    letterSpacing: "var(--tracking-wider)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gapX1: {
+    columnGap: "4px",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  grow: {
+    flexGrow: "1",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  basis0: {
+    flexBasis: "0",
+  },
+  minW230px: {
+    minWidth: "230px",
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  pt15: {
+    paddingTop: "calc(4px * 1.5)",
+  },
+  mt7px: {
+    marginTop: "7px",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
 });
 
 type ComposerPressButtonProps = Omit<
@@ -348,10 +375,10 @@ const ComposerPressButton = React.forwardRef<
 interface Props {
   /**
    * Controlled draft text. Omit it (with `onChange`) to let the Composer own
-   * the draft internally — the parent then receives the text via `onSend` and
+   * the draft internally: the parent then receives the text via `onSend` and
    * stops re-rendering on every keystroke (the CommentableDiff draft-text
-   * lesson). In uncontrolled mode the draft clears when `onSend` returns true
-   * (i.e. the message was actually consumed).
+   * lesson). In uncontrolled mode the draft clears when `onSend` returns true,
+   * meaning the message was actually consumed.
    */
   value?: string;
   onChange?: (value: string) => void;
@@ -359,164 +386,20 @@ interface Props {
   onTyping?: (active: boolean) => void;
   /** Reports when dictation owns the input so a host can coordinate nearby UI. */
   onDictationActive?: (active: boolean) => void;
-  /**
-   * Uncontrolled mode only: persist the text draft under this key (lib/drafts)
-   * so it survives the component unmounting — switching to another session,
-   * workspace or view. Restored on mount; cleared when a send is consumed.
-   * Controlled parents own their value and persist it themselves.
-   */
-  draftKey?: string;
-  /** `steer` is set when the send should fold into the running turn right
-   * away — the turn keeps running. Busy sends follow the per-user follow-up
-   * preference (default queue: delivered after the run fully finishes);
-   * ⌘/Ctrl+Enter or Command/Ctrl-click flips to the non-default action. */
-  onSend: (
-    text: string,
-    opts?: { steer?: boolean },
-  ) => boolean | void | Promise<boolean | void>;
-  placeholder?: string;
-  disabled?: boolean;
-  /** Boolean, or a predicate on the current draft (for uncontrolled mode,
-   * where the parent can't read the text). */
-  sendDisabled?: boolean | ((text: string) => boolean);
-  /** Shows on the send button tooltip when busy-queueing. */
-  sendTitle?: string;
-  busy?: boolean;
-  onStop?: () => void;
-  /** A stop was asked for and the turn has not settled yet. The button stays
-   *  live (a second press re-sends the cancel, which is what people already do
-   *  when nothing seems to happen) but reads as acknowledged rather than
-   *  ignored. */
-  stopping?: boolean;
-  /**
-   * Ask for the stop confirmation from outside the composer — the parent bumps
-   * this counter, and each bump opens the same dialog Escape does. A counter
-   * rather than a callback ref because the question is "has one more been
-   * asked for", which a boolean can't say twice in a row.
-   */
-  stopRequest?: number;
-  models: ModelOption[];
-  defaultModel: string;
-  /** Current model id; "" = default. */
-  model: string;
-  onModelChange: (model: string) => void;
-  modelDisabled?: boolean;
-  modelTitle?: string;
-  /**
-   * Reasoning-effort control (stowed as a compact pill, mirroring the new-session
-   * palette). Forward-compatible: threaded through but not yet consumed
-   * server-side. When omitted, the effort pill is hidden.
-   */
-  effort?: string;
-  onEffortChange?: (effort: string) => void;
-  fastMode?: boolean;
-  onFastModeChange?: (fastMode: boolean) => void;
-  /** Pinnable provider accounts + current pin for the model pill's account
-   * submenu. Empty/omitted hides it. */
-  accounts?: ProviderAccountOption[];
-  accountId?: string;
-  onAccountChange?: (accountId: string) => void;
-  /**
-   * Session goal (pinned via /goal, rides along with every prompt). When
-   * `onSetGoal` is wired, a target button lets you set/clear it inline; it lights
-   * up and grows a "Goal" label while a goal is pinned.
-   */
-  goal?: string | null;
-  onSetGoal?: (goal: string | null) => void;
-  /** Conversation usage shown inside the model menu. */
-  usage?: SessionUsage;
-  /** Extra row for the "+" menu, below the built-in ones. Same shape as
-   *  `sendMenu`: render a `composerMenuItem` button and call `close()`
-   *  when it's picked. */
-  menuExtra?: (ctx: { close: () => void }) => React.ReactNode;
+  config: ComposerConfig;
+  actions: ComposerActions;
   /** Content visually attached to the composer above the draft field. */
   attached?: React.ReactNode;
-  /**
-   * One-shot draft injection (e.g. editing a queued message pulls its text
-   * back into the composer). Applied when `seq` changes: appended to a
-   * non-empty draft, otherwise it becomes the draft; the caret lands at the
-   * end. `replace` is for editing an existing queued message, where appending
-   * would accidentally fold a separate draft into that message. Works in both
-   * controlled and uncontrolled modes.
-   */
-  prefill?: { seq: number; text: string; replace?: boolean } | null;
-  /** Optional action rendered inside the "+" menu, e.g. "schedule message". */
-  sendMenu?: (ctx: {
+  /** Extra row for the "+" menu, below the built-in ones. Same shape as
+   * `sendMenu`: render a `composerMenuItem` button and call `close()` when it
+   * is picked. */
+  menuExtra?: (context: { close: () => void }) => React.ReactNode;
+  /** Optional action rendered inside the "+" menu, such as scheduling. */
+  sendMenu?: (context: {
     text: string;
     disabled: boolean;
     onScheduled: () => void;
   }) => React.ReactNode;
-  hint?: string;
-  /** Lets the focused session pane claim the attachment shortcut even when
-   * focus is in the transcript rather than the textarea. */
-  attachmentShortcutActive?: boolean;
-  autoFocus?: boolean;
-  /** Exposes the textarea so parents can focus it (e.g. keyboard shortcuts). */
-  textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
-  /**
-   * Attached images as `data:` URLs. When `onImagesChange` is provided, the
-   * composer accepts pasted/dropped screenshots and renders thumbnails.
-   */
-  images?: string[];
-  onImagesChange?: (images: string[]) => void;
-  /**
-   * Non-image attachments (staged to disk server-side). When `onFilesChange` is
-   * provided, the composer accepts any dropped/picked file, not just images.
-   */
-  files?: FileAttachment[];
-  onFilesChange?: (files: FileAttachment[]) => void;
-  /** Uploads managed by the parent, used when a larger surface shares this
-   * composer's attachment path. Omit both props for Composer-owned staging. */
-  staging?: StagingCount;
-  onAddAttachments?: (picked: FileList | File[]) => void | Promise<void>;
-  onRemovePendingImage?: (index: number) => void;
-  onRemovePendingFile?: (index: number) => void;
-  /** The transcript selection currently attached as ephemeral context. */
-  quote?: Quote | null;
-  onQuoteClear?: () => void;
-  /**
-   * Enables "@"-mention file autocomplete. Given the text typed after the "@",
-   * returns matching files (primary repo + any attached repos). When omitted,
-   * "@" is inert.
-   */
-  mentionFetch?: (query: string) => Promise<FileMention[]>;
-  /** Fast non-file rows for the inline @ palette. */
-  paletteFetch?: (query: string) => Promise<FileMention[]>;
-  /**
-   * Enables "/"-skill autocomplete when the draft starts with "/". Given the
-   * text typed after the "/", returns matching skills/commands. When omitted,
-   * "/" is inert.
-   */
-  skillsFetch?: (query: string) => Promise<FileMention[]>;
-  /**
-   * Note mode (Plain-style internal notes): the send posts a team note the
-   * agent never sees. When `onNoteModeChange` is wired, a Note row appears in
-   * the "+" menu and ⌘/Ctrl+N toggles it while the field is focused; the
-   * composer tints yellow so the mode is unmistakable.
-   */
-  noteMode?: boolean;
-  onNoteModeChange?: (on: boolean) => void;
-  /**
-   * Ask mode: this session can read the checkout but not change it. Washes the
-   * writing surface green and names itself in a chip above the field, which is
-   * the same pair note mode takes.
-   *
-   * The pair is the point. The wash alone could not carry the state: at 7%
-   * green under note mode's 10% yellow the two surfaces were one faint tint
-   * apart (8.6 dE in light, less in dark), and you never see them side by side
-   * to compare, so a tinted composer stopped saying WHICH mode you were in.
-   * With a named chip on both, the wash says something is different and the
-   * chip says what, so neither state can be mistaken for the other.
-   */
-  askMode?: boolean;
-  /**
-   * Leaves ask mode, from the chip's ✕. Cutting a worktree is the server's
-   * call and not every session may promote, so when this is omitted the chip
-   * renders without an exit rather than offering one that fails.
-   */
-  onAskModeExit?: () => void;
-  /** The exit is in flight: the chip says so and its ✕ stops taking clicks. */
-  askExitPending?: boolean;
 }
 
 /**
@@ -577,7 +460,21 @@ function GoalModal({
 
         <textarea
           ref={inputRef}
-          {...stylex.props(sx.minH120px, sx.wFull, sx.resizeY, sx.roundedLg, sx.border, sx.borderLineStrong, sx.bgSurface, sx.px4, sx.py35, sx.leadingRelaxed, sx.textFg, sx.outlineNone, typography.body)}
+          {...stylex.props(
+            sx.minH120px,
+            sx.wFull,
+            sx.resizeY,
+            sx.roundedLg,
+            sx.border,
+            sx.borderLineStrong,
+            sx.bgSurface,
+            sx.px4,
+            sx.py35,
+            sx.leadingRelaxed,
+            sx.textFg,
+            sx.outlineNone,
+            typography.body,
+          )}
           value={text}
           rows={3}
           {...noAutofill}
@@ -594,10 +491,7 @@ function GoalModal({
 
         <Modal.Footer>
           {initial && (
-            <Button
-              variant="danger"
-              onClick={() => onSubmit(null)}
-            >
+            <Button variant="danger" onClick={() => onSubmit(null)}>
               Clear goal
             </Button>
           )}
@@ -634,24 +528,49 @@ function StopConfirmModal({
       <Modal.Content
         initialFocus={stopRef}
         widthClassName={utilityClassName("max-w-[32rem]")}
-        className={mergeStylexOverrideClassName("phone:w-[calc(100vw-1.5rem)] phone:p-6", sx.gap5, sx.p7)}
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.gap5,
+          sx.p7,
+          sx.phoneWCalc100vw15rem,
+          sx.phoneP6,
+        )}
       >
         <div {...stylex.props(sx.flex, sx.flexCol)}>
-          <Modal.Title className={mergeStylexOverrideClassName("m-0", sx.textBalance, sx.fontSemibold, sx.leadingTight, sx.tracking001em, sx.textFg, typography.sectionTitle)} >
+          <Modal.Title
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.m0,
+              sx.textBalance,
+              sx.fontSemibold,
+              sx.leadingTight,
+              sx.tracking001em,
+              sx.textFg,
+              typography.sectionTitle,
+            )}
+          >
             Stop this response?
           </Modal.Title>
-          <Modal.Description className={mergeStylexOverrideClassName("m-0", sx.mt2, sx.textPretty, sx.textBase, sx.fontNormal, sx.leadingRelaxed, sx.textDim)} >
+          <Modal.Description
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.m0,
+              sx.mt2,
+              sx.textPretty,
+              sx.textBase,
+              sx.fontNormal,
+              sx.leadingRelaxed,
+              sx.textDim,
+            )}
+          >
             You can ask again or send a follow-up anytime.
           </Modal.Description>
         </div>
-        <Modal.Footer className={mergeStylexOverrideClassName("", sx.mt3, sx.gap3)}>
+        <Modal.Footer
+          className={mergeStylexOverrideClassName("", sx.mt3, sx.gap3)}
+        >
           <Modal.Close render={<Button size="lg">Keep going</Button>} />
-          <Button
-            ref={stopRef}
-            variant="primary"
-            size="lg"
-            onClick={onConfirm}
-          >
+          <Button ref={stopRef} variant="primary" size="lg" onClick={onConfirm}>
             Stop
           </Button>
         </Modal.Footer>
@@ -671,58 +590,62 @@ export function Composer({
   onChange,
   onTyping,
   onDictationActive,
-  draftKey,
-  onSend,
-  placeholder,
-  disabled,
-  sendDisabled,
-  sendTitle,
-  busy,
-  onStop,
-  stopping,
-  stopRequest,
-  models,
-  defaultModel,
-  model,
-  onModelChange,
-  modelDisabled,
-  modelTitle,
-  effort,
-  onEffortChange,
-  fastMode,
-  onFastModeChange,
-  accounts,
-  accountId,
-  onAccountChange,
-  goal,
-  onSetGoal,
-  usage,
+  config: {
+    draftKey,
+    placeholder,
+    disabled,
+    sendDisabled,
+    sendTitle,
+    busy,
+    stopping,
+    stopRequest,
+    models,
+    defaultModel,
+    model,
+    modelDisabled,
+    modelTitle,
+    effort,
+    fastMode,
+    accounts,
+    accountId,
+    goal,
+    usage,
+    prefill,
+    hint,
+    attachmentShortcutActive,
+    autoFocus,
+    textareaRef: externalRef,
+    images,
+    files,
+    staging,
+    quote,
+    noteMode,
+    askMode,
+    askExitPending,
+  },
+  actions: {
+    onSend,
+    onStop,
+    onModelChange,
+    onEffortChange,
+    onFastModeChange,
+    onAccountChange,
+    onSetGoal,
+    onImagesChange,
+    onFilesChange,
+    onAddAttachments,
+    onRemovePendingImage,
+    onRemovePendingFile,
+    onQuoteClear,
+    mentionFetch,
+    paletteFetch,
+    skillsFetch,
+    onNoteModeChange,
+    onAskModeExit,
+  },
   menuExtra,
   attached,
-  prefill,
   sendMenu,
-  hint,
-  attachmentShortcutActive,
-  autoFocus,
-  textareaRef: externalRef,
-  images,
-  onImagesChange,
-  files,
-  onFilesChange,
-  staging,
-  onAddAttachments,
-  onRemovePendingImage,
-  onRemovePendingFile,
-  quote,
-  onQuoteClear,
-  mentionFetch,
-  paletteFetch,
-  skillsFetch,
-  noteMode,
-  onNoteModeChange,
-  askMode,
-  onAskModeExit,
-  askExitPending,
 }: Props) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef ?? internalRef;
@@ -742,7 +665,6 @@ export function Composer({
   const localUploads = useAttachmentUploads();
   const activeStaging = staging ?? localUploads.staging;
   const isPhone = useIsPhone();
-  const noteChord = useShortcutLabel("composer-note");
   const attachChord = useShortcutLabel("composer-attach");
   const stopKeys = useShortcutKeys("run-stop");
   const effortUpLabel = useShortcutLabel("effort-up");
@@ -787,7 +709,14 @@ export function Composer({
   useEffect(() => onVimModeChanged(() => setVimEnabled(getVimModePref())), []);
   const isControlled = value !== undefined;
   const text = isControlled ? value : innerValue;
-  const setText = isControlled ? onChange ?? (() => {}) : setInnerValue;
+  const setText = isControlled ? (onChange ?? (() => {})) : setInnerValue;
+  // The lightbox is hosted above the composer and keeps the callback from the
+  // moment it opened. Keep its draft source current across several Shift+Enter
+  // comments without making the global viewer own composer state.
+  const textRef = useRef(text);
+  useLayoutEffect(() => {
+    textRef.current = text;
+  }, [text]);
   // A session reference in the draft is stored as its id and shown as that
   // session's name (hooks/useSessionNameProjection.ts): the field renders
   // `displayText`, while the draft, the send and the clipboard keep the id.
@@ -823,9 +752,10 @@ export function Composer({
   const applyPrefill = useEffectEvent(() => {
     if (!prefill || prefill.seq === prefillSeqRef.current) return;
     prefillSeqRef.current = prefill.seq;
-    const next = !prefill.replace && text.trim()
-      ? `${text.replace(/\s+$/, "")}\n${prefill.text}`
-      : prefill.text;
+    const next =
+      !prefill.replace && text.trim()
+        ? `${text.replace(/\s+$/, "")}\n${prefill.text}`
+        : prefill.text;
     // Persist the handoff before React commits it. Restoring queued attachments
     // can emit a draft-store change in the same pass; if the store still holds
     // the old empty text, that event otherwise erases the restored message.
@@ -837,7 +767,10 @@ export function Composer({
       const el = textareaRef.current;
       if (el) {
         el.focus();
-        const at = composerDisplayOffset(projectComposerSessions(next), next.length);
+        const at = composerDisplayOffset(
+          projectComposerSessions(next),
+          next.length,
+        );
         el.selectionStart = el.selectionEnd = at;
       }
     });
@@ -858,7 +791,9 @@ export function Composer({
      *  the `setDisplayText` beside it has not committed. */
     overrideText?: string,
   ) {
-    const sentPastedIds = new Set(pastedTexts.map((attachment) => attachment.id));
+    const sentPastedIds = new Set(
+      pastedTexts.map((attachment) => attachment.id),
+    );
     const consume = () => {
       onTyping?.(false);
       if (!isControlled) {
@@ -896,6 +831,9 @@ export function Composer({
   const isSendDisabled = sendBlockedFor(text);
   const imgs = images || [];
   const fls = files || [];
+  // The draft is the source of truth for annotation dots. Editing or deleting
+  // their plain-text references directly therefore updates the next preview.
+  const imageComments = parseImageAttachmentComments(text);
   // Notes accept images but not arbitrary files: images remain team-visible,
   // while files are agent-readable workspace context and belong to prompts.
   const canAttachImages = !!onImagesChange;
@@ -905,7 +843,11 @@ export function Composer({
   useEffect(() => {
     if (!attachmentShortcutActive || !canAttach) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.defaultPrevented || e.repeat || !matchesShortcut(e, "composer-attach"))
+      if (
+        e.defaultPrevented ||
+        e.repeat ||
+        !matchesShortcut(e, "composer-attach")
+      )
         return;
       e.preventDefault();
       fileInputRef.current?.click();
@@ -966,7 +908,9 @@ export function Composer({
   // Notes bypass the busy queue/steer machinery entirely — they post straight
   // to the team whether or not a turn is running.
   const steerSend =
-    !noteMode && !!busy && (modifierPicks && sendModifierHeld ? modSteer : entSteer);
+    !noteMode &&
+    !!busy &&
+    (modifierPicks && sendModifierHeld ? modSteer : entSteer);
   // Picking a busy action from the send button's menu hands the OTHER one to
   // ⌘/Ctrl+Enter, so both actions always keep a key and each row shows exactly
   // one — with both prefs on the same action there is no way to reach the other
@@ -1039,7 +983,8 @@ export function Composer({
     // `mousedown` on non-interactive elements, so listen for `touchstart` too —
     // otherwise the menu gets stuck open on mobile.
     function onDown(e: Event) {
-      if (!(e.target as HTMLElement).closest(".composer-pop-wrap")) setMenu(null);
+      if (!(e.target as HTMLElement).closest(".composer-pop-wrap"))
+        setMenu(null);
     }
     document.addEventListener("mousedown", onDown);
     document.addEventListener("touchstart", onDown);
@@ -1090,36 +1035,42 @@ export function Composer({
     skillsFetch,
     actions: [
       ...(canAttach
-        ? [{
-            id: "add-files",
-            label: "Add files and folders",
-            description: "Attach context to this message",
-            keywords: ["upload", "attach"],
-            icon: <IconPaperclip size={16} />,
-            run: () => fileInputRef.current?.click(),
-          }]
+        ? [
+            {
+              id: "add-files",
+              label: "Add files and folders",
+              description: "Attach context to this message",
+              keywords: ["upload", "attach"],
+              icon: <IconPaperclip size={16} />,
+              run: () => fileInputRef.current?.click(),
+            },
+          ]
         : []),
       ...(onSetGoal
-        ? [{
-            id: "session-goal",
-            label: goal ? "Edit session goal" : "Set session goal",
-            description: "Guide every prompt in this session",
-            keywords: ["target", "objective"],
-            icon: <IconCrosshair size={16} />,
-            run: () => setMenu("goal"),
-          }]
+        ? [
+            {
+              id: "session-goal",
+              label: goal ? "Edit session goal" : "Set session goal",
+              description: "Guide every prompt in this session",
+              keywords: ["target", "objective"],
+              icon: <IconCrosshair size={16} />,
+              run: () => setMenu("goal"),
+            },
+          ]
         : []),
       ...(onNoteModeChange
-        ? [{
-            id: "team-note",
-            label: noteMode ? "Back to prompting" : "Write a team note",
-            description: noteMode
-              ? "Send the next message to the agent"
-              : "Only your team will see it",
-            keywords: ["internal", "note"],
-            icon: <IconNote size={16} />,
-            run: () => onNoteModeChange(!noteMode),
-          }]
+        ? [
+            {
+              id: "team-note",
+              label: noteMode ? "Back to prompting" : "Write a team note",
+              description: noteMode
+                ? "Send the next message to the agent"
+                : "Only your team will see it",
+              keywords: ["internal", "note"],
+              icon: <IconNote size={16} />,
+              run: () => onNoteModeChange(!noteMode),
+            },
+          ]
         : []),
     ],
   });
@@ -1131,13 +1082,19 @@ export function Composer({
       return;
     }
     const selected = Array.from(picked);
-    const noteImageTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+    const noteImageTypes = new Set([
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+    ]);
     const allowed = (file: File) =>
-      file.type.startsWith("image/") && (!noteMode || noteImageTypes.has(file.type));
-    const disallowed = canAttachFiles ? [] : selected.filter((file) => !allowed(file));
-    const accepted = canAttachFiles
-      ? selected
-      : selected.filter(allowed);
+      file.type.startsWith("image/") &&
+      (!noteMode || noteImageTypes.has(file.type));
+    const disallowed = canAttachFiles
+      ? []
+      : selected.filter((file) => !allowed(file));
+    const accepted = canAttachFiles ? selected : selected.filter(allowed);
     const results = await localUploads.upload(accepted, (file, signal) =>
       splitAttachments([file], signal),
     );
@@ -1182,6 +1139,52 @@ export function Composer({
 
   function removeImage(i: number) {
     onImagesChange?.(imgs.filter((_, idx) => idx !== i));
+    const next = rebaseImageAttachmentReferences(textRef.current, i);
+    textRef.current = next;
+    setText(next);
+  }
+
+  function writeAnnotationDraft(next: string) {
+    textRef.current = next;
+    if (!isControlled && draftKey) saveDraft(draftKey, { text: next });
+    setText(next);
+  }
+
+  function commentOnImage(
+    i: number,
+    region: { x: number; y: number; width: number; height: number },
+    comment: string,
+    keepOpen: boolean,
+    existing?: ImageRegionAnnotation,
+  ) {
+    const next = existing
+      ? updateImageAttachmentComment(
+          textRef.current,
+          { ...existing, imageIndex: i },
+          region,
+          comment,
+        )
+      : appendImageAttachmentComment(textRef.current, i, region, comment);
+    writeAnnotationDraft(next);
+    if (!keepOpen) {
+      // The lightbox restores focus to its thumbnail first. Run after that
+      // cleanup so the newly added reference is ready to edit or send.
+      setTimeout(() => {
+        const field = textareaRef.current;
+        field?.focus({ preventScroll: true });
+        if (field)
+          field.selectionStart = field.selectionEnd = field.value.length;
+      }, 0);
+    }
+  }
+
+  function deleteCommentOnImage(i: number, annotation: ImageRegionAnnotation) {
+    writeAnnotationDraft(
+      deleteImageAttachmentComment(textRef.current, {
+        ...annotation,
+        imageIndex: i,
+      }),
+    );
   }
 
   function removeFile(i: number) {
@@ -1316,10 +1319,10 @@ export function Composer({
   const hlRef = useRef<HTMLDivElement>(null);
   const sessionRanges = sessionNames.sessions;
   const hlActive = needsComposerHighlight(displayText, people, sessionRanges);
-  const hlHtml = (hlActive
-        ? composerHighlightHtml(displayText, people, sessionRanges)
-        : "");
-  const mentionRanges = (composerMentionRanges(displayText, people));
+  const hlHtml = hlActive
+    ? composerHighlightHtml(displayText, people, sessionRanges)
+    : "";
+  const mentionRanges = composerMentionRanges(displayText, people);
   // A mention pill's padding is bought out of the space beside it, so the draft
   // pays a wider word space only while it holds one. Both the field and the
   // mirror wear it, or the painted text slides off the caret behind it. Session
@@ -1355,10 +1358,18 @@ export function Composer({
       (s) => caret > s.start && caret < s.end,
     );
     if (session)
-      return { kind: "session" as const, start: session.start, end: session.end };
+      return {
+        kind: "session" as const,
+        start: session.start,
+        end: session.end,
+      };
     const mention = mentionRanges.find((r) => caret > r.start && caret < r.end);
     if (mention)
-      return { kind: "mention" as const, start: mention.start, end: mention.end };
+      return {
+        kind: "mention" as const,
+        start: mention.start,
+        end: mention.end,
+      };
     return null;
   }
 
@@ -1368,7 +1379,11 @@ export function Composer({
   // way at all to point a reference somewhere else short of deleting it and
   // starting over. Pressing one now selects it and offers what you can do to
   // it; Remove is a row in that menu rather than the whole interaction.
-  function openPillMenu(el: HTMLTextAreaElement, x: number, y: number): boolean {
+  function openPillMenu(
+    el: HTMLTextAreaElement,
+    x: number,
+    y: number,
+  ): boolean {
     const hit = pillAtCaret(el);
     if (!hit) return false;
     // Selected, because the menu is ABOUT that reference and a menu that
@@ -1382,7 +1397,12 @@ export function Composer({
     setPillMenu({
       ...hit,
       rect: rect
-        ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+        ? {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+          }
         : { left: x, top: y, width: 0, height: 0 },
     });
     return true;
@@ -1391,17 +1411,17 @@ export function Composer({
   // Base UI positions against an element; a pill is a box of text with no
   // element of its own, so it is handed the box instead. Rebuilt with the
   // menu's own state, which is the only thing that moves it.
-  const pillAnchor = (pillMenu
-        ? {
-            getBoundingClientRect: () =>
-              new DOMRect(
-                pillMenu.rect.left,
-                pillMenu.rect.top,
-                pillMenu.rect.width,
-                pillMenu.rect.height,
-              ),
-          }
-        : null);
+  const pillAnchor = pillMenu
+    ? {
+        getBoundingClientRect: () =>
+          new DOMRect(
+            pillMenu.rect.left,
+            pillMenu.rect.top,
+            pillMenu.rect.width,
+            pillMenu.rect.height,
+          ),
+      }
+    : null;
 
   /** Point the reference somewhere else, rather than at nothing. */
   function changePill() {
@@ -1480,8 +1500,7 @@ export function Composer({
     const back = key === "Backspace";
     const hit = mentionRanges.find((r) =>
       back
-        ? caret === r.end ||
-          (caret === r.end + 1 && displayText[r.end] === " ")
+        ? caret === r.end || (caret === r.end + 1 && displayText[r.end] === " ")
         : caret === r.start,
     );
     if (!hit) return false;
@@ -1542,11 +1561,7 @@ export function Composer({
     insertDictation(t);
     const nextCanonical = appendDictation(text, t);
     if (disabled || sendBlockedFor(nextCanonical)) return;
-    fireSend(
-      onSend,
-      steerSend ? { steer: true } : undefined,
-      nextCanonical,
-    );
+    fireSend(onSend, steerSend ? { steer: true } : undefined, nextCanonical);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -1559,7 +1574,7 @@ export function Composer({
     // other ⌘Z is left to the field's own history.
     if (sessionNames.handleUndoRedoKey(e)) return;
     if (handleMentionKeyDown(e)) return;
-    if ((e.nativeEvent as any).isComposing) return;
+    if (e.nativeEvent.isComposing) return;
     if (
       (e.key === "Backspace" || e.key === "Delete") &&
       !e.metaKey &&
@@ -1678,8 +1693,16 @@ export function Composer({
         // rounded bottom, and the seam where they meet squares off.
         initial={false}
         animate={{
-          borderTopLeftRadius: minimized ? 999 : hasAttached ? 0 : composerRadius(),
-          borderTopRightRadius: minimized ? 999 : hasAttached ? 0 : composerRadius(),
+          borderTopLeftRadius: minimized
+            ? 999
+            : hasAttached
+              ? 0
+              : composerRadius(),
+          borderTopRightRadius: minimized
+            ? 999
+            : hasAttached
+              ? 0
+              : composerRadius(),
           borderBottomLeftRadius: minimized ? 999 : composerRadius(),
           borderBottomRightRadius: minimized ? 999 : composerRadius(),
           // The controls stay in their toolbar positions while the top edge
@@ -1703,7 +1726,9 @@ export function Composer({
           minimized && "composer-min",
           composerBox,
           minimized ? composerBoxMinimized : composerBoxExpanded,
-          utilityClassName("isolate before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--composer-note-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] [&>*]:relative [&>*]:z-[1]"),
+          utilityClassName(
+            "isolate before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--composer-note-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] [&>*]:relative [&>*]:z-[1]",
+          ),
           noteMode && utilityClassName("before:opacity-100"),
           dictationClipping && utilityClassName("overflow-hidden"),
           disabled && utilityClassName("opacity-60"),
@@ -1721,7 +1746,26 @@ export function Composer({
             typing looks identical with the pref on. Sits above the input wrap's
             scroll-fade mask. */}
         {vimEnabled && vim.mode !== "insert" && (
-          <div {...mergeStylexProps("select-none", sx.pointerEventsNone, sx.absolute, sx.right3, sx.top2, sx.z2, sx.roundedSm, sx.border, sx.borderLine, sx.bgSurface, sx.px15, sx.py05, sx.fontSemibold, sx.trackingWider, sx.textDim, typography.meta)} >
+          <div
+            {...stylex.props(
+              sx.pointerEventsNone,
+              sx.absolute,
+              sx.right3,
+              sx.top2,
+              sx.z2,
+              sx.selectNone,
+              sx.roundedSm,
+              sx.border,
+              sx.borderLine,
+              sx.bgSurface,
+              sx.px15,
+              sx.py05,
+              sx.fontSemibold,
+              sx.trackingWider,
+              sx.textDim,
+              typography.meta,
+            )}
+          >
             {vim.mode === "normal"
               ? "NORMAL"
               : vim.mode === "visual"
@@ -1729,7 +1773,7 @@ export function Composer({
                 : "V-LINE"}
           </div>
         )}
-        <div {...mergeStylexProps("gap-x-1", sx.flex, sx.flexWrap, sx.itemsStart)} >
+        <div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsStart, sx.gapX1)}>
           <AnimatePresence initial={false}>
             {/* Ask mode first: it encloses everything else in the row, being
                 the session's own state rather than something attached to the
@@ -1765,7 +1809,7 @@ export function Composer({
                 key="note-mode"
                 icon={<IconNote size={15} />}
                 label="Team note"
-                title="The agent won't read this. ⌘N to go back."
+                title="The agent won't read this."
                 tone="note"
                 onRemove={() => onNoteModeChange?.(false)}
                 removeLabel="Leave note mode"
@@ -1804,14 +1848,21 @@ export function Composer({
           images={imgs}
           pending={activeStaging.images}
           onRemove={removeImage}
-          onRemovePending={staging ? onRemovePendingImage : localUploads.cancelPendingImage}
+          comments={imageComments}
+          onComment={canAttachImages ? commentOnImage : undefined}
+          onDeleteComment={canAttachImages ? deleteCommentOnImage : undefined}
+          onRemovePending={
+            staging ? onRemovePendingImage : localUploads.cancelPendingImage
+          }
           disabled={disabled}
         />
         <FileChips
           files={fls}
           pending={activeStaging.files}
           onRemove={removeFile}
-          onRemovePending={staging ? onRemovePendingFile : localUploads.cancelPendingFile}
+          onRemovePending={
+            staging ? onRemovePendingFile : localUploads.cancelPendingFile
+          }
           disabled={disabled}
         />
         {attachingLabel(activeStaging) && (
@@ -1846,7 +1897,9 @@ export function Composer({
                 "composer-hl",
                 composerTextarea,
                 composerTextareaPadding,
-                utilityClassName("pointer-events-none absolute inset-0 z-0 overflow-hidden text-fg break-words whitespace-pre-wrap select-none"),
+                utilityClassName(
+                  "pointer-events-none absolute inset-0 z-0 overflow-hidden text-fg break-words whitespace-pre-wrap select-none",
+                ),
                 hasMention && composerMentionSpacing,
                 // A pill's wash reaches past its own box (base.css), so one at
                 // either end of a line would be cut off by this box. The
@@ -1889,12 +1942,16 @@ export function Composer({
               // LIGHTENING it, the intuitive move, would have taken it to
               // 1.82:1 and made it dimmer as well as still cool.
               noteMode
-                ? utilityClassName("placeholder:text-[color-mix(in_srgb,var(--text-faint)_84%,var(--yellow))]")
+                ? utilityClassName(
+                    "placeholder:text-[color-mix(in_srgb,var(--text-faint)_84%,var(--yellow))]",
+                  )
                 : utilityClassName("placeholder:text-faint"),
               // With the mirror painting the styled draft, the field's own
               // glyphs go transparent and only the caret stays visible.
               hlActive
-                ? utilityClassName("relative z-[1] break-words text-transparent caret-[var(--text)]")
+                ? utilityClassName(
+                    "relative z-[1] break-words text-transparent caret-[var(--text)]",
+                  )
                 : utilityClassName("text-fg"),
             )}
             // In the resting pill the full prompt would clip, so show a short
@@ -1943,8 +2000,13 @@ export function Composer({
               onTyping?.(false);
               const remote = pendingRemoteText.current;
               pendingRemoteText.current = null;
-              if (remote !== null && (!draftKey || loadDraft(draftKey).text === remote)) {
-                setInnerValue((current) => (current === remote ? current : remote));
+              if (
+                remote !== null &&
+                (!draftKey || loadDraft(draftKey).text === remote)
+              ) {
+                setInnerValue((current) =>
+                  current === remote ? current : remote,
+                );
               }
               // Let a click on a suggestion (mousedown) win the race first.
               setTimeout(closeMentions, 120);
@@ -2023,10 +2085,14 @@ export function Composer({
               // `composer-pop-wrap` stays as a hook: the outside-click handler
               // above dismisses the menu for any mousedown that isn't inside one.
               className={cn(
-                utilityClassName("composer-pop-wrap relative inline-flex shrink-0"),
+                utilityClassName(
+                  "composer-pop-wrap relative inline-flex shrink-0",
+                ),
                 // Phones pull the model pill to the front of the toolbar, so the
                 // "+" has to lead it; in the resting pill it opens the row.
-                minimized ? utilityClassName("order-1") : utilityClassName("phone:order-[-2]"),
+                minimized
+                  ? utilityClassName("order-1")
+                  : utilityClassName("phone:order-[-2]"),
               )}
             >
               <Tooltip label="Attach files and session options">
@@ -2081,7 +2147,9 @@ export function Composer({
                       <span className={composerMenuIcon}>
                         <IconAtSign size={22} />
                       </span>
-                      <span {...stylex.props(sx.grow, sx.whitespaceNowrap)}>Reference a file</span>
+                      <span {...stylex.props(sx.grow, sx.whitespaceNowrap)}>
+                        Reference a file
+                      </span>
                       {/* Not a chord: typing @ in the field opens the same
                           picker, which is the faster way once you know it.
                           Hidden on phones, where there are no keys to press —
@@ -2116,8 +2184,8 @@ export function Composer({
                       }}
                       title={
                         noteMode
-                          ? "Prompt the agent again (⌘N)"
-                          : "Only your team sees it (⌘N)"
+                          ? "Prompt the agent again"
+                          : "Only your team sees it"
                       }
                     >
                       <span className={composerMenuIcon}>
@@ -2126,9 +2194,6 @@ export function Composer({
                       <span {...stylex.props(sx.grow, sx.whitespaceNowrap)}>
                         {noteMode ? "Back to prompting" : "Write a team note"}
                       </span>
-                      {!isPhone && (
-                        <MenuShortcut>{isApple ? "⌘N" : "Ctrl N"}</MenuShortcut>
-                      )}
                     </ComposerPressButton>
                   )}
                   {menuExtra?.({ close: () => setMenu(null) })}
@@ -2159,7 +2224,11 @@ export function Composer({
                 type="file"
                 {...(canAttachFiles
                   ? {}
-                  : { accept: noteMode ? "image/png,image/jpeg,image/gif,image/webp" : "image/*" })}
+                  : {
+                      accept: noteMode
+                        ? "image/png,image/jpeg,image/gif,image/webp"
+                        : "image/*",
+                    })}
                 multiple
                 hidden
                 onChange={(e) => {
@@ -2179,7 +2248,9 @@ export function Composer({
           {/* `grow basis-0 shrink-0` rather than `flex-1`: every direct child of
               the toolbar is pinned at flex-shrink 0 so the model pill is the
               only thing that gives way, and a shorthand would take that back. */}
-          {!minimized && <div {...stylex.props(sx.shrink0, sx.grow, sx.basis0)} />}
+          {!minimized && (
+            <div {...stylex.props(sx.shrink0, sx.grow, sx.basis0)} />
+          )}
 
           {/* Model + effort live together on the right edge (ChatGPT-style):
               one pill, effort levels up top, the model behind a submenu.
@@ -2187,87 +2258,46 @@ export function Composer({
               composerToolbarSelect). It stays out of the resting phone pill
               because that state is minimized, but returns when the installed
               PWA composer expands. */}
-          <AnimatePresence initial={false}>
-            {!minimized && (
-              <motion.div
-                key="model-effort"
-                layout="position"
-                {...composerChipMotion}
-                className={composerToolbarSelect}
-              >
-                <ModelEffortSelect
-                  className={cn(palettePill, composerToolbarPill)}
-                  // The pill is where the effort chords are worth naming: they
-                  // step what it displays. Appended to the native title the
-                  // trigger already carries, so a reader who hovers the thing
-                  // they would otherwise click finds them.
-                  title={
-                    (modelTitle ||
-                      "Model and reasoning effort for this session") +
-                    (effortDownLabel && effortUpLabel
-                      ? `\n${effortDownLabel} / ${effortUpLabel} steps the effort`
-                      : "")
-                  }
-                  models={models}
-                  defaultModel={defaultModel}
-                  model={model}
-                  onModelChange={onModelChange}
-                  preferredDefaultModel={preferredDefaultModel}
-                  onSetAsDefault={setPreferredDefaultModel}
-                  modelDisabled={modelDisabled}
-                  modelTitle={modelTitle}
-                  effort={effort}
-                  onEffortChange={onEffortChange}
-                  fastMode={fastMode}
-                  onFastModeChange={onFastModeChange}
-                  accounts={accounts}
-                  accountId={accountId}
-                  onAccountChange={onAccountChange}
-                  usage={usage}
-                  showUsage
-                  disabled={disabled}
-                  onOpenChange={setModelMenuOpen}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <ModelRow
+            minimized={minimized}
+            models={models}
+            defaultModel={defaultModel}
+            model={model}
+            onModelChange={onModelChange}
+            preferredDefaultModel={preferredDefaultModel}
+            onSetAsDefault={setPreferredDefaultModel}
+            modelDisabled={modelDisabled}
+            modelTitle={modelTitle}
+            effort={effort}
+            onEffortChange={onEffortChange}
+            fastMode={fastMode}
+            onFastModeChange={onFastModeChange}
+            accounts={accounts}
+            accountId={accountId}
+            onAccountChange={onAccountChange}
+            usage={usage}
+            disabled={disabled}
+            effortDownLabel={effortDownLabel}
+            effortUpLabel={effortUpLabel}
+            onOpenChange={setModelMenuOpen}
+          />
 
           {/* Wrapper around the dictation mic — gives Motion a layout box so it
               glides between rows during the morph without disturbing either. */}
-          <motion.div
-            layout="position"
-            transition={composerMorph}
-            layoutDependency={minimized}
-            className={cn(
-              utilityClassName("pwa-composer-dictation inline-flex shrink-0 items-center"),
-              minimized && utilityClassName("order-3"),
-            )}
-          >
-            {/* The mic is one of the resting pill's circles, so it takes the
-                round variant with the "+" — that pairing used to come from a
-                `.composer.composer-min .palette-icon-btn` descendant rule. */}
-            <VoiceInput
-              className={composerIconButtonClass}
-              shortcutActive={!!attachmentShortcutActive || focused}
-              cancelClassName={addButtonClass}
-              cancelFromPlus
-              onText={insertDictation}
-              onTextSend={sendDictation}
-              editTargetRef={textareaRef}
-              overlayTargetRef={voiceOverlayRef}
-              overlayStyle={dictationSurfaceStyle}
-              onActiveChange={handleDictationActive}
-              // The bar covers the whole composer, so it takes the composer's
-              // own corner. The resting phone pill is included, which is a
-              // capsule rather than the expanded box's radius.
-              overlayClassName={
-                minimized
-                  ? utilityClassName("rounded-[999px] phone:pl-2 phone:pr-0.5 phone:pb-1")
-                  : utilityClassName("rounded-[var(--composer-radius)]")
-              }
-              disabled={disabled}
-            />
-          </motion.div>
+          <VoiceControl
+            minimized={minimized}
+            className={composerIconButtonClass}
+            shortcutActive={!!attachmentShortcutActive}
+            focused={focused}
+            cancelClassName={addButtonClass}
+            onText={insertDictation}
+            onTextSend={sendDictation}
+            textareaRef={textareaRef}
+            overlayTargetRef={voiceOverlayRef}
+            overlayStyle={dictationSurfaceStyle}
+            onActiveChange={handleDictationActive}
+            disabled={disabled}
+          />
 
           {busy && onStop && (
             <Tooltip
@@ -2296,7 +2326,9 @@ export function Composer({
                 )}
                 onPress={onStop}
                 disabled={disabled}
-                aria-label={stopping ? "Stopping current turn" : "Stop current turn"}
+                aria-label={
+                  stopping ? "Stopping current turn" : "Stop current turn"
+                }
               >
                 <IconStopSquare size={24} />
               </ComposerPressButton>
@@ -2383,30 +2415,38 @@ export function Composer({
                     )}
                   </ContextMenu.Trigger>
                 </Tooltip>
-                <ContextMenu.Popup className={mergeStylexOverrideClassName("", sx.minW230px)}>
-                  <ContextMenu.Item
-                    onClick={() => pickBusySend("queue")}
-                  >
+                <ContextMenu.Popup
+                  className={mergeStylexOverrideClassName("", sx.minW230px)}
+                >
+                  <ContextMenu.Item onClick={() => pickBusySend("queue")}>
                     <IconReturn size={20} />
-                    <span {...stylex.props(sx.grow)}>Queue after run finishes</span>
+                    <span {...stylex.props(sx.grow)}>
+                      Queue after run finishes
+                    </span>
                     {busySendKeys("queue") && (
                       <ContextMenu.Shortcut>
                         {busySendKeys("queue")}
                       </ContextMenu.Shortcut>
                     )}
-                    <ContextMenu.Check on={busySendPrefs.enter === "queue"} size={16} />
+                    <ContextMenu.Check
+                      on={busySendPrefs.enter === "queue"}
+                      size={16}
+                    />
                   </ContextMenu.Item>
-                  <ContextMenu.Item
-                    onClick={() => pickBusySend("steer")}
-                  >
+                  <ContextMenu.Item onClick={() => pickBusySend("steer")}>
                     <IconArrowUp size={20} />
-                    <span {...stylex.props(sx.grow)}>Steer into running turn</span>
+                    <span {...stylex.props(sx.grow)}>
+                      Steer into running turn
+                    </span>
                     {busySendKeys("steer") && (
                       <ContextMenu.Shortcut>
                         {busySendKeys("steer")}
                       </ContextMenu.Shortcut>
                     )}
-                    <ContextMenu.Check on={busySendPrefs.enter === "steer"} size={16} />
+                    <ContextMenu.Check
+                      on={busySendPrefs.enter === "steer"}
+                      size={16}
+                    />
                   </ContextMenu.Item>
                 </ContextMenu.Popup>
               </ContextMenu.Root>
@@ -2430,43 +2470,63 @@ export function Composer({
             stays for mouse/pen, with a recent-touch guard for browsers that
             fire both. The bar also stays mounted outside insert mode even if
             focus is lost, so it can never vanish mid-interaction. */}
-        {vimEnabled && isPhone && !minimized && (focused || vim.mode !== "insert") && (
-          <div
-            {...stylex.props(sx.mt15, sx.flex, sx.gap15, sx.borderT, sx.borderLine, sx.pt15)}
-            onPointerDown={(e) => e.preventDefault()}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            {(
-              [
-                ["esc", "Escape"],
-                ["tab", "Tab"],
-                ["←", "ArrowLeft"],
-                ["↓", "ArrowDown"],
-                ["↑", "ArrowUp"],
-                ["→", "ArrowRight"],
-              ] as const
-            ).map(([label, key]) => (
-              <ComposerPressButton
-                key={key}
-                type="button"
-                className={utilityClassName(`h-8 flex-1 select-none rounded-md border border-line bg-surface text-label font-semibold text-dim active:bg-panel ${
-                  key === "Escape" && vim.mode !== "insert"
-                    ? "border-accent text-fg"
-                    : ""
-                }`)}
-                onPress={() => vim.injectKey(key)}
-                aria-label={key}
-              >
-                {label}
-              </ComposerPressButton>
-            ))}
-          </div>
-        )}
+        {vimEnabled &&
+          isPhone &&
+          !minimized &&
+          (focused || vim.mode !== "insert") && (
+            <div
+              {...stylex.props(
+                sx.mt15,
+                sx.flex,
+                sx.gap15,
+                sx.borderT,
+                sx.borderLine,
+                sx.pt15,
+              )}
+              onPointerDown={(e) => e.preventDefault()}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {(
+                [
+                  ["esc", "Escape"],
+                  ["tab", "Tab"],
+                  ["←", "ArrowLeft"],
+                  ["↓", "ArrowDown"],
+                  ["↑", "ArrowUp"],
+                  ["→", "ArrowRight"],
+                ] as const
+              ).map(([label, key]) => (
+                <ComposerPressButton
+                  key={key}
+                  type="button"
+                  className={utilityClassName(
+                    `h-8 flex-1 select-none rounded-md border border-line bg-surface text-label font-semibold text-dim active:bg-panel ${
+                      key === "Escape" && vim.mode !== "insert"
+                        ? "border-accent text-fg"
+                        : ""
+                    }`,
+                  )}
+                  onPress={() => vim.injectKey(key)}
+                  aria-label={key}
+                >
+                  {label}
+                </ComposerPressButton>
+              ))}
+            </div>
+          )}
       </motion.div>
       {/* The keyboard-shortcut hint is irrelevant on touch and eats vertical
           space right where the keyboard appears. */}
       {hint && (
-        <div {...mergeStylexProps("phone:hidden", sx.mt7px, sx.textCenter, sx.textFaint, typography.meta)} >
+        <div
+          {...stylex.props(
+            sx.mt7px,
+            sx.textCenter,
+            sx.textFaint,
+            sx.phoneHidden,
+            typography.meta,
+          )}
+        >
           {hint}
         </div>
       )}

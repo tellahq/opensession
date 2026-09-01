@@ -51,8 +51,16 @@ describe("filterManifest", () => {
 
   test("keeps files that merely contain 'log' or 'env' in their name", () => {
     expect(
-      filterManifest(["packages/logger/dist/", "src/environment.res.mjs", "catalog.res.mjs"]),
-    ).toEqual(["packages/logger/dist/", "src/environment.res.mjs", "catalog.res.mjs"]);
+      filterManifest([
+        "packages/logger/dist/",
+        "src/environment.res.mjs",
+        "catalog.res.mjs",
+      ]),
+    ).toEqual([
+      "packages/logger/dist/",
+      "src/environment.res.mjs",
+      "catalog.res.mjs",
+    ]);
   });
 });
 
@@ -205,7 +213,8 @@ describe("templateStatus", () => {
       const templateDir = join(root, "app-warm-template");
       mkdirSync(warm, { recursive: true });
       if (!c.noTemplateDir) mkdirSync(templateDir, { recursive: true });
-      for (const t of c.trees) mkdirSync(join(templateDir, t), { recursive: true });
+      for (const t of c.trees)
+        mkdirSync(join(templateDir, t), { recursive: true });
       if (c.state) {
         writeFileSync(
           join(warm, "app.state.json"),
@@ -225,13 +234,16 @@ describe("templateStatus", () => {
       try {
         const status = templateStatus("app");
         expect(status.kind).toBe(c.expect);
-        if (c.reason && status.kind === "stale") expect(status.reason).toContain(c.reason);
+        if (c.reason && status.kind === "stale")
+          expect(status.reason).toContain(c.reason);
         // Only "warm" carries the entries, so no caller can link from a
         // template it did not verify.
         if (status.kind === "warm") {
           expect(status.dir).toBe(templateDir);
           expect(status.sha).toBe("abc1234");
-          expect(status.entries).toEqual(c.manifest!.filter(isNodeModulesEntry));
+          expect(status.entries).toEqual(
+            c.manifest!.filter(isNodeModulesEntry),
+          );
         }
       } finally {
         __setSessionsDirForTest(prev);

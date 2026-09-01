@@ -68,7 +68,8 @@ describe("code-writing tool diffs", () => {
   test("leaves apply_patch input to the existing diff fallback", () => {
     expect(
       toolInputDiff("apply_patch", {
-        patch: "*** Begin Patch\n*** Update File: src/a.ts\n-old\n+new\n*** End Patch",
+        patch:
+          "*** Begin Patch\n*** Update File: src/a.ts\n-old\n+new\n*** End Patch",
       }),
     ).toBeNull();
   });

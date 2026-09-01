@@ -25,8 +25,9 @@ export interface WatchState {
 // Parked on globalThis so a `bun --hot` reload keeps the live watch map: the
 // old module's map would otherwise be unreachable from the new module's stop
 // functions, orphaning every 1s polling interval forever.
-const watches: Map<string, WatchState> = ((globalThis as any).__transcriptWatches ??=
-  new Map());
+const watches: Map<string, WatchState> = ((
+  globalThis as any
+).__transcriptWatches ??= new Map());
 
 // Server-side hook: opensession registers a listener so appended entries can
 // reconcile state that mirrors the transcript (steer receipts — a receipt
@@ -40,9 +41,14 @@ type AppendListener = (
 export function setTranscriptAppendListener(fn: AppendListener): void {
   (globalThis as any).__transcriptAppendListener = fn;
 }
-function notifyAppendListener(sessionId: string | undefined, entries: TranscriptEntry[]) {
+function notifyAppendListener(
+  sessionId: string | undefined,
+  entries: TranscriptEntry[],
+) {
   if (!sessionId || entries.length === 0) return;
-  const fn = (globalThis as any).__transcriptAppendListener as AppendListener | undefined;
+  const fn = (globalThis as any).__transcriptAppendListener as
+    | AppendListener
+    | undefined;
   if (!fn) return;
   try {
     void Promise.resolve(fn(sessionId, entries)).catch((error) => {
@@ -110,7 +116,7 @@ function getFileSize(path: string): number {
 async function feedTranscriptStore(
   sessionId: string | undefined,
   entries: TranscriptEntry[],
-  reset = false
+  reset = false,
 ): Promise<void> {
   if (!sessionId || (!reset && entries.length === 0)) return;
   try {
@@ -129,7 +135,7 @@ export interface FilePollDeps {
   feed(
     sessionId: string | undefined,
     entries: TranscriptEntry[],
-    reset?: boolean
+    reset?: boolean,
   ): unknown | Promise<void>;
 }
 
@@ -143,7 +149,7 @@ const pollDeps: FilePollDeps = {
  * temp files while replacing only the surrounding delivery/store ports. */
 export function pollTranscriptFile(
   state: WatchState,
-  deps: FilePollDeps = pollDeps
+  deps: FilePollDeps = pollDeps,
 ): void {
   let stat: ReturnType<typeof statSync>;
   try {
@@ -183,10 +189,15 @@ export function pollTranscriptFile(
   if (entries.length === 0 && !reset) return;
 
   deps.notify(state.sessionId, entries);
-  void Promise.resolve(deps.feed(state.sessionId, entries, reset)).catch((error) => {
-    if (state.sessionId) markTranscriptStoreDegraded(state.sessionId);
-    console.warn(`[file-watcher] v2 store feed failed for ${state.sessionId}:`, error);
-  });
+  void Promise.resolve(deps.feed(state.sessionId, entries, reset)).catch(
+    (error) => {
+      if (state.sessionId) markTranscriptStoreDegraded(state.sessionId);
+      console.warn(
+        `[file-watcher] v2 store feed failed for ${state.sessionId}:`,
+        error,
+      );
+    },
+  );
 
   // endOffset + rev = the client's resume cursor: on reconnect it re-watches
   // with sinceOffset/sinceRev and the gap since this exact byte is replayed
@@ -212,7 +223,7 @@ function sendTranscriptAppend(
   entries: TranscriptEntry[],
   sessionId: string | undefined,
   endOffset: number,
-  rev: string
+  rev: string,
 ): void {
   if (entries.length === 0) return;
   try {
@@ -223,7 +234,7 @@ function sendTranscriptAppend(
         entries: entriesForWire(entries),
         endOffset,
         rev,
-      })
+      }),
     );
   } catch {
     // Dead connection, will be cleaned up on close
@@ -234,7 +245,7 @@ export function startWatching(
   path: string,
   ws: any,
   initialOffset?: number,
-  sessionId?: string
+  sessionId?: string,
 ): void {
   let state = watches.get(path);
   if (state) {
@@ -249,7 +260,7 @@ export function startWatching(
         entries,
         sessionId || state.sessionId,
         newOffset,
-        transcriptRev(path)
+        transcriptRev(path),
       );
     }
     state.viewers.add(ws);

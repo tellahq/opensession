@@ -76,7 +76,10 @@ function fnv1a(s: string): number {
  * first use, stable afterwards. Deterministic start + linear probe over the
  * persisted map; throws only when the whole 8000-port range is exhausted.
  */
-export function sandboxHttpsPortFor(sandboxId: string, containerPort: number): number {
+export function sandboxHttpsPortFor(
+  sandboxId: string,
+  containerPort: number,
+): number {
   const map = readAllocations();
   const key = keyFor(sandboxId, containerPort);
   const existing = map[key];
@@ -90,11 +93,16 @@ export function sandboxHttpsPortFor(sandboxId: string, containerPort: number): n
     writeJsonAtomic(allocationsPath(), map);
     return port;
   }
-  throw new Error("sandbox preview https-port range exhausted (20000-27999 all allocated)");
+  throw new Error(
+    "sandbox preview https-port range exhausted (20000-27999 all allocated)",
+  );
 }
 
 /** Existing allocation only, never allocates (stop/teardown paths). */
-export function lookupSandboxHttpsPort(sandboxId: string, containerPort: number): number | null {
+export function lookupSandboxHttpsPort(
+  sandboxId: string,
+  containerPort: number,
+): number | null {
   return readAllocations()[keyFor(sandboxId, containerPort)] ?? null;
 }
 
@@ -108,7 +116,8 @@ export function sandboxAllocationForHttpsPort(
     const split = key.lastIndexOf(":");
     const sandboxId = key.slice(0, split);
     const containerPort = Number(key.slice(split + 1));
-    if (sandboxId && Number.isInteger(containerPort)) return { sandboxId, containerPort };
+    if (sandboxId && Number.isInteger(containerPort))
+      return { sandboxId, containerPort };
   }
   return null;
 }

@@ -1,8 +1,5 @@
 import { ApiError, BASE, request } from "./request";
-import type {
-	SessionNote,
-	UnifiedSession,
-} from "../types";
+import type { SessionNote, TranscriptEntry, UnifiedSession } from "../types";
 import { resolveAnonymousUserPath } from "../auth-ready";
 import { preparePromptImages } from "../images";
 
@@ -16,43 +13,43 @@ import { preparePromptImages } from "../images";
  * settles into a 304 while the live one keeps changing.
  */
 export async function fetchSessionsSnapshot(
-	opts: { etag?: string | null; signal?: AbortSignal; query?: string } = {},
+  opts: { etag?: string | null; signal?: AbortSignal; query?: string } = {},
 ): Promise<{
-	text: string | null;
-	etag: string | null;
-	notModified: boolean;
+  text: string | null;
+  etag: string | null;
+  notModified: boolean;
 }> {
-	const path = await resolveAnonymousUserPath(`/sessions${opts.query || ""}`);
-	const res = await fetch(`${BASE}${path}`, {
-		signal: opts.signal,
-		headers: opts.etag ? { "If-None-Match": opts.etag } : undefined,
-	});
-	if (res.status === 304) {
-		return {
-			text: null,
-			etag: res.headers.get("ETag") || opts.etag || null,
-			notModified: true,
-		};
-	}
-	if (!res.ok)
-		throw new ApiError(`Failed to fetch sessions: ${res.status}`, res.status);
-	return {
-		text: await res.text(),
-		etag: res.headers.get("ETag"),
-		notModified: false,
-	};
+  const path = await resolveAnonymousUserPath(`/sessions${opts.query || ""}`);
+  const res = await fetch(`${BASE}${path}`, {
+    signal: opts.signal,
+    headers: opts.etag ? { "If-None-Match": opts.etag } : undefined,
+  });
+  if (res.status === 304) {
+    return {
+      text: null,
+      etag: res.headers.get("ETag") || opts.etag || null,
+      notModified: true,
+    };
+  }
+  if (!res.ok)
+    throw new ApiError(`Failed to fetch sessions: ${res.status}`, res.status);
+  return {
+    text: await res.text(),
+    etag: res.headers.get("ETag"),
+    notModified: false,
+  };
 }
 
 /** Fetch the slim archived history for one workspace, newest activity first. */
 export async function fetchWorkspaceArchivedSessions(
-	workspaceId: string,
-	signal?: AbortSignal,
+  workspaceId: string,
+  signal?: AbortSignal,
 ): Promise<UnifiedSession[]> {
-	const snapshot = await fetchSessionsSnapshot({
-		signal,
-		query: `?archived=only&slim=1&workspace=${encodeURIComponent(workspaceId)}`,
-	});
-	return snapshot.text ? (JSON.parse(snapshot.text) as UnifiedSession[]) : [];
+  const snapshot = await fetchSessionsSnapshot({
+    signal,
+    query: `?archived=only&slim=1&workspace=${encodeURIComponent(workspaceId)}`,
+  });
+  return snapshot.text ? (JSON.parse(snapshot.text) as UnifiedSession[]) : [];
 }
 
 /**
@@ -64,71 +61,74 @@ export async function fetchWorkspaceArchivedSessions(
  * link), which the caller shows as "not found" rather than an error.
  */
 export async function fetchSession(
-	sessionId: string,
-	opts: { signal?: AbortSignal } = {},
+  sessionId: string,
+  opts: { signal?: AbortSignal } = {},
 ): Promise<UnifiedSession | null> {
-	const res = await fetch(`${BASE}/sessions/${encodeURIComponent(sessionId)}`, {
-		signal: opts.signal,
-	});
-	if (res.status === 404) return null;
-	if (!res.ok)
-		throw new ApiError(`Failed to load session: ${res.status}`, res.status);
-	return (await res.json()) as UnifiedSession;
+  const res = await fetch(`${BASE}/sessions/${encodeURIComponent(sessionId)}`, {
+    signal: opts.signal,
+  });
+  if (res.status === 404) return null;
+  if (!res.ok)
+    throw new ApiError(`Failed to load session: ${res.status}`, res.status);
+  return (await res.json()) as UnifiedSession;
 }
 
 export interface PromptDelivery {
-	status: "steered" | "queued" | "started" | "handled";
-	message: string;
-	deliveryId?: string;
-	clientId?: string;
-	duplicate?: boolean;
+  status: "steered" | "queued" | "started" | "handled";
+  message: string;
+  deliveryId?: string;
+  clientId?: string;
+  duplicate?: boolean;
 }
 
 /** REST transport for the durable web outbox. `clientId` makes retries idempotent. */
 export async function deliverSessionPrompt(
-	sessionId: string,
-	body: {
-		content: string;
-		images?: string[];
-		files?: unknown[];
-		effort?: string;
-		fastMode?: boolean;
-		busyMode?: "queue" | "steer";
-		contextSessions?: string[];
-		user?: string;
-		clientId: string;
-	},
+  sessionId: string,
+  body: {
+    content: string;
+    images?: string[];
+    files?: unknown[];
+    effort?: string;
+    fastMode?: boolean;
+    busyMode?: "queue" | "steer";
+    contextSessions?: string[];
+    user?: string;
+    clientId: string;
+  },
 ): Promise<PromptDelivery> {
-	const images = await preparePromptImages(body.images);
-	return request<PromptDelivery>(`/sessions/${encodeURIComponent(sessionId)}/prompt`, {
-		method: "POST",
-		body: { ...body, ...(images ? { images } : {}) },
-		label: "Failed to deliver prompt",
-	});
+  const images = await preparePromptImages(body.images);
+  return request<PromptDelivery>(
+    `/sessions/${encodeURIComponent(sessionId)}/prompt`,
+    {
+      method: "POST",
+      body: { ...body, ...(images ? { images } : {}) },
+      label: "Failed to deliver prompt",
+    },
+  );
 }
 
 // ── Session assets (scratch folder previewed in the Assets tab) ─────────────
 
 export interface SessionAssetFile {
-	path: string;
-	size: number;
-	mtime: string;
-	description?: string;
+  path: string;
+  size: number;
+  mtime: string;
+  description?: string;
 }
 
 export async function fetchSessionAssets(
-	sessionId: string,
+  sessionId: string,
 ): Promise<{ dir: string; files: SessionAssetFile[] }> {
-	return request(`/sessions/${encodeURIComponent(sessionId)}/assets`, {
-		label: "Failed to load assets",
-	});
+  return request(`/sessions/${encodeURIComponent(sessionId)}/assets`, {
+    label: "Failed to load assets",
+  });
 }
 
 /** Direct URL of one asset (iframe/img/video src). Path-based so relative
  *  references inside a previewed HTML asset resolve to sibling assets. */
 export function sessionAssetRawUrl(sessionId: string, path: string): string {
-	const rel = path.split("/").map(encodeURIComponent).join("/");
-	return `${BASE}/sessions/${encodeURIComponent(sessionId)}/assets/raw/${rel}`;
+  const rel = path.split("/").map(encodeURIComponent).join("/");
+  return `${BASE}/sessions/${encodeURIComponent(sessionId)}/assets/raw/${rel}`;
 }
 
 /** The URL a preview loads: the raw route, with the file's mtime along for the
@@ -136,124 +136,126 @@ export function sessionAssetRawUrl(sessionId: string, path: string): string {
  *  path (iterating on one artifact is the normal flow). A file the listing
  *  hasn't caught up with yet carries no mtime and simply isn't busted. */
 export function sessionAssetPreviewUrl(
-	sessionId: string,
-	file: SessionAssetFile,
+  sessionId: string,
+  file: SessionAssetFile,
 ): string {
-	const raw = sessionAssetRawUrl(sessionId, file.path);
-	return file.mtime ? `${raw}?v=${encodeURIComponent(file.mtime)}` : raw;
+  const raw = sessionAssetRawUrl(sessionId, file.path);
+  return file.mtime ? `${raw}?v=${encodeURIComponent(file.mtime)}` : raw;
 }
 
 /** The same file, as an attachment rather than something the browser renders. */
 export function sessionAssetDownloadUrl(
-	sessionId: string,
-	file: SessionAssetFile,
+  sessionId: string,
+  file: SessionAssetFile,
 ): string {
-	const url = sessionAssetPreviewUrl(sessionId, file);
-	return `${url}${url.includes("?") ? "&" : "?"}download=1`;
+  const url = sessionAssetPreviewUrl(sessionId, file);
+  return `${url}${url.includes("?") ? "&" : "?"}download=1`;
 }
 
 export async function deleteSessionAssetApi(
-	sessionId: string,
-	path: string,
+  sessionId: string,
+  path: string,
 ): Promise<void> {
-	await request(`/sessions/${encodeURIComponent(sessionId)}/assets/delete`, {
-		method: "POST",
-		body: { path },
-		label: "Failed to delete asset",
-	});
+  await request(`/sessions/${encodeURIComponent(sessionId)}/assets/delete`, {
+    method: "POST",
+    body: { path },
+    label: "Failed to delete asset",
+  });
 }
 
 export interface TranscriptMatch {
-	id: string;
-	snippet: string;
+  id: string;
+  snippet: string;
 }
 
 /** Full-text search across session transcripts (⌘K "search in conversations"). */
 export async function searchTranscripts(
-	q: string,
-	signal?: AbortSignal,
+  q: string,
+  signal?: AbortSignal,
 ): Promise<TranscriptMatch[]> {
-	const data = await request<{ matches?: TranscriptMatch[] }>(
-		`/sessions/search?q=${encodeURIComponent(q)}`,
-		{ signal, label: "Transcript search failed" },
-	);
-	return data?.matches ?? [];
+  const data = await request<{ matches?: TranscriptMatch[] }>(
+    `/sessions/search?q=${encodeURIComponent(q)}`,
+    { signal, label: "Transcript search failed" },
+  );
+  return data?.matches ?? [];
 }
 
-export async function fetchTranscript(sessionId: string, tail?: number) {
-	return request<any>(
-		`/sessions/${encodeURIComponent(sessionId)}/transcript${
-			tail ? `?tail=${tail}` : ""
-		}`,
-		{ label: "Failed to fetch transcript" },
-	);
+export async function fetchTranscript(
+  sessionId: string,
+  tail?: number,
+): Promise<TranscriptEntry[]> {
+  return request<TranscriptEntry[]>(
+    `/sessions/${encodeURIComponent(sessionId)}/transcript${
+      tail ? `?tail=${tail}` : ""
+    }`,
+    { label: "Failed to fetch transcript" },
+  );
 }
 
 export interface SubagentTranscript {
-	meta: {
-		agentId: string;
-		agentType?: string;
-		model?: string;
-		description?: string;
-		toolUseId?: string;
-		spawnDepth?: number;
-	};
-	entries: import("../types").TranscriptEntry[];
-	sessionRunning: boolean;
+  meta: {
+    agentId: string;
+    agentType?: string;
+    model?: string;
+    description?: string;
+    toolUseId?: string;
+    spawnDepth?: number;
+  };
+  entries: import("../types").TranscriptEntry[];
+  sessionRunning: boolean;
 }
 
 export async function fetchSubagent(
-	sessionId: string,
-	agentId: string,
+  sessionId: string,
+  agentId: string,
 ): Promise<SubagentTranscript> {
-	return request<SubagentTranscript>(
-		`/sessions/${encodeURIComponent(sessionId)}/subagent/${encodeURIComponent(agentId)}`,
-		{ label: "Failed to fetch sub-agent" },
-	);
+  return request<SubagentTranscript>(
+    `/sessions/${encodeURIComponent(sessionId)}/subagent/${encodeURIComponent(agentId)}`,
+    { label: "Failed to fetch sub-agent" },
+  );
 }
 
 /** One sub-agent a session spawned directly (pi task-tool child or
  *  Claude-SDK Task agent) — mirrors the server's SessionSubagentSnapshot
  *  (pi-subagents.ts). Feeds the Agents tab's sub-agents card. */
 export interface SessionSubagentSnapshot {
-	/** Drill-in key for fetchSubagent; absent while a spawn is still pending. */
-	id?: string;
-	/** The spawning Task call's tool_use id — links this snapshot to its
-	 *  transcript row so the UI can offer the drill-in mid-run. */
-	toolUseId?: string;
-	agentType?: string;
-	label: string;
-	status: "pending" | "running" | "done" | "error";
-	/** Epoch ms. */
-	startedAt?: number;
-	endedAt?: number;
-	model?: string;
-	tokensOut?: number;
-	source: "pi" | "sdk";
+  /** Drill-in key for fetchSubagent; absent while a spawn is still pending. */
+  id?: string;
+  /** The spawning Task call's tool_use id — links this snapshot to its
+   *  transcript row so the UI can offer the drill-in mid-run. */
+  toolUseId?: string;
+  agentType?: string;
+  label: string;
+  status: "pending" | "running" | "done" | "error";
+  /** Epoch ms. */
+  startedAt?: number;
+  endedAt?: number;
+  model?: string;
+  tokensOut?: number;
+  source: "pi" | "sdk";
 }
 
 export async function fetchSessionSubagents(sessionId: string): Promise<{
-	subagents: SessionSubagentSnapshot[];
-	sessionRunning: boolean;
+  subagents: SessionSubagentSnapshot[];
+  sessionRunning: boolean;
 }> {
-	return request(
-		`/sessions/${encodeURIComponent(sessionId)}/subagents`,
-		{ label: "Failed to fetch sub-agents" },
-	);
+  return request(`/sessions/${encodeURIComponent(sessionId)}/subagents`, {
+    label: "Failed to fetch sub-agents",
+  });
 }
 
 /** A single "@"-mention suggestion. `insert` is what lands in the textarea. */
 export interface FileMention {
-	/** Repo-relative path or the display name of a referenced object. */
-	display: string;
-	/** Text inserted after the "@": path, `repo:path`, or a typed stable id. */
-	insert: string;
-	/** Repo label, set only when more than one repo is searched (cross-repo). */
-	repo?: string;
-	/** Entry type; absent means a file. */
-	kind?: "workspace" | "session" | "skill" | "dir" | "person" | "tool";
-	/** Subtitle for non-file entries (e.g. a session's branch, a skill's description). */
-	sub?: string;
+  /** Repo-relative path or the display name of a referenced object. */
+  display: string;
+  /** Text inserted after the "@": path, `repo:path`, or a typed stable id. */
+  insert: string;
+  /** Repo label, set only when more than one repo is searched (cross-repo). */
+  repo?: string;
+  /** Entry type; absent means a file. */
+  kind?: "workspace" | "session" | "skill" | "dir" | "person" | "tool";
+  /** Subtitle for non-file entries (e.g. a session's branch, a skill's description). */
+  sub?: string;
 }
 
 /**
@@ -263,47 +265,47 @@ export interface FileMention {
  * has no session yet), falling back to the default repo.
  */
 export async function fetchFileMentions(
-	query: string,
-	sessionId?: string,
-	repo?: string,
+  query: string,
+  sessionId?: string,
+  repo?: string,
 ): Promise<FileMention[]> {
-	const params = new URLSearchParams({ q: query });
-	if (sessionId) params.set("session", sessionId);
-	else if (repo) params.set("repo", repo);
-	try {
-		const data = await request<{ files?: FileMention[] }>(
-			`/files?${params.toString()}`,
-		);
-		return (data.files ?? []).filter(
-			(item) => item.kind === undefined || item.kind === "dir",
-		);
-	} catch (error) {
-		console.warn("fetchFileMentions failed:", error);
-		return [];
-	}
+  const params = new URLSearchParams({ q: query });
+  if (sessionId) params.set("session", sessionId);
+  else if (repo) params.set("repo", repo);
+  try {
+    const data = await request<{ files?: FileMention[] }>(
+      `/files?${params.toString()}`,
+    );
+    return (data.files ?? []).filter(
+      (item) => item.kind === undefined || item.kind === "dir",
+    );
+  } catch (error) {
+    console.warn("fetchFileMentions failed:", error);
+    return [];
+  }
 }
 
 /** People-independent rows for the inline @ palette. Kept separate from the
  * repository search so tools and recent sessions never wait for git. */
 export async function fetchMentionSuggestions(
-	query: string,
-	sessionId?: string,
-	user?: string,
-	mcpServers?: string[],
+  query: string,
+  sessionId?: string,
+  user?: string,
+  mcpServers?: string[],
 ): Promise<FileMention[]> {
-	const params = new URLSearchParams({ q: query });
-	if (sessionId) params.set("session", sessionId);
-	if (user) params.set("user", user);
-	for (const server of mcpServers || []) params.append("mcp", server);
-	try {
-		const data = await request<{ items?: FileMention[] }>(
-			`/mention-suggestions?${params.toString()}`,
-		);
-		return data.items ?? [];
-	} catch (error) {
-		console.warn("fetchMentionPalette failed:", error);
-		return [];
-	}
+  const params = new URLSearchParams({ q: query });
+  if (sessionId) params.set("session", sessionId);
+  if (user) params.set("user", user);
+  for (const server of mcpServers || []) params.append("mcp", server);
+  try {
+    const data = await request<{ items?: FileMention[] }>(
+      `/mention-suggestions?${params.toString()}`,
+    );
+    return data.items ?? [];
+  } catch (error) {
+    console.warn("fetchMentionPalette failed:", error);
+    return [];
+  }
 }
 
 /**
@@ -312,27 +314,27 @@ export async function fetchMentionSuggestions(
  * commands); `repo` is the fallback for composers with no session yet.
  */
 export async function fetchSkillMentions(
-	query: string,
-	sessionId?: string,
-	repo?: string,
+  query: string,
+  sessionId?: string,
+  repo?: string,
 ): Promise<FileMention[]> {
-	const params = new URLSearchParams({ q: query });
-	if (sessionId) params.set("session", sessionId);
-	else if (repo) params.set("repo", repo);
-	try {
-		const data = await request<{
-			skills?: Array<{ name: string; description: string; source: string }>;
-		}>(`/skills?${params.toString()}`);
-		return (data?.skills ?? []).map((s) => ({
-			display: s.name,
-			insert: s.name,
-			kind: "skill" as const,
-			sub: s.description,
-		}));
-	} catch (e) {
-		console.warn("fetchSkillMentions failed:", e);
-		return [];
-	}
+  const params = new URLSearchParams({ q: query });
+  if (sessionId) params.set("session", sessionId);
+  else if (repo) params.set("repo", repo);
+  try {
+    const data = await request<{
+      skills?: Array<{ name: string; description: string; source: string }>;
+    }>(`/skills?${params.toString()}`);
+    return (data?.skills ?? []).map((s) => ({
+      display: s.name,
+      insert: s.name,
+      kind: "skill" as const,
+      sub: s.description,
+    }));
+  } catch (e) {
+    console.warn("fetchSkillMentions failed:", e);
+    return [];
+  }
 }
 
 /**
@@ -341,85 +343,87 @@ export async function fetchSkillMentions(
  * new branch + worktree dir.
  */
 export async function promoteSessionApi(
-	sessionId: string,
-	opts?: { branch?: string; repo?: string },
+  sessionId: string,
+  opts?: { branch?: string; repo?: string },
 ): Promise<{ branch: string; worktreeDir: string }> {
-	return request<{ branch: string; worktreeDir: string }>(
-		`/sessions/${encodeURIComponent(sessionId)}/promote`,
-		{ method: "POST", body: opts || {} },
-	);
+  return request<{ branch: string; worktreeDir: string }>(
+    `/sessions/${encodeURIComponent(sessionId)}/promote`,
+    { method: "POST", body: opts || {} },
+  );
 }
 
 /** Move a shared-checkout session into its own isolated branch. */
 export async function moveSessionToBranchApi(
-	sessionId: string,
+  sessionId: string,
 ): Promise<{ branch: string; worktreeDir: string; copiedFiles: number }> {
-	return request<{ branch: string; worktreeDir: string; copiedFiles: number }>(
-		`/sessions/${encodeURIComponent(sessionId)}/move-to-branch`,
-		{ method: "POST" },
-	);
+  return request<{ branch: string; worktreeDir: string; copiedFiles: number }>(
+    `/sessions/${encodeURIComponent(sessionId)}/move-to-branch`,
+    { method: "POST" },
+  );
 }
 
 /** Create an idle sibling tab. The first prompt starts its engine run. */
 export async function newSessionApi(
-	sourceId: string,
-	user: string,
-	mode?: "share" | "stack" | "ask",
-	clientSessionId?: string,
+  sourceId: string,
+  user: string,
+  mode?: "share" | "stack" | "ask",
+  clientSessionId?: string,
+  duplicate = false,
 ): Promise<{ id: string; session: UnifiedSession | null }> {
-	const body = await request<{ id: string; session?: UnifiedSession }>(
-		`/sessions/${encodeURIComponent(sourceId)}/new-session`,
-		{
-			method: "POST",
-			body: {
-				user,
-				...(mode ? { mode } : {}),
-				...(clientSessionId ? { clientSessionId } : {}),
-			},
-		},
-	);
-	return { id: body.id, session: body.session || null };
+  const body = await request<{ id: string; session?: UnifiedSession }>(
+    `/sessions/${encodeURIComponent(sourceId)}/new-session`,
+    {
+      method: "POST",
+      body: {
+        user,
+        ...(mode ? { mode } : {}),
+        ...(clientSessionId ? { clientSessionId } : {}),
+        ...(duplicate ? { duplicate: true } : {}),
+      },
+    },
+  );
+  return { id: body.id, session: body.session || null };
 }
 
 export async function deleteSessionApi(
-	sessionId: string,
-	cleanWorktree: boolean,
+  sessionId: string,
+  cleanWorktree: boolean,
 ): Promise<void> {
-	const params = cleanWorktree ? "?worktree=true" : "";
-	await request<void>(`/sessions/${encodeURIComponent(sessionId)}${params}`, {
-		method: "DELETE",
-		label: "Failed to delete",
-	});
+  const params = cleanWorktree ? "?worktree=true" : "";
+  await request<void>(`/sessions/${encodeURIComponent(sessionId)}${params}`, {
+    method: "DELETE",
+    label: "Failed to delete",
+  });
 }
 
 /** Returns `stoppedRun: true` when archiving gracefully stopped an in-flight,
  * process-owned turn (so callers can surface a "stopped the running turn"
  * notice). Always false on unarchive and for idle/external sessions. */
 export async function archiveSessionApi(
-	sessionId: string,
-	archived: boolean,
+  sessionId: string,
+  archived: boolean,
 ): Promise<{ stoppedRun: boolean }> {
-	const res = await request<{ ok?: boolean; stoppedRun?: boolean } | null>(
-		`/sessions/${encodeURIComponent(sessionId)}/archive`,
-		{
-			method: "POST",
-			body: { archived },
-			label: "Failed to update archive state",
-		},
-	);
-	return { stoppedRun: !!res?.stoppedRun };
+  const res = await request<{ ok?: boolean; stoppedRun?: boolean } | null>(
+    `/sessions/${encodeURIComponent(sessionId)}/archive`,
+    {
+      method: "POST",
+      body: { archived },
+      label: "Failed to update archive state",
+    },
+  );
+  return { stoppedRun: !!res?.stoppedRun };
 }
 
 /** Set a manual display title for a session; empty string clears the rename. */
 export async function renameSessionApi(
-	sessionId: string,
-	title: string,
+  sessionId: string,
+  title: string,
 ): Promise<void> {
-	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/title`, {
-		method: "PUT",
-		body: { title },
-		label: "Failed to rename session",
-	});
+  await request<void>(`/sessions/${encodeURIComponent(sessionId)}/title`, {
+    method: "PUT",
+    body: { title },
+    label: "Failed to rename session",
+  });
 }
 
 /**
@@ -427,20 +431,14 @@ export async function renameSessionApi(
  * or pass null to clear the override back to the derived lane.
  */
 export async function setSessionStatusApi(
-	sessionId: string,
-	status:
-		| "needsinput"
-		| "inprogress"
-		| "review"
-		| "merged"
-		| "pending"
-		| null,
+  sessionId: string,
+  status: "needsinput" | "inprogress" | "review" | "merged" | "pending" | null,
 ): Promise<void> {
-	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/status`, {
-		method: "PUT",
-		body: { status },
-		label: "Failed to change session status",
-	});
+  await request<void>(`/sessions/${encodeURIComponent(sessionId)}/status`, {
+    method: "PUT",
+    body: { status },
+    label: "Failed to change session status",
+  });
 }
 
 /**
@@ -448,78 +446,82 @@ export async function setSessionStatusApi(
  * at the top of their sidebar + pushes a notification); null clears the request.
  */
 export async function setSessionReviewerApi(
-	sessionId: string,
-	reviewer: string | null,
-	by: string,
+  sessionId: string,
+  reviewer: string | null,
+  by: string,
 ): Promise<void> {
-	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/review`, {
-		method: "PUT",
-		body: { reviewer, by },
-		label: "Failed to set reviewer",
-	});
+  await request<void>(`/sessions/${encodeURIComponent(sessionId)}/review`, {
+    method: "PUT",
+    body: { reviewer, by },
+    label: "Failed to set reviewer",
+  });
 }
 
 /** Mark the session's review request accepted (reviewer signed off) or reopen it. */
 export async function acceptReviewApi(
-	sessionId: string,
-	accept: boolean,
-	by: string,
+  sessionId: string,
+  accept: boolean,
+  by: string,
 ): Promise<void> {
-	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/review`, {
-		method: "PUT",
-		body: { accept, by },
-		label: "Failed to update review",
-	});
+  await request<void>(`/sessions/${encodeURIComponent(sessionId)}/review`, {
+    method: "PUT",
+    body: { accept, by },
+    label: "Failed to update review",
+  });
 }
 
 /** Team notes on a session (agent-invisible; src/server/session-notes.ts). */
 export async function fetchSessionNotesApi(
-	sessionId: string,
+  sessionId: string,
 ): Promise<SessionNote[]> {
-	const data = await request<{ notes?: SessionNote[] }>(
-		`/sessions/${encodeURIComponent(sessionId)}/notes`,
-		{ label: "Failed to load notes" },
-	);
-	return data?.notes || [];
+  const data = await request<{ notes?: SessionNote[] }>(
+    `/sessions/${encodeURIComponent(sessionId)}/notes`,
+    { label: "Failed to load notes" },
+  );
+  return data?.notes || [];
 }
 
 /** Post a team note. The server broadcasts it back, so callers don't echo it
  *  locally — every viewer (including this one) renders the stored record. */
 export async function postSessionNoteApi(
-	sessionId: string,
-	text: string,
-	user: string,
-	images?: string[],
+  sessionId: string,
+  text: string,
+  user: string,
+  images?: string[],
 ): Promise<SessionNote> {
-	const data = await request<{ note: SessionNote }>(
-		`/sessions/${encodeURIComponent(sessionId)}/notes`,
-		{ method: "POST", body: { text, user, images }, label: "Failed to add note" },
-	);
-	return data.note;
+  const data = await request<{ note: SessionNote }>(
+    `/sessions/${encodeURIComponent(sessionId)}/notes`,
+    {
+      method: "POST",
+      body: { text, user, images },
+      label: "Failed to add note",
+    },
+  );
+  return data.note;
 }
 
 /** Edit a note. Author-only; the server rejects anyone else with a 403. */
 export async function editSessionNoteApi(
-	sessionId: string,
-	noteId: string,
-	text: string,
-	user: string,
+  sessionId: string,
+  noteId: string,
+  text: string,
+  user: string,
 ): Promise<SessionNote> {
-	const data = await request<{ note: SessionNote }>(
-		`/sessions/${encodeURIComponent(sessionId)}/notes/${encodeURIComponent(noteId)}`,
-		{ method: "PATCH", body: { text, user }, label: "Failed to edit note" },
-	);
-	return data.note;
+  const data = await request<{ note: SessionNote }>(
+    `/sessions/${encodeURIComponent(sessionId)}/notes/${encodeURIComponent(noteId)}`,
+    { method: "PATCH", body: { text, user }, label: "Failed to edit note" },
+  );
+  return data.note;
 }
 
 /** Delete a note. Author-only, same as editing. */
 export async function deleteSessionNoteApi(
-	sessionId: string,
-	noteId: string,
-	user: string,
+  sessionId: string,
+  noteId: string,
+  user: string,
 ): Promise<void> {
-	await request<void>(
-		`/sessions/${encodeURIComponent(sessionId)}/notes/${encodeURIComponent(noteId)}?user=${encodeURIComponent(user)}`,
-		{ method: "DELETE", label: "Failed to delete note" },
-	);
+  await request<void>(
+    `/sessions/${encodeURIComponent(sessionId)}/notes/${encodeURIComponent(noteId)}?user=${encodeURIComponent(user)}`,
+    { method: "DELETE", label: "Failed to delete note" },
+  );
 }

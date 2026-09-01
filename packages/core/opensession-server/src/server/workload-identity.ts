@@ -27,7 +27,12 @@ const MAX_TOKEN_TTL_SECONDS = 60 * 60;
 const LEASE_TTL_MS = 24 * 60 * 60 * 1_000;
 const MAX_LEASES = 10_000;
 
-export type WorkloadLifecycle = "setup" | "resume" | "preview" | "run" | "prewarm";
+export type WorkloadLifecycle =
+  | "setup"
+  | "resume"
+  | "preview"
+  | "run"
+  | "prewarm";
 
 export interface WorkloadIdentityContext {
   sandboxId: string;
@@ -100,13 +105,19 @@ async function loadKey(): Promise<StoredKey> {
   if (existsSync(KEY_PATH)) {
     try {
       const parsed = JSON.parse(readFileSync(KEY_PATH, "utf8")) as StoredKey;
-      if (parsed.privateKey?.kty === "RSA" && parsed.publicKey?.kty === "RSA" && parsed.kid) {
+      if (
+        parsed.privateKey?.kty === "RSA" &&
+        parsed.publicKey?.kty === "RSA" &&
+        parsed.kid
+      ) {
         return parsed;
       }
     } catch {
       // A corrupt key must not be silently replaced: that would invalidate a
       // published issuer without an operator noticing.
-      throw new Error(`Cannot read workload identity signing key at ${KEY_PATH}`);
+      throw new Error(
+        `Cannot read workload identity signing key at ${KEY_PATH}`,
+      );
     }
     throw new Error(`Invalid workload identity signing key at ${KEY_PATH}`);
   }
@@ -153,11 +164,15 @@ function configuredAudiences(context: WorkloadIdentityContext): string[] {
   try {
     grants = JSON.parse(raw);
   } catch {
-    console.warn("[workload-identity] OPENSESSION_WORKLOAD_IDENTITY_GRANTS is not valid JSON");
+    console.warn(
+      "[workload-identity] OPENSESSION_WORKLOAD_IDENTITY_GRANTS is not valid JSON",
+    );
     return [];
   }
   if (!Array.isArray(grants)) {
-    console.warn("[workload-identity] OPENSESSION_WORKLOAD_IDENTITY_GRANTS must be a JSON array");
+    console.warn(
+      "[workload-identity] OPENSESSION_WORKLOAD_IDENTITY_GRANTS must be a JSON array",
+    );
     return [];
   }
   const allowed = new Set<string>();
@@ -172,7 +187,8 @@ function configuredAudiences(context: WorkloadIdentityContext): string[] {
     ) {
       continue;
     }
-    for (const audience of grant.audiences) if (validAudience(audience)) allowed.add(audience);
+    for (const audience of grant.audiences)
+      if (validAudience(audience)) allowed.add(audience);
   }
   return [...allowed];
 }
@@ -181,7 +197,9 @@ function validTtl(value: unknown): number | null {
   if (value === undefined) return DEFAULT_TOKEN_TTL_SECONDS;
   if (!Number.isInteger(value)) return null;
   const ttl = Number(value);
-  return ttl >= MIN_TOKEN_TTL_SECONDS && ttl <= MAX_TOKEN_TTL_SECONDS ? ttl : null;
+  return ttl >= MIN_TOKEN_TTL_SECONDS && ttl <= MAX_TOKEN_TTL_SECONDS
+    ? ttl
+    : null;
 }
 
 function subject(context: WorkloadIdentityContext): string {
@@ -202,7 +220,9 @@ async function signToken(
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1_000);
   const key = await signingKey();
-  const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT", kid: key.kid }));
+  const header = base64Url(
+    JSON.stringify({ alg: "RS256", typ: "JWT", kid: key.kid }),
+  );
   const claims: Record<string, string | number> = {
     iss: workloadIdentityIssuer(),
     aud: audience,
@@ -241,7 +261,9 @@ async function signToken(
  * the bundled `opensession sandbox id-token` helper. The lease is never a
  * cloud credential and is deliberately not persisted into snapshots.
  */
-export function createWorkloadIdentityEnv(context: WorkloadIdentityContext): Record<string, string> {
+export function createWorkloadIdentityEnv(
+  context: WorkloadIdentityContext,
+): Record<string, string> {
   const audiences = configuredAudiences(context);
   // Identity is opt-in per workload grant. A sandbox cannot choose an
   // arbitrary external audience merely because it is running OpenSession.
@@ -310,15 +332,18 @@ async function token(req: Request): Promise<Response> {
       break;
     }
   }
-  if (!lease || lease.expiresAt <= Date.now()) return new Response("Unauthorized", { status: 401 });
+  if (!lease || lease.expiresAt <= Date.now())
+    return new Response("Unauthorized", { status: 401 });
   let body: { audience?: unknown; ttl_seconds?: unknown };
   try {
     body = await req.json();
   } catch {
     return new Response("Invalid JSON", { status: 400 });
   }
-  if (!validAudience(body.audience)) return new Response("Invalid audience", { status: 400 });
-  if (!lease.audiences.includes(body.audience)) return new Response("Forbidden audience", { status: 403 });
+  if (!validAudience(body.audience))
+    return new Response("Invalid audience", { status: 400 });
+  if (!lease.audiences.includes(body.audience))
+    return new Response("Forbidden audience", { status: 403 });
   const ttl = validTtl(body.ttl_seconds);
   if (ttl === null) {
     return new Response(
@@ -327,18 +352,28 @@ async function token(req: Request): Promise<Response> {
     );
   }
   return new Response(await signToken(lease, body.audience, ttl), {
-    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+    },
   });
 }
 
 /** Handle the complete public OIDC surface, or return undefined for other paths. */
-export async function handleWorkloadIdentityRequest(req: Request): Promise<Response | undefined> {
+export async function handleWorkloadIdentityRequest(
+  req: Request,
+): Promise<Response | undefined> {
   const path = new URL(req.url).pathname;
-  if (req.method === "GET" && path === `${IDENTITY_PATH}/.well-known/openid-configuration`) {
+  if (
+    req.method === "GET" &&
+    path === `${IDENTITY_PATH}/.well-known/openid-configuration`
+  ) {
     return await discovery();
   }
-  if (req.method === "GET" && path === `${IDENTITY_PATH}/jwks.json`) return await jwks();
-  if (req.method === "POST" && path === `${IDENTITY_PATH}/token`) return await token(req);
+  if (req.method === "GET" && path === `${IDENTITY_PATH}/jwks.json`)
+    return await jwks();
+  if (req.method === "POST" && path === `${IDENTITY_PATH}/token`)
+    return await token(req);
   return undefined;
 }
 

@@ -17,6 +17,9 @@ final class SessionViewModel {
     }
 
     private(set) var session: Session
+    /// A fenced operation always wins over stale running projections from an
+    /// older list poll or socket frame.
+    var safety: SessionSafetyState? { session.safety }
 
     private(set) var entries: [TranscriptEntry] = []
     private(set) var sessionNotes: [SessionNote] = []
@@ -48,8 +51,29 @@ final class SessionViewModel {
     /// available. Once detailed queue state arrives, derive the count from its
     /// items so a stale list snapshot cannot contradict the visible queue.
     private var hasDetailedQueue = false
+    #if DEBUG
+    /// Keeps a screenshot fixture from being cleared by the live watch's
+    /// ordinary status snapshot after the launch hook installs it.
+    private var holdsSafetyScreenshot = false
+    private var holdsScreenshotFixture = false
+    #endif
     var queuedCount: Int {
         hasDetailedQueue ? queuedItems.count : session.queuedCount ?? 0
+    }
+
+    /// The session-row fallback for a terminal failure that did not make it
+    /// into the transcript. A live retry and a safety pause each have their
+    /// own, more specific state, and a durable system entry wins over this
+    /// fallback so the same failure is never shown twice.
+    var inlineRunFailureMessage: String? {
+        guard !isRunning,
+              safety == nil,
+              let message = session.lastRunError?.message?.nilIfBlank,
+              !entries.contains(where: {
+                  $0.type == "system" && $0.text.contains(message)
+              })
+        else { return nil }
+        return message
     }
     /// What this conversation has cost and how full its context window is.
     /// Seeded from the session row and then kept live by `usage_update`,
@@ -57,8 +81,12 @@ final class SessionViewModel {
     private(set) var usage: SessionUsage?
     /// Messages held for after the current run (editable, steerable).
     private(set) var queuedItems: [QueueItem] = []
-    /// Steer receipts: delivering into the run at its next turn boundary.
+    /// Legacy steer receipts from older servers. Current servers put an
+    /// accepted steer directly in the transcript and name it below instead.
     private(set) var steeredItems: [QueueItem] = []
+    /// Transcript entry ids accepted as sent but not yet acknowledged at an
+    /// engine delivery boundary. They never render as composer queue chips.
+    private(set) var pendingDeliveryIds: Set<String> = []
 
     /// The create run is still preparing this session's worktree. Seeded
     /// from the sessions row and overridden by the live workspace_status
@@ -122,6 +150,43 @@ final class SessionViewModel {
 
     /// Called by the composer on the first character of a new draft.
     func draftStarted() { composeSeq += 1 }
+
+    #if DEBUG
+    /// Deterministic states for the native screenshot harness. These are
+    /// launch-env-only hooks in debug builds, never protocol mutations.
+    func showSafetyPauseForScreenshot() {
+        holdsSafetyScreenshot = true
+        holdsScreenshotFixture = true
+        session.safety = SessionSafetyState(
+            status: "paused_for_safety",
+            explanation: "This session was paused because the last action could not be confirmed safely.",
+            automaticReconciliationRunning: false,
+            pausedAt: ISO8601DateFormatter().string(from: .now),
+            operation: nil,
+            repairAvailable: true
+        )
+        isRunning = false
+        runStartedAt = nil
+        isLoadingConversation = false
+    }
+
+    func showSteeredMessageForScreenshot() {
+        holdsScreenshotFixture = true
+        let id = "screenshot-steered-message"
+        upsert([TranscriptEntry(
+            id: id,
+            type: "user",
+            content: "Please include the native paused-state handling too.",
+            timestamp: ISO8601DateFormatter().string(from: .now)
+        )])
+        pendingDeliveryIds = [id]
+        queuedItems.removeAll { $0.id == id }
+        steeredItems.removeAll { $0.id == id }
+        deliveringItems.removeAll { $0.id == id }
+        isLoadingConversation = false
+        rebuildDisplayItems()
+    }
+    #endif
 
     func resolveSlackComposer(_ receipt: SlackComposeReceipt) {
         if let pendingSlackComposer {
@@ -236,6 +301,12 @@ final class SessionViewModel {
     /// acknowledges them, so nothing is lost to a dead socket or no signal.
     let outbox: Outbox
     private var reconnectTask: Task<Void, Never>?
+    /// Stays set across failed reconnect attempts until a replacement hello
+    /// arrives, keeping a deliberate handoff quick without tightening normal
+    /// outage retries.
+    private var isServerHandoffPending = false
+    static let reconnectDelay: Duration = .seconds(2)
+    static let handoffReconnectDelay: Duration = .milliseconds(250)
     private var conversationLoadTask: Task<Void, Never>?
     private let conversationLoadTimeout: TimeInterval
     /// Multiple views can briefly overlap during a reversed tab transition.
@@ -452,7 +523,7 @@ final class SessionViewModel {
         self.prLoader = prLoader
         self.slackComposerUndoer = slackComposerUndoer
         self.workflowLoader = workflowLoader
-        self.isRunning = session.isRunning ?? false
+        self.isRunning = session.safety == nil && (session.isRunning ?? false)
         self.usage = session.usage
         self.model = session.model ?? ""
         self.effort = session.effort ?? ""
@@ -500,7 +571,13 @@ final class SessionViewModel {
         guard session.id == self.session.id else { return }
         let hadWalkthrough = self.session.walkthrough
         let hadReview = ReviewLoopResult(session: self.session)
+        #if DEBUG
+        let screenshotSafety = holdsSafetyScreenshot ? self.session.safety : nil
+        #endif
         self.session = session
+        #if DEBUG
+        if let screenshotSafety { self.session.safety = screenshotSafety }
+        #endif
         // The walkthrough and the PR's review verdict ride on the session row,
         // not the transcript, so a newly published walkthrough or a fresh
         // review only reach the blocks through a rebuild.
@@ -522,9 +599,15 @@ final class SessionViewModel {
         hasDetailedQueue = false
         queuedItems = []
         steeredItems = []
+        pendingDeliveryIds = []
         updateDelivering([])
 
-        if let running = session.isRunning {
+        if session.safety != nil {
+            isRunning = false
+            runStartedAt = nil
+            streamEnded = true
+            isStreaming = false
+        } else if let running = session.isRunning {
             isRunning = running
             runStartedAt = running ? session.runStartedDate : nil
             if !running {
@@ -903,6 +986,7 @@ final class SessionViewModel {
     /// the button was how messages used to be lost — you'd type, tap a dead
     /// button (or hit a socket that only LOOKED alive), and the text vanished.
     var canSend: Bool {
+        guard safety == nil else { return false }
         let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return hasText || !attachedImages.isEmpty
     }
@@ -1020,7 +1104,13 @@ final class SessionViewModel {
             continuedFailureNoticeIds.insert(String(purpose.dropFirst("failure:".count)))
         }
         switch delivery.status {
-        case "queued", "steered":
+        case "steered":
+            // Current servers admit a steer as a sent transcript row before
+            // answering. Keep the optimistic bubble until that durable row
+            // upserts it by delivery id. An older server's `steered` queue row
+            // still converts it to a compatibility chip in queueUpdate.
+            return
+        case "queued":
             removeOutboxEcho(item)
             rebuildDisplayItems()
             // Held server-side; it enters the transcript when the queue
@@ -1032,8 +1122,7 @@ final class SessionViewModel {
             // twice: the server's entry plus an optimistic copy that only
             // cleared when the queue next changed.
             let content = item.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            let alreadyShown = (delivery.status == "steered" ? steeredItems : queuedItems)
-                .contains {
+            let alreadyShown = queuedItems.contains {
                     !$0.isLocalEcho
                         && $0.content.trimmingCharacters(in: .whitespacesAndNewlines) == content
                 }
@@ -1044,8 +1133,7 @@ final class SessionViewModel {
                 user: item.user
             )
             hasDetailedQueue = true
-            if delivery.status == "steered" { steeredItems.append(chip) }
-            else { queuedItems.append(chip) }
+            queuedItems.append(chip)
         case "handled":
             // A slash command (/model, /goal …) — the server's answer is the
             // whole result; nothing enters the transcript.
@@ -1521,8 +1609,11 @@ final class SessionViewModel {
         otherTypingUsers = []
         stopTyping()
         reconnectTask?.cancel()
+        let delay = isServerHandoffPending
+            ? Self.handoffReconnectDelay
+            : Self.reconnectDelay
         reconnectTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: delay)
             guard let self, !self.stopped, !Task.isCancelled else { return }
             self.connect()
         }
@@ -1559,6 +1650,7 @@ final class SessionViewModel {
         lastEventAt = Date()
         switch event {
         case .hello:
+            isServerHandoffPending = false
             connectionState = .connected
             // A replacement socket defaults to present. Restore scene focus
             // before joining the session so a background reconnect never
@@ -1571,6 +1663,9 @@ final class SessionViewModel {
             // backoff goes now.
             outbox.clearBackoff()
             outbox.poke()
+
+        case .serverRestarting:
+            isServerHandoffPending = true
 
         case .transcriptInit(let id, let newEntries, let cursor) where id == session.id:
             creationRetryTask?.cancel()
@@ -1619,8 +1714,10 @@ final class SessionViewModel {
             // run this client thought idle — and wiping the bubble blinks
             // the message out until it finally lands.
             let pendingEchoes = entries.filter { echo in
-                localEchoIds.contains(echo.id) && !newEntries.contains {
-                    !knownIds.contains($0.id) && echoDelivered(echo, in: $0)
+                localEchoIds.contains(echo.id) && !newEntries.contains { durable in
+                    !knownIds.contains(durable.id)
+                        && (echo.id == "local-\(durable.id)"
+                            || echoDelivered(echo, in: durable))
                 }
             }
             entries = newEntries + pendingEchoes
@@ -1773,9 +1870,14 @@ final class SessionViewModel {
         case .usageUpdate(let id, let latest) where id == nil || id == session.id:
             usage = latest
 
-        case .sessionStatus(let id, let running) where id == session.id:
-            let completed = isRunning && !running
-            if running {
+        case .sessionStatus(let id, let running, let safety) where id == session.id:
+            #if DEBUG
+            if holdsSafetyScreenshot { break }
+            #endif
+            session.safety = safety
+            let effectiveRunning = safety == nil && running
+            let completed = isRunning && !effectiveRunning
+            if effectiveRunning {
                 // Keep the earliest known anchor across resync re-sends.
                 if runStartedAt == nil {
                     runStartedAt = session.runStartedDate ?? Date()
@@ -1783,7 +1885,7 @@ final class SessionViewModel {
             } else {
                 runStartedAt = nil
             }
-            isRunning = running
+            isRunning = effectiveRunning
             if completed {
                 NativeNotifications.post(
                     event: "runComplete",
@@ -1791,7 +1893,7 @@ final class SessionViewModel {
                     body: "The session finished running."
                 )
             }
-            if !running {
+            if !effectiveRunning {
                 streamEnded = true
                 isStreaming = false
                 flushLiveTextNow()
@@ -1810,8 +1912,41 @@ final class SessionViewModel {
         case .modelChanged(let id, let model, _) where id == session.id:
             session.model = model
 
-        case .queueUpdate(let id, let queued, let steered) where id == session.id:
+        case .queueUpdate(let id, let queued, let steered, let pendingIds)
+            where id == session.id:
             hasDetailedQueue = true
+            pendingDeliveryIds = Set(pendingIds)
+            let priorChips = queuedItems + steeredItems + deliveringItems
+            var transcriptChanged = false
+            // A queued row promoted with Send now can reach this frame just
+            // before its durable transcript append. Move that exact id into
+            // chat immediately; the append then replaces it instead of adding
+            // a second row. Direct composer steers already have local-<id>.
+            for deliveryId in pendingDeliveryIds
+            where !entries.contains(where: { $0.id == deliveryId }) {
+                guard let chip = priorChips.first(where: { $0.id == deliveryId }) else {
+                    continue
+                }
+                entries.append(TranscriptEntry(
+                    id: deliveryId,
+                    type: "user",
+                    content: chip.content,
+                    timestamp: ISO8601DateFormatter().string(from: .now),
+                    images: chip.images.isEmpty ? nil : chip.images
+                ))
+                transcriptChanged = true
+            }
+            // If the durable row beat this frame, retire its direct-send echo
+            // by identity rather than fuzzy text matching.
+            for deliveryId in pendingDeliveryIds
+            where entries.contains(where: { $0.id == deliveryId }) {
+                let localId = "local-\(deliveryId)"
+                if localEchoIds.remove(localId) != nil {
+                    entries.removeAll { $0.id == localId }
+                    transcriptChanged = true
+                }
+            }
+            if transcriptChanged { rebuildDisplayItems() }
             // A chip that vanishes from the server's queue without its message
             // having landed in the transcript is mid-delivery: the drain
             // broadcasts the emptied queue before the engine turn writes the
@@ -1847,7 +1982,9 @@ final class SessionViewModel {
                     let replaced = incoming.contains {
                         $0.id == chip.id || $0.content == chip.content
                     }
-                    return !replaced && !messageLanded(chip)
+                    return !replaced
+                        && !pendingDeliveryIds.contains(chip.id)
+                        && !messageLanded(chip)
                 }
             )
             // The two lists render as separate rows, so an id claimed by both
@@ -1932,6 +2069,9 @@ final class SessionViewModel {
             }
 
         case .notice(let message), .serverError(let message):
+            #if DEBUG
+            if holdsScreenshotFixture && message == "Session not found" { break }
+            #endif
             // A server notice is something that happened to the SESSION — a
             // run that failed, a sandbox that wasn't there, a rebuild that
             // paused — so it joins the transcript in order, which is where
@@ -2132,6 +2272,35 @@ final class SessionViewModel {
 
     private func upsert(_ incoming: [TranscriptEntry]) {
         for entry in incoming {
+            // Current single-message turns use the delivery id as their durable
+            // row id. Batched turns name every source separately. Retire those
+            // identities before any legacy text fallback so repeated messages
+            // cannot claim one another.
+            if entry.isUser {
+                let sourceIds = Set(entry.sourceMessageIds ?? [])
+                let exactIds = sourceIds.union([entry.id])
+                for sourceId in exactIds {
+                    let localId = "local-\(sourceId)"
+                    if localEchoIds.remove(localId) != nil {
+                        entries.removeAll { $0.id == localId }
+                    }
+                }
+                if !sourceIds.isEmpty {
+                    queuedItems.removeAll {
+                        sourceIds.contains($0.id)
+                            || ($0.id.hasPrefix("local-queued-")
+                                && sourceIds.contains(String($0.id.dropFirst("local-queued-".count))))
+                    }
+                    steeredItems.removeAll { sourceIds.contains($0.id) }
+                    if deliveringItems.contains(where: { sourceIds.contains($0.id) }) {
+                        updateDelivering(
+                            deliveringItems.filter { !sourceIds.contains($0.id) }
+                        )
+                    }
+                    pendingDeliveryIds.subtract(sourceIds)
+                    landedChipIds.formUnion(sourceIds)
+                }
+            }
             if let index = entries.firstIndex(where: { $0.id == entry.id }) {
                 entries[index] = entry
             } else {

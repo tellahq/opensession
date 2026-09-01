@@ -9,6 +9,6 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const MQ = stylex.defineConsts({
-	PHONE: "@media (max-width: 720px)",
-	DESKTOP: "@media (min-width: 721px)",
+  PHONE: "@media (max-width: 720px)",
+  DESKTOP: "@media (min-width: 721px)",
 });

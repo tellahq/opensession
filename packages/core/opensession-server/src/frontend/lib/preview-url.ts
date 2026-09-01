@@ -5,8 +5,8 @@
  * normalize defensively. Falsy path → the base URL unchanged.
  */
 export function withPreviewPath(base: string, path?: string | null): string {
-	if (!path) return base;
-	const rel = "/" + String(path).replace(/^\/+/, "");
-	if (rel === "/") return base;
-	return base.replace(/\/+$/, "") + rel;
+  if (!path) return base;
+  const rel = "/" + String(path).replace(/^\/+/, "");
+  if (rel === "/") return base;
+  return base.replace(/\/+$/, "") + rel;
 }

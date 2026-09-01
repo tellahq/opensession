@@ -7,9 +7,17 @@
  * posts), and only act when the body actually mentions a configured handle — so
  * the bot's replies (which don't mention itself) never re-trigger.
  */
-import { getPrAutomationDetails, type PrAutomationDetails } from "../../server/pr-info";
+import {
+  getPrAutomationDetails,
+  type PrAutomationDetails,
+} from "../../server/pr-info";
+import { defaultRepo } from "../../server/config";
+import { isExternalPullRequest } from "./public-review";
 import { listAutomations } from "../../server/automations";
-import { createWorktreeForPrBranch, createWorktreeForFollowup } from "../../server/worktree";
+import {
+  createWorktreeForPrBranch,
+  createWorktreeForFollowup,
+} from "../../server/worktree";
 import {
   claimLock,
   releaseLock,
@@ -18,7 +26,13 @@ import {
   setPendingMention,
   clearPendingMention,
 } from "./state";
-import { announceGithubRun, runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
+import {
+  announceGithubRun,
+  runGithubAgent,
+  authorForLogin,
+  finalSummary,
+  sessionUrl,
+} from "./run";
 import { buildMentionPrompt, buildFollowupMentionPrompt } from "./prompts";
 import { triggerPrAction } from "./trigger";
 import { repoForFullName } from "./constants";
@@ -33,7 +47,11 @@ import {
 } from "./github-rest";
 import { PR_EVENT_KEY } from "./constants";
 import { classifyPrActionIntent } from "../slack/mention-intent";
-import { configuredIntegration, isGithubBotLogin, personaName } from "../../server/config";
+import {
+  configuredIntegration,
+  isGithubBotLogin,
+  personaName,
+} from "../../server/config";
 import { isTrustedGithubLogin } from "../../server/shared/user-mappings";
 
 export function githubMentionHandles(input: {
@@ -48,20 +66,30 @@ export function githubMentionHandles(input: {
     input.appSlug || "",
     (input.botLogin || "").replace(/\[bot\]$/i, ""),
     ...(Array.isArray(input.configured)
-      ? input.configured.filter((value): value is string => typeof value === "string")
+      ? input.configured.filter(
+          (value): value is string => typeof value === "string",
+        )
       : []),
     ...(input.environment || "").split(","),
   ]
     .map((handle) =>
-      handle.trim().replace(/^@/, "").replace(/\[bot\]$/i, "").toLowerCase(),
+      handle
+        .trim()
+        .replace(/^@/, "")
+        .replace(/\[bot\]$/i, "")
+        .toLowerCase(),
     )
-    .filter((handle, index, handles) => !!handle && handles.indexOf(handle) === index);
+    .filter(
+      (handle, index, handles) => !!handle && handles.indexOf(handle) === index,
+    );
 }
 
 const githubIntegration = configuredIntegration("github");
 const configuredAppSlug =
   process.env.OPENSESSION_GITHUB_APP_SLUG?.trim() ||
-  (typeof githubIntegration.appSlug === "string" ? githubIntegration.appSlug.trim() : "");
+  (typeof githubIntegration.appSlug === "string"
+    ? githubIntegration.appSlug.trim()
+    : "");
 const MENTION_HANDLES = githubMentionHandles({
   persona: personaName(),
   appSlug: configuredAppSlug,
@@ -97,7 +125,10 @@ function alreadyHandled(key: string): boolean {
 
 export type MentionKind = "issue" | "review";
 
-export async function handleMention(kind: MentionKind, payload: any): Promise<void> {
+export async function handleMention(
+  kind: MentionKind,
+  payload: any,
+): Promise<void> {
   if (payload?.action !== "created") return; // ignore edits/deletes
   const comment = payload.comment;
   const body: string = comment?.body || "";
@@ -106,7 +137,9 @@ export async function handleMention(kind: MentionKind, payload: any): Promise<vo
   const authorLogin: string = comment?.user?.login || "";
   if (isGithubBotLogin(authorLogin)) return; // the bot's own pushes' account
   if (!isTrustedGithubLogin(authorLogin)) {
-    console.warn(`[github] Ignoring PR mention from untrusted @${authorLogin || "unknown"}`);
+    console.warn(
+      `[github] Ignoring PR mention from untrusted @${authorLogin || "unknown"}`,
+    );
     return;
   }
 
@@ -166,11 +199,23 @@ Queued @${authorLogin}'s request. I'll retry automatically if GitHub metadata is
   if (receiptId) {
     const pending = readPrState(prNumber, ghRepo)?.pendingMention;
     if (pending && pending.commentId === comment.id) {
-      setPendingMention(prNumber, { ...pending, progressCommentId: receiptId }, ghRepo);
+      setPendingMention(
+        prNumber,
+        { ...pending, progressCommentId: receiptId },
+        ghRepo,
+      );
     }
   }
   try {
-    await dispatchMention({ prNumber, kind, body, author: authorLogin, replyToId, inline, ghRepo });
+    await dispatchMention({
+      prNumber,
+      kind,
+      body,
+      author: authorLogin,
+      replyToId,
+      inline,
+      ghRepo,
+    });
     const stillPending = readPrState(prNumber, ghRepo)?.pendingMention;
     if (receiptId && stillPending?.commentId === comment.id) {
       await editIssueComment(
@@ -226,13 +271,24 @@ export async function dispatchMention(args: {
     // /simplify") that the run should honor — not just a generic pass.
     const res = await triggerPrAction(action, prNumber, author, body, ghRepo);
     const ack = `${REPLY_MARKER}\nOn it — ${res.message}`;
-    if (kind === "review" && replyToId) await replyToReviewComment(prNumber, replyToId, ack, ghRepo).catch(() => {});
+    if (kind === "review" && replyToId)
+      await replyToReviewComment(prNumber, replyToId, ack, ghRepo).catch(
+        () => {},
+      );
     else await postIssueComment(prNumber, ack, ghRepo).catch(() => {});
     return;
   }
 
   // Otherwise it's a conversational request — answer (and act) in a worktree session.
-  await runConversationalMention({ prNumber, author, body, kind, replyToId, inline, ghRepo });
+  await runConversationalMention({
+    prNumber,
+    author,
+    body,
+    kind,
+    replyToId,
+    inline,
+    ghRepo,
+  });
 }
 
 export interface ConversationalMentionArgs {
@@ -258,14 +314,31 @@ export async function runConversationalMention(
     return;
   }
   if (!claimLock("code", prNumber, ghRepo)) {
-    console.log(`[github] a code action is already running for PR #${prNumber}, skipping mention`);
+    console.log(
+      `[github] a code action is already running for PR #${prNumber}, skipping mention`,
+    );
     return;
   }
   let headRef = "";
   let runOwnsRecovery = false;
   try {
-    const details = await getPrAutomationDetails(String(prNumber), ghRepo || undefined);
+    const details = await getPrAutomationDetails(
+      String(prNumber),
+      ghRepo || undefined,
+    );
     if (!details) return;
+    if (isExternalPullRequest(details, ghRepo || defaultRepo().ghRepo)) {
+      const message = `${REPLY_MARKER}\nExternal PRs are read-only. I can run an isolated review, but I can't execute requests or push changes from this fork.`;
+      if (args.kind === "review" && args.replyToId)
+        await replyToReviewComment(
+          prNumber,
+          args.replyToId,
+          message,
+          ghRepo,
+        ).catch(() => {});
+      else await postIssueComment(prNumber, message, ghRepo).catch(() => {});
+      return;
+    }
     // Merged/closed PR: you can't push to it, but a mention like "fix this in a
     // follow-up PR" (Kent's case) should still spin up a session — off a fresh
     // branch that opens its own PR — not be silently dropped.
@@ -274,7 +347,9 @@ export async function runConversationalMention(
       return;
     }
     headRef = details.headRefName;
-    const model = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY)?.model;
+    const model = listAutomations().find(
+      (a) => a.eventKey === PR_EVENT_KEY,
+    )?.model;
     const link = `[📺 open session](${sessionUrl(prNumber, "mention", ghRepo)})`;
     const title = `Mention · PR #${prNumber} ${details.title}`.slice(0, 100);
     await announceGithubRun({
@@ -288,8 +363,11 @@ export async function runConversationalMention(
 
     const prior = readPrState(prNumber, ghRepo);
     // Reuse the progress comment only when recovering an interrupted run.
-    const reuseId = recovering ? prior?.activeMention?.progressCommentId : undefined;
-    const pendingReceiptId = readPrState(prNumber, ghRepo)?.pendingMention?.progressCommentId;
+    const reuseId = recovering
+      ? prior?.activeMention?.progressCommentId
+      : undefined;
+    const pendingReceiptId = readPrState(prNumber, ghRepo)?.pendingMention
+      ?.progressCommentId;
     const progressId = await postOrEditComment(
       prNumber,
       reuseId ?? pendingReceiptId,
@@ -323,7 +401,9 @@ export async function runConversationalMention(
       headRef,
       ghRepo ? repoForFullName(ghRepo)?.id : undefined,
     );
-    console.log(`[github] Mention reply on PR #${prNumber} (${args.kind}) from @${args.author}`);
+    console.log(
+      `[github] Mention reply on PR #${prNumber} (${args.kind}) from @${args.author}`,
+    );
     const result = await runGithubAgent({
       prNumber,
       ghRepo,
@@ -349,13 +429,27 @@ export async function runConversationalMention(
     const out = `${REPLY_MARKER}\n${reply}\n\n<sub>${link}</sub>`;
     if (args.kind === "review" && args.replyToId) {
       // Answer in the inline thread; the progress comment becomes a pointer to it.
-      const ok = await replyToReviewComment(prNumber, args.replyToId, out, ghRepo);
-      if (!ok) console.warn(`[github] failed to post mention thread reply for PR #${prNumber}`);
-      if (progressId) await editIssueComment(progressId, `${REPLY_MARKER}\n✓ Replied in the review thread above. · ${link}`, ghRepo);
+      const ok = await replyToReviewComment(
+        prNumber,
+        args.replyToId,
+        out,
+        ghRepo,
+      );
+      if (!ok)
+        console.warn(
+          `[github] failed to post mention thread reply for PR #${prNumber}`,
+        );
+      if (progressId)
+        await editIssueComment(
+          progressId,
+          `${REPLY_MARKER}\n✓ Replied in the review thread above. · ${link}`,
+          ghRepo,
+        );
     } else {
       // Conversation reply: turn the progress comment into the answer.
       if (progressId) {
-        if (!(await editIssueComment(progressId, out, ghRepo))) await postIssueComment(prNumber, out, ghRepo);
+        if (!(await editIssueComment(progressId, out, ghRepo)))
+          await postIssueComment(prNumber, out, ghRepo);
       } else {
         await postIssueComment(prNumber, out, ghRepo);
       }
@@ -397,7 +491,10 @@ async function runFollowupMention(
   const suffix = args.replyToId ? String(args.replyToId) : String(prNumber);
   const branch = `followup-pr-${prNumber}-${suffix}`.slice(0, 80);
   const link = `[📺 open session](${sessionUrl(prNumber, "followup", ghRepo)})`;
-  const followupTitle = `Follow-up · PR #${prNumber} ${details.title}`.slice(0, 100);
+  const followupTitle = `Follow-up · PR #${prNumber} ${details.title}`.slice(
+    0,
+    100,
+  );
   await announceGithubRun({
     prNumber,
     ghRepo,
@@ -414,7 +511,9 @@ async function runFollowupMention(
     ghRepo,
   );
 
-  const model = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY)?.model;
+  const model = listAutomations().find(
+    (a) => a.eventKey === PR_EVENT_KEY,
+  )?.model;
   const worktreeDir = await createWorktreeForFollowup(
     branch,
     baseRef,
@@ -451,12 +550,25 @@ async function runFollowupMention(
   const reply = finalSummary(result.text) || "(no reply produced)";
   const out = `${REPLY_MARKER}\n${reply}\n\n<sub>${link}</sub>`;
   if (args.kind === "review" && args.replyToId) {
-    const ok = await replyToReviewComment(prNumber, args.replyToId, out, ghRepo);
-    if (!ok) console.warn(`[github] failed to post follow-up thread reply for PR #${prNumber}`);
+    const ok = await replyToReviewComment(
+      prNumber,
+      args.replyToId,
+      out,
+      ghRepo,
+    );
+    if (!ok)
+      console.warn(
+        `[github] failed to post follow-up thread reply for PR #${prNumber}`,
+      );
     if (progressId)
-      await editIssueComment(progressId, `${REPLY_MARKER}\n✓ Replied in the review thread above. · ${link}`, ghRepo);
+      await editIssueComment(
+        progressId,
+        `${REPLY_MARKER}\n✓ Replied in the review thread above. · ${link}`,
+        ghRepo,
+      );
   } else if (progressId) {
-    if (!(await editIssueComment(progressId, out, ghRepo))) await postIssueComment(prNumber, out, ghRepo);
+    if (!(await editIssueComment(progressId, out, ghRepo)))
+      await postIssueComment(prNumber, out, ghRepo);
   } else {
     await postIssueComment(prNumber, out, ghRepo);
   }

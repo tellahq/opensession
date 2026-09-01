@@ -25,7 +25,13 @@ describe("sandbox host recovery decision", () => {
     expect(
       decideSandboxHostRecovery({
         run: run({ launchPhase: "started" }),
-        meta: { hostId: "rh-old", pid: 42, osSessionId: "os-1", startedAt: "now", engineSessionId: "engine-1" },
+        meta: {
+          hostId: "rh-old",
+          pid: 42,
+          osSessionId: "os-1",
+          startedAt: "now",
+          engineSessionId: "engine-1",
+        },
         hasCompleteSpec: true,
       }),
     ).toEqual({ kind: "resume", engineSessionId: "engine-1" });
@@ -43,7 +49,10 @@ describe("sandbox host recovery decision", () => {
   test("does not use a preexisting target as a started-run checkpoint", () => {
     expect(
       decideSandboxHostRecovery({
-        run: run({ launchPhase: "started", claudeSessionId: "source-or-thread" }),
+        run: run({
+          launchPhase: "started",
+          claudeSessionId: "source-or-thread",
+        }),
         hasCompleteSpec: true,
       }),
     ).toEqual({ kind: "uncertain" });
@@ -63,7 +72,12 @@ describe("sandbox host recovery decision", () => {
     expect(
       decideSandboxHostRecovery({
         run: run({ launchPhase: "started" }),
-        meta: { hostId: "rh-old", pid: 42, osSessionId: "os-1", startedAt: "now" },
+        meta: {
+          hostId: "rh-old",
+          pid: 42,
+          osSessionId: "os-1",
+          startedAt: "now",
+        },
         hasCompleteSpec: true,
       }),
     ).toEqual({ kind: "uncertain" });

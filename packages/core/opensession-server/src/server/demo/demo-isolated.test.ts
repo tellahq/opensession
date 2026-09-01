@@ -13,7 +13,6 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const CHILD = process.env.OS_DEMO_TEST_CHILD === "1";
@@ -27,7 +26,11 @@ let priorGhBackoff: number | undefined;
 beforeAll(async () => {
   if (!CHILD) return;
   priorHome = process.env.HOME;
-  home = join(tmpdir(), `demo-data-test-${crypto.randomUUID()}`);
+  // demo.test.ts already launches this process with an isolated HOME. Reuse
+  // it instead of tmpdir(): the live VPS points TMPDIR under /home/ubuntu,
+  // which made the "no operator-home literals" assertion fail on its own path.
+  home =
+    process.env.HOME || join("/tmp", `demo-data-test-${crypto.randomUUID()}`);
   process.env.HOME = home;
   priorConfig = process.env.OPENSESSION_CONFIG;
   // Point the config at a nonexistent scratch path so configuredRepos()
@@ -112,21 +115,26 @@ describe.skipIf(!CHILD)("demo dataset generator", () => {
 
     // The hero session picks up the seeded v4 PR snapshot through the real
     // enrichment path (repo unset → default repo, branch match).
-    const hero = byId.get("bks-demo-pr") as { prNumber?: number; prChecks?: { passed: number } };
+    const hero = byId.get("bks-demo-pr") as {
+      prNumber?: number;
+      prChecks?: { passed: number };
+    };
     expect(hero?.prNumber).toBe(128);
     expect(hero?.prChecks?.passed).toBe(5);
 
     // The demo worktree is a real dirty git checkout on the demo branch.
-    const status = Bun.spawnSync(
-      ["git", "status", "--porcelain"],
-      { cwd: result.worktreeDir, stdout: "pipe", stderr: "pipe" },
-    );
+    const status = Bun.spawnSync(["git", "status", "--porcelain"], {
+      cwd: result.worktreeDir,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     expect(status.exitCode).toBe(0);
     expect(status.stdout.toString().trim().length).toBeGreaterThan(0);
-    const branch = Bun.spawnSync(
-      ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-      { cwd: result.worktreeDir, stdout: "pipe", stderr: "pipe" },
-    );
+    const branch = Bun.spawnSync(["git", "rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd: result.worktreeDir,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     expect(branch.stdout.toString().trim()).toBe("demo/fix-flaky-upload");
   });
 
@@ -156,13 +164,9 @@ describe.skipIf(!CHILD)("demo dataset generator", () => {
           sawBigOutput = true;
       }
     }
-    expect([...kinds].sort()).toEqual([
-      "assistant",
-      "system",
-      "tool_use",
-      "tool_result",
-      "user",
-    ].sort());
+    expect([...kinds].sort()).toEqual(
+      ["assistant", "system", "tool_use", "tool_result", "user"].sort(),
+    );
     expect(sawError).toBe(true);
     expect(sawCompaction).toBe(true);
     expect(sawBigOutput).toBe(true);

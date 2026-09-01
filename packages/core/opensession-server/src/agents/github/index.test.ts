@@ -12,7 +12,8 @@ afterEach(() => {
   else process.env.ENABLE_GITHUB_AGENT = originalGithub;
   if (originalSlack === undefined) delete process.env.ENABLE_SLACK_AGENT;
   else process.env.ENABLE_SLACK_AGENT = originalSlack;
-  if (originalWebhookSecret === undefined) delete process.env.GITHUB_WEBHOOK_SECRET;
+  if (originalWebhookSecret === undefined)
+    delete process.env.GITHUB_WEBHOOK_SECRET;
   else process.env.GITHUB_WEBHOOK_SECRET = originalWebhookSecret;
 });
 
@@ -20,8 +21,12 @@ describe("webhook route ownership", () => {
   test("GitHub-only registration belongs to GitHub", () => {
     process.env.ENABLE_GITHUB_AGENT = "true";
     process.env.ENABLE_SLACK_AGENT = "false";
-    expect(new GithubAgent().getRoutes().has("POST /github/webhook")).toBe(true);
-    expect(new SlackAgent().getRoutes().has("POST /github/webhook")).toBe(false);
+    expect(new GithubAgent().getRoutes().has("POST /github/webhook")).toBe(
+      true,
+    );
+    expect(new SlackAgent().getRoutes().has("POST /github/webhook")).toBe(
+      false,
+    );
   });
 
   test("Slack-only registration uses the GitHub compatibility handler", () => {
@@ -39,9 +44,15 @@ describe("webhook route ownership", () => {
   test("both enabled leaves route ownership with GitHub", () => {
     process.env.ENABLE_GITHUB_AGENT = "true";
     process.env.ENABLE_SLACK_AGENT = "true";
-    expect(new GithubAgent().getRoutes().has("POST /github/webhook")).toBe(true);
-    expect(new SlackAgent().getRoutes().has("POST /github/webhook")).toBe(false);
-    expect(new SlackAgent().health()).not.toHaveProperty("githubWebhooksReceived");
+    expect(new GithubAgent().getRoutes().has("POST /github/webhook")).toBe(
+      true,
+    );
+    expect(new SlackAgent().getRoutes().has("POST /github/webhook")).toBe(
+      false,
+    );
+    expect(new SlackAgent().health()).not.toHaveProperty(
+      "githubWebhooksReceived",
+    );
   });
 });
 
@@ -71,7 +82,9 @@ describe("boot recovery trust gate", () => {
 
   test("the exemption does not extend to simplify or adversarial", () => {
     for (const kind of ["simplify", "adversarial"] as const) {
-      const s = prState({ activeRun: { kind, requestedBy: "", startedAt: AT } });
+      const s = prState({
+        activeRun: { kind, requestedBy: "", startedAt: AT },
+      });
       expect(recoveryPermitted(s, "run")).toBe(false);
     }
   });
@@ -90,7 +103,14 @@ describe("boot recovery trust gate", () => {
   test("person-initiated markers still require a trusted requester", () => {
     expect(
       recoveryPermitted(
-        prState({ autoFix: { active: true, iterations: 1, startedAt: AT, requestedBy: "" } }),
+        prState({
+          autoFix: {
+            active: true,
+            iterations: 1,
+            startedAt: AT,
+            requestedBy: "",
+          },
+        }),
         "auto-fix",
       ),
     ).toBe(false);
@@ -103,7 +123,12 @@ describe("boot recovery trust gate", () => {
     expect(
       recoveryPermitted(
         prState({
-          activeMention: { author: "", body: "hi", kind: "issue", startedAt: AT },
+          activeMention: {
+            author: "",
+            body: "hi",
+            kind: "issue",
+            startedAt: AT,
+          },
         }),
         "mention",
       ),
@@ -111,7 +136,13 @@ describe("boot recovery trust gate", () => {
     expect(
       recoveryPermitted(
         prState({
-          pendingMention: { kind: "issue", commentId: 7, body: "hi", author: "", receivedAt: AT },
+          pendingMention: {
+            kind: "issue",
+            commentId: 7,
+            body: "hi",
+            author: "",
+            receivedAt: AT,
+          },
         }),
         "pending-mention",
       ),

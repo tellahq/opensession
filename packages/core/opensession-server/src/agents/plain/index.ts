@@ -10,7 +10,11 @@ import {
   readRequestTextWithinLimit,
   webhookBodyTooLargeResponse,
 } from "../../server/shared/bounded-body";
-import { handleWebhook, activeSessions, pendingConfirmations } from "./handlers";
+import {
+  handleWebhook,
+  activeSessions,
+  pendingConfirmations,
+} from "./handlers";
 import type { PlainWebhookPayload } from "./handlers";
 import { configuredIntegration } from "../../server/config";
 
@@ -74,7 +78,9 @@ export class PlainAgent implements AgentModule {
           title: t.title || t.customer?.name || t.customer?.email || "Ticket",
           preview: t.previewText || undefined,
           lane: String(t.priority ?? 2),
-          ts: t.statusChangedAt ? Date.parse(t.statusChangedAt) || undefined : undefined,
+          ts: t.statusChangedAt
+            ? Date.parse(t.statusChangedAt) || undefined
+            : undefined,
           meta: t as unknown as Record<string, unknown>,
         }));
       },
@@ -82,14 +88,18 @@ export class PlainAgent implements AgentModule {
   }
 
   getRoutes(): Map<string, (req: Request, url: URL) => Promise<Response>> {
-    const routes = new Map<string, (req: Request, url: URL) => Promise<Response>>();
+    const routes = new Map<
+      string,
+      (req: Request, url: URL) => Promise<Response>
+    >();
 
     routes.set("POST /plain/webhook", async (req) => {
       let body: string;
       try {
         body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
       } catch (error) {
-        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
+        if (error instanceof RequestBodyTooLargeError)
+          return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
         throw error;
       }
       const signature = req.headers.get("plain-request-signature") || "";
@@ -116,15 +126,18 @@ export class PlainAgent implements AgentModule {
     }
 
     // Start confirmation cleanup timer
-    cleanupInterval = setInterval(() => {
-      const now = Date.now();
-      const timeout = 30 * 60 * 1000; // 30 minutes
-      for (const [key, pending] of pendingConfirmations) {
-        if (now - pending.timestamp > timeout) {
-          pendingConfirmations.delete(key);
+    cleanupInterval = setInterval(
+      () => {
+        const now = Date.now();
+        const timeout = 30 * 60 * 1000; // 30 minutes
+        for (const [key, pending] of pendingConfirmations) {
+          if (now - pending.timestamp > timeout) {
+            pendingConfirmations.delete(key);
+          }
         }
-      }
-    }, 5 * 60 * 1000);
+      },
+      5 * 60 * 1000,
+    );
 
     console.log("[plain] Agent started");
   }

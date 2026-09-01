@@ -90,13 +90,17 @@ export async function enablePush(user: string): Promise<void> {
     );
   }
   const permission = await Notification.requestPermission();
-  if (permission !== "granted") throw new Error("Notification permission was declined.");
+  if (permission !== "granted")
+    throw new Error("Notification permission was declined.");
 
-  const reg = await navigator.serviceWorker.register(SW_URL, { scope: `${BASE_PATH}/` });
+  const reg = await navigator.serviceWorker.register(SW_URL, {
+    scope: `${BASE_PATH}/`,
+  });
   await navigator.serviceWorker.ready;
 
   const keyRes = await fetch(`${BASE_PATH}/api/push/vapid-key`);
-  if (!keyRes.ok) throw new Error("Couldn't fetch the push key from the server.");
+  if (!keyRes.ok)
+    throw new Error("Couldn't fetch the push key from the server.");
   const { publicKey } = await keyRes.json();
 
   const sub =

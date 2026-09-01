@@ -36,42 +36,44 @@ const LEGACY_CTX_CLOSE = "</backstage:context>";
  * string: the taxonomy is what makes the log queryable.
  */
 export type ContextSource =
-	| "preamble"
-	| "handoff"
-	| "memory"
-	| "repos-note"
-	| "attached-session-excerpt"
-	| "external-refs"
-	| "ticket"
-	| "auto-continue"
-	| "background-wait"
-	| "restart-recovery"
-	| "steer-note"
-	| "uploads-note"
-	| "pinned-goal"
-	| "unknown";
+  | "preamble"
+  | "handoff"
+  | "memory"
+  | "repos-note"
+  | "attached-session-excerpt"
+  | "external-refs"
+  | "ticket"
+  | "auto-continue"
+  | "background-wait"
+  | "restart-recovery"
+  | "steer-note"
+  | "uploads-note"
+  | "pinned-goal"
+  | "unknown";
 
 const SOURCES = new Set<string>([
-	"preamble",
-	"handoff",
-	"memory",
-	"repos-note",
-	"attached-session-excerpt",
-	"external-refs",
-	"ticket",
-	"auto-continue",
-	"background-wait",
-	"restart-recovery",
-	"steer-note",
-	"uploads-note",
-	"pinned-goal",
-	"unknown",
+  "preamble",
+  "handoff",
+  "memory",
+  "repos-note",
+  "attached-session-excerpt",
+  "external-refs",
+  "ticket",
+  "auto-continue",
+  "background-wait",
+  "restart-recovery",
+  "steer-note",
+  "uploads-note",
+  "pinned-goal",
+  "unknown",
 ]);
 
 /** Read a source label off the wire, falling back to "unknown" for anything
  *  an older (or newer) writer put there. */
-export function asContextSource(value: string | undefined | null): ContextSource {
-	return value && SOURCES.has(value) ? (value as ContextSource) : "unknown";
+export function asContextSource(
+  value: string | undefined | null,
+): ContextSource {
+  return value && SOURCES.has(value) ? (value as ContextSource) : "unknown";
 }
 
 // Any fence open tag, with or without attributes, either sentinel generation.
@@ -81,33 +83,33 @@ const CLOSE_TAG_RE = /<\/(?:opensession|backstage):context>/g;
 /** Fence a block of injected context so it renders invisibly in the transcript.
  *  `source` is recorded on the block's context-injection log entry. */
 export function wrapContext(body: string, source?: ContextSource): string {
-	// Neutralize any fence sentinels inside the body: a nested
-	// <opensession:context> marker in inlined content (e.g. an attached session's
-	// transcript that literally contains the string) would otherwise let that
-	// content break out of the fence and inject unfenced instructions into the
-	// agent — a prompt-injection vector. A sentinel inside a fenced block is
-	// never legitimate, so replacing the angle brackets is always safe. Matched
-	// as a pattern, not as two literals: an open tag may carry attributes, and
-	// `<opensession:context source="x">` would otherwise sail through.
-	const safe = neutralizeContextSentinels(body);
-	const open = source ? `<opensession:context source="${source}">` : CTX_OPEN;
-	return `${open}\n${safe}\n${CTX_CLOSE}`;
+  // Neutralize any fence sentinels inside the body: a nested
+  // <opensession:context> marker in inlined content (e.g. an attached session's
+  // transcript that literally contains the string) would otherwise let that
+  // content break out of the fence and inject unfenced instructions into the
+  // agent — a prompt-injection vector. A sentinel inside a fenced block is
+  // never legitimate, so replacing the angle brackets is always safe. Matched
+  // as a pattern, not as two literals: an open tag may carry attributes, and
+  // `<opensession:context source="x">` would otherwise sail through.
+  const safe = neutralizeContextSentinels(body);
+  const open = source ? `<opensession:context source="${source}">` : CTX_OPEN;
+  return `${open}\n${safe}\n${CTX_CLOSE}`;
 }
 
 /** Make context fence text inert before applying an exact output budget. */
 export function neutralizeContextSentinels(body: string): string {
-	return body
-		.replace(OPEN_TAG_RE, (t) => `‹${t.slice(1, -1)}›`)
-		.replace(CLOSE_TAG_RE, (t) => `‹${t.slice(1, -1)}›`);
+  return body
+    .replace(OPEN_TAG_RE, (t) => `‹${t.slice(1, -1)}›`)
+    .replace(CLOSE_TAG_RE, (t) => `‹${t.slice(1, -1)}›`);
 }
 
 const STRIP_RE =
-	/<(?:opensession|backstage):context(?:\s[^>]*)?>[\s\S]*?<\/(?:opensession|backstage):context>\n*/g;
+  /<(?:opensession|backstage):context(?:\s[^>]*)?>[\s\S]*?<\/(?:opensession|backstage):context>\n*/g;
 // Before injected context was fenced, pinned goals were appended directly to
 // user prompts. Keep those stored turns clean too, not only prompts created
 // after the fence migration.
 const LEGACY_PINNED_GOAL_RE =
-	/(?:^|\n\n)\[Pinned session goal — keep working toward it and note how this turn advanced it: [\s\S]*\]\s*$/;
+  /(?:^|\n\n)\[Pinned session goal — keep working toward it and note how this turn advanced it: [\s\S]*\]\s*$/;
 // A delivery attribution ("[Name] ", added when a prompt is handed to the
 // engine) with nothing left after the fence is stripped: the whole turn was
 // plumbing, so the prefix is all the transcript would carry. Left in, it
@@ -117,43 +119,45 @@ const ATTRIBUTION_ONLY_RE = /^\[[^\]\n]{1,80}\]$/;
 
 /** Cheap pre-test shared by strip/parse: does this text hold a fence at all? */
 function hasFence(text: string): boolean {
-	return text.includes("<opensession:context") || text.includes("<backstage:context");
+  return (
+    text.includes("<opensession:context") || text.includes("<backstage:context")
+  );
 }
 
 /** Remove fenced context blocks and legacy unfenced injections for display. */
 export function stripContext(text: string): string {
-	if (!text) return text;
-	const withoutLegacyGoal = text.replace(LEGACY_PINNED_GOAL_RE, "");
-	const shown = hasFence(withoutLegacyGoal)
-		? withoutLegacyGoal.replace(STRIP_RE, "").trimStart()
-		: withoutLegacyGoal;
-	return ATTRIBUTION_ONLY_RE.test(shown.trim()) ? "" : shown;
+  if (!text) return text;
+  const withoutLegacyGoal = text.replace(LEGACY_PINNED_GOAL_RE, "");
+  const shown = hasFence(withoutLegacyGoal)
+    ? withoutLegacyGoal.replace(STRIP_RE, "").trimStart()
+    : withoutLegacyGoal;
+  return ATTRIBUTION_ONLY_RE.test(shown.trim()) ? "" : shown;
 }
 
 /** Is this prompt nothing but injected context — plumbing the human never
  *  typed (the auto-continue nudge, see auto-continue.ts)? Such a turn takes no
  *  delivery attribution: there'd be no message to attribute it to. */
 export function isContextOnly(text: string): boolean {
-	return !!text.trim() && !stripContext(text).trim();
+  return !!text.trim() && !stripContext(text).trim();
 }
 
 const BLOCK_RE =
-	/<(?:opensession|backstage):context(\s[^>]*)?>([\s\S]*?)<\/(?:opensession|backstage):context>/g;
+  /<(?:opensession|backstage):context(\s[^>]*)?>([\s\S]*?)<\/(?:opensession|backstage):context>/g;
 
 /** Every fenced block in a prompt body, in order, with its declared source.
  *  This is the read side of `wrapContext` — what context-log.ts records. */
 export function parseContextBlocks(
-	text: string,
+  text: string,
 ): Array<{ source: ContextSource; body: string }> {
-	if (!text || !hasFence(text)) return [];
-	const out: Array<{ source: ContextSource; body: string }> = [];
-	for (const m of text.matchAll(BLOCK_RE)) {
-		const body = m[2].trim();
-		if (!body) continue;
-		out.push({
-			source: asContextSource(m[1]?.match(/source="([^"]*)"/)?.[1]),
-			body,
-		});
-	}
-	return out;
+  if (!text || !hasFence(text)) return [];
+  const out: Array<{ source: ContextSource; body: string }> = [];
+  for (const m of text.matchAll(BLOCK_RE)) {
+    const body = m[2].trim();
+    if (!body) continue;
+    out.push({
+      source: asContextSource(m[1]?.match(/source="([^"]*)"/)?.[1]),
+      body,
+    });
+  }
+  return out;
 }

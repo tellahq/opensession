@@ -47,6 +47,35 @@ export interface LastReviewState {
   at: string;
 }
 
+interface PendingReviewCommon {
+  /** Optional only while loading state written before generation fencing shipped. */
+  generation?: string;
+  headRef: string;
+  headSha: string;
+  title: string;
+  firstPushAt: string;
+  dueAt: string;
+  attempts?: number;
+  lastError?: string;
+}
+
+export type PendingReviewState =
+  | (PendingReviewCommon & {
+      phase?: "queued";
+      claimedAt?: never;
+      exhaustedAt?: never;
+    })
+  | (PendingReviewCommon & {
+      phase: "running";
+      claimedAt: string;
+      exhaustedAt?: never;
+    })
+  | (PendingReviewCommon & {
+      phase: "exhausted";
+      exhaustedAt: string;
+      claimedAt?: never;
+    });
+
 export interface GithubPrState {
   prNumber: number;
   headRef: string;
@@ -66,6 +95,9 @@ export interface GithubPrState {
     requestedBy: string;
     receivedAt: string;
   };
+  /** Desired review work retained until this exact generation is recorded.
+   * The timer is only a wake-up hint and may be rebuilt after a restart. */
+  pendingReview?: PendingReviewState;
   /** Review → owning-session fix rounds (handoff.ts); cleared when a review
    *  comes back satisfied or the PR closes. */
   handoff?: HandoffState;
@@ -139,7 +171,10 @@ function statePath(prNumber: number, ghRepo?: string): string {
   return `${STATE_DIR}/${prKey(prNumber, ghRepo)}.json`;
 }
 
-export function readPrState(prNumber: number, ghRepo?: string): GithubPrState | null {
+export function readPrState(
+  prNumber: number,
+  ghRepo?: string,
+): GithubPrState | null {
   const path = statePath(prNumber, ghRepo);
   if (!existsSync(path)) return null;
   try {
@@ -149,7 +184,11 @@ export function readPrState(prNumber: number, ghRepo?: string): GithubPrState | 
   }
 }
 
-export function getOrInitPrState(prNumber: number, headRef: string, ghRepo?: string): GithubPrState {
+export function getOrInitPrState(
+  prNumber: number,
+  headRef: string,
+  ghRepo?: string,
+): GithubPrState {
   return (
     readPrState(prNumber, ghRepo) || {
       prNumber,
@@ -168,7 +207,8 @@ export function getOrInitPrState(prNumber: number, headRef: string, ghRepo?: str
 function writePrState(state: GithubPrState): void {
   state.updatedAt = new Date().toISOString();
   // Keep the reviewed-SHA list bounded.
-  if (state.reviewedShas.length > 20) state.reviewedShas = state.reviewedShas.slice(-20);
+  if (state.reviewedShas.length > 20)
+    state.reviewedShas = state.reviewedShas.slice(-20);
   writeJsonAtomic(statePath(state.prNumber, state.ghRepo), state);
 }
 
@@ -182,11 +222,23 @@ export function updatePrState(
   prNumber: number,
   headRef: string,
   patch: (s: GithubPrState) => void,
-  ghRepo?: string
+  ghRepo?: string,
 ): GithubPrState {
   const s = getOrInitPrState(prNumber, headRef, ghRepo);
   patch(s);
   writePrState(s);
+  return s;
+}
+
+/** Generation-fenced variant for races where a stale callback should do no I/O. */
+export function updatePrStateIf(
+  prNumber: number,
+  headRef: string,
+  patch: (s: GithubPrState) => boolean,
+  ghRepo?: string,
+): GithubPrState {
+  const s = getOrInitPrState(prNumber, headRef, ghRepo);
+  if (patch(s)) writePrState(s);
   return s;
 }
 
@@ -195,7 +247,7 @@ export function updatePrState(
 export function setPendingMention(
   prNumber: number,
   pending: NonNullable<GithubPrState["pendingMention"]>,
-  ghRepo?: string
+  ghRepo?: string,
 ): void {
   updatePrState(
     prNumber,
@@ -295,7 +347,11 @@ export function listPrStates(): GithubPrState[] {
   for (const file of readdirSync(STATE_DIR)) {
     if (!file.endsWith(".json")) continue;
     try {
-      out.push(JSON.parse(readFileSync(`${STATE_DIR}/${file}`, "utf-8")) as GithubPrState);
+      out.push(
+        JSON.parse(
+          readFileSync(`${STATE_DIR}/${file}`, "utf-8"),
+        ) as GithubPrState,
+      );
     } catch {}
   }
   return out;
@@ -307,12 +363,20 @@ export function listPrStates(): GithubPrState[] {
  *  run owns the PR. Outermost first: auto-fix's gate review sets `activeRun`
  *  while `autoFix.active` is still set (that pair is NORMAL, not corruption), so
  *  resuming the fix loop resumes the review with it. */
-export type RecoveryKind = "auto-fix" | "pending-auto-fix" | "run" | "mention" | "pending-mention";
+export type RecoveryKind =
+  | "auto-fix"
+  | "pending-auto-fix"
+  | "run"
+  | "mention"
+  | "pending-mention";
 
 const RECOVERY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /** When the marker was armed — the age `planRecovery` judges it by. */
-export function recoveryMarkerAt(s: GithubPrState, kind: RecoveryKind): string | undefined {
+export function recoveryMarkerAt(
+  s: GithubPrState,
+  kind: RecoveryKind,
+): string | undefined {
   switch (kind) {
     case "auto-fix":
       return s.autoFix?.startedAt;
@@ -371,7 +435,10 @@ export function planRecovery(
 }
 
 /** Clear one recovery marker (used for the stale ones planRecovery reports). */
-export function clearRecoveryMarker(s: GithubPrState, kind: RecoveryKind): void {
+export function clearRecoveryMarker(
+  s: GithubPrState,
+  kind: RecoveryKind,
+): void {
   updatePrState(
     s.prNumber,
     s.headRef,
@@ -413,19 +480,31 @@ const locks: Record<"review" | "code", Set<string>> = {
 };
 
 /** Try to claim the lock; false if already held. Release with releaseLock. */
-export function claimLock(behavior: keyof typeof locks, prNumber: number, ghRepo?: string): boolean {
+export function claimLock(
+  behavior: keyof typeof locks,
+  prNumber: number,
+  ghRepo?: string,
+): boolean {
   const key = prKey(prNumber, ghRepo);
   if (locks[behavior].has(key)) return false;
   locks[behavior].add(key);
   return true;
 }
 
-export function releaseLock(behavior: keyof typeof locks, prNumber: number, ghRepo?: string): void {
+export function releaseLock(
+  behavior: keyof typeof locks,
+  prNumber: number,
+  ghRepo?: string,
+): void {
   locks[behavior].delete(prKey(prNumber, ghRepo));
 }
 
 /** Is the lock currently held? (Read-only probe — never claims.) */
-export function isLockHeld(behavior: keyof typeof locks, prNumber: number, ghRepo?: string): boolean {
+export function isLockHeld(
+  behavior: keyof typeof locks,
+  prNumber: number,
+  ghRepo?: string,
+): boolean {
   return locks[behavior].has(prKey(prNumber, ghRepo));
 }
 

@@ -1,5 +1,5 @@
 import { repoLabel } from "./repo-label";
-import type { UnifiedSession } from "./types";
+import type { OsReview, UnifiedSession } from "./types";
 
 /**
  * Derivation for the PRs a session knows only as refs — everything the status
@@ -21,19 +21,39 @@ export type SessionPrRef = NonNullable<UnifiedSession["prs"]>[number];
  *  does anything else assembled from the same four fields, which is how a
  *  transcript chip's card (lib/chip-hover.ts) words a PR the same way. */
 export type PrStateFacts = Pick<
-	SessionPrRef,
-	"state" | "isDraft" | "reviewDecision" | "checks"
+  SessionPrRef,
+  "state" | "isDraft" | "reviewDecision" | "checks"
 >;
 
 export type PrTone = "green" | "purple" | "red" | "yellow" | "muted";
 
+/** Compact latest-review reading for session and workspace hover cards. */
+export function osReviewText(review: OsReview): string {
+  const verdict =
+    review.verdict === "approve"
+      ? "approved"
+      : review.verdict === "request_changes"
+        ? "changes requested"
+        : review.verdict === "comment"
+          ? "commented"
+          : "reviewed";
+  return [
+    typeof review.confidence === "number" ? `${review.confidence}/5` : "",
+    verdict,
+    review.blocking > 0 ? `${review.blocking} blocking` : "",
+    review.stale ? "stale" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 /** Worst-first, so a series folds down to the tone that needs attention. */
 const TONE_RANK: Record<PrTone, number> = {
-	red: 0,
-	yellow: 1,
-	green: 2,
-	purple: 3,
-	muted: 4,
+  red: 0,
+  yellow: 1,
+  green: 2,
+  purple: 3,
+  muted: 4,
 };
 
 /**
@@ -42,16 +62,16 @@ const TONE_RANK: Record<PrTone, number> = {
  * branch this worktree isn't on). deriveHeadline minus every git case.
  */
 export function refTone(ref: PrStateFacts): PrTone {
-	if (ref.state === "MERGED") return "purple";
-	if (ref.state === "CLOSED") return "muted";
-	if (
-		(ref.checks?.failed ?? 0) > 0 ||
-		ref.reviewDecision === "CHANGES_REQUESTED"
-	)
-		return "red";
-	if ((ref.checks?.pending ?? 0) > 0) return "yellow";
-	if (ref.isDraft) return "muted";
-	return "green";
+  if (ref.state === "MERGED") return "purple";
+  if (ref.state === "CLOSED") return "muted";
+  if (
+    (ref.checks?.failed ?? 0) > 0 ||
+    ref.reviewDecision === "CHANGES_REQUESTED"
+  )
+    return "red";
+  if ((ref.checks?.pending ?? 0) > 0) return "yellow";
+  if (ref.isDraft) return "muted";
+  return "green";
 }
 
 /**
@@ -61,17 +81,17 @@ export function refTone(ref: PrStateFacts): PrTone {
  * of its own.
  */
 export function sessionPrTone(
-	s: Pick<
-		UnifiedSession,
-		"prState" | "prIsDraft" | "prReviewDecision" | "prChecks"
-	>,
+  s: Pick<
+    UnifiedSession,
+    "prState" | "prIsDraft" | "prReviewDecision" | "prChecks"
+  >,
 ): PrTone {
-	return refTone({
-		state: s.prState,
-		isDraft: s.prIsDraft,
-		reviewDecision: s.prReviewDecision,
-		checks: s.prChecks,
-	});
+  return refTone({
+    state: s.prState,
+    isDraft: s.prIsDraft,
+    reviewDecision: s.prReviewDecision,
+    checks: s.prChecks,
+  });
 }
 
 /**
@@ -80,15 +100,15 @@ export function sessionPrTone(
  * way the primary headline counts them rather than collapsing to "Open".
  */
 export function refState(ref: PrStateFacts): string {
-	if (ref.state === "MERGED") return "Merged";
-	if (ref.state === "CLOSED") return "Closed";
-	if ((ref.checks?.failed ?? 0) > 0) return "Checks failed";
-	if (ref.reviewDecision === "CHANGES_REQUESTED") return "Changes requested";
-	const pending = ref.checks?.pending ?? 0;
-	if (pending > 0) return `${pending} check${pending === 1 ? "" : "s"} pending`;
-	if (ref.isDraft) return "Draft";
-	if (ref.reviewDecision === "APPROVED") return "Approved";
-	return "Open";
+  if (ref.state === "MERGED") return "Merged";
+  if (ref.state === "CLOSED") return "Closed";
+  if ((ref.checks?.failed ?? 0) > 0) return "Checks failed";
+  if (ref.reviewDecision === "CHANGES_REQUESTED") return "Changes requested";
+  const pending = ref.checks?.pending ?? 0;
+  if (pending > 0) return `${pending} check${pending === 1 ? "" : "s"} pending`;
+  if (ref.isDraft) return "Draft";
+  if (ref.reviewDecision === "APPROVED") return "Approved";
+  return "Open";
 }
 
 /**
@@ -97,20 +117,20 @@ export function refState(ref: PrStateFacts): string {
  * clue which repository it belongs to.
  */
 export function refChipText(ref: SessionPrRef, primaryRepo?: string): string {
-	if (!primaryRepo || ref.repo === primaryRepo) return `#${ref.number}`;
-	return `${repoLabel(ref.repo)} #${ref.number}`;
+  if (!primaryRepo || ref.repo === primaryRepo) return `#${ref.number}`;
+  return `${repoLabel(ref.repo)} #${ref.number}`;
 }
 
 /** Full sentence for the row's tooltip — the detail the compact row drops. */
 export function refLabel(ref: SessionPrRef): string {
-	const checks = ref.checks;
-	const parts = [
-		`${repoLabel(ref.repo)} #${ref.number} (${refState(ref).toLowerCase()})`,
-	];
-	if (ref.title) parts.push(`· ${ref.title}`);
-	if (checks && checks.total > 0)
-		parts.push(`· ${checks.passed}/${checks.total} checks passed`);
-	return parts.join(" ");
+  const checks = ref.checks;
+  const parts = [
+    `${repoLabel(ref.repo)} #${ref.number} (${refState(ref).toLowerCase()})`,
+  ];
+  if (ref.title) parts.push(`· ${ref.title}`);
+  if (checks && checks.total > 0)
+    parts.push(`· ${checks.passed}/${checks.total} checks passed`);
+  return parts.join(" ");
 }
 
 /**
@@ -119,11 +139,13 @@ export function refLabel(ref: SessionPrRef): string {
  * bar, which has a single slot and no strip to fall back to.
  */
 export function worstPrRef<T extends PrStateFacts>(refs: T[]): T | undefined {
-	return refs.reduce<T | undefined>(
-		(worst, ref) =>
-			!worst || TONE_RANK[refTone(ref)] < TONE_RANK[refTone(worst)] ? ref : worst,
-		undefined,
-	);
+  return refs.reduce<T | undefined>(
+    (worst, ref) =>
+      !worst || TONE_RANK[refTone(ref)] < TONE_RANK[refTone(worst)]
+        ? ref
+        : worst,
+    undefined,
+  );
 }
 
 /**
@@ -132,27 +154,30 @@ export function worstPrRef<T extends PrStateFacts>(refs: T[]): T | undefined {
  * neutral tone hides a failing PR sitting right underneath it.
  */
 export function summarizePrSeries(
-	refs: SessionPrRef[],
+  refs: SessionPrRef[],
 ): { tone: PrTone; label: string } | null {
-	if (refs.length === 0) return null;
-	const tone = refs
-		.map(refTone)
-		.reduce((worst, t) => (TONE_RANK[t] < TONE_RANK[worst] ? t : worst));
-	const open = refs.filter(
-		(r) => r.state !== "MERGED" && r.state !== "CLOSED",
-	).length;
-	if (open === 0) {
-		const merged = refs.filter((r) => r.state === "MERGED").length;
-		return {
-			tone,
-			label:
-				merged === refs.length
-					? `All ${refs.length} merged`
-					: merged > 0
-						? `${merged} of ${refs.length} merged`
-						: `All ${refs.length} closed`,
-		};
-	}
-	const total = `${refs.length} PR${refs.length === 1 ? "" : "s"}`;
-	return { tone, label: open === refs.length ? total : `${total} · ${open} open` };
+  if (refs.length === 0) return null;
+  const tone = refs
+    .map(refTone)
+    .reduce((worst, t) => (TONE_RANK[t] < TONE_RANK[worst] ? t : worst));
+  const open = refs.filter(
+    (r) => r.state !== "MERGED" && r.state !== "CLOSED",
+  ).length;
+  if (open === 0) {
+    const merged = refs.filter((r) => r.state === "MERGED").length;
+    return {
+      tone,
+      label:
+        merged === refs.length
+          ? `All ${refs.length} merged`
+          : merged > 0
+            ? `${merged} of ${refs.length} merged`
+            : `All ${refs.length} closed`,
+    };
+  }
+  const total = `${refs.length} PR${refs.length === 1 ? "" : "s"}`;
+  return {
+    tone,
+    label: open === refs.length ? total : `${total} · ${open} open`,
+  };
 }

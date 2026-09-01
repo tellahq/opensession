@@ -13,7 +13,9 @@ import {
  * is the outer gate, this is the inner one. Multi-repo: any repo in the
  * config registry participates once its GitHub webhook points here.
  */
-export function repoForFullName(fullName: string | null | undefined): Repo | null {
+export function repoForFullName(
+  fullName: string | null | undefined,
+): Repo | null {
   const lower = (fullName || "").trim().toLowerCase();
   if (!lower) return null;
   return (
@@ -33,7 +35,8 @@ export function prKey(prNumber: number, ghRepo?: string | null): string {
   if (!ghRepo || ghRepo.toLowerCase() === defaultRepo().ghRepo.toLowerCase()) {
     return String(prNumber);
   }
-  const id = repoForFullName(ghRepo)?.id || ghRepo.replace(/[^A-Za-z0-9._-]/g, "_");
+  const id =
+    repoForFullName(ghRepo)?.id || ghRepo.replace(/[^A-Za-z0-9._-]/g, "_");
   return `${id}-${prNumber}`;
 }
 
@@ -55,13 +58,17 @@ export const DOCS_SYNC_BRANCH_PREFIX = "auto-docs-sync-";
  */
 export function docsSyncChannel(): string | undefined {
   const configured = configuredIntegration("github").docsSyncChannel;
-  return typeof configured === "string" && configured.trim() ? configured.trim() : undefined;
+  return typeof configured === "string" && configured.trim()
+    ? configured.trim()
+    : undefined;
 }
 
 /** Slack channel where merged visual changes are shared with their walkthrough screenshot. */
 export function shippedChangesChannel(): string | undefined {
   const configured = configuredIntegration("github").shippedChangesChannel;
-  return typeof configured === "string" && configured.trim() ? configured.trim() : undefined;
+  return typeof configured === "string" && configured.trim()
+    ? configured.trim()
+    : undefined;
 }
 
 /** PR trigger labels. */

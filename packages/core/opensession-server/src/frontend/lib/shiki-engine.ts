@@ -1,7 +1,8 @@
 import {
-	createHighlighterCore,
-	type HighlighterCore,
-	type ShikiTransformer,
+  createHighlighterCore,
+  type HighlighterCore,
+  type LanguageRegistration,
+  type ShikiTransformer,
 } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import bash from "@shikijs/langs/bash";
@@ -24,107 +25,128 @@ import githubLight from "@shikijs/themes/github-light-default";
 import rescriptGrammar from "./rescript.tmLanguage.json";
 import { LANG_BY_EXT } from "./lang";
 
-const rescript = { ...(rescriptGrammar as any), name: "rescript" };
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function languageRegistration(
+  grammar: unknown,
+  name: string,
+): LanguageRegistration {
+  if (
+    !isRecord(grammar) ||
+    typeof grammar.scopeName !== "string" ||
+    !Array.isArray(grammar.patterns) ||
+    !isRecord(grammar.repository)
+  ) {
+    throw new TypeError(`Invalid TextMate grammar for ${name}`);
+  }
+  return { ...grammar, name } as LanguageRegistration;
+}
+
+const rescript = languageRegistration(rescriptGrammar, "rescript");
 let highlighterPromise: Promise<HighlighterCore> | null = null;
 
 function getHighlighter(): Promise<HighlighterCore> {
-	if (!highlighterPromise) {
-		highlighterPromise = createHighlighterCore({
-			themes: [githubDark, githubLight],
-			langs: [
-				bash,
-				typescript,
-				tsx,
-				javascript,
-				jsx,
-				json,
-				css,
-				html,
-				yaml,
-				markdown,
-				sql,
-				diff,
-				toml,
-				rust,
-				swift,
-				rescript,
-			],
-			engine: createJavaScriptRegexEngine({ forgiving: true }),
-		});
-	}
-	return highlighterPromise;
+  if (!highlighterPromise) {
+    highlighterPromise = createHighlighterCore({
+      themes: [githubDark, githubLight],
+      langs: [
+        bash,
+        typescript,
+        tsx,
+        javascript,
+        jsx,
+        json,
+        css,
+        html,
+        yaml,
+        markdown,
+        sql,
+        diff,
+        toml,
+        rust,
+        swift,
+        rescript,
+      ],
+      engine: createJavaScriptRegexEngine({ forgiving: true }),
+    });
+  }
+  return highlighterPromise;
 }
 
 function splitGutter(content: string): { nums: string[]; code: string } | null {
-	const lines = content.split("\n");
-	const formats: { re: RegExp; sep?: string }[] = [
-		{ re: /^(\s*\d+)\t/ },
-		{ re: /^(\d+[-:])/, sep: "--" },
-	];
-	for (const { re, sep } of formats) {
-		const matches = lines.map((line) => line.match(re));
-		const separators = lines.map((line) => sep !== undefined && line === sep);
-		const nonEmpty = lines.filter(Boolean).length;
-		const matched =
-			matches.filter(Boolean).length + separators.filter(Boolean).length;
-		if (matched === 0 || matched < nonEmpty * 0.8) continue;
-		const width = Math.max(...matches.map((match) => match?.[1].length ?? 0));
-		return {
-			nums: lines.map((_, index) =>
-				separators[index]
-					? sep!
-					: matches[index]
-						? `${matches[index]![1].padStart(width)} `
-						: "",
-			),
-			code: lines
-				.map((line, index) =>
-					separators[index]
-						? ""
-						: matches[index]
-							? line.slice(matches[index]![0].length)
-							: line,
-				)
-				.join("\n"),
-		};
-	}
-	return null;
+  const lines = content.split("\n");
+  const formats: { re: RegExp; sep?: string }[] = [
+    { re: /^(\s*\d+)\t/ },
+    { re: /^(\d+[-:])/, sep: "--" },
+  ];
+  for (const { re, sep } of formats) {
+    const matches = lines.map((line) => line.match(re));
+    const separators = lines.map((line) => sep !== undefined && line === sep);
+    const nonEmpty = lines.filter(Boolean).length;
+    const matched =
+      matches.filter(Boolean).length + separators.filter(Boolean).length;
+    if (matched === 0 || matched < nonEmpty * 0.8) continue;
+    const width = Math.max(...matches.map((match) => match?.[1].length ?? 0));
+    return {
+      nums: lines.map((_, index) =>
+        separators[index]
+          ? sep!
+          : matches[index]
+            ? `${matches[index]![1].padStart(width)} `
+            : "",
+      ),
+      code: lines
+        .map((line, index) =>
+          separators[index]
+            ? ""
+            : matches[index]
+              ? line.slice(matches[index]![0].length)
+              : line,
+        )
+        .join("\n"),
+    };
+  }
+  return null;
 }
 
 function gutterTransformer(nums: string[]): ShikiTransformer {
-	return {
-		line(node, line) {
-			node.children.unshift({
-				type: "element",
-				tagName: "span",
-				properties: { class: "shiki-gutter" },
-				children: [{ type: "text", value: nums[line - 1] ?? "" }],
-			});
-		},
-	};
+  return {
+    line(node, line) {
+      node.children.unshift({
+        type: "element",
+        tagName: "span",
+        properties: { class: "shiki-gutter" },
+        children: [{ type: "text", value: nums[line - 1] ?? "" }],
+      });
+    },
+  };
 }
 
 export interface ShikiRequest {
-	code: string;
-	lang: string;
-	theme: "dark" | "light";
-	gutter?: boolean;
-	requireGutter?: boolean;
+  code: string;
+  lang: string;
+  theme: "dark" | "light";
+  gutter?: boolean;
+  requireGutter?: boolean;
 }
 
-export async function renderShiki(request: ShikiRequest): Promise<string | null> {
-	const highlighter = await getHighlighter();
-	const resolved =
-		LANG_BY_EXT[request.lang.toLowerCase()] ?? request.lang.toLowerCase();
-	if (!highlighter.getLoadedLanguages().includes(resolved)) return null;
-	const split = request.gutter ? splitGutter(request.code) : null;
-	if (request.requireGutter && !split) return null;
-	return highlighter.codeToHtml(split ? split.code : request.code, {
-		lang: resolved,
-		theme:
-			request.theme === "light"
-				? "github-light-default"
-				: "github-dark-default",
-		transformers: split ? [gutterTransformer(split.nums)] : [],
-	});
+export async function renderShiki(
+  request: ShikiRequest,
+): Promise<string | null> {
+  const highlighter = await getHighlighter();
+  const resolved =
+    LANG_BY_EXT[request.lang.toLowerCase()] ?? request.lang.toLowerCase();
+  if (!highlighter.getLoadedLanguages().includes(resolved)) return null;
+  const split = request.gutter ? splitGutter(request.code) : null;
+  if (request.requireGutter && !split) return null;
+  return highlighter.codeToHtml(split ? split.code : request.code, {
+    lang: resolved,
+    theme:
+      request.theme === "light"
+        ? "github-light-default"
+        : "github-dark-default",
+    transformers: split ? [gutterTransformer(split.nums)] : [],
+  });
 }

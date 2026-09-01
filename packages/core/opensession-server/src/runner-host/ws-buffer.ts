@@ -48,7 +48,11 @@ export interface WsReplay {
  * streamed to (null on the first connection), `openSeq` the buffer's lastSeq
  * at the moment this socket opened.
  */
-export function replayStartFor(ack: WsAck, prevEpoch: string | null, openSeq: number): number {
+export function replayStartFor(
+  ack: WsAck,
+  prevEpoch: string | null,
+  openSeq: number,
+): number {
   if (ack.epoch && ack.epoch === prevEpoch) {
     // Same server-side registration — its consumed watermark is authoritative
     // (clamped: it can never have consumed frames we haven't produced).
@@ -99,9 +103,14 @@ export class WsFrameBuffer {
     // Bounded work: the scan is over at most maxFrames entries and only runs
     // while the ring is actually over budget.
     for (;;) {
-      const largest = this.frames.reduce((max, frame) => Math.max(max, frame.bytes), 0);
-      const byteLimit = largest > this.maxBytes ? largest + this.maxBytes : this.maxBytes;
-      if (this.frames.length <= this.maxFrames && this.bytes <= byteLimit) break;
+      const largest = this.frames.reduce(
+        (max, frame) => Math.max(max, frame.bytes),
+        0,
+      );
+      const byteLimit =
+        largest > this.maxBytes ? largest + this.maxBytes : this.maxBytes;
+      if (this.frames.length <= this.maxFrames && this.bytes <= byteLimit)
+        break;
       const dropped = this.frames.shift()!;
       this.bytes -= dropped.bytes;
       this.droppedThrough = dropped.seq;
@@ -121,7 +130,9 @@ export class WsFrameBuffer {
   replayFrom(after: number): WsReplay {
     const lines = this.frames.filter((f) => f.seq > after).map((f) => f.line);
     const gap =
-      this.droppedThrough > after ? { from: after + 1, to: this.droppedThrough } : null;
+      this.droppedThrough > after
+        ? { from: after + 1, to: this.droppedThrough }
+        : null;
     return { gap, lines };
   }
 }

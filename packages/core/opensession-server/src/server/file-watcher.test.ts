@@ -120,7 +120,8 @@ describe("pollTranscriptFile", () => {
       ...harness.deps,
       parseFrom(file, offset) {
         attempts++;
-        if (attempts === 1) return { entries: [], newOffset: offset, ok: false };
+        if (attempts === 1)
+          return { entries: [], newOffset: offset, ok: false };
         return parseTranscriptFrom(file, offset);
       },
     };
@@ -131,7 +132,7 @@ describe("pollTranscriptFile", () => {
     pollTranscriptFile(harness.state, deps);
     expect(attempts).toBe(2);
     expect(JSON.parse(harness.ws.sent[0]).entries[0].content).toBe(
-      "Read me twice"
+      "Read me twice",
     );
     expect(harness.notified).toHaveLength(1);
     expect(harness.fed).toHaveLength(1);
@@ -150,22 +151,25 @@ describe("pollTranscriptFile", () => {
     appendFileSync(path, "\n");
     pollTranscriptFile(harness.state, harness.deps);
     expect(JSON.parse(harness.ws.sent[0]).entries[0].content).toBe(
-      "Complete later"
+      "Complete later",
     );
   });
 
   it("resets to byte zero and sends init after in-place truncation", () => {
     const path = join(dir, "truncate.jsonl");
-    writeFileSync(path, `${userLine("old-long-id", "old content is longer")}\n`);
+    writeFileSync(
+      path,
+      `${userLine("old-long-id", "old content is longer")}\n`,
+    );
     const harness = pollHarness(path);
     writeFileSync(path, `${userLine("new", "new")}\n`);
 
     pollTranscriptFile(harness.state, harness.deps);
     const frame = JSON.parse(harness.ws.sent[0]);
     expect(frame.type).toBe("transcript_init");
-    expect(frame.entries.map((entry: TranscriptEntry) => entry.content)).toEqual([
-      "new",
-    ]);
+    expect(
+      frame.entries.map((entry: TranscriptEntry) => entry.content),
+    ).toEqual(["new"]);
     expect(harness.fed[0].reset).toBe(true);
   });
 

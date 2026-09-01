@@ -1,0 +1,25 @@
+# Stable Open Session HTTP/TCP ingress. This process owns the systemd socket and
+# is deliberately independent from gateway, executor, and SessionKernel rollout.
+[Unit]
+Description=Open Session stable ingress
+Requires=opensession.socket
+After=network.target opensession.socket
+
+[Service]
+Slice=opensession-control.slice
+Environment="PATH=/home/ubuntu/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Type=simple
+Sockets=opensession.socket
+User=ubuntu
+WorkingDirectory=/home/ubuntu/projects/opensession
+Environment="HOME=/home/ubuntu"
+Environment="NODE_ENV=production"
+ExecStart=/home/ubuntu/.bun/bin/bun run packages/core/opensession-server/src/server/gateway-ingress.ts
+Restart=always
+RestartSec=1
+TimeoutStopSec=10
+KillMode=mixed
+IPAddressDeny=169.254.169.254/32
+
+[Install]
+WantedBy=multi-user.target

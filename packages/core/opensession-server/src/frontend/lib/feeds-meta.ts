@@ -14,26 +14,26 @@ let loadedAt = 0;
 const TTL = 5 * 60_000;
 
 export function ensureFeedMeta(): Promise<FeedDescriptor[]> {
-	if (cached.length && Date.now() - loadedAt < TTL)
-		return Promise.resolve(cached);
-	if (inflight) return inflight;
-	inflight = fetchFeeds()
-		.then((feeds) => {
-			cached = feeds;
-			loadedAt = Date.now();
-			return feeds;
-		})
-		.catch(() => cached)
-		.finally(() => {
-			inflight = null;
-		});
-	return inflight;
+  if (cached.length && Date.now() - loadedAt < TTL)
+    return Promise.resolve(cached);
+  if (inflight) return inflight;
+  inflight = fetchFeeds()
+    .then((feeds) => {
+      cached = feeds;
+      loadedAt = Date.now();
+      return feeds;
+    })
+    .catch(() => cached)
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
 }
 
 export function getFeedDescriptors(): FeedDescriptor[] {
-	return cached;
+  return cached;
 }
 
 export function feedForRefKind(kind: string): FeedDescriptor | undefined {
-	return cached.find((f) => f.refKind === kind);
+  return cached.find((f) => f.refKind === kind);
 }

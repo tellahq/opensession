@@ -51,25 +51,34 @@ function value(flag: string): string | undefined {
 function main(): void {
   assertServicesStopped();
   const centralPath = value("--central") ?? sessionKernelDbPath();
-  const sourceTranscriptPath = value("--source") ??
-    `${OPENSESSION_SESSIONS_DIR}/transcripts.db`;
-  const isolatedRoot = value("--isolated-root") ??
+  const sourceTranscriptPath =
+    value("--source") ?? `${OPENSESSION_SESSIONS_DIR}/transcripts.db`;
+  const isolatedRoot =
+    value("--isolated-root") ??
     `${dirname(centralPath)}/session-kernel-sessions`;
   const rollback = process.argv.includes("--rollback");
-  const dryRun = process.argv.includes("--dry-run") || process.argv.includes("--audit");
-  if (rollback && dryRun) throw new Error("Choose either --rollback or --dry-run");
+  const dryRun =
+    process.argv.includes("--dry-run") || process.argv.includes("--audit");
+  if (rollback && dryRun)
+    throw new Error("Choose either --rollback or --dry-run");
   const startedAt = performance.now();
   if (rollback) {
-    console.log(JSON.stringify({
-      rolledBack: rollbackActorTranscriptsOffline({
-        centralPath,
-        sourceTranscriptPath,
-        isolatedRoot,
-      }),
-      centralPath,
-      sourceTranscriptPath,
-      elapsedMs: Math.round(performance.now() - startedAt),
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          rolledBack: rollbackActorTranscriptsOffline({
+            centralPath,
+            sourceTranscriptPath,
+            isolatedRoot,
+          }),
+          centralPath,
+          sourceTranscriptPath,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
   const result = migrateActorTranscriptsOffline({
@@ -83,11 +92,17 @@ function main(): void {
           `(migrated=${migrated}, adopted=${adopted})`,
       ),
   });
-  console.log(JSON.stringify({
-    ...result,
-    sourceUntouched: sourceTranscriptPath,
-    elapsedMs: Math.round(performance.now() - startedAt),
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ...result,
+        sourceUntouched: sourceTranscriptPath,
+        elapsedMs: Math.round(performance.now() - startedAt),
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 if (import.meta.main) main();

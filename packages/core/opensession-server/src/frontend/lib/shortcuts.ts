@@ -25,305 +25,297 @@
 
 import { isApple, isChromium } from "./platform";
 import {
-	chordGlyphs,
-	chordLabel,
-	eventChord,
-	isBindableChord,
-	normalizeChord,
-	type Chord,
+  chordGlyphs,
+  chordLabel,
+  eventChord,
+  isBindableChord,
+  normalizeChord,
+  type Chord,
 } from "./shortcut-chord";
 import { makeUserPref } from "./user-pref";
 
 export type { Chord } from "./shortcut-chord";
 
 export type ShortcutId =
-	| "command-menu"
-	| "desk"
-	| "history-back"
-	| "history-forward"
-	| "sidebar-toggle"
-	| "sidebar-next"
-	| "sidebar-prev"
-	| "workspace-next-unread"
-	| "tab-next"
-	| "tab-prev"
-	| "shortcuts-help"
-	| "session-new"
-	| "session-new-sibling"
-	| "run-stop"
-	| "session-close"
-	| "session-archive"
-	| "workspace-archive"
-	| "session-reopen"
-	| "session-pin"
-	| "session-copy-link"
-	| "session-copy-transcript"
-	| "composer-note"
-	| "composer-attach"
-	| "composer-dictate"
-	| "composer-focus"
-	| "transcript-up"
-	| "transcript-down"
-	| "effort-up"
-	| "effort-down"
-	| "open-pr"
-	| "open-preview";
+  | "command-menu"
+  | "desk"
+  | "history-back"
+  | "history-forward"
+  | "sidebar-toggle"
+  | "sidebar-next"
+  | "sidebar-prev"
+  | "workspace-next-unread"
+  | "tab-next"
+  | "tab-prev"
+  | "shortcuts-help"
+  | "session-new"
+  | "session-new-sibling"
+  | "run-stop"
+  | "session-close"
+  | "session-archive"
+  | "workspace-archive"
+  | "session-reopen"
+  | "session-pin"
+  | "session-copy-link"
+  | "session-copy-transcript"
+  | "composer-attach"
+  | "composer-dictate"
+  | "composer-focus"
+  | "transcript-up"
+  | "transcript-down"
+  | "effort-up"
+  | "effort-down"
+  | "open-pr"
+  | "open-preview";
 
 export interface ShortcutCommand {
-	id: ShortcutId;
-	title: string;
-	description: string;
-	group: string;
-	defaults: Chord[];
-	/** Advertise a different chord first where the browser eats the primary. */
-	preferAliasOnChromium?: boolean;
+  id: ShortcutId;
+  title: string;
+  description: string;
+  group: string;
+  defaults: Chord[];
+  /** Advertise a different chord first where the browser eats the primary. */
+  preferAliasOnChromium?: boolean;
 }
 
 /** Groups in page order. */
 export const SHORTCUT_GROUPS = [
-	"Navigation",
-	"Sessions",
-	"Composer",
-	"Transcript",
-	"Links",
+  "Navigation",
+  "Sessions",
+  "Composer",
+  "Transcript",
+  "Links",
 ] as const;
 
 export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
-	{
-		id: "command-menu",
-		title: "Command menu",
-		description: "Search sessions and jump anywhere",
-		group: "Navigation",
-		defaults: ["mod+k"],
-	},
-	{
-		id: "desk",
-		title: "Desk",
-		description: "Open the desk overlay",
-		group: "Navigation",
-		defaults: ["mod+j"],
-	},
-	{
-		id: "history-back",
-		title: "Go back",
-		description: "Return to the previous page",
-		group: "Navigation",
-		defaults: ["mod+["],
-	},
-	{
-		id: "history-forward",
-		title: "Go forward",
-		description: "Return to the next page",
-		group: "Navigation",
-		defaults: ["mod+]"],
-	},
-	{
-		id: "sidebar-toggle",
-		title: "Toggle sidebar",
-		description: "Show or hide the session list",
-		group: "Navigation",
-		defaults: ["mod+b"],
-	},
-	{
-		id: "sidebar-next",
-		title: "Next in sidebar",
-		description: "Open the session below the current one",
-		group: "Navigation",
-		defaults: ["mod+arrowdown"],
-	},
-	{
-		id: "sidebar-prev",
-		title: "Previous in sidebar",
-		description: "Open the session above the current one",
-		group: "Navigation",
-		defaults: ["mod+arrowup"],
-	},
-	{
-		id: "workspace-next-unread",
-		title: "Next chat",
-		description: "Open the next chat, prioritizing work that needs attention",
-		group: "Navigation",
-		defaults: ["alt+shift+arrowdown"],
-	},
-	// The tab strip's horizontal answer to the sidebar's ⌘↑/⌘↓. ⌘⌥ arrows are
-	// the neighbouring family (⌘⌥↑/↓ already step the reasoning effort), which
-	// is why the pair reads as one set — but Chromium takes ⌘⌥→/← for its own
-	// tab strip before the page sees them, so both carry a ⌃⌥ alias and
-	// advertise it there. Off Apple the two spell the same keycaps, since
-	// `ctrl` folds into `mod` on a PC.
-	{
-		id: "tab-next",
-		title: "Next tab",
-		description: "Move to the tab on the right in this workspace",
-		group: "Navigation",
-		defaults: ["mod+alt+arrowright", "ctrl+alt+arrowright"],
-		preferAliasOnChromium: true,
-	},
-	{
-		id: "tab-prev",
-		title: "Previous tab",
-		description: "Move to the tab on the left in this workspace",
-		group: "Navigation",
-		defaults: ["mod+alt+arrowleft", "ctrl+alt+arrowleft"],
-		preferAliasOnChromium: true,
-	},
-	{
-		id: "shortcuts-help",
-		title: "Shortcut list",
-		description: "Show every shortcut without leaving what you are doing",
-		group: "Navigation",
-		defaults: ["mod+/"],
-	},
-	{
-		id: "session-new",
-		title: "New session",
-		description: "Start a session in a new workspace",
-		group: "Sessions",
-		defaults: ["mod+s"],
-	},
-	{
-		id: "session-new-sibling",
-		title: "New session here",
-		description: "Start a session in the workspace you are already in",
-		group: "Sessions",
-		defaults: ["mod+alt+n"],
-	},
-	// Escape already asks this, but only with the composer focused, which is
-	// exactly where you are not when you have been reading the transcript. The
-	// two land on the same confirmation.
-	{
-		id: "run-stop",
-		title: "Stop the run",
-		description: "Ask to interrupt the turn that is running",
-		group: "Sessions",
-		defaults: ["mod+."],
-	},
-	{
-		id: "session-close",
-		title: "Close session",
-		description: "Archive the open session and close its tab",
-		group: "Sessions",
-		defaults: ["mod+w"],
-	},
-	{
-		id: "session-archive",
-		title: "Archive session",
-		description: "Archive the open session and move to the next one",
-		group: "Sessions",
-		defaults: ["mod+e", "mod+shift+a"],
-		preferAliasOnChromium: true,
-	},
-	{
-		id: "workspace-archive",
-		title: "Archive workspace",
-		description: "Archive every session in the active workspace",
-		group: "Sessions",
-		defaults: ["mod+alt+shift+a"],
-	},
-	{
-		id: "session-reopen",
-		title: "Reopen archived",
-		description: "Bring back the session or workspace you just archived",
-		group: "Sessions",
-		defaults: ["mod+z", "mod+shift+t"],
-	},
-	{
-		id: "session-pin",
-		title: "Pin session",
-		description: "Pin or unpin the open session",
-		group: "Sessions",
-		defaults: ["mod+p"],
-	},
-	{
-		id: "session-copy-link",
-		title: "Copy link",
-		description: "Copy a link to the open session or pull request",
-		group: "Sessions",
-		defaults: ["mod+shift+c"],
-	},
-	{
-		id: "session-copy-transcript",
-		title: "Copy transcript",
-		description: "Copy the session transcript in its concise form",
-		group: "Sessions",
-		defaults: ["mod+alt+c"],
-	},
-	{
-		id: "composer-note",
-		title: "Team note",
-		description: "Switch the composer between a prompt and a team note",
-		group: "Composer",
-		defaults: ["mod+n"],
-	},
-	{
-		id: "composer-attach",
-		title: "Attach files",
-		description: "Choose files to attach to the open session",
-		group: "Composer",
-		defaults: ["mod+u"],
-	},
-	{
-		id: "composer-dictate",
-		title: "Start dictation",
-		description: "Record a message in the active composer",
-		group: "Composer",
-		defaults: ["mod+d"],
-	},
-	{
-		id: "composer-focus",
-		title: "Focus composer",
-		description: "Move keyboard focus to the composer",
-		group: "Composer",
-		defaults: ["ctrl+r"],
-	},
-	{
-		id: "transcript-up",
-		title: "Scroll transcript up",
-		description: "Page the transcript up without leaving the composer",
-		group: "Transcript",
-		defaults: ["ctrl+shift+arrowup"],
-	},
-	{
-		id: "transcript-down",
-		title: "Scroll transcript down",
-		description: "Page the transcript down, resuming follow at the live edge",
-		group: "Transcript",
-		defaults: ["ctrl+shift+arrowdown"],
-	},
-	{
-		id: "effort-up",
-		title: "More reasoning",
-		description: "Step the reasoning effort up a level",
-		group: "Transcript",
-		defaults: ["mod+alt+arrowup"],
-	},
-	{
-		id: "effort-down",
-		title: "Less reasoning",
-		description: "Step the reasoning effort down a level",
-		group: "Transcript",
-		defaults: ["mod+alt+arrowdown"],
-	},
-	{
-		id: "open-pr",
-		title: "Open pull request",
-		description: "Open the session's pull request on GitHub",
-		group: "Links",
-		defaults: ["mod+g"],
-	},
-	{
-		id: "open-preview",
-		title: "Open preview",
-		description: "Open the pull request's preview environment",
-		group: "Links",
-		defaults: ["mod+o"],
-	},
+  {
+    id: "command-menu",
+    title: "Command menu",
+    description: "Search sessions and jump anywhere",
+    group: "Navigation",
+    defaults: ["mod+k"],
+  },
+  {
+    id: "desk",
+    title: "Desk",
+    description: "Open the desk overlay",
+    group: "Navigation",
+    defaults: ["mod+j"],
+  },
+  {
+    id: "history-back",
+    title: "Go back",
+    description: "Return to the previous page",
+    group: "Navigation",
+    defaults: ["mod+["],
+  },
+  {
+    id: "history-forward",
+    title: "Go forward",
+    description: "Return to the next page",
+    group: "Navigation",
+    defaults: ["mod+]"],
+  },
+  {
+    id: "sidebar-toggle",
+    title: "Toggle sidebar",
+    description: "Show or hide the session list",
+    group: "Navigation",
+    defaults: ["mod+b"],
+  },
+  {
+    id: "sidebar-next",
+    title: "Next in sidebar",
+    description: "Open the session below the current one",
+    group: "Navigation",
+    defaults: ["mod+arrowdown"],
+  },
+  {
+    id: "sidebar-prev",
+    title: "Previous in sidebar",
+    description: "Open the session above the current one",
+    group: "Navigation",
+    defaults: ["mod+arrowup"],
+  },
+  {
+    id: "workspace-next-unread",
+    title: "Next chat",
+    description: "Open the next chat, prioritizing work that needs attention",
+    group: "Navigation",
+    defaults: ["alt+shift+arrowdown"],
+  },
+  // The tab strip's horizontal answer to the sidebar's ⌘↑/⌘↓. ⌘⌥ arrows are
+  // the neighbouring family (⌘⌥↑/↓ already step the reasoning effort), which
+  // is why the pair reads as one set — but Chromium takes ⌘⌥→/← for its own
+  // tab strip before the page sees them, so both carry a ⌃⌥ alias and
+  // advertise it there. Off Apple the two spell the same keycaps, since
+  // `ctrl` folds into `mod` on a PC.
+  {
+    id: "tab-next",
+    title: "Next tab",
+    description: "Move to the tab on the right in this workspace",
+    group: "Navigation",
+    defaults: ["mod+alt+arrowright", "ctrl+alt+arrowright"],
+    preferAliasOnChromium: true,
+  },
+  {
+    id: "tab-prev",
+    title: "Previous tab",
+    description: "Move to the tab on the left in this workspace",
+    group: "Navigation",
+    defaults: ["mod+alt+arrowleft", "ctrl+alt+arrowleft"],
+    preferAliasOnChromium: true,
+  },
+  {
+    id: "shortcuts-help",
+    title: "Shortcut list",
+    description: "Show every shortcut without leaving what you are doing",
+    group: "Navigation",
+    defaults: ["mod+/"],
+  },
+  {
+    id: "session-new",
+    title: "New session",
+    description: "Start a session in a new workspace",
+    group: "Sessions",
+    defaults: ["mod+s"],
+  },
+  {
+    id: "session-new-sibling",
+    title: "New session here",
+    description: "Start a session in the workspace you are already in",
+    group: "Sessions",
+    defaults: ["mod+alt+n"],
+  },
+  // Escape already asks this, but only with the composer focused, which is
+  // exactly where you are not when you have been reading the transcript. The
+  // two land on the same confirmation.
+  {
+    id: "run-stop",
+    title: "Stop the run",
+    description: "Ask to interrupt the turn that is running",
+    group: "Sessions",
+    defaults: ["mod+."],
+  },
+  {
+    id: "session-close",
+    title: "Close session",
+    description: "Archive the open session and close its tab",
+    group: "Sessions",
+    defaults: ["mod+w"],
+  },
+  {
+    id: "session-archive",
+    title: "Archive session",
+    description: "Archive the open session and move to the next one",
+    group: "Sessions",
+    defaults: ["mod+e", "mod+shift+a"],
+    preferAliasOnChromium: true,
+  },
+  {
+    id: "workspace-archive",
+    title: "Archive workspace",
+    description: "Archive every session in the active workspace",
+    group: "Sessions",
+    defaults: ["mod+alt+shift+a"],
+  },
+  {
+    id: "session-reopen",
+    title: "Reopen archived",
+    description: "Bring back the session or workspace you just archived",
+    group: "Sessions",
+    defaults: ["mod+z", "mod+shift+t"],
+  },
+  {
+    id: "session-pin",
+    title: "Pin session",
+    description: "Pin or unpin the open session",
+    group: "Sessions",
+    defaults: ["mod+p"],
+  },
+  {
+    id: "session-copy-link",
+    title: "Copy link",
+    description: "Copy a link to the open session or pull request",
+    group: "Sessions",
+    defaults: ["mod+shift+c"],
+  },
+  {
+    id: "session-copy-transcript",
+    title: "Copy transcript",
+    description: "Copy the session transcript in its concise form",
+    group: "Sessions",
+    defaults: ["mod+alt+c"],
+  },
+  {
+    id: "composer-attach",
+    title: "Attach files",
+    description: "Choose files to attach to the open session",
+    group: "Composer",
+    defaults: ["mod+u"],
+  },
+  {
+    id: "composer-dictate",
+    title: "Start dictation",
+    description: "Record a message in the active composer",
+    group: "Composer",
+    defaults: ["mod+d"],
+  },
+  {
+    id: "composer-focus",
+    title: "Focus composer",
+    description: "Move keyboard focus to the composer",
+    group: "Composer",
+    defaults: ["ctrl+r"],
+  },
+  {
+    id: "transcript-up",
+    title: "Scroll transcript up",
+    description: "Page the transcript up without leaving the composer",
+    group: "Transcript",
+    defaults: ["ctrl+shift+arrowup"],
+  },
+  {
+    id: "transcript-down",
+    title: "Scroll transcript down",
+    description: "Page the transcript down, resuming follow at the live edge",
+    group: "Transcript",
+    defaults: ["ctrl+shift+arrowdown"],
+  },
+  {
+    id: "effort-up",
+    title: "More reasoning",
+    description: "Step the reasoning effort up a level",
+    group: "Transcript",
+    defaults: ["mod+alt+arrowup"],
+  },
+  {
+    id: "effort-down",
+    title: "Less reasoning",
+    description: "Step the reasoning effort down a level",
+    group: "Transcript",
+    defaults: ["mod+alt+arrowdown"],
+  },
+  {
+    id: "open-pr",
+    title: "Open pull request",
+    description: "Open the session's pull request on GitHub",
+    group: "Links",
+    defaults: ["mod+g"],
+  },
+  {
+    id: "open-preview",
+    title: "Open preview",
+    description: "Open the pull request's preview environment",
+    group: "Links",
+    defaults: ["mod+o"],
+  },
 ];
 
 const COMMANDS_BY_ID = new Map(SHORTCUT_COMMANDS.map((c) => [c.id, c]));
 
 export function shortcutCommand(id: ShortcutId): ShortcutCommand | undefined {
-	return COMMANDS_BY_ID.get(id);
+  return COMMANDS_BY_ID.get(id);
 }
 
 // ── Reference rows ─────────────────────────────────────────────────────────
@@ -332,46 +324,51 @@ export function shortcutCommand(id: ShortcutId): ShortcutCommand | undefined {
 // the interface rather than a command anyone should rebind.
 
 export interface ShortcutReference {
-	title: string;
-	description: string;
-	keys: string[];
+  title: string;
+  description: string;
+  keys: string[];
 }
 
 export const SHORTCUT_REFERENCE: ShortcutReference[] = [
-	{
-		title: "Close what's open",
-		description: "Dismiss a menu, dialog, palette, or panel",
-		keys: ["Esc"],
-	},
-	{
-		title: "Send a message",
-		description: "Follows your send key setting in Preferences",
-		keys: isApple ? ["↵"] : ["Enter"],
-	},
-	{
-		title: "Create options",
-		description: "Step through the create actions in the new session dialog",
-		keys: isApple ? ["⌘", "⌥", "↑"] : ["Ctrl", "Alt", "↑"],
-	},
-	{
-		title: "Answer a question",
-		description: "Pick a lettered option on a question card",
-		keys: ["A", "B", "C"],
-	},
-	// A chord family, not a command: the digit varies, and matching is exact on
-	// the whole chord, so there is nothing here one binding could stand for.
-	// Rebinding the modifier alone is not something the registry can express,
-	// so this stays hard-coded in App and is listed rather than offered.
-	{
-		title: "Jump to a tab",
-		description: "Open the first nine tabs in the workspace by number",
-		keys: isApple ? ["⌥", "1"] : ["Alt", "1"],
-	},
-	{
-		title: "Sort a card in Catch up",
-		description: "Archive it, mark it read, or keep it for later",
-		keys: ["←", "→", "↑"],
-	},
+  {
+    title: "Close what's open",
+    description: "Dismiss a menu, dialog, palette, or panel",
+    keys: ["Esc"],
+  },
+  {
+    title: "Send a message",
+    description: "Follows your send key setting in Preferences",
+    keys: isApple ? ["↵"] : ["Enter"],
+  },
+  {
+    title: "Create options",
+    description: "Step through the create actions in the new session dialog",
+    keys: isApple ? ["⌘", "⌥", "↑"] : ["Ctrl", "Alt", "↑"],
+  },
+  {
+    title: "Answer a question",
+    description: "Pick a lettered option on a question card",
+    keys: ["A", "B", "C"],
+  },
+  {
+    title: "Comment on an image",
+    description: "Start selecting a region in an open image preview",
+    keys: ["C"],
+  },
+  // A chord family, not a command: the digit varies, and matching is exact on
+  // the whole chord, so there is nothing here one binding could stand for.
+  // Rebinding the modifier alone is not something the registry can express,
+  // so this stays hard-coded in App and is listed rather than offered.
+  {
+    title: "Jump to a tab",
+    description: "Open the first nine tabs in the workspace by number",
+    keys: isApple ? ["⌥", "1"] : ["Alt", "1"],
+  },
+  {
+    title: "Sort a card in Catch up",
+    description: "Archive it, mark it read, or keep it for later",
+    keys: ["←", "→", "↑"],
+  },
 ];
 
 // ── Per-user overrides ─────────────────────────────────────────────────────
@@ -390,9 +387,9 @@ export const SHORTCUT_REFERENCE: ShortcutReference[] = [
 type OverrideMap = Record<string, Chord[]>;
 
 function canonicalJson(map: OverrideMap): string {
-	const sorted: OverrideMap = {};
-	for (const key of Object.keys(map).sort()) sorted[key] = map[key] as Chord[];
-	return JSON.stringify(sorted);
+  const sorted: OverrideMap = {};
+  for (const key of Object.keys(map).sort()) sorted[key] = map[key] as Chord[];
+  return JSON.stringify(sorted);
 }
 
 /**
@@ -401,35 +398,36 @@ function canonicalJson(map: OverrideMap): string {
  * wrote, or opening settings on the old client would destroy them.
  */
 function decodeOverrides(raw: string | null | undefined): string | null {
-	if (typeof raw !== "string" || raw.length === 0) return null;
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(raw);
-	} catch {
-		return null;
-	}
-	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-	const out: OverrideMap = {};
-	for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
-		if (!Array.isArray(value)) continue;
-		const chords: Chord[] = [];
-		for (const entry of value) {
-			if (typeof entry !== "string") continue;
-			const chord = normalizeChord(entry, isApple);
-			if (chord && !chords.includes(chord)) chords.push(chord);
-		}
-		out[id] = chords;
-	}
-	return canonicalJson(out);
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    return null;
+  const out: OverrideMap = {};
+  for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!Array.isArray(value)) continue;
+    const chords: Chord[] = [];
+    for (const entry of value) {
+      if (typeof entry !== "string") continue;
+      const chord = normalizeChord(entry, isApple);
+      if (chord && !chords.includes(chord)) chords.push(chord);
+    }
+    out[id] = chords;
+  }
+  return canonicalJson(out);
 }
 
 const pref = makeUserPref<string>({
-	localKey: "opensession-shortcuts",
-	prefKey: "shortcuts",
-	changeEvent: "opensession-shortcuts-changed",
-	defaultValue: "{}",
-	decode: decodeOverrides,
-	encode: (v) => v,
+  localKey: "opensession-shortcuts",
+  prefKey: "shortcuts",
+  changeEvent: "opensession-shortcuts-changed",
+  defaultValue: "{}",
+  decode: decodeOverrides,
+  encode: (v) => v,
 });
 
 export const onShortcutsChanged = pref.onChanged;
@@ -439,35 +437,35 @@ let cachedRaw: string | null = null;
 let cachedMap: OverrideMap = {};
 
 function overrides(): OverrideMap {
-	const raw = pref.get();
-	if (raw !== cachedRaw) {
-		cachedRaw = raw;
-		try {
-			cachedMap = JSON.parse(raw) as OverrideMap;
-		} catch {
-			cachedMap = {};
-		}
-	}
-	return cachedMap;
+  const raw = pref.get();
+  if (raw !== cachedRaw) {
+    cachedRaw = raw;
+    try {
+      cachedMap = JSON.parse(raw) as OverrideMap;
+    } catch {
+      cachedMap = {};
+    }
+  }
+  return cachedMap;
 }
 
 /** The chords a command answers to right now. Empty means unassigned. */
 export function shortcutBindings(id: ShortcutId): Chord[] {
-	const custom = overrides()[id];
-	if (custom) return custom;
-	return shortcutCommand(id)?.defaults ?? [];
+  const custom = overrides()[id];
+  if (custom) return custom;
+  return shortcutCommand(id)?.defaults ?? [];
 }
 
 /** True when the user has set this command's bindings themselves. */
 export function isShortcutCustomized(id: ShortcutId): boolean {
-	return Object.hasOwn(overrides(), id);
+  return Object.hasOwn(overrides(), id);
 }
 
 /** Every command currently bound to a chord, for conflict reporting. */
 export function commandsUsingChord(chord: Chord): ShortcutId[] {
-	return SHORTCUT_COMMANDS.filter((c) =>
-		shortcutBindings(c.id).includes(chord),
-	).map((c) => c.id);
+  return SHORTCUT_COMMANDS.filter((c) =>
+    shortcutBindings(c.id).includes(chord),
+  ).map((c) => c.id);
 }
 
 /**
@@ -476,32 +474,32 @@ export function commandsUsingChord(chord: Chord): ShortcutId[] {
  * propagate to the user's other devices.
  */
 export function setShortcutBindings(id: ShortcutId, chords: Chord[]): void {
-	const next: OverrideMap = { ...overrides() };
-	const seen: Chord[] = [];
-	for (const raw of chords) {
-		const chord = normalizeChord(raw, isApple);
-		if (chord && !seen.includes(chord)) seen.push(chord);
-	}
-	next[id] = seen;
-	pref.set(canonicalJson(next));
+  const next: OverrideMap = { ...overrides() };
+  const seen: Chord[] = [];
+  for (const raw of chords) {
+    const chord = normalizeChord(raw, isApple);
+    if (chord && !seen.includes(chord)) seen.push(chord);
+  }
+  next[id] = seen;
+  pref.set(canonicalJson(next));
 }
 
 /** Drop the override, returning the command to its default chords. */
 export function resetShortcutBindings(id: ShortcutId): void {
-	const next: OverrideMap = { ...overrides() };
-	if (!Object.hasOwn(next, id)) return;
-	delete next[id];
-	pref.set(canonicalJson(next));
+  const next: OverrideMap = { ...overrides() };
+  if (!Object.hasOwn(next, id)) return;
+  delete next[id];
+  pref.set(canonicalJson(next));
 }
 
 /** Drop every override at once. */
 export function resetAllShortcuts(): void {
-	const next: OverrideMap = {};
-	// Unknown ids belong to a newer client; leave them be.
-	for (const [id, chords] of Object.entries(overrides())) {
-		if (!COMMANDS_BY_ID.has(id as ShortcutId)) next[id] = chords;
-	}
-	pref.set(canonicalJson(next));
+  const next: OverrideMap = {};
+  // Unknown ids belong to a newer client; leave them be.
+  for (const [id, chords] of Object.entries(overrides())) {
+    if (!COMMANDS_BY_ID.has(id as ShortcutId)) next[id] = chords;
+  }
+  pref.set(canonicalJson(next));
 }
 
 // ── Matching ───────────────────────────────────────────────────────────────
@@ -514,11 +512,11 @@ export function resetAllShortcuts(): void {
 let recording = false;
 
 export function setShortcutRecording(active: boolean): void {
-	recording = active;
+  recording = active;
 }
 
 export function isShortcutRecording(): boolean {
-	return recording;
+  return recording;
 }
 
 /**
@@ -529,27 +527,27 @@ export function isShortcutRecording(): boolean {
  * selection), so consuming the event is theirs to do.
  */
 export function matchesShortcut(
-	e: KeyboardEvent | React.KeyboardEvent,
-	id: ShortcutId,
+  e: KeyboardEvent | React.KeyboardEvent,
+  id: ShortcutId,
 ): boolean {
-	if (recording) return false;
-	const native = "nativeEvent" in e ? (e.nativeEvent as KeyboardEvent) : e;
-	const chord = eventChord(native, isApple);
-	if (!chord) return false;
-	return shortcutBindings(id).includes(chord);
+  if (recording) return false;
+  const native = "nativeEvent" in e ? (e.nativeEvent as KeyboardEvent) : e;
+  const chord = eventChord(native, isApple);
+  if (!chord) return false;
+  return shortcutBindings(id).includes(chord);
 }
 
 /** The chord this event spells, for the settings page's recorder. */
 export function chordFromEvent(e: KeyboardEvent): Chord | null {
-	return eventChord(e, isApple);
+  return eventChord(e, isApple);
 }
 
 export function normalize(chord: string): Chord | null {
-	return normalizeChord(chord, isApple);
+  return normalizeChord(chord, isApple);
 }
 
 export function isBindable(chord: Chord): boolean {
-	return isBindableChord(chord);
+  return isBindableChord(chord);
 }
 
 // ── Display ────────────────────────────────────────────────────────────────
@@ -562,34 +560,34 @@ export function isBindable(chord: Chord): boolean {
  * reorders what a command already answers to; it never invents a chord.
  */
 export function shortcutKeys(id: ShortcutId): string[][] {
-	const bindings = shortcutBindings(id);
-	const command = shortcutCommand(id);
-	const ordered =
-		command?.preferAliasOnChromium &&
-		isChromium &&
-		!isShortcutCustomized(id) &&
-		bindings.length > 1
-			? [...bindings.slice(1), bindings[0] as Chord]
-			: bindings;
-	return ordered.map((chord) => chordGlyphs(chord, isApple));
+  const bindings = shortcutBindings(id);
+  const command = shortcutCommand(id);
+  const ordered =
+    command?.preferAliasOnChromium &&
+    isChromium &&
+    !isShortcutCustomized(id) &&
+    bindings.length > 1
+      ? [...bindings.slice(1), bindings[0] as Chord]
+      : bindings;
+  return ordered.map((chord) => chordGlyphs(chord, isApple));
 }
 
 /** The keycaps for a command's primary binding, or null when unassigned. */
 export function shortcutPrimaryKeys(id: ShortcutId): string[] | null {
-	return shortcutKeys(id)[0] ?? null;
+  return shortcutKeys(id)[0] ?? null;
 }
 
 /** A command's primary binding as one flat label, for tooltips and titles. */
 export function shortcutLabel(id: ShortcutId): string | null {
-	const keys = shortcutPrimaryKeys(id);
-	if (!keys) return null;
-	return keys.join(isApple ? "" : "+");
+  const keys = shortcutPrimaryKeys(id);
+  if (!keys) return null;
+  return keys.join(isApple ? "" : "+");
 }
 
 export function glyphsFor(chord: Chord): string[] {
-	return chordGlyphs(chord, isApple);
+  return chordGlyphs(chord, isApple);
 }
 
 export function labelFor(chord: Chord): string {
-	return chordLabel(chord, isApple);
+  return chordLabel(chord, isApple);
 }

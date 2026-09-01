@@ -27,13 +27,13 @@ targets where the difference matters.
 
 Use these user-facing concepts consistently:
 
-| Concept | Meaning |
-| --- | --- |
-| **This machine** | The default execution target: a local worktree and its existing setup. |
-| **Sandbox** | Isolated compute selected for a session. |
-| **Project preparation** | Optional, credential-free reusable setup state that speeds new Sandboxes. |
-| **Awake / Sleeping / Waking** | The lifecycle of a session's Sandbox. |
-| **Portal** | An authenticated live HTTP/WebSocket service belonging to one session. |
+| Concept                       | Meaning                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| **This machine**              | The default execution target: a local worktree and its existing setup.    |
+| **Sandbox**                   | Isolated compute selected for a session.                                  |
+| **Project preparation**       | Optional, credential-free reusable setup state that speeds new Sandboxes. |
+| **Awake / Sleeping / Waking** | The lifecycle of a session's Sandbox.                                     |
+| **Portal**                    | An authenticated live HTTP/WebSocket service belonging to one session.    |
 
 Do not expose `None`, `bind`, `volume`, provider names, prewarm machinery, or
 snapshot implementation details in the normal session flow. Provider and
@@ -52,13 +52,13 @@ sticky ports and authenticated Portals.
 Open Session already has more execution mechanisms, but they currently leak
 into the product:
 
-| Layer | Current Open Session behavior | Target presentation |
-| --- | --- | --- |
-| New session | Provider-specific Sandbox, optionally adopted from a prewarm | A fresh **Sandbox**. |
-| Project setup | Warm-on-typing automatically prepares and may publish credential-free templates for template-capable providers | Explicitly opted-in **Project preparation ready**. |
-| Session durability | Provider-specific checkpoints, snapshots, pause, or archival; durable sleep/wake exists only where the provider implements it | **Sandbox sleeping**. |
-| Wake | Provider resume/restore; `.agents/resume` runs for local MicroVM restore, but not every provider wake | **Waking Sandbox**, with the hook run before work resumes. |
-| Services | Supervised Portals through `opensession-portals` and generated `.ports.conf`, alongside the legacy repository Preview start path | Multiple supervised **Portals**, without a competing Preview concept. |
+| Layer              | Current Open Session behavior                                                                                                    | Target presentation                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| New session        | Provider-specific Sandbox, optionally adopted from a prewarm                                                                     | A fresh **Sandbox**.                                                  |
+| Project setup      | Warm-on-typing automatically prepares and may publish credential-free templates for template-capable providers                   | Explicitly opted-in **Project preparation ready**.                    |
+| Session durability | Provider-specific checkpoints, snapshots, pause, or archival; durable sleep/wake exists only where the provider implements it    | **Sandbox sleeping**.                                                 |
+| Wake               | Provider resume/restore; `.agents/resume` remains reserved until a selectable provider wires it                                  | **Waking Sandbox**, with the hook run before work resumes.            |
+| Services           | Supervised Portals through `opensession-portals` and generated `.ports.conf`, alongside the legacy repository Preview start path | Multiple supervised **Portals**, without a competing Preview concept. |
 
 Keep the stronger implementation layers. Simplify the visible model to fresh
 Sandbox, optional Project preparation, and session-specific sleep/wake.
@@ -136,8 +136,8 @@ Security constraints:
 - Provider preview URLs and tokens are used only for qualification/internal
   diagnostics, never in UI, transcripts, MCP results, or browser requests.
 
-Docker and the local MicroVM provider can reach private service addresses
-directly behind the same Portal abstraction. Users and agents receive the same
+Docker can reach private service addresses directly behind the same Portal
+abstraction. Users and agents receive the same
 Open Session Portal URLs for every provider.
 
 ## 4. Agent instructions and repository declarations
@@ -236,8 +236,7 @@ Target behavior while a Sandbox is Sleeping or Waking:
   restores as appropriate, and only then does the queue drain;
 - a failed wake preserves the queue and offers Retry in the Sandbox popover.
 
-The provider-neutral resume step is still outstanding. Local MicroVM restore
-runs `.agents/resume` through `ensure`; Daytona and Box resume without the
+The provider-neutral resume step is still outstanding. Daytona and Box resume without the
 hook. Run `.agents/resume` after every successful provider wake, before
 restoring Portals or draining queued work.
 
@@ -289,7 +288,7 @@ when guarding against regressions, prove:
 - the Portal relay and security matrix covers Daytona, E2B, Box, Modal, and
   AWS Lambda MicroVM;
 - the durable sleep/wake and queue matrix covers the providers that implement
-  pause/resume: Daytona, Box, and local MicroVM. Record Docker as not exposing
+  pause/resume: Daytona and Box. Record Docker as not exposing
   provider pause/resume. E2B and Modal are ephemeral here, while AWS Lambda
   MicroVM has a hard lifetime; none currently exposes this durable contract.
 

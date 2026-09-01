@@ -9,7 +9,9 @@ describe("parseSha256Checksum", () => {
   const digest = "a".repeat(64);
 
   test("accepts sha256sum sidecars and bare digests", () => {
-    expect(parseSha256Checksum(`${digest}  opensession-linux-x64.tar.gz\n`)).toBe(digest);
+    expect(
+      parseSha256Checksum(`${digest}  opensession-linux-x64.tar.gz\n`),
+    ).toBe(digest);
     expect(parseSha256Checksum(digest.toUpperCase())).toBe(digest);
   });
 
@@ -61,10 +63,12 @@ describe("classifyTopology", () => {
   });
 
   test("origin-only clone of the upstream project stays ff-only", () => {
-    expect(classifyTopology([{ name: "origin", url: UPSTREAM_HTTPS }])).toEqual({
-      source: "origin",
-      kind: "origin",
-    });
+    expect(classifyTopology([{ name: "origin", url: UPSTREAM_HTTPS }])).toEqual(
+      {
+        source: "origin",
+        kind: "origin",
+      },
+    );
   });
 
   test("origin IS the upstream project even with extra remotes → ff-only origin", () => {

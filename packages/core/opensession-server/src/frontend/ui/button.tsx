@@ -1,326 +1,27 @@
+import { mergeStylexOverrideClassName } from "./cn";
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { IconChevronDown } from "../components/icons";
-import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "./cn";
+import { cn } from "./cn";
 import * as stylex from "@stylexjs/stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	TextBoxTrimBothCapAlphabetic: {
-			textBox: "trim-both cap alphabetic"
-	},
-	inlineFlex: {
-			display: "inline-flex"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	opacity55: {
-			opacity: ".55"
-	},
-
-	justifyCenter: {
-		"justifyContent": "center"
-	},
-	border: {
-		"borderStyle": "var(--tw-border-style)",
-		"borderWidth": "1px"
-	},
-	whitespaceNowrap: {
-		"whiteSpace": "nowrap"
-	},
-	selectNone: {
-		"WebkitUserSelect": "none",
-		"userSelect": "none"
-	},
-	noUnderline: {
-		"textDecorationLine": "none"
-	},
-	leadingNone: {
-		"--tw-leading": "1",
-		"lineHeight": "1"
-	},
-	fontMedium: {
-		"--tw-font-weight": "var(--font-weight-medium)",
-		"fontWeight": "var(--font-weight-medium)"
-	},
-	activeScale096: {
-		":active": {
-			"scale": ".96"
-		}
-	},
-	focusRing: {
-		":focusVisible": {
-			"outline": "2px solid var(--accent-ink)",
-			"outlineOffset": "2px"
-		},
-		"@media (forced-colors: active)": {
-			":focusVisible": {
-				"outlineColor": "highlight"
-			}
-		}
-	},
-	disabledPointerEventsNone: {
-		":disabled": {
-			"pointerEvents": "none"
-		}
-	},
-	disabledOpacity40: {
-		":disabled": {
-			"opacity": ".4"
-		}
-	},
-
-	transitionColorBackgroundColorBorderColorFilterScale: {
-		"transitionProperty": "color,background-color,border-color,filter,scale",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-
-	opacity60: {
-		"opacity": ".6"
-	},
-	opacity80: {
-		"opacity": ".8"
-	},
-	gap15: {
-		"gap": "6px"
-	},
-	gap1: {
-		"gap": "4px"
-	},
-	minH26px: {
-		"minHeight": "26px"
-	},
-	px25: {
-		"paddingInline": "10px"
-	},
-	textXs: {
-		"fontSize": "var(--type-label)",
-		"lineHeight": "var(--tw-leading,var(--text-xs--line-height))"
-	},
-	roundedControl: {
-		"borderRadius": "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	minH8: {
-		"minHeight": "32px"
-	},
-	px3: {
-		"paddingInline": "12px"
-	},
-	textSm: {
-		"fontSize": "var(--type-label)",
-		"lineHeight": "var(--tw-leading,var(--text-sm--line-height))"
-	},
-	minH9: {
-		"minHeight": "36px"
-	},
-	px35: {
-		"paddingInline": "14px"
-	},
-	textBase: {
-		"fontSize": "var(--type-body)",
-		"lineHeight": "var(--tw-leading,var(--text-base--line-height))"
-	},
-	bgButton: {
-		"backgroundColor": "var(--button-surface)"
-	},
-	borderLine: {
-		"borderColor": "var(--border)"
-	},
-	textDim: {
-		"color": "var(--text-dim)"
-	},
-	hoverTextFg: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text)"
-			}
-		}
-	},
-	hoverBorderLineStrong: {
-		"@media (hover: hover)": {
-			":hover": {
-				"borderColor": "var(--border-strong)"
-			}
-		}
-	},
-	bgAccent: {
-		"backgroundColor": "var(--accent)"
-	},
-	borderTransparent: {
-		"borderColor": "transparent"
-	},
-	textOnAccent: {
-		"color": "var(--on-accent)"
-	},
-	plateSheen: {
-		"backgroundImage": "linear-gradient(transparent,color-mix(in srgb, var(--color-white) 3.5%, transparent) 35%,color-mix(in srgb, var(--color-white) 1%, transparent) 55%,color-mix(in srgb, var(--color-black) 5%, transparent))"
-	},
-	hoverBgAccentHover: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--accent-hover)"
-			}
-		}
-	},
-	bgFg8: {
-		"backgroundColor": "var(--text)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"backgroundColor": "color-mix(in oklab, var(--text) 8%, transparent)"
-		}
-	},
-	hoverBgFg13: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--text)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"backgroundColor": "color-mix(in oklab, var(--text) 13%, transparent)"
-				}
-			}
-		}
-	},
-	hoverBgHover: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--hover)"
-			}
-		}
-	},
-	bgTransparent: {
-		"backgroundColor": "transparent"
-	},
-	textWhite60: {
-		"color": "color-mix(in srgb, var(--color-white) 60%, transparent)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"color": "color-mix(in oklab, var(--color-white) 60%, transparent)"
-		}
-	},
-	hoverBgWhite15: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "color-mix(in srgb, var(--color-white) 15%, transparent)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"backgroundColor": "color-mix(in oklab, var(--color-white) 15%, transparent)"
-				}
-			}
-		}
-	},
-	hoverTextWhite: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--color-white)"
-			}
-		}
-	},
-	bgGreenSoft: {
-		"backgroundColor": "var(--green-soft)"
-	},
-	textGreen: {
-		"color": "var(--green)"
-	},
-	hoverBgGreen22: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--green)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"backgroundColor": "color-mix(in oklab, var(--green) 22%, transparent)"
-				}
-			}
-		}
-	},
-	bgRedSoft: {
-		"backgroundColor": "var(--red-soft)"
-	},
-	textRed: {
-		"color": "var(--red)"
-	},
-	hoverBgRed22: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--red)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"backgroundColor": "color-mix(in oklab, var(--red) 22%, transparent)"
-				}
-			}
-		}
-	},
-	bgYellowSoft: {
-		"backgroundColor": "var(--yellow-soft)"
-	},
-	textYellow: {
-		"color": "var(--yellow)"
-	},
-	hoverBgYellow22: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--yellow)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"backgroundColor": "color-mix(in oklab, var(--yellow) 22%, transparent)"
-				}
-			}
-		}
-	},
-	bgRed: {
-		"backgroundColor": "var(--red)"
-	},
-	textWhite: {
-		"color": "var(--color-white)"
-	},
-	hoverBrightness110: {
-		"@media (hover: hover)": {
-			":hover": {
-				"--tw-brightness": "brightness(110%)",
-				"filter": "var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)"
-			}
-		}
-	},
-	bgGreen: {
-		"backgroundColor": "var(--green)"
-	},
-	pl15: {
-		"paddingLeft": "6px"
-	},
-	pl2: {
-		"paddingLeft": "8px"
-	},
-	pl25: {
-		"paddingLeft": "10px"
-	},
-	pr15: {
-		"paddingRight": "6px"
-	},
-	pr2: {
-		"paddingRight": "8px"
-	},
-	pr25: {
-		"paddingRight": "10px"
-	},
-	w26px: {
-		"width": "26px"
-	},
-	px0: {
-		"paddingInline": "0"
-	},
-	w8: {
-		"width": "32px"
-	},
-	w9: {
-		"width": "36px"
-	},
+  TextBoxTrimBothCapAlphabetic: {
+    textBox: "trim-both cap alphabetic",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  opacity55: {
+    opacity: "55%",
+  },
 });
 
 /**
@@ -364,59 +65,59 @@ const sx = stylex.create({
  */
 
 type Variant =
-	| "default"
-	| "primary"
-	| "soft"
-	| "ghost"
-	| "overlay"
-	| "success"
-	| "danger"
-	| "warning"
-	| "danger-strong"
-	| "success-strong";
+  | "default"
+  | "primary"
+  | "soft"
+  | "ghost"
+  | "overlay"
+  | "success"
+  | "danger"
+  | "warning"
+  | "danger-strong"
+  | "success-strong";
 type Size = "sm" | "md" | "lg";
 
 const sizes: Record<Size, string> = {
-	// Heights bracket the app's existing chrome: 32px matches the viewer
-	// header buttons, 26px the chip/inline tier.
-	//
-	// One radius across every size: `rounded-control`, the corner the rest of
-	// the chrome already uses (legacy.css authors it as `calc(10px*var(--rf))`
-	// on .btn-viewer-pin / .btn-panel-toggle / .btn-viewer-newsession). The
-	// `rounded-xs`/`rounded-sm` this used to ship read visibly squarer than the
-	// buttons it sat beside — enough that call sites kept patching it back out
-	// by hand. Holding one corner across the scale is also what makes the three
-	// sizes read as one family: it goes pill on the short sizes, exactly as the
-	// ~26px chrome buttons already do, and stays a soft rect on lg.
-	//
-	// There used to be an `xs` between nothing and `sm`, 24px against 26px with
-	// the same padding, type and corner. Two names for one control: the 2px
-	// never told anyone anything, and choosing between them was a coin toss.
-	sm: mergeStylexClassName("", sx.minH26px, sx.px25, sx.textXs, sx.roundedControl),
-	md: mergeStylexClassName("", sx.minH8, sx.px3, sx.textSm, sx.roundedControl),
-	lg: mergeStylexClassName("", sx.minH9, sx.px35, sx.textBase, sx.roundedControl),
+  // Heights bracket the app's existing chrome: 32px matches the viewer
+  // header buttons, 26px the chip/inline tier.
+  //
+  // One radius across every size: `rounded-control`, the corner the rest of
+  // the chrome already uses (legacy.css authors it as `calc(10px*var(--rf))`
+  // on .btn-viewer-pin / .btn-panel-toggle / .btn-viewer-newsession). The
+  // `rounded-xs`/`rounded-sm` this used to ship read visibly squarer than the
+  // buttons it sat beside — enough that call sites kept patching it back out
+  // by hand. Holding one corner across the scale is also what makes the three
+  // sizes read as one family: it goes pill on the short sizes, exactly as the
+  // ~26px chrome buttons already do, and stays a soft rect on lg.
+  //
+  // There used to be an `xs` between nothing and `sm`, 24px against 26px with
+  // the same padding, type and corner. Two names for one control: the 2px
+  // never told anyone anything, and choosing between them was a coin toss.
+  sm: utilityClassName("min-h-[26px] px-2.5 text-xs rounded-control"),
+  md: utilityClassName("min-h-8 px-3 text-sm rounded-control"),
+  lg: utilityClassName("min-h-9 px-3.5 text-base rounded-control"),
 };
 
 // Leading icon + label: shave 4px off the icon side, which is the glyph's own
 // whitespace minus the label's side bearing (see doc block).
 const iconLeadPad: Record<Size, string> = {
-	sm: mergeStylexClassName("", sx.pl15),
-	md: mergeStylexClassName("", sx.pl2),
-	lg: mergeStylexClassName("", sx.pl25),
+  sm: utilityClassName("pl-1.5"),
+  md: utilityClassName("pl-2"),
+  lg: utilityClassName("pl-2.5"),
 };
 
 // Trailing caret + label: the same 4px shave, on the caret's side.
 const caretTrailPad: Record<Size, string> = {
-	sm: mergeStylexClassName("", sx.pr15),
-	md: mergeStylexClassName("", sx.pr2),
-	lg: mergeStylexClassName("", sx.pr25),
+  sm: utilityClassName("pr-1.5"),
+  md: utilityClassName("pr-2"),
+  lg: utilityClassName("pr-2.5"),
 };
 
 // The air between glyph and label. One gap utility only: a second one on the
 // same element resolves by Tailwind's output order rather than by the order
 // they are written, so the two cases pick a value instead of layering.
-const LEAD_GAP = mergeStylexClassName("", sx.gap15);
-const PLAIN_GAP = mergeStylexClassName("", sx.gap1);
+const LEAD_GAP = utilityClassName("gap-1.5");
+const PLAIN_GAP = utilityClassName("gap-1");
 
 // The caret keys off the label, not the 20px icon step: an iconic-pro glyph at
 // 14 draws an arrow about as tall as the cap height of a 12px label, which is
@@ -426,9 +127,9 @@ const caretSize: Record<Size, number> = { sm: 14, md: 16, lg: 18 };
 
 // Icon-only: square hit target, symmetric.
 const iconOnlyPad: Record<Size, string> = {
-	sm: mergeStylexClassName("", sx.w26px, sx.px0),
-	md: mergeStylexClassName("", sx.w8, sx.px0),
-	lg: mergeStylexClassName("", sx.w9, sx.px0),
+  sm: utilityClassName("w-[26px] px-0"),
+  md: utilityClassName("w-8 px-0"),
+  lg: utilityClassName("w-9 px-0"),
 };
 
 // Solid ink: the heaviest weight, for the one dominant action on a surface (a
@@ -447,8 +148,9 @@ const iconOnlyPad: Record<Size, string> = {
 // from reading as a flat printed rectangle. It is a white-then-black overlay,
 // so it costs the variant nothing per palette and survives the ink accent at
 // both ends of the light/dark range.
-const INK =
-	mergeStylexClassName("smooth-shadow-xs", sx.bgAccent, sx.borderTransparent, sx.textOnAccent, sx.plateSheen, sx.hoverBgAccentHover);
+const INK = utilityClassName(
+  "bg-accent border-transparent text-on-accent plate-sheen smooth-shadow-xs hover:bg-accent-hover",
+);
 
 /**
  * Which one, in one line each. The question a variant answers is what the
@@ -472,216 +174,262 @@ const INK =
  *   row of plates rather than a boxed label shouting over the quiet half.
  */
 const variants: Record<Variant, string> = {
-	// The raised control look of the newest chrome (viewer Share button).
-	// Paper in light (`bg-button`), graphite in dark: the hairline and the cast
-	// shadow are what say "raised", so the fill does not have to — see the
-	// --button-surface note in base.css.
-	default:
-		mergeStylexClassName("smooth-shadow-xs", sx.bgButton, sx.borderLine, sx.textDim, sx.hoverTextFg, sx.hoverBorderLineStrong),
-	primary: INK,
-	// A plate with no hairline: the quiet neutral button, and the one to reach
-	// for whenever a row holds more than one action (Cancel beside Save, a
-	// card's Run now · Edit · Delete). `default` cannot simply drop its border,
-	// because its fill is paper in light and the border plus shadow are what
-	// say raised — a row of them reads as plates inside a plate. `soft` steps
-	// the fill instead, so it still reads as a pressable thing at a quieter
-	// weight, and the hover goes one more step rather than adding an edge.
-	//
-	// The step is RELATIVE — ink over whatever is behind it, the same trick as
-	// --hover — not a fixed surface value. It used to be `bg-control`, which is
-	// tuned against the page: on a panel, where most of these rows actually
-	// live, #ebebeb on #f0f0f0 all but disappeared in light. 8% ink lands on
-	// that same #ebebeb over the white page, so nothing moved where the old
-	// value was right, and it holds its shape on a panel, a card, or the
-	// sidebar's translucent material.
-	soft: mergeStylexClassName("data-[popup-open]:bg-fg/13 data-[popup-open]:text-fg", sx.bgFg8, sx.borderTransparent, sx.textDim, sx.hoverBgFg13, sx.hoverTextFg),
-	// No plate at all until you reach for it. A ghost is the right weight for a
-	// control that is *reporting state* as much as inviting a press — a filter
-	// that says "In all workspaces" is mostly a label — so the row stays quiet
-	// and the wash arrives on hover. `data-popup-open` is Base UI's: when the
-	// ghost is a menu trigger it has to stay lit while its own menu is open, or
-	// the thing you just clicked disappears out from under the popup.
-	ghost:
-		mergeStylexClassName("data-[popup-open]:bg-hover data-[popup-open]:text-fg", sx.borderTransparent, sx.textDim, sx.hoverBgHover, sx.hoverTextFg),
-	// Media previews float directly on a dark scrim rather than an app surface.
-	// Keep their safe action clusters as quiet inverse ghosts until hover; the
-	// shared variant lets lightboxes use Button's spacing, focus, and anchor
-	// rendering instead of rebuilding those fundamentals around raw controls.
-	overlay:
-		mergeStylexClassName("", sx.borderTransparent, sx.bgTransparent, sx.textWhite60, sx.hoverBgWhite15, sx.hoverTextWhite),
-	// The tones come in two weights and no third: a tinted plate that PROPOSES
-	// the action, and a solid one that COMMITS it. Both are fills, like every
-	// variant above — a tone used to be an outline, which put a red box around
-	// a Delete sitting next to a grey Cancel and made the quiet half of a
-	// confirm the loudest thing in the row.
-	//
-	// The tint is the `-soft` token, a 10-14% wash of the tone itself, so it
-	// layers over a panel, a card or the page without knowing which it is —
-	// the same relative step `soft` takes. The hover doubles it rather than
-	// adding an edge.
-	//
-	// Green is the second-most reached-for colour in the app after the accent
-	// (approve a review, merge, mark read), so it earns a pair of its own.
-	success: mergeStylexClassName("", sx.bgGreenSoft, sx.borderTransparent, sx.textGreen, sx.hoverBgGreen22),
-	danger: mergeStylexClassName("", sx.bgRedSoft, sx.borderTransparent, sx.textRed, sx.hoverBgRed22),
-	// Yellow has no strong half: it qualifies an action ("delete the session,
-	// keep the worktree"), and nothing in the app commits in yellow.
-	warning: mergeStylexClassName("", sx.bgYellowSoft, sx.borderTransparent, sx.textYellow, sx.hoverBgYellow22),
-	// Solid red plate — the button that actually does the irreversible thing
-	// (a modal's confirm, the second click of a two-click close). Shares
-	// `primary`'s shape, so the two swap cleanly in a footer.
-	"danger-strong":
-		mergeStylexClassName("smooth-shadow-xs", sx.bgRed, sx.borderTransparent, sx.textWhite, sx.plateSheen, sx.hoverBrightness110),
-	// Solid green plate, for the affirmative action a surface wants read first
-	// — the deck's Skip, a workspace's Approve — where the tint would let a
-	// destructive neighbour dominate the row.
-	"success-strong":
-		mergeStylexClassName("smooth-shadow-xs", sx.bgGreen, sx.borderTransparent, sx.textWhite, sx.plateSheen, sx.hoverBrightness110),
+  // The raised control look of the newest chrome (viewer Share button).
+  // Paper in light (`bg-button`), graphite in dark: the hairline and the cast
+  // shadow are what say "raised", so the fill does not have to — see the
+  // --button-surface note in base.css.
+  default: utilityClassName(
+    "bg-button border-line text-dim smooth-shadow-xs hover:text-fg hover:border-line-strong",
+  ),
+  primary: INK,
+  // A plate with no hairline: the quiet neutral button, and the one to reach
+  // for whenever a row holds more than one action (Cancel beside Save, a
+  // card's Run now · Edit · Delete). `default` cannot simply drop its border,
+  // because its fill is paper in light and the border plus shadow are what
+  // say raised — a row of them reads as plates inside a plate. `soft` steps
+  // the fill instead, so it still reads as a pressable thing at a quieter
+  // weight, and the hover goes one more step rather than adding an edge.
+  //
+  // The step is RELATIVE — ink over whatever is behind it, the same trick as
+  // --hover — not a fixed surface value. It used to be `bg-control`, which is
+  // tuned against the page: on a panel, where most of these rows actually
+  // live, #ebebeb on #f0f0f0 all but disappeared in light. 8% ink lands on
+  // that same #ebebeb over the white page, so nothing moved where the old
+  // value was right, and it holds its shape on a panel, a card, or the
+  // sidebar's translucent material.
+  soft: utilityClassName(
+    "bg-fg/8 border-transparent text-dim hover:bg-fg/13 hover:text-fg data-[popup-open]:bg-fg/13 data-[popup-open]:text-fg",
+  ),
+  // No plate at all until you reach for it. A ghost is the right weight for a
+  // control that is *reporting state* as much as inviting a press — a filter
+  // that says "In all workspaces" is mostly a label — so the row stays quiet
+  // and the wash arrives on hover. `data-popup-open` is Base UI's: when the
+  // ghost is a menu trigger it has to stay lit while its own menu is open, or
+  // the thing you just clicked disappears out from under the popup.
+  ghost: utilityClassName(
+    "border-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+  ),
+  // Media previews float directly on a dark scrim rather than an app surface.
+  // Keep their safe action clusters as quiet inverse ghosts until hover; the
+  // shared variant lets lightboxes use Button's spacing, focus, and anchor
+  // rendering instead of rebuilding those fundamentals around raw controls.
+  overlay: utilityClassName(
+    "border-transparent bg-transparent text-white/60 hover:bg-white/15 hover:text-white",
+  ),
+  // The tones come in two weights and no third: a tinted plate that PROPOSES
+  // the action, and a solid one that COMMITS it. Both are fills, like every
+  // variant above — a tone used to be an outline, which put a red box around
+  // a Delete sitting next to a grey Cancel and made the quiet half of a
+  // confirm the loudest thing in the row.
+  //
+  // The tint is the `-soft` token, a 10-14% wash of the tone itself, so it
+  // layers over a panel, a card or the page without knowing which it is —
+  // the same relative step `soft` takes. The hover doubles it rather than
+  // adding an edge.
+  //
+  // Green is the second-most reached-for colour in the app after the accent
+  // (approve a review, merge, mark read), so it earns a pair of its own.
+  success: utilityClassName(
+    "bg-green-soft border-transparent text-green hover:bg-green/22",
+  ),
+  danger: utilityClassName(
+    "bg-red-soft border-transparent text-red hover:bg-red/22",
+  ),
+  // Yellow has no strong half: it qualifies an action ("delete the session,
+  // keep the worktree"), and nothing in the app commits in yellow.
+  warning: utilityClassName(
+    "bg-yellow-soft border-transparent text-yellow hover:bg-yellow/22",
+  ),
+  // Solid red plate — the button that actually does the irreversible thing
+  // (a modal's confirm, the second click of a two-click close). Shares
+  // `primary`'s shape, so the two swap cleanly in a footer.
+  "danger-strong": utilityClassName(
+    "bg-red border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
+  ),
+  // Solid green plate, for the affirmative action a surface wants read first
+  // — the deck's Skip, a workspace's Approve — where the tint would let a
+  // destructive neighbour dominate the row.
+  "success-strong": utilityClassName(
+    "bg-green border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
+  ),
 };
 
 // Leading-icon dimming per variant (icon-only stays full strength).
 const iconDim: Record<Variant, string> = {
-	default: mergeStylexClassName("", sx.opacity60),
-	primary: mergeStylexClassName("", sx.opacity80),
-	soft: mergeStylexClassName("", sx.opacity60),
-	ghost: mergeStylexClassName("", sx.opacity60),
-	overlay: mergeStylexClassName("", sx.opacity60),
-	success: mergeStylexClassName("", sx.opacity80),
-	danger: mergeStylexClassName("", sx.opacity80),
-	warning: mergeStylexClassName("", sx.opacity80),
-	"danger-strong": mergeStylexClassName("", sx.opacity80),
-	"success-strong": mergeStylexClassName("", sx.opacity80),
+  default: utilityClassName("opacity-60"),
+  primary: utilityClassName("opacity-80"),
+  soft: utilityClassName("opacity-60"),
+  ghost: utilityClassName("opacity-60"),
+  overlay: utilityClassName("opacity-60"),
+  success: utilityClassName("opacity-80"),
+  danger: utilityClassName("opacity-80"),
+  warning: utilityClassName("opacity-80"),
+  "danger-strong": utilityClassName("opacity-80"),
+  "success-strong": utilityClassName("opacity-80"),
 };
 
 export type ButtonProps = React.ComponentPropsWithoutRef<"button"> & {
-	variant?: Variant;
-	size?: Size;
-	/** Leading icon — pass a 20px glyph from components/icons.tsx. Renders an
-	 * icon-only square button when there are no children. */
-	icon?: React.ReactNode;
-	/** Trailing dropdown chevron, for a button that opens a menu. Inherits the
-	 * button's own color at low strength: a fixed grey caret reads as a dead
-	 * spot next to a red or green label. */
-	caret?: boolean;
-	/**
-	 * A trailing glyph that is not a chevron, on the same terms as `caret`:
-	 * same gap, same padding pull, sized by the caller. The one this exists
-	 * for is the outbound arrow on a button that leaves the app.
-	 *
-	 * It is a slot rather than "put it in children" because the cap-band trim
-	 * below only reaches a plain string. A caller who passes
-	 * `<>{"Merge"}<IconArrowUpRight /></>` gets an element child, silently
-	 * loses the trim, and lands the word a pixel high, which is the exact bug
-	 * this primitive exists to make impossible.
-	 */
-	trailing?: React.ReactNode;
-	/**
-	 * Render these optics on another element, for a control that is not a
-	 * `<button>`. Base UI's convention, and the one the app already uses for
-	 * menu and dialog triggers, so `render={<a href={url} />}` reads the same
-	 * here as it does there.
-	 *
-	 * It exists because an action that NAVIGATES has to be an anchor: middle
-	 * click, cmd-click and the context menu's copy-link all come from the
-	 * element, not from an onClick. Without this the choice was a `<button>`
-	 * that swallows those, or a hand-rolled plate outside the primitive, and
-	 * the app has ten of the latter. The hand-rolled ones are also how a
-	 * control quietly misses what this component does for a label: the whole
-	 * hover card footer sat a pixel high because it was a class string rather
-	 * than a Button.
-	 *
-	 * The element's own className wins over the variant's, so a caller can
-	 * restyle one edge without forking the component. `disabled` is a
-	 * `<button>` attribute and does nothing on an anchor: an anchor that
-	 * should not be followed has no href.
-	 */
-	render?: React.ReactElement;
+  variant?: Variant;
+  size?: Size;
+  /** Leading icon — pass a 20px glyph from components/icons.tsx. Renders an
+   * icon-only square button when there are no children. */
+  icon?: React.ReactNode;
+  /** Keep a labelled button's icon at full strength when its color carries
+   * meaning. Neutral supporting icons stay muted by default. */
+  iconTone?: "muted" | "full";
+  /** Trailing dropdown chevron, for a button that opens a menu. Inherits the
+   * button's own color at low strength: a fixed grey caret reads as a dead
+   * spot next to a red or green label. */
+  caret?: boolean;
+  /**
+   * A trailing glyph that is not a chevron, on the same terms as `caret`:
+   * same gap, same padding pull, sized by the caller. The one this exists
+   * for is the outbound arrow on a button that leaves the app.
+   *
+   * It is a slot rather than "put it in children" because the cap-band trim
+   * below only reaches a plain string. A caller who passes
+   * `<>{"Merge"}<IconArrowUpRight /></>` gets an element child, silently
+   * loses the trim, and lands the word a pixel high, which is the exact bug
+   * this primitive exists to make impossible.
+   */
+  trailing?: React.ReactNode;
+  /**
+   * Render these optics on another element, for a control that is not a
+   * `<button>`. Base UI's convention, and the one the app already uses for
+   * menu and dialog triggers, so `render={<a href={url} />}` reads the same
+   * here as it does there.
+   *
+   * It exists because an action that NAVIGATES has to be an anchor: middle
+   * click, cmd-click and the context menu's copy-link all come from the
+   * element, not from an onClick. Without this the choice was a `<button>`
+   * that swallows those, or a hand-rolled plate outside the primitive, and
+   * the app has ten of the latter. The hand-rolled ones are also how a
+   * control quietly misses what this component does for a label: the whole
+   * hover card footer sat a pixel high because it was a class string rather
+   * than a Button.
+   *
+   * The element's own className wins over the variant's, so a caller can
+   * restyle one edge without forking the component. `disabled` is a
+   * `<button>` attribute and does nothing on an anchor: an anchor that
+   * should not be followed has no href.
+   */
+  render?: React.ReactElement;
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-	function Button(
-		{ variant = "default", size = "md", icon, caret, trailing, render, className, children, ...rest },
-		ref,
-	) {
-		const hasLabel = children != null && children !== false && children !== "";
-		const iconOnly = icon != null && !hasLabel;
-		// A text label is centered on its CAP BAND, not on its line box. The
-		// line box carries the font's descender space, so flex centering puts
-		// the ink about 1.75px high — measured on the sm button: 6.5px of air
-		// above the cap, 10px below the baseline. `text-box` trims the box to
-		// cap height and baseline, which lands both within a quarter pixel and
-		// costs nothing per font, where a hand-tuned nudge would be wrong on
-		// every font but the one it was measured in. It only applies to a
-		// plain string child: an element child brings its own layout, and
-		// wrapping it would make it a flex item of a flex item.
-		const label =
-			typeof children === "string" || typeof children === "number" ? (
-				<span {...stylex.props(sx.TextBoxTrimBothCapAlphabetic)}>{children}</span>
-			) : (
-				children
-			);
-		const content = (
-			<>
-				{icon != null && (
-					<span {...mergeStylexProps(cn(!iconOnly && iconDim[variant]), sx.inlineFlex, sx.shrink0, sx.itemsCenter)}
-					>
-						{icon}
-					</span>
-				)}
-				{label}
-				{trailing != null && (
-					<span {...stylex.props(sx.inlineFlex, sx.shrink0, sx.itemsCenter)}>{trailing}</span>
-				)}
-				{caret && (
-					<IconChevronDown
-						className={mergeStylexOverrideClassName("", sx.shrink0, sx.opacity55)}
-						size={caretSize[size]}
-					/>
-				)}
-			</>
-		);
-		const optics = cn(
-			// `no-underline` is inert on a <button> and load-bearing under
-			// `render`: an <a> underlines its text by default, so without it a
-			// button that navigates arrives looking like body copy.
-			mergeStylexClassName("", sx.inlineFlex, sx.itemsCenter, sx.justifyCenter, sx.border, sx.whitespaceNowrap, sx.selectNone, sx.noUnderline),
-			icon != null && hasLabel ? LEAD_GAP : PLAIN_GAP,
-			// Text utilities carry different stock line heights even though this
-			// button scale pins its own heights. A single tight line box gives
-			// labels the same optical centre as fixed-size icons and chevrons.
-			mergeStylexClassName("", sx.leadingNone),
-			mergeStylexClassName("", sx.transitionColorBackgroundColorBorderColorFilterScale, sx.fontMedium, sx.activeScale096),
-			// One keyboard focus treatment for every variant. Without it a
-			// Button falls back to the browser's default outline, which
-			// differs per engine and sits tight against the corner; the
-			// shared utility also carries the forced-colors fallback.
-			mergeStylexClassName("", sx.focusRing),
-			mergeStylexClassName("", sx.disabledPointerEventsNone, sx.disabledOpacity40),
-			sizes[size],
-			variants[variant],
-			icon != null && hasLabel && iconLeadPad[size],
-			(caret || trailing != null) && hasLabel && caretTrailPad[size],
-			iconOnly && iconOnlyPad[size],
-			className,
-		);
+  function Button(
+    {
+      variant = "default",
+      size = "md",
+      icon,
+      iconTone = "muted",
+      caret,
+      trailing,
+      render,
+      className,
+      children,
+      ...rest
+    },
+    ref,
+  ) {
+    const hasLabel = children != null && children !== false && children !== "";
+    const iconOnly = icon != null && !hasLabel;
+    // A text label is centered on its CAP BAND, not on its line box. The
+    // line box carries the font's descender space, so flex centering puts
+    // the ink about 1.75px high — measured on the sm button: 6.5px of air
+    // above the cap, 10px below the baseline. `text-box` trims the box to
+    // cap height and baseline, which lands both within a quarter pixel and
+    // costs nothing per font, where a hand-tuned nudge would be wrong on
+    // every font but the one it was measured in. It only applies to a
+    // plain string child: an element child brings its own layout, and
+    // wrapping it would make it a flex item of a flex item.
+    const label =
+      typeof children === "string" || typeof children === "number" ? (
+        <span {...stylex.props(sx.TextBoxTrimBothCapAlphabetic)}>
+          {children}
+        </span>
+      ) : (
+        children
+      );
+    const content = (
+      <>
+        {icon != null && (
+          <span
+            className={cn(
+              utilityClassName("inline-flex shrink-0 items-center"),
+              !iconOnly && iconTone === "muted" && iconDim[variant],
+            )}
+          >
+            {icon}
+          </span>
+        )}
+        {label}
+        {trailing != null && (
+          <span {...stylex.props(sx.inlineFlex, sx.shrink0, sx.itemsCenter)}>
+            {trailing}
+          </span>
+        )}
+        {caret && (
+          <IconChevronDown
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.shrink0,
+              sx.opacity55,
+            )}
+            size={caretSize[size]}
+          />
+        )}
+      </>
+    );
+    const optics = cn(
+      // `no-underline` is inert on a <button> and load-bearing under
+      // `render`: an <a> underlines its text by default, so without it a
+      // button that navigates arrives looking like body copy.
+      utilityClassName(
+        "inline-flex items-center justify-center border whitespace-nowrap select-none no-underline",
+      ),
+      icon != null && hasLabel ? LEAD_GAP : PLAIN_GAP,
+      // Text utilities carry different stock line heights even though this
+      // button scale pins its own heights. A single tight line box gives
+      // labels the same optical centre as fixed-size icons and chevrons.
+      utilityClassName("leading-none"),
+      utilityClassName(
+        "font-medium transition-[color,background-color,border-color,filter,scale] active:scale-[0.96]",
+      ),
+      // One keyboard focus treatment for every variant. Without it a
+      // Button falls back to the browser's default outline, which
+      // differs per engine and sits tight against the corner; the
+      // shared utility also carries the forced-colors fallback.
+      "focus-ring",
+      utilityClassName("disabled:pointer-events-none disabled:opacity-40"),
+      sizes[size],
+      variants[variant],
+      icon != null && hasLabel && iconLeadPad[size],
+      (caret || trailing != null) && hasLabel && caretTrailPad[size],
+      iconOnly && iconOnlyPad[size],
+      className,
+    );
 
-		if (render) {
-			// The caller's element is the more specific of the two, so its own
-			// className lands last and wins the merge. `type="button"` is not
-			// forced on: it means nothing on an anchor.
-			const own = render.props as { className?: string };
-			return React.cloneElement(render as React.ReactElement<Record<string, unknown>>, {
-				...rest,
-				ref,
-				className: cn(optics, own.className),
-				children: content,
-			});
-		}
+    if (render) {
+      // The caller's element is the more specific of the two, so its own
+      // className lands last and wins the merge. `type="button"` is not
+      // forced on: it means nothing on an anchor.
+      const own = render.props as { className?: string };
+      return React.cloneElement(
+        render as React.ReactElement<Record<string, unknown>>,
+        {
+          ...rest,
+          ref,
+          className: cn(optics, own.className),
+          children: content,
+        },
+      );
+    }
 
-		return (
-			<button type="button" ref={ref} className={optics} {...rest}>
-				{content}
-			</button>
-		);
-	},
+    return (
+      <button type="button" ref={ref} className={optics} {...rest}>
+        {content}
+      </button>
+    );
+  },
 );

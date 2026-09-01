@@ -5,14 +5,14 @@ follows this convention — Open Session, and anything else that adopts it —
 knows how to provision a workspace for that repo and boot its dev server.
 Six files, each optional:
 
-| File          | When it runs                              | Job                                       |
-| ------------- | ----------------------------------------- | ----------------------------------------- |
-| `setup`       | once per workspace preparation, and as a first-host-preview safety net | install deps, fetch prebuilt assets |
-| `resume`      | after an actual durable Local MicroVM wake | idempotent post-wake repair               |
-| `start.sh`    | when a preview starts                     | bring the dev server up in the foreground |
-| `preview.json`| warm preview-pool preparation             | declare which routes to pre-compile       |
-| `portals.json`| session Portals panel                     | declare supervised service starters       |
-| `environment.json` | when a private remote workspace is adopted | legacy migration path for local env files |
+| File               | When it runs                                                           | Job                                       |
+| ------------------ | ---------------------------------------------------------------------- | ----------------------------------------- |
+| `setup`            | once per workspace preparation, and as a first-host-preview safety net | install deps, fetch prebuilt assets       |
+| `resume`           | reserved for providers that implement durable wake                     | idempotent post-wake repair               |
+| `start.sh`         | when a preview starts                                                  | bring the dev server up in the foreground |
+| `preview.json`     | warm preview-pool preparation                                          | declare which routes to pre-compile       |
+| `portals.json`     | session Portals panel                                                  | declare supervised service starters       |
+| `environment.json` | when a private remote workspace is adopted                             | legacy migration path for local env files |
 
 Why commit them rather than configure the host: the boot recipe travels with
 the code. Each session workspace can provision itself, and the Preview button
@@ -42,7 +42,7 @@ Runs during workspace preparation and as a first-host-preview safety net,
   and does not block the session. The retained log is available in the
   sandbox panel. See
   [deploy/sandbox/README.md](../deploy/sandbox/README.md).
-- **Remote-clone Sandbox workspace setup, including Local MicroVM.** A present
+- **Remote-clone Sandbox workspace setup.** A present
   hook must be executable. Failure blocks workspace preparation and leaves no
   success stamp, so a later preparation attempt can retry it. During remote
   setup, a PATH shim makes `bun install` use `--frozen-lockfile`; commit
@@ -61,8 +61,8 @@ artifact fetch, codegen. Slow extras belong behind an existence check.
 
 ## resume — idempotent post-wake repair
 
-Currently `.agents/resume` runs only after an actual durable Local MicroVM
-wake. Other Sandbox providers and host worktrees do not run it. Use it to
+Currently `.agents/resume` is reserved but not invoked by the selectable
+Sandbox providers or host worktrees. When a provider adopts it, use it to
 repair wall-clock- or environment-sensitive state such as stale pid files,
 expired cached tokens, and clock-skewed build caches.
 
@@ -81,11 +81,11 @@ repo root, no arguments. Two rules make it work:
    it.
 2. **Honor the environment contract:**
 
-   | Variable | Meaning |
-   | --- | --- |
-   | `WEBAPP_PORT` | The port the app must listen on. For `.agents/start.sh`, the host allocates and seeds it into `.ports.conf`; in a Sandbox it is a published container port. |
-   | `PREVIEW_URL` | When supplied, the public HTTPS origin fronting that port (e.g. `https://host.ts.net:9301`). Add its hostname to your framework's allowed dev origins so pages served through it actually hydrate. |
-   | `OPENSESSION_BOOT_MODE` | `fresh` or `snapshot-restore`, informational. Host previews use `fresh`; restored Docker and preview-pool images can use `snapshot-restore`. The separate `resume` hook receives `resume`. |
+   | Variable                | Meaning                                                                                                                                                                                            |
+   | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `WEBAPP_PORT`           | The port the app must listen on. For `.agents/start.sh`, the host allocates and seeds it into `.ports.conf`; in a Sandbox it is a published container port.                                        |
+   | `PREVIEW_URL`           | When supplied, the public HTTPS origin fronting that port (e.g. `https://host.ts.net:9301`). Add its hostname to your framework's allowed dev origins so pages served through it actually hydrate. |
+   | `OPENSESSION_BOOT_MODE` | `fresh` or `snapshot-restore`, informational. Host previews use `fresh`; restored Docker and preview-pool images can use `snapshot-restore`. The separate `resume` hook receives `resume`.         |
 
 Beyond that it should be just a script: a developer with a normal setup can
 run `./.agents/start.sh` by hand and get the usual dev server with sane
@@ -157,8 +157,17 @@ the fields it declares:
 
 ```json
 [
-  {"repoId":"example","lifecycle":"setup","audiences":["urn:example:artifacts"]},
-  {"repoId":"example","lifecycle":"preview","trustProfile":"interactive","audiences":["urn:example:preview-read"]}
+  {
+    "repoId": "example",
+    "lifecycle": "setup",
+    "audiences": ["urn:example:artifacts"]
+  },
+  {
+    "repoId": "example",
+    "lifecycle": "preview",
+    "trustProfile": "interactive",
+    "audiences": ["urn:example:preview-read"]
+  }
 ]
 ```
 
@@ -231,9 +240,6 @@ Agents can also create an ad-hoc Portal without changing repository
 configuration: create the service,
 call `start_portal`, verify it with `list_portals`, then tell the user which
 Portal is ready.
-
-After a durable Local MicroVM wake, `.agents/resume` repairs the workspace
-before the wake completes.
 
 ## Environment sources for sandboxes
 
@@ -321,7 +327,7 @@ failures.
 
 The scripts have a second consumer besides the Preview button: the agent.
 With the pair committed, any session worktree is bootable headlessly, which
-closes the loop *change → boot → screenshot → iterate* entirely inside a
+closes the loop _change → boot → screenshot → iterate_ entirely inside a
 session — the agent verifies its own UI work in a real browser instead of
 declaring victory from a successful compile. Running this daily on our own
 repos, these are the patterns that make it work:
@@ -338,7 +344,7 @@ repos, these are the patterns that make it work:
   an agent-instructions section that says: run this to bring the app up, then
   use these one-liners to screenshot / record / evaluate JS over CDP
   (puppeteer or `chrome --remote-debugging-port`). The lifecycle scripts make
-  the app *reachable*; the instructions make it *drivable*.
+  the app _reachable_; the instructions make it _drivable_.
 - **Human-once bootstrap, machine-many reuse.** Secrets that genuinely need
   an interactive login get pulled once into the main checkout by a human;
   `setup` (or the skill) seeds them from there into each worktree. Scripts

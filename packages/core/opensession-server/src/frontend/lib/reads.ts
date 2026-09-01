@@ -82,7 +82,10 @@ function syncToServer(user: string, map: ReadMap): void {
   const next = saveChains.get(user) ?? Promise.resolve();
   saveChains.set(
     user,
-    next.catch(() => {}).then(() => saveReadsApi(user, map)).catch(() => {}),
+    next
+      .catch(() => {})
+      .then(() => saveReadsApi(user, map))
+      .catch(() => {}),
   );
 }
 
@@ -103,7 +106,10 @@ export function mergeReadMaps(
 ): ReadMap {
   const merged: ReadMap = { ...server };
   for (const [id, mark] of Object.entries(local)) {
-    if (!merged[id] || new Date(mark).getTime() > new Date(merged[id]).getTime()) {
+    if (
+      !merged[id] ||
+      new Date(mark).getTime() > new Date(merged[id]).getTime()
+    ) {
       merged[id] = mark;
     }
   }

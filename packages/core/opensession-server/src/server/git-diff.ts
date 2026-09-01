@@ -22,11 +22,16 @@ import type { WorkspaceExec } from "./sandbox/workspace-exec";
 /** `git -C <dir> <args>` on the host (Bun $) or through the workspace exec.
  *  Throws on non-zero exit — matching Bun $'s .text() behavior that every
  *  call site here already wraps in try/catch. */
-async function gitText(dir: string, args: string[], exec?: WorkspaceExec): Promise<string> {
+async function gitText(
+  dir: string,
+  args: string[],
+  exec?: WorkspaceExec,
+): Promise<string> {
   const argv = ["git", "-C", dir, ...args];
   if (exec) {
     const r = await exec(argv, { timeoutMs: DIFF_TIMEOUT_MS });
-    if (r.exitCode !== 0) throw new Error(r.stderr.trim() || `git ${args[0]} failed`);
+    if (r.exitCode !== 0)
+      throw new Error(r.stderr.trim() || `git ${args[0]} failed`);
     return r.stdout;
   }
   return await $`${argv}`.quiet().text();
@@ -68,10 +73,19 @@ async function gitTextPrefix(
   const argv = ["git", "-C", dir, ...args];
   if (exec) {
     // WorkspaceExec buffers command output, so cap it inside the sandbox.
-    const result = await exec([
-      "bash", "-o", "pipefail", "-c", 'limit="$1"; shift; "$@" | head -c "$limit"',
-      "bash", String(limit + 1), ...argv,
-    ], { timeoutMs: DIFF_TIMEOUT_MS });
+    const result = await exec(
+      [
+        "bash",
+        "-o",
+        "pipefail",
+        "-c",
+        'limit="$1"; shift; "$@" | head -c "$limit"',
+        "bash",
+        String(limit + 1),
+        ...argv,
+      ],
+      { timeoutMs: DIFF_TIMEOUT_MS },
+    );
     const bytes = Buffer.from(result.stdout);
     if (result.exitCode !== 0 && bytes.byteLength <= limit)
       throw new Error(result.stderr.trim() || `git ${args[0]} failed`);
@@ -128,7 +142,10 @@ const MAX_RAW_PATCH = 600_000; // chars — keep huge diffs from flooding the br
 const MAX_UNTRACKED_BYTES = 60_000;
 const DIFF_TIMEOUT_MS = 30_000;
 const g = globalThis as any;
-const inflightDiffs: Map<string, Promise<SessionDiff>> = (g.__sessionDiffInflight ??= new Map());
+const inflightDiffs: Map<
+  string,
+  Promise<SessionDiff>
+> = (g.__sessionDiffInflight ??= new Map());
 
 /**
  * Merge-base of the worktree's HEAD with the base branch — the ref the
@@ -148,7 +165,9 @@ async function resolveMergeBase(
   ];
   for (const ref of candidates) {
     try {
-      const base = (await gitText(worktreeDir, ["merge-base", ref, "HEAD"], exec)).trim();
+      const base = (
+        await gitText(worktreeDir, ["merge-base", ref, "HEAD"], exec)
+      ).trim();
       if (base) return base;
     } catch {}
   }
@@ -163,12 +182,15 @@ async function computeSessionDiff(
   paths?: string[],
 ): Promise<SessionDiff> {
   const base = await resolveMergeBase(worktreeDir, baseBranch, exec);
-  const scopedPaths = paths === undefined ? undefined : [...new Set(paths)].sort();
+  const scopedPaths =
+    paths === undefined ? undefined : [...new Set(paths)].sort();
   const pathspec = scopedPaths?.length ? ["--", ...scopedPaths] : [];
 
   let branch: string | null = null;
   try {
-    branch = (await gitText(worktreeDir, ["branch", "--show-current"], exec)).trim() || null;
+    branch =
+      (await gitText(worktreeDir, ["branch", "--show-current"], exec)).trim() ||
+      null;
   } catch {}
 
   const files: DiffFile[] = [];
@@ -176,12 +198,23 @@ async function computeSessionDiff(
   let truncated = false;
 
   // Stats per file (additions/deletions, "-" for binary)
-  const stats = new Map<string, { add: number; del: number; binary: boolean }>();
+  const stats = new Map<
+    string,
+    { add: number; del: number; binary: boolean }
+  >();
   if (base && scopedPaths?.length !== 0) {
     try {
       const numstat = await gitText(
         worktreeDir,
-        ["--literal-pathspecs", "-c", "core.quotePath=false", "diff", "--numstat", base, ...pathspec],
+        [
+          "--literal-pathspecs",
+          "-c",
+          "core.quotePath=false",
+          "diff",
+          "--numstat",
+          base,
+          ...pathspec,
+        ],
         exec,
       );
       for (const line of numstat.split("\n")) {
@@ -200,7 +233,14 @@ async function computeSessionDiff(
     try {
       const output = await gitTextPrefix(
         worktreeDir,
-        ["--literal-pathspecs", "-c", "core.quotePath=false", "diff", base, ...pathspec],
+        [
+          "--literal-pathspecs",
+          "-c",
+          "core.quotePath=false",
+          "diff",
+          base,
+          ...pathspec,
+        ],
         Math.min(patchLimit ?? MAX_RAW_PATCH, MAX_RAW_PATCH),
         exec,
       );
@@ -253,7 +293,8 @@ async function computeSessionDiff(
               const r = await exec(["cat", "--", path], {
                 timeoutMs: DIFF_TIMEOUT_MS,
               });
-              if (r.exitCode !== 0) throw new Error(r.stderr.trim() || `cat ${path} failed`);
+              if (r.exitCode !== 0)
+                throw new Error(r.stderr.trim() || `cat ${path} failed`);
               return r.stdout;
             };
           } else {
@@ -261,19 +302,35 @@ async function computeSessionDiff(
             readContent = async () => readFileSync(full, "utf-8");
           }
           if (size > MAX_UNTRACKED_BYTES) {
-            files.push({ path, status: "untracked", additions: 0, deletions: 0 });
+            files.push({
+              path,
+              status: "untracked",
+              additions: 0,
+              deletions: 0,
+            });
             truncated = true;
             continue;
           }
           const content = await readContent();
           if (content.includes("\0")) {
-            files.push({ path, status: "untracked", additions: 0, deletions: 0, binary: true });
+            files.push({
+              path,
+              status: "untracked",
+              additions: 0,
+              deletions: 0,
+              binary: true,
+            });
             truncated = true;
             continue;
           }
           const lines = content.split("\n");
           if (lines[lines.length - 1] === "") lines.pop();
-          files.push({ path, status: "untracked", additions: lines.length, deletions: 0 });
+          files.push({
+            path,
+            status: "untracked",
+            additions: lines.length,
+            deletions: 0,
+          });
           rawPatch +=
             `diff --git a/${path} b/${path}\n` +
             `new file mode 100644\n` +
@@ -290,7 +347,8 @@ async function computeSessionDiff(
   if (rawPatch.length > MAX_RAW_PATCH) {
     // Cut at a file boundary so the renderer never sees a torn patch
     const cut = rawPatch.lastIndexOf("\ndiff --git ", MAX_RAW_PATCH);
-    rawPatch = cut > 0 ? rawPatch.slice(0, cut + 1) : rawPatch.slice(0, MAX_RAW_PATCH);
+    rawPatch =
+      cut > 0 ? rawPatch.slice(0, cut + 1) : rawPatch.slice(0, MAX_RAW_PATCH);
     truncated = true;
   }
 
@@ -315,10 +373,17 @@ export function getSessionDiff(
   paths?: string[],
   timeoutMs = DIFF_TIMEOUT_MS,
 ): Promise<SessionDiff> {
-  const scopedPaths = paths === undefined ? undefined : [...new Set(paths)].sort();
+  const scopedPaths =
+    paths === undefined ? undefined : [...new Set(paths)].sort();
   const pathKey = scopedPaths === undefined ? "all" : scopedPaths.join("\0");
   const compute = () => {
-    const work = computeSessionDiff(worktreeDir, baseBranch, exec, patchLimit, scopedPaths);
+    const work = computeSessionDiff(
+      worktreeDir,
+      baseBranch,
+      exec,
+      patchLimit,
+      scopedPaths,
+    );
     let timer: ReturnType<typeof setTimeout>;
     const bounded = new Promise<SessionDiff>((resolve, reject) => {
       timer = setTimeout(
@@ -385,7 +450,11 @@ export async function discardSessionFile(
     } else {
       // Added on the branch (tracked commit or untracked): drop it entirely.
       try {
-        await gitText(worktreeDir, ["rm", "-f", "--ignore-unmatch", "--", p], exec);
+        await gitText(
+          worktreeDir,
+          ["rm", "-f", "--ignore-unmatch", "--", p],
+          exec,
+        );
       } catch {}
       try {
         if (exec?.remote) await exec(["rm", "-f", "--", p]);
@@ -400,7 +469,7 @@ export async function discardSessionFile(
 
 function parsePatchStats(
   patch: string,
-  stats: Map<string, { add: number; del: number; binary: boolean }>
+  stats: Map<string, { add: number; del: number; binary: boolean }>,
 ): DiffFile[] {
   const files: DiffFile[] = [];
   const sections = patch.split(/^diff --git /m).filter((s) => s.trim());

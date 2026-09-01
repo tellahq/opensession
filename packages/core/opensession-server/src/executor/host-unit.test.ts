@@ -23,7 +23,9 @@ describe("run-host systemd policy", () => {
     const args = legacyHostUnitArgs(hostId, dir, 1234, 5678, "b".repeat(64));
     expect(args).toContain("systemd-run");
     expect(args).toContain("--uid=1234");
-    expect(args).toContain(`Environment=OPENSESSION_RUN_JOURNAL=${dir}/journal.json`);
+    expect(args).toContain(
+      `Environment=OPENSESSION_RUN_JOURNAL=${dir}/journal.json`,
+    );
     expect(args).toContain("StandardOutput=journal");
   });
 });

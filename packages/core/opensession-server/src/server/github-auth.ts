@@ -55,7 +55,9 @@ import { githubGitCredentialEnv } from "./github-git-credential";
 
 /** Env override is for tests/sandboxes; read per call so it can change. */
 function storePath(): string {
-  return process.env.OPENSESSION_GITHUB_AUTH_STORE || stateDir("github-auth.json");
+  return (
+    process.env.OPENSESSION_GITHUB_AUTH_STORE || stateDir("github-auth.json")
+  );
 }
 
 /** Classic OAuth needs `repo` for private-repository PR writes and
@@ -190,8 +192,10 @@ export function githubAppIdentity(): GithubAppIdentity {
   const o = githubIntegrationConfig();
   return {
     clientId:
-      trimmedEnv("OPENSESSION_GITHUB_CLIENT_ID") ?? trimmedConfig(o, "oauthClientId"),
-    slug: trimmedEnv("OPENSESSION_GITHUB_APP_SLUG") ?? trimmedConfig(o, "appSlug"),
+      trimmedEnv("OPENSESSION_GITHUB_CLIENT_ID") ??
+      trimmedConfig(o, "oauthClientId"),
+    slug:
+      trimmedEnv("OPENSESSION_GITHUB_APP_SLUG") ?? trimmedConfig(o, "appSlug"),
   };
 }
 
@@ -234,7 +238,8 @@ export function githubAuthOnConnect(): boolean {
  */
 export function githubAppConfigSource(): "env" | "config" | null {
   if (trimmedEnv("OPENSESSION_GITHUB_CLIENT_ID")) return "env";
-  if (trimmedConfig(githubIntegrationConfig(), "oauthClientId")) return "config";
+  if (trimmedConfig(githubIntegrationConfig(), "oauthClientId"))
+    return "config";
   return null;
 }
 
@@ -282,17 +287,20 @@ export interface DeviceFlowStart {
  * it lives rather than GitHub's word for its own error.
  */
 const DEVICE_FLOW_DISABLED =
-  'This GitHub app does not have Device Flow enabled, so nobody can sign in. ' +
+  "This GitHub app does not have Device Flow enabled, so nobody can sign in. " +
   'Tick "Enable Device Flow" in the app\'s settings on GitHub, then try again.';
 const GITHUB_DEVICE_VERIFICATION_URI = "https://github.com/login/device";
 
-export async function startGithubDeviceFlow(): Promise<DeviceFlowStart | { error: string }> {
+export async function startGithubDeviceFlow(): Promise<
+  DeviceFlowStart | { error: string }
+> {
   // The device flow uses the configured App client id from environment or config.
   // Without an App, authentication is unavailable. Who may reach this is the route's
   // job (operator mode: signed in; simple mode: App configured), not the
   // flow's — starting a device code is a read-only call to GitHub.
   const clientId = githubAppIdentity().clientId;
-  if (!clientId) return { error: "GitHub connect is not configured (no client id)" };
+  if (!clientId)
+    return { error: "GitHub connect is not configured (no client id)" };
   const res = await fetchWithTimeout("https://github.com/login/device/code", {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
@@ -300,8 +308,14 @@ export async function startGithubDeviceFlow(): Promise<DeviceFlowStart | { error
   });
   const body: any = await res.json().catch(() => null);
   if (!res.ok || !body?.device_code) {
-    if (body?.error === "device_flow_disabled") return { error: DEVICE_FLOW_DISABLED };
-    return { error: body?.error_description || body?.error || `GitHub device flow failed (${res.status})` };
+    if (body?.error === "device_flow_disabled")
+      return { error: DEVICE_FLOW_DISABLED };
+    return {
+      error:
+        body?.error_description ||
+        body?.error ||
+        `GitHub device flow failed (${res.status})`,
+    };
   }
   return {
     deviceCode: body.device_code,
@@ -334,16 +348,22 @@ function stripStoredAccount({
   return { ...rest, ...(refreshFailedAt ? { needsReconnect: true } : {}) };
 }
 
-export function connectedGithubAccount(login: string): GithubConnectedAccount | null {
+export function connectedGithubAccount(
+  login: string,
+): GithubConnectedAccount | null {
   const account = readStore().users[login.toLowerCase()];
   return account ? stripStoredAccount(account) : null;
 }
 
 export function validateGithubTokenLogin(
   actualLogin: string,
-  expectedLogin?: string | null
+  expectedLogin?: string | null,
 ): { ok: true } | { ok: false; error: string } {
-  if (!expectedLogin || actualLogin.toLowerCase() === expectedLogin.toLowerCase()) return { ok: true };
+  if (
+    !expectedLogin ||
+    actualLogin.toLowerCase() === expectedLogin.toLowerCase()
+  )
+    return { ok: true };
   return {
     ok: false,
     error: `GitHub authorized @${actualLogin}, but the signed-in user is @${expectedLogin}`,
@@ -357,30 +377,45 @@ export function validateGithubTokenLogin(
  */
 export async function pollGithubDeviceFlow(
   deviceCode: string,
-  expectedLogin?: string | null
+  expectedLogin?: string | null,
 ): Promise<DeviceFlowPoll> {
   const { clientId } = githubAppIdentity();
-  if (!clientId) return { status: "error", error: "No OAuth client id configured" };
-  const res = await fetchWithTimeout("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: clientId,
-      device_code: deviceCode,
-      grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-    }),
-  });
+  if (!clientId)
+    return { status: "error", error: "No OAuth client id configured" };
+  const res = await fetchWithTimeout(
+    "https://github.com/login/oauth/access_token",
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        device_code: deviceCode,
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+      }),
+    },
+  );
   const body: any = await res.json().catch(() => null);
-  if (!body) return { status: "error", error: `GitHub token endpoint failed (${res.status})` };
+  if (!body)
+    return {
+      status: "error",
+      error: `GitHub token endpoint failed (${res.status})`,
+    };
   if (body.error === "authorization_pending") return { status: "pending" };
   if (body.error === "slow_down") {
-    return { status: "slow_down", interval: typeof body.interval === "number" ? body.interval : 10 };
+    return {
+      status: "slow_down",
+      interval: typeof body.interval === "number" ? body.interval : 10,
+    };
   }
   if (body.error) {
     return { status: "error", error: body.error_description || body.error };
   }
   const token: string | undefined = body.access_token;
-  if (!token) return { status: "error", error: "GitHub returned no access token" };
+  if (!token)
+    return { status: "error", error: "GitHub returned no access token" };
   return identifyAndStoreToken(token, body, expectedLogin);
 }
 
@@ -403,8 +438,9 @@ export type DeviceFlowServerState =
 
 type WatchedFlow = DeviceFlowServerState & { expiresAt: number };
 
-const watchedFlows: Map<string, WatchedFlow> = ((globalThis as any).__osWatchedDeviceFlows ??=
-  new Map());
+const watchedFlows: Map<string, WatchedFlow> = ((
+  globalThis as any
+).__osWatchedDeviceFlows ??= new Map());
 
 function sweepWatchedFlows(): void {
   const now = Date.now();
@@ -421,7 +457,10 @@ export function watchGithubDeviceFlow(flow: DeviceFlowStart): void {
   // client that resumes late still gets a definitive answer.
   const codeExpiresAt = Date.now() + flow.expiresIn * 1000;
   const keepUntil = codeExpiresAt + 10 * 60_000;
-  watchedFlows.set(flow.deviceCode, { status: "pending", expiresAt: keepUntil });
+  watchedFlows.set(flow.deviceCode, {
+    status: "pending",
+    expiresAt: keepUntil,
+  });
   console.log(
     `[auth] device flow ${flow.userCode} (…${flow.deviceCode.slice(-6)}) started — watching server-side`,
   );
@@ -447,14 +486,18 @@ export function watchGithubDeviceFlow(flow: DeviceFlowStart): void {
           name: result.name,
           expiresAt: keepUntil,
         });
-        console.log(`[auth] device flow ${flow.userCode} authorized by @${result.login}`);
+        console.log(
+          `[auth] device flow ${flow.userCode} authorized by @${result.login}`,
+        );
       } else {
         watchedFlows.set(flow.deviceCode, {
           status: "error",
           error: result.error,
           expiresAt: keepUntil,
         });
-        console.log(`[auth] device flow ${flow.userCode} failed: ${result.error}`);
+        console.log(
+          `[auth] device flow ${flow.userCode} failed: ${result.error}`,
+        );
       }
       return;
     }
@@ -468,7 +511,9 @@ export function watchGithubDeviceFlow(flow: DeviceFlowStart): void {
 }
 
 /** Outcome of a server-watched flow (null: unknown code, or pre-watch flow). */
-export function githubDeviceFlowResult(deviceCode: string): DeviceFlowServerState | null {
+export function githubDeviceFlowResult(
+  deviceCode: string,
+): DeviceFlowServerState | null {
   sweepWatchedFlows();
   const flow = watchedFlows.get(deviceCode);
   if (!flow) return null;
@@ -496,7 +541,11 @@ function grantExpiryFields(body: TokenGrant): Partial<StoredAccount> {
       ? { refreshToken: body.refresh_token }
       : {}),
     ...(typeof body.refresh_token_expires_in === "number"
-      ? { refreshTokenExpiresAt: new Date(now + body.refresh_token_expires_in * 1000).toISOString() }
+      ? {
+          refreshTokenExpiresAt: new Date(
+            now + body.refresh_token_expires_in * 1000,
+          ).toISOString(),
+        }
       : {}),
   };
 }
@@ -587,16 +636,22 @@ export async function refreshGithubToken(login: string): Promise<boolean> {
     markRefreshDead(key, "refresh token expired");
     return false;
   }
-  const res = await fetchWithTimeout("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: "refresh_token",
-      refresh_token: account.refreshToken,
-    }),
-  });
+  const res = await fetchWithTimeout(
+    "https://github.com/login/oauth/access_token",
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: account.refreshToken,
+      }),
+    },
+  );
   const body: TokenGrant & { error?: string; error_description?: string } =
     (await res.json().catch(() => null)) ?? {};
   if (body.error || !body.access_token) {
@@ -615,7 +670,11 @@ export async function refreshGithubToken(login: string): Promise<boolean> {
   const current = store.users[key];
   if (!current) return false;
   const { refreshFailedAt: _cleared, ...kept } = current;
-  store.users[key] = { ...kept, token: body.access_token, ...grantExpiryFields(body) };
+  store.users[key] = {
+    ...kept,
+    token: body.access_token,
+    ...grantExpiryFields(body),
+  };
   writeStore(store);
   audit({ kind: "github_auth_refresh", login });
   return true;
@@ -686,8 +745,11 @@ export function connectedGithubAccounts(): GithubConnectedAccount[] {
  *  mtime rather than by a TTL, so it is never stale by a window: a `stat` is
  *  what a request pays, and `writeStore` clears it outright, which is what
  *  makes a reconnect take effect in the same breath rather than a beat later. */
-let reconnectCache: { path: string; stamp: number; logins: Set<string> } | null =
-  null;
+let reconnectCache: {
+  path: string;
+  stamp: number;
+  logins: Set<string>;
+} | null = null;
 
 function invalidateReconnectCache(): void {
   reconnectCache = null;
@@ -728,7 +790,9 @@ function refreshDeadLogins(): Set<string> {
  * their own sessions. The security boundary stays downstream, where the getters
  * refuse to hand out a token that has expired.
  */
-export function githubReconnectRequired(login: string | null | undefined): boolean {
+export function githubReconnectRequired(
+  login: string | null | undefined,
+): boolean {
   if (!login || !githubUserAuthActive()) return false;
   return refreshDeadLogins().has(login.toLowerCase());
 }
@@ -750,10 +814,15 @@ export function removeGithubAccount(login: string): boolean {
  */
 export function githubUserLoginForRun(user?: string | null): string | null {
   if (!githubUserAuthActive()) return null;
-  const key = user?.trim().replace(/\s*\([^)]*\)\s*$/, "").replace(/^@/, "").toLowerCase();
+  const key = user
+    ?.trim()
+    .replace(/\s*\([^)]*\)\s*$/, "")
+    .replace(/^@/, "")
+    .toLowerCase();
   if (!key) return null;
   const member = configuredIdentity().team.find((candidate) => {
-    const aliases = candidate.aliases?.map((alias) => alias.toLowerCase()) ?? [];
+    const aliases =
+      candidate.aliases?.map((alias) => alias.toLowerCase()) ?? [];
     return (
       candidate.github?.toLowerCase() === key ||
       candidate.slackId?.toLowerCase() === key ||
@@ -792,7 +861,10 @@ function projectedGithubAuthEnv(): Record<string, string> {
   const path = process.env[GITHUB_RUN_AUTH_FILE_ENV];
   if (!path) return {};
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as Record<
+      string,
+      unknown
+    >;
     const token =
       typeof parsed.GH_TOKEN === "string"
         ? parsed.GH_TOKEN
@@ -805,7 +877,9 @@ function projectedGithubAuthEnv(): Record<string, string> {
   }
 }
 
-function githubProcessEnv(auth: Record<string, string>): Record<string, string> {
+function githubProcessEnv(
+  auth: Record<string, string>,
+): Record<string, string> {
   // Empty authority still rewrites GitHub SSH remotes to non-interactive HTTPS.
   // A missing projected user token must fail closed, never inherit a host key.
   return githubGitCredentialEnv(auth.GH_TOKEN || "");
@@ -847,10 +921,12 @@ export async function resolveGithubCredential(
   credential: GithubCredential,
   opts: { write?: boolean } = {},
 ): Promise<GithubCredential> {
-  if (credential.kind !== "service" || credential.env.GH_TOKEN) return credential;
+  if (credential.kind !== "service" || credential.env.GH_TOKEN)
+    return credential;
   const { githubToken } = await import("./github-app");
   const token = await githubToken(opts);
-  if (!token) throw new Error("The selected GitHub bot credential is unavailable");
+  if (!token)
+    throw new Error("The selected GitHub bot credential is unavailable");
   return {
     ...credential,
     env: githubProcessEnv({ GH_TOKEN: token, GITHUB_TOKEN: token }),
@@ -871,7 +947,9 @@ function usableAccountForLogin(login: string): StoredAccount | null {
 }
 
 /** Exact-login lookup for an already authenticated web request. */
-export function githubCredentialForLogin(login: string): GithubCredential | null {
+export function githubCredentialForLogin(
+  login: string,
+): GithubCredential | null {
   if (!githubUserAuthActive()) return null;
   const account = usableAccountForLogin(login);
   return account ? credentialForAccount(account) : null;
@@ -905,7 +983,9 @@ export function githubCredentialForRun(
 
 /** The usable stored accounts (token present and not expired). */
 function usableAccounts(): StoredAccount[] {
-  return Object.values(readStore().users).filter((a) => a.token && tokenUsable(a));
+  return Object.values(readStore().users).filter(
+    (a) => a.token && tokenUsable(a),
+  );
 }
 
 /**

@@ -59,7 +59,10 @@ function serializeSessionProjection<T>(
   const tails = (projectionState.__sessionProjectionTails ??= new Map());
   const prior = tails.get(sessionId) ?? Promise.resolve();
   const result = prior.then(project);
-  const tail = result.then(() => undefined, () => undefined);
+  const tail = result.then(
+    () => undefined,
+    () => undefined,
+  );
   tails.set(sessionId, tail);
   void tail.finally(() => {
     if (tails.get(sessionId) === tail) tails.delete(sessionId);
@@ -96,7 +99,9 @@ export function executeDestinationIdempotentSessionProjection<T>(
     // attempt committed; the destination write below is idempotent by append
     // id, so executing is the same as the non-retried admitted path.
     if (plan.status === "in_progress" && !retried)
-      throw new Error(`Destination command ${requestId} is already in progress`);
+      throw new Error(
+        `Destination command ${requestId} is already in progress`,
+      );
     let physicalFinished = false;
     try {
       const result = await mutate();
@@ -130,7 +135,9 @@ export function executeDestinationIdempotentSessionProjection<T>(
           // receipt remains `processing` and boot recovery reconciles it.
           console.warn(
             `[session-projection] ${operation} failure settlement did not commit for ${sessionId}:`,
-            settleError instanceof Error ? settleError.message : String(settleError),
+            settleError instanceof Error
+              ? settleError.message
+              : String(settleError),
           );
         }
       }
@@ -161,8 +168,7 @@ export function executeSessionProjection<T>(
     // nothing has executed yet, so proceeding is the normal admitted path.
     const admitted =
       plan.status === "execute" || (retried && plan.status === "in_progress");
-    if (!admitted)
-      throw new Error(`Unexpected duplicate ${operation} command`);
+    if (!admitted) throw new Error(`Unexpected duplicate ${operation} command`);
     let physicalFinished = false;
     try {
       const result = await mutate();
@@ -194,7 +200,9 @@ export function executeSessionProjection<T>(
         } catch (settleError) {
           console.warn(
             `[session-projection] ${operation} failure settlement did not commit for ${sessionId}:`,
-            settleError instanceof Error ? settleError.message : String(settleError),
+            settleError instanceof Error
+              ? settleError.message
+              : String(settleError),
           );
         }
       }

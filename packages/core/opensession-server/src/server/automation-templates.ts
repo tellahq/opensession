@@ -100,7 +100,8 @@ Summarize as a short list ordered by staleness. If nothing is stale, say so in o
   {
     id: "dependency-check",
     name: "Dependency update check",
-    description: "Weekly PR bumping outdated dependencies that are safe to bump.",
+    description:
+      "Weekly PR bumping outdated dependencies that are safe to bump.",
     category: "hygiene",
     schedule: "0 6 * * 2",
     mode: "code",

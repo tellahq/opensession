@@ -51,7 +51,9 @@ describe("sessionMemoryScopes", () => {
 
   test("no user → no user scope; includeTeam:false drops workspace", () => {
     expect(
-      sessionMemoryScopes({ repos: ["a"], includeTeam: false }).map((s) => s.key)
+      sessionMemoryScopes({ repos: ["a"], includeTeam: false }).map(
+        (s) => s.key,
+      ),
     ).toEqual(["repo-a"]);
   });
 });
@@ -82,7 +84,9 @@ describe("memory round-trip", () => {
 describe("renderSessionMemoryNote", () => {
   test("empty scopes render nothing without tools, guidance with tools", async () => {
     expect(await renderSessionMemoryNote([TEST_SCOPE])).toBe("");
-    const withTools = await renderSessionMemoryNote([TEST_SCOPE], { tools: true });
+    const withTools = await renderSessionMemoryNote([TEST_SCOPE], {
+      tools: true,
+    });
     expect(withTools).toContain("store_memory");
   });
 });

@@ -60,7 +60,11 @@ import { existsSync, readFileSync, chmodSync } from "node:fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { audit } from "./audit";
 import { resolveTeammate } from "./shared/user-mappings";
-import { registerAsk, registerAskDomainHandler, type HumanAsk } from "./human-asks";
+import {
+  registerAsk,
+  registerAskDomainHandler,
+  type HumanAsk,
+} from "./human-asks";
 
 /**
  * Resolved per call, never captured at module load. Tests point
@@ -146,9 +150,11 @@ interface Stored {
 }
 
 const g = globalThis as any;
-const credentials: Map<string, KeychainCredential> = (g.__keychainCredentials ??= new Map());
+const credentials: Map<string, KeychainCredential> =
+  (g.__keychainCredentials ??= new Map());
 const grants: Map<string, KeychainGrant> = (g.__keychainGrants ??= new Map());
-const keychainAsks: Map<string, KeychainAskRecord> = (g.__keychainAsks ??= new Map());
+const keychainAsks: Map<string, KeychainAskRecord> = (g.__keychainAsks ??=
+  new Map());
 /** The path we last loaded from — a change (only tests do this) reloads. */
 let loadedFrom: string | null = null;
 
@@ -177,11 +183,13 @@ function load(): void {
     const cutoff = Date.now() - TERMINAL_RETENTION_MS;
     for (const c of data.credentials || []) credentials.set(c.id, c);
     for (const gr of data.grants || []) {
-      if (gr.status !== "active" && new Date(gr.createdAt).getTime() < cutoff) continue;
+      if (gr.status !== "active" && new Date(gr.createdAt).getTime() < cutoff)
+        continue;
       grants.set(gr.id, gr);
     }
     for (const a of data.asks || []) {
-      if (a.status !== "pending" && new Date(a.createdAt).getTime() < cutoff) continue;
+      if (a.status !== "pending" && new Date(a.createdAt).getTime() < cutoff)
+        continue;
       keychainAsks.set(a.id, a);
     }
   } catch (e) {
@@ -200,7 +208,11 @@ function settleExpiry(gr: KeychainGrant): KeychainGrant {
     gr.status = "expired";
     grants.set(gr.id, gr);
     persist();
-    audit({ kind: "keychain_grant_expired", grant_id: gr.id, credential_id: gr.credentialId });
+    audit({
+      kind: "keychain_grant_expired",
+      grant_id: gr.id,
+      credential_id: gr.credentialId,
+    });
   }
   return gr;
 }
@@ -229,7 +241,9 @@ export interface AddCredentialInput {
   allowedPathPrefixes?: string[];
 }
 
-export function addCredential(input: AddCredentialInput): KeychainCredentialMeta {
+export function addCredential(
+  input: AddCredentialInput,
+): KeychainCredentialMeta {
   load();
   const service = norm(input.service);
   const host = input.host
@@ -238,7 +252,9 @@ export function addCredential(input: AddCredentialInput): KeychainCredentialMeta
     .replace(/^https?:\/\//, "")
     .replace(/[/?#].*$/, "");
   if (!service || !/^[a-z0-9][a-z0-9._-]*$/.test(service)) {
-    throw new Error("service must be a short lowercase slug (letters, digits, . _ -)");
+    throw new Error(
+      "service must be a short lowercase slug (letters, digits, . _ -)",
+    );
   }
   if (!host || !/^[a-z0-9][a-z0-9.-]*$/.test(host) || host.includes(":")) {
     throw new Error("host must be a bare host name (no scheme, port, or path)");
@@ -247,10 +263,15 @@ export function addCredential(input: AddCredentialInput): KeychainCredentialMeta
   if ([...credentials.values()].some((c) => c.service === service)) {
     throw new Error(`a credential for service "${service}" already exists`);
   }
-  const methods = (input.allowedMethods || []).map((m) => m.trim().toUpperCase()).filter(Boolean);
-  const prefixes = (input.allowedPathPrefixes || []).map((p) => p.trim()).filter(Boolean);
+  const methods = (input.allowedMethods || [])
+    .map((m) => m.trim().toUpperCase())
+    .filter(Boolean);
+  const prefixes = (input.allowedPathPrefixes || [])
+    .map((p) => p.trim())
+    .filter(Boolean);
   for (const p of prefixes) {
-    if (!p.startsWith("/")) throw new Error(`path prefix must start with /: ${p}`);
+    if (!p.startsWith("/"))
+      throw new Error(`path prefix must start with /: ${p}`);
   }
   const now = new Date().toISOString();
   const cred: KeychainCredential = {
@@ -282,7 +303,8 @@ export function deleteCredential(id: string, by: string): boolean {
   load();
   const cred = credentials.get(id);
   if (!cred) return false;
-  if (!sameOwner(cred.owner, by)) throw new Error("only the credential's owner can delete it");
+  if (!sameOwner(cred.owner, by))
+    throw new Error("only the credential's owner can delete it");
   credentials.delete(id);
   // A deleted credential takes its live grants with it — the broker would
   // otherwise 404 on the credential with an "active" grant lying around.
@@ -303,29 +325,38 @@ export function listCredentials(): KeychainCredentialMeta[] {
   return [...credentials.values()].map(meta);
 }
 
-export function findCredential(ref: string): KeychainCredentialMeta | undefined {
+export function findCredential(
+  ref: string,
+): KeychainCredentialMeta | undefined {
   load();
   const key = norm(ref);
   const cred =
-    credentials.get(ref) || [...credentials.values()].find((c) => c.service === key);
+    credentials.get(ref) ||
+    [...credentials.values()].find((c) => c.service === key);
   return cred ? meta(cred) : undefined;
 }
 
 // ── Grants ───────────────────────────────────────────────────────────────────
 
-export function listGrants(opts?: { sessionId?: string; owner?: string }): KeychainGrant[] {
+export function listGrants(opts?: {
+  sessionId?: string;
+  owner?: string;
+}): KeychainGrant[] {
   load();
   return [...grants.values()]
     .map(settleExpiry)
     .filter(
       (gr) =>
         (!opts?.sessionId || gr.sessionId === opts.sessionId) &&
-        (!opts?.owner || sameOwner(gr.owner, opts.owner))
+        (!opts?.owner || sameOwner(gr.owner, opts.owner)),
     )
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export function revokeGrant(id: string, by: string): { ok: true } | { error: string } {
+export function revokeGrant(
+  id: string,
+  by: string,
+): { ok: true } | { error: string } {
   load();
   const gr = grants.get(id);
   if (!gr) return { error: "no such grant" };
@@ -339,7 +370,12 @@ export function revokeGrant(id: string, by: string): { ok: true } | { error: str
   gr.revokedAt = new Date().toISOString();
   grants.set(gr.id, gr);
   persist();
-  audit({ kind: "keychain_grant_revoked", grant_id: id, credential_id: gr.credentialId, by });
+  audit({
+    kind: "keychain_grant_revoked",
+    grant_id: id,
+    credential_id: gr.credentialId,
+    by,
+  });
   return { ok: true };
 }
 
@@ -356,7 +392,7 @@ function mintGrant(ask: KeychainAskRecord, mode: GrantMode): KeychainGrant {
     status: "active",
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(
-      now + (mode === "once" ? ONCE_GRANT_TTL_MS : STANDING_GRANT_TTL_MS)
+      now + (mode === "once" ? ONCE_GRANT_TTL_MS : STANDING_GRANT_TTL_MS),
     ).toISOString(),
     askId: ask.id,
   };
@@ -399,7 +435,7 @@ export function __mintGrantForTest(input: {
       status: "approved",
       createdAt: new Date().toISOString(),
     },
-    input.mode
+    input.mode,
   );
   if (input.expiresAt) {
     gr.expiresAt = input.expiresAt;
@@ -426,13 +462,14 @@ export interface BrokerUse {
 export function consumeGrantForBroker(
   grantId: string,
   method: string,
-  path: string
+  path: string,
 ): BrokerUse | { error: string; status: number } {
   load();
   const gr = grants.get(grantId);
   if (!gr) return { error: "unknown grant", status: 404 };
   settleExpiry(gr);
-  if (gr.status !== "active") return { error: `grant is ${gr.status}`, status: 403 };
+  if (gr.status !== "active")
+    return { error: `grant is ${gr.status}`, status: 403 };
   const cred = credentials.get(gr.credentialId);
   if (!cred) return { error: "credential no longer exists", status: 404 };
   const m = method.toUpperCase();
@@ -460,15 +497,20 @@ export function consumeGrantForBroker(
   return { credential: cred, grant: gr };
 }
 
-export function brokerHeaders(cred: KeychainCredential): Record<string, string> {
+export function brokerHeaders(
+  cred: KeychainCredential,
+): Record<string, string> {
   const header = cred.injection?.header || "Authorization";
-  const scheme = cred.injection?.scheme ?? (header === "Authorization" ? "Bearer" : "");
+  const scheme =
+    cred.injection?.scheme ?? (header === "Authorization" ? "Bearer" : "");
   return { [header]: scheme ? `${scheme} ${cred.secret}` : cred.secret };
 }
 
 /** Scrub the secret from a text body the remote echoed back. */
 export function scrubSecret(body: string, secret: string): string {
-  return secret && body.includes(secret) ? body.split(secret).join("[redacted]") : body;
+  return secret && body.includes(secret)
+    ? body.split(secret).join("[redacted]")
+    : body;
 }
 
 // ── Asks (through the human-asks transport) ─────────────────────────────────
@@ -486,9 +528,14 @@ function brokerBaseUrl(): string {
 
 /** The steer/tool text a session gets when its ask is approved. This is the
  *  agent's entire manual for the grant, so it names every constraint. */
-export function grantInstructions(gr: KeychainGrant, credMeta: KeychainCredentialMeta): string {
+export function grantInstructions(
+  gr: KeychainGrant,
+  credMeta: KeychainCredentialMeta,
+): string {
   const limits = [
-    credMeta.allowedMethods?.length ? `methods: ${credMeta.allowedMethods.join(", ")}` : null,
+    credMeta.allowedMethods?.length
+      ? `methods: ${credMeta.allowedMethods.join(", ")}`
+      : null,
     credMeta.allowedPathPrefixes?.length
       ? `paths: ${credMeta.allowedPathPrefixes.join(", ")}`
       : null,
@@ -521,7 +568,7 @@ export interface RequestCredentialInput {
 }
 
 export function requestCredential(
-  input: RequestCredentialInput
+  input: RequestCredentialInput,
 ): { ask: KeychainAskRecord; transport: HumanAsk } | { error: string } {
   load();
   const credMeta = findCredential(input.credential);
@@ -529,20 +576,31 @@ export function requestCredential(
     const known = listCredentials()
       .map((c) => c.service)
       .join(", ");
-    return { error: `no credential matches "${input.credential}"${known ? ` (known: ${known})` : ""}` };
+    return {
+      error: `no credential matches "${input.credential}"${known ? ` (known: ${known})` : ""}`,
+    };
   }
   const purpose = input.purpose.trim();
-  if (!purpose) return { error: "a purpose is required — the owner approves that, not the tool" };
+  if (!purpose)
+    return {
+      error: "a purpose is required — the owner approves that, not the tool",
+    };
   const owner = resolveTeammate(credMeta.owner);
-  if (!owner) return { error: `credential owner "${credMeta.owner}" is not in the identity roster` };
+  if (!owner)
+    return {
+      error: `credential owner "${credMeta.owner}" is not in the identity roster`,
+    };
 
   const pending = [...keychainAsks.values()].find(
     (a) =>
       a.status === "pending" &&
       a.credentialId === credMeta.id &&
-      a.sessionId === input.sessionId
+      a.sessionId === input.sessionId,
   );
-  if (pending) return { error: `an ask for this credential is already pending (${pending.id})` };
+  if (pending)
+    return {
+      error: `an ask for this credential is already pending (${pending.id})`,
+    };
 
   const record: KeychainAskRecord = {
     id: `ka-${crypto.randomUUID()}`,
@@ -588,7 +646,9 @@ export function requestCredential(
   return { ask: record, transport };
 }
 
-export function listKeychainAsks(opts?: { sessionId?: string }): KeychainAskRecord[] {
+export function listKeychainAsks(opts?: {
+  sessionId?: string;
+}): KeychainAskRecord[] {
   load();
   return [...keychainAsks.values()]
     .filter((a) => !opts?.sessionId || a.sessionId === opts.sessionId)
@@ -600,13 +660,17 @@ export function listKeychainAsks(opts?: { sessionId?: string }): KeychainAskReco
  *  kept as the owner's note. */
 export function parseOwnerAnswer(
   answer: string,
-  requestedMode: GrantMode
+  requestedMode: GrantMode,
 ): { approve: true; mode: GrantMode } | { approve: false; note?: string } {
   const t = answer.trim().toLowerCase();
   if (t === APPROVE_ONCE.toLowerCase()) return { approve: true, mode: "once" };
-  if (t === APPROVE_STANDING.toLowerCase()) return { approve: true, mode: "standing" };
+  if (t === APPROVE_STANDING.toLowerCase())
+    return { approve: true, mode: "standing" };
   if (/^(approve|yes|ok|sure|go ahead)\b/.test(t)) {
-    return { approve: true, mode: /standing/.test(t) ? "standing" : requestedMode };
+    return {
+      approve: true,
+      mode: /standing/.test(t) ? "standing" : requestedMode,
+    };
   }
   if (t === DECLINE.toLowerCase() || /^(no|deny|decline|reject)\b/.test(t)) {
     return { approve: false };
@@ -653,7 +717,12 @@ function resolveKeychainAsk(ask: HumanAsk, answer: string): string | null {
   record.grantId = grant.id;
   keychainAsks.set(record.id, record);
   persist();
-  audit({ kind: "keychain_ask_approved", ask_id: record.id, grant_id: grant.id, mode: verdict.mode });
+  audit({
+    kind: "keychain_ask_approved",
+    ask_id: record.id,
+    grant_id: grant.id,
+    mode: verdict.mode,
+  });
   const credMeta = findCredential(record.credentialId);
   return credMeta ? grantInstructions(grant, credMeta) : null;
 }

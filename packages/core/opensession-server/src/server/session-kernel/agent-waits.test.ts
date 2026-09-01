@@ -13,10 +13,7 @@ import {
 } from "../agent-waits";
 import { isContextOnly, parseContextBlocks } from "../prompt-context";
 import type { PrDetails } from "../pr-info";
-import {
-  SessionKernelStore,
-  __setSessionKernelStoreForTest,
-} from ".";
+import { SessionKernelStore, __setSessionKernelStoreForTest } from ".";
 
 let store: SessionKernelStore;
 let previousStore: SessionKernelStore | undefined;
@@ -140,7 +137,9 @@ describe("agent wait registration", () => {
     expect(parseContextBlocks(prompt)).toEqual([
       {
         source: "background-wait",
-        body: expect.stringContaining("Continue with: Inspect the result and continue."),
+        body: expect.stringContaining(
+          "Continue with: Inspect the result and continue.",
+        ),
       },
     ]);
     expect(prompt).not.toContain("[Jaap]");
@@ -166,7 +165,9 @@ describe("agent wait registration", () => {
 
 describe("PR check settlement", () => {
   test("classifies checks and fences settlement to the current head", async () => {
-    expect(prCheckSettlement(details([passing, failing, running]))).toMatchObject({
+    expect(
+      prCheckSettlement(details([passing, failing, running])),
+    ).toMatchObject({
       settled: false,
       total: 3,
       pending: 1,
@@ -182,8 +183,10 @@ describe("PR check settlement", () => {
       passed: 1,
     });
     expect(
-      prCheckSettlement({ ...details([passing, failing]), headRefOid: "new-head" })
-        .signature,
+      prCheckSettlement({
+        ...details([passing, failing]),
+        headRefOid: "new-head",
+      }).signature,
     ).not.toBe(settled.signature);
   });
 
@@ -216,7 +219,9 @@ describe("PR check settlement", () => {
     };
 
     expect(await handleAgentWait(wait, deps)).toBe("rescheduled");
-    expect((scheduled.at(-1)?.wait as PrChecksAgentWait).candidateSince).toBeUndefined();
+    expect(
+      (scheduled.at(-1)?.wait as PrChecksAgentWait).candidateSince,
+    ).toBeUndefined();
 
     current = details([passing, failing]);
     now = 40_000;

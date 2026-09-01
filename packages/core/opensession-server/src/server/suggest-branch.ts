@@ -38,7 +38,9 @@ export function sanitizeBranchSlug(raw: string): string | null {
 }
 
 /** Suggest a branch name for a task prompt. Returns null on any failure. */
-export async function suggestBranchName(prompt: string): Promise<string | null> {
+export async function suggestBranchName(
+  prompt: string,
+): Promise<string | null> {
   const text = (prompt || "").trim();
   // Too little signal to name a branch — let the user type one.
   if (text.length < 10) return null;

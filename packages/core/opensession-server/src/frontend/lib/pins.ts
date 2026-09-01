@@ -16,16 +16,16 @@ let cache: string[] = [];
 let loadedFor: string | null = null;
 
 function emit() {
-	window.dispatchEvent(new Event(CHANGE_EVENT));
+  window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
 function readLegacy(): string[] {
-	try {
-		const v = JSON.parse(localStorage.getItem(LEGACY_KEY) || "[]");
-		return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
-	} catch {
-		return [];
-	}
+  try {
+    const v = JSON.parse(localStorage.getItem(LEGACY_KEY) || "[]");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 // Hydrate the cache for `user`. On first run after the server-side switch, fold
@@ -33,42 +33,42 @@ function readLegacy(): string[] {
 // loses their pins. Migration is deferred until a real user is picked (never
 // "Anonymous") so legacy pins land on the right account, and runs at most once.
 async function load(user: string) {
-	loadedFor = user;
-	let pins: string[] = [];
-	try {
-		pins = await fetchPins(user);
-	} catch {
-		pins = [];
-	}
+  loadedFor = user;
+  let pins: string[] = [];
+  try {
+    pins = await fetchPins(user);
+  } catch {
+    pins = [];
+  }
 
-	if (user !== "Anonymous" && !localStorage.getItem(MIGRATED_FLAG)) {
-		const legacy = readLegacy();
-		if (legacy.length) {
-			pins = Array.from(new Set([...pins, ...legacy]));
-			try {
-				pins = await savePinsApi(user, pins);
-			} catch {
-				/* keep the merged list in memory even if the write fails */
-			}
-		}
-		localStorage.setItem(MIGRATED_FLAG, "1");
-	}
+  if (user !== "Anonymous" && !localStorage.getItem(MIGRATED_FLAG)) {
+    const legacy = readLegacy();
+    if (legacy.length) {
+      pins = Array.from(new Set([...pins, ...legacy]));
+      try {
+        pins = await savePinsApi(user, pins);
+      } catch {
+        /* keep the merged list in memory even if the write fails */
+      }
+    }
+    localStorage.setItem(MIGRATED_FLAG, "1");
+  }
 
-	// A newer load() (user switched mid-flight) wins.
-	if (loadedFor !== user) return;
-	cache = pins;
-	emit();
+  // A newer load() (user switched mid-flight) wins.
+  if (loadedFor !== user) return;
+  cache = pins;
+  emit();
 }
 
 whenCurrentUserReady((user) => void load(user));
 window.addEventListener(USER_CHANGE_EVENT, () => void load(getCurrentUser()));
 
 export function getPins(): string[] {
-	return cache;
+  return cache;
 }
 
 export function isPinned(id: string): boolean {
-	return cache.includes(id);
+  return cache.includes(id);
 }
 
 /** Add a pin if it isn't already set (never removes). Returns the new list.
@@ -76,12 +76,12 @@ export function isPinned(id: string): boolean {
     order (drag-to-reorder rewrites it), and a fresh session should surface at
     the top of the band, not sink under old pins. */
 export function pin(id: string): string[] {
-	if (cache.includes(id)) return cache;
-	const next = [id, ...cache];
-	cache = next;
-	emit();
-	void savePinsApi(getCurrentUser(), next).catch(() => {});
-	return next;
+  if (cache.includes(id)) return cache;
+  const next = [id, ...cache];
+  cache = next;
+  emit();
+  void savePinsApi(getCurrentUser(), next).catch(() => {});
+  return next;
 }
 
 // "Pin new" preferences. Both are opt-in — auto-pinning fills the tab strip
@@ -96,92 +96,93 @@ let pinPrefsWriteStamp = 0;
 let pinPrefsLoadedFor: string | null = null;
 
 export function getPinNewSessions(): boolean {
-	return localStorage.getItem(PIN_NEW_KEY) === "on";
+  return localStorage.getItem(PIN_NEW_KEY) === "on";
 }
 
 export function setPinNewSessions(on: boolean): void {
-	pinPrefsWriteStamp++;
-	if (on) localStorage.setItem(PIN_NEW_KEY, "on");
-	else localStorage.removeItem(PIN_NEW_KEY);
-	window.dispatchEvent(new Event(PIN_NEW_EVENT));
-	void saveUiPrefsApi(getCurrentUser(), {
-		[PIN_NEW_PREF_KEY]: on ? "on" : "off",
-	}).catch(() => {});
+  pinPrefsWriteStamp++;
+  if (on) localStorage.setItem(PIN_NEW_KEY, "on");
+  else localStorage.removeItem(PIN_NEW_KEY);
+  window.dispatchEvent(new Event(PIN_NEW_EVENT));
+  void saveUiPrefsApi(getCurrentUser(), {
+    [PIN_NEW_PREF_KEY]: on ? "on" : "off",
+  }).catch(() => {});
 }
 
 export function onPinNewSessionsChanged(handler: () => void): () => void {
-	window.addEventListener(PIN_NEW_EVENT, handler);
-	return () => window.removeEventListener(PIN_NEW_EVENT, handler);
+  window.addEventListener(PIN_NEW_EVENT, handler);
+  return () => window.removeEventListener(PIN_NEW_EVENT, handler);
 }
 
 const PIN_NEW_WS_KEY = "opensession-pin-new-workspaces";
 const PIN_NEW_WS_EVENT = "opensession-pin-new-workspaces-changed";
 
 export function getPinNewWorkspaces(): boolean {
-	return localStorage.getItem(PIN_NEW_WS_KEY) === "on";
+  return localStorage.getItem(PIN_NEW_WS_KEY) === "on";
 }
 
 export function setPinNewWorkspaces(on: boolean): void {
-	pinPrefsWriteStamp++;
-	if (on) localStorage.setItem(PIN_NEW_WS_KEY, "on");
-	else localStorage.removeItem(PIN_NEW_WS_KEY);
-	window.dispatchEvent(new Event(PIN_NEW_WS_EVENT));
-	void saveUiPrefsApi(getCurrentUser(), {
-		[PIN_NEW_WS_PREF_KEY]: on ? "on" : "off",
-	}).catch(() => {});
+  pinPrefsWriteStamp++;
+  if (on) localStorage.setItem(PIN_NEW_WS_KEY, "on");
+  else localStorage.removeItem(PIN_NEW_WS_KEY);
+  window.dispatchEvent(new Event(PIN_NEW_WS_EVENT));
+  void saveUiPrefsApi(getCurrentUser(), {
+    [PIN_NEW_WS_PREF_KEY]: on ? "on" : "off",
+  }).catch(() => {});
 }
 
 export function onPinNewWorkspacesChanged(handler: () => void): () => void {
-	window.addEventListener(PIN_NEW_WS_EVENT, handler);
-	return () => window.removeEventListener(PIN_NEW_WS_EVENT, handler);
+  window.addEventListener(PIN_NEW_WS_EVENT, handler);
+  return () => window.removeEventListener(PIN_NEW_WS_EVENT, handler);
 }
 
 async function hydratePinPrefs(user: string) {
-	pinPrefsLoadedFor = user;
-	const stampAtStart = pinPrefsWriteStamp;
-	let prefs: Record<string, string>;
-	try {
-		prefs = await fetchUiPrefs(user);
-	} catch {
-		return;
-	}
-	if (pinPrefsWriteStamp !== stampAtStart || pinPrefsLoadedFor !== user) return;
+  pinPrefsLoadedFor = user;
+  const stampAtStart = pinPrefsWriteStamp;
+  let prefs: Record<string, string>;
+  try {
+    prefs = await fetchUiPrefs(user);
+  } catch {
+    return;
+  }
+  if (pinPrefsWriteStamp !== stampAtStart || pinPrefsLoadedFor !== user) return;
 
-	const sessionPref = prefs[PIN_NEW_PREF_KEY];
-	if (sessionPref === "on" || sessionPref === "off") {
-		const on = sessionPref === "on";
-		if (on !== getPinNewSessions()) {
-			if (on) localStorage.setItem(PIN_NEW_KEY, "on");
-			else localStorage.removeItem(PIN_NEW_KEY);
-			window.dispatchEvent(new Event(PIN_NEW_EVENT));
-		}
-	} else if (getPinNewSessions()) {
-		void saveUiPrefsApi(user, { [PIN_NEW_PREF_KEY]: "on" }).catch(() => {});
-	}
+  const sessionPref = prefs[PIN_NEW_PREF_KEY];
+  if (sessionPref === "on" || sessionPref === "off") {
+    const on = sessionPref === "on";
+    if (on !== getPinNewSessions()) {
+      if (on) localStorage.setItem(PIN_NEW_KEY, "on");
+      else localStorage.removeItem(PIN_NEW_KEY);
+      window.dispatchEvent(new Event(PIN_NEW_EVENT));
+    }
+  } else if (getPinNewSessions()) {
+    void saveUiPrefsApi(user, { [PIN_NEW_PREF_KEY]: "on" }).catch(() => {});
+  }
 
-	const workspacePref = prefs[PIN_NEW_WS_PREF_KEY];
-	if (workspacePref === "on" || workspacePref === "off") {
-		const on = workspacePref === "on";
-		if (on !== getPinNewWorkspaces()) {
-			if (on) localStorage.setItem(PIN_NEW_WS_KEY, "on");
-			else localStorage.removeItem(PIN_NEW_WS_KEY);
-			window.dispatchEvent(new Event(PIN_NEW_WS_EVENT));
-		}
-	} else if (getPinNewWorkspaces()) {
-		void saveUiPrefsApi(user, { [PIN_NEW_WS_PREF_KEY]: "on" }).catch(() => {});
-	}
+  const workspacePref = prefs[PIN_NEW_WS_PREF_KEY];
+  if (workspacePref === "on" || workspacePref === "off") {
+    const on = workspacePref === "on";
+    if (on !== getPinNewWorkspaces()) {
+      if (on) localStorage.setItem(PIN_NEW_WS_KEY, "on");
+      else localStorage.removeItem(PIN_NEW_WS_KEY);
+      window.dispatchEvent(new Event(PIN_NEW_WS_EVENT));
+    }
+  } else if (getPinNewWorkspaces()) {
+    void saveUiPrefsApi(user, { [PIN_NEW_WS_PREF_KEY]: "on" }).catch(() => {});
+  }
 }
 
 whenCurrentUserReady((user) => void hydratePinPrefs(user));
-window.addEventListener(USER_CHANGE_EVENT, () =>
-	void hydratePinPrefs(getCurrentUser()),
+window.addEventListener(
+  USER_CHANGE_EVENT,
+  () => void hydratePinPrefs(getCurrentUser()),
 );
 
 /** Apply an authoritative server push without writing the same list back. */
 export function receivePins(user: string, pins: string[]): void {
-	if (user !== getCurrentUser()) return;
-	cache = Array.from(new Set(pins.filter((id) => typeof id === "string")));
-	emit();
+  if (user !== getCurrentUser()) return;
+  cache = Array.from(new Set(pins.filter((id) => typeof id === "string")));
+  emit();
 }
 
 /**
@@ -194,25 +195,25 @@ export function receivePins(user: string, pins: string[]): void {
  * bring an archived (unreachable) pin back to the Pinned band.
  */
 export function unpin(ids: string[]): string[] {
-	const drop = new Set(ids.filter(Boolean));
-	if (!drop.size) return cache;
-	const next = cache.filter((id) => !drop.has(id));
-	if (next.length === cache.length) return cache;
-	cache = next;
-	emit();
-	void savePinsApi(getCurrentUser(), next).catch(() => {});
-	return next;
+  const drop = new Set(ids.filter(Boolean));
+  if (!drop.size) return cache;
+  const next = cache.filter((id) => !drop.has(id));
+  if (next.length === cache.length) return cache;
+  cache = next;
+  emit();
+  void savePinsApi(getCurrentUser(), next).catch(() => {});
+  return next;
 }
 
 export function togglePin(id: string): string[] {
-	// Adding prepends — same top-of-band rule as pin().
-	const next = cache.includes(id)
-		? cache.filter((p) => p !== id)
-		: [id, ...cache];
-	cache = next;
-	emit();
-	void savePinsApi(getCurrentUser(), next).catch(() => {});
-	return next;
+  // Adding prepends — same top-of-band rule as pin().
+  const next = cache.includes(id)
+    ? cache.filter((p) => p !== id)
+    : [id, ...cache];
+  cache = next;
+  emit();
+  void savePinsApi(getCurrentUser(), next).catch(() => {});
+  return next;
 }
 
 /**
@@ -221,16 +222,16 @@ export function togglePin(id: string): string[] {
  * any pinned id the caller omitted, so nothing is silently dropped.
  */
 export function reorderPins(ids: string[]): string[] {
-	const known = new Set(cache);
-	const next = ids.filter((id) => known.has(id));
-	for (const id of cache) if (!next.includes(id)) next.push(id);
-	cache = next;
-	emit();
-	void savePinsApi(getCurrentUser(), next).catch(() => {});
-	return next;
+  const known = new Set(cache);
+  const next = ids.filter((id) => known.has(id));
+  for (const id of cache) if (!next.includes(id)) next.push(id);
+  cache = next;
+  emit();
+  void savePinsApi(getCurrentUser(), next).catch(() => {});
+  return next;
 }
 
 export function onPinsChanged(handler: () => void): () => void {
-	window.addEventListener(CHANGE_EVENT, handler);
-	return () => window.removeEventListener(CHANGE_EVENT, handler);
+  window.addEventListener(CHANGE_EVENT, handler);
+  return () => window.removeEventListener(CHANGE_EVENT, handler);
 }

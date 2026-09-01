@@ -5,8 +5,7 @@
  *  that same tap just opened — so no hover card is ever raised there. (iOS
  *  synthesizes a mouseenter on first tap, so this can't be left to hover.) */
 export function pointerCanHover() {
-	return (
-		typeof window === "undefined" ||
-		window.matchMedia("(hover: hover)").matches
-	);
+  return (
+    typeof window === "undefined" || window.matchMedia("(hover: hover)").matches
+  );
 }

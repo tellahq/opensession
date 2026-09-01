@@ -6,13 +6,14 @@ import type { UnifiedSession } from "./types";
  * has engine ids, while list clients receive the smaller `ran` summary.
  */
 export function isReusableEmptySession(session: UnifiedSession): boolean {
-	return (
-		session.source === "opensession" &&
-		!session.archived &&
-		!session.claudeSessionId &&
-		!session.codexThreadId &&
-		!session.piSessionId &&
-		!session.isRunning &&
-		session.lastActivity === session.createdAt
-	);
+  return (
+    session.source === "opensession" &&
+    !session.duplicatedFromSessionId &&
+    !session.archived &&
+    !session.claudeSessionId &&
+    !session.codexThreadId &&
+    !session.piSessionId &&
+    !session.isRunning &&
+    session.lastActivity === session.createdAt
+  );
 }

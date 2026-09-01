@@ -29,9 +29,9 @@ export const AGENT_PERSON_KEY = AGENT_NAME.trim().toLowerCase();
  * the automation is gone, and no person is accountable for them.
  */
 export const HOUSE_AUTOMATION: {
-	owner?: string;
-	repo?: string;
-	workspaceRepo?: string;
+  owner?: string;
+  repo?: string;
+  workspaceRepo?: string;
 } = {};
 
 /**
@@ -40,14 +40,11 @@ export const HOUSE_AUTOMATION: {
  * from a config roster, a display name or a GitHub login, so the compare is
  * the app's usual loose one: equal, or either a prefix of the other.
  */
-export function ownerMatchesPerson(
-	owner: string,
-	personKey: string,
-): boolean {
-	const a = owner.trim().toLowerCase();
-	const b = personKey.trim().toLowerCase();
-	if (!a || !b) return false;
-	return a === b || a.startsWith(b) || b.startsWith(a);
+export function ownerMatchesPerson(owner: string, personKey: string): boolean {
+  const a = owner.trim().toLowerCase();
+  const b = personKey.trim().toLowerCase();
+  if (!a || !b) return false;
+  return a === b || a.startsWith(b) || b.startsWith(a);
 }
 
 /**
@@ -64,23 +61,23 @@ export function ownerMatchesPerson(
  * - a person key — the ones that teammate owns.
  */
 export function automationInPersonLens(
-	automation: { owner?: string },
-	person: string,
-	currentUser: string,
+  automation: { owner?: string },
+  person: string,
+  currentUser: string,
 ): boolean {
-	if (person === "everyone") return true;
-	// "me" stands in for your own name, so resolve it first: the agent signed
-	// in as itself then finds its own routines under "me" as well.
-	const key =
-		person === "me"
-			? currentUser.trim().toLowerCase()
-			: person.trim().toLowerCase();
-	// Signed out, "mine" can't be answered: show the band rather than empty it.
-	if (person === "me" && (!key || key === "anonymous")) return true;
-	const owner = (automation.owner || "").trim();
-	if (!owner) return key === AGENT_PERSON_KEY;
-	if (person === "unassigned") return false;
-	return ownerMatchesPerson(owner, key);
+  if (person === "everyone") return true;
+  // "me" stands in for your own name, so resolve it first: the agent signed
+  // in as itself then finds its own routines under "me" as well.
+  const key =
+    person === "me"
+      ? currentUser.trim().toLowerCase()
+      : person.trim().toLowerCase();
+  // Signed out, "mine" can't be answered: show the band rather than empty it.
+  if (person === "me" && (!key || key === "anonymous")) return true;
+  const owner = (automation.owner || "").trim();
+  if (!owner) return key === AGENT_PERSON_KEY;
+  if (person === "unassigned") return false;
+  return ownerMatchesPerson(owner, key);
 }
 
 /**
@@ -91,12 +88,12 @@ export function automationInPersonLens(
  * workspaces.
  */
 export function automationInRepoLens(
-	automation: { repo?: string; workspaceRepo?: string },
-	repo: string,
+  automation: { repo?: string; workspaceRepo?: string },
+  repo: string,
 ): boolean {
-	if (repo === "all") return true;
-	return (
-		(automation.repo || DEFAULT_REPO_ID) === repo ||
-		automation.workspaceRepo === repo
-	);
+  if (repo === "all") return true;
+  return (
+    (automation.repo || DEFAULT_REPO_ID) === repo ||
+    automation.workspaceRepo === repo
+  );
 }

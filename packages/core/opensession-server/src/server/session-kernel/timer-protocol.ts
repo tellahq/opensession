@@ -38,10 +38,11 @@ export type TimerActorRequest =
       observedAttempts: number;
     };
 
-export type TimerActorResult<T extends TimerActorRequest> =
-  T extends { op: "schedule" | "cancel" }
-    ? void
-    : T extends { op: "begin" }
+export type TimerActorResult<T extends TimerActorRequest> = T extends {
+  op: "schedule" | "cancel";
+}
+  ? void
+  : T extends { op: "begin" }
     ? "execute" | "completed" | "missing"
     : T extends { op: "complete" }
       ? boolean

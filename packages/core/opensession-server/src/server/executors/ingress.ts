@@ -53,7 +53,8 @@ export interface ExecutorAuthority {
 }
 
 export type ExecutorAuthenticationResult =
-  { ok: true; authority: ExecutorAuthority } | { ok: false; status: 401 | 403 };
+  | { ok: true; authority: ExecutorAuthority }
+  | { ok: false; status: 401 | 403 };
 
 export interface ExecutorIngressOptions {
   /** Boot must supply the socket peer address, never a forwarded client header. */

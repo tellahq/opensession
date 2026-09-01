@@ -16,10 +16,10 @@ images:
 
 cpus: 4
 memory: "8GiB"
-disk: "40GiB"   # bun install of the server tree is multi-gigabyte today
+disk: "40GiB" # bun install of the server tree is multi-gigabyte today
 
 mounts:
-  - location: "/tmp/opensession-simple-mode"   # overridden by the driver
+  - location: "/tmp/opensession-simple-mode" # overridden by the driver
     mountPoint: "/mnt/simple-mode"
     writable: false
 

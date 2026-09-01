@@ -20,14 +20,24 @@ export function parseCron(expr: string): FieldSpec[] | null {
 
   const specs: FieldSpec[] = [];
   for (let i = 0; i < 5; i++) {
-    const spec = parseField(parts[i], FIELD_RANGES[i][0], FIELD_RANGES[i][1], i === 4);
+    const spec = parseField(
+      parts[i],
+      FIELD_RANGES[i][0],
+      FIELD_RANGES[i][1],
+      i === 4,
+    );
     if (!spec) return null;
     specs.push(spec);
   }
   return specs;
 }
 
-function parseField(field: string, min: number, max: number, isDow: boolean): FieldSpec | null {
+function parseField(
+  field: string,
+  min: number,
+  max: number,
+  isDow: boolean,
+): FieldSpec | null {
   if (field === "*") return { any: true, values: new Set() };
 
   const values = new Set<number>();
@@ -40,10 +50,12 @@ function parseField(field: string, min: number, max: number, isDow: boolean): Fi
 
     let lo: number, hi: number;
     if (base === "*") {
-      lo = min; hi = max;
+      lo = min;
+      hi = max;
     } else if (base.includes("-")) {
       const [a, b] = base.split("-").map(Number);
-      lo = a; hi = b;
+      lo = a;
+      hi = b;
     } else {
       lo = hi = parseInt(base);
       if (stepStr) hi = max; // "a/n" means a..max step n

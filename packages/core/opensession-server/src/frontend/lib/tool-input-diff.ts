@@ -47,18 +47,8 @@ export function toolInputDiff(
   for (const value of values) {
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     const edit = value as Record<string, unknown>;
-    const oldText = toolInputString(
-      edit,
-      "old_string",
-      "oldString",
-      "oldText",
-    );
-    const newText = toolInputString(
-      edit,
-      "new_string",
-      "newString",
-      "newText",
-    );
+    const oldText = toolInputString(edit, "old_string", "oldString", "oldText");
+    const newText = toolInputString(edit, "new_string", "newString", "newText");
     if (!oldText && !newText) continue;
     edits.push({ oldText, newText });
   }

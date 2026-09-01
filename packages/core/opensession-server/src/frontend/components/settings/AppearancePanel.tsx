@@ -1,69 +1,72 @@
+import { mergeStylexProps } from "../../ui/cn";
 import React, { useEffect, useState } from "react";
 import { IconCheck } from "../icons";
 import { fetchFeeds, type RepoInfo } from "../../lib/api";
+import { errorMessage } from "../../lib/error-message";
 import {
-	ACCENT_THEME_OPTIONS,
-	getAccentTheme,
-	getAccentThemeOption,
-	getOnAccentInk,
-	onAccentThemeChanged,
-	setAccentTheme,
-	type AccentTheme,
+  ACCENT_THEME_OPTIONS,
+  getAccentTheme,
+  getAccentThemeOption,
+  getOnAccentInk,
+  onAccentThemeChanged,
+  setAccentTheme,
+  type AccentTheme,
 } from "../../lib/accent-theme";
 import {
-	onSidebarFeedsChanged,
-	readHiddenSidebarFeeds,
-	setSidebarFeedVisible,
+  onSidebarFeedsChanged,
+  readHiddenSidebarFeeds,
+  setSidebarFeedVisible,
 } from "../../lib/sidebar-feeds";
 import {
-	onSidebarToolsChanged,
-	readHiddenSidebarTools,
-	setSidebarToolVisible,
-	toolFitsViewport,
-	SIDEBAR_TOOL_IDS,
-	SIDEBAR_TOOL_LABELS,
+  onSidebarToolsChanged,
+  readHiddenSidebarTools,
+  setSidebarToolVisible,
+  toolFitsViewport,
+  SIDEBAR_TOOL_IDS,
+  SIDEBAR_TOOL_LABELS,
 } from "../../lib/sidebar-tools";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import {
-	getThemePref,
-	effectiveTheme,
-	onThemeChanged,
-	setThemePref,
-	type ThemePref,
+  getThemePref,
+  effectiveTheme,
+  onThemeChanged,
+  setThemePref,
+  type ThemePref,
 } from "../../lib/theme";
 import type { FeedDescriptor } from "../../lib/types";
 import {
-	setFilter,
-	useSidebarFilter,
-	type SortBy,
+  setFilter,
+  useSidebarFilter,
+  type SortBy,
 } from "../../lib/sidebar-filter";
 import {
-	DENSITY_OPTIONS,
-	getSidebarDensity,
-	onSidebarDensityChanged,
-	setSidebarDensity,
-	type SidebarDensity,
+  DENSITY_OPTIONS,
+  getSidebarDensity,
+  onSidebarDensityChanged,
+  setSidebarDensity,
+  type SidebarDensity,
 } from "../../lib/sidebar-density";
 import {
-	getWsTimePref,
-	onWsTimeChanged,
-	setWsTimePref,
-	type WsTimePref,
+  getWsTimePref,
+  onWsTimeChanged,
+  setWsTimePref,
+  type WsTimePref,
 } from "../../lib/workspace-time";
 import {
-	PLAIN_ID,
-	SUPPORT_SURFACE_OPTIONS,
-	setSupportSurface,
-	supportSurfaceOf,
-	type SupportSurface,
+  PLAIN_ID,
+  SUPPORT_SURFACE_OPTIONS,
+  setSupportSurface,
+  supportSurfaceOf,
+  type SupportSurface,
 } from "../../lib/support-surface";
 import {
-	SettingCard,
-	SettingGroup,
-	SettingsGroupLabel,
-	SettingsSection,
+  SettingCard,
+  SettingGroup,
+  SettingsGroupLabel,
+  SettingsSection,
 } from "../../ui/settings";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
+import { InlineAlert } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { usePeople } from "../../lib/people";
 import { useCurrentUser } from "../UserPicker";
@@ -71,262 +74,259 @@ import { useAutomationOverview } from "../../lib/automation-overview";
 import { AGENT_NAME } from "../../lib/brand";
 import { AGENT_PERSON_KEY } from "../../lib/automation-audience";
 import {
-	GROUP_BY_OPTIONS,
-	LAST_USED_TIME_OPTIONS,
-	personFilterOptions,
-	PR_FILTER_OPTIONS,
-	repoFilterOptions,
+  GROUP_BY_OPTIONS,
+  LAST_USED_TIME_OPTIONS,
+  personFilterOptions,
+  PR_FILTER_OPTIONS,
+  repoFilterOptions,
 } from "../sidebar/filter-options";
 import { Tooltip } from "../../ui/tooltip";
 import { Select, SettingRow } from "./shared";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../../styles/typography.stylex";
-import { mergeStylexProps, mergeStylexClassName } from "../../ui/cn";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	absolute: {
-			position: "absolute"
-	},
-	inset0: {
-			inset: "0"
-	},
-	bgMkBg: {
-			backgroundColor: "var(--mk-bg)"
-	},
-	pt15: {
-			paddingTop: "15%"
-	},
-	mb9px: {
-			marginBottom: "9px"
-	},
-	flex: {
-			display: "flex"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap5px: {
-			gap: "5px"
-	},
-	h15: {
-			height: "6px"
-	},
-	w56: {
-			width: "56%"
-	},
-	roundedSm: {
-			borderRadius: "calc(4px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgMkPill: {
-			backgroundColor: "var(--mk-pill)"
-	},
-	w42: {
-			width: "42%"
-	},
-	opacity65: {
-			opacity: ".65"
-	},
-	mr9: {
-			marginRight: "9%"
-	},
-	ml14: {
-			marginLeft: "14%"
-	},
-	h56: {
-			height: "56%"
-	},
-	gap2: {
-			gap: "8px"
-	},
-	roundedTMd: {
-			borderTopLeftRadius: "calc(7px * var(--rf))",
-			borderTopRightRadius: "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgMkPanel: {
-			backgroundColor: "var(--mk-panel)"
-	},
-	px3: {
-			paddingInline: "12px"
-	},
-	py11px: {
-			paddingBlock: "11px"
-	},
-	w68: {
-			width: "68%"
-	},
-	roundedXs: {
-			borderRadius: "calc(2px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgMkLine: {
-			backgroundColor: "var(--mk-line)"
-	},
-	w84: {
-			width: "84%"
-	},
-	w20: {
-			width: "80px"
-	},
-	cursorPointer: {
-			cursor: "pointer"
-	},
-	gap25: {
-			gap: "10px"
-	},
-	borderNone: {
-			borderStyle: "none"
-	},
-	bgTransparent: {
-			backgroundColor: "transparent"
-	},
-	p0: {
-			padding: "0"
-	},
-	relative: {
-			position: "relative"
-	},
-	aspect1610: {
-			aspectRatio: "16/10"
-	},
-	wFull: {
-			width: "100%"
-	},
-	overflowHidden: {
-			overflow: "hidden"
-	},
-	roundedRow: {
-			borderRadius: "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	border2: {
-			borderStyle: "solid",
-			borderWidth: "2px"
-	},
-	borderLine: {
-			borderColor: "var(--border)"
-	},
-	ClipPathInset00050: {
-			clipPath: "inset(0 0 0 50%)"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	minH11: {
-			minHeight: "44px"
-	},
-	minW11: {
-			minWidth: "44px"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	roundedMd: {
-			borderRadius: "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	p1: {
-			padding: "4px"
-	},
-	srOnly: {
-			clipPath: "inset(50%)",
-			whiteSpace: "nowrap",
-			borderWidth: "0",
-			width: "1px",
-			height: "1px",
-			margin: "-1px",
-			padding: "0",
-			position: "absolute",
-			overflow: "hidden"
-	},
-	size8: {
-			width: "32px",
-			height: "32px"
-	},
-	roundedFull: {
-			borderRadius: "calc(infinity * 1px)"
-	,
-		cornerShape: "round"},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	textSwatchInk: {
-			color: "var(--swatch-ink)"
-	},
-	outlineOffset4: {
-			outlineOffset: "4px"
-	},
-	duration150: {
-			transitionDuration: ".15s"
-	},
-	justifyStart: {
-			justifyContent: "flex-start"
-	},
-	gap3: {
-			gap: "12px"
-	},
-	mt5: {
-			marginTop: "20px"
-	},
-	mb2: {
-			marginBottom: "8px"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	wFit: {
-			width: "fit-content"
-	},
-	maxWFull: {
-			maxWidth: "100%"
-	},
-	flexWrap: {
-			flexWrap: "wrap"
-	},
-	gapY1: {
-			rowGap: "4px"
-	},
-
-	desktopW28: {
-		"@media (min-width: 721px)": {
-			"width": "112px"
-		}
-	},
-	transitionBorderColorBoxShadow: {
-		"transitionProperty": "border-color,box-shadow",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	bgLinearGradient135degColorMixInSrgbVarSwatch97WhiteColorMixInSrgbVarSwatch94Black: {
-		"backgroundImage": "linear-gradient(135deg,var(--swatch),var(--swatch))",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"backgroundImage": "linear-gradient(135deg,color-mix(in srgb,var(--swatch) 97%,white),color-mix(in srgb,var(--swatch) 94%,black))"
-		}
-	},
-	transitionScaleBoxShadow: {
-		"transitionProperty": "scale,box-shadow",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	activeScale096: {
-		":active": {
-			"scale": ".96"
-		}
-	},
-	desktopGap4: {
-		"@media (min-width: 721px)": {
-			"gap": "16px"
-		}
-	},
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  bgMkBg: {
+    backgroundColor: "var(--mk-bg)",
+  },
+  pt15: {
+    paddingTop: "15%",
+  },
+  mb9px: {
+    marginBottom: "9px",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap5px: {
+    gap: "5px",
+  },
+  h15: {
+    height: "calc(4px * 1.5)",
+  },
+  w56: {
+    width: "56%",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgMkPill: {
+    backgroundColor: "var(--mk-pill)",
+  },
+  w42: {
+    width: "42%",
+  },
+  opacity65: {
+    opacity: "65%",
+  },
+  mr9: {
+    marginRight: "9%",
+  },
+  ml14: {
+    marginLeft: "14%",
+  },
+  h56: {
+    height: "56%",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  roundedTMd: {
+    borderTopLeftRadius: "calc(7px * var(--rf))",
+    borderTopRightRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgMkPanel: {
+    backgroundColor: "var(--mk-panel)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py11px: {
+    paddingBlock: "11px",
+  },
+  w68: {
+    width: "68%",
+  },
+  roundedXs: {
+    borderRadius: "calc(2px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgMkLine: {
+    backgroundColor: "var(--mk-line)",
+  },
+  w84: {
+    width: "84%",
+  },
+  w20: {
+    width: "calc(4px * 20)",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  borderNone: {
+    borderStyle: "none",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  p0: {
+    padding: "0",
+  },
+  desktopW28: {
+    "@media (min-width: 721px)": {
+      width: "calc(4px * 28)",
+    },
+  },
+  relative: {
+    position: "relative",
+  },
+  aspect1610: {
+    aspectRatio: "16/10",
+  },
+  wFull: {
+    width: "100%",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  roundedRow: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border2: {
+    borderStyle: "solid",
+    borderWidth: "2px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  transitionBorderColorBoxShadow: {
+    transitionProperty: "border-color,box-shadow",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  ClipPathInset00050: {
+    clipPath: "inset(0 0 0 50%)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  minH11: {
+    minHeight: "calc(4px * 11)",
+  },
+  minW11: {
+    minWidth: "calc(4px * 11)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  p1: {
+    padding: "4px",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  size8: {
+    width: "calc(4px * 8)",
+    height: "calc(4px * 8)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  bgLinearGradient135degColorMixInSrgbVarSwatch97WhiteColorMixInSrgbVarSwatch94Black:
+    {
+      backgroundImage:
+        "linear-gradient(135deg,color-mix(in srgb,var(--swatch) 97%,white),color-mix(in srgb,var(--swatch) 94%,black))",
+    },
+  textSwatchInk: {
+    color: "var(--swatch-ink)",
+  },
+  outlineOffset4: {
+    outlineOffset: "4px",
+  },
+  transitionScaleBoxShadow: {
+    transitionProperty: "scale,box-shadow",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  duration150: {
+    transitionDuration: "150ms",
+  },
+  activeScale096: {
+    ":active": {
+      scale: "0.96",
+    },
+  },
+  justifyStart: {
+    justifyContent: "flex-start",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  desktopGap4: {
+    "@media (min-width: 721px)": {
+      gap: "calc(4px * 4)",
+    },
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  wFit: {
+    width: "fit-content",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gapY1: {
+    rowGap: "4px",
+  },
 });
 
 // The look of the app, as it appears inside Settings → Preferences. These used
@@ -335,9 +335,9 @@ const sx = stylex.create({
 // nav row away.
 
 const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
-	{ value: "system", label: "System" },
-	{ value: "light", label: "Light" },
-	{ value: "dark", label: "Dark" },
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
 ];
 
 /**
@@ -347,119 +347,206 @@ const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
  * mock's parts can stay plain utilities.
  */
 const MOCK_PALETTE: Record<"light" | "dark", React.CSSProperties> = {
-	light: {
-		"--mk-bg": "#e9e9e9",
-		"--mk-panel": "#ffffff",
-		"--mk-line": "#d5d5d5",
-		"--mk-pill": "#cbcbcb",
-	} as React.CSSProperties,
-	dark: {
-		"--mk-bg": "#565656",
-		"--mk-panel": "#3e3e3e",
-		"--mk-line": "#c4c4c4",
-		"--mk-pill": "#8a8a8a",
-	} as React.CSSProperties,
+  light: {
+    "--mk-bg": "#e9e9e9",
+    "--mk-panel": "#ffffff",
+    "--mk-line": "#d5d5d5",
+    "--mk-pill": "#cbcbcb",
+  } as React.CSSProperties,
+  dark: {
+    "--mk-bg": "#565656",
+    "--mk-panel": "#3e3e3e",
+    "--mk-line": "#c4c4c4",
+    "--mk-pill": "#8a8a8a",
+  } as React.CSSProperties,
 };
 
 // A miniature app mockup used inside the theme swatches. Its proportions are
 // percentages of the swatch rather than scale steps: it is an illustration
 // that has to rescale with the card, not a piece of chrome on the grid.
 function ThemeMock({ tone }: { tone: "light" | "dark" }) {
-	return (
-		<div
-			{...stylex.props(sx.absolute, sx.inset0, sx.bgMkBg, sx.pt15)}
-			style={MOCK_PALETTE[tone]}
-		>
-			<div {...stylex.props(sx.mb9px, sx.flex, sx.flexCol, sx.itemsCenter, sx.gap5px)}>
-				<div {...stylex.props(sx.h15, sx.w56, sx.roundedSm, sx.bgMkPill)} />
-				<div {...stylex.props(sx.h15, sx.w42, sx.roundedSm, sx.bgMkPill, sx.opacity65)} />
-			</div>
-			<div {...stylex.props(sx.mr9, sx.ml14, sx.flex, sx.h56, sx.flexCol, sx.gap2, sx.roundedTMd, sx.bgMkPanel, sx.px3, sx.py11px)}>
-				<div {...stylex.props(sx.h15, sx.w68, sx.roundedXs, sx.bgMkLine)} />
-				<div {...stylex.props(sx.h15, sx.w84, sx.roundedXs, sx.bgMkLine)} />
-				<div {...stylex.props(sx.h15, sx.w56, sx.roundedXs, sx.bgMkLine)} />
-			</div>
-		</div>
-	);
+  return (
+    <div
+      {...stylex.props(sx.absolute, sx.inset0, sx.bgMkBg, sx.pt15)}
+      style={MOCK_PALETTE[tone]}
+    >
+      <div
+        {...stylex.props(
+          sx.mb9px,
+          sx.flex,
+          sx.flexCol,
+          sx.itemsCenter,
+          sx.gap5px,
+        )}
+      >
+        <div {...stylex.props(sx.h15, sx.w56, sx.roundedSm, sx.bgMkPill)} />
+        <div
+          {...stylex.props(
+            sx.h15,
+            sx.w42,
+            sx.roundedSm,
+            sx.bgMkPill,
+            sx.opacity65,
+          )}
+        />
+      </div>
+      <div
+        {...stylex.props(
+          sx.mr9,
+          sx.ml14,
+          sx.flex,
+          sx.h56,
+          sx.flexCol,
+          sx.gap2,
+          sx.roundedTMd,
+          sx.bgMkPanel,
+          sx.px3,
+          sx.py11px,
+        )}
+      >
+        <div {...stylex.props(sx.h15, sx.w68, sx.roundedXs, sx.bgMkLine)} />
+        <div {...stylex.props(sx.h15, sx.w84, sx.roundedXs, sx.bgMkLine)} />
+        <div {...stylex.props(sx.h15, sx.w56, sx.roundedXs, sx.bgMkLine)} />
+      </div>
+    </div>
+  );
 }
 
 function ThemeCard({
-	option,
-	active,
-	onClick,
+  option,
+  active,
+  onClick,
 }: {
-	option: ThemePref;
-	active: boolean;
-	onClick: () => void;
+  option: ThemePref;
+  active: boolean;
+  onClick: () => void;
 }) {
-	const label = THEME_OPTIONS.find((o) => o.value === option)?.label ?? option;
-	return (
-		// Selection reads off `data-active` rather than an `.active` class so the
-		// swatch and label can style themselves with group-data-* variants. The
-		// old rules were compound selectors (`.theme-card.active .theme-swatch`),
-		// which outrank a single utility: leaving the class here would have let
-		// it keep winning against everything below.
-		<button {...mergeStylexProps("group", sx.desktopW28, sx.flex, sx.w20, sx.cursorPointer, sx.flexCol, sx.itemsCenter, sx.gap25, sx.borderNone, sx.bgTransparent, sx.p0)}
-			role="radio"
-			aria-checked={active}
-			data-active={active || undefined}
-			onClick={onClick}
-		>
-			<div {...mergeStylexProps("group-hover:border-faint group-data-active:border-accent group-data-active:shadow-[0_0_0_1px_var(--accent)]", sx.transitionBorderColorBoxShadow, sx.relative, sx.aspect1610, sx.wFull, sx.overflowHidden, sx.roundedRow, sx.border2, sx.borderLine)}>
-				{/* System = light base with the dark mock clipped over the right half. */}
-				<ThemeMock tone={option === "dark" ? "dark" : "light"} />
-				{option === "system" && (
-					<div {...stylex.props(sx.absolute, sx.inset0, sx.ClipPathInset00050)}>
-						<ThemeMock tone="dark" />
-					</div>
-				)}
-			</div>
-			<span {...mergeStylexProps("group-data-active:font-semibold group-data-active:text-fg", sx.textDim, typography.label)}>
-				{label}
-			</span>
-		</button>
-	);
+  const label = THEME_OPTIONS.find((o) => o.value === option)?.label ?? option;
+  return (
+    // Selection reads off `data-active` rather than an `.active` class so the
+    // swatch and label can style themselves with group-data-* variants. The
+    // old rules were compound selectors (`.theme-card.active .theme-swatch`),
+    // which outrank a single utility: leaving the class here would have let
+    // it keep winning against everything below.
+    <button
+      {...mergeStylexProps(
+        "group",
+        sx.flex,
+        sx.w20,
+        sx.cursorPointer,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.gap25,
+        sx.borderNone,
+        sx.bgTransparent,
+        sx.p0,
+        sx.desktopW28,
+      )}
+      role="radio"
+      aria-checked={active}
+      data-active={active || undefined}
+      onClick={onClick}
+    >
+      <div
+        {...mergeStylexProps(
+          "group-hover:border-faint group-data-active:border-accent group-data-active:shadow-[0_0_0_1px_var(--accent)]",
+          sx.relative,
+          sx.aspect1610,
+          sx.wFull,
+          sx.overflowHidden,
+          sx.roundedRow,
+          sx.border2,
+          sx.borderLine,
+          sx.transitionBorderColorBoxShadow,
+        )}
+      >
+        {/* System = light base with the dark mock clipped over the right half. */}
+        <ThemeMock tone={option === "dark" ? "dark" : "light"} />
+        {option === "system" && (
+          <div {...stylex.props(sx.absolute, sx.inset0, sx.ClipPathInset00050)}>
+            <ThemeMock tone="dark" />
+          </div>
+        )}
+      </div>
+      <span
+        {...mergeStylexProps(
+          "group-data-active:font-semibold group-data-active:text-fg",
+          sx.textDim,
+          typography.label,
+        )}
+      >
+        {label}
+      </span>
+    </button>
+  );
 }
 
 function AccentSwatch({
-	theme,
-	active,
-	tone,
-	onClick,
+  theme,
+  active,
+  tone,
+  onClick,
 }: {
-	theme: AccentTheme;
-	active: boolean;
-	tone: "light" | "dark";
-	onClick: () => void;
+  theme: AccentTheme;
+  active: boolean;
+  tone: "light" | "dark";
+  onClick: () => void;
 }) {
-	const option = getAccentThemeOption(theme);
-	const swatch = option[tone];
-	const ink = getOnAccentInk(theme, tone);
-	const style = {
-		"--swatch": swatch,
-		"--swatch-ink": ink,
-	} as React.CSSProperties;
+  const option = getAccentThemeOption(theme);
+  const swatch = option[tone];
+  const ink = getOnAccentInk(theme, tone);
+  const style = {
+    "--swatch": swatch,
+    "--swatch-ink": ink,
+  } as React.CSSProperties;
 
-	return (
-		<Tooltip label={option.label}>
-			<label
-				{...stylex.props(sx.flex, sx.minH11, sx.minW11, sx.cursorPointer, sx.itemsCenter, sx.justifyCenter, sx.roundedMd, sx.p1)}
-				style={style}
-			>
-				<input
-					type="radio"
-					name="accent-theme"
-					value={theme}
-					checked={active}
-					onChange={onClick}
-					aria-label={option.label} {...mergeStylexProps("peer", sx.srOnly)}
-				/>
-				<span {...mergeStylexProps("peer-checked:shadow-[0_0_0_2px_var(--bg-raised),0_0_0_4px_var(--swatch)] peer-focus-visible:outline-2 peer-focus-visible:outline-accent-ink", sx.bgLinearGradient135degColorMixInSrgbVarSwatch97WhiteColorMixInSrgbVarSwatch94Black, sx.transitionScaleBoxShadow, sx.activeScale096, sx.flex, sx.size8, sx.itemsCenter, sx.justifyCenter, sx.roundedFull, sx.border, sx.borderLine, sx.textSwatchInk, sx.outlineOffset4, sx.duration150)}>
-					{active && <IconCheck size={16} strokeWidth={2.4} />}
-				</span>
-			</label>
-		</Tooltip>
-	);
+  return (
+    <Tooltip label={option.label}>
+      <label
+        {...stylex.props(
+          sx.flex,
+          sx.minH11,
+          sx.minW11,
+          sx.cursorPointer,
+          sx.itemsCenter,
+          sx.justifyCenter,
+          sx.roundedMd,
+          sx.p1,
+        )}
+        style={style}
+      >
+        <input
+          type="radio"
+          name="accent-theme"
+          value={theme}
+          checked={active}
+          onChange={onClick}
+          aria-label={option.label}
+          {...mergeStylexProps("peer", sx.srOnly)}
+        />
+        <span
+          {...mergeStylexProps(
+            "peer-checked:shadow-[0_0_0_2px_var(--bg-raised),0_0_0_4px_var(--swatch)] peer-focus-visible:outline-2 peer-focus-visible:outline-accent-ink",
+            sx.flex,
+            sx.size8,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.roundedFull,
+            sx.border,
+            sx.borderLine,
+            sx.bgLinearGradient135degColorMixInSrgbVarSwatch97WhiteColorMixInSrgbVarSwatch94Black,
+            sx.textSwatchInk,
+            sx.outlineOffset4,
+            sx.transitionScaleBoxShadow,
+            sx.duration150,
+            sx.activeScale096,
+          )}
+        >
+          {active && <IconCheck size={16} strokeWidth={2.4} />}
+        </span>
+      </label>
+    </Tooltip>
+  );
 }
 
 /**
@@ -468,346 +555,369 @@ function AccentSwatch({
  * a scroll apart.
  */
 export function AppearanceSection() {
-	const [pref, setPref] = useState<ThemePref>(getThemePref);
-	const [tone, setTone] = useState(effectiveTheme);
-	useEffect(
-		() =>
-			onThemeChanged(() => {
-				setPref(getThemePref());
-				setTone(effectiveTheme());
-			}),
-		[],
-	);
-	const [accent, setAccent] = useState<AccentTheme>(getAccentTheme);
-	useEffect(() => onAccentThemeChanged(() => setAccent(getAccentTheme())), []);
+  const [pref, setPref] = useState<ThemePref>(getThemePref);
+  const [tone, setTone] = useState(effectiveTheme);
+  useEffect(
+    () =>
+      onThemeChanged(() => {
+        setPref(getThemePref());
+        setTone(effectiveTheme());
+      }),
+    [],
+  );
+  const [accent, setAccent] = useState<AccentTheme>(getAccentTheme);
+  useEffect(() => onAccentThemeChanged(() => setAccent(getAccentTheme())), []);
 
-	return (
-		<>
-			<SettingsGroupLabel>Appearance</SettingsGroupLabel>
-			<SettingsSection>
-				<div {...mergeStylexProps("", sx.desktopGap4, sx.flex, sx.justifyStart, sx.gap3)}
-					role="radiogroup"
-					aria-label="Theme"
-				>
-					{THEME_OPTIONS.map((o) => (
-						<ThemeCard
-							key={o.value}
-							option={o.value}
-							active={pref === o.value}
-							onClick={() => {
-								setThemePref(o.value);
-								setPref(o.value);
-							}}
-						/>
-					))}
-				</div>
-				<div {...stylex.props(sx.mt5)}>
-					<div {...stylex.props(sx.mb2, sx.fontMedium, sx.textFaint, typography.controlLabel)}>
-						Accent
-					</div>
-					<div
-						// Keep the seven 44px targets together instead of stretching them
-						// across the plate. They wrap only when the viewport cannot hold
-						// the full group without shrinking its touch targets.
-						{...stylex.props(sx.flex, sx.wFit, sx.maxWFull, sx.flexWrap, sx.gapY1)}
-						role="radiogroup"
-						aria-label="Accent colour"
-					>
-						{ACCENT_THEME_OPTIONS.map((option) => (
-							<AccentSwatch
-								key={option.value}
-								theme={option.value}
-								active={accent === option.value}
-								tone={tone}
-								onClick={() => {
-									setAccentTheme(option.value);
-									setAccent(option.value);
-								}}
-							/>
-						))}
-					</div>
-				</div>
-			</SettingsSection>
-		</>
-	);
+  return (
+    <>
+      <SettingsGroupLabel>Appearance</SettingsGroupLabel>
+      <SettingsSection>
+        <div
+          {...stylex.props(sx.flex, sx.justifyStart, sx.gap3, sx.desktopGap4)}
+          role="radiogroup"
+          aria-label="Theme"
+        >
+          {THEME_OPTIONS.map((o) => (
+            <ThemeCard
+              key={o.value}
+              option={o.value}
+              active={pref === o.value}
+              onClick={() => {
+                setThemePref(o.value);
+                setPref(o.value);
+              }}
+            />
+          ))}
+        </div>
+        <div {...stylex.props(sx.mt5)}>
+          <div
+            {...stylex.props(
+              sx.mb2,
+              sx.fontMedium,
+              sx.textFaint,
+              typography.controlLabel,
+            )}
+          >
+            Accent
+          </div>
+          <div
+            // Keep the seven 44px targets together instead of stretching them
+            // across the plate. They wrap only when the viewport cannot hold
+            // the full group without shrinking its touch targets.
+            {...stylex.props(
+              sx.flex,
+              sx.wFit,
+              sx.maxWFull,
+              sx.flexWrap,
+              sx.gapY1,
+            )}
+            role="radiogroup"
+            aria-label="Accent colour"
+          >
+            {ACCENT_THEME_OPTIONS.map((option) => (
+              <AccentSwatch
+                key={option.value}
+                theme={option.value}
+                active={accent === option.value}
+                tone={tone}
+                onClick={() => {
+                  setAccentTheme(option.value);
+                  setAccent(option.value);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </SettingsSection>
+    </>
+  );
 }
 
 /** The same sidebar filter controls, shown as Settings rows. */
 export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
-	const filter = useSidebarFilter();
-	const currentUser = useCurrentUser();
-	const roster = usePeople();
-	const automationOverview = useAutomationOverview("settings");
-	const hasUnownedAutomation = Array.from(automationOverview.values()).some(
-		(automation) => !automation.owner,
-	);
-	const people = roster.map((person) => ({
-		key:
-			person.name.trim().split(/\s+/)[0]?.toLowerCase() ||
-			person.name.toLowerCase(),
-		label: person.name,
-	}));
-	if (
-		(hasUnownedAutomation || filter.person === AGENT_PERSON_KEY) &&
-		!people.some(({ key }) => key === AGENT_PERSON_KEY)
-	)
-		people.push({ key: AGENT_PERSON_KEY, label: AGENT_NAME });
-	if (
-		!["me", "everyone", "unassigned"].includes(filter.person) &&
-		!people.some(({ key }) => key === filter.person)
-	)
-		people.push({ key: filter.person, label: filter.person });
+  const filter = useSidebarFilter();
+  const currentUser = useCurrentUser();
+  const roster = usePeople();
+  const automationOverview = useAutomationOverview("settings");
+  const hasUnownedAutomation = Array.from(automationOverview.values()).some(
+    (automation) => !automation.owner,
+  );
+  const people = roster.map((person) => ({
+    key:
+      person.name.trim().split(/\s+/)[0]?.toLowerCase() ||
+      person.name.toLowerCase(),
+    label: person.name,
+  }));
+  if (
+    (hasUnownedAutomation || filter.person === AGENT_PERSON_KEY) &&
+    !people.some(({ key }) => key === AGENT_PERSON_KEY)
+  )
+    people.push({ key: AGENT_PERSON_KEY, label: AGENT_NAME });
+  if (
+    !["me", "everyone", "unassigned"].includes(filter.person) &&
+    !people.some(({ key }) => key === filter.person)
+  )
+    people.push({ key: filter.person, label: filter.person });
 
-	const availableRepos = repos.map(({ id }) => ({ id }));
-	if (
-		filter.repo !== "all" &&
-		!availableRepos.some(({ id }) => id === filter.repo)
-	)
-		availableRepos.push({ id: filter.repo });
-	const repoOptions = repoFilterOptions(availableRepos);
-	const personOptions = personFilterOptions({ people, currentUser });
+  const availableRepos = repos.map(({ id }) => ({ id }));
+  if (
+    filter.repo !== "all" &&
+    !availableRepos.some(({ id }) => id === filter.repo)
+  )
+    availableRepos.push({ id: filter.repo });
+  const repoOptions = repoFilterOptions(availableRepos);
+  const personOptions = personFilterOptions({ people, currentUser });
 
-	const [density, setDensity] = useState<SidebarDensity>(getSidebarDensity);
-	useEffect(
-		() => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
-		[],
-	);
-	const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
-	useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
+  const [density, setDensity] = useState<SidebarDensity>(getSidebarDensity);
+  useEffect(
+    () => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
+    [],
+  );
+  const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
+  useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
 
-	return (
-		<>
-			{/* These rows describe one default view of the sidebar. */}
-			<SettingGroup>
-				<SettingRow
-					title="Group by"
-					control={
-						<Select
-							label="Group by"
-							value={filter.groupBy}
-							options={GROUP_BY_OPTIONS}
-							onChange={(groupBy) => setFilter({ groupBy })}
-						/>
-					}
-				/>
-				<SettingRow
-					title="Group by project"
-					control={
-						<Switch
-							aria-label="Group by project"
-							checked={filter.byProject}
-							onCheckedChange={(byProject) => setFilter({ byProject })}
-						/>
-					}
-				/>
-				<SettingRow
-					title="Repo"
-					control={
-						<Select
-							label="Repo"
-							value={filter.repo}
-							options={repoOptions}
-							onChange={(repo) => setFilter({ repo })}
-						/>
-					}
-				/>
-				<SettingRow
-					title="Person"
-					control={
-						<Select
-							label="Person"
-							value={filter.person}
-							options={personOptions}
-							onChange={(person) => setFilter({ person })}
-						/>
-					}
-				/>
-				{filter.groupBy === "status" && (
-					<SettingRow
-						title="Sort by"
-						control={
-							<Select
-								label="Sort by"
-								value={filter.sort}
-								options={[
-									{ value: "updated", label: "Updated" },
-									{ value: "created", label: "Created" },
-								]}
-								onChange={(sort) => setFilter({ sort: sort as SortBy })}
-							/>
-						}
-					/>
-				)}
-				<SettingRow
-					title="Pull requests"
-					control={
-						<Select
-							label="Pull requests"
-							value={filter.prs}
-							options={PR_FILTER_OPTIONS}
-							onChange={(prs) => setFilter({ prs })}
-						/>
-					}
-				/>
-				<SettingRow
-					title="Show auto created"
-					control={
-						<Switch
-							aria-label="Show auto created"
-							checked={filter.autoCreated === "show"}
-							onCheckedChange={(shown) =>
-								setFilter({ autoCreated: shown ? "show" : "hide" })
-							}
-						/>
-					}
-				/>
-				<SettingRow
-					title="Hide empty projects"
-					control={
-						<Switch
-							aria-label="Hide empty projects"
-							checked={filter.emptyProjects === "hide"}
-							onCheckedChange={(hide) =>
-								setFilter({ emptyProjects: hide ? "hide" : "show" })
-							}
-						/>
-					}
-				/>
-			</SettingGroup>
-			<SettingGroup>
-				<SettingRow
-					title="Row density"
-					control={
-						<Segmented
-							label="Sidebar row density"
-							value={density}
-							onValueChange={(value) =>
-								setSidebarDensity(value as SidebarDensity)
-							}
-						>
-							{DENSITY_OPTIONS.map(({ value, label, Icon }) => (
-								<SegmentedOption key={value} value={value}>
-									<Icon size={20} />
-									{label}
-								</SegmentedOption>
-							))}
-						</Segmented>
-					}
-				/>
-				<SettingRow
-					title="Show last used time"
-					control={
-						<Select
-							label="Show last used time"
-							value={wsTime}
-							options={LAST_USED_TIME_OPTIONS}
-							onChange={setWsTimePref}
-						/>
-					}
-				/>
-			</SettingGroup>
-		</>
-	);
+  return (
+    <>
+      {/* These rows describe one default view of the sidebar. */}
+      <SettingGroup>
+        <SettingRow
+          title="Group by"
+          control={
+            <Select
+              label="Group by"
+              value={filter.groupBy}
+              options={GROUP_BY_OPTIONS}
+              onChange={(groupBy) => setFilter({ groupBy })}
+            />
+          }
+        />
+        <SettingRow
+          title="Group by project"
+          control={
+            <Switch
+              aria-label="Group by project"
+              checked={filter.byProject}
+              onCheckedChange={(byProject) => setFilter({ byProject })}
+            />
+          }
+        />
+        <SettingRow
+          title="Repo"
+          control={
+            <Select
+              label="Repo"
+              value={filter.repo}
+              options={repoOptions}
+              onChange={(repo) => setFilter({ repo })}
+            />
+          }
+        />
+        <SettingRow
+          title="Person"
+          control={
+            <Select
+              label="Person"
+              value={filter.person}
+              options={personOptions}
+              onChange={(person) => setFilter({ person })}
+            />
+          }
+        />
+        {filter.groupBy === "status" && (
+          <SettingRow
+            title="Sort by"
+            control={
+              <Select
+                label="Sort by"
+                value={filter.sort}
+                options={[
+                  { value: "updated", label: "Updated" },
+                  { value: "created", label: "Created" },
+                ]}
+                onChange={(sort) => setFilter({ sort: sort as SortBy })}
+              />
+            }
+          />
+        )}
+        <SettingRow
+          title="Pull requests"
+          control={
+            <Select
+              label="Pull requests"
+              value={filter.prs}
+              options={PR_FILTER_OPTIONS}
+              onChange={(prs) => setFilter({ prs })}
+            />
+          }
+        />
+        <SettingRow
+          title="Show auto created"
+          control={
+            <Switch
+              aria-label="Show auto created"
+              checked={filter.autoCreated === "show"}
+              onCheckedChange={(shown) =>
+                setFilter({ autoCreated: shown ? "show" : "hide" })
+              }
+            />
+          }
+        />
+        <SettingRow
+          title="Hide empty projects"
+          control={
+            <Switch
+              aria-label="Hide empty projects"
+              checked={filter.emptyProjects === "hide"}
+              onCheckedChange={(hide) =>
+                setFilter({ emptyProjects: hide ? "hide" : "show" })
+              }
+            />
+          }
+        />
+      </SettingGroup>
+      <SettingGroup>
+        <SettingRow
+          title="Row density"
+          control={
+            <Segmented
+              label="Sidebar row density"
+              value={density}
+              onValueChange={(value) =>
+                setSidebarDensity(value as SidebarDensity)
+              }
+            >
+              {DENSITY_OPTIONS.map(({ value, label, Icon }) => (
+                <SegmentedOption key={value} value={value}>
+                  <Icon size={20} />
+                  {label}
+                </SegmentedOption>
+              ))}
+            </Segmented>
+          }
+        />
+        <SettingRow
+          title="Show last used time"
+          control={
+            <Select
+              label="Show last used time"
+              value={wsTime}
+              options={LAST_USED_TIME_OPTIONS}
+              onChange={setWsTimePref}
+            />
+          }
+        />
+      </SettingGroup>
+    </>
+  );
 }
 
 /** Which tools and sources the sidebar carries, as its own card. */
 export function SidebarItemsSection() {
-	const isPhone = useIsPhone();
-	const [hiddenSidebarTools, setHiddenSidebarTools] = useState(
-		readHiddenSidebarTools,
-	);
-	const [sidebarFeeds, setSidebarFeeds] = useState<FeedDescriptor[]>([]);
-	const [hiddenSidebarFeeds, setHiddenSidebarFeeds] = useState(
-		readHiddenSidebarFeeds,
-	);
-	useEffect(() => {
-		let alive = true;
-		fetchFeeds()
-			.then((feeds) => {
-				if (alive) setSidebarFeeds(feeds);
-			})
-			.catch(() => {});
-		return () => {
-			alive = false;
-		};
-	}, []);
-	useEffect(
-		() =>
-			onSidebarToolsChanged(() =>
-				setHiddenSidebarTools(readHiddenSidebarTools()),
-			),
-		[],
-	);
-	useEffect(
-		() =>
-			onSidebarFeedsChanged(() =>
-				setHiddenSidebarFeeds(readHiddenSidebarFeeds()),
-			),
-		[],
-	);
+  const isPhone = useIsPhone();
+  const [hiddenSidebarTools, setHiddenSidebarTools] = useState(
+    readHiddenSidebarTools,
+  );
+  const [sidebarFeeds, setSidebarFeeds] = useState<FeedDescriptor[]>([]);
+  const [sidebarFeedsError, setSidebarFeedsError] = useState<string | null>(
+    null,
+  );
+  const [hiddenSidebarFeeds, setHiddenSidebarFeeds] = useState(
+    readHiddenSidebarFeeds,
+  );
+  useEffect(() => {
+    let alive = true;
+    fetchFeeds()
+      .then((feeds) => {
+        if (alive) setSidebarFeeds(feeds);
+      })
+      .catch((error: unknown) => {
+        if (alive)
+          setSidebarFeedsError(
+            errorMessage(error, "Failed to load sidebar sources"),
+          );
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  useEffect(
+    () =>
+      onSidebarToolsChanged(() =>
+        setHiddenSidebarTools(readHiddenSidebarTools()),
+      ),
+    [],
+  );
+  useEffect(
+    () =>
+      onSidebarFeedsChanged(() =>
+        setHiddenSidebarFeeds(readHiddenSidebarFeeds()),
+      ),
+    [],
+  );
 
-	return (
-		<>
-			<SettingsGroupLabel>Show in sidebar</SettingsGroupLabel>
-			<SettingCard>
-				{/* Support is one decision, not two switches. Its tool and its
+  return (
+    <>
+      <SettingsGroupLabel>Show in sidebar</SettingsGroupLabel>
+      {sidebarFeedsError && <InlineAlert>{sidebarFeedsError}</InlineAlert>}
+      <SettingCard>
+        {/* Support is one decision, not two switches. Its tool and its
 				    sidebar band are the same queue reached two ways, so they are
 				    set together here and left out of the lists below. Only
 				    offered when Plain is actually connected: with no queue behind
 				    it there is nowhere for either surface to lead. */}
-				{sidebarFeeds.some((feed) => feed.id === PLAIN_ID) && (
-					<SettingRow
-						title="Support tickets"
-						desc="Choose where Plain tickets live: in a full workspace from the sidebar, or beside the queue without chat."
-						control={
-							<Select
-								label="Where support tickets live"
-								value={supportSurfaceOf(
-									!hiddenSidebarTools.has(PLAIN_ID),
-									!hiddenSidebarFeeds.has(PLAIN_ID),
-								)}
-								options={SUPPORT_SURFACE_OPTIONS}
-								onChange={(value) => setSupportSurface(value as SupportSurface)}
-							/>
-						}
-					/>
-				)}
-				{SIDEBAR_TOOL_IDS.filter(
-					(toolId) => toolFitsViewport(toolId, isPhone) && toolId !== PLAIN_ID,
-				).map((toolId) => (
-					<SettingRow
-						key={toolId}
-						title={SIDEBAR_TOOL_LABELS[toolId]}
-						control={
-							<Switch
-								aria-label={`Show ${SIDEBAR_TOOL_LABELS[toolId]} in sidebar`}
-								checked={!hiddenSidebarTools.has(toolId)}
-								onCheckedChange={(visible) =>
-									setSidebarToolVisible(toolId, visible)
-								}
-							/>
-						}
-					/>
-				))}
-				{sidebarFeeds
-					.filter((feed) => feed.id !== PLAIN_ID)
-					.map((feed) => (
-						<SettingRow
-							key={feed.id}
-							title={feed.title}
-							desc="Hidden sources stop refreshing until shown again."
-							control={
-								<Switch
-									aria-label={`Show ${feed.title} in sidebar`}
-									checked={!hiddenSidebarFeeds.has(feed.id)}
-									onCheckedChange={(visible) =>
-										setSidebarFeedVisible(feed.id, visible)
-									}
-								/>
-							}
-						/>
-					))}
-			</SettingCard>
-		</>
-	);
+        {sidebarFeeds.some((feed) => feed.id === PLAIN_ID) && (
+          <SettingRow
+            title="Support tickets"
+            desc="Choose where Plain tickets live: in a full workspace from the sidebar, or beside the queue without chat."
+            control={
+              <Select
+                label="Where support tickets live"
+                value={supportSurfaceOf(
+                  !hiddenSidebarTools.has(PLAIN_ID),
+                  !hiddenSidebarFeeds.has(PLAIN_ID),
+                )}
+                options={SUPPORT_SURFACE_OPTIONS}
+                onChange={(value) => setSupportSurface(value as SupportSurface)}
+              />
+            }
+          />
+        )}
+        {SIDEBAR_TOOL_IDS.filter(
+          (toolId) => toolFitsViewport(toolId, isPhone) && toolId !== PLAIN_ID,
+        ).map((toolId) => (
+          <SettingRow
+            key={toolId}
+            title={SIDEBAR_TOOL_LABELS[toolId]}
+            control={
+              <Switch
+                aria-label={`Show ${SIDEBAR_TOOL_LABELS[toolId]} in sidebar`}
+                checked={!hiddenSidebarTools.has(toolId)}
+                onCheckedChange={(visible) =>
+                  setSidebarToolVisible(toolId, visible)
+                }
+              />
+            }
+          />
+        ))}
+        {sidebarFeeds
+          .filter((feed) => feed.id !== PLAIN_ID)
+          .map((feed) => (
+            <SettingRow
+              key={feed.id}
+              title={feed.title}
+              desc="Hidden sources stop refreshing until shown again."
+              control={
+                <Switch
+                  aria-label={`Show ${feed.title} in sidebar`}
+                  checked={!hiddenSidebarFeeds.has(feed.id)}
+                  onCheckedChange={(visible) =>
+                    setSidebarFeedVisible(feed.id, visible)
+                  }
+                />
+              }
+            />
+          ))}
+      </SettingCard>
+    </>
+  );
 }

@@ -115,7 +115,9 @@ export function verifyCsWebhookSignature(
     createHmac("sha256", secret).update(`${t}.${body}`).digest("hex"),
   );
   const provided = Buffer.from(sig.toLowerCase());
-  return expected.length === provided.length && timingSafeEqual(expected, provided);
+  return (
+    expected.length === provided.length && timingSafeEqual(expected, provided)
+  );
 }
 
 // A push can land as a burst; coalesce into one broadcast per repo+branch,
@@ -150,7 +152,8 @@ export async function handleCsWebhook(req: Request): Promise<Response> {
   try {
     body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
   } catch (error) {
-    if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
+    if (error instanceof RequestBodyTooLargeError)
+      return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
     throw error;
   }
   const signature = req.headers.get("x-pierre-signature") || "";
@@ -177,34 +180,50 @@ export async function handleCsWebhook(req: Request): Promise<Response> {
   // Sync lifecycle: a failed run is a per-repo health warning until the next
   // successful one (the status endpoint surfaces it).
   if (event === "repo.sync.failed") {
-    recordDelivery({ event, ok: true, ...(repoPath ? { repo: repoPath } : {}) });
+    recordDelivery({
+      event,
+      ok: true,
+      ...(repoPath ? { repo: repoPath } : {}),
+    });
     if (repoPath) {
       state.syncFailures[repoPath] = {
         at: new Date().toISOString(),
-        error: typeof payload.error === "string" ? payload.error : "sync failed",
+        error:
+          typeof payload.error === "string" ? payload.error : "sync failed",
       };
     }
     return Response.json({ ok: true });
   }
   if (event === "repo.sync.succeeded") {
-    recordDelivery({ event, ok: true, ...(repoPath ? { repo: repoPath } : {}) });
+    recordDelivery({
+      event,
+      ok: true,
+      ...(repoPath ? { repo: repoPath } : {}),
+    });
     if (repoPath) delete state.syncFailures[repoPath];
     return Response.json({ ok: true });
   }
   if (event !== "push") {
-    recordDelivery({ event, ok: true, ...(repoPath ? { repo: repoPath } : {}) });
+    recordDelivery({
+      event,
+      ok: true,
+      ...(repoPath ? { repo: repoPath } : {}),
+    });
     return Response.json({ ok: true, ignored: event });
   }
 
   const branch =
-    typeof payload.ref === "string" ? payload.ref.replace(/^refs\/heads\//, "") : "";
+    typeof payload.ref === "string"
+      ? payload.ref.replace(/^refs\/heads\//, "")
+      : "";
   recordDelivery({
     event,
     ok: true,
     ...(typeof payload.ref === "string" ? { ref: payload.ref } : {}),
     ...(repoPath ? { repo: repoPath } : {}),
   });
-  if (!branch || (!repoPath && !repoInternalId)) return Response.json({ ok: true });
+  if (!branch || (!repoPath && !repoInternalId))
+    return Response.json({ ok: true });
 
   // `repository.url` is the repo path ("acme/widget") — what Repo.csRepo
   // holds; the internal `repository.id` is matched too in case a config used it.
@@ -216,7 +235,8 @@ export async function handleCsWebhook(req: Request): Promise<Response> {
     // fire-and-forget) — the next PR-info read re-fetches the branch diff.
     prHostFor(repo).invalidatePrInfo(repo.csRepo, branch);
     scheduleCsBroadcast(repo.id, repo.csRepo, branch);
-    if (branch === repo.defaultBranch) scheduleSandboxEnvironmentInvalidation(repo.id);
+    if (branch === repo.defaultBranch)
+      scheduleSandboxEnvironmentInvalidation(repo.id);
     matched = true;
   }
   // Session prState enrichment reads through the 2s sessions cache — drop it

@@ -15,7 +15,10 @@ import { $ } from "bun";
 import type { WorkspaceExec } from "./sandbox/workspace-exec";
 
 const CACHE_TTL_MS = 15_000;
-const cache = new Map<string, { files: string[]; dirs: string[]; at: number }>();
+const cache = new Map<
+  string,
+  { files: string[]; dirs: string[]; at: number }
+>();
 const loads = new Map<string, Promise<void>>();
 
 // Monotonic-ish clock without Date.now() (which is fine in server code, but a
@@ -49,11 +52,18 @@ async function loadFiles(dir: string, exec?: WorkspaceExec): Promise<void> {
     try {
       // --cached: tracked, --others --exclude-standard: untracked but not gitignored.
       // -z: NUL-separated so paths with spaces/newlines survive.
-      const args = ["ls-files", "--cached", "--others", "--exclude-standard", "-z"];
+      const args = [
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "-z",
+      ];
       let out: string;
       if (exec) {
         const r = await exec(["git", ...args]);
-        if (r.exitCode !== 0) throw new Error(r.stderr.trim() || `git ls-files failed in ${dir}`);
+        if (r.exitCode !== 0)
+          throw new Error(r.stderr.trim() || `git ls-files failed in ${dir}`);
         out = r.stdout;
       } else {
         out = await $`git -C ${dir} ${args}`.quiet().text();
@@ -64,7 +74,10 @@ async function loadFiles(dir: string, exec?: WorkspaceExec): Promise<void> {
       const files = out
         .split("\0")
         .filter(Boolean)
-        .filter((f) => !f.startsWith("node_modules/") && !f.includes("/node_modules/"));
+        .filter(
+          (f) =>
+            !f.startsWith("node_modules/") && !f.includes("/node_modules/"),
+        );
       cache.set(dir, { files, dirs: deriveDirs(files), at: now() });
     } catch (error) {
       // A transient git/sandbox failure should not make the picker look empty.
@@ -118,7 +131,11 @@ export interface RepoEntry {
   dir?: boolean;
 }
 
-export function listRepoEntries(dir: string, query: string, limit = 20): RepoEntry[] {
+export function listRepoEntries(
+  dir: string,
+  query: string,
+  limit = 20,
+): RepoEntry[] {
   const hit = cache.get(dir);
   if (!hit) return [];
   const scored: Array<{ entry: RepoEntry; score: number }> = [];

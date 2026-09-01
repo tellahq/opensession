@@ -20,23 +20,25 @@
  */
 
 type InstanceBrand = {
-	productName?: string;
-	productMark?: string;
-	personaName?: string;
-	publicBaseUrl?: string;
-	webhookBaseUrl?: string;
-	githubBotLogins?: string[];
-	defaultRepoId?: string;
-	plainWorkspaceId?: string;
-	agentationEnabled?: boolean;
+  productName?: string;
+  productMark?: string;
+  personaName?: string;
+  publicBaseUrl?: string;
+  webhookBaseUrl?: string;
+  githubBotLogins?: string[];
+  defaultRepoId?: string;
+  plainWorkspaceId?: string;
+  agentationEnabled?: boolean;
 };
 
 const INSTANCE: InstanceBrand =
-	typeof window === "undefined"
-		? {}
-		: ((window as typeof window & {
-				__OPENSESSION_INSTANCE__?: InstanceBrand;
-			}).__OPENSESSION_INSTANCE__ || {});
+  typeof window === "undefined"
+    ? {}
+    : (
+        window as typeof window & {
+          __OPENSESSION_INSTANCE__?: InstanceBrand;
+        }
+      ).__OPENSESSION_INSTANCE__ || {};
 
 export const PRODUCT_NAME = INSTANCE.productName || "Open Session";
 
@@ -47,11 +49,11 @@ export const PRODUCT_MARK = INSTANCE.productMark || "OS";
 /** The agent's display name (server: personaName(), config persona.name). */
 export const AGENT_NAME = INSTANCE.personaName || "Assistant";
 export const PUBLIC_BASE_URL =
-	INSTANCE.publicBaseUrl ||
-	(typeof location === "undefined" ? "http://127.0.0.1:3850" : location.origin);
+  INSTANCE.publicBaseUrl ||
+  (typeof location === "undefined" ? "http://127.0.0.1:3850" : location.origin);
 export const WEBHOOK_BASE_URL = INSTANCE.webhookBaseUrl || PUBLIC_BASE_URL;
 export const GITHUB_BOT_LOGINS = new Set(
-	(INSTANCE.githubBotLogins || []).map((login) => login.toLowerCase()),
+  (INSTANCE.githubBotLogins || []).map((login) => login.toLowerCase()),
 );
 /** Primary GitHub bot login (first policy.githubBotLogins entry) for display
  *  fallbacks; empty string when the instance has no bot. */
@@ -74,9 +76,9 @@ export const AGENTATION_ENABLED = INSTANCE.agentationEnabled === true;
  * literal on the wire.
  */
 export const sessionSourceLabel = (source: string) =>
-	source === "opensession" || source === "backstage"
-		? PRODUCT_NAME.toLowerCase()
-		: source;
+  source === "opensession" || source === "backstage"
+    ? PRODUCT_NAME.toLowerCase()
+    : source;
 
 /**
  * The same origin written for prose — a tooltip or a sentence, where the
@@ -84,13 +86,13 @@ export const sessionSourceLabel = (source: string) =>
  * to the chip label, which is the id itself.
  */
 const SOURCE_NAMES: Record<string, string> = {
-	slack: "Slack",
-	linear: "Linear",
-	cli: "the CLI",
+  slack: "Slack",
+  linear: "Linear",
+  cli: "the CLI",
 };
 
 export const sessionSourceName = (source: string) =>
-	SOURCE_NAMES[source] ?? sessionSourceLabel(source);
+  SOURCE_NAMES[source] ?? sessionSourceLabel(source);
 
 /** Default document.title when no view-specific title applies. */
 export const DEFAULT_DOC_TITLE = PRODUCT_NAME;

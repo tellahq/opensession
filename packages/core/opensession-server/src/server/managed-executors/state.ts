@@ -1,7 +1,11 @@
 import type { ExecutorProviderId } from "./provider";
 
 export type ExecutorLifecycle =
-  "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
+  | "preparing"
+  | "awake"
+  | "sleeping"
+  | "waking"
+  | "needs_attention";
 
 export interface ExecutorProjectState {
   revision: string;

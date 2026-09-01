@@ -10,8 +10,21 @@
  * sandboxesEnabled() instead of assuming it, so a dev box with the switch on
  * still passes.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  test,
+} from "bun:test";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -50,30 +63,41 @@ beforeAll(() => {
   process.env.OPENSESSION_SANDBOX_CONFIG = cfgPath();
   process.env.OPENSESSION_CONFIG = instanceCfgPath();
   delete process.env.E2B_API_KEY;
-  process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
+  process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(
+    scratch,
+    "secrets.json",
+  );
 });
 
 afterEach(() => {
   for (const path of [cfgPath(), instanceCfgPath()]) {
-    try { unlinkSync(path); } catch {}
+    try {
+      unlinkSync(path);
+    } catch {}
   }
 });
 
 afterAll(() => {
-  if (prevEnvConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
+  if (prevEnvConfig === undefined)
+    delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = prevEnvConfig;
   if (prevE2bKey !== undefined) process.env.E2B_API_KEY = prevE2bKey;
-  if (prevSecretsStore !== undefined) process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = prevSecretsStore;
+  if (prevSecretsStore !== undefined)
+    process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = prevSecretsStore;
   else delete process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
-  if (prevInstanceConfig !== undefined) process.env.OPENSESSION_CONFIG = prevInstanceConfig;
+  if (prevInstanceConfig !== undefined)
+    process.env.OPENSESSION_CONFIG = prevInstanceConfig;
   else delete process.env.OPENSESSION_CONFIG;
   rmSync(scratch, { recursive: true, force: true });
 });
 
 const write = (cfg: object) => writeFileSync(cfgPath(), JSON.stringify(cfg));
 const writeIngress = (publicBaseUrl: string) =>
-  writeFileSync(instanceCfgPath(), JSON.stringify({ ingress: { publicBaseUrl, exposure: "custom" } }));
-const ready = (provider: "docker" | "daytona" | "box" | "modal" | "microvm") => {
+  writeFileSync(
+    instanceCfgPath(),
+    JSON.stringify({ ingress: { publicBaseUrl, exposure: "custom" } }),
+  );
+const ready = (provider: "docker" | "daytona" | "box" | "modal") => {
   connectSandboxProvider(
     provider,
     provider === "daytona" || provider === "box"
@@ -86,27 +110,29 @@ const ready = (provider: "docker" | "daytona" | "box" | "modal" | "microvm") => 
 };
 
 describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
-	test("certification requires both behavioral and warm-restore evidence", () => {
-		for (const certification of Object.values(SANDBOX_PROVIDER_CERTIFICATIONS)) {
-			if (!certification.certified) continue;
-			expect(certification.behavioralPassedAt).toBeTruthy();
-			expect(certification.warmRestorePassedAt).toBeTruthy();
-		}
-	});
+  test("certification requires both behavioral and warm-restore evidence", () => {
+    for (const certification of Object.values(
+      SANDBOX_PROVIDER_CERTIFICATIONS,
+    )) {
+      if (!certification.certified) continue;
+      expect(certification.behavioralPassedAt).toBeTruthy();
+      expect(certification.warmRestorePassedAt).toBeTruthy();
+    }
+  });
 
-	test("workspace default persists without replacing provider configuration", () => {
-		write({ provider: "docker", image: "runner:test", nested: { keep: true } });
-		ready("docker");
-		expect(setWorkspaceSandboxDefault("docker")).toBe("docker");
-		const stored = JSON.parse(readFileSync(cfgPath(), "utf-8"));
-		expect(stored).toMatchObject({
-			provider: "docker",
-			image: "runner:test",
-			nested: { keep: true },
-			sessionDefault: "docker",
-		});
-		expect(sandboxConfig().sessionDefault).toBe("docker");
-	});
+  test("workspace default persists without replacing provider configuration", () => {
+    write({ provider: "docker", image: "runner:test", nested: { keep: true } });
+    ready("docker");
+    expect(setWorkspaceSandboxDefault("docker")).toBe("docker");
+    const stored = JSON.parse(readFileSync(cfgPath(), "utf-8"));
+    expect(stored).toMatchObject({
+      provider: "docker",
+      image: "runner:test",
+      nested: { keep: true },
+      sessionDefault: "docker",
+    });
+    expect(sandboxConfig().sessionDefault).toBe("docker");
+  });
 
   test("no config file: disabled, everything unconfigured, default local", () => {
     const s = sandboxCapabilityStatus();
@@ -118,7 +144,6 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
       "e2b",
       "box",
       "modal",
-      "microvm",
       "lambda-microvm",
     ]);
     expect(s.providers.every((p) => !p.configured)).toBe(true);
@@ -127,7 +152,6 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
       "daytona",
       "box",
       "modal",
-      "microvm",
     ]);
     expect(s.killSwitch).toBe(!sandboxesEnabled());
   });
@@ -138,7 +162,9 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     expect(s.enabled).toBe(true);
     expect(s.defaultProvider).toBe("local");
     expect(s.providers.find((p) => p.id === "docker")?.configured).toBe(false);
-    expect(s.providers.find((p) => p.id === "docker")?.usability).toBe("not_configured");
+    expect(s.providers.find((p) => p.id === "docker")?.usability).toBe(
+      "not_configured",
+    );
     expect(sandboxProviderUsability("docker")).toEqual({
       state: "not_configured",
       configured: false,
@@ -165,20 +191,26 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     write({ provider: "docker" });
     writeIngress("https://example.ts.net");
     ready("daytona");
-    const d = sandboxCapabilityStatus().providers.find((p) => p.id === "daytona")!;
+    const d = sandboxCapabilityStatus().providers.find(
+      (p) => p.id === "daytona",
+    )!;
     expect(d.configured).toBe(true);
     expect(d.note).toBeUndefined();
   });
 
   test("Modal requires both normalized workspace token credentials", () => {
     write({ provider: "modal" });
-    expect(() => connectSandboxProvider("modal", { tokenId: "ak-one-sided" })).toThrow();
+    expect(() =>
+      connectSandboxProvider("modal", { tokenId: "ak-one-sided" }),
+    ).toThrow();
     write({
       provider: "modal",
       callbackBaseUrl: "wss://os.example.ts.net",
     });
     ready("modal");
-    const modal = sandboxCapabilityStatus().providers.find((p) => p.id === "modal")!;
+    const modal = sandboxCapabilityStatus().providers.find(
+      (p) => p.id === "modal",
+    )!;
     expect(modal.configured).toBe(true);
     expect(modal.note).toBeUndefined();
   });
@@ -188,12 +220,15 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     expect(sandboxProviderConfigured("lambda-microvm")).toBe(false);
     write({
       provider: "lambda-microvm",
-      awsLambdaMicrovm: { imageIdentifier: "arn:aws:lambda:us-east-1:123:microvm-image/test" },
+      awsLambdaMicrovm: {
+        imageIdentifier: "arn:aws:lambda:us-east-1:123:microvm-image/test",
+      },
       callbackBaseUrl: "wss://os.example.ts.net",
     });
     expect(sandboxProviderConfigured("lambda-microvm")).toBe(true);
     expect(
-      sandboxCapabilityStatus().providers.find((p) => p.id === "lambda-microvm")?.note,
+      sandboxCapabilityStatus().providers.find((p) => p.id === "lambda-microvm")
+        ?.note,
     ).toContain("not available for new sessions");
   });
 
@@ -214,15 +249,6 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     });
   });
 
-  test("local Firecracker microvm requires explicit config and a clean golden", () => {
-    write({ provider: "microvm", firecrackerMicrovm: { enabled: false } });
-    expect(sandboxProviderConfigured("microvm")).toBe(false);
-    expect(
-      sandboxCapabilityStatus().providers.find((p) => p.id === "microvm")
-        ?.configured,
-    ).toBe(false);
-  });
-
   test("an explicit callbackBaseUrl also counts as dial-back configured", () => {
     write({
       provider: "docker",
@@ -241,7 +267,9 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
       publicIngress: { enabled: false, publicBaseUrl: "wss://example.ts.net" },
     });
     ready("daytona");
-    const d = sandboxCapabilityStatus().providers.find((p) => p.id === "daytona")!;
+    const d = sandboxCapabilityStatus().providers.find(
+      (p) => p.id === "daytona",
+    )!;
     expect(d.note).toContain("no public ingress configured");
   });
 
@@ -252,7 +280,9 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("status carries model-family sandboxability verbatim (UI's source of truth)", () => {
-    expect(sandboxCapabilityStatus().modelFamilies).toBe(SANDBOX_MODEL_FAMILIES);
+    expect(sandboxCapabilityStatus().modelFamilies).toBe(
+      SANDBOX_MODEL_FAMILIES,
+    );
   });
 });
 
@@ -281,25 +311,39 @@ describe("provider-independent model-family sandboxability", () => {
       expect(sandboxableModelFamily(model)).toEqual({ ok: true });
     }
   });
-
-
 });
 
 describe("resolveRequestedSandbox (create-path validation)", () => {
-	test("omitted interactive choice uses defaults; explicit Host still wins", () => {
-		write({ provider: "docker", sessionDefault: "docker" });
-		ready("docker");
-		expect(
-			resolveInteractiveSandbox(undefined, "sandbox-default-test-user", undefined, "claude-fable-5"),
-		).toEqual({ ok: true, provider: "docker" });
-		expect(
-			resolveInteractiveSandbox("local", "sandbox-default-test-user", undefined, "claude-fable-5"),
-		).toEqual({ ok: true, provider: null });
-	});
+  test("omitted interactive choice uses defaults; explicit Host still wins", () => {
+    write({ provider: "docker", sessionDefault: "docker" });
+    ready("docker");
+    expect(
+      resolveInteractiveSandbox(
+        undefined,
+        "sandbox-default-test-user",
+        undefined,
+        "claude-fable-5",
+      ),
+    ).toEqual({ ok: true, provider: "docker" });
+    expect(
+      resolveInteractiveSandbox(
+        "local",
+        "sandbox-default-test-user",
+        undefined,
+        "claude-fable-5",
+      ),
+    ).toEqual({ ok: true, provider: null });
+  });
 
   test("falsy = no sandbox", () => {
-    expect(resolveRequestedSandbox(undefined)).toEqual({ ok: true, provider: null });
-    expect(resolveRequestedSandbox(false)).toEqual({ ok: true, provider: null });
+    expect(resolveRequestedSandbox(undefined)).toEqual({
+      ok: true,
+      provider: null,
+    });
+    expect(resolveRequestedSandbox(false)).toEqual({
+      ok: true,
+      provider: null,
+    });
     expect(resolveRequestedSandbox("")).toEqual({ ok: true, provider: null });
   });
 
@@ -316,7 +360,9 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   test("explicit configured and certified provider is accepted", () => {
     write({
       provider: "docker",
-      awsLambdaMicrovm: { imageIdentifier: "arn:aws:lambda:us-east-1:123:microvm-image/test" },
+      awsLambdaMicrovm: {
+        imageIdentifier: "arn:aws:lambda:us-east-1:123:microvm-image/test",
+      },
     });
     ready("docker");
     ready("daytona");
@@ -326,13 +372,25 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
       configured: true,
       usable: true,
     });
-    expect(resolveRequestedSandbox("docker")).toEqual({ ok: true, provider: "docker" });
-    expect(resolveRequestedSandbox("daytona")).toEqual({ ok: true, provider: "daytona" });
-    expect(resolveRequestedSandbox("modal")).toEqual({ ok: true, provider: "modal" });
+    expect(resolveRequestedSandbox("docker")).toEqual({
+      ok: true,
+      provider: "docker",
+    });
+    expect(resolveRequestedSandbox("daytona")).toEqual({
+      ok: true,
+      provider: "daytona",
+    });
+    expect(resolveRequestedSandbox("modal")).toEqual({
+      ok: true,
+      provider: "modal",
+    });
     const lambda = resolveRequestedSandbox("lambda-microvm");
     expect(lambda.ok).toBe(false);
     if (!lambda.ok) expect(lambda.error).toContain("not live-certified");
-    expect(resolveRequestedSandbox("DOCKER")).toEqual({ ok: true, provider: "docker" });
+    expect(resolveRequestedSandbox("DOCKER")).toEqual({
+      ok: true,
+      provider: "docker",
+    });
   });
 
   test("configured adapters without a live certification are cut from new sessions", () => {
@@ -344,7 +402,9 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     ready("box");
     expect(sandboxCapabilityStatus().defaultProvider).toBe("local");
     for (const provider of ["e2b", "lambda-microvm"] as const) {
-      const status = sandboxCapabilityStatus().providers.find((p) => p.id === provider)!;
+      const status = sandboxCapabilityStatus().providers.find(
+        (p) => p.id === provider,
+      )!;
       expect(status.configured).toBe(true);
       expect(status.usability).toBe("unavailable");
       expect(sandboxProviderUsability(provider).state).toBe("unavailable");
@@ -356,7 +416,8 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     }
     const defaultResolved = resolveRequestedSandbox(true);
     expect(defaultResolved.ok).toBe(false);
-    if (!defaultResolved.ok) expect(defaultResolved.error).toContain("not live-certified");
+    if (!defaultResolved.ok)
+      expect(defaultResolved.error).toContain("not live-certified");
   });
 
   test("explicit unconfigured provider fails with a pointed error", () => {
@@ -384,16 +445,23 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
       configured: true,
       usable: false,
     });
-    const status = sandboxCapabilityStatus().providers.find((provider) => provider.id === "docker")!;
+    const status = sandboxCapabilityStatus().providers.find(
+      (provider) => provider.id === "docker",
+    )!;
     expect(status.configured).toBe(true);
     expect(status.usability).toBe("unqualified");
 
     for (const requested of ["docker", true] as const) {
       const resolved = resolveRequestedSandbox(requested);
       expect(resolved.ok).toBe(false);
-      if (!resolved.ok) expect(resolved.error).toContain("has not passed workspace qualification");
+      if (!resolved.ok)
+        expect(resolved.error).toContain(
+          "has not passed workspace qualification",
+        );
     }
-    expect(() => setWorkspaceSandboxDefault("docker")).toThrow("not currently available");
+    expect(() => setWorkspaceSandboxDefault("docker")).toThrow(
+      "not currently available",
+    );
   });
 
   test("docker without any config file fails", () => {
@@ -407,7 +475,10 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     const r = resolveRequestedSandbox("fly");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain("Unknown sandbox provider");
-    expect(resolveRequestedSandbox("local")).toEqual({ ok: true, provider: null });
+    expect(resolveRequestedSandbox("local")).toEqual({
+      ok: true,
+      provider: null,
+    });
   });
 
   test("model-family sandboxability is enforced at create, not just in the UI", () => {
@@ -415,7 +486,9 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     ready("docker");
     ready("daytona");
     // Supported combos pass through.
-    expect(resolveRequestedSandbox("daytona", undefined, "claude-fable-5")).toEqual({
+    expect(
+      resolveRequestedSandbox("daytona", undefined, "claude-fable-5"),
+    ).toEqual({
       ok: true,
       provider: "daytona",
     });
@@ -441,13 +514,25 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     ready("docker");
     ready("daytona");
     expect(
-      resolveRequestedSandbox("daytona", undefined, "pi/anthropic/claude-sonnet-5"),
+      resolveRequestedSandbox(
+        "daytona",
+        undefined,
+        "pi/anthropic/claude-sonnet-5",
+      ),
     ).toEqual({ ok: true, provider: "daytona" });
     expect(
-      resolveRequestedSandbox("docker", undefined, "pi/anthropic/claude-sonnet-5"),
+      resolveRequestedSandbox(
+        "docker",
+        undefined,
+        "pi/anthropic/claude-sonnet-5",
+      ),
     ).toEqual({ ok: true, provider: "docker" });
     // The boolean default-provider path vets the model the same way.
-    const viaDefault = resolveRequestedSandbox(true, undefined, "pi/openai/gpt-5.5");
+    const viaDefault = resolveRequestedSandbox(
+      true,
+      undefined,
+      "pi/openai/gpt-5.5",
+    );
     expect(viaDefault.ok).toBe(true);
   });
 });

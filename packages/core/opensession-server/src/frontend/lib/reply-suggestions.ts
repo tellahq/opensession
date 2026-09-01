@@ -11,19 +11,19 @@
 import { makeUserPref } from "./user-pref";
 
 export interface ReplySuggestion {
-	/** 1-2 words, sentence case. What the chip reads as. */
-	label: string;
-	/** The full instruction the chip pastes into the composer. */
-	text: string;
+  /** 1-2 words, sentence case. What the chip reads as. */
+  label: string;
+  /** The full instruction the chip pastes into the composer. */
+  text: string;
 }
 
 const pref = makeUserPref<boolean>({
-	localKey: "opensession-reply-suggestions",
-	prefKey: "reply-suggestions",
-	changeEvent: "opensession-reply-suggestions-changed",
-	defaultValue: true,
-	decode: (v) => (v === "on" ? true : v === "off" ? false : null),
-	encode: (on) => (on ? "on" : "off"),
+  localKey: "opensession-reply-suggestions",
+  prefKey: "reply-suggestions",
+  changeEvent: "opensession-reply-suggestions-changed",
+  defaultValue: true,
+  decode: (v) => (v === "on" ? true : v === "off" ? false : null),
+  encode: (on) => (on ? "on" : "off"),
 });
 
 export const getReplySuggestionsPref = pref.get;

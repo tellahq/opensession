@@ -21,17 +21,17 @@
  * branch — including another branch of the primary repo.
  */
 export interface PrTarget {
-	key: string;
-	repo: string;
-	branch?: string;
-	/** Known for linked/discovered PRs; primary and attached ones resolve
-	 *  their branch server-side and never carry it. */
-	number?: number;
-	primary?: boolean;
-	linked?: boolean;
-	/** Found via the session link in the PR body, not stored on the session. */
-	discovered?: boolean;
-	label: string;
+  key: string;
+  repo: string;
+  branch?: string;
+  /** Known for linked/discovered PRs; primary and attached ones resolve
+   *  their branch server-side and never carry it. */
+  number?: number;
+  primary?: boolean;
+  linked?: boolean;
+  /** Found via the session link in the PR body, not stored on the session. */
+  discovered?: boolean;
+  label: string;
 }
 
 /**
@@ -40,25 +40,25 @@ export interface PrTarget {
  * targets by hand.
  */
 export interface PrFocus {
-	repo?: string;
-	branch?: string;
-	number?: number;
-	view?: "checks";
-	seq: number;
+  repo?: string;
+  branch?: string;
+  number?: number;
+  view?: "checks";
+  seq: number;
 }
 
 /** First target per key wins — a PR reached two ways (linked and discovered,
  *  or an attached repo whose branch also carries a discovered PR) is one tab. */
 export function dedupeTargets(targets: PrTarget[]): PrTarget[] {
-	const seen = new Set<string>();
-	return targets.filter((t) => {
-		// An attached/primary repo tab has no branch of its own (the server
-		// resolves it), so it can't collide with a branch-keyed target.
-		const key = t.branch ? `${t.repo}\u0000${t.branch}` : `repo:${t.repo}`;
-		if (seen.has(key)) return false;
-		seen.add(key);
-		return true;
-	});
+  const seen = new Set<string>();
+  return targets.filter((t) => {
+    // An attached/primary repo tab has no branch of its own (the server
+    // resolves it), so it can't collide with a branch-keyed target.
+    const key = t.branch ? `${t.repo}\u0000${t.branch}` : `repo:${t.repo}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**
@@ -72,18 +72,18 @@ export function dedupeTargets(targets: PrTarget[]): PrTarget[] {
  * panel simply has one PR for that repo.
  */
 export function matchFocusTarget(
-	targets: PrTarget[],
-	focus: Pick<PrFocus, "repo" | "branch" | "number">,
+  targets: PrTarget[],
+  focus: Pick<PrFocus, "repo" | "branch" | "number">,
 ): PrTarget | undefined {
-	if (!focus.repo) return undefined;
-	const inRepo = targets.filter((t) => t.repo === focus.repo);
-	return (
-		(focus.number !== undefined
-			? inRepo.find((t) => t.number === focus.number)
-			: undefined) ??
-		inRepo.find((t) =>
-			focus.branch ? t.branch === focus.branch : !t.branch,
-		) ??
-		inRepo[0]
-	);
+  if (!focus.repo) return undefined;
+  const inRepo = targets.filter((t) => t.repo === focus.repo);
+  return (
+    (focus.number !== undefined
+      ? inRepo.find((t) => t.number === focus.number)
+      : undefined) ??
+    inRepo.find((t) =>
+      focus.branch ? t.branch === focus.branch : !t.branch,
+    ) ??
+    inRepo[0]
+  );
 }

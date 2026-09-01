@@ -42,7 +42,12 @@ describe("slackFileRefs", () => {
 
   test("falls back to url_private and drops entries with no URL", () => {
     const refs = slackFileRefs([
-      { id: "F1", name: "a.pdf", mimetype: "application/pdf", url_private: "https://x/a.pdf" },
+      {
+        id: "F1",
+        name: "a.pdf",
+        mimetype: "application/pdf",
+        url_private: "https://x/a.pdf",
+      },
       { id: "F2", name: "tombstone" },
       null,
     ]);
@@ -110,7 +115,10 @@ describe("slackUploadPermalink", () => {
           file: { shares: { public: { C123: [{ ts: "1786.42" }] } } },
         });
       }
-      return Response.json({ ok: true, permalink: "https://tella.slack.com/archives/C123/p178642" });
+      return Response.json({
+        ok: true,
+        permalink: "https://tella.slack.com/archives/C123/p178642",
+      });
     }) as typeof fetch;
 
     // What files.completeUploadExternal actually answers: id and title only.
@@ -128,12 +136,17 @@ describe("slackUploadPermalink", () => {
   test("has no link when the file was never shared into the channel", async () => {
     globalThis.fetch = (async () =>
       Response.json({ ok: true, file: {} })) as unknown as typeof fetch;
-    expect(await slackUploadPermalink({ files: [{ id: "F1" }] }, "C123")).toBeUndefined();
+    expect(
+      await slackUploadPermalink({ files: [{ id: "F1" }] }, "C123"),
+    ).toBeUndefined();
   });
 
   test("finds a private share, and ignores another channel's", () => {
     const file = {
-      shares: { private: { C123: [{ ts: "1.2" }] }, public: { C999: [{ ts: "9.9" }] } },
+      shares: {
+        private: { C123: [{ ts: "1.2" }] },
+        public: { C999: [{ ts: "9.9" }] },
+      },
     };
     expect(slackFileShareTs(file, "C123")).toBe("1.2");
     expect(slackFileShareTs(file, "C555")).toBeUndefined();
@@ -141,20 +154,24 @@ describe("slackUploadPermalink", () => {
 });
 
 describe("Slack file uploads", () => {
-	test("asks for reconnection when the personal token lacks image access", async () => {
-		const root = mkdtempSync(join(tmpdir(), "slack-scope-"));
-		const path = join(root, "one.png");
-		writeFileSync(path, "image");
-		globalThis.fetch = (async () => Response.json({ ok: false, error: "missing_scope" })) as unknown as typeof fetch;
+  test("asks for reconnection when the personal token lacks image access", async () => {
+    const root = mkdtempSync(join(tmpdir(), "slack-scope-"));
+    const path = join(root, "one.png");
+    writeFileSync(path, "image");
+    globalThis.fetch = (async () =>
+      Response.json({
+        ok: false,
+        error: "missing_scope",
+      })) as unknown as typeof fetch;
 
-		try {
-			await expect(postSlackFiles("C123", [path], "Shipped it", {}, "test-user-token")).rejects.toThrow(
-				"SLACK_RECONNECT_REQUIRED",
-			);
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
-	});
+    try {
+      await expect(
+        postSlackFiles("C123", [path], "Shipped it", {}, "test-user-token"),
+      ).rejects.toThrow("SLACK_RECONNECT_REQUIRED");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   test("shares several uploaded files as one message", async () => {
     const root = mkdtempSync(join(tmpdir(), "slack-files-"));
@@ -182,13 +199,23 @@ describe("Slack file uploads", () => {
     }) as typeof fetch;
 
     try {
-      await postSlackFiles("C123", paths, "Shipped it", { title: "Editor" }, "test-user-token");
+      await postSlackFiles(
+        "C123",
+        paths,
+        "Shipped it",
+        { title: "Editor" },
+        "test-user-token",
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
 
-    expect(calls.filter((url) => url.endsWith("files.getUploadURLExternal"))).toHaveLength(2);
-    expect(calls.filter((url) => url.endsWith("files.completeUploadExternal"))).toHaveLength(1);
+    expect(
+      calls.filter((url) => url.endsWith("files.getUploadURLExternal")),
+    ).toHaveLength(2);
+    expect(
+      calls.filter((url) => url.endsWith("files.completeUploadExternal")),
+    ).toHaveLength(1);
     expect(completion?.get("channel_id")).toBe("C123");
     expect(completion?.get("initial_comment")).toBe("Shipped it");
     expect(JSON.parse(completion?.get("files") || "[]")).toEqual([
@@ -221,7 +248,13 @@ describe("Slack file uploads", () => {
     }) as typeof fetch;
 
     try {
-      await postSlackFiles("C123", paths, "", { threadTs: "1712.9" }, "test-user-token");
+      await postSlackFiles(
+        "C123",
+        paths,
+        "",
+        { threadTs: "1712.9" },
+        "test-user-token",
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

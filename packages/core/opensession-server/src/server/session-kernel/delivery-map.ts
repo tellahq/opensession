@@ -51,19 +51,24 @@ export class DeliveryOwnedMap<V> {
   }
 
   private entriesArray(): Array<[string, V]> {
-    return sessionDeliveryEntriesCached(this.slot).map(
-      ([sessionId, value]) => [sessionId, immutableCopy(value as V)],
-    );
+    return sessionDeliveryEntriesCached(this.slot).map(([sessionId, value]) => [
+      sessionId,
+      immutableCopy(value as V),
+    ]);
   }
 
   entries(): MapIterator<[string, V]> {
     return this.entriesArray()[Symbol.iterator]();
   }
   keys(): MapIterator<string> {
-    return this.entriesArray().map(([key]) => key)[Symbol.iterator]();
+    return this.entriesArray()
+      .map(([key]) => key)
+      [Symbol.iterator]();
   }
   values(): MapIterator<V> {
-    return this.entriesArray().map(([, value]) => value)[Symbol.iterator]();
+    return this.entriesArray()
+      .map(([, value]) => value)
+      [Symbol.iterator]();
   }
   forEach(
     callbackfn: (value: V, key: string, map: DeliveryOwnedMap<V>) => void,

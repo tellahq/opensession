@@ -3,23 +3,23 @@ import { ApiError, BASE, request } from "./request";
 // ── Automations ──
 
 export interface ModelOption {
-	id: string;
-	provider: "claude" | "codex" | "pi";
-	label: string;
-	aliases: string[];
-	efforts: string[];
-	/** Presets fix the lead model's effort instead of offering a ladder. */
-	fixedEffort?: string;
-	/** Provider account pool available to this model, if any. */
-	accountProvider?: "claude" | "codex";
-	/** Picker section override ("dial" = The Dial presets). */
-	group?: string;
-	/** One-line subtitle shown under the label (dial presets). */
-	description?: string;
-	/** Concrete lead and supporting models participating in a preset. */
-	composition?: string[];
-	/** This model has subscription-backend priority-tier variants configured. */
-	fastModeSupported?: boolean;
+  id: string;
+  provider: "claude" | "codex" | "pi";
+  label: string;
+  aliases: string[];
+  efforts: string[];
+  /** Presets fix the lead model's effort instead of offering a ladder. */
+  fixedEffort?: string;
+  /** Provider account pool available to this model, if any. */
+  accountProvider?: "claude" | "codex";
+  /** Picker section override ("dial" = The Dial presets). */
+  group?: string;
+  /** One-line subtitle shown under the label (dial presets). */
+  description?: string;
+  /** Concrete lead and supporting models participating in a preset. */
+  composition?: string[];
+  /** This model has subscription-backend priority-tier variants configured. */
+  fastModeSupported?: boolean;
 }
 
 type ModelCatalog = { models: ModelOption[]; default: string };
@@ -30,85 +30,184 @@ type ModelCatalog = { models: ModelOption[]; default: string };
  * just leave the field for the user to fill.
  */
 export async function suggestBranch(prompt: string): Promise<string | null> {
-	try {
-		const data = await request<{ branch?: unknown }>("/suggest-branch", {
-			method: "POST",
-			body: { prompt },
-		});
-		return typeof data?.branch === "string" ? data.branch : null;
-	} catch {
-		return null;
-	}
+  try {
+    const data = await request<{ branch?: unknown }>("/suggest-branch", {
+      method: "POST",
+      body: { prompt },
+    });
+    return typeof data?.branch === "string" ? data.branch : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Voice dictation: send a recorded clip (raw body), get the transcript back.
  * Bypasses `request` — the body is audio bytes, not JSON. */
 export async function transcribeClip(audio: Blob): Promise<string> {
-	const res = await fetch(`${BASE}/transcribe`, {
-		method: "POST",
-		headers: { "Content-Type": audio.type || "audio/webm" },
-		body: audio,
-	});
-	const data = (await res.json().catch(() => null)) as { text?: unknown; error?: unknown } | null;
-	if (!res.ok) {
-		throw new ApiError(
-			typeof data?.error === "string" ? data.error : `Transcribe: ${res.status}`,
-			res.status,
-		);
-	}
-	return typeof data?.text === "string" ? data.text : "";
+  const res = await fetch(`${BASE}/transcribe`, {
+    method: "POST",
+    headers: { "Content-Type": audio.type || "audio/webm" },
+    body: audio,
+  });
+  const data = (await res.json().catch(() => null)) as {
+    text?: unknown;
+    error?: unknown;
+  } | null;
+  if (!res.ok) {
+    throw new ApiError(
+      typeof data?.error === "string"
+        ? data.error
+        : `Transcribe: ${res.status}`,
+      res.status,
+    );
+  }
+  return typeof data?.text === "string" ? data.text : "";
 }
 
 export async function fetchModels(workspaceId?: string): Promise<ModelCatalog> {
-	const params = new URLSearchParams();
-	if (workspaceId) params.set("workspace", workspaceId);
-	return request<ModelCatalog>(`/models${params.size ? `?${params}` : ""}`, {
-		label: "Failed to fetch models",
-	});
+  const params = new URLSearchParams();
+  if (workspaceId) params.set("workspace", workspaceId);
+  return request<ModelCatalog>(`/models${params.size ? `?${params}` : ""}`, {
+    label: "Failed to fetch models",
+  });
 }
 
 /** Trimmed provider account shape for the per-session account picker. */
 export interface ProviderAccountOption {
-	id: string;
-	name: string;
-	email?: string;
-	provider: "claude" | "codex";
-	/** Personal-sub owner, if any (else it's a shared-pool account). */
-	owner?: string;
-	/** False when the account is currently exhausted / over its cap. */
-	usable: boolean;
-	/** Credential mechanism; Fast mode is unavailable for direct API keys. */
-	kind?: string;
+  id: string;
+  name: string;
+  email?: string;
+  provider: "claude" | "codex";
+  /** Personal-sub owner, if any (else it's a shared-pool account). */
+  owner?: string;
+  /** False when the account is currently exhausted / over its cap. */
+  usable: boolean;
+  /** Credential mechanism; Fast mode is unavailable for direct API keys. */
+  kind?: string;
 }
 
-export async function fetchProviderAccounts(): Promise<ProviderAccountOption[]> {
-	const fetchPool = async (provider: "claude" | "codex", path: string) => {
-		try {
-			const data = await request<{ accounts?: any[] }>(path);
-			return (data?.accounts ?? []).map((a) => ({
-				id: a.id,
-				name: a.name,
-				email: typeof a.email === "string" ? a.email : undefined,
-				provider,
-				owner: a.owner || undefined,
-				usable: a.usable !== false,
-				kind: typeof a.kind === "string" ? a.kind : undefined,
-			}));
-		} catch {
-			return [];
-		}
-	};
-	const [claude, codex] = await Promise.all([
-		fetchPool("claude", "/claude-accounts"),
-		fetchPool("codex", "/codex-accounts"),
-	]);
-	return [...claude, ...codex];
+interface ProviderAccountRecord {
+  id: string;
+  name: string;
+  email?: unknown;
+  owner?: unknown;
+  usable?: unknown;
+  kind?: unknown;
 }
 
-export async function fetchAutomations() {
-	return request<any>("/automations", {
-		label: "Failed to fetch automations",
-	});
+export async function fetchProviderAccounts(options?: {
+  onPoolError?: (cause: unknown) => void;
+}): Promise<ProviderAccountOption[]> {
+  const fetchPool = async (provider: "claude" | "codex", path: string) => {
+    try {
+      const data = await request<{ accounts?: ProviderAccountRecord[] }>(path);
+      return (data?.accounts ?? []).map((account) => ({
+        id: account.id,
+        name: account.name,
+        email: typeof account.email === "string" ? account.email : undefined,
+        provider,
+        owner: typeof account.owner === "string" ? account.owner : undefined,
+        usable: account.usable !== false,
+        kind: typeof account.kind === "string" ? account.kind : undefined,
+      }));
+    } catch (cause: unknown) {
+      options?.onPoolError?.(cause);
+      // Account pins are optional because automatic pool selection remains
+      // valid. Keep accounts from the other provider available when one pool
+      // cannot load.
+      return [];
+    }
+  };
+  const [claude, codex] = await Promise.all([
+    fetchPool("claude", "/claude-accounts"),
+    fetchPool("codex", "/codex-accounts"),
+  ]);
+  return [...claude, ...codex];
+}
+
+export interface AutomationRun {
+  at: string;
+  sessionId: string;
+  trigger: "cron" | "webhook" | "manual" | "event";
+  status: "running" | "ok" | "error";
+  error?: string;
+  durationMs?: number;
+}
+
+export interface AutomationInput {
+  id: string;
+  label?: string;
+  window?: {
+    mode?: "since_last_success" | "rolling";
+    minutes?: number;
+    overlapMinutes?: number;
+  };
+  reduce?: { model?: string; instructions?: string; maxOutputChars?: number };
+  source:
+    | {
+        type: "slack_channel";
+        channel: string;
+        includeThreads?: boolean;
+        includeBots?: boolean;
+        limit?: number;
+      }
+    | { type: "reports"; automationId: string; limit?: number };
+}
+
+export type AutomationOutput =
+  | {
+      id: string;
+      type: "report";
+      enabled?: boolean;
+      publish?: "always" | "on_findings";
+    }
+  | {
+      id: string;
+      type: "slack";
+      enabled?: boolean;
+      channel: string;
+      minUrgency?: "low" | "medium" | "high" | "critical";
+      minConfidence?: "low" | "medium" | "high";
+    };
+
+export interface Automation {
+  id: string;
+  name: string;
+  prompt: string;
+  schedule: string;
+  mode: "ask" | "code";
+  enabled: boolean;
+  createdBy: string;
+  createdAt: string;
+  webhookSecret?: string;
+  webhookEnabled?: boolean;
+  eventKey?: string;
+  mcpServers?: string[];
+  slackWatch?: { channel: string };
+  inputs?: AutomationInput[];
+  outputs?: AutomationOutput[];
+  owner?: string;
+  workspaceId?: string;
+  model?: string;
+  fallbackModel?: string;
+  accountId?: string;
+  accountStrict?: boolean;
+  usageCredits?: boolean;
+  sandbox?: boolean;
+  lastRunAt?: string;
+  lastRunSessionId?: string;
+  lastRunStatus?: "running" | "ok" | "error";
+  lastRunError?: string;
+  lastTrigger?: "cron" | "webhook" | "manual" | "event";
+  nextRunAt: string | null;
+  isRunning?: boolean;
+  runs?: AutomationRun[];
+}
+
+export async function fetchAutomations(): Promise<Automation[]> {
+  return request("/automations", {
+    label: "Failed to fetch automations",
+  });
 }
 
 /**
@@ -116,186 +215,192 @@ export async function fetchAutomations() {
  * where it files, and the outcome of its latest run.
  */
 export interface AutomationOverview {
-	id: string;
-	name: string;
-	enabled: boolean;
-	repo?: string;
-	workspaceId?: string;
-	workspaceName?: string;
-	/** The workspace's own repo, so the repo lens can match through it. */
-	workspaceRepo?: string;
-	owner?: string;
-	lastRunAt?: string;
-	lastRunStatus?: "running" | "ok" | "error";
-	lastRunSessionId?: string;
-	latestReport?: {
-		id: string;
-		title: string;
-		summary?: string;
-		urgency?: "low" | "medium" | "high" | "critical";
-		confidence?: "low" | "medium" | "high";
-		createdAt: string;
-		sessionId?: string;
-	};
+  id: string;
+  name: string;
+  enabled: boolean;
+  repo?: string;
+  workspaceId?: string;
+  workspaceName?: string;
+  /** The workspace's own repo, so the repo lens can match through it. */
+  workspaceRepo?: string;
+  owner?: string;
+  lastRunAt?: string;
+  lastRunStatus?: "running" | "ok" | "error";
+  lastRunSessionId?: string;
+  latestReport?: {
+    id: string;
+    title: string;
+    summary?: string;
+    urgency?: "low" | "medium" | "high" | "critical";
+    confidence?: "low" | "medium" | "high";
+    createdAt: string;
+    sessionId?: string;
+  };
 }
 
 export async function fetchAutomationOverview(): Promise<AutomationOverview[]> {
-	const result = await request<{ automations: AutomationOverview[] }>(
-		"/automations/overview",
-		{ label: "Failed to load automations" },
-	);
-	return result.automations;
+  const result = await request<{ automations: AutomationOverview[] }>(
+    "/automations/overview",
+    { label: "Failed to load automations" },
+  );
+  return result.automations;
 }
 
 export interface AutomationTemplate {
-	id: string;
-	name: string;
-	description: string;
-	category: "sweep" | "digest" | "investigator" | "triage" | "hygiene";
-	prompt: string;
-	schedule: string;
-	mode: "ask" | "code";
-	mcpServers?: string[];
-	eventKey?: string;
+  id: string;
+  name: string;
+  description: string;
+  category: "sweep" | "digest" | "investigator" | "triage" | "hygiene";
+  prompt: string;
+  schedule: string;
+  mode: "ask" | "code";
+  mcpServers?: string[];
+  eventKey?: string;
 }
 
-export async function fetchAutomationTemplates(): Promise<AutomationTemplate[]> {
-	const res = await fetch(`${BASE}/automation-templates`);
-	if (!res.ok) throw new Error(`Failed to fetch templates: ${res.status}`);
-	return res.json();
+export async function fetchAutomationTemplates(): Promise<
+  AutomationTemplate[]
+> {
+  const res = await fetch(`${BASE}/automation-templates`);
+  if (!res.ok) throw new Error(`Failed to fetch templates: ${res.status}`);
+  return res.json();
 }
 
 export interface AutomationDraft {
-	name: string;
-	prompt: string;
-	schedule: string;
-	mode: "ask" | "code";
-	mcpServers?: string[];
-	eventKey?: string;
+  name: string;
+  prompt: string;
+  schedule: string;
+  mode: "ask" | "code";
+  mcpServers?: string[];
+  eventKey?: string;
 }
 
 /** Draft an automation config from a free-text description (backend Haiku
  *  call). Throws with a friendly message when the draft fails. */
-export async function draftAutomationApi(description: string): Promise<AutomationDraft> {
-	const res = await fetch(`${BASE}/automations/draft`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ description }),
-	});
-	const body = await res.json();
-	if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-	return body;
+export async function draftAutomationApi(
+  description: string,
+): Promise<AutomationDraft> {
+  const res = await fetch(`${BASE}/automations/draft`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ description }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+  return body;
 }
 
 /** MCP server list + agent health, for pickers (Automations) and Settings. */
 export async function fetchConnections(): Promise<{
-	mcpServers: Array<{ name: string; status: string; allowedUsers?: string[] }>;
-	agents: Record<string, unknown>;
-	engines?: string[];
+  mcpServers: Array<{ name: string; status: string; allowedUsers?: string[] }>;
+  agents: Record<string, unknown>;
+  engines?: string[];
 }> {
-	const res = await fetch(`${BASE}/connections`);
-	if (!res.ok) throw new Error(`Failed to fetch connections: ${res.status}`);
-	return res.json();
+  const res = await fetch(`${BASE}/connections`);
+  if (!res.ok) throw new Error(`Failed to fetch connections: ${res.status}`);
+  return res.json();
 }
 
 /** Provider-independent model-family sandboxability from the server. */
 export interface SandboxModelFamilyInfo {
-	id: string;
-	label: string;
-	match: { provider: "claude" | "codex" | "pi" };
-	sandboxable: boolean;
-	hint?: string;
+  id: string;
+  label: string;
+  match: { provider: "claude" | "codex" | "pi" };
+  sandboxable: boolean;
+  hint?: string;
 }
 
 /** Sandbox capability status for the New-session provider picker
  *  (GET /api/sandbox/status — read fresh server-side per call). */
 export interface SandboxStatusInfo {
-	enabled: boolean;
-	defaultProvider: string;
-	providers: Array<{
-		id: "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm";
-		configured: boolean;
-		certified: boolean;
-		lastPassedAt?: string;
-		note?: string;
-	}>;
-	killSwitch: boolean;
-	defaults?: {
-		workspace: string;
-		personal: string;
-		effective: string;
-	};
-	connections?: SandboxConnectionInfo[];
-	operations?: SandboxOperationInfo[];
-	ingress?: SandboxIngressInfo;
-	canManage?: boolean;
-	/** Absent on a pre-upgrade server = no client-side combo warnings. */
-	modelFamilies?: SandboxModelFamilyInfo[];
+  enabled: boolean;
+  defaultProvider: string;
+  providers: Array<{
+    id: "docker" | "daytona" | "e2b" | "box" | "modal" | "lambda-microvm";
+    configured: boolean;
+    certified: boolean;
+    lastPassedAt?: string;
+    note?: string;
+  }>;
+  killSwitch: boolean;
+  defaults?: {
+    workspace: string;
+    personal: string;
+    effective: string;
+  };
+  connections?: SandboxConnectionInfo[];
+  operations?: SandboxOperationInfo[];
+  ingress?: SandboxIngressInfo;
+  canManage?: boolean;
+  /** Absent on a pre-upgrade server = no client-side combo warnings. */
+  modelFamilies?: SandboxModelFamilyInfo[];
 }
 
 export type SandboxConnectionState =
-	| "not_configured"
-	| "checking"
-	| "ready"
-	| "needs_attention"
-	| "disabled";
+  | "not_configured"
+  | "checking"
+  | "ready"
+  | "needs_attention"
+  | "disabled";
 
 export interface SandboxConnectionInfo {
-	id: string;
-	provider: "docker" | "daytona" | "box" | "modal" | "microvm";
-	enabled: boolean;
-	settings: Record<string, string | number | boolean | undefined>;
-	qualification?: {
-		status: "checking" | "ready" | "failed";
-		adapterSignature: string;
-		checkedAt?: string;
-		failureCode?: string;
-		failureSummary?: string;
-	};
-	createdAt: string;
-	updatedAt: string;
-	hasCredentials: boolean;
-	state: SandboxConnectionState;
+  id: string;
+  provider: "docker" | "daytona" | "box" | "modal";
+  enabled: boolean;
+  settings: Record<string, string | number | boolean | undefined>;
+  qualification?: {
+    status: "checking" | "ready" | "failed";
+    adapterSignature: string;
+    checkedAt?: string;
+    failureCode?: string;
+    failureSummary?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+  hasCredentials: boolean;
+  state: SandboxConnectionState;
 }
 
 export interface SandboxOperationInfo {
-	id: string;
-	kind: "qualification" | "repair" | "environment_rebuild";
-	provider: string;
-	repo?: string;
-	status: "running" | "succeeded" | "failed";
-	stage: string;
-	detail?: string;
-	progress?: number;
-	createdAt: string;
-	updatedAt: string;
-	failureCode?: string;
-	failureSummary?: string;
+  id: string;
+  kind: "qualification" | "repair" | "environment_rebuild";
+  provider: string;
+  repo?: string;
+  status: "running" | "succeeded" | "failed";
+  stage: string;
+  detail?: string;
+  progress?: number;
+  createdAt: string;
+  updatedAt: string;
+  failureCode?: string;
+  failureSummary?: string;
 }
 
 export interface SandboxIngressInfo {
-	configuredUrl?: string;
-	proposedUrl?: string;
-	source: "config" | "caddy" | "none";
-	health: "ready" | "unreachable" | "not_configured";
-	caddyAdminReachable: boolean;
-	generatedSnippet: string;
-	note?: string;
+  configuredUrl?: string;
+  proposedUrl?: string;
+  source: "config" | "caddy" | "none";
+  health: "ready" | "unreachable" | "not_configured";
+  caddyAdminReachable: boolean;
+  generatedSnippet: string;
+  note?: string;
 }
 
-export async function fetchSandboxStatus(user?: string): Promise<SandboxStatusInfo> {
-	const query = user ? `?user=${encodeURIComponent(user)}` : "";
-	const res = await fetch(`${BASE}/sandbox/status${query}`);
-	if (!res.ok) throw new Error(`Failed to fetch sandbox status: ${res.status}`);
-	return res.json();
+export async function fetchSandboxStatus(
+  user?: string,
+): Promise<SandboxStatusInfo> {
+  const query = user ? `?user=${encodeURIComponent(user)}` : "";
+  const res = await fetch(`${BASE}/sandbox/status${query}`);
+  if (!res.ok) throw new Error(`Failed to fetch sandbox status: ${res.status}`);
+  return res.json();
 }
 
 export async function saveSandboxDefault(input: {
-	scope: "workspace" | "personal";
-	value: string;
-	user: string;
+  scope: "workspace" | "personal";
+  value: string;
+  user: string;
 }): Promise<{ defaults: NonNullable<SandboxStatusInfo["defaults"]> }> {
-	return request("/sandbox/defaults", { method: "PUT", body: input });
+  return request("/sandbox/defaults", { method: "PUT", body: input });
 }
 
 /** Warm-on-typing sandbox prewarm (POST /api/sandbox/prewarm): fired by the
@@ -303,107 +408,120 @@ export async function saveSandboxDefault(input: {
  *  so the sandbox bootstrap runs while they write the prompt. Idempotent and
  *  cheap server-side; callers must swallow failures (never block typing). */
 export async function requestSandboxPrewarm(
-	provider: string,
-	repo: string,
-	user: string,
+  provider: string,
+  repo: string,
+  user: string,
 ): Promise<{ state: string }> {
-	const res = await fetch(`${BASE}/sandbox/prewarm`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ provider, repo, user }),
-	});
-	if (!res.ok) throw new Error(`prewarm failed: ${res.status}`);
-	return res.json();
+  const res = await fetch(`${BASE}/sandbox/prewarm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, repo, user }),
+  });
+  if (!res.ok) throw new Error(`prewarm failed: ${res.status}`);
+  return res.json();
 }
 
 export async function createAutomationApi(input: {
-	name: string;
-	prompt: string;
-	schedule: string;
-	mode: "ask" | "code";
-	createdBy: string;
-	eventKey?: string;
-	model?: string;
-	fallbackModel?: string;
-	accountId?: string;
-	accountStrict?: boolean;
-	usageCredits?: boolean;
-	sandbox?: boolean;
-	mcpServers?: string[];
-	slackWatch?: { channel: string };
-	webhookEnabled?: boolean;
-	inputs?: unknown[];
-	outputs?: unknown[];
-	owner?: string;
-	workspaceId?: string;
-}) {
-	return request<any>("/automations", { method: "POST", body: input });
+  name: string;
+  prompt: string;
+  schedule: string;
+  mode: "ask" | "code";
+  createdBy: string;
+  eventKey?: string;
+  model?: string;
+  fallbackModel?: string;
+  accountId?: string;
+  accountStrict?: boolean;
+  usageCredits?: boolean;
+  sandbox?: boolean;
+  mcpServers?: string[];
+  slackWatch?: { channel: string };
+  webhookEnabled?: boolean;
+  inputs?: unknown[];
+  outputs?: unknown[];
+  owner?: string;
+  workspaceId?: string;
+}): Promise<Automation> {
+  return request("/automations", { method: "POST", body: input });
 }
 
-export async function updateAutomationApi(id: string, patch: object) {
-	return request<any>(`/automations/${encodeURIComponent(id)}`, {
-		method: "PUT",
-		body: patch,
-	});
+export type AutomationPatch = Partial<
+  Omit<Automation, "mcpServers" | "slackWatch">
+> & {
+  mcpServers?: string[] | null;
+  slackWatch?: { channel: string } | null;
+};
+
+export async function updateAutomationApi(
+  id: string,
+  patch: AutomationPatch,
+): Promise<Automation> {
+  return request(`/automations/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: patch,
+  });
 }
 
 export async function deleteAutomationApi(id: string) {
-	await request<void>(`/automations/${encodeURIComponent(id)}`, {
-		method: "DELETE",
-		label: "Failed to delete",
-	});
+  await request<void>(`/automations/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    label: "Failed to delete",
+  });
 }
 
 export async function runAutomationApi(id: string) {
-	await request<void>(`/automations/${encodeURIComponent(id)}/run`, {
-		method: "POST",
-	});
+  await request<void>(`/automations/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+  });
 }
 
 /** Re-fire an automation replaying the triggering event of one of its past
  *  runs (the run is identified by its session id). */
 export async function retriggerAutomationApi(sessionId: string) {
-	await request<void>(`/automations/retrigger`, {
-		method: "POST",
-		body: { sessionId },
-		label: "Failed to retrigger",
-	});
+  await request<void>(`/automations/retrigger`, {
+    method: "POST",
+    body: { sessionId },
+    label: "Failed to retrigger",
+  });
 }
 
 // ── Scheduled prompts (composer "send later") ──
 
 export interface ScheduledPrompt {
-	id: string;
-	sessionId: string;
-	prompt: string;
-	user: string;
-	at: string;
-	createdAt: string;
+  id: string;
+  sessionId: string;
+  prompt: string;
+  user: string;
+  at: string;
+  createdAt: string;
 }
 
 export async function fetchScheduledPrompts(
-	sessionId: string,
+  sessionId: string,
 ): Promise<ScheduledPrompt[]> {
-	const data = await request<{ prompts?: ScheduledPrompt[] }>(
-		`/sessions/${encodeURIComponent(sessionId)}/scheduled-prompts`,
-		{ label: "Failed to fetch scheduled prompts" },
-	);
-	return data?.prompts ?? [];
+  const data = await request<{ prompts?: ScheduledPrompt[] }>(
+    `/sessions/${encodeURIComponent(sessionId)}/scheduled-prompts`,
+    { label: "Failed to fetch scheduled prompts" },
+  );
+  return data?.prompts ?? [];
 }
 
 export async function createScheduledPromptApi(
-	sessionId: string,
-	input: { prompt: string; at: string; user: string },
+  sessionId: string,
+  input: { prompt: string; at: string; user: string },
 ): Promise<ScheduledPrompt> {
-	return request(`/sessions/${encodeURIComponent(sessionId)}/scheduled-prompts`, {
-		method: "POST",
-		body: input,
-	});
+  return request(
+    `/sessions/${encodeURIComponent(sessionId)}/scheduled-prompts`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
 }
 
 export async function deleteScheduledPromptApi(id: string): Promise<void> {
-	await request<void>(`/scheduled-prompts/${encodeURIComponent(id)}`, {
-		method: "DELETE",
-		label: "Failed to delete scheduled prompt",
-	});
+  await request<void>(`/scheduled-prompts/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    label: "Failed to delete scheduled prompt",
+  });
 }

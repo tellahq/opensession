@@ -17,7 +17,9 @@ writeFileSync(
 const identity = await import("./workload-identity");
 
 function claims(token: string): Record<string, unknown> {
-  return JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString("utf8"));
+  return JSON.parse(
+    Buffer.from(token.split(".")[1]!, "base64url").toString("utf8"),
+  );
 }
 
 async function verifiesWith(token: string, jwk: JsonWebKey): Promise<boolean> {
@@ -40,9 +42,11 @@ async function verifiesWith(token: string, jwk: JsonWebKey): Promise<boolean> {
 afterAll(() => {
   if (previousState === undefined) delete process.env.OPENSESSION_STATE_DIR;
   else process.env.OPENSESSION_STATE_DIR = previousState;
-  if (previousConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
+  if (previousConfig === undefined)
+    delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = previousConfig;
-  if (previousGrants === undefined) delete process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS;
+  if (previousGrants === undefined)
+    delete process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS;
   else process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS = previousGrants;
   rmSync(root, { recursive: true, force: true });
 });
@@ -50,26 +54,51 @@ afterAll(() => {
 describe("sandbox workload identity", () => {
   beforeEach(() => {
     process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS = JSON.stringify([
-      { repoId: "fusion", lifecycle: "setup", audiences: ["urn:test:artifacts"] },
+      {
+        repoId: "fusion",
+        lifecycle: "setup",
+        audiences: ["urn:test:artifacts"],
+      },
       { repoId: "fusion", lifecycle: "run", audiences: ["urn:test:run"] },
     ]);
   });
 
   test("publishes discovery and a matching RS256 JWKS", async () => {
     const response = await identity.handleWorkloadIdentityRequest(
-      new Request("https://identity.example.test/workload-identity/.well-known/openid-configuration"),
+      new Request(
+        "https://identity.example.test/workload-identity/.well-known/openid-configuration",
+      ),
     );
     expect(response?.status).toBe(200);
-    const document = await response?.json() as Record<string, unknown>;
-    expect(document.issuer).toBe("https://identity.example.test/workload-identity");
-    expect(document.jwks_uri).toBe("https://identity.example.test/workload-identity/jwks.json");
-    expect(document.claims_supported).toEqual(["aud", "exp", "iat", "iss", "sub"]);
+    const document = (await response?.json()) as Record<string, unknown>;
+    expect(document.issuer).toBe(
+      "https://identity.example.test/workload-identity",
+    );
+    expect(document.jwks_uri).toBe(
+      "https://identity.example.test/workload-identity/jwks.json",
+    );
+    expect(document.claims_supported).toEqual([
+      "aud",
+      "exp",
+      "iat",
+      "iss",
+      "sub",
+    ]);
     const jwks = await identity.handleWorkloadIdentityRequest(
       new Request("https://identity.example.test/workload-identity/jwks.json"),
     );
-    const keys = (await jwks?.json() as { keys: Array<Record<string, unknown>> }).keys;
+    const keys = (
+      (await jwks?.json()) as { keys: Array<Record<string, unknown>> }
+    ).keys;
     expect(keys).toHaveLength(1);
-    expect(Object.keys(keys[0] || {}).sort()).toEqual(["alg", "e", "kid", "kty", "n", "use"]);
+    expect(Object.keys(keys[0] || {}).sort()).toEqual([
+      "alg",
+      "e",
+      "kid",
+      "kty",
+      "n",
+      "use",
+    ]);
     expect(keys[0]?.alg).toBe("RS256");
     expect(keys[0]?.use).toBe("sig");
   });
@@ -91,16 +120,19 @@ describe("sandbox workload identity", () => {
           authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ audience: "urn:test:artifacts", ttl_seconds: 120 }),
+        body: JSON.stringify({
+          audience: "urn:test:artifacts",
+          ttl_seconds: 120,
+        }),
       }),
     );
     expect(response?.status).toBe(200);
-    const token = await response?.text() as string;
+    const token = (await response?.text()) as string;
     expect(token.split(".")).toHaveLength(3);
     const jwks = await identity.handleWorkloadIdentityRequest(
       new Request("https://identity.example.test/workload-identity/jwks.json"),
     );
-    const [jwk] = (await jwks?.json() as { keys: JsonWebKey[] }).keys;
+    const [jwk] = ((await jwks?.json()) as { keys: JsonWebKey[] }).keys;
     expect(await verifiesWith(token, jwk!)).toBe(true);
     expect(claims(token)).toMatchObject({
       iss: "https://identity.example.test/workload-identity",
@@ -126,7 +158,9 @@ describe("sandbox workload identity", () => {
     const malformed = await identity.handleWorkloadIdentityRequest(
       new Request(env.OPENSESSION_WORKLOAD_IDENTITY_URL, {
         method: "POST",
-        headers: { authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}` },
+        headers: {
+          authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}`,
+        },
         body: JSON.stringify({ audience: "contains whitespace" }),
       }),
     );
@@ -134,7 +168,9 @@ describe("sandbox workload identity", () => {
     const forbidden = await identity.handleWorkloadIdentityRequest(
       new Request(env.OPENSESSION_WORKLOAD_IDENTITY_URL, {
         method: "POST",
-        headers: { authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}` },
+        headers: {
+          authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}`,
+        },
         body: JSON.stringify({ audience: "urn:test:forbidden" }),
       }),
     );
@@ -143,7 +179,9 @@ describe("sandbox workload identity", () => {
     const revoked = await identity.handleWorkloadIdentityRequest(
       new Request(env.OPENSESSION_WORKLOAD_IDENTITY_URL, {
         method: "POST",
-        headers: { authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}` },
+        headers: {
+          authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}`,
+        },
         body: JSON.stringify({ audience: "urn:test:revoked" }),
       }),
     );

@@ -410,17 +410,48 @@ enum OS1API {
         try await get("/api/recent-commits?days=\(days)")
     }
 
-    /// `@`-mention targets matching a query, for the composer's "Reference a
-    /// file" picker. Scoped to the session, so an attached repo's files come
-    /// back too (labelled with their repo).
-    static func fileMentions(query: String, sessionId: String) async throws -> [FileMention] {
+    /// File and folder `@` targets matching a query. Existing composers search
+    /// every repo attached to their session; new-session composers search the
+    /// repository they are about to use.
+    static func fileMentions(
+        query: String,
+        sessionId: String? = nil,
+        repo: String? = nil
+    ) async throws -> [FileMention] {
         struct MentionsResponse: Decodable, Sendable { let files: [FileMention]? }
-        let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+"))
-        let q = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "q", value: query)]
+        if let sessionId {
+            components.queryItems?.append(URLQueryItem(name: "session", value: sessionId))
+        } else if let repo {
+            components.queryItems?.append(URLQueryItem(name: "repo", value: repo))
+        }
         let response: MentionsResponse = try await get(
-            "/api/files?q=\(q)&session=\(sessionId)"
+            "/api/files?\(components.percentEncodedQuery ?? "")"
         )
-        return response.files ?? []
+        return (response.files ?? []).filter { $0.kind == nil || $0.kind == "dir" }
+    }
+
+    /// People-independent rows for the inline `@` palette. Keeping this request
+    /// separate means tools and recent sessions do not wait for repository
+    /// search, matching the web composer.
+    static func mentionSuggestions(
+        query: String,
+        sessionId: String? = nil
+    ) async throws -> [FileMention] {
+        struct SuggestionsResponse: Decodable, Sendable { let items: [FileMention]? }
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "user", value: ServerConfig.shared.userName),
+        ]
+        if let sessionId {
+            components.queryItems?.append(URLQueryItem(name: "session", value: sessionId))
+        }
+        let response: SuggestionsResponse = try await get(
+            "/api/mention-suggestions?\(components.percentEncodedQuery ?? "")"
+        )
+        return response.items ?? []
     }
 
     /// Promote an ask-mode session to code mode. The server cuts the worktree —
@@ -1604,12 +1635,29 @@ enum OS1API {
         return components.string ?? "/api/models"
     }
 
+    struct ForkFrom: Equatable, Sendable {
+        let sourceId: String
+        let messageId: String?
+
+        init(sourceId: String, messageId: String? = nil) {
+            self.sourceId = sourceId
+            self.messageId = messageId
+        }
+
+        var wireValue: [String: String] {
+            var value = ["sourceId": sourceId]
+            if let messageId { value["messageId"] = messageId }
+            return value
+        }
+    }
+
     /// Create a session; returns the new session id. Code mode gets a
     /// server-suggested branch; the opening run starts immediately.
     static func createSession(
         prompt: String,
         repo: String,
         mode: String,
+        checkoutMode: String = "default",
         model: String? = nil,
         effort: String? = nil,
         fastMode: Bool = false,
@@ -1617,6 +1665,7 @@ enum OS1API {
         files: [AttachedFile] = [],
         workspaceId: String? = nil,
         sandbox: String? = nil,
+        forkFrom: ForkFrom? = nil,
         requestId: String? = nil
     ) async throws -> String {
         struct CreateResponse: Decodable { let id: String }
@@ -1624,6 +1673,7 @@ enum OS1API {
             prompt: prompt,
             repo: repo,
             mode: mode,
+            checkoutMode: checkoutMode,
             model: model,
             effort: effort,
             fastMode: fastMode,
@@ -1631,6 +1681,7 @@ enum OS1API {
             files: files,
             workspaceId: workspaceId,
             sandbox: sandbox,
+            forkFrom: forkFrom,
             user: ServerConfig.shared.userName,
             requestId: requestId
         )
@@ -1653,6 +1704,7 @@ enum OS1API {
         prompt: String,
         repo: String,
         mode: String,
+        checkoutMode: String = "default",
         model: String? = nil,
         effort: String? = nil,
         fastMode: Bool = false,
@@ -1660,10 +1712,17 @@ enum OS1API {
         files: [AttachedFile] = [],
         workspaceId: String? = nil,
         sandbox: String? = nil,
+        forkFrom: ForkFrom? = nil,
         user: String,
         requestId: String? = nil
     ) -> [String: Any] {
-        var body: [String: Any] = ["prompt": prompt, "mode": mode]
+        var body: [String: Any] = [
+            "prompt": prompt,
+            "mode": mode,
+            "checkoutMode": checkoutMode == "checkout" || checkoutMode == "worktree"
+                ? checkoutMode
+                : "default",
+        ]
         if let requestId, !requestId.isEmpty { body["requestId"] = requestId }
         // Sent only when the composer actually offered the choice. Omitting it
         // lets the instance's own sandbox default decide, which is the right
@@ -1675,6 +1734,7 @@ enum OS1API {
         // than starting a standalone session: the server takes the workspace's
         // worktree/branch for code sessions, so the tabs share one checkout.
         if let workspaceId, !workspaceId.isEmpty { body["workspaceId"] = workspaceId }
+        if let forkFrom { body["forkFrom"] = forkFrom.wireValue }
         if let model, !model.isEmpty { body["model"] = model }
         if let effort, !effort.isEmpty { body["effort"] = effort }
         if fastMode { body["fastMode"] = true }

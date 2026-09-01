@@ -30,19 +30,21 @@ describe("commit transcript pagination", () => {
       timestamp: new Date(at + index).toISOString(),
     }));
     const limits: number[] = [];
-    const rows = await readCommitTranscriptRows(
-      "session",
-      0,
-      (async (_sessionId: string, cursor: number, limit = 200) => {
-        limits.push(limit);
-        const page = entries.filter((entry) => entry.seq > cursor).slice(0, limit);
-        return {
-          entries: page,
-          firstSeq: page[0]?.seq ?? 0,
-          lastSeq: page.at(-1)?.seq ?? 0,
-        };
-      }) as typeof import("./actor-transcript").transcript.readSince,
-    );
+    const rows = await readCommitTranscriptRows("session", 0, (async (
+      _sessionId: string,
+      cursor: number,
+      limit = 200,
+    ) => {
+      limits.push(limit);
+      const page = entries
+        .filter((entry) => entry.seq > cursor)
+        .slice(0, limit);
+      return {
+        entries: page,
+        firstSeq: page[0]?.seq ?? 0,
+        lastSeq: page.at(-1)?.seq ?? 0,
+      };
+    }) as typeof import("./actor-transcript").transcript.readSince);
     expect(rows).toHaveLength(450);
     expect(limits).toEqual([200, 200, 200]);
   });
@@ -63,7 +65,9 @@ describe("firstMentions", () => {
   });
 
   it("ignores a mention far from the commit", () => {
-    expect(firstMentions([row("os-later", 3_600_000, SHA)], wanted).size).toBe(0);
+    expect(firstMentions([row("os-later", 3_600_000, SHA)], wanted).size).toBe(
+      0,
+    );
   });
 
   it("does not read a uuid's hex as a sha it happens to start like", () => {
@@ -75,9 +79,9 @@ describe("firstMentions", () => {
 
   it("reads an abbreviation and a full sha as the same commit", () => {
     for (const text of ["[main ad85e5d5] Ask card", SHA, "reverts `ad85e5d`"]) {
-      expect(firstMentions([row("os-maker", 0, text)], wanted).get(SHA)?.session).toBe(
-        "os-maker",
-      );
+      expect(
+        firstMentions([row("os-maker", 0, text)], wanted).get(SHA)?.session,
+      ).toBe("os-maker");
     }
   });
 
@@ -87,9 +91,9 @@ describe("firstMentions", () => {
     // a real newline this passes either way, which is how it went unnoticed:
     // the same sha one line lower was simply never seen.
     const stored = String.raw`{"content":"main\nad85e5d5 Ask card\n 4 files"}`;
-    expect(firstMentions([row("os-maker", 0, stored)], wanted).get(SHA)?.session).toBe(
-      "os-maker",
-    );
+    expect(
+      firstMentions([row("os-maker", 0, stored)], wanted).get(SHA)?.session,
+    ).toBe("os-maker");
   });
 
   it("keeps the earliest mention when one session says it twice", () => {

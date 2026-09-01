@@ -32,10 +32,13 @@ export type ImportedKey = { key: CryptoKey; alg: "ES256" | "RS256" };
 
 // Key import is not free (PEM decode + WebCrypto import per mint otherwise);
 // cache by path+mtime like the config cache so key rotation is picked up.
-let keyCache: { path: string; mtimeMs: number; imported: ImportedKey } | null = null;
+let keyCache: { path: string; mtimeMs: number; imported: ImportedKey } | null =
+  null;
 
 function pemToDer(pem: string): ArrayBuffer {
-  const bin = atob(pem.replace(/-----(BEGIN|END)[^-]*-----/g, "").replace(/\s+/g, ""));
+  const bin = atob(
+    pem.replace(/-----(BEGIN|END)[^-]*-----/g, "").replace(/\s+/g, ""),
+  );
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes.buffer;
@@ -80,12 +83,16 @@ async function importPrivateKey(path: string): Promise<ImportedKey> {
   return imported;
 }
 
-const b64urlJson = (v: unknown): string => Buffer.from(JSON.stringify(v)).toString("base64url");
+const b64urlJson = (v: unknown): string =>
+  Buffer.from(JSON.stringify(v)).toString("base64url");
 
 /** Sign a code.storage JWT with the configured private key. */
 export async function mintCsJwt(opts: MintCsJwtOptions): Promise<string> {
   const cfg = codeStorageConfig();
-  if (!cfg) throw new Error("code.storage is not configured (integrations.codeStorage)");
+  if (!cfg)
+    throw new Error(
+      "code.storage is not configured (integrations.codeStorage)",
+    );
   const { key, alg } = await importPrivateKey(cfg.privateKeyPath);
   const now = Math.floor(Date.now() / 1000);
   const payload = {
@@ -112,7 +119,11 @@ export async function mintCsJwt(opts: MintCsJwtOptions): Promise<string> {
  * targets the repo's disposable ref namespace (`…/<repoId>+ephemeral.git` —
  * https://code.storage/docs/guides/ephemeral-branches.md).
  */
-export function remoteUrl(org: string, repoId: string, opts?: { ephemeral?: boolean }): string {
+export function remoteUrl(
+  org: string,
+  repoId: string,
+  opts?: { ephemeral?: boolean },
+): string {
   return `https://${org}.code.storage/${repoId}${opts?.ephemeral ? "+ephemeral" : ""}.git`;
 }
 
@@ -127,10 +138,18 @@ export function remoteUrl(org: string, repoId: string, opts?: { ephemeral?: bool
  */
 export async function authedRemoteUrl(
   repoId: string,
-  opts?: { org?: string; scopes?: CsScope[]; ttlSeconds?: number; ephemeral?: boolean },
+  opts?: {
+    org?: string;
+    scopes?: CsScope[];
+    ttlSeconds?: number;
+    ephemeral?: boolean;
+  },
 ): Promise<string> {
   const cfg = codeStorageConfig();
-  if (!cfg) throw new Error("code.storage is not configured (integrations.codeStorage)");
+  if (!cfg)
+    throw new Error(
+      "code.storage is not configured (integrations.codeStorage)",
+    );
   const org = opts?.org || cfg.org;
   const jwt = await mintCsJwt({
     org,

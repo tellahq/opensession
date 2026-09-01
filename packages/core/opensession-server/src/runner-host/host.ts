@@ -45,7 +45,12 @@ process.once("exit", cleanupProjectedGithubAuth);
 // can now close the startup race without broad process-name matching.
 writeFileSync(
   `${hostDir}/startup.json`,
-  JSON.stringify({ ...processIdentity(), pid: process.pid, specPath: resolve(specPath), startedAt: new Date().toISOString() }),
+  JSON.stringify({
+    ...processIdentity(),
+    pid: process.pid,
+    specPath: resolve(specPath),
+    startedAt: new Date().toISOString(),
+  }),
   { mode: 0o600 },
 );
 if (existsSync(`${hostDir}/cancelled`)) {
@@ -187,10 +192,11 @@ const { TranscriptRelay } = await import("./transcript-relay");
 const { SocketWriteQueue } = await import("./socket-write-queue");
 const transcriptRelay = new TranscriptRelay();
 {
-  const { setTranscriptForwarder } = await import("../server/transcript-forward");
+  const { setTranscriptForwarder } =
+    await import("../server/transcript-forward");
   let warnedOverflow = false;
   setTranscriptForwarder((engineSessionId, lines) => {
-    if (!RUN_WS_URL && !transcriptRelay.record(engineSessionId, lines) && !warnedOverflow) {
+    if (!transcriptRelay.record(engineSessionId, lines) && !warnedOverflow) {
       warnedOverflow = true;
       log(
         "transcript history exceeded its byte budget; reattach resend will be partial (live frames unaffected)",
@@ -233,9 +239,13 @@ function sendHello(): void {
     done: ended ? terminal : undefined,
   });
   // Socket mode is live-only: re-send the transcript history so a
-  // reattaching server upserts anything it missed while detached.
+  // reattaching server upserts anything it missed while detached. The marker
+  // is the terminal fence: an ended hello cannot close the connection before
+  // these replay frames have been consumed.
   if (!RUN_WS_URL) {
-    for (const batch of transcriptRelay.replay()) send({ t: "transcript", ...batch });
+    for (const batch of transcriptRelay.replay())
+      send({ t: "transcript", ...batch });
+    send({ t: "catchup_complete" });
   }
 }
 
@@ -260,8 +270,7 @@ function handleClientMsg(msg: ClientToHostMsg): void {
           msg.text,
           msg.images,
 
-          msg.steerId
-
+          msg.steerId,
         )
       ) {
         // Too late (run finishing) or backend can't steer — bounce it back so
@@ -273,7 +282,7 @@ function handleClientMsg(msg: ClientToHostMsg): void {
     case "retract_steer": {
       void retractAgentSteer(
         [spec.osSessionId, meta.engineSessionId],
-        msg.steerId
+        msg.steerId,
       ).then((retracted) => {
         send({
           t: "steer_retracted",
@@ -289,12 +298,12 @@ function handleClientMsg(msg: ClientToHostMsg): void {
         !interruptAndSteerAgentRun(
           [spec.osSessionId, meta.engineSessionId],
           msg.text,
-          msg.images
+          msg.images,
         ) &&
         !steerAgentRun(
           [spec.osSessionId, meta.engineSessionId],
           msg.text,
-          msg.images
+          msg.images,
         )
       ) {
         send({ t: "steer_failed", text: msg.text });
@@ -358,21 +367,34 @@ if (RUN_WS_URL) {
     }
     let openSeq = 0;
     let ackTimer: ReturnType<typeof setTimeout> | null = null;
-    /** Replay everything after `after`, then open the live tap. */
-    const beginStream = (after: number): void => {
+    /** Replay everything after `after`, then open the live tap. A fresh server
+     *  epoch has no safe event watermark, so recover its idempotent transcript
+     *  projection separately from the bounded transcript history. */
+    const beginStream = (after: number, freshServer: boolean): void => {
       const { gap, lines } = buf.replayFrom(after);
       try {
+        if (freshServer) {
+          for (const batch of transcriptRelay.replay()) {
+            sock.send(JSON.stringify({ t: "transcript", ...batch }));
+          }
+        }
         if (gap) {
-          log(`replay gap: frames ${gap.from}..${gap.to} were dropped (buffer overflow)`);
+          log(
+            `replay gap: frames ${gap.from}..${gap.to} were dropped (buffer overflow)`,
+          );
           sock.send(JSON.stringify({ t: "gap", ...gap }));
         }
         for (const line of lines) sock.send(line);
+        // Connection-specific and deliberately unsequenced: it fences both
+        // transcript catch-up and the sequenced replay from this handshake.
+        sock.send(JSON.stringify({ t: "catchup_complete" }));
       } catch (e) {
         log("ws replay failed (frames stay buffered):", e);
       }
       buf.ack(after); // the watermark below `after` will never be replayed again
       streaming = true;
-      if (lines.length) log(`replayed ${lines.length} frame(s) after seq ${after}`);
+      if (lines.length)
+        log(`replayed ${lines.length} frame(s) after seq ${after}`);
     };
     sock.onopen = () => {
       backoff = 500;
@@ -384,7 +406,7 @@ if (RUN_WS_URL) {
       openSeq = buf.lastSeq;
       // A pre-ack opensession never acks: fall back to live-only streaming from
       // this connection onward (the old semantics) so mixed versions still run.
-      ackTimer = setTimeout(() => beginStream(openSeq), 3_000);
+      ackTimer = setTimeout(() => beginStream(openSeq, true), 3_000);
     };
     sock.onmessage = (ev) => {
       let msg: any;
@@ -395,12 +417,16 @@ if (RUN_WS_URL) {
         return;
       }
       if (msg?.t === "ack") {
-        const ack = { seq: Number(msg.seq) || 0, epoch: typeof msg.epoch === "string" ? msg.epoch : undefined };
+        const ack = {
+          seq: Number(msg.seq) || 0,
+          epoch: typeof msg.epoch === "string" ? msg.epoch : undefined,
+        };
         if (!streaming) {
           if (ackTimer) clearTimeout(ackTimer);
+          const freshServer = !ack.epoch || ack.epoch !== lastEpoch;
           const from = replayStartFor(ack, lastEpoch, openSeq);
           lastEpoch = ack.epoch ?? null;
-          beginStream(from);
+          beginStream(from, freshServer);
         } else {
           buf.ack(ack.seq); // periodic watermark — release delivered frames
         }
@@ -515,7 +541,10 @@ function proxyMcpConfigs(): Record<string, unknown> | undefined {
   // that is `bun run <mcp-proxy.ts>` (process.execPath is bun — resolves both
   // on the host and inside a sandbox container where protocol.ts's BUN_BIN host
   // path doesn't exist); as a compiled binary it is `<exe> mcp-proxy`.
-  const [proxyCommand, ...proxyArgs] = mcpProxyArgv(process.execPath, MCP_PROXY_ENTRY);
+  const [proxyCommand, ...proxyArgs] = mcpProxyArgv(
+    process.execPath,
+    MCP_PROXY_ENTRY,
+  );
   for (const name of names) {
     out[name] = {
       command: proxyCommand,
@@ -558,6 +587,7 @@ try {
     inProcessMcp: proxyMcpConfigs(),
     reposNote: spec.reposNote,
     deniedTools: spec.deniedTools,
+    publicationPolicy: spec.publicationPolicy,
     confirmTools: spec.confirmTools,
     aws: spec.aws,
     claudeCliEnv: spec.claudeCliEnv,
@@ -565,6 +595,7 @@ try {
     author: spec.author,
     user: spec.user,
     fallbackModel: spec.fallbackModel,
+    accountAffinityKey: spec.accountAffinityKey,
     effort: spec.effort,
     fastMode: spec.fastMode,
     accountId: spec.accountId,
@@ -572,7 +603,9 @@ try {
     usageCredits: spec.usageCredits,
     prReviewer: spec.prReviewer,
     journal: {
-      osSessionId: spec.osSessionId,
+      ...(spec.lifecycle === "auxiliary"
+        ? {}
+        : { osSessionId: spec.osSessionId }),
       kind: spec.journalKind || "prompt",
       firstJournaledAt: spec.firstJournaledAt,
       resumeAttempts: spec.resumeAttempts,
@@ -602,7 +635,10 @@ try {
 }
 
 ended = true;
-meta.done = terminal ?? { type: "error", content: "Run ended without a result" };
+meta.done = terminal ?? {
+  type: "error",
+  content: "Run ended without a result",
+};
 meta.endedAt = new Date().toISOString();
 saveMeta();
 send({ t: "end", done: terminal });

@@ -7,12 +7,21 @@
  */
 import { homeDir } from "./paths";
 import { statePath } from "./paths";
-import { configuredIntegration, configuredRepos, configuredServer, defaultRepo } from "./config";
+import {
+  configuredIntegration,
+  configuredRepos,
+  configuredServer,
+  defaultRepo,
+} from "./config";
 import { $ } from "bun";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "fs";
 import { audited } from "./audit";
-import { ghRateLimited, noteGhRateLimited, isGhRateLimitMsg } from "./github-limit";
+import {
+  ghRateLimited,
+  noteGhRateLimited,
+  isGhRateLimitMsg,
+} from "./github-limit";
 import {
   resolveGithubCredential,
   serviceGithubCredential,
@@ -66,7 +75,8 @@ export async function getPrAutomationDetails(
 ): Promise<PrAutomationDetails | null> {
   if (ghRateLimited("rest")) throw new Error(GH_REST_RATE_LIMIT_MESSAGE);
   const token = await githubToken();
-  if (!token) throw new Error("The selected GitHub bot credential is unavailable");
+  if (!token)
+    throw new Error("The selected GitHub bot credential is unavailable");
   const numeric = /^\d+$/.test(selector);
   const path = numeric
     ? `/repos/${repo}/pulls/${selector}`
@@ -81,7 +91,7 @@ export async function getPrAutomationDetails(
     },
     signal: AbortSignal.timeout(10_000),
   });
-  const body = await response.json().catch(() => null) as any;
+  const body = (await response.json().catch(() => null)) as any;
   console.log(
     `[github-budget] lane=rest consumer=pr-automation status=${response.status} durationMs=${Date.now() - started} remaining=${response.headers.get("x-ratelimit-remaining") || "unknown"}`,
   );
@@ -90,10 +100,15 @@ export async function getPrAutomationDetails(
     const message = String(body?.message || `GitHub REST ${response.status}`);
     if (
       (response.status === 403 || response.status === 429) &&
-      (response.headers.get("x-ratelimit-remaining") === "0" || isGhRateLimitMsg(message))
+      (response.headers.get("x-ratelimit-remaining") === "0" ||
+        isGhRateLimitMsg(message))
     ) {
       const reset = Number(response.headers.get("x-ratelimit-reset")) * 1000;
-      noteGhRateLimited("pr-automation", Number.isFinite(reset) ? reset : undefined, "rest");
+      noteGhRateLimited(
+        "pr-automation",
+        Number.isFinite(reset) ? reset : undefined,
+        "rest",
+      );
     }
     throw new Error(prApiErrorMessage(message));
   }
@@ -138,12 +153,18 @@ export async function getPrAutomationDetails(
     baseRefName: pr.base?.ref || "",
     headRefName: pr.head?.ref || "",
     headRefOid: pr.head?.sha || "",
+    headRepo: pr.head?.repo?.full_name || cached?.headRepo,
     additions: Number(pr.additions) || cached?.additions || 0,
     deletions: Number(pr.deletions) || cached?.deletions || 0,
     changedFiles: Number(pr.changed_files) || cached?.changedFiles || 0,
     author: pr.user?.login || "",
     body: typeof pr.body === "string" ? pr.body : cached?.body || "",
-    mergeable: pr.mergeable === true ? "MERGEABLE" : pr.mergeable === false ? "CONFLICTING" : cached?.mergeable || "UNKNOWN",
+    mergeable:
+      pr.mergeable === true
+        ? "MERGEABLE"
+        : pr.mergeable === false
+          ? "CONFLICTING"
+          : cached?.mergeable || "UNKNOWN",
   };
 }
 
@@ -159,7 +180,8 @@ export function latestWorkflowChecks(checks: PrCheck[]): PrCheck[] {
 
     const key = `${check.workflowName}\0${check.name}`;
     const previous = latest.get(key);
-    if (!previous?.startedAt || check.startedAt > previous.startedAt) latest.set(key, check);
+    if (!previous?.startedAt || check.startedAt > previous.startedAt)
+      latest.set(key, check);
   }
 
   return [...statusContexts, ...latest.values()];
@@ -201,7 +223,7 @@ export function cachedPrDetailsForSession(
     headRefName: branch,
     additions: ref?.additions ?? (primary ? session.prAdditions : 0) ?? 0,
     deletions: ref?.deletions ?? (primary ? session.prDeletions : 0) ?? 0,
-    changedFiles: primary ? session.prChangedFiles ?? 0 : 0,
+    changedFiles: primary ? (session.prChangedFiles ?? 0) : 0,
     reviewDecision:
       ref?.reviewDecision || (primary ? session.prReviewDecision : "") || "",
     author: primary ? session.prAuthor || "" : "",
@@ -234,7 +256,9 @@ export function reconcilePrDetails(
   return details;
 }
 
-function parseStaging(comments: Array<{ body?: string }> | undefined): PrStaging | null {
+function parseStaging(
+  comments: Array<{ body?: string }> | undefined,
+): PrStaging | null {
   const github = configuredIntegration("github");
   const marker =
     typeof github.previewCommentMarker === "string"
@@ -280,7 +304,9 @@ async function probeEmbeddable(url: string): Promise<void> {
     const csp = res.headers.get("content-security-policy") || "";
     const uiHost = new URL(configuredServer().publicBaseUrl).hostname;
     const escaped = uiHost.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const ok = new RegExp(`frame-ancestors[^;]*\\b${escaped}\\b`, "i").test(csp);
+    const ok = new RegExp(`frame-ancestors[^;]*\\b${escaped}\\b`, "i").test(
+      csp,
+    );
     embedCache.set(url, { ok, ts: Date.now() });
   } catch {
     embedCache.set(url, { ok: false, ts: Date.now() });
@@ -297,7 +323,11 @@ function embeddableFor(url: string): boolean {
 }
 
 /** Changed files, biggest churn first, so the panel leads with the meat. */
-function buildFiles(files: Array<{ path?: string; additions?: number; deletions?: number }> | undefined): PrFile[] {
+function buildFiles(
+  files:
+    | Array<{ path?: string; additions?: number; deletions?: number }>
+    | undefined,
+): PrFile[] {
   return (files || [])
     .filter((f) => f.path)
     .map((f) => ({
@@ -324,11 +354,18 @@ function buildReviewers(
     const state = r.state as PrReviewer["state"] | undefined;
     // DISMISSED/PENDING sneak in via the API; only surface real outcomes here.
     if (!login || !state) continue;
-    if (state !== "APPROVED" && state !== "CHANGES_REQUESTED" && state !== "COMMENTED") continue;
+    if (
+      state !== "APPROVED" &&
+      state !== "CHANGES_REQUESTED" &&
+      state !== "COMMENTED"
+    )
+      continue;
     const prev = byLogin.get(login);
     // Keep the strongest signal if someone appears twice (approve > changes > comment).
-    const rank = (s: string) => (s === "CHANGES_REQUESTED" ? 3 : s === "APPROVED" ? 2 : 1);
-    if (!prev || rank(state) > rank(prev.state)) byLogin.set(login, { login, state });
+    const rank = (s: string) =>
+      s === "CHANGES_REQUESTED" ? 3 : s === "APPROVED" ? 2 : 1;
+    if (!prev || rank(state) > rank(prev.state))
+      byLogin.set(login, { login, state });
   }
   for (const r of requests || []) {
     const login = r.login || r.slug || r.name;
@@ -338,7 +375,13 @@ function buildReviewers(
   }
   // Requesters/blockers first (they gate the merge), approvers next.
   const rank = (s: string) =>
-    s === "CHANGES_REQUESTED" ? 0 : s === "PENDING" ? 1 : s === "COMMENTED" ? 2 : 3;
+    s === "CHANGES_REQUESTED"
+      ? 0
+      : s === "PENDING"
+        ? 1
+        : s === "COMMENTED"
+          ? 2
+          : 3;
   return [...byLogin.values()].sort((a, b) => rank(a.state) - rank(b.state));
 }
 
@@ -378,9 +421,8 @@ const DETAILS_CACHE_FILE = statePath(".opensession-pr-details-cache.json");
  *  snapshot is written at the end of boot — see loadPrCacheSnapshot(). */
 export function loadPrDetailsSnapshot(): void {
   try {
-    const raw: Record<string, { data: PrDetails | null; ts: number }> = JSON.parse(
-      readFileSync(DETAILS_CACHE_FILE, "utf8"),
-    );
+    const raw: Record<string, { data: PrDetails | null; ts: number }> =
+      JSON.parse(readFileSync(DETAILS_CACHE_FILE, "utf8"));
     for (const [k, v] of Object.entries(raw)) cache.set(k, v);
   } catch {}
 }
@@ -413,27 +455,35 @@ const diffCache = new Map<string, { data: PrDiffData | null; ts: number }>();
  * fail its live fetch. The entry is stamped far in the future so the TTL never
  * expires it into a doomed `gh` call.
  */
-export function seedPrDiff(repo: string, branch: string, data: PrDiffData): void {
+export function seedPrDiff(
+  repo: string,
+  branch: string,
+  data: PrDiffData,
+): void {
   diffCache.set(cacheKey(repo, branch), {
     data: {
       ...data,
-      diffVersion: data.diffVersion ?? createHash("sha256")
-        .update(data.baseRefOid ?? "")
-        .update("\0")
-        .update(data.headRefOid)
-        .digest("base64url"),
+      diffVersion:
+        data.diffVersion ??
+        createHash("sha256")
+          .update(data.baseRefOid ?? "")
+          .update("\0")
+          .update(data.headRefOid)
+          .digest("base64url"),
     },
     ts: Number.MAX_SAFE_INTEGER,
   });
 }
-const diffInflight: Map<string, Promise<PrDiffData | null>> =
-  ((globalThis as any).__prDiffInflight ??= new Map());
+const diffInflight: Map<string, Promise<PrDiffData | null>> = ((
+  globalThis as any
+).__prDiffInflight ??= new Map());
 
 async function selectedGhEnv(
   opts: { write?: boolean } = {},
 ): Promise<Record<string, string>> {
   const token = await githubToken(opts);
-  if (!token) throw new Error("The selected GitHub bot credential is unavailable");
+  if (!token)
+    throw new Error("The selected GitHub bot credential is unavailable");
   return { GH_TOKEN: token, GITHUB_TOKEN: token };
 }
 
@@ -471,7 +521,10 @@ async function processPrefix(
   return { text: Buffer.concat(chunks).toString("utf8"), truncated: false };
 }
 
-function completePatchPrefix(text: string, truncated: boolean): { patch: string; skippedFiles: number } {
+function completePatchPrefix(
+  text: string,
+  truncated: boolean,
+): { patch: string; skippedFiles: number } {
   if (!truncated) return { patch: text, skippedFiles: 0 };
   const boundary = text.lastIndexOf("\ndiff --git ");
   return {
@@ -496,7 +549,8 @@ async function boundedCommandPatch(
     processPrefix(child.stderr, 64 * 1024, () => child.kill()),
   ]);
   const code = await child.exited;
-  if (code !== 0 && !output.truncated) throw new Error(error.text.trim() || `${argv[0]} failed`);
+  if (code !== 0 && !output.truncated)
+    throw new Error(error.text.trim() || `${argv[0]} failed`);
   return completePatchPrefix(output.text, output.truncated);
 }
 
@@ -529,7 +583,15 @@ async function getMutationPrMeta(
 ): Promise<MutationPrMeta | null> {
   const resolvedCredential = await resolveGithubCredential(credential);
   const proc = spawnGh(
-    ["pr", "view", branch, "--repo", repo, "--json", "number,headRefOid,state,isDraft,url"],
+    [
+      "pr",
+      "view",
+      branch,
+      "--repo",
+      repo,
+      "--json",
+      "number,headRefOid,state,isDraft,url",
+    ],
     resolvedCredential,
   );
   const [out, err, code] = await Promise.all([
@@ -565,7 +627,8 @@ export async function getPrDiff(
   const refresh = (async () => {
     try {
       const token = await githubToken();
-      if (!token) throw new Error("The selected GitHub bot credential is unavailable");
+      if (!token)
+        throw new Error("The selected GitHub bot credential is unavailable");
       const headers = {
         Authorization: `Bearer ${token}`,
         "X-GitHub-Api-Version": "2022-11-28",
@@ -585,8 +648,11 @@ export async function getPrDiff(
           headers: { ...headers, Accept: "application/vnd.github+json" },
           signal: AbortSignal.timeout(10_000),
         });
-        const body = await response.json().catch(() => null) as any;
-        if (!response.ok) throw new Error(String(body?.message || `GitHub REST ${response.status}`));
+        const body = (await response.json().catch(() => null)) as any;
+        if (!response.ok)
+          throw new Error(
+            String(body?.message || `GitHub REST ${response.status}`),
+          );
         const pr = Array.isArray(body) ? body[0] : body;
         if (!pr) throw new Error("no pull requests found");
         return {
@@ -602,15 +668,34 @@ export async function getPrDiff(
         let skippedFiles = 0;
         try {
           const controller = new AbortController();
-          const response = await fetch(`https://api.github.com/repos/${repo}/pulls/${meta.number}`, {
-            headers: { ...headers, Accept: "application/vnd.github.v3.diff" },
-            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]),
-          });
-          if (!response.ok) throw new Error(await response.text().catch(() => `GitHub REST ${response.status}`));
-          if (!response.body) throw new Error("GitHub returned an empty PR diff");
+          const response = await fetch(
+            `https://api.github.com/repos/${repo}/pulls/${meta.number}`,
+            {
+              headers: { ...headers, Accept: "application/vnd.github.v3.diff" },
+              signal: AbortSignal.any([
+                controller.signal,
+                AbortSignal.timeout(30_000),
+              ]),
+            },
+          );
+          if (!response.ok)
+            throw new Error(
+              await response
+                .text()
+                .catch(() => `GitHub REST ${response.status}`),
+            );
+          if (!response.body)
+            throw new Error("GitHub returned an empty PR diff");
           if (maxPatchBytes) {
-            const bounded = await processPrefix(response.body, maxPatchBytes, () => controller.abort());
-            const complete = completePatchPrefix(bounded.text, bounded.truncated);
+            const bounded = await processPrefix(
+              response.body,
+              maxPatchBytes,
+              () => controller.abort(),
+            );
+            const complete = completePatchPrefix(
+              bounded.text,
+              bounded.truncated,
+            );
             patch = complete.patch;
             skippedFiles = complete.skippedFiles;
           } else {
@@ -621,18 +706,26 @@ export async function getPrDiff(
           // snapshotted refs in the configured local checkout.
           const dmsg = String(diffErr?.stderr || diffErr?.message || diffErr);
           if (!/maximum number of files/i.test(dmsg)) throw diffErr;
-          console.warn(`[pr-info] PR #${meta.number} diff >300 files; using local merge-base diff`);
+          console.warn(
+            `[pr-info] PR #${meta.number} diff >300 files; using local merge-base diff`,
+          );
           try {
             const local = await localPrDiffPatch(repo, meta, maxPatchBytes);
             patch = local.patch;
             skippedFiles = local.skippedFiles;
           } catch (localErr: any) {
-            console.warn(`[pr-info] local diff fallback failed: ${String(localErr?.stderr || localErr?.message || localErr).slice(0, 300)}`);
+            console.warn(
+              `[pr-info] local diff fallback failed: ${String(localErr?.stderr || localErr?.message || localErr).slice(0, 300)}`,
+            );
             throw localErr;
           }
         }
         const verified = await readMeta();
-        if (verified.headRefOid !== meta.headRefOid || verified.baseRefOid !== meta.baseRefOid) continue;
+        if (
+          verified.headRefOid !== meta.headRefOid ||
+          verified.baseRefOid !== meta.baseRefOid
+        )
+          continue;
         const data = {
           number: meta.number,
           baseRefOid: meta.baseRefOid,
@@ -648,11 +741,12 @@ export async function getPrDiff(
         if (!maxPatchBytes) diffCache.set(key, { data, ts: Date.now() });
         return data;
       }
-	  throw new Error("Pull request changed while loading its diff");
+      throw new Error("Pull request changed while loading its diff");
     } catch (e: any) {
       const msg = String(e?.stderr || e?.message || e).slice(0, 300);
       if (!isNoPrError(msg)) {
-        if (isGhRateLimitMsg(msg)) noteGhRateLimited("pr-diff", undefined, "rest");
+        if (isGhRateLimitMsg(msg))
+          noteGhRateLimited("pr-diff", undefined, "rest");
         console.warn(`[pr-info] gh pr diff ${branch} (${repo}) failed: ${msg}`);
         if (hit) return hit.data; // stale beats an error
         throw new Error(prApiErrorMessage(msg));
@@ -687,7 +781,9 @@ async function localPrDiffPatch(
       maxPatchBytes,
     );
   return {
-    patch: await $`git -C ${local} diff ${base}...${meta.headRefOid}`.quiet().text(),
+    patch: await $`git -C ${local} diff ${base}...${meta.headRefOid}`
+      .quiet()
+      .text(),
     skippedFiles: 0,
   };
 }
@@ -705,16 +801,27 @@ export async function postPrComment(
       const meta = await getMutationPrMeta(branch, repo, credential);
       if (!meta) return { error: "No PR found for this branch" };
       const args = [
-        "api", "-X", "POST", `repos/${repo}/pulls/${meta.number}/comments`,
-        "-f", `body=${input.body}`,
-        "-f", `commit_id=${meta.headRefOid}`,
-        "-f", `path=${input.path}`,
-        "-F", `line=${input.line}`,
-        "-f", `side=${input.side || "RIGHT"}`,
+        "api",
+        "-X",
+        "POST",
+        `repos/${repo}/pulls/${meta.number}/comments`,
+        "-f",
+        `body=${input.body}`,
+        "-f",
+        `commit_id=${meta.headRefOid}`,
+        "-f",
+        `path=${input.path}`,
+        "-F",
+        `line=${input.line}`,
+        "-f",
+        `side=${input.side || "RIGHT"}`,
       ];
       if (input.startLine && input.startLine !== input.line) {
         args.push("-F", `start_line=${input.startLine}`);
-        args.push("-f", `start_side=${input.startSide || input.side || "RIGHT"}`);
+        args.push(
+          "-f",
+          `start_side=${input.startSide || input.side || "RIGHT"}`,
+        );
       }
       const proc = spawnGh(args, credential);
       const [out, err, code] = await Promise.all([
@@ -744,7 +851,8 @@ export async function postPrComment(
       new Response(proc.stderr).text(),
       proc.exited,
     ]);
-    if (code !== 0) return { error: (err || "gh pr comment failed").slice(0, 300) };
+    if (code !== 0)
+      return { error: (err || "gh pr comment failed").slice(0, 300) };
     invalidatePrInfo(repo, branch);
     return { ok: true, url: out.trim() || undefined };
   } catch (e: any) {
@@ -770,9 +878,11 @@ export async function submitPrReview(
     return { error: "Nothing to submit" };
   }
 
-  const meta = await getMutationPrMeta(branch, repo, credential).catch((e: any) => ({
-    error: e?.message || String(e),
-  }));
+  const meta = await getMutationPrMeta(branch, repo, credential).catch(
+    (e: any) => ({
+      error: e?.message || String(e),
+    }),
+  );
   if (!meta) return { error: "No PR found for this branch" };
   if ("error" in meta) return meta;
 
@@ -785,7 +895,10 @@ export async function submitPrReview(
       line: c.line,
       side: c.side || "RIGHT",
       ...(c.startLine && c.startLine !== c.line
-        ? { start_line: c.startLine, start_side: c.startSide || c.side || "RIGHT" }
+        ? {
+            start_line: c.startLine,
+            start_side: c.startSide || c.side || "RIGHT",
+          }
         : {}),
       body: c.body,
     })),
@@ -805,7 +918,14 @@ export async function submitPrReview(
     },
     async () => {
       const proc = spawnGh(
-        ["api", "-X", "POST", `repos/${repo}/pulls/${meta.number}/reviews`, "--input", "-"],
+        [
+          "api",
+          "-X",
+          "POST",
+          `repos/${repo}/pulls/${meta.number}/reviews`,
+          "--input",
+          "-",
+        ],
         credential,
         "pipe",
       );
@@ -827,7 +947,7 @@ export async function submitPrReview(
       })();
       invalidatePrInfo(repo, branch);
       return { ok: true, url } as const;
-    }
+    },
   );
 }
 
@@ -840,7 +960,8 @@ export async function closePr(
   credential = await resolveGithubCredential(credential, { write: true });
   const pr = await getMutationPrMeta(branch, repo, credential);
   if (!pr) return { error: "No PR found for this branch" };
-  if (pr.state !== "OPEN") return { error: `PR #${pr.number} is ${pr.state.toLowerCase()}, not open` };
+  if (pr.state !== "OPEN")
+    return { error: `PR #${pr.number} is ${pr.state.toLowerCase()}, not open` };
 
   return audited(
     {
@@ -853,13 +974,17 @@ export async function closePr(
       },
     },
     async () => {
-      const proc = spawnGh(["pr", "close", String(pr.number), "--repo", repo], credential);
+      const proc = spawnGh(
+        ["pr", "close", String(pr.number), "--repo", repo],
+        credential,
+      );
       const [, err, code] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),
         proc.exited,
       ]);
-      if (code !== 0) return { error: (err || "gh pr close failed").slice(0, 300) } as const;
+      if (code !== 0)
+        return { error: (err || "gh pr close failed").slice(0, 300) } as const;
       cache.delete(cacheKey(repo, branch));
       diffCache.delete(cacheKey(repo, branch));
       return { ok: true, url: pr.url, number: pr.number } as const;
@@ -881,8 +1006,10 @@ export async function mergePr(
   credential = await resolveGithubCredential(credential, { write: true });
   const pr = await getMutationPrMeta(branch, repo, credential);
   if (!pr) return { error: "No PR found for this branch" };
-  if (pr.state !== "OPEN") return { error: `PR #${pr.number} is ${pr.state.toLowerCase()}, not open` };
-  if (pr.isDraft) return { error: `PR #${pr.number} is a draft — mark it ready first` };
+  if (pr.state !== "OPEN")
+    return { error: `PR #${pr.number} is ${pr.state.toLowerCase()}, not open` };
+  if (pr.isDraft)
+    return { error: `PR #${pr.number} is a draft — mark it ready first` };
 
   // Stack order: a layer merges into the one below it, so it can't land while
   // a lower layer is still open. GitHub enforces this itself — verified live
@@ -907,7 +1034,12 @@ export async function mergePr(
   }
 
   const method = opts.method || "squash";
-  const flag = method === "merge" ? "--merge" : method === "rebase" ? "--rebase" : "--squash";
+  const flag =
+    method === "merge"
+      ? "--merge"
+      : method === "rebase"
+        ? "--rebase"
+        : "--squash";
 
   return audited(
     {
@@ -930,12 +1062,13 @@ export async function mergePr(
         new Response(proc.stderr).text(),
         proc.exited,
       ]);
-      if (code !== 0) return { error: (err || "gh pr merge failed").slice(0, 300) } as const;
+      if (code !== 0)
+        return { error: (err || "gh pr merge failed").slice(0, 300) } as const;
       // Drop cached PR/diff so the UI reflects the merge on the next poll.
       cache.delete(cacheKey(repo, branch));
       diffCache.delete(cacheKey(repo, branch));
       return { ok: true, url: pr.url } as const;
-    }
+    },
   );
 }
 
@@ -959,8 +1092,9 @@ export async function editPrReviewers(
   if (opts.add) args.push("--add-reviewer", opts.add);
   // A list, because withdrawing a request made on GitHub rather than here can
   // mean several reviewers at once (see prReviewerSpecs).
-  const removals = (Array.isArray(opts.remove) ? opts.remove : [opts.remove])
-    .filter((person): person is string => !!person && person !== opts.add);
+  const removals = (
+    Array.isArray(opts.remove) ? opts.remove : [opts.remove]
+  ).filter((person): person is string => !!person && person !== opts.add);
   for (const person of removals) args.push("--remove-reviewer", person);
   if (args.length === 4) return { ok: true }; // nothing to do
   try {
@@ -970,7 +1104,8 @@ export async function editPrReviewers(
       new Response(proc.stderr).text(),
       proc.exited,
     ]);
-    if (code !== 0) return { error: (err || "gh pr edit failed").slice(0, 300) };
+    if (code !== 0)
+      return { error: (err || "gh pr edit failed").slice(0, 300) };
     cache.delete(cacheKey(repo, branch)); // reviewRequests changed
     return { ok: true };
   } catch (e: any) {
@@ -1025,13 +1160,13 @@ export async function prReviewerSpecs(
 export async function updatePrBody(
   branch: string,
   mutate: (body: string) => string,
-  repo: string = DEFAULT_REPO()
+  repo: string = DEFAULT_REPO(),
 ): Promise<{ ok: true; number: number; url: string } | { error: string }> {
   try {
     const ghEnv = await selectedGhEnv({ write: true });
     const view = Bun.spawn(
       ["gh", "pr", "view", branch, "--repo", repo, "--json", "body,number,url"],
-      { stdout: "pipe", stderr: "pipe", env: { ...process.env, ...ghEnv } }
+      { stdout: "pipe", stderr: "pipe", env: { ...process.env, ...ghEnv } },
     );
     const [out, viewErr, viewCode] = await Promise.all([
       new Response(view.stdout).text(),
@@ -1042,13 +1177,22 @@ export async function updatePrBody(
       return { error: (viewErr || "gh pr view failed").slice(0, 300) };
     const pr = JSON.parse(out) as { body: string; number: number; url: string };
     const next = mutate(pr.body || "");
-    if (next === (pr.body || "")) return { ok: true, number: pr.number, url: pr.url };
+    if (next === (pr.body || ""))
+      return { ok: true, number: pr.number, url: pr.url };
     const tmp = `/tmp/opensession-pr-body-${Date.now()}-${Math.random().toString(36).slice(2)}.json`;
     await Bun.write(tmp, JSON.stringify({ body: next }));
     try {
       const edit = Bun.spawn(
-        ["gh", "api", "-X", "PATCH", `repos/${repo}/pulls/${pr.number}`, "--input", tmp],
-        { stdout: "pipe", stderr: "pipe", env: { ...process.env, ...ghEnv } }
+        [
+          "gh",
+          "api",
+          "-X",
+          "PATCH",
+          `repos/${repo}/pulls/${pr.number}`,
+          "--input",
+          tmp,
+        ],
+        { stdout: "pipe", stderr: "pipe", env: { ...process.env, ...ghEnv } },
       );
       const [, editErr, editCode] = await Promise.all([
         new Response(edit.stdout).text(),
@@ -1056,9 +1200,13 @@ export async function updatePrBody(
         edit.exited,
       ]);
       if (editCode !== 0)
-        return { error: (editErr || "gh api pulls PATCH failed").slice(0, 300) };
+        return {
+          error: (editErr || "gh api pulls PATCH failed").slice(0, 300),
+        };
     } finally {
-      await Bun.file(tmp).unlink().catch(() => {});
+      await Bun.file(tmp)
+        .unlink()
+        .catch(() => {});
     }
     cache.delete(cacheKey(repo, branch)); // body changed
     return { ok: true, number: pr.number, url: pr.url };
@@ -1082,7 +1230,7 @@ const inflight = new Map<string, Promise<PrDetails | null>>();
  */
 export async function getPrDetails(
   branch: string,
-  repo: string = DEFAULT_REPO()
+  repo: string = DEFAULT_REPO(),
 ): Promise<PrDetails | null> {
   const key = cacheKey(repo, branch);
   const hit = cache.get(key);
@@ -1118,7 +1266,7 @@ export async function getPrDetails(
 /** Bypass the UI's stale-while-revalidate cache for action completion gates. */
 export async function getPrDetailsFresh(
   branch: string,
-  repo: string = DEFAULT_REPO()
+  repo: string = DEFAULT_REPO(),
 ): Promise<PrDetails | null> {
   // A completion gate must not act on stale data, so during a rate-limit
   // window it fails fast with the friendly message instead of burning a call.
@@ -1201,14 +1349,16 @@ export function ghApiErrorMessage(
 function isPermanentPrApiError(msg: string): boolean {
   // "Resource not accessible" = the token lacks a permission (e.g. Checks:read
   // for statusCheckRollup) — retrying only burns GraphQL quota.
-  return /rate limit|authentication|bad credentials|requires authentication|resource not accessible/i.test(msg);
+  return /rate limit|authentication|bad credentials|requires authentication|resource not accessible/i.test(
+    msg,
+  );
 }
 
 // The App permission set includes Checks: read, so every PR details query asks
 // for the rollup and fails visibly if the installation is misconfigured.
 async function fetchPrDetails(
   branch: string,
-  repo: string
+  repo: string,
 ): Promise<PrDetails | null> {
   let data: PrDetails | null = null;
   try {
@@ -1228,13 +1378,24 @@ async function fetchPrDetails(
           .env({ ...process.env, ...selectedEnv })
           .quiet()
           .text();
-        noteGithubGraphqlCall("pr-info:details", Date.now() - queryStarted, true);
+        noteGithubGraphqlCall(
+          "pr-info:details",
+          Date.now() - queryStarted,
+          true,
+        );
         break;
       } catch (e: any) {
-        noteGithubGraphqlCall("pr-info:details", Date.now() - queryStarted, false);
+        noteGithubGraphqlCall(
+          "pr-info:details",
+          Date.now() - queryStarted,
+          false,
+        );
         const msg = String(e?.stderr || e?.message || e).slice(0, 300);
-        if (isNoPrError(msg) || isPermanentPrApiError(msg) || attempt >= 3) throw e;
-        console.warn(`[pr-info] gh pr view ${branch} (${repo}) attempt ${attempt} failed, retrying: ${msg}`);
+        if (isNoPrError(msg) || isPermanentPrApiError(msg) || attempt >= 3)
+          throw e;
+        console.warn(
+          `[pr-info] gh pr view ${branch} (${repo}) attempt ${attempt} failed, retrying: ${msg}`,
+        );
         await new Promise((r) => setTimeout(r, attempt * 2000));
       }
     }

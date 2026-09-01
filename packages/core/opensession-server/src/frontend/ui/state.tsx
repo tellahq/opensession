@@ -1,309 +1,142 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "./cn";
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { IconX } from "../components/icons";
-import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "./cn";
+import { cn } from "./cn";
 import { PageLoader } from "./page-loader";
 import { Spinner } from "./spinner";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
-import { motionStyles } from "../styles/animations.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	inlineFlex: {
-			display: "inline-flex"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap2: {
-			gap: "8px"
-	},
-	AnimationGhostInVarDurVarEase180msBoth: {
-			animation: "ghost-in var(--dur) var(--ease) .18s both"
-	},
-	mt2: {
-			marginTop: "8px"
-	},
-	h25: {
-			height: "10px"
-	},
-	w26: {
-			width: "26%"
-	},
-	mxAuto: {
-			marginInline: "auto"
-	},
-	mb45: {
-			marginBottom: "18px"
-	},
-	flex: {
-			display: "flex"
-	},
-	wFull: {
-			width: "100%"
-	},
-	maxWVarSessionCol: {
-			maxWidth: "var(--session-col)"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	gap25: {
-			gap: "10px"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	flex1: {
-			flex: "1"
-	},
-	focusRing: {
-			":focus-visible": {
-					outline: "2px solid var(--accent-ink)",
-					outlineOffset: "2px"
-			}
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	selfCenter: {
-			alignSelf: "center"
-	},
-	whitespaceNowrap: {
-			whiteSpace: "nowrap"
-	},
-	underline: {
-			textDecorationLine: "underline"
-	},
-	underlineOffset2: {
-			textUnderlineOffset: "2px"
-	},
-	opacity80: {
-			opacity: ".8"
-	},
-	transitionOpacity: {
-			transitionProperty: "opacity",
-			transitionTimingFunction: "var(--tw-ease,var(--ease))",
-			transitionDuration: "var(--tw-duration,var(--dur-micro))"
-	},
-	relative: {
-			position: "relative"
-	},
-	Mr1: {
-			marginRight: "-4px"
-	},
-	size6: {
-			width: "24px",
-			height: "24px"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	roundedControl: {
-			borderRadius: "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	opacity60: {
-			opacity: ".6"
-	},
-	leadingSnug: {
-			lineHeight: "var(--leading-snug)"
-	},
-	maxW46ch: {
-			maxWidth: "46ch"
-	},
-	mt1: {
-			marginTop: "4px"
-	},
-	animatePulse: {
-			animation: "var(--animate-pulse)"
-	},
-	h3: {
-			height: "12px"
-	},
-	roundedSm: {
-			borderRadius: "calc(4px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgHover: {
-			backgroundColor: "var(--hover)"
-	},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	borderLine: {
-			borderColor: "var(--border)"
-	},
-	bgPanel: {
-			backgroundColor: "var(--bg-panel)"
-	},
-	px35: {
-			paddingInline: "14px"
-	},
-	py11px: {
-			paddingBlock: "11px"
-	},
-	py13px: {
-			paddingBlock: "13px"
-	},
-	selfEnd: {
-			alignSelf: "flex-end"
-	},
-	roundedLg: {
-			borderRadius: "calc(14px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	itemsStart: {
-			alignItems: "flex-start"
-	},
-	roundedMd: {
-			borderRadius: "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	px3: {
-			paddingInline: "12px"
-	},
-	py25: {
-			paddingBlock: "10px"
-	},
-	textSm: {
-			fontSize: "var(--type-label)",
-			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
-	},
-	cursorPointer: {
-			cursor: "pointer"
-	},
-	mt05: {
-			marginTop: "2px"
-	},
-	opacity90: {
-			opacity: ".9"
-	},
-
-	gap15: {
-		"gap": "6px"
-	},
-	gap05: {
-		"gap": "2px"
-	},
-
-	py10: {
-		"paddingBlock": "40px"
-	},
-	textCenter: {
-		"textAlign": "center"
-	},
-	rounded2xl: {
-		"borderRadius": "calc(22px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgRaised: {
-		"backgroundColor": "var(--bg-raised)"
-	},
-	px5: {
-		"paddingInline": "20px"
-	},
-	py4: {
-		"paddingBlock": "16px"
-	},
-	w62: {
-		"width": "62%"
-	},
-	w41: {
-		"width": "41%"
-	},
-	w73: {
-		"width": "73%"
-	},
-	w52: {
-		"width": "52%"
-	},
-	w35: {
-		"width": "35%"
-	},
-	w66: {
-		"width": "66%"
-	},
-	w47: {
-		"width": "47%"
-	},
-	w58: {
-		"width": "58%"
-	},
-	borderRed40: {
-		"borderColor": "var(--red)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"borderColor": "color-mix(in oklab, var(--red) 40%, transparent)"
-		}
-	},
-	bgRedSoft: {
-		"backgroundColor": "var(--red-soft)"
-	},
-	textRed: {
-		"color": "var(--red)"
-	},
-	borderYellow40: {
-		"borderColor": "var(--yellow)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"borderColor": "color-mix(in oklab, var(--yellow) 40%, transparent)"
-		}
-	},
-	bgYellowSoft: {
-		"backgroundColor": "var(--yellow-soft)"
-	},
-	textYellow: {
-		"color": "var(--yellow)"
-	},
-	borderBlue40: {
-		"borderColor": "var(--blue)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"borderColor": "color-mix(in oklab, var(--blue) 40%, transparent)"
-		}
-	},
-	bgBlueSoft: {
-		"backgroundColor": "var(--blue-soft)"
-	},
-	textBlue: {
-		"color": "var(--blue)"
-	},
-	hoverOpacity100: {
-		"@media (hover: hover)": {
-			":hover": {
-				"opacity": "1"
-			}
-		}
-	},
-	beforeAbsolute: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"position": "absolute"
-		}
-	},
-	beforeInset2: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"inset": "-8px"
-		}
-	},
-	beforeContent: {
-		"::before": {
-			"--tw-content": "\"\"",
-			"content": "var(--tw-content)"
-		}
-	},
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  AnimationGhostInVarDurVarEase180msBoth: {
+    animation: "ghost-in var(--dur) var(--ease) 180ms both",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  h25: {
+    height: "calc(4px * 2.5)",
+  },
+  w26: {
+    width: "26%",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  mb45: {
+    marginBottom: "calc(4px * 4.5)",
+  },
+  flex: {
+    display: "flex",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxWVarSessionCol: {
+    maxWidth: "var(--session-col)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  selfCenter: {
+    alignSelf: "center",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  underline: {
+    textDecorationLine: "underline",
+  },
+  underlineOffset2: {
+    textUnderlineOffset: "2px",
+  },
+  opacity80: {
+    opacity: "80%",
+  },
+  transitionOpacity: {
+    transitionProperty: "opacity",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverOpacity100: {
+    "@media (hover: hover)": {
+      ":hover": {
+        opacity: "100%",
+      },
+    },
+  },
+  relative: {
+    position: "relative",
+  },
+  Mr1: {
+    marginRight: "calc(4px * -1)",
+  },
+  size6: {
+    width: "calc(4px * 6)",
+    height: "calc(4px * 6)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  opacity60: {
+    opacity: "60%",
+  },
+  beforeAbsolute: {
+    "::before": {
+      content: '""',
+      position: "absolute",
+    },
+  },
+  beforeInset2: {
+    "::before": {
+      content: '""',
+      inset: "calc(4px * -2)",
+    },
+  },
+  beforeContent: {
+    "::before": {
+      content: "''",
+    },
+  },
 });
 
 /**
@@ -348,81 +181,112 @@ const sx = stylex.create({
 export type StatePlacement = "block" | "card" | "row";
 
 const placements: Record<StatePlacement, string> = {
-	// Stands in for a whole region: the `.loading`/`.empty` look (40px of air,
-	// centred) so it reads as "this area is empty", not "this row is".
-	block: mergeStylexClassName("", sx.flex, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.gap2, sx.py10, sx.textCenter),
-	// Stands in for a card: borrows SettingCard's surface so the page's rhythm
-	// survives the emptiness.
-	card: mergeStylexClassName("", sx.rounded2xl, sx.bgRaised, sx.px5, sx.py4),
-	// Lives inside a card's row list: matches SettingRow's padding so it lands
-	// on the same left edge as the rows it replaces.
-	row: mergeStylexClassName("", sx.px5, sx.py4),
+  // Stands in for a whole region: the `.loading`/`.empty` look (40px of air,
+  // centred) so it reads as "this area is empty", not "this row is".
+  block: utilityClassName(
+    "flex flex-col items-center justify-center gap-2 py-10 text-center",
+  ),
+  // Stands in for a card: borrows SettingCard's surface so the page's rhythm
+  // survives the emptiness.
+  card: utilityClassName("rounded-2xl bg-raised px-5 py-4"),
+  // Lives inside a card's row list: matches SettingRow's padding so it lands
+  // on the same left edge as the rows it replaces.
+  row: utilityClassName("px-5 py-4"),
 };
 
 export function EmptyState({
-	icon,
-	title,
-	action,
-	placement = "block",
-	className,
-	children,
-	...props
+  icon,
+  title,
+  action,
+  placement = "block",
+  className,
+  children,
+  ...props
 }: Omit<React.ComponentPropsWithoutRef<"div">, "title"> & {
-	/** 22px glyph from components/icons.tsx. Block placement only — in a row
-	 *  or card it would out-weigh the sentence beside it. */
-	icon?: React.ReactNode;
-	title?: React.ReactNode;
-	/** Usually a <Button size="sm">: the one thing that fills the emptiness. */
-	action?: React.ReactNode;
-	placement?: StatePlacement;
+  /** 22px glyph from components/icons.tsx. Block placement only — in a row
+   *  or card it would out-weigh the sentence beside it. */
+  icon?: React.ReactNode;
+  title?: React.ReactNode;
+  /** Usually a <Button size="sm">: the one thing that fills the emptiness. */
+  action?: React.ReactNode;
+  placement?: StatePlacement;
 }) {
-	const block = placement === "block";
-	return (
-		<div className={cn(placements[placement], className)} {...props}>
-			{block && icon && <span {...stylex.props(sx.textFaint)}>{icon}</span>}
-			{title && <div {...stylex.props(sx.fontMedium, sx.textFg, typography.controlLabel)}>{title}</div>}
-			{children && (
-				<div {...stylex.props(typography.supporting, sx.leadingSnug, sx.textDim, block && sx.maxW46ch)}>
-					{children}
-				</div>
-			)}
-			{action && <div {...stylex.props(block && sx.mt1, !(block) && sx.mt2)}>{action}</div>}
-		</div>
-	);
+  const block = placement === "block";
+  return (
+    <div className={cn(placements[placement], className)} {...props}>
+      {block && icon && <span {...stylex.props(sx.textFaint)}>{icon}</span>}
+      {title && (
+        <div
+          {...stylex.props(sx.fontMedium, sx.textFg, typography.controlLabel)}
+        >
+          {title}
+        </div>
+      )}
+      {children && (
+        <div
+          className={cn(
+            utilityClassName("text-supporting leading-snug text-dim"),
+            block && utilityClassName("max-w-[46ch]"),
+          )}
+        >
+          {children}
+        </div>
+      )}
+      {action && (
+        <div
+          className={cn(
+            block ? utilityClassName("mt-1") : utilityClassName("mt-2"),
+          )}
+        >
+          {action}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function LoadingState({
-	placement = "block",
-	spinner = true,
-	className,
-	children,
-	...props
+  placement = "block",
+  spinner = true,
+  className,
+  children,
+  ...props
 }: React.ComponentPropsWithoutRef<"div"> & {
-	placement?: StatePlacement;
-	spinner?: boolean;
+  placement?: StatePlacement;
+  spinner?: boolean;
 }) {
-	// The mark follows the placement, because the placement is already the
-	// answer to "how much is waiting". A `block` stands in for a whole region,
-	// which is what the launch wave is for, and it sits ABOVE the label there —
-	// the splash's own arrangement, and the one that reads as a page rather than
-	// as a sentence with a mark in front of it. A `row` or a `card` is a small
-	// thing working inside a page that has already arrived, so it keeps the ring
-	// on the label's line, where bars would be illegible anyway.
-	const block = placement === "block";
-	return (
-		<div
-			role="status"
-			aria-live="polite"
-			className={cn(placements[placement], className)}
-			{...props}
-		>
-			{block && spinner && <PageLoader className={mergeStylexOverrideClassName("", sx.textDim)} />}
-			<div {...stylex.props(sx.inlineFlex, sx.itemsCenter, sx.gap2, sx.textFaint, typography.supporting)}>
-				{!block && spinner && <Spinner />}
-				{children}
-			</div>
-		</div>
-	);
+  // The mark follows the placement, because the placement is already the
+  // answer to "how much is waiting". A `block` stands in for a whole region,
+  // which is what the launch wave is for, and it sits ABOVE the label there —
+  // the splash's own arrangement, and the one that reads as a page rather than
+  // as a sentence with a mark in front of it. A `row` or a `card` is a small
+  // thing working inside a page that has already arrived, so it keeps the ring
+  // on the label's line, where bars would be illegible anyway.
+  const block = placement === utilityClassName("block");
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn(placements[placement], className)}
+      {...props}
+    >
+      {block && spinner && (
+        <PageLoader className={mergeStylexOverrideClassName("", sx.textDim)} />
+      )}
+      <div
+        {...stylex.props(
+          sx.inlineFlex,
+          sx.itemsCenter,
+          sx.gap2,
+          sx.textFaint,
+          typography.supporting,
+        )}
+      >
+        {!block && spinner && <Spinner />}
+        {children}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -444,22 +308,24 @@ export function LoadingState({
  * inside. `className` styles the inner box — the one that IS the ghost.
  */
 export function Skeleton({
-	label = "Loading",
-	className,
-	children,
-	...props
+  label = "Loading",
+  className,
+  children,
+  ...props
 }: React.ComponentPropsWithoutRef<"div"> & { label?: string }) {
-	return (
-		<div
-			role="status"
-			aria-live="polite"
-			aria-label={label}
-			{...stylex.props(sx.AnimationGhostInVarDurVarEase180msBoth)}
-			{...props}
-		>
-			<div {...mergeStylexProps(cn(className), motionStyles.pulse)}>{children}</div>
-		</div>
-	);
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={label}
+      {...stylex.props(sx.AnimationGhostInVarDurVarEase180msBoth)}
+      {...props}
+    >
+      <div className={cn(utilityClassName("animate-pulse"), className)}>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -469,10 +335,15 @@ export function Skeleton({
  * placeholder is made of is one edit.
  */
 export function SkeletonBar({
-	className,
-	...props
+  className,
+  ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div {...mergeStylexProps(cn(className), sx.h3, sx.roundedSm, sx.bgHover)} {...props} />;
+  return (
+    <div
+      className={cn(utilityClassName("h-3 rounded-sm bg-hover"), className)}
+      {...props}
+    />
+  );
 }
 
 /**
@@ -482,14 +353,14 @@ export function SkeletonBar({
  * width: Tailwind only compiles class names it can find in the source.
  */
 const SKELETON_WIDTHS = [
-	mergeStylexClassName("", sx.w62),
-	mergeStylexClassName("", sx.w41),
-	mergeStylexClassName("", sx.w73),
-	mergeStylexClassName("", sx.w52),
-	mergeStylexClassName("", sx.w35),
-	mergeStylexClassName("", sx.w66),
-	mergeStylexClassName("", sx.w47),
-	mergeStylexClassName("", sx.w58),
+  utilityClassName("w-[62%]"),
+  utilityClassName("w-[41%]"),
+  utilityClassName("w-[73%]"),
+  utilityClassName("w-[52%]"),
+  utilityClassName("w-[35%]"),
+  utilityClassName("w-[66%]"),
+  utilityClassName("w-[47%]"),
+  utilityClassName("w-[58%]"),
 ];
 
 /**
@@ -505,46 +376,70 @@ const SKELETON_WIDTHS = [
  * amount of "gentler, not zero" for a placeholder.
  */
 export function ListSkeleton({
-	rows = 6,
-	variant = "cards",
-	rowClassName,
-	label = "Loading",
-	className,
-	...props
+  rows = 6,
+  variant = "cards",
+  rowClassName,
+  label = "Loading",
+  className,
+  ...props
 }: React.ComponentPropsWithoutRef<"div"> & {
-	rows?: number;
-	/**
-	 * Which list this stands in for. `cards` is a column of separate panels;
-	 * `rows` is the divided list inside one `CardList`; `bare` is a quiet,
-	 * borderless navigation list. Standing in for the wrong one is its own kind
-	 * of lie — the placeholder should be the shape that replaces it.
-	 */
-	variant?: "cards" | "rows" | "bare";
-	/** Match the geometry of the row this stands in for. */
-	rowClassName?: string;
-	label?: string;
+  rows?: number;
+  /**
+   * Which list this stands in for. `cards` is a column of separate panels;
+   * `rows` is the divided list inside one `CardList`; `bare` is a quiet,
+   * borderless navigation list. Standing in for the wrong one is its own kind
+   * of lie — the placeholder should be the shape that replaces it.
+   */
+  variant?: "cards" | "rows" | "bare";
+  /** Match the geometry of the row this stands in for. */
+  rowClassName?: string;
+  label?: string;
 }) {
-	const cards = variant === "cards";
-	const divided = variant === "rows";
-	return (
-		<Skeleton
-			label={label} {...mergeStylexProps(cn(cards
-					? mergeStylexClassName("", sx.gap15)
-					: divided
-						? "[&>*+*]:border-t [&>*+*]:border-line"
-						: mergeStylexClassName("", sx.gap05), className), sx.flex, sx.flexCol)}
-			{...props}
-		>
-			{Array.from({ length: rows }, (_, i) => (
-				<div
-					key={i} {...mergeStylexProps(cn(rowClassName), cards && sx.roundedControl, cards && sx.border, cards && sx.borderLine, cards && sx.bgPanel, cards && sx.px35, cards && sx.py11px, !(cards) && sx.px35, !(cards) && sx.py13px)}
-				>
-					<SkeletonBar className={SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]} />
-					{cards && <SkeletonBar className={mergeStylexOverrideClassName("", sx.mt2, sx.h25, sx.w26)} />}
-				</div>
-			))}
-		</Skeleton>
-	);
+  const cards = variant === "cards";
+  const divided = variant === "rows";
+  return (
+    <Skeleton
+      label={label}
+      className={cn(
+        utilityClassName("flex flex-col"),
+        cards
+          ? utilityClassName("gap-1.5")
+          : divided
+            ? "[&>*+*]:border-t [&>*+*]:border-line"
+            : utilityClassName("gap-0.5"),
+        className,
+      )}
+      {...props}
+    >
+      {Array.from({ length: rows }, (_, i) => (
+        <div
+          key={i}
+          className={cn(
+            cards
+              ? utilityClassName(
+                  "rounded-control border border-line bg-panel px-3.5 py-[11px]",
+                )
+              : utilityClassName("px-3.5 py-[13px]"),
+            rowClassName,
+          )}
+        >
+          <SkeletonBar
+            className={SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]}
+          />
+          {cards && (
+            <SkeletonBar
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.mt2,
+                sx.h25,
+                sx.w26,
+              )}
+            />
+          )}
+        </div>
+      ))}
+    </Skeleton>
+  );
 }
 
 /**
@@ -565,34 +460,62 @@ export function ListSkeleton({
  * a turn to scroll to.
  */
 const TRANSCRIPT_GHOST_TURNS: {
-	bubble: string;
-	lines: string[];
+  bubble: string;
+  lines: string[];
 }[] = [
-	{ bubble: "h-[42px] w-[42%]", lines: ["w-[68%]", "w-[84%]", "w-[51%]"] },
-	{ bubble: "h-[32px] w-[28%]", lines: ["w-[76%]", "w-[38%]"] },
+  { bubble: "h-[42px] w-[42%]", lines: ["w-[68%]", "w-[84%]", "w-[51%]"] },
+  { bubble: "h-[32px] w-[28%]", lines: ["w-[76%]", "w-[38%]"] },
 ];
 
 export function TranscriptSkeleton({
-	className,
-	label = "Loading conversation",
-	...props
+  className,
+  label = "Loading conversation",
+  ...props
 }: React.ComponentPropsWithoutRef<"div"> & { label?: string }) {
-	return (
-		<Skeleton label={label} {...mergeStylexProps(cn(className), sx.flex, sx.flexCol)} {...props}>
-			{TRANSCRIPT_GHOST_TURNS.map((turn) => (
-				<React.Fragment key={turn.bubble}>
-					<div {...stylex.props(sx.mxAuto, sx.mb45, sx.flex, sx.wFull, sx.maxWVarSessionCol, sx.flexCol)}>
-						<SkeletonBar {...mergeStylexProps(cn(turn.bubble), sx.selfEnd, sx.roundedLg)} />
-					</div>
-					<div {...stylex.props(sx.mxAuto, sx.mb45, sx.flex, sx.wFull, sx.maxWVarSessionCol, sx.flexCol, sx.gap25)}>
-						{turn.lines.map((width) => (
-							<SkeletonBar key={width} className={width} />
-						))}
-					</div>
-				</React.Fragment>
-			))}
-		</Skeleton>
-	);
+  return (
+    <Skeleton
+      label={label}
+      className={cn(utilityClassName("flex flex-col"), className)}
+      {...props}
+    >
+      {TRANSCRIPT_GHOST_TURNS.map((turn) => (
+        <React.Fragment key={turn.bubble}>
+          <div
+            {...stylex.props(
+              sx.mxAuto,
+              sx.mb45,
+              sx.flex,
+              sx.wFull,
+              sx.maxWVarSessionCol,
+              sx.flexCol,
+            )}
+          >
+            <SkeletonBar
+              className={cn(
+                utilityClassName("self-end rounded-lg"),
+                turn.bubble,
+              )}
+            />
+          </div>
+          <div
+            {...stylex.props(
+              sx.mxAuto,
+              sx.mb45,
+              sx.flex,
+              sx.wFull,
+              sx.maxWVarSessionCol,
+              sx.flexCol,
+              sx.gap25,
+            )}
+          >
+            {turn.lines.map((width) => (
+              <SkeletonBar key={width} className={width} />
+            ))}
+          </div>
+        </React.Fragment>
+      ))}
+    </Skeleton>
+  );
 }
 
 type AlertVariant = "error" | "warn" | "info";
@@ -602,67 +525,114 @@ type AlertVariant = "error" | "warn" | "info";
 // spells it; a hand-written color-mix here is a second vocabulary for one
 // recipe.
 const alertVariants: Record<AlertVariant, string> = {
-	error: mergeStylexClassName("", sx.borderRed40, sx.bgRedSoft, sx.textRed),
-	warn: mergeStylexClassName("", sx.borderYellow40, sx.bgYellowSoft, sx.textYellow),
-	info: mergeStylexClassName("", sx.borderBlue40, sx.bgBlueSoft, sx.textBlue),
+  error: utilityClassName("border-red/40 bg-red-soft text-red"),
+  warn: utilityClassName("border-yellow/40 bg-yellow-soft text-yellow"),
+  info: utilityClassName("border-blue/40 bg-blue-soft text-blue"),
 };
 
 export function InlineAlert({
-	variant = "error",
-	title,
-	onDismiss,
-	onRetry,
-	retryLabel = "Try again",
-	className,
-	children,
-	onClick,
-	...props
+  variant = "error",
+  title,
+  onDismiss,
+  onRetry,
+  retryLabel = "Try again",
+  className,
+  children,
+  onClick,
+  ...props
 }: Omit<React.ComponentPropsWithoutRef<"div">, "title"> & {
-	variant?: AlertVariant;
-	title?: React.ReactNode;
-	/** Renders a × and, preserving how these boxes have always behaved, makes
-	 *  the whole box dismiss on click — the × is what makes that discoverable
-	 *  and reachable from the keyboard. */
-	onDismiss?: () => void;
-	onRetry?: () => void;
-	retryLabel?: string;
+  variant?: AlertVariant;
+  title?: React.ReactNode;
+  /** Renders a × and, preserving how these boxes have always behaved, makes
+   *  the whole box dismiss on click — the × is what makes that discoverable
+   *  and reachable from the keyboard. */
+  onDismiss?: () => void;
+  onRetry?: () => void;
+  retryLabel?: string;
 }) {
-	return (
-		<div
-			role="alert" {...mergeStylexProps(cn(alertVariants[variant], className), sx.flex, sx.itemsStart, sx.gap2, sx.roundedMd, sx.border, sx.px3, sx.py25, sx.textSm, onDismiss && sx.cursorPointer)}
-			onClick={(e) => {
-				onClick?.(e);
-				onDismiss?.();
-			}}
-			{...props}
-		>
-			<div {...stylex.props(sx.minW0, sx.flex1)}>
-				{title && <div {...stylex.props(sx.fontMedium)}>{title}</div>}
-				<div {...stylex.props(sx.minW0, Boolean(title) && sx.mt05, Boolean(title) && sx.opacity90)}>{children}</div>
-			</div>
-			{onRetry && (
-				<button
-					type="button" {...mergeStylexProps("", sx.hoverOpacity100, sx.focusRing, sx.shrink0, sx.selfCenter, sx.whitespaceNowrap, sx.fontMedium, sx.underline, sx.underlineOffset2, sx.opacity80, sx.transitionOpacity, typography.supporting)}
-					onClick={(e) => {
-						e.stopPropagation();
-						onRetry();
-					}}
-				>
-					{retryLabel}
-				</button>
-			)}
-			{onDismiss && (
-				<button
-					type="button"
-					aria-label="Dismiss" {...mergeStylexProps("", sx.hoverOpacity100, sx.beforeAbsolute, sx.beforeInset2, sx.beforeContent, sx.focusRing, sx.relative, sx.Mr1, sx.flex, sx.size6, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedControl, sx.opacity60, sx.transitionOpacity)}
-					onClick={(e) => {
-						e.stopPropagation();
-						onDismiss();
-					}}
-				>
-					<IconX size={20} />
-				</button>
-			)}
-		</div>
-	);
+  return (
+    <div
+      role="alert"
+      className={cn(
+        utilityClassName(
+          "flex items-start gap-2 rounded-md border px-3 py-2.5 text-sm",
+        ),
+        alertVariants[variant],
+        onDismiss && utilityClassName("cursor-pointer"),
+        className,
+      )}
+      onClick={(e) => {
+        onClick?.(e);
+        onDismiss?.();
+      }}
+      {...props}
+    >
+      <div {...stylex.props(sx.minW0, sx.flex1)}>
+        {title && <div {...stylex.props(sx.fontMedium)}>{title}</div>}
+        <div
+          className={cn(
+            utilityClassName("min-w-0"),
+            title && utilityClassName("mt-0.5 opacity-90"),
+          )}
+        >
+          {children}
+        </div>
+      </div>
+      {onRetry && (
+        <button
+          type="button"
+          {...mergeStylexProps(
+            "focus-ring",
+            sx.shrink0,
+            sx.selfCenter,
+            sx.whitespaceNowrap,
+            sx.fontMedium,
+            sx.underline,
+            sx.underlineOffset2,
+            sx.opacity80,
+            sx.transitionOpacity,
+            sx.hoverOpacity100,
+            typography.supporting,
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetry();
+          }}
+        >
+          {retryLabel}
+        </button>
+      )}
+      {onDismiss && (
+        <button
+          type="button"
+          aria-label="Dismiss"
+          // Visually 24px so it sits inside the box's 10px padding; the
+          // pseudo-element takes the hit area out to 40px.
+          {...mergeStylexProps(
+            "focus-ring",
+            sx.relative,
+            sx.Mr1,
+            sx.flex,
+            sx.size6,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.roundedControl,
+            sx.opacity60,
+            sx.transitionOpacity,
+            sx.hoverOpacity100,
+            sx.beforeAbsolute,
+            sx.beforeInset2,
+            sx.beforeContent,
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismiss();
+          }}
+        >
+          <IconX size={20} />
+        </button>
+      )}
+    </div>
+  );
 }

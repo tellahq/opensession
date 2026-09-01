@@ -77,7 +77,10 @@ describe("asynchronous session kernel actor boundary", () => {
         }),
       ),
     );
-    const snapshot = await host.decideDeliveryAsync({ op: "snapshot", sessionId });
+    const snapshot = await host.decideDeliveryAsync({
+      op: "snapshot",
+      sessionId,
+    });
     expect(snapshot.queued).toHaveLength(20);
   });
 
@@ -88,7 +91,9 @@ describe("asynchronous session kernel actor boundary", () => {
     });
     const host = new SessionKernelActorClient(worker as unknown as Worker);
     client = host;
-    setTimeout(() => { timerFired = true; }, 20);
+    setTimeout(() => {
+      timerFired = true;
+    }, 20);
     const pending = host.callAsync(
       { t: "store", method: "creationState", args: ["slow"] },
       "creationState",
@@ -103,45 +108,55 @@ describe("asynchronous session kernel actor boundary", () => {
     const worker = new FakeWorker((message, emit) => {
       if (!failed) {
         failed = true;
-        queueMicrotask(() => emit({
-          t: "error",
-          rpcId: message.rpcId,
-          error: "connection closed",
-          retryable: true,
-        }));
+        queueMicrotask(() =>
+          emit({
+            t: "error",
+            rpcId: message.rpcId,
+            error: "connection closed",
+            retryable: true,
+          }),
+        );
         return;
       }
       queueMicrotask(() => emit(callResult(message.rpcId, undefined)));
     });
     const host = new SessionKernelActorClient(worker as unknown as Worker);
     client = host;
-    await expect(host.callAsync(
-      { t: "store", method: "creationState", args: ["first"] },
-      "creationState",
-    )).resolves.toBeUndefined();
-    await expect(host.callAsync(
-      { t: "store", method: "creationState", args: ["unrelated"] },
-      "creationState",
-    )).resolves.toBeUndefined();
+    await expect(
+      host.callAsync(
+        { t: "store", method: "creationState", args: ["first"] },
+        "creationState",
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      host.callAsync(
+        { t: "store", method: "creationState", args: ["unrelated"] },
+        "creationState",
+      ),
+    ).resolves.toBeUndefined();
   });
 
   test("ambiguous mutations are not replayed blindly", async () => {
     const worker = new FakeWorker((message, emit) => {
-      queueMicrotask(() => emit({
-        t: "error",
-        rpcId: message.rpcId,
-        error: "connection closed after admission",
-        retryable: true,
-      }));
+      queueMicrotask(() =>
+        emit({
+          t: "error",
+          rpcId: message.rpcId,
+          error: "connection closed after admission",
+          retryable: true,
+        }),
+      );
     });
     const host = new SessionKernelActorClient(worker as unknown as Worker);
     client = host;
-    await expect(host.decideGatewayAsync({
-      op: "request",
-      sessionId: "ambiguous",
-      requestId: "stable-request",
-      operation: "websocket_command",
-    })).rejects.toBeInstanceOf(SessionKernelActorError);
+    await expect(
+      host.decideGatewayAsync({
+        op: "request",
+        sessionId: "ambiguous",
+        requestId: "stable-request",
+        operation: "websocket_command",
+      }),
+    ).rejects.toBeInstanceOf(SessionKernelActorError);
     expect(worker.posts).toHaveLength(1);
   });
 
@@ -150,12 +165,14 @@ describe("asynchronous session kernel actor boundary", () => {
     const worker = new FakeWorker((message, emit) => {
       attempts += 1;
       if (attempts === 1) {
-        queueMicrotask(() => emit({
-          t: "error",
-          rpcId: message.rpcId,
-          error: "backpressure",
-          retryable: true,
-        }));
+        queueMicrotask(() =>
+          emit({
+            t: "error",
+            rpcId: message.rpcId,
+            error: "backpressure",
+            retryable: true,
+          }),
+        );
       } else queueMicrotask(() => emit(callResult(message.rpcId, undefined)));
     });
     const host = new SessionKernelActorClient(worker as unknown as Worker);
@@ -166,9 +183,12 @@ describe("asynchronous session kernel actor boundary", () => {
       request: { op: "snapshot" as const, sessionId: "safe-read" },
     };
     await host.callAsync({ t: "reduce", command }, "turn snapshot");
-    expect(worker.posts.map((post) =>
-      (post.command as { commandId?: string } | undefined)?.commandId,
-    )).toEqual(["stable-command", "stable-command"]);
+    expect(
+      worker.posts.map(
+        (post) =>
+          (post.command as { commandId?: string } | undefined)?.commandId,
+      ),
+    ).toEqual(["stable-command", "stable-command"]);
   });
 
   test("classifies a session quarantine without killing the client", async () => {
@@ -182,28 +202,32 @@ describe("asynchronous session kernel actor boundary", () => {
           sessionId: "one-session",
           error: "settlement is quarantined",
         });
-        queueMicrotask(() => emit({
-          t: "call_result",
-          rpcId: message.rpcId,
-          status: -1,
-          length: body.length,
-          body,
-        }));
+        queueMicrotask(() =>
+          emit({
+            t: "call_result",
+            rpcId: message.rpcId,
+            status: -1,
+            length: body.length,
+            body,
+          }),
+        );
       } else queueMicrotask(() => emit(callResult(message.rpcId, undefined)));
     });
     const host = new SessionKernelActorClient(worker as unknown as Worker);
     client = host;
-    await expect(host.decideGatewayAsync({
-      op: "request",
-      sessionId: "one-session",
-      requestId: "request",
-      operation: "websocket_command",
-    })).rejects.toBeInstanceOf(SessionKernelQuarantinedError);
-    await expect(host.callAsync(
-      { t: "store", method: "creationState", args: ["healthy-session"] },
-      "creationState",
-    )).resolves.toBeUndefined();
+    await expect(
+      host.decideGatewayAsync({
+        op: "request",
+        sessionId: "one-session",
+        requestId: "request",
+        operation: "websocket_command",
+      }),
+    ).rejects.toBeInstanceOf(SessionKernelQuarantinedError);
+    await expect(
+      host.callAsync(
+        { t: "store", method: "creationState", args: ["healthy-session"] },
+        "creationState",
+      ),
+    ).resolves.toBeUndefined();
   });
-
-
 });

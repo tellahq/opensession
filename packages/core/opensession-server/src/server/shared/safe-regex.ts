@@ -12,7 +12,8 @@ const MAX_PATTERN_CHARS = 256;
 export function compileSafeRegex(pattern: string, flags = ""): RegExp {
   if (!pattern || pattern.length > MAX_PATTERN_CHARS)
     throw new Error(`pattern must be 1-${MAX_PATTERN_CHARS} characters`);
-  if (/\\[1-9]|\\k<|\(\?[=!<]/.test(pattern)) throw new Error("backreferences and lookarounds are not supported");
+  if (/\\[1-9]|\\k<|\(\?[=!<]/.test(pattern))
+    throw new Error("backreferences and lookarounds are not supported");
 
   const groups: Array<{ quantified: boolean; alternation: boolean }> = [];
   let escaped = false;
@@ -59,9 +60,16 @@ export function compileSafeRegex(pattern: string, flags = ""): RegExp {
       previousQuantifier = false;
       continue;
     }
-    const quantifier = ch === "*" || ch === "+" || (ch === "?" && pattern[i - 1] !== "(") || ch === "{";
+    const quantifier =
+      ch === "*" ||
+      ch === "+" ||
+      (ch === "?" && pattern[i - 1] !== "(") ||
+      ch === "{";
     if (quantifier) {
-      if (previousQuantifier || (closed && (closed.quantified || closed.alternation))) {
+      if (
+        previousQuantifier ||
+        (closed && (closed.quantified || closed.alternation))
+      ) {
         throw new Error("nested or ambiguous repetition is not supported");
       }
       if (groups.length) groups[groups.length - 1]!.quantified = true;

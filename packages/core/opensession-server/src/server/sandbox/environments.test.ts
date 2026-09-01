@@ -26,8 +26,14 @@ beforeEach(() => {
   scratch = mkdtempSync(join(tmpdir(), "opensession-sandbox-environments-"));
   for (const key of keys) previous[key] = process.env[key];
   process.env.OPENSESSION_SANDBOX_CONFIG = join(scratch, "sandbox.json");
-  process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
-  process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE = join(scratch, "environments.json");
+  process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(
+    scratch,
+    "secrets.json",
+  );
+  process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE = join(
+    scratch,
+    "environments.json",
+  );
 });
 
 afterEach(() => {
@@ -49,14 +55,16 @@ describe("sandbox project environments", () => {
     await prepareSandboxEnvironment(repo, "docker");
     expect(
       (await listSandboxEnvironments()).find(
-        (environment) => environment.repo === repo && environment.provider === "docker",
+        (environment) =>
+          environment.repo === repo && environment.provider === "docker",
       ),
     ).toMatchObject({ state: "ready", mode: "per_session" });
 
     updateSandboxConnection("docker", { enabled: false });
     expect(
       (await listSandboxEnvironments()).find(
-        (environment) => environment.repo === repo && environment.provider === "docker",
+        (environment) =>
+          environment.repo === repo && environment.provider === "docker",
       )?.state,
     ).toBe("not_prepared");
   });
@@ -71,7 +79,10 @@ describe("sandbox project environments", () => {
 
   test("rejects invalid project machine settings before allocating provider work", async () => {
     const repo = Object.keys(REPOS)[0]!;
-    connectSandboxProvider("modal", { tokenId: "test-id", tokenSecret: "test-secret" });
+    connectSandboxProvider("modal", {
+      tokenId: "test-id",
+      tokenSecret: "test-secret",
+    });
     setSandboxConnectionQualification("modal", { status: "ready" });
     await expect(
       prepareSandboxEnvironment(repo, "modal", { settings: { cpu: 0 } }),
@@ -84,14 +95,6 @@ describe("sandbox project environments", () => {
         settings: { cpu: 4, memoryMb: 8_192, diskGb: 40 },
       }),
     ).rejects.toMatchObject({ code: "MACHINE_SETTINGS_INVALID" });
-
-    connectSandboxProvider("microvm", {});
-    setSandboxConnectionQualification("microvm", { status: "ready" });
-    await expect(
-      prepareSandboxEnvironment(repo, "microvm", {
-        settings: { cpu: 3, memoryMb: 4_096, diskGb: 25 },
-      }),
-    ).rejects.toMatchObject({ code: "MACHINE_SETTINGS_INVALID" });
   });
 
   test("marks every reusable provider template stale after a default-branch update", async () => {
@@ -101,7 +104,7 @@ describe("sandbox project environments", () => {
       path,
       JSON.stringify({
         version: 1,
-        environments: ["daytona", "box", "modal", "microvm"].map((provider) => ({
+        environments: ["daytona", "box", "modal"].map((provider) => ({
           repo,
           provider,
           state: "ready",
@@ -112,7 +115,11 @@ describe("sandbox project environments", () => {
     );
     await invalidateSandboxEnvironmentsForRepo(repo);
     const stored = JSON.parse(readFileSync(path, "utf-8"));
-    expect(stored.environments).toHaveLength(4);
-    expect(stored.environments.every((environment: any) => environment.state === "stale")).toBe(true);
+    expect(stored.environments).toHaveLength(3);
+    expect(
+      stored.environments.every(
+        (environment: any) => environment.state === "stale",
+      ),
+    ).toBe(true);
   });
 });

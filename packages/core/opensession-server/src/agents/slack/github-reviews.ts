@@ -36,9 +36,13 @@ export async function githubApi(path: string): Promise<any> {
     });
     if (!resp.ok) {
       console.warn(`[slack] GitHub API ${path}: ${resp.status}`);
-      if ((resp.status === 403 || resp.status === 429) && resp.headers.get("x-ratelimit-remaining") === "0") {
+      if (
+        (resp.status === 403 || resp.status === 429) &&
+        resp.headers.get("x-ratelimit-remaining") === "0"
+      ) {
         const resetHeader = resp.headers.get("x-ratelimit-reset");
-        if (resetHeader) noteGhRateLimited("slack-github", Number(resetHeader) * 1000, "rest");
+        if (resetHeader)
+          noteGhRateLimited("slack-github", Number(resetHeader) * 1000, "rest");
         else noteGhRateLimited("slack-github", undefined, "rest");
       }
       return null;
@@ -57,7 +61,7 @@ export async function githubApi(path: string): Promise<any> {
 export async function pollForVercelPreview(
   prNumber: number,
   channel: string,
-  threadTs?: string
+  threadTs?: string,
 ): Promise<void> {
   const maxAttempts = 30; // 5 minutes (10s intervals)
   const interval = 10_000;
@@ -71,27 +75,30 @@ export async function pollForVercelPreview(
       if (!pr?.head?.sha) continue;
 
       // Find deployment for this commit
-      const configuredEnvironment = configuredIntegration("github").previewEnvironment;
+      const configuredEnvironment =
+        configuredIntegration("github").previewEnvironment;
       const previewEnvironment =
-        typeof configuredEnvironment === "string" ? configuredEnvironment : "Preview";
+        typeof configuredEnvironment === "string"
+          ? configuredEnvironment
+          : "Preview";
       const deployments = await githubApi(
-        `/repos/${GITHUB_REPO}/deployments?ref=${pr.head.sha}&environment=${encodeURIComponent(previewEnvironment)}&per_page=1`
+        `/repos/${GITHUB_REPO}/deployments?ref=${pr.head.sha}&environment=${encodeURIComponent(previewEnvironment)}&per_page=1`,
       );
       if (!deployments?.[0]?.id) continue;
 
       // Get deployment status
       const statuses = await githubApi(
-        `/repos/${GITHUB_REPO}/deployments/${deployments[0].id}/statuses`
+        `/repos/${GITHUB_REPO}/deployments/${deployments[0].id}/statuses`,
       );
       const latest = statuses?.[0];
       if (latest?.state === "success" && latest?.environment_url) {
         await sendSlackMessage(
           channel,
           `Preview ready: ${latest.environment_url}`,
-          threadTs
+          threadTs,
         );
         console.log(
-          `[slack] [vercel] Preview ready for PR #${prNumber}: ${latest.environment_url}`
+          `[slack] [vercel] Preview ready for PR #${prNumber}: ${latest.environment_url}`,
         );
         return;
       }
@@ -104,7 +111,7 @@ export async function pollForVercelPreview(
     }
   }
   console.log(
-    `[slack] [vercel] Timed out waiting for preview for PR #${prNumber}`
+    `[slack] [vercel] Timed out waiting for preview for PR #${prNumber}`,
   );
 }
 
@@ -113,13 +120,13 @@ export async function pollForVercelPreview(
 // ---------------------------------------------------------------------------
 
 export async function findGitHubUsersForBranch(
-  branch: string
+  branch: string,
 ): Promise<string[]> {
   const users = new Set<string>();
 
   // Find PRs where this branch is the head
   const prs = await githubApi(
-    `/repos/${GITHUB_REPO}/pulls?head=${GITHUB_REPO.split("/")[0]}:${branch}&state=all&per_page=1`
+    `/repos/${GITHUB_REPO}/pulls?head=${GITHUB_REPO.split("/")[0]}:${branch}&state=all&per_page=1`,
   );
   if (prs && prs.length > 0) {
     const pr = prs[0];
@@ -132,7 +139,7 @@ export async function findGitHubUsersForBranch(
     }
     // Fetch submitted reviews
     const reviews = await githubApi(
-      `/repos/${GITHUB_REPO}/pulls/${pr.number}/reviews`
+      `/repos/${GITHUB_REPO}/pulls/${pr.number}/reviews`,
     );
     if (reviews) {
       for (const r of reviews) {
@@ -143,7 +150,7 @@ export async function findGitHubUsersForBranch(
 
   // Also check recent commits on the branch for committers
   const commits = await githubApi(
-    `/repos/${GITHUB_REPO}/commits?sha=${encodeURIComponent(branch)}&per_page=5`
+    `/repos/${GITHUB_REPO}/commits?sha=${encodeURIComponent(branch)}&per_page=5`,
   );
   if (commits) {
     for (const c of commits) {
@@ -153,10 +160,10 @@ export async function findGitHubUsersForBranch(
 
   // Filter out bots
   const filtered = [...users].filter(
-    (u) => !u.endsWith("[bot]") && !u.includes("bot") && u !== "web-flow"
+    (u) => !u.endsWith("[bot]") && !u.includes("bot") && u !== "web-flow",
   );
   console.log(
-    `[slack] GitHub users for branch ${branch}: ${filtered.join(", ") || "(none)"}`
+    `[slack] GitHub users for branch ${branch}: ${filtered.join(", ") || "(none)"}`,
   );
   return filtered;
 }
@@ -167,7 +174,7 @@ export async function findGitHubUsersForBranch(
 
 export async function inviteRelevantUsersToChannel(
   channelId: string,
-  branch: string
+  branch: string,
 ): Promise<void> {
   const ghUsers = await findGitHubUsersForBranch(branch);
   if (ghUsers.length === 0) return;
@@ -185,19 +192,22 @@ export async function inviteRelevantUsersToChannel(
 
   // Invite all users at once
   console.log(
-    `[slack] Inviting ${slackUserIds.length} user(s) to channel ${channelId}: ${slackUserIds.join(", ")}`
+    `[slack] Inviting ${slackUserIds.length} user(s) to channel ${channelId}: ${slackUserIds.join(", ")}`,
   );
-  const resp = await fetchWithTimeout("https://slack.com/api/conversations.invite", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+  const resp = await fetchWithTimeout(
+    "https://slack.com/api/conversations.invite",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({
+        channel: channelId,
+        users: slackUserIds.join(","),
+      }),
     },
-    body: JSON.stringify({
-      channel: channelId,
-      users: slackUserIds.join(","),
-    }),
-  });
+  );
   const data = (await resp.json()) as any;
   if (!data.ok && data.error !== "already_in_channel") {
     console.warn(`[slack] conversations.invite error: ${data.error}`);
@@ -210,7 +220,7 @@ export async function inviteRelevantUsersToChannel(
 
 export async function handlePullRequestReview(
   payload: any,
-  branchToChannel: Map<string, string>
+  branchToChannel: Map<string, string>,
 ): Promise<void> {
   if (payload.action !== "submitted") return;
 
@@ -231,7 +241,7 @@ export async function handlePullRequestReview(
   const channelId = branchToChannel.get(branch);
   if (!channelId) {
     console.log(
-      `[slack] PR review on branch ${branch} \u2014 no worktree channel, ignoring`
+      `[slack] PR review on branch ${branch} \u2014 no worktree channel, ignoring`,
     );
     return;
   }
@@ -245,7 +255,7 @@ export async function handlePullRequestReview(
   const reviewUrl = review.html_url;
 
   console.log(
-    `[slack] PR review on branch ${branch}: ${reviewState} by ${reviewerName} (PR #${prNumber})`
+    `[slack] PR review on branch ${branch}: ${reviewState} by ${reviewerName} (PR #${prNumber})`,
   );
 
   // Fetch inline review comments via GitHub API
@@ -256,7 +266,7 @@ export async function handlePullRequestReview(
   }> = [];
   try {
     const commentsData = await githubApi(
-      `/repos/${payload.repository.full_name}/pulls/${prNumber}/reviews/${review.id}/comments`
+      `/repos/${payload.repository.full_name}/pulls/${prNumber}/reviews/${review.id}/comments`,
     );
     if (commentsData && Array.isArray(commentsData)) {
       for (const c of commentsData) {
@@ -338,8 +348,7 @@ export async function handlePullRequestReview(
   // Add action buttons for changes_requested or commented-with-body
   const hasActionableContent =
     reviewState === "changes_requested" ||
-    (reviewState === "commented" &&
-      (reviewBody || inlineComments.length > 0));
+    (reviewState === "commented" && (reviewBody || inlineComments.length > 0));
 
   if (hasActionableContent) {
     // Build the value payload — must be under 2000 chars for Slack

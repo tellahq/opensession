@@ -1,31 +1,26 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import React, { useEffect, useState } from "react";
 import { hasDraft, onDraftsChanged } from "../../lib/drafts";
 import {
-	SIDEBAR_HOVER_LAYER,
-	SIDEBAR_RAIL,
-	SIDEBAR_WS_DRAFT,
-	SIDEBAR_WS_ROW,
+  SIDEBAR_HOVER_LAYER,
+  SIDEBAR_RAIL,
+  SIDEBAR_WS_DRAFT,
+  SIDEBAR_WS_ROW,
 } from "../../lib/sidebar-classes";
-import { cn, mergeStylexClassName, mergeStylexOverrideClassName } from "../../ui/cn";
+import { cn } from "../../ui/cn";
 import { IconPencil, IconPlus } from "../icons";
 import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./SidebarItem";
 import * as stylex from "@stylexjs/stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	shrink0: {
-			flexShrink: "0"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-
-	bgSelected: {
-		"backgroundColor": "var(--selected)"
-	},
-	ml15: {
-		"marginLeft": "6px"
-	},
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
 });
 
 /**
@@ -50,43 +45,43 @@ const sx = stylex.create({
  * the first word you typed and then quietly go stale.
  */
 export function DraftRow({
-	active,
-	onClick,
+  active,
+  onClick,
 }: {
-	active: boolean;
-	onClick: () => void;
+  active: boolean;
+  onClick: () => void;
 }) {
-	const [draft, setDraft] = useState(() => hasDraft("new-session"));
-	useEffect(
-		() => onDraftsChanged(() => setDraft(hasDraft("new-session"))),
-		[],
-	);
-	return (
-		<button
-			className={cn(
-				SIDEBAR_ROW,
-				SIDEBAR_WS_ROW,
-				SIDEBAR_HOVER_LAYER,
-				active && mergeStylexClassName("", sx.bgSelected),
-			)}
-			data-sidebar-row=""
-			data-selected={active || undefined}
-			onClick={onClick}
-			aria-label="New session, not started yet"
-		>
-			<span className={SIDEBAR_RAIL}>
-				<IconPlus className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} size={16} />
-			</span>
-			<span className={SIDEBAR_ROW_TITLE}>New session</span>
-			{draft && (
-				<span
-					className={cn(SIDEBAR_WS_DRAFT, mergeStylexClassName("", sx.ml15))}
-					data-ws-draft=""
-					aria-label="Unsent draft"
-				>
-					<IconPencil size={20} />
-				</span>
-			)}
-		</button>
-	);
+  const [draft, setDraft] = useState(() => hasDraft("new-session"));
+  useEffect(() => onDraftsChanged(() => setDraft(hasDraft("new-session"))), []);
+  return (
+    <button
+      className={cn(
+        SIDEBAR_ROW,
+        SIDEBAR_WS_ROW,
+        SIDEBAR_HOVER_LAYER,
+        active && utilityClassName("bg-selected"),
+      )}
+      data-sidebar-row=""
+      data-selected={active || undefined}
+      onClick={onClick}
+      aria-label="New session, not started yet"
+    >
+      <span className={SIDEBAR_RAIL}>
+        <IconPlus
+          className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
+          size={16}
+        />
+      </span>
+      <span className={SIDEBAR_ROW_TITLE}>New session</span>
+      {draft && (
+        <span
+          className={cn(SIDEBAR_WS_DRAFT, utilityClassName("ml-1.5"))}
+          data-ws-draft=""
+          aria-label="Unsent draft"
+        >
+          <IconPencil size={20} />
+        </span>
+      )}
+    </button>
+  );
 }

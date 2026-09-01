@@ -151,7 +151,9 @@ export async function unfurlForSession(
     if (diff) extras.push(diff);
     const c = s.prChecks;
     if (c && c.total) {
-      extras.push(`checks ${c.passed}/${c.total}${c.failed ? ` (${c.failed} failed)` : ""}`);
+      extras.push(
+        `checks ${c.passed}/${c.total}${c.failed ? ` (${c.failed} failed)` : ""}`,
+      );
     }
     const rev = reviewLabel(s.prReviewDecision);
     if (rev) extras.push(rev);
@@ -205,6 +207,8 @@ export async function handleLinkShared(
     unfurls,
   });
   if (!result?.ok) {
-    throw new Error(`Slack chat.unfurl failed: ${result?.error || "unknown error"}`);
+    throw new Error(
+      `Slack chat.unfurl failed: ${result?.error || "unknown error"}`,
+    );
   }
 }

@@ -1,10 +1,13 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
-import React, { useCallback, useEffect, useEffectEvent, useState, useRef } from "react";
+import React, { useEffect, useEffectEvent, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import type {
   CodeFlowResult,
   DiffFileGroup,
   RepoDiff,
+  WSClientMessage,
 } from "../lib/types";
 import { useSessionDiffResource } from "../hooks/useApiResources";
 import {
@@ -15,7 +18,8 @@ import {
   fetchWorktreeFile,
   saveWorktreeFile,
 } from "../lib/api";
-import { CommentableDiff, type CommentTarget } from "./CommentableDiff";
+import { CommentableDiff } from "./CommentableDiff";
+import type { CommentTarget } from "../lib/commentable-diff";
 import { getCurrentUser } from "./UserPicker";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SettingRow } from "../ui/setting-row";
@@ -38,360 +42,212 @@ import {
   useCodeOrganizationSettings,
 } from "../hooks/useCodeDisplaySettings";
 import { PrFileTree } from "./pr/PrFileTree";
+import { errorMessage } from "../lib/error-message";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
-import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	flex: {
-			display: "flex"
-	},
-	w340px: {
-			width: "340px"
-	},
-	maxWCalc100vw24px: {
-			maxWidth: "calc(100vw - 24px)"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	gap05: {
-			gap: "2px"
-	},
-	p3: {
-			padding: "12px"
-	},
-	mx2: {
-			marginInline: "8px"
-	},
-	my15: {
-			marginBlock: "6px"
-	},
-	hPx: {
-			height: "1px"
-	},
-	bgLine: {
-			backgroundColor: "var(--border)"
-	},
-	m4: {
-			margin: "16px"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	roundedSm: {
-			borderRadius: "calc(4px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgYellow15: {
-			backgroundColor: "var(--yellow)"
-	},
-	px7px: {
-			paddingInline: "7px"
-	},
-	pyPx: {
-			paddingBlock: "1px"
-	},
-	fontBold: {
-			fontWeight: "var(--font-weight-bold)"
-	},
-	textYellow: {
-			color: "var(--yellow)"
-	},
-	ml2: {
-			marginLeft: "8px"
-	},
-	minH0: {
-			minHeight: "0"
-	},
-	px2: {
-			paddingInline: "8px"
-	},
-	py05: {
-			paddingBlock: "2px"
-	},
-	mlAuto: {
-			marginLeft: "auto"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap2: {
-			gap: "8px"
-	},
-	h10: {
-			height: "40px"
-	},
-	gap25: {
-			gap: "10px"
-	},
-	overflowXAuto: {
-			overflowX: "auto"
-	},
-	borderB: {
-			borderBottomStyle: "solid",
-			borderBottomWidth: "1px"
-	},
-	borderDivider: {
-			borderColor: "var(--divider)"
-	},
-	px35: {
-			paddingInline: "14px"
-	},
-	whitespaceNowrap: {
-			whiteSpace: "nowrap"
-	},
-	ScrollbarWidthNone: {
-			scrollbarWidth: "none"
-	},
-	sticky: {
-			position: "sticky"
-	},
-	z2: {
-			zIndex: "2"
-	},
-	gap1: {
-			gap: "4px"
-	},
-	bgPanelSurface: {
-			backgroundColor: "var(--panel-surface)"
-	},
-	px25: {
-			paddingInline: "10px"
-	},
-	py15: {
-			paddingBlock: "6px"
-	},
-	roundedFull: {
-			borderRadius: "calc(infinity * 1px)"
-	,
-		cornerShape: "round"},
-	bgFaint20: {
-			backgroundColor: "var(--text-faint)"
-	},
-	px5px: {
-			paddingInline: "5px"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	flex1: {
-			flex: "1"
-	},
-	hFull: {
-			height: "100%"
-	},
-	minH280px: {
-			minHeight: "280px"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	gap3: {
-			gap: "12px"
-	},
-	px4: {
-			paddingInline: "16px"
-	},
-	pt12: {
-			paddingTop: "48px"
-	},
-	pb24: {
-			paddingBottom: "96px"
-	},
-	textCenter: {
-			textAlign: "center"
-	},
-	h14: {
-			height: "56px"
-	},
-	w14: {
-			width: "56px"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	textSm: {
-			fontSize: "var(--type-label)",
-			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
-	},
-	mt1: {
-			marginTop: "4px"
-	},
-	textXs: {
-			fontSize: "var(--type-label)",
-			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
-	},
-
-	z1: {
-		"zIndex": "1"
-	},
-	afterAbsolute: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"position": "absolute"
-		}
-	},
-	afterInsetX0: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"insetInline": "0"
-		}
-	},
-	afterTopFull: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"top": "100%"
-		}
-	},
-	afterH25: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"height": "10px"
-		}
-	},
-	afterBgPanelSurface: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"backgroundColor": "var(--panel-surface)"
-		}
-	},
-	afterContent: {
-		"::after": {
-			"--tw-content": "\"\"",
-			"content": "var(--tw-content)"
-		}
-	},
-	Container: {
-		"containerType": "inline-size"
-	},
-	inlineFlex: {
-		"display": "inline-flex"
-	},
-	cursorPointer: {
-		"cursor": "pointer"
-	},
-	gap15: {
-		"gap": "6px"
-	},
-	roundedMd: {
-		"borderRadius": "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	border: {
-		"borderStyle": "var(--tw-border-style)",
-		"borderWidth": "1px"
-	},
-	px9px: {
-		"paddingInline": "9px"
-	},
-	py3px: {
-		"paddingBlock": "3px"
-	},
-	phonePx3: {
-		"@media (max-width: 720px)": {
-			"paddingInline": "12px"
-		}
-	},
-	phonePy2: {
-		"@media (max-width: 720px)": {
-			"paddingBlock": "8px"
-		}
-	},
-	maxWFull: {
-		"maxWidth": "100%"
-	},
-	overflowClip: {
-		"overflow": "clip"
-	},
-	pb7: {
-		"paddingBottom": "28px"
-	},
-
-	borderLine: {
-		"borderColor": "var(--border)"
-	},
-	bgPanel: {
-		"backgroundColor": "var(--bg-panel)"
-	},
-	textFg: {
-		"color": "var(--text)"
-	},
-	borderTransparent: {
-		"borderColor": "transparent"
-	},
-	bgTransparent: {
-		"backgroundColor": "transparent"
-	},
-	hoverTextFg: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text)"
-			}
-		}
-	},
-	pt25: {
-		"paddingTop": "10px"
-	},
-	px0: {
-		"paddingInline": "0"
-	},
-	pt0: {
-		"paddingTop": "0"
-	},
-
-	topCalcVarDiffPanelTop0px37px: {
-		"top": "calc(var(--diff-panel-top,0px) + 37px)"
-	},
-	phoneTopCalcVarDiffPanelTop0px47px: {
-		"@media (max-width: 720px)": {
-			"top": "calc(var(--diff-panel-top,0px) + 47px)"
-		}
-	},
-	topVarDiffPanelTop0px: {
-		"top": "var(--diff-panel-top,0px)"
-	},
-	ReviewFileHeaderTopCalcVarDiffPanelTop0px87px: {
-		"--review-file-header-top": "calc(var(--diff-panel-top,0px) + 87px)"
-	},
-	phoneReviewFileHeaderTopCalcVarDiffPanelTop0px97px: {
-		"@media (max-width: 720px)": {
-			"--review-file-header-top": "calc(var(--diff-panel-top,0px) + 97px)"
-		}
-	},
-	ReviewFileHeaderTopCalcVarDiffPanelTop0px50px: {
-		"--review-file-header-top": "calc(var(--diff-panel-top,0px) + 50px)"
-	},
-
-	fontSemibold: {
-		"--tw-font-weight": "var(--font-weight-semibold)",
-		"fontWeight": "var(--font-weight-semibold)"
-	},
-	textGreen: {
-		"color": "var(--green)"
-	},
-	textRed: {
-		"color": "var(--red)"
-	},
+  flex: {
+    display: "flex",
+  },
+  w340px: {
+    width: "340px",
+  },
+  maxWCalc100vw24px: {
+    maxWidth: "calc(100vw - 24px)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  mx2: {
+    marginInline: "calc(4px * 2)",
+  },
+  my15: {
+    marginBlock: "calc(4px * 1.5)",
+  },
+  hPx: {
+    height: "1px",
+  },
+  bgLine: {
+    backgroundColor: "var(--border)",
+  },
+  m4: {
+    margin: "calc(4px * 4)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgYellow15: {
+    backgroundColor: "color-mix(in oklab, var(--yellow) 15%, transparent)",
+  },
+  px7px: {
+    paddingInline: "7px",
+  },
+  pyPx: {
+    paddingBlock: "1px",
+  },
+  fontBold: {
+    fontWeight: "var(--font-weight-bold)",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  ml2: {
+    marginLeft: "calc(4px * 2)",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py05: {
+    paddingBlock: "calc(4px * 0.5)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  h10: {
+    height: "calc(4px * 10)",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px35: {
+    paddingInline: "calc(4px * 3.5)",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  ScrollbarWidthNone: {
+    scrollbarWidth: "none",
+  },
+  sticky: {
+    position: "sticky",
+  },
+  topVarDiffPanelTop0px: {
+    top: "var(--diff-panel-top,0px)",
+  },
+  z2: {
+    zIndex: "2",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  bgPanelSurface: {
+    backgroundColor: "var(--panel-surface)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  bgFaint20: {
+    backgroundColor: "color-mix(in oklab, var(--text-faint) 20%, transparent)",
+  },
+  px5px: {
+    paddingInline: "5px",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  hFull: {
+    height: "100%",
+  },
+  minH280px: {
+    minHeight: "280px",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  pt12: {
+    paddingTop: "calc(4px * 12)",
+  },
+  pb24: {
+    paddingBottom: "calc(4px * 24)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  h14: {
+    height: "calc(4px * 14)",
+  },
+  w14: {
+    width: "calc(4px * 14)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textSm: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-sm--line-height))",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
 });
 
 /* The +/− counts. Kept as constants because CommentableDiff carries the same
    pair on its file rows and group headers, and the two must read alike. */
-const DIFF_ADD = mergeStylexClassName("", sx.fontSemibold, sx.textGreen);
-const DIFF_DEL = mergeStylexClassName("", sx.fontSemibold, sx.textRed);
+const DIFF_ADD = utilityClassName("font-semibold text-green");
+const DIFF_DEL = utilityClassName("font-semibold text-red");
 
 interface Props {
   sessionId: string;
   isRunning: boolean;
   canSend: boolean;
-  send: (msg: any) => void;
+  send: (msg: WSClientMessage) => void;
   /** Shared diff state (lifted so the Changes tab badge and this panel poll
    *  once, not twice). When omitted, the panel fetches on its own. */
   diff?: SessionDiffState;
@@ -410,7 +266,7 @@ export interface SessionDiffState {
   repos: RepoDiff[] | null;
   loading: boolean;
   error: string | null;
-	reload: () => Promise<void>;
+  reload: () => Promise<void>;
 }
 
 /**
@@ -419,16 +275,16 @@ export interface SessionDiffState {
  * empty-diff placeholder carries no hash, which is what the size guards cover.
  */
 function sameRepoDiffs(a: RepoDiff[] | null, b: RepoDiff[]): boolean {
-	if (a === null || a.length !== b.length) return false;
-	return a.every((repo, i) => {
-		const next = b[i];
-		return (
-			repo.repo === next.repo &&
-			repo.diff.diffVersion === next.diff.diffVersion &&
-			repo.diff.rawPatch.length === next.diff.rawPatch.length &&
-			repo.diff.files.length === next.diff.files.length
-		);
-	});
+  if (a === null || a.length !== b.length) return false;
+  return a.every((repo, i) => {
+    const next = b[i];
+    return (
+      repo.repo === next.repo &&
+      repo.diff.diffVersion === next.diff.diffVersion &&
+      repo.diff.rawPatch.length === next.diff.rawPatch.length &&
+      repo.diff.files.length === next.diff.files.length
+    );
+  });
 }
 
 /**
@@ -442,20 +298,22 @@ export function useSessionDiff(
   opts: { enabled?: boolean; isRunning: boolean },
 ): SessionDiffState {
   const { enabled = true, isRunning } = opts;
-  const { data, error: requestError, isLoading, mutate } = useSessionDiffResource(
-    sessionId,
-    {
-      enabled,
-      refreshInterval: enabled ? (isRunning ? 8000 : 30000) : 0,
-      // The same patch comes back on most polls. Suppress that update before it
-      // reaches React, because rendering a large diff parses every file again.
-      compare: (previous, next) => {
-        if (previous === next) return true;
-        if (!previous || !next) return false;
-        return sameRepoDiffs(previous.repos || [], next.repos || []);
-      },
+  const {
+    data,
+    error: requestError,
+    isLoading,
+    mutate,
+  } = useSessionDiffResource(sessionId, {
+    enabled,
+    refreshInterval: enabled ? (isRunning ? 8000 : 30000) : 0,
+    // The same patch comes back on most polls. Suppress that update before it
+    // reaches React, because rendering a large diff parses every file again.
+    compare: (previous, next) => {
+      if (previous === next) return true;
+      if (!previous || !next) return false;
+      return sameRepoDiffs(previous.repos || [], next.repos || []);
     },
-  );
+  });
   const repos = data?.repos ?? null;
   const loading = isLoading && !data;
   // A failed background revalidation must not replace a usable stale patch.
@@ -492,12 +350,8 @@ export function DiffPanel({
   // unified fallback until the person picks a layout.
   const codeDisplaySettings = useCodeDisplaySettings("unified");
   const organizationSettings = useCodeOrganizationSettings();
-  const {
-    grouping,
-    fileListMode,
-    fileOrder,
-    sortDirection,
-  } = organizationSettings;
+  const { grouping, fileListMode, fileOrder, sortDirection } =
+    organizationSettings;
   const [groups, setGroups] = useState<{
     repo: string;
     patch: string;
@@ -520,18 +374,23 @@ export function DiffPanel({
   const syncActiveRepo = useEffectEvent(() => {
     if (!repo) return;
     const index = changed.findIndex((candidate) => candidate.repo === repo);
-    if (index >= 0) setActive((current) => (current === index ? current : index));
+    if (index >= 0)
+      setActive((current) => (current === index ? current : index));
   });
   useEffect(() => {
     syncActiveRepo();
   }, [repo, changedReposKey]);
-  const cur = changed[Math.min(active, changed.length - 1)] || changed[0] || null;
+  const cur =
+    changed[Math.min(active, changed.length - 1)] || changed[0] || null;
   const groupPatch = cur?.diff.rawPatch || "";
   const groupFileCount = cur?.diff.files.length || 0;
   const patchVersion = cur?.diff.diffVersion || "";
   const flowRepo = cur?.repo;
   const flowKey = cur ? `${sessionId}\0${flowRepo}\0${patchVersion}` : "";
-  const [flow, setFlow] = useState<{ key: string; data: CodeFlowResult } | null>(null);
+  const [flow, setFlow] = useState<{
+    key: string;
+    data: CodeFlowResult;
+  } | null>(null);
   const [flowLoading, setFlowLoading] = useState(false);
   const [flowError, setFlowError] = useState<string | null>(null);
   const flowGeneration = useRef(0);
@@ -539,48 +398,56 @@ export function DiffPanel({
   const [diffControlsTarget, setDiffControlsTarget] =
     useState<HTMLDivElement | null>(null);
 
-	// Keyed on the semantic inputs (session/repo/diff version), not the
-	// per-poll `cur` object, so the flow effect doesn't re-arm every poll.
-	const loadFlow = useCallback(async () => {
+  // Keyed on the semantic inputs (session/repo/diff version), not the
+  // per-poll `cur` object, so the flow effect doesn't re-arm every poll.
+  const loadFlow = useEffectEvent(async () => {
     if (!flowRepo || !flowKey) return;
     const generation = ++flowGeneration.current;
     setFlowLoading(true);
     setFlowError(null);
     await (async () => {
-const data = await fetchCodeFlow(sessionId, flowRepo);
-      if (!data) throw new Error("Code flow isn't available for these changes.");
+      const data = await fetchCodeFlow(sessionId, flowRepo);
+      if (!data)
+        throw new Error("Code flow isn't available for these changes.");
       if (data.diffVersion !== patchVersion) {
         if (generation === flowGeneration.current) {
-          setFlowError("Changes updated while code flow was loading. Try again.");
+          setFlowError(
+            "Changes updated while code flow was loading. Try again.",
+          );
         }
         return;
       }
-      if (generation === flowGeneration.current) setFlow({ key: flowKey, data });
-})().catch(async (error: any) => {
-if (generation === flowGeneration.current)
-        setFlowError(error?.message || "Couldn't load code flow.");
-}).finally(async () => {
-if (generation === flowGeneration.current) setFlowLoading(false);
-});
-	}, [sessionId, flowRepo, flowKey, patchVersion]);
+      if (generation === flowGeneration.current)
+        setFlow({ key: flowKey, data });
+    })()
+      .catch(async (error: unknown) => {
+        if (generation === flowGeneration.current)
+          setFlowError(errorMessage(error, "Couldn't load code flow."));
+      })
+      .finally(async () => {
+        if (generation === flowGeneration.current) setFlowLoading(false);
+      });
+  });
 
-	const refreshFlow = async () => {
-		flowGeneration.current += 1;
-		setFlow(null);
-		setFlowError(null);
-		setFlowLoading(true);
-		await reload();
-		setFlowLoading(false);
-	};
+  const refreshFlow = async () => {
+    flowGeneration.current += 1;
+    setFlow(null);
+    setFlowError(null);
+    setFlowLoading(true);
+    await reload();
+    setFlowLoading(false);
+  };
 
   useEffect(() => {
     if (view !== "flow" || flowLoading || flowError) return;
     if (flow && flow.key !== flowKey) {
-      setFlowError("Changes updated. Refresh code flow to analyze the latest diff.");
+      setFlowError(
+        "Changes updated. Refresh code flow to analyze the latest diff.",
+      );
       return;
     }
     if (!flow) void loadFlow();
-  }, [view, flowKey, flow, flowLoading, flowError, loadFlow]);
+  }, [view, flowKey, flow, flowLoading, flowError]);
 
   useEffect(() => {
     setFlow(null);
@@ -593,7 +460,9 @@ if (generation === flowGeneration.current) setFlowLoading(false);
 
   function openFlowLocation(path: string) {
     setView("files");
-    requestAnimationFrame(() => requestAnimationFrame(() => revealDiffFile(panelRef.current, path)));
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => revealDiffFile(panelRef.current, path)),
+    );
   }
 
   const loadGroups = useEffectEvent(() => {
@@ -607,7 +476,10 @@ if (generation === flowGeneration.current) setFlowLoading(false);
     setGroups(null);
     setGroupsLoading(true);
     const retryLater = () => {
-      retryTimer = setTimeout(() => setGroupsRetry((attempt) => attempt + 1), 125_000);
+      retryTimer = setTimeout(
+        () => setGroupsRetry((attempt) => attempt + 1),
+        125_000,
+      );
     };
     fetchDiffGroups(sessionId, cur.repo, cur.diff.files, groupPatch)
       .then((result) => {
@@ -642,7 +514,9 @@ if (generation === flowGeneration.current) setFlowLoading(false);
   // the worktree — nothing is committed — so we offer a one-click note that
   // tells the agent about the hand-edits (it reviews them and folds them into
   // its next commit). Cleared per session and once sent.
-  const [handEdited, setHandEdited] = useState<{ repo: string; path: string }[]>([]);
+  const [handEdited, setHandEdited] = useState<
+    { repo: string; path: string }[]
+  >([]);
   useEffect(() => setHandEdited([]), [sessionId]);
   const recordHandEdit = (repo: string, path: string) =>
     setHandEdited((prev) =>
@@ -666,8 +540,15 @@ if (generation === flowGeneration.current) setFlowLoading(false);
     setHandEdited([]);
   }
 
-  async function handleComment(repo: string, target: CommentTarget, text: string) {
-    if (!canSend) throw new Error(`${AGENT_NAME} is busy. Wait for the current run to finish.`);
+  async function handleComment(
+    repo: string,
+    target: CommentTarget,
+    text: string,
+  ) {
+    if (!canSend)
+      throw new Error(
+        `${AGENT_NAME} is busy. Wait for the current run to finish.`,
+      );
     const lines =
       target.startLine === target.endLine
         ? `line ${target.startLine}`
@@ -702,12 +583,23 @@ if (generation === flowGeneration.current) setFlowLoading(false);
         side="bottom"
         align="end"
         initialFocus
-        className={mergeStylexOverrideClassName("", sx.flex, sx.w340px, sx.maxWCalc100vw24px, sx.flexCol, sx.gap05, sx.p3)}
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.flex,
+          sx.w340px,
+          sx.maxWCalc100vw24px,
+          sx.flexCol,
+          sx.gap05,
+          sx.p3,
+        )}
       >
         {source && onSourceChange && (
           <>
             <DiffSourceSetting value={source} onValueChange={onSourceChange} />
-            <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
+            <div
+              aria-hidden
+              {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+            />
           </>
         )}
         <SettingRow label="Code view">
@@ -737,7 +629,10 @@ if (generation === flowGeneration.current) setFlowLoading(false);
           </Segmented>
         </SettingRow>
 
-        <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
+        <div
+          aria-hidden
+          {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+        />
 
         <CodeOrganizationSettings
           settings={organizationSettings}
@@ -746,7 +641,10 @@ if (generation === flowGeneration.current) setFlowLoading(false);
           showFileListSetting={showFileList}
         />
 
-        <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
+        <div
+          aria-hidden
+          {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+        />
 
         <CodeDisplaySettings {...codeDisplaySettings} />
       </Popover.Popup>
@@ -755,7 +653,12 @@ if (generation === flowGeneration.current) setFlowLoading(false);
   const emptyState = <DiffEmptyState isRunning={isRunning} />;
 
   if (loading) return <LoadingState>Loading diff…</LoadingState>;
-  if (error) return <InlineAlert className={mergeStylexOverrideClassName("", sx.m4)}>{error}</InlineAlert>;
+  if (error)
+    return (
+      <InlineAlert className={mergeStylexOverrideClassName("", sx.m4)}>
+        {error}
+      </InlineAlert>
+    );
   if (!repos || !repos.length) return emptyState;
 
   // Repos that actually have changes; if none, show the empty state.
@@ -785,14 +688,25 @@ if (generation === flowGeneration.current) setFlowLoading(false);
         {d.files.length} file{d.files.length === 1 ? "" : "s"}
         {groupsLoading && (
           <span role="status" aria-label="Organizing files">
-            {" "}(organizing…)
+            {" "}
+            (organizing…)
           </span>
         )}
       </span>
       <span className={DIFF_ADD}>+{d.totalAdditions}</span>
       <span className={DIFF_DEL}>−{d.totalDeletions}</span>
       {d.truncated && (
-        <span {...stylex.props(sx.roundedSm, sx.bgYellow15, sx.px7px, sx.pyPx, sx.fontBold, sx.textYellow, typography.meta)}>
+        <span
+          {...stylex.props(
+            sx.roundedSm,
+            sx.bgYellow15,
+            sx.px7px,
+            sx.pyPx,
+            sx.fontBold,
+            sx.textYellow,
+            typography.meta,
+          )}
+        >
           truncated
         </span>
       )}
@@ -800,7 +714,14 @@ if (generation === flowGeneration.current) setFlowLoading(false);
         <Button
           variant="default"
           size="sm"
-          className={mergeStylexOverrideClassName("", sx.ml2, sx.minH0, sx.px2, sx.py05, typography.meta)}
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.ml2,
+            sx.minH0,
+            sx.px2,
+            sx.py05,
+            typography.meta,
+          )}
           onClick={tellAgentAboutEdits}
           title="Sends a note listing your hand-edits so they get reviewed and committed"
         >
@@ -808,7 +729,15 @@ if (generation === flowGeneration.current) setFlowLoading(false);
           {handEdited.length === 1 ? "" : "s"}
         </Button>
       )}
-      <div {...stylex.props(sx.mlAuto, sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2)}>
+      <div
+        {...stylex.props(
+          sx.mlAuto,
+          sx.flex,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.gap2,
+        )}
+      >
         <div
           ref={setDiffControlsTarget}
           {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2)}
@@ -837,9 +766,26 @@ if (generation === flowGeneration.current) setFlowLoading(false);
       // Paint through the section's 10px top gutter. The gutter still belongs
       // to the diff below, but code cannot scroll through its empty space.
       <div
-        className={[mergeStylexClassName("", sx.sticky), multi ? mergeStylexClassName("", sx.topCalcVarDiffPanelTop0px37px, sx.phoneTopCalcVarDiffPanelTop0px47px) : mergeStylexClassName("", sx.topVarDiffPanelTop0px), mergeStylexClassName("", sx.z1, sx.bgPanelSurface, sx.afterAbsolute, sx.afterInsetX0, sx.afterTopFull, sx.afterH25, sx.afterBgPanelSurface, sx.afterContent)].filter(Boolean).join(" ")}
+        className={utilityClassName(
+          `sticky ${multi ? "top-[calc(var(--diff-panel-top,0px)+37px)] phone:top-[calc(var(--diff-panel-top,0px)+47px)]" : "top-[var(--diff-panel-top,0px)]"} z-1 bg-panel-surface after:absolute after:inset-x-0 after:top-full after:h-2.5 after:bg-panel-surface after:content-['']`,
+        )}
       >
-        <div {...mergeStylexProps("[&::-webkit-scrollbar]:hidden", sx.flex, sx.h10, sx.itemsCenter, sx.gap25, sx.overflowXAuto, sx.borderB, sx.borderDivider, sx.px35, sx.whitespaceNowrap, sx.ScrollbarWidthNone, typography.label)}>
+        <div
+          {...mergeStylexProps(
+            "[&::-webkit-scrollbar]:hidden",
+            sx.flex,
+            sx.h10,
+            sx.itemsCenter,
+            sx.gap25,
+            sx.overflowXAuto,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px35,
+            sx.whitespaceNowrap,
+            sx.ScrollbarWidthNone,
+            typography.label,
+          )}
+        >
           {toolbarContents}
         </div>
       </div>
@@ -849,11 +795,27 @@ if (generation === flowGeneration.current) setFlowLoading(false);
 
   return (
     <div
-      className={[mergeStylexClassName("", sx.Container, sx.flex, sx.minH0, sx.flexCol), multi ? mergeStylexClassName("", sx.ReviewFileHeaderTopCalcVarDiffPanelTop0px87px, sx.phoneReviewFileHeaderTopCalcVarDiffPanelTop0px97px) : mergeStylexClassName("", sx.ReviewFileHeaderTopCalcVarDiffPanelTop0px50px)].filter(Boolean).join(" ")}
+      className={utilityClassName(
+        `@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+87px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+97px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+50px)]"}`,
+      )}
       ref={panelRef}
     >
       {multi && (
-        <div {...mergeStylexProps("", sx.topVarDiffPanelTop0px, sx.sticky, sx.z2, sx.flex, sx.gap1, sx.overflowXAuto, sx.borderB, sx.borderDivider, sx.bgPanelSurface, sx.px25, sx.py15)}>
+        <div
+          {...stylex.props(
+            sx.sticky,
+            sx.topVarDiffPanelTop0px,
+            sx.z2,
+            sx.flex,
+            sx.gap1,
+            sx.overflowXAuto,
+            sx.borderB,
+            sx.borderDivider,
+            sx.bgPanelSurface,
+            sx.px25,
+            sx.py15,
+          )}
+        >
           {changed.map((r, i) => {
             return (
               <button
@@ -861,14 +823,26 @@ if (generation === flowGeneration.current) setFlowLoading(false);
                 // The active pill supplies its own surface and border colour —
                 // the base has the geometry only, so nothing carries two
                 // competing colour utilities.
-                className={[mergeStylexClassName("", sx.inlineFlex, sx.cursorPointer, sx.itemsCenter, sx.gap15, sx.roundedMd, sx.border, sx.px9px, sx.py3px, typography.label, sx.whitespaceNowrap, sx.phonePx3, sx.phonePy2), i === active
-                    ? mergeStylexClassName("", sx.borderLine, sx.bgPanel, sx.textFg)
-                    : mergeStylexClassName("", sx.borderTransparent, sx.bgTransparent, sx.textDim, sx.hoverTextFg)].filter(Boolean).join(" ")}
+                className={utilityClassName(
+                  `inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-[9px] py-[3px] text-label whitespace-nowrap phone:px-3 phone:py-2 ${
+                    i === active
+                      ? "border-line bg-panel text-fg"
+                      : "border-transparent bg-transparent text-dim hover:text-fg"
+                  }`,
+                )}
                 onClick={() => setActive(i)}
                 title={r.primary ? "Primary repo" : "Attached repo"}
               >
                 {repoLabel(r.repo)}
-                <span {...stylex.props(sx.roundedFull, sx.bgFaint20, sx.px5px, sx.textFaint, typography.meta)}>
+                <span
+                  {...stylex.props(
+                    sx.roundedFull,
+                    sx.bgFaint20,
+                    sx.px5px,
+                    sx.textFaint,
+                    typography.meta,
+                  )}
+                >
                   {r.diff.files.length}
                 </span>
               </button>
@@ -880,96 +854,110 @@ if (generation === flowGeneration.current) setFlowLoading(false);
       {toolbar}
 
       <div {...stylex.props(sx.flex, sx.minH0, sx.minW0, sx.flex1)}>
-        {showFileList && fileListMode !== "hidden" && orderedFiles.length > 0 && (
-          <PrFileTree
-            files={orderedFiles}
-            mode={fileListMode}
-            showFileStats={codeDisplaySettings.showFileStats}
-            onOpenFile={openFlowLocation}
-          />
-        )}
+        {showFileList &&
+          fileListMode !== "hidden" &&
+          orderedFiles.length > 0 && (
+            <PrFileTree
+              files={orderedFiles}
+              mode={fileListMode}
+              showFileStats={codeDisplaySettings.showFileStats}
+              onOpenFile={openFlowLocation}
+            />
+          )}
         <div {...stylex.props(sx.minW0, sx.flex1)}>
-      {view === "flow" ? (
-        <CodeFlow
-          data={flow?.key === flowKey ? flow.data : null}
-          loading={flowLoading || (flow?.key !== flowKey && !flowError)}
-          error={flowError}
-			onRetry={() => void refreshFlow()}
-          onOpenLocation={openFlowLocation}
-        />
-      ) : (
-      /* @pierre/diffs sizes its own generated markup, which no utility on our
+          {view === "flow" ? (
+            <CodeFlow
+              data={flow?.key === flowKey ? flow.data : null}
+              loading={flowLoading || (flow?.key !== flowKey && !flowError)}
+              error={flowError}
+              onRetry={() => void refreshFlow()}
+              onOpenLocation={openFlowLocation}
+            />
+          ) : (
+            /* @pierre/diffs sizes its own generated markup, which no utility on our
          side can reach — hold it inside the panel from here. A parent toolbar
          supplies the review canvas's shared 8px inset; standalone Changes
          keeps this panel's own inset. */
-      <div
-        className={[toolbarTarget === undefined ? mergeStylexClassName("", sx.px25, sx.pt25) : mergeStylexClassName("", sx.px0, sx.pt0), mergeStylexClassName("[&_[class*=pierre]]:max-w-full", sx.minW0, sx.maxWFull, sx.overflowClip, sx.pb7)].filter(Boolean).join(" ")}
-      >
-        <CommentableDiff
-          key={cur.repo}
-          patch={d.rawPatch || ""}
-          defaultExpandedFiles={10}
-          controlsTarget={diffControlsTarget}
-          diffStyle={codeDisplaySettings.diffStyle}
-          wrapLines={codeDisplaySettings.wrapLines}
-          structuralHighlighting={codeDisplaySettings.structuralHighlighting}
-          showFileStats={codeDisplaySettings.showFileStats}
-          codeTheme={codeDisplaySettings.codeTheme}
-          visibleFileOrder={visibleFileOrder}
-          // The sidebar owns this scrollport. Keep each file's title below its
-          // standing toolbar until the following file pushes it away.
-          stickyFileHeaders={toolbarTarget === undefined}
-          groups={
-            grouping === "ai" &&
-            groups?.repo === cur.repo &&
-            groups.patch === d.rawPatch
-              ? groups.groups || undefined
-              : undefined
-          }
-          groupsLoading={grouping === "ai" && groupsLoading}
-          showGroupsStatus={false}
-          submitLabel={`Send to ${AGENT_NAME}`}
-          placeholder={`Leave feedback on these lines. ${AGENT_NAME} picks it up in this session…`}
-          disabled={!canSend}
-          disabledHint={`${AGENT_NAME} is working. You can send feedback once the current run finishes.`}
-          onSubmit={(target, text) => handleComment(cur.repo, target, text)}
-          // Discarding edits the worktree — withhold it while the agent is running
-          // to avoid racing its writes.
-          onDiscard={canSend ? (path, oldPath) => handleDiscard(cur.repo, path, oldPath) : undefined}
-          // In-place edit mode (@pierre/diffs edit): same live-worktree gate as
-          // discard. Load pulls full file contents (the editor can't work from
-          // hunks alone); save writes back and refreshes the diff.
-          editFile={
-            canSend
-              ? {
-                  load: (file, side) =>
-                    fetchWorktreeFile(
-                      sessionId,
-                      side === "base" ? file.prevName || file.name : file.name,
-                      cur.repo,
-                      side,
-                    ),
-                  save: async (path, content) => {
-                    await saveWorktreeFile(sessionId, path, content, cur.repo);
-                    recordHandEdit(cur.repo, path);
-                    await reload();
+            <div
+              className={utilityClassName(
+                `${toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"} min-w-0 max-w-full overflow-clip pb-7 [&_[class*=pierre]]:max-w-full`,
+              )}
+            >
+              <CommentableDiff
+                key={cur.repo}
+                patch={d.rawPatch || ""}
+                options={{
+                  defaultExpandedFiles: 10,
+                  controlsTarget: diffControlsTarget,
+                  diffStyle: codeDisplaySettings.diffStyle,
+                  wrapLines: codeDisplaySettings.wrapLines,
+                  structuralHighlighting:
+                    codeDisplaySettings.structuralHighlighting,
+                  showFileStats: codeDisplaySettings.showFileStats,
+                  codeTheme: codeDisplaySettings.codeTheme,
+                  visibleFileOrder,
+                  // The sidebar owns this scrollport. Keep each file's title below its
+                  // standing toolbar until the following file pushes it away.
+                  stickyFileHeaders: toolbarTarget === undefined,
+                  groups:
+                    grouping === "ai" &&
+                    groups?.repo === cur.repo &&
+                    groups.patch === d.rawPatch
+                      ? groups.groups || undefined
+                      : undefined,
+                  groupsLoading: grouping === "ai" && groupsLoading,
+                  showGroupsStatus: false,
+                  submitLabel: `Send to ${AGENT_NAME}`,
+                  placeholder: `Leave feedback on these lines. ${AGENT_NAME} picks it up in this session…`,
+                  disabled: !canSend,
+                  disabledHint: `${AGENT_NAME} is working. You can send feedback once the current run finishes.`,
+                  onSubmit: (target, text) =>
+                    handleComment(cur.repo, target, text),
+                  // Discarding edits the worktree — withhold it while the agent is running
+                  // to avoid racing its writes.
+                  onDiscard: canSend
+                    ? (path, oldPath) => handleDiscard(cur.repo, path, oldPath)
+                    : undefined,
+                  // In-place edit mode (@pierre/diffs edit): same live-worktree gate as
+                  // discard. Load pulls full file contents (the editor can't work from
+                  // hunks alone); save writes back and refreshes the diff.
+                  editFile: canSend
+                    ? {
+                        load: (file, side) =>
+                          fetchWorktreeFile(
+                            sessionId,
+                            side === "base"
+                              ? file.prevName || file.name
+                              : file.name,
+                            cur.repo,
+                            side,
+                          ),
+                        save: async (path, content) => {
+                          await saveWorktreeFile(
+                            sessionId,
+                            path,
+                            content,
+                            cur.repo,
+                          );
+                          recordHandEdit(cur.repo, path);
+                          await reload();
+                        },
+                      }
+                    : undefined,
+                  // Changed images render as pictures: new side straight from the
+                  // worktree, old side from the diff's merge base.
+                  imageSrcs: (file) => {
+                    const src = (side: "new" | "base", path: string) =>
+                      `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/worktree-image?repo=${encodeURIComponent(cur.repo)}&side=${side}&path=${encodeURIComponent(path)}`;
+                    return {
+                      oldSrc: src("base", file.prevName || file.name),
+                      newSrc: src("new", file.name),
+                    };
                   },
-                }
-              : undefined
-          }
-          // Changed images render as pictures: new side straight from the
-          // worktree, old side from the diff's merge base.
-          imageSrcs={(file) => {
-            const src = (side: "new" | "base", p: string) =>
-              `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/worktree-image?repo=${encodeURIComponent(cur.repo)}&side=${side}&path=${encodeURIComponent(p)}`;
-            return {
-              oldSrc: src("base", file.prevName || file.name),
-              newSrc: src("new", file.name),
-            };
-          }}
-        />
-      </div>
-      )}
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -985,7 +973,21 @@ if (generation === flowGeneration.current) setFlowLoading(false);
  */
 function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
   return (
-    <div {...stylex.props(sx.flex, sx.hFull, sx.minH280px, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.gap3, sx.px4, sx.pt12, sx.pb24, sx.textCenter)}>
+    <div
+      {...stylex.props(
+        sx.flex,
+        sx.hFull,
+        sx.minH280px,
+        sx.flexCol,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.gap3,
+        sx.px4,
+        sx.pt12,
+        sx.pb24,
+        sx.textCenter,
+      )}
+    >
       <svg
         viewBox="0 0 40 40"
         {...stylex.props(sx.h14, sx.w14, sx.textFaint)}
@@ -1001,11 +1003,24 @@ function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
         <path d="M13 18v5a4 4 0 0 0 4 4h5" />
       </svg>
       <div {...stylex.props(sx.flex, sx.flexCol, sx.gap1)}>
-        <div {...stylex.props(sx.fontMedium, sx.textDim, typography.itemTitle)}>No file changes yet</div>
-        <div {...stylex.props(sx.textSm, sx.textFaint)}>Changes appear here.</div>
+        <div {...stylex.props(sx.fontMedium, sx.textDim, typography.itemTitle)}>
+          No file changes yet
+        </div>
+        <div {...stylex.props(sx.textSm, sx.textFaint)}>
+          Changes appear here.
+        </div>
       </div>
       {isRunning && (
-        <div {...stylex.props(sx.mt1, sx.flex, sx.itemsCenter, sx.gap2, sx.textXs, sx.textFaint)}>
+        <div
+          {...stylex.props(
+            sx.mt1,
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.textXs,
+            sx.textFaint,
+          )}
+        >
           <Spinner className={mergeStylexOverrideClassName("", sx.textFaint)} />
           <span>Pulling latest…</span>
         </div>

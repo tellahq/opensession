@@ -30,9 +30,11 @@ interface StripeEvent {
   data?: { object?: StripeDispute };
 }
 
-function idOf(value: string | { id?: string } | null | undefined): string | null {
+function idOf(
+  value: string | { id?: string } | null | undefined,
+): string | null {
   if (!value) return null;
-  return typeof value === "string" ? value : value.id ?? null;
+  return typeof value === "string" ? value : (value.id ?? null);
 }
 
 /**
@@ -67,7 +69,12 @@ export async function handleStripeEvent(event: StripeEvent): Promise<number> {
   };
 
   const { fireAutomationsForEvent } = await import("../../server/automations");
-  const fired = fireAutomationsForEvent(DISPUTE_CREATED_EVENT, JSON.stringify(payload, null, 2));
-  console.log(`[stripe] Dispute ${dispute.id} (${dispute.reason ?? "?"}) → fired ${fired} automation(s)`);
+  const fired = fireAutomationsForEvent(
+    DISPUTE_CREATED_EVENT,
+    JSON.stringify(payload, null, 2),
+  );
+  console.log(
+    `[stripe] Dispute ${dispute.id} (${dispute.reason ?? "?"}) → fired ${fired} automation(s)`,
+  );
   return fired;
 }

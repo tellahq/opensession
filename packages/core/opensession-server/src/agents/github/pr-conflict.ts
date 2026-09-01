@@ -59,7 +59,10 @@ function readPending(): Map<string, PrConflictEvent> {
       intents?: PrConflictEvent[];
     };
     return new Map(
-      (stored.intents || []).map((event) => [prKeyOf(event.repoId, event.number), event]),
+      (stored.intents || []).map((event) => [
+        prKeyOf(event.repoId, event.number),
+        event,
+      ]),
     );
   } catch {
     return new Map();
@@ -67,7 +70,10 @@ function readPending(): Map<string, PrConflictEvent> {
 }
 
 function writePending(pending: Map<string, PrConflictEvent>): void {
-  writeJsonAtomic(pendingPath(), { version: 1, intents: [...pending.values()] });
+  writeJsonAtomic(pendingPath(), {
+    version: 1,
+    intents: [...pending.values()],
+  });
 }
 
 export function __setConflictIntentPathForTest(path?: string): void {
@@ -79,7 +85,9 @@ export function resetConflictWatch(): void {
   lastKnown.clear();
   delivering.clear();
   conflictSequence = 0;
-  try { rmSync(pendingPath(), { force: true }); } catch {}
+  try {
+    rmSync(pendingPath(), { force: true });
+  } catch {}
 }
 
 export function scanConflictTransitions(
@@ -95,7 +103,8 @@ export function scanConflictTransitions(
       if (pr.state !== "OPEN") continue;
       const key = prKeyOf(repoId, pr.number);
       seen.add(key);
-      if (pr.mergeable !== "MERGEABLE" && pr.mergeable !== "CONFLICTING") continue;
+      if (pr.mergeable !== "MERGEABLE" && pr.mergeable !== "CONFLICTING")
+        continue;
       const prev = lastKnown.get(key);
       lastKnown.set(key, pr.mergeable);
       if (pr.mergeable === "MERGEABLE" && pending.delete(key))
@@ -123,7 +132,9 @@ export function scanConflictTransitions(
       if (pending.delete(key)) pendingChanged = true;
     }
   }
-  const emitted = new Set(events.map((event) => prKeyOf(event.repoId, event.number)));
+  const emitted = new Set(
+    events.map((event) => prKeyOf(event.repoId, event.number)),
+  );
   for (const [key, event] of pending) {
     if (
       !emitted.has(key) &&
@@ -155,21 +166,27 @@ export function settleConflictIntent(event: PrConflictEvent): void {
   writePending(pending);
 }
 
-export async function notifyConflictedPrSession(event: PrConflictEvent): Promise<void> {
+export async function notifyConflictedPrSession(
+  event: PrConflictEvent,
+): Promise<void> {
   const key = `${prKeyOf(event.repoId, event.number)}:${event.conflictId}`;
   if (delivering.has(key)) return;
   delivering.add(key);
   try {
-    const { tryGetSessionControl } = await import("../../server/session-control");
+    const { tryGetSessionControl } =
+      await import("../../server/session-control");
     const control = tryGetSessionControl();
     if (!control) return;
 
-    let target = event.sessionRef ? control.getSession(event.sessionRef) : undefined;
+    let target = event.sessionRef
+      ? control.getSession(event.sessionRef)
+      : undefined;
     if (target?.state === "archived") target = undefined;
     if (!target) {
       const { matchSessions } = await import("./session-notify");
       target = [...matchSessions(control, event.repoId, event.branch)].sort(
-        (a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0),
+        (a, b) =>
+          (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0),
       )[0];
     }
     if (!target) return;
@@ -199,7 +216,10 @@ export async function notifyConflictedPrSession(event: PrConflictEvent): Promise
     });
     if (res.status !== "error") settleConflictIntent(event);
   } catch (error) {
-    console.error(`[github] conflict notification failed for PR #${event.number}:`, error);
+    console.error(
+      `[github] conflict notification failed for PR #${event.number}:`,
+      error,
+    );
   } finally {
     delivering.delete(key);
   }

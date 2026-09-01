@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, {
   useCallback,
   useEffect,
@@ -7,7 +9,27 @@ import React, {
   useState,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { fetchWorktrees, fetchModels, fetchToolAccounts, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, cachedRepos, type RepoInfo, createWorkspaceApi, updateWorkspaceApi, deleteWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
+import {
+  fetchWorktrees,
+  fetchModels,
+  fetchToolAccounts,
+  fetchSandboxStatus,
+  requestSandboxPrewarm,
+  suggestBranch,
+  configuredNewSessionRepo,
+  fetchProviderAccounts,
+  fetchRepos,
+  cachedRepos,
+  type OpenPr,
+  type RepoInfo,
+  createWorkspaceApi,
+  updateWorkspaceApi,
+  deleteWorkspaceApi,
+  ApiError,
+  type ProviderAccountOption,
+  type ModelOption,
+  type SandboxStatusInfo,
+} from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { type FileAttachment } from "../lib/images";
 import {
@@ -35,14 +57,19 @@ import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { effectiveSendKey, MOD_ENTER_GLYPH } from "../lib/send-key";
 import { isApple } from "../lib/platform";
 import { NO_REPO } from "../lib/session-repo";
-import { getDefaultRepoPref, setDefaultRepoPref } from "../lib/default-repo-pref";
+import {
+  getDefaultRepoPref,
+  setDefaultRepoPref,
+} from "../lib/default-repo-pref";
+import {
+  getSessionCheckoutPrefs,
+  onSessionCheckoutPrefChanged,
+} from "../lib/session-checkout-pref";
 import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
 import { fallbackBranchName } from "../lib/workspace-draft";
 import { newSessionDefaultRepo } from "../lib/new-session-repo";
-import {
-  NewSessionPrompt,
-  type NewSessionPromptHandle,
-} from "./NewSessionPrompt";
+import { NewSessionPrompt } from "./NewSessionPrompt";
+import type { NewSessionPromptHandle } from "../lib/new-session-prompt-types";
 import { ComposerContextChip } from "./ComposerContextChip";
 import {
   IconPaperclip,
@@ -59,7 +86,13 @@ import {
   IconNewBranch,
   IconX,
 } from "./icons";
-import type { WSClientMessage, WSServerMessage } from "../lib/types";
+import type {
+  UnifiedSession,
+  Workspace,
+  WSClientMessage,
+  WSServerMessage,
+} from "../lib/types";
+import { findPrWorkspaceId } from "../lib/pr-workspace";
 import { newClientSessionId } from "../lib/session-id";
 import { errorMatchesPendingCreate } from "../lib/new-session-navigation";
 import {
@@ -83,764 +116,177 @@ import { composerMorph } from "../ui/motion";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { matchesShortcut } from "../lib/shortcuts";
 import {
-	composerBox,
-	composerSend,
-	composerSendDefault,
+  composerBox,
+  composerSend,
+  composerSendDefault,
 } from "../lib/composer-classes";
-import {
-  foregroundFileComposerOwns,
-  hasDraggedFiles,
-} from "../lib/file-drag";
+import { foregroundFileComposerOwns, hasDraggedFiles } from "../lib/file-drag";
 import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
+import { NewSessionPrPicker } from "./NewSessionPrPicker";
 import { askSurface } from "../lib/tinted-surface";
 import { toast } from "../ui/toast";
-import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+import { cn } from "../ui/cn";
 import { PhoneTopBar, PhoneTopBarAction } from "../ui/top-bar";
 import {
-	paletteIconBtn,
-	paletteIconBtnOn,
-	palettePill,
+  paletteIconBtn,
+  paletteIconBtnOn,
+  palettePill,
 } from "../lib/palette-classes";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
-import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	srOnly: {
-			clipPath: "inset(50%)",
-			whiteSpace: "nowrap",
-			borderWidth: "0",
-			width: "1px",
-			height: "1px",
-			margin: "-1px",
-			padding: "0",
-			position: "absolute",
-			overflow: "hidden"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	truncate: {
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap",
-			overflow: "hidden"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	pointerEventsNone: {
-			pointerEvents: "none"
-	},
-	Absolute: {
-			position: "absolute!important"
-	},
-	inset0: {
-			inset: "0"
-	},
-	Z6: {
-			zIndex: "6!important"
-	},
-	flex: {
-			display: "flex"
-	},
-	flexWrap: {
-			flexWrap: "wrap"
-	},
-	itemsStart: {
-			alignItems: "flex-start"
-	},
-	gapX1: {
-			columnGap: "4px"
-	},
-	px4: {
-			paddingInline: "16px"
-	},
-	mr1: {
-			marginRight: "4px"
-	},
-	selfCenter: {
-			alignSelf: "center"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	minW260px: {
-			minWidth: "260px"
-	},
-	justifyBetween: {
-			justifyContent: "space-between"
-	},
-	gap3: {
-			gap: "12px"
-	},
-	flexNone: {
-			flex: "none"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap2: {
-			gap: "8px"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	gap1: {
-			gap: "4px"
-	},
-	mt05: {
-			marginTop: "2px"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	gap05: {
-			gap: "2px"
-	},
-	whitespaceNormal: {
-			whiteSpace: "normal"
-	},
-	leadingSnug: {
-			lineHeight: "var(--leading-snug)"
-	},
-	maxW300px: {
-			maxWidth: "300px"
-	},
-	px2: {
-			paddingInline: "8px"
-	},
-	pb1: {
-			paddingBottom: "4px"
-	},
-	gap25: {
-			gap: "10px"
-	},
-	pt15: {
-			paddingTop: "6px"
-	},
-	mtPx: {
-			marginTop: "1px"
-	},
-	gapPx: {
-			gap: "1px"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-
-	phoneSize11: {
-		"@media (max-width: 720px)": {
-			"width": "44px",
-			"height": "44px"
-		}
-	},
-	phoneRounded999px: {
-		"@media (max-width: 720px)": {
-			"borderRadius": "999px"
-		}
-	},
-	phoneBeforeRounded999px: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"content": "var(--tw-content)",
-				"borderRadius": "999px"
-			}
-		}
-	},
-	shrink: {
-		"flexShrink": "1"
-	},
-	maxWNone: {
-		"maxWidth": "none"
-	},
-	phoneMlAuto: {
-		"@media (max-width: 720px)": {
-			"marginLeft": "auto"
-		}
-	},
-	phoneMinH11: {
-		"@media (max-width: 720px)": {
-			"minHeight": "44px"
-		}
-	},
-	max560pxPx9px: {
-		"@media not all and (min-width: 560px)": {
-			"paddingInline": "9px"
-		}
-	},
-	relative: {
-		"position": "relative"
-	},
-	wFull: {
-		"width": "100%"
-	},
-	overflowHidden: {
-		"overflow": "hidden"
-	},
-	rounded2xl: {
-		"borderRadius": "calc(22px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	invisible: {
-		"visibility": "hidden"
-	},
-	minH0: {
-		"minHeight": "0"
-	},
-	flex1: {
-		"flex": "1"
-	},
-	bgHover: {
-		"backgroundColor": "var(--hover)"
-	},
-	mx0: {
-		"marginInline": "0"
-	},
-	phoneHidden: {
-		"@media (max-width: 720px)": {
-			"display": "none"
-		}
-	},
-	textXs: {
-		"fontSize": "var(--type-label)",
-		"lineHeight": "var(--tw-leading,var(--text-xs--line-height))"
-	},
-	Mx3px: {
-		"marginInline": "-3px"
-	},
-	transitionTransform: {
-		"transitionProperty": "transform,translate,scale,rotate",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	beforeOpacity100: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"opacity": "1"
-		}
-	},
-	afterOpacity100: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"opacity": "1"
-		}
-	},
-	maxHCalc89dvh1rem: {
-		"maxHeight": "calc(89dvh - 1rem)"
-	},
-	phoneMaxHCalc100dvh12px: {
-		"@media (max-width: 720px)": {
-			"maxHeight": "calc(100dvh - 12px)"
-		}
-	},
-	phoneRoundedTCalc40pxVarRf: {
-		"@media (max-width: 720px)": {
-			"borderTopLeftRadius": "calc(40px * var(--rf))",
-			"borderTopRightRadius": "calc(40px * var(--rf))"
-		}
-	},
-	phoneRoundedBNone: {
-		"@media (max-width: 720px)": {
-			"borderBottomRightRadius": "0",
-			"borderBottomLeftRadius": "0"
-		}
-	},
-
-	rotate180: {
-		"rotate": "180deg"
-	},
-
-	maxHMin560px68dvh: {
-		"maxHeight": "min(560px,68dvh)"
-	},
-	maxWMin340pxCalc100vw1rem: {
-		"maxWidth": "min(340px,100vw - 1rem)"
-	},
-	maxWMin360pxCalc100vw1rem: {
-		"maxWidth": "min(360px,100vw - 1rem)"
-	},
-
-	borderB: {
-		"borderBottomStyle": "var(--tw-border-style)",
-		"borderBottomWidth": "1px"
-	},
-	borderTransparent: {
-		"borderColor": "transparent"
-	},
-	pt4: {
-		"paddingTop": "16px"
-	},
-	pb11px: {
-		"paddingBottom": "11px"
-	},
-	phoneHAuto: {
-		"@media (max-width: 720px)": {
-			"height": "auto"
-		}
-	},
-	phonePx18px: {
-		"@media (max-width: 720px)": {
-			"paddingInline": "18px"
-		}
-	},
-	phonePb3: {
-		"@media (max-width: 720px)": {
-			"paddingBottom": "12px"
-		}
-	},
-	phonePt18px: {
-		"@media (max-width: 720px)": {
-			"paddingTop": "18px"
-		}
-	},
-	borderLine: {
-		"borderColor": "var(--border)"
-	},
-	desktopContents: {
-		"@media (min-width: 721px)": {
-			"display": "contents"
-		}
-	},
-	phoneFlex: {
-		"@media (max-width: 720px)": {
-			"display": "flex"
-		}
-	},
-	phoneMinW0: {
-		"@media (max-width: 720px)": {
-			"minWidth": "0"
-		}
-	},
-	phoneFlex1: {
-		"@media (max-width: 720px)": {
-			"flex": "1"
-		}
-	},
-	phoneJustifyCenter: {
-		"@media (max-width: 720px)": {
-			"justifyContent": "center"
-		}
-	},
-	inlineFlex: {
-		"display": "inline-flex"
-	},
-	maxWFull: {
-		"maxWidth": "100%"
-	},
-	cursorPointer: {
-		"cursor": "pointer"
-	},
-	gap15: {
-		"gap": "6px"
-	},
-	roundedControl: {
-		"borderRadius": "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	py5px: {
-		"paddingBlock": "5px"
-	},
-	textFg: {
-		"color": "var(--text)"
-	},
-	transitionColors: {
-		"transitionProperty": "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	hoverBgHover: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--hover)"
-			}
-		}
-	},
-	disabledCursorDefault: {
-		":disabled": {
-			"cursor": "default"
-		}
-	},
-	disabledOpacity55: {
-		":disabled": {
-			"opacity": ".55"
-		}
-	},
-	phoneGap1: {
-		"@media (max-width: 720px)": {
-			"gap": "4px"
-		}
-	},
-	phonePx25: {
-		"@media (max-width: 720px)": {
-			"paddingInline": "10px"
-		}
-	},
-	phonePy15: {
-		"@media (max-width: 720px)": {
-			"paddingBlock": "6px"
-		}
-	},
-	phoneTextLabel: {
-		"@media (max-width: 720px)": {
-			"fontSize": "var(--type-label)"
-		}
-	},
-	phoneFontMedium: {
-		"@media (max-width: 720px)": {
-			"--tw-font-weight": "var(--font-weight-medium)",
-			"fontWeight": "var(--font-weight-medium)"
-		}
-	},
-	Ml05: {
-		"marginLeft": "-2px"
-	},
-	phoneSize4: {
-		"@media (max-width: 720px)": {
-			"width": "16px",
-			"height": "16px"
-		}
-	},
-	phonePx3: {
-		"@media (max-width: 720px)": {
-			"paddingInline": "12px"
-		}
-	},
-	phonePt1: {
-		"@media (max-width: 720px)": {
-			"paddingTop": "4px"
-		}
-	},
-	phoneBlock: {
-		"@media (max-width: 720px)": {
-			"display": "block"
-		}
-	},
-	desktopHidden: {
-		"@media (min-width: 721px)": {
-			"display": "none"
-		}
-	},
-	mx4: {
-		"marginInline": "16px"
-	},
-	mb2: {
-		"marginBottom": "8px"
-	},
-	roundedMd: {
-		"borderRadius": "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgRedSoft: {
-		"backgroundColor": "var(--red-soft)"
-	},
-	px25: {
-		"paddingInline": "10px"
-	},
-	py7px: {
-		"paddingBlock": "7px"
-	},
-	textRed: {
-		"color": "var(--red)"
-	},
-	gapX2: {
-		"columnGap": "8px"
-	},
-	gapY2: {
-		"rowGap": "8px"
-	},
-	borderT: {
-		"borderTopStyle": "var(--tw-border-style)",
-		"borderTopWidth": "1px"
-	},
-	pt9px: {
-		"paddingTop": "9px"
-	},
-	pb35: {
-		"paddingBottom": "14px"
-	},
-	phoneFlexWrap: {
-		"@media (max-width: 720px)": {
-			"flexWrap": "wrap"
-		}
-	},
-	phonePbCalc075remEnvSafeAreaInsetBottom: {
-		"@media (max-width: 720px)": {
-			"paddingBottom": "calc(.75rem + env(safe-area-inset-bottom))"
-		}
-	},
-	max560pxGapX15: {
-		"@media not all and (min-width: 560px)": {
-			"columnGap": "6px"
-		}
-	},
-	max560pxGap1: {
-		"@media not all and (min-width: 560px)": {
-			"gap": "4px"
-		}
-	},
-	minH8: {
-		"minHeight": "32px"
-	},
-	phonePx35: {
-		"@media (max-width: 720px)": {
-			"paddingInline": "14px"
-		}
-	},
-	bgColorMixInSrgbVarGreen18Transparent: {
-		"backgroundColor": "var(--green)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"backgroundColor": "color-mix(in srgb,var(--green) 18%,transparent)"
-		}
-	},
-	textGreen: {
-		"color": "var(--green)"
-	},
-	hoverBgColorMixInSrgbVarGreen26Transparent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--green)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"backgroundColor": "color-mix(in srgb,var(--green) 26%,transparent)"
-				}
-			}
-		}
-	},
-	disabledOpacity50: {
-		":disabled": {
-			"opacity": ".5"
-		}
-	},
-	phoneContents: {
-		"@media (max-width: 720px)": {
-			"display": "contents"
-		}
-	},
-	itemsStretch: {
-		"alignItems": "stretch"
-	},
-	phoneOrder2: {
-		"@media (max-width: 720px)": {
-			"order": "2"
-		}
-	},
-	phoneMt05: {
-		"@media (max-width: 720px)": {
-			"marginTop": "2px"
-		}
-	},
-	phoneWFull: {
-		"@media (max-width: 720px)": {
-			"width": "100%"
-		}
-	},
-	gap7px: {
-		"gap": "7px"
-	},
-	borderNone: {
-		"--tw-border-style": "none",
-		"borderStyle": "none"
-	},
-	bgAccent: {
-		"backgroundColor": "var(--accent)"
-	},
-	px35: {
-		"paddingInline": "14px"
-	},
-	textOnAccent: {
-		"color": "var(--on-accent)"
-	},
-	transitionBackgroundColorOpacity: {
-		"transitionProperty": "background-color,opacity",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	enabledHoverBgAccentHover: {
-		"@media (hover: hover)": {
-			":enabled": {
-				":hover": {
-					"backgroundColor": "var(--accent-hover)"
-				}
-			}
-		}
-	},
-	disabledOpacity40: {
-		":disabled": {
-			"opacity": ".4"
-		}
-	},
-	max560pxPx3: {
-		"@media not all and (min-width: 560px)": {
-			"paddingInline": "12px"
-		}
-	},
-	desktopRoundedControl: {
-		"@media (min-width: 721px)": {
-			"borderRadius": "calc(12px * var(--rf))"
-		}
-	},
-	desktopRoundedLControl: {
-		"@media (min-width: 721px)": {
-			"borderTopLeftRadius": "calc(12px * var(--rf))",
-			"borderBottomLeftRadius": "calc(12px * var(--rf))"
-		}
-	},
-	phoneRoundedL999px: {
-		"@media (max-width: 720px)": {
-			"borderTopLeftRadius": "999px",
-			"borderBottomLeftRadius": "999px"
-		}
-	},
-	phoneRoundedRNone: {
-		"@media (max-width: 720px)": {
-			"borderTopRightRadius": "0",
-			"borderBottomRightRadius": "0"
-		}
-	},
-	opacity70: {
-		"opacity": ".7"
-	},
-	roundedRControl: {
-		"borderTopRightRadius": "calc(12px * var(--rf))",
-		"borderBottomRightRadius": "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	phoneMinW11: {
-		"@media (max-width: 720px)": {
-			"minWidth": "44px"
-		}
-	},
-	phoneRoundedR999px: {
-		"@media (max-width: 720px)": {
-			"borderTopRightRadius": "999px",
-			"borderBottomRightRadius": "999px"
-		}
-	},
-	p7px: {
-		"padding": "7px"
-	},
-	shadowInset1px00Rgba000014: {
-		"--tw-shadow": "inset 1px 0 0 var(--tw-shadow-color,color-mix(in srgb, var(--color-black) 14%, transparent))",
-		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
-	},
-	absolute: {
-		"position": "absolute"
-	},
-	bottomCalc1006px: {
-		"bottom": "calc(100% + 6px)"
-	},
-	right0: {
-		"right": "0"
-	},
-	z20: {
-		"zIndex": "20"
-	},
-	minW208px: {
-		"minWidth": "208px"
-	},
-	bgPopupGlass: {
-		"backgroundColor": "var(--popup-glass)"
-	},
-	BackdropFilterVarPopupBlur: {
-		"WebkitBackdropFilter": "var(--popup-blur)",
-		"backdropFilter": "var(--popup-blur)"
-	},
-	SmoothRingColorVarPopupRing: {
-		"--smooth-ring-color": "var(--popup-ring)"
-	},
-	p5px: {
-		"padding": "5px"
-	},
-	gap9px: {
-		"gap": "9px"
-	},
-	bgTransparent: {
-		"backgroundColor": "transparent"
-	},
-	px9px: {
-		"paddingInline": "9px"
-	},
-	textLeft: {
-		"textAlign": "left"
-	},
-	isolate: {
-		"isolation": "isolate"
-	},
-	beforePointerEventsNone: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"pointerEvents": "none"
-		}
-	},
-	beforeAbsolute: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"position": "absolute"
-		}
-	},
-	beforeInset0: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"inset": "0"
-		}
-	},
-	beforeZ0: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"zIndex": "0"
-		}
-	},
-	beforeRoundedInherit: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"borderRadius": "inherit"
-		}
-	},
-	beforeCornerShapeInherit: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"cornerShape": "inherit"
-		}
-	},
-	beforeBgVarPaletteAskBg: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"backgroundColor": "var(--palette-ask-bg)"
-		}
-	},
-	beforeOpacity0: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"opacity": "0"
-		}
-	},
-	beforeTransitionOpacity: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"transitionProperty": "opacity",
-			"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-			"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-		}
-	},
-	beforeDuration150: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"--tw-duration": ".15s",
-			"transitionDuration": ".15s"
-		}
-	},
-	beforeEaseCubicBezier03207201: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"--tw-ease": "cubic-bezier(.32,.72,0,1)",
-			"transitionTimingFunction": "cubic-bezier(.32,.72,0,1)"
-		}
-	},
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  Absolute: {
+    position: "absolute !important",
+  },
+  inset0: {
+    inset: "0",
+  },
+  Z6: {
+    zIndex: "6 !important",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gapX1: {
+    columnGap: "4px",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  phonePx3: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 3)",
+    },
+  },
+  phonePt1: {
+    "@media (max-width: 720px)": {
+      paddingTop: "4px",
+    },
+  },
+  mr1: {
+    marginRight: "4px",
+  },
+  selfCenter: {
+    alignSelf: "center",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  phoneBlock: {
+    "@media (max-width: 720px)": {
+      display: "block",
+    },
+  },
+  desktopHidden: {
+    "@media (min-width: 721px)": {
+      display: "none",
+    },
+  },
+  minW260px: {
+    minWidth: "260px",
+  },
+  maxWMin360pxCalc100vw1rem: {
+    maxWidth: "min(360px, calc(100vw - 1rem))",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  flexNone: {
+    flex: "none",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  maxWMin340pxCalc100vw1rem: {
+    maxWidth: "min(340px, calc(100vw - 1rem))",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  whitespaceNormal: {
+    whiteSpace: "normal",
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  maxW300px: {
+    maxWidth: "300px",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  pb1: {
+    paddingBottom: "4px",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  pt15: {
+    paddingTop: "calc(4px * 1.5)",
+  },
+  mtPx: {
+    marginTop: "1px",
+  },
+  gapPx: {
+    gap: "1px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
 });
 
 interface Props {
@@ -856,7 +302,7 @@ interface Props {
   /** Inline only: bumping this puts the caret back in the prompt. The sidebar's
       draft row points at this field. */
   focusSeq?: number;
-  send: (msg: any) => void;
+  send: (msg: WSClientMessage) => void;
   addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
   connected: boolean;
   /** Prefill the prompt (e.g. from the Home "New session" box). */
@@ -872,6 +318,10 @@ interface Props {
   /** …and defaults to the workspace's shared repo + worktree (a sibling's branch). */
   forceRepo?: string;
   forceBranch?: string;
+  /** Known workspaces and sessions let a PR create adopt the PR's existing
+      workspace instead of opening a duplicate lane for the same branch. */
+  workspaces: Workspace[];
+  sessions: UnifiedSession[];
   /** Lets App render the pending session shell before the created session appears
       in the polled session list. */
   onCreateStarted?: (draft: NewSessionCreateDraft) => void;
@@ -898,6 +348,11 @@ interface Worktree {
   branch: string;
   path: string;
 }
+
+type SessionStartPoint =
+  | { kind: "new" }
+  | { kind: "worktree"; branch: string }
+  | { kind: "pull-request"; pullRequest: OpenPr };
 
 interface RepoOption {
   id: string;
@@ -935,10 +390,11 @@ const LAST_REPO_KEY = "opensession-new-session-repo";
  *  second row under that bar, and the two rows together pushed the sheet taller
  *  than the strip a keyboard leaves visible, which cut the bar off the top of
  *  the screen as soon as an attachment took its own space. */
-const HEADER =
-	mergeStylexClassName("", sx.flex, sx.itemsCenter, sx.gap2, sx.borderB, sx.borderTransparent, sx.px4, sx.pt4, sx.pb11px, sx.phoneHAuto, sx.phonePx18px, sx.phonePb3, sx.phonePt18px);
+const HEADER = utilityClassName(
+  "flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:h-auto phone:px-[18px] phone:pb-3 phone:pt-[18px]",
+);
 /** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
-const EDGE_DIVIDER = mergeStylexClassName("", sx.borderLine);
+const EDGE_DIVIDER = utilityClassName("border-line");
 /** The header's picker, which doubles as the palette's title: bigger, solid,
  *  heavier than a footer control.
  *
@@ -947,15 +403,17 @@ const EDGE_DIVIDER = mergeStylexClassName("", sx.borderLine);
  *  already truncates, but a flex item whose own overflow is visible cannot be
  *  sized below its content, so a long repo name would push the row wider than
  *  the card instead of ellipsizing. */
-const TRIGGER_STRONG =
-	mergeStylexClassName("", sx.relative, sx.inlineFlex, sx.minW0, sx.maxWFull, sx.cursorPointer, sx.itemsCenter, sx.gap15, sx.roundedControl, sx.px2, sx.py5px, typography.itemTitle, sx.fontSemibold, sx.textFg, sx.transitionColors, sx.hoverBgHover, sx.disabledCursorDefault, sx.disabledOpacity55);
-const CHEVRON = mergeStylexClassName("", sx.Ml05, sx.shrink0, sx.textFaint, sx.phoneSize4);
+const TRIGGER_STRONG = utilityClassName(
+  "relative inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55",
+);
+const CHEVRON = utilityClassName("-ml-0.5 shrink-0 text-faint phone:size-4");
 /** A pass-through on a desktop, where the picker is the header's one control.
  *  On a phone it is the middle slot of the title bar: it takes the space the
  *  two discs leave and centres the title inside it, so the row reads as one
  *  balanced bar rather than a label pushed against the close button. */
-const MOBILE_PICKER =
-	mergeStylexClassName("", sx.desktopContents, sx.phoneFlex, sx.phoneMinW0, sx.phoneFlex1, sx.phoneJustifyCenter);
+const MOBILE_PICKER = utilityClassName(
+  "desktop:contents phone:flex phone:min-w-0 phone:flex-1 phone:justify-center",
+);
 /** On a phone the trigger is the sheet's title: the row's name, centred
  *  between the two discs that dismiss and commit. It carries no fill and no
  *  edge of its own. Those discs are the bar's only surfaces, and a third one
@@ -968,16 +426,23 @@ const MOBILE_PICKER =
  *  rest of the chrome's chips wear. It keeps the full 44px height as a touch
  *  target, and it has to fit the row it shares, which is what `max-w-full`
  *  plus the label's own truncation buy. */
-const MOBILE_TRIGGER =
-	mergeStylexClassName("phone:[&_svg:first-child]:size-4", sx.phoneMinH11, sx.phoneGap1, sx.phoneRounded999px, sx.phonePx25, sx.phonePy15, sx.phoneTextLabel, sx.phoneFontMedium);
+const MOBILE_TRIGGER = utilityClassName(
+  "phone:min-h-11 phone:gap-1 phone:rounded-[999px] phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4",
+);
 /** The composer's own send disc, so the gesture that commits a prompt looks the
  *  same in the palette as it does in a session. Sized up to the 44px target the
  *  rest of this bar keeps. */
-const PHONE_SEND = cn(composerSend, composerSendDefault, mergeStylexClassName("", sx.phoneSize11));
+const PHONE_SEND = cn(
+  composerSend,
+  composerSendDefault,
+  utilityClassName("phone:size-11"),
+);
 
 /* (The prompt's own surface — the scroller and the field — moved to
    NewSessionPrompt, with the draft state it belongs to.) */
-const ERROR = mergeStylexClassName("", sx.mx4, sx.mb2, sx.roundedMd, sx.bgRedSoft, sx.px25, sx.py7px, typography.supporting, sx.textRed);
+const ERROR = utilityClassName(
+  "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting text-red",
+);
 
 /* Single-line footer: the model pill is the only flexible item — it gives way
    (its label ellipsizes) while the icon buttons and Create keep their size.
@@ -989,16 +454,23 @@ const ERROR = mergeStylexClassName("", sx.mx4, sx.mb2, sx.roundedMd, sx.bgRedSof
    leaves it the same 16px clearance the side padding gives it. The safe-area
    inset clears the home indicator at rest, but the keyboard covers that edge
    while a field is focused, so the ordinary 12px pad takes over then. */
-const FOOTER =
-	mergeStylexClassName("phone:[body.kb-open_&]:pb-3", sx.flex, sx.itemsCenter, sx.justifyBetween, sx.gapX2, sx.gapY2, sx.borderT, sx.borderTransparent, sx.px4, sx.pt9px, sx.pb35, sx.phoneFlexWrap, sx.phonePx3, sx.phonePbCalc075remEnvSafeAreaInsetBottom, sx.max560pxGapX15);
-const FOOTER_LEFT = mergeStylexClassName("", sx.flex, sx.minW0, sx.itemsCenter, sx.gap15, sx.phoneFlex1, sx.max560pxGap1);
-const FOOTER_RIGHT = mergeStylexClassName("", sx.flex, sx.minW0, sx.itemsCenter, sx.gap15, sx.phoneContents, sx.max560pxGap1);
+const FOOTER = utilityClassName(
+  "flex items-center justify-between gap-x-2 gap-y-2 border-t border-transparent px-4 pt-[9px] pb-3.5 phone:flex-wrap phone:px-3 phone:pb-[calc(0.75rem+env(safe-area-inset-bottom))] phone:[body.kb-open_&]:pb-3 max-[560px]:gap-x-1.5",
+);
+const FOOTER_LEFT = utilityClassName(
+  "flex min-w-0 items-center gap-1.5 phone:flex-1 max-[560px]:gap-1",
+);
+const FOOTER_RIGHT = utilityClassName(
+  "flex min-w-0 items-center gap-1.5 phone:contents max-[560px]:gap-1",
+);
 /** Round on a phone, where the bar's two controls are discs and the repo is a
  *  pill: a 12px corner among them is the one square thing on the card. The
  *  hover wash rides a pseudo-element, so it has to be rounded with them. */
 const FOOTER_ICON_BTN = cn(
-	paletteIconBtn,
-	mergeStylexClassName("", sx.shrink0, sx.phoneSize11, sx.phoneRounded999px, sx.phoneBeforeRounded999px),
+  paletteIconBtn,
+  utilityClassName(
+    "shrink-0 phone:size-11 phone:rounded-[999px] phone:before:rounded-[999px]",
+  ),
 );
 /** Ask mode's toggle. Off, it is one of the footer's quiet icon tools. On, it
  *  wears the same green marker the session composer's toolbar shows for the
@@ -1011,8 +483,9 @@ const FOOTER_ICON_BTN = cn(
  *  `size-11` would crush the labelled chip on phones. 32px tall on a desktop,
  *  the size the icon buttons' hover wash paints, so the row keeps one rhythm;
  *  44px on a phone, where the whole row is thumb-sized. */
-const ASK_BTN_ON =
-	mergeStylexClassName("", sx.inlineFlex, sx.minH8, sx.shrink0, sx.itemsCenter, sx.gap15, sx.roundedControl, sx.px25, typography.label, sx.fontMedium, sx.transitionColors, sx.phoneMinH11, sx.phoneRounded999px, sx.phonePx35, sx.bgColorMixInSrgbVarGreen18Transparent, sx.textGreen, sx.hoverBgColorMixInSrgbVarGreen26Transparent, sx.disabledCursorDefault, sx.disabledOpacity50);
+const ASK_BTN_ON = utilityClassName(
+  "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:rounded-[999px] phone:px-3.5 bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50",
+);
 /** Ask mode paints the whole card, not just its toggle — the same thing the
  *  session composer does for ask and for note mode, because the mode governs
  *  everything you are about to type rather than one control in the corner.
@@ -1022,15 +495,19 @@ const ASK_BTN_ON =
  *  out with it intact. Children are lifted above it, and the shell's own
  *  `overflow-hidden` clips it to the rounded corner. */
 const ASK_SURFACE =
-	mergeStylexClassName("", sx.isolate) +
-	" " + mergeStylexClassName("", sx.beforePointerEventsNone, sx.beforeAbsolute, sx.beforeInset0, sx.beforeZ0, sx.beforeRoundedInherit, sx.beforeCornerShapeInherit, sx.beforeBgVarPaletteAskBg, sx.beforeOpacity0, sx.beforeTransitionOpacity, sx.beforeDuration150, sx.beforeEaseCubicBezier03207201) +
-	" " + "[&>*]:relative [&>*]:z-[1]";
+  utilityClassName("isolate ") +
+  utilityClassName(
+    "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] ",
+  ) +
+  "[&>*]:relative [&>*]:z-[1]";
 /** The one flexible footer item. The palette has room for the model's full
  *  name, so it opts out of palettePill's generic 180px cap. On phones the
  *  effort suffix steps aside first and leaves that room to the model. */
 const MODEL_PILL = cn(
-	palettePill,
-	mergeStylexClassName("phone:[&_[data-effort]]:hidden", sx.shrink, sx.minW0, sx.maxWNone, sx.phoneMlAuto, sx.phoneMinH11, sx.max560pxPx9px),
+  palettePill,
+  utilityClassName(
+    "shrink min-w-0 max-w-none phone:ml-auto phone:min-h-11 phone:[&_[data-effort]]:hidden max-[560px]:px-[9px]",
+  ),
 );
 
 /* What a create does with the view behind the palette: "open" follows the new
@@ -1054,9 +531,9 @@ const CYCLE_SHORTCUT = isApple ? ["⌘", "⌥", "↓"] : ["Ctrl", "Alt", "↓"];
 const MULTI_MODIFIER = isApple ? "⌘" : "Ctrl";
 
 const CREATE_LABELS: Record<CreateAction, string> = {
-	open: "Create",
-	background: "Create in background",
-	more: "Create more",
+  open: "Create",
+  background: "Create in background",
+  more: "Create more",
 };
 
 /* Split button: primary Create action + a caret that opens a mode dropdown.
@@ -1068,10 +545,12 @@ const CREATE_LABELS: Record<CreateAction, string> = {
    chrome shares (the Button primitive, the header CTAs). It used to be
    `rounded-md` — one step down, 9.45px against 13.5px — which on a 36px-tall
    plate read visibly square next to its neighbours. */
-const CREATE_SPLIT =
-	mergeStylexClassName("", sx.relative, sx.inlineFlex, sx.shrink0, sx.itemsStretch, sx.phoneOrder2, sx.phoneMt05, sx.phoneWFull);
-const CREATE_MAIN =
-	mergeStylexClassName("", sx.inlineFlex, sx.cursorPointer, sx.itemsCenter, sx.gap7px, sx.borderNone, sx.bgAccent, sx.px35, sx.py7px, typography.label, sx.fontSemibold, sx.textOnAccent, sx.transitionBackgroundColorOpacity, sx.enabledHoverBgAccentHover, sx.disabledCursorDefault, sx.disabledOpacity40, sx.phoneMinH11, sx.phoneFlex1, sx.phoneJustifyCenter, sx.max560pxPx3);
+const CREATE_SPLIT = utilityClassName(
+  "relative inline-flex shrink-0 items-stretch phone:order-2 phone:mt-0.5 phone:w-full",
+);
+const CREATE_MAIN = utilityClassName(
+  "inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 phone:min-h-11 phone:flex-1 phone:justify-center max-[560px]:px-3",
+);
 /** The desktop corner, split between the two shapes the button takes: half of
  *  a split button beside its caret, or the whole button when there is no caret
  *  (inline). Written as two whole classes rather than one plus an override,
@@ -1081,15 +560,22 @@ const CREATE_MAIN =
  *  The phone overlay moves Create into its title bar and does not render this
  *  pair. Only the inline card reaches these phone classes, where it has no
  *  caret and rounds the whole button. */
-const CREATE_MAIN_SPLIT = mergeStylexClassName("", sx.desktopRoundedLControl, sx.phoneRoundedL999px, sx.phoneRoundedRNone);
-const CREATE_MAIN_WHOLE = mergeStylexClassName("", sx.desktopRoundedControl, sx.phoneRounded999px);
-const CREATE_CARET =
-	mergeStylexClassName("", sx.inlineFlex, sx.cursorPointer, sx.itemsCenter, sx.gap7px, sx.roundedRControl, sx.phoneMinW11, sx.phoneJustifyCenter, sx.phoneRoundedR999px, sx.borderNone, sx.bgAccent, sx.p7px, typography.label, sx.fontSemibold, sx.textOnAccent, sx.shadowInset1px00Rgba000014, sx.transitionBackgroundColorOpacity, sx.enabledHoverBgAccentHover, sx.disabledCursorDefault, sx.disabledOpacity40);
-const CREATE_KBD = mergeStylexClassName("", sx.opacity70);
-const CREATE_MENU =
-	mergeStylexClassName("smooth-shadow-ring-md", sx.absolute, sx.bottomCalc1006px, sx.right0, sx.z20, sx.minW208px, sx.roundedControl, sx.bgPopupGlass, sx.BackdropFilterVarPopupBlur, sx.SmoothRingColorVarPopupRing, sx.p5px);
-const CREATE_MENU_ITEM =
-	mergeStylexClassName("", sx.flex, sx.wFull, sx.cursorPointer, sx.itemsStart, sx.gap9px, sx.roundedMd, sx.borderNone, sx.bgTransparent, sx.px9px, sx.py7px, sx.textLeft, sx.textFg, sx.transitionColors, sx.hoverBgHover);
+const CREATE_MAIN_SPLIT = utilityClassName(
+  "desktop:rounded-l-control phone:rounded-l-[999px] phone:rounded-r-none",
+);
+const CREATE_MAIN_WHOLE = utilityClassName(
+  "desktop:rounded-control phone:rounded-[999px]",
+);
+const CREATE_CARET = utilityClassName(
+  "inline-flex cursor-pointer items-center gap-[7px] rounded-r-control phone:min-w-11 phone:justify-center phone:rounded-r-[999px] border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40",
+);
+const CREATE_KBD = "opacity-70";
+const CREATE_MENU = utilityClassName(
+  "absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md",
+);
+const CREATE_MENU_ITEM = utilityClassName(
+  "flex w-full cursor-pointer items-start gap-[9px] rounded-md border-none bg-transparent px-[9px] py-[7px] text-left text-fg transition-colors hover:bg-hover",
+);
 
 /**
  * The same card rendered on the page rather than over a dimmed one: what the
@@ -1108,9 +594,9 @@ const CREATE_MENU_ITEM =
  * HUD; `overflow-hidden` keeps the rows' dividers inside the rounded shell.
  */
 const INLINE_CARD = cn(
-	mergeStylexClassName("", sx.relative, sx.flex, sx.wFull, sx.flexCol, sx.overflowHidden, sx.rounded2xl),
-	mergeStylexClassName("", sx.maxHMin560px68dvh),
-	composerBox,
+  utilityClassName("relative flex w-full flex-col overflow-hidden rounded-2xl"),
+  utilityClassName("max-h-[min(560px,68dvh)]"),
+  composerBox,
 );
 
 /**
@@ -1140,7 +626,9 @@ function migratedRepoPref(): string {
 // creating from a repo-filtered view lands on that repo.
 function filteredRepo(): string | null {
   try {
-    const v = JSON.parse(localStorage.getItem("opensession-sidebar-filter") || "{}");
+    const v = JSON.parse(
+      localStorage.getItem("opensession-sidebar-filter") || "{}",
+    );
     return typeof v.repo === "string" ? v.repo : null;
   } catch {
     return null;
@@ -1156,7 +644,8 @@ function readPrefill() {
   const rawRepoParam = params.get("repo") ?? params.get("project");
   // "auto" was a short-lived picker sentinel, never a repository id.
   const repoParam = rawRepoParam === "auto" ? "" : rawRepoParam;
-  const mode = params.get("mode") === "ask" ? ("ask" as const) : ("code" as const);
+  const mode =
+    params.get("mode") === "ask" ? ("ask" as const) : ("code" as const);
   // `?repo=none` is honored in either mode: Ask with no repo reads nothing,
   // Code with no repo is a scratch session. Ask defaults to no repo, matching
   // the toggle — otherwise an Ask deep link would silently inherit whichever
@@ -1176,7 +665,12 @@ function readPrefill() {
  *  line, trimmed and capped. Mirrors the server's own follow in
  *  updateWorkspace (workspaces.ts). */
 function firstNonEmptyLine(text: string): string {
-  return text.split("\n").find((l) => l.trim())?.trim() ?? "";
+  return (
+    text
+      .split("\n")
+      .find((l) => l.trim())
+      ?.trim() ?? ""
+  );
 }
 
 type PendingDraftPark = {
@@ -1215,7 +709,24 @@ function draftParkInFlight(text: string, workspaceId?: string): boolean {
   );
 }
 
-export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, initialMcpServers, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, onCreateStarted }: Props) {
+export function NewSession({
+  onBack,
+  inline,
+  focusSeq,
+  send,
+  addHandler,
+  connected,
+  prefillPrompt,
+  initialMcpServers,
+  forceMode,
+  workspaceId,
+  modelWorkspaceId,
+  forceRepo,
+  forceBranch,
+  workspaces,
+  sessions,
+  onCreateStarted,
+}: Props) {
   const [prefill] = useState(readPrefill);
   // What the session may do, and nothing else — the footer's Ask toggle. The
   // repo is a separate axis, so Scratch is not a third value here: it is what
@@ -1231,6 +742,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [repo, setRepo] = useState(
     forceMode === "scratch" ? NO_REPO : forceRepo || prefill.repo,
   );
+  // Exactly one start point owns the branch semantics. A PR is not merely an
+  // existing worktree: it must send `fromPr` so the server checks out the
+  // existing head branch rather than trying to create it again.
+  const defaultStartPoint = (): SessionStartPoint =>
+    forceBranch ? { kind: "worktree", branch: forceBranch } : { kind: "new" };
+  const [startPoint, setStartPoint] =
+    useState<SessionStartPoint>(defaultStartPoint);
+  const selectedPullRequest =
+    startPoint.kind === "pull-request" ? startPoint.pullRequest : null;
   /**
    * Repos the session works in BESIDES `repo`, in the order they were added
    * (the picker's ⌘-click). Each becomes an attached worktree on the session's
@@ -1254,7 +774,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     // nowhere to put a second repo. Drop them on the way in rather than
     // carrying a selection the create would have to refuse.
     if (next === "ask") setExtraRepos([]);
-    if (forceRepo) return;
+    if (forceRepo || startPoint.kind === "pull-request") return;
     if (next === "ask") setRepo(NO_REPO);
     else if (repo === NO_REPO)
       setRepo(migratedRepoPref() || configuredDefaultRepo || NO_REPO);
@@ -1265,10 +785,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // plain scratch dir when it doesn't.
   const mode: "ask" | "code" | "scratch" =
     permission === "ask" ? "ask" : repo === NO_REPO ? "scratch" : "code";
-  // A second repo is an isolated worktree on this session's branch, which only
-  // a Code session with a repo has. Ask reads one pinned checkout and Scratch
-  // has no checkout at all, so neither can carry one.
-  const canAddRepos = mode === "code";
+  const [checkoutPrefs, setCheckoutPrefs] = useState(getSessionCheckoutPrefs);
+  useEffect(
+    () =>
+      onSessionCheckoutPrefChanged(() =>
+        setCheckoutPrefs(getSessionCheckoutPrefs()),
+      ),
+    [],
+  );
+  const checkoutPref = checkoutPrefs[repo] ?? "default";
   const repoOptions = (items: RepoInfo[]): RepoOption[] =>
     items.map((item) => ({
       id: item.id,
@@ -1291,29 +816,44 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     const seeded = repoOptions(cachedRepos());
     return seeded.length ? resolveDefaultRepo(seeded) : "";
   });
+  const startsInLocalCheckout =
+    mode === "code" &&
+    startPoint.kind === "new" &&
+    (checkoutPref === "checkout" ||
+      (checkoutPref === "default" &&
+        !!repos.find((option) => option.id === repo)?.sharedCheckout));
+  // A second repo is an isolated worktree on this session's branch. Ask,
+  // Scratch, pull-request starts, and local-checkout sessions cannot carry one.
+  const canAddRepos =
+    mode === "code" &&
+    startPoint.kind !== "pull-request" &&
+    !startsInLocalCheckout;
   useEffect(() => {
     let live = true;
-    fetchRepos().then((items) => {
-      if (!live) return;
-      const options = repoOptions(items);
-      setRepos(options);
-      setConfiguredDefaultRepo(resolveDefaultRepo(options));
-    }).catch(() => {
-      // A failed refresh keeps the cached rows rather than emptying the picker.
-      if (!live) return;
-      setRepos((current) => current);
-    });
+    fetchRepos()
+      .then((items) => {
+        if (!live) return;
+        const options = repoOptions(items);
+        setRepos(options);
+        setConfiguredDefaultRepo(resolveDefaultRepo(options));
+      })
+      .catch(() => {
+        // A failed refresh keeps the cached rows rather than emptying the picker.
+        if (!live) return;
+        setRepos((current) => current);
+      });
     return () => {
       live = false;
     };
   }, []);
   useEffect(() => {
-	setRepo((current) => {
+    setRepo((current) => {
       // "No repo" is a real choice, not an unresolved id — without this it
       // fails the `repos.some(...)` membership test below and gets replaced by
       // the configured default the moment /repos lands.
       if (forceRepo === NO_REPO || current === NO_REPO) return current;
-      if (forceRepo && repos.some((item) => item.id === forceRepo)) return forceRepo;
+      if (forceRepo && repos.some((item) => item.id === forceRepo))
+        return forceRepo;
       if (repos.some((item) => item.id === current)) return current;
       return configuredDefaultRepo;
     });
@@ -1323,9 +863,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const repoOptionLabel = (id: string) =>
     repos.find((item) => item.id === id)?.label || id;
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
-  // In a workspace, default to a sibling's branch so the new session reuses its
-  // worktree; the user can still switch to "New branch" to fork a fresh one.
-  const [selectedWorktree, setSelectedWorktree] = useState(forceBranch || "__new__");
   const [newBranch, setNewBranch] = useState(prefill.branch);
   // An explicit prefill (Home hand-off, deep link) wins; otherwise restore the
   // stored draft so closing the palette / navigating away doesn't lose a
@@ -1357,22 +894,33 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // upload writes to and what a reopened palette reads back; keeping a second
   // copy authoritative here is what used to lose a screenshot pasted just
   // before the card closed.
-  const [images, setImages] = useState<string[]>(() => loadDraft(DRAFT_KEY).images);
-  const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(DRAFT_KEY).files);
+  const [images, setImages] = useState<string[]>(
+    () => loadDraft(DRAFT_KEY).images,
+  );
+  const [files, setFiles] = useState<FileAttachment[]>(
+    () => loadDraft(DRAFT_KEY).files,
+  );
   const uploads = useAttachmentUploads();
   const staging = uploads.staging;
   const [fileDragActive, setFileDragActive] = useState(false);
-  const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   // Stable identity: module loader + setters only.
   const adoptDraftAttachments = useCallback(() => {
     const stored = loadDraft(DRAFT_KEY);
-    setImages((prev) => (sameImages(prev, stored.images) ? prev : stored.images));
+    setImages((prev) =>
+      sameImages(prev, stored.images) ? prev : stored.images,
+    );
     setFiles((prev) => (sameFiles(prev, stored.files) ? prev : stored.files));
   }, []);
   // An upload that lands while this palette is open belongs on screen even
   // though it was staged by the instance that closed: the store fires on an
   // attachment change for exactly this.
-  useEffect(() => onDraftsChanged(adoptDraftAttachments), [adoptDraftAttachments]);
+  useEffect(
+    () => onDraftsChanged(adoptDraftAttachments),
+    [adoptDraftAttachments],
+  );
   const [status, setStatus] = useState<CreateStatus>({ kind: "idle" });
   const busy = status.kind === "creating" || status.kind === "reconnecting";
   // Which edges of the prompt have content beyond them, and so earn a hairline.
@@ -1391,7 +939,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [accountId, setAccountId] = useState("");
   const [accounts, setAccounts] = useState<ProviderAccountOption[]>([]);
   useEffect(() => {
-    fetchProviderAccounts().then(setAccounts).catch(() => {});
+    fetchProviderAccounts()
+      .then(setAccounts)
+      .catch(() => {});
   }, []);
   const effectiveNewModel = model || defaultModel;
   const accountProvider = models.find(
@@ -1437,56 +987,78 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // configured providers are offered, and the whole control hides when the
   // server has no sandbox config or the kill switch is on.
   const [sandboxProvider, setSandboxProvider] = useState("");
-  const [sandboxStatus, setSandboxStatus] = useState<SandboxStatusInfo | null>(null);
+  const [sandboxStatus, setSandboxStatus] = useState<SandboxStatusInfo | null>(
+    null,
+  );
   const sandboxSelectionTouched = useRef(false);
   useEffect(() => {
     fetchSandboxStatus(getCurrentUser())
       .then((status) => {
         setSandboxStatus(status);
-		// This machine remains the clear default. Sandbox configuration belongs
-		// behind the explicit Sandbox choice, never in an invisible default.
-		if (!sandboxSelectionTouched.current) setSandboxProvider("");
+        // This machine remains the clear default. Sandbox configuration belongs
+        // behind the explicit Sandbox choice, never in an invisible default.
+        if (!sandboxSelectionTouched.current) setSandboxProvider("");
       })
       .catch(() => {});
   }, []);
   const sandboxChoices = sandboxStatus?.connections?.length
     ? sandboxStatus.connections
         .filter((connection) => connection.state === "ready")
-        .map((connection) => ({ id: connection.provider, note: undefined as string | undefined }))
-    : (sandboxStatus?.providers || []).filter((p) => p.configured && p.certified);
+        .map((connection) => ({
+          id: connection.provider,
+          note: undefined as string | undefined,
+        }))
+    : (sandboxStatus?.providers || []).filter(
+        (p) => p.configured && p.certified,
+      );
   const selectedSandboxAvailable =
-    !sandboxProvider || sandboxChoices.some((choice) => choice.id === sandboxProvider);
+    !sandboxProvider ||
+    sandboxChoices.some((choice) => choice.id === sandboxProvider);
   const visibleSandboxChoices =
     sandboxProvider && !selectedSandboxAvailable
       ? [
           {
             id: sandboxProvider,
-					note: "Unavailable. Choose This machine or a ready Sandbox before creating.",
+            note: "Unavailable. Choose This machine or a ready Sandbox before creating.",
           },
           ...sandboxChoices,
         ]
       : sandboxChoices;
   const showSandboxPicker = !!sandboxStatus;
   const sandboxLabel = (id: string) =>
-		id === "" ? "This machine" : id === "docker" ? "Docker" : id === "daytona" ? "Daytona" : id === "e2b" ? "E2B" : id === "box" ? "Box" : id === "modal" ? "Modal" : id === "microvm" ? "Local MicroVM" : id === "lambda-microvm" ? "AWS Lambda MicroVM" : id;
+    id === ""
+      ? "This machine"
+      : id === "docker"
+        ? "Docker"
+        : id === "daytona"
+          ? "Daytona"
+          : id === "e2b"
+            ? "E2B"
+            : id === "box"
+              ? "Box"
+              : id === "modal"
+                ? "Modal"
+                : id === "lambda-microvm"
+                  ? "AWS Lambda MicroVM"
+                  : id;
 
   // Provider-independent family check, driven by the same server list the
   // create path enforces.
   const effectiveModelId = model || defaultModel;
   const effectiveModelProvider = effectiveModelId.startsWith("pi/")
     ? "pi"
-    : models.find((m) => m.id === effectiveModelId)?.provider ?? "claude";
+    : (models.find((m) => m.id === effectiveModelId)?.provider ?? "claude");
   const modelFamily = (sandboxStatus?.modelFamilies || []).find(
     (f) => f.match.provider === effectiveModelProvider,
   );
   const sandboxModelWarning = (() => {
     if (sandboxProvider && !selectedSandboxAvailable) {
-		return `${sandboxLabel(sandboxProvider)} is unavailable. Choose This machine or a ready Sandbox.`;
+      return `${sandboxLabel(sandboxProvider)} is unavailable. Choose This machine or a ready Sandbox.`;
     }
-	    if (!sandboxProvider || !modelFamily) return null;
+    if (!sandboxProvider || !modelFamily) return null;
     if (modelFamily.sandboxable) return null;
     return (
-		`${modelFamily.label} models can't run in a Sandbox` +
+      `${modelFamily.label} models can't run in a Sandbox` +
       (modelFamily.hint ? ` · ${modelFamily.hint}` : "") +
       "."
     );
@@ -1494,8 +1066,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 
   // Brain-inside remote/MicroVM sessions all adopt a full-runner prewarm.
   // Strictly fire-and-forget: failure must never surface or block typing.
-  const isRemoteSandbox = sandboxProvider === "daytona" || sandboxProvider === "e2b" || sandboxProvider === "box" || sandboxProvider === "modal" || sandboxProvider === "lambda-microvm";
-  const shouldPrewarm = isRemoteSandbox || sandboxProvider === "microvm";
+  const isRemoteSandbox =
+    sandboxProvider === "daytona" ||
+    sandboxProvider === "e2b" ||
+    sandboxProvider === "box" ||
+    sandboxProvider === "modal" ||
+    sandboxProvider === "lambda-microvm";
+  const shouldPrewarm = isRemoteSandbox;
   const [sandboxWarmed, setSandboxWarmed] = useState(false);
   const lastPrewarmAtRef = useRef(0);
   useEffect(() => {
@@ -1573,7 +1150,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   useEffect(() => {
     if (!createMenuOpen) return;
     function onDown(e: MouseEvent) {
-      if (createSplitRef.current && !createSplitRef.current.contains(e.target as Node)) {
+      if (
+        createSplitRef.current &&
+        !createSplitRef.current.contains(e.target as Node)
+      ) {
         setCreateMenuOpen(false);
       }
     }
@@ -1594,7 +1174,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     e.preventDefault();
     const at = CREATE_ACTIONS.indexOf(createAction);
     setCreateAction(
-      CREATE_ACTIONS[(at + step + CREATE_ACTIONS.length) % CREATE_ACTIONS.length],
+      CREATE_ACTIONS[
+        (at + step + CREATE_ACTIONS.length) % CREATE_ACTIONS.length
+      ],
     );
   }
 
@@ -1608,7 +1190,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   }
 
   useEffect(() => {
-		fetchModels(modelWorkspaceId || workspaceId)
+    fetchModels(modelWorkspaceId || workspaceId)
       .then(async (m) => {
         setModels(m.models);
         setDefaultModel(m.default);
@@ -1628,7 +1210,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         });
       })
       .catch(() => {});
-	}, [modelWorkspaceId, workspaceId]);
+  }, [modelWorkspaceId, workspaceId]);
 
   // Worktrees are per-repo; refetch and reset the selection when it changes.
   // Inside a workspace, snap back to the shared sibling branch, not "New branch".
@@ -1640,7 +1222,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // repo the session was no longer pointed at.
   useEffect(() => {
     let live = true;
-    setSelectedWorktree(forceBranch || "__new__");
+    setStartPoint((current) =>
+      current.kind === "pull-request" && current.pullRequest.repo === repo
+        ? current
+        : forceBranch
+          ? { kind: "worktree", branch: forceBranch }
+          : { kind: "new" },
+    );
     if (!repo || repo === NO_REPO) {
       setWorktrees([]);
       return;
@@ -1671,7 +1259,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   }, [branchEdited]);
   const suggestSeqRef = useRef(0);
   useEffect(() => {
-    if (mode !== "code" || selectedWorktree !== "__new__" || branchEdited) return;
+    if (mode !== "code" || startPoint.kind !== "new" || branchEdited) return;
     if (settledPrompt.trim().length < 10) return;
     suggestSeqRef.current += 1;
     const seq = suggestSeqRef.current;
@@ -1681,7 +1269,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       if (seq !== suggestSeqRef.current || branchEditedRef.current) return;
       if (branch) setNewBranch(branch);
     })();
-  }, [settledPrompt, mode, selectedWorktree, branchEdited]);
+  }, [settledPrompt, mode, startPoint.kind, branchEdited]);
 
   // Registered from mount and gated on a ref set synchronously in handleCreate:
   // session_created is announced before the worktree even boots, so it can
@@ -1795,13 +1383,18 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       busy ||
       parkingDraftRef.current ||
       draftParkInFlight(text, workspaceId)
-    ) return;
+    )
+      return;
     parkingDraftRef.current = true;
     const operation: PendingDraftPark = { text, workspaceId, consumed: false };
     pendingDraftParks.add(operation);
-    const draft = { text, updatedAt: new Date().toISOString(), by: getCurrentUser() };
+    const draft = {
+      text,
+      updatedAt: new Date().toISOString(),
+      by: getCurrentUser(),
+    };
     await (async () => {
-const createWorkspace = () =>
+      const createWorkspace = () =>
         createWorkspaceApi({
           name: firstNonEmptyLine(text).slice(0, 80) || "Draft",
           ...(repo && repo !== NO_REPO ? { repo } : {}),
@@ -1848,18 +1441,20 @@ const createWorkspace = () =>
         });
       }
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
-})().catch(async (e) => {
-if (!operation.consumed) {
-        toast(
-          e instanceof ApiError
-            ? `Couldn't save the draft: ${e.message}`
-            : "Couldn't save the draft. It is still in the composer.",
-        );
-      }
-}).finally(async () => {
-pendingDraftParks.delete(operation);
-      parkingDraftRef.current = false;
-});
+    })()
+      .catch(async (e) => {
+        if (!operation.consumed) {
+          toast(
+            e instanceof ApiError
+              ? `Couldn't save the draft: ${e.message}`
+              : "Couldn't save the draft. It is still in the composer.",
+          );
+        }
+      })
+      .finally(async () => {
+        pendingDraftParks.delete(operation);
+        parkingDraftRef.current = false;
+      });
   }
 
   function handleCreate() {
@@ -1867,9 +1462,11 @@ pendingDraftParks.delete(operation);
     const prompt = promptText.current.trim();
     const createRepo = repo;
     const branch =
-      selectedWorktree === "__new__"
-        ? newBranch.trim() || fallbackBranchName(prompt)
-        : selectedWorktree;
+      startPoint.kind === "pull-request"
+        ? startPoint.pullRequest.branch
+        : startPoint.kind === "new"
+          ? newBranch.trim() || fallbackBranchName(prompt)
+          : startPoint.branch;
     const attachRepos = extraRepos.filter((id) => id !== createRepo);
     const createMode = mode;
 
@@ -1881,12 +1478,25 @@ pendingDraftParks.delete(operation);
     // the session joins it. An unscoped composer that was closed already made
     // a draft workspace, so reopening and creating adopts that same workspace
     // instead of leaving the draft beside a second, live workspace.
+    const prWorkspaceId = selectedPullRequest
+      ? findPrWorkspaceId(workspaces, sessions, {
+          repo: selectedPullRequest.repo,
+          branch: selectedPullRequest.branch,
+          number: selectedPullRequest.number,
+        }) || undefined
+      : undefined;
+    // A PR source owns its workspace identity too. Prefer its known lane over a
+    // parked generic draft; without one, ask the server to mint a PR-named lane.
     const createWorkspaceId =
-      workspaceId || getParkedNewSessionWorkspaceId() || undefined;
+      workspaceId ||
+      prWorkspaceId ||
+      (!selectedPullRequest
+        ? getParkedNewSessionWorkspaceId() || undefined
+        : undefined);
     const worktreeMode =
       createMode === "ask"
         ? "ask"
-        : createMode === "code" && selectedWorktree === "__new__"
+        : startPoint.kind === "new"
           ? "stack"
           : "share";
     const clientSessionId = newClientSessionId();
@@ -1900,7 +1510,7 @@ pendingDraftParks.delete(operation);
       mode: createMode,
       // The optimistic shell is replaced once the persisted record lands.
       repo: createRepo,
-      branch: createMode === "code" ? branch : null,
+      branch: createMode === "code" || selectedPullRequest ? branch : null,
       ...(createWorkspaceId ? { workspaceId: createWorkspaceId } : {}),
       ...(optimisticModel ? { model: optimisticModel } : {}),
       ...(images.length ? { images } : {}),
@@ -1915,15 +1525,27 @@ pendingDraftParks.delete(operation);
       clientSessionId,
       mode: createMode,
       repo: createRepo,
+      // A branch or PR picked in this palette is more specific than the standing
+      // preference, so it keeps its isolated worktree.
+      checkoutMode: startPoint.kind === "new" ? checkoutPref : "worktree",
       // Repos to work in beside `repo`. The server cuts each an isolated
       // worktree on this session's branch before the first turn runs, so the
       // agent is told about them in the same breath as its own checkout.
       ...(attachRepos.length && canAddRepos ? { attachRepos } : {}),
       ...(createWorkspaceId
         ? { workspaceId: createWorkspaceId, worktreeMode }
-        : { createWorkspace: {} }),
+        : {
+            createWorkspace: selectedPullRequest
+              ? {
+                  name: `PR #${selectedPullRequest.number}: ${selectedPullRequest.title}`
+                    .trim()
+                    .slice(0, 80),
+                }
+              : {},
+          }),
       ...(modelWorkspaceId ? { modelWorkspaceId } : {}),
-      branch: createMode === "code" ? branch : "",
+      branch: createMode === "code" || selectedPullRequest ? branch : "",
+      ...(selectedPullRequest ? { fromPr: true } : {}),
       prompt,
       titlePrompt: projectComposerSessions(prompt).displayText,
       user: getCurrentUser(),
@@ -1939,14 +1561,20 @@ pendingDraftParks.delete(operation);
       ...(files.length
         ? {
             files: files.map((f) =>
-              f.path ? { name: f.name, path: f.path } : { name: f.name, dataUrl: f.dataUrl },
+              f.path
+                ? { name: f.name, path: f.path }
+                : { name: f.name, dataUrl: f.dataUrl },
             ),
           }
         : {}),
     } as WSClientMessage;
     createSessionIdRef.current = clientSessionId;
     createMessageRef.current = createMessage;
-    createWorkspaceIdRef.current = createWorkspaceId ?? null;
+    // A globally selected PR adopts its workspace, but its composer draft did
+    // not come from that workspace and must not clear a teammate's parked text.
+    createWorkspaceIdRef.current = selectedPullRequest
+      ? null
+      : (createWorkspaceId ?? null);
     try {
       send(createMessage);
       consumePendingDraftParks(prompt, workspaceId, createWorkspaceId);
@@ -1987,8 +1615,7 @@ pendingDraftParks.delete(operation);
     // create with the same message (resolveRequestedSandbox). Block here
     // so the wall is discovered before submit, not after.
     !sandboxModelWarning &&
-    (hasPromptText || images.length > 0 || files.length > 0) &&
-    (mode === "ask" || mode === "scratch" || selectedWorktree !== "");
+    (hasPromptText || images.length > 0 || files.length > 0);
 
   /** The latest `handleCreate`, for a caller that has to wait a render before
    *  it can create. The dictation bar's ↑ is the one: it writes the transcript
@@ -2006,31 +1633,51 @@ pendingDraftParks.delete(operation);
   // one thing you do choose. Only a Code session with a repo has a branch at
   // all — Ask cuts no worktree, and Code with no repo has nothing to cut one
   // from.
-  const createFromLabel = selectedWorktree === "__new__" ? "New branch" : selectedWorktree;
-  const createFromOptions = [
-    {
-      value: "__new__",
-      label: workspaceId && forceBranch
-        ? `New stacked branch (off ${forceBranch})`
-        : "New branch",
-    },
-    ...worktrees.map((wt) => ({ value: wt.branch, label: wt.branch })),
-  ];
+  const createFromLabel =
+    startPoint.kind === "pull-request"
+      ? `PR #${startPoint.pullRequest.number}`
+      : startPoint.kind === "worktree"
+        ? startPoint.branch
+        : startsInLocalCheckout
+          ? "Local checkout"
+          : "New branch";
+  const createFromOptions: Array<{ label: string; point: SessionStartPoint }> =
+    [
+      {
+        point: { kind: "new" },
+        label: startsInLocalCheckout
+          ? "Local checkout"
+          : workspaceId && forceBranch
+            ? `New stacked branch (off ${forceBranch})`
+            : "New branch",
+      },
+      ...worktrees.map((wt) => ({
+        point: { kind: "worktree" as const, branch: wt.branch },
+        label: wt.branch,
+      })),
+    ];
   // The branch this palette starts on: a sibling's inside a workspace, a fresh
   // one everywhere else. Anything else is a deliberate pick, and one level
   // behind a button it has to light that button up to be visible at all.
-  const defaultWorktree = forceBranch || "__new__";
-  const branchPicked = mode === "code" && selectedWorktree !== defaultWorktree;
-  // A row worth opening needs a second thing to pick. With no sibling
-  // worktrees there is only "New branch", which is what a create does anyway.
+  const branchPicked =
+    mode === "code" &&
+    !startsInLocalCheckout &&
+    (startPoint.kind === "pull-request" ||
+      (startPoint.kind === "worktree" && startPoint.branch !== forceBranch));
+  // A row worth opening needs a second thing to pick. A local-checkout default
+  // still shows the row when an existing worktree offers a deliberate override.
   const showBranchPicker =
-    mode === "code" && (worktrees.length > 0 || selectedWorktree !== "__new__");
+    mode === "code" &&
+    (worktrees.length > 0 ||
+      (!startsInLocalCheckout && startPoint.kind !== "new"));
 
   // Which edges of the prompt earn a hairline. The field measures its own
   // scroller and reports; holding the previous object when nothing moved is
   // what keeps a scroll (or a keystroke) from re-rendering the card.
   function handlePromptEdges(next: { top: boolean; bottom: boolean }) {
-    setEdges((prev) => (prev.top === next.top && prev.bottom === next.bottom ? prev : next));
+    setEdges((prev) =>
+      prev.top === next.top && prev.bottom === next.bottom ? prev : next,
+    );
   }
 
   // One frame closed so the palette animates in; App mounts us already-open.
@@ -2072,7 +1719,8 @@ pendingDraftParks.delete(operation);
         return;
       }
       const next = event.relatedTarget;
-      if (next instanceof Node && document.documentElement.contains(next)) return;
+      if (next instanceof Node && document.documentElement.contains(next))
+        return;
       resetFileDrag();
     }
     function handleDragOver(event: DragEvent) {
@@ -2136,7 +1784,9 @@ pendingDraftParks.delete(operation);
           project, commit. One row rather than two, because a sheet over an
           open keyboard has about half a screen to spend and an attachment
           takes its share of it. */}
-      <PhoneTopBar className={cn(HEADER, !dictating && edges.top && EDGE_DIVIDER)}>
+      <PhoneTopBar
+        className={cn(HEADER, !dictating && edges.top && EDGE_DIVIDER)}
+      >
         {phoneBar && (
           <>
             <Modal.Close
@@ -2149,7 +1799,11 @@ pendingDraftParks.delete(operation);
             />
             {/* The sheet still has a name, it just isn't drawn: the dialog
                 needs one, and a screen reader has no card to look at. */}
-            <Modal.Title className={mergeStylexOverrideClassName("", sx.srOnly)}>New session</Modal.Title>
+            <Modal.Title
+              className={mergeStylexOverrideClassName("", sx.srOnly)}
+            >
+              New session
+            </Modal.Title>
           </>
         )}
         <div className={MOBILE_PICKER}>
@@ -2164,7 +1818,11 @@ pendingDraftParks.delete(operation);
                 icon: <RepoTile name={p.id} />,
                 // A shared-checkout repo has no isolated worktree to attach,
                 // so it can be the session's repo but never a second one.
-                singleOnly: p.sharedCheckout,
+                singleOnly:
+                  startPoint.kind === "new" &&
+                  ((checkoutPrefs[p.id] ?? "default") === "checkout" ||
+                    ((checkoutPrefs[p.id] ?? "default") === "default" &&
+                      p.sharedCheckout)),
               })),
               // Either mode can run without a repo, and the Ask toggle in the
               // footer says which one you get: Ask reads nothing, Code writes
@@ -2178,6 +1836,10 @@ pendingDraftParks.delete(operation);
             ]}
             onChange={(nextRepo) => {
               setRepo(nextRepo);
+              // Picking a project is a fresh source choice, even when it is the
+              // same repo as the selected PR. Otherwise the title says Project
+              // while create_session still checks out the PR's existing branch.
+              setStartPoint(defaultStartPoint());
               // A plain pick is "work here", not "and here too": it replaces
               // the whole selection, which is what it did before any of this.
               // It does NOT become your default either — that is a setting
@@ -2197,7 +1859,11 @@ pendingDraftParks.delete(operation);
                   }
                 : undefined
             }
-            multiHint={repoSelectionHint(extraRepos, repoOptionLabel, MULTI_MODIFIER)}
+            multiHint={repoSelectionHint(
+              extraRepos,
+              repoOptionLabel,
+              MULTI_MODIFIER,
+            )}
             // A feed workspace is repo-less by construction (its subject is a
             // a feed item, not a checkout), so its create doesn't offer one.
             disabled={busy || forceMode === "scratch"}
@@ -2205,7 +1871,10 @@ pendingDraftParks.delete(operation);
             isPhone={isPhone}
           >
             {repo === NO_REPO ? (
-              <IconMessage className={mergeStylexOverrideClassName("", sx.shrink0)} size={18} />
+              <IconMessage
+                className={mergeStylexOverrideClassName("", sx.shrink0)}
+                size={18}
+              />
             ) : (
               <RepoTile name={repo} />
             )}
@@ -2218,7 +1887,12 @@ pendingDraftParks.delete(operation);
                 the same shorthand the session header's repo pill uses. */}
             {extraRepos.length > 0 && (
               <span
-                {...stylex.props(sx.shrink0, sx.fontMedium, sx.textDim, typography.label)}
+                {...stylex.props(
+                  sx.shrink0,
+                  sx.fontMedium,
+                  sx.textDim,
+                  typography.label,
+                )}
                 title={extraRepos.map(repoOptionLabel).join(", ")}
               >
                 +{extraRepos.length}
@@ -2232,7 +1906,10 @@ pendingDraftParks.delete(operation);
         {phoneBar && (
           <button
             type="button"
-            className={cn(PHONE_SEND, dictating && mergeStylexClassName("", sx.invisible))}
+            className={cn(
+              PHONE_SEND,
+              dictating && utilityClassName("invisible"),
+            )}
             onClick={handleCreate}
             disabled={!canCreate}
             aria-label={CREATE_LABELS[createAction]}
@@ -2250,8 +1927,8 @@ pendingDraftParks.delete(operation);
           if (!dictating) setDictationClipping(false);
         }}
         className={cn(
-          mergeStylexClassName("", sx.relative, sx.flex, sx.minH0, sx.flexCol),
-          dictationClipping && mergeStylexClassName("", sx.overflowHidden),
+          utilityClassName("relative flex min-h-0 flex-col"),
+          dictationClipping && utilityClassName("overflow-hidden"),
         )}
       >
         {/* Dictation replaces everything below Project while the card itself
@@ -2263,203 +1940,355 @@ pendingDraftParks.delete(operation);
         />
         <div
           className={cn(
-            mergeStylexClassName("", sx.flex, sx.minH0, sx.flex1, sx.flexCol),
-            dictating && mergeStylexClassName("", sx.invisible),
+            utilityClassName("flex min-h-0 flex-1 flex-col"),
+            dictating && utilityClassName("invisible"),
           )}
         >
-
-      {/* Picked services, above the field like every other thing attached to
+          {/* Picked services, above the field like every other thing attached to
           what you are about to send. The picker is two levels inside a menu,
           so without this the only trace of a pick is a count on the overflow
           button, and the pick governs the whole session rather than one
           prompt. The row stays mounted so the last chip can animate out. */}
-      <div {...mergeStylexProps("", sx.phonePx3, sx.phonePt1, sx.flex, sx.flexWrap, sx.itemsStart, sx.gapX1, sx.px4)}>
-        {selectedMcpServers.length > 0 && (
-          <span {...mergeStylexProps("", sx.phoneBlock, sx.desktopHidden, sx.mr1, sx.selfCenter, sx.fontMedium, sx.textFaint, typography.meta)}>
-            Using
-          </span>
-        )}
-        <AnimatePresence initial={false}>
-          {selectedMcpServers.map((mcp) => (
-            <ComposerContextChip
-              key={mcp}
-              icon={<IconTile name={mcp} size={15} />}
-              label={displayName(mcp)}
-              title={`${displayName(mcp)} is on. A session gets only the services you pick here.`}
-              onRemove={() => toggleMcpServer(mcp, false)}
-              removeLabel={`Remove ${displayName(mcp)}`}
-              disabled={busy}
-            />
-          ))}
-        </AnimatePresence>
-      </div>
-
-        {/* Prompt. It owns the draft: see NewSessionPrompt for why the text
-            does not live in this component. */}
-        <NewSessionPrompt
-          initialText={initialPrompt}
-          textareaRef={promptRef}
-          valueRef={promptText}
-          handle={promptHandle}
-          repo={repo}
-          mcpServers={selectedMcpServers}
-          // Ask sessions read and explain; they never touch the code. Asking
-          // "what to work on" in that mode invites a prompt the session
-          // cannot carry out.
-          placeholder={
-            mode === "ask" ? "What do you want to find out?" : "What do you want to work on?"
-          }
-          disabled={busy}
-          images={images}
-          files={files}
-          staging={staging}
-          onRemovePendingImage={uploads.cancelPendingImage}
-          onRemovePendingFile={uploads.cancelPendingFile}
-          onRemoveImage={(i) => {
-            removeDraftImage(DRAFT_KEY, i);
-            adoptDraftAttachments();
-          }}
-          onRemoveFile={(i) => {
-            removeDraftFile(DRAFT_KEY, i);
-            adoptDraftAttachments();
-          }}
-          onAddAttachments={(picked) => void addAttachments(picked)}
-          sendKey={sendKey}
-          canCreate={canCreate}
-          onCreate={handleCreate}
-          onHasTextChange={setHasPromptText}
-          onDraftSettled={setSettledPrompt}
-          onEdgesChange={handlePromptEdges}
-          onMentionOpenChange={setMentionOpen}
-        />
-
-        {status.kind === "failed" && <div className={ERROR}>{status.message}</div>}
-        {sandboxModelWarning && (
-          <div className={ERROR} role="alert">
-            {sandboxModelWarning}
-          </div>
-        )}
-
-        {/* Footer toolbar */}
-        <div className={cn(FOOTER, edges.bottom && EDGE_DIVIDER)}>
-          <div className={FOOTER_LEFT}>
-            <Tooltip label="Attach a file" shortcut={attachKeys ?? undefined}>
-              <button
-                type="button"
-                className={FOOTER_ICON_BTN}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={busy}
-                aria-label="Attach a file"
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.flexWrap,
+              sx.itemsStart,
+              sx.gapX1,
+              sx.px4,
+              sx.phonePx3,
+              sx.phonePt1,
+            )}
+          >
+            {selectedMcpServers.length > 0 && (
+              <span
+                {...stylex.props(
+                  sx.mr1,
+                  sx.selfCenter,
+                  sx.fontMedium,
+                  sx.textFaint,
+                  sx.phoneBlock,
+                  sx.desktopHidden,
+                  typography.meta,
+                )}
               >
-                <IconPaperclip size={20} />
-              </button>
-            </Tooltip>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => {
-                if (e.target.files?.length) void addAttachments(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            {/* Ask sits with the tools rather than in the header: Code is what
+                Using
+              </span>
+            )}
+            <AnimatePresence initial={false}>
+              {selectedMcpServers.map((mcp) => (
+                <ComposerContextChip
+                  key={mcp}
+                  icon={<IconTile name={mcp} size={15} />}
+                  label={displayName(mcp)}
+                  title={`${displayName(mcp)} is on. A session gets only the services you pick here.`}
+                  onRemove={() => toggleMcpServer(mcp, false)}
+                  removeLabel={`Remove ${displayName(mcp)}`}
+                  disabled={busy}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+
+          {/* Prompt. It owns the draft: see NewSessionPrompt for why the text
+            does not live in this component. */}
+          <NewSessionPrompt
+            config={{
+              initialText: initialPrompt,
+              repo,
+              mcpServers: selectedMcpServers,
+              // Ask sessions read and explain; they never touch the code. Asking
+              // "what to work on" in that mode invites a prompt the session
+              // cannot carry out.
+              placeholder:
+                mode === "ask"
+                  ? "What do you want to find out?"
+                  : "What do you want to work on?",
+              disabled: busy,
+              images,
+              files,
+              staging,
+              sendKey,
+              canCreate,
+            }}
+            refs={{
+              textarea: promptRef,
+              value: promptText,
+              handle: promptHandle,
+            }}
+            actions={{
+              removePendingImage: uploads.cancelPendingImage,
+              removePendingFile: uploads.cancelPendingFile,
+              removeImage: (index) => {
+                removeDraftImage(DRAFT_KEY, index);
+                adoptDraftAttachments();
+              },
+              removeFile: (index) => {
+                removeDraftFile(DRAFT_KEY, index);
+                adoptDraftAttachments();
+              },
+              addAttachments: (picked) => void addAttachments(picked),
+              create: handleCreate,
+              changeHasText: setHasPromptText,
+              settleDraft: setSettledPrompt,
+              changeEdges: handlePromptEdges,
+              changeMentionOpen: setMentionOpen,
+            }}
+          />
+
+          {status.kind === "failed" && (
+            <div className={ERROR}>{status.message}</div>
+          )}
+          {sandboxModelWarning && (
+            <div className={ERROR} role="alert">
+              {sandboxModelWarning}
+            </div>
+          )}
+
+          {/* Footer toolbar */}
+          <div className={cn(FOOTER, edges.bottom && EDGE_DIVIDER)}>
+            <div className={FOOTER_LEFT}>
+              <Tooltip label="Attach a file" shortcut={attachKeys ?? undefined}>
+                <button
+                  type="button"
+                  className={FOOTER_ICON_BTN}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={busy}
+                  aria-label="Attach a file"
+                >
+                  <IconPaperclip size={20} />
+                </button>
+              </Tooltip>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                  if (e.target.files?.length)
+                    void addAttachments(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              {/* Ask sits with the tools rather than in the header: Code is what
                 you are almost always doing, so the header should show what you
                 are working on (the repo, the branch) and this is the one
                 switch that changes it. Off it is a quiet icon; on it names
                 itself and wears the green the card and the composer's Ask pill
                 also wear, because read-only running silently is the one state
                 worth being loud about. */}
-            {!forceMode && (
-              <Tooltip
-                label={
-                  permission === "ask"
-                    ? "Ask mode on · reads, changes nothing. Click to write code instead"
-                    : "Ask mode · read-only, and no repo unless you pick one"
-                }
-              >
-                <button
-                  type="button"
-                  className={permission === "ask" ? ASK_BTN_ON : FOOTER_ICON_BTN}
-                  onClick={togglePermission}
+              {!workspaceId && forceMode !== "scratch" && (
+                <NewSessionPrPicker
+                  repo={repo}
+                  selected={selectedPullRequest}
                   disabled={busy}
-                  aria-pressed={permission === "ask"}
-                  aria-label="Ask mode"
+                  onSelect={(pullRequest) => {
+                    setRepo(pullRequest.repo);
+                    setExtraRepos([]);
+                    setStartPoint({ kind: "pull-request", pullRequest });
+                  }}
+                  onClear={() => setStartPoint(defaultStartPoint())}
+                />
+              )}
+              {!forceMode && (
+                <Tooltip
+                  label={
+                    permission === "ask"
+                      ? "Ask mode on · reads, changes nothing. Click to write code instead"
+                      : "Ask mode · read-only, and no repo unless you pick one"
+                  }
                 >
-                  <IconEye size={permission === "ask" ? 14 : 20} />
-                  {permission === "ask" && "Ask"}
-                </button>
-              </Tooltip>
-            )}
-            {/* Rarely changed execution settings stay one level behind a single
+                  <button
+                    type="button"
+                    className={
+                      permission === "ask" ? ASK_BTN_ON : FOOTER_ICON_BTN
+                    }
+                    onClick={togglePermission}
+                    disabled={busy}
+                    aria-pressed={permission === "ask"}
+                    aria-label="Ask mode"
+                  >
+                    <IconEye size={permission === "ask" ? 14 : 20} />
+                    {permission === "ask" && "Ask"}
+                  </button>
+                </Tooltip>
+              )}
+              {/* Rarely changed execution settings stay one level behind a single
                 overflow button. Their current values remain visible in the
                 submenu rows, while attachment stays one tap away. */}
-            <Menu.Root>
-              <Tooltip label="More options">
-                <Menu.Trigger
-                  type="button"
-                  className={cn(
-                    FOOTER_ICON_BTN,
-						(branchPicked || sandboxProvider || modelEngine(effectiveModelId) !== "pi" || selectedMcpServers.length > 0) &&
-                      paletteIconBtnOn,
+              <Menu.Root>
+                <Tooltip label="More options">
+                  <Menu.Trigger
+                    type="button"
+                    className={cn(
+                      FOOTER_ICON_BTN,
+                      (branchPicked ||
+                        sandboxProvider ||
+                        modelEngine(effectiveModelId) !== "pi" ||
+                        selectedMcpServers.length > 0) &&
+                        paletteIconBtnOn,
+                    )}
+                    disabled={busy}
+                    aria-label="More options"
+                  >
+                    <IconDotsHorizontal size={20} />
+                  </Menu.Trigger>
+                </Tooltip>
+                <Menu.Popup
+                  align="start"
+                  sideOffset={6}
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.minW260px,
+                    sx.maxWMin360pxCalc100vw1rem,
                   )}
-                  disabled={busy}
-                  aria-label="More options"
                 >
-                  <IconDotsHorizontal size={20} />
-                </Menu.Trigger>
-              </Tooltip>
-              <Menu.Popup
-                align="start"
-                sideOffset={6} {...mergeStylexProps("", sx.maxWMin360pxCalc100vw1rem, sx.minW260px)}
-              >
-                {showBranchPicker && (
-                  <Menu.SubmenuRoot>
-                    <Menu.SubmenuTrigger className={mergeStylexOverrideClassName("", sx.justifyBetween, sx.gap3)}>
-                      <span {...stylex.props(sx.flex, sx.flexNone, sx.itemsCenter, sx.gap2)}>
-                        <IconNewBranch className={mergeStylexOverrideClassName("", sx.shrink0, sx.textDim)} size={20} />
-                        <span>Branch</span>
-                      </span>
-                      <span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap1, sx.textDim)}>
-                        <span {...stylex.props(sx.truncate)}>{createFromLabel}</span>
-                        <IconChevronRight className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} size={17} />
-                      </span>
-                    </Menu.SubmenuTrigger>
-                    <Menu.Popup className={mergeStylexOverrideClassName("", sx.maxWMin340pxCalc100vw1rem)}>
-                      {createFromOptions.map((opt) => (
-                        <Menu.Item
-                          key={opt.value}
-                          onClick={() => setSelectedWorktree(opt.value)}
-                        >
-                          <Menu.Check
-                            on={selectedWorktree === opt.value}
-                            className={mergeStylexOverrideClassName("", sx.textDim)}
-                          />
-                          <span {...stylex.props(sx.minW0, sx.truncate)}>{opt.label}</span>
-                        </Menu.Item>
-                      ))}
-                    </Menu.Popup>
-                  </Menu.SubmenuRoot>
-                )}
-                {showSandboxPicker && (
-                  <Menu.SubmenuRoot>
-                    <Menu.SubmenuTrigger className={mergeStylexOverrideClassName("", sx.justifyBetween, sx.gap3)}>
-                      <span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
-                        <IconBox className={mergeStylexOverrideClassName("", sx.shrink0, sx.textDim)} size={20} />
-                        <span {...stylex.props(sx.truncate)}>Sandbox</span>
-                      </span>
-                      <span {...stylex.props(sx.flex, sx.flexNone, sx.itemsCenter, sx.gap1, sx.textDim)}>
-                        {sandboxLabel(sandboxProvider)}
-                        {sandboxWarmed && shouldPrewarm && (
-                          <span {...stylex.props(sx.textFaint)}>· ready</span>
+                  {showBranchPicker && (
+                    <Menu.SubmenuRoot>
+                      <Menu.SubmenuTrigger
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.justifyBetween,
+                          sx.gap3,
                         )}
-                        <IconChevronRight className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} size={17} />
-                      </span>
-                    </Menu.SubmenuTrigger>
-                    <Menu.Popup className={mergeStylexOverrideClassName("", sx.maxWMin340pxCalc100vw1rem)}>
-                      {[{ id: "", note: undefined as string | undefined }, ...visibleSandboxChoices].map(
-                        (opt) => {
+                      >
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.flexNone,
+                            sx.itemsCenter,
+                            sx.gap2,
+                          )}
+                        >
+                          <IconNewBranch
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.shrink0,
+                              sx.textDim,
+                            )}
+                            size={20}
+                          />
+                          <span>Branch</span>
+                        </span>
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.minW0,
+                            sx.itemsCenter,
+                            sx.gap1,
+                            sx.textDim,
+                          )}
+                        >
+                          <span {...stylex.props(sx.truncate)}>
+                            {createFromLabel}
+                          </span>
+                          <IconChevronRight
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.shrink0,
+                              sx.textFaint,
+                            )}
+                            size={17}
+                          />
+                        </span>
+                      </Menu.SubmenuTrigger>
+                      <Menu.Popup
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.maxWMin340pxCalc100vw1rem,
+                        )}
+                      >
+                        {createFromOptions.map((opt) => {
+                          const selected =
+                            opt.point.kind === startPoint.kind &&
+                            (opt.point.kind !== "worktree" ||
+                              (startPoint.kind === "worktree" &&
+                                opt.point.branch === startPoint.branch));
+                          return (
+                            <Menu.Item
+                              key={
+                                opt.point.kind === "worktree"
+                                  ? opt.point.branch
+                                  : opt.point.kind
+                              }
+                              onClick={() => setStartPoint(opt.point)}
+                            >
+                              <Menu.Check
+                                on={selected}
+                                className={mergeStylexOverrideClassName(
+                                  "",
+                                  sx.textDim,
+                                )}
+                              />
+                              <span {...stylex.props(sx.minW0, sx.truncate)}>
+                                {opt.label}
+                              </span>
+                            </Menu.Item>
+                          );
+                        })}
+                      </Menu.Popup>
+                    </Menu.SubmenuRoot>
+                  )}
+                  {showSandboxPicker && (
+                    <Menu.SubmenuRoot>
+                      <Menu.SubmenuTrigger
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.justifyBetween,
+                          sx.gap3,
+                        )}
+                      >
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.minW0,
+                            sx.itemsCenter,
+                            sx.gap2,
+                          )}
+                        >
+                          <IconBox
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.shrink0,
+                              sx.textDim,
+                            )}
+                            size={20}
+                          />
+                          <span {...stylex.props(sx.truncate)}>Sandbox</span>
+                        </span>
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.flexNone,
+                            sx.itemsCenter,
+                            sx.gap1,
+                            sx.textDim,
+                          )}
+                        >
+                          {sandboxLabel(sandboxProvider)}
+                          {sandboxWarmed && shouldPrewarm && (
+                            <span {...stylex.props(sx.textFaint)}>· ready</span>
+                          )}
+                          <IconChevronRight
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.shrink0,
+                              sx.textFaint,
+                            )}
+                            size={17}
+                          />
+                        </span>
+                      </Menu.SubmenuTrigger>
+                      <Menu.Popup
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.maxWMin340pxCalc100vw1rem,
+                        )}
+                      >
+                        {[
+                          { id: "", note: undefined as string | undefined },
+                          ...visibleSandboxChoices,
+                        ].map((opt) => {
                           const selected = sandboxProvider === opt.id;
                           return (
                             <Menu.Item
@@ -2468,246 +2297,405 @@ pendingDraftParks.delete(operation);
                                 sandboxSelectionTouched.current = true;
                                 setSandboxProvider(opt.id);
                               }}
-                              className={mergeStylexOverrideClassName("", sx.itemsStart)}
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.itemsStart,
+                              )}
                             >
-                              <Menu.Check on={selected} className={mergeStylexOverrideClassName("", sx.mt05, sx.textDim)} />
-                              <span {...stylex.props(sx.flex, sx.minW0, sx.flexCol, sx.gap05)}>
-                                <span>
-                                  {sandboxLabel(opt.id)}
-                                </span>
+                              <Menu.Check
+                                on={selected}
+                                className={mergeStylexOverrideClassName(
+                                  "",
+                                  sx.mt05,
+                                  sx.textDim,
+                                )}
+                              />
+                              <span
+                                {...stylex.props(
+                                  sx.flex,
+                                  sx.minW0,
+                                  sx.flexCol,
+                                  sx.gap05,
+                                )}
+                              >
+                                <span>{sandboxLabel(opt.id)}</span>
                                 {opt.note && (
-                                  <span {...stylex.props(sx.whitespaceNormal, sx.leadingSnug, sx.textFaint, typography.supporting)}>
+                                  <span
+                                    {...stylex.props(
+                                      sx.whitespaceNormal,
+                                      sx.leadingSnug,
+                                      sx.textFaint,
+                                      typography.supporting,
+                                    )}
+                                  >
                                     {opt.note}
                                   </span>
                                 )}
                               </span>
                             </Menu.Item>
                           );
-                        },
+                        })}
+                      </Menu.Popup>
+                    </Menu.SubmenuRoot>
+                  )}
+                  <Menu.SubmenuRoot>
+                    <Menu.SubmenuTrigger
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.justifyBetween,
+                        sx.gap3,
                       )}
-                    </Menu.Popup>
-                  </Menu.SubmenuRoot>
-                )}
-                <Menu.SubmenuRoot>
-                  <Menu.SubmenuTrigger className={mergeStylexOverrideClassName("", sx.justifyBetween, sx.gap3)}>
-                    <span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
-                      <IconConnections className={mergeStylexOverrideClassName("", sx.shrink0, sx.textDim)} size={20} />
-                      <span {...stylex.props(sx.truncate)}>Connected services</span>
-                    </span>
-                    <span {...stylex.props(sx.flex, sx.flexNone, sx.itemsCenter, sx.gap1, sx.textDim)}>
-                      {/* Nothing picked is not "none": an empty allowlist means
+                    >
+                      <span
+                        {...stylex.props(
+                          sx.flex,
+                          sx.minW0,
+                          sx.itemsCenter,
+                          sx.gap2,
+                        )}
+                      >
+                        <IconConnections
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.shrink0,
+                            sx.textDim,
+                          )}
+                          size={20}
+                        />
+                        <span {...stylex.props(sx.truncate)}>
+                          Connected services
+                        </span>
+                      </span>
+                      <span
+                        {...stylex.props(
+                          sx.flex,
+                          sx.flexNone,
+                          sx.itemsCenter,
+                          sx.gap1,
+                          sx.textDim,
+                        )}
+                      >
+                        {/* Nothing picked is not "none": an empty allowlist means
                           the run gets every service you can see
                           (filterMcpServers, scope "all"), so the readout says
                           so rather than promising a session with no tools. */}
-                      {selectedMcpServers.length ? `${selectedMcpServers.length} on` : "All"}
-                      <IconChevronRight className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} size={17} />
-                    </span>
-                  </Menu.SubmenuTrigger>
-                  <Menu.Popup className={mergeStylexOverrideClassName("", sx.maxWMin360pxCalc100vw1rem)}>
-                    {availableMcpServers.length > 0 && (
-                      <div {...stylex.props(sx.maxW300px, sx.px2, sx.pb1, sx.leadingSnug, sx.textFaint, typography.supporting)}>
-                        Picked services are the only ones the session gets.
-                      </div>
-                    )}
-                    {availableMcpServers.length === 0 && (
-                      <Menu.Item disabled className={mergeStylexOverrideClassName("", sx.textFaint)}>
-                        No services available
-                      </Menu.Item>
-                    )}
-                    {availableMcpServers.map((mcp) => {
-                      const checked = selectedMcpServers.includes(mcp);
-                      return (
-                        <Menu.CheckboxItem
-                          key={mcp}
-                          checked={checked}
-                          closeOnClick={false}
-                          onCheckedChange={(on) => toggleMcpServer(mcp, on)}
-                          className={cn(mergeStylexClassName("", sx.justifyBetween, sx.gap3), checked && mergeStylexClassName("", sx.bgHover))}
+                        {selectedMcpServers.length
+                          ? `${selectedMcpServers.length} on`
+                          : "All"}
+                        <IconChevronRight
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.shrink0,
+                            sx.textFaint,
+                          )}
+                          size={17}
+                        />
+                      </span>
+                    </Menu.SubmenuTrigger>
+                    <Menu.Popup
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.maxWMin360pxCalc100vw1rem,
+                      )}
+                    >
+                      {availableMcpServers.length > 0 && (
+                        <div
+                          {...stylex.props(
+                            sx.maxW300px,
+                            sx.px2,
+                            sx.pb1,
+                            sx.leadingSnug,
+                            sx.textFaint,
+                            typography.supporting,
+                          )}
                         >
-                          <span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap25)}>
-                            <IconTile name={mcp} size={20} />
-                            <span {...stylex.props(sx.minW0, sx.truncate)}>{displayName(mcp)}</span>
-                          </span>
-                          <Menu.Check on={checked} className={mergeStylexOverrideClassName("", sx.textDim)} />
-                        </Menu.CheckboxItem>
-                      );
-                    })}
-                  </Menu.Popup>
-                </Menu.SubmenuRoot>
-                {/* The phone's send is one round button, so what the desktop
+                          Picked services are the only ones the session gets.
+                        </div>
+                      )}
+                      {availableMcpServers.length === 0 && (
+                        <Menu.Item
+                          disabled
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.textFaint,
+                          )}
+                        >
+                          No services available
+                        </Menu.Item>
+                      )}
+                      {availableMcpServers.map((mcp) => {
+                        const checked = selectedMcpServers.includes(mcp);
+                        return (
+                          <Menu.CheckboxItem
+                            key={mcp}
+                            checked={checked}
+                            closeOnClick={false}
+                            onCheckedChange={(on) => toggleMcpServer(mcp, on)}
+                            className={cn(
+                              utilityClassName("justify-between gap-3"),
+                              checked && utilityClassName("bg-hover"),
+                            )}
+                          >
+                            <span
+                              {...stylex.props(
+                                sx.flex,
+                                sx.minW0,
+                                sx.itemsCenter,
+                                sx.gap25,
+                              )}
+                            >
+                              <IconTile name={mcp} size={20} />
+                              <span {...stylex.props(sx.minW0, sx.truncate)}>
+                                {displayName(mcp)}
+                              </span>
+                            </span>
+                            <Menu.Check
+                              on={checked}
+                              className={mergeStylexOverrideClassName(
+                                "",
+                                sx.textDim,
+                              )}
+                            />
+                          </Menu.CheckboxItem>
+                        );
+                      })}
+                    </Menu.Popup>
+                  </Menu.SubmenuRoot>
+                  {/* The phone's send is one round button, so what the desktop
                     caret holds lives here instead. Flat rows rather than a
                     submenu: a submenu opens on hover, which a finger does not
                     have. A plain div rather than Menu.GroupLabel, which stops
                     the sibling submenus above from opening at all. */}
-                {phoneBar && (
-                  <>
-                    <div {...stylex.props(sx.px2, sx.pb1, sx.pt15, sx.fontMedium, sx.textFaint, typography.meta)}>
-                      On create
-                    </div>
-                    {CREATE_ACTIONS.map((action) => (
-                      <Menu.Item
-                        key={action}
-                        onClick={() => setCreateAction(action)}
+                  {phoneBar && (
+                    <>
+                      <div
+                        {...stylex.props(
+                          sx.px2,
+                          sx.pb1,
+                          sx.pt15,
+                          sx.fontMedium,
+                          sx.textFaint,
+                          typography.meta,
+                        )}
                       >
-                        <Menu.Check
-                          on={createAction === action}
-                          className={mergeStylexOverrideClassName("", sx.textDim)}
-                        />
-                        <span {...stylex.props(sx.minW0, sx.truncate)}>
-                          {CREATE_LABELS[action]}
-                        </span>
-                      </Menu.Item>
-                    ))}
-                  </>
-                )}
-              </Menu.Popup>
-            </Menu.Root>
-          </div>
+                        On create
+                      </div>
+                      {CREATE_ACTIONS.map((action) => (
+                        <Menu.Item
+                          key={action}
+                          onClick={() => setCreateAction(action)}
+                        >
+                          <Menu.Check
+                            on={createAction === action}
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.textDim,
+                            )}
+                          />
+                          <span {...stylex.props(sx.minW0, sx.truncate)}>
+                            {CREATE_LABELS[action]}
+                          </span>
+                        </Menu.Item>
+                      ))}
+                    </>
+                  )}
+                </Menu.Popup>
+              </Menu.Root>
+            </div>
 
-          <div className={FOOTER_RIGHT}>
-            {/* Always visible — on phones too, so a non-default (dumber) model
+            <div className={FOOTER_RIGHT}>
+              {/* Always visible — on phones too, so a non-default (dumber) model
                 is never silently in effect. */}
-            <ModelEffortSelect
-              className={MODEL_PILL}
-              title="Model and reasoning effort"
-              models={models}
-              defaultModel={defaultModel}
-              model={model}
-              onModelChange={setModel}
-              effort={effort}
-              onEffortChange={setEffort}
-              fastMode={fastMode}
-              onFastModeChange={setFastMode}
-              accounts={accounts}
-              accountId={accountId}
-              onAccountChange={setAccountId}
-              disabled={busy}
-            />
-            <VoiceInput
-              className={FOOTER_ICON_BTN}
-              disabled={busy}
-              editTargetRef={promptRef}
-              overlayTargetRef={voiceOverlayRef}
-              onActiveChange={handleDictationActive}
-              onText={(t) => {
-                promptHandle.current?.appendText(t);
-                promptRef.current?.focus();
-              }}
-              onTextSend={(t) => {
-                promptHandle.current?.appendText(t);
-                // One turn of the loop before creating: the transcript reaches
-                // the prompt through its own state, and `canCreate` only
-                // catches up on the render after it. `createRef` is read then
-                // rather than captured now for the same reason.
-                setTimeout(() => createRef.current(), 0);
-              }}
-              // The parent card owns the only visible surface. This layer is
-              // just controls and waveform clipped by that card's outer edge.
-              overlayClassName={mergeStylexClassName("[backdrop-filter:none]", sharedClassStyles.roundedNone, sharedClassStyles.bgTransparent)}
-            />
-
-            {!phoneBar && (
-            <div className={CREATE_SPLIT} ref={createSplitRef}>
-              <button
-                className={cn(
-                  CREATE_MAIN,
-                  inline ? CREATE_MAIN_WHOLE : CREATE_MAIN_SPLIT,
+              <ModelEffortSelect
+                selection={{
+                  models,
+                  defaultModel,
+                  model,
+                  effort,
+                  fastMode,
+                  accounts,
+                  accountId,
+                }}
+                appearance={{
+                  className: MODEL_PILL,
+                  title: "Model and reasoning effort",
+                  disabled: busy,
+                }}
+                actions={{
+                  changeModel: setModel,
+                  changeEffort: setEffort,
+                  changeFastMode: setFastMode,
+                  changeAccount: setAccountId,
+                }}
+              />
+              <VoiceInput
+                className={FOOTER_ICON_BTN}
+                disabled={busy}
+                editTargetRef={promptRef}
+                overlayTargetRef={voiceOverlayRef}
+                onActiveChange={handleDictationActive}
+                onText={(t) => {
+                  promptHandle.current?.appendText(t);
+                  promptRef.current?.focus();
+                }}
+                onTextSend={(t) => {
+                  promptHandle.current?.appendText(t);
+                  // One turn of the loop before creating: the transcript reaches
+                  // the prompt through its own state, and `canCreate` only
+                  // catches up on the render after it. `createRef` is read then
+                  // rather than captured now for the same reason.
+                  setTimeout(() => createRef.current(), 0);
+                }}
+                // The parent card owns the only visible surface. This layer is
+                // just controls and waveform clipped by that card's outer edge.
+                overlayClassName={utilityClassName(
+                  "rounded-none bg-transparent [backdrop-filter:none]",
                 )}
-                onClick={handleCreate}
-                disabled={!canCreate}
-              >
-                {status.kind === "reconnecting"
-                  ? "Reconnecting…"
-                  : status.kind === "creating"
-                    ? "Creating…"
-                    : isStaging(staging)
-                      ? "Attaching…"
-                      : CREATE_LABELS[createAction]}
-                {/* The hint has to match the preference — a bare ↩ next to a
+              />
+
+              {!phoneBar && (
+                <div className={CREATE_SPLIT} ref={createSplitRef}>
+                  <button
+                    className={cn(
+                      CREATE_MAIN,
+                      inline ? CREATE_MAIN_WHOLE : CREATE_MAIN_SPLIT,
+                    )}
+                    onClick={handleCreate}
+                    disabled={!canCreate}
+                  >
+                    {status.kind === "reconnecting"
+                      ? "Reconnecting…"
+                      : status.kind === "creating"
+                        ? "Creating…"
+                        : isStaging(staging)
+                          ? "Attaching…"
+                          : CREATE_LABELS[createAction]}
+                    {/* The hint has to match the preference — a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}
-                {sendKey === "mod-enter" ? (
-                  <span className={[CREATE_KBD, mergeStylexClassName("", sx.mx0, sx.phoneHidden, sx.textXs)].filter(Boolean).join(" ")}>
-                    {MOD_ENTER_GLYPH}
-                  </span>
-                ) : (
-                  /* Snug the return glyph up to the label and nudge it off the
+                    {sendKey === "mod-enter" ? (
+                      <span
+                        className={utilityClassName(
+                          `${CREATE_KBD} mx-0 phone:hidden text-xs`,
+                        )}
+                      >
+                        {MOD_ENTER_GLYPH}
+                      </span>
+                    ) : (
+                      /* Snug the return glyph up to the label and nudge it off the
                      button edge. "Create more" is a desktop workflow, so the
                      hint goes away with the caret on phones. */
-                  <IconReturn
-                    className={[CREATE_KBD, mergeStylexClassName("", sx.Mx3px, sx.phoneHidden)].filter(Boolean).join(" ")}
-                    size={20}
-                  />
-                )}
-              </button>
-              {/* The tooltip is where the cycle shortcut is taught: the caret
+                      <IconReturn
+                        className={utilityClassName(
+                          `${CREATE_KBD} -mx-[3px] phone:hidden`,
+                        )}
+                        size={20}
+                      />
+                    )}
+                  </button>
+                  {/* The tooltip is where the cycle shortcut is taught: the caret
                   is the only thing on screen that says these options exist.
                   Inline there are no options to pick between, so the button is
                   whole and the caret is gone. */}
-              {!inline && (
-              <Tooltip label="Create options" shortcut={CYCLE_SHORTCUT}>
-              <button
-                type="button"
-                className={CREATE_CARET}
-                onClick={() => setCreateMenuOpen((v) => !v)}
-                // Not having a prompt yet leaves the caret alone: the options
-                // are still worth reading, and picking one is how you change
-                // what Enter will do. A create in flight is the one thing that
-                // closes it off, and then it greys out with the main button
-                // beside it, so the pair still reads as one busy control. An
-                // attachment on its way to disk holds the same pair the same
-                // way, for the second or two it takes.
-                disabled={busy || isStaging(staging)}
-                aria-haspopup="menu"
-                aria-expanded={createMenuOpen}
-                aria-label="Create options"
-              >
-                <IconChevronDown
-                  className={[mergeStylexClassName("", sx.transitionTransform), createMenuOpen ? mergeStylexClassName("", sx.rotate180) : ""].filter(Boolean).join(" ")}
-                  size={22}
-                />
-              </button>
-              </Tooltip>
+                  {!inline && (
+                    <Tooltip label="Create options" shortcut={CYCLE_SHORTCUT}>
+                      <button
+                        type="button"
+                        className={CREATE_CARET}
+                        onClick={() => setCreateMenuOpen((v) => !v)}
+                        // Not having a prompt yet leaves the caret alone: the options
+                        // are still worth reading, and picking one is how you change
+                        // what Enter will do. A create in flight is the one thing that
+                        // closes it off, and then it greys out with the main button
+                        // beside it, so the pair still reads as one busy control. An
+                        // attachment on its way to disk holds the same pair the same
+                        // way, for the second or two it takes.
+                        disabled={busy || isStaging(staging)}
+                        aria-haspopup="menu"
+                        aria-expanded={createMenuOpen}
+                        aria-label="Create options"
+                      >
+                        <IconChevronDown
+                          className={utilityClassName(
+                            `transition-transform ${createMenuOpen ? "rotate-180" : ""}`,
+                          )}
+                          size={22}
+                        />
+                      </button>
+                    </Tooltip>
+                  )}
+                  {!inline && createMenuOpen && (
+                    <div className={CREATE_MENU} role="menu">
+                      {[
+                        {
+                          action: "open" as const,
+                          title: "Create",
+                          desc: "Open the new session",
+                        },
+                        {
+                          action: "background" as const,
+                          title: "Create in background",
+                          desc: "Stay where you are",
+                        },
+                        {
+                          action: "more" as const,
+                          title: "Create more",
+                          desc: "Stay here to start another",
+                        },
+                      ].map((opt) => (
+                        <button
+                          key={opt.action}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={createAction === opt.action}
+                          className={CREATE_MENU_ITEM}
+                          onClick={() => {
+                            setCreateAction(opt.action);
+                            setCreateMenuOpen(false);
+                          }}
+                        >
+                          <Menu.Check
+                            on={createAction === opt.action}
+                            size={22}
+                            className={mergeStylexOverrideClassName(
+                              "",
+                              sx.mtPx,
+                              sx.textDim,
+                            )}
+                          />
+                          <span
+                            {...stylex.props(
+                              sx.flex,
+                              sx.minW0,
+                              sx.flexCol,
+                              sx.gapPx,
+                            )}
+                          >
+                            <span
+                              {...stylex.props(
+                                sx.fontSemibold,
+                                typography.label,
+                              )}
+                            >
+                              {opt.title}
+                            </span>
+                            <span
+                              {...stylex.props(
+                                sx.textDim,
+                                typography.supporting,
+                              )}
+                            >
+                              {opt.desc}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
-              {!inline && createMenuOpen && (
-                <div className={CREATE_MENU} role="menu">
-                  {[
-                    { action: "open" as const, title: "Create", desc: "Open the new session" },
-                    {
-                      action: "background" as const,
-                      title: "Create in background",
-                      desc: "Stay where you are",
-                    },
-                    { action: "more" as const, title: "Create more", desc: "Stay here to start another" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.action}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={createAction === opt.action}
-                      className={CREATE_MENU_ITEM}
-                      onClick={() => {
-                        setCreateAction(opt.action);
-                        setCreateMenuOpen(false);
-                      }}
-                    >
-                      <Menu.Check
-                        on={createAction === opt.action}
-                        size={22}
-                        className={mergeStylexOverrideClassName("", sx.mtPx, sx.textDim)}
-                      />
-                      <span {...stylex.props(sx.flex, sx.minW0, sx.flexCol, sx.gapPx)}>
-                        <span {...stylex.props(sx.fontSemibold, typography.label)}>{opt.title}</span>
-                        <span {...stylex.props(sx.textDim, typography.supporting)}>{opt.desc}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
             </div>
-            )}
           </div>
-        </div>
         </div>
       </motion.div>
     </>
@@ -2719,7 +2707,8 @@ pendingDraftParks.delete(operation);
         className={cn(
           INLINE_CARD,
           ASK_SURFACE,
-          mode === "ask" && mergeStylexClassName("", sx.beforeOpacity100, sx.afterOpacity100),
+          mode === "ask" &&
+            utilityClassName("before:opacity-100 after:opacity-100"),
         )}
         style={askSurfaceStyle}
         role="group"
@@ -2756,13 +2745,15 @@ pendingDraftParks.delete(operation);
       <Modal.Content
         data-global-file-composer="new-session"
         variant="palette"
-        widthClassName={mergeStylexClassName("", sharedClassStyles.wMin820px100PhoneFull)}
+        widthClassName={utilityClassName("w-[min(820px,100%)] phone:w-full")}
         // The bottom pad is the keyboard's own height (lib/keyboard-inset).
         // The sheet is anchored to the bottom of the LAYOUT viewport, which iOS
         // does not shrink for the keyboard, so without it the composer sits
         // behind the keys and the page has to be panned to reach it. It is 0px
         // wherever nothing covers the window.
-        viewportClassName={mergeStylexClassName("", sharedClassStyles.phoneItemsEnd, sharedClassStyles.phonePx0, sharedClassStyles.phonePbVarKbInset0px, sharedClassStyles.phonePt3)}
+        viewportClassName={utilityClassName(
+          "phone:items-end phone:px-0 phone:pb-[var(--kb-inset,0px)] phone:pt-3",
+        )}
         className={cn(
           // A phone sheet carries a rounder top corner than the floating
           // palette does: it meets the screen's own edge on three sides, so the
@@ -2775,9 +2766,12 @@ pendingDraftParks.delete(operation);
           // inside that strip on a client whose keyboard is taller than the
           // one 43dvh was measured against. Past the cap the prompt scrolls,
           // which is what its scroller is for.
-          mergeStylexClassName("phone:[body.kb-open_&]:max-h-[min(43dvh,100%)] phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone", sx.maxHCalc89dvh1rem, sx.phoneMaxHCalc100dvh12px, sx.phoneRoundedTCalc40pxVarRf, sx.phoneRoundedBNone),
+          utilityClassName(
+            "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[min(43dvh,100%)] phone:rounded-t-[calc(40px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
+          ),
           ASK_SURFACE,
-          mode === "ask" && mergeStylexClassName("", sx.beforeOpacity100, sx.afterOpacity100),
+          mode === "ask" &&
+            utilityClassName("before:opacity-100 after:opacity-100"),
         )}
         style={askSurfaceStyle}
         aria-label="New session"

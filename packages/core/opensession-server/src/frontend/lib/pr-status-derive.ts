@@ -13,19 +13,50 @@ export function deriveStatus(pr: PrDetails): StatusLine {
     return { key: "merged", label: "Merged", qualifier: null, tone: "purple" };
   if (pr.state === "CLOSED")
     return { key: "closed", label: "Closed", qualifier: null, tone: "muted" };
-  if (pr.isDraft) return { key: "draft", label: "Draft", qualifier: null, tone: "muted" };
+  if (pr.isDraft)
+    return { key: "draft", label: "Draft", qualifier: null, tone: "muted" };
   if (pr.mergeable === "CONFLICTING")
-    return { key: "conflicts", label: "Open", qualifier: "Merge conflicts", tone: "red" };
+    return {
+      key: "conflicts",
+      label: "Open",
+      qualifier: "Merge conflicts",
+      tone: "red",
+    };
   const checks = summarize(pr.checks);
   if (checks.failed > 0)
-    return { key: "failing", label: "Open", qualifier: "Checks failed", tone: "red" };
+    return {
+      key: "failing",
+      label: "Open",
+      qualifier: "Checks failed",
+      tone: "red",
+    };
   if (pr.reviewDecision === "CHANGES_REQUESTED")
-    return { key: "changes", label: "Open", qualifier: "Changes requested", tone: "red" };
+    return {
+      key: "changes",
+      label: "Open",
+      qualifier: "Changes requested",
+      tone: "red",
+    };
   if (checks.pending > 0)
-    return { key: "running", label: "Open", qualifier: "Checks running", tone: "yellow" };
+    return {
+      key: "running",
+      label: "Open",
+      qualifier: "Checks running",
+      tone: "yellow",
+    };
   if (pr.reviewDecision === "REVIEW_REQUIRED")
-    return { key: "review", label: "Open", qualifier: "Review required", tone: "yellow" };
-  return { key: "ready", label: "Open", qualifier: "Ready to merge", tone: "green" };
+    return {
+      key: "review",
+      label: "Open",
+      qualifier: "Review required",
+      tone: "yellow",
+    };
+  return {
+    key: "ready",
+    label: "Open",
+    qualifier: "Ready to merge",
+    tone: "green",
+  };
 }
 
 export function summarize(checks: PrCheck[]) {
@@ -41,13 +72,18 @@ export function summarize(checks: PrCheck[]) {
   return { passed, failed, pending, total: checks.length };
 }
 
-type PrCheckRank = "check-success" | "check-failure" | "check-pending" | "check-neutral";
+type PrCheckRank =
+  | "check-success"
+  | "check-failure"
+  | "check-pending"
+  | "check-neutral";
 
 export function checkClass(status: string, conclusion: string): PrCheckRank {
   if (status !== "COMPLETED" && status !== "") return "check-pending";
   // StatusContexts (Vercel deploys) report a state, not a status — a pending
   // deploy is "COMPLETED"/PENDING here and must not read as neutral.
-  if (conclusion === "PENDING" || conclusion === "EXPECTED") return "check-pending";
+  if (conclusion === "PENDING" || conclusion === "EXPECTED")
+    return "check-pending";
   switch (conclusion) {
     case "SUCCESS":
       return "check-success";
@@ -82,7 +118,9 @@ export function isDeployment(check: PrCheck): boolean {
 export function formatCheckDuration(check: PrCheck): string | null {
   if (!check.startedAt || !check.completedAt) return null;
   const secs = Math.round(
-    (new Date(check.completedAt).getTime() - new Date(check.startedAt).getTime()) / 1000,
+    (new Date(check.completedAt).getTime() -
+      new Date(check.startedAt).getTime()) /
+      1000,
   );
   if (secs <= 0) return null;
   if (secs < 60) return `${secs}s`;

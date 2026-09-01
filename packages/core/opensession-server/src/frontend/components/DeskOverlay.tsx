@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useRef, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import { getCurrentUser } from "./UserPicker";
@@ -6,115 +8,81 @@ import { DESK_SUGGESTIONS } from "../lib/desk-suggestions";
 import { Modal } from "../ui/modal";
 import { IconDesk, IconExpand, IconMinus } from "./icons";
 import { Button } from "../ui/button";
-import {
-	DeskVoiceClient,
-	type DeskVoiceState,
-} from "../lib/desk-voice-client";
+import { DeskVoiceClient, type DeskVoiceState } from "../lib/desk-voice-client";
 import { getDeskVoicePref, onDeskVoiceChanged } from "../lib/desk-voice-pref";
-import { cn, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+import { cn } from "../ui/cn";
+import { errorMessage } from "../lib/error-message";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
-import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	flex: {
-			display: "flex"
-	},
-	minH0: {
-			minHeight: "0"
-	},
-	flex1: {
-			flex: "1"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap25: {
-			gap: "10px"
-	},
-	borderB: {
-			borderBottomStyle: "solid",
-			borderBottomWidth: "1px"
-	},
-	borderDivider: {
-			borderColor: "var(--divider)"
-	},
-	px4: {
-			paddingInline: "16px"
-	},
-	py25: {
-			paddingBlock: "10px"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	truncate: {
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap",
-			overflow: "hidden"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	maxW160px: {
-			maxWidth: "160px"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	py6: {
-			paddingBlock: "24px"
-	},
-	textCenter: {
-			textAlign: "center"
-	},
-
-	h600px: {
-		"height": "600px"
-	},
-	maxH80dvh: {
-		"maxHeight": "80dvh"
-	},
-	originCenter: {
-		"transformOrigin": "50%"
-	},
-	originBottomRight: {
-		"transformOrigin": "100% 100%"
-	},
-	roundedBVarComposerRadius: {
-		"borderBottomRightRadius": "var(--composer-radius)",
-		"borderBottomLeftRadius": "var(--composer-radius)"
-	,
-		cornerShape: "var(--cs)"},
-	duration100ms: {
-		"--tw-duration": ".1s",
-		"transitionDuration": ".1s"
-	},
-
-	hMin600px85dvh: {
-		"height": "min(600px,85dvh)"
-	},
-	transitionScaleTranslateOpacity: {
-		"transitionProperty": "scale,translate,opacity",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  maxW160px: {
+    maxWidth: "160px",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  py6: {
+    paddingBlock: "calc(4px * 6)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
 });
 
 /**
@@ -134,255 +102,314 @@ const sx = stylex.create({
  */
 
 interface DeskOverlayProps {
-	open: boolean;
-	openOrigin: "center" | "bottom-right";
-	onClose: () => void;
-	phone: boolean;
-	/** Open the Desk session in the full viewer. */
-	onOpenSession: (sessionId: string) => void;
+  open: boolean;
+  openOrigin: "center" | "bottom-right";
+  onClose: () => void;
+  phone: boolean;
+  /** Open the Desk session in the full viewer. */
+  onOpenSession: (sessionId: string) => void;
 }
 
 function DeskBody({
-	active,
-	phone,
-	onClose,
-	onOpenSession,
+  active,
+  phone,
+  onClose,
+  onOpenSession,
 }: Omit<DeskOverlayProps, "open" | "openOrigin"> & { active: boolean }) {
-	const user = getCurrentUser();
-	const [sessionId, setSessionId] = useState<string | null>(null);
-	const [clearedAt, setClearedAt] = useState<string | undefined>(undefined);
-	const [ensureError, setEnsureError] = useState<string | null>(null);
-	// The Desk session's stored model + effort, so the composer's pill opens on
-	// what this session actually runs rather than on the instance default.
-	const [settings, setSettings] = useState<{ model?: string; effort?: string }>(
-		{},
-	);
+  const user = getCurrentUser();
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [clearedAt, setClearedAt] = useState<string | undefined>(undefined);
+  const [ensureError, setEnsureError] = useState<string | null>(null);
+  // The Desk session's stored model + effort, so the composer's pill opens on
+  // what this session actually runs rather than on the instance default.
+  const [settings, setSettings] = useState<{ model?: string; effort?: string }>(
+    {},
+  );
 
-	// Voice mode (Settings → Desk voice): a live GPT Realtime call layered on
-	// this same Desk session. The call mirrors its transcript into the session,
-	// so the conversation below updates live while you talk.
-	const [voiceEnabled, setVoiceEnabled] = useState(getDeskVoicePref);
-	const [voiceState, setVoiceState] = useState<DeskVoiceState>("idle");
-	const [voiceError, setVoiceError] = useState<string | null>(null);
-	const voiceRef = useRef<DeskVoiceClient | null>(null);
-	useEffect(
-		() => onDeskVoiceChanged(() => setVoiceEnabled(getDeskVoicePref())),
-		[],
-	);
-	// Never leave a mic running past the overlay body's lifetime.
-	useEffect(
-		() => () => {
-			voiceRef.current?.stop();
-		},
-		[],
-	);
+  // Voice mode (Settings → Desk voice): a live GPT Realtime call layered on
+  // this same Desk session. The call mirrors its transcript into the session,
+  // so the conversation below updates live while you talk.
+  const [voiceEnabled, setVoiceEnabled] = useState(getDeskVoicePref);
+  const [voiceState, setVoiceState] = useState<DeskVoiceState>("idle");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const voiceRef = useRef<DeskVoiceClient | null>(null);
+  useEffect(
+    () => onDeskVoiceChanged(() => setVoiceEnabled(getDeskVoicePref())),
+    [],
+  );
+  // Never leave a mic running past the overlay body's lifetime.
+  useEffect(
+    () => () => {
+      voiceRef.current?.stop();
+    },
+    [],
+  );
 
-	const voiceActive = voiceState !== "idle" && voiceState !== "error";
+  const voiceActive = voiceState !== "idle" && voiceState !== "error";
 
-	function toggleVoice() {
-		if (voiceRef.current?.active) {
-			voiceRef.current.stop();
-			return;
-		}
-		setVoiceError(null);
-		const client = new DeskVoiceClient({
-			user,
-			onState: (s, detail) => {
-				setVoiceState(s);
-				if (s === "error") setVoiceError(detail || "Voice call failed");
-			},
-		});
-		voiceRef.current = client;
-		void client.start().catch((e: any) => {
-			setVoiceState("error");
-			setVoiceError(e?.message || String(e));
-		});
-	}
+  function toggleVoice() {
+    if (voiceRef.current?.active) {
+      voiceRef.current.stop();
+      return;
+    }
+    setVoiceError(null);
+    const client = new DeskVoiceClient({
+      user,
+      onState: (s, detail) => {
+        setVoiceState(s);
+        if (s === "error") setVoiceError(detail || "Voice call failed");
+      },
+    });
+    voiceRef.current = client;
+    void client.start().catch((error) => {
+      setVoiceState("error");
+      setVoiceError(errorMessage(error, "Voice call failed"));
+    });
+  }
 
-	// One-time boot (the body stays mounted after the first summon): resolve
-	// the standing Desk session + the clear marker.
-	useEffect(() => {
-		let cancelled = false;
-		(async () => {
-			await (async () => {
-const res = await fetch(`${BASE_PATH}/api/desk/ensure`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ user }),
-				});
-				if (!res.ok) throw new Error(`HTTP ${res.status}`);
-				const data = (await res.json()) as {
-					sessionId: string;
-					clearedAt: string | null;
-					session: { model?: string; effort?: string } | null;
-				};
-				if (cancelled) return;
-				setSessionId(data.sessionId);
-				setSettings({
-					model: data.session?.model,
-					effort: data.session?.effort,
-				});
-				if (data.clearedAt) setClearedAt(data.clearedAt);
-})().catch(async (e: any) => {
-if (!cancelled) setEnsureError(e?.message || "Failed to open the Desk");
-});
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [user]);
+  // One-time boot (the body stays mounted after the first summon): resolve
+  // the standing Desk session + the clear marker.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await (async () => {
+        const res = await fetch(`${BASE_PATH}/api/desk/ensure`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as {
+          sessionId: string;
+          clearedAt: string | null;
+          session: { model?: string; effort?: string } | null;
+        };
+        if (cancelled) return;
+        setSessionId(data.sessionId);
+        setSettings({
+          model: data.session?.model,
+          effort: data.session?.effort,
+        });
+        if (data.clearedAt) setClearedAt(data.clearedAt);
+      })().catch(async (error) => {
+        if (!cancelled)
+          setEnsureError(errorMessage(error, "Failed to open the Desk"));
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
-	async function clearSession() {
-		await (async () => {
-const res = await fetch(`${BASE_PATH}/api/desk/clear`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ user }),
-			});
-			const data = (await res.json()) as { clearedAt?: string };
-			if (data.clearedAt) setClearedAt(data.clearedAt);
-})().catch(async () => {
+  async function clearSession() {
+    await (async () => {
+      const res = await fetch(`${BASE_PATH}/api/desk/clear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user }),
+      });
+      const data = (await res.json()) as { clearedAt?: string };
+      if (data.clearedAt) setClearedAt(data.clearedAt);
+    })().catch(async () => {});
+  }
 
-});
-	}
+  return (
+    <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
+      {/* Header */}
+      <div
+        {...stylex.props(
+          sx.flex,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.gap25,
+          sx.borderB,
+          sx.borderDivider,
+          sx.px4,
+          sx.py25,
+        )}
+      >
+        <IconDesk
+          size={22}
+          className={mergeStylexOverrideClassName("", sx.textDim)}
+        />
+        <span
+          {...stylex.props(
+            sx.minW0,
+            sx.flex1,
+            sx.truncate,
+            sx.fontSemibold,
+            sx.textFg,
+            typography.itemTitle,
+          )}
+        >
+          Desk
+        </span>
+        {voiceEnabled && voiceState !== "idle" && (
+          <span
+            {...stylex.props(
+              sx.maxW160px,
+              sx.shrink0,
+              sx.truncate,
+              sx.fontMedium,
+              sx.textDim,
+              typography.meta,
+            )}
+            title={voiceError ?? undefined}
+          >
+            {voiceState === "error"
+              ? (voiceError ?? "Voice call failed")
+              : {
+                  connecting: "Connecting…",
+                  listening: "Listening",
+                  thinking: "Thinking…",
+                  speaking: "Speaking",
+                  action: "Working…",
+                }[voiceState]}
+          </span>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
+          onClick={clearSession}
+          title="Clear the session here. The full transcript stays in the expanded session."
+        >
+          Clear chat
+        </Button>
+        {sessionId && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.shrink0,
+              sx.textFaint,
+            )}
+            icon={<IconExpand size={20} />}
+            onClick={() => {
+              onClose();
+              onOpenSession(sessionId);
+            }}
+            title="Open as a full session"
+            aria-label="Open as a full session"
+          />
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
+          icon={<IconMinus size={20} />}
+          onClick={onClose}
+          title="Minimise Desk"
+          aria-label="Minimise Desk"
+        />
+      </div>
 
-	return (
-		<div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
-			{/* Header */}
-			<div {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap25, sx.borderB, sx.borderDivider, sx.px4, sx.py25)}>
-				<IconDesk size={22} className={mergeStylexOverrideClassName("", sx.textDim)} />
-				<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.fontSemibold, sx.textFg, typography.itemTitle)}>
-					Desk
-				</span>
-				{voiceEnabled && voiceState !== "idle" && (
-					<span
-						{...stylex.props(sx.maxW160px, sx.shrink0, sx.truncate, sx.fontMedium, sx.textDim, typography.meta)}
-						title={voiceError ?? undefined}
-					>
-						{voiceState === "error"
-							? (voiceError ?? "Voice call failed")
-							: { connecting: "Connecting…", listening: "Listening", thinking: "Thinking…", speaking: "Speaking", action: "Working…" }[voiceState]}
-					</span>
-				)}
-				<Button
-					variant="ghost"
-					size="sm"
-					className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
-					onClick={clearSession}
-					title="Clear the session here. The full transcript stays in the expanded session."
-				>
-					Clear chat
-				</Button>
-				{sessionId && (
-					<Button
-						variant="ghost"
-						size="sm"
-						className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
-						icon={<IconExpand size={20} />}
-						onClick={() => {
-							onClose();
-							onOpenSession(sessionId);
-						}}
-						title="Open as a full session"
-						aria-label="Open as a full session"
-					/>
-				)}
-				<Button
-					variant="ghost"
-					size="sm"
-					className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
-					icon={<IconMinus size={20} />}
-					onClick={onClose}
-					title="Minimise Desk"
-					aria-label="Minimise Desk"
-				/>
-			</div>
-
-			{/* Concierge session */}
-			<div {...stylex.props(sx.minH0, sx.flex1)}>
-				{ensureError ? (
-					<div {...stylex.props(sx.px4, sx.py6, sx.textCenter, sx.fontMedium, sx.textDim, typography.label)}>
-						{ensureError}
-					</div>
-				) : sessionId ? (
-					<DeskConversation
-						sessionId={sessionId}
-						presenceActive={active}
-						autoFocus={active && !phone}
-						model={settings.model}
-						effort={settings.effort}
-						hideBefore={clearedAt}
-						voiceSend={(text) =>
-							voiceRef.current?.active
-								? voiceRef.current.sendText(text)
-								: false
-						}
-						// The Desk's job is delegating, so its transcript is full of
-						// spawned workers. There's no side pane in a modal — open the
-						// worker as a full session, the way the expand button does.
-						onOpenSubagent={(id) => {
-							onClose();
-							onOpenSession(id);
-						}}
-						placeholder="Ask anything…"
-						suggestions={DESK_SUGGESTIONS}
-					/>
-				) : (
-					<div {...stylex.props(sx.px4, sx.py6, sx.textCenter, sx.fontMedium, sx.textDim, typography.label)}>
-						Opening…
-					</div>
-				)}
-			</div>
-		</div>
-	);
+      {/* Concierge session */}
+      <div {...stylex.props(sx.minH0, sx.flex1)}>
+        {ensureError ? (
+          <div
+            {...stylex.props(
+              sx.px4,
+              sx.py6,
+              sx.textCenter,
+              sx.fontMedium,
+              sx.textDim,
+              typography.label,
+            )}
+          >
+            {ensureError}
+          </div>
+        ) : sessionId ? (
+          <DeskConversation
+            sessionId={sessionId}
+            presenceActive={active}
+            autoFocus={active && !phone}
+            model={settings.model}
+            effort={settings.effort}
+            hideBefore={clearedAt}
+            voiceSend={(text) =>
+              voiceRef.current?.active ? voiceRef.current.sendText(text) : false
+            }
+            // The Desk's job is delegating, so its transcript is full of
+            // spawned workers. There's no side pane in a modal — open the
+            // worker as a full session, the way the expand button does.
+            onOpenSubagent={(id) => {
+              onClose();
+              onOpenSession(id);
+            }}
+            placeholder="Ask anything…"
+            suggestions={DESK_SUGGESTIONS}
+          />
+        ) : (
+          <div
+            {...stylex.props(
+              sx.px4,
+              sx.py6,
+              sx.textCenter,
+              sx.fontMedium,
+              sx.textDim,
+              typography.label,
+            )}
+          >
+            Opening…
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function DeskOverlay({
-	open,
-	openOrigin,
-	onClose,
-	phone,
-	onOpenSession,
+  open,
+  openOrigin,
+  onClose,
+  phone,
+  onOpenSession,
 }: DeskOverlayProps) {
-	// Base UI's keepMounted preserves the Desk after its first summon, but it
-	// also mounts hidden content on a cold app load. Gate the body until then so
-	// a person who never opens Desk does not create its session, fetch its model
-	// catalog, or hold a second WebSocket all day.
-	const [opened, setOpened] = useState(open);
-	useEffect(() => {
-		if (open) setOpened(true);
-	}, [open]);
+  // Base UI's keepMounted preserves the Desk after its first summon, but it
+  // also mounts hidden content on a cold app load. Gate the body until then so
+  // a person who never opens Desk does not create its session, fetch its model
+  // catalog, or hold a second WebSocket all day.
+  const [opened, setOpened] = useState(open);
+  useEffect(() => {
+    if (open) setOpened(true);
+  }, [open]);
 
-	return (
-		<Modal.Root
-			open={open}
-			onOpenChange={(next) => {
-				if (!next) onClose();
-			}}
-			modal="trap-focus"
-		>
-			<Modal.Content
-				variant="palette"
-				keepMounted
-				widthClassName={mergeStylexClassName("", sharedClassStyles.wMin650px100)}
-				className={cn(
-					phone
-						? mergeStylexClassName("", sx.hMin600px85dvh)
-						: mergeStylexClassName("", sx.h600px, sx.maxH80dvh),
-					openOrigin === "center" ? mergeStylexClassName("", sx.originCenter) : mergeStylexClassName("", sx.originBottomRight),
-					mergeStylexClassName("data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!", sx.transitionScaleTranslateOpacity, sx.roundedBVarComposerRadius, sx.duration100ms),
-				)}
-				aria-label="Desk"
-			>
-				{(open || opened) && (
-					<DeskBody
-						active={open}
-						phone={phone}
-						onClose={onClose}
-						onOpenSession={onOpenSession}
-					/>
-				)}
-			</Modal.Content>
-		</Modal.Root>
-	);
+  return (
+    <Modal.Root
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      modal="trap-focus"
+    >
+      <Modal.Content
+        variant="palette"
+        keepMounted
+        widthClassName={utilityClassName("w-[min(650px,100%)]")}
+        className={cn(
+          phone
+            ? utilityClassName("h-[min(600px,85dvh)]")
+            : utilityClassName("h-[600px] max-h-[80dvh]"),
+          openOrigin === "center"
+            ? utilityClassName("origin-center")
+            : utilityClassName("origin-bottom-right"),
+          utilityClassName(
+            "rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! duration-[100ms]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!",
+          ),
+        )}
+        aria-label="Desk"
+      >
+        {(open || opened) && (
+          <DeskBody
+            active={open}
+            phone={phone}
+            onClose={onClose}
+            onOpenSession={onOpenSession}
+          />
+        )}
+      </Modal.Content>
+    </Modal.Root>
+  );
 }

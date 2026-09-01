@@ -30,14 +30,21 @@ export interface HostRunControl {
 }
 
 // Keyed by every id a caller might know: bks session id, engine session id.
-const hostRuns: Map<string, HostRunControl> = ((globalThis as any).__hostRuns ??=
-  new Map());
+const hostRuns: Map<string, HostRunControl> = ((
+  globalThis as any
+).__hostRuns ??= new Map());
 
-export function registerHostRun(keys: Array<string | undefined>, ctl: HostRunControl): void {
+export function registerHostRun(
+  keys: Array<string | undefined>,
+  ctl: HostRunControl,
+): void {
   for (const k of keys) if (k) hostRuns.set(k, ctl);
 }
 
-export function addHostRunKey(key: string | undefined, ctl: HostRunControl): void {
+export function addHostRunKey(
+  key: string | undefined,
+  ctl: HostRunControl,
+): void {
   if (key) hostRuns.set(key, ctl);
 }
 
@@ -62,45 +69,37 @@ export function hostSteer(
   text: string,
   images?: ImageInput[],
 
-  steerId?: string
+  steerId?: string,
 ): boolean {
   const ctl = hostRuns.get(id);
-  if (
-    !ctl ||
-    ctl.reconcileTerminal?.() ||
-    !ctl.steerable ||
-    !ctl.connected()
-  ) return false;
+  if (!ctl || ctl.reconcileTerminal?.() || !ctl.steerable || !ctl.connected())
+    return false;
   return ctl.steer(text, images, steerId);
 }
 
 export async function hostRetractSteer(
   ids: Array<string | null | undefined>,
-  steerId: string
+  steerId: string,
 ): Promise<boolean> {
   const controls = new Set(
-    ids.flatMap((id) => (id && hostRuns.get(id) ? [hostRuns.get(id)!] : []))
+    ids.flatMap((id) => (id && hostRuns.get(id) ? [hostRuns.get(id)!] : [])),
   );
   for (const ctl of controls) {
     if (ctl.reconcileTerminal?.()) continue;
-    if (ctl.steerable && ctl.connected() && await ctl.retractSteer(steerId)) return true;
+    if (ctl.steerable && ctl.connected() && (await ctl.retractSteer(steerId)))
+      return true;
   }
   return false;
-
 }
 
 export function hostInterruptSteer(
   id: string,
   text: string,
-  images?: ImageInput[]
+  images?: ImageInput[],
 ): boolean {
   const ctl = hostRuns.get(id);
-  if (
-    !ctl ||
-    ctl.reconcileTerminal?.() ||
-    !ctl.steerable ||
-    !ctl.connected()
-  ) return false;
+  if (!ctl || ctl.reconcileTerminal?.() || !ctl.steerable || !ctl.connected())
+    return false;
   return ctl.interruptSteer(text, images);
 }
 

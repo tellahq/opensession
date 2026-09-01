@@ -4,6 +4,7 @@ import {
   evaluateCommand,
   EXEC_WRAPPER_NAMES,
   orgFloorPolicy,
+  publicationPolicyDenyReason,
   scannableCommand,
   type CommandPolicy,
 } from "./command-policy";
@@ -15,7 +16,9 @@ import {
 describe("org floor", () => {
   test("requires approval for recursive delete and denies fork bomb", () => {
     const p = orgFloorPolicy();
-    expect(evaluateCommand("rm -rf build", p).decision).toBe("require_approval");
+    expect(evaluateCommand("rm -rf build", p).decision).toBe(
+      "require_approval",
+    );
     expect(evaluateCommand("mkfs.ext4 /dev/sda", p).decision).toBe("deny");
   });
 
@@ -45,22 +48,42 @@ describe("org floor", () => {
 
   test("force push requires approval in long and short flag forms", () => {
     const p = orgFloorPolicy();
-    expect(evaluateCommand("git push --force origin main", p).decision).toBe("require_approval");
-    expect(evaluateCommand("git push -f origin feature", p).decision).toBe("require_approval");
-    expect(evaluateCommand("git push --force-with-lease", p).decision).toBe("require_approval");
+    expect(evaluateCommand("git push --force origin main", p).decision).toBe(
+      "require_approval",
+    );
+    expect(evaluateCommand("git push -f origin feature", p).decision).toBe(
+      "require_approval",
+    );
+    expect(evaluateCommand("git push --force-with-lease", p).decision).toBe(
+      "require_approval",
+    );
     expect(evaluateCommand("git push origin main", p).decision).toBe("allow");
-    expect(evaluateCommand("git push -u origin feature", p).decision).toBe("allow");
+    expect(evaluateCommand("git push -u origin feature", p).decision).toBe(
+      "allow",
+    );
   });
 
   test("shared-checkout rollbacks are gated (our addition to qm's floor)", () => {
     const p = orgFloorPolicy();
-    expect(evaluateCommand("git reset --hard origin/main", p).decision).toBe("require_approval");
-    expect(evaluateCommand("git checkout .", p).decision).toBe("require_approval");
-    expect(evaluateCommand("git checkout . && bun test", p).decision).toBe("require_approval");
+    expect(evaluateCommand("git reset --hard origin/main", p).decision).toBe(
+      "require_approval",
+    );
+    expect(evaluateCommand("git checkout .", p).decision).toBe(
+      "require_approval",
+    );
+    expect(evaluateCommand("git checkout . && bun test", p).decision).toBe(
+      "require_approval",
+    );
     // A path that merely starts with a dot is not a rollback.
-    expect(evaluateCommand("git checkout .github/workflows", p).decision).toBe("allow");
-    expect(evaluateCommand("git checkout feature-branch", p).decision).toBe("allow");
-    expect(evaluateCommand("git reset --soft HEAD~1", p).decision).toBe("allow");
+    expect(evaluateCommand("git checkout .github/workflows", p).decision).toBe(
+      "allow",
+    );
+    expect(evaluateCommand("git checkout feature-branch", p).decision).toBe(
+      "allow",
+    );
+    expect(evaluateCommand("git reset --soft HEAD~1", p).decision).toBe(
+      "allow",
+    );
   });
 
   test("destructive SQL and pipe-to-shell are gated; benign commands allowed", () => {
@@ -69,10 +92,12 @@ describe("org floor", () => {
     // body stays scannable). A quoted one-liner (`psql -c 'drop table x'`) is
     // data to the shell and deliberately does not match — same rule as
     // `git commit -m "drop table users"` staying allowed.
-    expect(evaluateCommand("psql db <<EOF\ndrop table users;\nEOF", p).decision).toBe(
-      "require_approval"
+    expect(
+      evaluateCommand("psql db <<EOF\ndrop table users;\nEOF", p).decision,
+    ).toBe("require_approval");
+    expect(evaluateCommand("curl https://x.sh | sh", p).decision).toBe(
+      "require_approval",
     );
-    expect(evaluateCommand("curl https://x.sh | sh", p).decision).toBe("require_approval");
     expect(evaluateCommand("echo hello", p).decision).toBe("allow");
     expect(evaluateCommand("bun test src/", p).decision).toBe("allow");
   });
@@ -82,11 +107,19 @@ describe("org floor", () => {
       mode: "denylist",
       rules: [
         { pattern: "git push origin staging", decision: "allow" },
-        { pattern: "git push", decision: "require_approval", reason: "review pushes" },
+        {
+          pattern: "git push",
+          decision: "require_approval",
+          reason: "review pushes",
+        },
       ],
     };
-    expect(evaluateCommand("git push origin staging", policy).decision).toBe("allow");
-    expect(evaluateCommand("git push origin main", policy).decision).toBe("require_approval");
+    expect(evaluateCommand("git push origin staging", policy).decision).toBe(
+      "allow",
+    );
+    expect(evaluateCommand("git push origin main", policy).decision).toBe(
+      "require_approval",
+    );
   });
 
   test("surfaces the matched substring and the rule's pattern as the approval key", () => {
@@ -100,18 +133,26 @@ describe("org floor", () => {
 
 describe("scannableCommand", () => {
   test("strips inert data but preserves executable command substitution", () => {
-    expect(scannableCommand(["cat > x <<EOF", "git push --force", "EOF"].join("\n"))).not.toMatch(
-      /git push --force/
-    );
+    expect(
+      scannableCommand(["cat > x <<EOF", "git push --force", "EOF"].join("\n")),
+    ).not.toMatch(/git push --force/);
     expect(scannableCommand("echo 'rm -rf /'")).not.toMatch(/rm -rf/);
-    expect(scannableCommand('git commit -m "drop table users"')).not.toMatch(/drop table/i);
+    expect(scannableCommand('git commit -m "drop table users"')).not.toMatch(
+      /drop table/i,
+    );
     expect(scannableCommand('echo "$(rm -rf /)"')).toMatch(/rm -rf/);
   });
 
   test("unquotes bare words so quoting cannot evade word-boundary rules", () => {
-    expect(scannableCommand("acmecli 'tool' query_database")).toBe("acmecli tool query_database");
-    expect(scannableCommand('acmecli "tool" query_database')).toBe("acmecli tool query_database");
-    expect(scannableCommand("git commit -m 'fix stuff'")).toBe("git commit -m ''");
+    expect(scannableCommand("acmecli 'tool' query_database")).toBe(
+      "acmecli tool query_database",
+    );
+    expect(scannableCommand('acmecli "tool" query_database')).toBe(
+      "acmecli tool query_database",
+    );
+    expect(scannableCommand("git commit -m 'fix stuff'")).toBe(
+      "git commit -m ''",
+    );
     expect(scannableCommand("echo 'a;b'")).toBe("echo ''");
   });
 });
@@ -193,14 +234,22 @@ describe("evasion corpus", () => {
       "acmecli status",
       "echo 'acmecli login'",
     ]) {
-      expect(evaluateCommand(c, layerPolicy).decision, `must not deny: ${c}`).toBe("allow");
+      expect(
+        evaluateCommand(c, layerPolicy).decision,
+        `must not deny: ${c}`,
+      ).toBe("allow");
     }
   });
 
   test("shell escapes and empty-quote concatenation cannot bypass rules", () => {
     const policy: CommandPolicy = {
       mode: "denylist",
-      rules: [{ pattern: "\\bacmecli\\s+tool\\s+query_database\\b", decision: "require_approval" }],
+      rules: [
+        {
+          pattern: "\\bacmecli\\s+tool\\s+query_database\\b",
+          decision: "require_approval",
+        },
+      ],
     };
     for (const c of [
       "acmecli tool query_database",
@@ -214,9 +263,12 @@ describe("evasion corpus", () => {
     ]) {
       expect(evaluateCommand(c, policy).decision, c).toBe("require_approval");
     }
-    expect(evaluateCommand("echo 'acme\\cli tool query_database'", policy).decision).toBe("allow");
     expect(
-      evaluateCommand("printf '%s' 'acme''cli tool query_database'", policy).decision
+      evaluateCommand("echo 'acme\\cli tool query_database'", policy).decision,
+    ).toBe("allow");
+    expect(
+      evaluateCommand("printf '%s' 'acme''cli tool query_database'", policy)
+        .decision,
     ).toBe("allow");
   });
 
@@ -230,20 +282,33 @@ describe("evasion corpus", () => {
     ].join("\n");
     expect(evaluateCommand(writeHeredoc, p).decision).toBe("allow");
     expect(evaluateCommand("echo 'rm -rf /'", p).decision).toBe("allow");
-    expect(evaluateCommand('git commit -m "drop table users"', p).decision).toBe("allow");
+    expect(
+      evaluateCommand('git commit -m "drop table users"', p).decision,
+    ).toBe("allow");
   });
 
   test("a real dangerous command alongside a written heredoc is still gated", () => {
     const p = orgFloorPolicy();
-    const cmd = ["cat > note.txt <<EOF", "harmless body", "EOF", "git push --force origin main"].join("\n");
+    const cmd = [
+      "cat > note.txt <<EOF",
+      "harmless body",
+      "EOF",
+      "git push --force origin main",
+    ].join("\n");
     expect(evaluateCommand(cmd, p).decision).toBe("require_approval");
   });
 
   test("a heredoc body FED TO a shell stays gated (executed, not written)", () => {
     const p = orgFloorPolicy();
-    expect(evaluateCommand("bash <<EOF\nrm -rf /\nEOF", p).decision).toBe("require_approval");
-    expect(evaluateCommand("cat <<EOF | bash\nrm -rf /\nEOF", p).decision).toBe("require_approval");
-    expect(evaluateCommand("cat > /tmp/s.sh <<EOF\nrm -rf /\nEOF", p).decision).toBe("allow");
+    expect(evaluateCommand("bash <<EOF\nrm -rf /\nEOF", p).decision).toBe(
+      "require_approval",
+    );
+    expect(evaluateCommand("cat <<EOF | bash\nrm -rf /\nEOF", p).decision).toBe(
+      "require_approval",
+    );
+    expect(
+      evaluateCommand("cat > /tmp/s.sh <<EOF\nrm -rf /\nEOF", p).decision,
+    ).toBe("allow");
   });
 
   test("shell-evaluated payloads cannot bypass the org floor", () => {
@@ -256,8 +321,12 @@ describe("evasion corpus", () => {
     ]) {
       expect(evaluateCommand(c, p).decision, c).toBe("require_approval");
     }
-    expect(evaluateCommand("bash -c 'echo \"rm -rf /tmp/x\"'", p).decision).toBe("allow");
-    expect(evaluateCommand("printf '%s' 'bash -c rm -rf /tmp/x'", p).decision).toBe("allow");
+    expect(
+      evaluateCommand("bash -c 'echo \"rm -rf /tmp/x\"'", p).decision,
+    ).toBe("allow");
+    expect(
+      evaluateCommand("printf '%s' 'bash -c rm -rf /tmp/x'", p).decision,
+    ).toBe("allow");
   });
 
   test("literal stdin executed by a shell and simple command variables stay inside the gate", () => {
@@ -288,7 +357,9 @@ describe("evasion corpus", () => {
       time: "time",
       timeout: "timeout 5",
     };
-    expect(Object.keys(invocations).sort()).toEqual([...EXEC_WRAPPER_NAMES].sort());
+    expect(Object.keys(invocations).sort()).toEqual(
+      [...EXEC_WRAPPER_NAMES].sort(),
+    );
     for (const name of EXEC_WRAPPER_NAMES) {
       const w = invocations[name]!;
       for (const c of [
@@ -309,7 +380,10 @@ describe("evasion corpus", () => {
   test("xargs and coproc did not leak into the stdin question", () => {
     // They execute their input as ARGUMENTS, not as a shell script, so a
     // literal piped into them is data. Gating these would be a false positive.
-    for (const c of ["echo 'acmecli login' | xargs true", "echo 'acmecli login' | coproc true"]) {
+    for (const c of [
+      "echo 'acmecli login' | xargs true",
+      "echo 'acmecli login' | coproc true",
+    ]) {
       expect(evaluateCommand(c, layerPolicy).decision, c).toBe("allow");
     }
   });
@@ -318,22 +392,39 @@ describe("evasion corpus", () => {
     const p = orgFloorPolicy();
     // stdbuf was in every wrapper table except the one that extracts `-c`
     // payloads, so this fell through to no payload at all.
-    expect(evaluateCommand("stdbuf -oL bash -c 'rm -rf /tmp/x'", p).decision).toBe("require_approval");
-    expect(evaluateCommand("stdbuf -o0 -e0 sudo bash -c 'rm -rf /tmp/x'", p).decision).toBe("require_approval");
+    expect(
+      evaluateCommand("stdbuf -oL bash -c 'rm -rf /tmp/x'", p).decision,
+    ).toBe("require_approval");
+    expect(
+      evaluateCommand("stdbuf -o0 -e0 sudo bash -c 'rm -rf /tmp/x'", p)
+        .decision,
+    ).toBe("require_approval");
     // builtin was only known to the literal-producer table.
-    expect(evaluateCommand("builtin bash -c 'rm -rf /tmp/x'", p).decision).toBe("require_approval");
-    expect(evaluateCommand("echo 'rm -rf /tmp/x' | builtin bash", p).decision).toBe("require_approval");
-    expect(evaluateCommand("C='rm'; builtin $C -rf /tmp/x", p).decision).toBe("require_approval");
+    expect(evaluateCommand("builtin bash -c 'rm -rf /tmp/x'", p).decision).toBe(
+      "require_approval",
+    );
+    expect(
+      evaluateCommand("echo 'rm -rf /tmp/x' | builtin bash", p).decision,
+    ).toBe("require_approval");
+    expect(evaluateCommand("C='rm'; builtin $C -rf /tmp/x", p).decision).toBe(
+      "require_approval",
+    );
   });
 
   test("a wrapper that does not execute what follows stops the peel", () => {
     const p = orgFloorPolicy();
     // `command -v bash` prints a path; the payload is never run. The abort now
     // holds for every question, including the stdin one.
-    expect(evaluateCommand("command -v bash -c 'rm -rf /tmp/x'", p).decision).toBe("allow");
-    expect(evaluateCommand("echo 'rm -rf /tmp/x' | command -v bash", p).decision).toBe("allow");
+    expect(
+      evaluateCommand("command -v bash -c 'rm -rf /tmp/x'", p).decision,
+    ).toBe("allow");
+    expect(
+      evaluateCommand("echo 'rm -rf /tmp/x' | command -v bash", p).decision,
+    ).toBe("allow");
     // Only as a leading option: an operand ends the option scan.
-    expect(evaluateCommand("command bash -c 'rm -rf /tmp/x' -v", p).decision).toBe("require_approval");
+    expect(
+      evaluateCommand("command bash -c 'rm -rf /tmp/x' -v", p).decision,
+    ).toBe("require_approval");
   });
 
   test("allowlist mode denies anything unmatched", () => {
@@ -343,6 +434,80 @@ describe("evasion corpus", () => {
     };
     expect(evaluateCommand("git status", policy).decision).toBe("allow");
     expect(evaluateCommand("git push", policy).decision).toBe("deny");
+  });
+});
+
+describe("automation descendant publication policy", () => {
+  const policy = {
+    repo: "tellahq/renderer",
+    branch: "main",
+    headBranch: "compat/layout",
+  };
+
+  test("allows feature-branch publication and PR updates", () => {
+    expect(
+      publicationPolicyDenyReason(
+        "git push -u origin HEAD:refs/heads/compat/layout",
+        policy,
+      ),
+    ).toBeUndefined();
+    expect(
+      publicationPolicyDenyReason(
+        "gh pr edit 12 --repo tellahq/renderer --add-label ready",
+        policy,
+      ),
+    ).toBeUndefined();
+  });
+
+  test("denies merge, protected-base push, and external repository writes", () => {
+    expect(
+      publicationPolicyDenyReason("gh pr merge 12 --squash", policy),
+    ).toContain("cannot merge");
+    expect(
+      publicationPolicyDenyReason("git push origin HEAD:main", policy),
+    ).toContain("protected base");
+    expect(
+      publicationPolicyDenyReason(
+        "gh issue create --repo other/project --title nope",
+        policy,
+      ),
+    ).toContain("other/project");
+    expect(
+      publicationPolicyDenyReason(
+        "git push https://github.com/other/project.git HEAD:feature",
+        policy,
+      ),
+    ).toContain("external repository");
+    expect(
+      publicationPolicyDenyReason("git -C . push origin HEAD:main", policy),
+    ).toContain("protected base");
+    expect(
+      publicationPolicyDenyReason(
+        "git --git-dir=.git push origin HEAD:main",
+        policy,
+      ),
+    ).toContain("protected base");
+    expect(
+      publicationPolicyDenyReason("git send-pack origin HEAD:main", policy),
+    ).toContain("send-pack");
+    expect(
+      publicationPolicyDenyReason(
+        "gh --repo tellahq/renderer pr merge 12",
+        policy,
+      ),
+    ).toContain("cannot merge");
+    expect(
+      publicationPolicyDenyReason(
+        "gh issue create -R=other/project --title nope",
+        policy,
+      ),
+    ).toContain("other/project");
+    expect(
+      publicationPolicyDenyReason(
+        "gh api graphql -f query='mutation { x }'",
+        policy,
+      ),
+    ).toContain("general GitHub API");
   });
 });
 
@@ -357,51 +522,79 @@ describe("bashAskPolicyReply", () => {
     expect(
       bashAskPolicyReply(
         { permission: "external_directory", metadata: {} },
-        { unattended: true, gated: true }
-      )
+        { unattended: true, gated: true },
+      ),
     ).toBeNull();
   });
 
   test("a deny match rejects in every mode", () => {
-    expect(bashAskPolicyReply(bashAsk("mkfs.ext4 /dev/sda"), { unattended: true, gated: true })).toBe(
-      "reject"
-    );
-    expect(bashAskPolicyReply(bashAsk("mkfs.ext4 /dev/sda"), { unattended: false, gated: false })).toBe(
-      "reject"
-    );
+    expect(
+      bashAskPolicyReply(bashAsk("mkfs.ext4 /dev/sda"), {
+        unattended: true,
+        gated: true,
+      }),
+    ).toBe("reject");
+    expect(
+      bashAskPolicyReply(bashAsk("mkfs.ext4 /dev/sda"), {
+        unattended: false,
+        gated: false,
+      }),
+    ).toBe("reject");
   });
 
   test("require_approval rejects unattended, defers to the human interactively", () => {
-    expect(bashAskPolicyReply(bashAsk("rm -rf build"), { unattended: true, gated: true })).toBe(
-      "reject"
-    );
-    expect(bashAskPolicyReply(bashAsk("rm -rf build"), { unattended: false, gated: false })).toBeNull();
+    expect(
+      bashAskPolicyReply(bashAsk("rm -rf build"), {
+        unattended: true,
+        gated: true,
+      }),
+    ).toBe("reject");
+    expect(
+      bashAskPolicyReply(bashAsk("rm -rf build"), {
+        unattended: false,
+        gated: false,
+      }),
+    ).toBeNull();
   });
 
   test("an allowed command answers its own ask on gated runs only", () => {
-    expect(bashAskPolicyReply(bashAsk("bun test src/"), { unattended: true, gated: true })).toBe(
-      "once"
-    );
+    expect(
+      bashAskPolicyReply(bashAsk("bun test src/"), {
+        unattended: true,
+        gated: true,
+      }),
+    ).toBe("once");
     // Non-gated unattended runs keep their historical auto-reject.
-    expect(bashAskPolicyReply(bashAsk("bun test src/"), { unattended: true, gated: false })).toBe(
-      "reject"
-    );
+    expect(
+      bashAskPolicyReply(bashAsk("bun test src/"), {
+        unattended: true,
+        gated: false,
+      }),
+    ).toBe("reject");
     // Interactive: the question-card flow decides.
-    expect(bashAskPolicyReply(bashAsk("bun test src/"), { unattended: false, gated: false })).toBeNull();
+    expect(
+      bashAskPolicyReply(bashAsk("bun test src/"), {
+        unattended: false,
+        gated: false,
+      }),
+    ).toBeNull();
   });
 
   test("falls back to the ask title when metadata carries no command", () => {
     expect(
       bashAskPolicyReply(
         { permission: "bash", metadata: {}, title: "rm -rf build" },
-        { unattended: true, gated: true }
-      )
+        { unattended: true, gated: true },
+      ),
     ).toBe("reject");
   });
 
   test("an unreadable command fails closed on unattended runs", () => {
     expect(
-      bashAskPolicyReply({ permission: "bash", metadata: {} }, { unattended: true, gated: true })
+      bashAskPolicyReply(
+        { permission: "bash", metadata: {} },
+        { unattended: true, gated: true },
+      ),
     ).toBe("reject");
   });
 });

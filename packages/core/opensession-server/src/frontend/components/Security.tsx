@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import { BASE_PATH } from "../lib/base";
 import React, { useCallback, useEffect, useState } from "react";
@@ -18,12 +20,13 @@ import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+import { cn } from "../ui/cn";
 import { Menu } from "../ui/menu";
 import { Modal } from "../ui/modal";
 import { CheckStatusIcon } from "./CheckStatusIcon";
 import { IconDotsHorizontal, IconPencil, IconPlus, IconTrash } from "./icons";
 import { SOURCE_CHIP } from "../lib/source-chip-classes";
+import { errorMessage } from "../lib/error-message";
 import { Field, Input, Textarea } from "../ui/input";
 import { OptionSelect } from "../ui/select";
 import {
@@ -42,199 +45,157 @@ import {
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
-import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	flex: {
-			display: "flex"
-	},
-	minH0: {
-			minHeight: "0"
-	},
-	flex1: {
-			flex: "1"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	overflowYAuto: {
-			overflowY: "auto"
-	},
-	px8: {
-			paddingInline: "32px"
-	},
-	pt11: {
-			paddingTop: "44px"
-	},
-	pb22: {
-			paddingBottom: "88px"
-	},
-	selfStart: {
-			alignSelf: "flex-start"
-	},
-	mb4: {
-			marginBottom: "16px"
-	},
-	px5: {
-			paddingInline: "20px"
-	},
-	mb3: {
-			marginBottom: "12px"
-	},
-	itemsStart: {
-			alignItems: "flex-start"
-	},
-	mt1: {
-			marginTop: "4px"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	textRed: {
-			color: "var(--red)"
-	},
-	mt0: {
-			marginTop: "0"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap3: {
-			gap: "12px"
-	},
-	flexWrap: {
-			flexWrap: "wrap"
-	},
-	gap2: {
-			gap: "8px"
-	},
-	mt2: {
-			marginTop: "8px"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	gap1: {
-			gap: "4px"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	size2: {
-			width: "8px",
-			height: "8px"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	roundedFull: {
-			borderRadius: "calc(infinity * 1px)"
-	,
-		cornerShape: "round"},
-	textFg: {
-			color: "var(--text)"
-	},
-	truncate: {
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap",
-			overflow: "hidden"
-	},
-	gap35: {
-			gap: "14px"
-	},
-	mt3px: {
-			marginTop: "3px"
-	},
-	mt05: {
-			marginTop: "2px"
-	},
-	block: {
-			display: "block"
-	},
-	fontNormal: {
-			fontWeight: "var(--font-weight-normal)"
-	},
-
-	size5: {
-		"width": "20px",
-		"height": "20px"
-	},
-	textGreen: {
-		"color": "var(--green)"
-	},
-	phoneFlexCol: {
-		"@media (max-width: 720px)": {
-			"flexDirection": "column"
-		}
-	},
-	phoneItemsStart: {
-		"@media (max-width: 720px)": {
-			"alignItems": "flex-start"
-		}
-	},
-	phoneGap3: {
-		"@media (max-width: 720px)": {
-			"gap": "12px"
-		}
-	},
-	lineClamp2: {
-		"WebkitLineClamp": "2",
-		"WebkitBoxOrient": "vertical",
-		"display": "-webkit-box",
-		"overflow": "hidden"
-	},
-	mlAuto: {
-		"marginLeft": "auto"
-	},
-	flexRow: {
-		"flexDirection": "row"
-	},
-	gap25: {
-		"gap": "10px"
-	},
-	fontMedium: {
-		"--tw-font-weight": "var(--font-weight-medium)",
-		"fontWeight": "var(--font-weight-medium)"
-	},
-	cursorPointer: {
-		"cursor": "pointer"
-	},
-	opacity50: {
-		"opacity": ".5"
-	},
-
-	phonePx4: {
-		"@media (max-width: 720px)": {
-			"paddingInline": "16px"
-		}
-	},
-	phonePt5: {
-		"@media (max-width: 720px)": {
-			"paddingTop": "20px"
-		}
-	},
-	phonePb12: {
-		"@media (max-width: 720px)": {
-			"paddingBottom": "48px"
-		}
-	},
-	textLink: {
-		"color": "var(--link)"
-	},
-	noUnderline: {
-		"textDecorationLine": "none"
-	},
-	hoverUnderline: {
-		"@media (hover: hover)": {
-			":hover": {
-				"textDecorationLine": "underline"
-			}
-		}
-	},
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  px8: {
+    paddingInline: "calc(4px * 8)",
+  },
+  pt11: {
+    paddingTop: "calc(4px * 11)",
+  },
+  pb22: {
+    paddingBottom: "calc(4px * 22)",
+  },
+  phonePx4: {
+    "@media (max-width: 720px)": {
+      paddingInline: "calc(4px * 4)",
+    },
+  },
+  phonePt5: {
+    "@media (max-width: 720px)": {
+      paddingTop: "calc(4px * 5)",
+    },
+  },
+  phonePb12: {
+    "@media (max-width: 720px)": {
+      paddingBottom: "calc(4px * 12)",
+    },
+  },
+  selfStart: {
+    alignSelf: "flex-start",
+  },
+  phoneFlexCol: {
+    "@media (max-width: 720px)": {
+      flexDirection: "column",
+    },
+  },
+  phoneItemsStart: {
+    "@media (max-width: 720px)": {
+      alignItems: "flex-start",
+    },
+  },
+  phoneGap3: {
+    "@media (max-width: 720px)": {
+      gap: "calc(4px * 3)",
+    },
+  },
+  mb4: {
+    marginBottom: "calc(4px * 4)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  lineClamp2: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "2",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  mt0: {
+    marginTop: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  size2: {
+    width: "calc(4px * 2)",
+    height: "calc(4px * 2)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  gap35: {
+    gap: "calc(4px * 3.5)",
+  },
+  mt3px: {
+    marginTop: "3px",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  block: {
+    display: "block",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
 });
 
 /* Security is a tool surface hosted inside Settings, so it reads as one of its
@@ -247,7 +208,9 @@ const sx = stylex.create({
 const FORM_FIELDS =
   "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
 /** A link inside a row: the session an entry points at, the page that owns it. */
-const LINK = mergeStylexClassName("", sx.cursorPointer, sx.textLink, sx.noUnderline, sx.hoverUnderline);
+const LINK = utilityClassName(
+  "cursor-pointer text-link no-underline hover:underline",
+);
 
 interface Props {
   onOpenSession: (sessionId: string) => void;
@@ -266,10 +229,14 @@ interface RecurringScan {
 type Tab = "scans" | "profiles";
 
 /** A scan's state as the settings row reads it: a dot and a word. */
-function scanStatus(status: SecurityScan["status"]): { label: string; dot: string } {
+function scanStatus(status: SecurityScan["status"]): {
+  label: string;
+  dot: string;
+} {
   if (status === "running") return { label: "Running", dot: "var(--yellow)" };
   if (status === "done") return { label: "Done", dot: "var(--green)" };
-  if (status === "interactive") return { label: "Interactive", dot: "var(--accent)" };
+  if (status === "interactive")
+    return { label: "Interactive", dot: "var(--accent)" };
   return { label: "Error", dot: "var(--red)" };
 }
 
@@ -278,8 +245,10 @@ function RunGlyph({ ok, title }: { ok: boolean; title?: string }) {
   return (
     <span
       className={cn(
-        mergeStylexClassName("[&_svg]:size-3.5", sx.flex, sx.size5, sx.shrink0, sx.itemsCenter, sx.justifyCenter),
-        ok ? mergeStylexClassName("", sx.textGreen) : mergeStylexClassName("", sx.textRed),
+        utilityClassName(
+          "flex size-5 shrink-0 items-center justify-center [&_svg]:size-3.5",
+        ),
+        ok ? utilityClassName("text-green") : utilityClassName("text-red"),
       )}
       title={title}
     >
@@ -296,31 +265,31 @@ export function Security({ onOpenSession }: Props) {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("scans");
   const [showNewScan, setShowNewScan] = useState(false);
-  const [editProfile, setEditProfile] = useState<ScanProfile | "new" | null>(null);
+  const [editProfile, setEditProfile] = useState<ScanProfile | "new" | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
 
-  // Stable identity: only setters and module functions are captured, so the
-  // polling effect can list `load` without ever refiring from re-renders.
   const load = useCallback(async () => {
-    await (async () => {
-const data = await fetchSecurity();
+    try {
+      const data = await fetchSecurity();
       setScans(data.scans);
       setProfiles(data.profiles);
       setRepos(data.repos);
-      setLoading(false);
-})().catch(async () => {
-
-});
-    await (async () => {
-const autos = await fetchAutomations();
+    } catch (error) {
+      setError(errorMessage(error, "Failed to load security scans"));
+    }
+    setLoading(false);
+    try {
+      const automations = await fetchAutomations();
       setRecurring(
-        (autos as RecurringScan[]).filter((a) =>
-          /deepsec|security scan/i.test(a.name),
+        automations.filter((automation) =>
+          /deepsec|security scan/i.test(automation.name),
         ),
       );
-})().catch(async () => {
-
-});
+    } catch (error) {
+      setError(errorMessage(error, "Failed to load recurring scans"));
+    }
   }, []);
 
   useEffect(() => {
@@ -334,32 +303,52 @@ const autos = await fetchAutomations();
   }, [load]);
 
   async function handleDeleteScan(s: SecurityScan) {
-    if (!confirm("Remove this scan record? Its sessions are left as-is.")) return;
-    await (async () => {
-await deleteScanApi(s.id);
-      load();
-})().catch(async (e: any) => {
-setError(e.message);
-});
+    if (!confirm("Remove this scan record? Its sessions are left as-is."))
+      return;
+    try {
+      await deleteScanApi(s.id);
+      void load();
+    } catch (error) {
+      setError(errorMessage(error, "Failed to remove scan"));
+    }
   }
 
   async function handleDeleteProfile(p: ScanProfile) {
     if (!confirm(`Delete profile "${p.name}"?`)) return;
-    await (async () => {
-await deleteScanProfileApi(p.id);
-      load();
-})().catch(async (e: any) => {
-setError(e.message);
-});
+    try {
+      await deleteScanProfileApi(p.id);
+      void load();
+    } catch (error) {
+      setError(errorMessage(error, "Failed to delete profile"));
+    }
   }
 
   return (
-    <div {...mergeStylexProps("", sx.phonePx4, sx.phonePt5, sx.phonePb12, sx.flex, sx.minH0, sx.flex1, sx.justifyCenter, sx.overflowYAuto, sx.px8, sx.pt11, sx.pb22)}>
+    <div
+      {...stylex.props(
+        sx.flex,
+        sx.minH0,
+        sx.flex1,
+        sx.justifyCenter,
+        sx.overflowYAuto,
+        sx.px8,
+        sx.pt11,
+        sx.pb22,
+        sx.phonePx4,
+        sx.phonePt5,
+        sx.phonePb12,
+      )}
+    >
       <SettingsPanel className={mergeStylexOverrideClassName("", sx.selfStart)}>
         <SettingsHeader
           title="Security"
           description="deepsec scans across your repos. Every confirmed finding lands as its own PR."
-          className={mergeStylexOverrideClassName("", sx.phoneFlexCol, sx.phoneItemsStart, sx.phoneGap3)}
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.phoneFlexCol,
+            sx.phoneItemsStart,
+            sx.phoneGap3,
+          )}
           actions={
             tab === "profiles" ? (
               <Button
@@ -389,13 +378,20 @@ setError(e.message);
             value={tab}
             onValueChange={(next) => setTab(next as Tab)}
           >
-            <SegmentedOption value="scans">Scans {scans.length}</SegmentedOption>
-            <SegmentedOption value="profiles">Profiles {profiles.length}</SegmentedOption>
+            <SegmentedOption value="scans">
+              Scans {scans.length}
+            </SegmentedOption>
+            <SegmentedOption value="profiles">
+              Profiles {profiles.length}
+            </SegmentedOption>
           </Segmented>
         </div>
 
         {error && (
-          <InlineAlert className={mergeStylexOverrideClassName("", sx.mb3)} onDismiss={() => setError(null)}>
+          <InlineAlert
+            className={mergeStylexOverrideClassName("", sx.mb3)}
+            onDismiss={() => setError(null)}
+          >
             {error}
           </InlineAlert>
         )}
@@ -406,18 +402,31 @@ setError(e.message);
           <SettingCard>
             {profiles.length === 0 ? (
               <EmptyState placement="row" title="No scan profiles yet">
-                A profile tells a scan how to read your code: what to prioritize,
-                what is intentionally public, and where the severity bar sits.
+                A profile tells a scan how to read your code: what to
+                prioritize, what is intentionally public, and where the severity
+                bar sits.
               </EmptyState>
             ) : (
               profiles.map((p) => (
-                <SettingRow key={p.id} className={mergeStylexOverrideClassName("", sx.itemsStart)}>
+                <SettingRow
+                  key={p.id}
+                  className={mergeStylexOverrideClassName("", sx.itemsStart)}
+                >
                   <SettingRowText>
                     <SettingRowTitle>{p.name}</SettingRowTitle>
-                    <SettingRowDescription className={mergeStylexOverrideClassName("", sx.lineClamp2)}>
+                    <SettingRowDescription
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.lineClamp2,
+                      )}
+                    >
                       {p.prompt}
                     </SettingRowDescription>
-                    <div {...stylex.props(sx.mt1, sx.textFaint, typography.meta)}>by {p.createdBy}</div>
+                    <div
+                      {...stylex.props(sx.mt1, sx.textFaint, typography.meta)}
+                    >
+                      by {p.createdBy}
+                    </div>
                   </SettingRowText>
                   <SettingRowControl>
                     <Menu.Root>
@@ -433,7 +442,11 @@ setError(e.message);
                           Edit profile
                         </Menu.Item>
                         <Menu.Item
-                          onClick={() => handleDeleteProfile(p)} {...mergeStylexProps("data-[highlighted]:bg-red-soft", sx.textRed)}
+                          onClick={() => handleDeleteProfile(p)}
+                          className={mergeStylexOverrideClassName(
+                            "data-[highlighted]:bg-red-soft",
+                            sx.textRed,
+                          )}
                         >
                           <IconTrash size={16} />
                           Delete profile
@@ -449,7 +462,11 @@ setError(e.message);
           <>
             {recurring.length > 0 && (
               <>
-                <SettingsGroupLabel className={mergeStylexOverrideClassName("", sx.mt0)}>Recurring</SettingsGroupLabel>
+                <SettingsGroupLabel
+                  className={mergeStylexOverrideClassName("", sx.mt0)}
+                >
+                  Recurring
+                </SettingsGroupLabel>
                 <SettingCard>
                   {recurring.map((r) => (
                     <SettingRow key={r.id}>
@@ -457,15 +474,27 @@ setError(e.message);
                         <SettingRowTitle>{r.name}</SettingRowTitle>
                         <SettingRowDescription>
                           {r.schedule}
-                          {r.lastRunAt ? ` · last run ${relativeTime(r.lastRunAt)}` : ""}
+                          {r.lastRunAt
+                            ? ` · last run ${relativeTime(r.lastRunAt)}`
+                            : ""}
                         </SettingRowDescription>
                       </SettingRowText>
-                      <SettingRowControl className={mergeStylexOverrideClassName("", sx.flex, sx.itemsCenter, sx.gap3)}>
-                        {r.lastRunStatus === "ok" || r.lastRunStatus === "error" ? (
+                      <SettingRowControl
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.flex,
+                          sx.itemsCenter,
+                          sx.gap3,
+                        )}
+                      >
+                        {r.lastRunStatus === "ok" ||
+                        r.lastRunStatus === "error" ? (
                           <RunGlyph
                             ok={r.lastRunStatus === "ok"}
                             title={
-                              r.lastRunStatus === "ok" ? "Last run ok" : "Last run failed"
+                              r.lastRunStatus === "ok"
+                                ? "Last run ok"
+                                : "Last run failed"
                             }
                           />
                         ) : null}
@@ -491,9 +520,19 @@ setError(e.message);
                 </EmptyState>
               ) : (
                 scans.map((s) => (
-                  <SettingRow key={s.id} className={mergeStylexOverrideClassName("", sx.itemsStart)}>
+                  <SettingRow
+                    key={s.id}
+                    className={mergeStylexOverrideClassName("", sx.itemsStart)}
+                  >
                     <SettingRowText>
-                      <div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap2)}>
+                      <div
+                        {...stylex.props(
+                          sx.flex,
+                          sx.flexWrap,
+                          sx.itemsCenter,
+                          sx.gap2,
+                        )}
+                      >
                         <SettingRowTitle>
                           {s.interactive ? "Interactive scan" : "Scan"} ·{" "}
                           {s.repos.map(repoLabel).join(", ")}
@@ -506,35 +545,64 @@ setError(e.message);
                       </div>
 
                       {s.instructions && (
-                        <SettingRowDescription className={mergeStylexOverrideClassName("", sx.lineClamp2)}>
+                        <SettingRowDescription
+                          className={mergeStylexOverrideClassName(
+                            "",
+                            sx.lineClamp2,
+                          )}
+                        >
                           {s.instructions}
                         </SettingRowDescription>
                       )}
 
-                      <div {...stylex.props(sx.mt2, sx.flex, sx.flexCol, sx.gap1)}>
+                      <div
+                        {...stylex.props(sx.mt2, sx.flex, sx.flexCol, sx.gap1)}
+                      >
                         {s.sessions.map((ref) => (
                           <div
                             key={ref.repo + ref.sessionId}
-                            {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2, sx.textDim, typography.label)}
+                            {...stylex.props(
+                              sx.flex,
+                              sx.minW0,
+                              sx.itemsCenter,
+                              sx.gap2,
+                              sx.textDim,
+                              typography.label,
+                            )}
                           >
                             {ref.status === "running" ? (
                               <span
-                                {...stylex.props(sx.size2, sx.shrink0, sx.roundedFull)}
+                                {...stylex.props(
+                                  sx.size2,
+                                  sx.shrink0,
+                                  sx.roundedFull,
+                                )}
                                 style={{ background: "var(--yellow)" }}
                                 title="Running"
                               />
                             ) : (
-                              <RunGlyph ok={ref.status === "ok"} title={ref.error} />
+                              <RunGlyph
+                                ok={ref.status === "ok"}
+                                title={ref.error}
+                              />
                             )}
-                            <span {...stylex.props(sx.shrink0, sx.textFg)}>{repoLabel(ref.repo)}</span>
+                            <span {...stylex.props(sx.shrink0, sx.textFg)}>
+                              {repoLabel(ref.repo)}
+                            </span>
                             {ref.error && (
-                              <span {...stylex.props(sx.truncate, sx.textRed)} title={ref.error}>
+                              <span
+                                {...stylex.props(sx.truncate, sx.textRed)}
+                                title={ref.error}
+                              >
                                 {ref.error}
                               </span>
                             )}
                             {ref.sessionId && (
                               <a
-                                className={cn(LINK, mergeStylexClassName("", sx.mlAuto, sx.shrink0))}
+                                className={cn(
+                                  LINK,
+                                  utilityClassName("ml-auto shrink-0"),
+                                )}
                                 href={`${BASE_PATH}/session/${ref.sessionId}`}
                                 onClick={(e) => {
                                   e.preventDefault();
@@ -548,21 +616,38 @@ setError(e.message);
                         ))}
                       </div>
 
-                      <div {...stylex.props(sx.mt2, sx.textFaint, typography.meta)}>
+                      <div
+                        {...stylex.props(sx.mt2, sx.textFaint, typography.meta)}
+                      >
                         started {relativeTime(s.createdAt)}
-                        {s.finishedAt && ` · finished ${relativeTime(s.finishedAt)}`}
+                        {s.finishedAt &&
+                          ` · finished ${relativeTime(s.finishedAt)}`}
                         {` · by ${s.createdBy}`}
                       </div>
                     </SettingRowText>
-                    <SettingRowControl className={mergeStylexOverrideClassName("", sx.flex, sx.itemsCenter, sx.gap2)}>
+                    <SettingRowControl
+                      className={mergeStylexOverrideClassName(
+                        "",
+                        sx.flex,
+                        sx.itemsCenter,
+                        sx.gap2,
+                      )}
+                    >
                       <StatusChip {...scanStatus(s.status)} />
                       <Menu.Root>
-                        <Menu.Trigger className={rowMenuTriggerClasses} aria-label="Manage scan">
+                        <Menu.Trigger
+                          className={rowMenuTriggerClasses}
+                          aria-label="Manage scan"
+                        >
                           <IconDotsHorizontal size={18} />
                         </Menu.Trigger>
                         <Menu.Popup align="end" sideOffset={4}>
                           <Menu.Item
-                            onClick={() => handleDeleteScan(s)} {...mergeStylexProps("data-[highlighted]:bg-red-soft", sx.textRed)}
+                            onClick={() => handleDeleteScan(s)}
+                            className={mergeStylexOverrideClassName(
+                              "data-[highlighted]:bg-red-soft",
+                              sx.textRed,
+                            )}
                           >
                             <IconTrash size={16} />
                             Remove scan
@@ -624,7 +709,9 @@ function NewScanModal({
   const [repo, setRepo] = useState("");
   const [profileId, setProfileId] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [recurrence, setRecurrence] = useState<"none" | "daily" | "weekly">("none");
+  const [recurrence, setRecurrence] = useState<"none" | "daily" | "weekly">(
+    "none",
+  );
   const [interactive, setInteractive] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -653,8 +740,8 @@ function NewScanModal({
   async function handleStart() {
     setStarting(true);
     setError(null);
-    await (async () => {
-const res = await startScanApi({
+    try {
+      const res = await startScanApi({
         repos: scope === "all" ? "all" : [repo],
         profileId: profileId || undefined,
         instructions: instructions.trim() || undefined,
@@ -663,10 +750,10 @@ const res = await startScanApi({
         createdBy: getCurrentUser(),
       });
       onStarted(res.sessionId);
-})().catch(async (e: any) => {
-setError(e.message);
+    } catch (error) {
+      setError(errorMessage(error, "Failed to start scan"));
       setStarting(false);
-});
+    }
   }
 
   return (
@@ -677,7 +764,7 @@ setError(e.message);
       }}
     >
       <Modal.Content
-        widthClassName={mergeStylexClassName("", sharedClassStyles.maxW34rem)}
+        widthClassName={utilityClassName("max-w-[34rem]")}
         className={FORM_FIELDS}
         initialFocus={repoRef}
       >
@@ -755,7 +842,9 @@ setError(e.message);
                 { value: "daily", label: "Daily" },
                 { value: "weekly", label: "Weekly" },
               ]}
-              onChange={(next) => setRecurrence(next as "none" | "daily" | "weekly")}
+              onChange={(next) =>
+                setRecurrence(next as "none" | "daily" | "weekly")
+              }
               disabled={!canRecur}
             />
             {!singleRepo && (
@@ -767,8 +856,12 @@ setError(e.message);
 
           <label
             className={cn(
-              mergeStylexClassName("", sx.flex, sx.flexRow, sx.itemsStart, sx.gap25, typography.label, sx.fontMedium, sx.textDim),
-              canInteractive ? mergeStylexClassName("", sx.cursorPointer) : mergeStylexClassName("", sx.opacity50),
+              utilityClassName(
+                "flex flex-row items-start gap-2.5 text-label font-medium text-dim",
+              ),
+              canInteractive
+                ? utilityClassName("cursor-pointer")
+                : utilityClassName("opacity-50"),
             )}
           >
             <Checkbox
@@ -779,9 +872,17 @@ setError(e.message);
             />
             <span>
               Interactive mode
-              <span {...stylex.props(sx.mt05, sx.block, sx.fontNormal, sx.textFaint, typography.label)}>
-                Instead of scanning end to end, {AGENT_NAME} shapes the threat model
-                with you in a session first.
+              <span
+                {...stylex.props(
+                  sx.mt05,
+                  sx.block,
+                  sx.fontNormal,
+                  sx.textFaint,
+                  typography.label,
+                )}
+              >
+                Instead of scanning end to end, {AGENT_NAME} shapes the threat
+                model with you in a session first.
               </span>
             </span>
           </label>
@@ -790,7 +891,11 @@ setError(e.message);
         </div>
 
         <Modal.Footer>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={starting}>
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={starting}
+          >
             Cancel
           </Button>
           <Button
@@ -842,14 +947,19 @@ function ProfileModal({
   async function handleSave() {
     setSaving(true);
     setError(null);
-    await (async () => {
-if (initial) await updateScanProfileApi(initial.id, { name, prompt });
-      else await createScanProfileApi({ name, prompt, createdBy: getCurrentUser() });
+    try {
+      if (initial) await updateScanProfileApi(initial.id, { name, prompt });
+      else
+        await createScanProfileApi({
+          name,
+          prompt,
+          createdBy: getCurrentUser(),
+        });
       onSaved();
-})().catch(async (e: any) => {
-setError(e.message);
+    } catch (error) {
+      setError(errorMessage(error, "Failed to save profile"));
       setSaving(false);
-});
+    }
   }
 
   return (
@@ -860,7 +970,7 @@ setError(e.message);
       }}
     >
       <Modal.Content
-        widthClassName={mergeStylexClassName("", sharedClassStyles.maxW34rem)}
+        widthClassName={utilityClassName("max-w-[34rem]")}
         className={FORM_FIELDS}
         initialFocus={nameRef}
       >
@@ -894,7 +1004,11 @@ setError(e.message);
         </div>
 
         <Modal.Footer>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
             Cancel
           </Button>
           <Button

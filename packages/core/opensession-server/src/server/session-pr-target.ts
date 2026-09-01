@@ -5,13 +5,13 @@ import { getWorkspace, type Workspace } from "./workspaces";
 /** The PR branch `session` can take from `workspace`, or null. Never across
  *  repos: a session in another repo would resolve to a branch absent there. */
 function inheritedBranch(
-	session: UnifiedSession,
-	workspace: Workspace | null | undefined,
+  session: UnifiedSession,
+  workspace: Workspace | null | undefined,
 ): string | null {
-	if (!workspace?.branch) return null;
-	if (session.repo && workspace.repo && session.repo !== workspace.repo)
-		return null;
-	return workspace.branch;
+  if (!workspace?.branch) return null;
+  if (session.repo && workspace.repo && session.repo !== workspace.repo)
+    return null;
+  return workspace.branch;
 }
 
 /**
@@ -31,18 +31,18 @@ function inheritedBranch(
  * leaving it `undefined` reads it, `null` opts out of the lookup entirely.
  */
 export function sessionPrBranch(
-	session: UnifiedSession,
-	workspace?: Workspace | null,
+  session: UnifiedSession,
+  workspace?: Workspace | null,
 ): string | null {
-	const parent =
-		workspace === undefined && session.workspaceId
-			? getWorkspace(session.workspaceId)
-			: workspace;
-	if (session.automation === "github-pr-review")
-		return parent?.prNumber != null && parent.branch
-			? parent.branch
-			: session.branch;
-	return session.branch || inheritedBranch(session, parent);
+  const parent =
+    workspace === undefined && session.workspaceId
+      ? getWorkspace(session.workspaceId)
+      : workspace;
+  if (session.automation === "github-pr-review")
+    return parent?.prNumber != null && parent.branch
+      ? parent.branch
+      : session.branch;
+  return session.branch || inheritedBranch(session, parent);
 }
 
 /**
@@ -53,59 +53,61 @@ export function sessionPrBranch(
  * {@link sessionPrBranch} never consults the workspace for those.
  */
 export function prWorkspaceReader(): (s: UnifiedSession) => Workspace | null {
-	const cache = new Map<string, Workspace | null>();
-	return (session) => {
-		if (!session.workspaceId) return null;
-		if (session.branch && session.automation !== "github-pr-review") return null;
-		let workspace = cache.get(session.workspaceId);
-		if (workspace === undefined)
-			cache.set(session.workspaceId, (workspace = getWorkspace(session.workspaceId)));
-		return workspace;
-	};
+  const cache = new Map<string, Workspace | null>();
+  return (session) => {
+    if (!session.workspaceId) return null;
+    if (session.branch && session.automation !== "github-pr-review")
+      return null;
+    let workspace = cache.get(session.workspaceId);
+    if (workspace === undefined)
+      cache.set(
+        session.workspaceId,
+        (workspace = getWorkspace(session.workspaceId)),
+      );
+    return workspace;
+  };
 }
 
 function prRefKey(ref: Pick<SessionPrRef, "repo" | "branch">): string {
-	return `${ref.repo}\u0000${ref.branch}`;
+  return `${ref.repo}\u0000${ref.branch}`;
 }
 
 function flatPrRef(session: UnifiedSession): SessionPrRef | null {
-	if ((!session.prUrl && session.prNumber == null) || !session.branch) return null;
-	return {
-		repo: session.repo || defaultRepo().id,
-		branch: session.branch,
-		source: "primary",
-		url: session.prUrl,
-		state: session.prState,
-		number: session.prNumber,
-		title: session.prTitle,
-		isDraft: session.prIsDraft,
-		reviewDecision: session.prReviewDecision,
-		additions: session.prAdditions,
-		deletions: session.prDeletions,
-		checks: session.prChecks,
-	};
+  if ((!session.prUrl && session.prNumber == null) || !session.branch)
+    return null;
+  return {
+    repo: session.repo || defaultRepo().id,
+    branch: session.branch,
+    source: "primary",
+    url: session.prUrl,
+    state: session.prState,
+    number: session.prNumber,
+    title: session.prTitle,
+    isDraft: session.prIsDraft,
+    reviewDecision: session.prReviewDecision,
+    additions: session.prAdditions,
+    deletions: session.prDeletions,
+    checks: session.prChecks,
+  };
 }
 
-function mergePrRef(
-	owned: SessionPrRef,
-	shared: SessionPrRef,
-): SessionPrRef {
-	// Keep how THIS session owns the target, but take any richer cache fields a
-	// sibling received. The same PR can be primary here and linked there.
-	return {
-		...shared,
-		...owned,
-		source: owned.source,
-		url: owned.url ?? shared.url,
-		state: owned.state ?? shared.state,
-		number: owned.number ?? shared.number,
-		title: owned.title ?? shared.title,
-		isDraft: owned.isDraft ?? shared.isDraft,
-		reviewDecision: owned.reviewDecision ?? shared.reviewDecision,
-		additions: owned.additions ?? shared.additions,
-		deletions: owned.deletions ?? shared.deletions,
-		checks: owned.checks ?? shared.checks,
-	};
+function mergePrRef(owned: SessionPrRef, shared: SessionPrRef): SessionPrRef {
+  // Keep how THIS session owns the target, but take any richer cache fields a
+  // sibling received. The same PR can be primary here and linked there.
+  return {
+    ...shared,
+    ...owned,
+    source: owned.source,
+    url: owned.url ?? shared.url,
+    state: owned.state ?? shared.state,
+    number: owned.number ?? shared.number,
+    title: owned.title ?? shared.title,
+    isDraft: owned.isDraft ?? shared.isDraft,
+    reviewDecision: owned.reviewDecision ?? shared.reviewDecision,
+    additions: owned.additions ?? shared.additions,
+    deletions: owned.deletions ?? shared.deletions,
+    checks: owned.checks ?? shared.checks,
+  };
 }
 
 /**
@@ -122,54 +124,81 @@ function mergePrRef(
  * A bare attached branch is not proof of a PR and is therefore not shared.
  */
 export function shareWorkspacePrRefs(sessions: UnifiedSession[]): void {
-	const groups = new Map<string, UnifiedSession[]>();
-	for (const session of sessions) {
-		if (!session.workspaceId) continue;
-		const group = groups.get(session.workspaceId);
-		if (group) group.push(session);
-		else groups.set(session.workspaceId, [session]);
-	}
+  const groups = new Map<string, UnifiedSession[]>();
+  for (const session of sessions) {
+    if (!session.workspaceId) continue;
+    const group = groups.get(session.workspaceId);
+    if (group) group.push(session);
+    else groups.set(session.workspaceId, [session]);
+  }
 
-	for (const group of groups.values()) {
-		if (group.length < 2) continue;
-		const shared = new Map<string, SessionPrRef>();
-		for (const session of group) {
-			const flat = flatPrRef(session);
-			const own = flat ? [...(session.prs || []), flat] : session.prs || [];
-			for (const ref of own) {
-				if (
-					ref.source === "attached" &&
-					ref.number == null &&
-					!ref.url &&
-					!ref.state
-				)
-					continue;
-				const key = prRefKey(ref);
-				const existing = shared.get(key);
-				shared.set(key, existing ? mergePrRef(existing, ref) : ref);
-			}
-		}
-		if (shared.size === 0) continue;
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const shared = new Map<string, SessionPrRef>();
+    for (const session of group) {
+      const flat = flatPrRef(session);
+      const own = flat ? [...(session.prs || []), flat] : session.prs || [];
+      for (const ref of own) {
+        if (
+          ref.source === "attached" &&
+          ref.number == null &&
+          !ref.url &&
+          !ref.state
+        )
+          continue;
+        const key = prRefKey(ref);
+        const existing = shared.get(key);
+        shared.set(key, existing ? mergePrRef(existing, ref) : ref);
+      }
+    }
+    if (shared.size === 0) continue;
 
-		for (const session of group) {
-			const refs = [...(session.prs || [])];
-			const flat = flatPrRef(session);
-			if (flat && !refs.some((ref) => prRefKey(ref) === prRefKey(flat)))
-				refs.unshift(flat);
-			const positions = new Map(
-				refs.map((ref, index) => [prRefKey(ref), index] as const),
-			);
-			for (const ref of shared.values()) {
-				const key = prRefKey(ref);
-				const index = positions.get(key);
-				if (index === undefined) {
-					positions.set(key, refs.length);
-					refs.push({ ...ref, source: "discovered" });
-				} else {
-					refs[index] = mergePrRef(refs[index]!, ref);
-				}
-			}
-			if (refs.length > 0) session.prs = refs;
-		}
-	}
+    for (const session of group) {
+      const refs = [...(session.prs || [])];
+      const flat = flatPrRef(session);
+      if (flat && !refs.some((ref) => prRefKey(ref) === prRefKey(flat)))
+        refs.unshift(flat);
+      const positions = new Map(
+        refs.map((ref, index) => [prRefKey(ref), index] as const),
+      );
+      for (const ref of shared.values()) {
+        const key = prRefKey(ref);
+        const index = positions.get(key);
+        if (index === undefined) {
+          positions.set(key, refs.length);
+          refs.push({ ...ref, source: "discovered" });
+        } else {
+          refs[index] = mergePrRef(refs[index]!, ref);
+        }
+      }
+      if (refs.length > 0) session.prs = refs;
+    }
+  }
+}
+
+/**
+ * Add a workspace projection to one authoritative session without mutating it.
+ *
+ * Detail and PR routes load one session actor, while workspace PRs come from
+ * the bounded materialized workspace index. Include the indexed copy of the
+ * same session: it may carry derived footer PRs that are intentionally absent
+ * from the durable actor record.
+ */
+export function projectWorkspacePrRefs(
+  session: UnifiedSession,
+  workspaceSessions: readonly UnifiedSession[],
+): UnifiedSession {
+  if (!session.workspaceId) return session;
+  const projected: UnifiedSession = {
+    ...session,
+    ...(session.prs ? { prs: [...session.prs] } : {}),
+  };
+  const members = workspaceSessions
+    .filter((candidate) => candidate.workspaceId === session.workspaceId)
+    .map((candidate) => ({
+      ...candidate,
+      ...(candidate.prs ? { prs: [...candidate.prs] } : {}),
+    }));
+  shareWorkspacePrRefs([projected, ...members]);
+  return projected;
 }

@@ -1,0 +1,14 @@
+# Stable public listener for Open Session. systemd retains this socket while
+# opensession-ingress.service is upgraded. Gateway and peer rollouts never
+# restart the ingress process.
+[Unit]
+Description=Open Session stable gateway listener
+
+[Socket]
+ListenStream=127.0.0.1:3850
+NoDelay=true
+Backlog=512
+Service=opensession-ingress.service
+
+[Install]
+WantedBy=sockets.target

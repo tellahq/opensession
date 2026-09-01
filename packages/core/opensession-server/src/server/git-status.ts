@@ -19,11 +19,16 @@ import type { WorkspaceExec } from "./sandbox/workspace-exec";
 
 /** `git -C <dir> <args>` on the host (Bun $) or through the workspace exec.
  *  Throws on non-zero exit, matching the Bun $ .text() call sites here. */
-async function gitText(dir: string, args: string[], exec?: WorkspaceExec): Promise<string> {
+async function gitText(
+  dir: string,
+  args: string[],
+  exec?: WorkspaceExec,
+): Promise<string> {
   const argv = ["git", "-C", dir, ...args];
   if (exec) {
     const r = await exec(argv);
-    if (r.exitCode !== 0) throw new Error(r.stderr.trim() || `git ${args[0]} failed`);
+    if (r.exitCode !== 0)
+      throw new Error(r.stderr.trim() || `git ${args[0]} failed`);
     return r.stdout;
   }
   return await $`${argv}`.quiet().text();
@@ -31,7 +36,7 @@ async function gitText(dir: string, args: string[], exec?: WorkspaceExec): Promi
 
 export interface GitStatusInfo {
   branch: string | null;
-  /** Branch has an upstream (has been pushed at least once). */
+  /** Branch has a published remote counterpart, configured or inferred. */
   hasUpstream: boolean;
   /** Commits ahead of / behind the upstream tracking ref. */
   ahead: number;
@@ -127,12 +132,20 @@ export function gitFailureMessage(output: string, fallback: string): string {
     .slice(0, 300);
 }
 
-async function refreshBase(dir: string, baseBranch: string, exec?: WorkspaceExec): Promise<void> {
+async function refreshBase(
+  dir: string,
+  baseBranch: string,
+  exec?: WorkspaceExec,
+): Promise<void> {
   const last = lastFetch.get(dir) || 0;
   if (Date.now() - last < FETCH_TTL) return;
   lastFetch.set(dir, Date.now());
   try {
-    await gitText(dir, ["fetch", "origin", baseBranch, "--no-tags", "--quiet"], exec);
+    await gitText(
+      dir,
+      ["fetch", "origin", baseBranch, "--no-tags", "--quiet"],
+      exec,
+    );
   } catch {
     // Offline or no remote — counts fall back to the last-known tracking refs.
   }
@@ -157,7 +170,8 @@ export async function getGitStatus(
 
   let branch: string | null = null;
   try {
-    branch = (await gitText(dir, ["branch", "--show-current"], exec)).trim() || null;
+    branch =
+      (await gitText(dir, ["branch", "--show-current"], exec)).trim() || null;
   } catch {}
 
   let hasUpstream = false;
@@ -165,27 +179,64 @@ export async function getGitStatus(
   let behind = 0;
   try {
     const counts = (
-      await gitText(dir, ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"], exec)
+      await gitText(
+        dir,
+        ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"],
+        exec,
+      )
     ).trim();
     const [b, a] = counts.split(/\s+/).map((n) => parseInt(n) || 0);
     hasUpstream = true;
     behind = b || 0;
     ahead = a || 0;
   } catch {
-    // No upstream — every local commit past the base is effectively unpushed.
-    try {
-      ahead =
-        parseInt(
-          (await gitText(dir, ["rev-list", "--count", `origin/${baseBranch}..HEAD`], exec)).trim()
-        ) || 0;
-    } catch {}
+    // A plain `git push origin <branch>` publishes the branch without writing
+    // branch.<name>.remote/merge. Treat its remote-tracking ref as the upstream
+    // anyway; comparing against the base would mislabel every feature commit as
+    // unpushed even when origin/<branch> is exactly at HEAD.
+    if (branch) {
+      try {
+        const counts = (
+          await gitText(
+            dir,
+            ["rev-list", "--left-right", "--count", `origin/${branch}...HEAD`],
+            exec,
+          )
+        ).trim();
+        const [b, a] = counts.split(/\s+/).map((n) => parseInt(n) || 0);
+        hasUpstream = true;
+        behind = b || 0;
+        ahead = a || 0;
+      } catch {}
+    }
+    // No configured or inferred upstream: commits past the base are local-only.
+    if (!hasUpstream) {
+      try {
+        ahead =
+          parseInt(
+            (
+              await gitText(
+                dir,
+                ["rev-list", "--count", `origin/${baseBranch}..HEAD`],
+                exec,
+              )
+            ).trim(),
+          ) || 0;
+      } catch {}
+    }
   }
 
   let behindBase = 0;
   try {
     behindBase =
       parseInt(
-        (await gitText(dir, ["rev-list", "--count", `HEAD..origin/${baseBranch}`], exec)).trim()
+        (
+          await gitText(
+            dir,
+            ["rev-list", "--count", `HEAD..origin/${baseBranch}`],
+            exec,
+          )
+        ).trim(),
       ) || 0;
   } catch {}
 
@@ -236,13 +287,22 @@ export async function gitPull(
     {
       context: "sessions",
       action: "git_pull",
-      args: { dir, fromBase: fromBase || null, sandboxed: exec?.sandboxed || undefined },
+      args: {
+        dir,
+        fromBase: fromBase || null,
+        sandboxed: exec?.sandboxed || undefined,
+      },
     },
     async () => {
       const operationEnv = gitCredentialEnvForExec(env, exec);
-      async function run(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+      async function run(
+        args: string[],
+      ): Promise<{ stdout: string; stderr: string; code: number }> {
         if (exec) {
-          const r = await exec(args, operationEnv ? { env: operationEnv } : undefined);
+          const r = await exec(
+            args,
+            operationEnv ? { env: operationEnv } : undefined,
+          );
           return { stdout: r.stdout, stderr: r.stderr, code: r.exitCode };
         }
         const proc = Bun.spawn(args, {
@@ -261,20 +321,40 @@ export async function gitPull(
       if (!fromBase) {
         const result = await run(["git", "-C", dir, "pull", "--ff-only"]);
         if (result.code !== 0)
-          return { error: gitFailureMessage(result.stderr, "Git pull failed") } as const;
+          return {
+            error: gitFailureMessage(result.stderr, "Git pull failed"),
+          } as const;
         return { ok: true } as const;
       }
 
       const status = await run(["git", "-C", dir, "status", "--porcelain"]);
       if (status.code !== 0)
-        return { error: (status.stderr || "Could not inspect the worktree").trim().slice(0, 300) } as const;
+        return {
+          error: (status.stderr || "Could not inspect the worktree")
+            .trim()
+            .slice(0, 300),
+        } as const;
       if (status.stdout.trim())
-        return { error: "Commit or discard the uncommitted changes before updating." } as const;
+        return {
+          error: "Commit or discard the uncommitted changes before updating.",
+        } as const;
 
-      const fetch = await run(["git", "-C", dir, "fetch", "origin", fromBase, "--no-tags", "--quiet"]);
+      const fetch = await run([
+        "git",
+        "-C",
+        dir,
+        "fetch",
+        "origin",
+        fromBase,
+        "--no-tags",
+        "--quiet",
+      ]);
       if (fetch.code !== 0)
         return {
-          error: gitFailureMessage(fetch.stderr, `Could not fetch origin/${fromBase}`),
+          error: gitFailureMessage(
+            fetch.stderr,
+            `Could not fetch origin/${fromBase}`,
+          ),
         } as const;
 
       const merge = await run([
@@ -287,13 +367,23 @@ export async function gitPull(
         `origin/${fromBase}`,
       ]);
       if (merge.code !== 0) {
-        const mergeState = await run(["git", "-C", dir, "rev-parse", "--verify", "MERGE_HEAD"]);
+        const mergeState = await run([
+          "git",
+          "-C",
+          dir,
+          "rev-parse",
+          "--verify",
+          "MERGE_HEAD",
+        ]);
         if (mergeState.code === 0) {
           const abort = await run(["git", "-C", dir, "merge", "--abort"]);
           if (abort.code !== 0)
             return {
               error: `Update failed and Git could not restore the worktree: ${(
-                abort.stderr || merge.stderr || merge.stdout || "unknown error"
+                abort.stderr ||
+                merge.stderr ||
+                merge.stdout ||
+                "unknown error"
               )
                 .trim()
                 .slice(0, 220)}`,
@@ -303,11 +393,13 @@ export async function gitPull(
           } as const;
         }
         return {
-          error: (merge.stderr || merge.stdout || "Could not update the branch").trim().slice(0, 300),
+          error: (merge.stderr || merge.stdout || "Could not update the branch")
+            .trim()
+            .slice(0, 300),
         } as const;
       }
       return { ok: true } as const;
-    }
+    },
   );
 }
 
@@ -334,7 +426,10 @@ export async function gitPush(
       let err: string;
       let code: number;
       if (exec) {
-        const r = await exec(args, operationEnv ? { env: operationEnv } : undefined);
+        const r = await exec(
+          args,
+          operationEnv ? { env: operationEnv } : undefined,
+        );
         err = r.stderr;
         code = r.exitCode;
       } else {
@@ -348,8 +443,9 @@ export async function gitPush(
           proc.exited,
         ]);
       }
-      if (code !== 0) return { error: gitFailureMessage(err, "Git push failed") } as const;
+      if (code !== 0)
+        return { error: gitFailureMessage(err, "Git push failed") } as const;
       return { ok: true } as const;
-    }
+    },
   );
 }

@@ -47,7 +47,12 @@ function pr(overrides: Partial<PrInfo> = {}): PrInfo {
 /** One sweep of a single repo whose PR sits on `fix/test`. */
 function sweep(mergeable: string, overrides: Partial<PrInfo> = {}) {
   return scanConflictTransitions(
-    new Map([["tella-fusion", new Map([["fix/test", pr({ mergeable, ...overrides })]])]]),
+    new Map([
+      [
+        "tella-fusion",
+        new Map([["fix/test", pr({ mergeable, ...overrides })]]),
+      ],
+    ]),
     new Set(["tella-fusion"]),
   );
 }
@@ -126,7 +131,9 @@ describe("scanConflictTransitions", () => {
 
   test("carries the PR body's session ref when it has one", () => {
     sweep("MERGEABLE", { sessionRef: "os-abc" });
-    expect(sweep("CONFLICTING", { sessionRef: "os-abc" })[0]?.sessionRef).toBe("os-abc");
+    expect(sweep("CONFLICTING", { sessionRef: "os-abc" })[0]?.sessionRef).toBe(
+      "os-abc",
+    );
   });
 
   test("ignores PRs that are no longer open", () => {
@@ -143,14 +150,19 @@ describe("scanConflictTransitions", () => {
     expect(scanConflictTransitions(data, new Set())).toEqual([]);
     data.get("tella-fusion")!.set("fix/test", pr({ mergeable: "CONFLICTING" }));
     expect(scanConflictTransitions(data, new Set())).toEqual([]);
-    expect(scanConflictTransitions(data, new Set(["tella-fusion"]))).toEqual([]);
+    expect(scanConflictTransitions(data, new Set(["tella-fusion"]))).toEqual(
+      [],
+    );
   });
 
   test("forgets a PR that leaves the open set, so a reopen starts clean", () => {
     sweep("MERGEABLE");
     // Sweep with the PR gone entirely (merged and aged out of the window).
     expect(
-      scanConflictTransitions(new Map([["tella-fusion", new Map()]]), new Set(["tella-fusion"])),
+      scanConflictTransitions(
+        new Map([["tella-fusion", new Map()]]),
+        new Set(["tella-fusion"]),
+      ),
     ).toEqual([]);
     expect(sweep("CONFLICTING")).toEqual([]);
   });
@@ -163,7 +175,10 @@ describe("scanConflictTransitions", () => {
       ]);
     const fresh = new Set(["tella-fusion", "opensession"]);
     scanConflictTransitions(data("MERGEABLE", "CONFLICTING"), fresh);
-    const events = scanConflictTransitions(data("CONFLICTING", "CONFLICTING"), fresh);
+    const events = scanConflictTransitions(
+      data("CONFLICTING", "CONFLICTING"),
+      fresh,
+    );
     expect(events).toHaveLength(1);
     expect(events[0]?.repoId).toBe("tella-fusion");
   });
@@ -189,7 +204,14 @@ describe("conflictMessage", () => {
     // It is an event, not a briefing: no procedure, no priority call, no
     // repetition of git rules the agent already has.
     expect(msg.length).toBeLessThan(160);
-    for (const instruction of ["git ", "gh pr", "resolve", "finish", "Never", "push"])
+    for (const instruction of [
+      "git ",
+      "gh pr",
+      "resolve",
+      "finish",
+      "Never",
+      "push",
+    ])
       expect(msg).not.toContain(instruction);
   });
 
@@ -198,7 +220,10 @@ describe("conflictMessage", () => {
     // (session-control-wiring.ts), and classifyEntry turns a GitHub-attributed
     // user turn into a system notice: no sender, so no client can render it as
     // the session owner's own message or as a teammate's steer.
-    const delivered = { type: "user", content: `[GitHub] ${msg}` } as TranscriptEntry;
+    const delivered = {
+      type: "user",
+      content: `[GitHub] ${msg}`,
+    } as TranscriptEntry;
     const classified = classifyEntry(delivered);
     expect(classified.sender).toBeUndefined();
     expect(classified.senderVia).toBeUndefined();

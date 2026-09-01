@@ -1,20 +1,14 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
 import type { GithubCredential } from "../github-auth";
-import type {
-  Sandbox,
-  SandboxSessionSpec,
-} from "../sandbox/provider";
+import type { Sandbox, SandboxSessionSpec } from "../sandbox/provider";
 import { createWorkspace, getWorkspace, type Workspace } from "../workspaces";
 import type { CreationAttachmentSource } from "../uploads";
 import type { WorktreeInfo } from "../worktree";
 import { registerSessionEffectExecutor } from "./effect-executors";
 import { sessionKernel } from "./kernel";
 import type { SessionActorEffectFor } from "./lifecycle-protocol";
-import type {
-  CreationEventDecisionResult,
-  DurableOutboxItem,
-} from "./store";
+import type { CreationEventDecisionResult, DurableOutboxItem } from "./store";
 
 type WorkspaceEffect = SessionActorEffectFor<"creation_workspace_prepare">;
 type BranchEffect = SessionActorEffectFor<"creation_branch_prepare">;
@@ -25,27 +19,33 @@ type OpeningEffect = SessionActorEffectFor<"creation_opening_turn">;
 export type CreationWorkspaceEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
-> & WorkspaceEffect;
+> &
+  WorkspaceEffect;
 export type CreationBranchEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
-> & BranchEffect;
+> &
+  BranchEffect;
 export type CreationCredentialEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
-> & CredentialEffect;
+> &
+  CredentialEffect;
 export type CreationSandboxEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
-> & SandboxEffect;
+> &
+  SandboxEffect;
 export type CreationAttachmentEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
-> & AttachmentEffect;
+> &
+  AttachmentEffect;
 export type CreationOpeningEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
-> & OpeningEffect;
+> &
+  OpeningEffect;
 
 export class CreationEffectIndeterminateError extends Error {
   readonly indeterminate = true;
@@ -54,7 +54,9 @@ export class CreationEffectIndeterminateError extends Error {
 type WorkspaceExecutorDependencies = {
   getWorkspace: typeof getWorkspace;
   createWorkspace: typeof createWorkspace;
-  result: (item: CreationWorkspaceEffectItem) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
+  result: (
+    item: CreationWorkspaceEffectItem,
+  ) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
   afterDestinationAccepted?: (workspace: Workspace) => void;
 };
 
@@ -154,7 +156,9 @@ type BranchExecutorDependencies = {
     project: string,
     path: string,
   ) => Promise<boolean>;
-  result: (item: CreationBranchEffectItem) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
+  result: (
+    item: CreationBranchEffectItem,
+  ) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
   afterDestinationAccepted?: (worktreePath: string) => void;
 };
 
@@ -176,7 +180,9 @@ function defaultBranchResult(
 async function resolveCurrentCredential(
   principal: string,
 ): Promise<GithubCredential | null> {
-  return (await import("../github-auth")).githubCredentialForPrincipal(principal);
+  return (await import("../github-auth")).githubCredentialForPrincipal(
+    principal,
+  );
 }
 
 async function createExistingWorktree(
@@ -197,7 +203,9 @@ async function isSharedCheckoutDestination(
 ): Promise<boolean> {
   const { getRepo, sharedCheckoutForNewSessions } = await import("../worktree");
   const repo = getRepo(project);
-  return sharedCheckoutForNewSessions(repo) && resolve(repo.repo) === resolve(path);
+  return (
+    sharedCheckoutForNewSessions(repo) && resolve(repo.repo) === resolve(path)
+  );
 }
 
 const defaultBranchDependencies: BranchExecutorDependencies = {
@@ -219,8 +227,12 @@ export async function executeCreationBranchPrepare(
 ): Promise<void> {
   const payload = item.payload;
   const worktrees = await dependencies.listWorktrees(payload.project);
-  const byBranch = worktrees.find((worktree) => worktree.branch === payload.branch);
-  const byPath = worktrees.find((worktree) => worktree.path === payload.worktreePath);
+  const byBranch = worktrees.find(
+    (worktree) => worktree.branch === payload.branch,
+  );
+  const byPath = worktrees.find(
+    (worktree) => worktree.path === payload.worktreePath,
+  );
   if (byBranch && byBranch.path !== payload.worktreePath)
     throw new CreationEffectIndeterminateError(
       `Branch ${payload.branch} is checked out at another destination`,
@@ -231,11 +243,9 @@ export async function executeCreationBranchPrepare(
     );
   const sharedCheckout =
     !byBranch &&
-    await (dependencies.isSharedCheckoutDestination ??
-      isSharedCheckoutDestination)(
-      payload.project,
-      payload.worktreePath,
-    );
+    (await (
+      dependencies.isSharedCheckoutDestination ?? isSharedCheckoutDestination
+    )(payload.project, payload.worktreePath));
   if (
     !byPath &&
     !sharedCheckout &&
@@ -246,8 +256,9 @@ export async function executeCreationBranchPrepare(
     );
   let credential: GithubCredential | null = null;
   if (!byBranch && !sharedCheckout && payload.credentialPrincipal) {
-    credential = await (dependencies.resolveCredential ??
-      resolveCurrentCredential)(payload.credentialPrincipal);
+    credential = await (
+      dependencies.resolveCredential ?? resolveCurrentCredential
+    )(payload.credentialPrincipal);
     if (!credential)
       throw new Error(
         `Credential ${payload.credentialPrincipal} is not currently available`,
@@ -257,24 +268,20 @@ export async function executeCreationBranchPrepare(
         `Credential selector ${payload.credentialPrincipal} resolved to another principal`,
       );
   }
-  const acceptedPath = byBranch?.path ?? (sharedCheckout
-    ? payload.worktreePath
-    : payload.existingBranch
-    ? await (dependencies.createWorktreeForExistingBranch ??
-        createExistingWorktree)(
-        payload.branch,
-        payload.project,
-        credential?.env,
-      )
-    : await dependencies.createWorktree(
-        payload.branch,
-        payload.project,
-        {
-          ...(payload.baseBranch ? { base: payload.baseBranch } : {}),
-          ...(payload.isolated ? { isolated: true } : {}),
-          ...(credential ? { gitEnv: credential.env } : {}),
-        },
-      ));
+  const acceptedPath =
+    byBranch?.path ??
+    (sharedCheckout
+      ? payload.worktreePath
+      : payload.existingBranch
+        ? await (
+            dependencies.createWorktreeForExistingBranch ??
+            createExistingWorktree
+          )(payload.branch, payload.project, credential?.env)
+        : await dependencies.createWorktree(payload.branch, payload.project, {
+            ...(payload.baseBranch ? { base: payload.baseBranch } : {}),
+            ...(payload.isolated ? { isolated: true } : {}),
+            ...(credential ? { gitEnv: credential.env } : {}),
+          }));
   if (acceptedPath !== payload.worktreePath)
     throw new CreationEffectIndeterminateError(
       `Branch ${payload.branch} materialized at an unexpected destination`,
@@ -292,8 +299,13 @@ type SandboxExecutorDependencies = {
     provider: string,
     spec: SandboxSessionSpec,
   ) => Promise<Pick<Sandbox, "id" | "provider">>;
-  result: (item: CreationSandboxEffectItem, sandboxId: string) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
-  afterDestinationAccepted?: (sandbox: Pick<Sandbox, "id" | "provider">) => void;
+  result: (
+    item: CreationSandboxEffectItem,
+    sandboxId: string,
+  ) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
+  afterDestinationAccepted?: (
+    sandbox: Pick<Sandbox, "id" | "provider">,
+  ) => void;
 };
 
 function defaultSandboxResult(
@@ -319,7 +331,10 @@ const defaultSandboxDependencies: SandboxExecutorDependencies = {
         import("../sandbox"),
         import("../sandbox/reliability"),
       ]);
-    return ensureSandboxWithTransientRetry(getSandboxProvider(providerId), spec);
+    return ensureSandboxWithTransientRetry(
+      getSandboxProvider(providerId),
+      spec,
+    );
   },
   result: defaultSandboxResult,
 };
@@ -359,7 +374,9 @@ export async function executeCreationSandboxPrepare(
 
 type CredentialExecutorDependencies = {
   resolveCredential: (principal: string) => Promise<GithubCredential | null>;
-  result: (item: CreationCredentialEffectItem) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
+  result: (
+    item: CreationCredentialEffectItem,
+  ) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
   afterResolved?: (credential: GithubCredential) => void;
 };
 
@@ -387,7 +404,9 @@ export async function executeCreationCredentialResolve(
   item: CreationCredentialEffectItem,
   dependencies: CredentialExecutorDependencies = defaultCredentialDependencies,
 ): Promise<void> {
-  const credential = await dependencies.resolveCredential(item.payload.principal);
+  const credential = await dependencies.resolveCredential(
+    item.payload.principal,
+  );
   if (!credential)
     throw new Error(
       `Credential ${item.payload.principal} is not currently available`,
@@ -408,10 +427,10 @@ type AttachmentExecutorDependencies = {
   stage: (
     sessionId: string,
     source: CreationAttachmentSource,
-  ) =>
-    | { name: string; path: string }
-    | Promise<{ name: string; path: string }>;
-  result: (item: CreationAttachmentEffectItem) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
+  ) => { name: string; path: string } | Promise<{ name: string; path: string }>;
+  result: (
+    item: CreationAttachmentEffectItem,
+  ) => CreationEventDecisionResult | Promise<CreationEventDecisionResult>;
   afterDestinationAccepted?: (path: string) => void;
 };
 
@@ -468,7 +487,7 @@ export async function executeCreationOpeningTurn(
     throw new CreationEffectIndeterminateError(
       `Opening run ${item.payload.runId} crossed session ownership`,
     );
-  if (dependencies.cancel && await dependencies.cancel(item)) return;
+  if (dependencies.cancel && (await dependencies.cancel(item))) return;
   await dependencies.launch(item);
 }
 

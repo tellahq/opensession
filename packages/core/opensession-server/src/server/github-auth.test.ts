@@ -34,7 +34,7 @@ import {
 } from "./github-auth";
 import { botGhToken } from "./github-limit";
 import {
-	ensureAutomationWebSession,
+  ensureAutomationWebSession,
   keypadBearerAuthorized,
   refreshWebIdentity,
   resolveWebAuth,
@@ -94,7 +94,9 @@ function enableFeature(memberName: string | null = "Alice Example"): void {
             ]
           : [],
       },
-      integrations: { github: { userPrAuth: true, oauthClientId: "test-client-id" } },
+      integrations: {
+        github: { userPrAuth: true, oauthClientId: "test-client-id" },
+      },
     }),
   );
   process.env.OPENSESSION_CONFIG = path;
@@ -116,19 +118,15 @@ function seedToken(login = "alice", token = "gho_test123"): void {
   );
 }
 
-
 describe("service credential boundary", () => {
   test("the App does not fall back to ambient gh login", async () => {
     const path = join(dir, "config.json");
-    writeFileSync(
-      path,
-      JSON.stringify({ integrations: { github: {} } }),
-    );
+    writeFileSync(path, JSON.stringify({ integrations: { github: {} } }));
     process.env.OPENSESSION_CONFIG = path;
     expect(await botGhToken()).toBeNull();
-    await expect(resolveGithubCredential(serviceGithubCredential)).rejects.toThrow(
-      "selected GitHub bot credential is unavailable",
-    );
+    await expect(
+      resolveGithubCredential(serviceGithubCredential),
+    ).rejects.toThrow("selected GitHub bot credential is unavailable");
   });
 });
 
@@ -151,7 +149,10 @@ describe("githubUserAuthSettings", () => {
 
   test("enabled without a client id is not active", () => {
     const path = join(dir, "config.json");
-    writeFileSync(path, JSON.stringify({ integrations: { github: { userPrAuth: true } } }));
+    writeFileSync(
+      path,
+      JSON.stringify({ integrations: { github: { userPrAuth: true } } }),
+    );
     process.env.OPENSESSION_CONFIG = path;
     expect(githubUserAuthSettings().enabled).toBe(true);
     expect(githubUserAuthActive()).toBe(false);
@@ -236,7 +237,9 @@ describe("token lookups + runner env", () => {
       GITHUB_TOKEN: "ghu_remote123",
       GIT_CONFIG_VALUE_2: "git@github.com:",
     });
-    expect(JSON.stringify(githubRunEnv("Alice"))).not.toContain("must-not-be-read");
+    expect(JSON.stringify(githubRunEnv("Alice"))).not.toContain(
+      "must-not-be-read",
+    );
   });
 
   test("connectedGithubAccounts never exposes tokens", () => {
@@ -255,7 +258,7 @@ describe("token lookups + runner env", () => {
             refreshTokenExpiresAt: "2027-01-01T00:00:00.000Z",
             expiresAt: "2026-07-18T08:00:00.000Z",
             source: "device",
-          connectedAt: "2026-07-18T00:00:00.000Z",
+            connectedAt: "2026-07-18T00:00:00.000Z",
           },
         },
       }),
@@ -281,7 +284,7 @@ describe("token lookups + runner env", () => {
             refreshToken: "ghr_dead",
             refreshFailedAt: "2026-08-04T10:00:00.000Z",
             source: "device",
-          connectedAt: "2026-07-18T00:00:00.000Z",
+            connectedAt: "2026-07-18T00:00:00.000Z",
           },
         },
       }),
@@ -312,7 +315,7 @@ describe("token lookups + runner env", () => {
             refreshToken: "ghr_dead",
             refreshFailedAt: "2026-08-04T10:00:00.000Z",
             source: "device",
-          connectedAt: "2026-07-18T00:00:00.000Z",
+            connectedAt: "2026-07-18T00:00:00.000Z",
           },
         },
       }),
@@ -336,7 +339,12 @@ describe("token lookups + runner env", () => {
       process.env.OPENSESSION_GITHUB_AUTH_STORE!,
       JSON.stringify({
         users: {
-          alice: { login: "alice", token: "t", refreshFailedAt: "2026-08-04T10:00:00.000Z", connectedAt: "x" },
+          alice: {
+            login: "alice",
+            token: "t",
+            refreshFailedAt: "2026-08-04T10:00:00.000Z",
+            connectedAt: "x",
+          },
         },
       }),
     );
@@ -395,7 +403,9 @@ describe("token lookups + runner env", () => {
   test("durable principals resolve the current token without changing identity", () => {
     enableFeature();
     seedToken("Alice", "gho_old");
-    expect(githubCredentialForPrincipal("user:alice")?.env.GH_TOKEN).toBe("gho_old");
+    expect(githubCredentialForPrincipal("user:alice")?.env.GH_TOKEN).toBe(
+      "gho_old",
+    );
 
     seedToken("Alice", "gho_refreshed");
     const recovered = githubCredentialForPrincipal("user:alice");
@@ -426,7 +436,9 @@ describe("starting the device flow", () => {
 
   function githubAnswers(status: number, body: unknown): void {
     globalThis.fetch = (async () =>
-      new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+      new Response(JSON.stringify(body), {
+        status,
+      })) as unknown as typeof fetch;
   }
 
   test("an app without Device Flow enabled says which switch to tick", async () => {
@@ -456,7 +468,10 @@ describe("starting the device flow", () => {
   test("a configured app gets its code back with the canonical browser URL", async () => {
     enableFeature();
     let requestedScope = "";
-    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    globalThis.fetch = (async (
+      _input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
       const body = JSON.parse(String(init?.body));
       requestedScope = body.scope;
       return Response.json({
@@ -479,42 +494,42 @@ describe("starting the device flow", () => {
 });
 
 describe("web sign-in resolution", () => {
-	test("local automation gets a distinct machine identity, ordered before humans", () => {
-		enableFeature();
-		const now = Date.now();
-		writeFileSync(
-			process.env.OPENSESSION_WEB_SESSIONS_STORE!,
-			JSON.stringify({
-				sessions: [
-					{
-						token: "human-token",
-						login: "alice",
-						name: "Alice Example",
-						createdAt: now,
-						lastSeenAt: now,
-					},
-				],
-			}),
-		);
-		const machine = ensureAutomationWebSession();
-		expect(machine?.token).toBeString();
-		expect(
-			resolveWebAuth(
-				new Request("http://x/", {
-					headers: { authorization: `Bearer ${machine!.token}` },
-				}),
-			),
-		).toEqual({
-			login: "opensession-automation",
-			name: "Automation",
-			automation: true,
-		});
-		const stored = JSON.parse(
-			readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
-		);
-		expect(stored.sessions[0].kind).toBe("automation");
-		expect(stored.sessions[1].login).toBe("alice");
-	});
+  test("local automation gets a distinct machine identity, ordered before humans", () => {
+    enableFeature();
+    const now = Date.now();
+    writeFileSync(
+      process.env.OPENSESSION_WEB_SESSIONS_STORE!,
+      JSON.stringify({
+        sessions: [
+          {
+            token: "human-token",
+            login: "alice",
+            name: "Alice Example",
+            createdAt: now,
+            lastSeenAt: now,
+          },
+        ],
+      }),
+    );
+    const machine = ensureAutomationWebSession();
+    expect(machine?.token).toBeString();
+    expect(
+      resolveWebAuth(
+        new Request("http://x/", {
+          headers: { authorization: `Bearer ${machine!.token}` },
+        }),
+      ),
+    ).toEqual({
+      login: "opensession-automation",
+      name: "Automation",
+      automation: true,
+    });
+    const stored = JSON.parse(
+      readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
+    );
+    expect(stored.sessions[0].kind).toBe("automation");
+    expect(stored.sessions[1].login).toBe("alice");
+  });
 
   test("team gate: only configured github logins may sign in", () => {
     expect(teamMemberForLogin("alice")).toBeNull();
@@ -542,16 +557,24 @@ describe("web sign-in resolution", () => {
       }),
     );
     const byCookie = resolveWebAuth(
-      new Request("http://x/", { headers: { cookie: "foo=1; opensession_auth=tok-abc" } }),
+      new Request("http://x/", {
+        headers: { cookie: "foo=1; opensession_auth=tok-abc" },
+      }),
     );
     expect(byCookie).toEqual({ login: "alice", name: "Alice Example" });
     const byBearer = resolveWebAuth(
-      new Request("http://x/", { headers: { authorization: "Bearer tok-abc" } }),
+      new Request("http://x/", {
+        headers: { authorization: "Bearer tok-abc" },
+      }),
     );
     expect(byBearer?.login).toBe("alice");
     expect(resolveWebAuth(new Request("http://x/"))).toBeNull();
     expect(
-      resolveWebAuth(new Request("http://x/", { headers: { cookie: "opensession_auth=wrong" } })),
+      resolveWebAuth(
+        new Request("http://x/", {
+          headers: { cookie: "opensession_auth=wrong" },
+        }),
+      ),
     ).toBeNull();
   });
 
@@ -637,9 +660,10 @@ describe("web sign-in resolution", () => {
 
   test("refreshes identities used by long-lived transports", () => {
     enableFeature();
-    expect(
-      refreshWebIdentity({ login: "alice", name: "Old Alice" }),
-    ).toEqual({ login: "alice", name: "Alice Example" });
+    expect(refreshWebIdentity({ login: "alice", name: "Old Alice" })).toEqual({
+      login: "alice",
+      name: "Alice Example",
+    });
 
     enableFeature(null);
     expect(
@@ -677,8 +701,12 @@ describe("keypad bearer auth", () => {
         headers: authorization ? { authorization } : undefined,
       });
 
-    expect(keypadBearerAuthorized(request("Bearer keypad-test-secret"))).toBe(true);
-    expect(keypadBearerAuthorized(request("bearer keypad-test-secret"))).toBe(true);
+    expect(keypadBearerAuthorized(request("Bearer keypad-test-secret"))).toBe(
+      true,
+    );
+    expect(keypadBearerAuthorized(request("bearer keypad-test-secret"))).toBe(
+      true,
+    );
     expect(keypadBearerAuthorized(request("Bearer wrong-secret"))).toBe(false);
     expect(keypadBearerAuthorized(request())).toBe(false);
   });
@@ -751,7 +779,11 @@ describe("simple-mode credential (App connected, sign-in off)", () => {
   test("reconnect authorizing a different account replaces, never strands two", async () => {
     simpleModeApp();
     writeStore({
-      alice: { login: "alice", token: "tok-alice", connectedAt: "2026-07-18T00:00:00.000Z" },
+      alice: {
+        login: "alice",
+        token: "tok-alice",
+        connectedAt: "2026-07-18T00:00:00.000Z",
+      },
     });
     // Simple-mode reconnect passes no expected login; GitHub reports @bob.
     globalThis.fetch = (async (input: string | URL | Request) => {
@@ -762,7 +794,9 @@ describe("simple-mode credential (App connected, sign-in off)", () => {
           { status: 200 },
         );
       if (url.includes("api.github.com/user"))
-        return new Response(JSON.stringify({ login: "bob", name: "Bob" }), { status: 200 });
+        return new Response(JSON.stringify({ login: "bob", name: "Bob" }), {
+          status: 200,
+        });
       return new Response("{}", { status: 404 });
     }) as unknown as typeof fetch;
     const res = await pollGithubDeviceFlow("device-code");

@@ -4,7 +4,6 @@ import { existsSync } from "fs";
 import type { TranscriptEntry } from "./types";
 import {
   classifyEntries,
-  dropContextInjections,
   parseAnsweredAskData,
 } from "@tellahq/opensession-protocol/notices";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
@@ -67,6 +66,10 @@ interface RawJsonlEntry {
   uuid?: string;
   timestamp?: string;
   requestId?: string;
+  sourceMessageIds?: string[];
+  // Open Session's Pi normalizer marks provider thinking blocks so they keep
+  // their quiet activity presentation after the JSONL normalization round-trip.
+  isReasoning?: boolean;
   // Structured companion to an <ask-record> text block. Older parsers ignore
   // the extra line field and keep the markdown fallback in the message.
   ask?: unknown;
@@ -74,7 +77,11 @@ interface RawJsonlEntry {
   isMeta?: boolean;
   // Present on a Task/Agent tool_result line: carries the spawned sub-agent's id
   // (and its type/description), used to link the call to its sub-agent transcript.
-  toolUseResult?: { agentId?: string; agentType?: string; description?: string };
+  toolUseResult?: {
+    agentId?: string;
+    agentType?: string;
+    description?: string;
+  };
   message?: {
     role?: string;
     content?: any;
@@ -178,20 +185,33 @@ function splitAttributedParts(text: string): string[] {
 }
 
 /** Push a user turn, splitting a steer-joined composite into one entry per
- *  attributed part (derived ids keep streaming merges stable). */
+ *  attributed part. Delivery identities survive normalization so optimistic
+ *  clients never have to correlate repeated text or client/server clocks. */
 function pushUserEntries(
   entries: TranscriptEntry[],
   id: string,
   text: string,
   ts: string,
+  sourceMessageIds?: string[],
 ): void {
   const parts = splitAttributedParts(text);
+  const sources = sourceMessageIds?.filter(
+    (source): source is string =>
+      typeof source === "string" && source.length > 0,
+  );
   parts.forEach((part, i) => {
+    const partSources =
+      sources?.length === parts.length
+        ? [sources[i]!]
+        : i === 0
+          ? sources
+          : undefined;
     entries.push({
       id: i === 0 ? id : `${id}-j${i + 1}`,
       type: "user",
       content: resolveSlackIds(part),
       timestamp: ts,
+      ...(partSources?.length ? { sourceMessageIds: partSources } : {}),
     });
   });
 }
@@ -209,7 +229,9 @@ function harnessEntryId(
   ts: string,
   blockIndex = 0,
 ): string {
-  const base = raw.uuid ? `sys-${raw.uuid}` : `sys-h${fnv1a36(`${ts}|${text}`)}`;
+  const base = raw.uuid
+    ? `sys-${raw.uuid}`
+    : `sys-h${fnv1a36(`${ts}|${text}`)}`;
   return blockIndex > 0 ? `${base}-b${blockIndex}` : base;
 }
 
@@ -223,24 +245,26 @@ function harnessEntryFor(
   if (t.startsWith("<task-notification>")) {
     const summary = t.match(/<summary>([\s\S]*?)<\/summary>/)?.[1]?.trim();
     const status = t.match(/<status>([\s\S]*?)<\/status>/)?.[1]?.trim();
-    return [{
-      id,
-      type: "system",
-      content: summary
-        ? `Background task ${status || "update"}: ${summary}`
-        : `Background task ${status || "update"}`,
-      timestamp: ts,
-    }];
+    return [
+      {
+        id,
+        type: "system",
+        content: summary
+          ? `Background task ${status || "update"}: ${summary}`
+          : `Background task ${status || "update"}`,
+        timestamp: ts,
+      },
+    ];
   }
   if (t.startsWith("<system-reminder>")) return [];
   // Runner-injected operational notice (account rotation, transient-error
   // retry — transcriptLineRunnerNotice in pi-transcript.ts): render as a
   // system chip, never as a user bubble.
   if (t.startsWith("<runner-notice>")) {
-    const body = t.match(/<runner-notice>([\s\S]*?)<\/runner-notice>/)?.[1]?.trim();
-    return body
-      ? [{ id, type: "system", content: body, timestamp: ts }]
-      : [];
+    const body = t
+      .match(/<runner-notice>([\s\S]*?)<\/runner-notice>/)?.[1]
+      ?.trim();
+    return body ? [{ id, type: "system", content: body, timestamp: ts }] : [];
   }
   // An answered question card (transcriptLineAskRecord in
   // transcript-persistence.ts, written by asks.ts when the ask resolves). The
@@ -253,14 +277,16 @@ function harnessEntryFor(
     const body = t.match(/<ask-record>([\s\S]*?)<\/ask-record>/)?.[1]?.trim();
     const ask = parseAnsweredAskData(structuredAsk);
     return body
-      ? [{
-          id,
-          type: "system",
-          content: body,
-          timestamp: ts,
-          noticeKind: "ask",
-          ...(ask ? { ask } : {}),
-        }]
+      ? [
+          {
+            id,
+            type: "system",
+            content: body,
+            timestamp: ts,
+            noticeKind: "ask",
+            ...(ask ? { ask } : {}),
+          },
+        ]
       : [];
   }
   // Engine context-compaction summary (transcriptLineCompactionSummary in
@@ -269,9 +295,19 @@ function harnessEntryFor(
   // set, so the UI shows a collapsed "context compacted" chip instead of the
   // model apparently dumping a status report mid-conversation.
   if (t.startsWith("<compaction-summary>")) {
-    const body = t.match(/<compaction-summary>([\s\S]*?)<\/compaction-summary>/)?.[1]?.trim();
+    const body = t
+      .match(/<compaction-summary>([\s\S]*?)<\/compaction-summary>/)?.[1]
+      ?.trim();
     return body
-      ? [{ id, type: "system", content: body, timestamp: ts, noticeKind: "compaction" }]
+      ? [
+          {
+            id,
+            type: "system",
+            content: body,
+            timestamp: ts,
+            noticeKind: "compaction",
+          },
+        ]
       : [];
   }
   // Session recap (transcriptLineRecap in pi-transcript.ts): the
@@ -281,7 +317,15 @@ function harnessEntryFor(
   if (t.startsWith("<recap>")) {
     const body = t.match(/<recap>([\s\S]*?)<\/recap>/)?.[1]?.trim();
     return body
-      ? [{ id, type: "system", content: body, timestamp: ts, noticeKind: "recap" }]
+      ? [
+          {
+            id,
+            type: "system",
+            content: body,
+            timestamp: ts,
+            noticeKind: "recap",
+          },
+        ]
       : [];
   }
   // A model-visible payload the harness injected into a prompt
@@ -381,7 +425,10 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
                 : "";
           // Markers, implicit mentions and the Read image block, derived the
           // same way on every engine — see toolResultMedia.
-          const media = toolResultMedia(resultText, extractImages(block.content));
+          const media = toolResultMedia(
+            resultText,
+            extractImages(block.content),
+          );
           // A Task/Agent result carries the spawned sub-agent's id on the line's
           // toolUseResult; attach it so the UI can open the sub-agent transcript.
           const agentId = raw.toolUseResult?.agentId;
@@ -389,7 +436,9 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
             // Keyed on the tool_use id: one jsonl line can carry several
             // tool_result blocks (parallel calls), and the live-stream copy
             // of the same result must upsert rather than duplicate.
-            id: block.tool_use_id ? `tr-${block.tool_use_id}` : raw.uuid || crypto.randomUUID(),
+            id: block.tool_use_id
+              ? `tr-${block.tool_use_id}`
+              : raw.uuid || crypto.randomUUID(),
             type: "tool_result",
             content: resultText,
             timestamp: ts,
@@ -415,16 +464,24 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
           const { text, files } = extractUploadsNote(stripped);
           if (!text.trim() && !files.length) continue;
           const baseId = raw.uuid || crypto.randomUUID();
-          const id = userTextCount === 0 ? baseId : `${baseId}-t${userTextCount}`;
+          const id =
+            userTextCount === 0 ? baseId : `${baseId}-t${userTextCount}`;
           userTextCount++;
-          pushUserEntries(entries, id, text, ts);
+          pushUserEntries(entries, id, text, ts, raw.sourceMessageIds);
           if (files.length) {
             // The note rides the end of the turn — attach to its last user entry
             // (or a bare one when the message was attachments-only).
-            const lastUser = [...entries].reverse().find((e) => e.type === "user");
+            const lastUser = [...entries]
+              .reverse()
+              .find((e) => e.type === "user");
             if (lastUser) attachUploads(lastUser, files);
             else {
-              const bare: TranscriptEntry = { id, type: "user", content: "", timestamp: ts };
+              const bare: TranscriptEntry = {
+                id,
+                type: "user",
+                content: "",
+                timestamp: ts,
+              };
               attachUploads(bare, files);
               entries.push(bare);
             }
@@ -461,9 +518,17 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
           entries.push(...harness);
         } else {
           const { text, files } = extractUploadsNote(stripped);
-          pushUserEntries(entries, raw.uuid || crypto.randomUUID(), text, ts);
+          pushUserEntries(
+            entries,
+            raw.uuid || crypto.randomUUID(),
+            text,
+            ts,
+            raw.sourceMessageIds,
+          );
           if (files.length) {
-            const lastUser = [...entries].reverse().find((e) => e.type === "user");
+            const lastUser = [...entries]
+              .reverse()
+              .find((e) => e.type === "user");
             if (lastUser) attachUploads(lastUser, files);
           }
         }
@@ -473,7 +538,8 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
 
   if (raw.type === "assistant") {
     const content = raw.message.content;
-    const model = typeof raw.message.model === "string" ? raw.message.model : undefined;
+    const model =
+      typeof raw.message.model === "string" ? raw.message.model : undefined;
     if (Array.isArray(content)) {
       // One line can carry several renderable text blocks; sharing the bare
       // line uuid would collide them as upsert/React keys (and as v2 store
@@ -492,8 +558,13 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
             timestamp: ts,
             requestId: raw.requestId,
             ...(model ? { model } : {}),
-            ...(assistant.videos.length > 0 ? { videos: assistant.videos } : {}),
-            ...(assistant.images.length > 0 ? { images: assistant.images } : {}),
+            ...(raw.isReasoning ? { isReasoning: true } : {}),
+            ...(assistant.videos.length > 0
+              ? { videos: assistant.videos }
+              : {}),
+            ...(assistant.images.length > 0
+              ? { images: assistant.images }
+              : {}),
           });
           textBlockCount++;
         }
@@ -521,6 +592,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
           timestamp: ts,
           requestId: raw.requestId,
           ...(model ? { model } : {}),
+          ...(raw.isReasoning ? { isReasoning: true } : {}),
           ...(assistant.videos.length > 0 ? { videos: assistant.videos } : {}),
           ...(assistant.images.length > 0 ? { images: assistant.images } : {}),
         });
@@ -581,7 +653,12 @@ function fnv1a36(source: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function stableCodexId(prefix: string, raw: any, p: any, extra?: unknown): string {
+function stableCodexId(
+  prefix: string,
+  raw: any,
+  p: any,
+  extra?: unknown,
+): string {
   const source = JSON.stringify({
     ts: raw?.timestamp || "",
     rawType: raw?.type || "",
@@ -598,7 +675,11 @@ function parseCodexEntry(raw: any): TranscriptEntry[] {
   if (!p || typeof p !== "object") return [];
 
   if (raw.type === "event_msg") {
-    if (p.type === "user_message" && typeof p.message === "string" && p.message.trim()) {
+    if (
+      p.type === "user_message" &&
+      typeof p.message === "string" &&
+      p.message.trim()
+    ) {
       // Strip fenced injected context (system preamble, repos note, engine
       // handoff — all of which ride on the Codex user turn) plus legacy
       // harness-appended run-policy/fallback notes, so the rendered prompt is
@@ -607,22 +688,30 @@ function parseCodexEntry(raw: any): TranscriptEntry[] {
         .split("\n\n[Run policy:")[0]
         .split("\n\n[Note: a previous attempt")[0];
       if (!message.trim()) return [];
-      return [{
-        id: p.id || stableCodexId("codex-user", raw, p, message),
-        type: "user",
-        content: resolveSlackIds(message),
-        timestamp: ts,
-      }];
+      return [
+        {
+          id: p.id || stableCodexId("codex-user", raw, p, message),
+          type: "user",
+          content: resolveSlackIds(message),
+          timestamp: ts,
+        },
+      ];
     }
-    if (p.type === "agent_message" && typeof p.message === "string" && p.message.trim()) {
+    if (
+      p.type === "agent_message" &&
+      typeof p.message === "string" &&
+      p.message.trim()
+    ) {
       const assistant = extractAssistantVideos(p.message);
-      return [{
-        id: p.id || stableCodexId("codex-assistant", raw, p, p.message),
-        type: "assistant",
-        content: assistant.content,
-        timestamp: ts,
-        ...(assistant.videos.length > 0 ? { videos: assistant.videos } : {}),
-      }];
+      return [
+        {
+          id: p.id || stableCodexId("codex-assistant", raw, p, p.message),
+          type: "assistant",
+          content: assistant.content,
+          timestamp: ts,
+          ...(assistant.videos.length > 0 ? { videos: assistant.videos } : {}),
+        },
+      ];
     }
     return [];
   }
@@ -630,7 +719,11 @@ function parseCodexEntry(raw: any): TranscriptEntry[] {
   if (raw.type === "response_item") {
     const parseArgs = (v: unknown): unknown => {
       if (typeof v !== "string") return v;
-      try { return JSON.parse(v); } catch { return v; }
+      try {
+        return JSON.parse(v);
+      } catch {
+        return v;
+      }
     };
     const outputText = (v: unknown): string => {
       const parsed = parseArgs(v) as any;
@@ -643,79 +736,101 @@ function parseCodexEntry(raw: any): TranscriptEntry[] {
     };
 
     // MCP / custom tool calls
-    if ((p.type === "function_call" || p.type === "custom_tool_call") && p.name) {
+    if (
+      (p.type === "function_call" || p.type === "custom_tool_call") &&
+      p.name
+    ) {
       const input = parseArgs(p.arguments ?? p.input);
-      return [{
-        id: p.call_id || crypto.randomUUID(),
-        type: "tool_use",
-        content: `Using ${p.name}`,
-        timestamp: ts,
-        toolName: p.name,
-        toolInput: input,
-        toolUseId: p.call_id,
-      }];
+      return [
+        {
+          id: p.call_id || crypto.randomUUID(),
+          type: "tool_use",
+          content: `Using ${p.name}`,
+          timestamp: ts,
+          toolName: p.name,
+          toolInput: input,
+          toolUseId: p.call_id,
+        },
+      ];
     }
-    if (p.type === "function_call_output" || p.type === "custom_tool_call_output") {
+    if (
+      p.type === "function_call_output" ||
+      p.type === "custom_tool_call_output"
+    ) {
       const content = outputText(p.output);
-      return [{
-        id: p.call_id ? `tr-${p.call_id}` : stableCodexId("tr-codex", raw, p, content),
-        type: "tool_result",
-        content,
-        timestamp: ts,
-        toolUseId: p.call_id,
-        // Codex hands over no attachment media, but the markers and implicit
-        // mentions in the text render exactly as on the other engines.
-        ...toolResultMedia(content),
-      }];
+      return [
+        {
+          id: p.call_id
+            ? `tr-${p.call_id}`
+            : stableCodexId("tr-codex", raw, p, content),
+          type: "tool_result",
+          content,
+          timestamp: ts,
+          toolUseId: p.call_id,
+          // Codex hands over no attachment media, but the markers and implicit
+          // mentions in the text render exactly as on the other engines.
+          ...toolResultMedia(content),
+        },
+      ];
     }
     if (p.type === "file_change") {
-      return [{
-        id: p.id || stableCodexId("codex-file-change", raw, p, p.changes),
-        type: "tool_use",
-        content: `Changed ${(p.changes || []).length || ""} file(s)`.trim(),
-        timestamp: ts,
-        toolName: "FileChange",
-        toolInput: { changes: Array.isArray(p.changes) ? p.changes : [] },
-        toolUseId: p.id,
-      }];
+      return [
+        {
+          id: p.id || stableCodexId("codex-file-change", raw, p, p.changes),
+          type: "tool_use",
+          content: `Changed ${(p.changes || []).length || ""} file(s)`.trim(),
+          timestamp: ts,
+          toolName: "FileChange",
+          toolInput: { changes: Array.isArray(p.changes) ? p.changes : [] },
+          toolUseId: p.id,
+        },
+      ];
     }
     // Shell commands
     if (p.type === "local_shell_call") {
       const command = Array.isArray(p.action?.command)
         ? p.action.command.join(" ")
         : String(p.action?.command || "");
-      return [{
-        id: p.call_id || crypto.randomUUID(),
-        type: "tool_use",
-        content: `$ ${command.split("\n")[0].slice(0, 80)}`,
-        timestamp: ts,
-        toolName: "Bash",
-        toolInput: { command },
-        toolUseId: p.call_id,
-      }];
+      return [
+        {
+          id: p.call_id || crypto.randomUUID(),
+          type: "tool_use",
+          content: `$ ${command.split("\n")[0].slice(0, 80)}`,
+          timestamp: ts,
+          toolName: "Bash",
+          toolInput: { command },
+          toolUseId: p.call_id,
+        },
+      ];
     }
     if (p.type === "local_shell_call_output") {
       const content = outputText(p.output);
-      return [{
-        id: p.call_id ? `tr-${p.call_id}` : stableCodexId("tr-codex", raw, p, content),
-        type: "tool_result",
-        content,
-        timestamp: ts,
-        toolUseId: p.call_id,
-        ...toolResultMedia(content),
-      }];
+      return [
+        {
+          id: p.call_id
+            ? `tr-${p.call_id}`
+            : stableCodexId("tr-codex", raw, p, content),
+          type: "tool_result",
+          content,
+          timestamp: ts,
+          toolUseId: p.call_id,
+          ...toolResultMedia(content),
+        },
+      ];
     }
     if (p.type === "web_search_call") {
       const toolUseId = p.call_id || p.id;
-      return [{
-        id: toolUseId || stableCodexId("codex-web", raw, p, p.action),
-        type: "tool_use",
-        content: `Search: ${p.action?.query || ""}`,
-        timestamp: ts,
-        toolName: "WebSearch",
-        toolInput: p.action,
-        ...(toolUseId ? { toolUseId } : {}),
-      }];
+      return [
+        {
+          id: toolUseId || stableCodexId("codex-web", raw, p, p.action),
+          type: "tool_use",
+          content: `Search: ${p.action?.query || ""}`,
+          timestamp: ts,
+          toolName: "WebSearch",
+          toolInput: p.action,
+          ...(toolUseId ? { toolUseId } : {}),
+        },
+      ];
     }
     return [];
   }
@@ -799,7 +914,7 @@ function makeJsonlAccumulator(): {
  */
 export async function parseJsonlLinesAsync(
   lines: string[],
-  yieldEveryLines = 1000
+  yieldEveryLines = 1000,
 ): Promise<TranscriptEntry[]> {
   const acc = makeJsonlAccumulator();
   for (let i = 0; i < lines.length; i++) {
@@ -848,7 +963,7 @@ function pruneParseCache(): void {
 const DEFAULT_TAIL_BYTES = 256 * 1024;
 function readTailBytes(
   path: string,
-  maxBytes: number
+  maxBytes: number,
 ): { buf: Buffer; truncated: boolean; size: number } {
   const fd = openSync(path, "r");
   try {
@@ -915,7 +1030,7 @@ export function parseTranscript(path: string): TranscriptEntry[] {
  * safe to interleave.
  */
 export async function parseTranscriptAsync(
-  path: string
+  path: string,
 ): Promise<TranscriptEntry[]> {
   if (!existsSync(path)) return [];
 
@@ -973,12 +1088,23 @@ const MAX_TAIL_BYTES = 16 * 1024 * 1024;
 export function parseTranscriptTail(
   path: string,
   maxBytes: number = DEFAULT_TAIL_BYTES,
-  minEntries = 40
-): { entries: TranscriptEntry[]; truncated: boolean; endOffset: number; startOffset: number } {
-  if (!existsSync(path)) return { entries: [], truncated: false, endOffset: 0, startOffset: 0 };
+  minEntries = 40,
+): {
+  entries: TranscriptEntry[];
+  truncated: boolean;
+  endOffset: number;
+  startOffset: number;
+} {
+  if (!existsSync(path))
+    return { entries: [], truncated: false, endOffset: 0, startOffset: 0 };
   if (isCodexRolloutPath(path)) {
     const endOffset = fileSizeSafe(path);
-    return { entries: parseTranscript(path), truncated: false, endOffset, startOffset: 0 };
+    return {
+      entries: parseTranscript(path),
+      truncated: false,
+      endOffset,
+      startOffset: 0,
+    };
   }
 
   let win = maxBytes;
@@ -990,7 +1116,12 @@ export function parseTranscriptTail(
       ({ buf, truncated, size } = readTailBytes(path, win));
     } catch {
       const endOffset = fileSizeSafe(path);
-      return { entries: parseTranscript(path), truncated: false, endOffset, startOffset: 0 };
+      return {
+        entries: parseTranscript(path),
+        truncated: false,
+        endOffset,
+        startOffset: 0,
+      };
     }
 
     // Drop the leading partial line so we never start mid-JSON-object.
@@ -1008,7 +1139,10 @@ export function parseTranscriptTail(
     // mid-line and dropping the entry as unparseable.
     const lastNl = buf.lastIndexOf(0x0a);
     const endOffset = size - (buf.length - (lastNl + 1));
-    const lines = chunk.toString("utf-8").split("\n").filter((l) => l.trim());
+    const lines = chunk
+      .toString("utf-8")
+      .split("\n")
+      .filter((l) => l.trim());
     const entries = parseJsonlLines(lines);
 
     if (!truncated || entries.length >= minEntries)
@@ -1018,7 +1152,12 @@ export function parseTranscriptTail(
       // would leave the tail empty — fall back to the full parse so the viewer
       // is never blank.
       if (entries.length === 0) {
-        return { entries: parseTranscript(path), truncated: false, endOffset, startOffset: 0 };
+        return {
+          entries: parseTranscript(path),
+          truncated: false,
+          endOffset,
+          startOffset: 0,
+        };
       }
       return { entries, truncated, endOffset, startOffset };
     }
@@ -1047,7 +1186,7 @@ export function parseTranscriptWindow(
    *  storm — the infinite-scroll sentinel stays in range after a tiny
    *  prepend). Past the floor the cap wins; below it the window keeps
    *  growing to MAX_TAIL_BYTES, so a click never returns a near-empty page. */
-  maxWindowBytes: number = MAX_TAIL_BYTES
+  maxWindowBytes: number = MAX_TAIL_BYTES,
 ): { entries: TranscriptEntry[]; startOffset: number; truncated: boolean } {
   if (!existsSync(path) || beforeOffset <= 0)
     return { entries: [], startOffset: 0, truncated: false };
@@ -1075,7 +1214,10 @@ export function parseTranscriptWindow(
       chunk = nl !== -1 ? buf.subarray(nl + 1) : Buffer.alloc(0);
     }
     const startOffset = beforeOffset - chunk.length;
-    const lines = chunk.toString("utf-8").split("\n").filter((l) => l.trim());
+    const lines = chunk
+      .toString("utf-8")
+      .split("\n")
+      .filter((l) => l.trim());
     const entries = parseJsonlLines(lines);
 
     if (start === 0 || entries.length >= minEntries) {
@@ -1092,7 +1234,7 @@ export function parseTranscriptWindow(
         let cut = Math.floor(rawLines.length * (1 - frac));
         while (cut > 0) {
           const page = parseJsonlLines(
-            rawLines.slice(cut).filter((l) => l.trim())
+            rawLines.slice(cut).filter((l) => l.trim()),
           );
           if (page.length >= minEntries) {
             const droppedBytes = rawLines
@@ -1109,7 +1251,10 @@ export function parseTranscriptWindow(
       }
       return { entries, startOffset, truncated: startOffset > 0 };
     }
-    if (win >= maxWindowBytes && entries.length >= Math.max(1, Math.ceil(minEntries / 4)))
+    if (
+      win >= maxWindowBytes &&
+      entries.length >= Math.max(1, Math.ceil(minEntries / 4))
+    )
       return { entries, startOffset, truncated: startOffset > 0 };
     if (win >= MAX_TAIL_BYTES)
       return { entries, startOffset, truncated: startOffset > 0 };
@@ -1151,10 +1296,9 @@ function clampEntryForWire(e: TranscriptEntry, max: number): TranscriptEntry {
 /** Wire-clamp a batch; returns the same array when nothing needed clamping. */
 export function clampEntriesForWire(
   entries: TranscriptEntry[],
-  maxBytes: number = WIRE_CLAMP_BYTES
+  maxBytes: number = WIRE_CLAMP_BYTES,
 ): TranscriptEntry[] {
-  if (!entries.some((e) => (e.content?.length ?? 0) > maxBytes))
-    return entries;
+  if (!entries.some((e) => (e.content?.length ?? 0) > maxBytes)) return entries;
   return entries.map((e) => clampEntryForWire(e, maxBytes));
 }
 
@@ -1183,6 +1327,37 @@ function stripStoredUserContext(entries: TranscriptEntry[]): TranscriptEntry[] {
   return changed ? shown : entries;
 }
 
+/** Hide model-only context while preserving the one structural fact a reader
+ * needs: a background wait starts another agent turn. The payload stays
+ * private; clients receive only a content-free boundary carrying the original
+ * sequence identity, so old stored waits gain the fix without migration. */
+function projectContextForWire(entries: TranscriptEntry[]): TranscriptEntry[] {
+  const projected: TranscriptEntry[] = [];
+  for (const entry of entries) {
+    const contextRecord =
+      entry.noticeKind === "context-injection" ||
+      entry.noticeKind === "standing-context";
+    if (!contextRecord) {
+      projected.push(entry);
+      continue;
+    }
+    if (entry.contextInjection?.source === "background-wait") {
+      projected.push({
+        id: entry.id,
+        type: "user",
+        content: "",
+        timestamp: entry.timestamp,
+        turnBoundary: true,
+        ...(entry.seq !== undefined ? { seq: entry.seq } : {}),
+        ...(entry.changeSeq !== undefined
+          ? { changeSeq: entry.changeSeq }
+          : {}),
+      });
+    }
+  }
+  return projected;
+}
+
 /**
  * Everything a batch of entries needs before it leaves the server: strip
  * injected context, classify how each entry reads (notices.ts), say what each
@@ -1198,16 +1373,16 @@ function stripStoredUserContext(entries: TranscriptEntry[]): TranscriptEntry[] {
  * plumbing to a client that no longer knows how to parse it.
  */
 export function prepareEntriesForWire(
-  entries: TranscriptEntry[]
+  entries: TranscriptEntry[],
 ): TranscriptEntry[] {
   return withToolPresentations(
-    classifyEntries(stripStoredUserContext(dropContextInjections(entries)))
+    classifyEntries(stripStoredUserContext(projectContextForWire(entries))),
   );
 }
 
 export function entriesForWire(
   entries: TranscriptEntry[],
-  maxBytes: number = WIRE_CLAMP_BYTES
+  maxBytes: number = WIRE_CLAMP_BYTES,
 ): TranscriptEntry[] {
   return clampEntriesForWire(prepareEntriesForWire(entries), maxBytes);
 }
@@ -1224,7 +1399,7 @@ export function entriesForWire(
 export function transcriptMatchSnippet(
   path: string,
   query: string,
-  ctx: number = 60
+  ctx: number = 60,
 ): string | null {
   for (const entry of parseTranscript(path)) {
     const snippet = transcriptEntryMatchSnippet(entry, query, ctx);
@@ -1235,9 +1410,10 @@ export function transcriptMatchSnippet(
 
 export function parseTranscriptFrom(
   path: string,
-  byteOffset: number
+  byteOffset: number,
 ): { entries: TranscriptEntry[]; newOffset: number; ok: boolean } {
-  if (!existsSync(path)) return { entries: [], newOffset: byteOffset, ok: false };
+  if (!existsSync(path))
+    return { entries: [], newOffset: byteOffset, ok: false };
 
   // Positional read of just [byteOffset, EOF) — this runs every second per
   // watched session (file-watcher poll), and a full readFileSync of a 30 MB
@@ -1266,8 +1442,7 @@ export function parseTranscriptFrom(
   // has no other live delivery path, so the sender's bubble never reconciles).
   // Leave the partial tail for the next poll instead.
   const lastNl = buf.lastIndexOf(0x0a);
-  if (lastNl === -1)
-    return { entries: [], newOffset: byteOffset, ok: true };
+  if (lastNl === -1) return { entries: [], newOffset: byteOffset, ok: true };
   const consumed = lastNl + 1;
   const chunk = buf.subarray(0, consumed).toString("utf-8");
   const newOffset = byteOffset + consumed;

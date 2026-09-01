@@ -35,9 +35,7 @@ self.addEventListener("install", (event) => {
       .catch(() => {}),
   );
 });
-self.addEventListener("activate", (event) =>
-  event.waitUntil(activateWorker()),
-);
+self.addEventListener("activate", (event) => event.waitUntil(activateWorker()));
 
 async function activateWorker() {
   const keys = await caches.keys();

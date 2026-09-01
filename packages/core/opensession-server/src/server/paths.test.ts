@@ -89,15 +89,15 @@ describe("resolveLegacySessionsPath", () => {
 
 describe("isClientSessionId", () => {
   it("accepts only client-minted os uuidv7 ids", () => {
-    expect(
-      isClientSessionId("os-019f0000-0000-7000-8000-000000000001"),
-    ).toBe(true);
-    expect(
-      isClientSessionId("bks-019f0000-0000-7000-8000-000000000001"),
-    ).toBe(false);
-    expect(
-      isClientSessionId("os-019f0000-0000-4000-8000-000000000001"),
-    ).toBe(false);
+    expect(isClientSessionId("os-019f0000-0000-7000-8000-000000000001")).toBe(
+      true,
+    );
+    expect(isClientSessionId("bks-019f0000-0000-7000-8000-000000000001")).toBe(
+      false,
+    );
+    expect(isClientSessionId("os-019f0000-0000-4000-8000-000000000001")).toBe(
+      false,
+    );
     expect(isClientSessionId("os-release-2026")).toBe(false);
   });
 });

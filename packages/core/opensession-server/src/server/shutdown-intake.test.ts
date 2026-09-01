@@ -8,7 +8,9 @@ describe("shutdown intake fence", () => {
     const source = await read("./automations.ts");
     const run = source.indexOf("export async function runAutomation(");
     const shutdown = source.indexOf("if (isShuttingDown())", run);
-    expect(source.indexOf("persistAutomationIntent({", run)).toBeLessThan(shutdown);
+    expect(source.indexOf("persistAutomationIntent({", run)).toBeLessThan(
+      shutdown,
+    );
     expect(shutdown).toBeLessThan(source.indexOf("runningCounts.set", run));
     expect(source).toContain(
       "schedulerInterval = setInterval(() => {\n    if (isShuttingDown()) return;",
@@ -23,9 +25,11 @@ describe("shutdown intake fence", () => {
     expect(source).toContain("acceptedAt: intent.acceptedAt");
     expect(source).toContain("const startedAt = new Date(acceptedAt)");
     expect(source).toContain("automationPreparations.has(intent.sessionId)");
-    expect(source).toContain("activeAutomationIntentSessions.has(intent.sessionId)");
     expect(source).toContain(
-      "activeRunRecords().some((run) => run.osSessionId === intent.sessionId)",
+      "activeAutomationIntentSessions.has(intent.sessionId)",
+    );
+    expect(source).toMatch(
+      /activeRunRecords\(\)\.some\(\s*\(run\) => run\.osSessionId === intent\.sessionId,?\s*\)/,
     );
     expect(source).toContain(
       '(intent.trigger === "cron" || intent.trigger === "manual") &&',
@@ -34,7 +38,10 @@ describe("shutdown intake fence", () => {
     expect(source).toContain("resumePendingAutomationRuns(onSessionCreated)");
     expect(source).toContain("recordAutomationIntentTerminal(");
     const streamAdoption = source.indexOf("for await (const event of events)");
-    const terminal = source.indexOf("recordAutomationIntentTerminal(bksId", streamAdoption);
+    const terminal = source.indexOf(
+      "recordAutomationIntentTerminal(bksId",
+      streamAdoption,
+    );
     const settle = source.indexOf("settleRun(automation.id, bksId", terminal);
     expect(terminal).toBeLessThan(settle);
     expect(settle).toBeLessThan(
@@ -70,7 +77,35 @@ describe("shutdown intake fence", () => {
     expect(source.indexOf("activeAutomationPreparationCount(),")).toBeLessThan(
       source.indexOf("activeAgentRunCount() - activeDetachedAgentRunCount()"),
     );
-    expect(source).toContain("resumePendingAutomationRuns(onAutomationSession)");
+    expect(source).toContain(
+      "resumePendingAutomationRuns(onAutomationSession)",
+    );
+  });
+
+  test("announces a restart before potentially slow shutdown work", async () => {
+    const source = await read("../../opensession.ts");
+    const shutdown = source.indexOf("const gracefulShutdown = async");
+    const announce = source.indexOf(
+      'broadcastToAll({ type: "server_restarting" });',
+      shutdown,
+    );
+    const flush = source.indexOf("setTimeout(r, 50)", announce);
+    const runtimeStop = source.indexOf("stopSessionKernelRuntime()", announce);
+    const snapshot = source.indexOf("snapshotActiveSessions()", announce);
+
+    expect(announce).toBeGreaterThan(shutdown);
+    expect(announce).toBeLessThan(flush);
+    expect(flush).toBeLessThan(runtimeStop);
+    expect(runtimeStop).toBeLessThan(snapshot);
+  });
+
+  test("reserves the handoff signal exclusively for graceful shutdown", async () => {
+    const source = await read("../../opensession.ts");
+    expect(source.match(/process\.on\("SIGUSR2"/g)).toHaveLength(1);
+    expect(source).toContain(
+      'process.on("SIGUSR2", () => void gracefulShutdown("SIGUSR2"))',
+    );
+    expect(source).not.toContain('scheduleFrontendRebuild("SIGUSR2"');
   });
 
   test("acknowledges restart-window composer intake as queued", async () => {
@@ -80,10 +115,16 @@ describe("shutdown intake fence", () => {
     const busyRoute = source.indexOf("isAgentSessionBusy(", earlyFence);
     expect(earlyFence).toBeGreaterThan(delivery);
     expect(earlyFence).toBeLessThan(busyRoute);
-    expect(source.slice(earlyFence, busyRoute)).toContain("await enqueuePrompt(id, queuedItem)");
-    expect(source.slice(earlyFence, busyRoute)).toContain('status: "queued" as const');
+    expect(source.slice(earlyFence, busyRoute)).toContain(
+      "await enqueuePrompt(id, queuedItem)",
+    );
+    expect(source.slice(earlyFence, busyRoute)).toContain(
+      'status: "queued" as const',
+    );
 
-    const durableIntake = source.indexOf("// Every accepted prompt is durable before any engine or workspace wake.");
+    const durableIntake = source.indexOf(
+      "// Every accepted prompt is durable before any engine or workspace wake.",
+    );
     const enqueue = source.indexOf("await enqueuePrompt(id", durableIntake);
     const park = source.indexOf("if (parkQueueForShutdown(id))", enqueue);
     const drain = source.indexOf("void drainQueue(id)", park);
@@ -99,7 +140,10 @@ describe("shutdown intake fence", () => {
     const firstFence = source.indexOf("if (isShuttingDown())", detailed);
     const acquire = source.indexOf("await acquireOneShotSlot()", firstFence);
     const secondFence = source.indexOf("if (isShuttingDown())", acquire);
-    const launch = source.indexOf("for await (const event of runPi(", secondFence);
+    const launch = source.indexOf(
+      "for await (const event of runPi(",
+      secondFence,
+    );
     expect(firstFence).toBeGreaterThan(detailed);
     expect(firstFence).toBeLessThan(acquire);
     expect(acquire).toBeLessThan(secondFence);
@@ -110,9 +154,11 @@ describe("shutdown intake fence", () => {
     const source = await read("./agent-runner.ts");
     const recovery = source.indexOf("const recoveryTask = (");
     const start = source.indexOf("const start = async () =>", recovery);
-    expect(source.indexOf("if (started || isShuttingDown()) return", start)).toBeGreaterThan(start);
-    expect(source.indexOf("if (started || isShuttingDown()) return", start)).toBeLessThan(
-      source.indexOf("started = true", start),
-    );
+    expect(
+      source.indexOf("if (started || isShuttingDown()) return", start),
+    ).toBeGreaterThan(start);
+    expect(
+      source.indexOf("if (started || isShuttingDown()) return", start),
+    ).toBeLessThan(source.indexOf("started = true", start));
   });
 });

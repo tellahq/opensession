@@ -56,7 +56,9 @@ export function listRecipes(): Recipe[] {
   for (const file of readdirSync(RECIPES_DIR).sort()) {
     if (!file.endsWith(".json")) continue;
     try {
-      const recipe = JSON.parse(readFileSync(join(RECIPES_DIR, file), "utf8")) as Recipe;
+      const recipe = JSON.parse(
+        readFileSync(join(RECIPES_DIR, file), "utf8"),
+      ) as Recipe;
       if (recipe?.id && recipe?.automation?.prompt) recipes.push(recipe);
     } catch {
       // A malformed recipe should not break `opensession automations`.
@@ -122,7 +124,8 @@ export async function installRecipe(
 
   const list = config.integrations.seeds.automations as any[];
   const key = keyOf(recipe);
-  if (list.some((e) => (e?.eventKey || e?.name) === key)) return "already-present";
+  if (list.some((e) => (e?.eventKey || e?.name) === key))
+    return "already-present";
 
   list.push({ ...recipe.automation, createdBy });
   await Bun.write(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");

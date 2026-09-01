@@ -77,7 +77,14 @@ export function ProductDemoEntry() {
               fill="currentColor"
               fillOpacity="0.38"
             />
-            <rect x="2.2" y="2.2" width="17.8" height="7.6" rx="2" fill="currentColor" />
+            <rect
+              x="2.2"
+              y="2.2"
+              width="17.8"
+              height="7.6"
+              rx="2"
+              fill="currentColor"
+            />
           </svg>
         </span>
       </div>

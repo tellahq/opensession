@@ -11,12 +11,12 @@ import { makeUserPref } from "./user-pref";
 import type { SendKeyPref } from "./send-key";
 
 const pref = makeUserPref<SendKeyPref>({
-	localKey: "opensession-send-key",
-	prefKey: "send-key",
-	changeEvent: "opensession-send-key-changed",
-	defaultValue: "enter",
-	decode: (v) => (v === "enter" || v === "mod-enter" ? v : null),
-	encode: (v) => v,
+  localKey: "opensession-send-key",
+  prefKey: "send-key",
+  changeEvent: "opensession-send-key-changed",
+  defaultValue: "enter",
+  decode: (v) => (v === "enter" || v === "mod-enter" ? v : null),
+  encode: (v) => v,
 });
 
 export const getSendKeyPref = pref.get;

@@ -5,7 +5,9 @@ import { stateDir } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
 import { broadcastToAll } from "../ws-hub";
 
-const liveOperations: Set<string> = ((globalThis as any).__sandboxLiveOperations ??= new Set());
+const liveOperations: Set<string> = ((
+  globalThis as any
+).__sandboxLiveOperations ??= new Set());
 
 export type SandboxOperationStatus = "running" | "succeeded" | "failed";
 
@@ -25,7 +27,10 @@ export interface SandboxOperation {
 }
 
 function storePath(): string {
-  return process.env.OPENSESSION_SANDBOX_OPERATIONS_STORE || stateDir("sandbox-operations.json");
+  return (
+    process.env.OPENSESSION_SANDBOX_OPERATIONS_STORE ||
+    stateDir("sandbox-operations.json")
+  );
 }
 
 function readOperations(): SandboxOperation[] {
@@ -39,7 +44,9 @@ function readOperations(): SandboxOperation[] {
 }
 
 function persist(operation: SandboxOperation): void {
-  const all = readOperations().filter((candidate) => candidate.id !== operation.id);
+  const all = readOperations().filter(
+    (candidate) => candidate.id !== operation.id,
+  );
   all.push(operation);
   all.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   writeJsonAtomic(storePath(), { version: 1, operations: all.slice(0, 100) });
@@ -54,7 +61,8 @@ export function listSandboxOperations(): SandboxOperation[] {
           status: "failed" as const,
           stage: "Interrupted",
           failureCode: "SERVER_RESTARTED",
-          failureSummary: "The server restarted during this operation. Test again.",
+          failureSummary:
+            "The server restarted during this operation. Test again.",
         }
       : operation,
   );
@@ -88,8 +96,16 @@ export function startSandboxOperation(
       Partial<Pick<SandboxOperation, "detail" | "progress">>,
   ) => {
     if (operation.status !== "running") return;
-    const progress = patch.progress == null ? operation.progress : Math.max(0, Math.min(100, patch.progress));
-    if (operation.stage === patch.stage && operation.detail === patch.detail && operation.progress === progress) return;
+    const progress =
+      patch.progress == null
+        ? operation.progress
+        : Math.max(0, Math.min(100, patch.progress));
+    if (
+      operation.stage === patch.stage &&
+      operation.detail === patch.detail &&
+      operation.progress === progress
+    )
+      return;
     operation.stage = patch.stage;
     operation.detail = patch.detail;
     operation.progress = progress;

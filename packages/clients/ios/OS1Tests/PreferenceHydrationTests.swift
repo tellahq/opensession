@@ -3,6 +3,57 @@ import XCTest
 
 @MainActor
 final class PreferenceHydrationTests: XCTestCase {
+    func testDefaultRepositoryPreferenceNormalizesRetiredAuto() {
+        XCTAssertNil(NativePreferences.normalizedDefaultRepository(nil))
+        XCTAssertEqual(NativePreferences.normalizedDefaultRepository(""), "")
+        XCTAssertEqual(NativePreferences.normalizedDefaultRepository("auto"), "")
+        XCTAssertEqual(NativePreferences.normalizedDefaultRepository("repo-docs"), "repo-docs")
+    }
+
+    func testSessionCheckoutMapKeepsOnlyValidRepositoryChoices() {
+        let raw = """
+        {"docs":"worktree","app":"checkout","future":"remote","blank":"","": "checkout"}
+        """
+
+        let normalized = NativePreferences.validatedSessionCheckouts(raw)
+        XCTAssertEqual(normalized, "{\"app\":\"checkout\",\"docs\":\"worktree\"}")
+        XCTAssertEqual(
+            NativePreferences.sessionCheckoutMode(for: "app", in: normalized),
+            "checkout"
+        )
+        XCTAssertEqual(
+            NativePreferences.sessionCheckoutMode(for: "docs", in: normalized),
+            "worktree"
+        )
+        XCTAssertEqual(
+            NativePreferences.sessionCheckoutMode(for: "future", in: normalized),
+            "default"
+        )
+    }
+
+    func testMalformedSessionCheckoutMapSafelyUsesDefault() {
+        for raw in [nil, "not json", "[]", "null"] as [String?] {
+            XCTAssertEqual(
+                NativePreferences.sessionCheckoutMode(for: "app", in: raw),
+                "default"
+            )
+        }
+    }
+
+    func testSettingSessionCheckoutMatchesWebMapShape() {
+        var raw = NativePreferences.settingSessionCheckout(
+            "worktree",
+            for: "docs",
+            in: nil
+        )
+        raw = NativePreferences.settingSessionCheckout("checkout", for: "app", in: raw)
+        XCTAssertEqual(raw, "{\"app\":\"checkout\",\"docs\":\"worktree\"}")
+        XCTAssertEqual(
+            NativePreferences.settingSessionCheckout("default", for: "docs", in: raw),
+            "{\"app\":\"checkout\"}"
+        )
+    }
+
     func testReplySuggestionsPreferenceUsesWebValues() {
         XCTAssertEqual(NativePreferences.replySuggestionsEnabled("on"), true)
         XCTAssertEqual(NativePreferences.replySuggestionsEnabled("off"), false)

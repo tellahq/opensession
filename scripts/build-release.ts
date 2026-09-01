@@ -34,9 +34,21 @@
  * Runs on any host with Bun and git; cross-target is fine because nothing
  * here executes target binaries and the frontend bundle is platform-neutral.
  */
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "fs";
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import { dirname, join, resolve } from "path";
-import { FRONTEND_DIST, compileAssets } from "../packages/core/opensession-server/src/server/frontend-build";
+import {
+  FRONTEND_DIST,
+  compileAssets,
+} from "../packages/core/opensession-server/src/server/frontend-build";
 
 const ROOT = resolve(import.meta.dir, "..");
 
@@ -47,14 +59,21 @@ function arg(name: string, def?: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : def;
 }
 
-const os = (arg("os", process.platform === "darwin" ? "darwin" : "linux") as Target["os"]);
-const arch = (arg("arch", process.arch === "arm64" ? "arm64" : "x64") as Target["arch"]);
+const os = arg(
+  "os",
+  process.platform === "darwin" ? "darwin" : "linux",
+) as Target["os"];
+const arch = arg(
+  "arch",
+  process.arch === "arm64" ? "arm64" : "x64",
+) as Target["arch"];
 // Default output lives OUTSIDE the repo: a staged release tree inside the
 // checkout (tens of thousands of files, a nested node_modules) breaks
 // `bun test <filter>` for the whole repo (Bun 1.3.13: child stdout capture
 // goes empty once the test scanner has walked such a tree). Keep it in the
 // user cache and copy the tarball wherever it is needed.
-const CACHE_HOME = process.env.XDG_CACHE_HOME || join(process.env.HOME || "~", ".cache");
+const CACHE_HOME =
+  process.env.XDG_CACHE_HOME || join(process.env.HOME || "~", ".cache");
 const OUT = resolve(arg("out", join(CACHE_HOME, "opensession-release"))!);
 const BUN_VERSION = arg("bun", Bun.version)!;
 if (!["linux", "darwin"].includes(os) || !["arm64", "x64"].includes(arch)) {
@@ -64,23 +83,49 @@ if (!["linux", "darwin"].includes(os) || !["arm64", "x64"].includes(arch)) {
 
 /** Paths never shipped: clients, docs, tests, site, CI, build outputs. */
 const EXCLUDE_PREFIXES = [
-  "os1-chrome/", "os1-ios/", "os1-mac/", "os1-tui/",
-  "website/", "docs/", "adrs/", "test/", ".github/", "output/", "dist/",
-  ".vscode/", "mac-app-icon.png",
+  "os1-chrome/",
+  "os1-ios/",
+  "os1-mac/",
+  "os1-tui/",
+  "website/",
+  "docs/",
+  "adrs/",
+  "test/",
+  ".github/",
+  "output/",
+  "dist/",
+  ".vscode/",
+  "mac-app-icon.png",
 ];
 
-async function sh(cmd: string[], opts: { cwd?: string; env?: Record<string, string> } = {}) {
-  const p = Bun.spawn(cmd, { cwd: opts.cwd, env: { ...process.env, ...opts.env }, stdout: "pipe", stderr: "pipe" });
-  const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
+async function sh(
+  cmd: string[],
+  opts: { cwd?: string; env?: Record<string, string> } = {},
+) {
+  const p = Bun.spawn(cmd, {
+    cwd: opts.cwd,
+    env: { ...process.env, ...opts.env },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [out, err] = await Promise.all([
+    new Response(p.stdout).text(),
+    new Response(p.stderr).text(),
+  ]);
   const code = await p.exited;
-  if (code !== 0) throw new Error(`${cmd.join(" ")} failed (${code})\n${out}\n${err}`);
+  if (code !== 0)
+    throw new Error(`${cmd.join(" ")} failed (${code})\n${out}\n${err}`);
   return out;
 }
 
 const t0 = Date.now();
-function step(s: string) { console.log(`\n== ${s}  (+${((Date.now() - t0) / 1000).toFixed(0)}s)`); }
+function step(s: string) {
+  console.log(`\n== ${s}  (+${((Date.now() - t0) / 1000).toFixed(0)}s)`);
+}
 
-const commit = (await sh(["git", "rev-parse", "--short", "HEAD"], { cwd: ROOT })).trim();
+const commit = (
+  await sh(["git", "rev-parse", "--short", "HEAD"], { cwd: ROOT })
+).trim();
 const pkg = JSON.parse(await Bun.file(join(ROOT, "package.json")).text()) as {
   version?: string;
 };
@@ -93,10 +138,17 @@ rmSync(STAGE, { recursive: true, force: true });
 mkdirSync(STAGE, { recursive: true });
 
 step("source tree");
-const tracked = (await sh(["git", "ls-files", "-z"], { cwd: ROOT })).split("\0").filter(Boolean);
+const tracked = (await sh(["git", "ls-files", "-z"], { cwd: ROOT }))
+  .split("\0")
+  .filter(Boolean);
 let copied = 0;
 for (const rel of tracked) {
-  if (EXCLUDE_PREFIXES.some((p) => rel.startsWith(p) || rel === p.replace(/\/$/, ""))) continue;
+  if (
+    EXCLUDE_PREFIXES.some(
+      (p) => rel.startsWith(p) || rel === p.replace(/\/$/, ""),
+    )
+  )
+    continue;
   const src = join(ROOT, rel);
   if (!existsSync(src)) continue; // deleted in the worktree but still tracked
   const dst = join(STAGE, rel);
@@ -132,10 +184,21 @@ for (const f of distFiles) {
 console.log(`${shipped} files (inputs ${meta.inputsHash})`);
 
 step(`dependencies for ${os}/${arch}`);
-await sh(["bun", "install", "--production", "--frozen-lockfile", "--ignore-scripts", `--os=${os}`, `--cpu=${arch}`], {
-  cwd: STAGE,
-  env: { BUN_INSTALL_CACHE_DIR: join(OUT, "bun-cache") },
-});
+await sh(
+  [
+    "bun",
+    "install",
+    "--production",
+    "--frozen-lockfile",
+    "--ignore-scripts",
+    `--os=${os}`,
+    `--cpu=${arch}`,
+  ],
+  {
+    cwd: STAGE,
+    env: { BUN_INSTALL_CACHE_DIR: join(OUT, "bun-cache") },
+  },
+);
 // bun's --os/--cpu keeps musl variants for linux; nothing here targets musl.
 const store = join(STAGE, "node_modules", ".bun");
 function dirBytes(p: string): number {
@@ -152,7 +215,9 @@ let prunedClaudeBytes = 0;
 if (existsSync(store)) {
   for (const d of readdirSync(store)) {
     const foreign =
-      /musl/.test(d) || (os === "linux" && /darwin|win32/.test(d)) || (os === "darwin" && /linux|win32/.test(d));
+      /musl/.test(d) ||
+      (os === "linux" && /darwin|win32/.test(d)) ||
+      (os === "darwin" && /linux|win32/.test(d));
     // Never executed: Open Session shells out to the installed `claude` CLI
     // (config paths.claudeBin): the Agent SDK gets pathToClaudeCodeExecutable
     // and Meridian gets MERIDIAN_CLAUDE_PATH, so the SDK's and claude-code's
@@ -163,7 +228,8 @@ if (existsSync(store)) {
     // sharp is NOT pruned here: the server loads it at runtime for session
     // social cards, and the foreign-platform check above already drops the
     // sharp variants for other platforms.
-    const bundledClaude = /^@anthropic-ai\+claude-agent-sdk-|^@anthropic-ai\+claude-code-/.test(d);
+    const bundledClaude =
+      /^@anthropic-ai\+claude-agent-sdk-|^@anthropic-ai\+claude-code-/.test(d);
     if (!foreign && !bundledClaude) continue;
     const bytes = dirBytes(join(store, d));
     rmSync(join(store, d), { recursive: true, force: true });
@@ -176,8 +242,12 @@ if (existsSync(store)) {
     }
   }
 }
-console.log(`pruned ${pruned} foreign-platform packages (${(prunedBytes / 1e6).toFixed(0)} MB)`);
-console.log(`pruned ${prunedClaude} bundled Claude Code binary packages (${(prunedClaudeBytes / 1e6).toFixed(0)} MB)`);
+console.log(
+  `pruned ${pruned} foreign-platform packages (${(prunedBytes / 1e6).toFixed(0)} MB)`,
+);
+console.log(
+  `pruned ${prunedClaude} bundled Claude Code binary packages (${(prunedClaudeBytes / 1e6).toFixed(0)} MB)`,
+);
 
 step(`bun ${BUN_VERSION} for ${os}/${arch}`);
 const bunAsset = `bun-${os}-${arch === "arm64" ? "aarch64" : "x64"}`;
@@ -196,7 +266,15 @@ step("release.json");
 writeFileSync(
   join(STAGE, "release.json"),
   JSON.stringify(
-    { name, version, commit, os, arch, bun: BUN_VERSION, builtAt: new Date().toISOString() },
+    {
+      name,
+      version,
+      commit,
+      os,
+      arch,
+      bun: BUN_VERSION,
+      builtAt: new Date().toISOString(),
+    },
     null,
     2,
   ) + "\n",
@@ -207,7 +285,10 @@ const tarball = join(OUT, `${name}.tar.gz`);
 rmSync(tarball, { force: true });
 // No Apple xattrs/resource forks in the archive: GNU tar on the box warns
 // about them on every file otherwise.
-await sh(["tar", "--no-xattrs", "-C", join(OUT, "stage"), "-czf", tarball, name], { env: { COPYFILE_DISABLE: "1" } });
+await sh(
+  ["tar", "--no-xattrs", "-C", join(OUT, "stage"), "-czf", tarball, name],
+  { env: { COPYFILE_DISABLE: "1" } },
+);
 const mb = (statSync(tarball).size / 1e6).toFixed(0);
 console.log(`${tarball} (${mb} MB)`);
 console.log(`\nInstall: install.sh --artifact ${tarball}`);

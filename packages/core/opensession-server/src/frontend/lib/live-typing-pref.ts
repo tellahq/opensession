@@ -16,12 +16,12 @@
 import { makeUserPref } from "./user-pref";
 
 const pref = makeUserPref<boolean>({
-	localKey: "opensession-live-typing",
-	prefKey: "live-typing",
-	changeEvent: "opensession-live-typing-changed",
-	defaultValue: false,
-	decode: (v) => (v === "on" ? true : v === "off" ? false : null),
-	encode: (on) => (on ? "on" : "off"),
+  localKey: "opensession-live-typing",
+  prefKey: "live-typing",
+  changeEvent: "opensession-live-typing-changed",
+  defaultValue: false,
+  decode: (v) => (v === "on" ? true : v === "off" ? false : null),
+  encode: (on) => (on ? "on" : "off"),
 });
 
 export const getLiveTypingPref = pref.get;

@@ -52,8 +52,9 @@ export interface ClaudeLoginStart {
   accountName: string;
 }
 
-const pending: Map<string, PendingLogin> = ((globalThis as any).__claudeOauthLogins ??=
-  new Map());
+const pending: Map<string, PendingLogin> = ((
+  globalThis as any
+).__claudeOauthLogins ??= new Map());
 
 function prune(): void {
   const now = Date.now();
@@ -73,14 +74,16 @@ export function claudeOauthCredentialsPath(accountId: string): string {
 
 /** Begin a PKCE sign-in that attaches usage tracking to an account. */
 export async function startClaudeLogin(
-  accountId: string
+  accountId: string,
 ): Promise<ClaudeLoginStart | { error: string }> {
   prune();
   const account = getAccountById(accountId);
   if (!account) return { error: "Unknown account" };
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = b64url(
-    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)))
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
+    ),
   );
   const login: PendingLogin = {
     id: crypto.randomUUID(),
@@ -109,14 +112,15 @@ export async function startClaudeLogin(
  */
 export async function completeClaudeLogin(
   id: string,
-  pastedCode: string
+  pastedCode: string,
 ): Promise<{ account: ClaudeAccountPublic } | { error: string }> {
   prune();
   const login = pending.get(id);
   if (!login) return { error: "Sign-in attempt expired — start again." };
   const cleaned = pastedCode.replace(/\s+/g, "");
   const [code, state] = cleaned.split("#");
-  if (!code) return { error: "Paste the full code Anthropic showed after sign-in." };
+  if (!code)
+    return { error: "Paste the full code Anthropic showed after sign-in." };
 
   let res: Response;
   try {
@@ -138,7 +142,9 @@ export async function completeClaudeLogin(
   }
   if (!res.ok) {
     const detail = (await res.text().catch(() => "")).slice(0, 200);
-    return { error: `Token exchange failed (HTTP ${res.status})${detail ? `: ${detail}` : ""}` };
+    return {
+      error: `Token exchange failed (HTTP ${res.status})${detail ? `: ${detail}` : ""}`,
+    };
   }
   const body: any = await res.json().catch(() => null);
   if (!body?.access_token || !body?.refresh_token) {
@@ -153,7 +159,11 @@ export async function completeClaudeLogin(
   const email: string | undefined = body.account?.email_address || undefined;
   // Usage data from the wrong subscription is actively misleading. Refuse a
   // mismatched sign-in instead of silently attaching it.
-  if (account.email && email && account.email.toLowerCase() !== email.toLowerCase()) {
+  if (
+    account.email &&
+    email &&
+    account.email.toLowerCase() !== email.toLowerCase()
+  ) {
     pending.delete(id);
     return {
       error: `Signed into ${email}, but this pool account is ${account.email}. Sign in with the matching Claude account and try again.`,
@@ -174,19 +184,23 @@ export async function completeClaudeLogin(
           refreshTokenExpiresAt: Number(body.refresh_token_expires_in)
             ? now + Number(body.refresh_token_expires_in) * 1000
             : undefined,
-          scopes: typeof body.scope === "string" ? body.scope.split(" ") : undefined,
+          scopes:
+            typeof body.scope === "string" ? body.scope.split(" ") : undefined,
         },
       },
       null,
-      2
-    ) + "\n"
+      2,
+    ) + "\n",
   );
   chmodSync(path, 0o600);
   pending.delete(id);
 
   const updated = setAccountUsageCredentials(login.accountId, path, email);
-  if (!updated) return { error: "The account this sign-in was for no longer exists." };
-  console.log(`[claude-oauth-login] ${updated.name} reconnected${email ? ` (${email})` : ""}`);
+  if (!updated)
+    return { error: "The account this sign-in was for no longer exists." };
+  console.log(
+    `[claude-oauth-login] ${updated.name} reconnected${email ? ` (${email})` : ""}`,
+  );
   return { account: updated };
 }
 

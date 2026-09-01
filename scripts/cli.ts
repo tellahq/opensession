@@ -23,11 +23,39 @@ import { team } from "./lib/team";
 import { ENV_PATH, REPO_ROOT } from "./lib/paths";
 import * as service from "./lib/service";
 import { update } from "./lib/update";
-import { bold, dim, fail, green, heading, info, ok, run, runInherit, warn } from "./lib/ui";
-import { INTEGRATIONS, findIntegration } from "../packages/core/opensession-server/src/server/integrations/registry";
-import { findRecipe, installRecipe, installedKeys, listRecipes, removeRecipe } from "./lib/recipes";
+import {
+  bold,
+  dim,
+  fail,
+  green,
+  heading,
+  info,
+  ok,
+  run,
+  runInherit,
+  warn,
+} from "./lib/ui";
+import {
+  INTEGRATIONS,
+  findIntegration,
+} from "../packages/core/opensession-server/src/server/integrations/registry";
+import {
+  findRecipe,
+  installRecipe,
+  installedKeys,
+  listRecipes,
+  removeRecipe,
+} from "./lib/recipes";
 import { plugins } from "./lib/plugins";
-import { connect, installRunnerService, runnerRun, runnerStatus, runnersList, runnersPair, runnersRemove } from "./lib/connect";
+import {
+  connect,
+  installRunnerService,
+  runnerRun,
+  runnerStatus,
+  runnersList,
+  runnersPair,
+  runnersRemove,
+} from "./lib/connect";
 import { sandbox } from "./lib/sandbox";
 import { configuredServerUrl } from "./lib/server-url";
 
@@ -57,7 +85,6 @@ ${bold("Setup")}
   service install          install and start the user service (--system: root unit)
   service uninstall        stop and remove it
   sandbox enable docker    install, configure and qualify local Docker
-  sandbox enable microvm   install, configure and qualify Local MicroVM
   sandbox test <provider>  re-run a connection qualification
   sandbox disable <provider> stop new use without deleting live sandboxes
   sandbox ingress install <https-origin> install an owned Caddy fragment
@@ -109,17 +136,24 @@ async function version(): Promise<number> {
     .json()
     .catch(() => null as { version?: string; commit?: string } | null);
   if (rel?.version) {
-    console.log(`opensession ${rel.version}${rel.commit ? ` (${rel.commit})` : ""}`);
+    console.log(
+      `opensession ${rel.version}${rel.commit ? ` (${rel.commit})` : ""}`,
+    );
     console.log(dim(`  ${REPO_ROOT}`));
     return 0;
   }
   const pkg = await Bun.file(`${REPO_ROOT}/package.json`)
     .json()
     .catch(() => ({ version: "unknown" }) as { version?: string });
-  const { stdout: sha } = await run(["git", "rev-parse", "--short", "HEAD"], { cwd: REPO_ROOT });
-  const { stdout: branch } = await run(["git", "rev-parse", "--abbrev-ref", "HEAD"], {
+  const { stdout: sha } = await run(["git", "rev-parse", "--short", "HEAD"], {
     cwd: REPO_ROOT,
   });
+  const { stdout: branch } = await run(
+    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+    {
+      cwd: REPO_ROOT,
+    },
+  );
   console.log(`opensession ${pkg.version}${sha ? ` (${branch} ${sha})` : ""}`);
   console.log(dim(`  ${REPO_ROOT}`));
   return 0;
@@ -127,7 +161,11 @@ async function version(): Promise<number> {
 
 async function start(): Promise<number> {
   const publicUrl = await configuredServerUrl();
-  if (flags.has("--foreground") || flags.has("-f") || !(await service.isInstalled())) {
+  if (
+    flags.has("--foreground") ||
+    flags.has("-f") ||
+    !(await service.isInstalled())
+  ) {
     info(dim(`starting in the foreground · ${REPO_ROOT}`));
     info(`Open ${bold(publicUrl)}`);
     // Compiled binary: re-exec ourselves as the server subcommand (there is no
@@ -138,7 +176,11 @@ async function start(): Promise<number> {
       : ["bun", "run", "packages/core/opensession-server/opensession.ts"];
     const kernelCommand = compiled
       ? [process.execPath, "session-kernel-service"]
-      : ["bun", "run", "packages/core/opensession-server/src/session-kernel-service.ts"];
+      : [
+          "bun",
+          "run",
+          "packages/core/opensession-server/src/session-kernel-service.ts",
+        ];
     const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
     const sharedEnv = { OPENSESSION_SESSION_KERNEL_TOKEN: token };
     const kernel = Bun.spawn(kernelCommand, {
@@ -202,7 +244,10 @@ async function status(): Promise<number> {
 async function setIntegration(id: string, on: boolean): Promise<number> {
   const spec = findIntegration(id);
   if (!spec) {
-    fail(`unknown integration '${id}'`, `known: ${INTEGRATIONS.map((i) => i.id).join(", ")}`);
+    fail(
+      `unknown integration '${id}'`,
+      `known: ${INTEGRATIONS.map((i) => i.id).join(", ")}`,
+    );
     return 1;
   }
   if (!existsSync(ENV_PATH)) {
@@ -213,13 +258,20 @@ async function setIntegration(id: string, on: boolean): Promise<number> {
   const text = await Bun.file(ENV_PATH).text();
   const line = `${spec.enableFlag}=${on}`;
   const pattern = new RegExp(`^${spec.enableFlag}=.*$`, "m");
-  await Bun.write(ENV_PATH, pattern.test(text) ? text.replace(pattern, line) : `${text}\n${line}\n`);
+  await Bun.write(
+    ENV_PATH,
+    pattern.test(text) ? text.replace(pattern, line) : `${text}\n${line}\n`,
+  );
 
   ok(`${spec.label} ${on ? "enabled" : "disabled"}`, ENV_PATH);
   if (on) {
     const missing = spec.env.filter((e) => e.required);
     if (missing.length) {
-      info(dim(`  needs: ${missing.map((m) => m.name).join(", ")} — see ${spec.doc}`));
+      info(
+        dim(
+          `  needs: ${missing.map((m) => m.name).join(", ")} — see ${spec.doc}`,
+        ),
+      );
     }
   }
   warn("restart to apply", "opensession restart");
@@ -235,7 +287,9 @@ async function listIntegrations(): Promise<number> {
       continue;
     }
     const on = new RegExp(`^${spec.enableFlag}=true$`, "m").test(envText);
-    info(`${on ? green("on ") : dim("off")}     ${spec.label}  ${dim(spec.id)}`);
+    info(
+      `${on ? green("on ") : dim("off")}     ${spec.label}  ${dim(spec.id)}`,
+    );
   }
   info(dim(`\n  opensession integrations enable <id>`));
   return 0;
@@ -258,7 +312,9 @@ async function listAutomations(): Promise<number> {
     const mark = installed.has(key) ? green("added") : dim("  -  ");
     info(`${mark}  ${recipe.id.padEnd(24)} ${dim(recipe.description)}`);
     if (recipe.requires?.length) {
-      info(`         ${dim(`needs the ${recipe.requires.join(", ")} integration`)}`);
+      info(
+        `         ${dim(`needs the ${recipe.requires.join(", ")} integration`)}`,
+      );
     }
   }
   info(dim("\n  opensession automations add <id>"));
@@ -268,7 +324,12 @@ async function listAutomations(): Promise<number> {
 async function addAutomation(id: string): Promise<number> {
   const recipe = findRecipe(id);
   if (!recipe) {
-    fail(`unknown recipe '${id}'`, `known: ${listRecipes().map((r) => r.id).join(", ")}`);
+    fail(
+      `unknown recipe '${id}'`,
+      `known: ${listRecipes()
+        .map((r) => r.id)
+        .join(", ")}`,
+    );
     return 1;
   }
   const result = await installRecipe(recipe);
@@ -278,7 +339,11 @@ async function addAutomation(id: string): Promise<number> {
   }
   ok(`added ${recipe.label}`, "disabled until you enable it in the UI");
   if (recipe.requires?.length) {
-    info(dim(`  needs: ${recipe.requires.join(", ")} — opensession integrations enable <id>`));
+    info(
+      dim(
+        `  needs: ${recipe.requires.join(", ")} — opensession integrations enable <id>`,
+      ),
+    );
   }
   if (recipe.notes) info(dim(`  ${recipe.notes}`));
   warn("restart to create it", "opensession restart");
@@ -297,7 +362,11 @@ async function removeAutomation(id: string): Promise<number> {
   }
   ok(`removed ${recipe.label} from the seed list`);
   // Seeding is create-if-absent, so an already-created automation stays put.
-  info(dim("  an automation already created from it is untouched — delete it in the UI"));
+  info(
+    dim(
+      "  an automation already created from it is untouched — delete it in the UI",
+    ),
+  );
   return 0;
 }
 
@@ -353,7 +422,8 @@ async function main(): Promise<number> {
         info(`Open ${bold(await configuredServerUrl())}`);
         return 0;
       }
-      if (positional[0] === "uninstall") return (await service.uninstall()) ? 0 : 1;
+      if (positional[0] === "uninstall")
+        return (await service.uninstall()) ? 0 : 1;
       fail("usage: opensession service install [--system] | uninstall");
       return 1;
 
@@ -365,13 +435,17 @@ async function main(): Promise<number> {
       });
 
     case "integrations":
-      if (positional[0] === "enable") return await setIntegration(positional[1] ?? "", true);
-      if (positional[0] === "disable") return await setIntegration(positional[1] ?? "", false);
+      if (positional[0] === "enable")
+        return await setIntegration(positional[1] ?? "", true);
+      if (positional[0] === "disable")
+        return await setIntegration(positional[1] ?? "", false);
       return await listIntegrations();
 
     case "automations":
-      if (positional[0] === "add") return await addAutomation(positional[1] ?? "");
-      if (positional[0] === "remove") return await removeAutomation(positional[1] ?? "");
+      if (positional[0] === "add")
+        return await addAutomation(positional[1] ?? "");
+      if (positional[0] === "remove")
+        return await removeAutomation(positional[1] ?? "");
       return await listAutomations();
 
     case "plugins":
@@ -391,33 +465,50 @@ async function main(): Promise<number> {
 
     case "runner":
       if (positional[0] === "run") return await runnerRun();
-			if (positional[0] === "service" && positional[1] === "install") {
-				if (await installRunnerService()) return 0;
-				info(dim("  run `opensession runner run` in the foreground to hold the channel open meanwhile"));
-				return 1;
-			}
-      if (positional[0] === "status" || !positional[0]) return await runnerStatus();
-			// The pairing UI and docs both say `opensession runner connect`; keep
-			// that spelling working alongside the top-level `connect`.
-			if (positional[0] === "connect") return await connect({
-				server: flagValue("--server"),
-				code: flagValue("--code"),
-				name: flagValue("--name"),
-				label: flagValue("--label"),
-			});
-		fail("usage: opensession runner run|status|connect|service install");
+      if (positional[0] === "service" && positional[1] === "install") {
+        if (await installRunnerService()) return 0;
+        info(
+          dim(
+            "  run `opensession runner run` in the foreground to hold the channel open meanwhile",
+          ),
+        );
+        return 1;
+      }
+      if (positional[0] === "status" || !positional[0])
+        return await runnerStatus();
+      // The pairing UI and docs both say `opensession runner connect`; keep
+      // that spelling working alongside the top-level `connect`.
+      if (positional[0] === "connect")
+        return await connect({
+          server: flagValue("--server"),
+          code: flagValue("--code"),
+          name: flagValue("--name"),
+          label: flagValue("--label"),
+        });
+      fail("usage: opensession runner run|status|connect|service install");
       return 1;
 
     case "runners":
       if (positional[0] === "pair") return await runnersPair();
-      if (positional[0] === "remove") return await runnersRemove(positional[1] ?? "");
+      if (positional[0] === "remove")
+        return await runnersRemove(positional[1] ?? "");
       return await runnersList();
+
+    // First-party stdio MCP entry point. Keeping it behind the installed
+    // command gives Connections a stable target across release worktrees.
+    case "apple-mobile-mcp": {
+      const { startAppleMobileServer } =
+        await import("../packages/integrations/apple-mobile/src/server");
+      await startAppleMobileServer(argv.slice(1));
+      await new Promise<never>(() => {});
+    }
 
     // Internal git credential-helper entrypoint. It stays out of --help, but is
     // routed through the installed command so compiled releases need no Bun or
     // source-tree sidecar.
     case "github-credential": {
-      const { githubCredentialHelper } = await import("./lib/github-credential");
+      const { githubCredentialHelper } =
+        await import("./lib/github-credential");
       return await githubCredentialHelper(positional[0]);
     }
 

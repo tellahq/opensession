@@ -12,11 +12,19 @@ import { configuredServer, personaName } from "./config";
 import { githubLoginFor, type GitIdentity } from "./shared/user-mappings";
 
 const UI_BASE =
-  process.env.OPENSESSION_UI_BASE ||
-  configuredServer().publicBaseUrl;
+  process.env.OPENSESSION_UI_BASE || configuredServer().publicBaseUrl;
 
 /** Private-key-backed PR-checks reader used by the bash allowlist. */
-export const GH_CHECKS_CLI_PATH = join(import.meta.dir, "..", "..", "..", "..", "..", "scripts", "gh-checks.ts");
+export const GH_CHECKS_CLI_PATH = join(
+  import.meta.dir,
+  "..",
+  "..",
+  "..",
+  "..",
+  "..",
+  "scripts",
+  "gh-checks.ts",
+);
 
 /** Minimal per-run context appended to the engine system prompt. */
 export function buildRunInstructions(input: {
@@ -71,54 +79,63 @@ export function buildRunInstructions(input: {
   const parts: string[] = [];
   parts.push(
     "## Data handling\nNever upload files or data to public hosts. Use " +
-      "organization-controlled channels only."
+      "organization-controlled channels only.",
   );
   parts.push(
     "## Finish your turns\nComplete promised actions, then briefly report the outcome and " +
-      "relevant links."
+      "relevant links.",
   );
   parts.push(
     "## References\nFor PRs outside the current primary repository, write " +
-      "`<repo>#<number>`, never bare `#<number>`."
+      "`<repo>#<number>`, never bare `#<number>`.",
   );
 
   if (input.isScratch) {
     parts.push(
       `You are ${personaName()} in Scratch mode. This is not a repository; do not commit, ` +
-        "push, or open a PR."
+        "push, or open a PR.",
     );
   } else if (input.isAsk) {
     parts.push(
       input.isRepoLess
         ? `You are ${personaName()} in read-only Ask mode with no repository.`
-        : `You are ${personaName()} in read-only Ask mode for the current checkout.`
+        : `You are ${personaName()} in read-only Ask mode for the current checkout.`,
     );
   }
 
   if (input.dialOracle) {
     const d = input.dialOracle;
-    const access = d.tool ? `the \`${d.agent}\` tool` : `the \`${d.agent}\` task agent`;
+    const access = d.tool
+      ? `the \`${d.agent}\` tool`
+      : `the \`${d.agent}\` task agent`;
     parts.push(
       `## Oracle\nThe "${d.presetLabel}" preset pairs ${d.mainLabel} with ${d.oracleLabel} via ` +
-        `${access}. Use it for difficult planning, architecture, debugging, or review, not routine work.`
+        `${access}. Use it for difficult planning, architecture, debugging, or review, not routine work.`,
     );
   }
 
   if (input.orchestrator) {
     const o = input.orchestrator;
-    const workers = o.workers.map((w) => `\`${w.agent}\` (${w.modelLabel})`).join(", ");
+    const workers = o.workers
+      .map((w) => `\`${w.agent}\` (${w.modelLabel})`)
+      .join(", ");
     parts.push(
       `## Workers\nThe "${o.presetLabel}" preset gives ${o.mainLabel} these workers: ` +
-        `${workers}. Delegate clear independent tasks, then verify their work.`
+        `${workers}. Delegate clear independent tasks, then verify their work.`,
     );
   }
 
   if (input.reposNote) parts.push(input.reposNote);
 
-  if (!input.isAsk && !input.isScratch && input.osSessionId && input.repoHost === "codestorage") {
+  if (
+    !input.isAsk &&
+    !input.isScratch &&
+    input.osSessionId &&
+    input.repoHost === "codestorage"
+  ) {
     parts.push(
       "## Code Storage\nCommit and push the branch; a pushed branch is the change request. " +
-        "Do not merge it or use `gh pr create`."
+        "Do not merge it or use `gh pr create`.",
     );
   } else if (!input.isAsk && !input.isScratch && input.osSessionId) {
     const link = `${UI_BASE}/session/${input.osSessionId}`;
@@ -134,11 +151,11 @@ export function buildRunInstructions(input: {
           ? `PRs use @${input.githubUserLogin}'s account; do not add an assignee.`
           : requester && login
             ? `When possible, assign @${login}.`
-            : "")
+            : ""),
     );
     if (input.prReviewer) {
       parts.push(
-        `Request \`${input.prReviewer}\` on every PR. If that fails, mention it in the final response.`
+        `For a PR this unattended automation creates, request \`${input.prReviewer}\` as reviewer. Never add this automatic reviewer to an existing PR or a human-steered PR. If the request fails, mention it in the final response.`,
       );
     }
   }
@@ -147,16 +164,28 @@ export function buildRunInstructions(input: {
   if (inproc["opensession-sessions"]) {
     parts.push(
       "## New sessions\nA request for a new session means `create_session`, not an " +
-        "in-process worker."
+        "in-process worker.",
+    );
+  }
+  if (!input.isAsk && inproc["opensession-portals"]) {
+    parts.push(
+      "## Preview links\nBefore finishing a user-facing web change, set its exact " +
+        "root-relative route, query included. For editors, call `opensession-portals` " +
+        "`set_editor_preview_path` with a dedicated or fresh staging record: at least 60 " +
+        "seconds, 2+ clips, and a ready non-empty transcript. Pass a stable `exclusiveKey` " +
+        "such as `video:<id>` to prevent reuse by another active session. Never use a local " +
+        "fixture. For other web changes, call `set_portal_path` without a name. Open the " +
+        "resulting staging URL and verify it shows the changed feature.",
     );
   }
 
   parts.push(
     "## Media\nShow selected results with `OPENSESSION_IMAGE: /abs/path.png` or " +
-      "`OPENSESSION_VIDEO: /abs/path.mp4`."
+      "`OPENSESSION_VIDEO: /abs/path.mp4`.",
   );
   // Instance-local operator instructions last: they're the deployment's own
   // additions and may refine anything above.
-  if (input.localInstructions?.trim()) parts.push(input.localInstructions.trim());
+  if (input.localInstructions?.trim())
+    parts.push(input.localInstructions.trim());
   return parts.join("\n\n");
 }

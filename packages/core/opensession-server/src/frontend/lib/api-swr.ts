@@ -6,9 +6,9 @@ import type { SWRConfiguration } from "swr";
  * Periodic resources opt into their own refresh interval at the call site.
  */
 export const API_SWR_OPTIONS = {
-	shouldRetryOnError: false,
-	revalidateOnFocus: true,
-	revalidateOnReconnect: true,
+  shouldRetryOnError: false,
+  revalidateOnFocus: true,
+  revalidateOnReconnect: true,
 } satisfies SWRConfiguration;
 
 /**
@@ -17,34 +17,34 @@ export const API_SWR_OPTIONS = {
  * it during the external-store snapshot check.
  */
 export function apiResourceSWRConfig<Data>(
-	refreshInterval: number,
-	compare?: SWRConfiguration<Data>["compare"],
+  refreshInterval: number,
+  compare?: SWRConfiguration<Data>["compare"],
 ): SWRConfiguration<Data> {
-	return {
-		...API_SWR_OPTIONS,
-		refreshInterval,
-		...(compare === undefined ? {} : { compare }),
-	};
+  return {
+    ...API_SWR_OPTIONS,
+    refreshInterval,
+    ...(compare === undefined ? {} : { compare }),
+  };
 }
 
 // Keep resource identities in one place so separate surfaces share both the
 // cached value and an in-flight revalidation instead of merely looking alike.
 export const apiSWRKey = {
-	session: (sessionId: string) => ["api", "session", sessionId] as const,
-	workspaceOverview: (workspaceKey: string) =>
-		["api", "workspace-overview", workspaceKey] as const,
-	sessionDiff: (sessionId: string) =>
-		["api", "session-diff", sessionId] as const,
-	sessionPr: (sessionId: string, repo?: string, branch?: string) =>
-		["api", "session-pr", sessionId, repo || "", branch || ""] as const,
-	sessionPrDiff: (sessionId: string, repo?: string, branch?: string) =>
-		["api", "session-pr-diff", sessionId, repo || "", branch || ""] as const,
-	sessionGit: (sessionId: string, repo?: string) =>
-		["api", "session-git", sessionId, repo || ""] as const,
-	sessionAssets: (sessionId: string) =>
-		["api", "session-assets", sessionId] as const,
-	previewPr: (repo: string, branch: string) =>
-		["api", "preview-pr", repo, branch] as const,
-	previewPrDiff: (repo: string, branch: string) =>
-		["api", "preview-pr-diff", repo, branch] as const,
+  session: (sessionId: string) => ["api", "session", sessionId] as const,
+  workspaceOverview: (workspaceKey: string) =>
+    ["api", "workspace-overview", workspaceKey] as const,
+  sessionDiff: (sessionId: string) =>
+    ["api", "session-diff", sessionId] as const,
+  sessionPr: (sessionId: string, repo?: string, branch?: string) =>
+    ["api", "session-pr", sessionId, repo || "", branch || ""] as const,
+  sessionPrDiff: (sessionId: string, repo?: string, branch?: string) =>
+    ["api", "session-pr-diff", sessionId, repo || "", branch || ""] as const,
+  sessionGit: (sessionId: string, repo?: string) =>
+    ["api", "session-git", sessionId, repo || ""] as const,
+  sessionAssets: (sessionId: string) =>
+    ["api", "session-assets", sessionId] as const,
+  previewPr: (repo: string, branch: string) =>
+    ["api", "preview-pr", repo, branch] as const,
+  previewPrDiff: (repo: string, branch: string) =>
+    ["api", "preview-pr-diff", repo, branch] as const,
 };

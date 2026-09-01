@@ -81,7 +81,11 @@
 
 import { homeDir } from "./paths";
 import { stateDir } from "./paths";
-import { query, createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import {
+  query,
+  createSdkMcpServer,
+  tool,
+} from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { audit, summarizeText } from "./audit";
 import {
@@ -90,7 +94,11 @@ import {
   type ClaudeAccount,
 } from "./claude-accounts";
 import { CLAUDE_CODE_BIN } from "./runner-shared";
-import { bridgePort, bridgeMaxRequestsPerHour, readModelProviderConfig } from "./model-providers";
+import {
+  bridgePort,
+  bridgeMaxRequestsPerHour,
+  readModelProviderConfig,
+} from "./model-providers";
 import { readPiEngineConfig } from "./pi-config";
 import { mkdirSync } from "fs";
 
@@ -118,7 +126,8 @@ interface StoredBridgeSession {
 // Pi-session key → SDK session mapping. In-memory (parked on globalThis
 // for hot reloads); a real restart just means the next request replays the
 // conversation into a fresh SDK session — correct, only slower.
-const sessions: Map<string, StoredBridgeSession> = (g.__anthropicBridgeSessions ??= new Map());
+const sessions: Map<string, StoredBridgeSession> =
+  (g.__anthropicBridgeSessions ??= new Map());
 
 /** Per-boot shared secret between Pi-runner and this bridge. */
 export function bridgeKey(): string {
@@ -164,7 +173,10 @@ export function ensureAnthropicBridge(): BridgeInfo {
   if (designationError) throw new Error(designationError);
   const port = bridgePort();
   if (g.__anthropicBridgeServer) {
-    return { url: `http://127.0.0.1:${g.__anthropicBridgeServer.port}`, key: bridgeKey() };
+    return {
+      url: `http://127.0.0.1:${g.__anthropicBridgeServer.port}`,
+      key: bridgeKey(),
+    };
   }
   ensureAnthropicBridgeCwd();
   g.__anthropicBridgeHandler = handleBridgeRequest;
@@ -175,7 +187,8 @@ export function ensureAnthropicBridge(): BridgeInfo {
     // kill the non-streamed path. 0 = no idle limit (streamed responses also
     // heartbeat, see below).
     idleTimeout: 0,
-    fetch: (req: Request) => (g.__anthropicBridgeHandler as typeof handleBridgeRequest)(req),
+    fetch: (req: Request) =>
+      (g.__anthropicBridgeHandler as typeof handleBridgeRequest)(req),
   } as unknown as Parameters<typeof Bun.serve>[0]);
   console.log(`[anthropic-bridge] listening on 127.0.0.1:${port}`);
   return { url: `http://127.0.0.1:${port}`, key: bridgeKey() };
@@ -219,7 +232,7 @@ export interface BridgeAccountPin {
  *  isPiUsageLimitShape's anthropic arm keys on them. */
 export function pickBridgeAccount(
   model: string | undefined,
-  pin?: BridgeAccountPin
+  pin?: BridgeAccountPin,
 ): ClaudeAccount | { error: string } {
   const cfg = readModelProviderConfig();
   const ids = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
@@ -258,14 +271,20 @@ export function pickBridgeAccount(
         };
   }
   if (refusal.kind === "designated-dry") {
-    return { error: `no designated bridge account is currently usable (tried: ${refusal.tried})` };
+    return {
+      error: `no designated bridge account is currently usable (tried: ${refusal.tried})`,
+    };
   }
   if (refusal.kind === "none-configured") {
     // Deliberately NOT usage-limit-shaped: an empty pool is a config problem,
     // and hopping models would not fix it.
-    return { error: "no Claude accounts configured (add one in Settings → Providers)" };
+    return {
+      error: "no Claude accounts configured (add one in Settings → Providers)",
+    };
   }
-  return { error: "no usable Claude account in the pool (all exhausted or sidelined)" };
+  return {
+    error: "no usable Claude account in the pool (all exhausted or sidelined)",
+  };
 }
 
 // ── Anthropic request → SDK prompt mapping ───────────────────────────────────
@@ -279,7 +298,9 @@ export interface AnthropicMessage {
 /** Flatten one message to plain text for replay/continuation (tool_results
  *  unwrap to their raw output so the model reads a natural outcome, not
  *  `[tool_result toolu_x]` noise — same choice the reference makes). */
-export function flattenMessageText(content: AnthropicMessage["content"]): string {
+export function flattenMessageText(
+  content: AnthropicMessage["content"],
+): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return String(content ?? "");
   const parts: string[] = [];
@@ -287,12 +308,15 @@ export function flattenMessageText(content: AnthropicMessage["content"]): string
     if (!block || typeof block !== "object") continue;
     if (block.type === "text" && block.text) parts.push(block.text);
     else if (block.type === "tool_use") {
-      parts.push(`[called tool ${block.name} with ${JSON.stringify(block.input ?? {})}]`);
+      parts.push(
+        `[called tool ${block.name} with ${JSON.stringify(block.input ?? {})}]`,
+      );
     } else if (block.type === "tool_result") {
       const inner = block.content;
       if (typeof inner === "string") parts.push(inner);
       else if (Array.isArray(inner)) {
-        for (const ib of inner) if (ib?.type === "text" && ib.text) parts.push(ib.text);
+        for (const ib of inner)
+          if (ib?.type === "text" && ib.text) parts.push(ib.text);
       }
     }
   }
@@ -305,7 +329,9 @@ export function replayConversation(messages: AnthropicMessage[]): string {
   for (const m of messages) {
     const text = flattenMessageText(m.content).trim();
     if (!text) continue;
-    turns.push(m.role === "assistant" ? `[Your previous reply]\n${text}` : text);
+    turns.push(
+      m.role === "assistant" ? `[Your previous reply]\n${text}` : text,
+    );
   }
   return turns.join("\n\n");
 }
@@ -313,13 +339,18 @@ export function replayConversation(messages: AnthropicMessage[]): string {
 /** Minimal JSON Schema → zod conversion for client tool registration. The
  *  schema only shapes what the model emits — Pi revalidates on its side,
  *  so unknown constructs safely degrade to z.any(). */
-export function jsonSchemaToZodShape(schema: any): Record<string, z.ZodTypeAny> {
+export function jsonSchemaToZodShape(
+  schema: any,
+): Record<string, z.ZodTypeAny> {
   if (!schema || typeof schema !== "object" || !schema.properties) return {};
-  const required = new Set<string>(Array.isArray(schema.required) ? schema.required : []);
+  const required = new Set<string>(
+    Array.isArray(schema.required) ? schema.required : [],
+  );
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const [key, prop] of Object.entries<any>(schema.properties)) {
     let t = jsonSchemaToZod(prop);
-    if (prop?.description && typeof prop.description === "string") t = t.describe(prop.description);
+    if (prop?.description && typeof prop.description === "string")
+      t = t.describe(prop.description);
     shape[key] = required.has(key) ? t : t.optional();
   }
   return shape;
@@ -340,7 +371,9 @@ function jsonSchemaToZod(schema: any): z.ZodTypeAny {
     case "array":
       return z.array(jsonSchemaToZod(schema.items));
     case "object":
-      return schema.properties ? z.object(jsonSchemaToZodShape(schema)) : z.record(z.string(), z.any());
+      return schema.properties
+        ? z.object(jsonSchemaToZodShape(schema))
+        : z.record(z.string(), z.any());
     default:
       return z.any();
   }
@@ -352,10 +385,29 @@ export const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
 /** Built-in SDK tools the bridge must never let run — the client owns all
  *  execution. (The PreToolUse hook blocks everything as backstop.) */
 export const DISALLOWED_BUILTINS = [
-  "Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch",
-  "NotebookEdit", "Task", "TaskOutput", "TaskStop", "Agent", "Skill",
-  "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "AskUserQuestion",
-  "ListMcpResourcesTool", "ReadMcpResourceTool", "ToolSearch", "Workflow",
+  "Bash",
+  "Edit",
+  "Write",
+  "Read",
+  "Glob",
+  "Grep",
+  "WebFetch",
+  "WebSearch",
+  "NotebookEdit",
+  "Task",
+  "TaskOutput",
+  "TaskStop",
+  "Agent",
+  "Skill",
+  "TaskCreate",
+  "TaskUpdate",
+  "TaskList",
+  "TaskGet",
+  "AskUserQuestion",
+  "ListMcpResourcesTool",
+  "ReadMcpResourceTool",
+  "ToolSearch",
+  "Workflow",
 ];
 
 interface CapturedToolUse {
@@ -364,7 +416,11 @@ interface CapturedToolUse {
   input: unknown;
 }
 
-function anthropicError(status: number, type: string, message: string): Response {
+function anthropicError(
+  status: number,
+  type: string,
+  message: string,
+): Response {
   return Response.json({ type: "error", error: { type, message } }, { status });
 }
 
@@ -374,7 +430,7 @@ function auditReject(
   requestId: string,
   status: number,
   reason: string,
-  fields: Record<string, unknown> = {}
+  fields: Record<string, unknown> = {},
 ): void {
   audit({
     msg: "anthropic_bridge_rejected",
@@ -398,17 +454,20 @@ interface BridgeUsageEvent {
 // account id → request events in the trailing hour. Per-boot (parked on
 // globalThis for hot reloads); the extra-usage credit ceiling (module doc) is
 // the durable backstop.
-const bridgeUsage: Map<string, BridgeUsageEvent[]> = (g.__anthropicBridgeUsage ??= new Map());
+const bridgeUsage: Map<string, BridgeUsageEvent[]> =
+  (g.__anthropicBridgeUsage ??= new Map());
 
 /** Admit-or-reject under the rolling per-account ceiling; admits record their
  *  estimated input tokens so the audit trail can track spend pressure. */
 export function admitBridgeRequest(
   accountId: string,
   estTokens: number,
-  now = Date.now()
+  now = Date.now(),
 ): { allowed: boolean; requests: number; tokens: number; limit: number } {
   const cutoff = now - RATE_WINDOW_MS;
-  const events = (bridgeUsage.get(accountId) || []).filter((e) => e.at > cutoff);
+  const events = (bridgeUsage.get(accountId) || []).filter(
+    (e) => e.at > cutoff,
+  );
   const limit = bridgeMaxRequestsPerHour();
   const allowed = events.length < limit;
   if (allowed) events.push({ at: now, estTokens });
@@ -435,11 +494,18 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   if (url.pathname === "/health") return Response.json({ ok: true });
   const requestId = crypto.randomUUID();
-  const engineSessionHeader = req.headers.get("x-opensession-session") || undefined;
+  const engineSessionHeader =
+    req.headers.get("x-opensession-session") || undefined;
   if (req.method !== "POST" || url.pathname !== "/v1/messages") {
-    return anthropicError(404, "not_found_error", `no such endpoint: ${req.method} ${url.pathname}`);
+    return anthropicError(
+      404,
+      "not_found_error",
+      `no such endpoint: ${req.method} ${url.pathname}`,
+    );
   }
-  const presented = req.headers.get("x-api-key") || (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const presented =
+    req.headers.get("x-api-key") ||
+    (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   if (presented !== bridgeKey()) {
     auditReject(requestId, 401, "invalid_bridge_key", {
       key_presented: !!presented,
@@ -454,39 +520,63 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     const declared = Number(req.headers.get("content-length") || 0);
     if (declared > BRIDGE_MAX_BODY_BYTES) throw new RangeError("too large");
     rawBody = await req.text();
-    if (rawBody.length > BRIDGE_MAX_BODY_BYTES) throw new RangeError("too large");
+    if (rawBody.length > BRIDGE_MAX_BODY_BYTES)
+      throw new RangeError("too large");
   } catch (e) {
     const tooLarge = e instanceof RangeError;
-    auditReject(requestId, tooLarge ? 413 : 400, tooLarge ? "body_too_large" : "unreadable_body", {
-      engine_session: engineSessionHeader,
-    });
+    auditReject(
+      requestId,
+      tooLarge ? 413 : 400,
+      tooLarge ? "body_too_large" : "unreadable_body",
+      {
+        engine_session: engineSessionHeader,
+      },
+    );
     return tooLarge
-      ? anthropicError(413, "request_too_large", `request body exceeds ${BRIDGE_MAX_BODY_BYTES} bytes`)
+      ? anthropicError(
+          413,
+          "request_too_large",
+          `request body exceeds ${BRIDGE_MAX_BODY_BYTES} bytes`,
+        )
       : anthropicError(400, "invalid_request_error", "unreadable request body");
   }
   try {
     body = JSON.parse(rawBody);
   } catch {
-    auditReject(requestId, 400, "invalid_json", { engine_session: engineSessionHeader });
+    auditReject(requestId, 400, "invalid_json", {
+      engine_session: engineSessionHeader,
+    });
     return anthropicError(400, "invalid_request_error", "invalid JSON body");
   }
-  const messages: AnthropicMessage[] = Array.isArray(body?.messages) ? body.messages : [];
+  const messages: AnthropicMessage[] = Array.isArray(body?.messages)
+    ? body.messages
+    : [];
   if (!messages.length) {
     auditReject(requestId, 400, "empty_messages", {
       engine_session: engineSessionHeader,
       model: typeof body?.model === "string" ? body.model : undefined,
     });
-    return anthropicError(400, "invalid_request_error", "messages[] is required");
+    return anthropicError(
+      400,
+      "invalid_request_error",
+      "messages[] is required",
+    );
   }
   const model: string = typeof body?.model === "string" ? body.model : "";
   const wantsStream = body?.stream === true;
-  const requestTools: Array<{ name: string; description?: string; input_schema?: any }> =
-    Array.isArray(body?.tools) ? body.tools : [];
+  const requestTools: Array<{
+    name: string;
+    description?: string;
+    input_schema?: any;
+  }> = Array.isArray(body?.tools) ? body.tools : [];
   const system =
     typeof body?.system === "string"
       ? body.system
       : Array.isArray(body?.system)
-        ? body.system.map((b: any) => (b?.type === "text" ? b.text : "")).filter(Boolean).join("\n\n")
+        ? body.system
+            .map((b: any) => (b?.type === "text" ? b.text : ""))
+            .filter(Boolean)
+            .join("\n\n")
         : "";
 
   const account = pickBridgeAccount(model);
@@ -525,19 +615,29 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     return anthropicError(
       429,
       "rate_limit_error",
-      `bridge: account "${account.name}" exceeded ${rate.limit} requests/hour (bridgeMaxRequestsPerHour)`
+      `bridge: account "${account.name}" exceeded ${rate.limit} requests/hour (bridgeMaxRequestsPerHour)`,
     );
   }
 
   const captured: CapturedToolUse[] = [];
   const passthroughTools = requestTools.map((t) =>
-    tool(t.name, t.description || t.name, jsonSchemaToZodShape(t.input_schema), async () => ({
-      content: [{ type: "text" as const, text: "forwarded to client" }],
-    }))
+    tool(
+      t.name,
+      t.description || t.name,
+      jsonSchemaToZodShape(t.input_schema),
+      async () => ({
+        content: [{ type: "text" as const, text: "forwarded to client" }],
+      }),
+    ),
   );
   const mcpServers =
     passthroughTools.length > 0
-      ? { [PASSTHROUGH_MCP]: createSdkMcpServer({ name: PASSTHROUGH_MCP, tools: passthroughTools }) }
+      ? {
+          [PASSTHROUGH_MCP]: createSdkMcpServer({
+            name: PASSTHROUGH_MCP,
+            tools: passthroughTools,
+          }),
+        }
       : {};
 
   const started = Date.now();
@@ -556,7 +656,12 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
 
   const run = async () => {
     const contentOut: ContentBlock[] = [];
-    let usage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+    let usage = {
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    };
     let sdkSessionId = isContinuation ? stored!.sdkSessionId : undefined;
 
     const q = query({
@@ -594,7 +699,11 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
                   const bare = name.startsWith(PASSTHROUGH_PREFIX)
                     ? name.slice(PASSTHROUGH_PREFIX.length)
                     : name;
-                  captured.push({ id: input.tool_use_id, name: bare, input: input.tool_input ?? {} });
+                  captured.push({
+                    id: input.tool_use_id,
+                    name: bare,
+                    input: input.tool_input ?? {},
+                  });
                   return {
                     decision: "block" as const,
                     reason:
@@ -621,7 +730,8 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
             // Text only: tool_use blocks are appended from `captured` below
             // (post-hook, so a blocked-then-retried call is never doubled),
             // and thinking blocks can't round-trip without their signatures.
-            if (b.type === "text" && b.text) contentOut.push({ type: "text", text: b.text });
+            if (b.type === "text" && b.text)
+              contentOut.push({ type: "text", text: b.text });
           }
         }
       }
@@ -639,10 +749,16 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
         // Surface SDK/API failures as provider errors, not assistant text —
         // the CLI narrates errors (e.g. "API Error: 400 …") as a message,
         // which would otherwise read as a normal model reply in Pi.
-        if ((rm.is_error || rm.subtype !== "success") && !maxTurnsWithCaptures) {
+        if (
+          (rm.is_error || rm.subtype !== "success") &&
+          !maxTurnsWithCaptures
+        ) {
           const detail =
             (typeof rm.result === "string" && rm.result) ||
-            contentOut.filter((b) => b.type === "text").map((b) => b.text).join("\n") ||
+            contentOut
+              .filter((b) => b.type === "text")
+              .map((b) => b.text)
+              .join("\n") ||
             rm.errors?.join(", ") ||
             rm.subtype ||
             "SDK run failed";
@@ -652,7 +768,8 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
           input_tokens: rm.usage?.input_tokens || 0,
           output_tokens: rm.usage?.output_tokens || 0,
           cache_read_input_tokens: rm.usage?.cache_read_input_tokens || 0,
-          cache_creation_input_tokens: rm.usage?.cache_creation_input_tokens || 0,
+          cache_creation_input_tokens:
+            rm.usage?.cache_creation_input_tokens || 0,
         };
         break;
       }
@@ -670,7 +787,12 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     }
 
     for (const t of captured) {
-      contentOut.push({ type: "tool_use", id: t.id, name: t.name, input: t.input ?? {} });
+      contentOut.push({
+        type: "tool_use",
+        id: t.id,
+        name: t.name,
+        input: t.input ?? {},
+      });
     }
     const stopReason = captured.length ? "tool_use" : "end_turn";
     const response = {
@@ -694,7 +816,12 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
       input_tokens: usage.input_tokens,
       output_tokens: usage.output_tokens,
       cache_read_input_tokens: usage.cache_read_input_tokens,
-      ...summarizeText(contentOut.filter((b) => b.type === "text").map((b) => b.text).join("\n")),
+      ...summarizeText(
+        contentOut
+          .filter((b) => b.type === "text")
+          .map((b) => b.text)
+          .join("\n"),
+      ),
     });
     return response;
   };
@@ -704,7 +831,13 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
       return Response.json(await run());
     } catch (e: any) {
       const message = e?.message || String(e);
-      audit({ ...auditBase, direction: "out", ok: false, duration_ms: Date.now() - started, error: message });
+      audit({
+        ...auditBase,
+        direction: "out",
+        ok: false,
+        duration_ms: Date.now() - started,
+        error: message,
+      });
       // 400/invalid_request_error: SDK failures here are configuration/policy
       // shaped (e.g. Anthropic's third-party extra-usage billing rejection),
       // and a non-retryable status keeps clients from retry-looping them.
@@ -716,7 +849,8 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
   // client-side idle timeout at bay), then replay the finished message as
   // synthesized Anthropic stream events.
   const enc = new TextEncoder();
-  const sse = (event: string, data: unknown) => enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  const sse = (event: string, data: unknown) =>
+    enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const heartbeat = setInterval(() => {
@@ -730,24 +864,72 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
           try {
             const { content, ...head } = message as any;
             controller.enqueue(
-              sse("message_start", { type: "message_start", message: { ...head, content: [], usage: { ...message.usage, output_tokens: 0 }, stop_reason: null } })
+              sse("message_start", {
+                type: "message_start",
+                message: {
+                  ...head,
+                  content: [],
+                  usage: { ...message.usage, output_tokens: 0 },
+                  stop_reason: null,
+                },
+              }),
             );
             content.forEach((block: ContentBlock, index: number) => {
               if (block.type === "text") {
-                controller.enqueue(sse("content_block_start", { type: "content_block_start", index, content_block: { type: "text", text: "" } }));
-                controller.enqueue(sse("content_block_delta", { type: "content_block_delta", index, delta: { type: "text_delta", text: block.text } }));
+                controller.enqueue(
+                  sse("content_block_start", {
+                    type: "content_block_start",
+                    index,
+                    content_block: { type: "text", text: "" },
+                  }),
+                );
+                controller.enqueue(
+                  sse("content_block_delta", {
+                    type: "content_block_delta",
+                    index,
+                    delta: { type: "text_delta", text: block.text },
+                  }),
+                );
               } else if (block.type === "tool_use") {
                 controller.enqueue(
-                  sse("content_block_start", { type: "content_block_start", index, content_block: { type: "tool_use", id: block.id, name: block.name, input: {} } })
+                  sse("content_block_start", {
+                    type: "content_block_start",
+                    index,
+                    content_block: {
+                      type: "tool_use",
+                      id: block.id,
+                      name: block.name,
+                      input: {},
+                    },
+                  }),
                 );
                 controller.enqueue(
-                  sse("content_block_delta", { type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input ?? {}) } })
+                  sse("content_block_delta", {
+                    type: "content_block_delta",
+                    index,
+                    delta: {
+                      type: "input_json_delta",
+                      partial_json: JSON.stringify(block.input ?? {}),
+                    },
+                  }),
                 );
               }
-              controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index }));
+              controller.enqueue(
+                sse("content_block_stop", {
+                  type: "content_block_stop",
+                  index,
+                }),
+              );
             });
             controller.enqueue(
-              sse("message_delta", { type: "message_delta", delta: { stop_reason: message.stop_reason, stop_sequence: null }, usage: { output_tokens: message.usage.output_tokens } })
+              sse("message_delta", {
+                type: "message_delta",
+                delta: {
+                  stop_reason: message.stop_reason,
+                  stop_sequence: null,
+                },
+                usage: { output_tokens: message.usage.output_tokens },
+              }),
             );
             controller.enqueue(sse("message_stop", { type: "message_stop" }));
             controller.close();
@@ -756,17 +938,31 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
         (e) => {
           clearInterval(heartbeat);
           const message = e?.message || String(e);
-          audit({ ...auditBase, direction: "out", ok: false, duration_ms: Date.now() - started, error: message });
+          audit({
+            ...auditBase,
+            direction: "out",
+            ok: false,
+            duration_ms: Date.now() - started,
+            error: message,
+          });
           try {
-            controller.enqueue(sse("error", { type: "error", error: { type: "api_error", message } }));
+            controller.enqueue(
+              sse("error", {
+                type: "error",
+                error: { type: "api_error", message },
+              }),
+            );
             controller.close();
           } catch {}
-        }
+        },
       );
     },
   });
   return new Response(stream, {
-    headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
+    headers: {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+    },
   });
 }
 
@@ -774,6 +970,9 @@ const MAX_BRIDGE_SESSIONS = 500;
 
 function pruneSessions(): void {
   if (sessions.size <= MAX_BRIDGE_SESSIONS) return;
-  const byAge = [...sessions.entries()].sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt);
-  for (const [key] of byAge.slice(0, sessions.size - MAX_BRIDGE_SESSIONS)) sessions.delete(key);
+  const byAge = [...sessions.entries()].sort(
+    (a, b) => a[1].lastUsedAt - b[1].lastUsedAt,
+  );
+  for (const [key] of byAge.slice(0, sessions.size - MAX_BRIDGE_SESSIONS))
+    sessions.delete(key);
 }

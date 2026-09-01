@@ -19,11 +19,16 @@ import type { z, ZodRawShape } from "zod";
 
 type InferShape<Schema extends ZodRawShape> = z.output<z.ZodObject<Schema>>;
 
-export interface InProcessToolDefinition<Schema extends ZodRawShape = ZodRawShape> {
+export interface InProcessToolDefinition<
+  Schema extends ZodRawShape = ZodRawShape,
+> {
   name: string;
   description: string;
   inputSchema: Schema;
-  handler: (args: InferShape<Schema>, extra: unknown) => Promise<CallToolResult>;
+  handler: (
+    args: InferShape<Schema>,
+    extra: unknown,
+  ) => Promise<CallToolResult>;
 }
 
 /** Define one tool: name, description, zod shape, handler. Same signature as
@@ -32,7 +37,10 @@ export function tool<Schema extends ZodRawShape>(
   name: string,
   description: string,
   inputSchema: Schema,
-  handler: (args: InferShape<Schema>, extra: unknown) => Promise<CallToolResult>
+  handler: (
+    args: InferShape<Schema>,
+    extra: unknown,
+  ) => Promise<CallToolResult>,
 ): InProcessToolDefinition<Schema> {
   return { name, description, inputSchema, handler };
 }
@@ -53,13 +61,13 @@ export function createSdkMcpServer(options: {
 }): InProcessMcpServer {
   const instance = new McpServer(
     { name: options.name, version: options.version ?? "1.0.0" },
-    { capabilities: { tools: options.tools ? {} : undefined } }
+    { capabilities: { tools: options.tools ? {} : undefined } },
   );
   for (const t of options.tools ?? []) {
     instance.registerTool(
       t.name,
       { description: t.description, inputSchema: t.inputSchema },
-      t.handler as any
+      t.handler as any,
     );
   }
   return { type: "sdk", name: options.name, instance };

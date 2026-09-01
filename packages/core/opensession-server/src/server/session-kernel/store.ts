@@ -40,47 +40,51 @@ import { selectQueueBatch } from "./queue-batch-reducer";
 import type { QueueItem } from "../queue-state";
 
 export type DurableCommandStatus =
-  "pending" | "processing" | "completed" | "failed" | "indeterminate";
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "indeterminate";
 
 export interface DurableCommandRecord {
-	sessionId: string;
-	requestId: string;
-	type: string;
-	payload: unknown;
-	payloadHash: string;
-	status: DurableCommandStatus;
-	result?: unknown;
-	error?: string;
-	createdAt: number;
-	updatedAt: number;
-	replaySafe: boolean;
-	retryable?: boolean;
-	acknowledgedAt?: number;
-	resultHash?: string;
-	terminalFailure: boolean;
+  sessionId: string;
+  requestId: string;
+  type: string;
+  payload: unknown;
+  payloadHash: string;
+  status: DurableCommandStatus;
+  result?: unknown;
+  error?: string;
+  createdAt: number;
+  updatedAt: number;
+  replaySafe: boolean;
+  retryable?: boolean;
+  acknowledgedAt?: number;
+  resultHash?: string;
+  terminalFailure: boolean;
 }
 
 export interface DurableRunState {
-	state: string;
-	since: string;
-	lastEvent?: string;
-	generation: number;
-	currentRunId?: string;
-	changeSeq: number;
+  state: string;
+  since: string;
+  lastEvent?: string;
+  generation: number;
+  currentRunId?: string;
+  changeSeq: number;
 }
 
 export interface DurableTimer {
-	sessionId: string;
-	timerId: string;
-	kind: string;
-	dueAt: number;
-	token: string;
-	payload: unknown;
-	attempts: number;
-	nextAttemptAt: number;
-	lastError?: string;
-	deadLetteredAt?: number;
-	createdAt: number;
+  sessionId: string;
+  timerId: string;
+  kind: string;
+  dueAt: number;
+  token: string;
+  payload: unknown;
+  attempts: number;
+  nextAttemptAt: number;
+  lastError?: string;
+  deadLetteredAt?: number;
+  createdAt: number;
 }
 
 export type DurableSteerTarget = {
@@ -142,38 +146,38 @@ export type DurableTurnOutcomeProjection = {
 };
 
 export interface DurableOutboxItem {
-	id: number;
-	effectId: string;
-	effectKey: string;
-	sessionId: string;
-	kind: string;
-	payload: unknown;
-	attempts: number;
-	nextAttemptAt: number;
-	lastError?: string;
-	deadLetteredAt?: number;
-	createdAt: number;
+  id: number;
+  effectId: string;
+  effectKey: string;
+  sessionId: string;
+  kind: string;
+  payload: unknown;
+  attempts: number;
+  nextAttemptAt: number;
+  lastError?: string;
+  deadLetteredAt?: number;
+  createdAt: number;
 }
 
 const json = (value: unknown): string => JSON.stringify(value ?? null);
 const CHANGE_HISTORY_PER_SESSION = 5_000;
 const MAINTENANCE_CHANGE_DELETE_BATCH = 250;
 const digest = (text: string): string =>
-	new Bun.CryptoHasher("sha256").update(text).digest("hex");
+  new Bun.CryptoHasher("sha256").update(text).digest("hex");
 const resultRecord = (value: unknown) => {
-	const text = json(value);
-	return {
-		text,
-		hash: digest(text),
-		terminalFailure:
-			!!value &&
-			typeof value === "object" &&
-			(value as Record<string, unknown>).__sessionKernelFailure === true,
-	};
+  const text = json(value);
+  return {
+    text,
+    hash: digest(text),
+    terminalFailure:
+      !!value &&
+      typeof value === "object" &&
+      (value as Record<string, unknown>).__sessionKernelFailure === true,
+  };
 };
 const parsed = <T>(value: string | null | undefined): T | undefined => {
-	if (value == null) return undefined;
-	return JSON.parse(value) as T;
+  if (value == null) return undefined;
+  return JSON.parse(value) as T;
 };
 type ProcessOwnerIdentity = { token: string; bootId?: string; start?: string };
 function linuxBootId(): string | undefined {
@@ -184,32 +188,32 @@ function linuxBootId(): string | undefined {
   }
 }
 function linuxProcessStart(pid: number): string | undefined {
-	try {
-		const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
     const fields = stat
       .slice(stat.lastIndexOf(")") + 2)
       .trim()
       .split(/\s+/);
-		return fields[19];
+    return fields[19];
   } catch {
     return undefined;
   }
 }
 function parseOwnerIdentity(value: string): ProcessOwnerIdentity | undefined {
-	try {
-		const parsed = JSON.parse(value) as ProcessOwnerIdentity;
-		return typeof parsed?.token === "string" ? parsed : undefined;
+  try {
+    const parsed = JSON.parse(value) as ProcessOwnerIdentity;
+    return typeof parsed?.token === "string" ? parsed : undefined;
   } catch {
     return undefined;
   }
 }
 function plausibleLegacyOwner(pid: number): boolean {
-	try {
+  try {
     const command = readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(
       /\0/g,
       " ",
     );
-		if (!command.includes("opensession.ts")) return false;
+    if (!command.includes("opensession.ts")) return false;
     const environment = readFileSync(`/proc/${pid}/environ`, "utf8").split(
       "\0",
     );
@@ -219,26 +223,26 @@ function plausibleLegacyOwner(pid: number): boolean {
     const sessionOverride = environment
       .find((entry) => entry.startsWith("OPENSESSION_SESSIONS_DIR="))
       ?.slice("OPENSESSION_SESSIONS_DIR=".length);
-		if (sessionOverride && sessionOverride !== sessionsDir()) return false;
-		if (stateDir && !sessionsDir().startsWith(stateDir)) return false;
-		return true;
-	} catch {
-		// Non-Linux and unreadable process evidence fail closed during the one-time
-		// migration from pre-identity owner rows.
-		return true;
-	}
+    if (sessionOverride && sessionOverride !== sessionsDir()) return false;
+    if (stateDir && !sessionsDir().startsWith(stateDir)) return false;
+    return true;
+  } catch {
+    // Non-Linux and unreadable process evidence fail closed during the one-time
+    // migration from pre-identity owner rows.
+    return true;
+  }
 }
 const ownerGlobal = globalThis as typeof globalThis & {
-	__opensessionSessionKernelOwnerId?: string;
+  __opensessionSessionKernelOwnerId?: string;
 };
 const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
-	JSON.stringify({
-		token:
+  JSON.stringify({
+    token:
       process.env.OPENSESSION_SESSION_KERNEL_OWNER_ID?.trim() ||
       crypto.randomUUID(),
-		bootId: linuxBootId(),
-		start: linuxProcessStart(process.pid),
-	} satisfies ProcessOwnerIdentity));
+    bootId: linuxBootId(),
+    start: linuxProcessStart(process.pid),
+  } satisfies ProcessOwnerIdentity));
 export const SESSION_KERNEL_SCHEMA_VERSION = 32;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
@@ -251,22 +255,28 @@ function validCreationSetupPatch(patch: Record<string, unknown>): boolean {
         !["branch", "workspaceId", "attachments", "resolved"].includes(key) ||
         patch[key] === undefined,
     )
-  ) return false;
+  )
+    return false;
   if (
     patch.branch !== undefined &&
-    (typeof patch.branch !== "string" || !patch.branch || patch.branch.length > 512)
-  ) return false;
+    (typeof patch.branch !== "string" ||
+      !patch.branch ||
+      patch.branch.length > 512)
+  )
+    return false;
   if (
     patch.workspaceId !== undefined &&
     (typeof patch.workspaceId !== "string" ||
       !patch.workspaceId ||
       patch.workspaceId.length > 256)
-  ) return false;
+  )
+    return false;
   if (patch.attachments !== undefined) {
     if (!Array.isArray(patch.attachments) || patch.attachments.length > 32)
       return false;
     for (const item of patch.attachments) {
-      if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+      if (!item || typeof item !== "object" || Array.isArray(item))
+        return false;
       const attachment = item as Record<string, unknown>;
       if (
         typeof attachment.attachmentId !== "string" ||
@@ -279,7 +289,8 @@ function validCreationSetupPatch(patch: Record<string, unknown>): boolean {
         attachment.sourceRef.length > 8192 ||
         typeof attachment.digest !== "string" ||
         !/^sha256:[a-f0-9]{64}$/.test(attachment.digest)
-      ) return false;
+      )
+        return false;
     }
   }
   if (patch.resolved !== undefined) {
@@ -287,9 +298,12 @@ function validCreationSetupPatch(patch: Record<string, unknown>): boolean {
       !patch.resolved ||
       typeof patch.resolved !== "object" ||
       Array.isArray(patch.resolved)
-    ) return false;
+    )
+      return false;
     const resolved = patch.resolved as Record<string, unknown>;
-    if (["gitEnv", "images", "materializeWorktree"].some((key) => key in resolved))
+    if (
+      ["gitEnv", "images", "materializeWorktree"].some((key) => key in resolved)
+    )
       return false;
   }
   return true;
@@ -298,20 +312,20 @@ function validCreationSetupPatch(patch: Record<string, unknown>): boolean {
 export function sessionKernelDbPath(): string {
   const explicit = process.env.OPENSESSION_SESSION_KERNEL_DB_PATH?.trim();
   if (explicit) return explicit;
-	// Test processes must never open the live instance state. Tests that need
-	// restart persistence construct a store at an explicit temporary path.
-	if (process.env.NODE_ENV === "test") return ":memory:";
-	return `${sessionsDir()}/session-kernel.sqlite`;
+  // Test processes must never open the live instance state. Tests that need
+  // restart persistence construct a store at an explicit temporary path.
+  if (process.env.NODE_ENV === "test") return ":memory:";
+  return `${sessionsDir()}/session-kernel.sqlite`;
 }
 
 export function sessionKernelSessionDbPath(
-	sessionId: string,
-	root = `${sessionsDir()}/session-kernel-sessions`,
+  sessionId: string,
+  root = `${sessionsDir()}/session-kernel-sessions`,
 ): string {
-	if (!sessionId || Buffer.byteLength(sessionId) > 1_024)
-		throw new Error("Invalid session kernel session id");
-	const key = digest(sessionId);
-	return `${root}/${key.slice(0, 2)}/${key}.sqlite`;
+  if (!sessionId || Buffer.byteLength(sessionId) > 1_024)
+    throw new Error("Invalid session kernel session id");
+  const key = digest(sessionId);
+  return `${root}/${key.slice(0, 2)}/${key}.sqlite`;
 }
 
 /**
@@ -387,7 +401,8 @@ function decodeDurableAgentHostPlan(
     generation: row.run_generation,
     planHash: row.plan_hash,
   });
-  const hostId = row.host_id == null ? undefined : decodeExecutorId(row.host_id);
+  const hostId =
+    row.host_id == null ? undefined : decodeExecutorId(row.host_id);
   const hostGenerationHighWater = Number(row.host_generation_high_water);
   const supervisorHighWater = Number(row.supervisor_high_water);
   if (
@@ -397,7 +412,8 @@ function decodeDurableAgentHostPlan(
     hostGenerationHighWater < 0 ||
     !Number.isSafeInteger(supervisorHighWater) ||
     supervisorHighWater < 0
-  ) throw new Error("Invalid durable Agent Host plan");
+  )
+    throw new Error("Invalid durable Agent Host plan");
   return {
     ...plan,
     hostId,
@@ -413,18 +429,22 @@ function migrateAgentHostSupervisionSchema(
   if (schemaVersion >= 26) return;
   const tx = db.transaction(() => {
     const supervisionColumns = new Set(
-      (db.query(
-        "PRAGMA table_info(session_kernel_agent_host_supervision)",
-      ).all() as Array<{ name: string }>).map((column) => column.name),
+      (
+        db
+          .query("PRAGMA table_info(session_kernel_agent_host_supervision)")
+          .all() as Array<{ name: string }>
+      ).map((column) => column.name),
     );
     if (!supervisionColumns.has("expires_at"))
       db.exec(
         "ALTER TABLE session_kernel_agent_host_supervision ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0",
       );
     const planColumns = new Set(
-      (db.query(
-        "PRAGMA table_info(session_kernel_agent_host_plan)",
-      ).all() as Array<{ name: string }>).map((column) => column.name),
+      (
+        db
+          .query("PRAGMA table_info(session_kernel_agent_host_plan)")
+          .all() as Array<{ name: string }>
+      ).map((column) => column.name),
     );
     if (!planColumns.has("host_generation_high_water"))
       db.exec(
@@ -437,47 +457,122 @@ function migrateAgentHostSupervisionSchema(
 
 function assertAgentOperationSchema28(db: Database): void {
   const expected = {
-    session_kernel_agent_operation_high_water: [["session_id","TEXT",1,1],["operation_sequence","INTEGER",1,0],["updated_at","INTEGER",1,0]],
+    session_kernel_agent_operation_high_water: [
+      ["session_id", "TEXT", 1, 1],
+      ["operation_sequence", "INTEGER", 1, 0],
+      ["updated_at", "INTEGER", 1, 0],
+    ],
     session_kernel_agent_operations: [
-      ["session_id","TEXT",1,1],["operation_id","TEXT",1,2],["semantic_hash","TEXT",1,0],["identity_hash","TEXT",1,0],
-      ["identity","TEXT",1,0],["operation_sequence","INTEGER",1,0],["run_id","TEXT",1,0],["turn_id","TEXT",1,0],
-      ["run_generation","INTEGER",1,0],["kind","TEXT",1,0],["state","TEXT",1,0],["anchor_change_seq","INTEGER",1,0],
-      ["terminal_change_seq","INTEGER",0,0],["terminal_entry_ids","TEXT",0,0],["terminal_request","TEXT",0,0],
-      ["receipt","TEXT",1,0],["admitted_at","INTEGER",1,0],["terminal_at","INTEGER",0,0],
+      ["session_id", "TEXT", 1, 1],
+      ["operation_id", "TEXT", 1, 2],
+      ["semantic_hash", "TEXT", 1, 0],
+      ["identity_hash", "TEXT", 1, 0],
+      ["identity", "TEXT", 1, 0],
+      ["operation_sequence", "INTEGER", 1, 0],
+      ["run_id", "TEXT", 1, 0],
+      ["turn_id", "TEXT", 1, 0],
+      ["run_generation", "INTEGER", 1, 0],
+      ["kind", "TEXT", 1, 0],
+      ["state", "TEXT", 1, 0],
+      ["anchor_change_seq", "INTEGER", 1, 0],
+      ["terminal_change_seq", "INTEGER", 0, 0],
+      ["terminal_entry_ids", "TEXT", 0, 0],
+      ["terminal_request", "TEXT", 0, 0],
+      ["receipt", "TEXT", 1, 0],
+      ["admitted_at", "INTEGER", 1, 0],
+      ["terminal_at", "INTEGER", 0, 0],
     ],
   } as const;
-  const normalize = (value: string) => value.toLowerCase().replace(/\s+/g," ").trim();
+  const normalize = (value: string) =>
+    value.toLowerCase().replace(/\s+/g, " ").trim();
   for (const [table, columns] of Object.entries(expected)) {
-    const row = db.query("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table) as {sql:string}|null;
-    const actual = (db.query(`PRAGMA table_xinfo(${table})`).all() as Array<{name:string;type:string;notnull:number;pk:number;hidden:number}>).map(({name,type,notnull,pk,hidden})=>[name,type,notnull,pk,hidden]);
-    const wanted = columns.map(([name,type,notnull,pk])=>[name,type,notnull,pk,0]);
-    if (!row?.sql || !normalize(row.sql).endsWith(") strict") || JSON.stringify(actual)!==JSON.stringify(wanted))
+    const row = db
+      .query("SELECT sql FROM sqlite_master WHERE type='table' AND name=?")
+      .get(table) as { sql: string } | null;
+    const actual = (
+      db.query(`PRAGMA table_xinfo(${table})`).all() as Array<{
+        name: string;
+        type: string;
+        notnull: number;
+        pk: number;
+        hidden: number;
+      }>
+    ).map(({ name, type, notnull, pk, hidden }) => [
+      name,
+      type,
+      notnull,
+      pk,
+      hidden,
+    ]);
+    const wanted = columns.map(([name, type, notnull, pk]) => [
+      name,
+      type,
+      notnull,
+      pk,
+      0,
+    ]);
+    if (
+      !row?.sql ||
+      !normalize(row.sql).endsWith(") strict") ||
+      JSON.stringify(actual) !== JSON.stringify(wanted)
+    )
       throw new Error("Agent operation schema does not match exact schema 28");
-    const sql=normalize(row.sql);
-    const required = table === "session_kernel_agent_operation_high_water"
-      ? ["primary key", "check(operation_sequence >= 0)", "check(updated_at >= 0)"]
-      : [
-          "primary key(session_id, operation_id)",
-          "unique(session_id, semantic_hash)", "unique(session_id, operation_sequence)",
-          "check(semantic_hash glob 'sha256:*' and length(semantic_hash)=71)",
-          "check(identity_hash glob 'sha256:*' and length(identity_hash)=71)",
-          "check(operation_sequence >= 1)", "check(run_generation >= 0)",
-          "check(kind in ('model','mcp'))", "check(state in ('admitted','settled','indeterminate'))",
-          "check(anchor_change_seq >= 0)", "check(admitted_at >= 0)",
-          "check((state='admitted' and terminal_change_seq is null",
-          "(state!='admitted' and terminal_change_seq is not null",
-        ];
-    if(required.some((fragment)=>!sql.includes(fragment)))
-      throw new Error("Agent operation schema constraints do not match schema 28");
+    const sql = normalize(row.sql);
+    const required =
+      table === "session_kernel_agent_operation_high_water"
+        ? [
+            "primary key",
+            "check(operation_sequence >= 0)",
+            "check(updated_at >= 0)",
+          ]
+        : [
+            "primary key(session_id, operation_id)",
+            "unique(session_id, semantic_hash)",
+            "unique(session_id, operation_sequence)",
+            "check(semantic_hash glob 'sha256:*' and length(semantic_hash)=71)",
+            "check(identity_hash glob 'sha256:*' and length(identity_hash)=71)",
+            "check(operation_sequence >= 1)",
+            "check(run_generation >= 0)",
+            "check(kind in ('model','mcp'))",
+            "check(state in ('admitted','settled','indeterminate'))",
+            "check(anchor_change_seq >= 0)",
+            "check(admitted_at >= 0)",
+            "check((state='admitted' and terminal_change_seq is null",
+            "(state!='admitted' and terminal_change_seq is not null",
+          ];
+    if (required.some((fragment) => !sql.includes(fragment)))
+      throw new Error(
+        "Agent operation schema constraints do not match schema 28",
+      );
   }
-  const indexes=db.query(`SELECT name,sql FROM sqlite_master WHERE type='index' AND tbl_name IN ('session_kernel_agent_operations','session_kernel_agent_operation_high_water') AND sql IS NOT NULL ORDER BY name`).all() as Array<{name:string;sql:string}>;
-  const wantedIndexes=[
-    ["idx_skao_prune","create index idx_skao_prune on session_kernel_agent_operations(session_id,terminal_at) where state='settled'"],
-    ["idx_skao_turn_sequence","create index idx_skao_turn_sequence on session_kernel_agent_operations(session_id,run_id,run_generation,turn_id,operation_sequence)"],
+  const indexes = db
+    .query(
+      `SELECT name,sql FROM sqlite_master WHERE type='index' AND tbl_name IN ('session_kernel_agent_operations','session_kernel_agent_operation_high_water') AND sql IS NOT NULL ORDER BY name`,
+    )
+    .all() as Array<{ name: string; sql: string }>;
+  const wantedIndexes = [
+    [
+      "idx_skao_prune",
+      "create index idx_skao_prune on session_kernel_agent_operations(session_id,terminal_at) where state='settled'",
+    ],
+    [
+      "idx_skao_turn_sequence",
+      "create index idx_skao_turn_sequence on session_kernel_agent_operations(session_id,run_id,run_generation,turn_id,operation_sequence)",
+    ],
   ];
-  if(JSON.stringify(indexes.map(({name,sql})=>[name,normalize(sql)]))!==JSON.stringify(wantedIndexes)) throw new Error("Agent operation schema indexes do not match exact schema 28");
-  const integrity=db.query("PRAGMA quick_check").get() as Record<string,unknown>;
-  if(!Object.values(integrity).includes("ok")) throw new Error("Agent operation schema integrity check failed");
+  if (
+    JSON.stringify(indexes.map(({ name, sql }) => [name, normalize(sql)])) !==
+    JSON.stringify(wantedIndexes)
+  )
+    throw new Error(
+      "Agent operation schema indexes do not match exact schema 28",
+    );
+  const integrity = db.query("PRAGMA quick_check").get() as Record<
+    string,
+    unknown
+  >;
+  if (!Object.values(integrity).includes("ok"))
+    throw new Error("Agent operation schema integrity check failed");
 }
 
 function assertAgentOperationCancellationSchema32(db: Database): void {
@@ -604,14 +699,16 @@ function migrateQuarantineProjectionSchema30(
 ): void {
   if (schemaVersion >= 30) return;
   const tx = db.transaction(() => {
-    const quarantine = (db
-      .query("PRAGMA table_info(session_kernel_sparse_projections)")
-      .all() as Array<{
+    const quarantine = (
+      db
+        .query("PRAGMA table_info(session_kernel_sparse_projections)")
+        .all() as Array<{
         name: string;
         type: string;
         notnull: number;
         dflt_value: string | null;
-      }>).find((column) => column.name === "quarantine_state");
+      }>
+    ).find((column) => column.name === "quarantine_state");
     if (!quarantine) {
       db.exec(`
         ALTER TABLE session_kernel_sparse_projections
@@ -708,8 +805,11 @@ function migrateTranscriptAuthoritySchema31(
       dflt_value: string | null;
     };
     const columns = new Map(
-      (db.query("PRAGMA table_info(session_kernel_placements)").all() as Column[])
-        .map((column) => [column.name, column]),
+      (
+        db
+          .query("PRAGMA table_info(session_kernel_placements)")
+          .all() as Column[]
+      ).map((column) => [column.name, column]),
     );
     const authority = columns.get("transcript_authority");
     if (!authority) {
@@ -751,13 +851,17 @@ function migrateTranscriptAuthoritySchema31(
       published.notnull !== 0 ||
       published.dflt_value !== null
     ) {
-      throw new Error("Schema 31 requires exact transcript publication storage");
+      throw new Error(
+        "Schema 31 requires exact transcript publication storage",
+      );
     }
 
     const placementSql = (
-      db.query(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='session_kernel_placements'",
-      ).get() as { sql: string } | null
+      db
+        .query(
+          "SELECT sql FROM sqlite_master WHERE type='table' AND name='session_kernel_placements'",
+        )
+        .get() as { sql: string } | null
     )?.sql;
     if (
       !placementSql ||
@@ -765,7 +869,9 @@ function migrateTranscriptAuthoritySchema31(
         placementSql,
       )
     ) {
-      throw new Error("Schema 31 requires constrained transcript authority storage");
+      throw new Error(
+        "Schema 31 requires constrained transcript authority storage",
+      );
     }
 
     db.exec(`
@@ -835,10 +941,10 @@ function migrateAgentHostSupervisionSchema27(
 }
 
 export type RunEventDecision = {
-	sessionId: string;
-	event: RunEvent;
-	detail?: Record<string, unknown>;
-	runKey?: string;
+  sessionId: string;
+  event: RunEvent;
+  detail?: Record<string, unknown>;
+  runKey?: string;
 };
 
 export type CreationEventDecision = {
@@ -896,20 +1002,20 @@ export type CreationEventDecisionResult = {
 };
 
 export type RunEventDecisionResult = {
-	accepted: boolean;
-	from: RunState;
-	to: RunState;
-	reason?: "invalid_transition" | "stale_run";
-	currentRunId?: string;
-	rejectedRunId?: string;
-	state: DurableRunState;
+  accepted: boolean;
+  from: RunState;
+  to: RunState;
+  reason?: "invalid_transition" | "stale_run";
+  currentRunId?: string;
+  rejectedRunId?: string;
+  state: DurableRunState;
 };
 
 export type SessionKernelStoreOptions = {
-	readonly?: boolean;
-	/** Internal migration reader for additive schemas with unchanged session tables. */
-	compatibleReadSchemaFloor?: number;
-	allocateOutboxId?: (sessionId: string) => number;
+  readonly?: boolean;
+  /** Internal migration reader for additive schemas with unchanged session tables. */
+  compatibleReadSchemaFloor?: number;
+  allocateOutboxId?: (sessionId: string) => number;
   busyTimeoutMs?: number;
   hydrateRunStateCache?: boolean;
 };
@@ -935,77 +1041,84 @@ const SESSION_KERNEL_SESSION_TABLES = [
 ] as const;
 
 export type DurableSessionPlacement = {
-	sessionId: string;
-	placement: "isolated";
+  sessionId: string;
+  placement: "isolated";
   transcriptAuthority: "shared" | "actor";
   transcriptMigrationReceipt?: string;
   transcriptPublishedAt?: number;
-	needsScan: boolean;
-	nextTimerAt?: number;
-	nextOutboxAt?: number;
-	updatedAt: number;
+  needsScan: boolean;
+  nextTimerAt?: number;
+  nextOutboxAt?: number;
+  updatedAt: number;
 };
 
 export class SessionKernelStore {
-	private readonly db: Database;
-	private readonly closeable: boolean;
-	private readonly runStateCache = new Map<string, DurableRunState>();
-	private readonly dirtyChangeSessions = new Set<string>();
-	private readonly path: string;
-	private readonly allocateOutboxId?: (sessionId: string) => number;
+  private readonly db: Database;
+  private readonly closeable: boolean;
+  private readonly runStateCache = new Map<string, DurableRunState>();
+  private readonly dirtyChangeSessions = new Set<string>();
+  private readonly path: string;
+  private readonly allocateOutboxId?: (sessionId: string) => number;
 
-	constructor(path = sessionKernelDbPath(), options: SessionKernelStoreOptions = {}) {
-		this.path = path;
-		this.allocateOutboxId = options.allocateOutboxId;
+  constructor(
+    path = sessionKernelDbPath(),
+    options: SessionKernelStoreOptions = {},
+  ) {
+    this.path = path;
+    this.allocateOutboxId = options.allocateOutboxId;
     const busyTimeoutMs = options.busyTimeoutMs ?? 5_000;
-    if (!Number.isInteger(busyTimeoutMs) || busyTimeoutMs < 0 || busyTimeoutMs > 60_000)
+    if (
+      !Number.isInteger(busyTimeoutMs) ||
+      busyTimeoutMs < 0 ||
+      busyTimeoutMs > 60_000
+    )
       throw new Error("Invalid session kernel SQLite busy timeout");
-		if (options.readonly) {
-			if (path === ":memory:")
-				throw new Error("A read-only session kernel store requires a file path");
-			this.db = new Database(path, { readonly: true });
-			this.closeable = true;
-			this.db.exec("PRAGMA query_only = ON; PRAGMA busy_timeout = 50;");
-			const schemaVersion = Number(
-				(this.db.query("PRAGMA user_version").get() as { user_version: number })
-					.user_version,
-			);
-			const compatibleFloor = options.compatibleReadSchemaFloor;
-			if (
-				schemaVersion !== SESSION_KERNEL_SCHEMA_VERSION &&
-				(
-					compatibleFloor === undefined ||
-					schemaVersion < compatibleFloor ||
-					schemaVersion > SESSION_KERNEL_SCHEMA_VERSION
-				)
-			)
-				throw new Error(
-					`Session kernel read mirror schema ${schemaVersion} does not match supported ${SESSION_KERNEL_SCHEMA_VERSION}`,
-				);
-			if (options.hydrateRunStateCache !== false) this.hydrateRunStateCache();
-			return;
-		}
-		if (path !== ":memory:") {
-			const dir = dirname(path);
-			if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-		}
-		this.db = new Database(path);
-		this.closeable = true;
-		this.db.exec("PRAGMA journal_mode = WAL;");
-		// NORMAL, not FULL: with WAL, NORMAL still guarantees no corruption and
-		// no torn transactions — an OS crash or power loss can only drop the most
-		// recent commit(s) that had not yet reached the WAL fsync point; an
-		// application crash loses nothing. Every kernel command is designed for
-		// exactly that window: admissions replay by request id, effects are
-		// destination-idempotent at-least-once, and interrupted physical work
-		// fails closed. FULL cost ~3.3 ms of fsync per commit on this class of
-		// disk vs ~0.005 ms at NORMAL — with two kernel commits wrapping every
-		// transcript append, that fsync tax dominated the append path (measured
-		// p50 ~18 ms per append pair) and drove lane saturation at ~100
-		// concurrent sessions. Approved trade (Jaap, 2026-08-26).
-		this.db.exec("PRAGMA synchronous = NORMAL;");
-		this.db.exec(`PRAGMA busy_timeout = ${busyTimeoutMs};`);
-		this.db.exec(`
+    if (options.readonly) {
+      if (path === ":memory:")
+        throw new Error(
+          "A read-only session kernel store requires a file path",
+        );
+      this.db = new Database(path, { readonly: true });
+      this.closeable = true;
+      this.db.exec("PRAGMA query_only = ON; PRAGMA busy_timeout = 50;");
+      const schemaVersion = Number(
+        (this.db.query("PRAGMA user_version").get() as { user_version: number })
+          .user_version,
+      );
+      const compatibleFloor = options.compatibleReadSchemaFloor;
+      if (
+        schemaVersion !== SESSION_KERNEL_SCHEMA_VERSION &&
+        (compatibleFloor === undefined ||
+          schemaVersion < compatibleFloor ||
+          schemaVersion > SESSION_KERNEL_SCHEMA_VERSION)
+      )
+        throw new Error(
+          `Session kernel read mirror schema ${schemaVersion} does not match supported ${SESSION_KERNEL_SCHEMA_VERSION}`,
+        );
+      if (options.hydrateRunStateCache !== false) this.hydrateRunStateCache();
+      return;
+    }
+    if (path !== ":memory:") {
+      const dir = dirname(path);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    }
+    this.db = new Database(path);
+    this.closeable = true;
+    this.db.exec("PRAGMA journal_mode = WAL;");
+    // NORMAL, not FULL: with WAL, NORMAL still guarantees no corruption and
+    // no torn transactions — an OS crash or power loss can only drop the most
+    // recent commit(s) that had not yet reached the WAL fsync point; an
+    // application crash loses nothing. Every kernel command is designed for
+    // exactly that window: admissions replay by request id, effects are
+    // destination-idempotent at-least-once, and interrupted physical work
+    // fails closed. FULL cost ~3.3 ms of fsync per commit on this class of
+    // disk vs ~0.005 ms at NORMAL — with two kernel commits wrapping every
+    // transcript append, that fsync tax dominated the append path (measured
+    // p50 ~18 ms per append pair) and drove lane saturation at ~100
+    // concurrent sessions. Approved trade (Jaap, 2026-08-26).
+    this.db.exec("PRAGMA synchronous = NORMAL;");
+    this.db.exec(`PRAGMA busy_timeout = ${busyTimeoutMs};`);
+    this.db.exec(`
 			CREATE TABLE IF NOT EXISTS session_kernel_owner (
 				singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
 				owner_id TEXT NOT NULL,
@@ -1013,18 +1126,18 @@ export class SessionKernelStore {
 				claimed_at INTEGER NOT NULL
 			);
 		`);
-		// Claim before inspecting or mutating any durable schema. A concurrent old
-		// actor must never observe migrations performed by a losing process.
-		this.claimWriter();
-		const schemaVersion = Number(
-			(this.db.query("PRAGMA user_version").get() as { user_version: number })
-				.user_version,
-		);
-		if (schemaVersion > SESSION_KERNEL_SCHEMA_VERSION)
-			throw new Error(
-				`Session kernel schema ${schemaVersion} is newer than supported ${SESSION_KERNEL_SCHEMA_VERSION}`,
-			);
-		this.db.exec(`
+    // Claim before inspecting or mutating any durable schema. A concurrent old
+    // actor must never observe migrations performed by a losing process.
+    this.claimWriter();
+    const schemaVersion = Number(
+      (this.db.query("PRAGMA user_version").get() as { user_version: number })
+        .user_version,
+    );
+    if (schemaVersion > SESSION_KERNEL_SCHEMA_VERSION)
+      throw new Error(
+        `Session kernel schema ${schemaVersion} is newer than supported ${SESSION_KERNEL_SCHEMA_VERSION}`,
+      );
+    this.db.exec(`
 			CREATE TABLE IF NOT EXISTS session_kernel_owner (
 				singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
 				owner_id TEXT NOT NULL,
@@ -1220,7 +1333,9 @@ export class SessionKernelStore {
       ).map((column) => column.name),
     );
     if (!deliveryColumns.has("interrupt"))
-      this.db.exec("ALTER TABLE session_kernel_delivery ADD COLUMN interrupt TEXT");
+      this.db.exec(
+        "ALTER TABLE session_kernel_delivery ADD COLUMN interrupt TEXT",
+      );
     const creationColumns = new Set(
       (
         this.db
@@ -1240,59 +1355,59 @@ export class SessionKernelStore {
       this.db.exec(
         "ALTER TABLE session_kernel_creation ADD COLUMN setup_plan TEXT",
       );
-		const commandColumns = new Set(
-			(
+    const commandColumns = new Set(
+      (
         this.db
           .query("PRAGMA table_info(session_kernel_commands)")
           .all() as Array<{ name: string }>
-			).map((column) => column.name),
-		);
-		if (!commandColumns.has("payload_hash"))
+      ).map((column) => column.name),
+    );
+    if (!commandColumns.has("payload_hash"))
       this.db.exec(
         "ALTER TABLE session_kernel_commands ADD COLUMN payload_hash TEXT",
       );
-		if (!commandColumns.has("replay_safe")) {
+    if (!commandColumns.has("replay_safe")) {
       this.db.exec(
         "ALTER TABLE session_kernel_commands ADD COLUMN replay_safe INTEGER NOT NULL DEFAULT 0",
       );
-			// Pre-policy releases re-admitted every interrupted command. Preserve that
-			// contract across the upgrade instead of turning live receipts indeterminate.
-			this.db.run("UPDATE session_kernel_commands SET replay_safe = 1");
-		}
-		if (!commandColumns.has("retryable"))
+      // Pre-policy releases re-admitted every interrupted command. Preserve that
+      // contract across the upgrade instead of turning live receipts indeterminate.
+      this.db.run("UPDATE session_kernel_commands SET replay_safe = 1");
+    }
+    if (!commandColumns.has("retryable"))
       this.db.exec(
         "ALTER TABLE session_kernel_commands ADD COLUMN retryable INTEGER",
       );
-		if (!commandColumns.has("result_hash"))
+    if (!commandColumns.has("result_hash"))
       this.db.exec(
         "ALTER TABLE session_kernel_commands ADD COLUMN result_hash TEXT",
       );
-		if (!commandColumns.has("result_released"))
+    if (!commandColumns.has("result_released"))
       this.db.exec(
         "ALTER TABLE session_kernel_commands ADD COLUMN result_released INTEGER NOT NULL DEFAULT 0",
       );
-		if (schemaVersion < 6) {
-			this.db.exec("DROP INDEX IF EXISTS idx_skc_compact");
-			this.db.run(
-				`UPDATE session_kernel_commands SET result_released = 1
+    if (schemaVersion < 6) {
+      this.db.exec("DROP INDEX IF EXISTS idx_skc_compact");
+      this.db.run(
+        `UPDATE session_kernel_commands SET result_released = 1
 				 WHERE result LIKE '%"__sessionKernelResultReleased":true%'`,
-			);
-		}
-		if (!commandColumns.has("terminal_failure")) {
+      );
+    }
+    if (!commandColumns.has("terminal_failure")) {
       this.db.exec(
         "ALTER TABLE session_kernel_commands ADD COLUMN terminal_failure INTEGER NOT NULL DEFAULT 0",
       );
-			this.db.run(
-				`UPDATE session_kernel_commands SET terminal_failure = 1
+      this.db.run(
+        `UPDATE session_kernel_commands SET terminal_failure = 1
 				 WHERE result LIKE '%"__sessionKernelFailure":true%'`,
-			);
-		}
-		if (!commandColumns.has("acknowledged_at"))
+      );
+    }
+    if (!commandColumns.has("acknowledged_at"))
       this.db.exec(
         "ALTER TABLE session_kernel_commands ADD COLUMN acknowledged_at INTEGER",
       );
-		if (schemaVersion < 4) {
-		const unhashedCommands = this.db
+    if (schemaVersion < 4) {
+      const unhashedCommands = this.db
         .query(
           "SELECT session_id, request_id, payload FROM session_kernel_commands WHERE payload_hash IS NULL",
         )
@@ -1301,16 +1416,16 @@ export class SessionKernelStore {
         request_id: string;
         payload: string;
       }>;
-			const setPayloadHash = this.db.query(
-				"UPDATE session_kernel_commands SET payload_hash = ? WHERE session_id = ? AND request_id = ?",
-			);
-			for (const command of unhashedCommands)
-				setPayloadHash.run(
-					digest(command.payload),
-					command.session_id,
-					command.request_id,
-				);
-			const unhashedResults = this.db
+      const setPayloadHash = this.db.query(
+        "UPDATE session_kernel_commands SET payload_hash = ? WHERE session_id = ? AND request_id = ?",
+      );
+      for (const command of unhashedCommands)
+        setPayloadHash.run(
+          digest(command.payload),
+          command.session_id,
+          command.request_id,
+        );
+      const unhashedResults = this.db
         .query(
           "SELECT session_id, request_id, result FROM session_kernel_commands WHERE result IS NOT NULL AND result_hash IS NULL",
         )
@@ -1319,89 +1434,89 @@ export class SessionKernelStore {
         request_id: string;
         result: string;
       }>;
-			const setResultHash = this.db.query(
-				"UPDATE session_kernel_commands SET result_hash = ? WHERE session_id = ? AND request_id = ?",
-			);
-			for (const command of unhashedResults)
+      const setResultHash = this.db.query(
+        "UPDATE session_kernel_commands SET result_hash = ? WHERE session_id = ? AND request_id = ?",
+      );
+      for (const command of unhashedResults)
         setResultHash.run(
           digest(command.result),
           command.session_id,
           command.request_id,
         );
-		}
+    }
 
-		const outboxColumns = new Set(
-			(
-				this.db
-					.query("PRAGMA table_info(session_kernel_outbox)")
-					.all() as Array<{ name: string }>
-			).map((column) => column.name),
-		);
-		if (!outboxColumns.has("effect_id"))
-			this.db.exec(
-				"ALTER TABLE session_kernel_outbox ADD COLUMN effect_id TEXT",
-			);
-		if (!outboxColumns.has("effect_key"))
-			this.db.exec(
-				"ALTER TABLE session_kernel_outbox ADD COLUMN effect_key TEXT",
-			);
-		if (!outboxColumns.has("next_attempt_at"))
-			this.db.exec(
-				"ALTER TABLE session_kernel_outbox ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0",
-			);
-		if (!outboxColumns.has("last_error"))
-			this.db.exec(
-				"ALTER TABLE session_kernel_outbox ADD COLUMN last_error TEXT",
-			);
-		if (!outboxColumns.has("dead_lettered_at"))
-			this.db.exec(
-				"ALTER TABLE session_kernel_outbox ADD COLUMN dead_lettered_at INTEGER",
-			);
-		const timerColumns = new Set(
-			(
-				this.db
-					.query("PRAGMA table_info(session_kernel_timers)")
-					.all() as Array<{ name: string }>
-			).map((column) => column.name),
-		);
-		if (!timerColumns.has("token")) {
-			this.db.exec("ALTER TABLE session_kernel_timers ADD COLUMN token TEXT");
+    const outboxColumns = new Set(
+      (
+        this.db
+          .query("PRAGMA table_info(session_kernel_outbox)")
+          .all() as Array<{ name: string }>
+      ).map((column) => column.name),
+    );
+    if (!outboxColumns.has("effect_id"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_outbox ADD COLUMN effect_id TEXT",
+      );
+    if (!outboxColumns.has("effect_key"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_outbox ADD COLUMN effect_key TEXT",
+      );
+    if (!outboxColumns.has("next_attempt_at"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_outbox ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0",
+      );
+    if (!outboxColumns.has("last_error"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_outbox ADD COLUMN last_error TEXT",
+      );
+    if (!outboxColumns.has("dead_lettered_at"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_outbox ADD COLUMN dead_lettered_at INTEGER",
+      );
+    const timerColumns = new Set(
+      (
+        this.db
+          .query("PRAGMA table_info(session_kernel_timers)")
+          .all() as Array<{ name: string }>
+      ).map((column) => column.name),
+    );
+    if (!timerColumns.has("token")) {
+      this.db.exec("ALTER TABLE session_kernel_timers ADD COLUMN token TEXT");
       this.db.run(
         "UPDATE session_kernel_timers SET token = lower(hex(randomblob(16))) WHERE token IS NULL",
       );
-		}
-		if (!timerColumns.has("attempts"))
-			this.db.exec(
-				"ALTER TABLE session_kernel_timers ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0",
-			);
-		if (!timerColumns.has("next_attempt_at"))
-			this.db.exec(
-				"ALTER TABLE session_kernel_timers ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0",
-			);
-		if (!timerColumns.has("last_error"))
-			this.db.exec(
-				"ALTER TABLE session_kernel_timers ADD COLUMN last_error TEXT",
-			);
-		if (!timerColumns.has("dead_lettered_at"))
-			this.db.exec(
-				"ALTER TABLE session_kernel_timers ADD COLUMN dead_lettered_at INTEGER",
-			);
-		if (!timerColumns.has("created_at")) {
-			this.db.exec(
-				"ALTER TABLE session_kernel_timers ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0",
-			);
+    }
+    if (!timerColumns.has("attempts"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_timers ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0",
+      );
+    if (!timerColumns.has("next_attempt_at"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_timers ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0",
+      );
+    if (!timerColumns.has("last_error"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_timers ADD COLUMN last_error TEXT",
+      );
+    if (!timerColumns.has("dead_lettered_at"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_timers ADD COLUMN dead_lettered_at INTEGER",
+      );
+    if (!timerColumns.has("created_at")) {
+      this.db.exec(
+        "ALTER TABLE session_kernel_timers ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0",
+      );
       this.db.run(
         "UPDATE session_kernel_timers SET created_at = due_at WHERE created_at = 0",
       );
-		}
-		if (schemaVersion < 4)
-			this.db.run(
-				"UPDATE session_kernel_outbox SET effect_id = COALESCE(effect_id, 'legacy:' || id), effect_key = COALESCE(effect_key, 'legacy:' || id)",
-			);
-		this.db.exec(
+    }
+    if (schemaVersion < 4)
+      this.db.run(
+        "UPDATE session_kernel_outbox SET effect_id = COALESCE(effect_id, 'legacy:' || id), effect_key = COALESCE(effect_key, 'legacy:' || id)",
+      );
+    this.db.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_sko_effect ON session_kernel_outbox(session_id, kind, effect_key)",
     );
-		this.db.exec(`
+    this.db.exec(`
 			CREATE INDEX IF NOT EXISTS idx_skc_active_created
 				ON session_kernel_commands(created_at)
 				WHERE status IN ('pending', 'processing', 'indeterminate');
@@ -1451,370 +1566,414 @@ export class SessionKernelStore {
     migrateAgentOperationCancellationSchema32(this.db, schemaVersion);
     assertAgentOperationSchema28(this.db);
     assertAgentOperationCancellationSchema32(this.db);
-		if (path !== ":memory:") {
-			try {
-				chmodSync(path, 0o600);
-			} catch {}
-		}
+    if (path !== ":memory:") {
+      try {
+        chmodSync(path, 0o600);
+      } catch {}
+    }
     // A processing execution dies with its actor. Keep replay-safe intent pending
     // so the client's receipt outbox can re-admit the exact same command id.
-		this.db.run(
-			"UPDATE session_kernel_commands SET status = 'pending', error = 'actor restarted before acknowledgement', updated_at = ? WHERE status = 'processing' AND replay_safe = 1",
-			[Date.now()],
-		);
-		// Pending means the actor committed admission but never marked execution
-		// started. No physical effect can have run, so preserve the receipt as a
-		// retryable failure instead of leaving readiness degraded forever.
-		this.db.run(
-			`UPDATE session_kernel_commands
+    this.db.run(
+      "UPDATE session_kernel_commands SET status = 'pending', error = 'actor restarted before acknowledgement', updated_at = ? WHERE status = 'processing' AND replay_safe = 1",
+      [Date.now()],
+    );
+    // Pending means the actor committed admission but never marked execution
+    // started. No physical effect can have run, so preserve the receipt as a
+    // retryable failure instead of leaving readiness degraded forever.
+    this.db.run(
+      `UPDATE session_kernel_commands
 			 SET status = 'failed', replay_safe = 1, retryable = 1,
 			     error = 'actor restarted before execution admission', updated_at = ?
 			 WHERE status = 'pending'`,
-			[Date.now()],
-		);
-		this.db.run(
-			"UPDATE session_kernel_commands SET status = 'indeterminate', error = 'actor restarted after execution began', retryable = 0, updated_at = ? WHERE status = 'processing'",
-			[Date.now()],
-		);
-		this.hydrateRunStateCache();
-		// A restart used to mark every known session dirty. The first runtime
-		// maintenance pass then issued up to 100 FULL-synchronous DELETEs, which
-		// could monopolize the actor for minutes on a large journal. Rebuild only
-		// the actual over-retention candidates; new writes still mark themselves.
-		const compactableChangeRows = this.db
-			.query(
-				`SELECT session_id FROM session_kernel_changes
+      [Date.now()],
+    );
+    this.db.run(
+      "UPDATE session_kernel_commands SET status = 'indeterminate', error = 'actor restarted after execution began', retryable = 0, updated_at = ? WHERE status = 'processing'",
+      [Date.now()],
+    );
+    this.hydrateRunStateCache();
+    // A restart used to mark every known session dirty. The first runtime
+    // maintenance pass then issued up to 100 FULL-synchronous DELETEs, which
+    // could monopolize the actor for minutes on a large journal. Rebuild only
+    // the actual over-retention candidates; new writes still mark themselves.
+    const compactableChangeRows = this.db
+      .query(
+        `SELECT session_id FROM session_kernel_changes
 				 GROUP BY session_id HAVING COUNT(*) > ?`,
-			)
-			.all(CHANGE_HISTORY_PER_SESSION) as Array<{ session_id: string }>;
-		for (const row of compactableChangeRows)
-			this.dirtyChangeSessions.add(row.session_id);
-	}
+      )
+      .all(CHANGE_HISTORY_PER_SESSION) as Array<{ session_id: string }>;
+    for (const row of compactableChangeRows)
+      this.dirtyChangeSessions.add(row.session_id);
+  }
 
-	private hydrateRunStateCache(): void {
-		this.runStateCache.clear();
-		const stateRows = this.db
-			.query(
-				`SELECT session_id, run_state, run_since, last_event, generation,
+  private hydrateRunStateCache(): void {
+    this.runStateCache.clear();
+    const stateRows = this.db
+      .query(
+        `SELECT session_id, run_state, run_since, last_event, generation,
 				 current_run_id, change_seq FROM session_kernel_state`,
-			)
-			.all() as Record<string, unknown>[];
-		for (const row of stateRows)
-			this.runStateCache.set(String(row.session_id), {
-				state: String(row.run_state),
-				since: String(row.run_since),
-				lastEvent: row.last_event == null ? undefined : String(row.last_event),
-				generation: Number(row.generation),
-				currentRunId:
-					row.current_run_id == null ? undefined : String(row.current_run_id),
-				changeSeq: Number(row.change_seq),
-			});
-	}
+      )
+      .all() as Record<string, unknown>[];
+    for (const row of stateRows)
+      this.runStateCache.set(String(row.session_id), {
+        state: String(row.run_state),
+        since: String(row.run_since),
+        lastEvent: row.last_event == null ? undefined : String(row.last_event),
+        generation: Number(row.generation),
+        currentRunId:
+          row.current_run_id == null ? undefined : String(row.current_run_id),
+        changeSeq: Number(row.change_seq),
+      });
+  }
 
-	private claimWriter(): void {
-		const transaction = this.db.transaction(() => {
-			const current = this.db
+  private claimWriter(): void {
+    const transaction = this.db.transaction(() => {
+      const current = this.db
         .query(
           "SELECT owner_id, pid FROM session_kernel_owner WHERE singleton = 1",
         )
-				.get() as { owner_id: string; pid: number } | null;
-			if (current && current.owner_id !== PROCESS_OWNER_ID) {
-				let alive = false;
-				try {
-					process.kill(current.pid, 0);
-					alive = true;
-				} catch {}
-				if (alive) {
-					const recorded = parseOwnerIdentity(current.owner_id);
-					const bootId = linuxBootId();
-					const start = linuxProcessStart(current.pid);
-					if (
+        .get() as { owner_id: string; pid: number } | null;
+      if (current && current.owner_id !== PROCESS_OWNER_ID) {
+        let alive = false;
+        try {
+          process.kill(current.pid, 0);
+          alive = true;
+        } catch {}
+        if (alive) {
+          const recorded = parseOwnerIdentity(current.owner_id);
+          const bootId = linuxBootId();
+          const start = linuxProcessStart(current.pid);
+          if (
             recorded?.bootId &&
             recorded.start &&
             bootId &&
             start &&
-						(recorded.bootId !== bootId || recorded.start !== start)
+            (recorded.bootId !== bootId || recorded.start !== start)
           )
             alive = false;
           else if (!recorded && !plausibleLegacyOwner(current.pid))
             alive = false;
-				}
-				if (alive)
-					throw new Error(
-						`Session kernel already owned by live process ${current.pid}`,
-					);
-			}
-			this.db.run(
-				`INSERT INTO session_kernel_owner (singleton, owner_id, pid, claimed_at)
+        }
+        if (alive)
+          throw new Error(
+            `Session kernel already owned by live process ${current.pid}`,
+          );
+      }
+      this.db.run(
+        `INSERT INTO session_kernel_owner (singleton, owner_id, pid, claimed_at)
 				 VALUES (1, ?, ?, ?)
 				 ON CONFLICT(singleton) DO UPDATE SET owner_id = excluded.owner_id,
 					pid = excluded.pid, claimed_at = excluded.claimed_at`,
-				[PROCESS_OWNER_ID, process.pid, Date.now()],
-			);
-		});
-		transaction.immediate();
-	}
+        [PROCESS_OWNER_ID, process.pid, Date.now()],
+      );
+    });
+    transaction.immediate();
+  }
 
-	close(): void {
-		if (this.closeable) this.db.close();
-	}
+  close(): void {
+    if (this.closeable) this.db.close();
+  }
 
-	quarantineSession(
-		sessionId: string,
-		reason: string,
-		commandKind: string,
-	): DurableSessionQuarantine {
-		const quarantinedAt = Date.now();
-		this.db.run(
-			`INSERT INTO session_kernel_quarantine
+  quarantineSession(
+    sessionId: string,
+    reason: string,
+    commandKind: string,
+  ): DurableSessionQuarantine {
+    const quarantinedAt = Date.now();
+    this.db.run(
+      `INSERT INTO session_kernel_quarantine
 			 (session_id, reason, command_kind, quarantined_at)
 			 VALUES (?, ?, ?, ?)
 			 ON CONFLICT(session_id) DO NOTHING`,
-			[sessionId, reason.slice(0, 2_000), commandKind.slice(0, 200), quarantinedAt],
-		);
-		return this.quarantinedSession(sessionId)!;
-	}
+      [
+        sessionId,
+        reason.slice(0, 2_000),
+        commandKind.slice(0, 200),
+        quarantinedAt,
+      ],
+    );
+    return this.quarantinedSession(sessionId)!;
+  }
 
-	private recoverableGatewaySettlementCommands(
-		sessionId: string,
-		commandKind: string,
-	): Array<{ requestId: string; retryable: boolean }> | undefined {
-		if (commandKind !== "gateway:complete" && commandKind !== "gateway:fail")
-			return;
-		const rows = this.db.query(
-			`SELECT request_id, type, status, replay_safe
+  private recoverableGatewaySettlementCommands(
+    sessionId: string,
+    commandKind: string,
+  ): Array<{ requestId: string; retryable: boolean }> | undefined {
+    if (commandKind !== "gateway:complete" && commandKind !== "gateway:fail")
+      return;
+    const rows = this.db
+      .query(
+        `SELECT request_id, type, status, replay_safe
 			 FROM session_kernel_commands
 			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate')`,
-		).all(sessionId) as Array<Record<string, unknown>>;
-		if (!rows.every((row) => {
-			const replaySafeSubmit =
-				row.type === "submit_prompt" && Number(row.replay_safe) === 1;
-			const strandedGatewaySettlement =
-				row.status === "indeterminate" &&
-				Number(row.replay_safe) === 0 &&
-				GATEWAY_COMMAND_OPERATIONS.includes(
-					String(row.type) as (typeof GATEWAY_COMMAND_OPERATIONS)[number],
-				);
-			return replaySafeSubmit || strandedGatewaySettlement;
-		})) return;
-		return rows.map((row) => ({
-			requestId: String(row.request_id),
-			retryable: row.type === "submit_prompt",
-		}));
-	}
+      )
+      .all(sessionId) as Array<Record<string, unknown>>;
+    if (
+      !rows.every((row) => {
+        const replaySafeSubmit =
+          row.type === "submit_prompt" && Number(row.replay_safe) === 1;
+        const strandedGatewaySettlement =
+          row.status === "indeterminate" &&
+          Number(row.replay_safe) === 0 &&
+          GATEWAY_COMMAND_OPERATIONS.includes(
+            String(row.type) as (typeof GATEWAY_COMMAND_OPERATIONS)[number],
+          );
+        return replaySafeSubmit || strandedGatewaySettlement;
+      })
+    )
+      return;
+    return rows.map((row) => ({
+      requestId: String(row.request_id),
+      retryable: row.type === "submit_prompt",
+    }));
+  }
 
-	private recoverableDeliverySettlementCommands(
-		sessionId: string,
-		commandKind: string,
-		reason?: string,
-	): Array<{ requestId: string; retryable: boolean }> | undefined {
-		if (
-			(commandKind !== "delivery:complete_submit_command" &&
-				commandKind !== "delivery:fail_submit_command") ||
-			(reason !== "actor restarted before execution admission" &&
-				reason !== "actor restarted before acknowledgement" &&
-				reason !== "actor restarted after execution began")
-		) return;
-		const rows = this.db.query(
-			`SELECT request_id, type, status, replay_safe
+  private recoverableDeliverySettlementCommands(
+    sessionId: string,
+    commandKind: string,
+    reason?: string,
+  ): Array<{ requestId: string; retryable: boolean }> | undefined {
+    if (
+      (commandKind !== "delivery:complete_submit_command" &&
+        commandKind !== "delivery:fail_submit_command") ||
+      (reason !== "actor restarted before execution admission" &&
+        reason !== "actor restarted before acknowledgement" &&
+        reason !== "actor restarted after execution began")
+    )
+      return;
+    const rows = this.db
+      .query(
+        `SELECT request_id, type, status, replay_safe
 			 FROM session_kernel_commands
 			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate')`,
-		).all(sessionId) as Array<Record<string, unknown>>;
-		if (!rows.every((row) => {
-			const replaySafeSubmit =
-				row.type === "submit_prompt" && Number(row.replay_safe) === 1;
-			const strandedGatewaySettlement =
-				row.status === "indeterminate" &&
-				Number(row.replay_safe) === 0 &&
-				GATEWAY_COMMAND_OPERATIONS.includes(
-					String(row.type) as (typeof GATEWAY_COMMAND_OPERATIONS)[number],
-				);
-			return replaySafeSubmit || strandedGatewaySettlement;
-		})) return;
-		return rows.map((row) => ({
-			requestId: String(row.request_id),
-			retryable: row.type === "submit_prompt",
-		}));
-	}
+      )
+      .all(sessionId) as Array<Record<string, unknown>>;
+    if (
+      !rows.every((row) => {
+        const replaySafeSubmit =
+          row.type === "submit_prompt" && Number(row.replay_safe) === 1;
+        const strandedGatewaySettlement =
+          row.status === "indeterminate" &&
+          Number(row.replay_safe) === 0 &&
+          GATEWAY_COMMAND_OPERATIONS.includes(
+            String(row.type) as (typeof GATEWAY_COMMAND_OPERATIONS)[number],
+          );
+        return replaySafeSubmit || strandedGatewaySettlement;
+      })
+    )
+      return;
+    return rows.map((row) => ({
+      requestId: String(row.request_id),
+      retryable: row.type === "submit_prompt",
+    }));
+  }
 
-	quarantineRepairEvidence(
-		sessionId: string,
-		commandKind = "unknown",
-		reason?: string,
-		verifiedCommittedOutboxSettlement = false,
-	): boolean {
-		const recoverableSettlement =
-			this.recoverableGatewaySettlementCommands(sessionId, commandKind) ??
-			this.recoverableDeliverySettlementCommands(sessionId, commandKind, reason);
-		const recoverableOutboxSettlement =
-			verifiedCommittedOutboxSettlement &&
-			(commandKind === "core:ack_outbox" || commandKind === "core:fail_outbox") &&
-			/^Outbox \d+ crossed session ownership$/.test(reason ?? "");
-		if (
-			["preparing", "starting", "running", "ask_blocked", "interrupted", "reattaching"]
-				.includes(this.runState(sessionId).state) &&
-			!recoverableSettlement
-		) return false;
-		const ambiguousCommands = this.db.query(
-			`SELECT 1 FROM session_kernel_commands
+  quarantineRepairEvidence(
+    sessionId: string,
+    commandKind = "unknown",
+    reason?: string,
+    verifiedCommittedOutboxSettlement = false,
+  ): boolean {
+    const recoverableSettlement =
+      this.recoverableGatewaySettlementCommands(sessionId, commandKind) ??
+      this.recoverableDeliverySettlementCommands(
+        sessionId,
+        commandKind,
+        reason,
+      );
+    const recoverableOutboxSettlement =
+      verifiedCommittedOutboxSettlement &&
+      (commandKind === "core:ack_outbox" ||
+        commandKind === "core:fail_outbox") &&
+      /^Outbox \d+ crossed session ownership$/.test(reason ?? "");
+    if (
+      [
+        "preparing",
+        "starting",
+        "running",
+        "ask_blocked",
+        "interrupted",
+        "reattaching",
+      ].includes(this.runState(sessionId).state) &&
+      !recoverableSettlement
+    )
+      return false;
+    const ambiguousCommands = this.db
+      .query(
+        `SELECT 1 FROM session_kernel_commands
 			 WHERE session_id = ? AND status IN ('pending', 'processing', 'indeterminate') LIMIT 1`,
-		).get(sessionId);
-		if (ambiguousCommands && !recoverableSettlement) return false;
-		const claimedTimer = this.db.query(
-			"SELECT 1 FROM session_kernel_timers WHERE session_id = ? AND token IS NOT NULL LIMIT 1",
-		).get(sessionId);
-		if (claimedTimer) return false;
-		const pendingEffects = this.db.query(
-			`SELECT kind FROM session_kernel_outbox
+      )
+      .get(sessionId);
+    if (ambiguousCommands && !recoverableSettlement) return false;
+    const claimedTimer = this.db
+      .query(
+        "SELECT 1 FROM session_kernel_timers WHERE session_id = ? AND token IS NOT NULL LIMIT 1",
+      )
+      .get(sessionId);
+    if (claimedTimer) return false;
+    const pendingEffects = this.db
+      .query(
+        `SELECT kind FROM session_kernel_outbox
 			 WHERE session_id = ? AND dead_lettered_at IS NULL`,
-		).all(sessionId) as Array<{ kind: string }>;
-		// Turn outcome and cancellation effects are actor-owned state machines with
-		// immutable run/dispatch identities. Keep them available to finish after
-		// releasing a proven gateway-restart fence; externally delivered effects
-		// and creation work remain fail-closed.
-		const recoverableLifecycleEffects = new Set([
-			"turn_outcome_project",
-			"turn_cancel",
-			"delivery_interrupt_cancel",
-		]);
-		const onlyRecoverableLifecycleEffects =
-			(!!recoverableSettlement || recoverableOutboxSettlement) &&
-			pendingEffects.length > 0 &&
-			pendingEffects.every((effect) => recoverableLifecycleEffects.has(effect.kind));
-		if (pendingEffects.length > 0 && !onlyRecoverableLifecycleEffects) return false;
-		return true;
-	}
+      )
+      .all(sessionId) as Array<{ kind: string }>;
+    // Turn outcome and cancellation effects are actor-owned state machines with
+    // immutable run/dispatch identities. Keep them available to finish after
+    // releasing a proven gateway-restart fence; externally delivered effects
+    // and creation work remain fail-closed.
+    const recoverableLifecycleEffects = new Set([
+      "turn_outcome_project",
+      "turn_cancel",
+      "delivery_interrupt_cancel",
+    ]);
+    const onlyRecoverableLifecycleEffects =
+      (!!recoverableSettlement || recoverableOutboxSettlement) &&
+      pendingEffects.length > 0 &&
+      pendingEffects.every((effect) =>
+        recoverableLifecycleEffects.has(effect.kind),
+      );
+    if (pendingEffects.length > 0 && !onlyRecoverableLifecycleEffects)
+      return false;
+    return true;
+  }
 
-	quarantinedSession(sessionId: string): DurableSessionQuarantine | undefined {
-		const row = this.db
-			.query(
-				`SELECT session_id, reason, command_kind, quarantined_at
+  quarantinedSession(sessionId: string): DurableSessionQuarantine | undefined {
+    const row = this.db
+      .query(
+        `SELECT session_id, reason, command_kind, quarantined_at
 				 FROM session_kernel_quarantine WHERE session_id = ?`,
-			)
-			.get(sessionId) as Record<string, unknown> | null;
-		if (!row) return undefined;
-		const commandKind = String(row.command_kind);
-		const reason = String(row.reason);
-		return {
-			sessionId: String(row.session_id),
-			reason,
-			commandKind,
-			quarantinedAt: Number(row.quarantined_at),
-			repairable: this.quarantineRepairEvidence(sessionId, commandKind, reason),
-		};
-	}
+      )
+      .get(sessionId) as Record<string, unknown> | null;
+    if (!row) return undefined;
+    const commandKind = String(row.command_kind);
+    const reason = String(row.reason);
+    return {
+      sessionId: String(row.session_id),
+      reason,
+      commandKind,
+      quarantinedAt: Number(row.quarantined_at),
+      repairable: this.quarantineRepairEvidence(sessionId, commandKind, reason),
+    };
+  }
 
-	quarantinedSessions(limit = 100, offset = 0): DurableSessionQuarantine[] {
-		const rows = this.db
-			.query(
-				`SELECT session_id, reason, command_kind, quarantined_at
+  quarantinedSessions(limit = 100, offset = 0): DurableSessionQuarantine[] {
+    const rows = this.db
+      .query(
+        `SELECT session_id, reason, command_kind, quarantined_at
 				 FROM session_kernel_quarantine
 				 ORDER BY quarantined_at DESC LIMIT ? OFFSET ?`,
-			)
-			.all(limit, offset) as Record<string, unknown>[];
-		return rows.map((row) => {
-			const sessionId = String(row.session_id);
-			const commandKind = String(row.command_kind);
-			const reason = String(row.reason);
-			return {
-				sessionId,
-				reason,
-				commandKind,
-				quarantinedAt: Number(row.quarantined_at),
-				repairable: this.quarantineRepairEvidence(sessionId, commandKind, reason),
-			};
-		});
-	}
+      )
+      .all(limit, offset) as Record<string, unknown>[];
+    return rows.map((row) => {
+      const sessionId = String(row.session_id);
+      const commandKind = String(row.command_kind);
+      const reason = String(row.reason);
+      return {
+        sessionId,
+        reason,
+        commandKind,
+        quarantinedAt: Number(row.quarantined_at),
+        repairable: this.quarantineRepairEvidence(
+          sessionId,
+          commandKind,
+          reason,
+        ),
+      };
+    });
+  }
 
-	releaseQuarantine(
-		sessionId: string,
-		verifiedCommittedOutboxSettlement = false,
-	): boolean {
-		let released = false;
-		const transaction = this.db.transaction(() => {
-			const quarantine = this.quarantinedSession(sessionId);
-			if (
-				!quarantine ||
-				!this.quarantineRepairEvidence(
-					sessionId,
-					quarantine.commandKind,
-					quarantine.reason,
-					verifiedCommittedOutboxSettlement,
-				)
-			) return;
-			const recoverable =
-				this.recoverableGatewaySettlementCommands(
-					sessionId,
-					quarantine.commandKind,
-				) ?? this.recoverableDeliverySettlementCommands(
-					sessionId,
-					quarantine.commandKind,
-					quarantine.reason,
-				);
-			for (const command of recoverable ?? []) {
-				this.failCommand(
-					sessionId,
-					command.requestId,
-					command.retryable
-						? "Replay-safe delivery settlement was re-admitted during session recovery"
-						: "Ambiguous gateway settlement was abandoned during safe session recovery",
-					command.retryable,
-				);
-			}
-			released = this.db.run(
-				"DELETE FROM session_kernel_quarantine WHERE session_id = ?",
-				[sessionId],
-			).changes > 0;
-		});
-		transaction.immediate();
-		return released;
-	}
+  releaseQuarantine(
+    sessionId: string,
+    verifiedCommittedOutboxSettlement = false,
+  ): boolean {
+    let released = false;
+    const transaction = this.db.transaction(() => {
+      const quarantine = this.quarantinedSession(sessionId);
+      if (
+        !quarantine ||
+        !this.quarantineRepairEvidence(
+          sessionId,
+          quarantine.commandKind,
+          quarantine.reason,
+          verifiedCommittedOutboxSettlement,
+        )
+      )
+        return;
+      const recoverable =
+        this.recoverableGatewaySettlementCommands(
+          sessionId,
+          quarantine.commandKind,
+        ) ??
+        this.recoverableDeliverySettlementCommands(
+          sessionId,
+          quarantine.commandKind,
+          quarantine.reason,
+        );
+      for (const command of recoverable ?? []) {
+        this.failCommand(
+          sessionId,
+          command.requestId,
+          command.retryable
+            ? "Replay-safe delivery settlement was re-admitted during session recovery"
+            : "Ambiguous gateway settlement was abandoned during safe session recovery",
+          command.retryable,
+        );
+      }
+      released =
+        this.db.run(
+          "DELETE FROM session_kernel_quarantine WHERE session_id = ?",
+          [sessionId],
+        ).changes > 0;
+    });
+    transaction.immediate();
+    return released;
+  }
 
   command(
     sessionId: string,
     requestId: string,
   ): DurableCommandRecord | undefined {
-		const row = this.db
+    const row = this.db
       .query(
         `SELECT session_id, request_id, type, payload, payload_hash, status, replay_safe, retryable, result, result_hash, terminal_failure, acknowledged_at, error,
 				created_at, updated_at FROM session_kernel_commands
 				WHERE session_id = ? AND request_id = ?`,
       )
-			.get(sessionId, requestId) as Record<string, unknown> | null;
-		if (!row) return undefined;
-		return {
-			sessionId: String(row.session_id),
-			requestId: String(row.request_id),
-			type: String(row.type),
-			payload: parsed(row.payload as string),
-			payloadHash: String(row.payload_hash),
-			status: row.status as DurableCommandStatus,
-			result: parsed(row.result as string | null),
-			error: row.error == null ? undefined : String(row.error),
-			createdAt: Number(row.created_at),
-			updatedAt: Number(row.updated_at),
-			replaySafe: Number(row.replay_safe) === 1,
+      .get(sessionId, requestId) as Record<string, unknown> | null;
+    if (!row) return undefined;
+    return {
+      sessionId: String(row.session_id),
+      requestId: String(row.request_id),
+      type: String(row.type),
+      payload: parsed(row.payload as string),
+      payloadHash: String(row.payload_hash),
+      status: row.status as DurableCommandStatus,
+      result: parsed(row.result as string | null),
+      error: row.error == null ? undefined : String(row.error),
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+      replaySafe: Number(row.replay_safe) === 1,
       retryable:
         row.retryable == null ? undefined : Number(row.retryable) === 1,
-			acknowledgedAt:
-				row.acknowledged_at == null ? undefined : Number(row.acknowledged_at),
-			resultHash: row.result_hash == null ? undefined : String(row.result_hash),
-			terminalFailure: Number(row.terminal_failure) === 1,
-		};
-	}
+      acknowledgedAt:
+        row.acknowledged_at == null ? undefined : Number(row.acknowledged_at),
+      resultHash: row.result_hash == null ? undefined : String(row.result_hash),
+      terminalFailure: Number(row.terminal_failure) === 1,
+    };
+  }
 
-	acceptCommand(input: {
-		sessionId: string;
-		requestId: string;
-		type: string;
-		payload?: unknown;
-		replaySafe?: boolean;
-	}): DurableCommandRecord {
-		const now = Date.now();
-		const payloadText = json(input.payload);
-		const payloadHash = digest(payloadText);
-		this.db.run(
-			`INSERT INTO session_kernel_commands
+  acceptCommand(input: {
+    sessionId: string;
+    requestId: string;
+    type: string;
+    payload?: unknown;
+    replaySafe?: boolean;
+  }): DurableCommandRecord {
+    const now = Date.now();
+    const payloadText = json(input.payload);
+    const payloadHash = digest(payloadText);
+    this.db.run(
+      `INSERT INTO session_kernel_commands
 				(session_id, request_id, type, payload, payload_hash, status, replay_safe, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
 			 ON CONFLICT(session_id, request_id) DO NOTHING`,
@@ -1828,42 +1987,42 @@ export class SessionKernelStore {
         now,
         now,
       ],
-		);
-		let record = this.command(input.sessionId, input.requestId);
-		if (!record) throw new Error("Session command was not persisted");
+    );
+    let record = this.command(input.sessionId, input.requestId);
+    if (!record) throw new Error("Session command was not persisted");
     if (record.type !== input.type || record.payloadHash !== payloadHash) {
-			throw new Error(
-				`Session command id ${input.requestId} was reused with another payload`,
-			);
-		}
+      throw new Error(
+        `Session command id ${input.requestId} was reused with another payload`,
+      );
+    }
     if (
       input.replaySafe &&
       !record.replaySafe &&
       record.status !== "indeterminate"
     ) {
-			this.db.run(
-				"UPDATE session_kernel_commands SET replay_safe = 1 WHERE session_id = ? AND request_id = ?",
-				[input.sessionId, input.requestId],
-			);
-			record = this.command(input.sessionId, input.requestId)!;
-		}
-		return record;
-	}
+      this.db.run(
+        "UPDATE session_kernel_commands SET replay_safe = 1 WHERE session_id = ? AND request_id = ?",
+        [input.sessionId, input.requestId],
+      );
+      record = this.command(input.sessionId, input.requestId)!;
+    }
+    return record;
+  }
 
-	markProcessing(sessionId: string, requestId: string): void {
-		this.db.run(
-			`UPDATE session_kernel_commands SET status = 'processing',
+  markProcessing(sessionId: string, requestId: string): void {
+    this.db.run(
+      `UPDATE session_kernel_commands SET status = 'processing',
        payload = CASE WHEN type IN ('cancel_session', 'websocket_command') THEN payload ELSE 'null' END,
        error = NULL, retryable = NULL,
 				updated_at = ? WHERE session_id = ? AND request_id = ?`,
-			[Date.now(), sessionId, requestId],
-		);
-	}
+      [Date.now(), sessionId, requestId],
+    );
+  }
 
-	completeCommand(sessionId: string, requestId: string, result: unknown): void {
-		const stored = resultRecord(result);
-		this.db.run(
-			`UPDATE session_kernel_commands SET status = 'completed',
+  completeCommand(sessionId: string, requestId: string, result: unknown): void {
+    const stored = resultRecord(result);
+    this.db.run(
+      `UPDATE session_kernel_commands SET status = 'completed',
        payload = CASE WHEN type IN ('cancel_session', 'websocket_command') THEN payload ELSE 'null' END,
 				result = ?, result_hash = ?, result_released = 0, terminal_failure = ?, error = NULL,
 				retryable = NULL, updated_at = ? WHERE session_id = ? AND request_id = ?`,
@@ -1875,17 +2034,17 @@ export class SessionKernelStore {
         sessionId,
         requestId,
       ],
-		);
-	}
+    );
+  }
 
-	failCommand(
-		sessionId: string,
-		requestId: string,
-		error: string,
-		retryable = false,
-	): void {
-		this.db.run(
-			`UPDATE session_kernel_commands SET status = 'failed',
+  failCommand(
+    sessionId: string,
+    requestId: string,
+    error: string,
+    retryable = false,
+  ): void {
+    this.db.run(
+      `UPDATE session_kernel_commands SET status = 'failed',
        payload = CASE WHEN type IN ('cancel_session', 'websocket_command') THEN payload ELSE 'null' END,
        error = ?, retryable = ?,
 				updated_at = ? WHERE session_id = ? AND request_id = ?`,
@@ -1896,121 +2055,121 @@ export class SessionKernelStore {
         sessionId,
         requestId,
       ],
-		);
-	}
+    );
+  }
 
-	runState(sessionId: string): DurableRunState {
-		// Global compatibility turns can mutate an isolated session through the
-		// catalog lane while its stable session lane still has the same database
-		// open. The mailbox barrier serializes those writers, but it cannot refresh
-		// another worker's in-memory cache. Read the durable row before deriving the
-		// next change sequence so a later session turn never reuses a journal key.
-		const row = this.db
-			.query(
-				`SELECT run_state, run_since, last_event, generation,
+  runState(sessionId: string): DurableRunState {
+    // Global compatibility turns can mutate an isolated session through the
+    // catalog lane while its stable session lane still has the same database
+    // open. The mailbox barrier serializes those writers, but it cannot refresh
+    // another worker's in-memory cache. Read the durable row before deriving the
+    // next change sequence so a later session turn never reuses a journal key.
+    const row = this.db
+      .query(
+        `SELECT run_state, run_since, last_event, generation,
 				 current_run_id, change_seq FROM session_kernel_state
 				 WHERE session_id = ?`,
-			)
-			.get(sessionId) as Record<string, unknown> | null;
-		if (!row) {
-			this.runStateCache.delete(sessionId);
-			return {
-				state: "idle",
-				since: new Date(0).toISOString(),
-				generation: 0,
-				changeSeq: 0,
-			};
-		}
-		const state: DurableRunState = {
-			state: String(row.run_state),
-			since: String(row.run_since),
-			lastEvent: row.last_event == null ? undefined : String(row.last_event),
-			generation: Number(row.generation),
-			currentRunId:
-				row.current_run_id == null ? undefined : String(row.current_run_id),
-			changeSeq: Number(row.change_seq),
-		};
-		this.runStateCache.set(sessionId, state);
-		return { ...state };
-	}
+      )
+      .get(sessionId) as Record<string, unknown> | null;
+    if (!row) {
+      this.runStateCache.delete(sessionId);
+      return {
+        state: "idle",
+        since: new Date(0).toISOString(),
+        generation: 0,
+        changeSeq: 0,
+      };
+    }
+    const state: DurableRunState = {
+      state: String(row.run_state),
+      since: String(row.run_since),
+      lastEvent: row.last_event == null ? undefined : String(row.last_event),
+      generation: Number(row.generation),
+      currentRunId:
+        row.current_run_id == null ? undefined : String(row.current_run_id),
+      changeSeq: Number(row.change_seq),
+    };
+    this.runStateCache.set(sessionId, state);
+    return { ...state };
+  }
 
-	runStates(): Array<DurableRunState & { sessionId: string }> {
+  runStates(): Array<DurableRunState & { sessionId: string }> {
     // Catalog/global reads may run on a different actor-host lane from the
     // session's stable mailbox. Refresh this projection from SQLite instead of
     // returning a lane-local cache snapshot.
     this.hydrateRunStateCache();
-		return [...this.runStateCache].map(([sessionId, state]) => ({
-			sessionId,
-			...state,
-		}));
-	}
+    return [...this.runStateCache].map(([sessionId, state]) => ({
+      sessionId,
+      ...state,
+    }));
+  }
 
-	appendChange(sessionId: string, kind: string, payload?: unknown): number {
-		const now = Date.now();
-		let changeSeq = 0;
-		const tx = this.db.transaction(() => {
-			const prior = this.runState(sessionId);
-			changeSeq = prior.changeSeq + 1;
-			this.db.run(
-				`INSERT INTO session_kernel_state
+  appendChange(sessionId: string, kind: string, payload?: unknown): number {
+    const now = Date.now();
+    let changeSeq = 0;
+    const tx = this.db.transaction(() => {
+      const prior = this.runState(sessionId);
+      changeSeq = prior.changeSeq + 1;
+      this.db.run(
+        `INSERT INTO session_kernel_state
 					(session_id, run_state, run_since, last_event, generation,
 					 current_run_id, change_seq, updated_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(session_id) DO UPDATE SET
 					change_seq = excluded.change_seq,
 					updated_at = excluded.updated_at`,
-				[
-					sessionId,
-					prior.state,
-					prior.since === new Date(0).toISOString()
-						? new Date(now).toISOString()
-						: prior.since,
-					prior.lastEvent ?? null,
-					prior.generation,
-					prior.currentRunId ?? null,
-					changeSeq,
-					now,
-				],
-			);
-			this.db.run(
-				`INSERT INTO session_kernel_changes
+        [
+          sessionId,
+          prior.state,
+          prior.since === new Date(0).toISOString()
+            ? new Date(now).toISOString()
+            : prior.since,
+          prior.lastEvent ?? null,
+          prior.generation,
+          prior.currentRunId ?? null,
+          changeSeq,
+          now,
+        ],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
 					(session_id, change_seq, kind, payload, created_at)
 				 VALUES (?, ?, ?, ?, ?)`,
-				[sessionId, changeSeq, kind, json(payload), now],
-			);
-		});
-		tx.immediate();
-		const prior = this.runState(sessionId);
-		this.runStateCache.set(sessionId, { ...prior, changeSeq });
-		this.dirtyChangeSessions.add(sessionId);
-		return changeSeq;
-	}
+        [sessionId, changeSeq, kind, json(payload), now],
+      );
+    });
+    tx.immediate();
+    const prior = this.runState(sessionId);
+    this.runStateCache.set(sessionId, { ...prior, changeSeq });
+    this.dirtyChangeSessions.add(sessionId);
+    return changeSeq;
+  }
 
-	changesSince(
-		sessionId: string,
-		afterChangeSeq: number,
-		limit = 500,
+  changesSince(
+    sessionId: string,
+    afterChangeSeq: number,
+    limit = 500,
   ): Array<{
     changeSeq: number;
     kind: string;
     payload: unknown;
     createdAt: number;
   }> {
-		const rows = this.db
+    const rows = this.db
       .query(
         `SELECT change_seq, kind, payload, created_at
 				FROM session_kernel_changes
 				WHERE session_id = ? AND change_seq > ?
 				ORDER BY change_seq LIMIT ?`,
       )
-			.all(sessionId, afterChangeSeq, limit) as Record<string, unknown>[];
-		return rows.map((row) => ({
-			changeSeq: Number(row.change_seq),
-			kind: String(row.kind),
-			payload: parsed(row.payload as string),
-			createdAt: Number(row.created_at),
-		}));
-	}
+      .all(sessionId, afterChangeSeq, limit) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      changeSeq: Number(row.change_seq),
+      kind: String(row.kind),
+      payload: parsed(row.payload as string),
+      createdAt: Number(row.created_at),
+    }));
+  }
 
   creationState(sessionId: string): DurableCreationState | undefined {
     const row = this.db
@@ -2102,8 +2261,7 @@ export class SessionKernelStore {
         !completedEffectIds.includes(input.effectId);
       if (
         (completesNewEffect || effect !== undefined) &&
-        completedEffectIds.length >=
-          SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS
+        completedEffectIds.length >= SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS
       ) {
         result = {
           accepted: false,
@@ -2197,7 +2355,8 @@ export class SessionKernelStore {
           (!openingPlanText ||
             Buffer.byteLength(openingPlanText) >
               SESSION_KERNEL_MAX_OPENING_PLAN_BYTES)) ||
-        (input.event !== "opening_dispatched" && input.openingPlan !== undefined);
+        (input.event !== "opening_dispatched" &&
+          input.openingPlan !== undefined);
       if (invalidOpeningPlan) {
         result = {
           accepted: false,
@@ -2212,11 +2371,11 @@ export class SessionKernelStore {
         setupPlan = undefined;
       const openingPlan = ["ready", "failed", "cancelled"].includes(to)
         ? undefined
-        : input.openingPlan ?? prior?.openingPlan;
+        : (input.openingPlan ?? prior?.openingPlan);
       const currentEffectId = ["ready", "failed", "cancelled"].includes(to)
         ? undefined
-        : effect?.effectKey ??
-          (input.effectId === undefined ? prior?.currentEffectId : undefined);
+        : (effect?.effectKey ??
+          (input.effectId === undefined ? prior?.currentEffectId : undefined));
       this.db.run(
         `INSERT INTO session_kernel_creation
           (session_id, identity, state, generation, current_effect_id,
@@ -2323,21 +2482,38 @@ export class SessionKernelStore {
   }): void {
     const run = this.runState(input.sessionId);
     if (
-      run.currentRunId !== input.runId || run.generation !== input.generation ||
-      !["starting", "running", "ask_blocked", "interrupted", "reattaching"].includes(run.state)
-    ) throw new Error(`Transcript destination run fence rejected ${input.sessionId}`);
+      run.currentRunId !== input.runId ||
+      run.generation !== input.generation ||
+      ![
+        "starting",
+        "running",
+        "ask_blocked",
+        "interrupted",
+        "reattaching",
+      ].includes(run.state)
+    )
+      throw new Error(
+        `Transcript destination run fence rejected ${input.sessionId}`,
+      );
     const plan = decodeDurableAgentHostPlan(
       input.sessionId,
-      this.db.query(
-        `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
+      this.db
+        .query(
+          `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
                 host_id, host_generation_high_water, supervisor_high_water
          FROM session_kernel_agent_host_plan WHERE session_id = ?`,
-      ).get(input.sessionId) as Record<string, unknown> | null,
+        )
+        .get(input.sessionId) as Record<string, unknown> | null,
     );
     if (
-      !plan || plan.runId !== input.runId ||
-      plan.generation !== input.generation || plan.turnId !== input.turnId
-    ) throw new Error(`Transcript destination turn fence rejected ${input.sessionId}`);
+      !plan ||
+      plan.runId !== input.runId ||
+      plan.generation !== input.generation ||
+      plan.turnId !== input.turnId
+    )
+      throw new Error(
+        `Transcript destination turn fence rejected ${input.sessionId}`,
+      );
   }
 
   registerAgentHostPlan(
@@ -2350,16 +2526,25 @@ export class SessionKernelStore {
     const run = this.runState(input.sessionId);
     if (run.currentRunId !== input.runId || run.generation !== input.generation)
       return { accepted: false, reason: "stale_run" };
-    if (![
-      "starting", "running", "ask_blocked", "interrupted", "reattaching",
-    ].includes(run.state)) return { accepted: false, reason: "terminal_run" };
+    if (
+      ![
+        "starting",
+        "running",
+        "ask_blocked",
+        "interrupted",
+        "reattaching",
+      ].includes(run.state)
+    )
+      return { accepted: false, reason: "terminal_run" };
     const prior = decodeDurableAgentHostPlan(
       input.sessionId,
-      this.db.query(
-        `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
+      this.db
+        .query(
+          `SELECT registration_id, run_id, run_generation, turn_id, plan_hash,
                 host_id, host_generation_high_water, supervisor_high_water
          FROM session_kernel_agent_host_plan WHERE session_id = ?`,
-      ).get(input.sessionId) as Record<string, unknown> | null,
+        )
+        .get(input.sessionId) as Record<string, unknown> | null,
     );
     if (
       prior &&
@@ -2402,15 +2587,15 @@ export class SessionKernelStore {
     return { accepted: true, replayed: false };
   }
 
-	applyRunEvent(input: RunEventDecision): RunEventDecisionResult {
-		const now = Date.now();
-		const since = new Date(now).toISOString();
-		let result!: RunEventDecisionResult;
-		const tx = this.db.transaction(() => {
+  applyRunEvent(input: RunEventDecision): RunEventDecisionResult {
+    const now = Date.now();
+    const since = new Date(now).toISOString();
+    let result!: RunEventDecisionResult;
+    const tx = this.db.transaction(() => {
       if (this.isTombstoned(input.sessionId))
         throw new Error(`Session ${input.sessionId} was deleted`);
-			const prior = this.runState(input.sessionId);
-			const from = prior.state as RunState;
+      const prior = this.runState(input.sessionId);
+      const from = prior.state as RunState;
       if (
         input.runKey &&
         ["turn_end", "run_failed", "start_failed", "start_aborted"].includes(
@@ -2429,8 +2614,8 @@ export class SessionKernelStore {
         };
         return;
       }
-			const to = nextRunState(from, input.event);
-			if (!to) {
+      const to = nextRunState(from, input.event);
+      if (!to) {
         result = {
           accepted: false,
           from,
@@ -2438,8 +2623,8 @@ export class SessionKernelStore {
           reason: "invalid_transition",
           state: prior,
         };
-				return;
-			}
+        return;
+      }
       const canceledDispatch = this.turnSnapshot(input.sessionId).cancel;
       if (
         (input.event === "run_registered" ||
@@ -2459,11 +2644,11 @@ export class SessionKernelStore {
         };
         return;
       }
-			if (
+      if (
         (input.event === "prompt" || input.event === "run_registered") &&
-				input.runKey &&
-				prior.currentRunId &&
-				prior.currentRunId !== input.runKey &&
+        input.runKey &&
+        prior.currentRunId &&
+        prior.currentRunId !== input.runKey &&
         [
           "preparing",
           "starting",
@@ -2472,18 +2657,18 @@ export class SessionKernelStore {
           "interrupted",
           "reattaching",
         ].includes(from)
-			) {
-				result = {
-					accepted: false,
-					from,
-					to: from,
-					reason: "stale_run",
-					currentRunId: prior.currentRunId,
-					rejectedRunId: input.runKey,
-					state: prior,
-				};
-				return;
-			}
+      ) {
+        result = {
+          accepted: false,
+          from,
+          to: from,
+          reason: "stale_run",
+          currentRunId: prior.currentRunId,
+          rejectedRunId: input.runKey,
+          state: prior,
+        };
+        return;
+      }
       const claimsRun =
         !!input.runKey &&
         (input.event === "prompt" ||
@@ -2493,14 +2678,14 @@ export class SessionKernelStore {
         claimsRun && prior.currentRunId !== input.runKey
           ? prior.generation + 1
           : prior.generation;
-			const currentRunId = ["idle", "stopped", "failed"].includes(to)
-				? undefined
+      const currentRunId = ["idle", "stopped", "failed"].includes(to)
+        ? undefined
         : claimsRun
           ? input.runKey
           : prior.currentRunId;
-			const changeSeq = prior.changeSeq + 1;
-			this.db.run(
-				`INSERT INTO session_kernel_state
+      const changeSeq = prior.changeSeq + 1;
+      this.db.run(
+        `INSERT INTO session_kernel_state
 					(session_id, run_state, run_since, last_event, generation,
 					 current_run_id, change_seq, updated_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -2522,9 +2707,9 @@ export class SessionKernelStore {
           changeSeq,
           now,
         ],
-			);
-			this.db.run(
-				`INSERT INTO session_kernel_changes
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
 					(session_id, change_seq, kind, payload, created_at)
 				 VALUES (?, ?, 'run_state', ?, ?)`,
         [
@@ -2533,45 +2718,45 @@ export class SessionKernelStore {
           json({ state: to, event: input.event, detail: input.detail }),
           now,
         ],
-			);
-			const state: DurableRunState = {
-				state: to,
-				since,
-				lastEvent: input.event,
-				generation,
-				currentRunId,
-				changeSeq,
-			};
-			result = { accepted: true, from, to, state };
-		});
-		tx.immediate();
-		if (result.accepted) {
-			this.runStateCache.set(input.sessionId, result.state);
-			this.dirtyChangeSessions.add(input.sessionId);
-		}
-		return result;
-	}
+      );
+      const state: DurableRunState = {
+        state: to,
+        since,
+        lastEvent: input.event,
+        generation,
+        currentRunId,
+        changeSeq,
+      };
+      result = { accepted: true, from, to, state };
+    });
+    tx.immediate();
+    if (result.accepted) {
+      this.runStateCache.set(input.sessionId, result.state);
+      this.dirtyChangeSessions.add(input.sessionId);
+    }
+    return result;
+  }
 
-	setRunState(input: {
-		sessionId: string;
-		state: string;
-		event: string;
-		detail?: unknown;
-		generation?: number;
-		currentRunId?: string | null;
-	}): DurableRunState {
-		const now = Date.now();
-		const since = new Date(now).toISOString();
-		let next!: DurableRunState;
-		const tx = this.db.transaction(() => {
-			const prior = this.runState(input.sessionId);
-			const changeSeq = prior.changeSeq + 1;
-			const generation = input.generation ?? prior.generation;
-			const currentRunId = ["idle", "stopped", "failed"].includes(input.state)
-				? undefined
-				: (input.currentRunId ?? prior.currentRunId);
-			this.db.run(
-				`INSERT INTO session_kernel_state
+  setRunState(input: {
+    sessionId: string;
+    state: string;
+    event: string;
+    detail?: unknown;
+    generation?: number;
+    currentRunId?: string | null;
+  }): DurableRunState {
+    const now = Date.now();
+    const since = new Date(now).toISOString();
+    let next!: DurableRunState;
+    const tx = this.db.transaction(() => {
+      const prior = this.runState(input.sessionId);
+      const changeSeq = prior.changeSeq + 1;
+      const generation = input.generation ?? prior.generation;
+      const currentRunId = ["idle", "stopped", "failed"].includes(input.state)
+        ? undefined
+        : (input.currentRunId ?? prior.currentRunId);
+      this.db.run(
+        `INSERT INTO session_kernel_state
 					(session_id, run_state, run_since, last_event, generation,
 					 current_run_id, change_seq, updated_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -2583,62 +2768,62 @@ export class SessionKernelStore {
 					current_run_id = excluded.current_run_id,
 					change_seq = excluded.change_seq,
 					updated_at = excluded.updated_at`,
-				[
-					input.sessionId,
-					input.state,
-					since,
-					input.event,
-					generation,
-					currentRunId ?? null,
-					changeSeq,
-					now,
-				],
-			);
-			this.db.run(
-				`INSERT INTO session_kernel_changes
+        [
+          input.sessionId,
+          input.state,
+          since,
+          input.event,
+          generation,
+          currentRunId ?? null,
+          changeSeq,
+          now,
+        ],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
 					(session_id, change_seq, kind, payload, created_at)
 				 VALUES (?, ?, 'run_state', ?, ?)`,
-				[
-					input.sessionId,
-					changeSeq,
+        [
+          input.sessionId,
+          changeSeq,
           json({
             state: input.state,
             event: input.event,
             detail: input.detail,
           }),
-					now,
-				],
-			);
-			next = {
-				state: input.state,
-				since,
-				lastEvent: input.event,
-				generation,
-				currentRunId,
-				changeSeq,
-			};
-		});
-		tx.immediate();
-		this.runStateCache.set(input.sessionId, next);
-		this.dirtyChangeSessions.add(input.sessionId);
-		return next;
-	}
+          now,
+        ],
+      );
+      next = {
+        state: input.state,
+        since,
+        lastEvent: input.event,
+        generation,
+        currentRunId,
+        changeSeq,
+      };
+    });
+    tx.immediate();
+    this.runStateCache.set(input.sessionId, next);
+    this.dirtyChangeSessions.add(input.sessionId);
+    return next;
+  }
 
-	isTombstoned(sessionId: string, now = Date.now()): boolean {
-		const row = this.db
+  isTombstoned(sessionId: string, now = Date.now()): boolean {
+    const row = this.db
       .query(
         "SELECT deleted_at FROM session_kernel_tombstones WHERE session_id = ?",
       )
-			.get(sessionId) as { deleted_at: number } | null;
-		if (!row) return false;
-		void now;
-		return true;
-	}
+      .get(sessionId) as { deleted_at: number } | null;
+    if (!row) return false;
+    void now;
+    return true;
+  }
 
-	tombstoneSession(sessionId: string): void {
-		const tx = this.db.transaction(() => {
-			for (const table of [
-				"session_kernel_state",
+  tombstoneSession(sessionId: string): void {
+    const tx = this.db.transaction(() => {
+      for (const table of [
+        "session_kernel_state",
         "session_kernel_creation",
         "session_kernel_asks",
         "session_kernel_delivery",
@@ -2649,28 +2834,28 @@ export class SessionKernelStore {
         "session_kernel_agent_operations",
         "session_kernel_agent_operation_cancellations",
         "session_kernel_agent_operation_high_water",
-				"session_kernel_quarantine",
-				"session_kernel_commands",
-				"session_kernel_changes",
-				"session_kernel_timers",
-				"session_kernel_outbox",
-			])
-				this.db.run(`DELETE FROM ${table} WHERE session_id = ?`, [sessionId]);
-			this.db.run(
-				`INSERT INTO session_kernel_tombstones (session_id, deleted_at) VALUES (?, ?)
+        "session_kernel_quarantine",
+        "session_kernel_commands",
+        "session_kernel_changes",
+        "session_kernel_timers",
+        "session_kernel_outbox",
+      ])
+        this.db.run(`DELETE FROM ${table} WHERE session_id = ?`, [sessionId]);
+      this.db.run(
+        `INSERT INTO session_kernel_tombstones (session_id, deleted_at) VALUES (?, ?)
 				 ON CONFLICT(session_id) DO UPDATE SET deleted_at = excluded.deleted_at`,
-				[sessionId, Date.now()],
-			);
-		});
-		tx.immediate();
-		this.runStateCache.delete(sessionId);
-		this.dirtyChangeSessions.delete(sessionId);
-	}
+        [sessionId, Date.now()],
+      );
+    });
+    tx.immediate();
+    this.runStateCache.delete(sessionId);
+    this.dirtyChangeSessions.delete(sessionId);
+  }
 
-	clearSession(sessionId: string): void {
-		const tx = this.db.transaction(() => {
-			for (const table of [
-				"session_kernel_state",
+  clearSession(sessionId: string): void {
+    const tx = this.db.transaction(() => {
+      for (const table of [
+        "session_kernel_state",
         "session_kernel_creation",
         "session_kernel_asks",
         "session_kernel_delivery",
@@ -2681,19 +2866,19 @@ export class SessionKernelStore {
         "session_kernel_agent_operations",
         "session_kernel_agent_operation_cancellations",
         "session_kernel_agent_operation_high_water",
-				"session_kernel_quarantine",
-				"session_kernel_commands",
-				"session_kernel_changes",
-				"session_kernel_timers",
-				"session_kernel_outbox",
-			]) {
-				this.db.run(`DELETE FROM ${table} WHERE session_id = ?`, [sessionId]);
-			}
-		});
-		tx.immediate();
-		this.runStateCache.delete(sessionId);
-		this.dirtyChangeSessions.delete(sessionId);
-	}
+        "session_kernel_quarantine",
+        "session_kernel_commands",
+        "session_kernel_changes",
+        "session_kernel_timers",
+        "session_kernel_outbox",
+      ]) {
+        this.db.run(`DELETE FROM ${table} WHERE session_id = ?`, [sessionId]);
+      }
+    });
+    tx.immediate();
+    this.runStateCache.delete(sessionId);
+    this.dirtyChangeSessions.delete(sessionId);
+  }
 
   askMigrationComplete(): boolean {
     return !!this.db
@@ -2825,7 +3010,10 @@ export class SessionKernelStore {
     const record = this.askSnapshot(sessionId) as
       | {
           questionId?: string;
-          answer?: { requestId: string; answers: Record<string, string> | null };
+          answer?: {
+            requestId: string;
+            answers: Record<string, string> | null;
+          };
         }
       | undefined;
     if (!record) return { matched: false };
@@ -2889,7 +3077,8 @@ export class SessionKernelStore {
     if (
       record.status === "indeterminate" &&
       record.error === "actor restarted after execution began"
-    ) return true;
+    )
+      return true;
     return (
       record.status === "failed" &&
       record.replaySafe &&
@@ -2917,8 +3106,7 @@ export class SessionKernelStore {
           result: { status: 200, body: { ok: true } },
           duplicate: true,
         };
-      if (input.operation === "transcript_delete")
-        return { status: "execute" };
+      if (input.operation === "transcript_delete") return { status: "execute" };
       throw new Error(`Session ${input.sessionId} was deleted`);
     }
     const record = this.acceptCommand({
@@ -2926,7 +3114,9 @@ export class SessionKernelStore {
       requestId: input.requestId,
       type: input.operation,
       payload: input.identity,
-      replaySafe: DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS.has(input.operation),
+      replaySafe: DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS.has(
+        input.operation,
+      ),
     });
     if (record.status === "completed")
       return { status: "completed", result: record.result, duplicate: true };
@@ -2934,7 +3124,8 @@ export class SessionKernelStore {
     if (
       record.status === "indeterminate" ||
       (record.status === "failed" && (!record.retryable || !record.replaySafe))
-    ) throw new Error(record.error || "Gateway command failed");
+    )
+      throw new Error(record.error || "Gateway command failed");
     this.markProcessing(input.sessionId, input.requestId);
     return { status: "execute" };
   }
@@ -2951,7 +3142,8 @@ export class SessionKernelStore {
         (input.operation === "delete_session" ||
           input.operation === "transcript_delete") &&
         this.isTombstoned(input.sessionId)
-      ) return input.result;
+      )
+        return input.result;
       throw new Error("Gateway command receipt is missing");
     }
     if (record.status === "completed") return record.result;
@@ -2974,7 +3166,8 @@ export class SessionKernelStore {
         (input.operation === "delete_session" ||
           input.operation === "transcript_delete") &&
         this.isTombstoned(input.sessionId)
-      ) return;
+      )
+        return;
       throw new Error("Gateway command receipt is missing");
     }
     if (record.status === "completed") return;
@@ -3012,9 +3205,9 @@ export class SessionKernelStore {
     if (record.status === "processing") return { status: "in_progress" };
     if (
       record.status === "indeterminate" ||
-      (record.status === "failed" &&
-        (!record.retryable || !record.replaySafe))
-    ) throw new Error(record.error || "Submit prompt command failed");
+      (record.status === "failed" && (!record.retryable || !record.replaySafe))
+    )
+      throw new Error(record.error || "Submit prompt command failed");
     this.markProcessing(input.sessionId, input.requestId);
     return { status: "execute" };
   }
@@ -3213,17 +3406,22 @@ export class SessionKernelStore {
   }
 
   enqueueDelivery(sessionId: string, item: unknown, front = false): boolean {
-    return this.mutateDelivery(sessionId, "delivery_queued_enqueue", (state) => {
-      const queue = state.queued as Array<{ id?: string }>;
-      const id = item && typeof item === "object"
-        ? (item as { id?: unknown }).id
-        : undefined;
-      if (typeof id === "string" && queue.some((queued) => queued.id === id))
-        return false;
-      if (front) queue.unshift(item as { id?: string });
-      else queue.push(item as { id?: string });
-      return true;
-    }).result as boolean;
+    return this.mutateDelivery(
+      sessionId,
+      "delivery_queued_enqueue",
+      (state) => {
+        const queue = state.queued as Array<{ id?: string }>;
+        const id =
+          item && typeof item === "object"
+            ? (item as { id?: unknown }).id
+            : undefined;
+        if (typeof id === "string" && queue.some((queued) => queued.id === id))
+          return false;
+        if (front) queue.unshift(item as { id?: string });
+        else queue.push(item as { id?: string });
+        return true;
+      },
+    ).result as boolean;
   }
 
   promoteQueuedDelivery(
@@ -3234,28 +3432,34 @@ export class SessionKernelStore {
   ): unknown | undefined {
     if (!itemId || !promptEntryId || promptEntryId.length > 256)
       throw new Error("Invalid promoted prompt identity");
-    return this.mutateDelivery(sessionId, "delivery_queued_promoted", (state) => {
-      const queue = state.queued as Array<Record<string, unknown> & { id?: string }>;
-      const index = queue.findIndex((item) => item.id === itemId);
-      if (index < 0 && directItem === undefined) return undefined;
-      const queuedItem = index >= 0 ? queue.splice(index, 1)[0] : undefined;
-      const item = {
-        ...(queuedItem ?? {}),
-        ...(directItem && typeof directItem === "object"
-          ? directItem as Record<string, unknown>
-          : {}),
-        id: itemId,
-        promptEntryId,
-      };
-      // "Send now" outranks ordinary queued work if physical steering cannot
-      // target the run. It is still queue-owned recovery state, not a composer
-      // row, because promptEntryId marks it as already sent.
-      state.queued = [
-        item,
-        ...queue.filter((candidate) => candidate.id !== itemId),
-      ];
-      return item;
-    }).result;
+    return this.mutateDelivery(
+      sessionId,
+      "delivery_queued_promoted",
+      (state) => {
+        const queue = state.queued as Array<
+          Record<string, unknown> & { id?: string }
+        >;
+        const index = queue.findIndex((item) => item.id === itemId);
+        if (index < 0 && directItem === undefined) return undefined;
+        const queuedItem = index >= 0 ? queue.splice(index, 1)[0] : undefined;
+        const item = {
+          ...(queuedItem ?? {}),
+          ...(directItem && typeof directItem === "object"
+            ? (directItem as Record<string, unknown>)
+            : {}),
+          id: itemId,
+          promptEntryId,
+        };
+        // "Send now" outranks ordinary queued work if physical steering cannot
+        // target the run. It is still queue-owned recovery state, not a composer
+        // row, because promptEntryId marks it as already sent.
+        state.queued = [
+          item,
+          ...queue.filter((candidate) => candidate.id !== itemId),
+        ];
+        return item;
+      },
+    ).result;
   }
 
   deleteDeliverySlot(sessionId: string, slot: DeliverySlot): boolean {
@@ -3284,32 +3488,38 @@ export class SessionKernelStore {
     target: DurableSteerTarget,
     directItem?: unknown,
   ): unknown | undefined {
-    return this.mutateDelivery(sessionId, "delivery_steer_prepared", (state) => {
-      const run = this.runState(sessionId);
-      if (
-        run.currentRunId !== target.runId ||
-        run.generation !== target.generation
-      ) return undefined;
-      const queue = state.queued as Array<{ id?: string }>;
-      const index = queue.findIndex((item) => item.id === itemId);
-      if (index < 0 && directItem === undefined) return undefined;
-      const queuedItem = index >= 0 ? queue.splice(index, 1)[0] : undefined;
-      const item = directItem && typeof directItem === "object"
-        ? {
-            ...(queuedItem as Record<string, unknown> | undefined),
-            ...(directItem as Record<string, unknown>),
-            id: itemId,
-          }
-        : queuedItem ?? { id: itemId, value: directItem };
-      state.queued = queue;
-      state.pendingSteers.push({
-        item,
-        index: index >= 0 ? index : 0,
-        preparedAt: Date.now(),
-        target,
-      });
-      return item;
-    }).result;
+    return this.mutateDelivery(
+      sessionId,
+      "delivery_steer_prepared",
+      (state) => {
+        const run = this.runState(sessionId);
+        if (
+          run.currentRunId !== target.runId ||
+          run.generation !== target.generation
+        )
+          return undefined;
+        const queue = state.queued as Array<{ id?: string }>;
+        const index = queue.findIndex((item) => item.id === itemId);
+        if (index < 0 && directItem === undefined) return undefined;
+        const queuedItem = index >= 0 ? queue.splice(index, 1)[0] : undefined;
+        const item =
+          directItem && typeof directItem === "object"
+            ? {
+                ...(queuedItem as Record<string, unknown> | undefined),
+                ...(directItem as Record<string, unknown>),
+                id: itemId,
+              }
+            : (queuedItem ?? { id: itemId, value: directItem });
+        state.queued = queue;
+        state.pendingSteers.push({
+          item,
+          index: index >= 0 ? index : 0,
+          preparedAt: Date.now(),
+          target,
+        });
+        return item;
+      },
+    ).result;
   }
 
   acceptSteerDelivery(
@@ -3317,27 +3527,32 @@ export class SessionKernelStore {
     itemId: string,
     target: DurableSteerTarget,
   ): boolean {
-    return this.mutateDelivery(sessionId, "delivery_steer_accepted", (state) => {
-      const run = this.runState(sessionId);
-      if (
-        run.currentRunId !== target.runId ||
-        run.generation !== target.generation
-      ) return false;
-      const index = state.pendingSteers.findIndex(
-        (pending) =>
-          (pending.item as { id?: string }).id === itemId &&
-          pending.target?.token === target.token &&
-          pending.target.runId === target.runId &&
-          pending.target.generation === target.generation,
-      );
-      if (index < 0) return false;
-      const [pending] = state.pendingSteers.splice(index, 1);
-      state.steered.push({
-        ...(pending.item as Record<string, unknown>),
-        steeredAt: Date.now(),
-      });
-      return true;
-    }).result as boolean;
+    return this.mutateDelivery(
+      sessionId,
+      "delivery_steer_accepted",
+      (state) => {
+        const run = this.runState(sessionId);
+        if (
+          run.currentRunId !== target.runId ||
+          run.generation !== target.generation
+        )
+          return false;
+        const index = state.pendingSteers.findIndex(
+          (pending) =>
+            (pending.item as { id?: string }).id === itemId &&
+            pending.target?.token === target.token &&
+            pending.target.runId === target.runId &&
+            pending.target.generation === target.generation,
+        );
+        if (index < 0) return false;
+        const [pending] = state.pendingSteers.splice(index, 1);
+        state.steered.push({
+          ...(pending.item as Record<string, unknown>),
+          steeredAt: Date.now(),
+        });
+        return true;
+      },
+    ).result as boolean;
   }
 
   rejectSteerDelivery(
@@ -3345,23 +3560,27 @@ export class SessionKernelStore {
     itemId: string,
     target: DurableSteerTarget,
   ): boolean {
-    return this.mutateDelivery(sessionId, "delivery_steer_rejected", (state) => {
-      const index = state.pendingSteers.findIndex(
-        (pending) =>
-          (pending.item as { id?: string }).id === itemId &&
-          pending.target?.token === target.token &&
-          pending.target.runId === target.runId &&
-          pending.target.generation === target.generation,
-      );
-      if (index < 0) return false;
-      const [pending] = state.pendingSteers.splice(index, 1);
-      state.queued.splice(
-        Math.min(pending.index, state.queued.length),
-        0,
-        pending.item,
-      );
-      return true;
-    }).result as boolean;
+    return this.mutateDelivery(
+      sessionId,
+      "delivery_steer_rejected",
+      (state) => {
+        const index = state.pendingSteers.findIndex(
+          (pending) =>
+            (pending.item as { id?: string }).id === itemId &&
+            pending.target?.token === target.token &&
+            pending.target.runId === target.runId &&
+            pending.target.generation === target.generation,
+        );
+        if (index < 0) return false;
+        const [pending] = state.pendingSteers.splice(index, 1);
+        state.queued.splice(
+          Math.min(pending.index, state.queued.length),
+          0,
+          pending.item,
+        );
+        return true;
+      },
+    ).result as boolean;
   }
 
   requeueSteerDeliveries(sessionId: string, items: unknown[]): number {
@@ -3369,7 +3588,9 @@ export class SessionKernelStore {
       return 0;
     this.mutateDelivery(sessionId, "delivery_steers_requeued", (state) => {
       const ids = new Set(
-        (items as Array<{ id?: string }>).map((item) => item.id).filter(Boolean),
+        (items as Array<{ id?: string }>)
+          .map((item) => item.id)
+          .filter(Boolean),
       );
       state.queued = [
         ...items,
@@ -3383,27 +3604,35 @@ export class SessionKernelStore {
   }
 
   hasPendingSteers(): boolean {
-    return !!this.db.query(
-      "SELECT 1 FROM session_kernel_delivery WHERE pending_steers != '[]' LIMIT 1",
-    ).get();
+    return !!this.db
+      .query(
+        "SELECT 1 FROM session_kernel_delivery WHERE pending_steers != '[]' LIMIT 1",
+      )
+      .get();
   }
 
   settlePendingSteers(): number {
-    const rows = this.db.query(
-      "SELECT session_id FROM session_kernel_delivery WHERE pending_steers != '[]'",
-    ).all() as Array<{ session_id: string }>;
+    const rows = this.db
+      .query(
+        "SELECT session_id FROM session_kernel_delivery WHERE pending_steers != '[]'",
+      )
+      .all() as Array<{ session_id: string }>;
     let count = 0;
     for (const row of rows) {
-      this.mutateDelivery(row.session_id, "delivery_steer_recovered", (state) => {
-        for (const pending of state.pendingSteers) {
-          state.steered.push({
-            ...(pending.item as Record<string, unknown>),
-            steeredAt: pending.preparedAt,
-          });
-          count += 1;
-        }
-        state.pendingSteers = [];
-      });
+      this.mutateDelivery(
+        row.session_id,
+        "delivery_steer_recovered",
+        (state) => {
+          for (const pending of state.pendingSteers) {
+            state.steered.push({
+              ...(pending.item as Record<string, unknown>),
+              steeredAt: pending.preparedAt,
+            });
+            count += 1;
+          }
+          state.pendingSteers = [];
+        },
+      );
     }
     return count;
   }
@@ -3413,9 +3642,11 @@ export class SessionKernelStore {
       .query(
         "SELECT revision, cancel, updated_at FROM session_kernel_turn WHERE session_id = ?",
       )
-      .get(sessionId) as
-      | { revision: number; cancel: string | null; updated_at: number }
-      | null;
+      .get(sessionId) as {
+      revision: number;
+      cancel: string | null;
+      updated_at: number;
+    } | null;
     return row
       ? {
           revision: Number(row.revision),
@@ -3441,7 +3672,8 @@ export class SessionKernelStore {
       input.requestId.length > 256 ||
       (input.fallbackRunId !== null &&
         (!input.fallbackRunId || input.fallbackRunId.length > 256))
-    ) throw new Error("Invalid cancel command intent");
+    )
+      throw new Error("Invalid cancel command intent");
     if (this.isTombstoned(input.sessionId))
       throw new Error(`Session ${input.sessionId} was deleted`);
 
@@ -3461,7 +3693,8 @@ export class SessionKernelStore {
         existing.status === "indeterminate" ||
         (existing.status === "failed" &&
           (!existing.retryable || !existing.replaySafe))
-      ) throw new Error(existing.error || "Session cancel command failed");
+      )
+        throw new Error(existing.error || "Session cancel command failed");
       const payload = existing.payload as {
         targetRunId?: unknown;
         targetRunGeneration?: unknown;
@@ -3481,7 +3714,8 @@ export class SessionKernelStore {
         !targetRunId ||
         !Number.isSafeInteger(targetRunGeneration) ||
         Number(targetRunGeneration) < 0
-      ) throw new Error("Durable cancel command target is invalid");
+      )
+        throw new Error("Durable cancel command target is invalid");
       this.markProcessing(input.sessionId, input.requestId);
       return {
         status: "execute",
@@ -3503,7 +3737,7 @@ export class SessionKernelStore {
     const targetRunId =
       replayedTarget?.runId ||
       priorRun.currentRunId ||
-      ((priorRun.state === "starting" || priorRun.state === "preparing")
+      (priorRun.state === "starting" || priorRun.state === "preparing"
         ? input.fallbackRunId
         : null);
     const targetRunGeneration =
@@ -3548,7 +3782,8 @@ export class SessionKernelStore {
         cancel?.cancelId !== `stop:${input.requestId}` ||
         cancel.runId !== payload?.targetRunId ||
         cancel.runGeneration !== payload?.targetRunGeneration
-      ) throw new Error("Cancel command completed without its durable receipt");
+      )
+        throw new Error("Cancel command completed without its durable receipt");
     }
     this.completeCommand(input.sessionId, input.requestId, input.result);
     return input.result;
@@ -3593,9 +3828,9 @@ export class SessionKernelStore {
       input.requeueIds.some((id) => !id || id.length > 256) ||
       !input.source ||
       input.source.length > 100 ||
-      (input.user !== undefined &&
-        (!input.user || input.user.length > 200))
-    ) throw new Error("Invalid turn cancel intent");
+      (input.user !== undefined && (!input.user || input.user.length > 200))
+    )
+      throw new Error("Invalid turn cancel intent");
     if (this.isTombstoned(input.sessionId))
       throw new Error(`Session ${input.sessionId} was deleted`);
     let result!: NonNullable<DurableTurnState["cancel"]>;
@@ -3610,7 +3845,10 @@ export class SessionKernelStore {
           json(priorTurn.cancel.requeueIds) !== json(input.requeueIds) ||
           priorTurn.cancel.source !== input.source ||
           priorTurn.cancel.user !== input.user
-        ) throw new Error("Turn cancel identity was reused with another payload");
+        )
+          throw new Error(
+            "Turn cancel identity was reused with another payload",
+          );
         result = priorTurn.cancel;
         nextRun = this.runState(input.sessionId);
         return;
@@ -3630,7 +3868,8 @@ export class SessionKernelStore {
       // reached journal registration yet. The generic preparing→cancel reducer
       // returns idle for non-turn workspace preparation; this operation is the
       // stronger user intent and remains stopped until their next prompt.
-      const targetState = priorRun.state === "preparing" ? "stopped" : reducedState;
+      const targetState =
+        priorRun.state === "preparing" ? "stopped" : reducedState;
 
       const priorDelivery = this.deliveryRow(input.sessionId);
       const steered = priorDelivery.steered as QueueItem[];
@@ -3735,7 +3974,8 @@ export class SessionKernelStore {
     if (
       prior.runGeneration !== input.runGeneration ||
       this.runState(input.sessionId).generation !== input.runGeneration
-    ) return "adopt_confirmed";
+    )
+      return "adopt_confirmed";
     if (prior.phase === "executing") return "retry";
     this.updateTurnCancel(input.sessionId, { ...prior, phase: "executing" });
     return "execute";
@@ -3766,9 +4006,10 @@ export class SessionKernelStore {
         `SELECT phase, payload FROM session_kernel_turn_projections
          WHERE session_id = ? AND projection_id = ?`,
       )
-      .get(sessionId, projectionId) as
-      | { phase: "pending" | "completed" | "superseded"; payload: string }
-      | null;
+      .get(sessionId, projectionId) as {
+      phase: "pending" | "completed" | "superseded";
+      payload: string;
+    } | null;
     if (!row) return undefined;
     return {
       ...(parsed(row.payload) as Omit<DurableTurnOutcomeProjection, "phase">),
@@ -3803,7 +4044,8 @@ export class SessionKernelStore {
       !input.projectedAt ||
       input.projectedAt.length > 64 ||
       !Number.isFinite(Date.parse(input.projectedAt))
-    ) throw new Error("Invalid turn outcome projection");
+    )
+      throw new Error("Invalid turn outcome projection");
     if (this.isTombstoned(input.sessionId))
       throw new Error(`Session ${input.sessionId} was deleted`);
     const payload: Omit<DurableTurnOutcomeProjection, "phase"> = {
@@ -3811,7 +4053,9 @@ export class SessionKernelStore {
       runId: input.runId,
       runGeneration: input.runGeneration,
       errorMessage: input.errorMessage,
-      ...(input.engineSessionId ? { engineSessionId: input.engineSessionId } : {}),
+      ...(input.engineSessionId
+        ? { engineSessionId: input.engineSessionId }
+        : {}),
       noticePersisted: input.noticePersisted,
       ...(input.noticeLabel ? { noticeLabel: input.noticeLabel } : {}),
       projectedAt: input.projectedAt,
@@ -3823,27 +4067,31 @@ export class SessionKernelStore {
     if (existing) {
       const { phase: _phase, ...existingPayload } = existing;
       if (JSON.stringify(existingPayload) !== JSON.stringify(payload))
-        throw new Error("Turn outcome projection identity was reused with another payload");
+        throw new Error(
+          "Turn outcome projection identity was reused with another payload",
+        );
       return existing;
     }
     const priorRun = this.runState(input.sessionId);
     const cancel = this.turnSnapshot(input.sessionId).cancel;
     if (
       priorRun.generation !== input.runGeneration ||
-      (priorRun.currentRunId !== undefined && priorRun.currentRunId !== input.runId) ||
+      (priorRun.currentRunId !== undefined &&
+        priorRun.currentRunId !== input.runId) ||
       (cancel?.runId === input.runId &&
         cancel.runGeneration === input.runGeneration &&
         cancel.phase === "settled" &&
         cancel.outcome === "confirmed")
-    ) return "stale";
+    )
+      return "stale";
     const generationOwner = this.db
       .query(
         `SELECT projection_id FROM session_kernel_turn_projections
          WHERE session_id = ? AND generation = ? LIMIT 1`,
       )
-      .get(input.sessionId, input.runGeneration) as
-      | { projection_id: string }
-      | null;
+      .get(input.sessionId, input.runGeneration) as {
+      projection_id: string;
+    } | null;
     if (generationOwner)
       throw new Error("Turn outcome projection generation is already owned");
 
@@ -3965,12 +4213,7 @@ export class SessionKernelStore {
         `UPDATE session_kernel_turn_projections
          SET phase = 'completed', updated_at = ?
          WHERE session_id = ? AND projection_id = ? AND generation = ?`,
-        [
-          now,
-          input.sessionId,
-          input.projectionId,
-          input.runGeneration,
-        ],
+        [now, input.sessionId, input.projectionId, input.runGeneration],
       );
       this.db.run(
         `UPDATE session_kernel_state SET change_seq = ?, updated_at = ?
@@ -4048,26 +4291,36 @@ export class SessionKernelStore {
       input.dispatchId.length > 256 ||
       (input.soloId !== undefined &&
         (!input.soloId || input.soloId.length > 256))
-    ) throw new Error("Invalid prompt interrupt identity");
+    )
+      throw new Error("Invalid prompt interrupt identity");
     return this.mutateDelivery(
       input.sessionId,
       "delivery_interrupt_prepared",
       (state) => {
-        if (state.dispatch) throw new Error("A prompt dispatch is already active");
+        if (state.dispatch)
+          throw new Error("A prompt dispatch is already active");
         const queued = state.queued as QueueItem[];
         const steered = state.steered as QueueItem[];
-        const queuedIndex = queued.findIndex((item) => item.id === input.anchorId);
-        const steeredIndex = steered.findIndex((item) => item.id === input.anchorId);
+        const queuedIndex = queued.findIndex(
+          (item) => item.id === input.anchorId,
+        );
+        const steeredIndex = steered.findIndex(
+          (item) => item.id === input.anchorId,
+        );
         if (queuedIndex < 0 && steeredIndex < 0)
           throw new Error("Interrupted prompt is no longer delivery-owned");
         const existing = state.interrupt;
         if (existing) {
           if (existing.interruptId === input.interruptId) {
             if (
-              (existing.dispatchId && existing.dispatchId !== input.dispatchId) ||
+              (existing.dispatchId &&
+                existing.dispatchId !== input.dispatchId) ||
               existing.anchorId !== input.anchorId ||
               existing.soloId !== input.soloId
-            ) throw new Error("Prompt interrupt identity was reused with another payload");
+            )
+              throw new Error(
+                "Prompt interrupt identity was reused with another payload",
+              );
             return existing;
           }
           throw new Error("A prompt interrupt is already pending");
@@ -4122,7 +4375,9 @@ export class SessionKernelStore {
       "delivery_interrupt_effect_started",
       (state) => {
         const dispatchInterrupt = (
-          state.dispatch as { interrupt?: DurableDeliveryState["interrupt"] } | undefined
+          state.dispatch as
+            | { interrupt?: DurableDeliveryState["interrupt"] }
+            | undefined
         )?.interrupt;
         const interrupt = state.interrupt || dispatchInterrupt;
         if (!interrupt || interrupt.interruptId !== input.interruptId)
@@ -4131,7 +4386,8 @@ export class SessionKernelStore {
         if (
           interrupt.runGeneration !== input.runGeneration ||
           this.runState(input.sessionId).generation !== input.runGeneration
-        ) return "adopt_confirmed" as const;
+        )
+          return "adopt_confirmed" as const;
         if (interrupt.phase === "executing") return "retry" as const;
         state.interrupt = { ...interrupt, phase: "executing" };
         return "execute" as const;
@@ -4154,11 +4410,14 @@ export class SessionKernelStore {
       "delivery_interrupt_settled",
       (state) => {
         const interrupt = state.interrupt;
-        if (!interrupt || interrupt.interruptId !== input.interruptId) return false;
+        if (!interrupt || interrupt.interruptId !== input.interruptId)
+          return false;
         if (input.outcome === "not_aborted") {
           if (interrupt.source?.slot === "steered") {
             const queued = state.queued as QueueItem[];
-            const index = queued.findIndex((item) => item.id === interrupt.anchorId);
+            const index = queued.findIndex(
+              (item) => item.id === interrupt.anchorId,
+            );
             if (index >= 0) {
               const [receipt] = queued.splice(index, 1);
               const steered = state.steered as QueueItem[];
@@ -4199,7 +4458,8 @@ export class SessionKernelStore {
       input.sessionId,
       "delivery_next_dispatch_claimed",
       (state) => {
-        if (state.dispatch) throw new Error("A prompt dispatch is already active");
+        if (state.dispatch)
+          throw new Error("A prompt dispatch is already active");
         const interrupt = state.interrupt;
         const queued = state.queued as QueueItem[];
         if (!queued.length) {
@@ -4239,7 +4499,10 @@ export class SessionKernelStore {
         const applyInterrupt = confirmedInterrupt && batchOwnsInterrupt;
         if (applyInterrupt) state.interrupt = undefined;
         const promptEntryId =
-          retryDispatchId || plan.batch[0]?.promptEntryId || input.promptEntryId;
+          retryDispatchId ||
+          plan.batch[0]?.promptEntryId ||
+          (plan.batch.length === 1 ? plan.batch[0]?.id : undefined) ||
+          input.promptEntryId;
         if (!promptEntryId || promptEntryId.length > 256)
           throw new Error("Invalid claimed prompt dispatch identity");
         state.queued = plan.rest;
@@ -4272,7 +4535,9 @@ export class SessionKernelStore {
 
   claimDeliveryDispatch(input: {
     sessionId: string;
-    items: Array<{ id?: string; promptEntryId?: string } & Record<string, unknown>>;
+    items: Array<
+      { id?: string; promptEntryId?: string } & Record<string, unknown>
+    >;
     promptEntryId: string;
     kind?: "create";
     requireQueued?: boolean;
@@ -4282,7 +4547,8 @@ export class SessionKernelStore {
       "delivery_dispatch_claimed",
       (state) => {
         const existing = state.dispatch as
-          { promptEntryId?: string; items?: unknown[] } | undefined;
+          | { promptEntryId?: string; items?: unknown[] }
+          | undefined;
         if (existing?.promptEntryId === input.promptEntryId) return existing;
         if (existing) throw new Error("A prompt dispatch is already active");
         const ids = new Set(
@@ -4297,7 +4563,8 @@ export class SessionKernelStore {
         if (input.requireQueued) {
           const queuedIds = new Set(
             queued.flatMap(
-              (item) => [item.id, item.promptEntryId].filter(Boolean) as string[],
+              (item) =>
+                [item.id, item.promptEntryId].filter(Boolean) as string[],
             ),
           );
           if (
@@ -4336,14 +4603,16 @@ export class SessionKernelStore {
 
   ackDeliveryDispatch(sessionId: string, promptEntryId: string): boolean {
     const current = this.deliveryRow(sessionId).dispatch as
-      { promptEntryId?: string } | undefined;
+      | { promptEntryId?: string }
+      | undefined;
     if (current?.promptEntryId !== promptEntryId) return false;
     this.mutateDelivery(
       sessionId,
       "delivery_dispatch_acknowledged",
       (state) => {
         const dispatch = state.dispatch as
-          { promptEntryId?: string } | undefined;
+          | { promptEntryId?: string }
+          | undefined;
         if (dispatch?.promptEntryId !== promptEntryId)
           throw new Error("Prompt dispatch changed before acknowledgement");
         state.dispatch = undefined;
@@ -4354,7 +4623,8 @@ export class SessionKernelStore {
 
   failDeliveryDispatch(sessionId: string, promptEntryId: string): boolean {
     const current = this.deliveryRow(sessionId).dispatch as
-      { promptEntryId?: string } | undefined;
+      | { promptEntryId?: string }
+      | undefined;
     if (current?.promptEntryId !== promptEntryId) return false;
     this.mutateDelivery(sessionId, "delivery_dispatch_failed", (state) => {
       const dispatch = state.dispatch as
@@ -4415,7 +4685,8 @@ export class SessionKernelStore {
       existing?.status === "indeterminate" ||
       (existing?.status === "failed" &&
         (!existing.retryable || !existing.replaySafe))
-    ) throw new Error(existing.error || "Timer execution failed");
+    )
+      throw new Error(existing.error || "Timer execution failed");
     this.acceptCommand({
       sessionId: input.sessionId,
       requestId,
@@ -4484,7 +4755,8 @@ export class SessionKernelStore {
       input.maxAttempts < 1 ||
       !Number.isSafeInteger(input.observedAttempts) ||
       input.observedAttempts < 0
-    ) throw new Error("Invalid timer runtime failure intent");
+    )
+      throw new Error("Invalid timer runtime failure intent");
     const current = this.timer(input.sessionId, input.timerId);
     if (!current || current.token !== input.token)
       return { updated: false, deadLetteredNow: false };
@@ -4502,7 +4774,7 @@ export class SessionKernelStore {
     );
   }
 
-	scheduleTimer(
+  scheduleTimer(
     timer: Omit<
       DurableTimer,
       | "token"
@@ -4512,10 +4784,10 @@ export class SessionKernelStore {
       | "deadLetteredAt"
       | "createdAt"
     >,
-	): void {
-		const token = crypto.randomUUID();
-		this.db.run(
-			`INSERT INTO session_kernel_timers
+  ): void {
+    const token = crypto.randomUUID();
+    this.db.run(
+      `INSERT INTO session_kernel_timers
 			 (session_id, timer_id, kind, due_at, token, payload, attempts, next_attempt_at, created_at)
 			 VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
 			 ON CONFLICT(session_id, timer_id) DO UPDATE SET
@@ -4533,43 +4805,43 @@ export class SessionKernelStore {
         timer.dueAt,
         Date.now(),
       ],
-		);
-	}
+    );
+  }
 
-	timer(sessionId: string, timerId: string): DurableTimer | undefined {
-		const row = this.db
-			.query(
-				`SELECT session_id, timer_id, kind, due_at, token, payload, attempts, next_attempt_at, last_error, dead_lettered_at, created_at
+  timer(sessionId: string, timerId: string): DurableTimer | undefined {
+    const row = this.db
+      .query(
+        `SELECT session_id, timer_id, kind, due_at, token, payload, attempts, next_attempt_at, last_error, dead_lettered_at, created_at
          FROM session_kernel_timers WHERE session_id = ? AND timer_id = ?`,
       )
-			.get(sessionId, timerId) as Record<string, unknown> | null;
-		return row
-			? {
-				sessionId: String(row.session_id),
-				timerId: String(row.timer_id),
-				kind: String(row.kind),
-				dueAt: Number(row.due_at),
-				token: String(row.token),
-				payload: parsed(row.payload as string),
-					attempts: Number(row.attempts),
-					nextAttemptAt: Number(row.next_attempt_at),
-					lastError:
-						row.last_error == null ? undefined : String(row.last_error),
+      .get(sessionId, timerId) as Record<string, unknown> | null;
+    return row
+      ? {
+          sessionId: String(row.session_id),
+          timerId: String(row.timer_id),
+          kind: String(row.kind),
+          dueAt: Number(row.due_at),
+          token: String(row.token),
+          payload: parsed(row.payload as string),
+          attempts: Number(row.attempts),
+          nextAttemptAt: Number(row.next_attempt_at),
+          lastError:
+            row.last_error == null ? undefined : String(row.last_error),
           deadLetteredAt:
             row.dead_lettered_at == null
               ? undefined
               : Number(row.dead_lettered_at),
-					createdAt: Number(row.created_at),
-			}
-			: undefined;
-	}
+          createdAt: Number(row.created_at),
+        }
+      : undefined;
+  }
 
-	cancelTimer(sessionId: string, timerId: string): void {
-		this.db.run(
-			"DELETE FROM session_kernel_timers WHERE session_id = ? AND timer_id = ?",
-			[sessionId, timerId],
-		);
-	}
+  cancelTimer(sessionId: string, timerId: string): void {
+    this.db.run(
+      "DELETE FROM session_kernel_timers WHERE session_id = ? AND timer_id = ?",
+      [sessionId, timerId],
+    );
+  }
 
   settleTimerSuccess(
     sessionId: string,
@@ -4578,24 +4850,24 @@ export class SessionKernelStore {
   ): boolean {
     return (
       this.db.run(
-			"DELETE FROM session_kernel_timers WHERE session_id = ? AND timer_id = ? AND token = ?",
-			[sessionId, timerId, token],
+        "DELETE FROM session_kernel_timers WHERE session_id = ? AND timer_id = ? AND token = ?",
+        [sessionId, timerId, token],
       ).changes > 0
     );
-	}
+  }
 
-	dueTimers(
-		now = Date.now(),
-		limit = 100,
-		kinds?: readonly string[],
-	): DurableTimer[] {
-		if (kinds && kinds.length === 0) return [];
-		const kindFilter = kinds?.length
-			? ` AND kind IN (${kinds.map(() => "?").join(",")})`
-			: "";
-		const rows = this.db
-			.query(
-				`SELECT session_id, timer_id, kind, due_at, token, payload, attempts, next_attempt_at,
+  dueTimers(
+    now = Date.now(),
+    limit = 100,
+    kinds?: readonly string[],
+  ): DurableTimer[] {
+    if (kinds && kinds.length === 0) return [];
+    const kindFilter = kinds?.length
+      ? ` AND kind IN (${kinds.map(() => "?").join(",")})`
+      : "";
+    const rows = this.db
+      .query(
+        `SELECT session_id, timer_id, kind, due_at, token, payload, attempts, next_attempt_at,
 					last_error, dead_lettered_at, created_at
 				 FROM session_kernel_timers
 				 WHERE due_at <= ? AND next_attempt_at <= ? AND dead_lettered_at IS NULL
@@ -4604,52 +4876,52 @@ export class SessionKernelStore {
 					 WHERE q.session_id = session_kernel_timers.session_id
 				   )${kindFilter}
 				 ORDER BY next_attempt_at, due_at LIMIT ?`,
-			)
-			.all(now, now, ...(kinds || []), limit) as Record<string, unknown>[];
-		return rows.map((row) => ({
-			sessionId: String(row.session_id),
-			timerId: String(row.timer_id),
-			kind: String(row.kind),
-			dueAt: Number(row.due_at),
-			token: String(row.token),
-			payload: parsed(row.payload as string),
-			attempts: Number(row.attempts),
-			nextAttemptAt: Number(row.next_attempt_at),
-			lastError: row.last_error == null ? undefined : String(row.last_error),
-			deadLetteredAt:
-				row.dead_lettered_at == null ? undefined : Number(row.dead_lettered_at),
-			createdAt: Number(row.created_at),
-		}));
-	}
+      )
+      .all(now, now, ...(kinds || []), limit) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      sessionId: String(row.session_id),
+      timerId: String(row.timer_id),
+      kind: String(row.kind),
+      dueAt: Number(row.due_at),
+      token: String(row.token),
+      payload: parsed(row.payload as string),
+      attempts: Number(row.attempts),
+      nextAttemptAt: Number(row.next_attempt_at),
+      lastError: row.last_error == null ? undefined : String(row.last_error),
+      deadLetteredAt:
+        row.dead_lettered_at == null ? undefined : Number(row.dead_lettered_at),
+      createdAt: Number(row.created_at),
+    }));
+  }
 
-	noteTimerFailure(
-		sessionId: string,
-		timerId: string,
-		error: string,
-		maxAttempts = 20,
-		expectedToken?: string,
-	): { updated: boolean; deadLetteredNow: boolean } {
-		const row = this.timer(sessionId, timerId);
-		if (!row || (expectedToken !== undefined && row.token !== expectedToken))
-			return { updated: false, deadLetteredNow: false };
-		const attempts = row.attempts + 1;
-		const deadLetteredAt = attempts >= maxAttempts ? Date.now() : null;
-		const delay = Math.min(5 * 60_000, 1_000 * 2 ** Math.min(attempts - 1, 8));
-		this.db.run(
-			`UPDATE session_kernel_timers SET attempts = ?, next_attempt_at = ?, last_error = ?,
+  noteTimerFailure(
+    sessionId: string,
+    timerId: string,
+    error: string,
+    maxAttempts = 20,
+    expectedToken?: string,
+  ): { updated: boolean; deadLetteredNow: boolean } {
+    const row = this.timer(sessionId, timerId);
+    if (!row || (expectedToken !== undefined && row.token !== expectedToken))
+      return { updated: false, deadLetteredNow: false };
+    const attempts = row.attempts + 1;
+    const deadLetteredAt = attempts >= maxAttempts ? Date.now() : null;
+    const delay = Math.min(5 * 60_000, 1_000 * 2 ** Math.min(attempts - 1, 8));
+    this.db.run(
+      `UPDATE session_kernel_timers SET attempts = ?, next_attempt_at = ?, last_error = ?,
 				dead_lettered_at = ? WHERE session_id = ? AND timer_id = ? AND token = ?`,
-			[
-				attempts,
-				Date.now() + delay,
-				error.slice(0, 2_000),
-				deadLetteredAt,
-				sessionId,
-				timerId,
-				row.token,
-			],
-		);
-		return { updated: true, deadLetteredNow: deadLetteredAt !== null };
-	}
+      [
+        attempts,
+        Date.now() + delay,
+        error.slice(0, 2_000),
+        deadLetteredAt,
+        sessionId,
+        timerId,
+        row.token,
+      ],
+    );
+    return { updated: true, deadLetteredNow: deadLetteredAt !== null };
+  }
 
   enqueueOutbox(
     sessionId: string,
@@ -4657,40 +4929,53 @@ export class SessionKernelStore {
     payload: unknown,
     effectKey: string = crypto.randomUUID(),
   ): number {
-		const effectId = `${sessionId}:${kind}:${effectKey}`;
-		const existing = this.db.query(
-			"SELECT id FROM session_kernel_outbox WHERE session_id = ? AND kind = ? AND effect_key = ?",
-		).get(sessionId, kind, effectKey) as { id: number } | null;
-		if (existing) return Number(existing.id);
-		const allocatedId = this.allocateOutboxId?.(sessionId);
-		this.db.run(
-			allocatedId === undefined
-				? `INSERT INTO session_kernel_outbox
+    const effectId = `${sessionId}:${kind}:${effectKey}`;
+    const existing = this.db
+      .query(
+        "SELECT id FROM session_kernel_outbox WHERE session_id = ? AND kind = ? AND effect_key = ?",
+      )
+      .get(sessionId, kind, effectKey) as { id: number } | null;
+    if (existing) return Number(existing.id);
+    const allocatedId = this.allocateOutboxId?.(sessionId);
+    this.db.run(
+      allocatedId === undefined
+        ? `INSERT INTO session_kernel_outbox
 					(effect_id, effect_key, session_id, kind, payload, created_at)
 				 VALUES (?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(session_id, kind, effect_key) DO NOTHING`
-				: `INSERT INTO session_kernel_outbox
+        : `INSERT INTO session_kernel_outbox
 					(id, effect_id, effect_key, session_id, kind, payload, created_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(session_id, kind, effect_key) DO NOTHING`,
-			allocatedId === undefined
-				? [effectId, effectKey, sessionId, kind, json(payload), Date.now()]
-				: [allocatedId, effectId, effectKey, sessionId, kind, json(payload), Date.now()],
-		);
-		const row = this.db.query(
-				"SELECT id FROM session_kernel_outbox WHERE session_id = ? AND kind = ? AND effect_key = ?",).get(sessionId, kind, effectKey) as { id: number } | null;
-		if (!row) throw new Error("Outbox effect was not persisted");
-		return Number(row.id);
-	}
+      allocatedId === undefined
+        ? [effectId, effectKey, sessionId, kind, json(payload), Date.now()]
+        : [
+            allocatedId,
+            effectId,
+            effectKey,
+            sessionId,
+            kind,
+            json(payload),
+            Date.now(),
+          ],
+    );
+    const row = this.db
+      .query(
+        "SELECT id FROM session_kernel_outbox WHERE session_id = ? AND kind = ? AND effect_key = ?",
+      )
+      .get(sessionId, kind, effectKey) as { id: number } | null;
+    if (!row) throw new Error("Outbox effect was not persisted");
+    return Number(row.id);
+  }
 
-	enqueueOutboxMany(
-		sessionId: string,
-		effects: Array<{ kind: string; payload: unknown; effectKey: string }>,
-	): number[] {
-		if (effects.length === 0) return [];
-		const ids: number[] = [];
-		const tx = this.db.transaction(() => {
-			for (const effect of effects)
+  enqueueOutboxMany(
+    sessionId: string,
+    effects: Array<{ kind: string; payload: unknown; effectKey: string }>,
+  ): number[] {
+    if (effects.length === 0) return [];
+    const ids: number[] = [];
+    const tx = this.db.transaction(() => {
+      for (const effect of effects)
         ids.push(
           this.enqueueOutbox(
             sessionId,
@@ -4699,242 +4984,249 @@ export class SessionKernelStore {
             effect.effectKey,
           ),
         );
-		});
-		tx.immediate();
-		return ids;
-	}
+    });
+    tx.immediate();
+    return ids;
+  }
 
-	completeCommandDecision(input: {
-		sessionId: string;
-		requestId: string;
-		type: string;
-		result: unknown;
-		effects: Array<{ kind: string; payload: unknown; effectKey: string }>;
-	}): void {
-		const now = Date.now();
-		const stored = resultRecord(input.result);
-		let changeSeq = 0;
-		const tx = this.db.transaction(() => {
-			this.db.run(
-				`UPDATE session_kernel_commands SET status = 'completed',
+  completeCommandDecision(input: {
+    sessionId: string;
+    requestId: string;
+    type: string;
+    result: unknown;
+    effects: Array<{ kind: string; payload: unknown; effectKey: string }>;
+  }): void {
+    const now = Date.now();
+    const stored = resultRecord(input.result);
+    let changeSeq = 0;
+    const tx = this.db.transaction(() => {
+      this.db.run(
+        `UPDATE session_kernel_commands SET status = 'completed',
          payload = CASE WHEN type IN ('cancel_session', 'websocket_command') THEN payload ELSE 'null' END,
 				 result = ?, result_hash = ?, result_released = 0, terminal_failure = ?, error = NULL,
 				 retryable = NULL, updated_at = ? WHERE session_id = ? AND request_id = ?`,
-				[
-					stored.text,
-					stored.hash,
-					stored.terminalFailure ? 1 : 0,
-					now,
-					input.sessionId,
-					input.requestId,
-				],
-			);
-			const prior = this.runState(input.sessionId);
-			changeSeq = prior.changeSeq + 1;
-			this.db.run(
-				`INSERT INTO session_kernel_state
+        [
+          stored.text,
+          stored.hash,
+          stored.terminalFailure ? 1 : 0,
+          now,
+          input.sessionId,
+          input.requestId,
+        ],
+      );
+      const prior = this.runState(input.sessionId);
+      changeSeq = prior.changeSeq + 1;
+      this.db.run(
+        `INSERT INTO session_kernel_state
 				 (session_id, run_state, run_since, last_event, generation, current_run_id, change_seq, updated_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(session_id) DO UPDATE SET change_seq = excluded.change_seq, updated_at = excluded.updated_at`,
-				[
-					input.sessionId,
-					prior.state,
-					prior.since === new Date(0).toISOString()
-						? new Date(now).toISOString()
-						: prior.since,
-					prior.lastEvent ?? null,
-					prior.generation,
-					prior.currentRunId ?? null,
-					changeSeq,
-					now,
-				],
-			);
-			this.db.run(
-				`INSERT INTO session_kernel_changes (session_id, change_seq, kind, payload, created_at)
+        [
+          input.sessionId,
+          prior.state,
+          prior.since === new Date(0).toISOString()
+            ? new Date(now).toISOString()
+            : prior.since,
+          prior.lastEvent ?? null,
+          prior.generation,
+          prior.currentRunId ?? null,
+          changeSeq,
+          now,
+        ],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes (session_id, change_seq, kind, payload, created_at)
 				 VALUES (?, ?, ?, ?, ?)`,
-				[
-					input.sessionId,
-					changeSeq,
-					`command:${input.type}`,
-					json({ requestId: input.requestId }),
-					now,
-				],
-			);
-			for (const effect of input.effects)
-				this.enqueueOutbox(
-					input.sessionId,
-					effect.kind,
-					effect.payload,
-					effect.effectKey,
-				);
-		});
-		tx.immediate();
-		const prior = this.runState(input.sessionId);
-		this.runStateCache.set(input.sessionId, { ...prior, changeSeq });
-		this.dirtyChangeSessions.add(input.sessionId);
-	}
+        [
+          input.sessionId,
+          changeSeq,
+          `command:${input.type}`,
+          json({ requestId: input.requestId }),
+          now,
+        ],
+      );
+      for (const effect of input.effects)
+        this.enqueueOutbox(
+          input.sessionId,
+          effect.kind,
+          effect.payload,
+          effect.effectKey,
+        );
+    });
+    tx.immediate();
+    const prior = this.runState(input.sessionId);
+    this.runStateCache.set(input.sessionId, { ...prior, changeSeq });
+    this.dirtyChangeSessions.add(input.sessionId);
+  }
 
-	pendingOutbox(
-		now = Date.now(),
-		limit = 100,
-		kinds?: readonly string[],
-	): DurableOutboxItem[] {
-		if (kinds && kinds.length === 0) return [];
-		const kindFilter = kinds?.length
-			? ` AND kind IN (${kinds.map(() => "?").join(",")})`
-			: "";
-		const rows = this.db
-			.query(
-				`SELECT id, effect_id, effect_key, session_id, kind, payload, attempts,
+  pendingOutbox(
+    now = Date.now(),
+    limit = 100,
+    kinds?: readonly string[],
+    excludedIds: readonly number[] = [],
+  ): DurableOutboxItem[] {
+    if (kinds && kinds.length === 0) return [];
+    const kindFilter = kinds?.length
+      ? ` AND kind IN (${kinds.map(() => "?").join(",")})`
+      : "";
+    const exclusionFilter = excludedIds.length
+      ? ` AND id NOT IN (${excludedIds.map(() => "?").join(",")})`
+      : "";
+    const rows = this.db
+      .query(
+        `SELECT id, effect_id, effect_key, session_id, kind, payload, attempts,
          next_attempt_at, last_error, dead_lettered_at, created_at
          FROM session_kernel_outbox
          WHERE dead_lettered_at IS NULL AND next_attempt_at <= ?
            AND NOT EXISTS (
              SELECT 1 FROM session_kernel_quarantine q
              WHERE q.session_id = session_kernel_outbox.session_id
-           )${kindFilter}
+           )${kindFilter}${exclusionFilter}
          ORDER BY next_attempt_at, id LIMIT ?`,
       )
-			.all(now, ...(kinds || []), limit) as Record<string, unknown>[];
-		return rows.map((row) => ({
-			id: Number(row.id),
-			effectId: String(row.effect_id),
-			effectKey: String(row.effect_key),
-			sessionId: String(row.session_id),
-			kind: String(row.kind),
-			payload: parsed(row.payload as string),
-			attempts: Number(row.attempts),
-			nextAttemptAt: Number(row.next_attempt_at),
-			lastError: row.last_error == null ? undefined : String(row.last_error),
-			deadLetteredAt:
-				row.dead_lettered_at == null ? undefined : Number(row.dead_lettered_at),
-			createdAt: Number(row.created_at),
-		}));
-	}
+      .all(now, ...(kinds || []), ...excludedIds, limit) as Record<
+      string,
+      unknown
+    >[];
+    return rows.map((row) => ({
+      id: Number(row.id),
+      effectId: String(row.effect_id),
+      effectKey: String(row.effect_key),
+      sessionId: String(row.session_id),
+      kind: String(row.kind),
+      payload: parsed(row.payload as string),
+      attempts: Number(row.attempts),
+      nextAttemptAt: Number(row.next_attempt_at),
+      lastError: row.last_error == null ? undefined : String(row.last_error),
+      deadLetteredAt:
+        row.dead_lettered_at == null ? undefined : Number(row.dead_lettered_at),
+      createdAt: Number(row.created_at),
+    }));
+  }
 
-	stats(): {
-		sessions: number;
-		quarantinedSessions: number;
-		pendingCommands: number;
-		indeterminateCommands: number;
-		pendingTimers: number;
-		pendingOutbox: number;
-		deadLetteredOutbox: number;
-		deadLetteredTimers: number;
-		oldestPendingCommandAt?: number;
-		oldestIndeterminateCommandAt?: number;
-		oldestPendingTimerAt?: number;
-		oldestPendingOutboxAt?: number;
-		dbBytes: number;
-		walBytes: number;
-		pageCount: number;
-		freePages: number;
-		schemaVersion: number;
-	} {
-		const count = (table: string, where = "") =>
-			Number(
-				(
+  stats(): {
+    sessions: number;
+    quarantinedSessions: number;
+    pendingCommands: number;
+    indeterminateCommands: number;
+    pendingTimers: number;
+    pendingOutbox: number;
+    deadLetteredOutbox: number;
+    deadLetteredTimers: number;
+    oldestPendingCommandAt?: number;
+    oldestIndeterminateCommandAt?: number;
+    oldestPendingTimerAt?: number;
+    oldestPendingOutboxAt?: number;
+    dbBytes: number;
+    walBytes: number;
+    pageCount: number;
+    freePages: number;
+    schemaVersion: number;
+  } {
+    const count = (table: string, where = "") =>
+      Number(
+        (
           this.db
             .query(`SELECT COUNT(*) AS n FROM ${table} ${where}`)
             .get() as {
-						n: number;
-					}
-				).n,
-			);
+            n: number;
+          }
+        ).n,
+      );
     const oldest = (
       table: string,
       column: string,
       where = "",
     ): number | undefined => {
-			const row = this.db
-				.query(`SELECT MIN(${column}) AS oldest FROM ${table} ${where}`)
-				.get() as { oldest: number | null };
-			return row.oldest == null ? undefined : Number(row.oldest);
-		};
+      const row = this.db
+        .query(`SELECT MIN(${column}) AS oldest FROM ${table} ${where}`)
+        .get() as { oldest: number | null };
+      return row.oldest == null ? undefined : Number(row.oldest);
+    };
     const pragma = (name: string) =>
       Number(
         Object.values(
           this.db.query(`PRAGMA ${name}`).get() as Record<string, unknown>,
         )[0] ?? 0,
-		);
-		const fileBytes = (path: string) => {
+      );
+    const fileBytes = (path: string) => {
       try {
         return statSync(path).size;
       } catch {
         return 0;
       }
-		};
-		return {
-			sessions: count("session_kernel_state"),
-			quarantinedSessions: count("session_kernel_quarantine"),
-			pendingCommands: count(
-				"session_kernel_commands",
-				"WHERE status IN ('pending', 'processing')",
-			),
-			indeterminateCommands: count(
-				"session_kernel_commands",
-				"WHERE status = 'indeterminate'",
-			),
-			pendingTimers: count("session_kernel_timers"),
+    };
+    return {
+      sessions: count("session_kernel_state"),
+      quarantinedSessions: count("session_kernel_quarantine"),
+      pendingCommands: count(
+        "session_kernel_commands",
+        "WHERE status IN ('pending', 'processing')",
+      ),
+      indeterminateCommands: count(
+        "session_kernel_commands",
+        "WHERE status = 'indeterminate'",
+      ),
+      pendingTimers: count("session_kernel_timers"),
       pendingOutbox: count(
         "session_kernel_outbox",
-				"WHERE dead_lettered_at IS NULL",
-			),
-			deadLetteredOutbox: count(
-				"session_kernel_outbox",
+        "WHERE dead_lettered_at IS NULL",
+      ),
+      deadLetteredOutbox: count(
+        "session_kernel_outbox",
         "WHERE dead_lettered_at IS NOT NULL",
       ),
-			deadLetteredTimers: count(
-				"session_kernel_timers",
-				"WHERE dead_lettered_at IS NOT NULL",
-			),
-			oldestPendingCommandAt: oldest(
-				"session_kernel_commands",
-				"created_at",
-				"WHERE status IN ('pending', 'processing')",
-			),
-			oldestIndeterminateCommandAt: oldest(
-				"session_kernel_commands",
-				"created_at",
-				"WHERE status = 'indeterminate'",
-			),
-			oldestPendingTimerAt: oldest(
-				"session_kernel_timers",
-				"created_at",
-				"WHERE dead_lettered_at IS NULL",
-			),
-			oldestPendingOutboxAt: oldest(
-				"session_kernel_outbox",
-				"created_at",
-				"WHERE dead_lettered_at IS NULL",
-			),
-			dbBytes: this.path === ":memory:" ? 0 : fileBytes(this.path),
-			walBytes: this.path === ":memory:" ? 0 : fileBytes(`${this.path}-wal`),
-			pageCount: pragma("page_count"),
-			freePages: pragma("freelist_count"),
-			schemaVersion: pragma("user_version"),
-		};
-	}
+      deadLetteredTimers: count(
+        "session_kernel_timers",
+        "WHERE dead_lettered_at IS NOT NULL",
+      ),
+      oldestPendingCommandAt: oldest(
+        "session_kernel_commands",
+        "created_at",
+        "WHERE status IN ('pending', 'processing')",
+      ),
+      oldestIndeterminateCommandAt: oldest(
+        "session_kernel_commands",
+        "created_at",
+        "WHERE status = 'indeterminate'",
+      ),
+      oldestPendingTimerAt: oldest(
+        "session_kernel_timers",
+        "created_at",
+        "WHERE dead_lettered_at IS NULL",
+      ),
+      oldestPendingOutboxAt: oldest(
+        "session_kernel_outbox",
+        "created_at",
+        "WHERE dead_lettered_at IS NULL",
+      ),
+      dbBytes: this.path === ":memory:" ? 0 : fileBytes(this.path),
+      walBytes: this.path === ":memory:" ? 0 : fileBytes(`${this.path}-wal`),
+      pageCount: pragma("page_count"),
+      freePages: pragma("freelist_count"),
+      schemaVersion: pragma("user_version"),
+    };
+  }
 
-	acknowledgeCommand(sessionId: string, requestId: string): boolean {
-		const result = this.db.run(
-			`UPDATE session_kernel_commands SET acknowledged_at = COALESCE(acknowledged_at, ?)
+  acknowledgeCommand(sessionId: string, requestId: string): boolean {
+    const result = this.db.run(
+      `UPDATE session_kernel_commands SET acknowledged_at = COALESCE(acknowledged_at, ?)
 			 WHERE session_id = ? AND request_id = ? AND status = 'completed'`,
-			[Date.now(), sessionId, requestId],
-		);
-		return result.changes > 0;
-	}
+      [Date.now(), sessionId, requestId],
+    );
+    return result.changes > 0;
+  }
 
-	compact(
-		now = Date.now(),
-		commandRetentionMs = 30 * 24 * 60 * 60_000,
-		changesPerSession = CHANGE_HISTORY_PER_SESSION,
-	): void {
-		// Request fingerprints and completion state are permanent. Large semantic
-		// results stay replayable until the client confirms local receipt, then age
-		// into a bounded digest marker. Terminal failures always keep their message.
-		this.db.run(
-			`UPDATE session_kernel_commands
+  compact(
+    now = Date.now(),
+    commandRetentionMs = 30 * 24 * 60 * 60_000,
+    changesPerSession = CHANGE_HISTORY_PER_SESSION,
+  ): void {
+    // Request fingerprints and completion state are permanent. Large semantic
+    // results stay replayable until the client confirms local receipt, then age
+    // into a bounded digest marker. Terminal failures always keep their message.
+    this.db.run(
+      `UPDATE session_kernel_commands
 			 SET result = '{"__sessionKernelResultReleased":true,"sha256":"' || result_hash || '"}',
 			     result_released = 1
 			 WHERE rowid IN (
@@ -4944,28 +5236,28 @@ export class SessionKernelStore {
 				  AND result_hash IS NOT NULL AND result_released = 0 AND length(result) > ?
 				LIMIT 500
 			 )`,
-			[now - commandRetentionMs, 64 * 1024],
-		);
-		for (const sessionId of [...this.dirtyChangeSessions].slice(0, 100)) {
-			const result = this.db.run(
-				`DELETE FROM session_kernel_changes WHERE rowid IN (
+      [now - commandRetentionMs, 64 * 1024],
+    );
+    for (const sessionId of [...this.dirtyChangeSessions].slice(0, 100)) {
+      const result = this.db.run(
+        `DELETE FROM session_kernel_changes WHERE rowid IN (
 					SELECT rowid FROM session_kernel_changes
 					WHERE session_id = ? AND change_seq <= (
 						SELECT MAX(change_seq) - ? FROM session_kernel_changes WHERE session_id = ?
 					)
 					LIMIT 5000
 				 )`,
-				[sessionId, changesPerSession, sessionId],
-			);
-			if (result.changes < 5000) this.dirtyChangeSessions.delete(sessionId);
-		}
-	}
+        [sessionId, changesPerSession, sessionId],
+      );
+      if (result.changes < 5000) this.dirtyChangeSessions.delete(sessionId);
+    }
+  }
 
-	maintain(): boolean {
-		// Bounded semantic compaction only. VACUUM/optimize/checkpoint are offline
-		// operator work because this actor also serves synchronous compatibility RPCs.
-		this.db.run(
-			`UPDATE session_kernel_commands
+  maintain(): boolean {
+    // Bounded semantic compaction only. VACUUM/optimize/checkpoint are offline
+    // operator work because this actor also serves synchronous compatibility RPCs.
+    this.db.run(
+      `UPDATE session_kernel_commands
 			 SET result = '{"__sessionKernelResultReleased":true,"sha256":"' || result_hash || '"}',
 			     result_released = 1
 			 WHERE rowid IN (
@@ -4975,81 +5267,81 @@ export class SessionKernelStore {
 				  AND result_hash IS NOT NULL AND result_released = 0 AND length(result) > ?
 				LIMIT 50
 			 )`,
-			[Date.now() - 30 * 24 * 60 * 60_000, 64 * 1024],
-		);
-		const sessionId = this.dirtyChangeSessions.values().next().value as
-			| string
-			| undefined;
-		if (!sessionId) return false;
-		const result = this.db.run(
-			`DELETE FROM session_kernel_changes WHERE rowid IN (
+      [Date.now() - 30 * 24 * 60 * 60_000, 64 * 1024],
+    );
+    const sessionId = this.dirtyChangeSessions.values().next().value as
+      | string
+      | undefined;
+    if (!sessionId) return false;
+    const result = this.db.run(
+      `DELETE FROM session_kernel_changes WHERE rowid IN (
 				SELECT rowid FROM session_kernel_changes
 				WHERE session_id = ? AND change_seq <= (
 					SELECT MAX(change_seq) - ? FROM session_kernel_changes WHERE session_id = ?
 				)
 				LIMIT ?
 			 )`,
-			[
-				sessionId,
-				CHANGE_HISTORY_PER_SESSION,
-				sessionId,
-				MAINTENANCE_CHANGE_DELETE_BATCH,
-			],
-		);
-		if (result.changes < MAINTENANCE_CHANGE_DELETE_BATCH)
-			this.dirtyChangeSessions.delete(sessionId);
-		return this.dirtyChangeSessions.size > 0;
-	}
+      [
+        sessionId,
+        CHANGE_HISTORY_PER_SESSION,
+        sessionId,
+        MAINTENANCE_CHANGE_DELETE_BATCH,
+      ],
+    );
+    if (result.changes < MAINTENANCE_CHANGE_DELETE_BATCH)
+      this.dirtyChangeSessions.delete(sessionId);
+    return this.dirtyChangeSessions.size > 0;
+  }
 
-	deadLetters(limit = 100, offset = 0) {
+  deadLetters(limit = 100, offset = 0) {
     const timers = this.db
       .query(
-			`SELECT session_id, timer_id, kind, due_at, attempts, next_attempt_at, last_error, dead_lettered_at, created_at
+        `SELECT session_id, timer_id, kind, due_at, attempts, next_attempt_at, last_error, dead_lettered_at, created_at
 			 FROM session_kernel_timers WHERE dead_lettered_at IS NOT NULL
 			 ORDER BY dead_lettered_at DESC LIMIT ? OFFSET ?`,
       )
       .all(limit, offset) as Record<string, unknown>[];
     const outbox = this.db
       .query(
-			`SELECT id, effect_id, effect_key, session_id, kind, attempts, next_attempt_at, last_error, dead_lettered_at, created_at
+        `SELECT id, effect_id, effect_key, session_id, kind, attempts, next_attempt_at, last_error, dead_lettered_at, created_at
 			 FROM session_kernel_outbox WHERE dead_lettered_at IS NOT NULL
 			 ORDER BY dead_lettered_at DESC LIMIT ? OFFSET ?`,
       )
       .all(limit, offset) as Record<string, unknown>[];
-		const quarantines = this.quarantinedSessions(limit, offset);
-		return {
-			quarantines,
-			timers: timers.map((row) => ({
-				sessionId: String(row.session_id),
-				timerId: String(row.timer_id),
-				kind: String(row.kind),
-				dueAt: Number(row.due_at),
-				nextAttemptAt: Number(row.next_attempt_at),
-				createdAt: Number(row.created_at),
-				attempts: Number(row.attempts),
-				lastError: row.last_error == null ? undefined : String(row.last_error),
-				deadLetteredAt: Number(row.dead_lettered_at),
-			})),
-			outbox: outbox.map((row) => ({
-				id: Number(row.id),
-				effectId: String(row.effect_id),
-				effectKey: String(row.effect_key),
-				nextAttemptAt: Number(row.next_attempt_at),
-				createdAt: Number(row.created_at),
-				sessionId: String(row.session_id),
-				kind: String(row.kind),
-				attempts: Number(row.attempts),
-				lastError: row.last_error == null ? undefined : String(row.last_error),
-				deadLetteredAt: Number(row.dead_lettered_at),
-			})),
-			totals: {
-				quarantines: Number(
-					(
-						this.db
-							.query("SELECT COUNT(*) AS n FROM session_kernel_quarantine")
-							.get() as { n: number }
-					).n,
-				),
+    const quarantines = this.quarantinedSessions(limit, offset);
+    return {
+      quarantines,
+      timers: timers.map((row) => ({
+        sessionId: String(row.session_id),
+        timerId: String(row.timer_id),
+        kind: String(row.kind),
+        dueAt: Number(row.due_at),
+        nextAttemptAt: Number(row.next_attempt_at),
+        createdAt: Number(row.created_at),
+        attempts: Number(row.attempts),
+        lastError: row.last_error == null ? undefined : String(row.last_error),
+        deadLetteredAt: Number(row.dead_lettered_at),
+      })),
+      outbox: outbox.map((row) => ({
+        id: Number(row.id),
+        effectId: String(row.effect_id),
+        effectKey: String(row.effect_key),
+        nextAttemptAt: Number(row.next_attempt_at),
+        createdAt: Number(row.created_at),
+        sessionId: String(row.session_id),
+        kind: String(row.kind),
+        attempts: Number(row.attempts),
+        lastError: row.last_error == null ? undefined : String(row.last_error),
+        deadLetteredAt: Number(row.dead_lettered_at),
+      })),
+      totals: {
+        quarantines: Number(
+          (
+            this.db
+              .query("SELECT COUNT(*) AS n FROM session_kernel_quarantine")
+              .get() as { n: number }
+          ).n,
+        ),
         timers: Number(
           (
             this.db
@@ -5068,55 +5360,56 @@ export class SessionKernelStore {
               .get() as { n: number }
           ).n,
         ),
-			},
-			nextOffset:
-				quarantines.length === limit ||
-				timers.length === limit ||
-				outbox.length === limit
-					? offset + limit
-					: undefined,
-		};
-	}
+      },
+      nextOffset:
+        quarantines.length === limit ||
+        timers.length === limit ||
+        outbox.length === limit
+          ? offset + limit
+          : undefined,
+    };
+  }
 
-	discardDeadTimer(sessionId: string, timerId: string): boolean {
-		const result = this.db.run(
-			"DELETE FROM session_kernel_timers WHERE session_id = ? AND timer_id = ? AND dead_lettered_at IS NOT NULL",
-			[sessionId, timerId],
-		);
-		return result.changes > 0;
-	}
+  discardDeadTimer(sessionId: string, timerId: string): boolean {
+    const result = this.db.run(
+      "DELETE FROM session_kernel_timers WHERE session_id = ? AND timer_id = ? AND dead_lettered_at IS NOT NULL",
+      [sessionId, timerId],
+    );
+    return result.changes > 0;
+  }
 
-	discardDeadOutbox(id: number): boolean {
-		const result = this.db.run(
-			"DELETE FROM session_kernel_outbox WHERE id = ? AND dead_lettered_at IS NOT NULL",
-			[id],
-		);
-		return result.changes > 0;
-	}
+  discardDeadOutbox(id: number): boolean {
+    const result = this.db.run(
+      "DELETE FROM session_kernel_outbox WHERE id = ? AND dead_lettered_at IS NOT NULL",
+      [id],
+    );
+    return result.changes > 0;
+  }
 
-	retryDeadTimer(sessionId: string, timerId: string): boolean {
-		const result = this.db.run(
-			`UPDATE session_kernel_timers SET attempts = 0, next_attempt_at = ?,
+  retryDeadTimer(sessionId: string, timerId: string): boolean {
+    const result = this.db.run(
+      `UPDATE session_kernel_timers SET attempts = 0, next_attempt_at = ?,
 			 last_error = NULL, dead_lettered_at = NULL
 			 WHERE session_id = ? AND timer_id = ? AND dead_lettered_at IS NOT NULL`,
-			[Date.now(), sessionId, timerId],
-		);
-		return result.changes > 0;
-	}
+      [Date.now(), sessionId, timerId],
+    );
+    return result.changes > 0;
+  }
 
-	retryDeadOutbox(id: number): boolean {
-		const result = this.db.run(
-			`UPDATE session_kernel_outbox SET attempts = 0, next_attempt_at = ?,
+  retryDeadOutbox(id: number): boolean {
+    const result = this.db.run(
+      `UPDATE session_kernel_outbox SET attempts = 0, next_attempt_at = ?,
 			 last_error = NULL, dead_lettered_at = NULL
 			 WHERE id = ? AND dead_lettered_at IS NOT NULL`,
-			[Date.now(), id],
-		);
-		return result.changes > 0;
-	}
+      [Date.now(), id],
+    );
+    return result.changes > 0;
+  }
 
-	hasCreationBranchDeadLetters(): boolean {
-		return !!this.db.query(
-			`SELECT 1
+  hasCreationBranchDeadLetters(): boolean {
+    return !!this.db
+      .query(
+        `SELECT 1
 			 FROM session_kernel_outbox AS outbox
 			 JOIN session_kernel_creation AS creation
 			   ON creation.session_id = outbox.session_id
@@ -5125,30 +5418,33 @@ export class SessionKernelStore {
 			 WHERE outbox.kind = 'creation_branch_prepare'
 			   AND outbox.dead_lettered_at IS NOT NULL
 			 LIMIT 1`,
-		).get();
-	}
+      )
+      .get();
+  }
 
-	/**
-	 * Re-admit branch effects rejected before physical work by compatibility bugs:
-	 * the former shared-checkout classifier and the old empty-base decoder. The
-	 * caller supplies trusted shared destinations; every other failure stays dead.
-	 */
-	retryCompatibleCreationBranchDeadLetters(
-		destinations: ReadonlyArray<{ project: string; worktreePath: string }>,
-		now = Date.now(),
-	): Array<{
-		id: number;
-		sessionId: string;
-		reason: "shared_checkout_destination_adoptable" | "legacy_empty_base_branch";
-	}> {
-		const allowed = new Set(
-			destinations.map(({ project, worktreePath }) =>
-				JSON.stringify([project, worktreePath]),
-			),
-		);
-		const rows = this.db
-			.query(
-				`SELECT outbox.id, outbox.session_id, outbox.payload, outbox.last_error
+  /**
+   * Re-admit branch effects rejected before physical work by compatibility bugs:
+   * the former shared-checkout classifier and the old empty-base decoder. The
+   * caller supplies trusted shared destinations; every other failure stays dead.
+   */
+  retryCompatibleCreationBranchDeadLetters(
+    destinations: ReadonlyArray<{ project: string; worktreePath: string }>,
+    now = Date.now(),
+  ): Array<{
+    id: number;
+    sessionId: string;
+    reason:
+      | "shared_checkout_destination_adoptable"
+      | "legacy_empty_base_branch";
+  }> {
+    const allowed = new Set(
+      destinations.map(({ project, worktreePath }) =>
+        JSON.stringify([project, worktreePath]),
+      ),
+    );
+    const rows = this.db
+      .query(
+        `SELECT outbox.id, outbox.session_id, outbox.payload, outbox.last_error
 				 FROM session_kernel_outbox AS outbox
 				 JOIN session_kernel_creation AS creation
 				   ON creation.session_id = outbox.session_id
@@ -5158,80 +5454,83 @@ export class SessionKernelStore {
 				   AND outbox.dead_lettered_at IS NOT NULL
 				 ORDER BY outbox.id
 				 LIMIT 1000`,
-			)
-			.all() as Array<{
-				id: number;
-				session_id: string;
-				payload: string;
-				last_error: string | null;
-			}>;
-		const retried: Array<{
-			id: number;
-			sessionId: string;
-			reason: "shared_checkout_destination_adoptable" | "legacy_empty_base_branch";
-		}> = [];
-		const tx = this.db.transaction(() => {
-			for (const row of rows) {
-				let payload: Record<string, unknown>;
-				try {
-					const parsed = JSON.parse(row.payload);
-					if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-						continue;
-					payload = parsed as Record<string, unknown>;
-				} catch {
-					continue;
-				}
-				if (
-					typeof payload.creationIdentity !== "string" ||
-					payload.creationIdentity.length === 0 ||
-					!Number.isSafeInteger(payload.creationGeneration) ||
-					Number(payload.creationGeneration) < 1 ||
-					typeof payload.project !== "string" ||
-					typeof payload.worktreePath !== "string" ||
-					typeof payload.branch !== "string" ||
-					payload.branch.length === 0 ||
-					payload.mode !== "adopt_or_create" ||
-					typeof payload.isolated !== "boolean"
-				)
-					continue;
-				const sharedCheckoutFalsePositive =
-					payload.isolated === false &&
-					allowed.has(
-						JSON.stringify([payload.project, payload.worktreePath]),
-					) &&
-					row.last_error ===
-						`Worktree destination ${payload.worktreePath} exists without a registered branch`;
-				// This decoder rejection happened before any executor or physical Git
-				// action. Current additive decoding treats the old empty sentinel as
-				// an omitted optional base, so replay cannot duplicate prior work.
-				const legacyEmptyBaseBranch =
-					payload.baseBranch === "" &&
-					row.last_error ===
-						"Invalid creation_branch_prepare effect payload: baseBranch";
-				if (!sharedCheckoutFalsePositive && !legacyEmptyBaseBranch) continue;
-				const result = this.db.run(
-					`UPDATE session_kernel_outbox
+      )
+      .all() as Array<{
+      id: number;
+      session_id: string;
+      payload: string;
+      last_error: string | null;
+    }>;
+    const retried: Array<{
+      id: number;
+      sessionId: string;
+      reason:
+        | "shared_checkout_destination_adoptable"
+        | "legacy_empty_base_branch";
+    }> = [];
+    const tx = this.db.transaction(() => {
+      for (const row of rows) {
+        let payload: Record<string, unknown>;
+        try {
+          const parsed = JSON.parse(row.payload);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+            continue;
+          payload = parsed as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+        if (
+          typeof payload.creationIdentity !== "string" ||
+          payload.creationIdentity.length === 0 ||
+          !Number.isSafeInteger(payload.creationGeneration) ||
+          Number(payload.creationGeneration) < 1 ||
+          typeof payload.project !== "string" ||
+          typeof payload.worktreePath !== "string" ||
+          typeof payload.branch !== "string" ||
+          payload.branch.length === 0 ||
+          payload.mode !== "adopt_or_create" ||
+          typeof payload.isolated !== "boolean"
+        )
+          continue;
+        const sharedCheckoutFalsePositive =
+          payload.isolated === false &&
+          allowed.has(
+            JSON.stringify([payload.project, payload.worktreePath]),
+          ) &&
+          row.last_error ===
+            `Worktree destination ${payload.worktreePath} exists without a registered branch`;
+        // This decoder rejection happened before any executor or physical Git
+        // action. Current additive decoding treats the old empty sentinel as
+        // an omitted optional base, so replay cannot duplicate prior work.
+        const legacyEmptyBaseBranch =
+          payload.baseBranch === "" &&
+          row.last_error ===
+            "Invalid creation_branch_prepare effect payload: baseBranch";
+        if (!sharedCheckoutFalsePositive && !legacyEmptyBaseBranch) continue;
+        const result = this.db.run(
+          `UPDATE session_kernel_outbox
 					 SET attempts = 0, next_attempt_at = ?, last_error = NULL,
 					     dead_lettered_at = NULL
 					 WHERE id = ? AND dead_lettered_at IS NOT NULL`,
-					[now, row.id],
-				);
-				if (result.changes > 0)
-					retried.push({
-						id: Number(row.id),
-						sessionId: row.session_id,
-						reason: sharedCheckoutFalsePositive
-							? "shared_checkout_destination_adoptable"
-							: "legacy_empty_base_branch",
-					});
-			}
-		});
-		tx.immediate();
-		return retried;
-	}
+          [now, row.id],
+        );
+        if (result.changes > 0)
+          retried.push({
+            id: Number(row.id),
+            sessionId: row.session_id,
+            reason: sharedCheckoutFalsePositive
+              ? "shared_checkout_destination_adoptable"
+              : "legacy_empty_base_branch",
+          });
+      }
+    });
+    tx.immediate();
+    return retried;
+  }
 
-	hasSessionDurableState(sessionId: string): boolean {
-		const row = this.db.query(`
+  hasSessionDurableState(sessionId: string): boolean {
+    const row = this.db
+      .query(`
 			SELECT 1 AS present FROM (
 				SELECT session_id FROM session_kernel_tombstones WHERE session_id = ?
 				UNION ALL SELECT session_id FROM session_kernel_quarantine WHERE session_id = ?
@@ -5246,14 +5545,17 @@ export class SessionKernelStore {
 				UNION ALL SELECT session_id FROM session_kernel_timers WHERE session_id = ?
 				UNION ALL SELECT session_id FROM session_kernel_outbox WHERE session_id = ?
 			) LIMIT 1
-		`).get(...Array(12).fill(sessionId)) as { present: number } | null;
-		return row !== null;
-	}
+		`)
+      .get(...Array(12).fill(sessionId)) as { present: number } | null;
+    return row !== null;
+  }
 
-	legacySessionIds(limit = 1): string[] {
-		if (!Number.isInteger(limit) || limit < 1 || limit > 100)
-			throw new Error("Invalid legacy migration limit");
-		return (this.db.query(`
+  legacySessionIds(limit = 1): string[] {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+      throw new Error("Invalid legacy migration limit");
+    return (
+      this.db
+        .query(`
 			SELECT session_id FROM (
 				SELECT session_id FROM session_kernel_tombstones
 				UNION SELECT session_id FROM session_kernel_quarantine
@@ -5274,182 +5576,241 @@ export class SessionKernelStore {
 			)
 			ORDER BY session_id
 			LIMIT ?
-		`).all(limit) as Array<{ session_id: string }>).map((row) => row.session_id);
-	}
+		`)
+        .all(limit) as Array<{ session_id: string }>
+    ).map((row) => row.session_id);
+  }
 
-	migrateLegacySession(sessionId: string, targetPath: string): boolean {
-		if (this.path === ":memory:" || targetPath === ":memory:")
-			throw new Error("Legacy session migration requires durable database paths");
-		if (this.sessionPlacement(sessionId)) return false;
-		if (!this.hasSessionDurableState(sessionId)) return false;
+  migrateLegacySession(sessionId: string, targetPath: string): boolean {
+    if (this.path === ":memory:" || targetPath === ":memory:")
+      throw new Error(
+        "Legacy session migration requires durable database paths",
+      );
+    if (this.sessionPlacement(sessionId)) return false;
+    if (!this.hasSessionDurableState(sessionId)) return false;
 
-		const temporaryPath = `${targetPath}.migrating-${crypto.randomUUID()}`;
-		for (const path of [targetPath, `${targetPath}-wal`, `${targetPath}-shm`, temporaryPath, `${temporaryPath}-wal`, `${temporaryPath}-shm`])
-			rmSync(path, { force: true });
-		const initialized = new SessionKernelStore(temporaryPath, { busyTimeoutMs: 250 });
-		initialized.close();
+    const temporaryPath = `${targetPath}.migrating-${crypto.randomUUID()}`;
+    for (const path of [
+      targetPath,
+      `${targetPath}-wal`,
+      `${targetPath}-shm`,
+      temporaryPath,
+      `${temporaryPath}-wal`,
+      `${temporaryPath}-shm`,
+    ])
+      rmSync(path, { force: true });
+    const initialized = new SessionKernelStore(temporaryPath, {
+      busyTimeoutMs: 250,
+    });
+    initialized.close();
 
-		let attached = false;
-		let nextTimerAt: number | undefined;
-		let nextOutboxAt: number | undefined;
-		try {
-			this.db.query("ATTACH DATABASE ? AS session_migration").run(temporaryPath);
-			attached = true;
-			const columnsByTable = new Map<string, string>();
-			for (const table of SESSION_KERNEL_SESSION_TABLES) {
-				const sourceColumns = (this.db.query(
-					`PRAGMA main.table_info(${table})`,
-				).all() as Array<{ name: string }>).map((column) => column.name);
-				const targetColumns = (this.db.query(
-					`PRAGMA session_migration.table_info(${table})`,
-				).all() as Array<{ name: string }>).map((column) => column.name);
-				if (
-					sourceColumns.length !== targetColumns.length ||
-					targetColumns.some((column) => !sourceColumns.includes(column))
-				) throw new Error(`Session migration schema mismatch for ${table}`);
-				columnsByTable.set(
-					table,
-					targetColumns.map((column) => `"${column.replaceAll('"', '""')}"`).join(", "),
-				);
-			}
-			this.db.exec("BEGIN IMMEDIATE");
-			try {
-				for (const table of SESSION_KERNEL_SESSION_TABLES) {
-					const columns = columnsByTable.get(table)!;
-					this.db.query(
-						`INSERT INTO session_migration.${table} (${columns}) SELECT ${columns} FROM main.${table} WHERE session_id = ?`,
-					).run(sessionId);
-				}
-				this.db.exec("COMMIT");
-			} catch (error) {
-				this.db.exec("ROLLBACK");
-				throw error;
-			}
+    let attached = false;
+    let nextTimerAt: number | undefined;
+    let nextOutboxAt: number | undefined;
+    try {
+      this.db
+        .query("ATTACH DATABASE ? AS session_migration")
+        .run(temporaryPath);
+      attached = true;
+      const columnsByTable = new Map<string, string>();
+      for (const table of SESSION_KERNEL_SESSION_TABLES) {
+        const sourceColumns = (
+          this.db.query(`PRAGMA main.table_info(${table})`).all() as Array<{
+            name: string;
+          }>
+        ).map((column) => column.name);
+        const targetColumns = (
+          this.db
+            .query(`PRAGMA session_migration.table_info(${table})`)
+            .all() as Array<{ name: string }>
+        ).map((column) => column.name);
+        if (
+          sourceColumns.length !== targetColumns.length ||
+          targetColumns.some((column) => !sourceColumns.includes(column))
+        )
+          throw new Error(`Session migration schema mismatch for ${table}`);
+        columnsByTable.set(
+          table,
+          targetColumns
+            .map((column) => `"${column.replaceAll('"', '""')}"`)
+            .join(", "),
+        );
+      }
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        for (const table of SESSION_KERNEL_SESSION_TABLES) {
+          const columns = columnsByTable.get(table)!;
+          this.db
+            .query(
+              `INSERT INTO session_migration.${table} (${columns}) SELECT ${columns} FROM main.${table} WHERE session_id = ?`,
+            )
+            .run(sessionId);
+        }
+        this.db.exec("COMMIT");
+      } catch (error) {
+        this.db.exec("ROLLBACK");
+        throw error;
+      }
 
-			for (const table of SESSION_KERNEL_SESSION_TABLES) {
-				const source = this.db.query(
-					`SELECT COUNT(*) AS count FROM main.${table} WHERE session_id = ?`,
-				).get(sessionId) as { count: number };
-				const target = this.db.query(
-					`SELECT COUNT(*) AS count FROM session_migration.${table} WHERE session_id = ?`,
-				).get(sessionId) as { count: number };
-				if (Number(source.count) !== Number(target.count))
-					throw new Error(`Session migration count mismatch for ${table}`);
-				const columns = columnsByTable.get(table)!;
-				const sourceDifference = this.db.query(`
+      for (const table of SESSION_KERNEL_SESSION_TABLES) {
+        const source = this.db
+          .query(
+            `SELECT COUNT(*) AS count FROM main.${table} WHERE session_id = ?`,
+          )
+          .get(sessionId) as { count: number };
+        const target = this.db
+          .query(
+            `SELECT COUNT(*) AS count FROM session_migration.${table} WHERE session_id = ?`,
+          )
+          .get(sessionId) as { count: number };
+        if (Number(source.count) !== Number(target.count))
+          throw new Error(`Session migration count mismatch for ${table}`);
+        const columns = columnsByTable.get(table)!;
+        const sourceDifference = this.db
+          .query(`
 					SELECT 1 AS differs FROM (
 						SELECT ${columns} FROM main.${table} WHERE session_id = ?
 						EXCEPT
 						SELECT ${columns} FROM session_migration.${table} WHERE session_id = ?
 					) LIMIT 1
-				`).get(sessionId, sessionId);
-				const targetDifference = this.db.query(`
+				`)
+          .get(sessionId, sessionId);
+        const targetDifference = this.db
+          .query(`
 					SELECT 1 AS differs FROM (
 						SELECT ${columns} FROM session_migration.${table} WHERE session_id = ?
 						EXCEPT
 						SELECT ${columns} FROM main.${table} WHERE session_id = ?
 					) LIMIT 1
-				`).get(sessionId, sessionId);
-				if (sourceDifference || targetDifference)
-					throw new Error(`Session migration row mismatch for ${table}`);
-			}
-			const integrity = this.db.query(
-				"PRAGMA session_migration.integrity_check",
-			).get() as { integrity_check: string };
-			if (integrity.integrity_check !== "ok")
-				throw new Error(`Session migration integrity check failed: ${integrity.integrity_check}`);
-			const timerWake = this.db.query(`
+				`)
+          .get(sessionId, sessionId);
+        if (sourceDifference || targetDifference)
+          throw new Error(`Session migration row mismatch for ${table}`);
+      }
+      const integrity = this.db
+        .query("PRAGMA session_migration.integrity_check")
+        .get() as { integrity_check: string };
+      if (integrity.integrity_check !== "ok")
+        throw new Error(
+          `Session migration integrity check failed: ${integrity.integrity_check}`,
+        );
+      const timerWake = this.db
+        .query(`
 				SELECT MIN(CASE WHEN next_attempt_at > due_at THEN next_attempt_at ELSE due_at END) AS next_at
 				FROM session_migration.session_kernel_timers
 				WHERE session_id = ? AND dead_lettered_at IS NULL
-			`).get(sessionId) as { next_at: number | null };
-			const outboxWake = this.db.query(`
+			`)
+        .get(sessionId) as { next_at: number | null };
+      const outboxWake = this.db
+        .query(`
 				SELECT MIN(next_attempt_at) AS next_at
 				FROM session_migration.session_kernel_outbox
 				WHERE session_id = ? AND dead_lettered_at IS NULL
-			`).get(sessionId) as { next_at: number | null };
-			nextTimerAt = timerWake.next_at === null ? undefined : Number(timerWake.next_at);
-			nextOutboxAt = outboxWake.next_at === null ? undefined : Number(outboxWake.next_at);
-			this.db.exec("PRAGMA session_migration.wal_checkpoint(TRUNCATE)");
-			this.db.exec("DETACH DATABASE session_migration");
-			attached = false;
+			`)
+        .get(sessionId) as { next_at: number | null };
+      nextTimerAt =
+        timerWake.next_at === null ? undefined : Number(timerWake.next_at);
+      nextOutboxAt =
+        outboxWake.next_at === null ? undefined : Number(outboxWake.next_at);
+      this.db.exec("PRAGMA session_migration.wal_checkpoint(TRUNCATE)");
+      this.db.exec("DETACH DATABASE session_migration");
+      attached = false;
 
-			for (const suffix of ["-wal", "-shm"])
-				rmSync(`${temporaryPath}${suffix}`, { force: true });
-			const file = openSync(temporaryPath, "r");
-			try {
-				fsyncSync(file);
-			} finally {
-				closeSync(file);
-			}
-			renameSync(temporaryPath, targetPath);
-			const directory = openSync(dirname(targetPath), "r");
-			try {
-				fsyncSync(directory);
-			} finally {
-				closeSync(directory);
-			}
+      for (const suffix of ["-wal", "-shm"])
+        rmSync(`${temporaryPath}${suffix}`, { force: true });
+      const file = openSync(temporaryPath, "r");
+      try {
+        fsyncSync(file);
+      } finally {
+        closeSync(file);
+      }
+      renameSync(temporaryPath, targetPath);
+      const directory = openSync(dirname(targetPath), "r");
+      try {
+        fsyncSync(directory);
+      } finally {
+        closeSync(directory);
+      }
 
-			const publish = this.db.transaction(() => {
-				if (this.sessionPlacement(sessionId)) return false;
-				if (!this.hasSessionDurableState(sessionId))
-					throw new Error("Legacy session state disappeared before cutover");
-				const outboxIds = this.db.query(`
+      const publish = this.db.transaction(() => {
+        if (this.sessionPlacement(sessionId)) return false;
+        if (!this.hasSessionDurableState(sessionId))
+          throw new Error("Legacy session state disappeared before cutover");
+        const outboxIds = this.db
+          .query(`
 					SELECT id FROM session_kernel_outbox
 					WHERE session_id = ? ORDER BY id
-				`).all(sessionId) as Array<{ id: number }>;
-				for (const row of outboxIds)
-					this.db.run(`
+				`)
+          .all(sessionId) as Array<{ id: number }>;
+        for (const row of outboxIds)
+          this.db.run(
+            `
 						INSERT INTO session_kernel_outbox_routes (id, session_id, created_at)
 						VALUES (?, ?, ?)
-					`, [Number(row.id), sessionId, Date.now()]);
-				this.db.run(`
+					`,
+            [Number(row.id), sessionId, Date.now()],
+          );
+        this.db.run(
+          `
 					INSERT INTO session_kernel_placements
 						(session_id, placement, needs_scan, next_timer_at, next_outbox_at, updated_at)
 					VALUES (?, 'isolated', 0, ?, ?, ?)
-				`, [sessionId, nextTimerAt ?? null, nextOutboxAt ?? null, Date.now()]);
-				for (const table of SESSION_KERNEL_SESSION_TABLES)
-					this.db.query(`DELETE FROM ${table} WHERE session_id = ?`).run(sessionId);
-				this.runStateCache.delete(sessionId);
-				this.dirtyChangeSessions.delete(sessionId);
-				return true;
-			});
-			return publish.immediate();
-		} catch (error) {
-			if (attached) {
-				try {
-					this.db.exec("DETACH DATABASE session_migration");
-				} catch {}
-			}
-			if (!this.sessionPlacement(sessionId)) {
-				for (const path of [targetPath, `${targetPath}-wal`, `${targetPath}-shm`, temporaryPath, `${temporaryPath}-wal`, `${temporaryPath}-shm`])
-					rmSync(path, { force: true });
-			}
-			throw error;
-		}
-	}
+				`,
+          [sessionId, nextTimerAt ?? null, nextOutboxAt ?? null, Date.now()],
+        );
+        for (const table of SESSION_KERNEL_SESSION_TABLES)
+          this.db
+            .query(`DELETE FROM ${table} WHERE session_id = ?`)
+            .run(sessionId);
+        this.runStateCache.delete(sessionId);
+        this.dirtyChangeSessions.delete(sessionId);
+        return true;
+      });
+      return publish.immediate();
+    } catch (error) {
+      if (attached) {
+        try {
+          this.db.exec("DETACH DATABASE session_migration");
+        } catch {}
+      }
+      if (!this.sessionPlacement(sessionId)) {
+        for (const path of [
+          targetPath,
+          `${targetPath}-wal`,
+          `${targetPath}-shm`,
+          temporaryPath,
+          `${temporaryPath}-wal`,
+          `${temporaryPath}-shm`,
+        ])
+          rmSync(path, { force: true });
+      }
+      throw error;
+    }
+  }
 
-	sessionPlacement(sessionId: string): DurableSessionPlacement | undefined {
-		const row = this.db.query(`
+  sessionPlacement(sessionId: string): DurableSessionPlacement | undefined {
+    const row = this.db
+      .query(`
 			SELECT session_id, placement, transcript_authority,
                    transcript_migration_receipt, transcript_published_at,
                    needs_scan, next_timer_at, next_outbox_at, updated_at
 			FROM session_kernel_placements WHERE session_id = ?
-		`).get(sessionId) as {
-			session_id: string;
-			placement: "isolated";
+		`)
+      .get(sessionId) as {
+      session_id: string;
+      placement: "isolated";
       transcript_authority: "shared" | "actor";
       transcript_migration_receipt: string | null;
       transcript_published_at: number | null;
-			needs_scan: number;
-			next_timer_at: number | null;
-			next_outbox_at: number | null;
-			updated_at: number;
-		} | null;
-		if (!row) return undefined;
-		return {
-			sessionId: row.session_id,
-			placement: row.placement,
+      needs_scan: number;
+      next_timer_at: number | null;
+      next_outbox_at: number | null;
+      updated_at: number;
+    } | null;
+    if (!row) return undefined;
+    return {
+      sessionId: row.session_id,
+      placement: row.placement,
       transcriptAuthority: row.transcript_authority,
       ...(row.transcript_migration_receipt === null
         ? {}
@@ -5457,34 +5818,39 @@ export class SessionKernelStore {
       ...(row.transcript_published_at === null
         ? {}
         : { transcriptPublishedAt: Number(row.transcript_published_at) }),
-			needsScan: row.needs_scan === 1,
-			...(row.next_timer_at === null ? {} : { nextTimerAt: Number(row.next_timer_at) }),
-			...(row.next_outbox_at === null ? {} : { nextOutboxAt: Number(row.next_outbox_at) }),
-			updatedAt: Number(row.updated_at),
-		};
-	}
+      needsScan: row.needs_scan === 1,
+      ...(row.next_timer_at === null
+        ? {}
+        : { nextTimerAt: Number(row.next_timer_at) }),
+      ...(row.next_outbox_at === null
+        ? {}
+        : { nextOutboxAt: Number(row.next_outbox_at) }),
+      updatedAt: Number(row.updated_at),
+    };
+  }
 
-  actorTranscriptSessionIds(
-    limit = 100,
-    afterSessionId = "",
-  ): string[] {
-    return (this.db.query(`
+  actorTranscriptSessionIds(limit = 100, afterSessionId = ""): string[] {
+    return (
+      this.db
+        .query(`
       SELECT session_id FROM session_kernel_placements
       WHERE placement = 'isolated'
         AND transcript_authority = 'actor'
         AND session_id > ?
       ORDER BY session_id LIMIT ?
-    `).all(afterSessionId, Math.max(1, limit)) as Array<{ session_id: string }>)
-      .map((row) => row.session_id);
+    `)
+        .all(afterSessionId, Math.max(1, limit)) as Array<{
+        session_id: string;
+      }>
+    ).map((row) => row.session_id);
   }
 
-  transcriptMigrationSessionIds(
-    limit = 1_000,
-    afterSessionId = "",
-  ): string[] {
+  transcriptMigrationSessionIds(limit = 1_000, afterSessionId = ""): string[] {
     if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
       throw new Error("Invalid transcript migration session limit");
-    return (this.db.query(`
+    return (
+      this.db
+        .query(`
       SELECT session_id FROM (
         SELECT session_id FROM session_kernel_tombstones
         UNION SELECT session_id FROM session_kernel_quarantine
@@ -5503,8 +5869,9 @@ export class SessionKernelStore {
       ) candidates
       WHERE session_id > ?
       ORDER BY session_id LIMIT ?
-    `).all(afterSessionId, limit) as Array<{ session_id: string }>)
-      .map((row) => row.session_id);
+    `)
+        .all(afterSessionId, limit) as Array<{ session_id: string }>
+    ).map((row) => row.session_id);
   }
 
   publishActorTranscriptAuthorities(
@@ -5512,7 +5879,10 @@ export class SessionKernelStore {
   ): void {
     const publish = this.db.transaction(() => {
       for (const { sessionId, migrationReceipt } of entries) {
-        if (!migrationReceipt || Buffer.byteLength(migrationReceipt) > 16 * 1024)
+        if (
+          !migrationReceipt ||
+          Buffer.byteLength(migrationReceipt) > 16 * 1024
+        )
           throw new Error("Invalid transcript migration receipt");
         const existing = this.sessionPlacement(sessionId);
         if (!existing || existing.placement !== "isolated")
@@ -5520,21 +5890,29 @@ export class SessionKernelStore {
         if (
           existing.transcriptAuthority === "actor" &&
           existing.transcriptMigrationReceipt !== migrationReceipt
-        ) throw new Error(`Session ${sessionId} transcript authority receipt conflict`);
+        )
+          throw new Error(
+            `Session ${sessionId} transcript authority receipt conflict`,
+          );
       }
       const now = Date.now();
       for (const { sessionId, migrationReceipt } of entries) {
         const existing = this.sessionPlacement(sessionId)!;
         if (existing.transcriptAuthority === "actor") continue;
-        const result = this.db.run(`
+        const result = this.db.run(
+          `
           UPDATE session_kernel_placements
           SET transcript_authority = 'actor', transcript_migration_receipt = ?,
               transcript_published_at = ?, updated_at = ?
           WHERE session_id = ? AND placement = 'isolated'
             AND transcript_authority = 'shared'
-        `, [migrationReceipt, now, now, sessionId]);
+        `,
+          [migrationReceipt, now, now, sessionId],
+        );
         if (result.changes !== 1)
-          throw new Error(`Session ${sessionId} transcript authority publication raced`);
+          throw new Error(
+            `Session ${sessionId} transcript authority publication raced`,
+          );
       }
     });
     publish.immediate();
@@ -5547,21 +5925,29 @@ export class SessionKernelStore {
     if (!migrationReceipt || Buffer.byteLength(migrationReceipt) > 16 * 1024)
       throw new Error("Invalid transcript migration receipt");
     const existing = this.sessionPlacement(sessionId);
-    if (!existing) throw new Error(`Session ${sessionId} has no isolated placement`);
+    if (!existing)
+      throw new Error(`Session ${sessionId} has no isolated placement`);
     if (existing.transcriptAuthority === "actor") {
       if (existing.transcriptMigrationReceipt !== migrationReceipt)
-        throw new Error(`Session ${sessionId} transcript authority receipt conflict`);
+        throw new Error(
+          `Session ${sessionId} transcript authority receipt conflict`,
+        );
       return existing;
     }
-    const result = this.db.run(`
+    const result = this.db.run(
+      `
       UPDATE session_kernel_placements
       SET transcript_authority = 'actor', transcript_migration_receipt = ?,
           transcript_published_at = ?, updated_at = ?
       WHERE session_id = ? AND placement = 'isolated'
         AND transcript_authority = 'shared'
-    `, [migrationReceipt, Date.now(), Date.now(), sessionId]);
+    `,
+      [migrationReceipt, Date.now(), Date.now(), sessionId],
+    );
     if (result.changes !== 1)
-      throw new Error(`Session ${sessionId} transcript authority publication raced`);
+      throw new Error(
+        `Session ${sessionId} transcript authority publication raced`,
+      );
     return this.sessionPlacement(sessionId)!;
   }
 
@@ -5569,45 +5955,60 @@ export class SessionKernelStore {
     const rollback = this.db.transaction(() => {
       const now = Date.now();
       for (const sessionId of sessionIds) {
-        const result = this.db.run(`
+        const result = this.db.run(
+          `
           UPDATE session_kernel_placements
           SET transcript_authority = 'shared', transcript_published_at = NULL,
               updated_at = ?
           WHERE session_id = ? AND placement = 'isolated'
             AND transcript_authority = 'actor'
-        `, [now, sessionId]);
+        `,
+          [now, sessionId],
+        );
         if (result.changes !== 1)
-          throw new Error(`Session ${sessionId} has no actor transcript authority`);
+          throw new Error(
+            `Session ${sessionId} has no actor transcript authority`,
+          );
       }
     });
     rollback.immediate();
   }
 
   rollbackActorTranscriptAuthority(sessionId: string): DurableSessionPlacement {
-    const result = this.db.run(`
+    const result = this.db.run(
+      `
       UPDATE session_kernel_placements
       SET transcript_authority = 'shared', transcript_published_at = NULL,
           updated_at = ?
       WHERE session_id = ? AND placement = 'isolated'
         AND transcript_authority = 'actor'
-    `, [Date.now(), sessionId]);
+    `,
+      [Date.now(), sessionId],
+    );
     if (result.changes !== 1)
       throw new Error(`Session ${sessionId} has no actor transcript authority`);
     return this.sessionPlacement(sessionId)!;
   }
 
-  claimIsolatedSessionForTranscriptMigration(sessionId: string): DurableSessionPlacement {
+  claimIsolatedSessionForTranscriptMigration(
+    sessionId: string,
+  ): DurableSessionPlacement {
     if (this.hasSessionDurableState(sessionId))
       throw new Error(`Session ${sessionId} still has central kernel state`);
-    this.db.run(`
+    this.db.run(
+      `
       INSERT INTO session_kernel_placements
         (session_id, placement, transcript_authority, needs_scan, updated_at)
       VALUES (?, 'isolated', 'shared', 0, ?)
       ON CONFLICT(session_id) DO NOTHING
-    `, [sessionId, Date.now()]);
+    `,
+      [sessionId, Date.now()],
+    );
     const placement = this.sessionPlacement(sessionId);
     if (!placement || placement.placement !== "isolated")
-      throw new Error(`Session ${sessionId} isolated migration placement was not persisted`);
+      throw new Error(
+        `Session ${sessionId} isolated migration placement was not persisted`,
+      );
     return placement;
   }
 
@@ -5620,13 +6021,18 @@ export class SessionKernelStore {
       const now = Date.now();
       for (const sessionId of unique) {
         if (this.hasSessionDurableState(sessionId))
-          throw new Error(`Session ${sessionId} still has central kernel state`);
-        this.db.run(`
+          throw new Error(
+            `Session ${sessionId} still has central kernel state`,
+          );
+        this.db.run(
+          `
           INSERT INTO session_kernel_placements
             (session_id, placement, transcript_authority, needs_scan, updated_at)
           VALUES (?, 'isolated', 'shared', 0, ?)
           ON CONFLICT(session_id) DO NOTHING
-        `, [sessionId, now]);
+        `,
+          [sessionId, now],
+        );
         const placement = this.sessionPlacement(sessionId);
         if (!placement || placement.placement !== "isolated")
           throw new Error(
@@ -5638,45 +6044,53 @@ export class SessionKernelStore {
     return unique.map((sessionId) => this.sessionPlacement(sessionId)!);
   }
 
-	claimIsolatedSession(sessionId: string): DurableSessionPlacement {
-		if (this.hasSessionDurableState(sessionId))
-			throw new Error(`Session ${sessionId} already has central kernel state`);
-		this.db.run(`
+  claimIsolatedSession(sessionId: string): DurableSessionPlacement {
+    if (this.hasSessionDurableState(sessionId))
+      throw new Error(`Session ${sessionId} already has central kernel state`);
+    this.db.run(
+      `
 			INSERT INTO session_kernel_placements
 				(session_id, placement, transcript_authority, needs_scan, updated_at)
 			VALUES (?, 'isolated', 'actor', 1, ?)
 			ON CONFLICT(session_id) DO NOTHING
-		`, [sessionId, Date.now()]);
-		const placement = this.sessionPlacement(sessionId);
-		if (!placement) throw new Error("Session placement was not persisted");
-		// New actors always publish an empty projection eagerly. Historical
-		// projection repair is an offline migration; the online host must never
-		// discover it by walking every actor database.
-		this.settleIsolatedSessionProjection(sessionId, undefined, undefined);
-		if (
-			!this.sparseProjectionMigrationComplete() &&
-			this.isolatedProjectionPendingSessionIds(1).length === 0
-		) this.markSparseProjectionMigrationComplete();
-		return placement;
-	}
+		`,
+      [sessionId, Date.now()],
+    );
+    const placement = this.sessionPlacement(sessionId);
+    if (!placement) throw new Error("Session placement was not persisted");
+    // New actors always publish an empty projection eagerly. Historical
+    // projection repair is an offline migration; the online host must never
+    // discover it by walking every actor database.
+    this.settleIsolatedSessionProjection(sessionId, undefined, undefined);
+    if (
+      !this.sparseProjectionMigrationComplete() &&
+      this.isolatedProjectionPendingSessionIds(1).length === 0
+    )
+      this.markSparseProjectionMigrationComplete();
+    return placement;
+  }
 
-	sparseProjectionMigrationComplete(): boolean {
-		return !!this.db.query(
-			"SELECT 1 FROM session_kernel_migrations WHERE name = 'sparse_projection_v2'",
-		).get();
-	}
+  sparseProjectionMigrationComplete(): boolean {
+    return !!this.db
+      .query(
+        "SELECT 1 FROM session_kernel_migrations WHERE name = 'sparse_projection_v2'",
+      )
+      .get();
+  }
 
-	markSparseProjectionMigrationComplete(): void {
-		if (this.isolatedProjectionPendingSessionIds(1).length > 0)
-			throw new Error("Sparse session projection backfill is incomplete");
-		this.db.run(
-			"INSERT OR IGNORE INTO session_kernel_migrations (name, completed_at) VALUES ('sparse_projection_v2', ?)",
-			[Date.now()],
-		);
-	}
+  markSparseProjectionMigrationComplete(): void {
+    if (this.isolatedProjectionPendingSessionIds(1).length > 0)
+      throw new Error("Sparse session projection backfill is incomplete");
+    this.db.run(
+      "INSERT OR IGNORE INTO session_kernel_migrations (name, completed_at) VALUES ('sparse_projection_v2', ?)",
+      [Date.now()],
+    );
+  }
 
-	isolatedProjectionPendingSessionIds(limit = 16): string[] {
-		return (this.db.query(`
+  isolatedProjectionPendingSessionIds(limit = 16): string[] {
+    return (
+      this.db
+        .query(`
 			SELECT placement.session_id
 			FROM session_kernel_placements placement
 			LEFT JOIN session_kernel_sparse_projections projection
@@ -5685,30 +6099,35 @@ export class SessionKernelStore {
 			  AND (projection.session_id IS NULL OR projection.dirty = 1)
 			ORDER BY placement.session_id
 			LIMIT ?
-		`).all(Math.max(1, limit)) as Array<{ session_id: string }>)
-			.map((row) => row.session_id);
-	}
+		`)
+        .all(Math.max(1, limit)) as Array<{ session_id: string }>
+    ).map((row) => row.session_id);
+  }
 
-	markIsolatedSessionProjectionDirty(sessionId: string): void {
-		if (!this.sessionPlacement(sessionId))
-			throw new Error(`Session ${sessionId} has no isolated placement`);
-		this.db.run(`
+  markIsolatedSessionProjectionDirty(sessionId: string): void {
+    if (!this.sessionPlacement(sessionId))
+      throw new Error(`Session ${sessionId} has no isolated placement`);
+    this.db.run(
+      `
 			INSERT INTO session_kernel_sparse_projections
 			  (session_id, dirty, updated_at) VALUES (?, 1, ?)
 			ON CONFLICT(session_id) DO UPDATE SET
 			  dirty = 1, updated_at = excluded.updated_at
-		`, [sessionId, Date.now()]);
-	}
+		`,
+      [sessionId, Date.now()],
+    );
+  }
 
-	settleIsolatedSessionProjection(
-		sessionId: string,
-		askRecord: unknown | undefined,
-		deliveryState: DurableDeliveryState | undefined,
-		quarantineState: DurableSessionQuarantine | undefined = undefined,
-	): void {
-		if (!this.sessionPlacement(sessionId))
-			throw new Error(`Session ${sessionId} has no isolated placement`);
-		this.db.run(`
+  settleIsolatedSessionProjection(
+    sessionId: string,
+    askRecord: unknown | undefined,
+    deliveryState: DurableDeliveryState | undefined,
+    quarantineState: DurableSessionQuarantine | undefined = undefined,
+  ): void {
+    if (!this.sessionPlacement(sessionId))
+      throw new Error(`Session ${sessionId} has no isolated placement`);
+    this.db.run(
+      `
 			INSERT INTO session_kernel_sparse_projections
 			  (session_id, ask_record, delivery_state, quarantine_state, dirty, updated_at)
 			VALUES (?, ?, ?, ?, 0, ?)
@@ -5718,102 +6137,125 @@ export class SessionKernelStore {
 			  quarantine_state = excluded.quarantine_state,
 			  dirty = 0,
 			  updated_at = excluded.updated_at
-		`, [
-			sessionId,
-			askRecord === undefined ? null : json(askRecord),
-			deliveryState === undefined ? null : json(deliveryState),
-			quarantineState === undefined ? null : json(quarantineState),
-			Date.now(),
-		]);
-	}
+		`,
+      [
+        sessionId,
+        askRecord === undefined ? null : json(askRecord),
+        deliveryState === undefined ? null : json(deliveryState),
+        quarantineState === undefined ? null : json(quarantineState),
+        Date.now(),
+      ],
+    );
+  }
 
-	isolatedQuarantineProjectionEntries(): DurableSessionQuarantine[] {
-		return (this.db.query(`
+  isolatedQuarantineProjectionEntries(): DurableSessionQuarantine[] {
+    return (
+      this.db
+        .query(`
 			SELECT quarantine_state
 			FROM session_kernel_sparse_projections
 			WHERE dirty = 0 AND quarantine_state IS NOT NULL
 			ORDER BY session_id
-		`).all() as Array<{ quarantine_state: string }>)
-			.map((row) => parsed(row.quarantine_state) as DurableSessionQuarantine);
-	}
+		`)
+        .all() as Array<{ quarantine_state: string }>
+    ).map((row) => parsed(row.quarantine_state) as DurableSessionQuarantine);
+  }
 
-	isolatedAskProjectionEntries(): Array<[string, unknown]> {
-		return (this.db.query(`
+  isolatedAskProjectionEntries(): Array<[string, unknown]> {
+    return (
+      this.db
+        .query(`
 			SELECT session_id, ask_record
 			FROM session_kernel_sparse_projections
 			WHERE dirty = 0 AND ask_record IS NOT NULL
 			ORDER BY session_id
-		`).all() as Array<{ session_id: string; ask_record: string }>)
-			.map((row) => [row.session_id, parsed(row.ask_record)]);
-	}
+		`)
+        .all() as Array<{ session_id: string; ask_record: string }>
+    ).map((row) => [row.session_id, parsed(row.ask_record)]);
+  }
 
-	isolatedDeliveryProjectionEntries(slot: DeliverySlot): Array<[string, unknown]> {
-		const states = this.db.query(`
+  isolatedDeliveryProjectionEntries(
+    slot: DeliverySlot,
+  ): Array<[string, unknown]> {
+    const states = this.db
+      .query(`
 			SELECT session_id, delivery_state
 			FROM session_kernel_sparse_projections
 			WHERE dirty = 0 AND delivery_state IS NOT NULL
 			ORDER BY session_id
-		`).all() as Array<{ session_id: string; delivery_state: string }>;
-		const entries: Array<[string, unknown]> = [];
-		for (const row of states) {
-			const state = parsed(row.delivery_state) as DurableDeliveryState;
-			const value = slot === "queued"
-				? state.queued
-				: slot === "steered"
-					? state.steered
-					: state.dispatch;
-			if (value === undefined || (Array.isArray(value) && value.length === 0))
-				continue;
-			entries.push([row.session_id, value]);
-		}
-		return entries;
-	}
+		`)
+      .all() as Array<{ session_id: string; delivery_state: string }>;
+    const entries: Array<[string, unknown]> = [];
+    for (const row of states) {
+      const state = parsed(row.delivery_state) as DurableDeliveryState;
+      const value =
+        slot === "queued"
+          ? state.queued
+          : slot === "steered"
+            ? state.steered
+            : state.dispatch;
+      if (value === undefined || (Array.isArray(value) && value.length === 0))
+        continue;
+      entries.push([row.session_id, value]);
+    }
+    return entries;
+  }
 
-	isolatedPendingSteerProjectionSessionIds(): string[] {
-		const rows = this.db.query(`
+  isolatedPendingSteerProjectionSessionIds(): string[] {
+    const rows = this.db
+      .query(`
 			SELECT session_id, delivery_state
 			FROM session_kernel_sparse_projections
 			WHERE dirty = 0 AND delivery_state IS NOT NULL
 			ORDER BY session_id
-		`).all() as Array<{ session_id: string; delivery_state: string }>;
-		return rows
-			.filter((row) => {
-				const state = parsed(row.delivery_state) as DurableDeliveryState;
-				return state.pendingSteers.length > 0;
-			})
-			.map((row) => row.session_id);
-	}
+		`)
+      .all() as Array<{ session_id: string; delivery_state: string }>;
+    return rows
+      .filter((row) => {
+        const state = parsed(row.delivery_state) as DurableDeliveryState;
+        return state.pendingSteers.length > 0;
+      })
+      .map((row) => row.session_id);
+  }
 
-	markIsolatedSessionDirty(sessionId: string): void {
-		const result = this.db.run(`
+  markIsolatedSessionDirty(sessionId: string): void {
+    const result = this.db.run(
+      `
 			UPDATE session_kernel_placements
 			SET needs_scan = 1, updated_at = ?
 			WHERE session_id = ? AND placement = 'isolated'
-		`, [Date.now(), sessionId]);
-		if (result.changes !== 1)
-			throw new Error(`Session ${sessionId} has no isolated placement`);
-	}
+		`,
+      [Date.now(), sessionId],
+    );
+    if (result.changes !== 1)
+      throw new Error(`Session ${sessionId} has no isolated placement`);
+  }
 
-	settleIsolatedSessionWake(
-		sessionId: string,
-		nextTimerAt?: number,
-		nextOutboxAt?: number,
-	): void {
-		const result = this.db.run(`
+  settleIsolatedSessionWake(
+    sessionId: string,
+    nextTimerAt?: number,
+    nextOutboxAt?: number,
+  ): void {
+    const result = this.db.run(
+      `
 			UPDATE session_kernel_placements
 			SET needs_scan = 0, next_timer_at = ?, next_outbox_at = ?, updated_at = ?
 			WHERE session_id = ? AND placement = 'isolated'
-		`, [nextTimerAt ?? null, nextOutboxAt ?? null, Date.now(), sessionId]);
-		if (result.changes !== 1)
-			throw new Error(`Session ${sessionId} has no isolated placement`);
-	}
+		`,
+      [nextTimerAt ?? null, nextOutboxAt ?? null, Date.now(), sessionId],
+    );
+    if (result.changes !== 1)
+      throw new Error(`Session ${sessionId} has no isolated placement`);
+  }
 
-	isolatedWakeCandidates(
-		now = Date.now(),
-		limit = 100,
-		afterSessionId = "",
-	): string[] {
-		return (this.db.query(`
+  isolatedWakeCandidates(
+    now = Date.now(),
+    limit = 100,
+    afterSessionId = "",
+  ): string[] {
+    return (
+      this.db
+        .query(`
 			SELECT session_id FROM session_kernel_placements
 			WHERE placement = 'isolated'
 			  AND session_id > ?
@@ -5824,17 +6266,22 @@ export class SessionKernelStore {
 			  AND (needs_scan = 1 OR next_timer_at <= ? OR next_outbox_at <= ?)
 			ORDER BY session_id
 			LIMIT ?
-		`).all(afterSessionId, now, now, Math.max(1, limit)) as Array<{ session_id: string }>)
-			.map((row) => row.session_id);
-	}
+		`)
+        .all(afterSessionId, now, now, Math.max(1, limit)) as Array<{
+        session_id: string;
+      }>
+    ).map((row) => row.session_id);
+  }
 
-	/** Newly dirtied actors outrank the historical wake-index sweep. A restore
-	 * can conservatively mark thousands of old placements dirty; ordering that
-	 * backlog only by session id otherwise leaves a brand-new creation outbox
-	 * undiscoverable for minutes. The ordinary cursor scan still receives the
-	 * rest of each runtime batch, so old work continues to make progress. */
-	isolatedRecentDirtyWakeCandidates(limit = 4): string[] {
-		return (this.db.query(`
+  /** Newly dirtied actors outrank the historical wake-index sweep. A restore
+   * can conservatively mark thousands of old placements dirty; ordering that
+   * backlog only by session id otherwise leaves a brand-new creation outbox
+   * undiscoverable for minutes. The ordinary cursor scan still receives the
+   * rest of each runtime batch, so old work continues to make progress. */
+  isolatedRecentDirtyWakeCandidates(limit = 4): string[] {
+    return (
+      this.db
+        .query(`
 			SELECT session_id FROM session_kernel_placements
 			WHERE placement = 'isolated'
 			  AND needs_scan = 1
@@ -5844,19 +6291,22 @@ export class SessionKernelStore {
 			  )
 			ORDER BY updated_at DESC, session_id
 			LIMIT ?
-		`).all(Math.max(1, limit)) as Array<{ session_id: string }>)
-			.map((row) => row.session_id);
-	}
+		`)
+        .all(Math.max(1, limit)) as Array<{ session_id: string }>
+    ).map((row) => row.session_id);
+  }
 
-	/** Due work gets its own cursor instead of waiting for the larger recovery
-	 * scan. A long-running effect remains due until acknowledgement, so this
-	 * list must rotate rather than repeatedly returning the same active actors. */
-	isolatedDueWakeCandidates(
-		now = Date.now(),
-		limit = 2,
-		afterSessionId = "",
-	): string[] {
-		return (this.db.query(`
+  /** Due work gets its own cursor instead of waiting for the larger recovery
+   * scan. A long-running effect remains due until acknowledgement, so this
+   * list must rotate rather than repeatedly returning the same active actors. */
+  isolatedDueWakeCandidates(
+    now = Date.now(),
+    limit = 2,
+    afterSessionId = "",
+  ): string[] {
+    return (
+      this.db
+        .query(`
 			SELECT session_id FROM session_kernel_placements
 			WHERE placement = 'isolated'
 			  AND needs_scan = 0
@@ -5868,88 +6318,107 @@ export class SessionKernelStore {
 			  )
 			ORDER BY session_id
 			LIMIT ?
-		`).all(
-			afterSessionId,
-			now,
-			now,
-			Math.max(1, limit),
-		) as Array<{ session_id: string }>)
-			.map((row) => row.session_id);
-	}
+		`)
+        .all(afterSessionId, now, now, Math.max(1, limit)) as Array<{
+        session_id: string;
+      }>
+    ).map((row) => row.session_id);
+  }
 
-	nextTimerWakeAt(): number | undefined {
-		const row = this.db.query(`
+  nextTimerWakeAt(): number | undefined {
+    const row = this.db
+      .query(`
 			SELECT MIN(CASE WHEN next_attempt_at > due_at THEN next_attempt_at ELSE due_at END) AS next_at
 			FROM session_kernel_timers WHERE dead_lettered_at IS NULL
-		`).get() as { next_at: number | null };
-		return row.next_at === null ? undefined : Number(row.next_at);
-	}
+		`)
+      .get() as { next_at: number | null };
+    return row.next_at === null ? undefined : Number(row.next_at);
+  }
 
-	nextOutboxWakeAt(): number | undefined {
-		const row = this.db.query(`
-			SELECT MIN(next_attempt_at) AS next_at
+  nextOutboxWakeAt(
+    activeIds: readonly number[] = [],
+    activeRecheckAt = Date.now(),
+  ): number | undefined {
+    const activeWake = activeIds.length
+      ? `CASE WHEN id IN (${activeIds.map(() => "?").join(",")}) THEN ? ELSE next_attempt_at END`
+      : "next_attempt_at";
+    const row = this.db
+      .query(`
+			SELECT MIN(${activeWake}) AS next_at
 			FROM session_kernel_outbox WHERE dead_lettered_at IS NULL
-		`).get() as { next_at: number | null };
-		return row.next_at === null ? undefined : Number(row.next_at);
-	}
+		`)
+      .get(...activeIds, ...(activeIds.length ? [activeRecheckAt] : [])) as {
+      next_at: number | null;
+    };
+    return row.next_at === null ? undefined : Number(row.next_at);
+  }
 
-	allocateIsolatedOutboxId(sessionId: string): number {
-		const floor = 4_000_000_000_000_000;
-		let id = floor;
-		const tx = this.db.transaction(() => {
-			const seeded = this.db.run(`
+  allocateIsolatedOutboxId(sessionId: string): number {
+    const floor = 4_000_000_000_000_000;
+    let id = floor;
+    const tx = this.db.transaction(() => {
+      const seeded = this.db.run(
+        `
 				UPDATE sqlite_sequence SET seq = MAX(seq, ?)
 				WHERE name = 'session_kernel_outbox_routes'
-			`, [floor - 1]);
-			if (seeded.changes === 0)
-				this.db.run(
-					"INSERT INTO sqlite_sequence(name, seq) VALUES ('session_kernel_outbox_routes', ?)",
-					[floor - 1],
-				);
-			const inserted = this.db.run(
-				"INSERT INTO session_kernel_outbox_routes (session_id, created_at) VALUES (?, ?)",
-				[sessionId, Date.now()],
-			);
-			id = Number(inserted.lastInsertRowid);
-			if (!Number.isSafeInteger(id))
-				throw new Error("Isolated outbox identity space is exhausted");
-		});
-		tx.immediate();
-		return id;
-	}
+			`,
+        [floor - 1],
+      );
+      if (seeded.changes === 0)
+        this.db.run(
+          "INSERT INTO sqlite_sequence(name, seq) VALUES ('session_kernel_outbox_routes', ?)",
+          [floor - 1],
+        );
+      const inserted = this.db.run(
+        "INSERT INTO session_kernel_outbox_routes (session_id, created_at) VALUES (?, ?)",
+        [sessionId, Date.now()],
+      );
+      id = Number(inserted.lastInsertRowid);
+      if (!Number.isSafeInteger(id))
+        throw new Error("Isolated outbox identity space is exhausted");
+    });
+    tx.immediate();
+    return id;
+  }
 
-	isolatedOutboxRoutes(
-		limit = 100,
-		afterId = 0,
-	): Array<{ id: number; sessionId: string }> {
-		return (this.db.query(`
+  isolatedOutboxRoutes(
+    limit = 100,
+    afterId = 0,
+  ): Array<{ id: number; sessionId: string }> {
+    return (
+      this.db
+        .query(`
 			SELECT id, session_id FROM session_kernel_outbox_routes
 			WHERE id > ? ORDER BY id LIMIT ?
-		`).all(afterId, Math.max(1, limit)) as Array<{ id: number; session_id: string }>)
-			.map((row) => ({ id: Number(row.id), sessionId: row.session_id }));
-	}
+		`)
+        .all(afterId, Math.max(1, limit)) as Array<{
+        id: number;
+        session_id: string;
+      }>
+    ).map((row) => ({ id: Number(row.id), sessionId: row.session_id }));
+  }
 
-	isolatedOutboxSessionId(id: number): string | undefined {
-		const row = this.db.query(
-			"SELECT session_id FROM session_kernel_outbox_routes WHERE id = ?",
-		).get(id) as { session_id: string } | null;
-		return row?.session_id;
-	}
+  isolatedOutboxSessionId(id: number): string | undefined {
+    const row = this.db
+      .query("SELECT session_id FROM session_kernel_outbox_routes WHERE id = ?")
+      .get(id) as { session_id: string } | null;
+    return row?.session_id;
+  }
 
-	forgetIsolatedOutboxRoute(id: number): void {
-		this.db.run("DELETE FROM session_kernel_outbox_routes WHERE id = ?", [id]);
-	}
+  forgetIsolatedOutboxRoute(id: number): void {
+    this.db.run("DELETE FROM session_kernel_outbox_routes WHERE id = ?", [id]);
+  }
 
-	outboxSessionId(id: number): string | undefined {
-		const row = this.db
-			.query("SELECT session_id FROM session_kernel_outbox WHERE id = ?")
-			.get(id) as { session_id: string } | null;
-		return row?.session_id;
-	}
+  outboxSessionId(id: number): string | undefined {
+    const row = this.db
+      .query("SELECT session_id FROM session_kernel_outbox WHERE id = ?")
+      .get(id) as { session_id: string } | null;
+    return row?.session_id;
+  }
 
-	ackOutbox(id: number): void {
-		this.db.run("DELETE FROM session_kernel_outbox WHERE id = ?", [id]);
-	}
+  ackOutbox(id: number): void {
+    this.db.run("DELETE FROM session_kernel_outbox WHERE id = ?", [id]);
+  }
 
   deferOutbox(id: number, delayMs = 250): void {
     const delay = Number.isFinite(delayMs) ? Math.max(1, delayMs) : 250;
@@ -5965,49 +6434,49 @@ export class SessionKernelStore {
     error: string,
     maxAttempts = 20,
   ): { updated: boolean; deadLetteredNow: boolean } {
-		const row = this.db
-			.query("SELECT attempts FROM session_kernel_outbox WHERE id = ?")
-			.get(id) as { attempts: number } | null;
-		if (!row) return { updated: false, deadLetteredNow: false };
-		const attempts = Number(row.attempts) + 1;
-		const deadLetteredAt = attempts >= maxAttempts ? Date.now() : null;
-		const delay = Math.min(5 * 60_000, 1_000 * 2 ** Math.min(attempts - 1, 8));
-		this.db.run(
-			`UPDATE session_kernel_outbox SET attempts = ?, next_attempt_at = ?, last_error = ?,
+    const row = this.db
+      .query("SELECT attempts FROM session_kernel_outbox WHERE id = ?")
+      .get(id) as { attempts: number } | null;
+    if (!row) return { updated: false, deadLetteredNow: false };
+    const attempts = Number(row.attempts) + 1;
+    const deadLetteredAt = attempts >= maxAttempts ? Date.now() : null;
+    const delay = Math.min(5 * 60_000, 1_000 * 2 ** Math.min(attempts - 1, 8));
+    this.db.run(
+      `UPDATE session_kernel_outbox SET attempts = ?, next_attempt_at = ?, last_error = ?,
        dead_lettered_at = ? WHERE id = ?`,
-			[attempts, Date.now() + delay, error.slice(0, 2_000), deadLetteredAt,id],
-		);
-		return { updated: true, deadLetteredNow: deadLetteredAt !== null };
-	}
+      [attempts, Date.now() + delay, error.slice(0, 2_000), deadLetteredAt, id],
+    );
+    return { updated: true, deadLetteredNow: deadLetteredAt !== null };
+  }
 }
 
 /** Structural runtime surface implemented locally in tests and by the actor proxy in production. */
 export type SessionKernelStoreApi = Omit<
-	SessionKernelStore,
-	| "hasSessionDurableState"
-	| "hasPendingSteers"
-	| "hasCreationBranchDeadLetters"
-	| "assertTranscriptDestinationFence"
-	| "legacySessionIds"
-	| "migrateLegacySession"
-	| "sessionPlacement"
-	| "isolatedSessionPlacements"
-	| "actorTranscriptSessionIds"
-	| "transcriptMigrationSessionIds"
-	| "publishActorTranscriptAuthority"
-	| "publishActorTranscriptAuthorities"
-	| "rollbackActorTranscriptAuthority"
-	| "rollbackActorTranscriptAuthorities"
-	| "claimIsolatedSession"
-	| "claimIsolatedSessionForTranscriptMigration"
-	| "claimIsolatedSessionsForTranscriptMigration"
-	| "markIsolatedSessionDirty"
-	| "settleIsolatedSessionWake"
-	| "isolatedWakeCandidates"
-	| "nextTimerWakeAt"
-	| "nextOutboxWakeAt"
-	| "allocateIsolatedOutboxId"
-	| "isolatedOutboxRoutes"
-	| "isolatedOutboxSessionId"
-	| "forgetIsolatedOutboxRoute"
+  SessionKernelStore,
+  | "hasSessionDurableState"
+  | "hasPendingSteers"
+  | "hasCreationBranchDeadLetters"
+  | "assertTranscriptDestinationFence"
+  | "legacySessionIds"
+  | "migrateLegacySession"
+  | "sessionPlacement"
+  | "isolatedSessionPlacements"
+  | "actorTranscriptSessionIds"
+  | "transcriptMigrationSessionIds"
+  | "publishActorTranscriptAuthority"
+  | "publishActorTranscriptAuthorities"
+  | "rollbackActorTranscriptAuthority"
+  | "rollbackActorTranscriptAuthorities"
+  | "claimIsolatedSession"
+  | "claimIsolatedSessionForTranscriptMigration"
+  | "claimIsolatedSessionsForTranscriptMigration"
+  | "markIsolatedSessionDirty"
+  | "settleIsolatedSessionWake"
+  | "isolatedWakeCandidates"
+  | "nextTimerWakeAt"
+  | "nextOutboxWakeAt"
+  | "allocateIsolatedOutboxId"
+  | "isolatedOutboxRoutes"
+  | "isolatedOutboxSessionId"
+  | "forgetIsolatedOutboxRoute"
 >;

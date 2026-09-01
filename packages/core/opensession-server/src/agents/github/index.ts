@@ -5,7 +5,11 @@
  * its PR behaviors. Slack review notifications are an optional side effect when
  * the Slack agent is enabled.
  */
-import { configuredIntegration, defaultRepo, personaName } from "../../server/config";
+import {
+  configuredIntegration,
+  defaultRepo,
+  personaName,
+} from "../../server/config";
 import {
   RequestBodyTooLargeError,
   readRequestTextWithinLimit,
@@ -18,7 +22,10 @@ import {
   saveAutomation,
 } from "../../server/automations";
 import { githubConfigured } from "./github-rest";
-import { githubAppCredentialHealth, githubToken } from "../../server/github-app";
+import {
+  githubAppCredentialHealth,
+  githubToken,
+} from "../../server/github-app";
 import {
   PR_EVENT_KEY,
   REVIEW_AUTOMATION_NAME,
@@ -27,7 +34,11 @@ import {
 } from "./constants";
 import { DEFAULT_REVIEW_PROMPT } from "./prompts";
 import { DEFAULT_GITHUB_FLOW_MCP_SERVERS } from "./run";
-import { setGithubSessionInvalidate, resolveReviewConfig } from "./webhook";
+import {
+  setGithubSessionInvalidate,
+  resolveReviewConfig,
+  restoreDesiredReviews,
+} from "./webhook";
 import { githubWebhookCount, loadGithubDeliveries } from "./webhook-deliveries";
 import { handleGithubWebhook } from "./webhook-intake";
 import {
@@ -43,7 +54,12 @@ import {
 } from "./state";
 import { feedbackStats } from "./feedback";
 import type { PrRef } from "./review";
-import { isTrustedGithubLogin, isTrustedUser } from "../../server/shared/user-mappings";
+import {
+  isTrustedGithubLogin,
+  isTrustedUser,
+} from "../../server/shared/user-mappings";
+import { getPrAutomationDetails } from "../../server/pr-info";
+import { isExternalPullRequest } from "./public-review";
 
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
@@ -57,7 +73,10 @@ function ensureReviewAutomation(): void {
     // renders unset as "all connectors", which would now be a lie. Write the
     // effective list so the settings screen matches what the runs actually get.
     if (existing.mcpServers === undefined) {
-      saveAutomation({ ...existing, mcpServers: [...DEFAULT_GITHUB_FLOW_MCP_SERVERS] });
+      saveAutomation({
+        ...existing,
+        mcpServers: [...DEFAULT_GITHUB_FLOW_MCP_SERVERS],
+      });
       console.log(
         `[github] Backfilled review automation MCP allowlist: ${DEFAULT_GITHUB_FLOW_MCP_SERVERS.join(", ")}`,
       );
@@ -79,7 +98,9 @@ function ensureReviewAutomation(): void {
   }
   // Seed it OFF — start label-only; flip on in the Automations UI to review every non-draft PR.
   saveAutomation({ ...created, enabled: false });
-  console.log(`[github] Seeded review automation "${REVIEW_AUTOMATION_NAME}" (disabled)`);
+  console.log(
+    `[github] Seeded review automation "${REVIEW_AUTOMATION_NAME}" (disabled)`,
+  );
 }
 
 /**
@@ -92,7 +113,9 @@ function ensureReviewAutomation(): void {
 function ensureDocsSyncAutomation(): void {
   const prompt = configuredIntegration("github").docsSyncPrompt;
   if (typeof prompt !== "string" || !prompt.trim()) return;
-  const existing = listAutomations().find((a) => a.eventKey === PR_MERGED_EVENT_KEY);
+  const existing = listAutomations().find(
+    (a) => a.eventKey === PR_MERGED_EVENT_KEY,
+  );
   if (existing) return;
   const created = createAutomation({
     name: DOCS_SYNC_AUTOMATION_NAME,
@@ -104,14 +127,22 @@ function ensureDocsSyncAutomation(): void {
     eventKey: PR_MERGED_EVENT_KEY,
   });
   if ("error" in created) {
-    console.error(`[github] Failed to seed docs-sync automation:`, created.error);
+    console.error(
+      `[github] Failed to seed docs-sync automation:`,
+      created.error,
+    );
     return;
   }
-  console.log(`[github] Seeded docs-sync automation "${DOCS_SYNC_AUTOMATION_NAME}" (enabled)`);
+  console.log(
+    `[github] Seeded docs-sync automation "${DOCS_SYNC_AUTOMATION_NAME}" (enabled)`,
+  );
 }
 
 /** Who armed a recovery marker. Empty/undefined means nobody did — see below. */
-function recoveryRequester(s: GithubPrState, kind: RecoveryKind): string | undefined {
+function recoveryRequester(
+  s: GithubPrState,
+  kind: RecoveryKind,
+): string | undefined {
   switch (kind) {
     case "auto-fix":
       return s.autoFix?.requestedBy;
@@ -141,16 +172,23 @@ function recoveryRequester(s: GithubPrState, kind: RecoveryKind): string | undef
  * triggering human, and auto-fix/mentions are inherently person-initiated, so a
  * missing requester there really is a marker that should not be replayed.
  */
-export function recoveryPermitted(s: GithubPrState, kind: RecoveryKind): boolean {
+export function recoveryPermitted(
+  s: GithubPrState,
+  kind: RecoveryKind,
+): boolean {
   const requester = recoveryRequester(s, kind);
   if (kind === "mention" || kind === "pending-mention")
     return isTrustedGithubLogin(requester);
-  if (kind === "run" && s.activeRun?.kind === "review" && !requester) return true;
+  if (kind === "run" && s.activeRun?.kind === "review" && !requester)
+    return true;
   return isTrustedUser(requester);
 }
 
 /** Fire the one recovery `planRecovery` picked for this PR. */
-async function fireRecovery(s: GithubPrState, kind: RecoveryKind): Promise<void> {
+async function fireRecovery(
+  s: GithubPrState,
+  kind: RecoveryKind,
+): Promise<void> {
   if (!recoveryPermitted(s, kind)) {
     console.warn(
       `[github] Refusing ${kind} recovery for PR #${s.prNumber} from untrusted @${recoveryRequester(s, kind) || "unknown"}`,
@@ -161,46 +199,102 @@ async function fireRecovery(s: GithubPrState, kind: RecoveryKind): Promise<void>
 
   switch (kind) {
     case "auto-fix": {
-      console.log(`[github] Recovering interrupted auto-fix loop for PR #${s.prNumber}`);
+      console.log(
+        `[github] Recovering interrupted auto-fix loop for PR #${s.prNumber}`,
+      );
       const { runAutoFix } = await import("./autofix");
-      const ref: PrRef = { number: s.prNumber, headRef: s.headRef, headSha: "", title: `PR #${s.prNumber}`, ...(s.ghRepo ? { ghRepo: s.ghRepo } : {}) };
-      void runAutoFix(ref, s.autoFix?.requestedBy || "", undefined, /*resuming*/ true, s.autoFix?.steer).catch((e) =>
-        console.error(`[github] auto-fix recovery failed for PR #${s.prNumber}:`, e),
+      const ref: PrRef = {
+        number: s.prNumber,
+        headRef: s.headRef,
+        headSha: "",
+        title: `PR #${s.prNumber}`,
+        ...(s.ghRepo ? { ghRepo: s.ghRepo } : {}),
+      };
+      void runAutoFix(
+        ref,
+        s.autoFix?.requestedBy || "",
+        undefined,
+        /*resuming*/ true,
+        s.autoFix?.steer,
+      ).catch((e) =>
+        console.error(
+          `[github] auto-fix recovery failed for PR #${s.prNumber}:`,
+          e,
+        ),
       );
       return;
     }
     case "pending-auto-fix": {
       const pending = s.pendingAutoFix!;
-      console.log(`[github] Recovering dropped auto-fix request for PR #${s.prNumber} (from @${pending.requestedBy})`);
+      console.log(
+        `[github] Recovering dropped auto-fix request for PR #${s.prNumber} (from @${pending.requestedBy})`,
+      );
       const { runAutoFix } = await import("./autofix");
-      const ref: PrRef = { number: s.prNumber, headRef: s.headRef, headSha: "", title: `PR #${s.prNumber}`, ...(s.ghRepo ? { ghRepo: s.ghRepo } : {}) };
+      const ref: PrRef = {
+        number: s.prNumber,
+        headRef: s.headRef,
+        headSha: "",
+        title: `PR #${s.prNumber}`,
+        ...(s.ghRepo ? { ghRepo: s.ghRepo } : {}),
+      };
       void runAutoFix(ref, pending.requestedBy).catch((e) =>
-        console.error(`[github] dropped auto-fix recovery failed for PR #${s.prNumber}:`, e),
+        console.error(
+          `[github] dropped auto-fix recovery failed for PR #${s.prNumber}:`,
+          e,
+        ),
       );
       return;
     }
     case "run": {
       const run = s.activeRun!;
-      console.log(`[github] Recovering interrupted ${run.kind} for PR #${s.prNumber}`);
+      console.log(
+        `[github] Recovering interrupted ${run.kind} for PR #${s.prNumber}`,
+      );
       const { triggerPrAction } = await import("./trigger");
-      void triggerPrAction(run.kind, s.prNumber, run.requestedBy, run.steer, s.ghRepo).catch((e) =>
-        console.error(`[github] ${run.kind} recovery failed for PR #${s.prNumber}:`, e),
+      void triggerPrAction(
+        run.kind,
+        s.prNumber,
+        run.requestedBy,
+        run.steer,
+        s.ghRepo,
+      ).catch((e) =>
+        console.error(
+          `[github] ${run.kind} recovery failed for PR #${s.prNumber}:`,
+          e,
+        ),
       );
       return;
     }
     case "mention": {
       const m = s.activeMention!;
-      console.log(`[github] Recovering interrupted mention for PR #${s.prNumber}`);
+      console.log(
+        `[github] Recovering interrupted mention for PR #${s.prNumber}`,
+      );
       const { runConversationalMention } = await import("./mention");
       void runConversationalMention(
-        { prNumber: s.prNumber, author: m.author, body: m.body, kind: m.kind, replyToId: m.replyToId, inline: m.inline, ghRepo: s.ghRepo },
+        {
+          prNumber: s.prNumber,
+          author: m.author,
+          body: m.body,
+          kind: m.kind,
+          replyToId: m.replyToId,
+          inline: m.inline,
+          ghRepo: s.ghRepo,
+        },
         /*recovering*/ true,
-      ).catch((e) => console.error(`[github] mention recovery failed for PR #${s.prNumber}:`, e));
+      ).catch((e) =>
+        console.error(
+          `[github] mention recovery failed for PR #${s.prNumber}:`,
+          e,
+        ),
+      );
       return;
     }
     case "pending-mention": {
       const p = s.pendingMention!;
-      console.log(`[github] Recovering dropped mention for PR #${s.prNumber} (from @${p.author})`);
+      console.log(
+        `[github] Recovering dropped mention for PR #${s.prNumber} (from @${p.author})`,
+      );
       const { dispatchMention } = await import("./mention");
       void dispatchMention({
         prNumber: s.prNumber,
@@ -212,7 +306,12 @@ async function fireRecovery(s: GithubPrState, kind: RecoveryKind): Promise<void>
         ghRepo: s.ghRepo,
       })
         .then(() => clearPendingMention(s.prNumber, s.ghRepo))
-        .catch((e) => console.error(`[github] dropped-mention recovery remains queued for PR #${s.prNumber}:`, e));
+        .catch((e) =>
+          console.error(
+            `[github] dropped-mention recovery remains queued for PR #${s.prNumber}:`,
+            e,
+          ),
+        );
       return;
     }
   }
@@ -254,7 +353,8 @@ async function retryPendingMentions(): Promise<void> {
       async () => {
         const stillPending = readPrState(s.prNumber, s.ghRepo)?.pendingMention;
         if (stillPending?.progressCommentId) {
-          const { editIssueComment, REPLY_MARKER } = await import("./github-rest");
+          const { editIssueComment, REPLY_MARKER } =
+            await import("./github-rest");
           await editIssueComment(
             stillPending.progressCommentId,
             `${REPLY_MARKER}
@@ -264,7 +364,11 @@ Request accepted.`,
         }
         clearPendingMention(s.prNumber, s.ghRepo);
       },
-      (error) => console.warn(`[github] pending mention remains queued for PR #${s.prNumber}:`, error),
+      (error) =>
+        console.warn(
+          `[github] pending mention remains queued for PR #${s.prNumber}:`,
+          error,
+        ),
     );
   }
 }
@@ -289,7 +393,8 @@ async function recoverInterrupted(): Promise<void> {
     }
     if (!fire) continue;
     // The fired run owns the PR; its mention receipt is bookkeeping it supersedes.
-    if (fire !== "pending-mention" && s.pendingMention) clearPendingMention(s.prNumber, s.ghRepo);
+    if (fire !== "pending-mention" && s.pendingMention)
+      clearPendingMention(s.prNumber, s.ghRepo);
     await fireRecovery(s, fire);
   }
 }
@@ -303,7 +408,10 @@ export class GithubAgent implements AgentModule {
   }
 
   getRoutes(): Map<string, (req: Request, url: URL) => Promise<Response>> {
-    const routes = new Map<string, (req: Request, url: URL) => Promise<Response>>();
+    const routes = new Map<
+      string,
+      (req: Request, url: URL) => Promise<Response>
+    >();
 
     routes.set("POST /github/webhook", handleGithubWebhook);
 
@@ -317,15 +425,42 @@ export class GithubAgent implements AgentModule {
       try {
         body = JSON.parse(await readRequestTextWithinLimit(req, 64 * 1024));
       } catch (error) {
-        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(64 * 1024);
+        if (error instanceof RequestBodyTooLargeError)
+          return webhookBodyTooLargeResponse(64 * 1024);
       }
       const prNumber = Number(body?.prNumber);
       const headRef = String(body?.headRef || "").trim();
       const behavior = String(body?.behavior || "review");
-      if (!prNumber || !headRef) return Response.json({ error: "prNumber and headRef required" }, { status: 400 });
-      const manualGhRepo = typeof body?.ghRepo === "string" && body.ghRepo.trim() ? body.ghRepo.trim() : undefined;
-      const ref: PrRef = { number: prNumber, headRef, headSha: String(body?.headSha || ""), title: `PR #${prNumber}`, ...(manualGhRepo ? { ghRepo: manualGhRepo } : {}) };
+      if (!prNumber || !headRef)
+        return Response.json(
+          { error: "prNumber and headRef required" },
+          { status: 400 },
+        );
+      const manualGhRepo =
+        typeof body?.ghRepo === "string" && body.ghRepo.trim()
+          ? body.ghRepo.trim()
+          : undefined;
+      const ref: PrRef = {
+        number: prNumber,
+        headRef,
+        headSha: String(body?.headSha || ""),
+        title: `PR #${prNumber}`,
+        ...(manualGhRepo ? { ghRepo: manualGhRepo } : {}),
+      };
       const requestedBy = String(body?.requestedBy || "");
+      const details = await getPrAutomationDetails(
+        String(prNumber),
+        manualGhRepo,
+      );
+      const external = details
+        ? isExternalPullRequest(details, manualGhRepo || defaultRepo().ghRepo)
+        : false;
+      if (external && behavior !== "review") {
+        return Response.json(
+          { error: "External PRs support isolated review only" },
+          { status: 403 },
+        );
+      }
 
       if (behavior === "autofix") {
         const { runAutoFix } = await import("./autofix");
@@ -335,7 +470,11 @@ export class GithubAgent implements AgentModule {
         void runSimplify(ref, requestedBy, this.onSessionInvalidate);
       } else {
         const { runReview } = await import("./review");
-        void runReview(ref, resolveReviewConfig().config, this.onSessionInvalidate);
+        void runReview(
+          ref,
+          resolveReviewConfig().config,
+          this.onSessionInvalidate,
+        );
       }
       return Response.json({ ok: true, behavior, prNumber });
     });
@@ -355,22 +494,30 @@ export class GithubAgent implements AgentModule {
     // the store itself.
     loadGithubDeliveries();
     if (!githubConfigured()) {
-      console.warn("[github] GitHub App identity is incomplete — review/fix/simplify can't post; agent idle");
+      console.warn(
+        "[github] GitHub App identity is incomplete — review/fix/simplify can't post; agent idle",
+      );
     } else if (!(await githubToken())) {
-      console.warn("[github] GitHub App installation token is unavailable — review/fix/simplify can't post; agent idle");
+      console.warn(
+        "[github] GitHub App installation token is unavailable — review/fix/simplify can't post; agent idle",
+      );
     }
     if (!GITHUB_WEBHOOK_SECRET) {
-      console.warn("[github] GITHUB_WEBHOOK_SECRET unset — PR webhooks won't be verified");
+      console.warn(
+        "[github] GITHUB_WEBHOOK_SECRET unset — PR webhooks won't be verified",
+      );
     }
     loadGithubDeliveries();
-    if (this.onSessionInvalidate) setGithubSessionInvalidate(this.onSessionInvalidate);
+    if (this.onSessionInvalidate)
+      setGithubSessionInvalidate(this.onSessionInvalidate);
     ensureReviewAutomation();
     ensureDocsSyncAutomation();
     await recoverInterrupted();
+    restoreDesiredReviews(listPrStates());
     startPendingMentionRetry();
     // Safety net under all of the above: the webhook path is fire-once, so
-    // work lost AFTER an event was consumed (debounce killed by a restart,
-    // review dead on dry pools, missed delivery) is re-fired by the sweep.
+    // reviews that die on dry pools or whose delivery never arrives are
+    // re-fired by the sweep. Accepted debounce work recovers from PR state.
     const { startReconcileSweep } = await import("./reconcile");
     startReconcileSweep();
     // Cross-PR learning: periodically re-distill the per-repo learned review
@@ -378,7 +525,9 @@ export class GithubAgent implements AgentModule {
     const { armLearnedRulesDistiller } = await import("./learned-rules");
     armLearnedRulesDistiller();
     const { autoEnabled } = resolveReviewConfig();
-    console.log(`[github] Agent started — review automation ${autoEnabled ? "ENABLED (all non-draft PRs)" : "disabled (label-only)"}`);
+    console.log(
+      `[github] Agent started — review automation ${autoEnabled ? "ENABLED (all non-draft PRs)" : "disabled (label-only)"}`,
+    );
   }
 
   async shutdown(): Promise<void> {

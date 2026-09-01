@@ -57,7 +57,10 @@ import { authedRemoteUrl } from "./codestorage/auth";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { isDevInstance } from "./dev-mode";
 import { sandboxConfig } from "./sandbox/config";
-import { injectCloneCredential, shellQuoteWord } from "./sandbox/adapters/bootstrap";
+import {
+  injectCloneCredential,
+  shellQuoteWord,
+} from "./sandbox/adapters/bootstrap";
 import { redactUrl } from "./shared/redact";
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -123,21 +126,37 @@ export function previewPoolConfig(repoId: string): PreviewPoolRepoConfig {
     const r = raw?.repos?.[repoId] ?? {};
     return {
       enabled: r.enabled === true,
-      backend: r.backend === "daytona" || r.backend === "microvm" ? r.backend : "docker",
+      backend:
+        r.backend === "daytona" || r.backend === "microvm"
+          ? r.backend
+          : "docker",
       running: clampInt(r.running, 0, 4, DEFAULTS.running),
       paused: clampInt(r.paused, 0, 8, DEFAULTS.paused),
       cpus: clampInt(r.cpus, 1, 16, DEFAULTS.cpus),
       memory: typeof r.memory === "string" ? r.memory : DEFAULTS.memory,
-      goldenIntervalHours: clampInt(r.goldenIntervalHours, 1, 24 * 7, DEFAULTS.goldenIntervalHours),
+      goldenIntervalHours: clampInt(
+        r.goldenIntervalHours,
+        1,
+        24 * 7,
+        DEFAULTS.goldenIntervalHours,
+      ),
       devAuthBypass: r.devAuthBypass === true,
-      claimIdleMinutes: clampInt(r.claimIdleMinutes, 5, 24 * 60, DEFAULTS.claimIdleMinutes),
+      claimIdleMinutes: clampInt(
+        r.claimIdleMinutes,
+        5,
+        24 * 60,
+        DEFAULTS.claimIdleMinutes,
+      ),
     };
   } catch {
     return { enabled: false, ...DEFAULTS };
   }
 }
 
-export function setPreviewPoolConfig(repoId: string, patch: Partial<PreviewPoolRepoConfig>): void {
+export function setPreviewPoolConfig(
+  repoId: string,
+  patch: Partial<PreviewPoolRepoConfig>,
+): void {
   mkdirSync(poolDir(), { recursive: true });
   let raw: { repos?: Record<string, unknown> } = {};
   try {
@@ -233,17 +252,28 @@ function writeState(repoId: string, state: PoolState): void {
   renameSync(tmp, stateFile(repoId));
 }
 
-function patchContainer(repoId: string, name: string, patch: Partial<PoolContainer> | null): void {
+function patchContainer(
+  repoId: string,
+  name: string,
+  patch: Partial<PoolContainer> | null,
+): void {
   const state = readState(repoId);
   if (patch === null) delete state.containers[name];
-  else state.containers[name] = { ...state.containers[name], ...patch } as PoolContainer;
+  else
+    state.containers[name] = {
+      ...state.containers[name],
+      ...patch,
+    } as PoolContainer;
   writeState(repoId, state);
 }
 
 const g = globalThis as unknown as {
   __previewPoolTimer?: ReturnType<typeof setInterval>;
   __previewPoolBusy?: Map<string, Promise<unknown>>;
-  __previewPoolSyncs?: Map<string, { timer: ReturnType<typeof setInterval>; mtimes: Map<string, number> }>;
+  __previewPoolSyncs?: Map<
+    string,
+    { timer: ReturnType<typeof setInterval>; mtimes: Map<string, number> }
+  >;
 };
 const busy: Map<string, Promise<unknown>> = (g.__previewPoolBusy ??= new Map());
 const defaultBranchInvalidationVersion = new Map<string, number>();
@@ -266,8 +296,14 @@ function provisionMarkers(repoId: string): string[] {
 
 // ── Docker helpers ───────────────────────────────────────────────────────────
 
-async function docker(args: string[], timeoutMs = 60_000): Promise<{ ok: boolean; out: string }> {
-  const proc = Bun.spawn(["docker", ...args], { stdout: "pipe", stderr: "pipe" });
+async function docker(
+  args: string[],
+  timeoutMs = 60_000,
+): Promise<{ ok: boolean; out: string }> {
+  const proc = Bun.spawn(["docker", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   let timedOut = false;
   const killer = setTimeout(() => {
     timedOut = true;
@@ -277,26 +313,46 @@ async function docker(args: string[], timeoutMs = 60_000): Promise<{ ok: boolean
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
-  ]).then(([out, err, code]) => ({ ok: code === 0 && !timedOut, out: (out + err).trim() }));
+  ]).then(([out, err, code]) => ({
+    ok: code === 0 && !timedOut,
+    out: (out + err).trim(),
+  }));
   // Absolute backstop: stream reads can wedge after a kill — never let a
   // docker call hang the caller past its budget (bit us live 2026-07-23:
   // a timed-out in-container clone left the whole golden build stuck).
   const result = await Promise.race([
     collect,
     new Promise<{ ok: boolean; out: string }>((res) =>
-      setTimeout(() => res({ ok: false, out: `docker ${args[0]} timed out after ${timeoutMs}ms` }), timeoutMs + 10_000),
+      setTimeout(
+        () =>
+          res({
+            ok: false,
+            out: `docker ${args[0]} timed out after ${timeoutMs}ms`,
+          }),
+        timeoutMs + 10_000,
+      ),
     ),
   ]);
   clearTimeout(killer);
-  if (timedOut) return { ok: false, out: `timed out after ${timeoutMs}ms: ${result.out.slice(-300)}` };
+  if (timedOut)
+    return {
+      ok: false,
+      out: `timed out after ${timeoutMs}ms: ${result.out.slice(-300)}`,
+    };
   return result;
 }
 
-async function dockerExec(name: string, script: string, timeoutMs = 60_000): Promise<{ ok: boolean; out: string }> {
+async function dockerExec(
+  name: string,
+  script: string,
+  timeoutMs = 60_000,
+): Promise<{ ok: boolean; out: string }> {
   return docker(["exec", name, "bash", "-c", script], timeoutMs);
 }
 
-async function containerRunning(name: string): Promise<"running" | "paused" | "gone"> {
+async function containerRunning(
+  name: string,
+): Promise<"running" | "paused" | "gone"> {
   const r = await docker(["inspect", name, "--format", "{{.State.Status}}"]);
   if (!r.ok) return "gone";
   if (r.out.includes("paused")) return "paused";
@@ -311,12 +367,22 @@ async function containerRunning(name: string): Promise<"running" | "paused" | "g
 // route. The SDK is imported lazily so docker-only setups never load it.
 
 async function daytonaClientForPool() {
-  const { getSandboxConnection, sandboxProviderCredential } = await import("./sandbox/connections");
+  const { getSandboxConnection, sandboxProviderCredential } =
+    await import("./sandbox/connections");
   const cfg = getSandboxConnection("daytona")?.settings;
-  const credential = sandboxProviderCredential("daytona") as { apiKey: string } | undefined;
-  if (!credential) throw new Error("preview-pool daytona backend: no Ready workspace connection");
+  const credential = sandboxProviderCredential("daytona") as
+    | { apiKey: string }
+    | undefined;
+  if (!credential)
+    throw new Error(
+      "preview-pool daytona backend: no Ready workspace connection",
+    );
   const { Daytona } = await import("@daytonaio/sdk");
-  return new Daytona({ apiKey: credential.apiKey, apiUrl: cfg?.apiUrl, target: cfg?.target as never });
+  return new Daytona({
+    apiKey: credential.apiKey,
+    apiUrl: cfg?.apiUrl,
+    target: cfg?.target as never,
+  });
 }
 
 async function daytonaSbx(id: string) {
@@ -364,15 +430,25 @@ async function mvmAgent(
       body: JSON.stringify(body),
       signal: AbortSignal.timeout((body.timeoutMs ?? 60_000) + 5_000),
     });
-    const r = (await res.json()) as { exitCode?: number; stdout?: string; stderr?: string };
-    return { ok: (r.exitCode ?? 1) === 0, out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim() };
+    const r = (await res.json()) as {
+      exitCode?: number;
+      stdout?: string;
+      stderr?: string;
+    };
+    return {
+      ok: (r.exitCode ?? 1) === 0,
+      out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim(),
+    };
   } catch (e) {
     return { ok: false, out: String((e as Error)?.message || e) };
   }
 }
 
 function mvmGoldenReady(): boolean {
-  return existsSync(`${MVM_STORE}/golden.vmstate`) && existsSync(`${MVM_STORE}/golden.mem`);
+  return (
+    existsSync(`${MVM_STORE}/golden.vmstate`) &&
+    existsSync(`${MVM_STORE}/golden.mem`)
+  );
 }
 
 /** Clone indexes owned by the general `microvm` sandbox provider. Preview
@@ -396,8 +472,14 @@ function sandboxMicrovmIndexes(): Set<number> {
   return indexes;
 }
 
-async function sudoRun(args: string[], timeoutMs = 120_000): Promise<{ ok: boolean; out: string }> {
-  const proc = Bun.spawn(["sudo", "-n", ...args], { stdout: "pipe", stderr: "pipe" });
+async function sudoRun(
+  args: string[],
+  timeoutMs = 120_000,
+): Promise<{ ok: boolean; out: string }> {
+  const proc = Bun.spawn(["sudo", "-n", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const killer = setTimeout(() => proc.kill(9), timeoutMs);
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -426,16 +508,26 @@ async function sudoRun(args: string[], timeoutMs = 120_000): Promise<{ ok: boole
 const MVM_PREFAULT_EVERY_MS = 15 * 60_000;
 function touchGoldenMem(): void {
   if (process.env.OPENSESSION_MVM_PREFAULT !== "1") return;
-  const t = globalThis as { __mvmPrefaultAt?: number; __mvmPrefaultBusy?: boolean };
-  if (t.__mvmPrefaultBusy || Date.now() - (t.__mvmPrefaultAt ?? 0) < MVM_PREFAULT_EVERY_MS) return;
+  const t = globalThis as {
+    __mvmPrefaultAt?: number;
+    __mvmPrefaultBusy?: boolean;
+  };
+  if (
+    t.__mvmPrefaultBusy ||
+    Date.now() - (t.__mvmPrefaultAt ?? 0) < MVM_PREFAULT_EVERY_MS
+  )
+    return;
   if (!mvmGoldenReady()) return;
   t.__mvmPrefaultBusy = true;
   try {
-    const proc = Bun.spawn(["cat", `${MVM_STORE}/golden.mem`, `${MVM_STORE}/golden.vmstate`], {
-      stdout: "ignore",
-      stderr: "ignore",
-      stdin: "ignore",
-    });
+    const proc = Bun.spawn(
+      ["cat", `${MVM_STORE}/golden.mem`, `${MVM_STORE}/golden.vmstate`],
+      {
+        stdout: "ignore",
+        stderr: "ignore",
+        stdin: "ignore",
+      },
+    );
     proc.exited
       .then(() => {
         t.__mvmPrefaultAt = Date.now();
@@ -452,14 +544,18 @@ function touchGoldenMem(): void {
 /** Restore a clone from the golden snapshot and expose it via Caddy. */
 async function spawnMicrovmClone(repo: Repo): Promise<PoolContainer | null> {
   if (!mvmGoldenReady()) {
-    console.warn(`[preview-pool] ${repo.id}: no microvm golden snapshot — run the refresh (POST /preview-pool/${repo.id}/refresh)`);
+    console.warn(
+      `[preview-pool] ${repo.id}: no microvm golden snapshot — run the refresh (POST /preview-pool/${repo.id}/refresh)`,
+    );
     return null;
   }
   // Free index across all repos (netns space is host-global). The reserved
   // set closes the window between concurrent spawners' state scans — two
   // spawns picked the same index and the second's destroy-first create
   // killed the first's live VM (2026-07-24).
-  const reserved = ((globalThis as { __mvmReservedIdx?: Set<number> }).__mvmReservedIdx ??= new Set<number>());
+  const reserved = ((
+    globalThis as { __mvmReservedIdx?: Set<number> }
+  ).__mvmReservedIdx ??= new Set<number>());
   const used = new Set<number>([...reserved, ...sandboxMicrovmIndexes()]);
   for (const rid of Object.keys(configuredRepos())) {
     for (const cc of Object.values(readState(rid).containers)) {
@@ -485,13 +581,22 @@ async function spawnMicrovmClone(repo: Repo): Promise<PoolContainer | null> {
     createdAt: new Date().toISOString(),
   };
   patchContainer(repo.id, name, c);
-  const r = await sudoRun(["bash", `${MVM_SCRIPTS}/clone.sh`, "create", String(idx), MVM_STORE], 180_000).finally(() =>
-    reserved.delete(idx),
-  );
+  const r = await sudoRun(
+    ["bash", `${MVM_SCRIPTS}/clone.sh`, "create", String(idx), MVM_STORE],
+    180_000,
+  ).finally(() => reserved.delete(idx));
   if (!r.ok) {
-    console.warn(`[preview-pool] microvm clone ${idx} failed: ${r.out.slice(-400)}`);
+    console.warn(
+      `[preview-pool] microvm clone ${idx} failed: ${r.out.slice(-400)}`,
+    );
     patchContainer(repo.id, name, null);
-    await sudoRun(["bash", `${MVM_SCRIPTS}/clone.sh`, "destroy", String(idx), MVM_STORE]).catch(() => {});
+    await sudoRun([
+      "bash",
+      `${MVM_SCRIPTS}/clone.sh`,
+      "destroy",
+      String(idx),
+      MVM_STORE,
+    ]).catch(() => {});
     return null;
   }
   // Fresh creds (the snapshot's are stale) + a background poke so the app
@@ -515,7 +620,9 @@ async function spawnMicrovmClone(repo: Repo): Promise<PoolContainer | null> {
           {
             handler: "reverse_proxy",
             upstreams: [{ dial: `${mvmIp(c)}:${CONTAINER_PORT}` }],
-            headers: { request: { set: { Host: [`localhost:${CONTAINER_PORT}`] } } },
+            headers: {
+              request: { set: { Host: [`localhost:${CONTAINER_PORT}`] } },
+            },
           },
         ],
         terminal: true,
@@ -523,18 +630,30 @@ async function spawnMicrovmClone(repo: Repo): Promise<PoolContainer | null> {
     ],
   };
   const path = `http://localhost:2019/config/apps/http/servers/preview_${httpsPort}`;
-  let res = await fetch(path, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(route) }).catch(() => null);
+  let res = await fetch(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(route),
+  }).catch(() => null);
   if (res && res.status === 409) {
     await fetch(path, { method: "DELETE" }).catch(() => {});
-    res = await fetch(path, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(route) }).catch(() => null);
+    res = await fetch(path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(route),
+    }).catch(() => null);
   }
-  const bootSha = (await mvmAgent(c, { command: `git -C ${WORKSPACE} rev-parse HEAD` })).out.trim();
+  const bootSha = (
+    await mvmAgent(c, { command: `git -C ${WORKSPACE} rev-parse HEAD` })
+  ).out.trim();
   const previewUrl = `https://${host}:${httpsPort}`;
   patchContainer(repo.id, name, { state: "ready", bootSha, previewUrl });
   c.state = "ready";
   c.bootSha = bootSha;
   c.previewUrl = previewUrl;
-  console.log(`[preview-pool] ${repo.id}: microvm clone ${idx} ready at ${previewUrl} (${bootSha.slice(0, 10)})`);
+  console.log(
+    `[preview-pool] ${repo.id}: microvm clone ${idx} ready at ${previewUrl} (${bootSha.slice(0, 10)})`,
+  );
   return c;
 }
 
@@ -560,19 +679,29 @@ async function poolExec(
       undefined,
       Math.max(10, Math.round(timeoutMs / 1000)),
     );
-    return { ok: (res.exitCode ?? 1) === 0, out: String(res.result ?? "").trim() };
+    return {
+      ok: (res.exitCode ?? 1) === 0,
+      out: String(res.result ?? "").trim(),
+    };
   } catch (e) {
     return { ok: false, out: String((e as Error)?.message || e) };
   }
 }
 
-async function poolWriteFile(c: PoolContainer, path: string, content: string): Promise<boolean> {
+async function poolWriteFile(
+  c: PoolContainer,
+  path: string,
+  content: string,
+): Promise<boolean> {
   if (isMicrovm(c)) {
     try {
       const res = await fetch(`http://${mvmIp(c)}:8080/files`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, content: Buffer.from(content, "utf-8").toString("base64") }),
+        body: JSON.stringify({
+          path,
+          content: Buffer.from(content, "utf-8").toString("base64"),
+        }),
         signal: AbortSignal.timeout(30_000),
       });
       return res.ok;
@@ -631,7 +760,9 @@ export async function reseedEnv(c: PoolContainer): Promise<void> {
     const content = envSeedContent(repo, rel);
     if (content === null) continue;
     if (!(await poolWriteFile(c, `${WORKSPACE}/${rel}`, content))) {
-      console.warn(`[preview-pool] ${c.repoId}: re-seeding ${rel} into ${c.name} failed`);
+      console.warn(
+        `[preview-pool] ${c.repoId}: re-seeding ${rel} into ${c.name} failed`,
+      );
     }
   }
 }
@@ -639,7 +770,10 @@ export async function reseedEnv(c: PoolContainer): Promise<void> {
 /** Same seeding for a docker container that hasn't started yet, where exec
  *  isn't available — `docker cp` needs a path, so the (already gitignored)
  *  content goes through a private temp file. Exported for tests. */
-export async function copySeedEnvFiles(name: string, repo: Repo): Promise<void> {
+export async function copySeedEnvFiles(
+  name: string,
+  repo: Repo,
+): Promise<void> {
   const staging = mkdtempSync(join(tmpdir(), "os-preview-seed-"));
   try {
     for (const rel of SEED_ENV_FILES) {
@@ -648,7 +782,10 @@ export async function copySeedEnvFiles(name: string, repo: Repo): Promise<void> 
       const staged = join(staging, rel.replace(/\//g, "_"));
       writeFileSync(staged, content, { mode: 0o600 });
       const cp = await docker(["cp", staged, `${name}:${WORKSPACE}/${rel}`]);
-      if (!cp.ok) console.warn(`[preview-pool] ${repo.id}: seeding ${rel} into ${name} failed`);
+      if (!cp.ok)
+        console.warn(
+          `[preview-pool] ${repo.id}: seeding ${rel} into ${name} failed`,
+        );
     }
   } finally {
     rmSync(staging, { recursive: true, force: true });
@@ -656,10 +793,14 @@ export async function copySeedEnvFiles(name: string, repo: Repo): Promise<void> 
 }
 
 /** running/paused/gone in pool terms (daytona "stopped" maps to paused). */
-async function poolRuntimeStatus(c: PoolContainer): Promise<"running" | "paused" | "gone"> {
+async function poolRuntimeStatus(
+  c: PoolContainer,
+): Promise<"running" | "paused" | "gone"> {
   if (isMicrovm(c)) {
     // The transient scope is the authoritative process handle.
-    const r = await $`systemctl is-active --quiet os-fc-clone${c.mvmIdx}`.quiet().nothrow();
+    const r = await $`systemctl is-active --quiet os-fc-clone${c.mvmIdx}`
+      .quiet()
+      .nothrow();
     if (r.exitCode === 0) return "running";
     // A transient check hiccup must not delete a live claim — the agent
     // answering proves the VM is alive.
@@ -672,7 +813,12 @@ async function poolRuntimeStatus(c: PoolContainer): Promise<"running" | "paused"
     await (sbx as { refreshData?: () => Promise<void> }).refreshData?.();
     const s = String((sbx as { state?: string }).state ?? "").toLowerCase();
     if (s.includes("started") || s.includes("running")) return "running";
-    if (s.includes("stopped") || s.includes("stopping") || s.includes("starting")) return "paused";
+    if (
+      s.includes("stopped") ||
+      s.includes("stopping") ||
+      s.includes("starting")
+    )
+      return "paused";
     return "gone";
   } catch {
     return "gone";
@@ -681,9 +827,18 @@ async function poolRuntimeStatus(c: PoolContainer): Promise<"running" | "paused"
 
 async function poolDestroyRef(c: PoolContainer): Promise<void> {
   if (isMicrovm(c)) {
-    await sudoRun(["bash", `${MVM_SCRIPTS}/clone.sh`, "destroy", String(c.mvmIdx), MVM_STORE]).catch(() => {});
+    await sudoRun([
+      "bash",
+      `${MVM_SCRIPTS}/clone.sh`,
+      "destroy",
+      String(c.mvmIdx),
+      MVM_STORE,
+    ]).catch(() => {});
     if (c.mvmIdx != null) {
-      await fetch(`http://localhost:2019/config/apps/http/servers/preview_${MVM_HTTPS_BASE + c.mvmIdx}`, { method: "DELETE" }).catch(() => {});
+      await fetch(
+        `http://localhost:2019/config/apps/http/servers/preview_${MVM_HTTPS_BASE + c.mvmIdx}`,
+        { method: "DELETE" },
+      ).catch(() => {});
     }
     return;
   }
@@ -702,7 +857,21 @@ async function poolDestroyRef(c: PoolContainer): Promise<void> {
 
 async function poolFreeze(c: PoolContainer): Promise<boolean> {
   if (isMicrovm(c)) {
-    return (await sudoRun(["curl", "-s", "--unix-socket", `${MVM_STORE}/fc-clone${c.mvmIdx}.sock`, "-X", "PATCH", "http://x/vm", "-H", "Content-Type: application/json", "-d", '{"state":"Paused"}'])).ok;
+    return (
+      await sudoRun([
+        "curl",
+        "-s",
+        "--unix-socket",
+        `${MVM_STORE}/fc-clone${c.mvmIdx}.sock`,
+        "-X",
+        "PATCH",
+        "http://x/vm",
+        "-H",
+        "Content-Type: application/json",
+        "-d",
+        '{"state":"Paused"}',
+      ])
+    ).ok;
   }
   if (!isDaytona(c)) return (await docker(["pause", c.name])).ok;
   try {
@@ -721,7 +890,21 @@ async function poolFreeze(c: PoolContainer): Promise<boolean> {
  *  green. */
 async function poolUnfreeze(c: PoolContainer): Promise<boolean> {
   if (isMicrovm(c)) {
-    return (await sudoRun(["curl", "-s", "--unix-socket", `${MVM_STORE}/fc-clone${c.mvmIdx}.sock`, "-X", "PATCH", "http://x/vm", "-H", "Content-Type: application/json", "-d", '{"state":"Resumed"}'])).ok;
+    return (
+      await sudoRun([
+        "curl",
+        "-s",
+        "--unix-socket",
+        `${MVM_STORE}/fc-clone${c.mvmIdx}.sock`,
+        "-X",
+        "PATCH",
+        "http://x/vm",
+        "-H",
+        "Content-Type: application/json",
+        "-d",
+        '{"state":"Resumed"}',
+      ])
+    ).ok;
   }
   if (!isDaytona(c)) return (await docker(["unpause", c.name])).ok;
   try {
@@ -739,17 +922,25 @@ async function poolUnfreeze(c: PoolContainer): Promise<boolean> {
 async function poolRestartDev(c: PoolContainer): Promise<void> {
   await reseedEnv(c);
   if (isMicrovm(c)) {
-    await mvmAgent(c, {
-      command: `pkill -TERM -f 'start.sh|dev-services|next dev|concurrently' 2>/dev/null; sleep 3; pkill -KILL -f 'next dev|rescript' 2>/dev/null; cd ${WORKSPACE} && : > /tmp/boot.log && (setpriv --reuid 1000 --regid 1000 --init-groups env HOME=${homeDir()} USER=ubuntu PATH=/usr/local/sbin:/usr/local/bin:/usr/local/bun/bin:/usr/sbin:/usr/bin:/sbin:/bin WEBAPP_PORT=${CONTAINER_PORT} OPENSESSION_BOOT_MODE=snapshot-restore bash .agents/start.sh < /dev/null > /tmp/boot.log 2>&1 &) && echo relaunched`,
-      timeoutMs: 30_000,
-    }, true);
+    await mvmAgent(
+      c,
+      {
+        command: `pkill -TERM -f 'start.sh|dev-services|next dev|concurrently' 2>/dev/null; sleep 3; pkill -KILL -f 'next dev|rescript' 2>/dev/null; cd ${WORKSPACE} && : > /tmp/boot.log && (setpriv --reuid 1000 --regid 1000 --init-groups env HOME=${homeDir()} USER=ubuntu PATH=/usr/local/sbin:/usr/local/bin:/usr/local/bun/bin:/usr/sbin:/usr/bin:/sbin:/bin WEBAPP_PORT=${CONTAINER_PORT} OPENSESSION_BOOT_MODE=snapshot-restore bash .agents/start.sh < /dev/null > /tmp/boot.log 2>&1 &) && echo relaunched`,
+        timeoutMs: 30_000,
+      },
+      true,
+    );
     return;
   }
   if (!isDaytona(c)) {
     await docker(["restart", "-t", "5", c.name], 60_000);
     return;
   }
-  await poolExec(c, `pkill -TERM -f 'start.sh|dev-services|next dev|concurrently' 2>/dev/null; sleep 3; pkill -KILL -f 'next dev|rescript' 2>/dev/null; true`, 30_000);
+  await poolExec(
+    c,
+    `pkill -TERM -f 'start.sh|dev-services|next dev|concurrently' 2>/dev/null; sleep 3; pkill -KILL -f 'next dev|rescript' 2>/dev/null; true`,
+    30_000,
+  );
   await launchDaytonaDev(c);
 }
 
@@ -804,13 +995,17 @@ function fullPortsConf(): string {
  * The default section supports provisioning steps; any named profiles declared
  * by registered repos support applications that set AWS_PROFILE themselves.
  */
-async function refreshContainerCreds(target: string | PoolContainer): Promise<boolean> {
+async function refreshContainerCreds(
+  target: string | PoolContainer,
+): Promise<boolean> {
   const env = await getAgentAwsEnv();
   if (!env.AWS_ACCESS_KEY_ID) return false;
   const section = [
     `aws_access_key_id = ${env.AWS_ACCESS_KEY_ID}`,
     `aws_secret_access_key = ${env.AWS_SECRET_ACCESS_KEY}`,
-    ...(env.AWS_SESSION_TOKEN ? [`aws_session_token = ${env.AWS_SESSION_TOKEN}`] : []),
+    ...(env.AWS_SESSION_TOKEN
+      ? [`aws_session_token = ${env.AWS_SESSION_TOKEN}`]
+      : []),
   ];
   const profiles = [
     ...new Set(
@@ -829,7 +1024,11 @@ async function refreshContainerCreds(target: string | PoolContainer): Promise<bo
   const configLines = [
     "[default]",
     `region = ${region}`,
-    ...profiles.flatMap((profile) => ["", `[profile ${profile}]`, `region = ${region}`]),
+    ...profiles.flatMap((profile) => [
+      "",
+      `[profile ${profile}]`,
+      `region = ${region}`,
+    ]),
     "",
   ].join("\\n");
   const script = `mkdir -p ~/.aws && cat > ~/.aws/credentials <<'BKSEOF'\n${lines}\nBKSEOF\nprintf '%b' '${configLines}' > ~/.aws/config && chmod 600 ~/.aws/credentials`;
@@ -852,7 +1051,10 @@ export async function cloneUrlFor(
     // tradeoff is a write-scoped repo token visible in docker inspect for the
     // container's life (same call as sandbox remotes, bootstrap.ts).
     if (!repo.csRepo || !codeStorageConfig()) return null;
-    return authedRemoteUrl(repo.csRepo, opts?.longLived ? { ttlSeconds: 30 * 24 * 3600 } : {});
+    return authedRemoteUrl(
+      repo.csRepo,
+      opts?.longLived ? { ttlSeconds: 30 * 24 * 3600 } : {},
+    );
   }
   if (!repo.ghRepo) return null;
   // Installation tokens expire too quickly to bake into a container command
@@ -891,7 +1093,11 @@ async function waitForUp(
   const deadline = Date.now() + timeoutMs;
   let probes = 0;
   while (Date.now() < deadline) {
-    const code = await httpCode(`http://127.0.0.1:${hostPort}/`, "localhost:3300", 5);
+    const code = await httpCode(
+      `http://127.0.0.1:${hostPort}/`,
+      "localhost:3300",
+      5,
+    );
     if (code !== 0) return { ok: true, detail: `HTTP ${code}` };
     probes++;
     if (probes % 3 === 0) {
@@ -903,7 +1109,10 @@ async function waitForUp(
         `sed 's/\\x1b\\[[0-9;]*m//g' /tmp/boot.log 2>/dev/null | grep -aE 'error: Recipe|Watcher exited|exited with code' | tail -3`,
       );
       if (log.out.includes("error: Recipe")) {
-        const tail = await dockerExec(name, "tail -c 1500 /tmp/boot.log 2>/dev/null");
+        const tail = await dockerExec(
+          name,
+          "tail -c 1500 /tmp/boot.log 2>/dev/null",
+        );
         return { ok: false, detail: `boot failed: ${log.out}\n${tail.out}` };
       }
     }
@@ -912,7 +1121,11 @@ async function waitForUp(
   return { ok: false, detail: "timed out" };
 }
 
-async function httpCode(url: string, host: string, timeoutSec: number): Promise<number> {
+async function httpCode(
+  url: string,
+  host: string,
+  timeoutSec: number,
+): Promise<number> {
   try {
     const res = await fetch(url, {
       headers: { Host: host },
@@ -931,14 +1144,18 @@ async function warmRoutes(repo: Repo, hostPort: number): Promise<void> {
   try {
     const raw = await dockerReadWorkspaceFile(repo, ".agents/preview.json");
     const parsed = raw ? JSON.parse(raw) : null;
-    if (Array.isArray(parsed?.warmRoutes) && parsed.warmRoutes.length) routes = parsed.warmRoutes;
+    if (Array.isArray(parsed?.warmRoutes) && parsed.warmRoutes.length)
+      routes = parsed.warmRoutes;
   } catch {}
   for (const r of routes) {
     await httpCode(`http://127.0.0.1:${hostPort}${r}`, "localhost:3300", 120);
   }
 }
 
-async function dockerReadWorkspaceFile(_repo: Repo, rel: string): Promise<string | null> {
+async function dockerReadWorkspaceFile(
+  _repo: Repo,
+  rel: string,
+): Promise<string | null> {
   // Read from the host main checkout — same content, no container roundtrip.
   const repoRoot = _repo.repo;
   const p = join(repoRoot, rel);
@@ -955,9 +1172,17 @@ function poolCodeLive(c: PoolContainer, code: number): boolean {
 }
 
 /** HTTP status for a path on a pool member's app, whichever backend. */
-async function poolHttpCode(c: PoolContainer, path: string, timeoutSec: number): Promise<number> {
+async function poolHttpCode(
+  c: PoolContainer,
+  path: string,
+  timeoutSec: number,
+): Promise<number> {
   if (isMicrovm(c)) {
-    return httpCode(`http://${mvmIp(c)}:${CONTAINER_PORT}${path}`, `localhost:${CONTAINER_PORT}`, timeoutSec);
+    return httpCode(
+      `http://${mvmIp(c)}:${CONTAINER_PORT}${path}`,
+      `localhost:${CONTAINER_PORT}`,
+      timeoutSec,
+    );
   }
   if (isDaytona(c)) {
     if (!c.previewUrl) return 0;
@@ -971,11 +1196,18 @@ async function poolHttpCode(c: PoolContainer, path: string, timeoutSec: number):
       return 0;
     }
   }
-  return httpCode(`http://127.0.0.1:${c.hostPort}${path}`, `localhost:${CONTAINER_PORT}`, timeoutSec);
+  return httpCode(
+    `http://127.0.0.1:${c.hostPort}${path}`,
+    `localhost:${CONTAINER_PORT}`,
+    timeoutSec,
+  );
 }
 
 /** Backend-generic waitForUp for pool members (see waitForUp's contract). */
-async function waitForPoolUp(c: PoolContainer, timeoutMs: number): Promise<{ ok: boolean; detail: string }> {
+async function waitForPoolUp(
+  c: PoolContainer,
+  timeoutMs: number,
+): Promise<{ ok: boolean; detail: string }> {
   const deadline = Date.now() + timeoutMs;
   let probes = 0;
   while (Date.now() < deadline) {
@@ -983,13 +1215,17 @@ async function waitForPoolUp(c: PoolContainer, timeoutMs: number): Promise<{ ok:
     if (poolCodeLive(c, code)) return { ok: true, detail: `HTTP ${code}` };
     probes++;
     if (probes % 3 === 0) {
-      if ((await poolRuntimeStatus(c)) === "gone") return { ok: false, detail: "sandbox gone" };
+      if ((await poolRuntimeStatus(c)) === "gone")
+        return { ok: false, detail: "sandbox gone" };
       const log = await poolExec(
         c,
         `sed 's/\\x1b\\[[0-9;]*m//g' /tmp/boot.log 2>/dev/null | grep -aE 'error: Recipe|Watcher exited' | tail -3`,
       );
       if (log.out.includes("error: Recipe")) {
-        const tail = await poolExec(c, "tail -c 1500 /tmp/boot.log 2>/dev/null");
+        const tail = await poolExec(
+          c,
+          "tail -c 1500 /tmp/boot.log 2>/dev/null",
+        );
         return { ok: false, detail: `boot failed: ${log.out}\n${tail.out}` };
       }
     }
@@ -1003,7 +1239,8 @@ async function warmRoutesPool(repo: Repo, c: PoolContainer): Promise<void> {
   try {
     const raw = await dockerReadWorkspaceFile(repo, ".agents/preview.json");
     const parsed = raw ? JSON.parse(raw) : null;
-    if (Array.isArray(parsed?.warmRoutes) && parsed.warmRoutes.length) routes = parsed.warmRoutes;
+    if (Array.isArray(parsed?.warmRoutes) && parsed.warmRoutes.length)
+      routes = parsed.warmRoutes;
   } catch {}
   for (const r of routes) await poolHttpCode(c, r, 120);
 }
@@ -1019,7 +1256,9 @@ async function warmRoutesPool(repo: Repo, c: PoolContainer): Promise<void> {
 async function spawnDaytonaWarm(repo: Repo): Promise<void> {
   const cloneUrl = await cloneUrlFor(repo);
   if (!cloneUrl) {
-    return console.warn(`[preview-pool] ${repo.id}: daytona backend needs a ghRepo + selected GitHub credential`);
+    return console.warn(
+      `[preview-pool] ${repo.id}: daytona backend needs a ghRepo + selected GitHub credential`,
+    );
   }
   const client = await daytonaClientForPool();
   const scfg = sandboxConfig();
@@ -1048,7 +1287,9 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
   patchContainer(repo.id, sbx.id, c);
   const fail = async (msg: string) => {
     // git failure output can echo the full authed clone URL (live JWT).
-    console.warn(`[preview-pool] ${repo.id}: daytona warm ${sbx.id} failed: ${redactUrl(msg).slice(0, 600)}`);
+    console.warn(
+      `[preview-pool] ${repo.id}: daytona warm ${sbx.id} failed: ${redactUrl(msg).slice(0, 600)}`,
+    );
     await destroyContainer(repo.id, sbx.id);
   };
   try {
@@ -1074,7 +1315,8 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
       ].join(" && "),
       12 * 60_000,
     );
-    if (!tool.out.includes("TOOLCHAIN-OK")) return void (await fail(`toolchain: ${tool.out.slice(-400)}`));
+    if (!tool.out.includes("TOOLCHAIN-OK"))
+      return void (await fail(`toolchain: ${tool.out.slice(-400)}`));
 
     await refreshContainerCreds(c);
     const clone = await poolExec(
@@ -1092,7 +1334,8 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
         c,
         `git -C ${WORKSPACE} remote set-url origin ${shellQuoteWord(safeOrigin)}`,
       );
-      if (!scrub.ok) return void (await fail(`credential scrub: ${scrub.out.slice(-400)}`));
+      if (!scrub.ok)
+        return void (await fail(`credential scrub: ${scrub.out.slice(-400)}`));
     }
 
     for (const rel of SEED_ENV_FILES) {
@@ -1109,7 +1352,8 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
       `export PATH="/usr/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"; cd ${WORKSPACE} && [ -f .agents/setup ] && OPENSESSION_BOOT_MODE=fresh bash .agents/setup || true`,
       20 * 60_000,
     );
-    if (setup.out.includes("ERROR:")) return void (await fail(`.agents/setup: ${setup.out.slice(-400)}`));
+    if (setup.out.includes("ERROR:"))
+      return void (await fail(`.agents/setup: ${setup.out.slice(-400)}`));
     for (const marker of provisionMarkers(repo.id)) {
       const chk = await poolExec(c, `test -e ${WORKSPACE}/${marker}`);
       if (!chk.ok) {
@@ -1122,9 +1366,15 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
     await launchDaytonaDev(c);
     const up = await waitForPoolUp(c, 6 * 60_000);
     if (!up.ok) return void (await fail(`boot: ${up.detail}`));
-    const bootSha = (await poolExec(c, `git -C ${WORKSPACE} rev-parse HEAD`)).out.trim();
+    const bootSha = (
+      await poolExec(c, `git -C ${WORKSPACE} rev-parse HEAD`)
+    ).out.trim();
     await warmRoutesPool(repo, c);
-    patchContainer(repo.id, sbx.id, { state: "ready", bootSha, previewUrl: c.previewUrl });
+    patchContainer(repo.id, sbx.id, {
+      state: "ready",
+      bootSha,
+      previewUrl: c.previewUrl,
+    });
     console.log(
       `[preview-pool] ${repo.id}: daytona warm ${sbx.id} ready at ${c.previewUrl} (${bootSha.slice(0, 10)})`,
     );
@@ -1136,14 +1386,22 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
 // ── Golden image build ───────────────────────────────────────────────────────
 
 async function originDefaultSha(repo: Repo): Promise<string | null> {
-  await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`.quiet().nothrow();
+  await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`
+    .quiet()
+    .nothrow();
   const sha = (
-    await $`git -C ${repo.repo} rev-parse origin/${repo.defaultBranch}`.quiet().nothrow().text()
+    await $`git -C ${repo.repo} rev-parse origin/${repo.defaultBranch}`
+      .quiet()
+      .nothrow()
+      .text()
   ).trim();
   return sha || null;
 }
 
-export async function refreshGoldenImage(repoId: string, force = false): Promise<boolean> {
+export async function refreshGoldenImage(
+  repoId: string,
+  force = false,
+): Promise<boolean> {
   const existing = busy.get(`golden-${repoId}`);
   if (existing) return existing as Promise<boolean>;
   // The microvm golden derives FROM the docker golden image: refresh the
@@ -1158,7 +1416,9 @@ export async function refreshGoldenImage(repoId: string, force = false): Promise
           const section = [
             `aws_access_key_id = ${env.AWS_ACCESS_KEY_ID}`,
             `aws_secret_access_key = ${env.AWS_SECRET_ACCESS_KEY}`,
-            ...(env.AWS_SESSION_TOKEN ? [`aws_session_token = ${env.AWS_SESSION_TOKEN}`] : []),
+            ...(env.AWS_SESSION_TOKEN
+              ? [`aws_session_token = ${env.AWS_SESSION_TOKEN}`]
+              : []),
           ];
           const profile = configuredRepos()[repoId]?.previewAwsProfile;
           const b64 = Buffer.from(
@@ -1175,7 +1435,9 @@ export async function refreshGoldenImage(repoId: string, force = false): Promise
             [
               "[default]",
               `region = ${region}`,
-              ...(profile ? ["", `[profile ${profile}]`, `region = ${region}`] : []),
+              ...(profile
+                ? ["", `[profile ${profile}]`, `region = ${region}`]
+                : []),
               "",
             ].join("\n"),
             "utf-8",
@@ -1193,7 +1455,9 @@ export async function refreshGoldenImage(repoId: string, force = false): Promise
             30 * 60_000,
           );
           if (!r.ok) {
-            console.warn(`[preview-pool] ${repoId}: microvm golden refresh failed: ${redactUrl(r.out.slice(-600))}`);
+            console.warn(
+              `[preview-pool] ${repoId}: microvm golden refresh failed: ${redactUrl(r.out.slice(-600))}`,
+            );
             return false;
           }
           console.log(`[preview-pool] ${repoId}: microvm golden refreshed`);
@@ -1214,7 +1478,10 @@ export async function refreshGoldenImage(repoId: string, force = false): Promise
   return run;
 }
 
-async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean> {
+async function doRefreshGolden(
+  repoId: string,
+  force: boolean,
+): Promise<boolean> {
   const repo = configuredRepos()[repoId];
   if (!repo) return false;
   const cfg = previewPoolConfig(repoId);
@@ -1222,22 +1489,38 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean>
   const state = readState(repoId);
   const sha = await originDefaultSha(repo);
   if (!sha) return false;
-  const imageExists = (await docker(["image", "inspect", `${goldenImage(repoId)}:latest`])).ok;
-  const ageMs = state.golden?.builtAt ? Date.now() - Date.parse(state.golden.builtAt) : Infinity;
-  if (!force && imageExists && state.golden?.sha && ageMs < cfg.goldenIntervalHours * 3_600_000) {
+  const imageExists = (
+    await docker(["image", "inspect", `${goldenImage(repoId)}:latest`])
+  ).ok;
+  const ageMs = state.golden?.builtAt
+    ? Date.now() - Date.parse(state.golden.builtAt)
+    : Infinity;
+  if (
+    !force &&
+    imageExists &&
+    state.golden?.sha &&
+    ageMs < cfg.goldenIntervalHours * 3_600_000
+  ) {
     return true;
   }
   const started = Date.now();
   const name = `os-preview-goldenbuild-${repoId}`;
   const cloneUrl = await cloneUrlFor(repo);
-  console.log(`[preview-pool] ${repoId}: building golden image at ${sha.slice(0, 10)}`);
+  console.log(
+    `[preview-pool] ${repoId}: building golden image at ${sha.slice(0, 10)}`,
+  );
   const fail = async (rawMsg: string): Promise<false> => {
     // git failure output can echo the full authed clone URL (live JWT).
     const msg = redactUrl(rawMsg);
-    console.warn(`[preview-pool] ${repoId}: golden build failed: ${msg.slice(0, 800)}`);
+    console.warn(
+      `[preview-pool] ${repoId}: golden build failed: ${msg.slice(0, 800)}`,
+    );
     writeState(repoId, {
       ...readState(repoId),
-      golden: { ...(readState(repoId).golden ?? { sha: "", builtAt: "" }), lastError: msg.slice(0, 500) },
+      golden: {
+        ...(readState(repoId).golden ?? { sha: "", builtAt: "" }),
+        lastError: msg.slice(0, 500),
+      },
     });
     await docker(["rm", "-f", name]);
     return false;
@@ -1246,12 +1529,23 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean>
   try {
     await docker(["rm", "-f", name]);
     const run = await docker([
-      "run", "-d", "--name", name,
-      "--label", `${POOL_LABEL}=goldenbuild`,
-      "-v", `${repo.repo}:/src:ro`,
-      "-p", `127.0.0.1::${CONTAINER_PORT}`,
-      "--cpus", String(cfg.cpus), "--memory", cfg.memory,
-      "opensession-runner:latest", "sleep", "infinity",
+      "run",
+      "-d",
+      "--name",
+      name,
+      "--label",
+      `${POOL_LABEL}=goldenbuild`,
+      "-v",
+      `${repo.repo}:/src:ro`,
+      "-p",
+      `127.0.0.1::${CONTAINER_PORT}`,
+      "--cpus",
+      String(cfg.cpus),
+      "--memory",
+      cfg.memory,
+      "opensession-runner:latest",
+      "sleep",
+      "infinity",
     ]);
     if (!run.ok) return fail(`docker run: ${run.out}`);
 
@@ -1259,7 +1553,11 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean>
     // to origin/<default> over https so the golden never lags the remote.
     // Depth 1: the workspace never needs history (worktree->container sync is
     // computed host-side; the container only ever resets to a fetched tip).
-    let r = await dockerExec(name, `git clone --depth 1 --branch ${shellQuoteWord(repo.defaultBranch)} file:///src ${WORKSPACE}`, 5 * 60_000);
+    let r = await dockerExec(
+      name,
+      `git clone --depth 1 --branch ${shellQuoteWord(repo.defaultBranch)} file:///src ${WORKSPACE}`,
+      5 * 60_000,
+    );
     if (!r.ok) return fail(`clone: ${r.out.slice(-500)}`);
     if (cloneUrl) {
       r = await dockerExec(
@@ -1269,7 +1567,9 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean>
       );
       if (!r.ok) return fail(`fetch/reset: ${r.out.slice(-500)}`);
     }
-    const wsSha = (await dockerExec(name, `git -C ${WORKSPACE} rev-parse HEAD`)).out.trim();
+    const wsSha = (
+      await dockerExec(name, `git -C ${WORKSPACE} rev-parse HEAD`)
+    ).out.trim();
 
     // Seed gitignored env files from the host checkout (same seeding the
     // session worktrees get — .env.local is required by start.sh).
@@ -1278,9 +1578,14 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean>
       if (!existsSync(src)) continue;
       await docker(["cp", src, `${name}:${WORKSPACE}/${rel}`]);
     }
-    await dockerExec(name, `cat > ${WORKSPACE}/.ports.conf <<'EOF'\n${fullPortsConf()}EOF`);
+    await dockerExec(
+      name,
+      `cat > ${WORKSPACE}/.ports.conf <<'EOF'\n${fullPortsConf()}EOF`,
+    );
     if (!(await refreshContainerCreds(name))) {
-      console.warn(`[preview-pool] ${repoId}: no AWS creds available for golden build (WASM install may fail)`);
+      console.warn(
+        `[preview-pool] ${repoId}: no AWS creds available for golden build (WASM install may fail)`,
+      );
     }
 
     // One-shot provisioning via the repo's own lifecycle contract.
@@ -1289,14 +1594,17 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean>
       `cd ${WORKSPACE} && [ -f .agents/setup ] && OPENSESSION_BOOT_MODE=fresh bash .agents/setup || true`,
       15 * 60_000,
     );
-    if (setup.out.includes("ERROR:")) return fail(`.agents/setup: ${setup.out.slice(-500)}`);
+    if (setup.out.includes("ERROR:"))
+      return fail(`.agents/setup: ${setup.out.slice(-500)}`);
     // The setup hook treats a failed WASM install as a non-fatal WARN, but a golden
     // without these artifacts boots into module-not-found crashes on first
     // page compile — verify hard instead of shipping a degraded image.
     for (const marker of provisionMarkers(repoId)) {
       const chk = await dockerExec(name, `test -e ${WORKSPACE}/${marker}`);
       if (!chk.ok) {
-        return fail(`provisioning incomplete: ${marker} missing after .agents/setup (S3 WASM install failed? ${setup.out.slice(-300)})`);
+        return fail(
+          `provisioning incomplete: ${marker} missing after .agents/setup (S3 WASM install failed? ${setup.out.slice(-300)})`,
+        );
       }
     }
 
@@ -1305,10 +1613,18 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean>
     const hostPort = parseInt(inspect.out.match(/:(\d+)$/m)?.[1] ?? "", 10);
     if (!hostPort) return fail(`no published port: ${inspect.out}`);
     await docker([
-      "exec", "-d",
-      "-e", `WEBAPP_PORT=${CONTAINER_PORT}`, "-e", "OPENSESSION_BOOT_MODE=fresh",
-      "-w", WORKSPACE, name,
-      "bash", "-c", `${BOOT_PREP} && exec bash .agents/start.sh > /tmp/boot.log 2>&1`,
+      "exec",
+      "-d",
+      "-e",
+      `WEBAPP_PORT=${CONTAINER_PORT}`,
+      "-e",
+      "OPENSESSION_BOOT_MODE=fresh",
+      "-w",
+      WORKSPACE,
+      name,
+      "bash",
+      "-c",
+      `${BOOT_PREP} && exec bash .agents/start.sh > /tmp/boot.log 2>&1`,
     ]);
     const up = await waitForUp(name, hostPort, 5 * 60_000);
     if (!up.ok) return fail(`boot: ${up.detail}`);
@@ -1319,7 +1635,10 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean>
       name,
       `grep -aE 'error: Recipe|fatal error' /tmp/boot.log | head -2; true`,
     );
-    if (post.out.trim()) return fail(`dev server died during route warming: ${post.out.slice(0, 300)}`);
+    if (post.out.trim())
+      return fail(
+        `dev server died during route warming: ${post.out.slice(0, 300)}`,
+      );
 
     // Graceful stop so the image carries no dev-server runtime state.
     await dockerExec(
@@ -1339,12 +1658,23 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean>
     await docker(["stop", "-t", "10", name], 30_000);
     // Committing an ~8GB layer is I/O-bound and can take many minutes when
     // the host is busy — a timeout here discards a fully verified build.
-    const commit = await docker(["commit", name, `${goldenImage(repoId)}:new`], 15 * 60_000);
+    const commit = await docker(
+      ["commit", name, `${goldenImage(repoId)}:new`],
+      15 * 60_000,
+    );
     if (!commit.ok) return fail(`commit: ${commit.out}`);
     // Rotate: latest -> prev, new -> latest.
     await docker(["rmi", `${goldenImage(repoId)}:prev`]);
-    await docker(["tag", `${goldenImage(repoId)}:latest`, `${goldenImage(repoId)}:prev`]);
-    await docker(["tag", `${goldenImage(repoId)}:new`, `${goldenImage(repoId)}:latest`]);
+    await docker([
+      "tag",
+      `${goldenImage(repoId)}:latest`,
+      `${goldenImage(repoId)}:prev`,
+    ]);
+    await docker([
+      "tag",
+      `${goldenImage(repoId)}:new`,
+      `${goldenImage(repoId)}:latest`,
+    ]);
     await docker(["rmi", `${goldenImage(repoId)}:new`]);
     await docker(["rm", "-f", name]);
 
@@ -1372,7 +1702,8 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<boolean>
 async function spawnWarmContainer(repo: Repo): Promise<void> {
   const cfg = previewPoolConfig(repo.id);
   const hostPort = await allocateHostPort();
-  if (!hostPort) return console.warn(`[preview-pool] ${repo.id}: no free host port`);
+  if (!hostPort)
+    return console.warn(`[preview-pool] ${repo.id}: no free host port`);
   const name = `os-preview-warm-${repo.id}-${Math.random().toString(36).slice(2, 8)}`;
   const { previewHost, httpsPortFor } = await import("./preview");
   const host = await previewHost();
@@ -1382,7 +1713,12 @@ async function spawnWarmContainer(repo: Repo): Promise<void> {
   const cloneUrl = await cloneUrlFor(repo, { longLived: true });
 
   patchContainer(repo.id, name, {
-    name, repoId: repo.id, state: "warming", hostPort, bootSha: "", createdAt: new Date().toISOString(),
+    name,
+    repoId: repo.id,
+    state: "warming",
+    hostPort,
+    bootSha: "",
+    createdAt: new Date().toISOString(),
   });
 
   // Advance the workspace to current origin/<default> before boot so warm
@@ -1399,42 +1735,64 @@ async function spawnWarmContainer(repo: Repo): Promise<void> {
   // startup. On a created-but-not-started container only `docker cp` works
   // (poolWriteFile's docker path needs a running container to exec in).
   const create = await docker([
-    "create", "--name", name,
-    "--label", `${POOL_LABEL}=${repo.id}`,
-    "-p", `127.0.0.1:${hostPort}:${CONTAINER_PORT}`,
-    "--cpus", String(cfg.cpus), "--memory", cfg.memory,
-    "-e", `WEBAPP_PORT=${CONTAINER_PORT}`,
-    "-e", "OPENSESSION_BOOT_MODE=snapshot-restore",
-    "-e", `PREVIEW_URL=${previewUrl}`,
+    "create",
+    "--name",
+    name,
+    "--label",
+    `${POOL_LABEL}=${repo.id}`,
+    "-p",
+    `127.0.0.1:${hostPort}:${CONTAINER_PORT}`,
+    "--cpus",
+    String(cfg.cpus),
+    "--memory",
+    cfg.memory,
+    "-e",
+    `WEBAPP_PORT=${CONTAINER_PORT}`,
+    "-e",
+    "OPENSESSION_BOOT_MODE=snapshot-restore",
+    "-e",
+    `PREVIEW_URL=${previewUrl}`,
     // No AWS_* env: apps may resolve credentials via their configured profile;
     // refreshContainerCreds writes both default and named sections.
-    "-w", WORKSPACE,
+    "-w",
+    WORKSPACE,
     `${goldenImage(repo.id)}:latest`,
-    "bash", "-c",
+    "bash",
+    "-c",
     `${BOOT_PREP} && ${advance}exec bash .agents/start.sh > /tmp/boot.log 2>&1`,
   ]);
   if (!create.ok) {
     patchContainer(repo.id, name, null);
     // docker failure output can echo the command line, authed cloneUrl included.
-    return console.warn(`[preview-pool] ${repo.id}: warm spawn failed: ${redactUrl(create.out.slice(-300))}`);
+    return console.warn(
+      `[preview-pool] ${repo.id}: warm spawn failed: ${redactUrl(create.out.slice(-300))}`,
+    );
   }
   await copySeedEnvFiles(name, repo);
   const run = await docker(["start", name]);
   if (!run.ok) {
     await docker(["rm", "-f", name]);
     patchContainer(repo.id, name, null);
-    return console.warn(`[preview-pool] ${repo.id}: warm start failed: ${redactUrl(run.out.slice(-300))}`);
+    return console.warn(
+      `[preview-pool] ${repo.id}: warm start failed: ${redactUrl(run.out.slice(-300))}`,
+    );
   }
   await refreshContainerCreds(name);
   const up = await waitForUp(name, hostPort, 4 * 60_000);
   if (!up.ok) {
-    console.warn(`[preview-pool] ${repo.id}: warm boot failed (${up.detail.slice(0, 500)})`);
+    console.warn(
+      `[preview-pool] ${repo.id}: warm boot failed (${up.detail.slice(0, 500)})`,
+    );
     return destroyContainer(repo.id, name);
   }
-  const bootSha = (await dockerExec(name, `git -C ${WORKSPACE} rev-parse HEAD`)).out.trim();
+  const bootSha = (
+    await dockerExec(name, `git -C ${WORKSPACE} rev-parse HEAD`)
+  ).out.trim();
   await warmRoutes(repo, hostPort);
   patchContainer(repo.id, name, { state: "ready", bootSha });
-  console.log(`[preview-pool] ${repo.id}: warm container ${name} ready on :${hostPort} (${bootSha.slice(0, 10)})`);
+  console.log(
+    `[preview-pool] ${repo.id}: warm container ${name} ready on :${hostPort} (${bootSha.slice(0, 10)})`,
+  );
 }
 
 async function destroyContainer(repoId: string, name: string): Promise<void> {
@@ -1487,7 +1845,9 @@ export function invalidatePreviewPoolDefaultBranch(repoId: string): void {
   if (busy.has(key)) return;
   let handledVersion = 0;
   const run = (async () => {
-    while (handledVersion < (defaultBranchInvalidationVersion.get(repoId) || 0)) {
+    while (
+      handledVersion < (defaultBranchInvalidationVersion.get(repoId) || 0)
+    ) {
       const targetVersion = defaultBranchInvalidationVersion.get(repoId) || 0;
       const sweep = busy.get("sweep");
       if (sweep) await sweep;
@@ -1521,7 +1881,10 @@ export function invalidatePreviewPoolDefaultBranch(repoId: string): void {
     }
   })()
     .catch((error) => {
-      console.warn(`[preview-pool] ${repoId}: default branch invalidation failed:`, error);
+      console.warn(
+        `[preview-pool] ${repoId}: default branch invalidation failed:`,
+        error,
+      );
     })
     .finally(() => busy.delete(key));
   busy.set(key, run);
@@ -1542,7 +1905,11 @@ async function ensurePool(repo: Repo): Promise<void> {
       else patchContainer(repo.id, name, null);
       continue;
     }
-    if (c.state === "claimed" && c.sessionWorktree && !existsSync(c.sessionWorktree)) {
+    if (
+      c.state === "claimed" &&
+      c.sessionWorktree &&
+      !existsSync(c.sessionWorktree)
+    ) {
       await destroyContainer(repo.id, name); // session worktree is gone
       continue;
     }
@@ -1559,7 +1926,10 @@ async function ensurePool(repo: Repo): Promise<void> {
       continue;
     }
     // A warming entry with no live boot (e.g. process restarted mid-boot).
-    if (c.state === "warming" && Date.now() - Date.parse(c.createdAt) > 10 * 60_000) {
+    if (
+      c.state === "warming" &&
+      Date.now() - Date.parse(c.createdAt) > 10 * 60_000
+    ) {
       await destroyContainer(repo.id, name);
     }
   }
@@ -1584,13 +1954,18 @@ async function ensurePool(repo: Repo): Promise<void> {
   }
 
   // Golden images are a docker concept; daytona sandboxes provision directly.
-  if (cfg.backend === "docker" && !(await docker(["image", "inspect", `${goldenImage(repo.id)}:latest`])).ok) {
+  if (
+    cfg.backend === "docker" &&
+    !(await docker(["image", "inspect", `${goldenImage(repo.id)}:latest`])).ok
+  ) {
     await refreshGoldenImage(repo.id);
     return;
   }
   // The microvm backend needs its golden snapshot before anything can spawn.
   if (cfg.backend === "microvm" && !mvmGoldenReady()) {
-    console.warn(`[preview-pool] ${repo.id}: microvm backend enabled but no golden snapshot — POST /preview-pool/${repo.id}/refresh builds it`);
+    console.warn(
+      `[preview-pool] ${repo.id}: microvm backend enabled but no golden snapshot — POST /preview-pool/${repo.id}/refresh builds it`,
+    );
     return;
   }
 
@@ -1615,7 +1990,8 @@ async function ensurePool(repo: Repo): Promise<void> {
   // 10+ min after a golden rotation, so every click fell back to host boots.
   if (ready.length > cfg.running) {
     for (const c of ready.slice(cfg.running)) {
-      if (await poolFreeze(c)) patchContainer(repo.id, c.name, { state: "paused" });
+      if (await poolFreeze(c))
+        patchContainer(repo.id, c.name, { state: "paused" });
     }
   }
   // Drain paused members beyond target — with microvm's restore-on-demand
@@ -1628,7 +2004,8 @@ async function ensurePool(repo: Repo): Promise<void> {
   }
   if (ready.length < cfg.running && pausedList.length > 0) {
     const c = pausedList[0];
-    if (await poolUnfreeze(c)) patchContainer(repo.id, c.name, { state: "ready" });
+    if (await poolUnfreeze(c))
+      patchContainer(repo.id, c.name, { state: "ready" });
   }
 
   const after = Object.values(readState(repo.id).containers).filter(
@@ -1663,7 +2040,12 @@ export function poolClaimFor(worktreeDir: string): PoolClaim | null {
   for (const repoId of Object.keys(configuredRepos())) {
     for (const c of Object.values(readState(repoId).containers)) {
       if (c.state === "claimed" && c.sessionWorktree === worktreeDir) {
-        return { containerName: c.name, hostPort: c.hostPort, repoId, previewUrl: c.previewUrl };
+        return {
+          containerName: c.name,
+          hostPort: c.hostPort,
+          repoId,
+          previewUrl: c.previewUrl,
+        };
       }
     }
   }
@@ -1680,13 +2062,20 @@ export function previewPoolEnabled(repoId: string): boolean {
  * checks always look "up" — pool-backed preview status must probe the app.
  * null = worktree has no pool claim (caller uses its normal detection).
  */
-export async function poolPreviewLive(worktreeDir: string): Promise<boolean | null> {
+export async function poolPreviewLive(
+  worktreeDir: string,
+): Promise<boolean | null> {
   const claim = poolClaimFor(worktreeDir);
   if (!claim) return null;
   // Status polls double as the claim's liveness signal (throttled writes).
   const c = readState(claim.repoId).containers[claim.containerName];
-  if (c && Date.now() - Date.parse(c.lastSeenAt || c.claimedAt || c.createdAt) > 60_000) {
-    patchContainer(claim.repoId, claim.containerName, { lastSeenAt: new Date().toISOString() });
+  if (
+    c &&
+    Date.now() - Date.parse(c.lastSeenAt || c.claimedAt || c.createdAt) > 60_000
+  ) {
+    patchContainer(claim.repoId, claim.containerName, {
+      lastSeenAt: new Date().toISOString(),
+    });
   }
   if (!c) return false;
   return poolCodeLive(c, await poolHttpCode(c, "/", isDaytona(c) ? 5 : 2));
@@ -1698,7 +2087,10 @@ export async function poolPreviewLive(worktreeDir: string): Promise<boolean | nu
  * lets the normal status path take over) or null when the pool has nothing
  * ready — the caller falls back to the host boot path.
  */
-export async function claimPoolPreview(repoId: string, worktreeDir: string): Promise<PoolClaim | null> {
+export async function claimPoolPreview(
+  repoId: string,
+  worktreeDir: string,
+): Promise<PoolClaim | null> {
   // Concurrent claims for one worktree must coalesce: a microvm spawn can take
   // minutes when golden.mem has to be re-read from EBS, and a second claim
   // arriving mid-spawn sees no ready container and spawns (then claims) a
@@ -1707,18 +2099,24 @@ export async function claimPoolPreview(repoId: string, worktreeDir: string): Pro
   const key = `claim:${worktreeDir}`;
   const inFlight = busy.get(key);
   if (inFlight) return inFlight as Promise<PoolClaim | null>;
-  const run = claimPoolPreviewInner(repoId, worktreeDir).finally(() => busy.delete(key));
+  const run = claimPoolPreviewInner(repoId, worktreeDir).finally(() =>
+    busy.delete(key),
+  );
   busy.set(key, run);
   return run;
 }
 
-async function claimPoolPreviewInner(repoId: string, worktreeDir: string): Promise<PoolClaim | null> {
+async function claimPoolPreviewInner(
+  repoId: string,
+  worktreeDir: string,
+): Promise<PoolClaim | null> {
   const repo = configuredRepos()[repoId];
   if (
     !repo ||
     !previewPoolEnabled(repoId) ||
     busy.has(`default-branch-${repoId}`)
-  ) return null;
+  )
+    return null;
   const already = poolClaimFor(worktreeDir);
   if (already) return already;
 
@@ -1751,9 +2149,13 @@ async function claimPoolPreviewInner(repoId: string, worktreeDir: string): Promi
   // The container may have fetched a newer origin/<default> than the host
   // repo has — make sure bootSha resolves locally before diffing against it.
   if (pick.bootSha) {
-    const have = await $`git -C ${worktreeDir} cat-file -e ${pick.bootSha}`.quiet().nothrow();
+    const have = await $`git -C ${worktreeDir} cat-file -e ${pick.bootSha}`
+      .quiet()
+      .nothrow();
     if (have.exitCode !== 0) {
-      await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`.quiet().nothrow();
+      await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`
+        .quiet()
+        .nothrow();
     }
   }
   try {
@@ -1764,11 +2166,17 @@ async function claimPoolPreviewInner(repoId: string, worktreeDir: string): Promi
     // A big flip live under the dev server's watchers causes a module-graph
     // error storm (flapping 500s while ReScript resettles) — reboot the dev
     // tree instead: clean graph on warm caches, ~20-40s, no error overlay.
-    const delta = pick.syncBase && pick.syncBase !== preBase
-      ? (await $`git -C ${worktreeDir} diff --name-only ${preBase} HEAD`.quiet().nothrow().text())
-          .split("\n")
-          .filter(Boolean).length
-      : 0;
+    const delta =
+      pick.syncBase && pick.syncBase !== preBase
+        ? (
+            await $`git -C ${worktreeDir} diff --name-only ${preBase} HEAD`
+              .quiet()
+              .nothrow()
+              .text()
+          )
+            .split("\n")
+            .filter(Boolean).length
+        : 0;
     // Microvm claims NEVER reboot: the snapshot's live watchers are the
     // asset — a reboot discards the warm process state and grinds page-cold
     // under memory pressure (measured: worse than a docker cold boot).
@@ -1792,7 +2200,10 @@ async function claimPoolPreviewInner(repoId: string, worktreeDir: string): Promi
       // Do not leave a failed claim discoverable. The orphan sweep cleans any
       // microvm resources the failed destroy could not remove.
       patchContainer(repoId, pick.name, null);
-      console.warn(`[preview-pool] cleanup of failed claim ${pick.name} failed:`, destroyError);
+      console.warn(
+        `[preview-pool] cleanup of failed claim ${pick.name} failed:`,
+        destroyError,
+      );
     }
     void sweepPool().catch(() => {});
     return null;
@@ -1804,20 +2215,31 @@ async function claimPoolPreviewInner(repoId: string, worktreeDir: string): Promi
       pick.previewUrl || `:${pick.hostPort}`
     })`,
   );
-  return { containerName: pick.name, hostPort: pick.hostPort, repoId, previewUrl: pick.previewUrl };
+  return {
+    containerName: pick.name,
+    hostPort: pick.hostPort,
+    repoId,
+    previewUrl: pick.previewUrl,
+  };
 }
 
 /** Release a worktree's pool preview: stop syncing, destroy the container. */
-export async function releasePoolPreview(worktreeDir: string): Promise<boolean> {
+export async function releasePoolPreview(
+  worktreeDir: string,
+): Promise<boolean> {
   const claim = poolClaimFor(worktreeDir);
   if (!claim) return false;
-  console.log(`[preview-pool] release: claim=${claim.containerName}, stopping sync`);
+  console.log(
+    `[preview-pool] release: claim=${claim.containerName}, stopping sync`,
+  );
   stopSyncLoop(worktreeDir);
   console.log(`[preview-pool] release: destroying ${claim.containerName}`);
   await destroyContainer(claim.repoId, claim.containerName);
   console.log(`[preview-pool] release: destroyed ${claim.containerName}`);
   void sweepPool().catch(() => {});
-  console.log(`[preview-pool] released ${claim.containerName} for ${worktreeDir}`);
+  console.log(
+    `[preview-pool] released ${claim.containerName} for ${worktreeDir}`,
+  );
   return true;
 }
 
@@ -1860,7 +2282,9 @@ async function doConverge(
   c: PoolContainer,
 ): Promise<string> {
   const base = c.syncBase || c.bootSha;
-  const head = (await $`git -C ${worktreeDir} rev-parse HEAD`.quiet().nothrow().text()).trim();
+  const head = (
+    await $`git -C ${worktreeDir} rev-parse HEAD`.quiet().nothrow().text()
+  ).trim();
   if (!head || head === base) return base;
 
   const inContainer = async (sha: string) =>
@@ -1880,25 +2304,40 @@ async function doConverge(
     if (!fetched && isDaytona(c)) {
       // No stdin streaming to remote sandboxes — un-pushed commits can't be
       // bundled over. Push the branch and re-claim.
-      throw new Error(`sha ${head.slice(0, 10)} not fetchable from the remote — push the branch for daytona previews`);
+      throw new Error(
+        `sha ${head.slice(0, 10)} not fetchable from the remote — push the branch for daytona previews`,
+      );
     }
     if (!fetched && isMicrovm(c)) {
       // Ship the bundle through the agent's /files endpoint (base64).
       const tmp = `/tmp/claim-${Date.now().toString(36)}.bundle`;
-      const b = await $`git -C ${worktreeDir} bundle create ${tmp} HEAD ^${base}`.quiet().nothrow();
+      const b =
+        await $`git -C ${worktreeDir} bundle create ${tmp} HEAD ^${base}`
+          .quiet()
+          .nothrow();
       if (b.exitCode !== 0) throw new Error("bundle create failed");
       const bytes = readFileSync(tmp);
       const { unlinkSync } = await import("node:fs");
       unlinkSync(tmp);
-      if (bytes.length > 30 * 1024 * 1024) throw new Error("bundle too large for the agent channel — push the branch");
+      if (bytes.length > 30 * 1024 * 1024)
+        throw new Error(
+          "bundle too large for the agent channel — push the branch",
+        );
       const up = await fetch(`http://${mvmIp(c)}:8080/files`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: "/tmp/claim.bundle", content: bytes.toString("base64") }),
+        body: JSON.stringify({
+          path: "/tmp/claim.bundle",
+          content: bytes.toString("base64"),
+        }),
         signal: AbortSignal.timeout(60_000),
       }).catch(() => null);
       if (!up?.ok) throw new Error("bundle upload to microvm agent failed");
-      const f = await poolExec(c, `cd ${WORKSPACE} && git fetch -q /tmp/claim.bundle HEAD && rm -f /tmp/claim.bundle`, 2 * 60_000);
+      const f = await poolExec(
+        c,
+        `cd ${WORKSPACE} && git fetch -q /tmp/claim.bundle HEAD && rm -f /tmp/claim.bundle`,
+        2 * 60_000,
+      );
       if (!f.ok) throw new Error(`bundle fetch failed: ${f.out.slice(-300)}`);
       fetched = true;
     }
@@ -1909,12 +2348,22 @@ async function doConverge(
         { stdout: "pipe", stderr: "pipe" },
       );
       const recv = Bun.spawn(
-        ["docker", "exec", "-i", c.name, "bash", "-c", "cat > /tmp/claim.bundle"],
+        [
+          "docker",
+          "exec",
+          "-i",
+          c.name,
+          "bash",
+          "-c",
+          "cat > /tmp/claim.bundle",
+        ],
         { stdin: bundle.stdout, stdout: "ignore", stderr: "pipe" },
       );
       const [bcode, rcode] = await Promise.all([bundle.exited, recv.exited]);
       if (bcode !== 0 || rcode !== 0) {
-        throw new Error(`bundle transfer failed (git=${bcode} docker=${rcode})`);
+        throw new Error(
+          `bundle transfer failed (git=${bcode} docker=${rcode})`,
+        );
       }
       const f = await dockerExec(
         c.name,
@@ -1931,7 +2380,9 @@ async function doConverge(
     2 * 60_000,
   );
   if (!co.ok || !co.out.includes(head)) {
-    throw new Error(`in-container checkout of ${head.slice(0, 10)} failed: ${co.out.slice(-300)}`);
+    throw new Error(
+      `in-container checkout of ${head.slice(0, 10)} failed: ${co.out.slice(-300)}`,
+    );
   }
   patchContainer(repo.id, c.name, { syncBase: head });
   c.syncBase = head;
@@ -1947,9 +2398,19 @@ async function doConverge(
  * converges to the worktree's exact content; its own gitignored build state
  * (lib/, .next) is never touched.
  */
-async function changedFiles(worktreeDir: string, bootSha: string): Promise<{ copy: string[]; drop: string[] }> {
-  const diff = await $`git -C ${worktreeDir} diff --name-status ${bootSha}`.quiet().nothrow().text();
-  const untracked = await $`git -C ${worktreeDir} ls-files -o --exclude-standard`.quiet().nothrow().text();
+async function changedFiles(
+  worktreeDir: string,
+  bootSha: string,
+): Promise<{ copy: string[]; drop: string[] }> {
+  const diff = await $`git -C ${worktreeDir} diff --name-status ${bootSha}`
+    .quiet()
+    .nothrow()
+    .text();
+  const untracked =
+    await $`git -C ${worktreeDir} ls-files -o --exclude-standard`
+      .quiet()
+      .nothrow()
+      .text();
   const copy: string[] = [];
   const drop: string[] = [];
   for (const line of diff.split("\n")) {
@@ -2005,7 +2466,9 @@ async function syncWorktreeIntoContainer(
       try {
         const st = statSync(abs);
         if (st.size > 8 * 1024 * 1024) {
-          console.warn(`[preview-pool] sync skipping ${rel} (${Math.round(st.size / 1e6)}MB)`);
+          console.warn(
+            `[preview-pool] sync skipping ${rel} (${Math.round(st.size / 1e6)}MB)`,
+          );
           continue;
         }
         await sbx.fs.uploadFile(readFileSync(abs), `${WORKSPACE}/${rel}`);
@@ -2017,41 +2480,59 @@ async function syncWorktreeIntoContainer(
     return;
   }
   // tar stream keeps modes and creates parent dirs in one round trip.
-  const tar = Bun.spawn(["tar", "-C", worktreeDir, "-cf", "-", ...toCopy], { stdout: "pipe" });
-  const untar = Bun.spawn(["docker", "exec", "-i", c.name, "tar", "-C", WORKSPACE, "-xf", "-"], {
-    stdin: tar.stdout,
-    stdout: "ignore",
-    stderr: "pipe",
+  const tar = Bun.spawn(["tar", "-C", worktreeDir, "-cf", "-", ...toCopy], {
+    stdout: "pipe",
   });
+  const untar = Bun.spawn(
+    ["docker", "exec", "-i", c.name, "tar", "-C", WORKSPACE, "-xf", "-"],
+    {
+      stdin: tar.stdout,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  );
   await Promise.all([tar.exited, untar.exited]);
 }
 
-function startSyncLoop(repo: Repo, worktreeDir: string, c: PoolContainer): void {
+function startSyncLoop(
+  repo: Repo,
+  worktreeDir: string,
+  c: PoolContainer,
+): void {
   stopSyncLoop(worktreeDir);
   const mtimes = new Map<string, number>();
   let busyTick = false;
-  const timer = setInterval(() => {
-    if (busyTick) return; // a converge can outlast the interval
-    busyTick = true;
-    void (async () => {
-      const claim = poolClaimFor(worktreeDir);
-      if (!claim || claim.containerName !== c.name) return stopSyncLoop(worktreeDir);
-      if ((await poolRuntimeStatus(c)) !== "running") return stopSyncLoop(worktreeDir);
-      // The agent may commit mid-session — re-converge when HEAD moves so
-      // tracked changes land atomically, then sync uncommitted files.
-      const head = (await $`git -C ${worktreeDir} rev-parse HEAD`.quiet().nothrow().text()).trim();
-      if (head && head !== (c.syncBase || c.bootSha)) {
-        await convergeContainerToWorktree(repo, worktreeDir, c).catch((e) =>
-          console.warn(`[preview-pool] re-converge of ${c.name} failed:`, e),
+  const timer = setInterval(
+    () => {
+      if (busyTick) return; // a converge can outlast the interval
+      busyTick = true;
+      void (async () => {
+        const claim = poolClaimFor(worktreeDir);
+        if (!claim || claim.containerName !== c.name)
+          return stopSyncLoop(worktreeDir);
+        if ((await poolRuntimeStatus(c)) !== "running")
+          return stopSyncLoop(worktreeDir);
+        // The agent may commit mid-session — re-converge when HEAD moves so
+        // tracked changes land atomically, then sync uncommitted files.
+        const head = (
+          await $`git -C ${worktreeDir} rev-parse HEAD`.quiet().nothrow().text()
+        ).trim();
+        if (head && head !== (c.syncBase || c.bootSha)) {
+          await convergeContainerToWorktree(repo, worktreeDir, c).catch((e) =>
+            console.warn(`[preview-pool] re-converge of ${c.name} failed:`, e),
+          );
+          mtimes.clear();
+        }
+        await syncWorktreeIntoContainer(repo, worktreeDir, c, mtimes).catch(
+          () => {},
         );
-        mtimes.clear();
-      }
-      await syncWorktreeIntoContainer(repo, worktreeDir, c, mtimes).catch(() => {});
-    })().finally(() => {
-      busyTick = false;
-    });
-    // Remote backends pay HTTPS round-trips per tick — poll gentler.
-  }, isDaytona(c) ? 5000 : 2000);
+      })().finally(() => {
+        busyTick = false;
+      });
+      // Remote backends pay HTTPS round-trips per tick — poll gentler.
+    },
+    isDaytona(c) ? 5000 : 2000,
+  );
   (timer as { unref?: () => void }).unref?.();
   syncs.set(worktreeDir, { timer, mtimes });
 }
@@ -2090,25 +2571,48 @@ async function gcMicrovmOrphans(): Promise<void> {
       if (c.mvmIdx != null) known.add(c.mvmIdx);
     }
   }
-  const units = await $`systemctl list-units --plain --no-legend 'os-fc-clone*'`.quiet().nothrow().text();
+  const units = await $`systemctl list-units --plain --no-legend 'os-fc-clone*'`
+    .quiet()
+    .nothrow()
+    .text();
   for (const m of units.matchAll(/os-fc-clone(\d+)/g)) {
     const idx = parseInt(m[1], 10);
     if (!known.has(idx)) {
       console.log(`[preview-pool] gc: reaping orphaned clone ${idx}`);
-      await sudoRun(["bash", `${MVM_SCRIPTS}/clone.sh`, "destroy", String(idx), MVM_STORE]).catch(() => {});
-      await fetch(`http://localhost:2019/config/apps/http/servers/preview_${MVM_HTTPS_BASE + idx}`, { method: "DELETE" }).catch(() => {});
+      await sudoRun([
+        "bash",
+        `${MVM_SCRIPTS}/clone.sh`,
+        "destroy",
+        String(idx),
+        MVM_STORE,
+      ]).catch(() => {});
+      await fetch(
+        `http://localhost:2019/config/apps/http/servers/preview_${MVM_HTTPS_BASE + idx}`,
+        { method: "DELETE" },
+      ).catch(() => {});
     }
   }
   // Disks/netns without a live scope (partial destroys). clone.sh destroy is
   // idempotent and cleans all three.
-  const disks = await $`ls /opt/firecracker/store 2>/dev/null`.quiet().nothrow().text();
+  const disks = await $`ls /opt/firecracker/store 2>/dev/null`
+    .quiet()
+    .nothrow()
+    .text();
   for (const m of disks.matchAll(/clone(\d+)\.ext4/g)) {
     const idx = parseInt(m[1], 10);
     if (known.has(idx)) continue;
-    const live = await $`systemctl is-active --quiet os-fc-clone${idx}`.quiet().nothrow();
+    const live = await $`systemctl is-active --quiet os-fc-clone${idx}`
+      .quiet()
+      .nothrow();
     if (live.exitCode !== 0) {
       console.log(`[preview-pool] gc: sweeping dead clone ${idx} leftovers`);
-      await sudoRun(["bash", `${MVM_SCRIPTS}/clone.sh`, "destroy", String(idx), MVM_STORE]).catch(() => {});
+      await sudoRun([
+        "bash",
+        `${MVM_SCRIPTS}/clone.sh`,
+        "destroy",
+        String(idx),
+        MVM_STORE,
+      ]).catch(() => {});
     }
   }
 }
@@ -2127,7 +2631,8 @@ async function sweepPool(): Promise<void> {
       const cfg = previewPoolConfig(repo.id);
       if (!cfg.enabled) {
         // Still reconcile so disabling drains leftovers.
-        if (Object.keys(readState(repo.id).containers).length) await ensurePool(repo).catch(() => {});
+        if (Object.keys(readState(repo.id).containers).length)
+          await ensurePool(repo).catch(() => {});
         continue;
       }
       // Golden images are docker-only; daytona sandboxes provision directly.
@@ -2141,9 +2646,13 @@ async function sweepPool(): Promise<void> {
         // repeat the same expensive failed build during this sweep.
         if (!refreshed && readState(repo.id).branchRebuildPending) continue;
       }
-      await ensurePool(repo).catch((e) => console.warn(`[preview-pool] ensure ${repo.id} failed:`, e));
+      await ensurePool(repo).catch((e) =>
+        console.warn(`[preview-pool] ensure ${repo.id} failed:`, e),
+      );
       if (cfg.backend === "microvm") {
-        await gcMicrovmOrphans().catch((e) => console.warn("[preview-pool] microvm gc failed:", e));
+        await gcMicrovmOrphans().catch((e) =>
+          console.warn("[preview-pool] microvm gc failed:", e),
+        );
         touchGoldenMem();
       }
       // Keep live warm containers' short-lived creds fresh.
@@ -2170,8 +2679,11 @@ async function sweepPool(): Promise<void> {
  */
 async function reapOrphanGoldenbuilds(): Promise<void> {
   const ls = await docker([
-    "ps", "--filter", `label=${POOL_LABEL}=goldenbuild`,
-    "--format", "{{.Names}}\t{{.CreatedAt}}",
+    "ps",
+    "--filter",
+    `label=${POOL_LABEL}=goldenbuild`,
+    "--format",
+    "{{.Names}}\t{{.CreatedAt}}",
   ]);
   if (!ls.ok) return;
   for (const line of ls.out.split("\n")) {
@@ -2181,8 +2693,11 @@ async function reapOrphanGoldenbuilds(): Promise<void> {
     if (busy.has(`golden-${repoId}`)) continue;
     // docker CreatedAt: "2026-07-24 13:20:01 +0000 UTC"
     const created = Date.parse((createdAt ?? "").replace(" UTC", "").trim());
-    if (!Number.isFinite(created) || Date.now() - created < 2 * 60 * 60_000) continue;
-    console.warn(`[preview-pool] reaping orphaned golden-build container ${name} (created ${createdAt})`);
+    if (!Number.isFinite(created) || Date.now() - created < 2 * 60 * 60_000)
+      continue;
+    console.warn(
+      `[preview-pool] reaping orphaned golden-build container ${name} (created ${createdAt})`,
+    );
     await docker(["rm", "-f", name]);
   }
 }

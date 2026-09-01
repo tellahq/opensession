@@ -59,7 +59,10 @@ export function loadReviewOptions(repoDir: string | undefined): ReviewOptions {
 export function normalizeReviewOptions(raw: any): ReviewOptions {
   const d = REVIEW_OPTION_DEFAULTS;
   if (!raw || typeof raw !== "object") return d;
-  const sev = typeof raw.minInlineSeverity === "string" ? raw.minInlineSeverity.toUpperCase() : "";
+  const sev =
+    typeof raw.minInlineSeverity === "string"
+      ? raw.minInlineSeverity.toUpperCase()
+      : "";
   return {
     ignoreGlobs: Array.isArray(raw.ignoreGlobs)
       ? raw.ignoreGlobs.filter((g: any) => typeof g === "string" && g.trim())
@@ -74,8 +77,10 @@ export function normalizeReviewOptions(raw: any): ReviewOptions {
     skipKeywords: Array.isArray(raw.skipKeywords)
       ? raw.skipKeywords.filter((k: any) => typeof k === "string" && k.trim())
       : d.skipKeywords,
-    testOnBase: typeof raw.testOnBase === "boolean" ? raw.testOnBase : d.testOnBase,
-    secretScan: typeof raw.secretScan === "boolean" ? raw.secretScan : d.secretScan,
+    testOnBase:
+      typeof raw.testOnBase === "boolean" ? raw.testOnBase : d.testOnBase,
+    secretScan:
+      typeof raw.secretScan === "boolean" ? raw.secretScan : d.secretScan,
   };
 }
 
@@ -88,7 +93,10 @@ export function severityRank(severity?: string): number {
   return 3;
 }
 
-export function titleHasSkipKeyword(title: string, opts: ReviewOptions): boolean {
+export function titleHasSkipKeyword(
+  title: string,
+  opts: ReviewOptions,
+): boolean {
   const t = (title || "").toLowerCase();
   return opts.skipKeywords.some((k) => t.includes(k.toLowerCase()));
 }

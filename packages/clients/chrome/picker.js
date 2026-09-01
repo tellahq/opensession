@@ -12,17 +12,20 @@
 
   const Z = 2147483647;
   const box = document.createElement("div");
-  box.style.cssText = `position:fixed;z-index:${Z};pointer-events:none;` +
+  box.style.cssText =
+    `position:fixed;z-index:${Z};pointer-events:none;` +
     "border:2px solid #6c8cff;background:rgba(108,140,255,0.15);" +
     "border-radius:3px;transition:all 40ms linear;display:none;";
   const label = document.createElement("div");
-  label.style.cssText = `position:fixed;z-index:${Z};pointer-events:none;` +
+  label.style.cssText =
+    `position:fixed;z-index:${Z};pointer-events:none;` +
     "background:#1b1e2e;color:#dfe4ff;font:12px/1.6 ui-monospace,monospace;" +
     "padding:1px 7px;border-radius:4px;border:1px solid #6c8cff;display:none;" +
     "max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
   const hint = document.createElement("div");
   hint.textContent = "Click an element to capture it · Esc to cancel";
-  hint.style.cssText = `position:fixed;z-index:${Z};pointer-events:none;` +
+  hint.style.cssText =
+    `position:fixed;z-index:${Z};pointer-events:none;` +
     "top:12px;left:50%;transform:translateX(-50%);background:#1b1e2e;" +
     "color:#dfe4ff;font:12.5px system-ui;padding:6px 14px;border-radius:999px;" +
     "border:1px solid #444a66;box-shadow:0 4px 16px rgba(0,0,0,0.4);";
@@ -40,7 +43,8 @@
 
   const onMove = (e) => {
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    if (!el || el === box || el === label || el === hint || el === current) return;
+    if (!el || el === box || el === label || el === hint || el === current)
+      return;
     current = el;
     const r = el.getBoundingClientRect();
     box.style.display = "block";

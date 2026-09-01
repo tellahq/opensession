@@ -8,25 +8,27 @@ import type { PlainTimelineEntry } from "../lib/types";
 // `??=`: one process, so whichever test file ran first may already have
 // installed (and frozen) these globals.
 Object.assign(
-	((globalThis as unknown as { localStorage?: Record<string, unknown> })
-		.localStorage ??= {}),
-	{
-		getItem: () => null,
-		setItem: () => {},
-		removeItem: () => {},
-	},
+  ((
+    globalThis as unknown as { localStorage?: Record<string, unknown> }
+  ).localStorage ??= {}),
+  {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  },
 );
 Object.assign(
-	((globalThis as unknown as { window?: Record<string, unknown> }).window ??= {}),
-	{
-		addEventListener: () => {},
-		removeEventListener: () => {},
-		matchMedia: () => ({
-			matches: false,
-			addEventListener: () => {},
-			removeEventListener: () => {},
-		}),
-	},
+  ((globalThis as unknown as { window?: Record<string, unknown> }).window ??=
+    {}),
+  {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    matchMedia: () => ({
+      matches: false,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }),
+  },
 );
 
 /**
@@ -38,118 +40,117 @@ Object.assign(
  */
 
 function entry(over: Partial<PlainTimelineEntry> = {}): PlainTimelineEntry {
-	return {
-		id: "e1",
-		timestamp: "2026-08-19T10:00:00.000Z",
-		actorName: "Ada Lovelace",
-		actorType: "customer",
-		kind: "email",
-		text: "hello",
-		...over,
-	};
+  return {
+    id: "e1",
+    timestamp: "2026-08-19T10:00:00.000Z",
+    actorName: "Ada Lovelace",
+    actorType: "customer",
+    kind: "email",
+    text: "hello",
+    ...over,
+  };
 }
 
 test("a customer's **test** is bold, not asterisks", () => {
-	const html = renderToStaticMarkup(
-		<PlainEntryRow entry={entry({ text: "so **test** should be bold" })} />,
-	);
+  const html = renderToStaticMarkup(
+    <PlainEntryRow entry={entry({ text: "so **test** should be bold" })} />,
+  );
 
-	expect(html).toContain("<strong>test</strong>");
-	expect(html).not.toContain("**test**");
+  expect(html).toContain("<strong>test</strong>");
+  expect(html).not.toContain("**test**");
 });
 
 test("our own replies and internal notes render markdown too", () => {
-	const reply = renderToStaticMarkup(
-		<PlainEntryRow
-			entry={entry({ actorType: "support", text: "**shipped** it" })}
-		/>,
-	);
-	const note = renderToStaticMarkup(
-		<PlainEntryRow entry={entry({ kind: "note", text: "**heads up**" })} />,
-	);
+  const reply = renderToStaticMarkup(
+    <PlainEntryRow
+      entry={entry({ actorType: "support", text: "**shipped** it" })}
+    />,
+  );
+  const note = renderToStaticMarkup(
+    <PlainEntryRow entry={entry({ kind: "note", text: "**heads up**" })} />,
+  );
 
-	expect(reply).toContain("<strong>shipped</strong>");
-	expect(note).toContain("<strong>heads up</strong>");
+  expect(reply).toContain("<strong>shipped</strong>");
+  expect(note).toContain("<strong>heads up</strong>");
 });
 
 test("an email's hard line breaks survive without doubling them", () => {
-	const html = renderToStaticMarkup(
-		<PlainEntryRow entry={entry({ text: "line one\nline two" })} />,
-	);
+  const html = renderToStaticMarkup(
+    <PlainEntryRow entry={entry({ text: "line one\nline two" })} />,
+  );
 
-	// `breaks: true` on the shared renderer turns the newline into a <br>, so
-	// the body must not ALSO be whitespace-pre-wrap or every break lands twice.
-	expect(html).toContain("<br>");
-	expect(html).not.toContain("whitespace-pre-wrap");
+  // `breaks: true` on the shared renderer turns the newline into a <br>, so
+  // the body must not ALSO be whitespace-pre-wrap or every break lands twice.
+  expect(html).toContain("<br>");
+  expect(html).not.toContain("whitespace-pre-wrap");
 });
 
 test("HTML a customer pastes stays literal text", () => {
-	const html = renderToStaticMarkup(
-		<PlainEntryRow
-			entry={entry({ text: '<img src=x onerror="alert(1)">' })}
-		/>,
-	);
+  const html = renderToStaticMarkup(
+    <PlainEntryRow entry={entry({ text: '<img src=x onerror="alert(1)">' })} />,
+  );
 
-	// The word survives as escaped text, which is the point: it is shown, not
-	// parsed. What must not appear is a real tag carrying a real handler.
-	expect(html).toContain("&lt;img");
-	expect(html).not.toContain("<img");
-	expect(html).not.toContain('onerror="alert(1)"');
+  // The word survives as escaped text, which is the point: it is shown, not
+  // parsed. What must not appear is a real tag carrying a real handler.
+  expect(html).toContain("&lt;img");
+  expect(html).not.toContain("<img");
+  expect(html).not.toContain('onerror="alert(1)"');
 });
 
 test("a bare #123 in a customer's mail is not linked to our repo", () => {
-	const html = renderToStaticMarkup(
-		<PlainEntryRow entry={entry({ text: "my order #123 never arrived" })} />,
-	);
+  const html = renderToStaticMarkup(
+    <PlainEntryRow entry={entry({ text: "my order #123 never arrived" })} />,
+  );
 
-	expect(html).toContain("#123");
-	expect(html).not.toContain("<a");
+  expect(html).toContain("#123");
+  expect(html).not.toContain("<a");
 });
 
 test("image attachments carry the classes the shared lightbox watches for", () => {
-	const html = renderToStaticMarkup(
-		<PlainEntryRow
-			entry={entry({
-				text: "see the screenshot",
-				attachments: [
-					{
-						id: "att_1",
-						fileName: "broken.png",
-						mimeType: "image/png",
-						sizeBytes: 12_345,
-					},
-				],
-			})}
-		/>,
-	);
+  const html = renderToStaticMarkup(
+    <PlainEntryRow
+      entry={entry({
+        text: "see the screenshot",
+        attachments: [
+          {
+            id: "att_1",
+            fileName: "broken.png",
+            mimeType: "image/png",
+            sizeBytes: 12_345,
+          },
+        ],
+      })}
+    />,
+  );
 
-	// MediaLightbox's delegated handler matches exactly these two selectors,
-	// and GALLERY_SELECTOR browses across every img.md-image on screen.
-	expect(html).toContain("md-image-link");
-	expect(html).toContain('class="md-image"');
-	// The filename is what captions the viewer.
-	expect(html).toContain('alt="broken.png"');
-	// The wrapper already draws the surface; the transcript image's own border
-	// and margin would double it.
-	expect(html).toContain("border-width:0");
+  // MediaLightbox's delegated handler matches exactly these two selectors,
+  // and GALLERY_SELECTOR browses across every img.md-image on screen.
+  expect(html).toContain("md-image-link");
+  expect(html).toContain('class="md-image"');
+  // The filename is what captions the viewer.
+  expect(html).toContain('alt="broken.png"');
+  // The wrapper already draws the surface; the transcript image's own border
+  // and margin would double it. StyleX renders the borderless image inline.
+  expect(html).toContain("border-width:0px");
+  expect(html).toContain("margin:0");
 });
 
 test("a non-image attachment stays a download chip", () => {
-	const html = renderToStaticMarkup(
-		<PlainEntryRow
-			entry={entry({
-				attachments: [
-					{
-						id: "att_2",
-						fileName: "logs.zip",
-						mimeType: "application/zip",
-						sizeBytes: 2048,
-					},
-				],
-			})}
-		/>,
-	);
+  const html = renderToStaticMarkup(
+    <PlainEntryRow
+      entry={entry({
+        attachments: [
+          {
+            id: "att_2",
+            fileName: "logs.zip",
+            mimeType: "application/zip",
+            sizeBytes: 2048,
+          },
+        ],
+      })}
+    />,
+  );
 
-	expect(html).toContain("logs.zip");
-	expect(html).not.toContain("md-image");
+  expect(html).toContain("logs.zip");
+  expect(html).not.toContain("md-image");
 });

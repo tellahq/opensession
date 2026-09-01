@@ -48,6 +48,7 @@ __pycache__/
 # Session captures, reviews, previews, worktrees, and generated deliverables.
 # The OS1 icon source and its build scripts are intentional tracked examples.
 .artifacts/
+/artifacts/verification/
 .capture/
 .captures/
 .hero-check/
@@ -91,12 +92,30 @@ deploy/sandbox/microvm/.cache-busybox-source.tar.bz2
 !.agents/skills/simplify/**
 !.agents/skills/pr-autofix/
 !.agents/skills/pr-autofix/**
+!.agents/skills/pstack/
+!.agents/skills/pstack/**
+!.agents/skills/poteto-mode/
+!.agents/skills/poteto-mode/**
+!.agents/skills/pstack-suite/
+!.agents/skills/pstack-suite/**
+!.agents/skills/deslop/
+!.agents/skills/deslop/**
+!.agents/skills/control-ui/
+!.agents/skills/control-ui/**
 !.agents/skills/audit-codebase/
 !.agents/skills/audit-codebase/**
+!.agents/skills/verify-opensession/
+!.agents/skills/verify-opensession/**
 !.agents/skills/bro/
 !.agents/skills/bro/**
 !.agents/skills/react-devtools/
 !.agents/skills/react-devtools/**
+!.agents/skills/vercel-react-best-practices/
+!.agents/skills/vercel-react-best-practices/**
+!.agents/skills/vercel-composition-patterns/
+!.agents/skills/vercel-composition-patterns/**
+!.agents/skills/workflow-authoring/
+!.agents/skills/workflow-authoring/**
 .claude/skills
 skills-lock.json
 .css-shots/

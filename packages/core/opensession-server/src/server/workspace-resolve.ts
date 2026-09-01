@@ -44,7 +44,9 @@ function sessionMatchesPr(
     (r.branch === branch || (number !== undefined && r.number === number));
   return (
     (s.prs || []).some(refMatch) ||
-    (s.attachedRepos || []).some((r) => r.repo === repoId && r.branch === branch) ||
+    (s.attachedRepos || []).some(
+      (r) => r.repo === repoId && r.branch === branch,
+    ) ||
     (s.linkedPrs || []).some(refMatch)
   );
 }
@@ -107,7 +109,10 @@ function adoptSiblingSessions(
 
 /** Serialize concurrent resolves for the same target (double-click guard). */
 const inflight = new Map<string, Promise<unknown>>();
-async function serialized<T>(lockKey: string, fn: () => Promise<T>): Promise<T> {
+async function serialized<T>(
+  lockKey: string,
+  fn: () => Promise<T>,
+): Promise<T> {
   const prev = inflight.get(lockKey) || Promise.resolve();
   const run = prev.then(fn, fn);
   const tail = run.catch(() => {});
@@ -168,89 +173,96 @@ export async function resolvePrWorkspace(input: {
   createdBy: string;
 }): Promise<ResolvedWorkspace | null> {
   const repoId = getRepo(input.repoId).id;
-  return serialized(`pr:${repoId}:${input.number ?? ""}:${input.branch ?? ""}`, async () => {
-    // Normalize number+branch+title from the PR caches when incomplete.
-    let { number, branch, title } = input;
-    if (number === undefined || !branch) {
-      const match = (p: { repo: string; number: number; branch: string }) =>
-        p.repo === repoId &&
-        (number !== undefined ? p.number === number : p.branch === branch);
-      const pr = getOpenPrs().find(match) || getRecentPrs().find(match);
-      if (pr) {
-        number = pr.number;
-        branch = pr.branch;
-        title = title || pr.title;
+  return serialized(
+    `pr:${repoId}:${input.number ?? ""}:${input.branch ?? ""}`,
+    async () => {
+      // Normalize number+branch+title from the PR caches when incomplete.
+      let { number, branch, title } = input;
+      if (number === undefined || !branch) {
+        const match = (p: { repo: string; number: number; branch: string }) =>
+          p.repo === repoId &&
+          (number !== undefined ? p.number === number : p.branch === branch);
+        const pr = getOpenPrs().find(match) || getRecentPrs().find(match);
+        if (pr) {
+          number = pr.number;
+          branch = pr.branch;
+          title = title || pr.title;
+        }
       }
-    }
-    if (number === undefined && !branch) return null;
+      if (number === undefined && !branch) return null;
 
-    // Handed back to the caller so it can open the review on THIS PR rather
-    // than on whichever one the workspace was minted from.
-    const pr = {
-      repo: repoId,
-      ...(number !== undefined ? { number } : {}),
-      ...(branch ? { branch } : {}),
-    };
+      // Handed back to the caller so it can open the review on THIS PR rather
+      // than on whichever one the workspace was minted from.
+      const pr = {
+        repo: repoId,
+        ...(number !== undefined ? { number } : {}),
+        ...(branch ? { branch } : {}),
+      };
 
-    const key =
-      number !== undefined
-        ? `ghpr-${prKey(number, getRepo(repoId).ghRepo)}`
-        : null;
-    const stamp = {
-      ...(key ? { key } : {}),
-      ...(number !== undefined ? { prNumber: number } : {}),
-      ...(branch ? { branch } : {}),
-      // The PR's repo travels with its branch. A workspace minted by a session
-      // in another repo (cross-repo work through an attached repo) keeps that
-      // session's repo otherwise, and the pair then describes a branch that
-      // does not exist where it says it does.
-      repo: repoId,
-    };
-    const matches = (s: UnifiedSession) =>
-      !!branch && sessionMatchesPr(s, repoId, branch, number);
+      const key =
+        number !== undefined
+          ? `ghpr-${prKey(number, getRepo(repoId).ghRepo)}`
+          : null;
+      const stamp = {
+        ...(key ? { key } : {}),
+        ...(number !== undefined ? { prNumber: number } : {}),
+        ...(branch ? { branch } : {}),
+        // The PR's repo travels with its branch. A workspace minted by a session
+        // in another repo (cross-repo work through an attached repo) keeps that
+        // session's repo otherwise, and the pair then describes a branch that
+        // does not exist where it says it does.
+        repo: repoId,
+      };
+      const matches = (s: UnifiedSession) =>
+        !!branch && sessionMatchesPr(s, repoId, branch, number);
 
-    // 1. Provenance key (workspaces minted from this PR before).
-    const byKey = key ? findWorkspaceByKey(key) : null;
-    if (byKey) {
-      const stamped = stampWorkspaceIdentity(byKey.id, stamp) || byKey;
-      const named = repairPrWorkspaceName(stamped, number, branch, title);
-      adoptSiblingSessions(named.id, matches);
-      return { workspace: named, created: false, pr };
-    }
-
-    // 2. A session already carrying this PR that's filed under a workspace.
-    if (branch) {
-      for (const s of newestFirst(getCachedSessions().filter((x) => !x.archived))) {
-        if (!s.workspaceId || !matches(s)) continue;
-        const ws = getWorkspace(s.workspaceId);
-        if (!ws) continue;
-        const stamped = stampWorkspaceIdentity(ws.id, stamp) || ws;
-        adoptSiblingSessions(stamped.id, matches);
-        return { workspace: stamped, created: false, pr };
+      // 1. Provenance key (workspaces minted from this PR before).
+      const byKey = key ? findWorkspaceByKey(key) : null;
+      if (byKey) {
+        const stamped = stampWorkspaceIdentity(byKey.id, stamp) || byKey;
+        const named = repairPrWorkspaceName(stamped, number, branch, title);
+        adoptSiblingSessions(named.id, matches);
+        return { workspace: named, created: false, pr };
       }
-      // 3. A workspace owning the PR head branch's worktree.
-      const wt = (await listWorktrees(repoId)).find((w) => w.branch === branch);
-      const owner = wt ? workspaceOwningWorktree(wt.path) : null;
-      if (owner) {
-        const stamped = stampWorkspaceIdentity(owner.id, stamp) || owner;
-        adoptSiblingSessions(stamped.id, matches);
-        return { workspace: stamped, created: false, pr };
-      }
-    }
 
-    // 4. Mint a session-less PR workspace (no worktreeDir — the first session
-    // materializes it via the create_session fromPr path).
-    const workspace = createWorkspace({
-      name: prWorkspaceName(number, branch, title),
-      repo: repoId,
-      createdBy: input.createdBy,
-      ...(key ? { key } : {}),
-      ...(number !== undefined ? { prNumber: number } : {}),
-      ...(branch ? { branch } : {}),
-    });
-    adoptSiblingSessions(workspace.id, matches);
-    return { workspace, created: true, pr };
-  });
+      // 2. A session already carrying this PR that's filed under a workspace.
+      if (branch) {
+        for (const s of newestFirst(
+          getCachedSessions().filter((x) => !x.archived),
+        )) {
+          if (!s.workspaceId || !matches(s)) continue;
+          const ws = getWorkspace(s.workspaceId);
+          if (!ws) continue;
+          const stamped = stampWorkspaceIdentity(ws.id, stamp) || ws;
+          adoptSiblingSessions(stamped.id, matches);
+          return { workspace: stamped, created: false, pr };
+        }
+        // 3. A workspace owning the PR head branch's worktree.
+        const wt = (await listWorktrees(repoId)).find(
+          (w) => w.branch === branch,
+        );
+        const owner = wt ? workspaceOwningWorktree(wt.path) : null;
+        if (owner) {
+          const stamped = stampWorkspaceIdentity(owner.id, stamp) || owner;
+          adoptSiblingSessions(stamped.id, matches);
+          return { workspace: stamped, created: false, pr };
+        }
+      }
+
+      // 4. Mint a session-less PR workspace (no worktreeDir — the first session
+      // materializes it via the create_session fromPr path).
+      const workspace = createWorkspace({
+        name: prWorkspaceName(number, branch, title),
+        repo: repoId,
+        createdBy: input.createdBy,
+        ...(key ? { key } : {}),
+        ...(number !== undefined ? { prNumber: number } : {}),
+        ...(branch ? { branch } : {}),
+      });
+      adoptSiblingSessions(workspace.id, matches);
+      return { workspace, created: true, pr };
+    },
+  );
 }
 
 /**

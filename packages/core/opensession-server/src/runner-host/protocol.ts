@@ -15,6 +15,8 @@ export { isCompiledBinary, runnerHostArgv, mcpProxyArgv } from "./exe";
  *  a subcommand instead (see ./exe and src/main.ts), so these source paths are
  *  never consulted. REPO_ROOT resolves to a harmless in-bundle path there. */
 export const BUN_BIN = Bun.which("bun") || process.execPath;
-export const REPO_ROOT = fileURLToPath(new URL("../../../../..", import.meta.url)).replace(/\/$/, "");
+export const REPO_ROOT = fileURLToPath(
+  new URL("../../../../..", import.meta.url),
+).replace(/\/$/, "");
 export const HOST_ENTRY = `${REPO_ROOT}/packages/core/opensession-server/src/runner-host/host.ts`;
 export const MCP_PROXY_ENTRY = `${REPO_ROOT}/packages/core/opensession-server/src/runner-host/mcp-proxy.ts`;

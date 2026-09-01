@@ -78,6 +78,40 @@ final class TranscriptGroupingTests: XCTestCase {
         XCTAssertEqual(answer.id, "a2")
     }
 
+    func testBackgroundWakeKeepsEarlierOutputVisible() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "ship it"),
+            toolUse("t1", name: "Bash"),
+            TranscriptEntry(
+                id: "status",
+                type: "assistant",
+                content: "Implemented. Deployment is running."
+            ),
+            TranscriptEntry(
+                id: "wake",
+                type: "user",
+                content: "",
+                turnBoundary: true
+            ),
+            toolUse("t2", name: "Bash"),
+            TranscriptEntry(id: "final", type: "assistant", content: "Deployment verified."),
+        ])
+
+        let messageIDs = viewModel.displayBlocks.compactMap { block -> String? in
+            guard case .message(let entry) = block else { return nil }
+            return entry.id
+        }
+        XCTAssertEqual(messageIDs, ["u1", "status", "final"])
+        XCTAssertEqual(
+            viewModel.displayBlocks.filter {
+                if case .work = $0 { return true }
+                return false
+            }.count,
+            2
+        )
+        XCTAssertFalse(viewModel.displayBlocks.contains { $0.id == "wake" })
+    }
+
     func testTurnWithoutToolsDoesNotFold() {
         append([
             TranscriptEntry(id: "u1", type: "user", content: "hi"),
@@ -94,6 +128,170 @@ final class TranscriptGroupingTests: XCTestCase {
         let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
         XCTAssertEqual(entry.videos, ["/media?path=demo.mp4"])
         XCTAssertEqual(entry.media.label, "1 video")
+    }
+
+    func testTranscriptEntryDecodesSourceMessageIds() throws {
+        let data = Data(
+            #"{"id":"batch","type":"user","sourceMessageIds":["one","two"]}"#.utf8
+        )
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        XCTAssertEqual(entry.sourceMessageIds, ["one", "two"])
+    }
+
+    func testTranscriptEntryDecodesTurnBoundary() throws {
+        let data = Data(
+            #"{"id":"wake","type":"user","content":"","turnBoundary":true}"#.utf8
+        )
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        XCTAssertEqual(entry.turnBoundary, true)
+    }
+
+    func testTranscriptEntryTolerantlyDecodesReasoningFlag() throws {
+        let marked = try JSONDecoder().decode(
+            TranscriptEntry.self,
+            from: Data(
+                #"{"id":"r1","type":"assistant","content":"Thinking","isReasoning":true,"futureField":{"x":1}}"#.utf8
+            )
+        )
+        let older = try JSONDecoder().decode(
+            TranscriptEntry.self,
+            from: Data(#"{"id":"a1","type":"assistant","content":"Done"}"#.utf8)
+        )
+
+        XCTAssertEqual(marked.isReasoning, true)
+        XCTAssertNil(older.isReasoning)
+    }
+
+    func testReasoningStaysInterleavedWithWorkAndOutsideFinalAnswer() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "check it"),
+            TranscriptEntry(
+                id: "r1", type: "assistant",
+                content: "**Checking deployment status**\n\nThe release is moving.",
+                isReasoning: true
+            ),
+            toolUse("t1", name: "Bash"),
+            TranscriptEntry(id: "a1", type: "assistant", content: "Deployed."),
+        ])
+
+        guard case .work(let turn) = viewModel.displayBlocks[1] else {
+            return XCTFail("reasoning and the tool should remain one work turn")
+        }
+        XCTAssertEqual(turn.items.map(\.id), ["r1", "tool-t1"])
+        guard case .message(let reasoning) = turn.items[0] else {
+            return XCTFail("the reasoning should keep its chronological position")
+        }
+        XCTAssertEqual(reasoning.isReasoning, true)
+        guard case .message(let answer) = viewModel.displayBlocks[2] else {
+            return XCTFail("the final answer should retain answer hierarchy")
+        }
+        XCTAssertEqual(answer.id, "a1")
+
+        let display = ReasoningSummaryDisplay(reasoning.text)
+        XCTAssertEqual(display.title, "Checking deployment status")
+        XCTAssertEqual(display.body, "The release is moving.")
+        XCTAssertEqual(display.activityTitle(isActive: true), "Checking deployment status")
+        XCTAssertEqual(display.activityTitle(isActive: false), "Checking deployment status")
+    }
+
+    func testLiveProseReasoningGetsThinkingLabelButDurableProseStaysUnlabelled() {
+        let display = ReasoningSummaryDisplay("I should inspect the current state first.")
+
+        XCTAssertEqual(display.activityTitle(isActive: true), "Thinking")
+        XCTAssertNil(display.activityTitle(isActive: false))
+        XCTAssertEqual(display.body, "I should inspect the current state first.")
+    }
+
+    func testReasoningOrderSurvivesLiveAndDurableGrouping() {
+        let entries = [
+            TranscriptEntry(id: "u1", type: "user", content: "check it"),
+            TranscriptEntry(
+                id: "r1", type: "assistant", content: "**Reading logs**", isReasoning: true
+            ),
+            toolUse("t1", name: "Bash"),
+            TranscriptEntry(
+                id: "r2", type: "assistant", content: "Still comparing results.",
+                isReasoning: true
+            ),
+        ]
+        let items = TranscriptGrouping.displayItems(from: entries)
+        let live = TranscriptGrouping.blocks(from: items, live: true, worktreeDir: nil)
+        let durable = TranscriptGrouping.blocks(from: items, live: false, worktreeDir: nil)
+
+        guard case .work(let liveTurn) = live[1],
+              case .work(let durableTurn) = durable[1] else {
+            return XCTFail("expected matching work turns")
+        }
+        XCTAssertEqual(liveTurn.items.map(\.id), ["r1", "tool-t1", "r2"])
+        XCTAssertEqual(durableTurn.items.map(\.id), liveTurn.items.map(\.id))
+    }
+
+    func testLegacyBoldIntermediateSummaryIsNormalizedButBoldFinalIsNot() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "check it"),
+            TranscriptEntry(
+                id: "legacy", type: "assistant",
+                content: "**Verifying the release**"
+            ),
+            toolUse("t1", name: "Bash"),
+            TranscriptEntry(id: "final", type: "assistant", content: "**Done**"),
+        ])
+
+        guard case .work(let turn) = viewModel.displayBlocks[1],
+              case .message(let reasoning) = turn.items.first else {
+            return XCTFail("expected one work turn with reasoning")
+        }
+        XCTAssertEqual(reasoning.id, "legacy")
+        XCTAssertEqual(reasoning.isReasoning, true)
+        guard case .message(let answer) = viewModel.displayBlocks[2] else {
+            return XCTFail("a bold final row is still the answer")
+        }
+        XCTAssertNil(answer.isReasoning)
+    }
+
+    func testLegacyHeadingBeforeTrailingToolsIsReasoning() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "check it"),
+            toolUse("t1", name: "Bash"),
+            TranscriptEntry(
+                id: "legacy", type: "assistant", content: "**Still checking**"
+            ),
+            toolUse("t2", name: "Read"),
+        ])
+
+        guard case .work(let turn) = viewModel.displayBlocks[1],
+              case .message(let reasoning) = turn.items[1] else {
+            return XCTFail("expected the heading between its tools")
+        }
+        XCTAssertEqual(turn.items.map(\.id), ["tool-t1", "legacy", "tool-t2"])
+        XCTAssertEqual(reasoning.isReasoning, true)
+        XCTAssertFalse(viewModel.displayBlocks.contains { block in
+            if case .message(let entry) = block { return entry.id == "legacy" }
+            if case .footer(let footer) = block { return footer.entryId == "legacy" }
+            return false
+        })
+    }
+
+    func testTrailingExplicitReasoningNeverBecomesTheFinalAnswer() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "check it"),
+            toolUse("t1", name: "Bash"),
+            TranscriptEntry(
+                id: "r1", type: "assistant",
+                content: "**Still checking**", isReasoning: true
+            ),
+        ])
+
+        guard case .work(let turn) = viewModel.displayBlocks[1],
+              case .message(let reasoning) = turn.items.last else {
+            return XCTFail("expected reasoning at the end of the work turn")
+        }
+        XCTAssertEqual(reasoning.id, "r1")
+        XCTAssertFalse(viewModel.displayBlocks.contains { block in
+            if case .message(let entry) = block { return entry.id == "r1" }
+            if case .footer(let footer) = block { return footer.entryId == "r1" }
+            return false
+        })
     }
 
     func testFoldProjectsOnlyExplicitlyFeaturedMediaAndDeduplicatesIt() {

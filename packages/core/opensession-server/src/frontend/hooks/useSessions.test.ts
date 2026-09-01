@@ -4,12 +4,55 @@ import {
   LIVE_POLL_FALLBACK_MS,
   liveSnapshotMatchesQuery,
   reconcilePendingSessionPatches,
+  reconcileStickySessions,
   sessionPatchNeedsAcknowledgement,
   sidebarSessionsQuery,
 } from "./useSessions";
 
+const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const hookSource = await Bun.file(
+  new URL("useSessions.ts", import.meta.url),
+).text();
+
 test("uses a slow safety poll behind WebSocket invalidations", () => {
   expect(LIVE_POLL_FALLBACK_MS).toBe(60_000);
+});
+
+describe("session feed socket ownership", () => {
+  test("keeps invalidation and reconnect transport concerns in useSessions", () => {
+    expect(hookSource).toContain(
+      'socket?: Pick<SessionSocket, "addHandler"> & { connected: boolean }',
+    );
+    expect(hookSource).toContain(
+      'if (message.type === "sessions_invalidated") onInvalidated()',
+    );
+    expect(hookSource).toContain(
+      "const onInvalidated = useEffectEvent(() => refreshInvalidated())",
+    );
+    expect(hookSource).toContain("}, [addHandler]);");
+    expect(hookSource).toContain("}, [socketConnected]);");
+    expect(hookSource).not.toContain("    refreshInvalidated,\n    inject,");
+  });
+
+  test("passes the main socket into useSessions before feed consumers", () => {
+    const socket = appSource.indexOf("const mainSocket = useWebSocket()");
+    const sessions = appSource.indexOf("useSessions({");
+
+    expect(socket).toBeGreaterThan(-1);
+    expect(socket).toBeLessThan(sessions);
+    expect(appSource).toContain("socket: mainSocket");
+    expect(appSource).not.toContain("refreshInvalidated");
+    expect(appSource).not.toContain("webSocketConnectedOnceRef");
+    expect(appSource).not.toContain("sessions_invalidated");
+  });
+
+  test("preserves session-list rendering and retry wiring", () => {
+    expect(appSource).toContain("sessionsError={sessionsError}");
+    expect(appSource).toContain("sessionsLoading={loading}");
+    expect(appSource).toContain("onRetrySessions={() => void refresh()}");
+    expect(appSource).toContain("loaded={archivedLoaded}");
+    expect(appSource).toContain("onShowArchived={refreshArchived}");
+  });
 });
 
 function session(archived: boolean): UnifiedSession {
@@ -51,6 +94,68 @@ describe("liveSnapshotMatchesQuery", () => {
 
     expect(liveSnapshotMatchesQuery(archivedRoute, nextRoute)).toBe(false);
     expect(liveSnapshotMatchesQuery(nextRoute, nextRoute)).toBe(true);
+  });
+});
+
+describe("reconcileStickySessions", () => {
+  const optimistic: UnifiedSession = {
+    ...session(false),
+    title: "New session",
+    workspaceId: null,
+  };
+  const authoritative: UnifiedSession = {
+    ...optimistic,
+    title: "Fix the sidebar",
+    workspaceId: "workspace-1",
+  };
+
+  test("keeps an unseen optimistic row across stale snapshots", () => {
+    const sticky = new Map([
+      [optimistic.id, { session: optimistic, serverSeen: false }],
+    ]);
+
+    expect(reconcileStickySessions([], sticky)).toEqual([optimistic]);
+    expect(sticky.has(optimistic.id)).toBe(true);
+  });
+
+  test("keeps the selected row as a fallback after the server first sees it", () => {
+    const sticky = new Map([
+      [optimistic.id, { session: optimistic, serverSeen: false }],
+    ]);
+
+    expect(
+      reconcileStickySessions([authoritative], sticky, optimistic.id),
+    ).toEqual([authoritative]);
+    expect(sticky.get(optimistic.id)).toEqual({
+      session: authoritative,
+      serverSeen: true,
+    });
+
+    // An indexed/cached projection can briefly lose the just-created row. It
+    // stays in place using the freshest server shape rather than disappearing.
+    expect(reconcileStickySessions([], sticky, optimistic.id)).toEqual([
+      authoritative,
+    ]);
+  });
+
+  test("retires the fallback after leaving a server-confirmed session", () => {
+    const sticky = new Map([
+      [optimistic.id, { session: authoritative, serverSeen: true }],
+    ]);
+
+    expect(reconcileStickySessions([], sticky, "another-session")).toEqual([]);
+    expect(sticky.has(optimistic.id)).toBe(false);
+  });
+
+  test("retires a background create as soon as the server returns it", () => {
+    const sticky = new Map([
+      [optimistic.id, { session: optimistic, serverSeen: false }],
+    ]);
+
+    expect(reconcileStickySessions([authoritative], sticky)).toEqual([
+      authoritative,
+    ]);
+    expect(sticky.has(optimistic.id)).toBe(false);
   });
 });
 

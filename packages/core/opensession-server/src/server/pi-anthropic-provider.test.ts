@@ -12,8 +12,22 @@
  * resume) needs the live smoke: POST /api/admin/pi-smoke with
  * anthropicTransport left at its "inprocess" default.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  test,
+} from "bun:test";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -95,18 +109,24 @@ function designate(bridgeAccountIds: string[] | null): void {
   }
   writeFileSync(piConfigFile, JSON.stringify({ enabled: true }));
   if (bridgeAccountIds.length) {
-    writeFileSync(providerConfigFile, JSON.stringify({ enabled: true, bridgeAccountIds }));
+    writeFileSync(
+      providerConfigFile,
+      JSON.stringify({ enabled: true, bridgeAccountIds }),
+    );
   } else {
     rmSync(providerConfigFile, { force: true });
   }
 }
 
-function seedAccounts(entries: Array<string | { id: string; owner?: string }>): void {
+function seedAccounts(
+  entries: Array<string | { id: string; owner?: string }>,
+): void {
   writeFileSync(
     accountsFile,
     JSON.stringify({
       accounts: entries.map((e) => {
-        const { id, owner } = typeof e === "string" ? { id: e, owner: undefined } : e;
+        const { id, owner } =
+          typeof e === "string" ? { id: e, owner: undefined } : e;
         return {
           id,
           name: id,
@@ -115,7 +135,7 @@ function seedAccounts(entries: Array<string | { id: string; owner?: string }>): 
           ...(owner ? { owner } : {}),
         };
       }),
-    })
+    }),
   );
 }
 
@@ -143,15 +163,24 @@ const model = {
   maxTokens: 64_000,
 } as unknown as PiCatalogModel;
 
-const wire = (m: Partial<AnthropicMessage> & { role: "user" | "assistant" }): AnthropicMessage =>
-  ({ content: "", ...m }) as AnthropicMessage;
+const wire = (
+  m: Partial<AnthropicMessage> & { role: "user" | "assistant" },
+): AnthropicMessage => ({ content: "", ...m }) as AnthropicMessage;
 
 describe("Meridian source dependency", () => {
   test("tracks the same release as the published package", () => {
-    const dependencyRoot = join(import.meta.dir, "../../../../../node_modules/@rynfar");
-    const published = JSON.parse(readFileSync(join(dependencyRoot, "meridian/package.json"), "utf8"));
+    const dependencyRoot = join(
+      import.meta.dir,
+      "../../../../../node_modules/@rynfar",
+    );
+    const published = JSON.parse(
+      readFileSync(join(dependencyRoot, "meridian/package.json"), "utf8"),
+    );
     const source = JSON.parse(
-      readFileSync(join(dependencyRoot, "meridian-source/package.json"), "utf8")
+      readFileSync(
+        join(dependencyRoot, "meridian-source/package.json"),
+        "utf8",
+      ),
     );
     expect(source.version).toBe(published.version);
   });
@@ -188,7 +217,10 @@ describe("ensureAnthropicBridgeCwd", () => {
 describe("planSdkTurn (continuation vs replay)", () => {
   const messages: AnthropicMessage[] = [
     wire({ role: "user", content: "first question" }),
-    wire({ role: "assistant", content: [{ type: "text", text: "first answer" }] }),
+    wire({
+      role: "assistant",
+      content: [{ type: "text", text: "first answer" }],
+    }),
     wire({ role: "user", content: "second question" }),
   ];
 
@@ -203,8 +235,13 @@ describe("planSdkTurn (continuation vs replay)", () => {
 
   test("history strictly grew → resume with only the new tail", () => {
     const plan = planSdkTurn(
-      { sdkSessionId: "sdk-1", messageCount: 2, accountId: "acc-1", lastUsedAt: Date.now() },
-      messages
+      {
+        sdkSessionId: "sdk-1",
+        messageCount: 2,
+        accountId: "acc-1",
+        lastUsedAt: Date.now(),
+      },
+      messages,
     );
     expect(plan.continuation).toBe(true);
     expect(plan.resume).toBe("sdk-1");
@@ -214,8 +251,13 @@ describe("planSdkTurn (continuation vs replay)", () => {
 
   test("same-length history (retry of a seen turn) → fresh replay, not resume", () => {
     const plan = planSdkTurn(
-      { sdkSessionId: "sdk-1", messageCount: 3, accountId: "acc-1", lastUsedAt: Date.now() },
-      messages
+      {
+        sdkSessionId: "sdk-1",
+        messageCount: 3,
+        accountId: "acc-1",
+        lastUsedAt: Date.now(),
+      },
+      messages,
     );
     expect(plan.continuation).toBe(false);
     expect(plan.resume).toBeUndefined();
@@ -224,8 +266,13 @@ describe("planSdkTurn (continuation vs replay)", () => {
 
   test("shrunk history (edit/compaction divergence) → fresh replay", () => {
     const plan = planSdkTurn(
-      { sdkSessionId: "sdk-1", messageCount: 9, accountId: "acc-1", lastUsedAt: Date.now() },
-      messages
+      {
+        sdkSessionId: "sdk-1",
+        messageCount: 9,
+        accountId: "acc-1",
+        lastUsedAt: Date.now(),
+      },
+      messages,
     );
     expect(plan.continuation).toBe(false);
     expect(plan.resume).toBeUndefined();
@@ -251,7 +298,7 @@ describe("planSdkTurn (continuation vs replay)", () => {
         passthroughToolCallIds: ["tool-1", "tool-2"],
         lastUsedAt: Date.now(),
       },
-      [messages[0], messages[1], ...tail]
+      [messages[0], messages[1], ...tail],
     );
     expect(plan.continuation).toBe(true);
     expect(plan.resume).toBe("sdk-1");
@@ -279,7 +326,7 @@ describe("planSdkTurn (continuation vs replay)", () => {
         passthroughToolCallIds: ["tool-1", "tool-2"],
         lastUsedAt: Date.now(),
       },
-      [messages[0], messages[1], ...partial]
+      [messages[0], messages[1], ...partial],
     );
     expect(plan.continuation).toBe(false);
     expect(plan.resume).toBeUndefined();
@@ -337,9 +384,18 @@ describe("piMessagesToAnthropic", () => {
       {
         role: "assistant",
         content: [
-          { type: "thinking", thinking: "secret reasoning", thinkingSignature: "sig" },
+          {
+            type: "thinking",
+            thinking: "secret reasoning",
+            thinkingSignature: "sig",
+          },
           { type: "text", text: "I'll check that file" },
-          { type: "toolCall", id: "tc-1", name: "read", arguments: { path: "a.ts" } },
+          {
+            type: "toolCall",
+            id: "tc-1",
+            name: "read",
+            arguments: { path: "a.ts" },
+          },
         ],
       },
       {
@@ -358,7 +414,11 @@ describe("piMessagesToAnthropic", () => {
           { type: "text", text: "with attachment" },
           {
             type: "image",
-            source: { type: "base64", media_type: "image/png", data: "…base64…" },
+            source: {
+              type: "base64",
+              media_type: "image/png",
+              data: "…base64…",
+            },
           },
         ],
       },
@@ -367,7 +427,12 @@ describe("piMessagesToAnthropic", () => {
         content: [
           // Thinking dropped: signatures cannot round-trip.
           { type: "text", text: "I'll check that file" },
-          { type: "tool_use", id: "tc-1", name: "read", input: { path: "a.ts" } },
+          {
+            type: "tool_use",
+            id: "tc-1",
+            name: "read",
+            input: { path: "a.ts" },
+          },
         ],
       },
       {
@@ -385,7 +450,11 @@ describe("piMessagesToAnthropic", () => {
 
   test("bridge flatten/replay reads the converted shapes (tool results unwrap raw)", () => {
     const converted = piMessagesToAnthropic([
-      { role: "toolResult", toolCallId: "tc-9", content: [{ type: "text", text: "42 matches" }] },
+      {
+        role: "toolResult",
+        toolCallId: "tc-9",
+        content: [{ type: "text", text: "42 matches" }],
+      },
     ]);
     expect(flattenMessageText(converted[0].content)).toBe("42 matches");
     const replay = replayConversation(
@@ -393,10 +462,21 @@ describe("piMessagesToAnthropic", () => {
         { role: "user", content: "count them" },
         {
           role: "assistant",
-          content: [{ type: "toolCall", id: "t1", name: "grep", arguments: { pattern: "x" } }],
+          content: [
+            {
+              type: "toolCall",
+              id: "t1",
+              name: "grep",
+              arguments: { pattern: "x" },
+            },
+          ],
         },
-        { role: "toolResult", toolCallId: "t1", content: [{ type: "text", text: "42 matches" }] },
-      ])
+        {
+          role: "toolResult",
+          toolCallId: "t1",
+          content: [{ type: "text", text: "42 matches" }],
+        },
+      ]),
     );
     expect(replay).toContain("count them");
     expect(replay).toContain('[called tool grep with {"pattern":"x"}]');
@@ -406,7 +486,11 @@ describe("piMessagesToAnthropic", () => {
 });
 
 describe("images survive the turn", () => {
-  const img = (mimeType: string, data = "AAAA") => ({ type: "image", data, mimeType });
+  const img = (mimeType: string, data = "AAAA") => ({
+    type: "image",
+    data,
+    mimeType,
+  });
 
   test("piImageBlockToAnthropic converts the four media types the API reads", () => {
     for (const mime of ["image/png", "image/jpeg", "image/gif", "image/webp"]) {
@@ -425,22 +509,39 @@ describe("images survive the turn", () => {
     expect(piImageBlockToAnthropic(img("image/bmp"))).toBeNull();
     expect(piImageBlockToAnthropic(img("image/svg+xml"))).toBeNull();
     expect(piImageBlockToAnthropic({ type: "image", data: "AAAA" })).toBeNull();
-    expect(piImageBlockToAnthropic({ type: "image", mimeType: "image/png" })).toBeNull();
+    expect(
+      piImageBlockToAnthropic({ type: "image", mimeType: "image/png" }),
+    ).toBeNull();
     expect(piImageBlockToAnthropic({ type: "text", text: "hi" })).toBeNull();
   });
 
   test("turnImages collects user images and keeps the newest past the cap", () => {
-    expect(turnImages([wire({ role: "user", content: "no blocks" })])).toEqual([]);
-    const many: AnthropicMessage[] = Array.from({ length: MAX_TURN_IMAGES + 3 }, (_, i) =>
-      wire({
-        role: "user",
-        content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: `d${i}` } }],
-      })
+    expect(turnImages([wire({ role: "user", content: "no blocks" })])).toEqual(
+      [],
+    );
+    const many: AnthropicMessage[] = Array.from(
+      { length: MAX_TURN_IMAGES + 3 },
+      (_, i) =>
+        wire({
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/png",
+                data: `d${i}`,
+              },
+            },
+          ],
+        }),
     );
     const kept = turnImages(many);
     expect(kept).toHaveLength(MAX_TURN_IMAGES);
     // Newest kept: the last block in the slice is the last block kept.
-    expect(kept.at(-1)).toMatchObject({ source: { data: `d${MAX_TURN_IMAGES + 2}` } });
+    expect(kept.at(-1)).toMatchObject({
+      source: { data: `d${MAX_TURN_IMAGES + 2}` },
+    });
   });
 
   test("planSdkTurn carries only the DELIVERED slice's images on a continuation", () => {
@@ -449,7 +550,10 @@ describe("images survive the turn", () => {
         role: "user",
         content: [
           { type: "text", text: "old shot" },
-          { type: "image", source: { type: "base64", media_type: "image/png", data: "old" } },
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: "old" },
+          },
         ],
       }),
       wire({ role: "assistant", content: [{ type: "text", text: "seen it" }] }),
@@ -457,13 +561,21 @@ describe("images survive the turn", () => {
         role: "user",
         content: [
           { type: "text", text: "new shot" },
-          { type: "image", source: { type: "base64", media_type: "image/png", data: "new" } },
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: "new" },
+          },
         ],
       }),
     ];
     const cont = planSdkTurn(
-      { sdkSessionId: "sdk-1", messageCount: 2, accountId: "acc-1", lastUsedAt: Date.now() },
-      messages
+      {
+        sdkSessionId: "sdk-1",
+        messageCount: 2,
+        accountId: "acc-1",
+        lastUsedAt: Date.now(),
+      },
+      messages,
     );
     expect(cont.continuation).toBe(true);
     expect(cont.images).toHaveLength(1);
@@ -473,7 +585,9 @@ describe("images survive the turn", () => {
   });
 
   test("sdkPromptContent puts images before the text, and only for image turns", () => {
-    const plain = planSdkTurn(undefined, [wire({ role: "user", content: "just words" })]);
+    const plain = planSdkTurn(undefined, [
+      wire({ role: "user", content: "just words" }),
+    ]);
     expect(sdkPromptContent(plain)).toBeNull();
 
     const withImage = planSdkTurn(undefined, [
@@ -481,7 +595,10 @@ describe("images survive the turn", () => {
         role: "user",
         content: [
           { type: "text", text: "look at this" },
-          { type: "image", source: { type: "base64", media_type: "image/png", data: "d" } },
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: "d" },
+          },
         ],
       }),
     ]);
@@ -495,7 +612,12 @@ describe("images survive the turn", () => {
     const plan = planSdkTurn(undefined, [
       wire({
         role: "user",
-        content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "d" } }],
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: "d" },
+          },
+        ],
       }),
     ]);
     expect(plan.prompt.trim()).toBe("");
@@ -507,7 +629,7 @@ describe("images survive the turn", () => {
 describe("Pi passthrough durable checkpoint", () => {
   test("uses Meridian's explicit model-facing stop instruction", () => {
     expect(PI_PASSTHROUGH_BLOCK_REASON).toContain(
-      "This tool call has been forwarded to the client for execution."
+      "This tool call has been forwarded to the client for execution.",
     );
     expect(PI_PASSTHROUGH_BLOCK_REASON).toContain("End your turn now.");
   });
@@ -608,7 +730,15 @@ describe("usageFromSdkResult", () => {
         output: 15,
         cacheRead: 0.3,
         cacheWrite: 3.75,
-        tiers: [{ inputTokensAbove: 200_000, input: 6, output: 22.5, cacheRead: 0.6, cacheWrite: 7.5 }],
+        tiers: [
+          {
+            inputTokensAbove: 200_000,
+            input: 6,
+            output: 22.5,
+            cacheRead: 0.6,
+            cacheWrite: 7.5,
+          },
+        ],
       },
     } as unknown as PiCatalogModel;
     const usage = usageFromSdkResult(tiered, {
@@ -634,24 +764,26 @@ describe("Claude account notice probe", () => {
     expect(shouldDeferClaudeText("Replying normally")).toBe(true);
     expect(
       shouldDeferClaudeText(
-        "This is a normal answer that is now long enough to stream without waiting for its result."
-      )
+        "This is a normal answer that is now long enough to stream without waiting for its result.",
+      ),
     ).toBe(false);
   });
 
   test("keeps observed limit notices hidden from the stream", () => {
     expect(
-      shouldDeferClaudeText("You've hit your weekly limit · resets Aug 20, 9am (UTC)")
+      shouldDeferClaudeText(
+        "You've hit your weekly limit · resets Aug 20, 9am (UTC)",
+      ),
     ).toBe(true);
     expect(
       shouldDeferClaudeText(
-        "You're out of usage credits. Run /usage-credits to keep using Fable 5 or /model to switch models."
-      )
+        "You're out of usage credits. Run /usage-credits to keep using Fable 5 or /model to switch models.",
+      ),
     ).toBe(true);
     expect(
       shouldDeferClaudeText(
-        "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access"
-      )
+        "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access",
+      ),
     ).toBe(true);
   });
 });
@@ -659,19 +791,22 @@ describe("Claude account notice probe", () => {
 describe("buildPiAnthropicProvider", () => {
   test("throws the bridge's gate error when disabled or no accounts exist", () => {
     designate(null);
-    expect(() => buildPiAnthropicProvider({ unifiedSessionId: "os-1" })).toThrow(
-      /Anthropic bridge is disabled/
-    );
+    expect(() =>
+      buildPiAnthropicProvider({ unifiedSessionId: "os-1" }),
+    ).toThrow(/Anthropic bridge is disabled/);
     // Enabled but zero Claude accounts configured: the other wording.
     designate([]);
     seedAccounts([]);
-    expect(() => buildPiAnthropicProvider({ unifiedSessionId: "os-1" })).toThrow(
-      /no accounts to serve on/
-    );
+    expect(() =>
+      buildPiAnthropicProvider({ unifiedSessionId: "os-1" }),
+    ).toThrow(/no accounts to serve on/);
     // Pool mode: an existing account is enough — no designation required.
     seedAccounts(["pool-gate-a"]);
     expect(() =>
-      buildPiAnthropicProvider({ unifiedSessionId: "os-1", builtinModels: [model] })
+      buildPiAnthropicProvider({
+        unifiedSessionId: "os-1",
+        builtinModels: [model],
+      }),
     ).not.toThrow();
   });
 
@@ -689,8 +824,14 @@ describe("buildPiAnthropicProvider", () => {
     ]);
     // Auth always resolves (accounts are picked per request) so ModelRuntime
     // treats the provider as configured without inventing a secret.
-    const resolved = await provider.auth.apiKey.resolve({ ctx: {}, credential: undefined });
-    expect(resolved).toEqual({ auth: {}, source: "in-process claude-agent-sdk" });
+    const resolved = await provider.auth.apiKey.resolve({
+      ctx: {},
+      credential: undefined,
+    });
+    expect(resolved).toEqual({
+      auth: {},
+      source: "in-process claude-agent-sdk",
+    });
     expect(typeof provider.stream).toBe("function");
     expect(provider.streamSimple).toBe(provider.stream);
   });
@@ -854,7 +995,7 @@ describe("buildPiAnthropicProvider", () => {
     for await (const ev of provider.streamSimple(
       model,
       { messages: [{ role: "user", content: "hi" }] },
-      { signal: controller.signal }
+      { signal: controller.signal },
     )) {
       events.push(ev);
     }
@@ -895,7 +1036,9 @@ describe("pickBridgeAccount pins (in-process runs only; designation is the ceili
     designate(["des-a"]);
     seedAccounts(["des-a", "outsider"]);
     accounts.__setUsageCacheForTest("des-a", freshUsage);
-    const picked = pickBridgeAccount("claude-sonnet-5", { accountId: "outsider" });
+    const picked = pickBridgeAccount("claude-sonnet-5", {
+      accountId: "outsider",
+    });
     expect((picked as any).id).toBe("des-a");
   });
 
@@ -913,7 +1056,9 @@ describe("pickBridgeAccount pins (in-process runs only; designation is the ceili
     expect(error).toMatch(/strict pin/);
     expect(isPiUsageLimitShape(error, "anthropic")).toBe(true);
     // Non-strict: the same pin widens to the rest of the designation.
-    const widened = pickBridgeAccount("claude-sonnet-5", { accountId: "des-maxed" });
+    const widened = pickBridgeAccount("claude-sonnet-5", {
+      accountId: "des-maxed",
+    });
     expect((widened as any).id).toBe("des-a");
   });
 
@@ -959,7 +1104,9 @@ describe("pickBridgeAccount pool mode (no designation — picks like pi)", () =>
     seedAccounts(["pool-pin-a", "pool-pin-maxed"]);
     accounts.__setUsageCacheForTest("pool-pin-a", freshUsage);
     accounts.__setUsageCacheForTest("pool-pin-maxed", maxedUsage);
-    const pinned = pickBridgeAccount("claude-sonnet-5", { accountId: "pool-pin-a" });
+    const pinned = pickBridgeAccount("claude-sonnet-5", {
+      accountId: "pool-pin-a",
+    });
     expect((pinned as any).id).toBe("pool-pin-a");
     const strict = pickBridgeAccount("claude-sonnet-5", {
       accountId: "pool-pin-maxed",
@@ -969,7 +1116,9 @@ describe("pickBridgeAccount pool mode (no designation — picks like pi)", () =>
     expect(error).toMatch(/no usable Claude account/);
     expect(isPiUsageLimitShape(error, "anthropic")).toBe(true);
     // Non-strict pin on an exhausted account widens to the pool.
-    const widened = pickBridgeAccount("claude-sonnet-5", { accountId: "pool-pin-maxed" });
+    const widened = pickBridgeAccount("claude-sonnet-5", {
+      accountId: "pool-pin-maxed",
+    });
     expect((widened as any).id).toBe("pool-pin-a");
   });
 

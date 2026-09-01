@@ -32,10 +32,83 @@ final class SessionViewModelTests: XCTestCase {
         SessionViewModel(session: Session(id: "bks-1"))
     }
 
+    func testServerHandoffUsesTheFastReconnectCadence() {
+        XCTAssertEqual(SessionViewModel.reconnectDelay, .seconds(2))
+        XCTAssertEqual(SessionViewModel.handoffReconnectDelay, .milliseconds(250))
+    }
+
     private func entry(
         _ id: String, _ type: String, text: String? = nil, toolUseId: String? = nil
     ) -> TranscriptEntry {
         TranscriptEntry(id: id, type: type, content: text, toolUseId: toolUseId)
+    }
+
+    func testSafetyPauseOverridesStaleRunningStateAndCanClear() {
+        let safety = SessionSafetyState(
+            status: "paused_for_safety",
+            explanation: "This session was paused safely.",
+            automaticReconciliationRunning: false,
+            pausedAt: "2026-08-26T12:00:00Z",
+            operation: "finishing the current turn",
+            repairAvailable: false
+        )
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1", isRunning: true, safety: safety)
+        )
+
+        XCTAssertFalse(viewModel.isRunning)
+        XCTAssertEqual(viewModel.safety, safety)
+        XCTAssertFalse(viewModel.canSend)
+
+        viewModel.handle(.sessionStatus(
+            sessionId: "bks-1", isRunning: true, safety: safety
+        ))
+        XCTAssertFalse(viewModel.isRunning, "safety must win over a stale running bit")
+
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: false))
+        XCTAssertNil(viewModel.safety)
+        XCTAssertFalse(viewModel.isRunning)
+    }
+
+    func testInlineRunFailureTracksIdleFallbackWithoutDuplicatingStrongerState() {
+        let error = Session.RunError(message: "Provider credits exhausted.")
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1", isRunning: false, lastRunError: error)
+        )
+
+        XCTAssertEqual(viewModel.inlineRunFailureMessage, "Provider credits exhausted.")
+
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        XCTAssertNil(viewModel.inlineRunFailureMessage, "a new run replaces the stale failure")
+
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: false))
+        viewModel.updateSessionSnapshot(Session(id: "bks-1", isRunning: false))
+        XCTAssertNil(viewModel.inlineRunFailureMessage, "the fallback clears with the field")
+
+        let safety = SessionSafetyState(status: "paused_for_safety")
+        viewModel.updateSessionSnapshot(Session(
+            id: "bks-1", isRunning: false, safety: safety, lastRunError: error
+        ))
+        XCTAssertNil(viewModel.inlineRunFailureMessage, "safety owns its own alert")
+    }
+
+    func testInlineRunFailureDoesNotDuplicateDurableTranscriptNotice() {
+        let message = "Provider credits exhausted."
+        let viewModel = SessionViewModel(
+            session: Session(
+                id: "bks-1",
+                isRunning: false,
+                lastRunError: Session.RunError(message: message)
+            )
+        )
+
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("failure", "system", text: "⚠ Run failed: \(message)")],
+            cursor: .empty
+        ))
+
+        XCTAssertNil(viewModel.inlineRunFailureMessage)
     }
 
     func testPageCacheReusesLoadedConversationAndRefreshesSessionSnapshot() {
@@ -1712,6 +1785,75 @@ final class SendDraftTests: XCTestCase {
         // its answer is what put the chip there.
         XCTAssertEqual(deliveries.map(\.item.content), ["do this next"])
         XCTAssertEqual(deliveries[0].item.busyMode, "queue")
+    }
+
+    func testCurrentSteerStaysInTranscriptAndReconcilesByDeliveryId() async throws {
+        UserDefaults.standard.set("steer", forKey: "os1.composer.busySend")
+        markRunning()
+        stubbedOutcome = .delivered(status: "steered", message: "Sent to the session.")
+
+        await send("look at this now")
+        let deliveryId = try XCTUnwrap(deliveries.last?.item.id)
+        XCTAssertEqual(viewModel.entries.map(\.text), ["look at this now"])
+        XCTAssertTrue(viewModel.queuedItems.isEmpty)
+        XCTAssertTrue(viewModel.steeredItems.isEmpty)
+
+        viewModel.handle(.queueUpdate(
+            sessionId: "bks-1", queued: [], steered: [],
+            pendingDeliveryIds: [deliveryId]
+        ))
+        viewModel.handle(.transcriptAppend(
+            sessionId: "bks-1",
+            entries: [entry(deliveryId, "user", text: "look at this now")]
+        ))
+
+        XCTAssertEqual(viewModel.entries.map(\.id), [deliveryId])
+        XCTAssertEqual(viewModel.entries.map(\.text), ["look at this now"])
+        XCTAssertTrue(viewModel.queuedItems.isEmpty)
+        XCTAssertTrue(viewModel.steeredItems.isEmpty)
+        XCTAssertTrue(viewModel.deliveringItems.isEmpty)
+    }
+
+    func testBatchedTranscriptRetiresRepeatedQueuedMessagesBySourceId() async {
+        markRunning()
+        await send("again")
+        await send("again")
+        let sourceIds = deliveries.map { $0.item.id }
+        XCTAssertEqual(viewModel.queuedItems.count, 2)
+
+        viewModel.handle(.transcriptAppend(
+            sessionId: "bks-1",
+            entries: [TranscriptEntry(
+                id: "batch-entry",
+                type: "user",
+                content: "normalized batch",
+                sourceMessageIds: sourceIds
+            )]
+        ))
+
+        XCTAssertEqual(viewModel.entries.map(\.id), ["batch-entry"])
+        XCTAssertTrue(viewModel.queuedItems.isEmpty)
+        XCTAssertTrue(viewModel.steeredItems.isEmpty)
+        XCTAssertTrue(viewModel.deliveringItems.isEmpty)
+    }
+
+    func testPromotedQueuedMessageMovesToTranscriptWithoutDeliveryChip() {
+        viewModel.handle(.queueUpdate(
+            sessionId: "bks-1",
+            queued: [QueueItem(id: "q1", content: "send this now", user: "Tester")],
+            steered: []
+        ))
+
+        viewModel.handle(.queueUpdate(
+            sessionId: "bks-1", queued: [], steered: [],
+            pendingDeliveryIds: ["q1"]
+        ))
+
+        XCTAssertEqual(viewModel.entries.map(\.id), ["q1"])
+        XCTAssertEqual(viewModel.entries.map(\.text), ["send this now"])
+        XCTAssertTrue(viewModel.queuedItems.isEmpty)
+        XCTAssertTrue(viewModel.steeredItems.isEmpty)
+        XCTAssertTrue(viewModel.deliveringItems.isEmpty)
     }
 
     func testTwoBusySendsStackTwoChips() async {

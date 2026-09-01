@@ -1,637 +1,4 @@
-
-import * as stylex from "@stylexjs/stylex";
-import { mergeStylexClassName } from "../ui/cn";
-import { type as typography } from "../styles/typography.stylex";
-import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
-
-const sx = stylex.create({
-	hidden: {
-		"display": "none"
-	},
-	hVarHeaderH: {
-		"height": "var(--header-h)"
-	},
-	shrink0: {
-		"flexShrink": "0"
-	},
-	itemsCenter: {
-		"alignItems": "center"
-	},
-	justifyBetween: {
-		"justifyContent": "space-between"
-	},
-	bgSidebar: {
-		"backgroundColor": "var(--sidebar-bg)"
-	},
-	px4: {
-		"paddingInline": "16px"
-	},
-	pb0: {
-		"paddingBottom": "0"
-	},
-	phoneFlex: {
-		"@media (max-width: 720px)": {
-			"display": "flex"
-		}
-	},
-	phonePx3: {
-		"@media (max-width: 720px)": {
-			"paddingInline": "12px"
-		}
-	},
-	phoneBgTransparent: {
-		"@media (max-width: 720px)": {
-			"backgroundColor": "transparent"
-		}
-	},
-	phoneFixed: {
-		"@media (max-width: 720px)": {
-			"position": "fixed"
-		}
-	},
-	phoneInsetX0: {
-		"@media (max-width: 720px)": {
-			"insetInline": "0"
-		}
-	},
-	phoneTop0: {
-		"@media (max-width: 720px)": {
-			"top": "0"
-		}
-	},
-	phoneZ40: {
-		"@media (max-width: 720px)": {
-			"zIndex": "40"
-		}
-	},
-	phonePointerEventsNone: {
-		"@media (max-width: 720px)": {
-			"pointerEvents": "none"
-		}
-	},
-	phoneBeforeAbsolute: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"content": "var(--tw-content)",
-				"position": "absolute"
-			}
-		}
-	},
-	phoneBeforeInsetX0: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"content": "var(--tw-content)",
-				"insetInline": "0"
-			}
-		}
-	},
-	phoneBeforeTop0: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"content": "var(--tw-content)",
-				"top": "0"
-			}
-		}
-	},
-	phoneBeforeBottomAuto: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"content": "var(--tw-content)",
-				"bottom": "auto"
-			}
-		}
-	},
-	phoneBeforeZ1: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"content": "var(--tw-content)",
-				"zIndex": "-1"
-			}
-		}
-	},
-	phoneBeforeHCalc10030px: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"content": "var(--tw-content)",
-				"height": "calc(100% + 30px)"
-			}
-		}
-	},
-	phoneBeforePointerEventsNone: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"content": "var(--tw-content)",
-				"pointerEvents": "none"
-			}
-		}
-	},
-	phoneBeforeContent: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"--tw-content": "\"\"",
-				"content": "var(--tw-content)"
-			}
-		}
-	},
-	phoneBeforeBackdropBlur20px: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"content": "var(--tw-content)",
-				"--tw-backdrop-blur": "blur(20px)",
-				"WebkitBackdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)",
-				"backdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)"
-			}
-		}
-	},
-	phoneBeforeBackdropSaturate14: {
-		"@media (max-width: 720px)": {
-			"::before": {
-				"content": "var(--tw-content)",
-				"--tw-backdrop-saturate": "saturate(1.4)",
-				"WebkitBackdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)",
-				"backdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)"
-			}
-		}
-	},
-	phoneRelative: {
-		"@media (max-width: 720px)": {
-			"position": "relative"
-		}
-	},
-	flex: {
-		"display": "flex"
-	},
-	gap2: {
-		"gap": "8px"
-	},
-	phoneBackdropFilterVarMobileHeaderControlBlur: {
-		"@media (max-width: 720px)": {
-			"WebkitBackdropFilter": "var(--mobile-header-control-blur)",
-			"backdropFilter": "var(--mobile-header-control-blur)"
-		}
-	},
-	phoneWebkitBackdropFilterVarMobileHeaderControlBlur: {
-		"@media (max-width: 720px)": {
-			"WebkitBackdropFilter": "var(--mobile-header-control-blur)"
-		}
-	},
-	phoneBgVarMobileHeaderControlSurface: {
-		"@media (max-width: 720px)": {
-			"backgroundColor": "var(--mobile-header-control-surface)"
-		}
-	},
-	phoneM0: {
-		"@media (max-width: 720px)": {
-			"margin": "0"
-		}
-	},
-	phoneInlineFlex: {
-		"@media (max-width: 720px)": {
-			"display": "inline-flex"
-		}
-	},
-	phoneSize11: {
-		"@media (max-width: 720px)": {
-			"width": "44px",
-			"height": "44px"
-		}
-	},
-	phoneMinH11: {
-		"@media (max-width: 720px)": {
-			"minHeight": "44px"
-		}
-	},
-	phoneItemsCenter: {
-		"@media (max-width: 720px)": {
-			"alignItems": "center"
-		}
-	},
-	phoneJustifyCenter: {
-		"@media (max-width: 720px)": {
-			"justifyContent": "center"
-		}
-	},
-	phoneTextFg: {
-		"@media (max-width: 720px)": {
-			"color": "var(--text)"
-		}
-	},
-	phoneShadowVarMobileHeaderControlShadow: {
-		"@media (max-width: 720px)": {
-			"--tw-shadow": "var(--mobile-header-control-shadow)",
-			"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
-		}
-	},
-	phoneCursorPointer: {
-		"@media (max-width: 720px)": {
-			"cursor": "pointer"
-		}
-	},
-	phoneTouchManipulation: {
-		"@media (max-width: 720px)": {
-			"touchAction": "manipulation"
-		}
-	},
-	phoneWebkitTapHighlightColorTransparent: {
-		"@media (max-width: 720px)": {
-			"WebkitTapHighlightColor": "transparent"
-		}
-	},
-	phoneTransitionPropertyOpacity: {
-		"@media (max-width: 720px)": {
-			"transitionProperty": "opacity"
-		}
-	},
-	phoneDurationVarDur: {
-		"@media (max-width: 720px)": {
-			"--tw-duration": "var(--dur)",
-			"transitionDuration": "var(--dur)"
-		}
-	},
-	phoneEaseVarEase: {
-		"@media (max-width: 720px)": {
-			"--tw-ease": "var(--ease)",
-			"transitionTimingFunction": "var(--ease)"
-		}
-	},
-	phoneActiveScale100: {
-		"@media (max-width: 720px)": {
-			":active": {
-				"--tw-scale-x": "100%",
-				"--tw-scale-y": "100%",
-				"--tw-scale-z": "100%",
-				"scale": "var(--tw-scale-x) var(--tw-scale-y)"
-			}
-		}
-	},
-	phoneActiveOpacity40: {
-		"@media (max-width: 720px)": {
-			":active": {
-				"opacity": ".4"
-			}
-		}
-	},
-	phoneActiveDuration0: {
-		"@media (max-width: 720px)": {
-			":active": {
-				"--tw-duration": "0s",
-				"transitionDuration": "0s"
-			}
-		}
-	},
-	absolute: {
-		"position": "absolute"
-	},
-	Right05: {
-		"right": "-2px"
-	},
-	Bottom05: {
-		"bottom": "-2px"
-	},
-	size25: {
-		"width": "10px",
-		"height": "10px"
-	},
-	roundedFull: {
-		"borderRadius": "3.40282e38px"
-	,
-		cornerShape: "round"},
-	border2: {
-		"borderStyle": "var(--tw-border-style)",
-		"borderWidth": "2px"
-	},
-	borderRaised: {
-		"borderColor": "var(--bg-raised)"
-	},
-	phoneFlex01Auto: {
-		"@media (max-width: 720px)": {
-			"flex": "0 auto"
-		}
-	},
-	phoneMinW0: {
-		"@media (max-width: 720px)": {
-			"minWidth": "0"
-		}
-	},
-	phoneJustifyStart: {
-		"@media (max-width: 720px)": {
-			"justifyContent": "flex-start"
-		}
-	},
-	phoneGap9px: {
-		"@media (max-width: 720px)": {
-			"gap": "9px"
-		}
-	},
-	phoneMl2: {
-		"@media (max-width: 720px)": {
-			"marginLeft": "8px"
-		}
-	},
-	phoneMrAuto: {
-		"@media (max-width: 720px)": {
-			"marginRight": "auto"
-		}
-	},
-	phonePy5px: {
-		"@media (max-width: 720px)": {
-			"paddingBlock": "5px"
-		}
-	},
-	phonePr4: {
-		"@media (max-width: 720px)": {
-			"paddingRight": "16px"
-		}
-	},
-	phonePl11px: {
-		"@media (max-width: 720px)": {
-			"paddingLeft": "11px"
-		}
-	},
-	phonePointerEventsAuto: {
-		"@media (max-width: 720px)": {
-			"pointerEvents": "auto"
-		}
-	},
-	phoneAbsolute: {
-		"@media (max-width: 720px)": {
-			"position": "absolute"
-		}
-	},
-	phoneLeft12: {
-		"@media (max-width: 720px)": {
-			"left": "50%"
-		}
-	},
-	phoneMl0: {
-		"@media (max-width: 720px)": {
-			"marginLeft": "0"
-		}
-	},
-	phoneMr0: {
-		"@media (max-width: 720px)": {
-			"marginRight": "0"
-		}
-	},
-	phoneTransformTranslateX50: {
-		"@media (max-width: 720px)": {
-			"transform": "translate(-50%)"
-		}
-	},
-	motionReduceTransitionNone: {
-		"@media (prefers-reduced-motion: reduce)": {
-			"transitionProperty": "none"
-		}
-	},
-	phoneTranslateY1: {
-		"@media (max-width: 720px)": {
-			"--tw-translate-y": "4px",
-			"translate": "var(--tw-translate-x) var(--tw-translate-y)"
-		}
-	},
-	phoneOpacity0: {
-		"@media (max-width: 720px)": {
-			"opacity": "0"
-		}
-	},
-	phoneFlexNone: {
-		"@media (max-width: 720px)": {
-			"flex": "none"
-		}
-	},
-	phoneFlexCol: {
-		"@media (max-width: 720px)": {
-			"flexDirection": "column"
-		}
-	},
-	phoneItemsStart: {
-		"@media (max-width: 720px)": {
-			"alignItems": "flex-start"
-		}
-	},
-	phoneGapPx: {
-		"@media (max-width: 720px)": {
-			"gap": "1px"
-		}
-	},
-	phoneMaxWFull: {
-		"@media (max-width: 720px)": {
-			"maxWidth": "100%"
-		}
-	},
-	phoneGap7px: {
-		"@media (max-width: 720px)": {
-			"gap": "7px"
-		}
-	},
-	phoneTextBase: {
-		"@media (max-width: 720px)": {
-			"fontSize": "var(--type-body)",
-			"lineHeight": "var(--tw-leading,var(--text-base--line-height))"
-		}
-	},
-	phoneLeading4: {
-		"@media (max-width: 720px)": {
-			"--tw-leading": "calc(4px * 4)",
-			"lineHeight": "16px"
-		}
-	},
-	phoneFontSemibold: {
-		"@media (max-width: 720px)": {
-			"--tw-font-weight": "var(--font-weight-semibold)",
-			"fontWeight": "var(--font-weight-semibold)"
-		}
-	},
-	phoneFlex1: {
-		"@media (max-width: 720px)": {
-			"flex": "1"
-		}
-	},
-	phoneTruncate: {
-		"@media (max-width: 720px)": {
-			"textOverflow": "ellipsis",
-			"whiteSpace": "nowrap",
-			"overflow": "hidden"
-		}
-	},
-	phoneTextMeta: {
-		"@media (max-width: 720px)": {
-			"fontSize": "var(--type-meta)",
-			"fontWeight": "var(--tw-font-weight,var(--font-weight-normal))"
-		}
-	},
-	phoneFontMedium: {
-		"@media (max-width: 720px)": {
-			"--tw-font-weight": "var(--font-weight-medium)",
-			"fontWeight": "var(--font-weight-medium)"
-		}
-	},
-	phoneLeading11: {
-		"@media (max-width: 720px)": {
-			"--tw-leading": "1.1",
-			"lineHeight": "1.1"
-		}
-	},
-	phoneTextFaint: {
-		"@media (max-width: 720px)": {
-			"color": "var(--text-faint)"
-		}
-	},
-	phoneMinH4: {
-		"@media (max-width: 720px)": {
-			"minHeight": "16px"
-		}
-	},
-	phoneGap15: {
-		"@media (max-width: 720px)": {
-			"gap": "6px"
-		}
-	},
-	phoneActiveOpacity60: {
-		"@media (max-width: 720px)": {
-			":active": {
-				"opacity": ".6"
-			}
-		}
-	},
-	phoneShrink0: {
-		"@media (max-width: 720px)": {
-			"flexShrink": "0"
-		}
-	},
-	phoneText16px: {
-		"@media (max-width: 720px)": {
-			"fontSize": "16px"
-		}
-	},
-	phoneTextDim: {
-		"@media (max-width: 720px)": {
-			"color": "var(--text-dim)"
-		}
-	},
-	truncate: {
-		"textOverflow": "ellipsis",
-		"whiteSpace": "nowrap",
-		"overflow": "hidden"
-	},
-	phoneMaxW45vw: {
-		"@media (max-width: 720px)": {
-			"maxWidth": "45vw"
-		}
-	},
-	minH0: {
-		"minHeight": "0"
-	},
-	gap1: {
-		"gap": "4px"
-	},
-	p0: {
-		"padding": "0"
-	},
-	phoneH10: {
-		"@media (max-width: 720px)": {
-			"height": "40px"
-		}
-	},
-	phoneW13: {
-		"@media (max-width: 720px)": {
-			"width": "52px"
-		}
-	},
-	phoneRoundedNone: {
-		"@media (max-width: 720px)": {
-			"borderRadius": "0"
-		}
-	},
-	phoneBorderNone: {
-		"@media (max-width: 720px)": {
-			"--tw-border-style": "none",
-			"borderStyle": "none"
-		}
-	},
-	phoneP0: {
-		"@media (max-width: 720px)": {
-			"padding": "0"
-		}
-	},
-	phoneShadowNone: {
-		"@media (max-width: 720px)": {
-			"--tw-shadow": "0 0 transparent",
-			"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
-		}
-	},
-	phoneActiveOpacity35: {
-		"@media (max-width: 720px)": {
-			":active": {
-				"opacity": ".35"
-			}
-		}
-	},
-
-	phoneRoundedFull: {
-		"@media (max-width: 720px)": {
-			"borderRadius": "3.40282e38px"
-		}
-	},
-	phoneBorder: {
-		"@media (max-width: 720px)": {
-			"borderStyle": "var(--tw-border-style)",
-			"borderWidth": "1px"
-		}
-	},
-	phoneBorderColorVarMobileHeaderControlBorder: {
-		"@media (max-width: 720px)": {
-			"borderColor": "var(--mobile-header-control-border)"
-		}
-	},
-	phoneMlAuto: {
-		"@media (max-width: 720px)": {
-			"marginLeft": "auto"
-		}
-	},
-	phoneGap0: {
-		"@media (max-width: 720px)": {
-			"gap": "0"
-		}
-	},
-	phoneOverflowHidden: {
-		"@media (max-width: 720px)": {
-			"overflow": "hidden"
-		}
-	},
-	phoneMl25: {
-		"@media (max-width: 720px)": {
-			"marginLeft": "10px"
-		}
-	},
-	phoneGap25: {
-		"@media (max-width: 720px)": {
-			"gap": "10px"
-		}
-	},
-	phoneOrder1: {
-		"@media (max-width: 720px)": {
-			"order": "calc(1 * -1)"
-		}
-	},
-
-	ptEnvSafeAreaInsetTop0px: {
-		"paddingTop": "env(safe-area-inset-top,0px)"
-	},
-	phonePtMaxEnvSafeAreaInsetTop0px8px: {
-		"@media (max-width: 720px)": {
-			"paddingTop": "max(env(safe-area-inset-top,0px), 8px)"
-		}
-	},
-	phoneTransitionOpacityTranslate: {
-		"@media (max-width: 720px)": {
-			"transitionProperty": "opacity,translate",
-			"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-			"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-		}
-	},
-});
-
+import { utilityClassName } from "../ui/cn";
 /**
  * The phone top bar — one iOS-style nav bar, and everything that rides in it.
  *
@@ -680,9 +47,13 @@ const sx = stylex.create({
  * full safe-area inset.
  */
 const APP_HEADER_BASE =
-	mergeStylexClassName("", sx.hidden, sx.hVarHeaderH, sx.shrink0, sx.itemsCenter, sx.justifyBetween, sx.bgSidebar) + " " +
-	mergeStylexClassName("", sx.ptEnvSafeAreaInsetTop0px, sx.px4, sx.pb0) + " " +
-	mergeStylexClassName("", sx.phonePtMaxEnvSafeAreaInsetTop0px8px, sx.phoneFlex, sx.phonePx3);
+  utilityClassName(
+    "hidden h-[var(--header-h)] shrink-0 items-center justify-between bg-sidebar ",
+  ) +
+  utilityClassName("px-4 pt-[env(safe-area-inset-top,0px)] pb-0 ") +
+  utilityClassName(
+    "phone:flex phone:px-3 phone:pt-[max(env(safe-area-inset-top,0px),8px)]",
+  );
 
 /**
  * Pushed pages (a session, a PR…): the band itself goes invisible so its
@@ -693,7 +64,7 @@ const APP_HEADER_BASE =
  * draws a border on this element (no rule in base.css or here targets it), so
  * that declaration only ever moved a computed value; it is not carried over.
  */
-const APP_HEADER_DETAIL = mergeStylexClassName("", sx.phoneBgTransparent);
+const APP_HEADER_DETAIL = utilityClassName("phone:bg-transparent");
 
 /**
  * Home, Feed, and a session: the bar floats over the content instead of
@@ -718,23 +89,37 @@ const APP_HEADER_DETAIL = mergeStylexClassName("", sx.phoneBgTransparent);
  * navigation bar stays pinned so Back and its actions never scroll away.
  */
 const APP_HEADER_OVERLAY =
-	"app-header-overlay " +
-	mergeStylexClassName("", sx.phoneFixed, sx.phoneInsetX0, sx.phoneTop0, sx.phoneZ40, sx.phoneBgTransparent) + " " +
-	mergeStylexClassName("phone:*:pointer-events-auto", sx.phonePointerEventsNone) + " " +
-	mergeStylexClassName("", sx.phoneBeforeAbsolute, sx.phoneBeforeInsetX0, sx.phoneBeforeTop0) + " " +
-	mergeStylexClassName("", sx.phoneBeforeBottomAuto, sx.phoneBeforeZ1, sx.phoneBeforeHCalc10030px) + " " +
-	"phone:[.app:has(.session-tabs)_&]:before:h-full " +
-	mergeStylexClassName("", sx.phoneBeforePointerEventsNone, sx.phoneBeforeContent) +
-	// The fade is thinned deliberately. It used to be SOLID `--bg` for its first
-	// half, which is exactly the band the controls sit in, so each control was
-	// backed by an opaque plate of the page colour and had nothing to be
-	// translucent against. Full strength survives only across the status-bar
-	// strip, where the clock has to stay legible; from there down the blur is
-	// what does the work, which is how an iOS scroll edge behaves.
-	" " + mergeStylexClassName("", sharedClassStyles.phoneBeforeBackgroundLinearGradientToBottomVarBg0ColorMixInSrgbVarBg55Transparent52ColorMixInSrgbVarBg18Transparent78Transparent100) +
-	" " + mergeStylexClassName("", sx.phoneBeforeBackdropBlur20px, sx.phoneBeforeBackdropSaturate14) + " " +
-	mergeStylexClassName("", sharedClassStyles.phoneBeforeWebkitMaskImageLinearGradientToBottomVarColorBlack0VarColorBlack62Transparent100) +
-	" " + mergeStylexClassName("", sharedClassStyles.phoneBeforeMaskImageLinearGradientToBottomVarColorBlack0VarColorBlack62Transparent100);
+  "app-header-overlay " +
+  utilityClassName(
+    "phone:fixed phone:inset-x-0 phone:top-0 phone:z-40 phone:bg-transparent ",
+  ) +
+  utilityClassName("phone:pointer-events-none phone:*:pointer-events-auto ") +
+  utilityClassName(
+    "phone:before:absolute phone:before:inset-x-0 phone:before:top-0 ",
+  ) +
+  utilityClassName(
+    "phone:before:bottom-auto phone:before:z-[-1] phone:before:h-[calc(100%+30px)] ",
+  ) +
+  "phone:[.app:has(.session-tabs)_&]:before:h-full " +
+  utilityClassName(
+    "phone:before:pointer-events-none phone:before:content-[''] ",
+  ) +
+  // The fade is thinned deliberately. It used to be SOLID `--bg` for its first
+  // half, which is exactly the band the controls sit in, so each control was
+  // backed by an opaque plate of the page colour and had nothing to be
+  // translucent against. Full strength survives only across the status-bar
+  // strip, where the clock has to stay legible; from there down the blur is
+  // what does the work, which is how an iOS scroll edge behaves.
+  utilityClassName(
+    "phone:before:[background:linear-gradient(to_bottom,var(--bg)_0%,color-mix(in_srgb,var(--bg)_55%,transparent)_52%,color-mix(in_srgb,var(--bg)_18%,transparent)_78%,transparent_100%)] ",
+  ) +
+  "phone:before:backdrop-blur-[20px] phone:before:backdrop-saturate-[1.4] " +
+  utilityClassName(
+    "phone:before:[-webkit-mask-image:linear-gradient(to_bottom,#000_0%,#000_62%,transparent_100%)] ",
+  ) +
+  utilityClassName(
+    "phone:before:[mask-image:linear-gradient(to_bottom,#000_0%,#000_62%,transparent_100%)]",
+  );
 
 /**
  * The bar's three faces, assembled so that only one of them is ever on the
@@ -750,23 +135,25 @@ const APP_HEADER_OVERLAY =
  * session, out of flow over the scrolling content.
  */
 export function appHeader({
-	detail,
-	floating,
+  detail,
+  floating,
 }: {
-	detail: boolean;
-	floating: boolean;
+  detail: boolean;
+  floating: boolean;
 }): string {
-	return [
-		APP_HEADER_BASE,
-		floating ? APP_HEADER_OVERLAY : mergeStylexClassName("", sx.phoneRelative),
-		detail ? APP_HEADER_DETAIL : "",
-	]
-		.filter(Boolean)
-		.join(" ");
+  return [
+    APP_HEADER_BASE,
+    floating ? APP_HEADER_OVERLAY : "phone:relative",
+    detail ? APP_HEADER_DETAIL : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /** Leading slot: the brand on the root page, the Back bubble on a pushed one. */
-export const APP_HEADER_LEFT = mergeStylexClassName("", sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2);
+export const APP_HEADER_LEFT = utilityClassName(
+  "flex shrink-0 items-center gap-2",
+);
 
 /**
  * What every floating control in this bar is made of: a thinned fill over a
@@ -783,12 +170,16 @@ export const APP_HEADER_LEFT = mergeStylexClassName("", sx.flex, sx.shrink0, sx.
  * backdrop-filter at all, and for reduced transparency.
  */
 export const MOBILE_CONTROL_GLASS_EFFECTS =
-	mergeStylexClassName("", sx.phoneBackdropFilterVarMobileHeaderControlBlur) + " " +
-	mergeStylexClassName("", sx.phoneWebkitBackdropFilterVarMobileHeaderControlBlur);
+  utilityClassName(
+    "phone:[backdrop-filter:var(--mobile-header-control-blur)] ",
+  ) +
+  utilityClassName(
+    "phone:[-webkit-backdrop-filter:var(--mobile-header-control-blur)]",
+  );
 
 export const MOBILE_CONTROL_GLASS =
-	mergeStylexClassName("", sx.phoneBgVarMobileHeaderControlSurface) +
-	" " + MOBILE_CONTROL_GLASS_EFFECTS;
+  utilityClassName("phone:bg-[var(--mobile-header-control-surface)] ") +
+  MOBILE_CONTROL_GLASS_EFFECTS;
 
 /**
  * One circular mobile top-bar control: Back, More and future page actions all
@@ -796,27 +187,38 @@ export const MOBILE_CONTROL_GLASS =
  * not `rounded-[999px]`, keeps the platform's true-circle toolbar shape.
  */
 export const MOBILE_TOP_BAR_CONTROL =
-	mergeStylexClassName("", sx.phoneM0, sx.phoneInlineFlex, sx.phoneSize11, sx.phoneMinH11, sx.phoneItemsCenter, sx.phoneJustifyCenter) +
-	" " + [mergeStylexClassName("", sx.phoneRoundedFull, sx.phoneBorder, sx.phoneBorderColorVarMobileHeaderControlBorder), MOBILE_CONTROL_GLASS, mergeStylexClassName("", sx.phoneP0)].filter(Boolean).join(" ") +
-	" " + mergeStylexClassName("", sx.phoneTextFg, sx.phoneShadowVarMobileHeaderControlShadow) + " " +
-	mergeStylexClassName("", sx.phoneCursorPointer, sx.phoneTouchManipulation) + " " +
-	mergeStylexClassName("", sx.phoneWebkitTapHighlightColorTransparent) + " " +
-	mergeStylexClassName("", sx.phoneTransitionPropertyOpacity, sx.phoneDurationVarDur) + " " +
-	mergeStylexClassName("", sx.phoneEaseVarEase, sx.phoneActiveScale100, sx.phoneActiveOpacity40, sx.phoneActiveDuration0) + " " +
-	"phone:[&_svg]:size-[26px] phone:[&_svg]:shrink-0";
+  utilityClassName(
+    "phone:m-0 phone:inline-flex phone:size-11 phone:min-h-11 phone:items-center phone:justify-center ",
+  ) +
+  utilityClassName(
+    `phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} phone:p-0 `,
+  ) +
+  utilityClassName(
+    "phone:text-fg phone:shadow-[var(--mobile-header-control-shadow)] ",
+  ) +
+  utilityClassName("phone:cursor-pointer phone:touch-manipulation ") +
+  utilityClassName("phone:[-webkit-tap-highlight-color:transparent] ") +
+  utilityClassName(
+    "phone:[transition-property:opacity] phone:duration-[var(--dur)] ",
+  ) +
+  utilityClassName(
+    "phone:ease-[var(--ease)] phone:active:scale-100 phone:active:opacity-40 phone:active:duration-0 ",
+  ) +
+  "phone:[&_svg]:size-[26px] phone:[&_svg]:shrink-0";
 
 /** Back adds only its PWA hook and the chevron's optical left nudge. */
 export const MOBILE_BACK =
-	[mergeStylexClassName("pwa-header-back"), MOBILE_TOP_BAR_CONTROL].filter(Boolean).join(" ") +
-	" " + "phone:[&_svg]:size-[34px] phone:[&_svg]:-ml-px";
+  `pwa-header-back ${MOBILE_TOP_BAR_CONTROL} ` +
+  "phone:[&_svg]:size-[34px] phone:[&_svg]:-ml-px";
 
 /**
  * Live connection dot on the organization mark in the sidebar selector. It
  * rides a relative wrapper because the tile itself can clip its image. The
  * colour is set inline from the socket state.
  */
-export const APP_LOGO_STATUS =
-	mergeStylexClassName("", sx.absolute, sx.Right05, sx.Bottom05, sx.size25, sx.roundedFull, sx.border2, sx.borderRaised);
+export const APP_LOGO_STATUS = utilityClassName(
+  "absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-raised",
+);
 
 /**
  * The title pill on a pushed page: the repo tile leads, then the name over a
@@ -834,16 +236,25 @@ export const APP_LOGO_STATUS =
  * anyway; spelling it `999px` would hand it a squircle it never had.
  */
 export const HEADER_TITLE_PILL =
-	mergeStylexClassName("", sx.phoneFlex, sx.phoneMinH11, sx.phoneFlex01Auto, sx.phoneMinW0, sx.phoneItemsCenter) + " " +
-	mergeStylexClassName("", sx.phoneJustifyStart, sx.phoneGap9px, sx.phoneMl2, sx.phoneMrAuto) + " " +
-	mergeStylexClassName("", sx.phonePy5px, sx.phonePr4, sx.phonePl11px) +
-	" " + [mergeStylexClassName("", sx.phoneRoundedFull, sx.phoneBorder, sx.phoneBorderColorVarMobileHeaderControlBorder), MOBILE_CONTROL_GLASS].filter(Boolean).join(" ") +
-	" " + mergeStylexClassName("", sx.phoneShadowVarMobileHeaderControlShadow, sx.phoneTextFg) + " " +
-	mergeStylexClassName("", sx.phonePointerEventsAuto);
+  utilityClassName(
+    "phone:flex phone:min-h-11 phone:flex-[0_1_auto] phone:min-w-0 phone:items-center ",
+  ) +
+  utilityClassName(
+    "phone:justify-start phone:gap-[9px] phone:ml-2 phone:mr-auto ",
+  ) +
+  utilityClassName("phone:py-[5px] phone:pr-4 phone:pl-[11px] ") +
+  utilityClassName(
+    `phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} `,
+  ) +
+  utilityClassName(
+    "phone:shadow-[var(--mobile-header-control-shadow)] phone:text-fg ",
+  ) +
+  utilityClassName("phone:pointer-events-auto");
 
 /** Center a plain page title independently of the leading and trailing controls. */
-export const HEADER_TITLE_PILL_CENTERED =
-	mergeStylexClassName("", sx.phoneAbsolute, sx.phoneLeft12, sx.phoneMl0, sx.phoneMr0, sx.phoneTransformTranslateX50);
+export const HEADER_TITLE_PILL_CENTERED = utilityClassName(
+  "phone:absolute phone:left-1/2 phone:ml-0 phone:mr-0 phone:[transform:translateX(-50%)]",
+);
 
 /**
  * Archived keeps Search at the phone's bottom edge. While that field is
@@ -855,13 +266,17 @@ export const HEADER_TITLE_PILL_CENTERED =
  * there is no status-bar safe area.
  */
 export const ARCHIVED_SEARCH_HEADER =
-	"phone:h-[calc(max(env(safe-area-inset-top,0px),16px)+60px)]! " +
-	"phone:pt-[max(env(safe-area-inset-top,0px),16px)]! " +
-	mergeStylexClassName("", sharedClassStyles.phoneTransitionHeightPaddingTopOpacityTransform) +
-	" " + mergeStylexClassName("", sx.phoneDurationVarDur, sx.phoneEaseVarEase) + " " +
-	"phone:[body.kb-open_&]:h-0! phone:[body.kb-open_&]:pt-0! " +
-	"phone:[body.kb-open_&]:pointer-events-none phone:[body.kb-open_&]:opacity-0 " +
-	mergeStylexClassName("phone:[body.kb-open_&]:[transform:translateY(-8px)]", sx.motionReduceTransitionNone);
+  utilityClassName(
+    "phone:h-[calc(max(env(safe-area-inset-top,0px),16px)+60px)]! ",
+  ) +
+  utilityClassName("phone:pt-[max(env(safe-area-inset-top,0px),16px)]! ") +
+  utilityClassName("phone:transition-[height,padding-top,opacity,transform] ") +
+  utilityClassName("phone:duration-[var(--dur)] phone:ease-[var(--ease)] ") +
+  "phone:[body.kb-open_&]:h-0! phone:[body.kb-open_&]:pt-0! " +
+  "phone:[body.kb-open_&]:pointer-events-none phone:[body.kb-open_&]:opacity-0 " +
+  utilityClassName(
+    "phone:[body.kb-open_&]:[transform:translateY(-8px)] motion-reduce:transition-none",
+  );
 
 /**
  * The pill on a page that names itself, which is every page but a session: it
@@ -875,8 +290,9 @@ export const ARCHIVED_SEARCH_HEADER =
  * duplicate title it was there to avoid.
  */
 export const HEADER_TITLE_PILL_FADE =
-	mergeStylexClassName("", sx.phoneTransitionOpacityTranslate, sx.phoneTranslateY1, sx.phoneOpacity0) + " " +
-	"phone:data-[shown]:translate-y-0 phone:data-[shown]:opacity-100";
+  utilityClassName(
+    "phone:translate-y-1 phone:opacity-0 phone:transition-[opacity,translate] ",
+  ) + "phone:data-[shown]:translate-y-0 phone:data-[shown]:opacity-100";
 
 /**
  * On a session the pill is the tap target for the settings menu, and the name
@@ -885,8 +301,10 @@ export const HEADER_TITLE_PILL_FADE =
  * the plain title can't dim on a stray press.
  */
 export const HEADER_TITLE_PILL_TAPPABLE =
-	[HEADER_TITLE_PILL, mergeStylexClassName("group/titlepill")].filter(Boolean).join(" ") +
-	" " + mergeStylexClassName("", sx.phoneCursorPointer, sx.phoneWebkitTapHighlightColorTransparent);
+  `${HEADER_TITLE_PILL} group/titlepill ` +
+  utilityClassName(
+    "phone:cursor-pointer phone:[-webkit-tap-highlight-color:transparent]",
+  );
 
 /**
  * Leading repo tile — a fixed square spanning both text rows. It is filled by
@@ -894,13 +312,15 @@ export const HEADER_TITLE_PILL_TAPPABLE =
  * pill's 9px gap in front of a name that has no tile yet.
  */
 export const HEADER_TITLE_REPO =
-	mergeStylexClassName("", sx.phoneInlineFlex, sx.phoneFlexNone, sx.phoneItemsCenter, sx.phoneJustifyCenter) + " " +
-	"phone:empty:hidden";
+  utilityClassName(
+    "phone:inline-flex phone:flex-none phone:items-center phone:justify-center ",
+  ) + "phone:empty:hidden";
 
 /** Name over metadata, stacked to the right of the repo tile. */
 export const HEADER_TITLE_COL =
-	mergeStylexClassName("", sx.phoneFlex, sx.phoneMinW0, sx.phoneFlexCol, sx.phoneItemsStart, sx.phoneJustifyCenter) + " " +
-	mergeStylexClassName("", sx.phoneGapPx);
+  utilityClassName(
+    "phone:flex phone:min-w-0 phone:flex-col phone:items-start phone:justify-center ",
+  ) + utilityClassName("phone:gap-px");
 
 /**
  * The name's row. The leading is pinned rather than left at `normal` (~1.21):
@@ -909,12 +329,14 @@ export const HEADER_TITLE_COL =
  * whatever the font's default line box happens to be.
  */
 export const HEADER_TITLE_ROW =
-	mergeStylexClassName("", sx.phoneFlex, sx.phoneMinW0, sx.phoneMaxWFull, sx.phoneItemsCenter, sx.phoneGap7px) + " " +
-	mergeStylexClassName("", sx.phoneTextBase, sx.phoneLeading4, sx.phoneFontSemibold);
+  utilityClassName(
+    "phone:flex phone:min-w-0 phone:max-w-full phone:items-center phone:gap-[7px] ",
+  ) + utilityClassName("phone:text-base phone:leading-4 phone:font-semibold");
 
 /** The name itself, softly faded if clipped and dimming while pressed. */
-export const HEADER_TITLE_TEXT =
-	mergeStylexClassName("phone:group-active/titlepill:opacity-60", sx.phoneFlex1);
+export const HEADER_TITLE_TEXT = utilityClassName(
+  "phone:flex-1 phone:group-active/titlepill:opacity-60",
+);
 
 /**
  * The metadata line's slot under the name — filled by SessionViewer's portal.
@@ -922,8 +344,12 @@ export const HEADER_TITLE_TEXT =
  * events are re-enabled here because the bar turns them off wholesale.
  */
 export const HEADER_TITLE_MODEL =
-	mergeStylexClassName("", sx.phoneMaxWFull, sx.phoneTruncate, sx.phoneTextMeta, sx.phoneFontMedium) + " " +
-	mergeStylexClassName("", sx.phoneLeading11, sx.phoneTextFaint, sx.phonePointerEventsAuto);
+  utilityClassName(
+    "phone:max-w-full phone:truncate phone:text-meta phone:font-medium ",
+  ) +
+  utilityClassName(
+    "phone:leading-[1.1] phone:text-faint phone:pointer-events-auto",
+  );
 
 /**
  * The session bar: the line under the title that just *shows* repo · model ·
@@ -934,10 +360,16 @@ export const HEADER_TITLE_MODEL =
  * `header-sessionbar` leads the string as a bare hook — see the module note.
  */
 export const HEADER_SESSIONBAR =
-	mergeStylexClassName("header-sessionbar", sx.phoneInlineFlex, sx.phoneMinH4, sx.phoneMinW0) + " " +
-	mergeStylexClassName("", sx.phoneMaxWFull, sx.phoneItemsCenter, sx.phoneJustifyStart, sx.phoneGap15) + " " +
-	mergeStylexClassName("", sx.phoneCursorPointer, sx.phonePointerEventsAuto) + " " +
-	mergeStylexClassName("", sx.phoneWebkitTapHighlightColorTransparent, sx.phoneActiveOpacity60);
+  utilityClassName(
+    "header-sessionbar phone:inline-flex phone:min-h-4 phone:min-w-0 ",
+  ) +
+  utilityClassName(
+    "phone:max-w-full phone:items-center phone:justify-start phone:gap-1.5 ",
+  ) +
+  utilityClassName("phone:cursor-pointer phone:pointer-events-auto ") +
+  utilityClassName(
+    "phone:[-webkit-tap-highlight-color:transparent] phone:active:opacity-60",
+  );
 
 /**
  * The middot between repo · model · cost. Bigger than the text around it, but
@@ -948,12 +380,14 @@ export const HEADER_SESSIONBAR =
 /* The 16px is glyph geometry, not a step of the scale: it sizes the middle dot
    between two runs of metadata so the dot lands optically centred against
    11px text. See the scale note in styles/tailwind.css. */
-export const HEADER_SESSIONBAR_SEP =
-	mergeStylexClassName("", sx.phoneShrink0, sx.phoneText16px, sx.phoneLeading4, sx.phoneTextDim);
+export const HEADER_SESSIONBAR_SEP = utilityClassName(
+  "phone:shrink-0 phone:text-[16px] phone:leading-4 phone:text-dim",
+);
 
 export const HEADER_SESSIONBAR_MODEL =
-	mergeStylexClassName("", sx.truncate, sx.phoneMinW0, sx.phoneMaxW45vw, sx.phoneTextMeta) + " " +
-	mergeStylexClassName("", sx.phoneFontMedium, sx.phoneTextDim);
+  utilityClassName(
+    "truncate phone:min-w-0 phone:max-w-[45vw] phone:text-meta ",
+  ) + utilityClassName("phone:font-medium phone:text-dim");
 
 /**
  * The cost meter, restyled for the subtitle line: the model's size and colour,
@@ -966,8 +400,9 @@ export const HEADER_SESSIONBAR_MODEL =
  * attributes. The cache rate is dropped through the meter's own
  * `showCacheRate` prop instead of being hidden after the fact.
  */
-export const HEADER_SESSIONBAR_USAGE =
-	mergeStylexClassName("[&_span]:text-dim [&_svg]:size-2.5", sx.minH0, sx.gap1, sx.p0, typography.meta);
+export const HEADER_SESSIONBAR_USAGE = utilityClassName(
+  "min-h-0 gap-1 p-0 text-meta [&_span]:text-dim [&_svg]:size-2.5",
+);
 
 /**
  * The trailing slot. On the root page it carries Search and the portaled
@@ -980,8 +415,9 @@ export const HEADER_SESSIONBAR_USAGE =
  * Tailwind's OUTPUT order rather than the order they are written, so a `gap-0`
  * appended after this string silently loses to a `gap-2.5` inside it.
  */
-const HEADER_ACTIONS_BASE =
-	mergeStylexClassName("app-header-actions", sx.phoneFlex, sx.phoneMinW0, sx.phoneItemsCenter);
+const HEADER_ACTIONS_BASE = utilityClassName(
+  "app-header-actions phone:flex phone:min-w-0 phone:items-center",
+);
 
 /**
  * On the root page the two glyphs in this slot — Filter and Search — are one
@@ -1005,9 +441,13 @@ const HEADER_ACTIONS_BASE =
  * loose spacing.
  */
 export const APP_HEADER_ACTIONS =
-	[HEADER_ACTIONS_BASE, mergeStylexClassName("", sx.phoneMlAuto, sx.phoneGap0, sx.phoneOverflowHidden)].filter(Boolean).join(" ") +
-	" " + [mergeStylexClassName("", sx.phoneRoundedFull, sx.phoneBorder, sx.phoneBorderColorVarMobileHeaderControlBorder), MOBILE_CONTROL_GLASS].filter(Boolean).join(" ") +
-	" " + mergeStylexClassName("", sx.phoneShadowVarMobileHeaderControlShadow);
+  utilityClassName(
+    `${HEADER_ACTIONS_BASE} phone:ml-auto phone:gap-0 phone:overflow-hidden `,
+  ) +
+  utilityClassName(
+    `phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} `,
+  ) +
+  "phone:shadow-[var(--mobile-header-control-shadow)]";
 
 /**
  * On a pushed page the title pill already carries `mr-auto` to shove this
@@ -1015,8 +455,9 @@ export const APP_HEADER_ACTIONS =
  * long title, so the pill butts straight against the actions — a fixed gap, and
  * no shrinking, keeps air between them.
  */
-export const APP_HEADER_ACTIONS_DETAIL =
-	[HEADER_ACTIONS_BASE, mergeStylexClassName("", sx.phoneMl25, sx.phoneFlexNone, sx.phoneGap25)].filter(Boolean).join(" ");
+export const APP_HEADER_ACTIONS_DETAIL = utilityClassName(
+  `${HEADER_ACTIONS_BASE} phone:ml-2.5 phone:flex-none phone:gap-2.5`,
+);
 
 /**
  * A segment of the grouped bar control (see `APP_HEADER_ACTIONS`): 40pt tall
@@ -1031,13 +472,19 @@ export const APP_HEADER_ACTIONS_DETAIL =
  * rather than as the tallest thing on the screen.
  */
 const MOBILE_BAR_SEGMENT =
-	mergeStylexClassName("", sx.phoneRelative, sx.phoneInlineFlex, sx.phoneH10, sx.phoneW13, sx.phoneShrink0) + " " +
-	mergeStylexClassName("", sx.phoneItemsCenter, sx.phoneJustifyCenter, sx.phoneRoundedNone) + " " +
-	mergeStylexClassName("", sx.phoneBorderNone, sx.phoneBgTransparent, sx.phoneP0, sx.phoneShadowNone) + " " +
-	mergeStylexClassName("", sx.phoneCursorPointer, sx.phoneTouchManipulation) + " " +
-	mergeStylexClassName("", sx.phoneWebkitTapHighlightColorTransparent) + " " +
-	mergeStylexClassName("", sx.phoneActiveOpacity35, sx.phoneActiveDuration0) + " " +
-	"phone:[&_svg]:size-[23px] phone:[&_svg]:[stroke-width:2]";
+  utilityClassName(
+    "phone:relative phone:inline-flex phone:h-10 phone:w-13 phone:shrink-0 ",
+  ) +
+  utilityClassName(
+    "phone:items-center phone:justify-center phone:rounded-none ",
+  ) +
+  utilityClassName(
+    "phone:border-none phone:bg-transparent phone:p-0 phone:shadow-none ",
+  ) +
+  utilityClassName("phone:cursor-pointer phone:touch-manipulation ") +
+  utilityClassName("phone:[-webkit-tap-highlight-color:transparent] ") +
+  utilityClassName("phone:active:opacity-35 phone:active:duration-0 ") +
+  "phone:[&_svg]:size-[23px] phone:[&_svg]:[stroke-width:2]";
 
 /**
  * Search — the trailing half of the pair. No rule divides it from the filter:
@@ -1045,9 +492,11 @@ const MOBILE_BAR_SEGMENT =
  * grouped toolbar item. The air between them is the separation.
  */
 export const MOBILE_SEARCH_BTN =
-	[MOBILE_BAR_SEGMENT, mergeStylexClassName("", sx.phoneTextFg)].filter(Boolean).join(" ") +
-	" " + mergeStylexClassName("", sx.phoneTransitionPropertyOpacity, sx.phoneDurationVarDur) + " " +
-	mergeStylexClassName("", sx.phoneEaseVarEase);
+  utilityClassName(`${MOBILE_BAR_SEGMENT} phone:text-fg `) +
+  utilityClassName(
+    "phone:[transition-property:opacity] phone:duration-[var(--dur)] ",
+  ) +
+  utilityClassName("phone:ease-[var(--ease)]");
 
 /**
  * Filter, portaled out of the sidebar header into the same capsule. `-order-1`
@@ -1060,15 +509,17 @@ export const MOBILE_SEARCH_BTN =
  * build the class name.
  */
 const MOBILE_FILTER_BTN_BASE =
-	[MOBILE_BAR_SEGMENT, mergeStylexClassName("", sx.phoneOrder1)].filter(Boolean).join(" ") +
-	" " + "phone:[transition:opacity_var(--dur)_var(--ease),color_var(--dur-micro)_var(--ease)] ";
+  utilityClassName(`${MOBILE_BAR_SEGMENT} phone:-order-1 `) +
+  utilityClassName(
+    "phone:[transition:opacity_var(--dur)_var(--ease),color_var(--dur-micro)_var(--ease)] ",
+  );
 
 const MOBILE_FILTER_BTN = {
-	muted: [MOBILE_FILTER_BTN_BASE, mergeStylexClassName("", sx.phoneTextDim)].filter(Boolean).join(" "),
-	active: [MOBILE_FILTER_BTN_BASE, mergeStylexClassName("", sx.phoneTextFg)].filter(Boolean).join(" "),
+  muted: `${MOBILE_FILTER_BTN_BASE} phone:text-dim`,
+  active: `${MOBILE_FILTER_BTN_BASE} phone:text-fg`,
 } as const;
 
 /** Raised to the neutral foreground while the popover is open or filtered. */
 export function mobileFilterBtn(active: boolean): string {
-	return active ? MOBILE_FILTER_BTN.active : MOBILE_FILTER_BTN.muted;
+  return active ? MOBILE_FILTER_BTN.active : MOBILE_FILTER_BTN.muted;
 }

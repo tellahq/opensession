@@ -7,7 +7,7 @@ Status: draft. Requirements, not design. Written 2026-08-18.
 Open Session's install works, but it is an operator's install: a runtime, a
 source clone, four chained `curl | bash` installers, a ten-question terminal
 wizard, an out-of-band credential step, an opt-in service, and a public-URL
-problem the docs hand to Caddy. Someone who wants to *try it* on a laptop or
+problem the docs hand to Caddy. Someone who wants to _try it_ on a laptop or
 a cheap Linux box has to make a dozen decisions they do not yet have the
 context for, and then keep a server healthy they do not know how to operate.
 
@@ -19,14 +19,14 @@ without giving up the configurable install sophisticated teams run today.
 
 ## Two tiers, one codebase
 
-| | Simple mode (this doc) | Full install (today's docs) |
-|---|---|---|
-| Who | one person, one box, trying it | a team operating it |
-| Where | laptop, Mac mini, cheap VPS | EC2/VPS with a public hostname |
-| Bind | `127.0.0.1:3850` | Tailscale IP / behind Caddy |
-| Exposure | one outbound tunnel for webhooks | reverse proxy + DNS + TLS |
-| Config | all defaults; browser first-run | wizard / `config.json` / env |
-| Ops | self-maintaining, alarms only | operator + runbooks |
+|          | Simple mode (this doc)           | Full install (today's docs)    |
+| -------- | -------------------------------- | ------------------------------ |
+| Who      | one person, one box, trying it   | a team operating it            |
+| Where    | laptop, Mac mini, cheap VPS      | EC2/VPS with a public hostname |
+| Bind     | `127.0.0.1:3850`                 | Tailscale IP / behind Caddy    |
+| Exposure | one outbound tunnel for webhooks | reverse proxy + DNS + TLS      |
+| Config   | all defaults; browser first-run  | wizard / `config.json` / env   |
+| Ops      | self-maintaining, alarms only    | operator + runbooks            |
 
 Simple mode is the default outcome of `curl … | bash`. Everything today's
 installer and wizard can do stays reachable (`--advanced`, `onboard --force`,
@@ -55,7 +55,7 @@ On a fresh macOS or Ubuntu box with only `curl` and `git`:
 
 - **R1.1** Rootless by default: everything under `~/.opensession` (Bun,
   source, deps, engine binaries, data). No `sudo` unless the user opts into
-  a system service or Tailscale on Linux; both are offered *after* the first
+  a system service or Tailscale on Linux; both are offered _after_ the first
   turn, not before.
 - **R1.2** Trim the critical path. The `claude` CLI is needed for an Anthropic
   turn (Pi is bundled into the binary); `codex` and Tailscale are not. Install
@@ -91,7 +91,7 @@ On a fresh macOS or Ubuntu box with only `curl` and `git`:
   with `install.sh --channel`, which implies the source path. Release installs
   currently use `--artifact` for an explicit tarball; release tag/channel
   selection is not implemented. On a release install, `opensession update
-  --channel` currently expects a complete artefact URL. With no channel it
+--channel` currently expects a complete artefact URL. With no channel it
   fetches the latest artefact for the OS/arch, unpacks it beside the current
   release, swaps the `src` symlink atomically, and restarts, keeping the old
   release for rollback. Keep `--uninstall`; it preserves any session worktree
@@ -151,7 +151,7 @@ On a fresh macOS or Ubuntu box with only `curl` and `git`:
   `server.log`/`server.err.log` there and systemd logs to the journal only;
   `logs`/`status` already handle both.
 - **R3.3** Auto-update is **on** in simple mode: a daily `opensession
-  update` through the existing health-gated path, with the previous checkout
+update` through the existing health-gated path, with the previous checkout
   kept for rollback. Off by default in full install (operators own their
   deploys). One toggle in Settings.
 
@@ -167,10 +167,10 @@ and workload identity.
   1. **Cloudflare Tunnel**: a named tunnel with a CNAME to
      `<tunnel-id>.cfargotunnel.com`, without inbound ports.
   2. **Custom domain**: A/AAAA records plus a managed Caddy site.
-  Only `:3860` is exposed. The private app on `:3850` never is: the gateway
-  dispatches exact registered routes and returns 404 for everything else.
+     Only `:3860` is exposed. The private app on `:3850` never is: the gateway
+     dispatches exact registered routes and returns 404 for everything else.
 - **R4.2 Integration setup screens show the URLs.** Enabling Slack/GitHub/
-  Linear/Plain/Stripe in the UI shows *this install's* event URL(s) and the
+  Linear/Plain/Stripe in the UI shows _this install's_ event URL(s) and the
   secret fields, and verifies the first inbound event, instead of linking to
   docs. Slack's URL verification requires the server to be up; the screen
   says so.
@@ -183,9 +183,9 @@ and workload identity.
     subprocess, or API polling of PR/issue comments; the existing
     `github-pr-review` recipe should work either way.
   - **Stripe**: `stripe listen --forward-to` for try-out.
-  Linear and Plain are webhook-only and stay on R4.1.
-- **R4.4** Precedence is explicit and visible: an integration is *configured*
-  (creds present), *reachable* (tunnel or socket up), and *verified* (an
+    Linear and Plain are webhook-only and stay on R4.1.
+- **R4.4** Precedence is explicit and visible: an integration is _configured_
+  (creds present), _reachable_ (tunnel or socket up), and _verified_ (an
   event arrived). `doctor` and the UI show all three.
 
 ## R5. No maintenance toil
@@ -209,7 +209,7 @@ missing pieces and surfaces them.
   (default: whichever is smaller of 20 GB or 40 % of the free space at
   install) and enforces it in layers: worktree parking → archived-session
   sweep → engine DB compaction → build-output eviction (`target/`, `dist`,
-  `.next`, `build`, `node_modules` in *parked* worktrees only) → refuse new
+  `.next`, `build`, `node_modules` in _parked_ worktrees only) → refuse new
   sessions with a clear message when still over. Never discard dirty or
   unpushed work. The UI shows the budget as a bar with
   "what is using it" and a "reclaim now" button.
@@ -217,7 +217,7 @@ missing pieces and surfaces them.
   platforms: transient systemd scopes on Linux (already exists for detached
   engines and previews; extend to every run), and an equivalent on macOS
   (process-group `ulimit`s + a wall-clock kill, since launchd has no
-  cgroups). A run that hits a cap is *stopped, not killed silently*: the
+  cgroups). A run that hits a cap is _stopped, not killed silently_: the
   session shows why, and offers "retry with a higher limit".
 - **R5.3 Zombie and leak hygiene.** Sweep orphaned engine processes,
   MCP proxies, preview servers, and tunnels whose session ended; sweep
@@ -258,7 +258,7 @@ cover detached user scopes. Full detail is in
 [`docs/setup/integrations-misc.md`](../docs/setup/integrations-misc.md).
 
 - Bind stays loopback; sharing with a teammate is a deliberate `opensession
-  bind` / Tailscale step with the trust-model warning (exists).
+bind` / Tailscale step with the trust-model warning (exists).
 - Only the isolated public-ingress listener on `:3860` may be exposed. It
   serves an explicit allowlist of webhook and OAuth routes, authenticated
   sandbox and RPC WebSockets, workload identity, an unsigned health endpoint,

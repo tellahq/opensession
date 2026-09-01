@@ -6,24 +6,24 @@ type CommandResultRecord = Record<string, unknown>;
  * Other command results keep their existing wire shape.
  */
 export function replayedSessionCreatedResult(
-	id: string,
-	workspaceId?: string | null,
+  id: string,
+  workspaceId?: string | null,
 ): Record<string, unknown> {
-	return {
-		type: "session_created",
-		id,
-		...(workspaceId ? { workspaceId } : {}),
-		replayed: true,
-	};
+  return {
+    type: "session_created",
+    id,
+    ...(workspaceId ? { workspaceId } : {}),
+    replayed: true,
+  };
 }
 
 export function markReplayedCommandResult(result: unknown): unknown {
-	if (
-		!result ||
-		typeof result !== "object" ||
-		Array.isArray(result) ||
-		(result as CommandResultRecord).type !== "session_created"
-	)
-		return result;
-	return { ...(result as CommandResultRecord), replayed: true };
+  if (
+    !result ||
+    typeof result !== "object" ||
+    Array.isArray(result) ||
+    (result as CommandResultRecord).type !== "session_created"
+  )
+    return result;
+  return { ...(result as CommandResultRecord), replayed: true };
 }

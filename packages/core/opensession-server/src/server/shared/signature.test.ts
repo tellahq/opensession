@@ -40,12 +40,16 @@ describe("verifySlackSignature", () => {
   it("rejects an expired timestamp (outside the 5-minute window)", () => {
     const oldTs = (Math.floor(Date.now() / 1000) - 600).toString();
     // Even a correctly-computed signature is rejected once the window passes.
-    expect(verifySlackSignature(BODY, oldTs, sign(BODY, oldTs), SECRET)).toBe(false);
+    expect(verifySlackSignature(BODY, oldTs, sign(BODY, oldTs), SECRET)).toBe(
+      false,
+    );
   });
 
   it("rejects a future timestamp outside the window", () => {
     const futureTs = (Math.floor(Date.now() / 1000) + 600).toString();
-    expect(verifySlackSignature(BODY, futureTs, sign(BODY, futureTs), SECRET)).toBe(false);
+    expect(
+      verifySlackSignature(BODY, futureTs, sign(BODY, futureTs), SECRET),
+    ).toBe(false);
   });
 
   it("rejects malformed / empty / wrong-length signatures without throwing", () => {
@@ -53,17 +57,23 @@ describe("verifySlackSignature", () => {
     expect(verifySlackSignature(BODY, ts, "", SECRET)).toBe(false);
     expect(verifySlackSignature(BODY, ts, "v0=abc", SECRET)).toBe(false);
     expect(verifySlackSignature(BODY, ts, "garbage", SECRET)).toBe(false);
-    expect(verifySlackSignature(BODY, ts, sign(BODY, ts) + "00", SECRET)).toBe(false);
+    expect(verifySlackSignature(BODY, ts, sign(BODY, ts) + "00", SECRET)).toBe(
+      false,
+    );
   });
 
   it("rejects a non-numeric timestamp", () => {
     const timestamp = "not-a-timestamp";
-    expect(verifySlackSignature(BODY, timestamp, sign(BODY, timestamp), SECRET)).toBe(false);
+    expect(
+      verifySlackSignature(BODY, timestamp, sign(BODY, timestamp), SECRET),
+    ).toBe(false);
   });
 
   it("rejects a timestamp with trailing non-numeric content", () => {
     const timestamp = `${freshTs()}seconds`;
-    expect(verifySlackSignature(BODY, timestamp, sign(BODY, timestamp), SECRET)).toBe(false);
+    expect(
+      verifySlackSignature(BODY, timestamp, sign(BODY, timestamp), SECRET),
+    ).toBe(false);
   });
 
   it("rejects signatures made with an empty secret", () => {
@@ -73,7 +83,8 @@ describe("verifySlackSignature", () => {
 });
 
 describe("verifyGitHubSignature", () => {
-  const sign = (body: string, secret = SECRET) => "sha256=" + hmacHex(secret, body);
+  const sign = (body: string, secret = SECRET) =>
+    "sha256=" + hmacHex(secret, body);
 
   it("accepts a valid signature", () => {
     expect(verifyGitHubSignature(BODY, sign(BODY), SECRET)).toBe(true);
@@ -91,7 +102,9 @@ describe("verifyGitHubSignature", () => {
     expect(verifyGitHubSignature(BODY, "", SECRET)).toBe(false);
     expect(verifyGitHubSignature(BODY, "sha256=", SECRET)).toBe(false);
     expect(verifyGitHubSignature(BODY, "sha256=deadbeef", SECRET)).toBe(false);
-    expect(verifyGitHubSignature(BODY, sign(BODY).slice(0, -2), SECRET)).toBe(false);
+    expect(verifyGitHubSignature(BODY, sign(BODY).slice(0, -2), SECRET)).toBe(
+      false,
+    );
   });
 
   it("rejects signatures made with an empty secret", () => {
@@ -143,7 +156,9 @@ describe("verifyPlainSignature", () => {
   it("rejects malformed / empty / wrong-length signatures without throwing", () => {
     expect(verifyPlainSignature(BODY, "", SECRET)).toBe(false);
     expect(verifyPlainSignature(BODY, "deadbeef", SECRET)).toBe(false);
-    expect(verifyPlainSignature(BODY, sign(BODY).slice(0, -2), SECRET)).toBe(false);
+    expect(verifyPlainSignature(BODY, sign(BODY).slice(0, -2), SECRET)).toBe(
+      false,
+    );
   });
 
   it("rejects when the secret is empty (fail closed)", () => {
@@ -177,12 +192,16 @@ describe("verifyStripeSignature", () => {
 
   it("rejects a tampered body", () => {
     const ts = freshTs();
-    expect(verifyStripeSignature(BODY + "x", header(BODY, ts), SECRET)).toBe(false);
+    expect(verifyStripeSignature(BODY + "x", header(BODY, ts), SECRET)).toBe(
+      false,
+    );
   });
 
   it("rejects an expired timestamp (outside the 5-minute tolerance)", () => {
     const oldTs = freshTs() - 600;
-    expect(verifyStripeSignature(BODY, header(BODY, oldTs), SECRET)).toBe(false);
+    expect(verifyStripeSignature(BODY, header(BODY, oldTs), SECRET)).toBe(
+      false,
+    );
   });
 
   it("rejects a non-numeric timestamp", () => {
@@ -196,13 +215,19 @@ describe("verifyStripeSignature", () => {
     expect(verifyStripeSignature(BODY, "", SECRET)).toBe(false);
     expect(verifyStripeSignature(BODY, "garbage", SECRET)).toBe(false);
     expect(verifyStripeSignature(BODY, `t=${ts}`, SECRET)).toBe(false); // no v1
-    expect(verifyStripeSignature(BODY, `v1=${sign(BODY, ts)}`, SECRET)).toBe(false); // no t
-    expect(verifyStripeSignature(BODY, `t=${ts},v1=deadbeef`, SECRET)).toBe(false); // wrong length
+    expect(verifyStripeSignature(BODY, `v1=${sign(BODY, ts)}`, SECRET)).toBe(
+      false,
+    ); // no t
+    expect(verifyStripeSignature(BODY, `t=${ts},v1=deadbeef`, SECRET)).toBe(
+      false,
+    ); // wrong length
     expect(verifyStripeSignature(BODY, `t=${ts},v1=`, SECRET)).toBe(false);
   });
 
   it("rejects when the secret is empty (fail closed)", () => {
     const ts = freshTs();
-    expect(verifyStripeSignature(BODY, `t=${ts},v1=${sign(BODY, ts, "")}`, "")).toBe(false);
+    expect(
+      verifyStripeSignature(BODY, `t=${ts},v1=${sign(BODY, ts, "")}`, ""),
+    ).toBe(false);
   });
 });

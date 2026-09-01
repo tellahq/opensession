@@ -10,7 +10,7 @@ language instead of introducing a new local style for each feature.
   empty states. Do not use title case or decorative ALL CAPS. Proper nouns and
   established acronyms keep their normal capitalization.
 - Keep copy short, direct, and specific. Buttons describe the action (`Create
-  session`, `Try again`); headings name the place or object (`Model providers`).
+session`, `Try again`); headings name the place or object (`Model providers`).
 - Reuse the product's existing terms. Do not casually rename projects, sessions,
   workspaces, automations, runs, reviews, or other established concepts.
 - Prefer plain language over implementation details. Errors should say what
@@ -225,6 +225,7 @@ layout from regressing once it exists.
   `hooks/useSessionScroll.ts`. Leave their `useMemo`/`useCallback` in place.
   The same care applies anywhere a callback ref sets state: an unstable
   identity detaches and reattaches the ref every render.
+
 - Keep component files component-only: put non-component helpers/constants in
   `lib/` or `ui/` modules, because mixed component+helper exports disqualify a
   module from React Fast Refresh and downgrade every edit to a full page

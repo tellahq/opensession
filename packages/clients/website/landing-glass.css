@@ -2,180 +2,176 @@
    the root canvas. The fixed layer is an element rather than
    `background-attachment: fixed`, which iOS Safari does not reliably paint. */
 :root {
-	--art-top-left: oklch(0.765 0.08 224.853);
-	--art-top: oklch(0.843 0.038 207.044);
-	--art-center: oklch(0.908 0.032 151.137);
-	--art-right: oklch(0.807 0.084 215.325);
-	--art-lower-left: oklch(0.721 0.096 251.098);
-	--art-lower: oklch(0.827 0.076 211.808);
-	--art-base: oklch(0.875 0.031 184.083);
-	--page-art:
-		radial-gradient(
-			ellipse 48% 42% at -4% -8%,
-			var(--art-top-left),
-			transparent 76%
-		),
-		radial-gradient(
-			ellipse 62% 48% at 78% 0%,
-			var(--art-top),
-			transparent 74%
-		),
-		radial-gradient(
-			ellipse 70% 58% at 34% 48%,
-			var(--art-center),
-			transparent 72%
-		),
-		radial-gradient(
-			ellipse 46% 58% at 103% 68%,
-			var(--art-right),
-			transparent 76%
-		),
-		radial-gradient(
-			ellipse 42% 34% at -2% 104%,
-			var(--art-lower-left),
-			transparent 74%
-		),
-		radial-gradient(
-			ellipse 72% 38% at 54% 108%,
-			var(--art-lower),
-			transparent 76%
-		),
-		linear-gradient(
-			to bottom,
-			var(--art-top),
-			var(--art-base) 58%,
-			var(--art-right)
-		);
-	--card-glass: oklch(1 0 0 / 0.8);
-	--glass-line: oklch(0 0 0 / 0.07);
-	/* Marketing dialogs use a slightly whiter version of the section material
+  --art-top-left: oklch(0.765 0.08 224.853);
+  --art-top: oklch(0.843 0.038 207.044);
+  --art-center: oklch(0.908 0.032 151.137);
+  --art-right: oklch(0.807 0.084 215.325);
+  --art-lower-left: oklch(0.721 0.096 251.098);
+  --art-lower: oklch(0.827 0.076 211.808);
+  --art-base: oklch(0.875 0.031 184.083);
+  --page-art:
+    radial-gradient(
+      ellipse 48% 42% at -4% -8%,
+      var(--art-top-left),
+      transparent 76%
+    ),
+    radial-gradient(ellipse 62% 48% at 78% 0%, var(--art-top), transparent 74%),
+    radial-gradient(
+      ellipse 70% 58% at 34% 48%,
+      var(--art-center),
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 46% 58% at 103% 68%,
+      var(--art-right),
+      transparent 76%
+    ),
+    radial-gradient(
+      ellipse 42% 34% at -2% 104%,
+      var(--art-lower-left),
+      transparent 74%
+    ),
+    radial-gradient(
+      ellipse 72% 38% at 54% 108%,
+      var(--art-lower),
+      transparent 76%
+    ),
+    linear-gradient(
+      to bottom,
+      var(--art-top),
+      var(--art-base) 58%,
+      var(--art-right)
+    );
+  --card-glass: oklch(1 0 0 / 0.8);
+  --glass-line: oklch(0 0 0 / 0.07);
+  /* Marketing dialogs use a slightly whiter version of the section material
 	   through WebsiteModal, while still letting the artwork show through. */
-	--modal-surface: oklch(1 0 0 / 0.78);
-	--modal-filter: blur(14px) saturate(1.08);
-	--modal-ring: var(--glass-line);
-	--button-glass: oklch(1 0 0 / 0.52);
-	--button-glass-hover: oklch(1 0 0 / 0.68);
-	--primary-pop: oklch(0.965 0.179 112.029);
-	--primary-pop-deep: oklch(0.939 0.182 111.784);
-	--primary-pop-ink: oklch(0.192 0.041 105.17);
-	/* The gradient Safari paints wherever the artwork itself cannot reach (the
+  --modal-surface: oklch(1 0 0 / 0.78);
+  --modal-filter: blur(14px) saturate(1.08);
+  --modal-ring: var(--glass-line);
+  --button-glass: oklch(1 0 0 / 0.52);
+  --button-glass-hover: oklch(1 0 0 / 0.68);
+  --primary-pop: oklch(0.965 0.179 112.029);
+  --primary-pop-deep: oklch(0.939 0.182 111.784);
+  --primary-pop-ink: oklch(0.192 0.041 105.17);
+  /* The gradient Safari paints wherever the artwork itself cannot reach (the
 	   safe-area bands and rubber-band overscroll). Its stops are sampled from the
 	   artwork's top and bottom, so the lower edge continues into stronger blue. */
-	--page-under-top: oklch(0.85 0.034 198.854);
-	--page-under-bottom: oklch(0.792 0.077 225.688);
+  --page-under-top: oklch(0.85 0.034 198.854);
+  --page-under-bottom: oklch(0.792 0.077 225.688);
 }
 
 /* Safari paints exposed safe-area and rubber-band regions from the root
    canvas, not from a negative body layer. Put the same artwork on that lowest
    canvas so those regions cannot fall back to the body's white background. */
 html {
-	min-height: 100%;
-	background-color: var(--page-under-bottom);
-	background-image:
-		var(--page-art),
-		linear-gradient(to bottom, var(--page-under-top), var(--page-under-bottom));
-	background-position: center;
-	background-repeat: no-repeat;
-	background-size: cover;
+  min-height: 100%;
+  background-color: var(--page-under-bottom);
+  background-image:
+    var(--page-art),
+    linear-gradient(to bottom, var(--page-under-top), var(--page-under-bottom));
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
 }
 
 body {
-	position: relative;
-	isolation: isolate;
-	min-height: 100vh;
-	background-color: transparent;
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  background-color: transparent;
 }
 
 body::before {
-	position: fixed;
-	z-index: -1;
-	inset: 0;
-	background-image: var(--page-art);
-	background-position: center;
-	background-repeat: no-repeat;
-	background-size: cover;
-	content: "";
-	pointer-events: none;
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image: var(--page-art);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  content: "";
+  pointer-events: none;
 }
 
 /* `viewport-fit=cover` lets the artwork reach behind Safari's top and bottom
    chrome. Keep the page content in the readable safe area while the fixed
    artwork continues through it. */
 @media (max-width: 1000px) {
-	.rail {
-		padding-top: calc(32px + env(safe-area-inset-top));
-	}
+  .rail {
+    padding-top: calc(32px + env(safe-area-inset-top));
+  }
 
-	.feed {
-		padding-bottom: calc(44px + env(safe-area-inset-bottom));
-	}
+  .feed {
+    padding-bottom: calc(44px + env(safe-area-inset-bottom));
+  }
 }
 
 .card {
-	border-color: var(--glass-line);
-	background: var(--card-glass);
-	-webkit-backdrop-filter: blur(14px) saturate(1.08);
-	backdrop-filter: blur(14px) saturate(1.08);
+  border-color: var(--glass-line);
+  background: var(--card-glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  backdrop-filter: blur(14px) saturate(1.08);
 }
 
 /* Keep the product shot on its own supplied scene rather than borrowing the
    page artwork through the transparent stage. */
 .stage {
-	background-image: url("./demo-background.webp");
-	background-position: center;
-	background-size: cover;
+  background-image: url("./demo-background.webp");
+  background-position: center;
+  background-size: cover;
 }
 
 .button-primary {
-	background-color: var(--primary-pop);
-	background-image: linear-gradient(
-		180deg,
-		var(--primary-pop) 0%,
-		var(--primary-pop-deep) 100%
-	);
-	color: var(--primary-pop-ink);
+  background-color: var(--primary-pop);
+  background-image: linear-gradient(
+    180deg,
+    var(--primary-pop) 0%,
+    var(--primary-pop-deep) 100%
+  );
+  color: var(--primary-pop-ink);
 }
 
 .button-secondary {
-	border-color: var(--glass-line);
-	background: var(--button-glass);
-	color: var(--ink);
-	-webkit-backdrop-filter: blur(10px) saturate(1.08);
-	backdrop-filter: blur(10px) saturate(1.08);
+  border-color: var(--glass-line);
+  background: var(--button-glass);
+  color: var(--ink);
+  -webkit-backdrop-filter: blur(10px) saturate(1.08);
+  backdrop-filter: blur(10px) saturate(1.08);
 }
 
 .button-secondary:hover {
-	background: var(--button-glass-hover);
+  background: var(--button-glass-hover);
 }
 
 /* Give light-mode guides a little more breathing room on screens where that
    space is available. The reading modal keeps its full-bleed article layout. */
 @media (prefers-color-scheme: light) and (min-width: 561px) {
-	.pwa-guide .website-modal-panel {
-		padding: 34px;
-	}
+  .pwa-guide .website-modal-panel {
+    padding: 34px;
+  }
 
-	.setup-guide:has(.download-cards) .website-modal-panel,
-	.setup-guide:has(.download-steps) .website-modal-panel {
-		padding: 40px;
-	}
+  .setup-guide:has(.download-cards) .website-modal-panel,
+  .setup-guide:has(.download-steps) .website-modal-panel {
+    padding: 40px;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
-	:root {
-		--art-top-left: oklch(0.29 0.064 237.816);
-		--art-top: oklch(0.35 0.037 223.657);
-		--art-center: oklch(0.411 0.029 169.48);
-		--art-right: oklch(0.335 0.064 226.227);
-		--art-lower-left: oklch(0.255 0.095 258.015);
-		--art-lower: oklch(0.339 0.065 231.427);
-		--art-base: oklch(0.379 0.029 192.613);
-		--page-under-top: oklch(0.358 0.033 217.347);
-		--page-under-bottom: oklch(0.316 0.068 237.979);
-		--card-glass: oklch(0.245 0.025 190 / 0.7);
-		--modal-surface: oklch(0.22 0.025 190 / 0.8);
-		--glass-line: oklch(1 0 0 / 0.08);
-		--button-glass: oklch(1 0 0 / 0.12);
-		--button-glass-hover: oklch(1 0 0 / 0.18);
-	}
+  :root {
+    --art-top-left: oklch(0.29 0.064 237.816);
+    --art-top: oklch(0.35 0.037 223.657);
+    --art-center: oklch(0.411 0.029 169.48);
+    --art-right: oklch(0.335 0.064 226.227);
+    --art-lower-left: oklch(0.255 0.095 258.015);
+    --art-lower: oklch(0.339 0.065 231.427);
+    --art-base: oklch(0.379 0.029 192.613);
+    --page-under-top: oklch(0.358 0.033 217.347);
+    --page-under-bottom: oklch(0.316 0.068 237.979);
+    --card-glass: oklch(0.245 0.025 190 / 0.7);
+    --modal-surface: oklch(0.22 0.025 190 / 0.8);
+    --glass-line: oklch(1 0 0 / 0.08);
+    --button-glass: oklch(1 0 0 / 0.12);
+    --button-glass-hover: oklch(1 0 0 / 0.18);
+  }
 }

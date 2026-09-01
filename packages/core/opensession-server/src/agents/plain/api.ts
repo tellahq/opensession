@@ -43,7 +43,11 @@ export async function uploadPlainAttachment(
   for (const field of prepared.data.uploadFormData) {
     form.append(field.key, field.value);
   }
-  form.append("file", new Blob([Uint8Array.from(bytes).buffer], { type: mimeType }), fileName);
+  form.append(
+    "file",
+    new Blob([Uint8Array.from(bytes).buffer], { type: mimeType }),
+    fileName,
+  );
   const uploaded = await fetchWithTimeout(
     prepared.data.uploadFormUrl,
     { method: "POST", body: form },
@@ -222,7 +226,9 @@ export async function getThreadWithMessages(threadId: string): Promise<any> {
   });
 
   if (result.error) {
-    throw new Error(`Failed to get thread with messages: ${result.error.message}`);
+    throw new Error(
+      `Failed to get thread with messages: ${result.error.message}`,
+    );
   }
 
   return (result.data as any).thread;
@@ -345,7 +351,12 @@ export interface NormalizedPlainThread {
   /** Workspace user (or bot) the thread is assigned to, if anyone. */
   assignee: { id: string; name: string; isBot: boolean } | null;
   /** Labels on the thread. `id` removes it, `labelTypeId` identifies the kind. */
-  labels: { id: string; labelTypeId: string; name: string; icon: string | null }[];
+  labels: {
+    id: string;
+    labelTypeId: string;
+    name: string;
+    icon: string | null;
+  }[];
   /**
    * When the customer's still-unanswered message landed, else null. Straight
    * from Plain's inbound/outbound tracking, which ignores autoresponders — so
@@ -411,7 +422,9 @@ export function normalizePlainThread(thread: any): NormalizedPlainThread {
       subject = entry.title || undefined;
       text = customEntryText(entry);
       actorName =
-        thread?.customer?.fullName || thread?.customer?.email?.email || "Customer";
+        thread?.customer?.fullName ||
+        thread?.customer?.email?.email ||
+        "Customer";
       actorType = "customer";
     } else {
       continue; // status changes, assignments, etc. — not part of the conversation
@@ -511,7 +524,9 @@ export interface SupportThreadSummary {
  * All TODO threads, newest status change first — the same ordering as Plain's
  * own Todo inbox. Feeds the sidebar's Support section.
  */
-export async function listTodoThreads(limit: number = 50): Promise<SupportThreadSummary[]> {
+export async function listTodoThreads(
+  limit: number = 50,
+): Promise<SupportThreadSummary[]> {
   const query = `
     query TodoThreads($filters: ThreadsFilter, $sortBy: ThreadsSort, $first: Int!) {
       threads(filters: $filters, sortBy: $sortBy, first: $first) {
@@ -687,18 +702,18 @@ export async function sendCustomerReply(
       });
       if (!result.error) {
         console.log(
-          `[plain] Sent reply in thread ${threadId} as the connected user`
+          `[plain] Sent reply in thread ${threadId} as the connected user`,
         );
         return { ok: true, sentAs: "user" };
       }
       console.warn(
         "[plain] user-token reply failed, falling back to system key:",
-        result.error
+        result.error,
       );
     } catch (e) {
       console.warn(
         "[plain] user-token reply failed, falling back to system key:",
-        e
+        e,
       );
     }
   }
@@ -748,9 +763,7 @@ export async function setThreadStatus(
             ),
           });
   if (result.error) {
-    throw new Error(
-      `Failed to mark thread ${status}: ${result.error.message}`,
-    );
+    throw new Error(`Failed to mark thread ${status}: ${result.error.message}`);
   }
 }
 
@@ -907,11 +920,7 @@ export async function listWorkspaceUsers(): Promise<PlainWorkspaceUser[]> {
   return edges
     .map((e: any) => e?.node)
     .filter(
-      (n: any) =>
-        n?.id &&
-        !n.isDeleted &&
-        n.fullName &&
-        !/@/.test(n.fullName), // alias accounts wear their email as a name
+      (n: any) => n?.id && !n.isDeleted && n.fullName && !/@/.test(n.fullName), // alias accounts wear their email as a name
     )
     .map((n: any) => ({
       id: n.id,
@@ -967,7 +976,10 @@ export async function listLabelTypes(): Promise<PlainLabelType[]> {
 }
 
 /** Format thread context for Claude */
-export function formatThreadContext(thread: any, includeAllMessages: boolean = false): string {
+export function formatThreadContext(
+  thread: any,
+  includeAllMessages: boolean = false,
+): string {
   if (!thread) {
     return "Thread information not available.";
   }
@@ -1000,7 +1012,8 @@ export function formatThreadContext(thread: any, includeAllMessages: boolean = f
     let actorType = "unknown";
 
     if (actor?.__typename === "CustomerActor") {
-      actorName = actor.customer?.fullName || actor.customer?.email?.email || "Customer";
+      actorName =
+        actor.customer?.fullName || actor.customer?.email?.email || "Customer";
       actorType = "customer";
     } else if (actor?.__typename === "UserActor") {
       actorName = actor.user?.fullName || actor.user?.email || "Support";
@@ -1016,7 +1029,9 @@ export function formatThreadContext(thread: any, includeAllMessages: boolean = f
     // drops the thread's opening message).
     if (entry?.__typename === "CustomEntry") {
       actorName =
-        thread.customer?.fullName || thread.customer?.email?.email || "Customer";
+        thread.customer?.fullName ||
+        thread.customer?.email?.email ||
+        "Customer";
       actorType = "customer";
     }
 
@@ -1056,16 +1071,22 @@ async function linearAuthHeader(): Promise<string | null> {
     if (token) return `Bearer ${token}`;
   }
   if (LINEAR_API_KEY) {
-    return LINEAR_API_KEY.startsWith("lin_api_") ? LINEAR_API_KEY : `Bearer ${LINEAR_API_KEY}`;
+    return LINEAR_API_KEY.startsWith("lin_api_")
+      ? LINEAR_API_KEY
+      : `Bearer ${LINEAR_API_KEY}`;
   }
   return null;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const teamIdCache = new Map<string, string>();
 
 /** Resolve a team key (e.g. "ENG") to its UUID — issueCreate only accepts UUIDs. */
-async function resolveLinearTeamId(auth: string, team: string): Promise<string | null> {
+async function resolveLinearTeamId(
+  auth: string,
+  team: string,
+): Promise<string | null> {
   if (UUID_RE.test(team)) return team;
   const cached = teamIdCache.get(team);
   if (cached) return cached;
@@ -1090,7 +1111,10 @@ async function resolveLinearTeamId(auth: string, team: string): Promise<string |
     teamIdCache.set(team, id);
     return id;
   }
-  console.error(`Linear team not found for key "${team}":`, data.errors || data);
+  console.error(
+    `Linear team not found for key "${team}":`,
+    data.errors || data,
+  );
   return null;
 }
 
@@ -1098,11 +1122,13 @@ async function resolveLinearTeamId(auth: string, team: string): Promise<string |
 export async function createLinearIssue(
   title: string,
   description: string,
-  teamId?: string
+  teamId?: string,
 ): Promise<{ id: string; identifier: string; url: string } | null> {
   const auth = await linearAuthHeader();
   if (!auth) {
-    console.error("No Linear credentials (OAuth token store empty and LINEAR_API_KEY unset)");
+    console.error(
+      "No Linear credentials (OAuth token store empty and LINEAR_API_KEY unset)",
+    );
     return null;
   }
 

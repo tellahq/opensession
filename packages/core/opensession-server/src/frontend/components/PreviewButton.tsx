@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useEffect, useRef, useState } from "react";
 import {
   fetchPreview,
@@ -9,9 +11,10 @@ import {
 import type { UnifiedSession } from "../lib/types";
 import { BASE_PATH } from "../lib/base";
 import { withPreviewPath } from "../lib/preview-url";
+import { errorMessage } from "../lib/error-message";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
-import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+import { cn } from "../ui/cn";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Popover } from "../ui/popover";
@@ -28,614 +31,344 @@ import { type as typography } from "../styles/typography.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	grow: {
-			flexGrow: "1"
-	},
-	fixed: {
-			position: "fixed"
-	},
-	inset0: {
-			inset: "0"
-	},
-	z300: {
-			zIndex: "300"
-	},
-	bgBlack60: {
-			backgroundColor: "color-mix(in srgb, var(--color-black) 60%, transparent)"
-	},
-	flex: {
-			display: "flex"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	p6: {
-			padding: "24px"
-	},
-	bgRaised: {
-			backgroundColor: "var(--bg-raised)"
-	},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	borderLine: {
-			borderColor: "var(--border)"
-	},
-	roundedPanel: {
-			borderRadius: "calc(var(--radius) * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	smoothShadowLg: {
-			boxShadow: "0 4px 12px -4px var(--smooth-shadow-color), 0 18px 48px -14px var(--smooth-shadow-color)"
-	},
-	p3: {
-			padding: "12px"
-	},
-	maxW90vw: {
-			maxWidth: "90vw"
-	},
-	maxH90vh: {
-			maxHeight: "90vh"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	gap25: {
-			gap: "10px"
-	},
-	textRed: {
-			color: "var(--red)"
-	},
-	px2: {
-			paddingInline: "8px"
-	},
-	py4: {
-			paddingBlock: "16px"
-	},
-	maxWFull: {
-			maxWidth: "100%"
-	},
-	maxH75vh: {
-			maxHeight: "75vh"
-	},
-	objectContain: {
-			objectFit: "contain"
-	},
-	roundedMd: {
-			borderRadius: "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	gap2: {
-			gap: "8px"
-	},
-	justifyEnd: {
-			justifyContent: "flex-end"
-	},
-	px14px: {
-			paddingInline: "14px"
-	},
-	py1: {
-			paddingBlock: "4px"
-	},
-	inlineFlex: {
-			display: "inline-flex"
-	},
-	minH26px: {
-			minHeight: "26px"
-	},
-	whitespaceNowrap: {
-			whiteSpace: "nowrap"
-	},
-	roundedXs: {
-			borderRadius: "calc(2px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgControl: {
-			backgroundColor: "var(--control-surface)"
-	},
-	px25: {
-			paddingInline: "10px"
-	},
-	textXs: {
-			fontSize: "var(--type-label)",
-			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	smoothShadowSm: {
-			boxShadow: "0 1px 3px -1px var(--smooth-shadow-color), 0 4px 10px -4px var(--smooth-shadow-color)"
-	},
-	transition: {
-			transitionProperty: "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to,opacity,box-shadow,transform,translate,scale,rotate,filter,-webkit-backdrop-filter,backdrop-filter,display,content-visibility,overlay,pointer-events",
-			transitionTimingFunction: "var(--tw-ease,var(--ease))",
-			transitionDuration: "var(--tw-duration,var(--dur-micro))"
-	},
-	minW240px: {
-			minWidth: "240px"
-	},
-	p25: {
-			padding: "10px"
-	},
-	mb2: {
-			marginBottom: "8px"
-	},
-	fontBold: {
-			fontWeight: "var(--font-weight-bold)"
-	},
-	tracking001em: {
-			letterSpacing: "-.01em"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	px0: {
-			paddingInline: "0"
-	},
-	listNone: {
-			listStyleType: "none"
-	},
-	gap5px: {
-			gap: "5px"
-	},
-	p0: {
-			padding: "0"
-	},
-	minH10: {
-			minHeight: "40px"
-	},
-	gap7px: {
-			gap: "7px"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	underline: {
-			textDecorationLine: "underline"
-	},
-	decorationTransparent: {
-			textDecorationColor: "transparent"
-	},
-	underlineOffset2: {
-			textUnderlineOffset: "2px"
-	},
-	transitionTextDecorationColor: {
-			transitionProperty: "text-decoration-color",
-			transitionTimingFunction: "var(--tw-ease,var(--ease))",
-			transitionDuration: "var(--tw-duration,var(--dur-micro))"
-	},
-	mt15: {
-			marginTop: "6px"
-	},
-	textCenter: {
-			textAlign: "center"
-	},
-	size5: {
-			width: "20px",
-			height: "20px"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	flex1: {
-			flex: "1"
-	},
-	truncate: {
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap",
-			overflow: "hidden"
-	},
-	relative: {
-			position: "relative"
-	},
-	w8: {
-			width: "32px"
-	},
-	roundedControl: {
-			borderRadius: "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	roundedLNone: {
-			borderTopLeftRadius: "0",
-			borderBottomLeftRadius: "0"
-	,
-		cornerShape: "var(--cs)"},
-	outlineNone: {
-			outlineStyle: "none"
-	},
-	transitionColors: {
-			transitionProperty: "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
-			transitionTimingFunction: "var(--tw-ease,var(--ease))",
-			transitionDuration: "var(--tw-duration,var(--dur-micro))"
-	},
-	pointerEventsNone: {
-			pointerEvents: "none"
-	},
-	absolute: {
-			position: "absolute"
-	},
-	left12: {
-			left: "50%"
-	},
-	top12: {
-			top: "50%"
-	},
-	size25px: {
-			width: "25px",
-			height: "25px"
-	},
-	TranslateX12: {
-			translate: "calc(calc(1 / 2 * 100%) * -1) 0"
-	},
-	TranslateY12: {
-			translate: "0 calc(calc(1 / 2 * 100%) * -1)"
-	},
-	roundedFull: {
-			borderRadius: "calc(infinity * 1px)"
-	,
-		cornerShape: "round"},
-	borderTransparent: {
-			borderColor: "transparent"
-	},
-	borderTCurrent: {
-			borderTopColor: "currentColor"
-	},
-	opacity90: {
-			opacity: ".9"
-	},
-	animatePreviewSpin07sLinearInfinite: {
-			animation: ".7s linear infinite preview-spin"
-	},
-	itemsStretch: {
-			alignItems: "stretch"
-	},
-	MlPx: {
-			marginLeft: "-1px"
-	},
-	opacity80: {
-			opacity: ".8"
-	},
-	inline: {
-			display: "inline"
-	},
-	hidden: {
-			display: "none"
-	},
-	textAccent: {
-			color: "var(--accent-ink)"
-	},
-
-	textGreen: {
-		"color": "var(--green)"
-	},
-	size7px: {
-		"width": "7px",
-		"height": "7px"
-	},
-	bgGreen: {
-		"backgroundColor": "var(--green)"
-	},
-	bgVarTextFaint: {
-		"backgroundColor": "var(--text-faint)"
-	},
-	shadowNone: {
-		"--tw-shadow": "0 0 transparent",
-		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
-	},
-	mlAuto: {
-		"marginLeft": "auto"
-	},
-	Ml3px: {
-		"marginLeft": "-3px"
-	},
-	pxPx: {
-		"paddingInline": "1px"
-	},
-	py3px: {
-		"paddingBlock": "3px"
-	},
-	hoverBgHover: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--hover)"
-			}
-		}
-	},
-	hoverTextGreen: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--green)"
-			}
-		}
-	},
-	hoverTextDim: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text-dim)"
-			}
-		}
-	},
-	textYellow: {
-		"color": "var(--yellow)"
-	},
-	hoverTextYellow: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--yellow)"
-			}
-		}
-	},
-	cursorNotAllowed: {
-		"cursor": "not-allowed"
-	},
-	opacity45: {
-		"opacity": ".45"
-	},
-	gap15: {
-		"gap": "6px"
-	},
-	roundedLCalc5pxVarRf: {
-		"borderTopLeftRadius": "calc(5px * var(--rf))",
-		"borderBottomLeftRadius": "calc(5px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	px11px: {
-		"paddingInline": "11px"
-	},
-	py5px: {
-		"paddingBlock": "5px"
-	},
-	noUnderline: {
-		"textDecorationLine": "none"
-	},
-	hoverRelative: {
-		"@media (hover: hover)": {
-			":hover": {
-				"position": "relative"
-			}
-		}
-	},
-	hoverZ1: {
-		"@media (hover: hover)": {
-			":hover": {
-				"zIndex": "1"
-			}
-		}
-	},
-	cursorPointer: {
-		"cursor": "pointer"
-	},
-	hoverTextRed: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--red)"
-			}
-		}
-	},
-	hoverBorderAccent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"borderColor": "var(--accent)"
-			}
-		}
-	},
-	hoverTextFg: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text)"
-			}
-		}
-	},
-	roundedRCalc5pxVarRf: {
-		"borderTopRightRadius": "calc(5px * var(--rf))",
-		"borderBottomRightRadius": "calc(5px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	z1: {
-		"zIndex": "1"
-	},
-
-	shadow0002pxColorMixInSrgbVarGreen18Transparent: {
-		"--tw-shadow": "0 0 0 2px var(--tw-shadow-color,var(--green))",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"--tw-shadow": "0 0 0 2px var(--tw-shadow-color,color-mix(in srgb,var(--green) 18%,transparent))"
-		},
-		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
-	},
-	hoverBorderColorMixInSrgbVarGreen50Transparent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"borderColor": "var(--green)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"borderColor": "color-mix(in srgb,var(--green) 50%,transparent)"
-				}
-			}
-		}
-	},
-	hoverBgColorMixInSrgbVarGreen12Transparent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--green)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"backgroundColor": "color-mix(in srgb,var(--green) 12%,transparent)"
-				}
-			}
-		}
-	},
-	hoverBorderColorMixInSrgbVarRed40Transparent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"borderColor": "var(--red)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"borderColor": "color-mix(in srgb,var(--red) 40%,transparent)"
-				}
-			}
-		}
-	},
-	hoverBgColorMixInSrgbVarRed10Transparent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--red)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"backgroundColor": "color-mix(in srgb,var(--red) 10%,transparent)"
-				}
-			}
-		}
-	},
-	textColorColorMixInSrgbVarGreen72VarTextDim: {
-		"color": "var(--green)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"color": "color-mix(in srgb,var(--green) 72%,var(--text-dim))"
-		}
-	},
-	borderColorMixInSrgbVarGreen50Transparent: {
-		"borderColor": "var(--green)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"borderColor": "color-mix(in srgb,var(--green) 50%,transparent)"
-		}
-	},
-	bgColorMixInSrgbVarGreen12Transparent: {
-		"backgroundColor": "var(--green)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"backgroundColor": "color-mix(in srgb,var(--green) 12%,transparent)"
-		}
-	},
-
-	hoverTextAccent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--accent-ink)"
-			}
-		}
-	},
-
-	size10px: {
-		"width": "10px",
-		"height": "10px"
-	},
-	borderLineStrong: {
-		"borderColor": "var(--border-strong)"
-	},
-	borderTAccent: {
-		"borderTopColor": "var(--accent)"
-	},
-	hoverBorderLineStrong: {
-		"@media (hover: hover)": {
-			":hover": {
-				"borderColor": "var(--border-strong)"
-			}
-		}
-	},
-	activeScale097: {
-		":active": {
-			"scale": ".97"
-		}
-	},
-	hoverDecorationCurrent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"textDecorationColor": "currentColor"
-			}
-		}
-	},
-	focusVisibleDecorationCurrent: {
-		":focusVisible": {
-			"textDecorationColor": "currentColor"
-		}
-	},
-	wFull: {
-		"width": "100%"
-	},
-	borderColorMixInSrgbVarRed40Transparent: {
-		"borderColor": "var(--red)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"borderColor": "color-mix(in srgb,var(--red) 40%,transparent)"
-		}
-	},
-	bgTransparent: {
-		"backgroundColor": "transparent"
-	},
-	disabledCursorDefault: {
-		":disabled": {
-			"cursor": "default"
-		}
-	},
-	disabledOpacity45: {
-		":disabled": {
-			"opacity": ".45"
-		}
-	},
-	disabledHoverBgTransparent: {
-		"@media (hover: hover)": {
-			":disabled": {
-				":hover": {
-					"backgroundColor": "transparent"
-				}
-			}
-		}
-	},
-	hoverBgColorMixInSrgbVarRed12Transparent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--red)"
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"backgroundColor": "color-mix(in srgb,var(--red) 12%,transparent)"
-				}
-			}
-		}
-	},
-	roundedRNone: {
-		"borderTopRightRadius": "0",
-		"borderBottomRightRadius": "0"
-	,
-		cornerShape: "var(--cs)"},
-	py2: {
-		"paddingBlock": "8px"
-	},
-	textLeft: {
-		"textAlign": "left"
-	},
-	focusVisibleBgHover: {
-		":focusVisible": {
-			"backgroundColor": "var(--hover)"
-		}
-	},
-	disabledOpacity50: {
-		":disabled": {
-			"opacity": ".5"
-		}
-	},
-	focusVisibleTextFg: {
-		":focusVisible": {
-			"color": "var(--text)"
-		}
-	},
-	px5px: {
-		"paddingInline": "5px"
-	},
+  grow: {
+    flexGrow: "1",
+  },
+  fixed: {
+    position: "fixed",
+  },
+  inset0: {
+    inset: "0",
+  },
+  z300: {
+    zIndex: "300",
+  },
+  bgBlack60: {
+    backgroundColor: "color-mix(in oklab, var(--color-black) 60%, transparent)",
+  },
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  p6: {
+    padding: "calc(4px * 6)",
+  },
+  bgRaised: {
+    backgroundColor: "var(--bg-raised)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  roundedPanel: {
+    borderRadius: "calc(var(--radius) * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  smoothShadowLg: {
+    boxShadow:
+      "0 4px 12px -4px color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent), 0 18px 48px -14px color-mix(in srgb, var(--smooth-shadow-color) 11%, transparent)",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  maxW90vw: {
+    maxWidth: "90vw",
+  },
+  maxH90vh: {
+    maxHeight: "90vh",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  maxH75vh: {
+    maxHeight: "75vh",
+  },
+  objectContain: {
+    objectFit: "contain",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  px14px: {
+    paddingInline: "14px",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  minH26px: {
+    minHeight: "26px",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  roundedXs: {
+    borderRadius: "calc(2px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgControl: {
+    backgroundColor: "var(--control-surface)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  smoothShadowSm: {
+    boxShadow:
+      "0 1px 3px -1px color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent), 0 4px 10px -4px color-mix(in srgb, var(--smooth-shadow-color) 9%, transparent)",
+  },
+  transition: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBorderLineStrong: {
+    "@media (hover: hover)": {
+      ":hover": {
+        borderColor: "var(--border-strong)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  activeScale097: {
+    ":active": {
+      scale: "0.97",
+    },
+  },
+  minW240px: {
+    minWidth: "240px",
+  },
+  p25: {
+    padding: "calc(4px * 2.5)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  fontBold: {
+    fontWeight: "var(--font-weight-bold)",
+  },
+  tracking001em: {
+    letterSpacing: "-0.01em",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  px0: {
+    paddingInline: "0",
+  },
+  listNone: {
+    listStyleType: "none",
+  },
+  gap5px: {
+    gap: "5px",
+  },
+  p0: {
+    padding: "0",
+  },
+  minH10: {
+    minHeight: "calc(4px * 10)",
+  },
+  gap7px: {
+    gap: "7px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  underline: {
+    textDecorationLine: "underline",
+  },
+  decorationTransparent: {
+    textDecorationColor: "transparent",
+  },
+  underlineOffset2: {
+    textUnderlineOffset: "2px",
+  },
+  transitionTextDecorationColor: {
+    transitionProperty: "text-decoration-color",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverDecorationCurrent: {
+    "@media (hover: hover)": {
+      ":hover": {
+        textDecorationColor: "currentcolor",
+      },
+    },
+  },
+  focusVisibleDecorationCurrent: {
+    ":focus-visible": {
+      textDecorationColor: "currentcolor",
+    },
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  relative: {
+    position: "relative",
+  },
+  w8: {
+    width: "calc(4px * 8)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  roundedLNone: {
+    borderTopLeftRadius: "0",
+    borderBottomLeftRadius: "0",
+    cornerShape: "var(--cs)",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  focusVisibleBgHover: {
+    ":focus-visible": {
+      backgroundColor: "var(--hover)",
+    },
+  },
+  focusVisibleTextFg: {
+    ":focus-visible": {
+      color: "var(--text)",
+    },
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  left12: {
+    left: "calc(1 / 2 * 100%)",
+  },
+  top12: {
+    top: "calc(1 / 2 * 100%)",
+  },
+  size25px: {
+    width: "25px",
+    height: "25px",
+  },
+  TranslateX12: {
+    translate: "calc(calc(1 / 2 * 100%) * -1) 0",
+  },
+  TranslateY12: {
+    translate: "0 calc(calc(1 / 2 * 100%) * -1)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  borderTransparent: {
+    borderColor: "transparent",
+  },
+  borderTCurrent: {
+    borderTopColor: "currentcolor",
+  },
+  opacity90: {
+    opacity: "90%",
+  },
+  animatePreviewSpin07sLinearInfinite: {
+    animation: "preview-spin 0.7s linear infinite",
+  },
+  itemsStretch: {
+    alignItems: "stretch",
+  },
+  MlPx: {
+    marginLeft: "-1px",
+  },
+  opacity80: {
+    opacity: "80%",
+  },
+  inline: {
+    display: "inline",
+  },
+  hidden: {
+    display: "none",
+  },
 });
 
 // Any worktree session gets the control; whether a repo can actually boot a
@@ -646,17 +379,21 @@ function isPreviewable(session: UnifiedSession): boolean {
   return !!session.worktreeDir;
 }
 
-const headerIconBase =
-  mergeStylexClassName("", sx.inlineFlex, sx.cursorPointer, sx.itemsCenter, sx.justifyCenter, sx.roundedMd, sx.border, sx.borderTransparent, sx.bgTransparent, sx.px5px, sx.py3px, sx.textFaint, sx.noUnderline);
+const headerIconBase = utilityClassName(
+  "inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent px-[5px] py-[3px] text-faint no-underline",
+);
 
-const splitSegmentBase =
-  mergeStylexClassName("", sx.inlineFlex, sx.itemsCenter, sx.justifyCenter, sx.border, sx.borderLineStrong, sx.bgTransparent, sx.textDim);
+const splitSegmentBase = utilityClassName(
+  "inline-flex items-center justify-center border border-line-strong bg-transparent text-dim",
+);
 
-const spinnerClass =
-  mergeStylexClassName("", sx.size10px, sx.shrink0, sx.roundedFull, sx.border, sx.borderLineStrong, sx.borderTAccent, sx.animatePreviewSpin07sLinearInfinite);
+const spinnerClass = utilityClassName(
+  "size-[10px] shrink-0 rounded-full border border-line-strong border-t-accent animate-[preview-spin_0.7s_linear_infinite]",
+);
 
-const popoverActionClass =
-  mergeStylexClassName("", sx.wFull, sx.roundedControl, sx.border, sx.borderColorMixInSrgbVarRed40Transparent, sx.bgTransparent, sx.px25, sx.py5px, sx.textXs, sx.fontSemibold, sx.textRed, sx.disabledCursorDefault, sx.disabledOpacity45, sx.disabledHoverBgTransparent, sx.hoverBgColorMixInSrgbVarRed12Transparent);
+const popoverActionClass = utilityClassName(
+  "w-full rounded-control border border-[color-mix(in_srgb,var(--red)_40%,transparent)] bg-transparent px-2.5 py-[5px] text-xs font-semibold text-red disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent hover:bg-[color-mix(in_srgb,var(--red)_12%,transparent)]",
+);
 
 /**
  * Header control for a session's local dev server ("Preview"). When the
@@ -775,10 +512,17 @@ export function PreviewButton({
         {isStarting ? (
           <span className={spinnerClass} />
         ) : (
-          <IconPlayOutline size={20} className={running ? mergeStylexClassName("", sx.textGreen) : MENU_ICON} />
+          <IconPlayOutline
+            size={20}
+            className={running ? utilityClassName("text-green") : MENU_ICON}
+          />
         )}
         <span {...stylex.props(sx.grow)}>
-          {isStarting ? "Cancel preview startup" : running ? "Open preview" : "Preview"}
+          {isStarting
+            ? "Cancel preview startup"
+            : running
+              ? "Open preview"
+              : "Preview"}
         </span>
       </Menu.Item>
     );
@@ -791,7 +535,9 @@ export function PreviewButton({
   // so the redirect lands where a click on the live link would.
   const waitUrl =
     `${BASE_PATH}/preview-wait/${encodeURIComponent(session.id)}` +
-    (session.previewPath ? `?path=${encodeURIComponent(session.previewPath)}` : "");
+    (session.previewPath
+      ? `?path=${encodeURIComponent(session.previewPath)}`
+      : "");
 
   const start = async () => {
     // In-app tab flow: opening the tab both starts the preview (the pane
@@ -821,27 +567,27 @@ export function PreviewButton({
     const wait = window.open(waitUrl, `preview-${session.id}`);
     setStarting(true);
     await (async () => {
-const s = await startPreviewApi(session.id);
+      const s = await startPreviewApi(session.id);
       setStatus(s);
       // Nothing actually started (repo not bootable, sandbox gate off) — don't
       // leave the interstitial spinning toward a boot that will never come.
       if (!s.running && !s.starting) wait?.close();
-})().catch(async () => {
-setStarting(false);
+    })().catch(async () => {
+      setStarting(false);
       wait?.close();
-});
+    });
   };
 
   const stop = async () => {
     setStopping(true);
     await (async () => {
-setStatus(await stopPreviewApi(session.id));
+      setStatus(await stopPreviewApi(session.id));
       setStarting(false);
-})().catch(async () => {
-
-}).finally(async () => {
-setStopping(false);
-});
+    })()
+      .catch(async () => {})
+      .finally(async () => {
+        setStopping(false);
+      });
   };
 
   async function snap() {
@@ -849,11 +595,11 @@ setStopping(false);
     setSnapping(true);
     setShotError(null);
     await (async () => {
-setShot(await capturePreviewShot(session.id));
-})().catch(async (e: any) => {
-setShotError(e.message);
+      setShot(await capturePreviewShot(session.id));
+    })().catch(async (error) => {
+      setShotError(errorMessage(error, "Failed to capture preview"));
       setShot(null);
-});
+    });
     setSnapping(false);
     // Hand over to the snapshot modal. The popup keeps its "Capturing…" label
     // until the result lands, then steps aside — it is portalled at the popover
@@ -864,7 +610,16 @@ setShotError(e.message);
   // Shared snapshot preview modal — rendered by both layouts.
   const snapshotModal = (shot || shotError) && (
     <div
-      {...stylex.props(sx.fixed, sx.inset0, sx.z300, sx.bgBlack60, sx.flex, sx.itemsCenter, sx.justifyCenter, sx.p6)}
+      {...stylex.props(
+        sx.fixed,
+        sx.inset0,
+        sx.z300,
+        sx.bgBlack60,
+        sx.flex,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.p6,
+      )}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           setShot(null);
@@ -872,14 +627,37 @@ setShotError(e.message);
         }
       }}
     >
-      <div {...stylex.props(sx.bgRaised, sx.border, sx.borderLine, sx.roundedPanel, sx.smoothShadowLg, sx.p3, sx.maxW90vw, sx.maxH90vh, sx.flex, sx.flexCol, sx.gap25)}>
+      <div
+        {...stylex.props(
+          sx.bgRaised,
+          sx.border,
+          sx.borderLine,
+          sx.roundedPanel,
+          sx.smoothShadowLg,
+          sx.p3,
+          sx.maxW90vw,
+          sx.maxH90vh,
+          sx.flex,
+          sx.flexCol,
+          sx.gap25,
+        )}
+      >
         {shotError ? (
-          <div {...stylex.props(sx.textRed, sx.px2, sx.py4, typography.label)}>{shotError}</div>
+          <div {...stylex.props(sx.textRed, sx.px2, sx.py4, typography.label)}>
+            {shotError}
+          </div>
         ) : (
           <img
             src={shot!}
             alt="Preview screenshot"
-            {...stylex.props(sx.maxWFull, sx.maxH75vh, sx.objectContain, sx.roundedMd, sx.border, sx.borderLine)}
+            {...stylex.props(
+              sx.maxWFull,
+              sx.maxH75vh,
+              sx.objectContain,
+              sx.roundedMd,
+              sx.border,
+              sx.borderLine,
+            )}
           />
         )}
         <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.justifyEnd)}>
@@ -897,7 +675,27 @@ setShotError(e.message);
             </Button>
           )}
           {shot && (
-            <a {...mergeStylexProps("", sx.hoverBorderLineStrong, sx.hoverTextFg, sx.activeScale097, sx.inlineFlex, sx.minH26px, sx.itemsCenter, sx.justifyCenter, sx.whitespaceNowrap, sx.roundedXs, sx.border, sx.borderLine, sx.bgControl, sx.px25, sx.textXs, sx.fontMedium, sx.textDim, sx.smoothShadowSm, sx.transition)}
+            <a
+              {...stylex.props(
+                sx.inlineFlex,
+                sx.minH26px,
+                sx.itemsCenter,
+                sx.justifyCenter,
+                sx.whitespaceNowrap,
+                sx.roundedXs,
+                sx.border,
+                sx.borderLine,
+                sx.bgControl,
+                sx.px25,
+                sx.textXs,
+                sx.fontMedium,
+                sx.textDim,
+                sx.smoothShadowSm,
+                sx.transition,
+                sx.hoverBorderLineStrong,
+                sx.hoverTextFg,
+                sx.activeScale097,
+              )}
               href={shot}
               download={`preview-${session.id}.png`}
             >
@@ -935,28 +733,69 @@ setShotError(e.message);
       initialFocus
       className={mergeStylexOverrideClassName("", sx.minW240px, sx.p25)}
     >
-      <div {...stylex.props(sx.mb2, sx.fontBold, sx.tracking001em, sx.textFaint, typography.meta)}>Dev services</div>
+      <div
+        {...stylex.props(
+          sx.mb2,
+          sx.fontBold,
+          sx.tracking001em,
+          sx.textFaint,
+          typography.meta,
+        )}
+      >
+        Dev services
+      </div>
       {status.services.length === 0 ? (
         <div {...stylex.props(sx.px0, sx.py1, sx.textXs, sx.textFaint)}>
           {isStarting ? "Starting up…" : "Not started yet"}
         </div>
       ) : (
-        <ul {...stylex.props(sx.mb2, sx.flex, sx.listNone, sx.flexCol, sx.gap5px, sx.p0)}>
+        <ul
+          {...stylex.props(
+            sx.mb2,
+            sx.flex,
+            sx.listNone,
+            sx.flexCol,
+            sx.gap5px,
+            sx.p0,
+          )}
+        >
           {status.services.map((s) => (
-            <li key={s.key} {...stylex.props(sx.flex, sx.minH10, sx.itemsCenter, sx.gap7px, sx.textXs, sx.textDim)}>
+            <li
+              key={s.key}
+              {...stylex.props(
+                sx.flex,
+                sx.minH10,
+                sx.itemsCenter,
+                sx.gap7px,
+                sx.textXs,
+                sx.textDim,
+              )}
+            >
               <span
                 className={cn(
-                  mergeStylexClassName("", sx.size7px, sx.shrink0, sx.roundedFull),
+                  utilityClassName("size-[7px] shrink-0 rounded-full"),
                   s.running
-                    ? mergeStylexClassName("", sx.shadow0002pxColorMixInSrgbVarGreen18Transparent, sx.bgGreen)
-                    : mergeStylexClassName("", sx.bgVarTextFaint, sx.shadowNone),
+                    ? utilityClassName(
+                        "bg-green shadow-[0_0_0_2px_color-mix(in_srgb,var(--green)_18%,transparent)]",
+                      )
+                    : utilityClassName("bg-[var(--text-faint)] shadow-none"),
                 )}
               />
               {s.running && s.previewUrl ? (
                 <a
                   href={s.previewUrl}
                   target="_blank"
-                  rel="noreferrer" {...mergeStylexProps("", sx.hoverDecorationCurrent, sx.focusVisibleDecorationCurrent, sx.fontSemibold, sx.textFg, sx.underline, sx.decorationTransparent, sx.underlineOffset2, sx.transitionTextDecorationColor)}
+                  rel="noreferrer"
+                  {...stylex.props(
+                    sx.fontSemibold,
+                    sx.textFg,
+                    sx.underline,
+                    sx.decorationTransparent,
+                    sx.underlineOffset2,
+                    sx.transitionTextDecorationColor,
+                    sx.hoverDecorationCurrent,
+                    sx.focusVisibleDecorationCurrent,
+                  )}
                 >
                   {s.name}
                 </a>
@@ -964,7 +803,12 @@ setShotError(e.message);
                 <span {...stylex.props(sx.fontSemibold)}>{s.name}</span>
               )}
               <span {...stylex.props(sx.textFaint)}>:{s.port}</span>
-              <span className={cn(mergeStylexClassName("", sx.mlAuto, typography.meta, sx.textFaint), s.running && mergeStylexClassName("", sx.textGreen))}>
+              <span
+                className={cn(
+                  utilityClassName("ml-auto text-meta text-faint"),
+                  s.running && utilityClassName("text-green"),
+                )}
+              >
                 {s.running ? "running" : "stopped"}
               </span>
             </li>
@@ -972,11 +816,19 @@ setShotError(e.message);
         </ul>
       )}
       {running || anyRunning ? (
-        <button className={popoverActionClass} onClick={stop} disabled={!anyRunning || stopping}>
+        <button
+          className={popoverActionClass}
+          onClick={stop}
+          disabled={!anyRunning || stopping}
+        >
           {stopping ? "Stopping…" : "Stop dev server"}
         </button>
       ) : isStarting ? (
-        <button className={popoverActionClass} onClick={stop} disabled={stopping}>
+        <button
+          className={popoverActionClass}
+          onClick={stop}
+          disabled={stopping}
+        >
           {stopping ? "Cancelling…" : "Cancel startup"}
         </button>
       ) : bootable ? (
@@ -984,10 +836,16 @@ setShotError(e.message);
           Start dev server
         </button>
       ) : (
-        <div {...stylex.props(sx.px0, sx.py1, sx.textXs, sx.textFaint)}>{notBootableHint}.</div>
+        <div {...stylex.props(sx.px0, sx.py1, sx.textXs, sx.textFaint)}>
+          {notBootableHint}.
+        </div>
       )}
       {variant !== "bar" && running && (
-        <button className={cn(popoverActionClass, mergeStylexClassName("", sx.mt15))} onClick={snap} disabled={snapping}>
+        <button
+          className={cn(popoverActionClass, utilityClassName("mt-1.5"))}
+          onClick={snap}
+          disabled={snapping}
+        >
           {snapping ? "Capturing…" : "Snapshot preview"}
         </button>
       )}
@@ -995,20 +853,20 @@ setShotError(e.message);
           those actions live here. The bar layout keeps its split controls. */}
       {variant !== "bar" && running && (
         <button
-          className={cn(popoverActionClass, mergeStylexClassName("", sx.mt15))}
+          className={cn(popoverActionClass, utilityClassName("mt-1.5"))}
           onClick={() => copy(url, { toast: "Preview link copied" })}
         >
           Copy preview link
         </button>
       )}
-      <div {...stylex.props(sx.mt15, sx.textCenter, sx.textFaint, typography.meta)}>
-        {running || anyRunning ? (
-          "Stops this worktree's dev process group only."
-        ) : bootable ? (
-          "Runs the repo's preview boot script in this worktree (first build ~1 min)."
-        ) : (
-          "Add .agents/start.sh or configure previewCommand."
-        )}
+      <div
+        {...stylex.props(sx.mt15, sx.textCenter, sx.textFaint, typography.meta)}
+      >
+        {running || anyRunning
+          ? "Stops this worktree's dev process group only."
+          : bootable
+            ? "Runs the repo's preview boot script in this worktree (first build ~1 min)."
+            : "Add .agents/start.sh or configure previewCommand."}
       </div>
     </Popover.Popup>
   );
@@ -1023,12 +881,26 @@ setShotError(e.message);
   };
 
   if (variant === "action") {
-    const mainClass =
-      mergeStylexClassName("aria-disabled:cursor-default aria-disabled:opacity-50", sx.flex, sx.minW0, sx.flex1, sx.itemsCenter, sx.gap2, sx.roundedMd, sx.roundedRNone, sx.px25, sx.py2, sx.textLeft, typography.supporting, sx.fontSemibold, sx.textFg, sx.noUnderline, sx.outlineNone, sx.transitionColors, sx.hoverBgHover, sx.focusVisibleBgHover, sx.disabledCursorDefault, sx.disabledOpacity50);
+    const mainClass = utilityClassName(
+      "flex min-w-0 flex-1 items-center gap-2 rounded-md rounded-r-none px-2.5 py-2 text-left text-supporting font-semibold text-fg no-underline outline-none transition-colors hover:bg-hover focus-visible:bg-hover disabled:cursor-default disabled:opacity-50 aria-disabled:cursor-default aria-disabled:opacity-50",
+    );
     const mainContent = (
       <>
-        <span {...stylex.props(sx.inlineFlex, sx.size5, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textFaint)}>
-          {isStarting ? <span className={spinnerClass} /> : <IconPlay size={17} />}
+        <span
+          {...stylex.props(
+            sx.inlineFlex,
+            sx.size5,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.justifyCenter,
+            sx.textFaint,
+          )}
+        >
+          {isStarting ? (
+            <span className={spinnerClass} />
+          ) : (
+            <IconPlay size={17} />
+          )}
         </span>
         <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
           {isStarting ? (stopping ? "Cancelling…" : "Starting…") : "Preview"}
@@ -1063,7 +935,11 @@ setShotError(e.message);
               {mainContent}
             </button>
           ) : !bootable ? (
-            <button className={mainClass} onClick={openServices} aria-disabled="true">
+            <button
+              className={mainClass}
+              onClick={openServices}
+              aria-disabled="true"
+            >
               {mainContent}
             </button>
           ) : (
@@ -1073,7 +949,23 @@ setShotError(e.message);
           )}
           <Popover.Trigger
             render={
-              <button {...mergeStylexProps("", sx.hoverBgHover, sx.hoverTextFg, sx.focusVisibleBgHover, sx.focusVisibleTextFg, sx.flex, sx.w8, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedControl, sx.roundedLNone, sx.textFaint, sx.outlineNone, sx.transitionColors)}
+              <button
+                {...stylex.props(
+                  sx.flex,
+                  sx.w8,
+                  sx.shrink0,
+                  sx.itemsCenter,
+                  sx.justifyCenter,
+                  sx.roundedControl,
+                  sx.roundedLNone,
+                  sx.textFaint,
+                  sx.outlineNone,
+                  sx.transitionColors,
+                  sx.hoverBgHover,
+                  sx.hoverTextFg,
+                  sx.focusVisibleBgHover,
+                  sx.focusVisibleTextFg,
+                )}
                 title="Dev services"
                 aria-label="Dev services"
               >
@@ -1102,10 +994,14 @@ setShotError(e.message);
             <button
               className={cn(
                 headerIconBase,
-                mergeStylexClassName("", sx.Ml3px, sx.pxPx, sx.py3px),
+                utilityClassName("-ml-[3px] px-px py-[3px]"),
                 open
-                  ? mergeStylexClassName("", sx.textGreen, sx.hoverBgHover, sx.hoverTextGreen)
-                  : mergeStylexClassName("", sx.textFaint, sx.hoverBgHover, sx.hoverTextDim),
+                  ? utilityClassName(
+                      "text-green hover:bg-hover hover:text-green",
+                    )
+                  : utilityClassName(
+                      "text-faint hover:bg-hover hover:text-dim",
+                    ),
               )}
               aria-label="Dev services"
             >
@@ -1117,7 +1013,10 @@ setShotError(e.message);
     );
     return (
       <Popover.Root open={open} onOpenChange={setOpen}>
-        <div {...stylex.props(sx.relative, sx.inlineFlex, sx.itemsCenter)} ref={wrapRef}>
+        <div
+          {...stylex.props(sx.relative, sx.inlineFlex, sx.itemsCenter)}
+          ref={wrapRef}
+        >
           {running ? (
             <Tooltip
               label={
@@ -1128,7 +1027,12 @@ setShotError(e.message);
               side="bottom"
             >
               <a
-                className={cn(headerIconBase, mergeStylexClassName("", sx.textGreen, sx.hoverBgHover, sx.hoverTextGreen))}
+                className={cn(
+                  headerIconBase,
+                  utilityClassName(
+                    "text-green hover:bg-hover hover:text-green",
+                  ),
+                )}
                 href={url}
                 target="_blank"
                 rel="noopener"
@@ -1150,23 +1054,57 @@ setShotError(e.message);
                   }
                 }}
               >
-                <CopyCheck copied={copied} size={22} idle={<IconPlayOutline size={22} />} />
+                <CopyCheck
+                  copied={copied}
+                  size={22}
+                  idle={<IconPlayOutline size={22} />}
+                />
               </a>
             </Tooltip>
           ) : isStarting ? (
             <Tooltip
-              label={stopping ? "Cancelling…" : "Starting the dev server. Click to cancel."}
+              label={
+                stopping
+                  ? "Cancelling…"
+                  : "Starting the dev server. Click to cancel."
+              }
               side="bottom"
             >
               <button
-                className={cn(headerIconBase, mergeStylexClassName("", sx.textYellow, sx.hoverBgHover, sx.hoverTextYellow))}
+                className={cn(
+                  headerIconBase,
+                  utilityClassName(
+                    "text-yellow hover:bg-hover hover:text-yellow",
+                  ),
+                )}
                 onClick={stop}
                 onContextMenu={openServices}
                 disabled={stopping}
               >
-                <span {...stylex.props(sx.relative, sx.inlineFlex, sx.itemsCenter, sx.justifyCenter)}>
+                <span
+                  {...stylex.props(
+                    sx.relative,
+                    sx.inlineFlex,
+                    sx.itemsCenter,
+                    sx.justifyCenter,
+                  )}
+                >
                   <span
-                    {...stylex.props(sx.pointerEventsNone, sx.absolute, sx.left12, sx.top12, sx.size25px, sx.TranslateX12, sx.TranslateY12, sx.roundedFull, sx.border, sx.borderTransparent, sx.borderTCurrent, sx.opacity90, sx.animatePreviewSpin07sLinearInfinite)}
+                    {...stylex.props(
+                      sx.pointerEventsNone,
+                      sx.absolute,
+                      sx.left12,
+                      sx.top12,
+                      sx.size25px,
+                      sx.TranslateX12,
+                      sx.TranslateY12,
+                      sx.roundedFull,
+                      sx.border,
+                      sx.borderTransparent,
+                      sx.borderTCurrent,
+                      sx.opacity90,
+                      sx.animatePreviewSpin07sLinearInfinite,
+                    )}
                     aria-hidden="true"
                   />
                   <IconPlayOutline size={22} />
@@ -1174,11 +1112,17 @@ setShotError(e.message);
               </button>
             </Tooltip>
           ) : !bootable ? (
-            <Tooltip label={`${notBootableHint} Right-click for details.`} side="bottom" multiline>
+            <Tooltip
+              label={`${notBootableHint} Right-click for details.`}
+              side="bottom"
+              multiline
+            >
               <button
                 className={cn(
                   headerIconBase,
-                  mergeStylexClassName("", sx.cursorNotAllowed, sx.textFaint, sx.opacity45, sx.hoverBgHover, sx.hoverTextDim),
+                  utilityClassName(
+                    "cursor-not-allowed text-faint opacity-45 hover:bg-hover hover:text-dim",
+                  ),
                 )}
                 onClick={openServices}
                 onContextMenu={openServices}
@@ -1188,9 +1132,15 @@ setShotError(e.message);
               </button>
             </Tooltip>
           ) : (
-            <Tooltip label="Run the dev server (right-click for dev services)" side="bottom">
+            <Tooltip
+              label="Run the dev server (right-click for dev services)"
+              side="bottom"
+            >
               <button
-                className={cn(headerIconBase, mergeStylexClassName("", sx.textFaint, sx.hoverBgHover, sx.hoverTextDim))}
+                className={cn(
+                  headerIconBase,
+                  utilityClassName("text-faint hover:bg-hover hover:text-dim"),
+                )}
                 onClick={start}
                 onContextMenu={openServices}
               >
@@ -1208,13 +1158,20 @@ setShotError(e.message);
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <div {...stylex.props(sx.relative, sx.inlineFlex, sx.itemsStretch)} ref={wrapRef}>
+      <div
+        {...stylex.props(sx.relative, sx.inlineFlex, sx.itemsStretch)}
+        ref={wrapRef}
+      >
         {running ? (
           <a
             className={cn(
               splitSegmentBase,
-              mergeStylexClassName("", sx.gap15, sx.whitespaceNowrap, sx.roundedLCalc5pxVarRf, sx.px11px, sx.py5px, typography.label, sx.fontSemibold, sx.textGreen, sx.noUnderline),
-              mergeStylexClassName("", sx.hoverBorderColorMixInSrgbVarGreen50Transparent, sx.hoverBgColorMixInSrgbVarGreen12Transparent, sx.hoverRelative, sx.hoverZ1, sx.hoverTextGreen),
+              utilityClassName(
+                "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-label font-semibold text-green no-underline",
+              ),
+              utilityClassName(
+                "hover:relative hover:z-[1] hover:border-[color-mix(in_srgb,var(--green)_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--green)_12%,transparent)] hover:text-green",
+              ),
             )}
             href={url}
             target="_blank"
@@ -1227,16 +1184,30 @@ setShotError(e.message);
               }
             }}
           >
-            <IconPlay size={15} className={mergeStylexOverrideClassName("", sx.opacity90)} />
+            <IconPlay
+              size={15}
+              className={mergeStylexOverrideClassName("", sx.opacity90)}
+            />
             Preview
-            <IconArrowUpRight size={15} className={mergeStylexOverrideClassName("", sx.MlPx, sx.opacity80)} />
+            <IconArrowUpRight
+              size={15}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.MlPx,
+                sx.opacity80,
+              )}
+            />
           </a>
         ) : isStarting ? (
           <button
             className={cn(
               splitSegmentBase,
-              mergeStylexClassName("group", sx.gap15, sx.whitespaceNowrap, sx.roundedLCalc5pxVarRf, sx.px11px, sx.py5px, typography.label, sx.fontSemibold, sx.textDim),
-              mergeStylexClassName("", sx.hoverBorderColorMixInSrgbVarRed40Transparent, sx.hoverBgColorMixInSrgbVarRed10Transparent, sx.cursorPointer, sx.hoverRelative, sx.hoverZ1, sx.hoverTextRed),
+              utilityClassName(
+                "group gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-label font-semibold text-dim",
+              ),
+              utilityClassName(
+                "cursor-pointer hover:relative hover:z-[1] hover:border-[color-mix(in_srgb,var(--red)_40%,transparent)] hover:bg-[color-mix(in_srgb,var(--red)_10%,transparent)] hover:text-red",
+              ),
             )}
             onClick={stop}
             disabled={stopping}
@@ -1246,33 +1217,41 @@ setShotError(e.message);
             <span {...mergeStylexProps("group-hover:hidden", sx.inline)}>
               {stopping ? "Cancelling…" : "Starting…"}
             </span>
-            <span {...mergeStylexProps("group-hover:inline", sx.hidden)}>Cancel</span>
+            <span {...mergeStylexProps("group-hover:inline", sx.hidden)}>
+              Cancel
+            </span>
           </button>
         ) : !bootable ? (
           <button
             className={cn(
               splitSegmentBase,
-              mergeStylexClassName("", sx.gap15, sx.whitespaceNowrap, sx.roundedLCalc5pxVarRf, sx.px11px, sx.py5px, typography.label, sx.fontSemibold, sx.textDim, sx.opacity45),
-              mergeStylexClassName("", sx.cursorNotAllowed),
+              utilityClassName(
+                "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-label font-semibold text-dim opacity-45",
+              ),
+              utilityClassName("cursor-not-allowed"),
             )}
             onClick={openServices}
             aria-disabled="true"
             title={`${notBootableHint}.`}
           >
-            <IconPlay size={15} className={mergeStylexOverrideClassName("", sx.textAccent)} />
+            <IconPlay size={15} className="text-accent" />
             Preview
           </button>
         ) : (
           <button
             className={cn(
               splitSegmentBase,
-              mergeStylexClassName("", sx.gap15, sx.whitespaceNowrap, sx.roundedLCalc5pxVarRf, sx.px11px, sx.py5px, typography.label, sx.fontSemibold, sx.textDim),
-              mergeStylexClassName("", sx.cursorPointer, sx.hoverRelative, sx.hoverZ1, sx.hoverBorderAccent, sx.hoverBgHover, sx.hoverTextFg),
+              utilityClassName(
+                "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-label font-semibold text-dim",
+              ),
+              utilityClassName(
+                "cursor-pointer hover:relative hover:z-[1] hover:border-accent hover:bg-hover hover:text-fg",
+              ),
             )}
             onClick={start}
             title="Start the dev server and preview this session"
           >
-            <IconPlay size={15} className={mergeStylexOverrideClassName("", sx.textAccent)} />
+            <IconPlay size={15} className="text-accent" />
             Preview
           </button>
         )}
@@ -1282,17 +1261,25 @@ setShotError(e.message);
         <button
           className={cn(
             splitSegmentBase,
-            mergeStylexClassName("", sx.MlPx, sx.px2, sx.py1),
+            utilityClassName("-ml-px px-2 py-1"),
             running
-              ? mergeStylexClassName("", sx.textColorColorMixInSrgbVarGreen72VarTextDim, sx.hoverBorderColorMixInSrgbVarGreen50Transparent, sx.hoverBgColorMixInSrgbVarGreen12Transparent, sx.hoverRelative, sx.hoverZ1, sx.hoverTextGreen)
-              : mergeStylexClassName("", sx.hoverTextAccent, sx.hoverRelative, sx.hoverZ1, sx.hoverBorderAccent, sx.hoverBgHover),
+              ? utilityClassName(
+                  "text-[color:color-mix(in_srgb,var(--green)_72%,var(--text-dim))] hover:relative hover:z-[1] hover:border-[color-mix(in_srgb,var(--green)_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--green)_12%,transparent)] hover:text-green",
+                )
+              : utilityClassName(
+                  "hover:relative hover:z-[1] hover:border-accent hover:bg-hover hover:text-accent",
+                ),
             "aria-disabled:cursor-default aria-disabled:opacity-45 aria-disabled:hover:border-line-strong aria-disabled:hover:bg-transparent aria-disabled:hover:text-dim",
           )}
           onClick={() => {
             if (running) copy(url, { toast: "Preview link copied" });
           }}
           aria-disabled={!running || undefined}
-          title={running ? `Copy the preview link · ${url}` : "Start the preview first"}
+          title={
+            running
+              ? `Copy the preview link · ${url}`
+              : "Start the preview first"
+          }
         >
           <CopyCheck copied={copied} size={18} idle={<IconLink size={18} />} />
         </button>
@@ -1300,14 +1287,22 @@ setShotError(e.message);
           <button
             className={cn(
               splitSegmentBase,
-              mergeStylexClassName("", sx.textColorColorMixInSrgbVarGreen72VarTextDim, sx.MlPx, sx.px2, sx.py1),
-              mergeStylexClassName("", sx.hoverBorderColorMixInSrgbVarGreen50Transparent, sx.hoverBgColorMixInSrgbVarGreen12Transparent, sx.hoverRelative, sx.hoverZ1, sx.hoverTextGreen),
+              utilityClassName(
+                "-ml-px px-2 py-1 text-[color:color-mix(in_srgb,var(--green)_72%,var(--text-dim))]",
+              ),
+              utilityClassName(
+                "hover:relative hover:z-[1] hover:border-[color-mix(in_srgb,var(--green)_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--green)_12%,transparent)] hover:text-green",
+              ),
             )}
             onClick={snap}
             disabled={snapping}
             title="Snapshot the preview (headless Chrome screenshot)"
           >
-            {snapping ? <span className={spinnerClass} /> : <IconCamera size={18} />}
+            {snapping ? (
+              <span className={spinnerClass} />
+            ) : (
+              <IconCamera size={18} />
+            )}
           </button>
         )}
         <Popover.Trigger
@@ -1315,16 +1310,28 @@ setShotError(e.message);
             <button
               className={cn(
                 splitSegmentBase,
-                mergeStylexClassName("", sx.MlPx, sx.roundedRCalc5pxVarRf, sx.px2, sx.py1),
+                utilityClassName(
+                  "-ml-px rounded-r-[calc(5px*var(--rf))] px-2 py-1",
+                ),
                 running
-                  ? mergeStylexClassName("", sx.textColorColorMixInSrgbVarGreen72VarTextDim)
-                  : mergeStylexClassName("", sx.textDim),
+                  ? utilityClassName(
+                      "text-[color:color-mix(in_srgb,var(--green)_72%,var(--text-dim))]",
+                    )
+                  : utilityClassName("text-dim"),
                 open || running
-                  ? mergeStylexClassName("", sx.borderColorMixInSrgbVarGreen50Transparent, sx.bgColorMixInSrgbVarGreen12Transparent, sx.relative, sx.z1, sx.textGreen)
+                  ? utilityClassName(
+                      "relative z-[1] border-[color-mix(in_srgb,var(--green)_50%,transparent)] bg-[color-mix(in_srgb,var(--green)_12%,transparent)] text-green",
+                    )
                   : "",
-                !running && mergeStylexClassName("", sx.hoverTextAccent, sx.hoverRelative, sx.hoverZ1, sx.hoverBorderAccent, sx.hoverBgHover),
-                running && !open &&
-                  mergeStylexClassName("", sx.hoverBorderColorMixInSrgbVarGreen50Transparent, sx.hoverBgColorMixInSrgbVarGreen12Transparent, sx.hoverRelative, sx.hoverZ1, sx.hoverTextGreen),
+                !running &&
+                  utilityClassName(
+                    "hover:relative hover:z-[1] hover:border-accent hover:bg-hover hover:text-accent",
+                  ),
+                running &&
+                  !open &&
+                  utilityClassName(
+                    "hover:relative hover:z-[1] hover:border-[color-mix(in_srgb,var(--green)_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--green)_12%,transparent)] hover:text-green",
+                  ),
               )}
               title="Dev server processes"
             >

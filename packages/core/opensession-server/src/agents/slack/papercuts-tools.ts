@@ -43,13 +43,13 @@ export function createPapercutsMcpServer(ctx: PapercutsToolContext) {
         message: z
           .string()
           .describe(
-            "The papercut, 1-2 sentences: what you were doing → what got in the way (optionally a guessed cause/fix)."
+            "The papercut, 1-2 sentences: what you were doing → what got in the way (optionally a guessed cause/fix).",
           ),
         repo: z
           .string()
           .optional()
           .describe(
-            "Registered repo id the friction belongs to. Defaults to this session's repo; pass explicitly when it concerns an attached repo or the tooling of a different one."
+            "Registered repo id the friction belongs to. Defaults to this session's repo; pass explicitly when it concerns an attached repo or the tooling of a different one.",
           ),
       },
       async (args: { message: string; repo?: string }) => {
@@ -64,12 +64,12 @@ export function createPapercutsMcpServer(ctx: PapercutsToolContext) {
             by: ctx.by,
           });
           return text(
-            `Logged${entry.repo ? ` for ${entry.repo}` : ""}. Keep them coming — log each papercut as you hit it.`
+            `Logged${entry.repo ? ` for ${entry.repo}` : ""}. Keep them coming — log each papercut as you hit it.`,
           );
         } catch (e: any) {
           return text(`Couldn't log papercut: ${e?.message || String(e)}`);
         }
-      }
+      },
     ),
     tool(
       "list_papercuts",
@@ -95,17 +95,21 @@ export function createPapercutsMcpServer(ctx: PapercutsToolContext) {
             .filter((r) => r.enabled)
             .map((r) => r.repoId);
           return text(
-            `No papercuts logged${args.repo ? ` for ${args.repo}` : ""} in the last ${args.days || 14} days. (Logging is on for: ${repos.join(", ")}.)`
+            `No papercuts logged${args.repo ? ` for ${args.repo}` : ""} in the last ${args.days || 14} days. (Logging is on for: ${repos.join(", ")}.)`,
           );
         }
         const lines = entries.map(
           (e) =>
-            `- [${e.ts.slice(0, 16).replace("T", " ")}]${e.repo ? ` (${e.repo})` : ""}${e.by ? ` ${e.by}:` : ""} ${e.message}`
+            `- [${e.ts.slice(0, 16).replace("T", " ")}]${e.repo ? ` (${e.repo})` : ""}${e.by ? ` ${e.by}:` : ""} ${e.message}`,
         );
         return text(lines.join("\n"));
-      }
+      },
     ),
   ];
 
-  return createSdkMcpServer({ name: "opensession-papercuts", version: "1.0.0", tools });
+  return createSdkMcpServer({
+    name: "opensession-papercuts",
+    version: "1.0.0",
+    tools,
+  });
 }

@@ -13,22 +13,22 @@
 export type PlanItemStatus = "pending" | "in_progress" | "completed";
 
 export interface PlanItem {
-	content: string;
-	status: PlanItemStatus;
+  content: string;
+  status: PlanItemStatus;
 }
 
 function statusOf(value: unknown): PlanItemStatus {
-	switch (value) {
-		case "in_progress":
-		case "active":
-		case "running":
-			return "in_progress";
-		case "completed":
-		case "done":
-			return "completed";
-		default:
-			return "pending";
-	}
+  switch (value) {
+    case "in_progress":
+    case "active":
+    case "running":
+      return "in_progress";
+    case "completed":
+    case "done":
+      return "completed";
+    default:
+      return "pending";
+  }
 }
 
 /**
@@ -38,32 +38,32 @@ function statusOf(value: unknown): PlanItemStatus {
  * scanning.
  */
 export function parsePlanItems(input: unknown): PlanItem[] {
-	if (!input || typeof input !== "object") return [];
-	const inp = input as Record<string, unknown>;
-	const list = Array.isArray(inp.todos)
-		? inp.todos
-		: Array.isArray(inp.plan)
-			? inp.plan
-			: null;
-	if (!list) return [];
-	const items: PlanItem[] = [];
-	for (const raw of list) {
-		if (!raw || typeof raw !== "object") continue;
-		const item = raw as Record<string, unknown>;
-		const content = [item.content, item.step, item.activeForm, item.title].find(
-			(v): v is string => typeof v === "string" && v.trim() !== "",
-		);
-		if (!content) continue;
-		items.push({ content: content.trim(), status: statusOf(item.status) });
-	}
-	return items;
+  if (!input || typeof input !== "object") return [];
+  const inp = input as Record<string, unknown>;
+  const list = Array.isArray(inp.todos)
+    ? inp.todos
+    : Array.isArray(inp.plan)
+      ? inp.plan
+      : null;
+  if (!list) return [];
+  const items: PlanItem[] = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object") continue;
+    const item = raw as Record<string, unknown>;
+    const content = [item.content, item.step, item.activeForm, item.title].find(
+      (v): v is string => typeof v === "string" && v.trim() !== "",
+    );
+    if (!content) continue;
+    items.push({ content: content.trim(), status: statusOf(item.status) });
+  }
+  return items;
 }
 
 /** The step the run is on right now, or "" when nothing is in progress. */
 export function currentPlanItem(items: readonly PlanItem[]): string {
-	return items.find((i) => i.status === "in_progress")?.content ?? "";
+  return items.find((i) => i.status === "in_progress")?.content ?? "";
 }
 
 export function planDoneCount(items: readonly PlanItem[]): number {
-	return items.filter((i) => i.status === "completed").length;
+  return items.filter((i) => i.status === "completed").length;
 }

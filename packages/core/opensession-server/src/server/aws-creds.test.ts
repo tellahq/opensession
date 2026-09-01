@@ -19,24 +19,28 @@ describe("AWS human-auth guard", () => {
     expect(
       isAwsHumanAuthRequest(
         "AWS login",
-        "Please authorize stage log access at https://d-9a67574b8b.awsapps.com/start/#/device with code XBBV-XSJV."
-      )
+        "Please authorize stage log access at https://d-9a67574b8b.awsapps.com/start/#/device with code XBBV-XSJV.",
+      ),
     ).toBe(true);
     expect(
       isAwsHumanAuthRequest(
-        "Please approve the AWS SSO device login and enter the code."
-      )
+        "Please approve the AWS SSO device login and enter the code.",
+      ),
     ).toBe(true);
     expect(
       isAwsHumanAuthRequest(
-        "Open the Amazon Web Services device authorization page and sign in."
-      )
+        "Open the Amazon Web Services device authorization page and sign in.",
+      ),
     ).toBe(true);
   });
 
   test("does not block ordinary AWS or unrelated login questions", () => {
-    expect(isAwsHumanAuthRequest("Which IAM role should stage logs use?")).toBe(false);
-    expect(isAwsHumanAuthRequest("Can you review this AWS policy?")).toBe(false);
+    expect(isAwsHumanAuthRequest("Which IAM role should stage logs use?")).toBe(
+      false,
+    );
+    expect(isAwsHumanAuthRequest("Can you review this AWS policy?")).toBe(
+      false,
+    );
     expect(isAwsHumanAuthRequest("Please sign in to GitHub.")).toBe(false);
   });
 
@@ -130,7 +134,9 @@ describe("IMDS mint gate", () => {
   test("config enables it without any env var", () => {
     writeConfig({ integrations: { aws: { region: "eu-central-1" } } });
     expect(agentAwsCredsEnabled()).toBe(true);
-    writeConfig({ integrations: { aws: { enabled: false, region: "eu-central-1" } } });
+    writeConfig({
+      integrations: { aws: { enabled: false, region: "eu-central-1" } },
+    });
     expect(agentAwsCredsEnabled()).toBe(false);
   });
 

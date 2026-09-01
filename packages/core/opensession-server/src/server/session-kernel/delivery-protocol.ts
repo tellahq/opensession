@@ -10,7 +10,9 @@ export function deliveryInterruptForAnchor(
   anchorId: string,
 ): DurableDeliveryState["interrupt"] {
   const dispatchInterrupt = (
-    state.dispatch as { interrupt?: DurableDeliveryState["interrupt"] } | undefined
+    state.dispatch as
+      | { interrupt?: DurableDeliveryState["interrupt"] }
+      | undefined
   )?.interrupt;
   const interrupt = state.interrupt || dispatchInterrupt;
   return interrupt?.anchorId === anchorId ? interrupt : undefined;
@@ -136,54 +138,60 @@ export function isDeliveryReadRequest(
   return request.op === "snapshot" || request.op === "entries";
 }
 
-export type DeliveryActorResult<T extends DeliveryActorRequest> =
-  T extends { op: "snapshot" }
-    ? DurableDeliveryState
-    : T extends { op: "entries" }
-      ? Array<[string, unknown]>
-      : T extends { op: "request_submit_command" }
-        ? SubmitPromptCommandPlan
-        : T extends { op: "complete_submit_command" }
-          ? unknown
-          : T extends { op: "fail_submit_command" }
-            ? void
-            : T extends { op: "claim_dispatch" }
-              ? { promptEntryId: string; items: unknown[]; revision: number }
-              : T extends { op: "claim_next_dispatch" }
-                ?
-                    | { kind: "empty"; revision: number }
-                    | { kind: "hold"; heldCount: number; revision: number }
-                    | {
-                        kind: "deliver";
-                        promptEntryId: string;
-                        items: unknown[];
-                        interrupted: boolean;
-                        revision: number;
-                      }
-                : T extends { op: "prepare_steer" | "promote_queued" }
-                  ? unknown | undefined
-                  : T extends {
-                        op:
-                          | "enqueue"
-                          | "delete"
-                          | "ack_dispatch"
-                          | "fail_dispatch"
-                          | "accept_steer"
-                          | "reject_steer";
-                      }
-                    ? boolean
-                    : T extends { op: "settle_pending_steers" | "requeue_steers" }
-                      ? number
-                      : T extends { op: "prepare_interrupt" }
-                        ? {
-                            interruptId: string;
-                            phase: "prepared" | "executing" | "confirmed";
-                            runGeneration: number;
-                            anchorId: string;
-                            soloId?: string;
-                          }
-                        : T extends { op: "begin_interrupt_effect" }
-                          ? "execute" | "retry" | "adopt_confirmed" | "confirmed" | "settled"
-                          : T extends { op: "settle_interrupt" }
-                            ? boolean
-                            : void;
+export type DeliveryActorResult<T extends DeliveryActorRequest> = T extends {
+  op: "snapshot";
+}
+  ? DurableDeliveryState
+  : T extends { op: "entries" }
+    ? Array<[string, unknown]>
+    : T extends { op: "request_submit_command" }
+      ? SubmitPromptCommandPlan
+      : T extends { op: "complete_submit_command" }
+        ? unknown
+        : T extends { op: "fail_submit_command" }
+          ? void
+          : T extends { op: "claim_dispatch" }
+            ? { promptEntryId: string; items: unknown[]; revision: number }
+            : T extends { op: "claim_next_dispatch" }
+              ?
+                  | { kind: "empty"; revision: number }
+                  | { kind: "hold"; heldCount: number; revision: number }
+                  | {
+                      kind: "deliver";
+                      promptEntryId: string;
+                      items: unknown[];
+                      interrupted: boolean;
+                      revision: number;
+                    }
+              : T extends { op: "prepare_steer" | "promote_queued" }
+                ? unknown | undefined
+                : T extends {
+                      op:
+                        | "enqueue"
+                        | "delete"
+                        | "ack_dispatch"
+                        | "fail_dispatch"
+                        | "accept_steer"
+                        | "reject_steer";
+                    }
+                  ? boolean
+                  : T extends { op: "settle_pending_steers" | "requeue_steers" }
+                    ? number
+                    : T extends { op: "prepare_interrupt" }
+                      ? {
+                          interruptId: string;
+                          phase: "prepared" | "executing" | "confirmed";
+                          runGeneration: number;
+                          anchorId: string;
+                          soloId?: string;
+                        }
+                      : T extends { op: "begin_interrupt_effect" }
+                        ?
+                            | "execute"
+                            | "retry"
+                            | "adopt_confirmed"
+                            | "confirmed"
+                            | "settled"
+                        : T extends { op: "settle_interrupt" }
+                          ? boolean
+                          : void;

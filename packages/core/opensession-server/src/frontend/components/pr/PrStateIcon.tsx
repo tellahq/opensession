@@ -1,6 +1,17 @@
 /** Provider-neutral PR-state glyph (open/draft share the branch icon). */
-export function PrStateIcon({ state, isDraft }: { state: string; isDraft?: boolean }) {
-  const common = { width: 15, height: 15, viewBox: "0 0 16 16", fill: "currentColor" as const };
+export function PrStateIcon({
+  state,
+  isDraft,
+}: {
+  state: string;
+  isDraft?: boolean;
+}) {
+  const common = {
+    width: 15,
+    height: 15,
+    viewBox: "0 0 16 16",
+    fill: "currentColor" as const,
+  };
   if (state === "MERGED")
     return (
       <svg {...common} aria-hidden>

@@ -22,11 +22,15 @@ import { resolve as resolvePath } from "path";
 import { codeStorageConfig, configuredRepos } from "../config";
 import { authedRemoteUrl, remoteUrl } from "./auth";
 
-const CREDENTIAL_SCRIPT = resolvePath(import.meta.dir, "../../../../../../scripts/cs-credential.ts");
+const CREDENTIAL_SCRIPT = resolvePath(
+  import.meta.dir,
+  "../../../../../../scripts/cs-credential.ts",
+);
 
 // https://<org>.code.storage/<repoId>(.git), with optional t:<jwt>@ userinfo.
 // Multi-label hosts (api.<org>.code.storage) deliberately don't match.
-const CS_REMOTE_RE = /^https:\/\/(?:t:[^@]*@)?([A-Za-z0-9][A-Za-z0-9-]*)\.code\.storage\/(.+?)(?:\.git)?\/?$/;
+const CS_REMOTE_RE =
+  /^https:\/\/(?:t:[^@]*@)?([A-Za-z0-9][A-Za-z0-9-]*)\.code\.storage\/(.+?)(?:\.git)?\/?$/;
 
 /**
  * Recognize a code.storage remote URL → {org, repoId}, or null.
@@ -44,7 +48,9 @@ export function parseCsRemote(
   const [, org, rawRepoId] = m;
   if (!org || !rawRepoId) return null;
   const ephemeral = rawRepoId.endsWith("+ephemeral");
-  const repoId = ephemeral ? rawRepoId.slice(0, -"+ephemeral".length) : rawRepoId;
+  const repoId = ephemeral
+    ? rawRepoId.slice(0, -"+ephemeral".length)
+    : rawRepoId;
   if (!repoId) return null;
   return ephemeral ? { org, repoId, ephemeral: true } : { org, repoId };
 }
@@ -92,13 +98,18 @@ export async function ensureCsCredentialHelper(
   checkoutPath: string,
   org: string,
 ): Promise<void> {
-  const raw = await $`git -C ${checkoutPath} config --get-all ${`credential.https://${org}.code.storage.helper`}`
-    .quiet()
-    .nothrow()
-    .text();
+  const raw =
+    await $`git -C ${checkoutPath} config --get-all ${`credential.https://${org}.code.storage.helper`}`
+      .quiet()
+      .nothrow()
+      .text();
   const current = raw.replace(/\n$/, "").split("\n");
   const expected = expectedHelperValues();
-  if (current.length === expected.length && current.every((v, i) => v === expected[i])) return;
+  if (
+    current.length === expected.length &&
+    current.every((v, i) => v === expected[i])
+  )
+    return;
   await configureCsCredentialHelper(checkoutPath, org);
 }
 
@@ -114,7 +125,10 @@ export async function cloneCsCheckout(
   org?: string,
 ): Promise<void> {
   const cfg = codeStorageConfig();
-  if (!cfg) throw new Error("code.storage is not configured (integrations.codeStorage)");
+  if (!cfg)
+    throw new Error(
+      "code.storage is not configured (integrations.codeStorage)",
+    );
   const theOrg = org || cfg.org;
   const authed = await authedRemoteUrl(repoId, { org: theOrg });
   const proc = Bun.spawn(["git", "clone", "--", authed, dest], {
@@ -129,7 +143,10 @@ export async function cloneCsCheckout(
   if (exitCode !== 0) {
     // git may echo the clone URL (JWT included) into stderr — redact it.
     throw new Error(
-      (stderr.trim() || "git clone failed").replace(/t:[A-Za-z0-9_.-]+@/g, "t:***@"),
+      (stderr.trim() || "git clone failed").replace(
+        /t:[A-Za-z0-9_.-]+@/g,
+        "t:***@",
+      ),
     );
   }
   await $`git -C ${dest} remote set-url origin ${remoteUrl(theOrg, repoId)}`.quiet();
@@ -149,12 +166,18 @@ export async function adoptCsCheckouts(): Promise<void> {
     if (repo.host !== "codestorage" || !existsSync(repo.repo)) continue;
     try {
       const origin = (
-        await $`git -C ${repo.repo} remote get-url origin`.quiet().nothrow().text()
+        await $`git -C ${repo.repo} remote get-url origin`
+          .quiet()
+          .nothrow()
+          .text()
       ).trim();
       const org = parseCsRemote(origin)?.org || cfg.org;
       await ensureCsCredentialHelper(repo.repo, org);
     } catch (e) {
-      console.warn(`[codestorage] credential-helper adoption failed for ${repo.id}:`, e);
+      console.warn(
+        `[codestorage] credential-helper adoption failed for ${repo.id}:`,
+        e,
+      );
     }
   }
 }

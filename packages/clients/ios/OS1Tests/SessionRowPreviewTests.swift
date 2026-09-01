@@ -110,36 +110,41 @@ final class SessionRowPreviewTests: XCTestCase {
 
     // MARK: - Automated review
 
-    func testVerdictIsAWordNotAScore() {
-        let approved = OsReviewSummary(verdict: "approve", confidence: 4)
+    func testScoreLeadsTheCompactReviewReading() {
         XCTAssertEqual(
-            PrPreviewFacts.osReviewFact(approved),
-            PrPreviewFact(text: "OS review approved", tone: .green)
+            PrPreviewFacts.osReviewFact(
+                OsReviewSummary(verdict: "approve", confidence: 4)
+            ),
+            PrPreviewFact(text: "4/5 · approved", tone: .green)
         )
+    }
+
+    func testVerdictStillReadsWithoutAScore() {
         XCTAssertEqual(
             PrPreviewFacts.osReviewFact(OsReviewSummary(verdict: "comment")),
-            PrPreviewFact(text: "OS review commented", tone: .dim)
+            PrPreviewFact(text: "commented", tone: .dim)
         )
         XCTAssertEqual(
             PrPreviewFacts.osReviewFact(OsReviewSummary(verdict: "request_changes")),
-            PrPreviewFact(text: "OS review changes requested", tone: .red)
+            PrPreviewFact(text: "changes requested", tone: .red)
         )
     }
 
-    func testBlockingCountSurvivesBecauseItChangesWhatToDoNext() {
+    func testBlockingAndStaleContextFollowTheScoreAndVerdict() {
         XCTAssertEqual(
             PrPreviewFacts.osReviewFact(
-                OsReviewSummary(verdict: "request_changes", blocking: 2)
+                OsReviewSummary(
+                    verdict: "request_changes",
+                    confidence: 2,
+                    blocking: 1,
+                    stale: true
+                )
             ),
-            PrPreviewFact(text: "OS review changes requested · 2 blocking", tone: .red)
+            PrPreviewFact(
+                text: "2/5 · changes requested · 1 blocking · stale",
+                tone: .faint
+            )
         )
-    }
-
-    func testStaleVerdictGoesFaintAndSaysSo() {
-        let fact = PrPreviewFacts.osReviewFact(
-            OsReviewSummary(verdict: "approve", stale: true)
-        )
-        XCTAssertEqual(fact, PrPreviewFact(text: "OS review approved · stale", tone: .faint))
     }
 
     func testVerdictlessReviewAddsNothing() {

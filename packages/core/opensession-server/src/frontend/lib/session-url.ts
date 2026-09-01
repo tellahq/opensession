@@ -14,7 +14,7 @@ import { PUBLIC_BASE_URL } from "./brand";
 
 /** Every minted id is `<prefix>-<uuidv7>`. */
 export const UUIDV7 =
-	"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+  "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
 /**
  * A minted session id standing on its own. Strict, and deliberately narrower
@@ -31,7 +31,7 @@ const MINTED_SESSION_ID = new RegExp(`^(?:os|bks)-${UUIDV7}$`, "i");
  * the one `pastedSessionId` asks when reading one.
  */
 export function isMintedSessionId(id: string): boolean {
-	return MINTED_SESSION_ID.test(id);
+  return MINTED_SESSION_ID.test(id);
 }
 
 // Links into Open Session itself stay in this app. Match the complete origin,
@@ -40,47 +40,47 @@ export function isMintedSessionId(id: string): boolean {
 // in a new tab. The configured public origin remains trusted while the app is
 // viewed through another entry URL (for example its ts.net address).
 export const INTERNAL_ORIGINS = new Set(
-	[
-		typeof location === "undefined" ? "" : location.origin,
-		(() => {
-			try {
-				return new URL(PUBLIC_BASE_URL).origin;
-			} catch {
-				return "";
-			}
-		})(),
-	].filter(Boolean),
+  [
+    typeof location === "undefined" ? "" : location.origin,
+    (() => {
+      try {
+        return new URL(PUBLIC_BASE_URL).origin;
+      } catch {
+        return "";
+      }
+    })(),
+  ].filter(Boolean),
 );
 
 /** What an internal URL opens, or null when it does not point at this app. */
 export function internalUrlTarget(href: string | null | undefined): {
-	sessionId?: string;
-	automationId?: string;
+  sessionId?: string;
+  automationId?: string;
 } | null {
-	if (!href) return null;
-	const loc =
-		typeof location !== "undefined" ? location.href : "http://127.0.0.1:3850/";
-	let url: URL;
-	try {
-		url = new URL(String(href), loc);
-	} catch {
-		return null;
-	}
-	if (!INTERNAL_ORIGINS.has(url.origin)) return null;
-	const path = url.pathname.replace(/^\/(?:opensession|backstage)(?=\/)/, "");
-	// The path already says "session", so both prefixes take the loose shape here.
-	const m =
-		path.match(/^\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i) ??
-		path.match(
-			/^\/workspace\/[^/]+\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i,
-		);
-	const automation = path.match(
-		new RegExp(`^/automations/(auto-${UUIDV7})/?$`, "i"),
-	);
-	return {
-		sessionId: m ? decodeURIComponent(m[1]) : undefined,
-		automationId: automation ? decodeURIComponent(automation[1]) : undefined,
-	};
+  if (!href) return null;
+  const loc =
+    typeof location !== "undefined" ? location.href : "http://127.0.0.1:3850/";
+  let url: URL;
+  try {
+    url = new URL(String(href), loc);
+  } catch {
+    return null;
+  }
+  if (!INTERNAL_ORIGINS.has(url.origin)) return null;
+  const path = url.pathname.replace(/^\/(?:opensession|backstage)(?=\/)/, "");
+  // The path already says "session", so both prefixes take the loose shape here.
+  const m =
+    path.match(/^\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i) ??
+    path.match(
+      /^\/workspace\/[^/]+\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i,
+    );
+  const automation = path.match(
+    new RegExp(`^/automations/(auto-${UUIDV7})/?$`, "i"),
+  );
+  return {
+    sessionId: m ? decodeURIComponent(m[1]) : undefined,
+    automationId: automation ? decodeURIComponent(automation[1]) : undefined,
+  };
 }
 
 /**
@@ -106,10 +106,10 @@ export function internalUrlTarget(href: string | null | undefined): {
  *    a working link for dead text.
  */
 export function pastedSessionId(pasted: string): string | undefined {
-	const text = pasted.trim();
-	if (!text || /\s/.test(text)) return undefined;
-	const id = internalUrlTarget(text)?.sessionId;
-	return id && isMintedSessionId(id) ? id : undefined;
+  const text = pasted.trim();
+  if (!text || /\s/.test(text)) return undefined;
+  const id = internalUrlTarget(text)?.sessionId;
+  return id && isMintedSessionId(id) ? id : undefined;
 }
 
 /**
@@ -125,18 +125,18 @@ export function pastedSessionId(pasted: string): string | undefined {
  * pasting again is the whole of the repair.
  */
 export function insertPastedSessionId(e: React.ClipboardEvent): boolean {
-	const id = pastedSessionId(e.clipboardData?.getData("text/plain") ?? "");
-	if (!id) return false;
-	e.preventDefault();
-	const el = e.currentTarget as HTMLTextAreaElement;
-	if (document.execCommand("insertText", false, id)) return true;
-	el.setRangeText(id, el.selectionStart ?? 0, el.selectionEnd ?? 0, "end");
-	el.dispatchEvent(
-		new InputEvent("input", {
-			bubbles: true,
-			data: id,
-			inputType: "insertFromPaste",
-		}),
-	);
-	return true;
+  const id = pastedSessionId(e.clipboardData?.getData("text/plain") ?? "");
+  if (!id) return false;
+  e.preventDefault();
+  const el = e.currentTarget as HTMLTextAreaElement;
+  if (document.execCommand("insertText", false, id)) return true;
+  el.setRangeText(id, el.selectionStart ?? 0, el.selectionEnd ?? 0, "end");
+  el.dispatchEvent(
+    new InputEvent("input", {
+      bubbles: true,
+      data: id,
+      inputType: "insertFromPaste",
+    }),
+  );
+  return true;
 }

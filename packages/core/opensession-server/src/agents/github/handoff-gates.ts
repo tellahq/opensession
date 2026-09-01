@@ -19,7 +19,8 @@ export interface ReviewGateInput {
 export function reviewSatisfied(r: ReviewGateInput): boolean {
   return (
     r.blocking === 0 &&
-    (r.findings === 0 || (typeof r.confidence === "number" && r.confidence >= 4))
+    (r.findings === 0 ||
+      (typeof r.confidence === "number" && r.confidence >= 4))
   );
 }
 

@@ -14,10 +14,10 @@ import type { UnifiedSession } from "./types";
  * read as running long after it stopped.
  */
 export const SESSION_DETAIL_ONLY = [
-	"claudeSessionId",
-	"codexThreadId",
-	"modelHistory",
-	"transcriptPath",
+  "claudeSessionId",
+  "codexThreadId",
+  "modelHistory",
+  "transcriptPath",
 ] as const satisfies readonly (keyof UnifiedSession)[];
 
 /**
@@ -29,15 +29,16 @@ export const SESSION_DETAIL_ONLY = [
  * detail response only ever fills in what the row does not carry.
  */
 export function mergeSessionDetail(
-	fromList: UnifiedSession,
-	detail: UnifiedSession | null,
+  fromList: UnifiedSession,
+  detail: UnifiedSession | null,
 ): UnifiedSession {
-	if (!detail) return fromList;
-	// A summary row carries less than the detail response does across the
-	// board, so the whole session wins outright there.
-	if (fromList.slim) return detail;
-	const merged: UnifiedSession = { ...fromList };
-	for (const key of SESSION_DETAIL_ONLY)
-		if (detail[key] !== undefined) Object.assign(merged, { [key]: detail[key] });
-	return merged;
+  if (!detail) return fromList;
+  // A summary row carries less than the detail response does across the
+  // board, so the whole session wins outright there.
+  if (fromList.slim) return detail;
+  const merged: UnifiedSession = { ...fromList };
+  for (const key of SESSION_DETAIL_ONLY)
+    if (detail[key] !== undefined)
+      Object.assign(merged, { [key]: detail[key] });
+  return merged;
 }

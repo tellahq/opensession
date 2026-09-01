@@ -141,11 +141,12 @@ extension View {
         #endif
     }
 
-    /// Keep fixed controls above the keyboard while their content scrolls.
+    /// Immediate dismissal keeps a bottom safe-area bar from being parked
+    /// behind a still-visible keyboard during an interrupted swipe.
     @ViewBuilder
-    func scrollKeepsKeyboardPresentedCompat() -> some View {
+    func scrollDismissesKeyboardImmediatelyCompat() -> some View {
         #if os(iOS)
-        scrollDismissesKeyboard(.never)
+        scrollDismissesKeyboard(.immediately)
         #else
         self
         #endif

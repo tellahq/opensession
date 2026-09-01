@@ -11,7 +11,6 @@ export function sessionIdForRequest(scope: string, requestId: string): string {
   return `bks-${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
 }
 
-
 /** Canonical JSON identity: object key order never changes a durable receipt. */
 export function canonicalCommandPayload(value: unknown): string {
   const normalize = (input: unknown): unknown => {

@@ -12,7 +12,12 @@ export type MemoryKind = (typeof MEMORY_KINDS)[number];
 export const MEMORY_TIERS = ["pinned", "retrievable"] as const;
 export type MemoryTier = (typeof MEMORY_TIERS)[number];
 
-export const MEMORY_STATES = ["active", "expired", "superseded", "archived"] as const;
+export const MEMORY_STATES = [
+  "active",
+  "expired",
+  "superseded",
+  "archived",
+] as const;
 export type MemoryState = (typeof MEMORY_STATES)[number];
 
 export const MEMORY_SOURCE_TYPES = [

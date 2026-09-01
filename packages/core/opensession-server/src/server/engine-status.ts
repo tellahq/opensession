@@ -84,5 +84,11 @@ export function engineStatus(): EngineStatus {
       "Add a Claude or ChatGPT account, or a provider API key, under Workspace → Models.",
     );
   }
-  return { ...base, ready: true, blocker: null, fix: null, fixableInApp: false };
+  return {
+    ...base,
+    ready: true,
+    blocker: null,
+    fix: null,
+    fixableInApp: false,
+  };
 }

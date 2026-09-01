@@ -28,8 +28,16 @@ const NOW = Date.parse("2026-08-18T12:00:00Z");
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
-function session(id: string, opts: Partial<ScratchSweepSession> = {}): ScratchSweepSession {
-  return { id, lastActivity: "2026-08-18T11:00:00Z", isRunning: false, ...opts };
+function session(
+  id: string,
+  opts: Partial<ScratchSweepSession> = {},
+): ScratchSweepSession {
+  return {
+    id,
+    lastActivity: "2026-08-18T11:00:00Z",
+    isRunning: false,
+    ...opts,
+  };
 }
 
 describe("ensureSessionScratch / removeSessionScratch", () => {
@@ -48,12 +56,18 @@ describe("ensureSessionScratch / removeSessionScratch", () => {
 });
 
 describe("scratchDirsToSweep", () => {
-  const dirs = (names: string[]) => names.map((name) => ({ name, mtimeMs: NOW - 30 * DAY }));
+  const dirs = (names: string[]) =>
+    names.map((name) => ({ name, mtimeMs: NOW - 30 * DAY }));
 
   it("keeps a running session's dir whatever its age", () => {
     const doomed = scratchDirsToSweep(
       dirs(["os-a"]),
-      [session("os-a", { isRunning: true, lastActivity: "2026-01-01T00:00:00Z" })],
+      [
+        session("os-a", {
+          isRunning: true,
+          lastActivity: "2026-01-01T00:00:00Z",
+        }),
+      ],
       NOW,
     );
     expect(doomed).toEqual([]);
@@ -62,7 +76,10 @@ describe("scratchDirsToSweep", () => {
   it("keeps recent sessions and sweeps ones idle past the horizon", () => {
     const doomed = scratchDirsToSweep(
       dirs(["os-recent", "os-idle"]),
-      [session("os-recent"), session("os-idle", { lastActivity: "2026-08-01T00:00:00Z" })],
+      [
+        session("os-recent"),
+        session("os-idle", { lastActivity: "2026-08-01T00:00:00Z" }),
+      ],
       NOW,
     );
     expect(doomed).toEqual(["os-idle"]);
@@ -72,8 +89,14 @@ describe("scratchDirsToSweep", () => {
     const doomed = scratchDirsToSweep(
       dirs(["os-auto-old", "os-auto-fresh"]),
       [
-        session("os-auto-old", { automation: "triage", lastActivity: "2026-08-16T00:00:00Z" }),
-        session("os-auto-fresh", { automation: "triage", lastActivity: "2026-08-18T00:00:00Z" }),
+        session("os-auto-old", {
+          automation: "triage",
+          lastActivity: "2026-08-16T00:00:00Z",
+        }),
+        session("os-auto-fresh", {
+          automation: "triage",
+          lastActivity: "2026-08-18T00:00:00Z",
+        }),
       ],
       NOW,
     );
@@ -84,7 +107,10 @@ describe("scratchDirsToSweep", () => {
     const doomed = scratchDirsToSweep(
       dirs(["os-shared"]),
       [
-        session("os-shared", { automation: "triage", lastActivity: "2026-08-16T00:00:00Z" }),
+        session("os-shared", {
+          automation: "triage",
+          lastActivity: "2026-08-16T00:00:00Z",
+        }),
         session("os-shared", { lastActivity: "2026-08-16T00:00:00Z" }),
       ],
       NOW,
@@ -120,7 +146,9 @@ describe("sweepSessionScratch", () => {
     const gone = ensureSessionScratch("os-dead")!;
     const old = (Date.now() - 10 * DAY) / 1000;
     utimesSync(gone, old, old);
-    const removed = await sweepSessionScratch([session("os-live", { isRunning: true })]);
+    const removed = await sweepSessionScratch([
+      session("os-live", { isRunning: true }),
+    ]);
     expect(removed).toEqual(["os-dead"]);
     expect(existsSync(keep)).toBe(true);
     expect(existsSync(gone)).toBe(false);

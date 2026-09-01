@@ -8,7 +8,10 @@ export async function runSessionKernelService(): Promise<void> {
   function stop(): void {
     if (stopping) return;
     stopping = true;
-    service.stop();
+    // The process exit closes every Worker and SQLite handle. Terminating the
+    // bounded worker pool synchronously adds several seconds while the gateway
+    // is parked, without improving SQLite's process-crash guarantees.
+    service.stop({ terminateWorkers: false });
     process.exit(0);
   }
   process.on("SIGTERM", stop);

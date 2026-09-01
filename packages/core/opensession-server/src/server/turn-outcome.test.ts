@@ -79,7 +79,9 @@ describe("isCheckedKind", () => {
 
 describe("verdictFor", () => {
   test("an outward effect is enough on its own", () => {
-    expect(verdictFor({ effects: ["mcp__plain__create_note"] })).toBe("reached");
+    expect(verdictFor({ effects: ["mcp__plain__create_note"] })).toBe(
+      "reached",
+    );
   });
 
   test("effects outrank a declaration — a run that said it would be quiet and then posted did reach someone", () => {
@@ -87,16 +89,19 @@ describe("verdictFor", () => {
       verdictFor({
         effects: ["mcp__plain__create_note"],
         declaration: { tool: "finish_silently", reason: "nothing found" },
-      })
+      }),
     ).toBe("reached");
   });
 
   test("a declaration alone is a clean quiet ending", () => {
-    expect(verdictFor({ effects: [], declaration: { tool: "finish_silently" } })).toBe(
-      "declared"
-    );
     expect(
-      verdictFor({ effects: [], declaration: { tool: "stay_silent", reason: "asked twice" } })
+      verdictFor({ effects: [], declaration: { tool: "finish_silently" } }),
+    ).toBe("declared");
+    expect(
+      verdictFor({
+        effects: [],
+        declaration: { tool: "stay_silent", reason: "asked twice" },
+      }),
     ).toBe("declared");
   });
 
@@ -120,11 +125,17 @@ describe("ledger", () => {
 
   test("the last declaration wins", () => {
     beginTurn({ key: "bks-declare", kind: "automation" });
-    recordDeclaration("bks-declare", { tool: "finish_silently", reason: "first" });
+    recordDeclaration("bks-declare", {
+      tool: "finish_silently",
+      reason: "first",
+    });
     recordDeclaration("bks-declare", { tool: "stay_silent", reason: "second" });
     const outcome = endTurn("bks-declare")!;
     expect(outcome.verdict).toBe("declared");
-    expect(outcome.declaration).toEqual({ tool: "stay_silent", reason: "second" });
+    expect(outcome.declaration).toEqual({
+      tool: "stay_silent",
+      reason: "second",
+    });
   });
 
   test("an unattended run that reached nobody and said nothing is a silent drop", () => {
@@ -142,8 +153,12 @@ describe("ledger", () => {
   });
 
   test("writes to an unknown or closed ledger are dropped, never thrown", () => {
-    expect(() => recordEffect("bks-missing", "mcp__plain__create_note")).not.toThrow();
-    expect(() => recordDeclaration(undefined, { tool: "finish_silently" })).not.toThrow();
+    expect(() =>
+      recordEffect("bks-missing", "mcp__plain__create_note"),
+    ).not.toThrow();
+    expect(() =>
+      recordDeclaration(undefined, { tool: "finish_silently" }),
+    ).not.toThrow();
     expect(endTurn("bks-missing")).toBeUndefined();
   });
 
@@ -166,7 +181,7 @@ describe("observedToolCall", () => {
           name: "slack_slack_post_message",
           arguments: { channel_id: "C0AFQ7PV057", text: "hi" },
         },
-      })
+      }),
     ).toEqual({
       name: "slack_slack_post_message",
       args: { channel_id: "C0AFQ7PV057", text: "hi" },
@@ -174,43 +189,60 @@ describe("observedToolCall", () => {
   });
 
   test("passes a directly-named tool through unchanged", () => {
-    expect(observedToolCall({ toolName: "bash", toolInput: { cmd: "ls" } })).toEqual({
+    expect(
+      observedToolCall({ toolName: "bash", toolInput: { cmd: "ls" } }),
+    ).toEqual({
       name: "bash",
       args: { cmd: "ls" },
     });
     expect(
-      observedToolCall({ toolName: "opensession-report_publish_report", toolInput: {} })
+      observedToolCall({
+        toolName: "opensession-report_publish_report",
+        toolInput: {},
+      }),
     ).toEqual({ name: "opensession-report_publish_report", args: {} });
   });
 
   test("a dispatcher call naming no tool names nothing", () => {
-    expect(observedToolCall({ toolName: "mcp_call", toolInput: {} })).toBeUndefined();
     expect(
-      observedToolCall({ toolName: "mcp_call", toolInput: { name: 42 } })
+      observedToolCall({ toolName: "mcp_call", toolInput: {} }),
+    ).toBeUndefined();
+    expect(
+      observedToolCall({ toolName: "mcp_call", toolInput: { name: 42 } }),
     ).toBeUndefined();
     expect(observedToolCall({ toolName: undefined })).toBeUndefined();
   });
 
   test("survives a missing or non-object input", () => {
-    expect(observedToolCall({ toolName: "bash" })).toEqual({ name: "bash", args: {} });
+    expect(observedToolCall({ toolName: "bash" })).toEqual({
+      name: "bash",
+      args: {},
+    });
     expect(observedToolCall({ toolName: "bash", toolInput: "nope" })).toEqual({
       name: "bash",
       args: {},
     });
     expect(
-      observedToolCall({ toolName: "mcp_call", toolInput: { name: "x", arguments: 7 } })
+      observedToolCall({
+        toolName: "mcp_call",
+        toolInput: { name: "x", arguments: 7 },
+      }),
     ).toEqual({ name: "x", args: {} });
   });
 });
 
 describe("silenceToolFor", () => {
   test("knows both opensession-turn tools in both spellings", () => {
-    expect(silenceToolFor("opensession-turn_finish_silently")).toBe("finish_silently");
+    expect(silenceToolFor("opensession-turn_finish_silently")).toBe(
+      "finish_silently",
+    );
     expect(silenceToolFor("mcp__opensession-turn__finish_silently")).toBe(
-      "finish_silently"
+      "finish_silently",
     );
     expect(silenceToolFor("opensession-turn_stay_silent")).toBe("stay_silent");
-    expect(silenceToolFor("mcp__opensession-turn__stay_silent")).toBe("stay_silent");
+    expect(silenceToolFor("mcp__opensession-turn__stay_silent")).toBe(
+      "stay_silent",
+    );
   });
 
   test("is not fooled by a lookalike or by nothing", () => {
@@ -286,7 +318,10 @@ describe("observeToolCall — the cross-process, dispatcher-wrapped run", () => 
       },
     });
     // What createTurnMcpServer does when the ledger IS in this process.
-    recordDeclaration("bks-both", { tool: "finish_silently", reason: "quiet day" });
+    recordDeclaration("bks-both", {
+      tool: "finish_silently",
+      reason: "quiet day",
+    });
     const outcome = endTurn("bks-both")!;
     expect(outcome.verdict).toBe("declared");
     expect(outcome.declaration).toEqual({
@@ -326,7 +361,7 @@ describe("observeToolCall — the cross-process, dispatcher-wrapped run", () => 
       observeToolCall(undefined, {
         toolName: "mcp_call",
         toolInput: { name: "slack_slack_post_message", arguments: {} },
-      })
+      }),
     ).not.toThrow();
   });
 });

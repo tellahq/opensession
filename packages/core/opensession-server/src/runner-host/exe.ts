@@ -28,7 +28,7 @@ import { basename, dirname, join } from "node:path";
  * `bun --hot` — always execs through a binary named `bun`.
  */
 export function isCompiledBinary(): boolean {
-	return !/^bun(\b|-|\.|$)/i.test(basename(process.execPath));
+  return !/^bun(\b|-|\.|$)/i.test(basename(process.execPath));
 }
 
 /**
@@ -36,10 +36,14 @@ export function isCompiledBinary(): boolean {
  * `bun`/`entry` are the source-mode interpreter and entrypoint; compiled mode
  * ignores them and re-execs this binary as `<exe> runner-host <spec>`.
  */
-export function runnerHostArgv(bun: string, entry: string, specPath: string): string[] {
-	return isCompiledBinary()
-		? [process.execPath, "runner-host", specPath]
-		: [bun, "run", entry, specPath];
+export function runnerHostArgv(
+  bun: string,
+  entry: string,
+  specPath: string,
+): string[] {
+  return isCompiledBinary()
+    ? [process.execPath, "runner-host", specPath]
+    : [bun, "run", entry, specPath];
 }
 
 /**
@@ -48,17 +52,24 @@ export function runnerHostArgv(bun: string, entry: string, specPath: string): st
  * is a bun runtime flag with no compiled-binary equivalent, so it is dropped
  * there (correctness over the RSS trim; the proxy is still a thin stdio pipe).
  */
-export function mcpProxyArgv(bun: string, entry: string, opts: { smol?: boolean } = {}): string[] {
-	return isCompiledBinary()
-		? [process.execPath, "mcp-proxy"]
-		: [bun, ...(opts.smol ? ["--smol"] : []), "run", entry];
+export function mcpProxyArgv(
+  bun: string,
+  entry: string,
+  opts: { smol?: boolean } = {},
+): string[] {
+  return isCompiledBinary()
+    ? [process.execPath, "mcp-proxy"]
+    : [bun, ...(opts.smol ? ["--smol"] : []), "run", entry];
 }
 
 /** argv to run the read-only transcript search worker. */
-export function transcriptSearchWorkerArgv(bun: string, entry: string): string[] {
-	return isCompiledBinary()
-		? [process.execPath, "transcript-search-worker"]
-		: [bun, entry];
+export function transcriptSearchWorkerArgv(
+  bun: string,
+  entry: string,
+): string[] {
+  return isCompiledBinary()
+    ? [process.execPath, "transcript-search-worker"]
+    : [bun, entry];
 }
 
 /**
@@ -70,6 +81,11 @@ export function transcriptSearchWorkerArgv(bun: string, entry: string): string[]
  * the sharp sidecar); a source checkout runs the TypeScript entry at `sourceUrl`.
  * Keep the sidecar names in sync with build-compile's WORKER_SIDECARS list.
  */
-export function workerEntry(sidecarName: string, sourceUrl: string | URL): string | URL {
-	return isCompiledBinary() ? join(dirname(process.execPath), sidecarName) : sourceUrl;
+export function workerEntry(
+  sidecarName: string,
+  sourceUrl: string | URL,
+): string | URL {
+  return isCompiledBinary()
+    ? join(dirname(process.execPath), sidecarName)
+    : sourceUrl;
 }

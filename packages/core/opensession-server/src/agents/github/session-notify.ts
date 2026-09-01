@@ -13,9 +13,17 @@
 import { stateDir } from "../../server/paths";
 import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
-import { tryGetSessionControl, type SessionControl, type SessionSummary } from "../../server/session-control";
+import {
+  tryGetSessionControl,
+  type SessionControl,
+  type SessionSummary,
+} from "../../server/session-control";
 import { audit } from "../../server/audit";
-import { isSharedCheckoutDir, REPOS, worktreeHeadBranch } from "../../server/worktree";
+import {
+  isSharedCheckoutDir,
+  REPOS,
+  worktreeHeadBranch,
+} from "../../server/worktree";
 import { defaultRepo } from "../../server/config";
 
 const PENDING_PATH = `${stateDir("github")}/pending-deploys.json`;
@@ -40,7 +48,9 @@ type PendingDeploys = Record<string, PendingDeploy>;
 function readPending(): PendingDeploys {
   if (!existsSync(PENDING_PATH)) return {};
   try {
-    const all = JSON.parse(readFileSync(PENDING_PATH, "utf-8")) as PendingDeploys;
+    const all = JSON.parse(
+      readFileSync(PENDING_PATH, "utf-8"),
+    ) as PendingDeploys;
     const cutoff = Date.now() - PENDING_TTL_MS;
     for (const [sha, p] of Object.entries(all)) {
       if (new Date(p.recordedAt).getTime() < cutoff) delete all[sha];
@@ -61,7 +71,11 @@ export function workspaceIdForRepo(fullName: string): string | null {
 
 /** Live (non-archived) sessions working on `branch` of `workspaceId`, primary or attached.
  *  Also used by handoff.ts to find the session that owns a PR's branch. */
-export function matchSessions(control: SessionControl, workspaceId: string, branch: string): SessionSummary[] {
+export function matchSessions(
+  control: SessionControl,
+  workspaceId: string,
+  branch: string,
+): SessionSummary[] {
   return control.listSessions().filter((s) => {
     if (s.state === "archived") return false;
     if ((s.repo || defaultRepo().id) === workspaceId) {
@@ -72,17 +86,24 @@ export function matchSessions(control: SessionControl, workspaceId: string, bran
       // A shared checkout's HEAD belongs to the whole instance, not to this
       // session. Treating it as session identity caused PR #5593's branch to
       // match 645 unrelated sessions that all pointed at the same checkout.
-      if (!isSharedCheckoutDir(s.worktreeDir) && worktreeHeadBranch(s.worktreeDir) === branch)
+      if (
+        !isSharedCheckoutDir(s.worktreeDir) &&
+        worktreeHeadBranch(s.worktreeDir) === branch
+      )
         return true;
     }
-    return (s.attachedRepos || []).some((r) => r.repo === workspaceId && r.branch === branch);
+    return (s.attachedRepos || []).some(
+      (r) => r.repo === workspaceId && r.branch === branch,
+    );
   });
 }
 
 /** Deduplicate ordinary multi-session matches and fail closed on an
  * implausible broadcast. Exported as a pure seam for the fan-out regression
  * test; the caller owns logging/auditing the refusal. */
-export function boundedSessionNotificationIds(sessionIds: string[]): string[] | null {
+export function boundedSessionNotificationIds(
+  sessionIds: string[],
+): string[] | null {
   const unique = [...new Set(sessionIds)];
   return unique.length <= MAX_SESSION_NOTIFICATION_FANOUT ? unique : null;
 }
@@ -143,7 +164,8 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
 
   const prNumber: number = pr.number;
   const title: string = pr.title || `PR #${prNumber}`;
-  const mergedBy: string = pr.merged_by?.login || payload?.sender?.login || "someone";
+  const mergedBy: string =
+    pr.merged_by?.login || payload?.sender?.login || "someone";
   const base: string = pr.base?.ref || "main";
   const repo = REPOS[workspaceId];
   const trackDeploy =
@@ -167,7 +189,9 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
   );
   if (!sessionIds) return;
 
-  console.log(`[github] PR #${prNumber} merged → notifying ${sessionIds.length} session(s) on ${workspaceId}:${headRef}`);
+  console.log(
+    `[github] PR #${prNumber} merged → notifying ${sessionIds.length} session(s) on ${workspaceId}:${headRef}`,
+  );
   await deliver(
     control,
     sessionIds,
@@ -192,7 +216,8 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
 export async function handleDeployWorkflowRun(payload: any): Promise<void> {
   if (payload?.action !== "completed") return;
   const run = payload?.workflow_run;
-  if (!run || (run.path !== DEPLOY_WORKFLOW_PATH && run.name !== "Deploy")) return;
+  if (!run || (run.path !== DEPLOY_WORKFLOW_PATH && run.name !== "Deploy"))
+    return;
 
   const pending = readPending();
   const entry = pending[run.head_sha];
@@ -208,14 +233,20 @@ export async function handleDeployWorkflowRun(payload: any): Promise<void> {
     ? `PR #${entry.prNumber} deployed. No action needed.`
     : `Deploy ${run.conclusion || "failed"} for PR #${entry.prNumber}: ${run.html_url}`;
 
-  const sessionIds = guardedSessionNotificationIds(entry.sessionIds, "deploy_completed", {
-    pr_number: entry.prNumber,
-    head_sha: run.head_sha,
-    conclusion: run.conclusion,
-  });
+  const sessionIds = guardedSessionNotificationIds(
+    entry.sessionIds,
+    "deploy_completed",
+    {
+      pr_number: entry.prNumber,
+      head_sha: run.head_sha,
+      conclusion: run.conclusion,
+    },
+  );
   if (!sessionIds) return;
 
-  console.log(`[github] Deploy ${run.conclusion} for ${run.head_sha} → notifying ${sessionIds.length} session(s)`);
+  console.log(
+    `[github] Deploy ${run.conclusion} for ${run.head_sha} → notifying ${sessionIds.length} session(s)`,
+  );
   await deliver(
     control,
     sessionIds,

@@ -170,7 +170,7 @@ struct TurnBlockView: View {
         // “Worked” is subheadline-sized while its counts are footnotes. Align
         // their baselines rather than the tops of two different font boxes.
         FlowLayout(spacing: 6, alignment: .firstTextBaseline) {
-            HStack(spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 chevron
                 Text(turn.isLive ? "Working" : "Worked")
                     .font(.subheadline.weight(.medium))
@@ -434,11 +434,19 @@ struct TurnStepsView: View {
             ForEach(sections) { section in
                 switch section {
                 case .message(let entry):
-                    // Narration is prose to read, just like the final answer.
-                    // The fold and its indent distinguish it; only tool rows
-                    // keep the dimmed treatment.
-                    MarkdownBody(entry.text)
+                    if entry.isReasoning == true {
+                        ReasoningSummaryRow(
+                            entry: entry,
+                            isActive: entry.id == activeReasoningId
+                        )
                         .padding(.trailing, 16)
+                    } else {
+                        // Narration is prose to read, just like the final answer.
+                        // The fold and its indent distinguish it; only tool rows
+                        // keep the dimmed treatment.
+                        MarkdownBody(entry.text)
+                            .padding(.trailing, 16)
+                    }
                 case .tools(let calls, let kind):
                     if showsTools {
                         if rendersToolCallsInPlace {
@@ -471,6 +479,16 @@ struct TurnStepsView: View {
                 }
             }
         }
+    }
+
+    private var activeReasoningId: String? {
+        guard isLive else { return nil }
+        return items.reversed().compactMap { item in
+            guard case .message(let entry) = item, entry.isReasoning == true else {
+                return nil
+            }
+            return entry.id
+        }.first
     }
 
     private var sections: [TurnSection] {

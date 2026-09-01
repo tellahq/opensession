@@ -17,10 +17,10 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 Query parameters:
 
-| Param | Meaning |
-| --- | --- |
-| `user` | Claimed prompt user when sign-in is off. With sign-in enabled, the verified identity wins through `requestUser`. Automation-owned sessions drop the prompt user. In this report, a server's `allowedUsers` gate may also be cleared by the session creator (`startedBy`). No shared-server key is returned. |
-| `verbose=1` | Add the static ask-mode bash allowlist. |
+| Param       | Meaning                                                                                                                                                                                                                                                                                                     |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `user`      | Claimed prompt user when sign-in is off. With sign-in enabled, the verified identity wins through `requestUser`. Automation-owned sessions drop the prompt user. In this report, a server's `allowedUsers` gate may also be cleared by the session creator (`startedBy`). No shared-server key is returned. |
+| `verbose=1` | Add the static ask-mode bash allowlist.                                                                                                                                                                                                                                                                     |
 
 On a signed-in instance, an ordinary interactive session is evaluated for the
 signed-in caller. A request authenticated as the `Automation` machine identity
@@ -49,19 +49,19 @@ contract: fallback routing and account selection are resolved at dispatch.
 
 ## Sections
 
-| Section | Answers |
-| --- | --- |
-| `execution` | A coarse Runner, sandbox, or host target, plus working directory, branch, session mode, and sandbox selection. |
-| `gate` | Whether hard-coded run kind `prompt` passes `runGateReason`. This is not a Pi enablement or engine-readiness check, so `allowed` can be true even when dispatch will refuse. |
-| `model` | Requested ID, Pi dispatch ID and provider, model preset, effort, fast mode, fallback, steer support, and account-pool type. |
-| `account` | The persisted `session.accountId` pin and its Claude-account display name when found. It does not predict account selection, reason, availability, rotation, required models, or pool-dry state. |
-| `mcp` | The resolved allowlist. The response does not expose whether it came from the automation, session, feed, or unscoped branch. It also lists configured and allowlisted servers with their inclusion result, plus the in-process `opensession-*` set. |
-| `tools` | The unattended-policy flag and tools stripped from the model's list, with their source catalogs. |
-| `agents` | Oracle and orchestrator-worker subagents resolved for the routed provider. |
-| `memory` | The `~/.opensession/memory` scopes included when session context is enabled. |
-| `placement` | A coarse mode and `restartSafe`, which is currently always `true`. It does not report shared-server placement, a reason, or a pool key. |
-| `identity` | The attributed run user, resolved commit author, per-user GitHub login when applicable, and resolved instance paths. It omits the MCP OAuth grant user and the simple-mode sole GitHub account. |
-| `instructions` | Sources composing the Pi system prompt. Contents are never returned; `AGENTS.local.md` remains instance-private. |
+| Section        | Answers                                                                                                                                                                                                                                             |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution`    | A coarse Runner, sandbox, or host target, plus working directory, branch, session mode, and sandbox selection.                                                                                                                                      |
+| `gate`         | Whether hard-coded run kind `prompt` passes `runGateReason`. This is not a Pi enablement or engine-readiness check, so `allowed` can be true even when dispatch will refuse.                                                                        |
+| `model`        | Requested ID, Pi dispatch ID and provider, model preset, effort, fast mode, fallback, steer support, and account-pool type.                                                                                                                         |
+| `account`      | The persisted `session.accountId` pin and its Claude-account display name when found. It does not predict account selection, reason, availability, rotation, required models, or pool-dry state.                                                    |
+| `mcp`          | The resolved allowlist. The response does not expose whether it came from the automation, session, feed, or unscoped branch. It also lists configured and allowlisted servers with their inclusion result, plus the in-process `opensession-*` set. |
+| `tools`        | The unattended-policy flag and tools stripped from the model's list, with their source catalogs.                                                                                                                                                    |
+| `agents`       | Oracle and orchestrator-worker subagents resolved for the routed provider.                                                                                                                                                                          |
+| `memory`       | The `~/.opensession/memory` scopes included when session context is enabled.                                                                                                                                                                        |
+| `placement`    | A coarse mode and `restartSafe`, which is currently always `true`. It does not report shared-server placement, a reason, or a pool key.                                                                                                             |
+| `identity`     | The attributed run user, resolved commit author, per-user GitHub login when applicable, and resolved instance paths. It omits the MCP OAuth grant user and the simple-mode sole GitHub account.                                                     |
+| `instructions` | Sources composing the Pi system prompt. Contents are never returned; `AGENTS.local.md` remains instance-private.                                                                                                                                    |
 
 ## Important caveats
 

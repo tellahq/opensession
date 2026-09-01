@@ -23,7 +23,10 @@ import type {
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
 import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
 import type { TimerActorRequest, TimerActorResult } from "./timer-protocol";
-import type { GatewayCommandRequest, GatewayCommandResult } from "./gateway-command-protocol";
+import type {
+  GatewayCommandRequest,
+  GatewayCommandResult,
+} from "./gateway-command-protocol";
 import type { CoreActorRequest, CoreActorResult } from "./core-protocol";
 import {
   assertTranscriptActorRequest,
@@ -120,8 +123,8 @@ export class SessionKernelActorClient {
         addEventListener(type: "close", listener: () => void): void;
       }
     ).addEventListener("close", () => {
-        this.markDead(new Error("Session kernel actor exited"));
-      });
+      this.markDead(new Error("Session kernel actor exited"));
+    });
   }
 
   async hello(): Promise<void> {
@@ -152,16 +155,21 @@ export class SessionKernelActorClient {
   }
 
   runStateProjection(sessionId: string): DurableRunState {
-    return this.runStateCache.get(sessionId) ?? {
-      state: "idle",
-      since: new Date(0).toISOString(),
-      generation: 0,
-      changeSeq: 0,
-    };
+    return (
+      this.runStateCache.get(sessionId) ?? {
+        state: "idle",
+        since: new Date(0).toISOString(),
+        generation: 0,
+        changeSeq: 0,
+      }
+    );
   }
 
   runStateProjections(): Array<DurableRunState & { sessionId: string }> {
-    return [...this.runStateCache].map(([sessionId, state]) => ({ sessionId, ...state }));
+    return [...this.runStateCache].map(([sessionId, state]) => ({
+      sessionId,
+      ...state,
+    }));
   }
 
   async statsAsync(): Promise<ReturnType<SessionKernelStoreApi["stats"]>> {
@@ -189,6 +197,12 @@ export class SessionKernelActorClient {
     effectKinds: string[],
     now = Date.now(),
     limit = 100,
+    additionalOutboxGroups: Array<{
+      effectKinds: string[];
+      limit: number;
+    }> = [],
+    activeOutbox: Array<{ id: number; sessionId: string }> = [],
+    activeOutboxRecheckAt = now,
   ): Promise<{ timers: DurableTimer[]; outbox: DurableOutboxItem[] }> {
     const response = await this.request({
       t: "runtime_work",
@@ -197,6 +211,9 @@ export class SessionKernelActorClient {
       timerKinds,
       effectKinds,
       limit,
+      additionalOutboxGroups,
+      activeOutbox,
+      activeOutboxRecheckAt,
     });
     if (response.t !== "runtime_work_result")
       throw new Error("Invalid kernel runtime work response");
@@ -212,9 +229,10 @@ export class SessionKernelActorClient {
     large = false,
   ): Promise<TResult> {
     const deadline = Date.now() + 15_000;
-    const retryableRead = request.t === "reduce"
-      ? isReadReducer(request.command)
-      : READ_METHODS.has(request.method);
+    const retryableRead =
+      request.t === "reduce"
+        ? isReadReducer(request.command)
+        : READ_METHODS.has(request.method);
     let delayMs = 10;
     while (true) {
       try {
@@ -308,7 +326,8 @@ export class SessionKernelActorClient {
       } catch (error) {
         clearTimeout(timeout);
         this.pending.delete(rpcId);
-        const failure = error instanceof Error ? error : new Error(String(error));
+        const failure =
+          error instanceof Error ? error : new Error(String(error));
         this.markDead(failure);
         reject(failure);
       }
@@ -395,7 +414,9 @@ export class SessionKernelActorClient {
   ): Promise<TranscriptActorResult<AgentTranscriptDestinationAppendRequest>> {
     const decoded = decodeAgentTranscriptActorRequest(request);
     if (!decoded || decoded.op !== "agent_append_destination")
-      return Promise.reject(new TypeError("Invalid Agent transcript destination append"));
+      return Promise.reject(
+        new TypeError("Invalid Agent transcript destination append"),
+      );
     return this.decideTranscriptAsync(decoded);
   }
 
@@ -404,7 +425,9 @@ export class SessionKernelActorClient {
   ): Promise<TranscriptActorResult<AgentTranscriptReceiptQueryRequest>> {
     const decoded = decodeAgentTranscriptActorRequest(request);
     if (!decoded || decoded.op !== "agent_query_destination_receipt")
-      return Promise.reject(new TypeError("Invalid Agent transcript receipt query"));
+      return Promise.reject(
+        new TypeError("Invalid Agent transcript receipt query"),
+      );
     return this.decideTranscriptAsync(decoded);
   }
 
@@ -413,7 +436,9 @@ export class SessionKernelActorClient {
   ): Promise<TranscriptActorResult<AgentTranscriptReceiptValidationRequest>> {
     const decoded = decodeAgentTranscriptActorRequest(request);
     if (!decoded || decoded.op !== "agent_validate_destination_receipt")
-      return Promise.reject(new TypeError("Invalid Agent transcript receipt validation"));
+      return Promise.reject(
+        new TypeError("Invalid Agent transcript receipt validation"),
+      );
     return this.decideTranscriptAsync(decoded);
   }
 
@@ -426,9 +451,8 @@ export class SessionKernelActorClient {
         t: "reduce",
         command: {
           kind: "transcript",
-          commandId: "requestId" in request
-            ? request.requestId
-            : crypto.randomUUID(),
+          commandId:
+            "requestId" in request ? request.requestId : crypto.randomUUID(),
           request,
         },
       },
@@ -488,8 +512,7 @@ export class SessionKernelActorClient {
       },
       "run event decision",
     );
-    if (result.accepted)
-      this.noteRunState(decision.sessionId, result.state);
+    if (result.accepted) this.noteRunState(decision.sessionId, result.state);
     return result;
   }
 
@@ -499,7 +522,10 @@ export class SessionKernelActorClient {
 
   private noteChange(sessionId: string): void {
     const current = this.runStateProjection(sessionId);
-    this.runStateCache.set(sessionId, { ...current, changeSeq: current.changeSeq + 1 });
+    this.runStateCache.set(sessionId, {
+      ...current,
+      changeSeq: current.changeSeq + 1,
+    });
   }
 
   terminate(): void {

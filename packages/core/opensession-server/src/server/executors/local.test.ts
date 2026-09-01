@@ -43,6 +43,17 @@ async function execute(executor: LocalExecutor, operation: ExecutorOperation) {
   return executor.execute(context, operation);
 }
 
+async function waitUntil<T>(read: () => Promise<T | undefined>): Promise<T> {
+  const deadline = Date.now() + 2_000;
+  for (;;) {
+    const value = await read();
+    if (value !== undefined) return value;
+    if (Date.now() >= deadline)
+      throw new Error("local executor test timed out");
+    await Bun.sleep(10);
+  }
+}
+
 async function processIsLive(pid: number): Promise<boolean> {
   try {
     const value = await readFile(`/proc/${pid}/stat`, "utf8");
@@ -228,16 +239,21 @@ describe("LocalExecutor", () => {
     });
     if (spawned.outcome.kind !== "process")
       throw new Error("unexpected outcome");
-    await Bun.sleep(50);
-    const status = await execute(executor, {
-      kind: "process.status",
-      processId: spawned.outcome.processId,
-    });
-    expect(
-      status.events
-        ?.flatMap((event) => (event.kind === "text" ? [event.data] : []))
-        .join(""),
-    ).toBe("€");
+    const output: string[] = [];
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const status = await execute(executor, {
+        kind: "process.status",
+        processId: spawned.outcome.processId,
+      });
+      output.push(
+        ...(status.events?.flatMap((event) =>
+          event.kind === "text" ? [event.data] : [],
+        ) ?? []),
+      );
+      if (output.join("") === "€") break;
+      await Bun.sleep(10);
+    }
+    expect(output.join("")).toBe("€");
   });
 
   test("resumes buffering after a truncation backlog is observed", async () => {
@@ -383,10 +399,13 @@ describe("LocalExecutor", () => {
     });
     if (spawned.outcome.kind !== "process")
       throw new Error("unexpected outcome");
-    await Bun.sleep(30);
-    const first = await execute(executor, {
-      kind: "process.status",
-      processId: spawned.outcome.processId,
+    const processId = spawned.outcome.processId;
+    const first = await waitUntil(async () => {
+      const current = await execute(executor, {
+        kind: "process.status",
+        processId,
+      });
+      return current.events?.length ? current : undefined;
     });
     if (first.outcome.kind !== "process") throw new Error("unexpected outcome");
     const firstStreamId = first.outcome.streamId;
@@ -503,10 +522,13 @@ describe("LocalExecutor", () => {
       ],
       idempotencyKey: "inherited-stream",
     });
-    await Bun.sleep(30);
-    const descendantPid = Number(
-      await readFile(join(root, "descendant.pid"), "utf8"),
-    );
+    const descendantPid = await waitUntil(async () => {
+      try {
+        return Number(await readFile(join(root, "descendant.pid"), "utf8"));
+      } catch {
+        return undefined;
+      }
+    });
     const started = performance.now();
     await executor.close();
     expect(performance.now() - started).toBeLessThan(500);

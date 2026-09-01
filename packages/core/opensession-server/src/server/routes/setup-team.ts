@@ -25,7 +25,13 @@ import { githubCredentialForLogin } from "../github-auth";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout";
 import type { RouteContext } from "./context";
 
-const STRING_FIELDS = ["name", "email", "slackId", "github", "timezone"] as const;
+const STRING_FIELDS = [
+  "name",
+  "email",
+  "slackId",
+  "github",
+  "timezone",
+] as const;
 const STRING_ARRAY_FIELDS = ["aliases", "linearEmails"] as const;
 const BOOLEAN_FIELDS = ["githubToSlack", "directory"] as const;
 
@@ -80,7 +86,9 @@ function validateMemberFields(
  *  admin through the same array the team CRUD uses. */
 export function rawTeam(config: Record<string, unknown>): MemberPatch[] {
   const identity =
-    config.identity && typeof config.identity === "object" && !Array.isArray(config.identity)
+    config.identity &&
+    typeof config.identity === "object" &&
+    !Array.isArray(config.identity)
       ? (config.identity as Record<string, unknown>)
       : {};
   config.identity = identity;
@@ -96,7 +104,9 @@ function memberName(entry: MemberPatch): string {
 }
 
 function memberGithub(entry: MemberPatch): string {
-  return typeof entry.github === "string" ? entry.github.trim().toLowerCase() : "";
+  return typeof entry.github === "string"
+    ? entry.github.trim().toLowerCase()
+    : "";
 }
 
 /** The untouched first-run identity. Once it gains any real identity field or
@@ -123,8 +133,9 @@ export function ensureLocalOnboardingMember(
  * people step, so a normal first-mile flow has this by the time it needs it. */
 function githubOrganization(): string | null {
   const integration = configuredIntegration("github");
-  const explicit = [integration.installationOwner, integration.appOrg]
-    .find((owner): owner is string => typeof owner === "string" && !!owner.trim());
+  const explicit = [integration.installationOwner, integration.appOrg].find(
+    (owner): owner is string => typeof owner === "string" && !!owner.trim(),
+  );
   if (explicit) return explicit.trim();
 
   const counts = new Map<string, { owner: string; count: number }>();
@@ -136,7 +147,9 @@ function githubOrganization(): string | null {
     const current = counts.get(key);
     counts.set(key, { owner, count: (current?.count ?? 0) + 1 });
   }
-  return [...counts.values()].sort((a, b) => b.count - a.count)[0]?.owner ?? null;
+  return (
+    [...counts.values()].sort((a, b) => b.count - a.count)[0]?.owner ?? null
+  );
 }
 
 interface GithubOrganizationMember {
@@ -173,17 +186,23 @@ async function fetchGithubOrganizationMembers(
         `GitHub could not list members for ${organization}.${detail} Make sure the credential can read organization members.`,
       );
     }
-    if (!Array.isArray(body)) throw new Error("GitHub returned an invalid member list.");
+    if (!Array.isArray(body))
+      throw new Error("GitHub returned an invalid member list.");
     for (const item of body) {
       if (item.type === "Bot") continue;
-      if (typeof item.login === "string" && item.login.trim()) members.push(item.login.trim());
+      if (typeof item.login === "string" && item.login.trim())
+        members.push(item.login.trim());
     }
     if (body.length < 100) break;
   }
-  return [...new Map(members.map((login) => [login.toLowerCase(), login])).values()];
+  return [
+    ...new Map(members.map((login) => [login.toLowerCase(), login])).values(),
+  ];
 }
 
-async function syncGithubOrganizationMembers(ctx: RouteContext): Promise<Response> {
+async function syncGithubOrganizationMembers(
+  ctx: RouteContext,
+): Promise<Response> {
   const organization = githubOrganization();
   const currentMembers = () => {
     const config = rawConfig();
@@ -192,9 +211,15 @@ async function syncGithubOrganizationMembers(ctx: RouteContext): Promise<Respons
       .filter((member): member is TeamMember => !!member);
   };
   if (!organization) {
-    return Response.json({ organization: null, synced: false, added: 0, members: currentMembers() });
+    return Response.json({
+      organization: null,
+      synced: false,
+      added: 0,
+      members: currentMembers(),
+    });
   }
-  const importedOrganization = configuredIntegration("github").membersImportedOrganization;
+  const importedOrganization =
+    configuredIntegration("github").membersImportedOrganization;
   if (
     typeof importedOrganization === "string" &&
     importedOrganization.toLowerCase() === organization.toLowerCase()
@@ -215,7 +240,8 @@ async function syncGithubOrganizationMembers(ctx: RouteContext): Promise<Respons
   const userToken = userCredential?.env.GH_TOKEN;
   const serviceToken = userToken ? null : await githubToken();
   const credentials = [userToken, serviceToken].filter(
-    (token, index, all): token is string => !!token && all.indexOf(token) === index,
+    (token, index, all): token is string =>
+      !!token && all.indexOf(token) === index,
   );
   if (credentials.length === 0) {
     return Response.json({
@@ -244,7 +270,10 @@ async function syncGithubOrganizationMembers(ctx: RouteContext): Promise<Respons
         synced: false,
         added: 0,
         members: currentMembers(),
-        error: importError instanceof Error ? importError.message : String(importError),
+        error:
+          importError instanceof Error
+            ? importError.message
+            : String(importError),
       },
       { status: 502 },
     );
@@ -349,9 +378,7 @@ export async function handleSetupTeamRoutes(
     });
   }
 
-  const memberMatch = path.match(
-    /^\/api\/setup\/team\/([^/]+)(\/remove)?$/,
-  );
+  const memberMatch = path.match(/^\/api\/setup\/team\/([^/]+)(\/remove)?$/);
   if (memberMatch) {
     const targetName = decodeURIComponent(memberMatch[1]).trim().toLowerCase();
     const isRemove = !!memberMatch[2];
@@ -362,7 +389,10 @@ export async function handleSetupTeamRoutes(
         const team = rawTeam(config);
         const idx = team.findIndex((m) => memberName(m) === targetName);
         if (idx === -1) {
-          return Response.json({ error: "Team member not found" }, { status: 404 });
+          return Response.json(
+            { error: "Team member not found" },
+            { status: 404 },
+          );
         }
         const removed = team[idx];
         team.splice(idx, 1);
@@ -389,7 +419,10 @@ export async function handleSetupTeamRoutes(
         const team = rawTeam(config);
         const idx = team.findIndex((m) => memberName(m) === targetName);
         if (idx === -1) {
-          return Response.json({ error: "Team member not found" }, { status: 404 });
+          return Response.json(
+            { error: "Team member not found" },
+            { status: 404 },
+          );
         }
         const merged: MemberPatch = { ...team[idx] };
         for (const [key, value] of Object.entries(body)) {
@@ -414,7 +447,10 @@ export async function handleSetupTeamRoutes(
           );
         }
         const github = parsed.github?.trim().toLowerCase();
-        if (github && team.some((m, i) => i !== idx && memberGithub(m) === github)) {
+        if (
+          github &&
+          team.some((m, i) => i !== idx && memberGithub(m) === github)
+        ) {
           return Response.json(
             { error: `GitHub account @${parsed.github} is already a member` },
             { status: 409 },

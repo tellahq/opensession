@@ -11,8 +11,8 @@ export const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
  * only way to type a second line and cannot also be the send key.
  */
 export const isTouchPrimary =
-	typeof window !== "undefined" &&
-	!!window.matchMedia?.("(hover: none) and (pointer: coarse)").matches;
+  typeof window !== "undefined" &&
+  !!window.matchMedia?.("(hover: none) and (pointer: coarse)").matches;
 
 /**
  * Chromium-engine browser (Chrome, Chromium, iOS Chrome, Edge, Opera).
@@ -20,5 +20,5 @@ export const isTouchPrimary =
  * surfaces advertise a different working alias there.
  */
 export const isChromium = /Chrome|Chromium|CriOS|Edg|OPR/.test(
-	navigator.userAgent,
+  navigator.userAgent,
 );

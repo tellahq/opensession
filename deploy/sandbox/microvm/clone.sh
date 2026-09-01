@@ -19,13 +19,20 @@
 set -euo pipefail
 CMD="$1"; IDX="$2"; POOL="${3:-/opt/firecracker/store}"
 TEMPLATE_KEY="${4:-}"
-VCPUS="${5:-4}"
-MEMORY_MIB="${6:-12288}"
-DISK_GIB="${7:-25}"
-case "$VCPUS:$MEMORY_MIB:$DISK_GIB" in
-  2:4096:25|4:8192:25|4:12288:25|4:12288:50|8:24576:100) ;;
-  *) echo "unsupported microvm size $VCPUS vCPU / $MEMORY_MIB MiB / $DISK_GIB GiB" >&2; exit 2 ;;
-esac
+if [ "$CMD" = "restrict-egress" ]; then
+  # Arguments 4+ are resolved network targets, not machine sizing.
+  VCPUS=4
+  MEMORY_MIB=12288
+  DISK_GIB=25
+else
+  VCPUS="${5:-4}"
+  MEMORY_MIB="${6:-12288}"
+  DISK_GIB="${7:-25}"
+  case "$VCPUS:$MEMORY_MIB:$DISK_GIB" in
+    2:4096:25|4:8192:25|4:12288:25|4:12288:50|8:24576:100) ;;
+    *) echo "unsupported microvm size $VCPUS vCPU / $MEMORY_MIB MiB / $DISK_GIB GiB" >&2; exit 2 ;;
+  esac
+fi
 [[ "$IDX" =~ ^[0-9]+$ ]] && [ "$IDX" -ge 1 ] && [ "$IDX" -le 254 ] || {
   echo "clone index must be an integer in 1..254" >&2; exit 2;
 }

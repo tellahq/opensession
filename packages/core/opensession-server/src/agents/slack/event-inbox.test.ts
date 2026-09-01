@@ -2,17 +2,19 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { SlackEventInbox, type SlackEventInboxDependencies } from "./event-inbox";
+import {
+  SlackEventInbox,
+  type SlackEventInboxDependencies,
+} from "./event-inbox";
 
 const scratch: string[] = [];
 
 afterEach(() => {
-  for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of scratch.splice(0))
+    rmSync(dir, { recursive: true, force: true });
 });
 
-function setup(
-  patch: Partial<SlackEventInboxDependencies> = {},
-): {
+function setup(patch: Partial<SlackEventInboxDependencies> = {}): {
   dir: string;
   store: string;
   handled: string[];
@@ -36,7 +38,13 @@ function setup(
     },
     ...patch,
   };
-  return { dir, store: join(dir, "event-inbox.json"), handled, processed, deps };
+  return {
+    dir,
+    store: join(dir, "event-inbox.json"),
+    handled,
+    processed,
+    deps,
+  };
 }
 
 function event(ts = "1787752607.643009") {

@@ -24,7 +24,16 @@ describe("envCapacity", () => {
   });
 
   test("keeps the fallback for out-of-range or malformed values", () => {
-    for (const raw of ["0", "65", "-3", "2.5", "abc", "8x", "Infinity", "NaN"]) {
+    for (const raw of [
+      "0",
+      "65",
+      "-3",
+      "2.5",
+      "abc",
+      "8x",
+      "Infinity",
+      "NaN",
+    ]) {
       process.env[NAME] = raw;
       expect(envCapacity(NAME, 8, 1, 64)).toBe(8);
     }

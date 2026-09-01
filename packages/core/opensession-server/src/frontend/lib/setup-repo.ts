@@ -7,8 +7,8 @@
  * empty string keeps the settings page usable until either request catches up.
  */
 export function setupRepoDefaultBranch(
-	setup: { defaultBranch?: string },
-	repository?: { defaultBranch?: string },
+  setup: { defaultBranch?: string },
+  repository?: { defaultBranch?: string },
 ): string {
-	return setup.defaultBranch || repository?.defaultBranch || "";
+  return setup.defaultBranch || repository?.defaultBranch || "";
 }

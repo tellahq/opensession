@@ -257,33 +257,49 @@ function removeFile(entry: Pick<PrewarmEntry, "provider" | "repoId">): void {
  *  safe: the runner-payload pin (bootstrapSignature) PLUS the provider's
  *  create-shape — daytona's org snapshot decides the sandbox's cpu/mem/disk
  *  and e2b's template its image, neither changeable after create. */
-function prewarmSignature(provider: string, resources?: SandboxMachineSettings): string {
+function prewarmSignature(
+  provider: string,
+  resources?: SandboxMachineSettings,
+): string {
   const cfg = sandboxConfig();
   const shape =
     provider === "daytona"
       ? getSandboxConnection("daytona")?.settings.snapshot || "default"
       : provider === "box"
         ? "named-snapshot"
-      : provider === "e2b"
-        ? cfg.e2b?.template || "base"
-        : "";
+        : provider === "e2b"
+          ? cfg.e2b?.template || "base"
+          : "";
   return `${bootstrapSignature()}|${shape}|${JSON.stringify(resources || {})}`;
 }
 
 // 429 is intentionally excluded: a blind 0.5–1s retry cannot clear provider
 // start quotas and can consume more of them. Environment maintenance owns the
 // persisted, provider-aware backoff instead.
-const TRANSIENT_PREWARM_ERROR = /HTTP 5\d\d|timed? ?out|timeout|temporar|connection|socket|transport|ECONNRESET|EPIPE/i;
+const TRANSIENT_PREWARM_ERROR =
+  /HTTP 5\d\d|timed? ?out|timeout|temporar|connection|socket|transport|ECONNRESET|EPIPE/i;
 
-async function retryTransientPrewarmStep<T>(label: string, run: () => Promise<T>): Promise<T> {
+async function retryTransientPrewarmStep<T>(
+  label: string,
+  run: () => Promise<T>,
+): Promise<T> {
   let last: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       return await run();
     } catch (error) {
       last = error;
-      if (!TRANSIENT_PREWARM_ERROR.test(error instanceof Error ? error.message : String(error)) || attempt === 3) throw error;
-      console.warn(`[sandbox-prewarm] ${label} transient failure; retrying (${attempt}/3):`, error);
+      if (
+        !TRANSIENT_PREWARM_ERROR.test(
+          error instanceof Error ? error.message : String(error),
+        ) ||
+        attempt === 3
+      )
+        throw error;
+      console.warn(
+        `[sandbox-prewarm] ${label} transient failure; retrying (${attempt}/3):`,
+        error,
+      );
       await new Promise((resolve) => setTimeout(resolve, attempt * 500));
     }
   }
@@ -309,7 +325,8 @@ function keepReadyTargets(): Array<{ provider: string; repoId: string }> {
       seen.has(key) ||
       !isRemoteSandboxProvider(provider) ||
       !(repoId in REPOS)
-    ) return false;
+    )
+      return false;
     seen.add(key);
     return true;
   });
@@ -335,10 +352,6 @@ async function adapterFor(provider: string): Promise<PrewarmAdapter | null> {
     const { boxPrewarmAdapter } = await import("./adapters/box");
     return boxPrewarmAdapter;
   }
-  if (provider === "microvm") {
-    const { microvmPrewarmAdapter } = await import("./adapters/microvm");
-    return microvmPrewarmAdapter;
-  }
   if (provider === "modal") {
     const { modalPrewarmAdapter } = await import("./adapters/modal");
     return modalPrewarmAdapter;
@@ -356,9 +369,14 @@ function destroyRecord(record: PrewarmRecord, why: string): Promise<void> {
     try {
       const adapter = await adapterFor(provider);
       await adapter?.destroy(sandboxId);
-      console.log(`[sandbox-prewarm] destroyed ${provider} prewarm ${sandboxId} (${why})`);
+      console.log(
+        `[sandbox-prewarm] destroyed ${provider} prewarm ${sandboxId} (${why})`,
+      );
     } catch (e) {
-      console.warn(`[sandbox-prewarm] destroy of ${sandboxId} (${why}) failed:`, e);
+      console.warn(
+        `[sandbox-prewarm] destroy of ${sandboxId} (${why}) failed:`,
+        e,
+      );
     }
   })();
   record.destroyDone = done;
@@ -367,7 +385,11 @@ function destroyRecord(record: PrewarmRecord, why: string): Promise<void> {
 
 /** Restart orphans have no in-memory owner to transition. Give cleanup a
  * short-lived owner so it still uses the same one-shot destruction path. */
-function destroyUntrackedLater(provider: string, sandboxId: string, why: string): void {
+function destroyUntrackedLater(
+  provider: string,
+  sandboxId: string,
+  why: string,
+): void {
   void destroyRecord(
     {
       entry: {
@@ -425,7 +447,8 @@ export async function requestPrewarm(
     (!sandboxProviderCertified(provider) &&
       process.env.OPENSESSION_SANDBOX_CERTIFICATION_RUN !== "1" &&
       !testAdapters.has(provider))
-  ) return { state: "disabled" };
+  )
+    return { state: "disabled" };
   ensurePrewarmSweep();
 
   const key = `${provider}:${repoId}`;
@@ -437,7 +460,8 @@ export async function requestPrewarm(
   if (
     entry &&
     (entry.signature !== prewarmSignature(provider, resources) ||
-      (entry.standby && entry.projectSignature !== projectPreparationSignature(repoId)))
+      (entry.standby &&
+        entry.projectSignature !== projectPreparationSignature(repoId)))
   ) {
     await invalidatePrewarm(provider, repoId);
     record = undefined;
@@ -496,7 +520,8 @@ export async function requestPrewarm(
   const done = runPrewarmBootstrap(freshRecord, adapter);
   freshRecord.bootstrapDone = done;
   void done.finally(() => {
-    if (freshRecord.bootstrapDone === done) freshRecord.bootstrapDone = undefined;
+    if (freshRecord.bootstrapDone === done)
+      freshRecord.bootstrapDone = undefined;
   });
   return { state: "bootstrapping" };
 }
@@ -505,18 +530,25 @@ export async function requestPrewarm(
  *  callers that only want to keep an existing prewarm alive). */
 export function touchPrewarm(provider: string, repoId: string): void {
   const entry = pool().get(`${provider}:${repoId}`)?.entry;
-  if (!entry || (entry.state !== "bootstrapping" && entry.state !== "ready")) return;
+  if (!entry || (entry.state !== "bootstrapping" && entry.state !== "ready"))
+    return;
   entry.lastTouchedAt = new Date().toISOString();
   persist(entry);
 }
 
-export function prewarmStatus(provider: string, repoId: string): PrewarmEntry | undefined {
+export function prewarmStatus(
+  provider: string,
+  repoId: string,
+): PrewarmEntry | undefined {
   const entry = pool().get(`${provider}:${repoId}`)?.entry;
   return entry ? { ...entry } : undefined;
 }
 
 /** Remove a provider/repo prewarm before an explicit environment rebuild. */
-export async function invalidatePrewarm(provider: string, repoId: string): Promise<void> {
+export async function invalidatePrewarm(
+  provider: string,
+  repoId: string,
+): Promise<void> {
   const key = `${provider}:${repoId}`;
   const record = pool().get(key);
   if (!record) return;
@@ -528,18 +560,29 @@ export async function invalidatePrewarm(provider: string, repoId: string): Promi
   }
 }
 
-async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapter): Promise<void> {
+async function runPrewarmBootstrap(
+  record: PrewarmRecord,
+  adapter: PrewarmAdapter,
+): Promise<void> {
   const { entry } = record;
   const current = () => pool().get(entry.key) === record;
   try {
     const ttl = sandboxPrewarmConfig().ttlMinutes;
-    console.log(`[sandbox-prewarm] starting ${entry.key} prewarm (user ${entry.user || "?"})`);
+    console.log(
+      `[sandbox-prewarm] starting ${entry.key} prewarm (user ${entry.user || "?"})`,
+    );
     setPrewarmStage(entry, "Creating sandbox", 10);
     const { sandboxId, driver, restoredFromTemplate } = await adapter.create(
-      { [PREWARM_LABEL]: "1", [PREWARM_KEY_LABEL]: entry.key, "opensession.sandbox": "1" },
+      {
+        [PREWARM_LABEL]: "1",
+        [PREWARM_KEY_LABEL]: entry.key,
+        "opensession.sandbox": "1",
+      },
       {
         autoStopMinutes: ttl + BACKSTOP_STOP_EXTRA_MIN,
-        autoDeleteMinutes: entry.standby ? STANDBY_DELETE_MIN : BACKSTOP_DELETE_MIN,
+        autoDeleteMinutes: entry.standby
+          ? STANDBY_DELETE_MIN
+          : BACKSTOP_DELETE_MIN,
         resources: entry.resources,
       },
     );
@@ -558,7 +601,8 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
         await assertDialbackReachable(driver, `${entry.provider}-prewarm`);
         await bootstrapRemoteSandbox(driver, `${entry.provider}-prewarm`);
       });
-      const { validateRemoteRepoTemplate } = await import("./remote-repo-template");
+      const { validateRemoteRepoTemplate } =
+        await import("./remote-repo-template");
       await validateRemoteRepoTemplate(
         driver,
         entry.provider as "daytona" | "box" | "modal",
@@ -568,39 +612,51 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
         setPrewarmStage(entry, "Syncing the latest project image", 72);
         const warmDir = remoteWarmWorkspaceDir(repo.id);
         const cloneUrl = await remoteCloneUrl(repo);
-        await retryTransientPrewarmStep(`${entry.key} image refresh`, async () => {
-          // A refresh that timed out mid-git (or a snapshot published while
-          // one ran) leaves stale .git lock files that fail every later
-          // refresh with "index.lock: File exists". This prewarm sandbox is
-          // the clone's only writer, so clearing dead locks before syncing
-          // is safe.
-          try {
-            const refreshed = await driver.exec(
-              `find .git -name "*.lock" -type f -delete 2>/dev/null; ` +
-                `git remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
-                `git fetch origin ${shellQuoteWord(repo.defaultBranch)} --quiet && ` +
-                `git reset --hard ${shellQuoteWord(`origin/${repo.defaultBranch}`)}`,
-              { cwd: warmDir, timeoutMs: 10 * 60_000 },
-            );
-            if (refreshed.exitCode !== 0) {
-              throw new Error(`could not refresh ${repo.id} project image: ${(refreshed.stderr || refreshed.stdout).trim().slice(0, 300)}`);
+        await retryTransientPrewarmStep(
+          `${entry.key} image refresh`,
+          async () => {
+            // A refresh that timed out mid-git (or a snapshot published while
+            // one ran) leaves stale .git lock files that fail every later
+            // refresh with "index.lock: File exists". This prewarm sandbox is
+            // the clone's only writer, so clearing dead locks before syncing
+            // is safe.
+            try {
+              const refreshed = await driver.exec(
+                `find .git -name "*.lock" -type f -delete 2>/dev/null; ` +
+                  `git remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
+                  `git fetch origin ${shellQuoteWord(repo.defaultBranch)} --quiet && ` +
+                  `git reset --hard ${shellQuoteWord(`origin/${repo.defaultBranch}`)}`,
+                { cwd: warmDir, timeoutMs: 10 * 60_000 },
+              );
+              if (refreshed.exitCode !== 0) {
+                throw new Error(
+                  `could not refresh ${repo.id} project image: ${(refreshed.stderr || refreshed.stdout).trim().slice(0, 300)}`,
+                );
+              }
+            } finally {
+              // A retained checkout must be safe both before repository setup
+              // runs and between transient refresh retries.
+              await scrubRemoteWarmWorkspaceAuthority(driver, repo, warmDir);
             }
-          } finally {
-            // A retained checkout must be safe both before repository setup
-            // runs and between transient refresh retries.
-            await scrubRemoteWarmWorkspaceAuthority(driver, repo, warmDir);
-          }
-        });
+          },
+        );
         // Updating source without rerunning setup republishes stale generated
         // output. For tella-fusion that turns the user's first Portal start
         // into an 80–100s ReScript rebuild, defeating the prepared image.
         setPrewarmStage(entry, "Rebuilding prepared project image", 76);
         await resetRemoteSetupLifecycleStamp(driver, repo.id);
-        await runRemoteLifecycleHook(driver, warmDir, "setup", "fresh", repo.id, {
-          sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
-          provider: entry.provider,
-          repoId: repo.id,
-        });
+        await runRemoteLifecycleHook(
+          driver,
+          warmDir,
+          "setup",
+          "fresh",
+          repo.id,
+          {
+            sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
+            provider: entry.provider,
+            repoId: repo.id,
+          },
+        );
       }
     } else if (adapter.prepare) {
       setPrewarmStage(entry, "Preparing project workspace", 40);
@@ -624,26 +680,34 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
         if (warm || adapter.publishTemplate) {
           setPrewarmStage(entry, "Cloning project and running setup", 55);
           const { warmRemoteWorkspace } = await import("./adapters/bootstrap");
-          const prepared = await warmRemoteWorkspace(driver, repo, `${entry.provider}-prewarm`, {
-            // A repository setup hook owns the exact dependency/build recipe
-            // for reusable templates. Running a second generic root install
-            // can rewrite bun.lock after setup and makes the sealed workspace
-            // dirty. Legacy non-template prewarms keep their old behavior.
-            installDeps: adapter.publishTemplate ? false : warm,
-            runSetup: true,
-            identity: {
-              sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
-              provider: entry.provider,
-              repoId: repo.id,
+          const prepared = await warmRemoteWorkspace(
+            driver,
+            repo,
+            `${entry.provider}-prewarm`,
+            {
+              // A repository setup hook owns the exact dependency/build recipe
+              // for reusable templates. Running a second generic root install
+              // can rewrite bun.lock after setup and makes the sealed workspace
+              // dirty. Legacy non-template prewarms keep their old behavior.
+              installDeps: adapter.publishTemplate ? false : warm,
+              runSetup: true,
+              identity: {
+                sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
+                provider: entry.provider,
+                repoId: repo.id,
+              },
             },
-          });
+          );
           if (!prepared && adapter.publishTemplate) {
             throw new Error(`could not prepare ${repo.id} for a repo template`);
           }
         }
       } catch (e) {
         if (adapter.publishTemplate) throw e;
-        console.warn(`[sandbox-prewarm] ${entry.key} warm workspace failed (non-fatal):`, e);
+        console.warn(
+          `[sandbox-prewarm] ${entry.key} warm workspace failed (non-fatal):`,
+          e,
+        );
       }
     }
     if (!current()) {
@@ -726,10 +790,17 @@ export function claimPrewarm(
   const p = pool();
   const record = p.get(key);
   const entry = record?.entry;
-  if (!entry || entry.refreshTemplate || entry.state !== "ready" || !entry.sandboxId) return null;
+  if (
+    !entry ||
+    entry.refreshTemplate ||
+    entry.state !== "ready" ||
+    !entry.sandboxId
+  )
+    return null;
   if (
     entry.signature !== prewarmSignature(provider, entry.resources) ||
-    (entry.standby && entry.projectSignature !== projectPreparationSignature(repoId))
+    (entry.standby &&
+      entry.projectSignature !== projectPreparationSignature(repoId))
   ) {
     // Runner pin, provider create-shape, or project setup input changed since
     // this was warmed — never adopt stale payload or a wrong-sized sandbox.
@@ -792,7 +863,8 @@ export async function claimPrewarmOrWait(
   const key = `${provider}:${repoId}`;
   const record = pool().get(key);
   const entry = record?.entry;
-  if (!entry || entry.refreshTemplate || entry.state !== "bootstrapping") return null;
+  if (!entry || entry.refreshTemplate || entry.state !== "bootstrapping")
+    return null;
   // Provider snapshot creation cannot be interrupted. Starting the user's
   // cold fallback now is faster than waiting two minutes and then doing the
   // same cold create, which was the five-minute startup failure this guards.
@@ -803,7 +875,10 @@ export async function claimPrewarmOrWait(
     return null;
   }
   const age = Date.now() - Date.parse(entry.createdAt);
-  if (!Number.isFinite(age) || (!entry.standby && age > (opts?.maxAgeMs ?? 60_000))) {
+  if (
+    !Number.isFinite(age) ||
+    (!entry.standby && age > (opts?.maxAgeMs ?? 60_000))
+  ) {
     console.log(
       `[sandbox-prewarm] ensure(${sessionId.slice(0, 20)}…) skipping old ${key} prewarm (${Math.round(age / 1000)}s old)`,
     );
@@ -843,7 +918,10 @@ export async function claimPrewarmOrWait(
 /** Release and destroy a claimed sandbox the adopter found unusable. The owner
  *  moves to destroying until provider cleanup settles, so status and orphan
  *  auditing cannot disagree about who owns the sandbox. */
-export function discardClaimedPrewarm(provider: string, sandboxId: string): void {
+export function discardClaimedPrewarm(
+  provider: string,
+  sandboxId: string,
+): void {
   const found = [...pool().entries()].find(
     ([, { entry }]) =>
       entry.provider === provider &&
@@ -886,7 +964,9 @@ export function restoreReadyPrewarms(now = Date.now()): number {
   for (const name of readdirSync(dir)) {
     if (!name.endsWith(".json")) continue;
     try {
-      const entry = JSON.parse(readFileSync(`${dir}/${name}`, "utf-8")) as PrewarmEntry;
+      const entry = JSON.parse(
+        readFileSync(`${dir}/${name}`, "utf-8"),
+      ) as PrewarmEntry;
       if (
         entry.state !== "ready" ||
         !entry.sandboxId ||
@@ -895,12 +975,14 @@ export function restoreReadyPrewarms(now = Date.now()): number {
         fileFor(entry) !== `${dir}/${name}` ||
         entry.signature !== prewarmSignature(entry.provider, entry.resources) ||
         (entry.standby &&
-          entry.projectSignature !== projectPreparationSignature(entry.repoId)) ||
+          entry.projectSignature !==
+            projectPreparationSignature(entry.repoId)) ||
         (!isKeepReady(entry.provider, entry.repoId) &&
           !(entry.standby && entry.parked) &&
           now - Date.parse(entry.lastTouchedAt) > ttlMs) ||
         p.has(entry.key)
-      ) continue;
+      )
+        continue;
       p.set(entry.key, { entry });
       restored++;
       console.log(
@@ -912,11 +994,16 @@ export function restoreReadyPrewarms(now = Date.now()): number {
 }
 
 export function sessionOwnedSandboxIds(
-  states: Array<Pick<ReturnType<typeof listRemoteStates>[number], "sessionId" | "sandboxId">>,
+  states: Array<
+    Pick<ReturnType<typeof listRemoteStates>[number], "sessionId" | "sandboxId">
+  >,
 ): Set<string> {
   return new Set(
     states
-      .filter((state) => !state.sessionId.startsWith("__prewarm__:") && state.sandboxId)
+      .filter(
+        (state) =>
+          !state.sessionId.startsWith("__prewarm__:") && state.sandboxId,
+      )
       .map((state) => state.sandboxId),
   );
 }
@@ -962,7 +1049,10 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
   for (const [key, record] of [...p.entries()]) {
     const { entry } = record;
     if (entry.state === "bootstrapping" || entry.state === "ready") {
-      if (isKeepReady(entry.provider, entry.repoId) || (entry.standby && entry.parked)) {
+      if (
+        isKeepReady(entry.provider, entry.repoId) ||
+        (entry.standby && entry.parked)
+      ) {
         entry.lastTouchedAt = new Date(now).toISOString();
         persist(entry);
         if (entry.state === "ready" && entry.sandboxId) {
@@ -980,18 +1070,26 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
               record.keptAliveAt = now;
               await adapter?.keepAlive?.(entry.sandboxId, {
                 autoStopMinutes: cfg.ttlMinutes + BACKSTOP_STOP_EXTRA_MIN,
-                autoDeleteMinutes: entry.standby ? STANDBY_DELETE_MIN : BACKSTOP_DELETE_MIN,
+                autoDeleteMinutes: entry.standby
+                  ? STANDBY_DELETE_MIN
+                  : BACKSTOP_DELETE_MIN,
               });
             }
           } catch (error) {
-            console.warn(`[sandbox-prewarm] parked keep-alive failed for ${entry.key}:`, error);
+            console.warn(
+              `[sandbox-prewarm] parked keep-alive failed for ${entry.key}:`,
+              error,
+            );
           }
         }
       } else if (now - Date.parse(entry.lastTouchedAt) > ttlMs) {
         p.delete(key);
         removeFile(entry);
         if (entry.sandboxId) void destroyRecord(record, "ttl expired");
-        else console.log(`[sandbox-prewarm] dropped ${key} (ttl expired before create)`);
+        else
+          console.log(
+            `[sandbox-prewarm] dropped ${key} (ttl expired before create)`,
+          );
       }
     } else if (entry.state === "failed") {
       if (now - Date.parse(entry.lastTouchedAt) > FAILED_RETRY_MS) {
@@ -1000,7 +1098,10 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
       }
     } else if (entry.state === "claimed") {
       // Adopted — session-owned now; never destroy. Just retire the tombstone.
-      if (now - Date.parse(entry.claimedAt || entry.lastTouchedAt) > CLAIMED_GRACE_MS) {
+      if (
+        now - Date.parse(entry.claimedAt || entry.lastTouchedAt) >
+        CLAIMED_GRACE_MS
+      ) {
         p.delete(key);
         try {
           unlinkSync(`${fileFor(entry)}.claimed`);
@@ -1046,7 +1147,8 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
           // Adopted before a restart — the session owns the sandbox. Unlink
           // the tombstone once its orphan-audit protection window passed.
           try {
-            if (now - statSync(full).mtimeMs > CLAIMED_GRACE_MS) unlinkSync(full);
+            if (now - statSync(full).mtimeMs > CLAIMED_GRACE_MS)
+              unlinkSync(full);
           } catch {}
           continue;
         }
@@ -1071,7 +1173,10 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
   for (const { provider, repoId } of keepReadyTargets()) {
     if (p.has(`${provider}:${repoId}`)) continue;
     void requestPrewarm(provider, repoId).catch((error) => {
-      console.warn(`[sandbox-prewarm] could not maintain ${provider}:${repoId}:`, error);
+      console.warn(
+        `[sandbox-prewarm] could not maintain ${provider}:${repoId}:`,
+        error,
+      );
     });
   }
 
@@ -1085,12 +1190,8 @@ async function auditProviderOrphans(now: number): Promise<void> {
   const g = globalThis as unknown as { __prewarmOrphanAuditAt?: number };
   if (now - (g.__prewarmOrphanAuditAt || 0) < ORPHAN_AUDIT_INTERVAL_MS) return;
   g.__prewarmOrphanAuditAt = now;
-  for (const provider of ["daytona", "box", "e2b", "modal", "microvm"]) {
-    if (
-      !sandboxProviderConfigured(
-        provider as "daytona" | "box" | "e2b" | "modal" | "microvm",
-      )
-    ) continue;
+  for (const provider of ["daytona", "box", "e2b", "modal"] as const) {
+    if (!sandboxProviderConfigured(provider)) continue;
     // A create in flight has a live sandbox with no recorded id yet — skip
     // this provider's audit round rather than destroy it mid-bootstrap.
     const creating = [...pool().values()].some(
@@ -1117,7 +1218,9 @@ async function auditProviderOrphans(now: number): Promise<void> {
       // no owner and are fair game.
       const repoId = key.includes(":") ? key.slice(key.indexOf(":") + 1) : "";
       if (repoId && !(repoId in REPOS)) continue;
-      console.warn(`[sandbox-prewarm] destroying untracked ${provider} prewarm ${id} (${key || "no key"})`);
+      console.warn(
+        `[sandbox-prewarm] destroying untracked ${provider} prewarm ${id} (${key || "no key"})`,
+      );
       try {
         await adapter.destroy(id);
       } catch (e) {
@@ -1134,10 +1237,14 @@ export function ensurePrewarmSweep(): void {
   // Dev instances: the sweep destroys sandboxes via live providers shared
   // with production, so it never arms there.
   if (isDevInstance()) return;
-  const g = globalThis as unknown as { __sandboxPrewarmSweepTimer?: ReturnType<typeof setInterval> };
+  const g = globalThis as unknown as {
+    __sandboxPrewarmSweepTimer?: ReturnType<typeof setInterval>;
+  };
   if (g.__sandboxPrewarmSweepTimer) return;
   const t = setInterval(() => {
-    sweepPrewarms().catch((e) => console.warn("[sandbox-prewarm] sweep failed:", e));
+    sweepPrewarms().catch((e) =>
+      console.warn("[sandbox-prewarm] sweep failed:", e),
+    );
   }, SWEEP_INTERVAL_MS);
   (t as { unref?: () => void }).unref?.();
   g.__sandboxPrewarmSweepTimer = t;
@@ -1146,8 +1253,14 @@ export function ensurePrewarmSweep(): void {
 // ── Per-user rate limit for the POST route (typing events are client-side
 //    debounced, but the server enforces its own ceiling) ────────────────────
 
-export function prewarmRateLimited(user: string, limit = 6, windowMs = 60_000): boolean {
-  const g = globalThis as unknown as { __sandboxPrewarmRate?: Map<string, number[]> };
+export function prewarmRateLimited(
+  user: string,
+  limit = 6,
+  windowMs = 60_000,
+): boolean {
+  const g = globalThis as unknown as {
+    __sandboxPrewarmRate?: Map<string, number[]>;
+  };
   const m = (g.__sandboxPrewarmRate ??= new Map<string, number[]>());
   const now = Date.now();
   const recent = (m.get(user) || []).filter((t) => now - t < windowMs);
@@ -1162,7 +1275,10 @@ export function prewarmRateLimited(user: string, limit = 6, windowMs = 60_000): 
 
 // ── Test seams ───────────────────────────────────────────────────────────────
 
-export function _setPrewarmAdapterForTest(provider: string, adapter: PrewarmAdapter | null): void {
+export function _setPrewarmAdapterForTest(
+  provider: string,
+  adapter: PrewarmAdapter | null,
+): void {
   testAdapters.set(provider, adapter);
 }
 
@@ -1184,7 +1300,9 @@ export function _prewarmPoolForTest(): Map<string, PrewarmEntry> {
 /** Stop the sweep interval (test teardown — a leaked timer in a test process
  *  could otherwise run the provider orphan audit against live config). */
 export function _stopPrewarmSweepForTest(): void {
-  const g = globalThis as unknown as { __sandboxPrewarmSweepTimer?: ReturnType<typeof setInterval> };
+  const g = globalThis as unknown as {
+    __sandboxPrewarmSweepTimer?: ReturnType<typeof setInterval>;
+  };
   if (g.__sandboxPrewarmSweepTimer) {
     clearInterval(g.__sandboxPrewarmSweepTimer);
     g.__sandboxPrewarmSweepTimer = undefined;

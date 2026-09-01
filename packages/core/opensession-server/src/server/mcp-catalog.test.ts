@@ -9,7 +9,11 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { MCP_SERVER_CATALOG, catalogFor, type McpServerCatalogEntry } from "./mcp-catalog";
+import {
+  MCP_SERVER_CATALOG,
+  catalogFor,
+  type McpServerCatalogEntry,
+} from "./mcp-catalog";
 import { interactiveMcpServers } from "./interactive-mcp";
 const ENGINE_IDS = ["pi"] as const;
 import { ENGINE_NOTES } from "../../../../../scripts/gen-catalogs";
@@ -28,11 +32,15 @@ function wiredInteractive(): string[] {
  * This checks the existing wiring without importing automations.ts, whose store
  * path is initialized at module load. */
 function wiredAutomation(): string[] {
-  const source = readFileSync(resolve(import.meta.dir, "automations.ts"), "utf-8");
+  const source = readFileSync(
+    resolve(import.meta.dir, "automations.ts"),
+    "utf-8",
+  );
   const section = (startMarker: string, endMarker: string): string => {
     const start = source.indexOf(startMarker);
     const end = source.indexOf(endMarker, start);
-    if (start < 0 || end < 0) throw new Error(`automation wiring marker missing: ${startMarker}`);
+    if (start < 0 || end < 0)
+      throw new Error(`automation wiring marker missing: ${startMarker}`);
     return source.slice(start, end);
   };
   const wiring = [
@@ -49,7 +57,22 @@ function wiredAutomation(): string[] {
       "/**\n * automationRunInProcessMcp for a session file",
     ),
   ].join("\n");
-  return [...wiring.matchAll(/"(opensession-[a-z-]+)"\s*:/g)].map((match) => match[1]!);
+  return [...wiring.matchAll(/"(opensession-[a-z-]+)"\s*:/g)].map(
+    (match) => match[1]!,
+  );
+}
+
+function wiredGoal(): string[] {
+  const source = readFileSync(
+    resolve(import.meta.dir, "goal-runner.ts"),
+    "utf-8",
+  );
+  const start = source.indexOf("function goalMcpServers(");
+  const end = source.indexOf("\n}\n\nfunction buildGoalWakePrompt", start);
+  if (start < 0 || end < 0) throw new Error("goal wiring markers missing");
+  return [
+    ...source.slice(start, end).matchAll(/"(opensession-[a-z-]+)"\s*:/g),
+  ].map((match) => match[1]!);
 }
 
 describe("MCP server catalog", () => {
@@ -61,7 +84,9 @@ describe("MCP server catalog", () => {
   test("every server interactive runs carry is catalogued", () => {
     const wired = wiredInteractive();
     expect(wired.length).toBeGreaterThan(10);
-    const missing = wired.filter((n) => !find(n)?.runClasses.includes("interactive"));
+    const missing = wired.filter(
+      (n) => !find(n)?.runClasses.includes("interactive"),
+    );
     expect(missing).toEqual([]);
   });
 
@@ -80,7 +105,17 @@ describe("MCP server catalog", () => {
   test("complete automation wiring matches the catalog", () => {
     const wired = wiredAutomation();
     expect([...new Set(wired)].sort()).toEqual(
-      catalogFor("automation").map((entry) => entry.name).sort(),
+      catalogFor("automation")
+        .map((entry) => entry.name)
+        .sort(),
+    );
+  });
+
+  test("complete goal wiring matches the catalog", () => {
+    expect(wiredGoal().sort()).toEqual(
+      catalogFor("goal")
+        .map((entry) => entry.name)
+        .sort(),
     );
   });
 

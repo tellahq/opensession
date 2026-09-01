@@ -105,7 +105,8 @@ function releaseSrcLink(): string {
 }
 
 function releaseInstall():
-  { manifest: ReleaseManifest; srcLink: string } | undefined {
+  | { manifest: ReleaseManifest; srcLink: string }
+  | undefined {
   const manifestPath = join(REPO_ROOT, "release.json");
   const srcLink = releaseSrcLink();
   if (!existsSync(manifestPath)) return undefined;
@@ -163,15 +164,17 @@ async function updateRelease(
     if (!expected) {
       const checksumUrl = `${url}.sha256`;
       if (
-        (await run([
-          "curl",
-          "-fsSL",
-          "--retry",
-          "3",
-          "-o",
-          checksum,
-          checksumUrl,
-        ])).code !== 0
+        (
+          await run([
+            "curl",
+            "-fsSL",
+            "--retry",
+            "3",
+            "-o",
+            checksum,
+            checksumUrl,
+          ])
+        ).code !== 0
       ) {
         fail(
           "release downloaded but its SHA-256 checksum is unavailable",

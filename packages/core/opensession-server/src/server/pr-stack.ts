@@ -34,7 +34,11 @@ import {
   serviceGithubCredential,
   type GithubCredential,
 } from "./github-auth";
-import { ghRateLimited, noteGhRateLimited, isGhRateLimitMsg } from "./github-limit";
+import {
+  ghRateLimited,
+  noteGhRateLimited,
+  isGhRateLimitMsg,
+} from "./github-limit";
 import { audited } from "./audit";
 import { noteGithubGraphqlCall } from "./github-budget";
 import type { PrStack, PrStackLayer } from "./pr-contract";
@@ -95,7 +99,9 @@ export function stackApiDisabled(): boolean {
 }
 
 function isUnknownFieldMsg(msg: string): boolean {
-  return /doesn't exist on type|Field '(stack|stackEntry)'|Unknown field/i.test(msg);
+  return /doesn't exist on type|Field '(stack|stackEntry)'|Unknown field/i.test(
+    msg,
+  );
 }
 
 function splitRepo(ghRepo: string): { owner: string; name: string } | null {
@@ -161,7 +167,8 @@ export async function getPrStack(
     number: stack.number,
     baseRefName: stack.baseRefName || "",
     size: typeof stack.size === "number" ? stack.size : 1,
-    position: typeof entry.position === "number" ? entry.position : self.position,
+    position:
+      typeof entry.position === "number" ? entry.position : self.position,
   };
 
   // The intended one-query enumeration, skipped once it has failed here.
@@ -219,7 +226,9 @@ async function graphql(
     const msg = String(err || "gh api graphql failed").slice(0, 300);
     if (isUnknownFieldMsg(msg)) {
       stackApiUnavailable = true;
-      console.warn(`[pr-stack] stack API unavailable — skipping stack reads until restart: ${msg.slice(0, 120)}`);
+      console.warn(
+        `[pr-stack] stack API unavailable — skipping stack reads until restart: ${msg.slice(0, 120)}`,
+      );
       return null;
     }
     if (isGhRateLimitMsg(msg)) noteGhRateLimited("pr-stack");
@@ -279,7 +288,11 @@ async function walkStackChain(
 
   // Down toward the trunk: the layer below is the PR whose head IS our base.
   let cursor = self;
-  for (let i = 0; i < stack.size && cursor.baseRefName !== stack.baseRefName; i++) {
+  for (
+    let i = 0;
+    i < stack.size && cursor.baseRefName !== stack.baseRefName;
+    i++
+  ) {
     const below = await hop("headRefName", cursor.baseRefName);
     if (!below) break;
     found.set(below.number, below);
@@ -324,7 +337,9 @@ export function parseStackResponse(
     const msg = String(errors[0]?.message || "").slice(0, 300);
     if (isUnknownFieldMsg(msg)) {
       stackApiUnavailable = true;
-      console.warn(`[pr-stack] stack API unavailable — skipping stack reads until restart: ${msg.slice(0, 120)}`);
+      console.warn(
+        `[pr-stack] stack API unavailable — skipping stack reads until restart: ${msg.slice(0, 120)}`,
+      );
     }
     return null;
   }
@@ -352,7 +367,9 @@ export function parseStackResponse(
   return {
     number,
     baseRefName: shell?.baseRefName ?? stack?.baseRefName ?? "",
-    size: shell?.size ?? (typeof stack?.size === "number" ? stack.size : layers.length),
+    size:
+      shell?.size ??
+      (typeof stack?.size === "number" ? stack.size : layers.length),
     position,
     layers,
   };
@@ -394,7 +411,11 @@ export async function linkPrStack(
       args: { prUrls, cwd, credential: credential.principal },
     },
     async () => {
-      const { code, err } = await runGh(["stack", "link", ...prUrls], credential, cwd);
+      const { code, err } = await runGh(
+        ["stack", "link", ...prUrls],
+        credential,
+        cwd,
+      );
       if (code !== 0) {
         const msg = String(err || "gh stack link failed").slice(0, 300);
         if (/unknown command|extension|not installed/i.test(msg))

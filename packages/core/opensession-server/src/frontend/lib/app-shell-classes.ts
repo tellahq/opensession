@@ -1,257 +1,4 @@
-
-import * as stylex from "@stylexjs/stylex";
-import { mergeStylexClassName } from "../ui/cn";
-import { type as typography } from "../styles/typography.stylex";
-import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
-
-const sx = stylex.create({
-	flex: {
-		"display": "flex"
-	},
-	minH0: {
-		"minHeight": "0"
-	},
-	flex1: {
-		"flex": "1"
-	},
-	bgSidebar: {
-		"backgroundColor": "var(--sidebar-bg)"
-	},
-	phoneRelative: {
-		"@media (max-width: 720px)": {
-			"position": "relative"
-		}
-	},
-	phoneOverflowHidden: {
-		"@media (max-width: 720px)": {
-			"overflow": "hidden"
-		}
-	},
-	phoneBgSurface: {
-		"@media (max-width: 720px)": {
-			"backgroundColor": "var(--bg)"
-		}
-	},
-	relative: {
-		"position": "relative"
-	},
-	z25: {
-		"zIndex": "25"
-	},
-	minW0: {
-		"minWidth": "0"
-	},
-	overflowHidden: {
-		"overflow": "hidden"
-	},
-	borderL: {
-		"borderLeftStyle": "var(--tw-border-style)",
-		"borderLeftWidth": "1px"
-	},
-	borderDivider: {
-		"borderColor": "var(--divider)"
-	},
-	bgSurface: {
-		"backgroundColor": "var(--bg)"
-	},
-	desktopBoxShadowVarContentEdgeShadow: {
-		"@media (min-width: 721px)": {
-			"boxShadow": "var(--content-edge-shadow)"
-		}
-	},
-	phoneContents: {
-		"@media (max-width: 720px)": {
-			"display": "contents"
-		}
-	},
-	flexCol: {
-		"flexDirection": "column"
-	},
-	phoneAbsolute: {
-		"@media (max-width: 720px)": {
-			"position": "absolute"
-		}
-	},
-	phoneInset0: {
-		"@media (max-width: 720px)": {
-			"inset": "0"
-		}
-	},
-	phoneZ10: {
-		"@media (max-width: 720px)": {
-			"zIndex": "10"
-		}
-	},
-	phonePaneHeaderHVarHeaderH: {
-		"@media (max-width: 720px)": {
-			"--pane-header-h": "var(--header-h)"
-		}
-	},
-	phoneTransformTranslateX100: {
-		"@media (max-width: 720px)": {
-			"transform": "translate(100%)"
-		}
-	},
-	phoneTransitionTransformVarDurLgVarEase: {
-		"@media (max-width: 720px)": {
-			"transition": "transform var(--dur-lg) var(--ease)"
-		}
-	},
-	pointerEventsNone: {
-		"pointerEvents": "none"
-	},
-	absolute: {
-		"position": "absolute"
-	},
-	topCalcVarDesktopHeaderH36px: {
-		"top": "calc(var(--desktop-header-h) + 36px)"
-	},
-	bottom2: {
-		"bottom": "8px"
-	},
-	roundedCalc10pxVarRf: {
-		"borderRadius": "calc(10px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	CornerShapeVarCs: {
-		"cornerShape": "var(--cs)"
-	},
-	border2: {
-		"borderStyle": "var(--tw-border-style)",
-		"borderWidth": "2px"
-	},
-	borderAccent: {
-		"borderColor": "var(--accent)"
-	},
-	left2: {
-		"left": "8px"
-	},
-	right2: {
-		"right": "8px"
-	},
-	afterPointerEventsNone: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"pointerEvents": "none"
-		}
-	},
-	afterAbsolute: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"position": "absolute"
-		}
-	},
-	afterInsetX0: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"insetInline": "0"
-		}
-	},
-	afterBottom0: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"bottom": "0"
-		}
-	},
-	afterHPx: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"height": "1px"
-		}
-	},
-	afterBgDivider: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"backgroundColor": "var(--divider)"
-		}
-	},
-	afterOpacity0: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"opacity": "0"
-		}
-	},
-	afterTransitionOpacity: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"transitionProperty": "opacity",
-			"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-			"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-		}
-	},
-	afterContent: {
-		"::after": {
-			"--tw-content": "\"\"",
-			"content": "var(--tw-content)"
-		}
-	},
-	hVarDesktopHeaderH: {
-		"height": "var(--desktop-header-h)"
-	},
-	itemsCenter: {
-		"alignItems": "center"
-	},
-	px4: {
-		"paddingInline": "16px"
-	},
-	fontSemibold: {
-		"--tw-font-weight": "var(--font-weight-semibold)",
-		"fontWeight": "var(--font-weight-semibold)"
-	},
-	textFg: {
-		"color": "var(--text)"
-	},
-	phoneHidden: {
-		"@media (max-width: 720px)": {
-			"display": "none"
-		}
-	},
-	mlAuto: {
-		"marginLeft": "auto"
-	},
-	gap2: {
-		"gap": "8px"
-	},
-	pl4: {
-		"paddingLeft": "16px"
-	},
-	fontNormal: {
-		"--tw-font-weight": "var(--font-weight-normal)",
-		"fontWeight": "var(--font-weight-normal)"
-	},
-	shrink100: {
-		"flexShrink": "100"
-	},
-	truncate: {
-		"textOverflow": "ellipsis",
-		"whiteSpace": "nowrap",
-		"overflow": "hidden"
-	},
-	translateY1: {
-		"--tw-translate-y": "4px",
-		"translate": "var(--tw-translate-x) var(--tw-translate-y)"
-	},
-	opacity0: {
-		"opacity": "0"
-	},
-	contents: {
-		"display": "contents"
-	},
-	h0: {
-		"height": "0"
-	},
-	shrink0: {
-		"flexShrink": "0"
-	},
-	OverflowAnchorNone: {
-		"overflowAnchor": "none"
-	},
-
-	itemsStretch: {
-		"alignItems": "stretch"
-	},
-});
-
+import { utilityClassName } from "../ui/cn";
 /**
  * The application shell, as finished utility classes — what used to be
  * `.app-body`, `.workspace-shell`, `.detail-pane` and `.detail-topbar` in
@@ -303,9 +50,11 @@ const sx = stylex.create({
  * page stack's positioning context instead, and the plain page colour.
  */
 export const APP_BODY =
-	mergeStylexClassName("app-body", sx.flex, sx.minH0, sx.flex1, sx.bgSidebar) + " " +
-	"desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)] " +
-	mergeStylexClassName("", sx.phoneRelative, sx.phoneOverflowHidden, sx.phoneBgSurface);
+  utilityClassName("app-body flex min-h-0 flex-1 bg-sidebar ") +
+  utilityClassName(
+    "desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)] ",
+  ) +
+  utilityClassName("phone:relative phone:overflow-hidden phone:bg-surface");
 
 /**
  * The detail pane and its optional right panel as one object, flush to the
@@ -321,12 +70,14 @@ export const APP_BODY =
  * relationship their mobile positioning rules expect.
  */
 export const WORKSPACE_SHELL =
-	// Above the sidebar's pinned labels (z 20), so their scroll-under washes
-	// cannot cut the shadow. The resize grabber stays above both at z 30.
-	mergeStylexClassName("", sx.relative, sx.z25, sx.flex, sx.minH0, sx.minW0, sx.flex1, sx.overflowHidden, sx.borderL, sx.borderDivider, sx.bgSurface, sx.desktopBoxShadowVarContentEdgeShadow) +
-	// Collapsed sidebar: nothing to divide from or cast depth onto.
-	" " + "[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:[box-shadow:none] " +
-	mergeStylexClassName("", sx.phoneContents);
+  // Above the sidebar's pinned labels (z 20), so their scroll-under washes
+  // cannot cut the shadow. The resize grabber stays above both at z 30.
+  utilityClassName(
+    "relative z-[25] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-divider bg-surface desktop:[box-shadow:var(--content-edge-shadow)] ",
+  ) +
+  // Collapsed sidebar: nothing to divide from or cast depth onto.
+  "[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:[box-shadow:none] " +
+  utilityClassName("phone:contents");
 
 /**
  * The pane itself. `relative` anchors the floating re-open control that appears
@@ -344,27 +95,31 @@ export const WORKSPACE_SHELL =
  * inside the pane is viewport-relative and keeps using `--header-h`.
  */
 export const DETAIL_PANE =
-	mergeStylexClassName("detail-pane", sx.relative, sx.flex, sx.minH0, sx.minW0, sx.flex1, sx.flexCol) + " " +
-	mergeStylexClassName("", sx.phoneAbsolute, sx.phoneInset0, sx.phoneZ10, sx.phoneBgSurface) + " " +
-	mergeStylexClassName("", sx.phonePaneHeaderHVarHeaderH) + " " +
-	"phone:[.app:not(:has(.app-header-overlay))_&]:[--pane-header-h:0px] " +
-	// `transform`, not Tailwind's `translate` property, because that is what
-	// the transition beside it names — and what the header animates with.
-	mergeStylexClassName("", sx.phoneTransformTranslateX100) + " " +
-	mergeStylexClassName("", sx.phoneTransitionTransformVarDurLgVarEase) +
-	// Pushed on top. The shadow rides the pushed state rather than the pane,
-	// or its left-side shadow bleeds back onto the sidebar while it rests just
-	// off the right edge.
-	" " + "phone:[.app-body.mobile-detail_&]:[transform:translateX(0)] " +
-	"phone:[.app-body.mobile-detail_&]:shadow-[-10px_0_28px_rgba(0,0,0,0.35)] " +
-	// How much extra top room the phone's DOCKED tab bar takes, published to
-	// everything inside the pane that has to start below it — the transcript
-	// (VIEWER_MESSAGES), the view-tab panes, the review host. It is only set
-	// when a strip is really shown: a lone session with no view tabs hides the
-	// strip, and then the default 0 is the right answer. Two selectors because
-	// "a strip is shown" is either a view tab or a second session tab.
-	"phone:[&:has(.session-tab-view)]:[--strip-clearance:46px] " +
-	"phone:[&:has(.session-tab-reorder~.session-tab-reorder)]:[--strip-clearance:46px]";
+  utilityClassName(
+    "detail-pane relative flex min-h-0 min-w-0 flex-1 flex-col ",
+  ) +
+  utilityClassName(
+    "phone:absolute phone:inset-0 phone:z-10 phone:bg-surface ",
+  ) +
+  utilityClassName("phone:[--pane-header-h:var(--header-h)] ") +
+  "phone:[.app:not(:has(.app-header-overlay))_&]:[--pane-header-h:0px] " +
+  // `transform`, not Tailwind's `translate` property, because that is what
+  // the transition beside it names — and what the header animates with.
+  utilityClassName("phone:[transform:translateX(100%)] ") +
+  utilityClassName("phone:[transition:transform_var(--dur-lg)_var(--ease)] ") +
+  // Pushed on top. The shadow rides the pushed state rather than the pane,
+  // or its left-side shadow bleeds back onto the sidebar while it rests just
+  // off the right edge.
+  "phone:[.app-body.mobile-detail_&]:[transform:translateX(0)] " +
+  "phone:[.app-body.mobile-detail_&]:shadow-[-10px_0_28px_rgba(0,0,0,0.35)] " +
+  // How much extra top room the phone's DOCKED tab bar takes, published to
+  // everything inside the pane that has to start below it — the transcript
+  // (VIEWER_MESSAGES), the view-tab panes, the review host. It is only set
+  // when a strip is really shown: a lone session with no view tabs hides the
+  // strip, and then the default 0 is the right answer. Two selectors because
+  // "a strip is shown" is either a view tab or a second session tab.
+  "phone:[&:has(.session-tab-view)]:[--strip-clearance:46px] " +
+  "phone:[&:has(.session-tab-reorder~.session-tab-reorder)]:[--strip-clearance:46px]";
 
 /**
  * The drop target outlined while a tab is dragged to the pane's edge to split
@@ -381,14 +136,14 @@ export const DETAIL_PANE =
  * it moves with the band.
  */
 export const tabSplitDropPreviewClass = (side: "left" | "right") =>
-	mergeStylexClassName("", sx.pointerEventsNone, sx.absolute, sx.topCalcVarDesktopHeaderH36px, sx.bottom2, sx.z25) + " " +
-	mergeStylexClassName("", sharedClassStyles.wCalcVarSplitPreviewShare5012px) +
-	" " + mergeStylexClassName("", sx.roundedCalc10pxVarRf, sx.CornerShapeVarCs, sx.border2, sx.borderAccent) + " " +
-	mergeStylexClassName("", sharedClassStyles.bgColorMixInSrgbVarAccent18Transparent) +
-	// A hairline of white inside the accent edge, so the outline still reads
-	// against a light screenshot or a pale diff behind it.
-	" " + "shadow-[inset_0_0_0_1px_color-mix(in_srgb,white_16%,transparent)] " +
-	(side === "left" ? mergeStylexClassName("", sx.left2) : mergeStylexClassName("", sx.right2));
+  "pointer-events-none absolute top-[calc(var(--desktop-header-h)+36px)] bottom-2 z-[25] " +
+  "w-[calc(var(--split-preview-share,50%)-12px)] " +
+  "rounded-[calc(10px*var(--rf))] [corner-shape:var(--cs)] border-2 border-accent " +
+  "bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] " +
+  // A hairline of white inside the accent edge, so the outline still reads
+  // against a light screenshot or a pale diff behind it.
+  "shadow-[inset_0_0_0_1px_color-mix(in_srgb,white_16%,transparent)] " +
+  (side === "left" ? "left-2" : "right-2");
 
 /**
  * The hairline a chrome row grows once content has scrolled underneath it.
@@ -411,10 +166,14 @@ export const tabSplitDropPreviewClass = (side: "left" | "right") =>
  * content and dissolves it with a mask instead (see `appHeader`).
  */
 export const SCROLL_EDGE_DIVIDER =
-	mergeStylexClassName("", sx.relative, sx.afterPointerEventsNone, sx.afterAbsolute, sx.afterInsetX0) + " " +
-	mergeStylexClassName("", sx.afterBottom0, sx.afterHPx, sx.afterBgDivider, sx.afterOpacity0) + " " +
-	mergeStylexClassName("", sx.afterTransitionOpacity, sx.afterContent) + " " +
-	"desktop:data-[scrolled]:after:opacity-100";
+  utilityClassName(
+    "relative after:pointer-events-none after:absolute after:inset-x-0 ",
+  ) +
+  utilityClassName(
+    "after:bottom-0 after:h-px after:bg-divider after:opacity-0 ",
+  ) +
+  utilityClassName("after:transition-opacity after:content-[''] ") +
+  "desktop:data-[scrolled]:after:opacity-100";
 
 /** Top bar above the tab strip: the session's header portals in here on
  *  session routes, other views render a plain title. `empty:hidden` collapses
@@ -426,8 +185,9 @@ export const SCROLL_EDGE_DIVIDER =
  *  `:has(+ .session-tabs)`: a split gives each column its own strip, nested a
  *  level down from this row. */
 export const DETAIL_TOPBAR =
-	[mergeStylexClassName("detail-topbar empty:hidden", sx.flex, sx.minW0, sx.shrink0, sx.flexCol, sx.itemsStretch), SCROLL_EDGE_DIVIDER].filter(Boolean).join(" ") +
-	" " + "[.detail-pane:has(.session-tabs)_&]:after:content-none";
+  utilityClassName(
+    `detail-topbar flex min-w-0 shrink-0 flex-col items-stretch empty:hidden ${SCROLL_EDGE_DIVIDER} `,
+  ) + "[.detail-pane:has(.session-tabs)_&]:after:content-none";
 
 /**
  * The plain title. Matches `.viewer-header` and the sidebar brand row's height
@@ -452,13 +212,15 @@ export const DETAIL_TOPBAR =
  * the bar, so the pane's content would jump 52px up and down as you scrolled.
  */
 export const DETAIL_TOPBAR_TITLE =
-	mergeStylexClassName("detail-topbar-title wco-chrome", sx.flex, sx.hVarDesktopHeaderH, sx.itemsCenter, sx.px4) + " " +
-	mergeStylexClassName("", sx.bgSurface) + " " +
-	mergeStylexClassName("", typography.itemTitle, sx.fontSemibold, sx.textFg) +
-	// Collapsed desktop sidebar: clear the floating re-open control and the
-	// fallback nav/search cluster beside it.
-	" " + "desktop:[.app-body.sidebar-collapsed_&]:pl-[148px] " +
-	mergeStylexClassName("", sx.phoneHidden);
+  utilityClassName(
+    "detail-topbar-title wco-chrome flex h-[var(--desktop-header-h)] items-center px-4 ",
+  ) +
+  utilityClassName("bg-surface ") +
+  utilityClassName("text-item-title font-semibold text-fg ") +
+  // Collapsed desktop sidebar: clear the floating re-open control and the
+  // fallback nav/search cluster beside it.
+  "desktop:[.app-body.sidebar-collapsed_&]:pl-[148px] " +
+  utilityClassName("phone:hidden");
 
 /**
  * The trailing slot of that row: a page's own controls, portaled up out of its
@@ -475,8 +237,9 @@ export const DETAIL_TOPBAR_TITLE =
  * every named route and only one page fills it, and an empty box still spends
  * its own padding in the row.
  */
-export const DETAIL_TOPBAR_ACTIONS =
-	mergeStylexClassName("empty:hidden", sx.mlAuto, sx.flex, sx.minW0, sx.itemsCenter, sx.gap2, sx.pl4, sx.fontNormal);
+export const DETAIL_TOPBAR_ACTIONS = utilityClassName(
+  "ml-auto flex min-w-0 items-center gap-2 pl-4 font-normal empty:hidden",
+);
 
 /**
  * The word inside that row, which is only there once the page's own heading has
@@ -493,13 +256,13 @@ export const DETAIL_TOPBAR_ACTIONS =
  * top of the window with it.
  */
 export const DETAIL_TOPBAR_TITLE_TEXT =
-	// It gives way first to whatever a page puts in the actions slot beside it,
-	// and gives way hard: at rest this word is invisible, so a narrow pane would
-	// otherwise be cutting a page's controls to hold room for a title nobody can
-	// see yet. Scrolled, it truncates, which is what a name in a bar does.
-	mergeStylexClassName("", sx.minW0, sx.shrink100, sx.truncate, sx.translateY1, sx.opacity0) + " " +
-	mergeStylexClassName("", sharedClassStyles.transitionOpacityTranslate) +
-	" " + "data-[shown]:translate-y-0 data-[shown]:opacity-100";
+  // It gives way first to whatever a page puts in the actions slot beside it,
+  // and gives way hard: at rest this word is invisible, so a narrow pane would
+  // otherwise be cutting a page's controls to hold room for a title nobody can
+  // see yet. Scrolled, it truncates, which is what a name in a bar does.
+  utilityClassName("min-w-0 shrink-[100] truncate translate-y-1 opacity-0 ") +
+  utilityClassName("transition-[opacity,translate] ") +
+  "data-[shown]:translate-y-0 data-[shown]:opacity-100";
 
 /**
  * The right panel portals into this slot. `contents` dissolves it so the panel
@@ -507,9 +270,11 @@ export const DETAIL_TOPBAR_TITLE_TEXT =
  * right column at the same level as the pane, rather than a box confined below
  * the session header.
  */
-export const RIGHT_PANEL_SLOT = mergeStylexClassName("", sx.contents);
+export const RIGHT_PANEL_SLOT = utilityClassName("contents");
 
 /** Bottom spacer that lets the latest turn reach the top of the viewport. The
  *  scroll hook sets its height imperatively; no transition, so it tracks a
  *  streaming reply exactly. */
-export const TURN_SPACER = mergeStylexClassName("", sx.pointerEventsNone, sx.h0, sx.shrink0, sx.OverflowAnchorNone);
+export const TURN_SPACER = utilityClassName(
+  "pointer-events-none h-0 shrink-0 [overflow-anchor:none]",
+);

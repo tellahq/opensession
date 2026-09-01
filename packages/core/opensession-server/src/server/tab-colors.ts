@@ -13,47 +13,47 @@ import { userStore } from "./shared/user-store";
 
 /** Allowed swatch keys — keep in sync with TAB_COLORS in lib/tab-colors.ts. */
 const ALLOWED = new Set([
-	"red",
-	"orange",
-	"yellow",
-	"green",
-	"blue",
-	"purple",
-	"pink",
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "blue",
+  "purple",
+  "pink",
 ]);
 
 export type TabColors = Record<string, string>;
 
 /** Keep only string-id → allowed-color entries. */
 function clean(input: unknown): TabColors {
-	const out: TabColors = {};
-	if (input && typeof input === "object") {
-		for (const [id, color] of Object.entries(
-			input as Record<string, unknown>,
-		)) {
-			if (
-				typeof id === "string" &&
-				typeof color === "string" &&
-				ALLOWED.has(color)
-			) {
-				out[id] = color;
-			}
-		}
-	}
-	return out;
+  const out: TabColors = {};
+  if (input && typeof input === "object") {
+    for (const [id, color] of Object.entries(
+      input as Record<string, unknown>,
+    )) {
+      if (
+        typeof id === "string" &&
+        typeof color === "string" &&
+        ALLOWED.has(color)
+      ) {
+        out[id] = color;
+      }
+    }
+  }
+  return out;
 }
 
 const store = userStore<TabColors>({
-	name: "tab-colors",
-	field: "colors",
-	clean,
+  name: "tab-colors",
+  field: "colors",
+  clean,
 });
 
 export function getTabColors(user: string): TabColors {
-	return store.get(user);
+  return store.get(user);
 }
 
 /** Replace a user's tab colors (validated). Returns the stored map. */
 export function setTabColors(user: string, colors: unknown): TabColors {
-	return store.set(user, colors);
+  return store.set(user, colors);
 }

@@ -7,240 +7,242 @@
  */
 
 import type { RouteContext } from "./context";
-import { addAccount, listAccountsPublic, refreshAllUsage, removeAccount, setAccountOwner } from "../claude-accounts";
 import {
-	addCodexAccount,
-	listCodexAccountsPublic,
-	refreshAllCodexUsage,
-	removeCodexAccount,
-	setCodexAccountOwner,
+  addAccount,
+  listAccountsPublic,
+  refreshAllUsage,
+  removeAccount,
+  setAccountOwner,
+} from "../claude-accounts";
+import {
+  addCodexAccount,
+  listCodexAccountsPublic,
+  refreshAllCodexUsage,
+  removeCodexAccount,
+  setCodexAccountOwner,
 } from "../codex-accounts";
-import { cancelDeviceLogin, getDeviceLogin, startDeviceLogin } from "../codex-device-login";
 import {
-	cancelCodexOauthLogin,
-	completeCodexOauthLogin,
-	startCodexOauthLogin,
+  cancelDeviceLogin,
+  getDeviceLogin,
+  startDeviceLogin,
+} from "../codex-device-login";
+import {
+  cancelCodexOauthLogin,
+  completeCodexOauthLogin,
+  startCodexOauthLogin,
 } from "../codex-oauth-login";
 import {
-	cancelClaudeLogin,
-	completeClaudeLogin,
-	startClaudeLogin,
+  cancelClaudeLogin,
+  completeClaudeLogin,
+  startClaudeLogin,
 } from "../claude-oauth-login";
 
 export async function handleAccountsRoutes(
-	ctx: RouteContext,
+  ctx: RouteContext,
 ): Promise<Response | undefined> {
-	const { req, url, path, publicPrefix } = ctx;
+  const { req, url, path, publicPrefix } = ctx;
 
-	// ── Claude account pool (tokens are never sent back, only masked) ──
-	if (path === "/api/claude-accounts" && req.method === "GET") {
-		return Response.json({ accounts: listAccountsPublic() });
-	}
+  // ── Claude account pool (tokens are never sent back, only masked) ──
+  if (path === "/api/claude-accounts" && req.method === "GET") {
+    return Response.json({ accounts: listAccountsPublic() });
+  }
 
-	if (path === "/api/claude-accounts" && req.method === "POST") {
-		const body = await req.json().catch(() => null);
-		if (!body?.name || !body?.token) {
-			return Response.json(
-				{ error: "name and token are required" },
-				{ status: 400 },
-			);
-		}
-		const result = await addAccount(
-			body.name,
-			body.token,
-			typeof body.owner === "string" ? body.owner : undefined,
-			typeof body.credentialsPath === "string" ? body.credentialsPath : undefined,
-		);
-		if ("error" in result) return Response.json(result, { status: 400 });
-		return Response.json(result);
-	}
+  if (path === "/api/claude-accounts" && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    if (!body?.name || !body?.token) {
+      return Response.json(
+        { error: "name and token are required" },
+        { status: 400 },
+      );
+    }
+    const result = await addAccount(
+      body.name,
+      body.token,
+      typeof body.owner === "string" ? body.owner : undefined,
+      typeof body.credentialsPath === "string"
+        ? body.credentialsPath
+        : undefined,
+    );
+    if ("error" in result) return Response.json(result, { status: 400 });
+    return Response.json(result);
+  }
 
-	if (
-		path === "/api/claude-accounts/refresh" &&
-		req.method === "POST"
-	) {
-		await refreshAllUsage();
-		return Response.json({ accounts: listAccountsPublic() });
-	}
+  if (path === "/api/claude-accounts/refresh" && req.method === "POST") {
+    await refreshAllUsage();
+    return Response.json({ accounts: listAccountsPublic() });
+  }
 
-	// "Sign in with Claude" attaches usage OAuth to an existing setup-token
-	// account. Keep this ahead of the generic /claude-accounts/:id matchers.
-	if (path === "/api/claude-accounts/oauth-login" && req.method === "POST") {
-		const body = await req.json().catch(() => null);
-		if (typeof body?.accountId !== "string" || !body.accountId) {
-			return Response.json({ error: "accountId is required" }, { status: 400 });
-		}
-		const result = await startClaudeLogin(body.accountId);
-		if ("error" in result) return Response.json(result, { status: 400 });
-		return Response.json(result);
-	}
-	const oauthLoginMatch = path.match(
-		/^\/api\/claude-accounts\/oauth-login\/([^/]+)$/,
-	);
-	if (oauthLoginMatch && req.method === "POST") {
-		const body = await req.json().catch(() => null);
-		if (typeof body?.code !== "string" || !body.code.trim()) {
-			return Response.json({ error: "code is required" }, { status: 400 });
-		}
-		const result = await completeClaudeLogin(
-			decodeURIComponent(oauthLoginMatch[1]),
-			body.code,
-		);
-		if ("error" in result) return Response.json(result, { status: 400 });
-		return Response.json(result);
-	}
-	if (oauthLoginMatch && req.method === "DELETE") {
-		return cancelClaudeLogin(decodeURIComponent(oauthLoginMatch[1]))
-			? Response.json({ ok: true })
-			: Response.json({ error: "Not found" }, { status: 404 });
-	}
+  // "Sign in with Claude" attaches usage OAuth to an existing setup-token
+  // account. Keep this ahead of the generic /claude-accounts/:id matchers.
+  if (path === "/api/claude-accounts/oauth-login" && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    if (typeof body?.accountId !== "string" || !body.accountId) {
+      return Response.json({ error: "accountId is required" }, { status: 400 });
+    }
+    const result = await startClaudeLogin(body.accountId);
+    if ("error" in result) return Response.json(result, { status: 400 });
+    return Response.json(result);
+  }
+  const oauthLoginMatch = path.match(
+    /^\/api\/claude-accounts\/oauth-login\/([^/]+)$/,
+  );
+  if (oauthLoginMatch && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    if (typeof body?.code !== "string" || !body.code.trim()) {
+      return Response.json({ error: "code is required" }, { status: 400 });
+    }
+    const result = await completeClaudeLogin(
+      decodeURIComponent(oauthLoginMatch[1]),
+      body.code,
+    );
+    if ("error" in result) return Response.json(result, { status: 400 });
+    return Response.json(result);
+  }
+  if (oauthLoginMatch && req.method === "DELETE") {
+    return cancelClaudeLogin(decodeURIComponent(oauthLoginMatch[1]))
+      ? Response.json({ ok: true })
+      : Response.json({ error: "Not found" }, { status: 404 });
+  }
 
-	const accountDelMatch = path.match(
-		/^\/api\/claude-accounts\/([^/]+)$/,
-	);
-	if (accountDelMatch && req.method === "DELETE") {
-		return removeAccount(decodeURIComponent(accountDelMatch[1]))
-			? Response.json({ ok: true })
-			: Response.json({ error: "Not found" }, { status: 404 });
-	}
-	// Set/clear an account's personal owner ({"owner": "Alex"} or "").
-	if (accountDelMatch && req.method === "PUT") {
-		const body = await req.json().catch(() => null);
-		const updated = setAccountOwner(
-			decodeURIComponent(accountDelMatch[1]),
-			typeof body?.owner === "string" ? body.owner : undefined,
-			typeof body?.credentialsPath === "string"
-				? body.credentialsPath
-				: undefined,
-		);
-		return updated
-			? Response.json(updated)
-			: Response.json({ error: "Not found" }, { status: 404 });
-	}
+  const accountDelMatch = path.match(/^\/api\/claude-accounts\/([^/]+)$/);
+  if (accountDelMatch && req.method === "DELETE") {
+    return removeAccount(decodeURIComponent(accountDelMatch[1]))
+      ? Response.json({ ok: true })
+      : Response.json({ error: "Not found" }, { status: 404 });
+  }
+  // Set/clear an account's personal owner ({"owner": "Alex"} or "").
+  if (accountDelMatch && req.method === "PUT") {
+    const body = await req.json().catch(() => null);
+    const updated = setAccountOwner(
+      decodeURIComponent(accountDelMatch[1]),
+      typeof body?.owner === "string" ? body.owner : undefined,
+      typeof body?.credentialsPath === "string"
+        ? body.credentialsPath
+        : undefined,
+    );
+    return updated
+      ? Response.json(updated)
+      : Response.json({ error: "Not found" }, { status: 404 });
+  }
 
-	// ── Codex (OpenAI) account pool ──
-	if (path === "/api/codex-accounts" && req.method === "GET") {
-		return Response.json({ accounts: listCodexAccountsPublic() });
-	}
+  // ── Codex (OpenAI) account pool ──
+  if (path === "/api/codex-accounts" && req.method === "GET") {
+    return Response.json({ accounts: listCodexAccountsPublic() });
+  }
 
-	if (
-		path === "/api/codex-accounts/refresh" &&
-		req.method === "POST"
-	) {
-		await refreshAllCodexUsage();
-		return Response.json({ accounts: listCodexAccountsPublic() });
-	}
+  if (path === "/api/codex-accounts/refresh" && req.method === "POST") {
+    await refreshAllCodexUsage();
+    return Response.json({ accounts: listCodexAccountsPublic() });
+  }
 
-	if (path === "/api/codex-accounts" && req.method === "POST") {
-		const body = await req.json().catch(() => null);
-		if (
-			(!body?.name && body?.kind === "api_key") ||
-			!body?.value ||
-			!["api_key", "home"].includes(body?.kind)
-		) {
-			return Response.json(
-				{ error: "kind (api_key|home) and value are required; API keys also need a name" },
-				{ status: 400 },
-			);
-		}
-		const result = addCodexAccount(
-			body.name,
-			body.kind,
-			body.value,
-			typeof body.owner === "string" ? body.owner : undefined,
-		);
-		if ("error" in result) return Response.json(result, { status: 400 });
-		return Response.json(result);
-	}
+  if (path === "/api/codex-accounts" && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    if (
+      (!body?.name && body?.kind === "api_key") ||
+      !body?.value ||
+      !["api_key", "home"].includes(body?.kind)
+    ) {
+      return Response.json(
+        {
+          error:
+            "kind (api_key|home) and value are required; API keys also need a name",
+        },
+        { status: 400 },
+      );
+    }
+    const result = addCodexAccount(
+      body.name,
+      body.kind,
+      body.value,
+      typeof body.owner === "string" ? body.owner : undefined,
+    );
+    if ("error" in result) return Response.json(result, { status: 400 });
+    return Response.json(result);
+  }
 
-	// ── Paste-link ChatGPT sign-in (PKCE; for device-auth-disabled workspaces) ──
-	// Keep these ahead of the generic /codex-accounts/:id matchers.
-	if (path === "/api/codex-accounts/oauth-login" && req.method === "POST") {
-		const body = await req.json().catch(() => null);
-		const result = await startCodexOauthLogin(
-			typeof body?.name === "string" ? body.name : "",
-			typeof body?.owner === "string" ? body.owner : undefined,
-		);
-		if ("error" in result) return Response.json(result, { status: 400 });
-		return Response.json(result);
-	}
-	const codexOauthMatch = path.match(
-		/^\/api\/codex-accounts\/oauth-login\/([^/]+)$/,
-	);
-	if (codexOauthMatch && req.method === "POST") {
-		const body = await req.json().catch(() => null);
-		if (typeof body?.code !== "string" || !body.code.trim()) {
-			return Response.json({ error: "code is required" }, { status: 400 });
-		}
-		const result = await completeCodexOauthLogin(
-			decodeURIComponent(codexOauthMatch[1]),
-			body.code,
-		);
-		if ("error" in result) return Response.json(result, { status: 400 });
-		return Response.json(result);
-	}
-	if (codexOauthMatch && req.method === "DELETE") {
-		return cancelCodexOauthLogin(decodeURIComponent(codexOauthMatch[1]))
-			? Response.json({ ok: true })
-			: Response.json({ error: "Not found" }, { status: 404 });
-	}
+  // ── Paste-link ChatGPT sign-in (PKCE; for device-auth-disabled workspaces) ──
+  // Keep these ahead of the generic /codex-accounts/:id matchers.
+  if (path === "/api/codex-accounts/oauth-login" && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    const result = await startCodexOauthLogin(
+      typeof body?.name === "string" ? body.name : "",
+      typeof body?.owner === "string" ? body.owner : undefined,
+    );
+    if ("error" in result) return Response.json(result, { status: 400 });
+    return Response.json(result);
+  }
+  const codexOauthMatch = path.match(
+    /^\/api\/codex-accounts\/oauth-login\/([^/]+)$/,
+  );
+  if (codexOauthMatch && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    if (typeof body?.code !== "string" || !body.code.trim()) {
+      return Response.json({ error: "code is required" }, { status: 400 });
+    }
+    const result = await completeCodexOauthLogin(
+      decodeURIComponent(codexOauthMatch[1]),
+      body.code,
+    );
+    if ("error" in result) return Response.json(result, { status: 400 });
+    return Response.json(result);
+  }
+  if (codexOauthMatch && req.method === "DELETE") {
+    return cancelCodexOauthLogin(decodeURIComponent(codexOauthMatch[1]))
+      ? Response.json({ ok: true })
+      : Response.json({ error: "Not found" }, { status: 404 });
+  }
 
-	// ── Device-code sign-in (browser-free `codex login --device-auth`) ──
-	if (
-		path === "/api/codex-accounts/device-login" &&
-		req.method === "POST"
-	) {
-		const body = await req.json().catch(() => null);
-		let result = startDeviceLogin(
-			typeof body?.name === "string" ? body.name : "",
-			typeof body?.owner === "string" ? body.owner : undefined,
-		);
-		// A failed start has no id — a started login may carry a (later) error
-		// field too, so keying the status on "error" alone 400s successes.
-		if (!("id" in result)) return Response.json(result, { status: 400 });
-		// Give the CLI a moment to print the URL + code so the UI can render
-		// them from this response; the client keeps polling either way.
-		for (let i = 0; i < 25 && result.state === "starting"; i++) {
-			await new Promise((r) => setTimeout(r, 160));
-			result = getDeviceLogin(result.id) ?? result;
-		}
-		return Response.json(result);
-	}
+  // ── Device-code sign-in (browser-free `codex login --device-auth`) ──
+  if (path === "/api/codex-accounts/device-login" && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    let result = startDeviceLogin(
+      typeof body?.name === "string" ? body.name : "",
+      typeof body?.owner === "string" ? body.owner : undefined,
+    );
+    // A failed start has no id — a started login may carry a (later) error
+    // field too, so keying the status on "error" alone 400s successes.
+    if (!("id" in result)) return Response.json(result, { status: 400 });
+    // Give the CLI a moment to print the URL + code so the UI can render
+    // them from this response; the client keeps polling either way.
+    for (let i = 0; i < 25 && result.state === "starting"; i++) {
+      await new Promise((r) => setTimeout(r, 160));
+      result = getDeviceLogin(result.id) ?? result;
+    }
+    return Response.json(result);
+  }
 
-	const deviceLoginMatch = path.match(
-		/^\/api\/codex-accounts\/device-login\/([^/]+)$/,
-	);
-	if (deviceLoginMatch && req.method === "GET") {
-		const login = getDeviceLogin(decodeURIComponent(deviceLoginMatch[1]));
-		return login
-			? Response.json(login)
-			: Response.json({ error: "Not found" }, { status: 404 });
-	}
-	if (deviceLoginMatch && req.method === "DELETE") {
-		return cancelDeviceLogin(decodeURIComponent(deviceLoginMatch[1]))
-			? Response.json({ ok: true })
-			: Response.json({ error: "Not found" }, { status: 404 });
-	}
+  const deviceLoginMatch = path.match(
+    /^\/api\/codex-accounts\/device-login\/([^/]+)$/,
+  );
+  if (deviceLoginMatch && req.method === "GET") {
+    const login = getDeviceLogin(decodeURIComponent(deviceLoginMatch[1]));
+    return login
+      ? Response.json(login)
+      : Response.json({ error: "Not found" }, { status: 404 });
+  }
+  if (deviceLoginMatch && req.method === "DELETE") {
+    return cancelDeviceLogin(decodeURIComponent(deviceLoginMatch[1]))
+      ? Response.json({ ok: true })
+      : Response.json({ error: "Not found" }, { status: 404 });
+  }
 
-	const codexAccountDelMatch = path.match(
-		/^\/api\/codex-accounts\/([^/]+)$/,
-	);
-	if (codexAccountDelMatch && req.method === "DELETE") {
-		return removeCodexAccount(decodeURIComponent(codexAccountDelMatch[1]))
-			? Response.json({ ok: true })
-			: Response.json({ error: "Not found" }, { status: 404 });
-	}
-	// Set/clear an account's personal owner ({"owner": "Alex"} or "").
-	if (codexAccountDelMatch && req.method === "PUT") {
-		const body = await req.json().catch(() => null);
-		const updated = setCodexAccountOwner(
-			decodeURIComponent(codexAccountDelMatch[1]),
-			typeof body?.owner === "string" ? body.owner : undefined,
-		);
-		return updated
-			? Response.json(updated)
-			: Response.json({ error: "Not found" }, { status: 404 });
-	}
+  const codexAccountDelMatch = path.match(/^\/api\/codex-accounts\/([^/]+)$/);
+  if (codexAccountDelMatch && req.method === "DELETE") {
+    return removeCodexAccount(decodeURIComponent(codexAccountDelMatch[1]))
+      ? Response.json({ ok: true })
+      : Response.json({ error: "Not found" }, { status: 404 });
+  }
+  // Set/clear an account's personal owner ({"owner": "Alex"} or "").
+  if (codexAccountDelMatch && req.method === "PUT") {
+    const body = await req.json().catch(() => null);
+    const updated = setCodexAccountOwner(
+      decodeURIComponent(codexAccountDelMatch[1]),
+      typeof body?.owner === "string" ? body.owner : undefined,
+    );
+    return updated
+      ? Response.json(updated)
+      : Response.json({ error: "Not found" }, { status: 404 });
+  }
 
-	return undefined;
+  return undefined;
 }

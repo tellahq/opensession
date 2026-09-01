@@ -22,11 +22,10 @@ Daytona, Box and Modal accept workspace-owned provider credentials there; they
 are submitted write-only to the server-side workspace secret store and are
 never returned to the browser or placed in a Sandbox.
 
-Local providers use these host commands:
+The local Docker provider uses this host command:
 
 ```sh
 opensession sandbox enable docker
-opensession sandbox enable microvm
 ```
 
 They check prerequisites, install and verify available release artifacts,
@@ -52,12 +51,6 @@ This also ensures the image contains the current checkout. The enable command's
 verified release pull keeps its GHCR tag, while Docker qualification and runs
 currently look for `opensession-runner:latest` unless the root-level `image`
 runtime setting says otherwise.
-
-Local MicroVM needs Linux, `/dev/kvm`, cgroup v2, Docker, `curl`, `cosign` for
-a published golden, tar with Zstandard support, at least 30 GB free,
-`/opt/firecracker/firecracker`, `/opt/firecracker/vmlinux`, and a
-reflink-capable XFS or Btrfs store under `/opt/firecracker` (or
-`OPENSESSION_MICROVM_STORE_DIR`).
 
 `opensession sandbox enable docker` currently requests volume workspaces, WS
 transport, and Docker snapshots enabled. Ask sessions and sessions with an
@@ -91,11 +84,11 @@ docker build -f deploy/sandbox/Dockerfile \
   -t opensession-runner:latest .
 ```
 
-| ARG | Default | Keep in lockstep with |
-| --- | --- | --- |
-| `BUN_VERSION` | 1.4.0 | host `bun --version` |
+| ARG              | Default | Keep in lockstep with   |
+| ---------------- | ------- | ----------------------- |
+| `BUN_VERSION`    | 1.4.0   | host `bun --version`    |
 | `CLAUDE_VERSION` | 2.1.218 | host `claude --version` |
-| `NODE_MAJOR` | 24 | host Node major |
+| `NODE_MAJOR`     | 24      | host Node major         |
 
 There is no `PI_VERSION` build argument; Pi is installed from `bun.lock`.
 Rebuild after a tool pin or lockfile change and after any runtime source copied
@@ -160,14 +153,14 @@ ready Sandbox outside active typing, use `keepReady`:
 `maxLive` bounds preparing plus unparked Ready capacity. Set it at least as high
 as the number of keep-ready targets; the parser does not enforce that
 relationship, so excess targets remain at capacity. Open Session parks prepared
-capacity when the provider retains its disk on stop, including Box, Daytona and
-Local MicroVM. A claim resumes that disk, and its replacement prepares in the
-background before parking again. Completed, signature-matching entries survive
+capacity when the provider retains its disk on stop, including Box and Daytona.
+A claim resumes that disk, and its replacement prepares in the background
+before parking again. Completed, signature-matching entries survive
 coordinator restarts. Without `keepReady`, the pool remains demand-driven and
 TTL-bound.
 
-Prewarm defaults on when Daytona, Box, Modal or Local MicroVM is configured,
-unless `prewarm.enabled` is false. E2B and Lambda MicroVM have no prewarm
+Prewarm defaults on when Daytona, Box or Modal is configured, unless
+`prewarm.enabled` is false. E2B and Lambda MicroVM have no prewarm
 adapter. Docker starts fast enough locally that it is not pooled.
 
 ### Snapshots
@@ -184,10 +177,6 @@ the committed layer.
 
 The schema default is off, although `opensession sandbox enable docker` writes
 it on. `maxPerSession` bounds retained timestamped images per session.
-
-Local MicroVM uses a golden memory snapshot only to create a fresh standard-size
-clone. Sleeping a session stops Firecracker and preserves its COW disk, not its
-RAM; wake cold-boots that disk and runs `.agents/resume`.
 
 Daytona has a separate base-snapshot setting. Its unsized default is 1 vCPU,
 1 GB and 3 GiB, too small for a real repository. Configure a prepared project's
@@ -206,25 +195,27 @@ Honest status, because these are the newest parts:
 - **Prewarm restart recovery** restores completed, signature-matching entries.
   Interrupted bootstraps are destroyed because their completion promise cannot
   be resumed safely.
-- **The MicroVM backend is live-certified** for provisioning, engine launch,
-  reconnect/replay, steering, cancellation, durable pause/wake, workspace
-  survival and teardown. Each Firecracker process is unprivileged and jailed
-  in a per-clone chroot with zero capabilities, NoNewPrivileges, seccomp and a
-  closed device cgroup. The guest has its own kernel behind KVM, but it still
-  depends on the host kernel, Firecracker and hardware virtualization rather
-  than a separate physical trust domain.
-- **Docker, Daytona, Box, Modal and Local MicroVM** have live certifications.
+- **Docker, Daytona, Box and Modal** have live certifications.
   E2B and Lambda MicroVM are implemented but not certified. They are hidden
   from the workspace connection UI and rejected for new sessions until their
   live matrix passes and the code certification registry is updated.
 - Clearly transient provider/network failures during idempotent sandbox
   creation are retried once. Agent launch is never retried because that could
   duplicate a turn.
-- A default-branch update invalidates Local MicroVM repository templates.
-  Daytona, Box and Modal prepared images remain safe because adoption fetches
+- Daytona, Box and Modal prepared images remain safe because adoption fetches
   the requested branch; setup-input changes invalidate them separately.
   Explicitly prepared Daytona and Modal images refresh on a 30-minute cadence,
   while Box uses six hours to conserve its daily start quota.
+- Prepared templates are keyed on the runner toolchain and the repo's
+  committed setup inputs, not on the runner's commit pin: an ordinary deploy
+  bumps the pin, and adoption reconciles it inside the restored filesystem
+  (shallow fetch + detached checkout + incremental install), so templates
+  survive deploys instead of rebuilding on every one. The default setup
+  inputs are `.agents/setup`, `.agents/sandbox-environment.json` and
+  `bun.lock`; a repo can declare extra committed files or directories in
+  `.agents/sandbox-environment.json` under `preparationInputs` (for example
+  `["patches", "Cargo.lock"]`) so its own invalidation surface travels with
+  the repo.
 
 If you are starting out, use Docker and leave prewarm alone. The enable command
 turns Docker snapshots on; set `snapshots.enabled` to false if you prefer no
@@ -240,7 +231,7 @@ Sandboxes honor the repo-committed lifecycle contract
   Docker treats failure as settled and non-blocking. Reusable project images
   run it before sealing and skip it after restore.
 - `.agents/resume` — executable, idempotent post-wake repair. It currently runs
-  only after an actual durable Local MicroVM wake; failure blocks the wake and
+  after an actual durable remote-provider wake; failure blocks the wake and
   is retained in the Sandbox panel.
 - `.agents/start.sh` — foreground dev-server/legacy Preview entry honoring
   `WEBAPP_PORT`, `PREVIEW_URL` and `OPENSESSION_BOOT_MODE`.
@@ -256,7 +247,7 @@ Fresh installs use `~/.opensession/sandbox.json`. If only the legacy
 `~/.opensession-sandbox.json` exists, Open Session continues using it until it
 is migrated; it does not split the store.
 
-Do not configure Docker, Daytona, Box, Modal or Local MicroVM connections by
+Do not configure Docker, Daytona, Box or Modal connections by
 editing this file. Normalized connections and opaque credential references are
 server-owned. Raw Daytona/Modal credentials and their credential environment
 variables are not supported by normal operation. E2B remains an experimental
@@ -272,7 +263,7 @@ clone token, keep it mode `0600`.
 {
   // Provider used by legacy/internal `sandbox: true` callers. Explicit
   // provider choices are recorded on each session.
-  // "local" | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" |
+  // "local" | "docker" | "daytona" | "e2b" | "box" | "modal" |
   // "lambda-microvm"
   "provider": "docker",
 
@@ -285,7 +276,7 @@ clone token, keep it mode `0600`.
   // Container image (default "opensession-runner:latest").
   "image": "opensession-runner:latest",
   // Shared idle timeout/countdown. Docker, Daytona, E2B, Box and Modal default
-  // to 30 minutes; Local MicroVM defaults to five. Provider semantics differ:
+  // to 30 minutes. Provider semantics differ:
   // stop, archive, expiry, termination or pause as documented in each guide.
   "idleStopMinutes": 30,
   // Docker per-container resource limits (docker --cpus / --memory).
@@ -319,16 +310,16 @@ clone token, keep it mode `0600`.
   // state (apt/global caches), NOT workspace or engine state (those live on
   // volumes/bind mounts). Absent block = disabled.
   "snapshots": {
-    "enabled": false,          // master switch (default false)
-    "onIdle": true,            // snapshot right before the idle-stop
-    "maxPerSession": 2,        // keep at most N snapshot images per session
-    "quickSyncOnRestore": true // git fetch + status after a volume restore
+    "enabled": false, // master switch (default false)
+    "onIdle": true, // snapshot right before the idle-stop
+    "maxPerSession": 2, // keep at most N snapshot images per session
+    "quickSyncOnRestore": true, // git fetch + status after a volume restore
   },
 
   // Per-repo provider overrides for legacy/internal default resolution.
   // Image selection is currently global, not per-repo.
   "perRepo": {
-    "my-app": { "provider": "docker" }
+    "my-app": { "provider": "docker" },
   },
 
   // ── Transport (how the in-sandbox run host talks to opensession) ─────
@@ -346,42 +337,24 @@ clone token, keep it mode `0600`.
 
   // ── Experimental conformance providers ─────────────────────────────
   "e2b": {
-    "apiKey": "e2b_…",         // falls back to E2B_API_KEY
-    "template": "base"         // sandbox template id (default "base")
+    "apiKey": "e2b_…", // falls back to E2B_API_KEY
+    "template": "base", // sandbox template id (default "base")
   },
   "awsLambdaMicrovm": {
     "imageIdentifier": "arn:aws:lambda:us-east-1:123456789012:microvm-image:opensession",
-    "imageVersion": "1",       // optional; latest active version by default
+    "imageVersion": "1", // optional; latest active version by default
     "executionRoleArn": "arn:aws:iam::123456789012:role/OpenSessionMicrovm",
-    "region": "us-east-1",    // falls back to AGENT_AWS_REGION/AWS_REGION
-    "controlPort": 8080,       // must match the image daemon
+    "region": "us-east-1", // falls back to AGENT_AWS_REGION/AWS_REGION
+    "controlPort": 8080, // must match the image daemon
     "maximumDurationSeconds": 28800, // AWS hard max: eight hours
     // Optional: endpoint-idle suspension. Omit for long-running agents: their
     // outbound WebSocket does not count as endpoint activity.
     "idleSuspendSeconds": 3600,
     "suspendedDurationSeconds": 3600, // only used with idleSuspendSeconds
     "logGroup": "/aws/lambda/microvms/opensession",
-    "ingressConnectorArn": "…",       // optional VPC connectors
-    "egressConnectorArn": "…"
+    "ingressConnectorArn": "…", // optional VPC connectors
+    "egressConnectorArn": "…",
   },
-  // Local Firecracker. Build this credential-free golden separately from the
-  // preview-pool golden; the latter contains an app and may contain app creds.
-  "firecrackerMicrovm": {
-    "enabled": false,
-    "storeDir": "/opt/firecracker/sandbox-store",
-    "indexStart": 64,          // 1..63 are reserved for preview-pool clones
-    "indexEnd": 127
-  },
-
-  // Credential-minimal unattended runs. MicroVM is deliberately the only
-  // admitted backend until another provider proves an equally enforceable
-  // outbound policy. Baseline model/Git/callback hosts are added by the
-  // launcher; entries here are extra HTTPS hosts, IPv4 addresses or CIDRs.
-  "automation": {
-    "provider": "microvm",
-    "egressAllowlist": ["api.example.internal", "10.40.0.0/16"]
-  },
-
   // How remote sandboxes authenticate `git clone` (they can't mount host
   // creds). "none" = public clone; "https-token" injects the token into the
   // https URL (GitHub App token / x-access-token).
@@ -395,86 +368,17 @@ clone token, keep it mode `0600`.
     "maxLive": 2,
     "keepReady": [
       { "provider": "box", "repoId": "tella-fusion" },
-      { "provider": "daytona", "repoId": "tella-fusion" }
-    ]
+      { "provider": "daytona", "repoId": "tella-fusion" },
+    ],
   },
 
   // Remote runner bootstrap. All sandboxable model families run the full
   // runner inside the Sandbox; native Codex is rejected before creation:
-  "runnerBundleUrl": null,     // tarball of the runner bundle (preferred)
-  "runnerRepoUrl": null,       // git URL fallback (default: this checkout's origin)
-  "runnerSha": null            // pinned ref (default: origin default branch)
+  "runnerBundleUrl": null, // tarball of the runner bundle (preferred)
+  "runnerRepoUrl": null, // git URL fallback (default: this checkout's origin)
+  "runnerSha": null, // pinned ref (default: origin default branch)
 }
 ```
-
-### Local Firecracker MicroVM (brain and workspace inside)
-
-The `microvm` provider runs the normal runner payload and selected engine
-inside a per-session Firecracker guest. Pi models and native Claude use the
-same brain-inside run-ws/rpc-ws transport as remote providers; native Codex
-stays host-only because its writable rotating `CODEX_HOME` is not safe to
-project across the boundary. Per-launch credentials are scoped and copied into
-the guest; the golden and shared repo templates remain credential-free.
-
-Use the setup command after installing the prerequisites listed above:
-
-```sh
-opensession sandbox enable microvm
-```
-
-It downloads and verifies a matching release golden when available. If no
-matching release exists, it invokes
-`deploy/sandbox/microvm/refresh-sandbox-golden.sh`; that source-build path is
-currently blocked because the script's pin-computation snippet still imports
-the pre-package-move `./src/server/...` paths. Do not rely on the fallback or
-manual refresh until that script is corrected. A matching published golden is
-therefore required for the current enable workflow.
-
-The intended refresh builds `Dockerfile.workspace` and
-`deploy/sandbox/microvm/Dockerfile.runner`, then publishes a credential-free
-golden with the pinned runner and engines. Its publication transaction is
-locked against clone creation and rolls back disk, memory, vmstate and metadata
-on failure.
-
-MicroVMs participate in warm-on-typing when sandbox prewarming is enabled. The
-first prompt input restores a clone, pre-clones the selected repo, runs the
-executable `.agents/setup` hook, scrubs clone authority, publishes a reflinked
-repo template, and parks the prepared VM with compute off. The template is
-keyed by repo plus runner signature and expires after 24 hours. Subsequent
-sessions clone this post-setup disk and cold-boot it, restore fresh clone
-authority only on their private copy, move the warm workspace into place, and
-skip setup through its stable repo stamp.
-
-Do not point this provider at `/opt/firecracker/store`; that belongs to the
-separate preview pool. Sandbox clones use COW ext4 disks and transient systemd
-scopes, so active guests survive an Open Session restart. An idle guest pauses
-after five minutes by default. Prompts, shell attach and Portal requests wake
-the preserved disk and run `.agents/resume`.
-Wake is a cold boot, currently about five seconds. A host reboot stops compute
-but leaves the COW disk recoverable through the same path.
-
-The Shell tab is a real PTY inside the guest (start/read/write/resize/close over
-the private control lane). Portal ports are routed from the guest's private
-veth through authenticated Caddy routes; private guest addresses are never
-sent to browsers. The session header's sandbox panel shows live state, setup /
-resume logs, pause, wake and destructive recreate controls.
-
-### Sandbox automations
-
-An automation can opt into the MicroVM profile from its Advanced form. This is
-not the interactive credential-bearing profile with a different label. Save is
-refused unless the automation has one hard-pinned provider account and an
-explicit MCP selection (`[]` means none); model/account fallback and nested
-Claude/Codex CLI credentials are disabled. Only selected MCP configurations and
-dynamic credentials are projected into the guest, and the workspace exists
-only on the guest volume.
-
-Outbound TCP is rejected before allow rules are installed. The host resolves
-the model, Git, callback, configured MCP and operator allowlist endpoints to
-IPv4/CIDRs; DNS and established return traffic remain available. Guest-provided
-hostnames never reach the privileged firewall script. This boundary currently
-requires the local MicroVM provider, so an automation's `sandbox: true` fails
-loudly when that provider/golden is unavailable.
 
 ### Real-work scorecard
 
@@ -493,14 +397,14 @@ canonical public origin as signed integration webhooks and workload identity.
 `packages/core/opensession-server/src/server/public-ingress.ts` binds the one
 fail-closed gateway on `127.0.0.1:3860`.
 
-| Path | What |
-| --- | --- |
-| registered webhook/OAuth paths | signature-checked integration intake |
-| `/run-ws/<hostId>` | authenticated run-host event stream |
-| `/rpc-ws?host=…` | authenticated MCP proxy channel |
-| `/sandbox-portal-ws` | authenticated remote Portal relay |
-| `/ingress-health` | bare `200 ok` |
-| `/workload-identity/*` | OIDC discovery, JWKS and token exchange |
+| Path                           | What                                    |
+| ------------------------------ | --------------------------------------- |
+| registered webhook/OAuth paths | signature-checked integration intake    |
+| `/run-ws/<hostId>`             | authenticated run-host event stream     |
+| `/rpc-ws?host=…`               | authenticated MCP proxy channel         |
+| `/sandbox-portal-ws`           | authenticated remote Portal relay       |
+| `/ingress-health`              | bare `200 ok`                           |
+| `/workload-identity/*`         | OIDC discovery, JWKS and token exchange |
 
 Every other method/path is a bodyless 404. The listener never exposes app
 routes, the general API, or the frontend. Sandbox upgrades use per-launch
@@ -529,7 +433,7 @@ lower tiers block outbound traffic, so no ingress URL is reachable from inside.
 
 - **Audit trail**: in-sandbox runs write turn-level audit lines to their own
   `~/.opensession/audit`. Docker bind-mounts that directory into the host audit
-  stream. Daytona, E2B, Box, Modal, Local MicroVM and Lambda MicroVM do not
+  stream. Daytona, E2B, Box, Modal and Lambda MicroVM do not
   mirror it to the host, so inspect the Sandbox while it exists if those lines
   are required. Provider lifecycle, journal and run-ws events still originate
   on the host. Pi transcripts are mirrored host-side from the dial-back stream.
@@ -549,7 +453,7 @@ resolver deliberately does not split old and new stores.
 
 ## What needs a restart
 
-The config file's *values* are read fresh per run. Code changes to the sandbox
+The config file's _values_ are read fresh per run. Code changes to the sandbox
 path are **runner internals** and need a service restart:
 
 - Connection enable/disable/test and runtime config values need no restart.
@@ -565,9 +469,8 @@ path are **runner internals** and need a service restart:
   value.
 - Docker runtime changes need an image rebuild as well as any server restart.
   Existing containers keep their image until the container is gone and
-  re-ensured. Local MicroVM payload changes require a golden refresh; existing
-  clone disks keep their old payload until recreated.
-- Config value changes need no restart. Docker and Local MicroVM idle sweeps
+  re-ensured.
+- Config value changes need no restart. Docker idle sweeps
   read `idleStopMinutes` fresh; provider-native idle policies update on their
   own create/touch paths. Docker mounts, preview ports, CPU and memory are
   create-time settings, so an existing container keeps them until recreated.
@@ -627,7 +530,7 @@ native (`autoStopInterval`).
   sealed-filesystem restore into a second sandbox, setup non-reexecution,
   real agent execution, and WS reconnect/steer/cancel, dialing back over
   the public ingress (`SBX_CONF_LISTEN_PORT=3860
-  SBX_CONF_PUBLIC_BASE=wss://your.domain`).
+SBX_CONF_PUBLIC_BASE=wss://your.domain`).
 
 ### E2B (implemented, NOT yet certified)
 
@@ -766,14 +669,14 @@ in `deploy/sandbox/lambda-microvm/`.
 - Certification still requires the live `lambda-microvm` conformance entry
   after the image and IAM resources exist. Its current credential loader has
   the legacy-path limitation noted above.
-Until then, the adapter is available only to the conformance harness; it is
-hidden from the picker and rejected by session creation.
+  Until then, the adapter is available only to the conformance harness; it is
+  hidden from the picker and rejected by session creation.
 
 ## Licensing notes
 
 - **Daytona** is AGPL-3.0. Open Session consumes it **over its API** (via the
   Apache-2.0 `@daytonaio/sdk`) and vendors none of its code, so AGPL
-  obligations sit with whoever *operates* the Daytona deployment, not with
+  obligations sit with whoever _operates_ the Daytona deployment, not with
   Open Session's codebase. Self-hosters running Daytona themselves take on
   AGPL's network-service obligations for their Daytona instance.
 - **E2B**: the JS SDK is MIT; the self-host infra repo is Apache-2.0.

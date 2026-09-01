@@ -5,11 +5,13 @@ import { personaName } from "../../server/config";
 
 export const MESSAGES = {
   starting: "Setting up a worktree for this ticket...",
-  claudeStarted: "Claude Code initialized in plan mode. I'm analyzing the codebase now.",
+  claudeStarted:
+    "Claude Code initialized in plan mode. I'm analyzing the codebase now.",
   error: "Something went wrong while handling this session.",
   planReady: "I've analyzed the situation. Ready for your review when you are.",
   planningComplete: "Plan posted and ready for review.",
-  implementationStarted: "Found the existing plan. Starting implementation now.",
+  implementationStarted:
+    "Found the existing plan. Starting implementation now.",
 };
 
 export const PLANNING_PROMPT = `You are ${personaName()}, planning Linear ticket $ISSUE_ID.

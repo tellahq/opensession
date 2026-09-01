@@ -30,13 +30,27 @@ function writeConfig(): string {
     JSON.stringify({
       // The App wizard records its organization as appOrg before this
       // first-mile import runs.
-      integrations: { github: { appOrg: "acme", userPrAuth: true, oauthClientId: "Iv-test" } },
+      integrations: {
+        github: { appOrg: "acme", userPrAuth: true, oauthClientId: "Iv-test" },
+      },
       identity: { team: [{ name: "Ada Lovelace", github: "ada" }] },
     }),
   );
   process.env.OPENSESSION_CONFIG = path;
   const store = join(dir, "github-auth.json");
-  writeFileSync(store, JSON.stringify({ users: { ada: { login: "ada", token: "test-token", source: "device", connectedAt: new Date().toISOString() } } }));
+  writeFileSync(
+    store,
+    JSON.stringify({
+      users: {
+        ada: {
+          login: "ada",
+          token: "test-token",
+          source: "device",
+          connectedAt: new Date().toISOString(),
+        },
+      },
+    }),
+  );
   process.env.OPENSESSION_GITHUB_AUTH_STORE = store;
   return path;
 }
@@ -45,9 +59,11 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
   else process.env.OPENSESSION_CONFIG = savedConfig;
-  if (savedStore === undefined) delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
+  if (savedStore === undefined)
+    delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
   else process.env.OPENSESSION_GITHUB_AUTH_STORE = savedStore;
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0))
+    rmSync(dir, { recursive: true, force: true });
 });
 
 describe("GitHub organization member import", () => {
@@ -67,7 +83,11 @@ describe("GitHub organization member import", () => {
     const response = await handleSetupTeamRoutes(context());
     expect(response?.status).toBe(200);
     const body = await response?.json();
-    expect(body).toMatchObject({ organization: "acme", synced: true, added: 1 });
+    expect(body).toMatchObject({
+      organization: "acme",
+      synced: true,
+      added: 1,
+    });
     expect(body.members).toEqual([
       { name: "Ada Lovelace", github: "ada" },
       { name: "grace", github: "grace" },

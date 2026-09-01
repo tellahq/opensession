@@ -15,6 +15,8 @@ describe("workspace administrator roles", () => {
 
   test("preserves the existing all-members-admin workspace model until roles are set", () => {
     const team = [{ name: "Ada", github: "ada" }];
-    expect(identityIsWorkspaceAdmin({ login: "any-verified-member" }, team)).toBe(true);
+    expect(
+      identityIsWorkspaceAdmin({ login: "any-verified-member" }, team),
+    ).toBe(true);
   });
 });

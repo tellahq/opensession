@@ -2,9 +2,7 @@
   "id": "github-pr-review",
   "label": "GitHub PR review",
   "description": "Reviews every pull request and posts its findings.",
-  "requires": [
-    "github"
-  ],
+  "requires": ["github"],
   "notes": "Needs the GitHub integration enabled and its webhook delivering pull_request events.",
   "automation": {
     "name": "github-pr-review",

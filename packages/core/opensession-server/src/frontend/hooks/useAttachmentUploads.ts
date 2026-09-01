@@ -38,26 +38,30 @@ export function useAttachmentUploads() {
   ): Promise<T[]> {
     const entries = Array.from(picked).map((file) => ({
       id: nextId.current++,
-      kind: file.type.startsWith("image/") ? "image" as const : "file" as const,
+      kind: file.type.startsWith("image/")
+        ? ("image" as const)
+        : ("file" as const),
       file,
       controller: new AbortController(),
     }));
     pending.current = [...pending.current, ...entries];
     publish();
 
-    const results = await Promise.all(entries.map((entry) =>
-      uploadOne(entry.file, entry.controller.signal).then(
-        (value) => {
-          remove(entry.id);
-          return entry.controller.signal.aborted ? null : { value };
-        },
-        (error) => {
-          remove(entry.id);
-          throw error;
-        },
+    const results = await Promise.all(
+      entries.map((entry) =>
+        uploadOne(entry.file, entry.controller.signal).then(
+          (value) => {
+            remove(entry.id);
+            return entry.controller.signal.aborted ? null : { value };
+          },
+          (error) => {
+            remove(entry.id);
+            throw error;
+          },
+        ),
       ),
-    ));
-    return results.flatMap((result) => result ? [result.value as T] : []);
+    );
+    return results.flatMap((result) => (result ? [result.value as T] : []));
   }
 
   function cancel(kind: PendingUpload["kind"], index: number) {

@@ -5,11 +5,16 @@
 # ============================================================================
 [Unit]
 Description=Open Session - agent session dashboard
-Requires=opensession-session-kernel.service
-Wants=opensession-executor.service
-After=network.target opensession-session-kernel.service opensession-executor.service
+# Protocol peers are enabled independently. Do not Wants=/Requires= them here:
+# socket activation during a rollout must not restart a peer that the deploy
+# controller intentionally stopped. The child generation barrier fails closed.
+Wants=opensession.socket opensession-ingress.service
+After=network.target opensession-ingress.service opensession-session-kernel.service opensession-executor.service
 
 [Service]
+# Keep latency-sensitive HTTP, WebSocket, and orchestration work ahead of
+# repository builds when the host is saturated.
+Slice=opensession-control.slice
 # PATH is passed straight through to engine subprocesses (engineEnv()/
 # host-client), so any toolchains your code sessions need must be on it —
 # interactive shells get it from the login profile; the service must carry
@@ -17,6 +22,8 @@ After=network.target opensession-session-kernel.service opensession-executor.ser
 Environment="PATH=/home/ubuntu/.cargo/bin:/home/ubuntu/.bun/bin:/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Type=simple
 User=ubuntu
+RuntimeDirectory=opensession-gateway
+RuntimeDirectoryMode=0700
 WorkingDirectory=/home/ubuntu/projects/opensession
 EnvironmentFile=/home/ubuntu/.opensession.env
 # EXECUTOR_CREDENTIAL: rendered installs replace this marker. Keeping the
@@ -24,12 +31,15 @@ EnvironmentFile=/home/ubuntu/.opensession.env
 # release without failing before it knows how to install the credential.
 # SESSION_KERNEL_CREDENTIAL
 Environment="NODE_ENV=production"
+Environment="OPENSESSION_EXTERNAL_INGRESS=1"
 # Do not use `bun --hot` here. A failed reload on Bun 1.3.14 can permanently
 # stop every timer while HTTP keeps serving, leaving all sessions apparently
 # running but unable to progress. Backend changes use a deliberate graceful
 # restart; detached engine turns survive and the run journal reattaches them.
-# The app's own frontend watcher still rebuilds frontend edits live.
-ExecStart=/home/ubuntu/.bun/bin/bun run packages/core/opensession-server/opensession.ts
+# The app's own frontend watcher still rebuilds frontend edits live. A stable
+# supervisor keeps one active child, preloads an inert candidate, observes the
+# old child exit, and only then releases the candidate's activation barrier.
+ExecStart=/home/ubuntu/.bun/bin/bun run packages/core/opensession-server/src/server/gateway-supervisor.ts
 Restart=always
 # 1s, not 5s: this pause is pure downtime on every restart (deliberate or
 # crash), and Caddy's lb_try_duration parks requests meanwhile — a crash loop

@@ -5,17 +5,17 @@ import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
 import React, { useEffect, useRef, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
 import {
-	fetchOpenPrs,
-	relativeTime,
-	searchTranscripts,
-	type OpenPr,
+  fetchOpenPrs,
+  relativeTime,
+  searchTranscripts,
+  type OpenPr,
 } from "../lib/api";
 import {
-	IconPeople,
-	IconPullRequest,
-	IconRepo,
-	IconSearch,
-	IconStatusRing,
+  IconPeople,
+  IconPullRequest,
+  IconRepo,
+  IconSearch,
+  IconStatusRing,
 } from "./icons";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { Button } from "../ui/button";
@@ -23,293 +23,339 @@ import { Menu } from "../ui/menu";
 import { RepoTile } from "./RepoTile";
 import { UserAvatar } from "./UserAvatar";
 import {
-	collapsePrLinkSessions,
-	prLinksMatch,
-	sessionUsesPrLink,
+  collapsePrLinkSessions,
+  prLinksMatch,
+  sessionUsesPrLink,
 } from "../lib/session-prs";
 import { usePeople } from "../lib/people";
 import {
-	canonicalNames,
-	sessionHasOwner,
-	sessionOwners,
+  canonicalNames,
+  sessionHasOwner,
+  sessionOwners,
 } from "../lib/session-owner";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	justifyBetween: {
-			justifyContent: "space-between"
-	},
-	gap3: {
-			gap: "calc(4px * 3)"
-	},
-	flex: {
-			display: "flex"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	flex1: {
-			flex: "1"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap25: {
-			gap: "calc(4px * 2.5)"
-	},
-	size18px: {
-			width: "18px",
-			height: "18px"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	truncate: {
-			overflow: "hidden",
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap"
-	},
-	borderB: {
-			borderBottomStyle: "solid",
-			borderBottomWidth: "1px"
-	},
-	px5: {
-			paddingInline: "calc(4px * 5)"
-	},
-	py4: {
-			paddingBlock: "calc(4px * 4)"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	borderNone: {
-			borderStyle: "none"
-	},
-	bgTransparent: {
-			backgroundColor: "transparent"
-	},
-	fontSans: {
-			fontFamily: "var(--sans)"
-	},
-	textInputPhone: {
-			fontSize: "var(--type-input-phone)"
-	},
-	leading14: {
-			lineHeight: "1.4"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	outlineNone: {
-			outlineStyle: "none"
-	},
-	flexWrap: {
-			flexWrap: "wrap"
-	},
-	gap2: {
-			gap: "calc(4px * 2)"
-	},
-	px4: {
-			paddingInline: "calc(4px * 4)"
-	},
-	py25: {
-			paddingBlock: "calc(4px * 2.5)"
-	},
-	mlAuto: {
-			marginLeft: "auto"
-	},
-	minH0: {
-			minHeight: "0"
-	},
-	overflowYAuto: {
-			overflowY: "auto"
-	},
-	p2: {
-			padding: "calc(4px * 2)"
-	},
-	py7: {
-			paddingBlock: "calc(4px * 7)"
-	},
-	textCenter: {
-			textAlign: "center"
-	},
-	px3: {
-			paddingInline: "calc(4px * 3)"
-	},
-	pb15: {
-			paddingBottom: "calc(4px * 1.5)"
-	},
-	pt25: {
-			paddingTop: "calc(4px * 2.5)"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-	inlineFlex: {
-			display: "inline-flex"
-	},
-	size5: {
-			width: "calc(4px * 5)",
-			height: "calc(4px * 5)"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	gap05: {
-			gap: "calc(4px * 0.5)"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	maxWFull: {
-			maxWidth: "100%"
-	},
-	leading135: {
-			lineHeight: "1.35"
-	},
-	gap3px: {
-			gap: "3px"
-	},
-	overflowHidden: {
-			overflow: "hidden"
-	},
-	whitespaceNowrap: {
-			whiteSpace: "nowrap"
-	},
-	maxW220px: {
-			maxWidth: "220px"
-	},
-	roundedSm: {
-			borderRadius: "calc(4px * var(--rf))",
-
-		cornerShape: "var(--cs)",},
-	px15: {
-			paddingInline: "calc(4px * 1.5)"
-	},
-	pyPx: {
-			paddingBlock: "1px"
-	},
-	textYellow: {
-			color: "var(--yellow)"
-	},
-	gap4: {
-			gap: "calc(4px * 4)"
-	},
-	borderT: {
-			borderTopStyle: "solid",
-			borderTopWidth: "1px"
-	},
-	borderLine: {
-			borderColor: "var(--border)"
-	},
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  maxWMin320pxCalc100vw1rem: {
+    maxWidth: "min(320px, calc(100vw - 1rem))",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  flex: {
+    display: "flex",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  size18px: {
+    width: "18px",
+    height: "18px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  hMin500px76vh: {
+    height: "min(500px, 76vh)",
+  },
+  max560pxHMin560px82vh: {
+    "@media (max-width: 559px)": {
+      height: "min(560px, 82vh)",
+    },
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  borderNone: {
+    borderStyle: "none",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  fontSans: {
+    fontFamily: "var(--sans)",
+  },
+  textInputPhone: {
+    fontSize: "var(--type-input-phone)",
+  },
+  leading14: {
+    lineHeight: "1.4",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  placeholderTextFaint: {
+    "::placeholder": {
+      color: "var(--text-faint)",
+    },
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  p2: {
+    padding: "calc(4px * 2)",
+  },
+  py7: {
+    paddingBlock: "calc(4px * 7)",
+  },
+  textCenter: {
+    textAlign: "center",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  pb15: {
+    paddingBottom: "calc(4px * 1.5)",
+  },
+  pt25: {
+    paddingTop: "calc(4px * 2.5)",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  maxWFull: {
+    maxWidth: "100%",
+  },
+  leading135: {
+    lineHeight: "1.35",
+  },
+  gap3px: {
+    gap: "3px",
+  },
+  max560pxHidden: {
+    "@media (max-width: 559px)": {
+      display: "none",
+    },
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  maxW220px: {
+    maxWidth: "220px",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgColorMixInSrgbVarYellow16Transparent: {
+    backgroundColor: "color-mix(in srgb,var(--yellow) 16%,transparent)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  pyPx: {
+    paddingBlock: "1px",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
 });
 
 export interface CommandPaletteAction {
-	id: string;
-	label: string;
-	description?: string;
-	category: "Actions" | "Navigate" | "Tools";
-	keywords?: string[];
-	shortcut?: string[];
-	icon?: React.ReactNode;
-	run: () => void;
+  id: string;
+  label: string;
+  description?: string;
+  category: "Actions" | "Navigate" | "Tools";
+  keywords?: string[];
+  shortcut?: string[];
+  icon?: React.ReactNode;
+  run: () => void;
 }
 
 interface Props {
-	sessions: UnifiedSession[];
-	actions: CommandPaletteAction[];
-	/** Open a session or PR (also closes the palette). */
-	onSelectSession: (id: string) => void;
-	onSelectPr: (pr: OpenPr) => void;
-	onClose: () => void;
+  sessions: UnifiedSession[];
+  actions: CommandPaletteAction[];
+  /** Open a session or PR (also closes the palette). */
+  onSelectSession: (id: string) => void;
+  onSelectPr: (pr: OpenPr) => void;
+  onClose: () => void;
 }
 
 // Repo-less sessions group under the literal FALLBACK_REPO bucket, not the
 // sidebar's default-repo lane (see lib/session-repo for the fork rationale).
 function sessionRepo(s: UnifiedSession): string {
-	return sessionRepoOr(s, FALLBACK_REPO);
+  return sessionRepoOr(s, FALLBACK_REPO);
 }
 
 // The status buckets a session can fall into, mirroring the sidebar's triage
 // order: a blocked question first, then live activity, then PR lifecycle.
-type Status = "paused" | "needsinput" | "failed" | "running" | "review" | "merged" | "pending";
+type Status =
+  | "paused"
+  | "needsinput"
+  | "failed"
+  | "running"
+  | "review"
+  | "merged"
+  | "pending";
 
 /** A keycap. Hidden below 720px, where the palette is driven by touch and the
  *  keyboard hints are noise. Filled with the translucent `--hover` ink rather
  *  than the `--bg-raised` surface: the palette shell is glass, and an absolute
  *  surface reads as an opaque chip cut out of it (and in dark it sat *below*
  *  the popup fill, so a "keycap" rendered sunken). */
-const KBD =
-	utilityClassName("mx-px inline-flex min-w-4 items-center justify-center rounded-md bg-hover px-1.5 py-px font-sans text-meta text-dim phone:hidden");
+const KBD = utilityClassName(
+  "mx-px inline-flex min-w-4 items-center justify-center rounded-md bg-hover px-1.5 py-px font-sans text-meta text-dim phone:hidden",
+);
 
 /** A result row. The selected wash rides on `aria-selected`, which the button
  *  already carries for the listbox — so the icon and keycap tones that used to
  *  need `.ss-item-active` descendant rules are `group-aria-selected:` here.
  *  `bg-pressed` rather than the `--bg-active` surface: the palette shell is
  *  glass, and an absolute surface would land on it as an opaque patch. */
-const ITEM =
-	utilityClassName("group flex w-full cursor-pointer items-center gap-3 rounded-lg border-none bg-transparent px-3 py-2.5 text-left text-fg aria-selected:bg-pressed");
+const ITEM = utilityClassName(
+  "group flex w-full cursor-pointer items-center gap-3 rounded-lg border-none bg-transparent px-3 py-2.5 text-left text-fg aria-selected:bg-pressed",
+);
 
 const STATUS_META: Record<Status, { label: string; dotClass: string }> = {
-	paused: { label: "Paused for safety", dotClass: "bg-yellow" },
-	needsinput: { label: "Needs input", dotClass: "bg-accent" },
-	failed: { label: "Run failed", dotClass: "bg-red" },
-	running: { label: "Running", dotClass: "bg-yellow" },
-	review: { label: "In review", dotClass: "bg-yellow" },
-	merged: { label: "Merged", dotClass: "bg-purple" },
-	pending: { label: "Pending", dotClass: "bg-faint" },
+  paused: { label: "Paused for safety", dotClass: "bg-yellow" },
+  needsinput: { label: "Needs input", dotClass: "bg-accent" },
+  failed: { label: "Run failed", dotClass: "bg-red" },
+  running: { label: "Running", dotClass: "bg-yellow" },
+  review: { label: "In review", dotClass: "bg-yellow" },
+  merged: { label: "Merged", dotClass: "bg-purple" },
+  pending: { label: "Pending", dotClass: "bg-faint" },
 };
 
 const STATUS_ORDER: Status[] = [
-	"paused",
-	"needsinput",
-	"failed",
-	"running",
-	"review",
-	"merged",
-	"pending",
+  "paused",
+  "needsinput",
+  "failed",
+  "running",
+  "review",
+  "merged",
+  "pending",
 ];
 
 function sessionStatus(s: UnifiedSession): Status {
-	if (s.safety) return "paused";
-	if (s.waitingForInput) return "needsinput";
-	if (s.lastRunError && !s.isRunning) return "failed";
-	if (s.isRunning) return "running";
-	if (s.prState === "OPEN") return "review";
-	if (s.prState === "MERGED") return "merged";
-	// Idle-but-unfinished — not "Done"; finishing is explicit (Archive).
-	return "pending";
+  if (s.safety) return "paused";
+  if (s.waitingForInput) return "needsinput";
+  if (s.lastRunError && !s.isRunning) return "failed";
+  if (s.isRunning) return "running";
+  if (s.prState === "OPEN") return "review";
+  if (s.prState === "MERGED") return "merged";
+  // Idle-but-unfinished — not "Done"; finishing is explicit (Archive).
+  return "pending";
 }
 
 // The searchable haystack for a session — title plus every field a person might
 // recall it by (branch, owner, automation, repo, Linear id).
 function haystack(s: UnifiedSession): string {
-	return [
-		s.title,
-		s.branch,
-		s.startedBy,
-		s.automation,
-		sessionRepo(s),
-		s.linearIssue?.identifier,
-		s.linearIssue?.title,
-	]
-		.filter(Boolean)
-		.join(" ")
-		.toLowerCase();
+  return [
+    s.title,
+    s.branch,
+    s.startedBy,
+    s.automation,
+    sessionRepo(s),
+    s.linearIssue?.identifier,
+    s.linearIssue?.title,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 /** The two per-session values the result list reads, derived once per pool. */
 export interface SessionSearchIndex {
-	hay: Map<UnifiedSession, string>;
-	activityAt: Map<UnifiedSession, number>;
+  hay: Map<UnifiedSession, string>;
+  activityAt: Map<UnifiedSession, number>;
 }
 
 /**
@@ -321,16 +367,14 @@ export interface SessionSearchIndex {
  * Keyed on the session objects, which the sessions poll replaces rather than
  * mutates, and rebuilt only when the pool array itself changes.
  */
-export function sessionSearchIndex(
-	pool: UnifiedSession[],
-): SessionSearchIndex {
-	const hay = new Map<UnifiedSession, string>();
-	const activityAt = new Map<UnifiedSession, number>();
-	for (const session of pool) {
-		hay.set(session, haystack(session));
-		activityAt.set(session, new Date(session.lastActivity).getTime());
-	}
-	return { hay, activityAt };
+export function sessionSearchIndex(pool: UnifiedSession[]): SessionSearchIndex {
+  const hay = new Map<UnifiedSession, string>();
+  const activityAt = new Map<UnifiedSession, number>();
+  for (const session of pool) {
+    hay.set(session, haystack(session));
+    activityAt.set(session, new Date(session.lastActivity).getTime());
+  }
+  return { hay, activityAt };
 }
 
 /**
@@ -343,586 +387,906 @@ export function sessionSearchIndex(
  * rather than ordering it as if it were epoch.
  */
 export function sortByRecentActivity(
-	rows: UnifiedSession[],
-	index: SessionSearchIndex,
+  rows: UnifiedSession[],
+  index: SessionSearchIndex,
 ): UnifiedSession[] {
-	const at = (s: UnifiedSession) =>
-		index.activityAt.get(s) ?? new Date(s.lastActivity).getTime();
-	return rows.sort((a, b) => at(b) - at(a));
+  const at = (s: UnifiedSession) =>
+    index.activityAt.get(s) ?? new Date(s.lastActivity).getTime();
+  return rows.sort((a, b) => at(b) - at(a));
 }
 
 function prStatus(pr: OpenPr): string {
-	if (pr.isDraft) return "Draft";
-	if (pr.checks.failed > 0)
-		return `${pr.checks.failed} failing check${pr.checks.failed === 1 ? "" : "s"}`;
-	if (pr.checks.pending > 0)
-		return `${pr.checks.pending} check${pr.checks.pending === 1 ? "" : "s"} running`;
-	if (pr.reviewDecision === "APPROVED") return "Approved";
-	if (pr.reviewDecision === "CHANGES_REQUESTED") return "Changes requested";
-	if (pr.reviewRequested?.length) return "Review requested";
-	return "Open";
+  if (pr.isDraft) return "Draft";
+  if (pr.checks.failed > 0)
+    return `${pr.checks.failed} failing check${pr.checks.failed === 1 ? "" : "s"}`;
+  if (pr.checks.pending > 0)
+    return `${pr.checks.pending} check${pr.checks.pending === 1 ? "" : "s"} running`;
+  if (pr.reviewDecision === "APPROVED") return "Approved";
+  if (pr.reviewDecision === "CHANGES_REQUESTED") return "Changes requested";
+  if (pr.reviewRequested?.length) return "Review requested";
+  return "Open";
 }
 
 type PaletteResult =
-	| { type: "action"; category: string; action: CommandPaletteAction }
-	| { type: "pr"; category: string; pr: OpenPr }
-	| {
-			type: "session";
-			category: string;
-			session: UnifiedSession;
-			snippet?: string;
-	  };
+  | { type: "action"; category: string; action: CommandPaletteAction }
+  | { type: "pr"; category: string; pr: OpenPr }
+  | {
+      type: "session";
+      category: string;
+      session: UnifiedSession;
+      snippet?: string;
+    };
 
 function resultKey(result: PaletteResult): string {
-	if (result.type === "action") return `action:${result.action.id}`;
-	if (result.type === "pr") return `pr:${result.pr.url}`;
-	return `session:${result.session.id}`;
+  if (result.type === "action") return `action:${result.action.id}`;
+  if (result.type === "pr") return `pr:${result.pr.url}`;
+  return `session:${result.session.id}`;
 }
 
 function FilterMenu({
-	label,
-	value,
-	options,
-	onChange,
-	icon,
+  label,
+  value,
+  options,
+  onChange,
+  icon,
 }: {
-	label: string;
-	value: string;
-	options: Array<{ value: string; label: string; icon?: React.ReactNode }>;
-	onChange: (value: string) => void;
-	icon: React.ReactNode;
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string; icon?: React.ReactNode }>;
+  onChange: (value: string) => void;
+  icon: React.ReactNode;
 }) {
-	const current = options.find((option) => option.value === value);
-	const hasIcons = options.some((option) => option.icon != null);
-	return (
-		<Menu.Root>
-			<Menu.Trigger
-				render={
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						className={utilityClassName("phone:min-h-11")}
-						icon={icon}
-						caret
-						data-session-filter
-						aria-label={`${label}: ${current?.label ?? value}`}
-					>
-						{current?.label ?? value}
-					</Button>
-				}
-			/>
-			<Menu.Popup align="start" sideOffset={6} className={utilityClassName("max-w-[min(320px,calc(100vw-1rem))]")}>
-				<Menu.RadioGroup value={value} onValueChange={(next) => onChange(String(next))}>
-					{options.map((option) => (
-						<Menu.RadioItem
-							key={option.value}
-							value={option.value}
-							closeOnClick
-							className={mergeStylexOverrideClassName("", sx.justifyBetween, sx.gap3)}
-						>
-							<span {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.itemsCenter, sx.gap25)}>
-								{hasIcons && (
-									<span {...stylex.props(sx.flex, sx.size18px, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textDim)}>
-										{option.icon}
-									</span>
-								)}
-								<span {...stylex.props(sx.minW0, sx.truncate)}>{option.label}</span>
-							</span>
-							<Menu.Check on={option.value === value} />
-						</Menu.RadioItem>
-					))}
-				</Menu.RadioGroup>
-			</Menu.Popup>
-		</Menu.Root>
-	);
+  const current = options.find((option) => option.value === value);
+  const hasIcons = options.some((option) => option.icon != null);
+  return (
+    <Menu.Root>
+      <Menu.Trigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
+            icon={icon}
+            caret
+            data-session-filter
+            aria-label={`${label}: ${current?.label ?? value}`}
+          >
+            {current?.label ?? value}
+          </Button>
+        }
+      />
+      <Menu.Popup
+        align="start"
+        sideOffset={6}
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.maxWMin320pxCalc100vw1rem,
+        )}
+      >
+        <Menu.RadioGroup
+          value={value}
+          onValueChange={(next) => onChange(String(next))}
+        >
+          {options.map((option) => (
+            <Menu.RadioItem
+              key={option.value}
+              value={option.value}
+              closeOnClick
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.justifyBetween,
+                sx.gap3,
+              )}
+            >
+              <span
+                {...stylex.props(
+                  sx.flex,
+                  sx.minW0,
+                  sx.flex1,
+                  sx.itemsCenter,
+                  sx.gap25,
+                )}
+              >
+                {hasIcons && (
+                  <span
+                    {...stylex.props(
+                      sx.flex,
+                      sx.size18px,
+                      sx.shrink0,
+                      sx.itemsCenter,
+                      sx.justifyCenter,
+                      sx.textDim,
+                    )}
+                  >
+                    {option.icon}
+                  </span>
+                )}
+                <span {...stylex.props(sx.minW0, sx.truncate)}>
+                  {option.label}
+                </span>
+              </span>
+              <Menu.Check on={option.value === value} />
+            </Menu.RadioItem>
+          ))}
+        </Menu.RadioGroup>
+      </Menu.Popup>
+    </Menu.Root>
+  );
 }
 
 export function SessionSearch({
-	sessions,
-	actions,
-	onSelectSession,
-	onSelectPr,
-	onClose,
+  sessions,
+  actions,
+  onSelectSession,
+  onSelectPr,
+  onClose,
 }: Props) {
-	const [query, setQuery] = useState("");
-	const [person, setPerson] = useState("all");
-	const [repo, setRepo] = useState("all");
-	const [status, setStatus] = useState<Status | "all">("all");
-	const [activeKey, setActiveKey] = useState<string | null>(null);
-	const [openPrs, setOpenPrs] = useState<OpenPr[]>([]);
-	const [loadingPrs, setLoadingPrs] = useState(true);
-	// Content matches from the backend transcript search, keyed by session id →
-	// snippet. Populated (debounced) as the query changes; empty when the query
-	// is too short or nothing matched inside any conversation.
-	const [snippets, setSnippets] = useState<Map<string, string>>(new Map());
-	const [searching, setSearching] = useState(false);
-	const inputRef = useRef<HTMLInputElement>(null);
-	const listRef = useRef<HTMLDivElement>(null);
-	// One frame closed so the palette animates in; App mounts us already-open.
-	const open = useEnterOnMount();
+  const [query, setQuery] = useState("");
+  const [person, setPerson] = useState("all");
+  const [repo, setRepo] = useState("all");
+  const [status, setStatus] = useState<Status | "all">("all");
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [openPrs, setOpenPrs] = useState<OpenPr[]>([]);
+  const [loadingPrs, setLoadingPrs] = useState(true);
+  // Content matches from the backend transcript search, keyed by session id →
+  // snippet. Populated (debounced) as the query changes; empty when the query
+  // is too short or nothing matched inside any conversation.
+  const [snippets, setSnippets] = useState<Map<string, string>>(new Map());
+  const [searching, setSearching] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  // One frame closed so the palette animates in; App mounts us already-open.
+  const open = useEnterOnMount();
 
-	useEffect(() => {
-		let alive = true;
-		fetchOpenPrs()
-			.then((prs) => {
-				if (alive) setOpenPrs(prs);
-			})
-			.catch(() => {})
-			.finally(() => {
-				if (alive) setLoadingPrs(false);
-			});
-		return () => {
-			alive = false;
-		};
-	}, []);
+  useEffect(() => {
+    let alive = true;
+    fetchOpenPrs()
+      .then((prs) => {
+        if (alive) setOpenPrs(prs);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setLoadingPrs(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-	// Search inside conversations too — the metadata filter is instant/local, but
-	// transcript text lives on disk, so we debounce a backend call and fold its
-	// hits into the result set. A stale/aborted request never clobbers newer
-	// state (AbortController + the trailing-edge guard).
-	useEffect(() => {
-		const q = query.trim();
-		if (q.length < 2) {
-			setSnippets(new Map());
-			setSearching(false);
-			return;
-		}
-		setSearching(true);
-		const ctrl = new AbortController();
-		const t = setTimeout(async () => {
-			await (async () => {
-const matches = await searchTranscripts(q, ctrl.signal);
-				setSnippets(new Map(matches.map((m) => [m.id, m.snippet])));
-})().catch(async (e) => {
-if (!ctrl.signal.aborted) setSnippets(new Map());
-}).finally(async () => {
-if (!ctrl.signal.aborted) setSearching(false);
-});
-		}, 250);
-		return () => {
-			clearTimeout(t);
-			ctrl.abort();
-		};
-	}, [query]);
+  // Search inside conversations too — the metadata filter is instant/local, but
+  // transcript text lives on disk, so we debounce a backend call and fold its
+  // hits into the result set. A stale/aborted request never clobbers newer
+  // state (AbortController + the trailing-edge guard).
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setSnippets(new Map());
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      await (async () => {
+        const matches = await searchTranscripts(q, ctrl.signal);
+        setSnippets(new Map(matches.map((m) => [m.id, m.snippet])));
+      })()
+        .catch(async (e) => {
+          if (!ctrl.signal.aborted) setSnippets(new Map());
+        })
+        .finally(async () => {
+          if (!ctrl.signal.aborted) setSearching(false);
+        });
+    }, 250);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [query]);
 
-	// Only live sessions are searchable.
-	const pool = (sessions.filter((s) => !s.archived));
+  // Only live sessions are searchable.
+  const pool = sessions.filter((s) => !s.archived);
 
-	const searchIndex = (sessionSearchIndex(pool));
+  const searchIndex = sessionSearchIndex(pool);
 
-	// Workspace members only. `startedBy` is a free-text name that also carries
-	// workers, goals, integration senders and unmapped Slack ids, so the team
-	// directory decides who is a person here, and merges the spellings one
-	// person has: "Michiel Westerbeek", "Michiel" and "Kent (loop)" are not
-	// three more teammates (lib/session-owner).
-	const roster = usePeople();
-	const canonical = (canonicalNames(roster));
-	const personOptions = ([
-			{ value: "all", label: "Anyone", icon: <IconPeople size={18} /> },
-			...sessionOwners(pool, canonical).map(({ key, label }) => ({
-				value: key,
-				label,
-				icon: <UserAvatar name={label} size={18} edge={false} />,
-			})),
-		]);
+  // Workspace members only. `startedBy` is a free-text name that also carries
+  // workers, goals, integration senders and unmapped Slack ids, so the team
+  // directory decides who is a person here, and merges the spellings one
+  // person has: "Michiel Westerbeek", "Michiel" and "Kent (loop)" are not
+  // three more teammates (lib/session-owner).
+  const roster = usePeople();
+  const canonical = canonicalNames(roster);
+  const personOptions = [
+    { value: "all", label: "Anyone", icon: <IconPeople size={18} /> },
+    ...sessionOwners(pool, canonical).map(({ key, label }) => ({
+      value: key,
+      label,
+      icon: <UserAvatar name={label} size={18} edge={false} />,
+    })),
+  ];
 
-	const repoOptions = (() => {
-		const counts = new Map<string, number>();
-		for (const session of pool) {
-			const project = sessionRepo(session);
-			counts.set(project, (counts.get(project) || 0) + 1);
-		}
-		return [
-			{ value: "all", label: "Any repo", icon: <IconRepo size={18} /> },
-			...Array.from(counts.entries())
-				.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-				.map(([value]) => ({
-					value,
-					label: repoLabel(value),
-					icon: <RepoTile name={value} size={18} />,
-				})),
-		];
-	})();
+  const repoOptions = (() => {
+    const counts = new Map<string, number>();
+    for (const session of pool) {
+      const project = sessionRepo(session);
+      counts.set(project, (counts.get(project) || 0) + 1);
+    }
+    return [
+      { value: "all", label: "Any repo", icon: <IconRepo size={18} /> },
+      ...Array.from(counts.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([value]) => ({
+          value,
+          label: repoLabel(value),
+          icon: <RepoTile name={value} size={18} />,
+        })),
+    ];
+  })();
 
-	const statusOptions = ([
-			{ value: "all", label: "Any status", icon: <IconStatusRing size={18} /> },
-			...STATUS_ORDER.map((value) => ({
-				value,
-				label: STATUS_META[value].label,
-				icon: (
-					<span
-						className={utilityClassName(`size-2 rounded-full ${STATUS_META[value].dotClass}`)}
-					/>
-				),
-			})),
-		]);
-	const hasSessionFilter = person !== "all" || repo !== "all" || status !== "all";
+  const statusOptions = [
+    { value: "all", label: "Any status", icon: <IconStatusRing size={18} /> },
+    ...STATUS_ORDER.map((value) => ({
+      value,
+      label: STATUS_META[value].label,
+      icon: (
+        <span
+          className={utilityClassName(
+            `size-2 rounded-full ${STATUS_META[value].dotClass}`,
+          )}
+        />
+      ),
+    })),
+  ];
+  const hasSessionFilter =
+    person !== "all" || repo !== "all" || status !== "all";
 
-	// Commands, PRs, and sessions share one flat result list so arrow-key navigation
-	// crosses group boundaries the way a command menu should.
-	const results = (() => {
-		const q = query.trim().toLowerCase();
-		const terms = q.split(/\s+/).filter(Boolean);
-		const hasQuery = terms.length > 0;
-		// The command menu is a search surface, not a second full list page. Keep
-		// its resting suggestions and each searched category bounded so opening or
-		// typing never mounts hundreds of rows before the person can read them.
-		const prLimit = hasQuery ? 20 : 8;
-		const sessionLimit = hasQuery || hasSessionFilter ? 40 : 12;
-		const matches = (values: Array<string | undefined>) => {
-			if (terms.length === 0) return true;
-			const text = values.filter(Boolean).join(" ").toLowerCase();
-			return terms.every((term) => text.includes(term));
-		};
-		const actionResults: PaletteResult[] = (hasSessionFilter ? [] : actions)
-			.filter((action) =>
-				matches([
-					action.label,
-					action.description,
-					...(action.keywords || []),
-					...(action.shortcut || []),
-				]),
-			)
-			.slice(0, hasQuery ? 24 : 16)
-			.map((action) => ({ type: "action", category: action.category, action }));
-		const prResults: PaletteResult[] = (hasSessionFilter ? [] : openPrs)
-			.filter((pr) =>
-				prLinksMatch(q, pr.url) ||
-				matches([
-						pr.title,
-						pr.repo,
-						pr.branch,
-						pr.author,
-						`#${pr.number}`,
-						prStatus(pr),
-						pr.url,
-					]),
-			)
-			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-			.slice(0, prLimit)
-			.map((pr) => ({ type: "pr", category: "Pull requests", pr }));
-		// Falls back to deriving the text for a session the index hasn't seen, so
-		// a pool and an index that are momentarily out of step still search.
-		const hayOf = (s: UnifiedSession) => searchIndex.hay.get(s) ?? haystack(s);
-		let sessionResults = pool.filter((s) => {
-			if (person !== "all" && !sessionHasOwner(s, person, canonical)) return false;
-			if (repo !== "all" && sessionRepo(s) !== repo) return false;
-			if (status !== "all" && sessionStatus(s) !== status) return false;
-			if (terms.length === 0) return true;
-			// A session shows if its metadata matches every term OR the query turned
-			// up inside its conversation, or the pasted PR link belongs to it.
-			const hay = hayOf(s);
-			return (
-				terms.every((t) => hay.includes(t)) ||
-				sessionUsesPrLink(s, q) ||
-				snippets.has(s.id)
-			);
-		});
-		sessionResults = sortByRecentActivity(sessionResults, searchIndex);
-		if (sessionResults.some((session) => sessionUsesPrLink(session, q))) {
-			sessionResults = collapsePrLinkSessions(sessionResults);
-		}
-		const sessionRows: PaletteResult[] = sessionResults
-			.slice(0, sessionLimit)
-			.map((s) => {
-				// Show the snippet only when the title/metadata didn't already match —
-				// otherwise the row explains itself.
-				const metaMatch =
-					terms.length > 0 &&
-					(terms.every((t) => hayOf(s).includes(t)) ||
-						sessionUsesPrLink(s, q));
-				return {
-					type: "session",
-					category: "Sessions",
-					session: s,
-					snippet: metaMatch ? undefined : snippets.get(s.id),
-				};
-			});
-		return [...actionResults, ...prResults, ...sessionRows];
-	})();
-	const keyedActive = results.findIndex((result) => resultKey(result) === activeKey);
-	const active = keyedActive >= 0 ? keyedActive : 0;
+  // Commands, PRs, and sessions share one flat result list so arrow-key navigation
+  // crosses group boundaries the way a command menu should.
+  const results = (() => {
+    const q = query.trim().toLowerCase();
+    const terms = q.split(/\s+/).filter(Boolean);
+    const hasQuery = terms.length > 0;
+    // The command menu is a search surface, not a second full list page. Keep
+    // its resting suggestions and each searched category bounded so opening or
+    // typing never mounts hundreds of rows before the person can read them.
+    const prLimit = hasQuery ? 20 : 8;
+    const sessionLimit = hasQuery || hasSessionFilter ? 40 : 12;
+    const matches = (values: Array<string | undefined>) => {
+      if (terms.length === 0) return true;
+      const text = values.filter(Boolean).join(" ").toLowerCase();
+      return terms.every((term) => text.includes(term));
+    };
+    const actionResults: PaletteResult[] = (hasSessionFilter ? [] : actions)
+      .filter((action) =>
+        matches([
+          action.label,
+          action.description,
+          ...(action.keywords || []),
+          ...(action.shortcut || []),
+        ]),
+      )
+      .slice(0, hasQuery ? 24 : 16)
+      .map((action) => ({ type: "action", category: action.category, action }));
+    const prResults: PaletteResult[] = (hasSessionFilter ? [] : openPrs)
+      .filter(
+        (pr) =>
+          prLinksMatch(q, pr.url) ||
+          matches([
+            pr.title,
+            pr.repo,
+            pr.branch,
+            pr.author,
+            `#${pr.number}`,
+            prStatus(pr),
+            pr.url,
+          ]),
+      )
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, prLimit)
+      .map((pr) => ({ type: "pr", category: "Pull requests", pr }));
+    // Falls back to deriving the text for a session the index hasn't seen, so
+    // a pool and an index that are momentarily out of step still search.
+    const hayOf = (s: UnifiedSession) => searchIndex.hay.get(s) ?? haystack(s);
+    let sessionResults = pool.filter((s) => {
+      if (person !== "all" && !sessionHasOwner(s, person, canonical))
+        return false;
+      if (repo !== "all" && sessionRepo(s) !== repo) return false;
+      if (status !== "all" && sessionStatus(s) !== status) return false;
+      if (terms.length === 0) return true;
+      // A session shows if its metadata matches every term OR the query turned
+      // up inside its conversation, or the pasted PR link belongs to it.
+      const hay = hayOf(s);
+      return (
+        terms.every((t) => hay.includes(t)) ||
+        sessionUsesPrLink(s, q) ||
+        snippets.has(s.id)
+      );
+    });
+    sessionResults = sortByRecentActivity(sessionResults, searchIndex);
+    if (sessionResults.some((session) => sessionUsesPrLink(session, q))) {
+      sessionResults = collapsePrLinkSessions(sessionResults);
+    }
+    const sessionRows: PaletteResult[] = sessionResults
+      .slice(0, sessionLimit)
+      .map((s) => {
+        // Show the snippet only when the title/metadata didn't already match —
+        // otherwise the row explains itself.
+        const metaMatch =
+          terms.length > 0 &&
+          (terms.every((t) => hayOf(s).includes(t)) || sessionUsesPrLink(s, q));
+        return {
+          type: "session",
+          category: "Sessions",
+          session: s,
+          snippet: metaMatch ? undefined : snippets.get(s.id),
+        };
+      });
+    return [...actionResults, ...prResults, ...sessionRows];
+  })();
+  const keyedActive = results.findIndex(
+    (result) => resultKey(result) === activeKey,
+  );
+  const active = keyedActive >= 0 ? keyedActive : 0;
 
-	// Keep the highlighted row scrolled into view during keyboard nav.
-	useEffect(() => {
-		const el = listRef.current?.querySelector<HTMLElement>(
-			`[data-idx="${active}"]`,
-		);
-		el?.scrollIntoView({ block: "nearest" });
-	}, [active, activeKey, results.length]);
+  // Keep the highlighted row scrolled into view during keyboard nav.
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(
+      `[data-idx="${active}"]`,
+    );
+    el?.scrollIntoView({ block: "nearest" });
+  }, [active, activeKey, results.length]);
 
-	// Result navigation only. Tab cycling, Escape and backdrop dismissal are the
-	// dialog's job now (Modal → Base UI), so this handler no longer duplicates
-	// them. Filter and clear buttons keep their own arrow/Enter behavior.
-	function onKeyDown(e: React.KeyboardEvent) {
-		if (
-			e.target instanceof HTMLElement &&
-			e.target.closest("[data-session-filter], [data-session-filter-clear]")
-		)
-			return;
-		if (e.key === "ArrowDown") {
-			e.preventDefault();
-			const next = Math.min(active + 1, results.length - 1);
-			if (results[next]) setActiveKey(resultKey(results[next]));
-		} else if (e.key === "ArrowUp") {
-			e.preventDefault();
-			const next = Math.max(active - 1, 0);
-			if (results[next]) setActiveKey(resultKey(results[next]));
-		} else if (e.key === "Enter") {
-			e.preventDefault();
-			selectResult(results[active]);
-		}
-	}
+  // Result navigation only. Tab cycling, Escape and backdrop dismissal are the
+  // dialog's job now (Modal → Base UI), so this handler no longer duplicates
+  // them. Filter and clear buttons keep their own arrow/Enter behavior.
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (
+      e.target instanceof HTMLElement &&
+      e.target.closest("[data-session-filter], [data-session-filter-clear]")
+    )
+      return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = Math.min(active + 1, results.length - 1);
+      if (results[next]) setActiveKey(resultKey(results[next]));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = Math.max(active - 1, 0);
+      if (results[next]) setActiveKey(resultKey(results[next]));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      selectResult(results[active]);
+    }
+  }
 
-	function selectResult(result?: PaletteResult) {
-		if (!result) return;
-		onClose();
-		if (result.type === "action") result.action.run();
-		else if (result.type === "pr") onSelectPr(result.pr);
-		else onSelectSession(result.session.id);
-	}
+  function selectResult(result?: PaletteResult) {
+    if (!result) return;
+    onClose();
+    if (result.type === "action") result.action.run();
+    else if (result.type === "pr") onSelectPr(result.pr);
+    else onSelectSession(result.session.id);
+  }
 
-	return (
-		<Modal.Root
-			open={open}
-			// Escape and outside presses both land here; App unmounts us in turn.
-			onOpenChange={(next) => {
-				if (!next) onClose();
-			}}
-			// Focus is trapped, but the page isn't inerted or scroll-locked — the
-			// palette has never done either, and inerting would break popups that
-			// portal outside it.
-			modal="trap-focus"
-		>
-			<Modal.Content
-				variant="palette"
-				widthClassName={utilityClassName("w-[min(640px,100%)]")}
-				className={utilityClassName("h-[min(500px,76vh)] max-[560px]:h-[min(560px,82vh)]")}
-				aria-label="Command menu"
-				initialFocus={inputRef}
-				onKeyDown={onKeyDown}
-			>
-				<div {...mergeStylexProps("border-divider", sx.flex, sx.itemsCenter, sx.gap3, sx.borderB, sx.px5, sx.py4)} >
-					<IconSearch className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} size={22} />
-					<input
-						ref={inputRef}
-						// 16px at every width on purpose: anything smaller makes iOS zoom
-						// the page when the palette's field takes focus.
-						{...mergeStylexProps("placeholder:text-faint", sx.flex1, sx.borderNone, sx.bgTransparent, sx.fontSans, sx.textInputPhone, sx.leading14, sx.textFg, sx.outlineNone)}
-						value={query}
-						onChange={(e) => {
-							setQuery(e.target.value);
-							setActiveKey(null);
-						}}
-						placeholder="Search actions, pull requests & conversations…"
-						spellCheck={false}
-						role="combobox"
-						aria-label="Search commands and conversations"
-						aria-autocomplete="list"
-						aria-expanded="true"
-						aria-controls="command-palette-results"
-						aria-activedescendant={results[active] ? `command-result-${active}` : undefined}
-					/>
-					{(searching || loadingPrs) && (
-						<span
-							className={
-								utilityClassName("size-[13px] shrink-0 animate-[spin_0.7s_linear_infinite] rounded-full border-2 border-line-strong border-t-accent ") +
-								// Keeps turning under reduced motion — it is the only "still
-								// searching" signal, and the blanket rule would freeze it.
-								utilityClassName("motion-reduce:[animation-duration:0.7s]! motion-reduce:[animation-iteration-count:infinite]!")
-							}
-							aria-label="Searching"
-						/>
-					)}
-					<kbd className={KBD}>esc</kbd>
-				</div>
+  return (
+    <Modal.Root
+      open={open}
+      // Escape and outside presses both land here; App unmounts us in turn.
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      // Focus is trapped, but the page isn't inerted or scroll-locked — the
+      // palette has never done either, and inerting would break popups that
+      // portal outside it.
+      modal="trap-focus"
+    >
+      <Modal.Content
+        variant="palette"
+        widthClassName={utilityClassName("w-[min(640px,100%)]")}
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.hMin500px76vh,
+          sx.max560pxHMin560px82vh,
+        )}
+        aria-label="Command menu"
+        initialFocus={inputRef}
+        onKeyDown={onKeyDown}
+      >
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap3,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px5,
+            sx.py4,
+          )}
+        >
+          <IconSearch
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.shrink0,
+              sx.textFaint,
+            )}
+            size={22}
+          />
+          <input
+            ref={inputRef}
+            // 16px at every width on purpose: anything smaller makes iOS zoom
+            // the page when the palette's field takes focus.
+            {...stylex.props(
+              sx.flex1,
+              sx.borderNone,
+              sx.bgTransparent,
+              sx.fontSans,
+              sx.textInputPhone,
+              sx.leading14,
+              sx.textFg,
+              sx.outlineNone,
+              sx.placeholderTextFaint,
+            )}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveKey(null);
+            }}
+            placeholder="Search actions, pull requests & conversations…"
+            spellCheck={false}
+            role="combobox"
+            aria-label="Search commands and conversations"
+            aria-autocomplete="list"
+            aria-expanded="true"
+            aria-controls="command-palette-results"
+            aria-activedescendant={
+              results[active] ? `command-result-${active}` : undefined
+            }
+          />
+          {(searching || loadingPrs) && (
+            <span
+              className={
+                utilityClassName(
+                  "size-[13px] shrink-0 animate-[spin_0.7s_linear_infinite] rounded-full border-2 border-line-strong border-t-accent ",
+                ) +
+                // Keeps turning under reduced motion — it is the only "still
+                // searching" signal, and the blanket rule would freeze it.
+                utilityClassName(
+                  "motion-reduce:[animation-duration:0.7s]! motion-reduce:[animation-iteration-count:infinite]!",
+                )
+              }
+              aria-label="Searching"
+            />
+          )}
+          <kbd className={KBD}>esc</kbd>
+        </div>
 
-				<div
-					{...mergeStylexProps("border-divider", sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap2, sx.borderB, sx.px4, sx.py25)}
-					aria-label="Session filters"
-				>
-					<FilterMenu
-						label="Person"
-						value={person}
-						options={personOptions}
-						onChange={setPerson}
-						icon={<IconPeople size={18} />}
-					/>
-					<FilterMenu
-						label="Repo"
-						value={repo}
-						options={repoOptions}
-						onChange={setRepo}
-						icon={<IconRepo size={18} />}
-					/>
-					<FilterMenu
-						label="Status"
-						value={status}
-						options={statusOptions}
-						onChange={(value) => setStatus(value as Status | "all")}
-						icon={<IconStatusRing size={18} />}
-					/>
-					{hasSessionFilter && (
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							className={mergeStylexOverrideClassName("", sx.mlAuto, sx.textFaint)}
-							data-session-filter-clear
-							onClick={() => {
-								setPerson("all");
-								setRepo("all");
-								setStatus("all");
-							}}
-						>
-							Clear
-						</Button>
-					)}
-				</div>
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.flexWrap,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px4,
+            sx.py25,
+          )}
+          aria-label="Session filters"
+        >
+          <FilterMenu
+            label="Person"
+            value={person}
+            options={personOptions}
+            onChange={setPerson}
+            icon={<IconPeople size={18} />}
+          />
+          <FilterMenu
+            label="Repo"
+            value={repo}
+            options={repoOptions}
+            onChange={setRepo}
+            icon={<IconRepo size={18} />}
+          />
+          <FilterMenu
+            label="Status"
+            value={status}
+            options={statusOptions}
+            onChange={(value) => setStatus(value as Status | "all")}
+            icon={<IconStatusRing size={18} />}
+          />
+          {hasSessionFilter && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.mlAuto,
+                sx.textFaint,
+              )}
+              data-session-filter-clear
+              onClick={() => {
+                setPerson("all");
+                setRepo("all");
+                setStatus("all");
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
 
-				<div
-					id="command-palette-results"
-					{...stylex.props(sx.minH0, sx.flex1, sx.overflowYAuto, sx.p2)}
-					ref={listRef}
-					role="listbox"
-				>
-					{results.length === 0 && (
-						<div {...stylex.props(sx.px4, sx.py7, sx.textCenter, sx.textFaint, typography.label)}>
-							{searching ? "Searching conversations…" : "Nothing found"}
-						</div>
-					)}
-					{results.map((result, i) => {
-						const startsGroup = i === 0 || results[i - 1]?.category !== result.category;
-						if (result.type === "action") {
-							return (
-								<React.Fragment key={`action:${result.action.id}`}>
-									{startsGroup && (
-										<div {...stylex.props(sx.px3, sx.pb15, sx.pt25, sx.fontSemibold, sx.textFaint, typography.meta)}>
-											{result.category}
-										</div>
-									)}
-									<button
-										id={`command-result-${i}`}
-										data-idx={i}
-										type="button"
-										role="option"
-										aria-selected={i === active}
-										tabIndex={-1}
-										className={ITEM}
-										onMouseMove={() => setActiveKey(resultKey(result))}
-										onClick={() => selectResult(result)}
-									>
-										{result.action.icon && (
-											<span {...mergeStylexProps("group-aria-selected:text-fg", sx.inlineFlex, sx.size5, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textDim)} >{result.action.icon}</span>
-										)}
-										<span {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.gap05)}>
-											<span {...stylex.props(sx.truncate, sx.fontMedium, typography.label)}>{result.action.label}</span>
-											{result.action.description && (
-												<span {...stylex.props(sx.maxWFull, sx.truncate, sx.leading135, sx.textDim, typography.supporting)}>{result.action.description}</span>
-											)}
-										</span>
-										{result.action.shortcut && (
-											<span {...mergeStylexProps("max-[560px]:hidden", sx.inlineFlex, sx.shrink0, sx.itemsCenter, sx.gap3px)} >
-												{result.action.shortcut.map((key) => <kbd key={key} className={KBD}>{key}</kbd>)}
-											</span>
-										)}
-									</button>
-								</React.Fragment>
-							);
-						}
-						if (result.type === "pr") {
-							const pr = result.pr;
-							return (
-								<React.Fragment key={`pr:${pr.url}`}>
-									{startsGroup && (
-										<div {...stylex.props(sx.px3, sx.pb15, sx.pt25, sx.fontSemibold, sx.textFaint, typography.meta)}>
-											{result.category}
-										</div>
-									)}
-									<button
-										id={`command-result-${i}`}
-										data-idx={i}
-										type="button"
-										role="option"
-										aria-selected={i === active}
-										tabIndex={-1}
-										className={ITEM}
-										onMouseMove={() => setActiveKey(resultKey(result))}
-										onClick={() => selectResult(result)}
-									>
-										<span {...mergeStylexProps("group-aria-selected:text-fg", sx.inlineFlex, sx.size5, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textDim)} ><IconPullRequest size={18} /></span>
-										<span {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.gap05)}>
-											<span {...stylex.props(sx.truncate, sx.fontMedium, typography.label)}>{pr.title}</span>
-											<span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.overflowHidden, sx.whitespaceNowrap, sx.textFaint, typography.meta)}>
-												<span {...stylex.props(sx.textDim)}>{repoLabel(pr.repo)} #{pr.number}</span>
-												<span {...mergeStylexProps("max-[560px]:hidden", sx.maxW220px, sx.truncate)} >{pr.branch}</span>
-												<span>{pr.author}</span>
-											</span>
-										</span>
-										<span {...mergeStylexProps("max-[560px]:hidden", sx.shrink0, sx.textFaint, typography.meta)} >{prStatus(pr)}</span>
-									</button>
-								</React.Fragment>
-							);
-						}
-						const s = result.session;
-						const st = sessionStatus(s);
-						const meta = STATUS_META[st];
-						return (
-							<React.Fragment key={`session:${s.id}`}>
-								{startsGroup && (
-										<div {...stylex.props(sx.px3, sx.pb15, sx.pt25, sx.fontSemibold, sx.textFaint, typography.meta)}>
-											{result.category}
-										</div>
-									)}
-								<button
-									id={`command-result-${i}`}
-									data-idx={i}
-									type="button"
-									role="option"
-									aria-selected={i === active}
-									tabIndex={-1}
-									className={ITEM}
-									onMouseMove={() => setActiveKey(resultKey(result))}
-									onClick={() => selectResult(result)}
-								>
-									<span className={utilityClassName(`size-2 shrink-0 rounded-full ${meta.dotClass}`)} />
-									<span {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.gap05)}>
-										<span {...stylex.props(sx.truncate, sx.fontMedium, typography.label)}>{s.title}</span>
-										{result.snippet && (
-											<span {...stylex.props(sx.maxWFull, sx.truncate, sx.leading135, sx.textDim, typography.supporting)}>{result.snippet}</span>
-										)}
-										<span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.overflowHidden, sx.whitespaceNowrap, sx.textFaint, typography.meta)}>
-											{s.automation ? (
-												<span {...mergeStylexProps("bg-[color-mix(in_srgb,var(--yellow)_16%,transparent)]", sx.roundedSm, sx.px15, sx.pyPx, sx.textYellow, typography.meta)} >{s.automation}</span>
-											) : (
-												s.startedBy && <span>{s.startedBy}</span>
-											)}
-											<span {...stylex.props(sx.textDim)}>{sessionRepo(s)}</span>
-											{s.branch && <span {...mergeStylexProps("max-[560px]:hidden", sx.maxW220px, sx.truncate)} >{s.branch}</span>}
-											<span {...stylex.props(sx.mlAuto, sx.shrink0)}>{relativeTime(s.lastActivity)}</span>
-										</span>
-									</span>
-									<span {...mergeStylexProps("max-[560px]:hidden", sx.shrink0, sx.textFaint, typography.meta)} >{meta.label}</span>
-								</button>
-							</React.Fragment>
-						);
-					})}
-				</div>
+        <div
+          id="command-palette-results"
+          {...stylex.props(sx.minH0, sx.flex1, sx.overflowYAuto, sx.p2)}
+          ref={listRef}
+          role="listbox"
+        >
+          {results.length === 0 && (
+            <div
+              {...stylex.props(
+                sx.px4,
+                sx.py7,
+                sx.textCenter,
+                sx.textFaint,
+                typography.label,
+              )}
+            >
+              {searching ? "Searching conversations…" : "Nothing found"}
+            </div>
+          )}
+          {results.map((result, i) => {
+            const startsGroup =
+              i === 0 || results[i - 1]?.category !== result.category;
+            if (result.type === "action") {
+              return (
+                <React.Fragment key={`action:${result.action.id}`}>
+                  {startsGroup && (
+                    <div
+                      {...stylex.props(
+                        sx.px3,
+                        sx.pb15,
+                        sx.pt25,
+                        sx.fontSemibold,
+                        sx.textFaint,
+                        typography.meta,
+                      )}
+                    >
+                      {result.category}
+                    </div>
+                  )}
+                  <button
+                    id={`command-result-${i}`}
+                    data-idx={i}
+                    type="button"
+                    role="option"
+                    aria-selected={i === active}
+                    tabIndex={-1}
+                    className={ITEM}
+                    onMouseMove={() => setActiveKey(resultKey(result))}
+                    onClick={() => selectResult(result)}
+                  >
+                    {result.action.icon && (
+                      <span
+                        {...mergeStylexProps(
+                          "group-aria-selected:text-fg",
+                          sx.inlineFlex,
+                          sx.size5,
+                          sx.shrink0,
+                          sx.itemsCenter,
+                          sx.justifyCenter,
+                          sx.textDim,
+                        )}
+                      >
+                        {result.action.icon}
+                      </span>
+                    )}
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.minW0,
+                        sx.flex1,
+                        sx.flexCol,
+                        sx.gap05,
+                      )}
+                    >
+                      <span
+                        {...stylex.props(
+                          sx.truncate,
+                          sx.fontMedium,
+                          typography.label,
+                        )}
+                      >
+                        {result.action.label}
+                      </span>
+                      {result.action.description && (
+                        <span
+                          {...stylex.props(
+                            sx.maxWFull,
+                            sx.truncate,
+                            sx.leading135,
+                            sx.textDim,
+                            typography.supporting,
+                          )}
+                        >
+                          {result.action.description}
+                        </span>
+                      )}
+                    </span>
+                    {result.action.shortcut && (
+                      <span
+                        {...stylex.props(
+                          sx.inlineFlex,
+                          sx.shrink0,
+                          sx.itemsCenter,
+                          sx.gap3px,
+                          sx.max560pxHidden,
+                        )}
+                      >
+                        {result.action.shortcut.map((key) => (
+                          <kbd key={key} className={KBD}>
+                            {key}
+                          </kbd>
+                        ))}
+                      </span>
+                    )}
+                  </button>
+                </React.Fragment>
+              );
+            }
+            if (result.type === "pr") {
+              const pr = result.pr;
+              return (
+                <React.Fragment key={`pr:${pr.url}`}>
+                  {startsGroup && (
+                    <div
+                      {...stylex.props(
+                        sx.px3,
+                        sx.pb15,
+                        sx.pt25,
+                        sx.fontSemibold,
+                        sx.textFaint,
+                        typography.meta,
+                      )}
+                    >
+                      {result.category}
+                    </div>
+                  )}
+                  <button
+                    id={`command-result-${i}`}
+                    data-idx={i}
+                    type="button"
+                    role="option"
+                    aria-selected={i === active}
+                    tabIndex={-1}
+                    className={ITEM}
+                    onMouseMove={() => setActiveKey(resultKey(result))}
+                    onClick={() => selectResult(result)}
+                  >
+                    <span
+                      {...mergeStylexProps(
+                        "group-aria-selected:text-fg",
+                        sx.inlineFlex,
+                        sx.size5,
+                        sx.shrink0,
+                        sx.itemsCenter,
+                        sx.justifyCenter,
+                        sx.textDim,
+                      )}
+                    >
+                      <IconPullRequest size={18} />
+                    </span>
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.minW0,
+                        sx.flex1,
+                        sx.flexCol,
+                        sx.gap05,
+                      )}
+                    >
+                      <span
+                        {...stylex.props(
+                          sx.truncate,
+                          sx.fontMedium,
+                          typography.label,
+                        )}
+                      >
+                        {pr.title}
+                      </span>
+                      <span
+                        {...stylex.props(
+                          sx.flex,
+                          sx.itemsCenter,
+                          sx.gap2,
+                          sx.overflowHidden,
+                          sx.whitespaceNowrap,
+                          sx.textFaint,
+                          typography.meta,
+                        )}
+                      >
+                        <span {...stylex.props(sx.textDim)}>
+                          {repoLabel(pr.repo)} #{pr.number}
+                        </span>
+                        <span
+                          {...stylex.props(
+                            sx.maxW220px,
+                            sx.truncate,
+                            sx.max560pxHidden,
+                          )}
+                        >
+                          {pr.branch}
+                        </span>
+                        <span>{pr.author}</span>
+                      </span>
+                    </span>
+                    <span
+                      {...stylex.props(
+                        sx.shrink0,
+                        sx.textFaint,
+                        sx.max560pxHidden,
+                        typography.meta,
+                      )}
+                    >
+                      {prStatus(pr)}
+                    </span>
+                  </button>
+                </React.Fragment>
+              );
+            }
+            const s = result.session;
+            const st = sessionStatus(s);
+            const meta = STATUS_META[st];
+            return (
+              <React.Fragment key={`session:${s.id}`}>
+                {startsGroup && (
+                  <div
+                    {...stylex.props(
+                      sx.px3,
+                      sx.pb15,
+                      sx.pt25,
+                      sx.fontSemibold,
+                      sx.textFaint,
+                      typography.meta,
+                    )}
+                  >
+                    {result.category}
+                  </div>
+                )}
+                <button
+                  id={`command-result-${i}`}
+                  data-idx={i}
+                  type="button"
+                  role="option"
+                  aria-selected={i === active}
+                  tabIndex={-1}
+                  className={ITEM}
+                  onMouseMove={() => setActiveKey(resultKey(result))}
+                  onClick={() => selectResult(result)}
+                >
+                  <span
+                    className={utilityClassName(
+                      `size-2 shrink-0 rounded-full ${meta.dotClass}`,
+                    )}
+                  />
+                  <span
+                    {...stylex.props(
+                      sx.flex,
+                      sx.minW0,
+                      sx.flex1,
+                      sx.flexCol,
+                      sx.gap05,
+                    )}
+                  >
+                    <span
+                      {...stylex.props(
+                        sx.truncate,
+                        sx.fontMedium,
+                        typography.label,
+                      )}
+                    >
+                      {s.title}
+                    </span>
+                    {result.snippet && (
+                      <span
+                        {...stylex.props(
+                          sx.maxWFull,
+                          sx.truncate,
+                          sx.leading135,
+                          sx.textDim,
+                          typography.supporting,
+                        )}
+                      >
+                        {result.snippet}
+                      </span>
+                    )}
+                    <span
+                      {...stylex.props(
+                        sx.flex,
+                        sx.itemsCenter,
+                        sx.gap2,
+                        sx.overflowHidden,
+                        sx.whitespaceNowrap,
+                        sx.textFaint,
+                        typography.meta,
+                      )}
+                    >
+                      {s.automation ? (
+                        <span
+                          {...stylex.props(
+                            sx.roundedSm,
+                            sx.bgColorMixInSrgbVarYellow16Transparent,
+                            sx.px15,
+                            sx.pyPx,
+                            sx.textYellow,
+                            typography.meta,
+                          )}
+                        >
+                          {s.automation}
+                        </span>
+                      ) : (
+                        s.startedBy && <span>{s.startedBy}</span>
+                      )}
+                      <span {...stylex.props(sx.textDim)}>
+                        {sessionRepo(s)}
+                      </span>
+                      {s.branch && (
+                        <span
+                          {...stylex.props(
+                            sx.maxW220px,
+                            sx.truncate,
+                            sx.max560pxHidden,
+                          )}
+                        >
+                          {s.branch}
+                        </span>
+                      )}
+                      <span {...stylex.props(sx.mlAuto, sx.shrink0)}>
+                        {relativeTime(s.lastActivity)}
+                      </span>
+                    </span>
+                  </span>
+                  <span
+                    {...stylex.props(
+                      sx.shrink0,
+                      sx.textFaint,
+                      sx.max560pxHidden,
+                      typography.meta,
+                    )}
+                  >
+                    {meta.label}
+                  </span>
+                </button>
+              </React.Fragment>
+            );
+          })}
+        </div>
 
-				<div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap4, sx.borderT, sx.borderLine, sx.px4, sx.py25, sx.textFaint, typography.meta)}>
-					<span className={utilityClassName("phone:hidden")}>
-						<kbd className={KBD}>↑</kbd>
-						<kbd className={KBD}>↓</kbd> navigate
-					</span>
-					<span className={utilityClassName("phone:hidden")}>
-						<kbd className={KBD}>↵</kbd> open
-					</span>
-					<span {...stylex.props(sx.mlAuto)}>
-						{results.length} result{results.length === 1 ? "" : "s"}
-					</span>
-				</div>
-			</Modal.Content>
-		</Modal.Root>
-	);
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap4,
+            sx.borderT,
+            sx.borderLine,
+            sx.px4,
+            sx.py25,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
+          <span {...stylex.props(sx.phoneHidden)}>
+            <kbd className={KBD}>↑</kbd>
+            <kbd className={KBD}>↓</kbd> navigate
+          </span>
+          <span {...stylex.props(sx.phoneHidden)}>
+            <kbd className={KBD}>↵</kbd> open
+          </span>
+          <span {...stylex.props(sx.mlAuto)}>
+            {results.length} result{results.length === 1 ? "" : "s"}
+          </span>
+        </div>
+      </Modal.Content>
+    </Modal.Root>
+  );
 }

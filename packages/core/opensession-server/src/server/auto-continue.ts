@@ -12,10 +12,10 @@
 export const AUTO_CONTINUE_USER = "auto-continue";
 
 export const AUTO_CONTINUE_PROMPT =
-	"[auto-continue] Your previous turn ended by announcing a next step without " +
-	"executing it. Continue now: perform the step you announced, and keep working " +
-	"until the task is done or you are genuinely blocked on input only the human " +
-	"can give.";
+  "[auto-continue] Your previous turn ended by announcing a next step without " +
+  "executing it. Continue now: perform the step you announced, and keep working " +
+  "until the task is done or you are genuinely blocked on input only the human " +
+  "can give.";
 
 /**
  * Variant for turns that ended on a FABRICATED tool transcript (see
@@ -26,25 +26,25 @@ export const AUTO_CONTINUE_PROMPT =
  * ends right after, so the nudge carries the correction itself.
  */
 export const AUTO_CONTINUE_FABRICATED_PROMPT =
-	"[auto-continue] Your previous turn ended with what looks like a tool-call " +
-	"transcript written out as text. None of it was executed: you authored it, " +
-	"and every value in it is fabricated. Re-read the genuine tool results " +
-	"earlier in the conversation, actually invoke the tools you only narrated, " +
-	"and keep working until the task is done or you are genuinely blocked on " +
-	"input only the human can give.";
+  "[auto-continue] Your previous turn ended with what looks like a tool-call " +
+  "transcript written out as text. None of it was executed: you authored it, " +
+  "and every value in it is fabricated. Re-read the genuine tool results " +
+  "earlier in the conversation, actually invoke the tools you only narrated, " +
+  "and keep working until the task is done or you are genuinely blocked on " +
+  "input only the human can give.";
 
 /**
  * In-runner retry nudge for a turn whose FINAL model completion came back
  * completely empty — zero content blocks, stopReason "stop" (2026-08-21
- * os-01a02486: stealth/ox-alpha via OpenRouter ended a 10-minute turn on
+ * os-01a02486: GLM-5.3's pre-release OpenRouter route ended a 10-minute turn on
  * `content: []` with all-zero usage; pi settled it as a clean turn and the
  * user had to ask "done?"). pi-runner sends this once via session.prompt();
  * the fence keeps it out of the rendered transcript.
  */
 export const EMPTY_REPLY_RETRY_PROMPT =
-	"[empty-response] Your previous reply reached the engine completely empty — " +
-	"no text and no tool calls. Send your final answer for the user's last " +
-	"message now: the summary, result, or question you intended to deliver.";
+  "[empty-response] Your previous reply reached the engine completely empty — " +
+  "no text and no tool calls. Send your final answer for the user's last " +
+  "message now: the summary, result, or question you intended to deliver.";
 
 /**
  * Redelivery nudge for user messages a dead turn never read. A busy-send
@@ -58,10 +58,10 @@ export const EMPTY_REPLY_RETRY_PROMPT =
  * errored turn) and fires ONE redelivery turn carrying this prompt.
  */
 export const ORPHANED_STEER_PROMPT =
-	"[auto-continue] Your previous turn was interrupted before it could read " +
-	"the user's most recent message(s), which are already in this conversation " +
-	"just above. Read and address them now, and keep working until the task is " +
-	"done or you are genuinely blocked on input only the human can give.";
+  "[auto-continue] Your previous turn was interrupted before it could read " +
+  "the user's most recent message(s), which are already in this conversation " +
+  "just above. Read and address them now, and keep working until the task is " +
+  "done or you are genuinely blocked on input only the human can give.";
 
 /**
  * Auto-retry nudge for turns terminated by an engine-bridge wedge (subagent
@@ -75,16 +75,16 @@ export const ORPHANED_STEER_PROMPT =
  * teaches graceful degradation so a second wedge doesn't strand the task.
  */
 export const WEDGE_RETRY_PROMPT =
-	"[auto-continue] Your previous turn was cut short by an engine stall: a " +
-	"sub-agent/provider request produced no output and was aborted. Your work " +
-	"and conversation state are preserved. Re-attempt the interrupted step now. " +
-	"If a task/oracle consult stalls again or the same failure repeats, proceed " +
-	"without it, note explicitly that you skipped it, and finish the task.";
+  "[auto-continue] Your previous turn was cut short by an engine stall: a " +
+  "sub-agent/provider request produced no output and was aborted. Your work " +
+  "and conversation state are preserved. Re-attempt the interrupted step now. " +
+  "If a task/oracle consult stalls again or the same failure repeats, proceed " +
+  "without it, note explicitly that you skipped it, and finish the task.";
 
 /** Failure text of a mid-turn engine wedge (stall guards, silent bridge). */
 export function isWedgeFailure(runFailure: string | null | undefined): boolean {
-	if (!runFailure) return false;
-	return /wedged|produced no output|went silent/i.test(runFailure);
+  if (!runFailure) return false;
+  return /wedged|produced no output|went silent/i.test(runFailure);
 }
 
 /**
@@ -97,12 +97,12 @@ export function isWedgeFailure(runFailure: string | null | undefined): boolean {
  * when the engine gains real mid-turn steering (pi v2 delivery:"steer").
  */
 export const INTERRUPT_STEER_NOTE =
-	"Delivery note: the user sent this while your previous turn was still " +
-	"executing; that turn was interrupted to deliver it. Treat it as a mid-task " +
-	"steer — fold it into the work in progress and continue executing in THIS " +
-	"turn: pick up any interrupted step that is still needed, act on the new " +
-	"message, and keep working until done or genuinely blocked. Do not end the " +
-	"turn on a bare acknowledgment or an announcement of what you will do.";
+  "Delivery note: the user sent this while your previous turn was still " +
+  "executing; that turn was interrupted to deliver it. Treat it as a mid-task " +
+  "steer — fold it into the work in progress and continue executing in THIS " +
+  "turn: pick up any interrupted step that is still needed, act on the new " +
+  "message, and keep working until done or genuinely blocked. Do not end the " +
+  "turn on a bare acknowledgment or an announcement of what you will do.";
 
 /**
  * Does the reply's final sentence read as a next action the model was about
@@ -112,71 +112,73 @@ export const INTERRUPT_STEER_NOTE =
  * question-shaped or waiting-on-the-human returns false.
  */
 export function announcesNextAction(text: string): boolean {
-	const trimmed = text.trim();
-	if (!trimmed) return false;
-	const tail = trimmed.slice(-400);
-	const sentences = tail.split(/(?<=[.!?])\s+/);
-	const last = (sentences[sentences.length - 1] || "").trim();
-	if (!last || last.length < 12) return false;
-	if (last.includes("?")) return false;
-	// Waiting on the human is a legitimate stop, not an announce-then-stop.
-	if (
-		/\b(let me know|blocked on|waiting for|awaiting|your call|if you (?:want|prefer|disagree)|say the word|shall i|should i|want me to|i['’]ll (?:wait|hold|leave|stop))\b/i.test(
-			last,
-		)
-	)
-		return false;
-	if (
-		/\b(let me|i['’]ll|i will|i need to|i['’]m going to|i['’]m about to|next,? i|now i['’]m|now i will)\b/i.test(
-			last,
-		)
-	)
-		return true;
-	// Passive implementation announcements can omit the model as actor, e.g.
-	// "Now the init effect's deps need `uploadsReady` added…". Keep this to
-	// concrete mutation/verification verbs so explanatory "users need to…"
-	// sentences do not trigger another turn.
-	if (
-		/^(?:now|next),?\s+.{1,180}\bneeds?\s+.{1,120}\b(?:added|updated|changed|fixed|implemented|removed|verified|checked|tested|run)\b/i.test(
-			last,
-		)
-	)
-		return true;
-	// Noun-phrase step announcements ("Next: where the render path turns X
-	// into Y.", "Then: the fallback check.") — 2026-08-03 bks-019fc72d ended
-	// its turn on one after a mid-turn tool loss and parked; no first-person
-	// verb and no gerund, so every pattern above misses the shape.
-	if (/^(?:next(?:\s+step|\s+up)?|then|after that)\s*:\s+\S/i.test(last)) return true;
-	// Bare gerund announcements ("Fetching the review comments on #4791.",
-	// "Now running the tests.") — seen 2026-07-12 in bks-019f54f8, where the
-	// first-person patterns above missed and the session parked. The verb must
-	// be followed by an object-ish token so completion shapes ("Testing
-	// complete.", "Everything is working.") and -ing non-verbs ("During the
-	// run…") stay out.
-	const gerund = /^(?:(?:now|next|first|then|ok(?:ay)?),?\s+)?([a-z]+ing)\s+(\S.*)/i.exec(
-		last,
-	);
-	if (!gerund) return false;
-	if (NON_VERB_ING.has(gerund[1].toLowerCase())) return false;
-	return (
-		/^(?:the|a|an|this|that|these|those|it|its|my|our|your|all|both|each|some|more|on)\b/i.test(
-			gerund[2],
-		) || /^[A-Z0-9`"'@[#]/.test(gerund[2])
-	);
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const tail = trimmed.slice(-400);
+  const sentences = tail.split(/(?<=[.!?])\s+/);
+  const last = (sentences[sentences.length - 1] || "").trim();
+  if (!last || last.length < 12) return false;
+  if (last.includes("?")) return false;
+  // Waiting on the human is a legitimate stop, not an announce-then-stop.
+  if (
+    /\b(let me know|blocked on|waiting for|awaiting|your call|if you (?:want|prefer|disagree)|say the word|shall i|should i|want me to|i['’]ll (?:wait|hold|leave|stop))\b/i.test(
+      last,
+    )
+  )
+    return false;
+  if (
+    /\b(let me|i['’]ll|i will|i need to|i['’]m going to|i['’]m about to|next,? i|now i['’]m|now i will)\b/i.test(
+      last,
+    )
+  )
+    return true;
+  // Passive implementation announcements can omit the model as actor, e.g.
+  // "Now the init effect's deps need `uploadsReady` added…". Keep this to
+  // concrete mutation/verification verbs so explanatory "users need to…"
+  // sentences do not trigger another turn.
+  if (
+    /^(?:now|next),?\s+.{1,180}\bneeds?\s+.{1,120}\b(?:added|updated|changed|fixed|implemented|removed|verified|checked|tested|run)\b/i.test(
+      last,
+    )
+  )
+    return true;
+  // Noun-phrase step announcements ("Next: where the render path turns X
+  // into Y.", "Then: the fallback check.") — 2026-08-03 bks-019fc72d ended
+  // its turn on one after a mid-turn tool loss and parked; no first-person
+  // verb and no gerund, so every pattern above misses the shape.
+  if (/^(?:next(?:\s+step|\s+up)?|then|after that)\s*:\s+\S/i.test(last))
+    return true;
+  // Bare gerund announcements ("Fetching the review comments on #4791.",
+  // "Now running the tests.") — seen 2026-07-12 in bks-019f54f8, where the
+  // first-person patterns above missed and the session parked. The verb must
+  // be followed by an object-ish token so completion shapes ("Testing
+  // complete.", "Everything is working.") and -ing non-verbs ("During the
+  // run…") stay out.
+  const gerund =
+    /^(?:(?:now|next|first|then|ok(?:ay)?),?\s+)?([a-z]+ing)\s+(\S.*)/i.exec(
+      last,
+    );
+  if (!gerund) return false;
+  if (NON_VERB_ING.has(gerund[1].toLowerCase())) return false;
+  return (
+    /^(?:the|a|an|this|that|these|those|it|its|my|our|your|all|both|each|some|more|on)\b/i.test(
+      gerund[2],
+    ) || /^[A-Z0-9`"'@[#]/.test(gerund[2])
+  );
 }
 
 /** -ing words that open sentences without being an action the model is taking. */
 const NON_VERB_ING = new Set([
-	"during",
-	"nothing",
-	"everything",
-	"anything",
-	"something",
-	"warning",
-	"pending",
-	"assuming",
-	"regarding",
-	"according",
-	"meaning",
-	"interesting",
+  "during",
+  "nothing",
+  "everything",
+  "anything",
+  "something",
+  "warning",
+  "pending",
+  "assuming",
+  "regarding",
+  "according",
+  "meaning",
+  "interesting",
 ]);

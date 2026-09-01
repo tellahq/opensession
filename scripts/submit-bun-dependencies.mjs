@@ -13,19 +13,25 @@ const LOCKFILES = process.env.BUN_LOCK
   ? [process.env.BUN_LOCK]
   : ["bun.lock", "packages/clients/mac/bun.lock"];
 
-const purl = (name, version) => `pkg:npm/${name.replace("@", "%40")}@${version}`;
+const purl = (name, version) =>
+  `pkg:npm/${name.replace("@", "%40")}@${version}`;
 
 function parseLockfile(lockPath) {
   // bun.lock is JSONC-with-trailing-commas; the generated file contains no
   // comments, so stripping trailing commas is sufficient.
-  const lock = JSON.parse(readFileSync(lockPath, "utf8").replace(/,(\s*[}\]])/g, "$1"));
+  const lock = JSON.parse(
+    readFileSync(lockPath, "utf8").replace(/,(\s*[}\]])/g, "$1"),
+  );
 
   const directRuntime = new Set();
   const directDev = new Set();
   for (const ws of Object.values(lock.workspaces ?? {})) {
-    for (const name of Object.keys(ws.dependencies ?? {})) directRuntime.add(name);
-    for (const name of Object.keys(ws.optionalDependencies ?? {})) directRuntime.add(name);
-    for (const name of Object.keys(ws.devDependencies ?? {})) directDev.add(name);
+    for (const name of Object.keys(ws.dependencies ?? {}))
+      directRuntime.add(name);
+    for (const name of Object.keys(ws.optionalDependencies ?? {}))
+      directRuntime.add(name);
+    for (const name of Object.keys(ws.devDependencies ?? {}))
+      directDev.add(name);
   }
 
   // Scope must propagate through the tree: a transitive pulled in only by
@@ -37,11 +43,17 @@ function parseLockfile(lockPath) {
   for (const entry of Object.values(lock.packages ?? {})) {
     const resolution = entry[0];
     const at = resolution.lastIndexOf("@");
-    if (at <= 0) { skipped++; continue; }
+    if (at <= 0) {
+      skipped++;
+      continue;
+    }
     const name = resolution.slice(0, at);
     const version = resolution.slice(at + 1);
     // Skip non-registry resolutions (workspace:, file:, git) — no meaningful purl.
-    if (!/^\d/.test(version)) { skipped++; continue; }
+    if (!/^\d/.test(version)) {
+      skipped++;
+      continue;
+    }
     const meta = entry[2] ?? {};
     const edges = [
       ...Object.keys(meta.dependencies ?? {}),
@@ -72,8 +84,12 @@ function parseLockfile(lockPath) {
     if (resolved[id]) continue;
     resolved[id] = {
       package_url: id,
-      relationship: directRuntime.has(name) || directDev.has(name) ? "direct" : "indirect",
-      scope: !runtimeReachable.has(name) && devReachable.has(name) ? "development" : "runtime",
+      relationship:
+        directRuntime.has(name) || directDev.has(name) ? "direct" : "indirect",
+      scope:
+        !runtimeReachable.has(name) && devReachable.has(name)
+          ? "development"
+          : "runtime",
     };
   }
   return { resolved, skipped };
@@ -114,24 +130,32 @@ const snapshot = {
 };
 
 if (process.env.DRY_RUN) {
-  const total = Object.values(manifests).reduce((n, m) => n + Object.keys(m.resolved).length, 0);
+  const total = Object.values(manifests).reduce(
+    (n, m) => n + Object.keys(m.resolved).length,
+    0,
+  );
   const dev = Object.values(manifests)
     .flatMap((m) => Object.values(m.resolved))
     .filter((r) => r.scope === "development").length;
-  console.log(`DRY_RUN: ${total} packages across ${Object.keys(manifests).length} manifests (${dev} development-scoped)`);
+  console.log(
+    `DRY_RUN: ${total} packages across ${Object.keys(manifests).length} manifests (${dev} development-scoped)`,
+  );
   process.exit(0);
 }
 
 const repo = process.env.GITHUB_REPOSITORY;
-const res = await fetch(`https://api.github.com/repos/${repo}/dependency-graph/snapshots`, {
-  method: "POST",
-  headers: {
-    authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-    accept: "application/vnd.github+json",
-    "x-github-api-version": "2022-11-28",
+const res = await fetch(
+  `https://api.github.com/repos/${repo}/dependency-graph/snapshots`,
+  {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+      accept: "application/vnd.github+json",
+      "x-github-api-version": "2022-11-28",
+    },
+    body: JSON.stringify(snapshot),
   },
-  body: JSON.stringify(snapshot),
-});
+);
 const body = await res.json();
 console.log(res.status, JSON.stringify(body));
 if (!res.ok) process.exit(1);

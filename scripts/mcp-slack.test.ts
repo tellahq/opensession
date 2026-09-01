@@ -10,12 +10,14 @@ describe("buildSlackMessageBody", () => {
   });
 
   test("passes explicit unfurl options and thread timestamp", () => {
-    expect(buildSlackMessageBody(
-      "C123",
-      "hello",
-      { unfurl_links: false, unfurl_media: false },
-      "123.456",
-    )).toEqual({
+    expect(
+      buildSlackMessageBody(
+        "C123",
+        "hello",
+        { unfurl_links: false, unfurl_media: false },
+        "123.456",
+      ),
+    ).toEqual({
       channel: "C123",
       text: "hello",
       thread_ts: "123.456",

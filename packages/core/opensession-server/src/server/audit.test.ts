@@ -2,13 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { buildAuditDigestFromLines } from "./audit";
 
 const digest = (...events: Array<Record<string, unknown>>) =>
-  buildAuditDigestFromLines("2026-08-19", events.map((event) => JSON.stringify(event)).join("\n"));
+  buildAuditDigestFromLines(
+    "2026-08-19",
+    events.map((event) => JSON.stringify(event)).join("\n"),
+  );
 
 function totals(value: Record<string, unknown>): Record<string, unknown> {
   return value.totals as Record<string, unknown>;
 }
 
-function byRunKind(value: Record<string, unknown>): Record<string, Record<string, unknown>> {
+function byRunKind(
+  value: Record<string, unknown>,
+): Record<string, Record<string, unknown>> {
   return value.byRunKind as Record<string, Record<string, unknown>>;
 }
 
@@ -42,7 +47,11 @@ describe("buildAuditDigest", () => {
     );
 
     expect(totals(value)).toMatchObject({ turns: 1, errors: 1, costUsd: 1.25 });
-    expect(byRunKind(value).automation).toMatchObject({ sessions: 1, turns: 1, costUsd: 1.25 });
+    expect(byRunKind(value).automation).toMatchObject({
+      sessions: 1,
+      turns: 1,
+      costUsd: 1.25,
+    });
     expect(byRunKind(value).prompt).toMatchObject({ sessions: 1, errors: 1 });
     expect(byRunKind(value)["?"]).toBeUndefined();
   });
@@ -156,7 +165,11 @@ describe("buildAuditDigest", () => {
     expect(byRunKind(value)["?"]).toBeUndefined();
     expect(value.oneshots).toEqual({ total: 1, failed: 0 });
     expect(value.errorGroups).toEqual([
-      expect.objectContaining({ count: 1, sample: "terminal Pi failure", runKinds: ["prompt"] }),
+      expect.objectContaining({
+        count: 1,
+        sample: "terminal Pi failure",
+        runKinds: ["prompt"],
+      }),
     ]);
   });
 });

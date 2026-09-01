@@ -60,7 +60,10 @@ import {
 import type { TranscriptEntry } from "./types";
 import { sanitizeTranscriptMediaEntry } from "./transcript-media";
 import { v2SnapshotEntryWeight } from "./transcript-wire";
-import { classifyEntry, dropContextInjections } from "@tellahq/opensession-protocol/notices";
+import {
+  classifyEntry,
+  dropContextInjections,
+} from "@tellahq/opensession-protocol/notices";
 import type {
   TranscriptIndexEntry,
   TranscriptIndexRole,
@@ -127,8 +130,7 @@ export interface DestinationTranscriptAppendResult extends AppendResult {
   changes: Array<{ entryId: string; seq: number; changeSeq: number }>;
 }
 
-export interface AgentDestinationTranscriptAppendRequest
-  extends DestinationTranscriptAppendRequest {
+export interface AgentDestinationTranscriptAppendRequest extends DestinationTranscriptAppendRequest {
   transcriptAnchor: Readonly<AgentTranscriptAnchorV1>;
 }
 
@@ -138,8 +140,7 @@ export interface DestinationTranscriptReceiptQuery extends TranscriptTurnFence {
   transcriptAnchor?: Readonly<AgentTranscriptAnchorV1>;
 }
 
-export interface DestinationTranscriptAppendReceipt
-  extends TranscriptTurnFence {
+export interface DestinationTranscriptAppendReceipt extends TranscriptTurnFence {
   readonly version: 1;
   readonly appendId: string;
   readonly requestDigest: `sha256:${string}`;
@@ -157,8 +158,7 @@ export interface DestinationTranscriptAppendReceipt
   }>[];
 }
 
-export interface AgentTranscriptReceiptValidationRequest
-  extends TranscriptTurnFence {
+export interface AgentTranscriptReceiptValidationRequest extends TranscriptTurnFence {
   readonly receipt: AgentTranscriptReceiptRefV1;
   readonly transcriptAnchor: Readonly<AgentTranscriptAnchorV1>;
 }
@@ -241,7 +241,10 @@ export interface TranscriptImportInfo {
  */
 const TAIL_WINDOW_MESSAGE_KINDS = new Set(["user", "assistant"]);
 
-export function handoffTranscriptEntryWeight(kind: string, bytes: number): number {
+export function handoffTranscriptEntryWeight(
+  kind: string,
+  bytes: number,
+): number {
   return kind === "user" || kind === "assistant" || kind === "system"
     ? Math.min(bytes, 8_000)
     : 0;
@@ -269,7 +272,7 @@ export interface TailWindowOpts {
  *  best-effort post-commit notification with the affected entries. */
 export type TranscriptAppendHook = (
   sessionId: string,
-  entries: SeqEntry[]
+  entries: SeqEntry[],
 ) => void | Promise<void>;
 
 const g = globalThis as unknown as {
@@ -321,7 +324,9 @@ export function transcriptStore(): TranscriptStore {
     isTestRunner() && !sessionsDirRedirected()
       ? scratchTranscriptDbPath()
       : transcriptDbPath();
-  return (g.__osTranscriptStore = new TranscriptStore(path, { actorOwned: true }));
+  return (g.__osTranscriptStore = new TranscriptStore(path, {
+    actorOwned: true,
+  }));
 }
 
 function isTestRunner(): boolean {
@@ -361,7 +366,6 @@ export function __setTranscriptStoreForTest(
   g.__osTranscriptStore = store;
   return prev;
 }
-
 
 // ── Row shapes ───────────────────────────────────────────────────────────────
 
@@ -422,13 +426,19 @@ export class TranscriptStore {
   private importedCache = new Set<string>();
   private outlineBackfills = new Map<string, Promise<void>>();
   /** BEGIN IMMEDIATE write transaction (bun:sqlite transaction wrapper). */
-  private txWrite: ((sessionId: string, entries: TranscriptEntry[]) => WriteOutcome) & {
+  private txWrite: ((
+    sessionId: string,
+    entries: TranscriptEntry[],
+  ) => WriteOutcome) & {
     immediate: (sessionId: string, entries: TranscriptEntry[]) => WriteOutcome;
   };
   private txDelete: ((sessionId: string) => void) & {
     immediate: (sessionId: string) => void;
   };
-  private txReplace: ((sessionId: string, entries: TranscriptEntry[]) => WriteOutcome) & {
+  private txReplace: ((
+    sessionId: string,
+    entries: TranscriptEntry[],
+  ) => WriteOutcome) & {
     immediate: (sessionId: string, entries: TranscriptEntry[]) => WriteOutcome;
   };
   private txDestinationAppend: ((
@@ -529,8 +539,11 @@ export class TranscriptStore {
       );
     `);
     const wakeColumns = new Set(
-      (this.db.query("PRAGMA table_info(session_kernel_transcript_wakes)").all() as Array<{ name: string }>)
-        .map(({ name }) => name),
+      (
+        this.db
+          .query("PRAGMA table_info(session_kernel_transcript_wakes)")
+          .all() as Array<{ name: string }>
+      ).map(({ name }) => name),
     );
     if (!wakeColumns.has("acked_reset_epoch"))
       this.db.exec(
@@ -540,20 +553,37 @@ export class TranscriptStore {
     type Tx = typeof this.txWrite;
     this.txWrite = this.db.transaction(
       (sessionId: string, entries: TranscriptEntry[]) =>
-        this.writeEntriesInTx(sessionId, entries)
+        this.writeEntriesInTx(sessionId, entries),
     ) as unknown as Tx;
     this.txDelete = this.db.transaction((sessionId: string) => {
-      this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [sessionId]);
-      this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [sessionId]);
-      this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [sessionId]);
-      this.db.run("DELETE FROM transcript_append_receipts WHERE session_id = ?", [sessionId]);
-      this.db.run("DELETE FROM transcript_sessions WHERE session_id = ?", [sessionId]);
+      this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [
+        sessionId,
+      ]);
+      this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [
+        sessionId,
+      ]);
+      this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [
+        sessionId,
+      ]);
+      this.db.run(
+        "DELETE FROM transcript_append_receipts WHERE session_id = ?",
+        [sessionId],
+      );
+      this.db.run("DELETE FROM transcript_sessions WHERE session_id = ?", [
+        sessionId,
+      ]);
     }) as unknown as typeof this.txDelete;
     this.txReplace = this.db.transaction(
       (sessionId: string, entries: TranscriptEntry[]) => {
-        this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [sessionId]);
-        this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [sessionId]);
-        this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [sessionId]);
+        this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [
+          sessionId,
+        ]);
+        this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [
+          sessionId,
+        ]);
+        this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [
+          sessionId,
+        ]);
         this.db.run(
           `INSERT INTO transcript_sessions (session_id, next_seq, next_change_seq)
            VALUES (?, 1, 1)
@@ -561,13 +591,13 @@ export class TranscriptStore {
              next_seq = 1,
              reset_change_seq = transcript_sessions.next_change_seq,
              next_change_seq = transcript_sessions.next_change_seq + 1`,
-          [sessionId]
+          [sessionId],
         );
         return this.writeEntriesInTx(sessionId, entries);
-      }
+      },
     ) as unknown as typeof this.txReplace;
     this.txActorMutation = this.db.transaction((request) =>
-      this.applyActorMutationInTx(request)
+      this.applyActorMutationInTx(request),
     ) as unknown as typeof this.txActorMutation;
     this.txDestinationAppend = this.db.transaction(
       (request: ValidatedDestinationAppend) => {
@@ -668,15 +698,21 @@ export class TranscriptStore {
     ) as unknown as typeof this.txDestinationAppend;
     this.txAgentDestinationAppend = this.db.transaction(
       (request: ValidatedDestinationAppend) => {
-        if (this.db.query(
-          "SELECT 1 FROM session_kernel_tombstones WHERE session_id = ?",
-        ).get(request.sessionId))
+        if (
+          this.db
+            .query(
+              "SELECT 1 FROM session_kernel_tombstones WHERE session_id = ?",
+            )
+            .get(request.sessionId)
+        )
           throw new Error(`Session ${request.sessionId} was deleted`);
         const beforeChangeSeq = this.getLastChangeSeq(request.sessionId);
-        const hasReceipt = !!this.db.query(
-          `SELECT 1 FROM transcript_append_receipts
+        const hasReceipt = !!this.db
+          .query(
+            `SELECT 1 FROM transcript_append_receipts
            WHERE session_id = ? AND append_id = ?`,
-        ).get(request.sessionId, request.appendId);
+          )
+          .get(request.sessionId, request.appendId);
         if (!hasReceipt) this.assertActorDestinationFenceCurrent(request);
         const outcome = this.txDestinationAppend(request);
         const receipt = this.queryTranscriptDestinationReceipt({
@@ -689,13 +725,17 @@ export class TranscriptStore {
           transcriptAnchor: request.transcriptAnchor!,
         });
         if (!receipt) throw new TranscriptAppendReceiptCorruptError();
-        this.assertTranscriptAnchorHistorical(request.sessionId, request.transcriptAnchor!);
+        this.assertTranscriptAnchorHistorical(
+          request.sessionId,
+          request.transcriptAnchor!,
+        );
         this.assertAgentReceiptEntriesCurrent(receipt);
         const result = destinationAgentReceiptRef(receipt);
         if (outcome.replay) {
           return {
             result,
-            wakeCursor: this.pendingActorWake(request.sessionId, true)?.cursor ?? 0,
+            wakeCursor:
+              this.pendingActorWake(request.sessionId, true)?.cursor ?? 0,
             replay: true,
           };
         }
@@ -722,24 +762,26 @@ export class TranscriptStore {
   appendTranscriptEvents(
     sessionId: string,
     entries: TranscriptEntry[],
-    opts?: AppendOpts
+    opts?: AppendOpts,
   ): Promise<AppendResult | null> {
     if (!this.options.actorOwned) {
       try {
-        return Promise.resolve(this.appendTranscriptEventsOwned(sessionId, entries, opts));
+        return Promise.resolve(
+          this.appendTranscriptEventsOwned(sessionId, entries, opts),
+        );
       } catch (error) {
         return Promise.reject(error);
       }
     }
     return executeSessionProjection(sessionId, "transcript_append", () =>
-      this.appendTranscriptEventsOwned(sessionId, entries, opts)
+      this.appendTranscriptEventsOwned(sessionId, entries, opts),
     );
   }
 
   private appendTranscriptEventsOwned(
     sessionId: string,
     entries: TranscriptEntry[],
-    opts?: AppendOpts
+    opts?: AppendOpts,
   ): AppendResult | null {
     if (!sessionId || !entries || entries.length === 0) return null;
 
@@ -783,9 +825,11 @@ export class TranscriptStore {
     const hook = g.__osTranscriptAppendHook;
     if (hook) {
       try {
-        void Promise.resolve(hook(sessionId, outcome.affected)).catch((error) => {
-          console.warn("[transcript-store] append hook threw:", error);
-        });
+        void Promise.resolve(hook(sessionId, outcome.affected)).catch(
+          (error) => {
+            console.warn("[transcript-store] append hook threw:", error);
+          },
+        );
       } catch (error) {
         console.warn("[transcript-store] append hook threw:", error);
       }
@@ -875,7 +919,10 @@ export class TranscriptStore {
   ): AgentTranscriptReceiptRefV1 | null {
     const receipt = this.queryTranscriptDestinationReceipt(input);
     if (!receipt) return null;
-    this.assertTranscriptAnchorHistorical(receipt.sessionId, input.transcriptAnchor);
+    this.assertTranscriptAnchorHistorical(
+      receipt.sessionId,
+      input.transcriptAnchor,
+    );
     this.assertAgentReceiptEntriesCurrent(receipt);
     return destinationAgentReceiptRef(receipt);
   }
@@ -893,7 +940,10 @@ export class TranscriptStore {
          FROM transcript_append_receipts
          WHERE session_id = ? AND append_id = ?`,
       )
-      .get(query.sessionId, query.appendId) as TranscriptAppendReceiptRow | null;
+      .get(
+        query.sessionId,
+        query.appendId,
+      ) as TranscriptAppendReceiptRow | null;
     if (!row) return null;
     const receipt = decodeDestinationReceiptRow(row);
     if (
@@ -927,9 +977,15 @@ export class TranscriptStore {
     });
     if (!durable) return null;
     const canonical = destinationAgentReceiptRef(durable);
-    this.assertTranscriptAnchorHistorical(durable.sessionId, validation.transcriptAnchor);
+    this.assertTranscriptAnchorHistorical(
+      durable.sessionId,
+      validation.transcriptAnchor,
+    );
     this.assertAgentReceiptEntriesCurrent(durable);
-    if (canonicalDestinationJson(canonical) !== canonicalDestinationJson(validation.receipt))
+    if (
+      canonicalDestinationJson(canonical) !==
+      canonicalDestinationJson(validation.receipt)
+    )
       throw new TranscriptAppendReceiptMismatchError();
     return canonical;
   }
@@ -973,8 +1029,12 @@ export class TranscriptStore {
     anchor: AgentTranscriptAnchorV1,
     knownResetChangeSeq?: number,
   ): void {
-    const resetChangeSeq = knownResetChangeSeq ?? this.getLastResetChangeSeq(sessionId);
-    if (!Number.isSafeInteger(resetChangeSeq) || anchor.throughChangeSeq < resetChangeSeq)
+    const resetChangeSeq =
+      knownResetChangeSeq ?? this.getLastResetChangeSeq(sessionId);
+    if (
+      !Number.isSafeInteger(resetChangeSeq) ||
+      anchor.throughChangeSeq < resetChangeSeq
+    )
       throw new TranscriptAppendReceiptMismatchError();
     for (const entryId of anchor.entryIds) {
       const row = this.db
@@ -1023,7 +1083,9 @@ export class TranscriptStore {
         (row.full_ref !== null && typeof row.full_data !== "string")
       )
         throw new TranscriptAppendReceiptMismatchError();
-      const source = (row.full_ref === null ? row.data : row.full_data) as string;
+      const source = (
+        row.full_ref === null ? row.data : row.full_data
+      ) as string;
       totalBytes += Buffer.byteLength(source);
       if (totalBytes > TRANSCRIPT_DESTINATION_MAX_BYTES)
         throw new TranscriptAppendReceiptMismatchError();
@@ -1115,9 +1177,12 @@ export class TranscriptStore {
     if (request.op === "agent_validate_destination_receipt")
       return this.validateAgentTranscriptReceiptRef(request);
     if ("requestId" in request) return this.txActorMutation.immediate(request);
-    if (request.op === "needs_import") return this.needsImport(request.sessionId);
-    if (request.op === "import_info") return this.getImportInfo(request.sessionId);
-    if (request.op === "tail") return this.readTail(request.sessionId, request.limit ?? 50);
+    if (request.op === "needs_import")
+      return this.needsImport(request.sessionId);
+    if (request.op === "import_info")
+      return this.getImportInfo(request.sessionId);
+    if (request.op === "tail")
+      return this.readTail(request.sessionId, request.limit ?? 50);
     if (request.op === "tail_window")
       return this.readTailWindow(request.sessionId, {
         ...request.options,
@@ -1128,9 +1193,17 @@ export class TranscriptStore {
             : {}),
       });
     if (request.op === "since")
-      return this.readSince(request.sessionId, request.sinceSeq, request.limit ?? 200);
+      return this.readSince(
+        request.sessionId,
+        request.sinceSeq,
+        request.limit ?? 200,
+      );
     if (request.op === "changes_since")
-      return this.readChangesSince(request.sessionId, request.changeSeq, request.limit ?? 200);
+      return this.readChangesSince(
+        request.sessionId,
+        request.changeSeq,
+        request.limit ?? 200,
+      );
     if (request.op === "hydrated_since")
       return this.readHydratedSince(
         request.sessionId,
@@ -1139,7 +1212,11 @@ export class TranscriptStore {
         request.maxBytes,
       );
     if (request.op === "before")
-      return this.readBefore(request.sessionId, request.beforeSeq, request.limit ?? 40);
+      return this.readBefore(
+        request.sessionId,
+        request.beforeSeq,
+        request.limit ?? 40,
+      );
     if (request.op === "range")
       return this.readRange(
         request.sessionId,
@@ -1154,27 +1231,33 @@ export class TranscriptStore {
         request.afterSeq ?? 0,
         request.limit ?? 2_000,
       );
-    if (request.op === "full_entry") return this.getFullEntry(request.sessionId, request.entryId);
+    if (request.op === "full_entry")
+      return this.getFullEntry(request.sessionId, request.entryId);
     if (request.op === "last_seq") return this.getLastSeq(request.sessionId);
-    if (request.op === "last_change_seq") return this.getLastChangeSeq(request.sessionId);
+    if (request.op === "last_change_seq")
+      return this.getLastChangeSeq(request.sessionId);
     if (request.op === "last_reset_change_seq")
       return this.getLastResetChangeSeq(request.sessionId);
     if (request.op === "count") return this.countEvents(request.sessionId);
     if (request.op === "summary") {
-      const row = this.db.query(`
+      const row = this.db
+        .query(`
         SELECT last_ts, next_seq FROM transcript_sessions WHERE session_id = ?
-      `).get(request.sessionId) as { last_ts: number | null; next_seq: number } | null;
+      `)
+        .get(request.sessionId) as {
+        last_ts: number | null;
+        next_seq: number;
+      } | null;
       return row
         ? { lastTs: row.last_ts, seqHighWater: Math.max(0, row.next_seq - 1) }
         : null;
     }
-    if (request.op === "pending_wake") return this.pendingActorWake(request.sessionId);
+    if (request.op === "pending_wake")
+      return this.pendingActorWake(request.sessionId);
     return this.ackActorWake(request.sessionId, request.cursor);
   }
 
-  private actorRequestDigest(
-    request: LegacyTranscriptMutationRequest,
-  ): string {
+  private actorRequestDigest(request: LegacyTranscriptMutationRequest): string {
     return new Bun.CryptoHasher("sha256")
       .update("opensession.transcript-actor-command.v1\0")
       .update(canonicalDestinationJson(request))
@@ -1185,50 +1268,81 @@ export class TranscriptStore {
     request: LegacyTranscriptMutationRequest,
   ): TranscriptMutationResult<unknown> | undefined {
     const digest = this.actorRequestDigest(request);
-    const receipt = this.db.query(`
+    const receipt = this.db
+      .query(`
       SELECT session_id, append_id, request_digest, fence_json, result_json, created_at
       FROM transcript_append_receipts
       WHERE session_id = ? AND append_id = ?
-    `).get(request.sessionId, request.requestId) as TranscriptAppendReceiptRow | null;
+    `)
+      .get(
+        request.sessionId,
+        request.requestId,
+      ) as TranscriptAppendReceiptRow | null;
     if (!receipt) return undefined;
     validateTranscriptAppendReceiptRow(receipt);
     if (receipt.request_digest !== digest)
-      throw new TranscriptAppendConflictError(request.sessionId, request.requestId);
+      throw new TranscriptAppendConflictError(
+        request.sessionId,
+        request.requestId,
+      );
     const result = {
-      ...(JSON.parse(receipt.result_json as string) as TranscriptMutationResult<unknown>),
+      ...(JSON.parse(
+        receipt.result_json as string,
+      ) as TranscriptMutationResult<unknown>),
       replay: true,
     };
     assertTranscriptActorResponse(result);
     return result;
   }
 
-  private assertActorDestinationFenceCurrent(request: ValidatedDestinationAppend): void {
-    const run = this.db.query(
-      `SELECT run_state, generation, current_run_id
+  private assertActorDestinationFenceCurrent(
+    request: ValidatedDestinationAppend,
+  ): void {
+    const run = this.db
+      .query(
+        `SELECT run_state, generation, current_run_id
        FROM session_kernel_state WHERE session_id = ?`,
-    ).get(request.sessionId) as {
+      )
+      .get(request.sessionId) as {
       run_state: unknown;
       generation: unknown;
       current_run_id: unknown;
     } | null;
     if (
-      !run || run.current_run_id !== request.runId ||
+      !run ||
+      run.current_run_id !== request.runId ||
       run.generation !== request.generation ||
       typeof run.run_state !== "string" ||
-      !["starting", "running", "ask_blocked", "interrupted", "reattaching"].includes(run.run_state)
-    ) throw new Error(`Transcript destination run fence rejected ${request.sessionId}`);
-    const plan = this.db.query(
-      `SELECT run_id, run_generation, turn_id
+      ![
+        "starting",
+        "running",
+        "ask_blocked",
+        "interrupted",
+        "reattaching",
+      ].includes(run.run_state)
+    )
+      throw new Error(
+        `Transcript destination run fence rejected ${request.sessionId}`,
+      );
+    const plan = this.db
+      .query(
+        `SELECT run_id, run_generation, turn_id
        FROM session_kernel_agent_host_plan WHERE session_id = ?`,
-    ).get(request.sessionId) as {
+      )
+      .get(request.sessionId) as {
       run_id: unknown;
       run_generation: unknown;
       turn_id: unknown;
     } | null;
     if (
-      !plan || plan.run_id !== request.runId ||
-      plan.run_generation !== request.generation || plan.turn_id !== request.turnId
-    ) throw new Error(`Transcript destination turn fence rejected ${request.sessionId}`);
+      !plan ||
+      plan.run_id !== request.runId ||
+      plan.run_generation !== request.generation ||
+      plan.turn_id !== request.turnId
+    )
+      throw new Error(
+        `Transcript destination turn fence rejected ${request.sessionId}`,
+      );
   }
 
   private recordActorWakeInTx(
@@ -1239,10 +1353,12 @@ export class TranscriptStore {
     const previousWake = this.pendingActorWake(sessionId, true);
     const cursor = (previousWake?.cursor ?? 0) + 1;
     const lastChangeSeq = this.getLastChangeSeq(sessionId);
-    const firstChangeSeq = previousWake && previousWake.cursor > previousWake.ackedCursor
-      ? previousWake.firstChangeSeq
-      : Math.min(lastChangeSeq, beforeChangeSeq + 1);
-    this.db.run(`
+    const firstChangeSeq =
+      previousWake && previousWake.cursor > previousWake.ackedCursor
+        ? previousWake.firstChangeSeq
+        : Math.min(lastChangeSeq, beforeChangeSeq + 1);
+    this.db.run(
+      `
       INSERT INTO session_kernel_transcript_wakes
         (session_id, cursor, acked_cursor, first_change_seq, last_change_seq,
          reset_epoch, updated_at)
@@ -1261,7 +1377,16 @@ export class TranscriptStore {
           ELSE excluded.reset_epoch
         END,
         updated_at = excluded.updated_at
-    `, [sessionId, cursor, firstChangeSeq, lastChangeSeq, resetEpoch, Date.now()]);
+    `,
+      [
+        sessionId,
+        cursor,
+        firstChangeSeq,
+        lastChangeSeq,
+        resetEpoch,
+        Date.now(),
+      ],
+    );
     return cursor;
   }
 
@@ -1274,7 +1399,10 @@ export class TranscriptStore {
 
     const currentEpoch = this.getLastResetChangeSeq(request.sessionId);
     const beforeChangeSeq = this.getLastChangeSeq(request.sessionId);
-    if (request.expectedEpoch !== undefined && request.expectedEpoch !== currentEpoch)
+    if (
+      request.expectedEpoch !== undefined &&
+      request.expectedEpoch !== currentEpoch
+    )
       throw new Error(
         `Transcript epoch fence rejected ${request.sessionId}: expected ${request.expectedEpoch}, current ${currentEpoch}`,
       );
@@ -1282,39 +1410,60 @@ export class TranscriptStore {
     let result: unknown;
     if (request.op === "append" || request.op === "append_destination") {
       const outcome = this.writeEntriesInTx(request.sessionId, request.entries);
-      this.db.run(`
+      this.db.run(
+        `
         UPDATE transcript_sessions SET
           imported_at = COALESCE(imported_at, ?),
           import_src = COALESCE(import_src, 'live-only')
         WHERE session_id = ?
-      `, [Date.now(), request.sessionId]);
-      result = request.op === "append_destination"
-        ? destinationResult(outcome)
-        : appendResult(outcome);
+      `,
+        [Date.now(), request.sessionId],
+      );
+      result =
+        request.op === "append_destination"
+          ? destinationResult(outcome)
+          : appendResult(outcome);
     } else if (request.op === "import") {
       const outcome = this.writeEntriesInTx(request.sessionId, request.entries);
       if (request.final !== false)
         this.markImported(request.sessionId, request.src, request.watermark);
       result = { inserted: outcome.inserted, updated: outcome.updated };
     } else if (request.op === "replace") {
-      this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [request.sessionId]);
-      this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [request.sessionId]);
-      this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [request.sessionId]);
-      this.db.run(`
+      this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [
+        request.sessionId,
+      ]);
+      this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [
+        request.sessionId,
+      ]);
+      this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [
+        request.sessionId,
+      ]);
+      this.db.run(
+        `
         INSERT INTO transcript_sessions (session_id, next_seq, next_change_seq)
         VALUES (?, 1, 1)
         ON CONFLICT(session_id) DO UPDATE SET
           next_seq = 1,
           reset_change_seq = transcript_sessions.next_change_seq,
           next_change_seq = transcript_sessions.next_change_seq + 1
-      `, [request.sessionId]);
+      `,
+        [request.sessionId],
+      );
       const outcome = this.writeEntriesInTx(request.sessionId, request.entries);
       result = { inserted: outcome.inserted, updated: outcome.updated };
     } else {
-      this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [request.sessionId]);
-      this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [request.sessionId]);
-      this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [request.sessionId]);
-      this.db.run("DELETE FROM transcript_sessions WHERE session_id = ?", [request.sessionId]);
+      this.db.run("DELETE FROM transcript_events WHERE session_id = ?", [
+        request.sessionId,
+      ]);
+      this.db.run("DELETE FROM transcript_outline WHERE session_id = ?", [
+        request.sessionId,
+      ]);
+      this.db.run("DELETE FROM transcript_blobs WHERE session_id = ?", [
+        request.sessionId,
+      ]);
+      this.db.run("DELETE FROM transcript_sessions WHERE session_id = ?", [
+        request.sessionId,
+      ]);
       result = null;
     }
 
@@ -1331,32 +1480,40 @@ export class TranscriptStore {
       replay: false,
     };
     const resultJson = canonicalDestinationJson(commandResult);
-    this.db.run(`
+    this.db.run(
+      `
       INSERT INTO transcript_append_receipts
         (session_id, append_id, request_digest, fence_json, result_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `, [
-      request.sessionId,
-      request.requestId,
-      digest,
-      canonicalDestinationJson({
-        expectedEpoch: request.expectedEpoch ?? null,
-        generation: request.generation ?? null,
-        runId: request.runId ?? null,
-        turnId: request.turnId ?? null,
-      }),
-      resultJson,
-      Date.now(),
-    ]);
+    `,
+      [
+        request.sessionId,
+        request.requestId,
+        digest,
+        canonicalDestinationJson({
+          expectedEpoch: request.expectedEpoch ?? null,
+          generation: request.generation ?? null,
+          runId: request.runId ?? null,
+          turnId: request.turnId ?? null,
+        }),
+        resultJson,
+        Date.now(),
+      ],
+    );
     return commandResult;
   }
 
-  pendingActorWake(sessionId: string, includeAcked = false): TranscriptWake | null {
-    const row = this.db.query(`
+  pendingActorWake(
+    sessionId: string,
+    includeAcked = false,
+  ): TranscriptWake | null {
+    const row = this.db
+      .query(`
       SELECT cursor, acked_cursor, first_change_seq, last_change_seq, reset_epoch,
         acked_reset_epoch
       FROM session_kernel_transcript_wakes WHERE session_id = ?
-    `).get(sessionId) as {
+    `)
+      .get(sessionId) as {
       cursor: number;
       acked_cursor: number;
       first_change_seq: number;
@@ -1377,11 +1534,14 @@ export class TranscriptStore {
 
   ackActorWake(sessionId: string, cursor: number): boolean {
     if (!Number.isSafeInteger(cursor) || cursor < 0) return false;
-    const result = this.db.run(`
+    const result = this.db.run(
+      `
       UPDATE session_kernel_transcript_wakes
       SET acked_cursor = ?, acked_reset_epoch = reset_epoch, updated_at = ?
       WHERE session_id = ? AND cursor = ? AND acked_cursor < ?
-    `, [cursor, Date.now(), sessionId, cursor, cursor]);
+    `,
+      [cursor, Date.now(), sessionId, cursor, cursor],
+    );
     return result.changes === 1;
   }
 
@@ -1398,7 +1558,7 @@ export class TranscriptStore {
     sessionId: string,
     entries: TranscriptEntry[],
     src: TranscriptImportSrc | string,
-    watermark: number | null
+    watermark: number | null,
   ): Promise<{ inserted: number; updated: number }> {
     if (!this.options.actorOwned) {
       try {
@@ -1410,7 +1570,7 @@ export class TranscriptStore {
       }
     }
     return executeSessionProjection(sessionId, "transcript_import", () =>
-      this.importLegacyTranscriptOwned(sessionId, entries, src, watermark)
+      this.importLegacyTranscriptOwned(sessionId, entries, src, watermark),
     );
   }
 
@@ -1418,7 +1578,7 @@ export class TranscriptStore {
     sessionId: string,
     entries: TranscriptEntry[],
     src: TranscriptImportSrc | string,
-    watermark: number | null
+    watermark: number | null,
   ): { inserted: number; updated: number } {
     let inserted = 0;
     let updated = 0;
@@ -1446,23 +1606,25 @@ export class TranscriptStore {
    * monotonic change cursor. Used for truncation/atomic replacement only. */
   replaceTranscriptEvents(
     sessionId: string,
-    entries: TranscriptEntry[]
+    entries: TranscriptEntry[],
   ): Promise<{ inserted: number; updated: number }> {
     if (!this.options.actorOwned) {
       try {
-        return Promise.resolve(this.replaceTranscriptEventsOwned(sessionId, entries));
+        return Promise.resolve(
+          this.replaceTranscriptEventsOwned(sessionId, entries),
+        );
       } catch (error) {
         return Promise.reject(error);
       }
     }
     return executeSessionProjection(sessionId, "transcript_replace", () =>
-      this.replaceTranscriptEventsOwned(sessionId, entries)
+      this.replaceTranscriptEventsOwned(sessionId, entries),
     );
   }
 
   private replaceTranscriptEventsOwned(
     sessionId: string,
-    entries: TranscriptEntry[]
+    entries: TranscriptEntry[],
   ): { inserted: number; updated: number } {
     const outcome = this.txReplace.immediate(sessionId, entries);
     publishTranscript(sessionId, {
@@ -1494,7 +1656,7 @@ export class TranscriptStore {
   markImported(
     sessionId: string,
     src: TranscriptImportSrc | string,
-    watermark: number | null = null
+    watermark: number | null = null,
   ): void {
     this.db.run(
       `INSERT INTO transcript_sessions (session_id, next_seq, imported_at, import_src, import_watermark)
@@ -1503,7 +1665,7 @@ export class TranscriptStore {
          imported_at = excluded.imported_at,
          import_src = excluded.import_src,
          import_watermark = excluded.import_watermark`,
-      [sessionId, Date.now(), src, watermark]
+      [sessionId, Date.now(), src, watermark],
     );
     this.importedCache.add(sessionId);
   }
@@ -1512,7 +1674,7 @@ export class TranscriptStore {
   getImportInfo(sessionId: string): TranscriptImportInfo | null {
     const row = this.db
       .query(
-        "SELECT imported_at, import_src, import_watermark FROM transcript_sessions WHERE session_id = ?"
+        "SELECT imported_at, import_src, import_watermark FROM transcript_sessions WHERE session_id = ?",
       )
       .get(sessionId) as SessionRow | null;
     if (!row || row.imported_at == null) return null;
@@ -1549,12 +1711,12 @@ export class TranscriptStore {
     const maxEntries = Math.max(1, Math.floor(opts.maxEntries));
     const minEntries = Math.max(
       1,
-      Math.min(Math.floor(opts.minEntries), maxEntries)
+      Math.min(Math.floor(opts.minEntries), maxEntries),
     );
     const minMessages = Math.max(0, Math.floor(opts.minMessages));
     const minUserMessagesWithToolWork = Math.max(
       0,
-      Math.floor(opts.minUserMessagesWithToolWork ?? 0)
+      Math.floor(opts.minUserMessagesWithToolWork ?? 0),
     );
     const maxEstimatedBytes = Math.max(0, opts.maxEstimatedBytes);
     const weigh = opts.weigh ?? ((_kind: string, bytes: number) => bytes);
@@ -1562,7 +1724,7 @@ export class TranscriptStore {
       .query(
         `SELECT seq, kind, length(CAST(data AS BLOB)) AS bytes
          FROM transcript_events
-         WHERE session_id = ? ORDER BY seq DESC LIMIT ?`
+         WHERE session_id = ? ORDER BY seq DESC LIMIT ?`,
       )
       .all(sessionId, maxEntries) as Array<{
       seq: number;
@@ -1587,10 +1749,7 @@ export class TranscriptStore {
       // The entry floor is unconditional. The byte ceiling only governs the
       // message-seeking extension past it, so a session of enormous rows still
       // opens on the same window it always did.
-      if (
-        count >= minEntries &&
-        estimatedBytes + cost > maxEstimatedBytes
-      ) {
+      if (count >= minEntries && estimatedBytes + cost > maxEstimatedBytes) {
         break;
       }
       count++;
@@ -1625,7 +1784,7 @@ export class TranscriptStore {
     const rows = this.db
       .query(
         `SELECT seq, change_seq, data, full_ref FROM transcript_events
-         WHERE session_id = ? ORDER BY seq DESC LIMIT ?`
+         WHERE session_id = ? ORDER BY seq DESC LIMIT ?`,
       )
       .all(sessionId, Math.max(1, limit)) as EventRow[];
     rows.reverse();
@@ -1633,11 +1792,15 @@ export class TranscriptStore {
   }
 
   /** Entries with seq > sinceSeq, ascending, up to `limit` (resume path). */
-  readSince(sessionId: string, sinceSeq: number, limit: number = 500): TranscriptPage {
+  readSince(
+    sessionId: string,
+    sinceSeq: number,
+    limit: number = 500,
+  ): TranscriptPage {
     const rows = this.db
       .query(
         `SELECT seq, change_seq, data, full_ref FROM transcript_events
-         WHERE session_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`
+         WHERE session_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`,
       )
       .all(sessionId, sinceSeq, Math.max(1, limit)) as EventRow[];
     return page(rows);
@@ -1648,13 +1811,13 @@ export class TranscriptStore {
   readChangesSince(
     sessionId: string,
     sinceChangeSeq: number,
-    limit: number = 500
+    limit: number = 500,
   ): TranscriptPage {
     const rows = this.db
       .query(
         `SELECT seq, change_seq, data, full_ref FROM transcript_events
          WHERE session_id = ? AND change_seq > ?
-         ORDER BY change_seq ASC LIMIT ?`
+         ORDER BY change_seq ASC LIMIT ?`,
       )
       .all(sessionId, sinceChangeSeq, Math.max(1, limit)) as EventRow[];
     return page(rows);
@@ -1662,11 +1825,15 @@ export class TranscriptStore {
 
   /** Entries with seq < beforeSeq — the LAST `limit` of them, ascending
    *  (history paging: walk backwards a page at a time). */
-  readBefore(sessionId: string, beforeSeq: number, limit: number = 40): TranscriptPage {
+  readBefore(
+    sessionId: string,
+    beforeSeq: number,
+    limit: number = 40,
+  ): TranscriptPage {
     const rows = this.db
       .query(
         `SELECT seq, change_seq, data, full_ref FROM transcript_events
-         WHERE session_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?`
+         WHERE session_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?`,
       )
       .all(sessionId, beforeSeq, Math.max(1, limit)) as EventRow[];
     rows.reverse();
@@ -1681,7 +1848,8 @@ export class TranscriptStore {
     limit = 100,
     maxBytes = 12 * 1024 * 1024,
   ): TranscriptHydratedPage {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT event.seq, event.change_seq,
         COALESCE(blob.data, event.data) AS data
       FROM transcript_events event
@@ -1691,7 +1859,8 @@ export class TranscriptStore {
        AND blob.uuid = event.uuid
       WHERE event.session_id = ? AND event.seq > ?
       ORDER BY event.seq LIMIT ?
-    `).all(sessionId, sinceSeq, limit + 1) as Array<{
+    `)
+      .all(sessionId, sinceSeq, limit + 1) as Array<{
       seq: number;
       change_seq: number;
       data: string;
@@ -1703,7 +1872,9 @@ export class TranscriptStore {
     for (const row of rows.slice(0, limit)) {
       let entry: TranscriptEntry;
       try {
-        entry = sanitizeTranscriptMediaEntry(JSON.parse(row.data) as TranscriptEntry);
+        entry = sanitizeTranscriptMediaEntry(
+          JSON.parse(row.data) as TranscriptEntry,
+        );
       } catch {
         coveredThroughSeq = row.seq;
         continue;
@@ -1739,7 +1910,7 @@ export class TranscriptStore {
       .query(
         `SELECT uuid, seq, change_seq, ts, render_role, content_length, review_pr_number
          FROM transcript_outline WHERE session_id = ? AND seq > ?
-         ORDER BY seq LIMIT ?`
+         ORDER BY seq LIMIT ?`,
       )
       .all(sessionId, afterSeq, limit) as Array<{
       uuid: string;
@@ -1776,22 +1947,29 @@ export class TranscriptStore {
     firstSeq: number,
     lastSeq: number,
     afterSeq: number = firstSeq - 1,
-    limit: number = 500
+    limit: number = 500,
   ): TranscriptRangePage {
     const boundedLimit = Math.max(1, limit);
     const rows = this.db
       .query(
         `SELECT seq, change_seq, data, full_ref FROM transcript_events
          WHERE session_id = ? AND seq >= ? AND seq <= ? AND seq > ?
-         ORDER BY seq ASC LIMIT ?`
+         ORDER BY seq ASC LIMIT ?`,
       )
-      .all(sessionId, firstSeq, lastSeq, afterSeq, boundedLimit + 1) as EventRow[];
+      .all(
+        sessionId,
+        firstSeq,
+        lastSeq,
+        afterSeq,
+        boundedLimit + 1,
+      ) as EventRow[];
     const complete = rows.length <= boundedLimit;
     const shipped = complete ? rows : rows.slice(0, boundedLimit);
     const hydrated = page(shipped);
     return {
       ...hydrated,
-      coveredThroughSeq: shipped[shipped.length - 1]?.seq ?? Math.max(afterSeq, firstSeq - 1),
+      coveredThroughSeq:
+        shipped[shipped.length - 1]?.seq ?? Math.max(afterSeq, firstSeq - 1),
       complete,
     };
   }
@@ -1802,14 +1980,16 @@ export class TranscriptStore {
    */
   getFullEntry(sessionId: string, uuid: string): TranscriptEntry | null {
     const blob = this.db
-      .query("SELECT data FROM transcript_blobs WHERE session_id = ? AND uuid = ?")
+      .query(
+        "SELECT data FROM transcript_blobs WHERE session_id = ? AND uuid = ?",
+      )
       .get(sessionId, uuid) as { data: string } | null;
     const raw =
       blob?.data ??
       (
         this.db
           .query(
-            "SELECT data FROM transcript_events WHERE session_id = ? AND uuid = ?"
+            "SELECT data FROM transcript_events WHERE session_id = ? AND uuid = ?",
           )
           .get(sessionId, uuid) as { data: string } | null
       )?.data;
@@ -1832,7 +2012,9 @@ export class TranscriptStore {
   /** Highest committed mutation cursor for the session (0 when empty). */
   getLastChangeSeq(sessionId: string): number {
     const row = this.db
-      .query("SELECT next_change_seq FROM transcript_sessions WHERE session_id = ?")
+      .query(
+        "SELECT next_change_seq FROM transcript_sessions WHERE session_id = ?",
+      )
       .get(sessionId) as { next_change_seq: number } | null;
     return row ? row.next_change_seq - 1 : 0;
   }
@@ -1841,7 +2023,9 @@ export class TranscriptStore {
    * cursor older than this cannot safely merge and must receive a snapshot. */
   getLastResetChangeSeq(sessionId: string): number {
     const row = this.db
-      .query("SELECT reset_change_seq FROM transcript_sessions WHERE session_id = ?")
+      .query(
+        "SELECT reset_change_seq FROM transcript_sessions WHERE session_id = ?",
+      )
       .get(sessionId) as { reset_change_seq: number } | null;
     return row?.reset_change_seq ?? 0;
   }
@@ -1895,7 +2079,9 @@ export class TranscriptStore {
   countEvents(sessionId: string): number {
     return (
       this.db
-        .query("SELECT COUNT(*) AS n FROM transcript_events WHERE session_id = ?")
+        .query(
+          "SELECT COUNT(*) AS n FROM transcript_events WHERE session_id = ?",
+        )
         .get(sessionId) as { n: number }
     ).n;
   }
@@ -1929,11 +2115,11 @@ export class TranscriptStore {
    */
   private writeEntriesInTx(
     sessionId: string,
-    entries: TranscriptEntry[]
+    entries: TranscriptEntry[],
   ): WriteOutcome {
     const sessRow = this.db
       .query(
-        "SELECT next_seq, next_change_seq FROM transcript_sessions WHERE session_id = ?"
+        "SELECT next_seq, next_change_seq FROM transcript_sessions WHERE session_id = ?",
       )
       .get(sessionId) as { next_seq: number; next_change_seq: number } | null;
     let nextSeq = sessRow?.next_seq ?? 1;
@@ -1941,7 +2127,7 @@ export class TranscriptStore {
     if (!sessRow) {
       this.db.run(
         "INSERT INTO transcript_sessions (session_id, next_seq, next_change_seq) VALUES (?, 1, 1)",
-        [sessionId]
+        [sessionId],
       );
     }
 
@@ -1954,14 +2140,38 @@ export class TranscriptStore {
       const uuid = entry?.id;
       if (!uuid || typeof uuid !== "string") {
         console.warn(
-          `[transcript-store] skipping entry without id in ${sessionId} (type=${entry?.type})`
+          `[transcript-store] skipping entry without id in ${sessionId} (type=${entry?.type})`,
         );
         continue;
       }
       const ts = entryTs(entry);
       const changeSeq = nextChangeSeq++;
       lastTs = ts;
-      const bounded = boundEntryForStore(entry);
+      const existing = this.db
+        .query(
+          "SELECT seq, full_ref, data FROM transcript_events WHERE session_id = ? AND uuid = ?",
+        )
+        .get(sessionId, uuid) as {
+        seq: number;
+        full_ref: number | null;
+        data: string;
+      } | null;
+      // The engine later upserts the same early-persisted user row, but its
+      // provider transcript does not know which browser deliveries formed a
+      // batched turn. Preserve that immutable causal identity unless a newer
+      // writer explicitly supplies it.
+      let effectiveEntry = entry;
+      if (existing && !entry.sourceMessageIds?.length) {
+        try {
+          const prior = JSON.parse(existing.data) as TranscriptEntry;
+          if (prior.sourceMessageIds?.length)
+            effectiveEntry = {
+              ...entry,
+              sourceMessageIds: prior.sourceMessageIds,
+            };
+        } catch {}
+      }
+      const bounded = boundEntryForStore(effectiveEntry);
 
       // Blob first (need its id for full_ref).
       let fullRef: number | null = null;
@@ -1970,17 +2180,11 @@ export class TranscriptStore {
           .query(
             `INSERT INTO transcript_blobs (session_id, uuid, data) VALUES (?, ?, ?)
              ON CONFLICT(session_id, uuid) DO UPDATE SET data = excluded.data
-             RETURNING id`
+             RETURNING id`,
           )
           .get(sessionId, uuid, bounded.full) as { id: number };
         fullRef = blobRow.id;
       }
-
-      const existing = this.db
-        .query(
-          "SELECT seq, full_ref FROM transcript_events WHERE session_id = ? AND uuid = ?"
-        )
-        .get(sessionId, uuid) as { seq: number; full_ref: number | null } | null;
 
       if (existing) {
         // Upsert: keep ORIGINAL seq, update data/full_ref/ts (§1 semantics).
@@ -1988,14 +2192,22 @@ export class TranscriptStore {
           // Entry shrank below the bound — drop the now-stale blob.
           this.db.run(
             "DELETE FROM transcript_blobs WHERE session_id = ? AND uuid = ?",
-            [sessionId, uuid]
+            [sessionId, uuid],
           );
         }
         this.db.run(
           `UPDATE transcript_events
            SET kind = ?, data = ?, full_ref = ?, ts = ?, change_seq = ?
            WHERE session_id = ? AND seq = ?`,
-          [entry.type ?? "unknown", bounded.data, fullRef, ts, changeSeq, sessionId, existing.seq]
+          [
+            entry.type ?? "unknown",
+            bounded.data,
+            fullRef,
+            ts,
+            changeSeq,
+            sessionId,
+            existing.seq,
+          ],
         );
         updated++;
         affected.push({ ...bounded.entry, seq: existing.seq, changeSeq });
@@ -2014,21 +2226,21 @@ export class TranscriptStore {
             bounded.data,
             fullRef,
             changeSeq,
-          ]
+          ],
         );
         inserted++;
         affected.push({ ...bounded.entry, seq, changeSeq });
       }
 
       const seq = existing?.seq ?? nextSeq - 1;
-      this.writeOutlineRow(sessionId, seq, changeSeq, ts, entry);
+      this.writeOutlineRow(sessionId, seq, changeSeq, ts, effectiveEntry);
     }
 
     this.db.run(
       `UPDATE transcript_sessions
        SET next_seq = ?, next_change_seq = ?, last_ts = COALESCE(?, last_ts)
        WHERE session_id = ?`,
-      [nextSeq, nextChangeSeq, lastTs, sessionId]
+      [nextSeq, nextChangeSeq, lastTs, sessionId],
     );
 
     return { affected, inserted, updated };
@@ -2039,7 +2251,7 @@ export class TranscriptStore {
     seq: number,
     changeSeq: number,
     ts: number,
-    entry: TranscriptEntry
+    entry: TranscriptEntry,
   ): void {
     const projection = transcriptOutlineProjection(entry);
     this.db.run(
@@ -2062,7 +2274,7 @@ export class TranscriptStore {
         projection.role,
         projection.contentLength,
         projection.reviewPrNumber ?? null,
-      ]
+      ],
     );
   }
 
@@ -2092,7 +2304,7 @@ export class TranscriptStore {
            LEFT JOIN transcript_outline o
              ON o.session_id = e.session_id AND o.seq = e.seq
            WHERE e.session_id = ? AND e.seq > ?
-           ORDER BY e.seq LIMIT 100`
+           ORDER BY e.seq LIMIT 100`,
         )
         .all(sessionId, afterSeq) as Array<{
         seq: number;
@@ -2115,34 +2327,36 @@ export class TranscriptStore {
           return {
             row,
             entry: sanitizeTranscriptMediaEntry(
-              JSON.parse(row.data) as TranscriptEntry
+              JSON.parse(row.data) as TranscriptEntry,
             ),
           };
         } catch {
           return { row, entry: null };
         }
       });
-      this.db.transaction(() => {
-        for (const { row, entry } of parsed) {
-          if (entry) {
-            this.writeOutlineRow(
-              sessionId,
-              row.seq,
-              row.change_seq,
-              row.ts,
-              entry
-            );
-          } else {
-            this.db.run(
-              `INSERT OR REPLACE INTO transcript_outline
+      this.db
+        .transaction(() => {
+          for (const { row, entry } of parsed) {
+            if (entry) {
+              this.writeOutlineRow(
+                sessionId,
+                row.seq,
+                row.change_seq,
+                row.ts,
+                entry,
+              );
+            } else {
+              this.db.run(
+                `INSERT OR REPLACE INTO transcript_outline
                  (session_id, seq, uuid, change_seq, ts, render_role, content_length)
                SELECT session_id, seq, uuid, change_seq, ts, 'hidden', 0
                FROM transcript_events WHERE session_id = ? AND seq = ?`,
-              [sessionId, row.seq]
-            );
+                [sessionId, row.seq],
+              );
+            }
           }
-        }
-      }).immediate();
+        })
+        .immediate();
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       const currentEpoch = this.getLastResetChangeSeq(sessionId);
       if (currentEpoch !== epoch) {
@@ -2164,29 +2378,32 @@ export class TranscriptStore {
       .all() as Array<{ name: string }>;
     const hasEventChange = eventColumns.some((c) => c.name === "change_seq");
     const hasNextChange = sessionColumns.some(
-      (c) => c.name === "next_change_seq"
+      (c) => c.name === "next_change_seq",
     );
     const hasResetChange = sessionColumns.some(
-      (c) => c.name === "reset_change_seq"
+      (c) => c.name === "reset_change_seq",
     );
-    this.db.transaction(() => {
-      if (!hasEventChange) {
+    this.db
+      .transaction(() => {
+        if (!hasEventChange) {
+          this.db.exec(
+            "ALTER TABLE transcript_events ADD COLUMN change_seq INTEGER NOT NULL DEFAULT 0",
+          );
+        }
+        if (!hasNextChange) {
+          this.db.exec(
+            "ALTER TABLE transcript_sessions ADD COLUMN next_change_seq INTEGER NOT NULL DEFAULT 1",
+          );
+        }
+        if (!hasResetChange) {
+          this.db.exec(
+            "ALTER TABLE transcript_sessions ADD COLUMN reset_change_seq INTEGER NOT NULL DEFAULT 0",
+          );
+        }
         this.db.exec(
-          "ALTER TABLE transcript_events ADD COLUMN change_seq INTEGER NOT NULL DEFAULT 0"
+          "UPDATE transcript_events SET change_seq = seq WHERE change_seq = 0",
         );
-      }
-      if (!hasNextChange) {
-        this.db.exec(
-          "ALTER TABLE transcript_sessions ADD COLUMN next_change_seq INTEGER NOT NULL DEFAULT 1"
-        );
-      }
-      if (!hasResetChange) {
-        this.db.exec(
-          "ALTER TABLE transcript_sessions ADD COLUMN reset_change_seq INTEGER NOT NULL DEFAULT 0"
-        );
-      }
-      this.db.exec("UPDATE transcript_events SET change_seq = seq WHERE change_seq = 0");
-      this.db.exec(`
+        this.db.exec(`
         UPDATE transcript_sessions
         SET next_change_seq = MAX(
           next_change_seq,
@@ -2198,9 +2415,10 @@ export class TranscriptStore {
           )
         )
       `);
-      this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_te_change
+        this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_te_change
         ON transcript_events(session_id, change_seq)`);
-    }).immediate();
+      })
+      .immediate();
   }
 }
 
@@ -2271,6 +2489,7 @@ const TRANSCRIPT_ENTRY_KEYS = new Set([
   "sender",
   "senderVia",
   "timestamp",
+  "turnBoundary",
   "toolInput",
   "toolName",
   "toolUseId",
@@ -2400,7 +2619,10 @@ function validateTurnFenceRecord(
   const sessionId = boundedId(record.sessionId, "sessionId", 128);
   const runId = boundedId(record.runId, "runId", 256);
   const turnId = boundedId(record.turnId, "turnId", 256);
-  if (!Number.isSafeInteger(record.generation) || (record.generation as number) < 1)
+  if (
+    !Number.isSafeInteger(record.generation) ||
+    (record.generation as number) < 1
+  )
     throw new TypeError("Invalid transcript destination generation");
   const fence = {
     sessionId,
@@ -2489,24 +2711,45 @@ function validStoredMutationResult(value: unknown): boolean {
   if (exactSortedKeys(value, ["inserted", "updated"]))
     return nonnegative(value.inserted) && nonnegative(value.updated);
   if (exactSortedKeys(value, ["firstSeq", "inserted", "lastSeq", "updated"]))
-    return nonnegative(value.inserted) && nonnegative(value.updated) &&
-      Number.isSafeInteger(value.firstSeq) && (value.firstSeq as number) >= 1 &&
+    return (
+      nonnegative(value.inserted) &&
+      nonnegative(value.updated) &&
+      Number.isSafeInteger(value.firstSeq) &&
+      (value.firstSeq as number) >= 1 &&
       Number.isSafeInteger(value.lastSeq) &&
-      (value.lastSeq as number) >= (value.firstSeq as number);
-  if (!exactSortedKeys(value, ["changes", "firstSeq", "inserted", "lastSeq", "updated"]) ||
-      !Array.isArray(value.changes) || value.changes.length === 0 ||
-      value.changes.length > TRANSCRIPT_DESTINATION_MAX_ENTRIES ||
-      !nonnegative(value.inserted) || !nonnegative(value.updated)) return false;
-  return value.changes.every((change, index) =>
-    isPlainRecord(change) &&
-    exactSortedKeys(change, ["changeSeq", "entryId", "seq"]) &&
-    typeof change.entryId === "string" && change.entryId.length > 0 &&
-    Buffer.byteLength(change.entryId, "utf8") <= 256 &&
-    Number.isSafeInteger(change.seq) && (change.seq as number) >= 1 &&
-    Number.isSafeInteger(change.changeSeq) && (change.changeSeq as number) >= 1 &&
-    (index === 0 ||
-      (change.changeSeq as number) ===
-        ((value.changes as Array<Record<string, unknown>>)[index - 1]!.changeSeq as number) + 1)
+      (value.lastSeq as number) >= (value.firstSeq as number)
+    );
+  if (
+    !exactSortedKeys(value, [
+      "changes",
+      "firstSeq",
+      "inserted",
+      "lastSeq",
+      "updated",
+    ]) ||
+    !Array.isArray(value.changes) ||
+    value.changes.length === 0 ||
+    value.changes.length > TRANSCRIPT_DESTINATION_MAX_ENTRIES ||
+    !nonnegative(value.inserted) ||
+    !nonnegative(value.updated)
+  )
+    return false;
+  return value.changes.every(
+    (change, index) =>
+      isPlainRecord(change) &&
+      exactSortedKeys(change, ["changeSeq", "entryId", "seq"]) &&
+      typeof change.entryId === "string" &&
+      change.entryId.length > 0 &&
+      Buffer.byteLength(change.entryId, "utf8") <= 256 &&
+      Number.isSafeInteger(change.seq) &&
+      (change.seq as number) >= 1 &&
+      Number.isSafeInteger(change.changeSeq) &&
+      (change.changeSeq as number) >= 1 &&
+      (index === 0 ||
+        (change.changeSeq as number) ===
+          ((value.changes as Array<Record<string, unknown>>)[index - 1]!
+            .changeSeq as number) +
+            1),
   );
 }
 
@@ -2521,7 +2764,8 @@ export function validateTranscriptAppendReceiptRow(
       !RAW_SHA256_DIGEST.test(row.request_digest) ||
       !Number.isSafeInteger(row.created_at) ||
       (row.created_at as number) < 0
-    ) throw new TypeError("Invalid durable transcript receipt metadata");
+    )
+      throw new TypeError("Invalid durable transcript receipt metadata");
     const fence = parseDestinationReceiptJson(
       row.fence_json,
       "durableFence",
@@ -2535,27 +2779,38 @@ export function validateTranscriptAppendReceiptRow(
     if (
       canonicalDestinationJson(fence) !== row.fence_json ||
       canonicalDestinationJson(result) !== row.result_json
-    ) throw new TypeError("Non-canonical durable transcript receipt");
+    )
+      throw new TypeError("Non-canonical durable transcript receipt");
     if (isPlainRecord(fence) && Object.hasOwn(fence, "sessionId")) {
       decodeDestinationReceiptRow(row);
       return;
     }
     if (
       !isPlainRecord(fence) ||
-      !exactSortedKeys(fence, ["expectedEpoch", "generation", "runId", "turnId"]) ||
+      !exactSortedKeys(fence, [
+        "expectedEpoch",
+        "generation",
+        "runId",
+        "turnId",
+      ]) ||
       (fence.expectedEpoch !== null &&
-        (!Number.isSafeInteger(fence.expectedEpoch) || (fence.expectedEpoch as number) < 0)) ||
+        (!Number.isSafeInteger(fence.expectedEpoch) ||
+          (fence.expectedEpoch as number) < 0)) ||
       (fence.generation !== null &&
-        (!Number.isSafeInteger(fence.generation) || (fence.generation as number) < 0)) ||
-      (fence.runId !== null && boundedId(fence.runId, "runId", 128) !== fence.runId) ||
-      (fence.turnId !== null && boundedId(fence.turnId, "turnId", 128) !== fence.turnId) ||
+        (!Number.isSafeInteger(fence.generation) ||
+          (fence.generation as number) < 0)) ||
+      (fence.runId !== null &&
+        boundedId(fence.runId, "runId", 128) !== fence.runId) ||
+      (fence.turnId !== null &&
+        boundedId(fence.turnId, "turnId", 128) !== fence.turnId) ||
       !isPlainRecord(result) ||
       !exactSortedKeys(result, ["replay", "result", "wakeCursor"]) ||
       result.replay !== false ||
       !Number.isSafeInteger(result.wakeCursor) ||
       (result.wakeCursor as number) < 1 ||
       !validStoredMutationResult(result.result)
-    ) throw new TypeError(`Invalid actor transcript receipt for ${sessionId}`);
+    )
+      throw new TypeError(`Invalid actor transcript receipt for ${sessionId}`);
     assertTranscriptActorResponse(result);
   } catch (error) {
     if (error instanceof TranscriptAppendReceiptCorruptError) throw error;
@@ -2642,8 +2897,7 @@ function decodeDestinationReceiptRow(
         changes.length ||
       changes.some(
         (change, index) =>
-          index > 0 &&
-          change.changeSeq !== changes[index - 1]!.changeSeq + 1,
+          index > 0 && change.changeSeq !== changes[index - 1]!.changeSeq + 1,
       )
     )
       throw new TypeError("Contradictory durable transcript receipt changes");
@@ -2652,10 +2906,7 @@ function decodeDestinationReceiptRow(
     const throughChangeSeq = Math.max(
       ...changes.map((change) => change.changeSeq),
     );
-    if (
-      resultValue.firstSeq !== firstSeq ||
-      resultValue.lastSeq !== lastSeq
-    )
+    if (resultValue.firstSeq !== firstSeq || resultValue.lastSeq !== lastSeq)
       throw new TypeError("Contradictory durable transcript receipt range");
     return Object.freeze({
       version: 1,
@@ -2744,7 +2995,7 @@ function validateDestinationEntry(
     if (entry[key] !== undefined && typeof entry[key] !== "string")
       throw new TypeError(`Invalid transcript entry ${key} at ${index}`);
   }
-  for (const key of ["isError"]) {
+  for (const key of ["isError", "turnBoundary"]) {
     if (entry[key] !== undefined && typeof entry[key] !== "boolean")
       throw new TypeError(`Invalid transcript entry ${key} at ${index}`);
   }
@@ -2870,12 +3121,7 @@ function assertPlainJson(
         descriptor.value === undefined
       )
         throw new TypeError(`Sparse or accessor JSON array at ${path}`);
-      assertPlainJson(
-        descriptor.value,
-        `${path}[${index}]`,
-        seen,
-        depth + 1,
-      );
+      assertPlainJson(descriptor.value, `${path}[${index}]`, seen, depth + 1);
     }
   } else {
     if (!isPlainRecord(value))
@@ -2888,7 +3134,9 @@ function assertPlainJson(
         !descriptor.enumerable ||
         descriptor.value === undefined
       )
-        throw new TypeError(`Accessor or undefined JSON value at ${path}.${key}`);
+        throw new TypeError(
+          `Accessor or undefined JSON value at ${path}.${key}`,
+        );
       assertPlainJson(descriptor.value, `${path}.${key}`, seen, depth + 1);
     }
   }
@@ -2964,6 +3212,15 @@ function transcriptOutlineProjection(entry: TranscriptEntry): {
   contentLength: number;
   reviewPrNumber?: number;
 } {
+  // A background wait is model-only context, but it starts a distinct turn.
+  // Index it as a content-free user boundary so hydrated ranges cannot merge
+  // the completed status before the wait into the later continuation.
+  if (
+    entry.noticeKind === "context-injection" &&
+    entry.contextInjection?.source === "background-wait"
+  ) {
+    return { role: "user", contentLength: 0 };
+  }
   if (dropContextInjections([entry]).length === 0) {
     return { role: "hidden", contentLength: 0 };
   }
@@ -3049,7 +3306,10 @@ function boundEntryForStore(entry: TranscriptEntry): {
       stripped.toolInput &&
       typeof stripped.toolInput === "object" &&
       !Array.isArray(stripped.toolInput)
-        ? Object.keys(stripped.toolInput as Record<string, unknown>).slice(0, 50)
+        ? Object.keys(stripped.toolInput as Record<string, unknown>).slice(
+            0,
+            50,
+          )
         : [];
     stripped.toolInput = {
       toolName: entry.toolName ?? "",
@@ -3063,7 +3323,7 @@ function boundEntryForStore(entry: TranscriptEntry): {
     stripped.images = stripped.images.map((src, i) =>
       typeof src === "string" && src.startsWith("data:")
         ? `os-blob:${entry.id}/${i}`
-        : src
+        : src,
     );
   }
 
@@ -3071,7 +3331,11 @@ function boundEntryForStore(entry: TranscriptEntry): {
   // markers clampEntriesForWire uses (contentLength = original char length).
   let json = safeStringify(stripped);
   let bytes = Buffer.byteLength(json);
-  if (bytes > TRANSCRIPT_DATA_MAX_BYTES && typeof stripped.content === "string" && stripped.content) {
+  if (
+    bytes > TRANSCRIPT_DATA_MAX_BYTES &&
+    typeof stripped.content === "string" &&
+    stripped.content
+  ) {
     const orig = stripped.content;
     stripped.contentClamped = true;
     stripped.contentLength = orig.length;
@@ -3083,7 +3347,10 @@ function boundEntryForStore(entry: TranscriptEntry): {
       bytes = Buffer.byteLength(json);
       if (bytes <= TRANSCRIPT_DATA_MAX_BYTES) break;
       const over = bytes - TRANSCRIPT_DATA_MAX_BYTES;
-      content = content.slice(0, Math.max(0, content.length - Math.max(over, 64)));
+      content = content.slice(
+        0,
+        Math.max(0, content.length - Math.max(over, 64)),
+      );
       stripped.content = content;
       if (!content) {
         json = safeStringify(stripped);
@@ -3121,7 +3388,9 @@ function boundEntryForStore(entry: TranscriptEntry): {
 
 // ── Page hydration ───────────────────────────────────────────────────────────
 
-function page(rows: { seq: number; change_seq: number; data: string }[]): TranscriptPage {
+function page(
+  rows: { seq: number; change_seq: number; data: string }[],
+): TranscriptPage {
   const entries: SeqEntry[] = [];
   for (const r of rows) {
     try {

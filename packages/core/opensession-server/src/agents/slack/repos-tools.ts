@@ -22,12 +22,17 @@ export interface ReposToolContext {
   /** The session these tools act on. */
   sessionId: string;
   /** Attach (or re-attach) a repo; throws with a human message on bad input. */
-  attach: (repo: string, branch?: string) => Promise<{ attached: AttachedRepo; all: AttachedRepo[] }>;
+  attach: (
+    repo: string,
+    branch?: string,
+  ) => Promise<{ attached: AttachedRepo; all: AttachedRepo[] }>;
   /**
    * Switch the session's PRIMARY repo (wrong repo picked at creation).
    * Clean-only — throws if the session already has work.
    */
-  switchPrimary: (repo: string) => Promise<{ repo: string; branch: string; worktreeDir: string }>;
+  switchPrimary: (
+    repo: string,
+  ) => Promise<{ repo: string; branch: string; worktreeDir: string }>;
   /** Current repo layout for the session, or null if it can't be resolved. */
   snapshot: () => {
     primaryRepo: string;
@@ -36,7 +41,11 @@ export interface ReposToolContext {
     attached: AttachedRepo[];
   } | null;
   /** All registered repos (id + default branch + whether shared-checkout). */
-  repos: () => Array<{ id: string; defaultBranch: string; sharedCheckout: boolean }>;
+  repos: () => Array<{
+    id: string;
+    defaultBranch: string;
+    sharedCheckout: boolean;
+  }>;
   /**
    * Link a PR to the session (shows up in its Review tab beside the
    * branch-derived PRs); throws with a human message on bad input.
@@ -64,22 +73,29 @@ export function createReposMcpServer(ctx: ReposToolContext) {
         const repos = ctx.repos();
         const lines: string[] = [];
         if (snap) {
-          lines.push(`Primary: ${snap.primaryRepo}${snap.branch ? ` (branch ${snap.branch})` : ""} → ${snap.worktreeDir}`);
+          lines.push(
+            `Primary: ${snap.primaryRepo}${snap.branch ? ` (branch ${snap.branch})` : ""} → ${snap.worktreeDir}`,
+          );
           if (snap.attached.length) {
             lines.push("Attached:");
-            for (const r of snap.attached) lines.push(`  • ${r.repo} (branch ${r.branch}) → ${r.dir}`);
+            for (const r of snap.attached)
+              lines.push(`  • ${r.repo} (branch ${r.branch}) → ${r.dir}`);
           } else {
             lines.push("Attached: none yet");
           }
         }
         const attachable = repos.filter(
-          (p) => !p.sharedCheckout && p.id !== snap?.primaryRepo
+          (p) => !p.sharedCheckout && p.id !== snap?.primaryRepo,
         );
         lines.push("");
-        lines.push("Attachable repos: " + attachable.map((p) => p.id).join(", "));
-        lines.push("Wrong primary repo? Use switch_repo (fresh sessions only).");
+        lines.push(
+          "Attachable repos: " + attachable.map((p) => p.id).join(", "),
+        );
+        lines.push(
+          "Wrong primary repo? Use switch_repo (fresh sessions only).",
+        );
         return text(lines.join("\n"));
-      }
+      },
     ),
     tool(
       "attach_repo",
@@ -91,7 +107,9 @@ export function createReposMcpServer(ctx: ReposToolContext) {
         branch: z
           .string()
           .optional()
-          .describe("Branch to check out in the worktree. Defaults to this session's primary branch."),
+          .describe(
+            "Branch to check out in the worktree. Defaults to this session's primary branch.",
+          ),
       },
       async (args: { repo: string; branch?: string }) => {
         try {
@@ -101,12 +119,16 @@ export function createReposMcpServer(ctx: ReposToolContext) {
             `Attached ${attached.repo} on branch ${attached.branch}.\n` +
               `Worktree: ${attached.dir}\n` +
               `cd there to work in it; commit/push and open a PR in this repo independently of the primary repo.` +
-              (others.length ? `\n(Also attached: ${others.map((r) => r.repo).join(", ")}.)` : "")
+              (others.length
+                ? `\n(Also attached: ${others.map((r) => r.repo).join(", ")}.)`
+                : ""),
           );
         } catch (e: any) {
-          return text(`Couldn't attach ${args.repo}: ${e?.message || String(e)}`);
+          return text(
+            `Couldn't attach ${args.repo}: ${e?.message || String(e)}`,
+          );
         }
-      }
+      },
     ),
     tool(
       "switch_repo",
@@ -122,12 +144,14 @@ export function createReposMcpServer(ctx: ReposToolContext) {
           return text(
             `Switched primary repo to ${res.repo} (branch ${res.branch}).\n` +
               `Worktree: ${res.worktreeDir}\n` +
-              `cd there now — your current working directory still points at the old repo until the next turn.`
+              `cd there now — your current working directory still points at the old repo until the next turn.`,
           );
         } catch (e: any) {
-          return text(`Couldn't switch to ${args.repo}: ${e?.message || String(e)}`);
+          return text(
+            `Couldn't switch to ${args.repo}: ${e?.message || String(e)}`,
+          );
         }
-      }
+      },
     ),
     tool(
       "link_pr",
@@ -136,28 +160,46 @@ export function createReposMcpServer(ctx: ReposToolContext) {
         url: z
           .string()
           .optional()
-          .describe("GitHub PR URL (https://github.com/owner/repo/pull/123). Easiest — repo and number are parsed from it."),
+          .describe(
+            "GitHub PR URL (https://github.com/owner/repo/pull/123). Easiest — repo and number are parsed from it.",
+          ),
         repo: z
           .string()
           .optional()
           .describe("Registered repo id when not passing a URL."),
         number: z.number().optional().describe("PR number in that repo."),
-        branch: z.string().optional().describe("PR head branch, as an alternative to the number."),
+        branch: z
+          .string()
+          .optional()
+          .describe("PR head branch, as an alternative to the number."),
       },
-      async (args: { url?: string; repo?: string; number?: number; branch?: string }) => {
+      async (args: {
+        url?: string;
+        repo?: string;
+        number?: number;
+        branch?: string;
+      }) => {
         try {
           const { linked, all } = await ctx.linkPr(args);
-          const label = linked.number ? `#${linked.number}` : `branch ${linked.branch}`;
+          const label = linked.number
+            ? `#${linked.number}`
+            : `branch ${linked.branch}`;
           return text(
             `Linked ${linked.repo} ${label}${linked.title ? ` (“${linked.title}”)` : ""} to this session.` +
-              (all.length > 1 ? `\nLinked PRs now: ${all.map((r) => `${r.repo}${r.number ? `#${r.number}` : `:${r.branch}`}`).join(", ")}.` : "")
+              (all.length > 1
+                ? `\nLinked PRs now: ${all.map((r) => `${r.repo}${r.number ? `#${r.number}` : `:${r.branch}`}`).join(", ")}.`
+                : ""),
           );
         } catch (e: any) {
           return text(`Couldn't link that PR: ${e?.message || String(e)}`);
         }
-      }
+      },
     ),
   ];
 
-  return createSdkMcpServer({ name: "opensession-repos", version: "1.0.0", tools });
+  return createSdkMcpServer({
+    name: "opensession-repos",
+    version: "1.0.0",
+    tools,
+  });
 }

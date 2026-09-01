@@ -27,10 +27,15 @@ import {
 const PROXY_TIMEOUT_MS = 30_000;
 
 /** Hop-by-hop headers a proxy must not forward verbatim. */
-const STRIPPED = new Set(["host", "connection", "content-length", "accept-encoding"]);
+const STRIPPED = new Set([
+  "host",
+  "connection",
+  "content-length",
+  "accept-encoding",
+]);
 
 export async function handleDeployRoutes(
-  ctx: RouteContext
+  ctx: RouteContext,
 ): Promise<Response | undefined> {
   const { req, url, path } = ctx;
 
@@ -40,11 +45,12 @@ export async function handleDeployRoutes(
     const name = proxied[1]!;
     const rest = proxied[2] ?? "";
     const deploy = getDeploy(name);
-    if (!deploy) return new Response(`No deploy named "${name}"`, { status: 404 });
+    if (!deploy)
+      return new Response(`No deploy named "${name}"`, { status: 404 });
     if (deploy.state !== "running") {
       return new Response(
         `"${name}" is ${deploy.state}${deploy.lastError ? `: ${deploy.lastError}` : ""}`,
-        { status: 503 }
+        { status: 503 },
       );
     }
     // A bare /d/<name> must become /d/<name>/ before the app sees it, or its
@@ -74,16 +80,19 @@ export async function handleDeployRoutes(
               : await req.arrayBuffer(),
           redirect: "manual",
           signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
-        }
+        },
       );
       const out = new Headers(upstream.headers);
       out.delete("content-encoding");
       out.delete("content-length");
-      return new Response(upstream.body, { status: upstream.status, headers: out });
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: out,
+      });
     } catch (e: any) {
       return new Response(
         `"${name}" did not respond (${e?.message || String(e)}). It may still be starting.`,
-        { status: 502 }
+        { status: 502 },
       );
     }
   }
@@ -93,12 +102,15 @@ export async function handleDeployRoutes(
     return Response.json({ deploys: listDeploys() });
   }
 
-  const m = path.match(/^\/api\/deploys\/([^/]+)(?:\/(logs|stop|start|rollback))?$/);
+  const m = path.match(
+    /^\/api\/deploys\/([^/]+)(?:\/(logs|stop|start|rollback))?$/,
+  );
   if (!m) return undefined;
   const ref = decodeURIComponent(m[1]!);
   const action = m[2];
   const deploy = getDeploy(ref);
-  if (!deploy) return Response.json({ error: "no such deploy" }, { status: 404 });
+  if (!deploy)
+    return Response.json({ error: "no such deploy" }, { status: 404 });
 
   if (action === "logs" && req.method === "GET") {
     return Response.json({ logs: await deployLogs(deploy.id) });
@@ -107,13 +119,18 @@ export async function handleDeployRoutes(
     return Response.json({ deploy: await stopDeploy(deploy.id) });
   }
   if (action === "start" && req.method === "POST") {
-    return Response.json({ deploy: await launchDeploy(deploy.id, { force: true }) });
+    return Response.json({
+      deploy: await launchDeploy(deploy.id, { force: true }),
+    });
   }
   if (action === "rollback" && req.method === "POST") {
     const body = await req.json().catch(() => null);
     const version = Number(body?.version);
     if (!Number.isInteger(version)) {
-      return Response.json({ error: "expected { version: number }" }, { status: 400 });
+      return Response.json(
+        { error: "expected { version: number }" },
+        { status: 400 },
+      );
     }
     try {
       return Response.json({ deploy: rollbackDeploy(deploy.id, version) });

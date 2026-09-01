@@ -46,6 +46,7 @@ export function chooseSessionLane(
   if (lanes.length === 1) return first;
   const second = laneHash(sessionId, SECOND_CANDIDATE_SEED) % lanes.length;
   if (second === first) return first;
-  const load = (index: number) => lanes[index]!.queued + lanes[index]!.executing;
+  const load = (index: number) =>
+    lanes[index]!.queued + lanes[index]!.executing;
   return load(second) < load(first) ? second : first;
 }

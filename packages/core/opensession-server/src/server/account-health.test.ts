@@ -18,10 +18,7 @@ describe("GitHub account health credential selection", () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-account-health-"));
     try {
       const config = join(dir, "config.json");
-      writeFileSync(
-        config,
-        JSON.stringify({ integrations: { github: {} } }),
-      );
+      writeFileSync(config, JSON.stringify({ integrations: { github: {} } }));
       process.env.OPENSESSION_CONFIG = config;
       let requests = 0;
       globalThis.fetch = (async () => {

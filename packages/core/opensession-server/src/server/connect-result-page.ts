@@ -16,49 +16,57 @@
  * going back to the app when it did not.
  */
 
-import { BRANDS, brandKey, brandLogo, displayName } from "../frontend/brand-logos";
+import {
+  BRANDS,
+  brandKey,
+  brandLogo,
+  displayName,
+} from "../frontend/brand-logos";
 
 const ESCAPES: Record<string, string> = {
-	"&": "&amp;",
-	"<": "&lt;",
-	">": "&gt;",
-	'"': "&quot;",
-	"'": "&#39;",
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
 };
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
 const CHECK =
-	'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 const ALERT =
-	'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5v7"/><path d="M12 17.5h.01"/></svg>';
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5v7"/><path d="M12 17.5h.01"/></svg>';
 
 /** The service's brand square, badged with the outcome. */
 function mark(server: string | undefined, ok: boolean): string {
-	const key = server?.toLowerCase() || "";
-	const brand = BRANDS[brandKey(key)];
-	const logo = brandLogo(key);
-	// No server name at all (a redirect that lost its state): the badge has
-	// nothing to sit on, so the alert becomes the mark.
-	if (!server)
-		return `<div class="mark"><span class="tile tile-alert">${ALERT}</span></div>`;
-	const face = logo
-		? `<svg viewBox="${logo.viewBox}" fill="currentColor" aria-hidden="true">${logo.paths
-				.map((d, index) => {
-					const fill = logo.fills?.[index] ? ` fill="${logo.fills[index]}"` : "";
-					const opacity = logo.opacities?.[index] != null
-						? ` opacity="${logo.opacities[index]}"`
-						: "";
-					const rule = logo.evenOdd ? ' fill-rule="evenodd"' : "";
-					return `<path d="${d}"${fill}${opacity}${rule}/>`;
-				})
-				.join("")}</svg>`
-		: esc(server.charAt(0).toUpperCase());
-	const style = brand
-		? `background:${brand.bg};color:${brand.fg || "#fff"}`
-		: "background:var(--wash);color:var(--dim)";
-	return `<div class="mark"><span class="tile" style="${style}">${face}</span><span class="badge ${
-		ok ? "ok" : "warn"
-	}">${ok ? CHECK : ALERT}</span></div>`;
+  const key = server?.toLowerCase() || "";
+  const brand = BRANDS[brandKey(key)];
+  const logo = brandLogo(key);
+  // No server name at all (a redirect that lost its state): the badge has
+  // nothing to sit on, so the alert becomes the mark.
+  if (!server)
+    return `<div class="mark"><span class="tile tile-alert">${ALERT}</span></div>`;
+  const face = logo
+    ? `<svg viewBox="${logo.viewBox}" fill="currentColor" aria-hidden="true">${logo.paths
+        .map((d, index) => {
+          const fill = logo.fills?.[index]
+            ? ` fill="${logo.fills[index]}"`
+            : "";
+          const opacity =
+            logo.opacities?.[index] != null
+              ? ` opacity="${logo.opacities[index]}"`
+              : "";
+          const rule = logo.evenOdd ? ' fill-rule="evenodd"' : "";
+          return `<path d="${d}"${fill}${opacity}${rule}/>`;
+        })
+        .join("")}</svg>`
+    : esc(server.charAt(0).toUpperCase());
+  const style = brand
+    ? `background:${brand.bg};color:${brand.fg || "#fff"}`
+    : "background:var(--wash);color:var(--dim)";
+  return `<div class="mark"><span class="tile" style="${style}">${face}</span><span class="badge ${
+    ok ? "ok" : "warn"
+  }">${ok ? CHECK : ALERT}</span></div>`;
 }
 
 const CSS = `
@@ -150,24 +158,24 @@ btn.focus({preventScroll:true,focusVisible:false});`;
  * the webhook server and writes its own copy.
  */
 export function connectResultPage(opts: {
-	ok: boolean;
-	/** Server/brand name for the mark. Omit when the redirect lost it. */
-	server?: string;
-	title: string;
-	message: string;
-	/** The useful next step: close this tab, or go somewhere. */
-	action: { close: true } | { href: string; label: string };
-	status?: number;
+  ok: boolean;
+  /** Server/brand name for the mark. Omit when the redirect lost it. */
+  server?: string;
+  title: string;
+  message: string;
+  /** The useful next step: close this tab, or go somewhere. */
+  action: { close: true } | { href: string; label: string };
+  status?: number;
 }): Response {
-	const action = opts.action;
-	const close = "close" in action;
-	const button = close
-		? `<button class="btn" id="close" type="button">Close tab</button>
+  const action = opts.action;
+  const close = "close" in action;
+  const button = close
+    ? `<button class="btn" id="close" type="button">Close tab</button>
 <p class="foot" id="foot">You can close this tab.</p>`
-		: `<a class="btn" href="${esc(action.href)}">${esc(action.label)}</a>
+    : `<a class="btn" href="${esc(action.href)}">${esc(action.label)}</a>
 <p class="foot always">Or close this tab.</p>`;
-	return new Response(
-		`<!doctype html>
+  return new Response(
+    `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -185,34 +193,37 @@ ${button}
 ${close ? `<script>${CLOSE_SCRIPT}</script>` : ""}
 </body>
 </html>`,
-		{
-			status: opts.status,
-			headers: { "Content-Type": "text/html; charset=utf-8" },
-		},
-	);
+    {
+      status: opts.status,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    },
+  );
 }
 
 /** The grant landed. `teamName` present = it is that teammate's own account. */
 export function connectedPage(server: string, teamName?: string): Response {
-	const name = displayName(server);
-	return connectResultPage({
-		ok: true,
-		server,
-		title: `${name} connected`,
-		message: teamName
-			? `Sessions you run will use ${teamName}'s ${name} account.`
-			: `Every session in this workspace can use this ${name} account.`,
-		action: { close: true },
-	});
+  const name = displayName(server);
+  return connectResultPage({
+    ok: true,
+    server,
+    title: `${name} connected`,
+    message: teamName
+      ? `Sessions you run will use ${teamName}'s ${name} account.`
+      : `Every session in this workspace can use this ${name} account.`,
+    action: { close: true },
+  });
 }
 
 /** The flow came back broken: a lost state, a refused consent, a token exchange that failed. */
-export function connectFailedPage(server: string | undefined, error: string): Response {
-	return connectResultPage({
-		ok: false,
-		server,
-		title: server ? `${displayName(server)} not connected` : "Connect failed",
-		message: error,
-		action: { href: "/settings/connections", label: "Back to connections" },
-	});
+export function connectFailedPage(
+  server: string | undefined,
+  error: string,
+): Response {
+  return connectResultPage({
+    ok: false,
+    server,
+    title: server ? `${displayName(server)} not connected` : "Connect failed",
+    message: error,
+    action: { href: "/settings/connections", label: "Back to connections" },
+  });
 }

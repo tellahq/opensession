@@ -456,9 +456,9 @@ describe("destination-idempotent transcript append receipts", () => {
       expect(bus).toBe(1);
       store.close();
       const reopened = new TranscriptStore(path);
-      expect(
-        reopened.commitTranscriptDestinationAppendReceipt(input),
-      ).toEqual(receipt);
+      expect(reopened.commitTranscriptDestinationAppendReceipt(input)).toEqual(
+        receipt,
+      );
       expect(reopened.queryTranscriptDestinationReceipt(query)).toEqual(
         receipt,
       );

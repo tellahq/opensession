@@ -26,6 +26,7 @@ concurrency:
 
 jobs:
   check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Type-check and tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -40,6 +41,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Check formatting
+        run: bun run format:check
 
       - name: Type-check
         run: bun run typecheck
@@ -57,6 +61,37 @@ jobs:
       # fixtures have tight readiness budgets under shared-runner contention.
       - name: Unit tests
         run: scripts/test-unit-isolated.sh
+
+      # A deterministic local fixture drives the production transcript stack
+      # without credentials, sessions, or API traffic. Chrome is preinstalled
+      # on the hosted runner; the explicit profile makes remote debugging work
+      # on current headless Chrome.
+      - name: Transcript motion performance budgets
+        run: |
+          google-chrome --headless=new --no-sandbox \
+            --remote-debugging-port=9222 --remote-allow-origins='*' \
+            --user-data-dir="$RUNNER_TEMP/transcript-motion-chrome" \
+            about:blank > "$RUNNER_TEMP/transcript-motion-chrome.log" 2>&1 &
+          chrome_pid=$!
+          PORT=4899 bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fixture-server.ts \
+            > "$RUNNER_TEMP/transcript-motion-fixture.log" 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" "$chrome_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..120}; do
+            curl -fsS http://127.0.0.1:4899/__fixtures/transcript-motion >/dev/null && break
+            if [ "$attempt" -eq 120 ]; then
+              cat "$RUNNER_TEMP/transcript-motion-fixture.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          CDP_PORT=9222 OPENSESSION_URL=http://127.0.0.1:4899 \
+            bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fuzz.ts \
+              --seeds 24 --speed 8 --out "$RUNNER_TEMP/transcript-motion-report.json"
+          CDP_PORT=9222 OPENSESSION_URL=http://127.0.0.1:4899 \
+            bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fuzz.ts \
+              --profile stream --seeds 1 --speed 1 \
+              --out "$RUNNER_TEMP/transcript-stream-report.json"
 
       # The snapshot scenarios are exactly the part of that sweep the ordering
       # problem eats: they redirect the sessions dir, transcript store, MCP
@@ -83,6 +118,7 @@ jobs:
         run: bun run test:snapshots
 
   installer:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Install (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -180,6 +216,7 @@ jobs:
         run: bash install.sh --uninstall
 
   runner-windows:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # Same situation as the macOS installer job above: the Windows Runner
     # client (install.ps1, the scheduled-task service, PowerShell command
     # execution, the Windows env whitelist) was written without a Windows box

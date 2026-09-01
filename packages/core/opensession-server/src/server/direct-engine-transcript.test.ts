@@ -19,13 +19,21 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { readEngineTranscript, readEngineTranscriptAsync, getEngineTranscriptPath } from "./sessions";
+import {
+  readEngineTranscript,
+  readEngineTranscriptAsync,
+  getEngineTranscriptPath,
+} from "./sessions";
 
 const scratch = mkdtempSync(join(tmpdir(), "direct-engine-transcript-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 /** Write a claude-shape jsonl where getEngineTranscriptPath will look for it. */
-function writeLegacyJsonl(worktree: string, engineSessionId: string, text: string) {
+function writeLegacyJsonl(
+  worktree: string,
+  engineSessionId: string,
+  text: string,
+) {
   const path = getEngineTranscriptPath(worktree, engineSessionId, "claude")!;
   mkdirSync(join(path, ".."), { recursive: true });
   writeFileSync(
@@ -37,7 +45,7 @@ function writeLegacyJsonl(worktree: string, engineSessionId: string, text: strin
         timestamp: new Date().toISOString(),
         message: { role: "assistant", content: [{ type: "text", text }] },
       }),
-    ].join("\n") + "\n"
+    ].join("\n") + "\n",
   );
   return path;
 }
@@ -50,7 +58,9 @@ describe("readEngineTranscript for direct-SDK engine sessions", () => {
       readEngineTranscript(scratch, engineId, "claude"),
       await readEngineTranscriptAsync(scratch, engineId, "claude"),
     ]) {
-      expect(entries.map((e) => e.content).join("\n")).toContain("from the legacy file");
+      expect(entries.map((e) => e.content).join("\n")).toContain(
+        "from the legacy file",
+      );
     }
   });
 
@@ -60,7 +70,9 @@ describe("readEngineTranscript for direct-SDK engine sessions", () => {
     // throwing or parsing a path that does not exist.
     const engineId = crypto.randomUUID();
     expect(readEngineTranscript(scratch, engineId, "claude")).toEqual([]);
-    expect(await readEngineTranscriptAsync(scratch, engineId, "claude")).toEqual([]);
+    expect(
+      await readEngineTranscriptAsync(scratch, engineId, "claude"),
+    ).toEqual([]);
     expect(readEngineTranscript(scratch, "", "codex")).toEqual([]);
   });
 });

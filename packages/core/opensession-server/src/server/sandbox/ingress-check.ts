@@ -7,7 +7,9 @@ function publicBaseUrl(): string {
   const value = configuredIngress().publicBaseUrl;
   if (!value) {
     throw Object.assign(
-      new Error("A public sandbox callback URL is required before remote provider testing"),
+      new Error(
+        "A public sandbox callback URL is required before remote provider testing",
+      ),
       { code: "INGRESS_URL_MISSING" },
     );
   }
@@ -25,14 +27,23 @@ function publicBaseUrl(): string {
   return parsed.toString().replace(/\/$/, "");
 }
 
-async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
         timer = setTimeout(
-          () => reject(Object.assign(new Error(`${label} timed out`), { code: "INGRESS_TIMEOUT" })),
+          () =>
+            reject(
+              Object.assign(new Error(`${label} timed out`), {
+                code: "INGRESS_TIMEOUT",
+              }),
+            ),
           ms,
         );
       }),
@@ -48,7 +59,11 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
  * Bun's upgrade API, so an invalid or misrouted request can never open. */
 export async function verifyPublicSandboxIngress(): Promise<void> {
   const base = publicBaseUrl();
-  const health = await withTimeout(fetch(`${base}/ingress-health`), 10_000, "Ingress health check");
+  const health = await withTimeout(
+    fetch(`${base}/ingress-health`),
+    10_000,
+    "Ingress health check",
+  );
   if (!health.ok || (await health.text()).trim() !== "ok") {
     throw Object.assign(
       new Error(`Sandbox ingress health returned HTTP ${health.status}`),
@@ -75,9 +90,12 @@ export async function verifyPublicSandboxIngress(): Promise<void> {
         socket.onerror = () => {
           if (opened) return;
           reject(
-            Object.assign(new Error("Authenticated sandbox WebSocket probe failed"), {
-              code: "INGRESS_WEBSOCKET_FAILED",
-            }),
+            Object.assign(
+              new Error("Authenticated sandbox WebSocket probe failed"),
+              {
+                code: "INGRESS_WEBSOCKET_FAILED",
+              },
+            ),
           );
         };
         socket.onclose = () => {
@@ -85,9 +103,14 @@ export async function verifyPublicSandboxIngress(): Promise<void> {
           // this rejection. A pre-open close is an actionable routing/auth fail.
           if (opened) return;
           reject(
-            Object.assign(new Error("Sandbox WebSocket closed before authentication completed"), {
-              code: "INGRESS_WEBSOCKET_FAILED",
-            }),
+            Object.assign(
+              new Error(
+                "Sandbox WebSocket closed before authentication completed",
+              ),
+              {
+                code: "INGRESS_WEBSOCKET_FAILED",
+              },
+            ),
           );
         };
       }),

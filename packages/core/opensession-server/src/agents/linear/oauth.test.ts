@@ -33,7 +33,9 @@ describe("Linear OAuth state binding", () => {
 
     const response = await handleCallback(
       new Request("https://example.test/oauth/callback"),
-      new URL("https://example.test/oauth/callback?code=attacker-code&state=wrong"),
+      new URL(
+        "https://example.test/oauth/callback?code=attacker-code&state=wrong",
+      ),
       {},
     );
 
@@ -55,8 +57,12 @@ describe("Linear OAuth state binding", () => {
     }) as unknown as typeof fetch;
 
     const response = await handleCallback(
-      new Request("https://example.test/oauth/callback", { headers: { Cookie: cookie } }),
-      new URL(`https://example.test/oauth/callback?code=expired-code&state=${state}`),
+      new Request("https://example.test/oauth/callback", {
+        headers: { Cookie: cookie },
+      }),
+      new URL(
+        `https://example.test/oauth/callback?code=expired-code&state=${state}`,
+      ),
       {},
     );
 

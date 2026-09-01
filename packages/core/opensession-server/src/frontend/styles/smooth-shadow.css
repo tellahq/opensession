@@ -38,7 +38,7 @@
  */
 
 :root {
-	/*
+  /*
 	 * Upstream uses translucent black/white. That works on a plain page, but an
 	 * outer ring composites against a modal scrim and becomes a different edge.
 	 * Resolve the color against the app background up front so menus and dialogs
@@ -46,12 +46,12 @@
 	 * needs 14% light ink to clear the raised surface; light uses the upstream
 	 * demo's quieter 5% dark edge.
 	 */
-	--smooth-ring-color: color-mix(in srgb, var(--text) 14%, var(--bg));
-	--smooth-ring-width: theme(--default-ring-width, 1px);
+  --smooth-ring-color: color-mix(in srgb, var(--text) 14%, var(--bg));
+  --smooth-ring-width: theme(--default-ring-width, 1px);
 }
 
 html[data-theme="light"] {
-	--smooth-ring-color: color-mix(in srgb, var(--text) 5%, var(--bg));
+  --smooth-ring-color: color-mix(in srgb, var(--text) 5%, var(--bg));
 }
 
 /* Cast-only tiers for surfaces that already carry a meaningful border. */
@@ -64,81 +64,81 @@ html[data-theme="light"] {
  * than a lift. This keeps the same two-layer shape, pulled in tight.
  */
 @utility smooth-shadow-xs {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 1px 2px -1px
-		color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 2px 5px -3px
-		color-mix(in srgb, var(--smooth-shadow-color) 7%, transparent);
+  --smooth-shadow-color: var(--tw-shadow-color, black);
+  box-shadow:
+    0 1px 2px -1px
+      color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
+    0 2px 5px -3px
+      color-mix(in srgb, var(--smooth-shadow-color) 7%, transparent);
 }
 
 @utility smooth-shadow-sm {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 1px 3px -1px
-		color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent),
-		0 4px 10px -4px
-		color-mix(in srgb, var(--smooth-shadow-color) 9%, transparent);
+  --smooth-shadow-color: var(--tw-shadow-color, black);
+  box-shadow:
+    0 1px 3px -1px
+      color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent),
+    0 4px 10px -4px
+      color-mix(in srgb, var(--smooth-shadow-color) 9%, transparent);
 }
 
 @utility smooth-shadow-ring-sm {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 1px 3px -1px
-		color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent),
-		0 4px 10px -4px
-		color-mix(in srgb, var(--smooth-shadow-color) 9%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px)
-		color-mix(in srgb, var(--smooth-ring-color) 80%, transparent);
+  --smooth-shadow-color: var(--tw-shadow-color, black);
+  box-shadow:
+    0 1px 3px -1px
+      color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent),
+    0 4px 10px -4px
+      color-mix(in srgb, var(--smooth-shadow-color) 9%, transparent),
+    0 0 0 var(--smooth-ring-width, 1px)
+      color-mix(in srgb, var(--smooth-ring-color) 80%, transparent);
 }
 
 @utility smooth-shadow-md {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 2px 6px -2px
-		color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 10px 28px -8px
-		color-mix(in srgb, var(--smooth-shadow-color) 10%, transparent);
+  --smooth-shadow-color: var(--tw-shadow-color, black);
+  box-shadow:
+    0 2px 6px -2px
+      color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
+    0 10px 28px -8px
+      color-mix(in srgb, var(--smooth-shadow-color) 10%, transparent);
 }
 
 @utility smooth-shadow-ring-md {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 2px 6px -2px
-		color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 10px 28px -8px
-		color-mix(in srgb, var(--smooth-shadow-color) 10%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px)
-		color-mix(in srgb, var(--smooth-ring-color) 65%, transparent);
+  --smooth-shadow-color: var(--tw-shadow-color, black);
+  box-shadow:
+    0 2px 6px -2px
+      color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
+    0 10px 28px -8px
+      color-mix(in srgb, var(--smooth-shadow-color) 10%, transparent),
+    0 0 0 var(--smooth-ring-width, 1px)
+      color-mix(in srgb, var(--smooth-ring-color) 65%, transparent);
 }
 
 @utility smooth-shadow-lg {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 4px 12px -4px
-		color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 18px 48px -14px
-		color-mix(in srgb, var(--smooth-shadow-color) 11%, transparent);
+  --smooth-shadow-color: var(--tw-shadow-color, black);
+  box-shadow:
+    0 4px 12px -4px
+      color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
+    0 18px 48px -14px
+      color-mix(in srgb, var(--smooth-shadow-color) 11%, transparent);
 }
 
 @utility smooth-shadow-ring-lg {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 4px 12px -4px
-		color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 18px 48px -14px
-		color-mix(in srgb, var(--smooth-shadow-color) 11%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px)
-		color-mix(in srgb, var(--smooth-ring-color) 50%, transparent);
+  --smooth-shadow-color: var(--tw-shadow-color, black);
+  box-shadow:
+    0 4px 12px -4px
+      color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
+    0 18px 48px -14px
+      color-mix(in srgb, var(--smooth-shadow-color) 11%, transparent),
+    0 0 0 var(--smooth-ring-width, 1px)
+      color-mix(in srgb, var(--smooth-ring-color) 50%, transparent);
 }
 
 @utility smooth-shadow-soft {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 3px 10px -3px
-		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 20px 56px -16px
-		color-mix(in srgb, var(--smooth-shadow-color) 12%, transparent);
+  --smooth-shadow-color: var(--tw-shadow-color, black);
+  box-shadow:
+    0 3px 10px -3px
+      color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
+    0 20px 56px -16px
+      color-mix(in srgb, var(--smooth-shadow-color) 12%, transparent);
 }
 
 /*
@@ -151,20 +151,20 @@ html[data-theme="light"] {
  * you see and the shadow only says how far above the page it is.
  */
 @utility smooth-shadow-ring-soft {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 3px 10px -3px
-		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 20px 56px -16px
-		color-mix(in srgb, var(--smooth-shadow-color) 12%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px)
-		color-mix(in srgb, var(--smooth-ring-color) 35%, transparent);
+  --smooth-shadow-color: var(--tw-shadow-color, black);
+  box-shadow:
+    0 3px 10px -3px
+      color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
+    0 20px 56px -16px
+      color-mix(in srgb, var(--smooth-shadow-color) 12%, transparent),
+    0 0 0 var(--smooth-ring-width, 1px)
+      color-mix(in srgb, var(--smooth-ring-color) 35%, transparent);
 }
 
 /* Forced colors removes box-shadows, so restore the floating surface's edge. */
 @media (forced-colors: active) {
-	[class*="smooth-shadow-ring"] {
-		outline: var(--smooth-ring-width, 1px) solid CanvasText;
-		outline-offset: calc(-1 * var(--smooth-ring-width, 1px));
-	}
+  [class*="smooth-shadow-ring"] {
+    outline: var(--smooth-ring-width, 1px) solid CanvasText;
+    outline-offset: calc(-1 * var(--smooth-ring-width, 1px));
+  }
 }

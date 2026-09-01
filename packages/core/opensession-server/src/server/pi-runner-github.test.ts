@@ -45,7 +45,12 @@ describe("recovered GitHub code-run credentials", () => {
         users,
         JSON.stringify({
           users: {
-            alice: { login: "alice", token: "human-token", source: "device", connectedAt: new Date().toISOString() },
+            alice: {
+              login: "alice",
+              token: "human-token",
+              source: "device",
+              connectedAt: new Date().toISOString(),
+            },
           },
         }),
       );
@@ -66,7 +71,10 @@ describe("recovered GitHub code-run credentials", () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-projected-github-"));
     try {
       const auth = join(dir, "github-auth.json");
-      writeFileSync(auth, JSON.stringify({ GH_TOKEN: "projected-service-token" }));
+      writeFileSync(
+        auth,
+        JSON.stringify({ GH_TOKEN: "projected-service-token" }),
+      );
       process.env[GITHUB_RUN_AUTH_FILE_ENV] = auth;
 
       const env = await githubCodeRunEnv("/remote/unregistered/repo");

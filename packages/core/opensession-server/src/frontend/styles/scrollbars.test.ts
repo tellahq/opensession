@@ -51,7 +51,9 @@ describe("scrollbar policy", () => {
       for (const match of text.matchAll(
         /::-webkit-scrollbar(?:-[a-z]+)?[^{]*\{([^}]*)\}/g,
       )) {
-        if (/(?:^|;|\s)(?:width|height|min-width|min-height)\s*:/.test(match[1]))
+        if (
+          /(?:^|;|\s)(?:width|height|min-width|min-height)\s*:/.test(match[1])
+        )
           offenders.push(`${path}: ${match[0].replace(/\s+/g, " ").trim()}`);
       }
     }

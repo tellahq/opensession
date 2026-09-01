@@ -61,14 +61,14 @@ there is no per-session ACL narrower than that team boundary yet.
 Interactive agents receive the `opensession-sessions` tools. Together they
 cover the full worker lifecycle:
 
-| Capability | Tool |
-| --- | --- |
-| Discover and inspect sessions | `list_sessions`, `get_session` |
-| Start a peer or worker | `create_session`, `spawn_task` |
-| Send or steer work | `send_to_session` |
-| Answer a blocked worker | `answer_session_question` |
-| Poll and stop delegated work | `task_status`, `cancel_task`, `cancel_session` |
-| Transfer an artifact | `send_file_to_session` |
+| Capability                    | Tool                                           |
+| ----------------------------- | ---------------------------------------------- |
+| Discover and inspect sessions | `list_sessions`, `get_session`                 |
+| Start a peer or worker        | `create_session`, `spawn_task`                 |
+| Send or steer work            | `send_to_session`                              |
+| Answer a blocked worker       | `answer_session_question`                      |
+| Poll and stop delegated work  | `task_status`, `cancel_task`, `cancel_session` |
+| Transfer an artifact          | `send_file_to_session`                         |
 
 `send_to_session` steers a live run when possible and otherwise queues a new
 turn, so a message is not lost at a run boundary. Queued and just-steered

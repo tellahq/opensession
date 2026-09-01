@@ -26,9 +26,8 @@ process.env.OPENSESSION_STATE_DIR = scratch;
 process.env.OPENSESSION_CONFIG = configPath;
 
 const { createWorkspace, getWorkspace } = await import("./workspaces");
-const { resolvePrWorkspace, workspaceBacksOpenPr } = await import(
-  "./workspace-resolve"
-);
+const { resolvePrWorkspace, workspaceBacksOpenPr } =
+  await import("./workspace-resolve");
 
 beforeEach(() => {
   process.env.OPENSESSION_STATE_DIR = scratch;

@@ -8,6 +8,9 @@ After=network.target
 Before=opensession.service
 
 [Service]
+# Actor reductions stay latency-sensitive even while agent commands saturate
+# the host.
+Slice=opensession-control.slice
 Environment="PATH=/home/ubuntu/.bun/bin:/usr/local/bin:/usr/bin:/bin"
 Type=simple
 User=ubuntu

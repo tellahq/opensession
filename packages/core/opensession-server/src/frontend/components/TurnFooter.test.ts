@@ -129,7 +129,9 @@ test("a tool that only reports a path carries no hunks", () => {
 });
 
 test("a bash call touches nothing", () => {
-  expect(touchedFilesFromTool(edit("h", "Bash", { command: "ls" }))).toEqual([]);
+  expect(touchedFilesFromTool(edit("h", "Bash", { command: "ls" }))).toEqual(
+    [],
+  );
 });
 
 function answer(id: string): TranscriptEntry {

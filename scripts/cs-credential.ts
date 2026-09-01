@@ -29,14 +29,26 @@ for (const line of (await Bun.stdin.text()).split("\n")) {
 }
 
 const host = attrs.host || "";
-const org = host.endsWith(".code.storage") ? host.slice(0, -".code.storage".length) : "";
+const org = host.endsWith(".code.storage")
+  ? host.slice(0, -".code.storage".length)
+  : "";
 // Strips "/", ".git", and a "+ephemeral" ref-namespace suffix — ephemeral
 // remotes (…/<repoId>+ephemeral.git) authenticate as the base repo.
 const repoId = csRepoClaimFromPath(attrs.path || "");
 
-if (attrs.protocol !== "https" || !org || org.includes(".") || !repoId || !codeStorageConfig()) {
+if (
+  attrs.protocol !== "https" ||
+  !org ||
+  org.includes(".") ||
+  !repoId ||
+  !codeStorageConfig()
+) {
   process.exit(0);
 }
 
-const jwt = await mintCsJwt({ org, repo: repoId, scopes: ["git:read", "git:write"] });
+const jwt = await mintCsJwt({
+  org,
+  repo: repoId,
+  scopes: ["git:read", "git:write"],
+});
 process.stdout.write(`username=t\npassword=${jwt}\n`);

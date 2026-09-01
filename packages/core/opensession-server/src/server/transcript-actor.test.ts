@@ -20,7 +20,8 @@ import {
 
 const roots: string[] = [];
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
 
 function fixture() {
@@ -32,116 +33,145 @@ function fixture() {
     op: "append" as const,
     sessionId,
     requestId: "append-one",
-    entries: [{
-      id: "entry-one",
-      type: "assistant" as const,
-      timestamp: "2026-01-01T00:00:00.000Z",
-      content: "committed",
-    }],
+    entries: [
+      {
+        id: "entry-one",
+        type: "assistant" as const,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        content: "committed",
+      },
+    ],
   };
   return { path, sessionId, request };
 }
 
 describe("actor transcript request bounds", () => {
   test("accepts boundary reads and rejects oversized entries and options", () => {
-    expect(() => assertTranscriptActorRequest({
-      op: "tail",
-      sessionId: "bounded",
-      limit: TRANSCRIPT_ACTOR_MAX_READ_LIMIT,
-    })).not.toThrow();
-    expect(() => assertTranscriptActorRequest({
-      op: "tail",
-      sessionId: "bounded",
-      limit: TRANSCRIPT_ACTOR_MAX_READ_LIMIT + 1,
-    })).toThrow("read limit");
-    expect(() => assertTranscriptActorRequest({
-      op: "range",
-      sessionId: "bounded",
-      fromSeq: 1,
-      toSeq: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
-      limit: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
-    })).not.toThrow();
-    expect(() => assertTranscriptActorRequest({
-      op: "range",
-      sessionId: "bounded",
-      fromSeq: 1,
-      toSeq: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT + 1,
-      limit: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT + 1,
-    })).toThrow("read limit");
-    expect(() => assertTranscriptActorRequest({
-      op: "append",
-      sessionId: "bounded",
-      requestId: "too-many",
-      entries: Array.from({ length: TRANSCRIPT_ACTOR_MAX_ENTRIES + 1 }, (_, index) => ({
-        id: String(index),
-        type: "user" as const,
-        timestamp: "2026-01-01T00:00:00.000Z",
-        content: "x",
-      })),
-    })).toThrow("too many entries");
-    expect(() => assertTranscriptActorRequest({
-      op: "tail_window",
-      sessionId: "bounded",
-      options: {
-        minEntries: 1,
-        minMessages: 1,
-        maxEntries: TRANSCRIPT_ACTOR_MAX_READ_LIMIT + 1,
-        maxEstimatedBytes: 1_000,
-      },
-    })).toThrow("maxEntries");
-    expect(() => assertTranscriptActorRequest({
-      op: "tail_window",
-      sessionId: "bounded",
-      options: {
-        minEntries: 132,
-        minMessages: 4,
-        minUserMessagesWithToolWork: 1,
-        maxEntries: 1_400,
-        maxEstimatedBytes: 850_000,
-        weightProfile: "v2_snapshot",
-      },
-    })).not.toThrow();
-    expect(() => assertTranscriptActorRequest({
-      op: "tail_window",
-      sessionId: "bounded",
-      options: {
-        minEntries: 132,
-        minMessages: 4,
-        minUserMessagesWithToolWork: 1,
-        maxEntries: 1_401,
-        maxEstimatedBytes: 850_000,
-        weightProfile: "v2_snapshot",
-      },
-    })).toThrow("maxEntries");
-    expect(() => assertTranscriptActorRequest({
-      op: "tail_window",
-      sessionId: "bounded",
-      options: {
-        minEntries: 32,
-        minMessages: 24,
-        minUserMessagesWithToolWork: 4,
-        maxEntries: 512,
-        maxEstimatedBytes: 180_000,
-        weightProfile: "handoff",
-      },
-    })).not.toThrow();
-    expect(() => assertTranscriptActorRequest({
-      op: "tail_window",
-      sessionId: "bounded",
-      options: {
-        minEntries: 32,
-        minMessages: 24,
-        minUserMessagesWithToolWork: 4,
-        maxEntries: 513,
-        maxEstimatedBytes: 180_000,
-        weightProfile: "handoff",
-      },
-    })).toThrow("maxEntries");
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "tail",
+        sessionId: "bounded",
+        limit: TRANSCRIPT_ACTOR_MAX_READ_LIMIT,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "tail",
+        sessionId: "bounded",
+        limit: TRANSCRIPT_ACTOR_MAX_READ_LIMIT + 1,
+      }),
+    ).toThrow("read limit");
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "range",
+        sessionId: "bounded",
+        fromSeq: 1,
+        toSeq: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
+        limit: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "range",
+        sessionId: "bounded",
+        fromSeq: 1,
+        toSeq: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT + 1,
+        limit: TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT + 1,
+      }),
+    ).toThrow("read limit");
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "append",
+        sessionId: "bounded",
+        requestId: "too-many",
+        entries: Array.from(
+          { length: TRANSCRIPT_ACTOR_MAX_ENTRIES + 1 },
+          (_, index) => ({
+            id: String(index),
+            type: "user" as const,
+            timestamp: "2026-01-01T00:00:00.000Z",
+            content: "x",
+          }),
+        ),
+      }),
+    ).toThrow("too many entries");
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "tail_window",
+        sessionId: "bounded",
+        options: {
+          minEntries: 1,
+          minMessages: 1,
+          maxEntries: TRANSCRIPT_ACTOR_MAX_READ_LIMIT + 1,
+          maxEstimatedBytes: 1_000,
+        },
+      }),
+    ).toThrow("maxEntries");
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "tail_window",
+        sessionId: "bounded",
+        options: {
+          minEntries: 132,
+          minMessages: 4,
+          minUserMessagesWithToolWork: 1,
+          maxEntries: 1_400,
+          maxEstimatedBytes: 850_000,
+          weightProfile: "v2_snapshot",
+        },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "tail_window",
+        sessionId: "bounded",
+        options: {
+          minEntries: 132,
+          minMessages: 4,
+          minUserMessagesWithToolWork: 1,
+          maxEntries: 1_401,
+          maxEstimatedBytes: 850_000,
+          weightProfile: "v2_snapshot",
+        },
+      }),
+    ).toThrow("maxEntries");
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "tail_window",
+        sessionId: "bounded",
+        options: {
+          minEntries: 32,
+          minMessages: 24,
+          minUserMessagesWithToolWork: 4,
+          maxEntries: 512,
+          maxEstimatedBytes: 180_000,
+          weightProfile: "handoff",
+        },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "tail_window",
+        sessionId: "bounded",
+        options: {
+          minEntries: 32,
+          minMessages: 24,
+          minUserMessagesWithToolWork: 4,
+          maxEntries: 513,
+          maxEstimatedBytes: 180_000,
+          weightProfile: "handoff",
+        },
+      }),
+    ).toThrow("maxEntries");
   });
 
   test("persists and reads an entry larger than the former 16 MiB envelope", () => {
-    expect(TRANSCRIPT_ACTOR_MAX_REQUEST_BYTES).toBeGreaterThan(16 * 1024 * 1024);
-    expect(TRANSCRIPT_ACTOR_MAX_RESPONSE_BYTES).toBeGreaterThan(16 * 1024 * 1024);
+    expect(TRANSCRIPT_ACTOR_MAX_REQUEST_BYTES).toBeGreaterThan(
+      16 * 1024 * 1024,
+    );
+    expect(TRANSCRIPT_ACTOR_MAX_RESPONSE_BYTES).toBeGreaterThan(
+      16 * 1024 * 1024,
+    );
     const { path, sessionId } = fixture();
     const store = new TranscriptStore(path, { actorOwned: true });
     const content = "x".repeat(17 * 1024 * 1024);
@@ -149,12 +179,14 @@ describe("actor transcript request bounds", () => {
       op: "append" as const,
       sessionId,
       requestId: "large-accepted-entry",
-      entries: [{
-        id: "large-entry",
-        type: "user" as const,
-        timestamp: "2026-01-01T00:00:00.000Z",
-        content,
-      }],
+      entries: [
+        {
+          id: "large-entry",
+          type: "user" as const,
+          timestamp: "2026-01-01T00:00:00.000Z",
+          content,
+        },
+      ],
     };
     expect(() => assertTranscriptActorRequest(request)).not.toThrow();
     store.applyActorRequest(request);
@@ -178,7 +210,11 @@ describe("actor transcript request bounds", () => {
         timestamp: "2026-01-01T00:00:00.000Z",
         content: "x",
       }));
-    for (const [start, count] of [[0, 1_000], [1_000, 1_000], [2_000, 1]] as const)
+    for (const [start, count] of [
+      [0, 1_000],
+      [1_000, 1_000],
+      [2_000, 1],
+    ] as const)
       store.applyActorRequest({
         op: "append",
         sessionId,
@@ -203,16 +239,20 @@ describe("actor transcript request bounds", () => {
   });
 
   test("enforces canonical request strings and response bytes", () => {
-    expect(() => assertTranscriptActorRequest({
-      op: "full_entry",
-      sessionId: "bounded",
-      entryId: "x".repeat(8 * 1024 * 1024 + 1),
-    })).toThrow("entryId is invalid");
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "full_entry",
+        sessionId: "bounded",
+        entryId: "x".repeat(8 * 1024 * 1024 + 1),
+      }),
+    ).toThrow("entryId is invalid");
     expect(TRANSCRIPT_ACTOR_MAX_REQUEST_BYTES).toBe(80 * 1024 * 1024);
     expect(TRANSCRIPT_ACTOR_MAX_RESPONSE_BYTES).toBe(80 * 1024 * 1024);
-    expect(() => assertTranscriptActorResponse({
-      payload: Array.from({ length: 250_001 }, () => 0),
-    })).toThrow("too many scalar values");
+    expect(() =>
+      assertTranscriptActorResponse({
+        payload: Array.from({ length: 250_001 }, () => 0),
+      }),
+    ).toThrow("too many scalar values");
   });
 });
 
@@ -255,7 +295,9 @@ describe("actor transcript wake crash recovery", () => {
     });
     const previous = __setTranscriptStoreForTest(store);
     const events: TranscriptBusEvent[] = [];
-    const unsubscribe = subscribeTranscript(sessionId, (event) => events.push(event));
+    const unsubscribe = subscribeTranscript(sessionId, (event) =>
+      events.push(event),
+    );
     try {
       expect(await drainPendingTranscriptWakesForSessions([sessionId])).toBe(1);
       await Bun.sleep(0);
@@ -280,32 +322,40 @@ describe("actor transcript wake crash recovery", () => {
       const store = new TranscriptStore(path, { actorOwned: true });
       store.applyActorRequest(request);
       store.ackActorWake(sessionId, 1);
-      store.applyActorRequest(destructive === "replace" ? {
-        op: "replace",
-        sessionId,
-        requestId: `${destructive}-before-crash`,
-        entries: [],
-      } : {
-        op: "delete",
-        sessionId,
-        requestId: `${destructive}-before-crash`,
-      });
+      store.applyActorRequest(
+        destructive === "replace"
+          ? {
+              op: "replace",
+              sessionId,
+              requestId: `${destructive}-before-crash`,
+              entries: [],
+            }
+          : {
+              op: "delete",
+              sessionId,
+              requestId: `${destructive}-before-crash`,
+            },
+      );
       store.applyActorRequest({
         op: "append",
         sessionId,
         requestId: "append-after-crash",
-        entries: [{
-          id: "after",
-          type: "user",
-          timestamp: "2026-01-01T00:00:01.000Z",
-          content: "after reset",
-        }],
+        entries: [
+          {
+            id: "after",
+            type: "user",
+            timestamp: "2026-01-01T00:00:01.000Z",
+            content: "after reset",
+          },
+        ],
       });
       const pending = store.pendingActorWake(sessionId)!;
       expect(pending.resetEpoch).toBeGreaterThan(pending.ackedResetEpoch);
       const previous = __setTranscriptStoreForTest(store);
       const events: TranscriptBusEvent[] = [];
-      const unsubscribe = subscribeTranscript(sessionId, (event) => events.push(event));
+      const unsubscribe = subscribeTranscript(sessionId, (event) =>
+        events.push(event),
+      );
       try {
         await drainPendingTranscriptWakesForSessions([sessionId]);
         await Bun.sleep(0);
@@ -330,12 +380,14 @@ describe("actor transcript wake crash recovery", () => {
       op: "import",
       sessionId,
       requestId: "import:one:0",
-      entries: [{
-        id: "history",
-        type: "user",
-        timestamp: "2026-01-01T00:00:00.000Z",
-        content: "history",
-      }],
+      entries: [
+        {
+          id: "history",
+          type: "user",
+          timestamp: "2026-01-01T00:00:00.000Z",
+          content: "history",
+        },
+      ],
       src: "merged",
       watermark: 42,
       final: false,

@@ -10,15 +10,15 @@
  * support lanes': red, yellow, blue, then neutral.
  */
 const URGENCY_DOT: Record<string, string> = {
-	critical: "var(--red)",
-	high: "var(--yellow)",
-	medium: "var(--blue)",
-	low: "var(--text-faint)",
+  critical: "var(--red)",
+  high: "var(--yellow)",
+  medium: "var(--blue)",
+  low: "var(--text-faint)",
 };
 
 /** The dot's fill, as a colour for an inline `background-color`. */
 export function reportUrgencyDot(urgency?: string): string {
-	return URGENCY_DOT[urgency || ""] || "var(--text-faint)";
+  return URGENCY_DOT[urgency || ""] || "var(--text-faint)";
 }
 
 /**
@@ -28,5 +28,5 @@ export function reportUrgencyDot(urgency?: string): string {
  * row reads as just its title.
  */
 export function reportUrgencyLabel(urgency?: string): string | null {
-	return urgency ? `${urgency} urgency` : null;
+  return urgency ? `${urgency} urgency` : null;
 }

@@ -23,9 +23,9 @@ const plain: RunInputsSession = {
 
 describe("sessionMcpScopeSource", () => {
   test("an automation-owned session is scoped by its automation", () => {
-    expect(sessionMcpScopeSource({ ...plain, automation: "Plain ticket triage" })).toBe(
-      "automation",
-    );
+    expect(
+      sessionMcpScopeSource({ ...plain, automation: "Plain ticket triage" }),
+    ).toBe("automation");
   });
 
   test("the automation wins over a stamped session allowlist", () => {
@@ -39,7 +39,9 @@ describe("sessionMcpScopeSource", () => {
   });
 
   test("a stamped allowlist is used when there is no automation", () => {
-    expect(sessionMcpScopeSource({ ...plain, mcpServers: ["slack"] })).toBe("session");
+    expect(sessionMcpScopeSource({ ...plain, mcpServers: ["slack"] })).toBe(
+      "session",
+    );
   });
 
   test("an EMPTY stamped allowlist is not an allowlist", () => {
@@ -50,7 +52,10 @@ describe("sessionMcpScopeSource", () => {
 
   test("a feed-workspace session falls back to its feed's servers", () => {
     expect(
-      sessionMcpScopeSource({ ...plain, externalRefs: [{ kind: "tella-video", id: "v1" }] }),
+      sessionMcpScopeSource({
+        ...plain,
+        externalRefs: [{ kind: "tella-video", id: "v1" }],
+      }),
     ).toBe("feed");
   });
 
@@ -61,14 +66,18 @@ describe("sessionMcpScopeSource", () => {
 
 describe("sessionInProcessMcpBranch", () => {
   test("automation-owned sessions never get the interactive servers", () => {
-    expect(sessionInProcessMcpBranch({ ...plain, automation: "Health monitor" })).toBe(
-      "automation-self-improve",
-    );
+    expect(
+      sessionInProcessMcpBranch({ ...plain, automation: "Health monitor" }),
+    ).toBe("automation-self-improve");
   });
 
   test("an automation-owned GOAL session still stays on the automation branch", () => {
     expect(
-      sessionInProcessMcpBranch({ ...plain, automation: "Health monitor", goalId: "g1" }),
+      sessionInProcessMcpBranch({
+        ...plain,
+        automation: "Health monitor",
+        goalId: "g1",
+      }),
     ).toBe("automation-self-improve");
   });
 
@@ -118,6 +127,33 @@ describe("resolveSessionRunInputs", () => {
     // No memory / repos / personal-prompt note for an automation run.
     expect(inputs.sessionNote).toBe(false);
     expect(inputs.inProcessMcpBranch).toBe("automation-self-improve");
+  });
+
+  test("an automation descendant keeps immutable empty scope on resume", async () => {
+    const inputs = await resolveSessionRunInputs(
+      {
+        ...plain,
+        automation: undefined,
+        mcpServers: ["dangerous-later-config"],
+        automationDescendantPolicy: {
+          automationId: "auto-1",
+          automationName: "Renderer swarm",
+          mcpServers: [],
+          repo: "renderer",
+          publicationRepo: "tellahq/renderer",
+          baseBranch: "main",
+          allowedRunners: [],
+          publication: "branch-pr-only",
+        },
+      },
+      { user: "Kent" },
+    );
+    expect(inputs.isAutomationSession).toBe(true);
+    expect(inputs.mcpServers).toEqual([]);
+    expect(inputs.mcpServersSource).toBe("automation");
+    expect(inputs.deniedTools).toBeDefined();
+    expect(inputs.user).toBeUndefined();
+    expect(inputs.sessionNote).toBe(false);
   });
 
   test("an allowlist that resolves to nothing reports itself as unscoped", async () => {

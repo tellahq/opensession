@@ -1,11 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { pathToFileURL } from "url";
@@ -28,9 +22,9 @@ describe("normalizeRepoOrigin", () => {
     expect(normalizeRepoOrigin("git@gitlab.com:acme/widget.git")).toBe(
       "gitlab.com/acme/widget",
     );
-    expect(normalizeRepoOrigin("https://token@gitlab.com/acme/widget.git")).toBe(
-      "gitlab.com/acme/widget",
-    );
+    expect(
+      normalizeRepoOrigin("https://token@gitlab.com/acme/widget.git"),
+    ).toBe("gitlab.com/acme/widget");
   });
 
   test("normalizes local paths, file URLs, and resolvable symlinks", () => {
@@ -55,6 +49,24 @@ describe("normalizeRepoOrigin", () => {
 });
 
 describe("inspectRepo", () => {
+  test("accepts an empty repository using its unborn local branch", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-empty-repo-"));
+    try {
+      const remote = join(dir, "remote.git");
+      const checkout = join(dir, "checkout");
+      git("init", "-q", "--bare", "-b", "main", remote);
+      git("init", "-q", "-b", "main", checkout);
+      git("-C", checkout, "remote", "add", "origin", remote);
+
+      expect(await inspectRepo(checkout)).toMatchObject({
+        path: checkout,
+        defaultBranch: "main",
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("uses the remote HEAD when the local origin/HEAD is stale", async () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-repo-inspection-"));
     try {
@@ -65,14 +77,26 @@ describe("inspectRepo", () => {
       writeFileSync(join(source, "README.md"), "test\n");
       git("-C", source, "add", "README.md");
       git(
-        "-C", source,
-        "-c", "user.name=Test",
-        "-c", "user.email=test@example.com",
-        "commit", "-q", "-m", "initial",
+        "-C",
+        source,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-q",
+        "-m",
+        "initial",
       );
       git("clone", "-q", "--bare", source, remote);
       git("clone", "-q", remote, checkout);
-      git("-C", checkout, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+      git(
+        "-C",
+        checkout,
+        "symbolic-ref",
+        "refs/remotes/origin/HEAD",
+        "refs/remotes/origin/main",
+      );
 
       expect((await inspectRepo(checkout)).defaultBranch).toBe("master");
     } finally {
@@ -91,10 +115,16 @@ describe("repoHasBranch", () => {
       writeFileSync(join(source, "README.md"), "test\n");
       git("-C", source, "add", "README.md");
       git(
-        "-C", source,
-        "-c", "user.name=Test",
-        "-c", "user.email=test@example.com",
-        "commit", "-q", "-m", "initial",
+        "-C",
+        source,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-q",
+        "-m",
+        "initial",
       );
       git("-C", source, "branch", "local-only");
       git("init", "-q", "--bare", remote);

@@ -20,14 +20,18 @@ function definitionOf(tool: BoundTool): ToolDefinition<any, any, any> {
     // Runtime tools are never exposed directly to Pi. Keeping execute here
     // preserves the diagnostic `tools` contract and exact call semantics.
     execute: (toolCallId, params, signal) =>
-      tool.runtime.callExact(tool.id, (params ?? {}) as Record<string, unknown>, {
-        toolCallId,
-        signal,
-      }).then(({ content }) => ({ content, details: undefined })),
+      tool.runtime
+        .callExact(tool.id, (params ?? {}) as Record<string, unknown>, {
+          toolCallId,
+          signal,
+        })
+        .then(({ content }) => ({ content, details: undefined })),
   };
 }
 
-export async function createPiMcpBridge(runtime: McpRuntime): Promise<PiMcpBridge> {
+export async function createPiMcpBridge(
+  runtime: McpRuntime,
+): Promise<PiMcpBridge> {
   const tools: ToolDefinition<any, any, any>[] = [];
   const byName = new Map<string, ToolDefinition<any, any, any>>();
   const seen = new Set<string>();
@@ -42,7 +46,8 @@ export async function createPiMcpBridge(runtime: McpRuntime): Promise<PiMcpBridg
   };
   await syncCatalog(false);
 
-  const describedWeight = (length: number) => Math.min(1, 400 / Math.max(length, 400));
+  const describedWeight = (length: number) =>
+    Math.min(1, 400 / Math.max(length, 400));
   const searchCatalog: ToolDefinition<any, any, any> = {
     name: "mcp_search",
     label: "Search MCP tools",
@@ -53,12 +58,17 @@ export async function createPiMcpBridge(runtime: McpRuntime): Promise<PiMcpBridg
       type: "object",
       properties: {
         query: { type: "string", description: "What capability you need" },
-        limit: { type: "number", description: "Maximum matches to return, 1 to 12 (default 6)" },
+        limit: {
+          type: "number",
+          description: "Maximum matches to return, 1 to 12 (default 6)",
+        },
       },
       required: ["query"],
     } as any,
     async execute(_toolCallId, params) {
-      const query = String((params as { query?: unknown })?.query ?? "").trim().toLowerCase();
+      const query = String((params as { query?: unknown })?.query ?? "")
+        .trim()
+        .toLowerCase();
       if (!query) throw new Error("mcp_search requires a query");
       await syncCatalog(true);
       const requested = Number((params as { limit?: unknown })?.limit);
@@ -82,22 +92,27 @@ export async function createPiMcpBridge(runtime: McpRuntime): Promise<PiMcpBridg
             else if (entry.label.includes(term)) score += 5;
             else if (entry.description.includes(term)) score += 3 * weight;
           }
-          if (compact && entry.name.replace(/[_-]/g, "").includes(compact)) score += 15;
+          if (compact && entry.name.replace(/[_-]/g, "").includes(compact))
+            score += 15;
           return { entry, score };
         })
         .filter(({ score }) => score > 0)
-        .sort((a, b) =>
-          b.score - a.score ||
-          a.entry.description.length - b.entry.description.length ||
-          a.entry.name.localeCompare(b.entry.name))
+        .sort(
+          (a, b) =>
+            b.score - a.score ||
+            a.entry.description.length - b.entry.description.length ||
+            a.entry.name.localeCompare(b.entry.name),
+        )
         .slice(0, limit);
-      const brief = (text: string) => text.length > 700
-        ? `${text.slice(0, 700)}… [truncated]`
-        : text;
+      const brief = (text: string) =>
+        text.length > 700 ? `${text.slice(0, 700)}… [truncated]` : text;
       const text = matches.length
-        ? matches.map(({ entry }) =>
-            `${entry.definition.name}: ${brief(entry.definition.description || "")}\narguments: ${JSON.stringify(entry.definition.parameters)}`)
-          .join("\n\n")
+        ? matches
+            .map(
+              ({ entry }) =>
+                `${entry.definition.name}: ${brief(entry.definition.description || "")}\narguments: ${JSON.stringify(entry.definition.parameters)}`,
+            )
+            .join("\n\n")
         : `No permitted MCP tools matched "${query}". Try broader capability words.`;
       return { content: [{ type: "text", text }], details: undefined };
     },
@@ -111,7 +126,10 @@ export async function createPiMcpBridge(runtime: McpRuntime): Promise<PiMcpBridg
     parameters: {
       type: "object",
       properties: {
-        name: { type: "string", description: "Exact tool name returned by mcp_search" },
+        name: {
+          type: "string",
+          description: "Exact tool name returned by mcp_search",
+        },
         arguments: { type: "object", description: "Arguments for that tool" },
       },
       required: ["name", "arguments"],
@@ -119,7 +137,10 @@ export async function createPiMcpBridge(runtime: McpRuntime): Promise<PiMcpBridg
     async execute(toolCallId, params, signal, onUpdate, ctx) {
       const name = String((params as { name?: unknown })?.name ?? "");
       const definition = byName.get(name);
-      if (!definition) throw new Error(`MCP tool "${name}" is unavailable. Search the catalog first.`);
+      if (!definition)
+        throw new Error(
+          `MCP tool "${name}" is unavailable. Search the catalog first.`,
+        );
       const args = (params as { arguments?: unknown })?.arguments;
       if (!args || typeof args !== "object" || Array.isArray(args)) {
         throw new Error("mcp_call arguments must be an object");

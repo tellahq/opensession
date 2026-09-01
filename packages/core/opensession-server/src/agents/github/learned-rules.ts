@@ -74,7 +74,13 @@ These are advisory tuning, not new hard rules: "calibration" entries tell you wh
 
 /** A record carries signal once a reader outcome landed on it. */
 function hasSignal(r: FeedbackRecord): boolean {
-  return !!(r.outcome || r.falseNegative || r.replySignal || (r.plus || 0) > 0 || (r.minus || 0) > 0);
+  return !!(
+    r.outcome ||
+    r.falseNegative ||
+    r.replySignal ||
+    (r.plus || 0) > 0 ||
+    (r.minus || 0) > 0
+  );
 }
 
 function clip(text: string, cap: number): string {
@@ -87,9 +93,13 @@ function buildDistillPrompt(
   records: FeedbackRecord[],
   current: LearnedRulesFile | null,
 ): string {
-  const negatives = records.filter((r) => !r.falseNegative && isNegativeSignal(r)).slice(-30);
+  const negatives = records
+    .filter((r) => !r.falseNegative && isNegativeSignal(r))
+    .slice(-30);
   const missed = records.filter((r) => r.falseNegative).slice(-15);
-  const positives = records.filter((r) => !r.falseNegative && isPositiveSignal(r)).slice(-25);
+  const positives = records
+    .filter((r) => !r.falseNegative && isPositiveSignal(r))
+    .slice(-25);
 
   const fmt = (r: FeedbackRecord) =>
     `- [${r.severity || "?"}] ${clip(`${r.title}: ${r.text}`, 220)}${r.replySignal === "dismissive" ? " (author explicitly pushed back)" : ""}`;
@@ -121,7 +131,10 @@ Output ONLY a JSON object, no prose: {"rules": [{"text": "...", "kind": "calibra
 }
 
 /** Re-distill one repo's rules if enough new signal accumulated. */
-export async function distillLearnedRules(ghRepo?: string, force = false): Promise<boolean> {
+export async function distillLearnedRules(
+  ghRepo?: string,
+  force = false,
+): Promise<boolean> {
   const records = readFeedback(ghRepo);
   const signalCount = records.filter(hasSignal).length;
   const current = readLearnedRules(ghRepo);
@@ -139,17 +152,27 @@ export async function distillLearnedRules(ghRepo?: string, force = false): Promi
     const end = text.lastIndexOf("}");
     parsed = JSON.parse(text.slice(start, end + 1));
   } catch {
-    console.warn(`[github] rules distill for ${repoFull}: unparseable model output — keeping previous rules`);
+    console.warn(
+      `[github] rules distill for ${repoFull}: unparseable model output — keeping previous rules`,
+    );
     return false;
   }
   const rules = validateDistilledRules(parsed);
   if (!rules) {
-    console.warn(`[github] rules distill for ${repoFull}: invalid shape — keeping previous rules`);
+    console.warn(
+      `[github] rules distill for ${repoFull}: invalid shape — keeping previous rules`,
+    );
     return false;
   }
-  const file: LearnedRulesFile = { updatedAt: new Date().toISOString(), signalCount, rules };
+  const file: LearnedRulesFile = {
+    updatedAt: new Date().toISOString(),
+    signalCount,
+    rules,
+  };
   writeJsonAtomic(rulesPath(ghRepo), file);
-  console.log(`[github] distilled ${rules.length} learned review rule(s) for ${repoFull} (${signalCount} signals)`);
+  console.log(
+    `[github] distilled ${rules.length} learned review rule(s) for ${repoFull} (${signalCount} signals)`,
+  );
   audit({
     msg: "review_rules_distilled",
     repo: repoFull,
@@ -162,7 +185,10 @@ export async function distillLearnedRules(ghRepo?: string, force = false): Promi
 async function distillSweep(): Promise<void> {
   const targets: Array<string | undefined> = [undefined];
   for (const repo of Object.values(configuredRepos())) {
-    if (repo.ghRepo && repo.ghRepo.toLowerCase() !== defaultRepo().ghRepo.toLowerCase()) {
+    if (
+      repo.ghRepo &&
+      repo.ghRepo.toLowerCase() !== defaultRepo().ghRepo.toLowerCase()
+    ) {
       targets.push(repo.ghRepo);
     }
   }
@@ -170,7 +196,10 @@ async function distillSweep(): Promise<void> {
     try {
       await distillLearnedRules(target);
     } catch (e) {
-      console.warn(`[github] rules distill failed for ${target || "default repo"}:`, e);
+      console.warn(
+        `[github] rules distill failed for ${target || "default repo"}:`,
+        e,
+      );
     }
   }
 }

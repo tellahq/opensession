@@ -107,7 +107,11 @@
  */
 
 import { mkdirSync } from "fs";
-import { query, createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import {
+  query,
+  createSdkMcpServer,
+  tool,
+} from "@anthropic-ai/claude-agent-sdk";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { stateDir } from "./paths";
 import { audit, summarizeText } from "./audit";
@@ -146,7 +150,10 @@ const g = globalThis as any;
 
 const ACCOUNT_NOTICE_PROBE_CHARS = 64;
 
-function isClaudeAccountUnavailable(message: string, isErrorResult: boolean): boolean {
+function isClaudeAccountUnavailable(
+  message: string,
+  isErrorResult: boolean,
+): boolean {
   return (
     isClaudeUsageLimitError(message, isErrorResult) ||
     isClaudeSubscriptionError(message)
@@ -164,7 +171,9 @@ export function shouldDeferClaudeText(text: string): boolean {
 // ── Types (derived from the SDK so pi-ai never becomes a value import) ───────
 
 /** The pi-ai Provider shape registerNativeProvider accepts. */
-export type PiNativeProvider = Parameters<ModelRuntime["registerNativeProvider"]>[0];
+export type PiNativeProvider = Parameters<
+  ModelRuntime["registerNativeProvider"]
+>[0];
 /** The pi-ai Model shape the runtime resolves and streams with. */
 export type PiCatalogModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
 
@@ -202,7 +211,13 @@ interface PiUsageShape {
   cacheRead: number;
   cacheWrite: number;
   totalTokens: number;
-  cost: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
+  cost: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
 }
 
 interface PiAssistantMessageShape {
@@ -219,12 +234,39 @@ interface PiAssistantMessageShape {
 
 type PiStreamEvent =
   | { type: "start"; partial: PiAssistantMessageShape }
-  | { type: "text_start" | "thinking_start" | "toolcall_start"; contentIndex: number; partial: PiAssistantMessageShape }
-  | { type: "text_delta" | "thinking_delta" | "toolcall_delta"; contentIndex: number; delta: string; partial: PiAssistantMessageShape }
-  | { type: "text_end" | "thinking_end"; contentIndex: number; content: string; partial: PiAssistantMessageShape }
-  | { type: "toolcall_end"; contentIndex: number; toolCall: Record<string, any>; partial: PiAssistantMessageShape }
-  | { type: "done"; reason: "stop" | "length" | "toolUse"; message: PiAssistantMessageShape }
-  | { type: "error"; reason: "aborted" | "error"; error: PiAssistantMessageShape };
+  | {
+      type: "text_start" | "thinking_start" | "toolcall_start";
+      contentIndex: number;
+      partial: PiAssistantMessageShape;
+    }
+  | {
+      type: "text_delta" | "thinking_delta" | "toolcall_delta";
+      contentIndex: number;
+      delta: string;
+      partial: PiAssistantMessageShape;
+    }
+  | {
+      type: "text_end" | "thinking_end";
+      contentIndex: number;
+      content: string;
+      partial: PiAssistantMessageShape;
+    }
+  | {
+      type: "toolcall_end";
+      contentIndex: number;
+      toolCall: Record<string, any>;
+      partial: PiAssistantMessageShape;
+    }
+  | {
+      type: "done";
+      reason: "stop" | "length" | "toolUse";
+      message: PiAssistantMessageShape;
+    }
+  | {
+      type: "error";
+      reason: "aborted" | "error";
+      error: PiAssistantMessageShape;
+    };
 
 // ── Passthrough capture and durable checkpoint drain ─────────────────────────
 
@@ -255,12 +297,18 @@ const ANTHROPIC_IMAGE_MEDIA_TYPES = new Set([
  * pi's `{type:"image", data, mimeType}` → Anthropic's base64 image block, or
  * null when it is not an image this API can read. Exported for the tests.
  */
-export function piImageBlockToAnthropic(block: Record<string, any>): ContentBlock | null {
+export function piImageBlockToAnthropic(
+  block: Record<string, any>,
+): ContentBlock | null {
   if (!block || block.type !== "image") return null;
   if (typeof block.data !== "string" || !block.data) return null;
-  const mediaType = typeof block.mimeType === "string" ? block.mimeType.toLowerCase() : "";
+  const mediaType =
+    typeof block.mimeType === "string" ? block.mimeType.toLowerCase() : "";
   if (!ANTHROPIC_IMAGE_MEDIA_TYPES.has(mediaType)) return null;
-  return { type: "image", source: { type: "base64", media_type: mediaType, data: block.data } };
+  return {
+    type: "image",
+    source: { type: "base64", media_type: mediaType, data: block.data },
+  };
 }
 
 /**
@@ -274,7 +322,9 @@ export function piImageBlockToAnthropic(block: Record<string, any>): ContentBloc
  * answered as if the person had never attached a screenshot, with no error on
  * either side. Exported for the unit tests.
  */
-export function piMessagesToAnthropic(messages: readonly PiWireMessage[]): AnthropicMessage[] {
+export function piMessagesToAnthropic(
+  messages: readonly PiWireMessage[],
+): AnthropicMessage[] {
   const out: AnthropicMessage[] = [];
   for (const m of messages) {
     if (!m || typeof m !== "object") continue;
@@ -299,9 +349,15 @@ export function piMessagesToAnthropic(messages: readonly PiWireMessage[]): Anthr
       if (Array.isArray(m.content)) {
         for (const b of m.content) {
           if (!b || typeof b !== "object") continue;
-          if (b.type === "text" && b.text) blocks.push({ type: "text", text: b.text });
+          if (b.type === "text" && b.text)
+            blocks.push({ type: "text", text: b.text });
           else if (b.type === "toolCall" && b.id) {
-            blocks.push({ type: "tool_use", id: b.id, name: b.name, input: b.arguments ?? {} });
+            blocks.push({
+              type: "tool_use",
+              id: b.id,
+              name: b.name,
+              input: b.arguments ?? {},
+            });
           }
           // thinking: dropped — signatures cannot round-trip through flat replay.
         }
@@ -410,14 +466,16 @@ export function turnImages(messages: AnthropicMessage[]): ContentBlock[] {
     if (m.role !== "user" || !Array.isArray(m.content)) continue;
     for (const b of m.content) if (b?.type === "image") images.push(b);
   }
-  return images.length > MAX_TURN_IMAGES ? images.slice(-MAX_TURN_IMAGES) : images;
+  return images.length > MAX_TURN_IMAGES
+    ? images.slice(-MAX_TURN_IMAGES)
+    : images;
 }
 
 /** Merge an exact resumed tool-result delta into the one structured user
  *  message the SDK expects after resumeSessionAt. */
 export function resumedToolResults(
   messages: AnthropicMessage[],
-  expectedIds: readonly string[]
+  expectedIds: readonly string[],
 ): ContentBlock[] | null {
   const blocks: ContentBlock[] = [];
   for (const message of messages) {
@@ -437,7 +495,7 @@ export function resumedToolResults(
  *  counts full-replay into a fresh SDK session. */
 export function planSdkTurn(
   stored: PiSdkSessionState | undefined,
-  messages: AnthropicMessage[]
+  messages: AnthropicMessage[],
 ): PiSdkTurnPlan {
   if (stored && messages.length > stored.messageCount) {
     const delivered = messages.slice(stored.messageCount);
@@ -499,7 +557,7 @@ export function rememberSdkTurn(
   sdkSessionId: string,
   wireMessageCount: number,
   accountId: string,
-  checkpoint?: { assistantUuid: string; toolCallIds: string[] }
+  checkpoint?: { assistantUuid: string; toolCallIds: string[] },
 ): void {
   const store = piSdkSessionStore();
   store.set(key, {
@@ -515,8 +573,11 @@ export function rememberSdkTurn(
     lastUsedAt: Date.now(),
   });
   if (store.size <= MAX_PI_SDK_SESSIONS) return;
-  const byAge = [...store.entries()].sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt);
-  for (const [k] of byAge.slice(0, store.size - MAX_PI_SDK_SESSIONS)) store.delete(k);
+  const byAge = [...store.entries()].sort(
+    (a, b) => a[1].lastUsedAt - b[1].lastUsedAt,
+  );
+  for (const [k] of byAge.slice(0, store.size - MAX_PI_SDK_SESSIONS))
+    store.delete(k);
 }
 
 // ── Model catalog ────────────────────────────────────────────────────────────
@@ -531,7 +592,7 @@ export function rememberSdkTurn(
  */
 export function buildPiAnthropicModels(
   builtin: readonly PiCatalogModel[],
-  ensureModelId?: string
+  ensureModelId?: string,
 ): PiCatalogModel[] {
   const models = builtin.map((m) => ({ ...m }));
   if (ensureModelId && !models.some((m) => m.id === ensureModelId)) {
@@ -569,7 +630,7 @@ function zeroUsage(): PiUsageShape {
  *  no 1h-write split, so every cache write prices at the base write rate). */
 export function usageFromSdkResult(
   model: PiCatalogModel,
-  sdkUsage: Record<string, number | undefined> | null | undefined
+  sdkUsage: Record<string, number | undefined> | null | undefined,
 ): PiUsageShape {
   const u = sdkUsage || {};
   const usage = zeroUsage();
@@ -577,12 +638,21 @@ export function usageFromSdkResult(
   usage.output = u.output_tokens || 0;
   usage.cacheRead = u.cache_read_input_tokens || 0;
   usage.cacheWrite = u.cache_creation_input_tokens || 0;
-  usage.totalTokens = usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+  usage.totalTokens =
+    usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
   const inputTokens = usage.input + usage.cacheRead + usage.cacheWrite;
-  let rates: { input: number; output: number; cacheRead: number; cacheWrite: number } = model.cost;
+  let rates: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+  } = model.cost;
   let matchedThreshold = -1;
   for (const tier of model.cost.tiers ?? []) {
-    if (inputTokens > tier.inputTokensAbove && tier.inputTokensAbove > matchedThreshold) {
+    if (
+      inputTokens > tier.inputTokensAbove &&
+      tier.inputTokensAbove > matchedThreshold
+    ) {
       rates = tier;
       matchedThreshold = tier.inputTokensAbove;
     }
@@ -592,7 +662,10 @@ export function usageFromSdkResult(
   usage.cost.cacheRead = (rates.cacheRead / 1_000_000) * usage.cacheRead;
   usage.cost.cacheWrite = (rates.cacheWrite / 1_000_000) * usage.cacheWrite;
   usage.cost.total =
-    usage.cost.input + usage.cost.output + usage.cost.cacheRead + usage.cost.cacheWrite;
+    usage.cost.input +
+    usage.cost.output +
+    usage.cost.cacheRead +
+    usage.cost.cacheWrite;
   return usage;
 }
 
@@ -629,12 +702,20 @@ function claudeConfigDirFor(accountId: string): string {
  * runtime.registerNativeProvider under the builtin id "anthropic", replacing
  * the HTTP-bound builtin for this run's runtime only.
  */
-export function buildPiAnthropicProvider(opts: PiAnthropicProviderOpts): PiNativeProvider {
+export function buildPiAnthropicProvider(
+  opts: PiAnthropicProviderOpts,
+): PiNativeProvider {
   const designationError = bridgeDesignationError();
   if (designationError) throw new Error(designationError);
-  const models = buildPiAnthropicModels(opts.builtinModels || [], opts.ensureModelId);
-  const stream = (model: PiCatalogModel, context: PiStreamContext, options?: PiStreamCallOptions) =>
-    runSdkStream(opts, model, context, options);
+  const models = buildPiAnthropicModels(
+    opts.builtinModels || [],
+    opts.ensureModelId,
+  );
+  const stream = (
+    model: PiCatalogModel,
+    context: PiStreamContext,
+    options?: PiStreamCallOptions,
+  ) => runSdkStream(opts, model, context, options);
   const provider = {
     id: "anthropic",
     name: "Anthropic (in-process Claude Agent SDK)",
@@ -645,7 +726,10 @@ export function buildPiAnthropicProvider(opts: PiAnthropicProviderOpts): PiNativ
     auth: {
       apiKey: {
         name: "Open Session designated Claude accounts (in-process)",
-        resolve: async () => ({ auth: {}, source: "in-process claude-agent-sdk" }),
+        resolve: async () => ({
+          auth: {},
+          source: "in-process claude-agent-sdk",
+        }),
       },
     },
     getModels: () => models,
@@ -670,7 +754,7 @@ async function* runSdkStream(
   opts: PiAnthropicProviderOpts,
   model: PiCatalogModel,
   context: PiStreamContext,
-  options: PiStreamCallOptions | undefined
+  options: PiStreamCallOptions | undefined,
 ): AsyncGenerator<PiStreamEvent> {
   // Shared across attempts: a rotation replays the turn from scratch, so the
   // assistant message under construction is the one thing that must survive.
@@ -687,7 +771,10 @@ async function* runSdkStream(
   };
   yield { type: "start", partial };
 
-  const fail = (reason: "aborted" | "error", message: string): PiStreamEvent => ({
+  const fail = (
+    reason: "aborted" | "error",
+    message: string,
+  ): PiStreamEvent => ({
     type: "error",
     reason,
     error: {
@@ -704,7 +791,16 @@ async function* runSdkStream(
   const excluded = new Set<string>();
   for (;;) {
     const rotate = { retry: false };
-    yield* runSdkAttempt(opts, model, context, options, partial, fail, excluded, rotate);
+    yield* runSdkAttempt(
+      opts,
+      model,
+      context,
+      options,
+      partial,
+      fail,
+      excluded,
+      rotate,
+    );
     if (!rotate.retry) return;
   }
 }
@@ -720,7 +816,7 @@ async function* runSdkAttempt(
   partial: PiAssistantMessageShape,
   fail: (reason: "aborted" | "error", message: string) => PiStreamEvent,
   excluded: Set<string>,
-  rotate: { retry: boolean }
+  rotate: { retry: boolean },
 ): AsyncGenerator<PiStreamEvent> {
   const signal = options?.signal;
   const requestId = crypto.randomUUID();
@@ -786,7 +882,7 @@ async function* runSdkAttempt(
     const stored = piSdkSessionStore().get(storeKey);
     const plan = planSdkTurn(
       stored && stored.accountId === account.id ? stored : undefined,
-      wireMessages
+      wireMessages,
     );
     plannedContinuation = plan.continuation;
 
@@ -801,12 +897,13 @@ async function* runSdkAttempt(
     // ~1.6k tokens is a typical screenshot. The estimate only feeds our local
     // rolling cap, so rough is the right amount of precision here.
     const estTokens =
-      Math.ceil((plan.prompt.length + system.length) / 4) + plan.images.length * 1600;
+      Math.ceil((plan.prompt.length + system.length) / 4) +
+      plan.images.length * 1600;
     const rate = admitBridgeRequest(account.id, estTokens);
     if (!rate.allowed) {
       const rateErr = new Error(
         `pi-anthropic 429: account "${account.name}" exceeded ${rate.limit} requests/hour ` +
-          "(bridgeMaxRequestsPerHour)"
+          "(bridgeMaxRequestsPerHour)",
       );
       (rateErr as any).piLocalRateCap = true;
       throw rateErr;
@@ -821,13 +918,23 @@ async function* runSdkAttempt(
     });
 
     const passthroughTools = requestTools.map((t) =>
-      tool(t.name, t.description || t.name, jsonSchemaToZodShape(t.parameters), async () => ({
-        content: [{ type: "text" as const, text: "forwarded to client" }],
-      }))
+      tool(
+        t.name,
+        t.description || t.name,
+        jsonSchemaToZodShape(t.parameters),
+        async () => ({
+          content: [{ type: "text" as const, text: "forwarded to client" }],
+        }),
+      ),
     );
     const mcpServers =
       passthroughTools.length > 0
-        ? { [PASSTHROUGH_MCP]: createSdkMcpServer({ name: PASSTHROUGH_MCP, tools: passthroughTools }) }
+        ? {
+            [PASSTHROUGH_MCP]: createSdkMcpServer({
+              name: PASSTHROUGH_MCP,
+              tools: passthroughTools,
+            }),
+          }
         : {};
 
     const controller = new AbortController();
@@ -837,7 +944,9 @@ async function* runSdkAttempt(
     let sdkSessionId: string | undefined;
     let sdkUsage: Record<string, number> | undefined;
     let reachedResult = false;
-    let checkpoint: { assistantUuid: string; toolCallIds: string[] } | undefined;
+    let checkpoint:
+      | { assistantUuid: string; toolCallIds: string[] }
+      | undefined;
     const earlyStop = createEarlyStopTracker();
 
     // PreToolUse hooks can resolve before the stream iterator has delivered
@@ -863,7 +972,10 @@ async function* runSdkAttempt(
     // (tool_use streams are ignored — the post-hook captures are authoritative
     // and a blocked-then-retried call must not double).
     let idxMap = new Map<number, number>();
-    let pendingText = new Map<number, { text: string; accountUnavailable: boolean }>();
+    let pendingText = new Map<
+      number,
+      { text: string; accountUnavailable: boolean }
+    >();
     let deferredAccountUnavailable: string | undefined;
     let sawStreamContent = false;
     let emittedCaptures = 0;
@@ -889,7 +1001,9 @@ async function* runSdkAttempt(
         cwd: ensureAnthropicBridgeCwd(),
         model: model.id,
         resume: plan.resume,
-        ...(plan.resumeSessionAt ? { resumeSessionAt: plan.resumeSessionAt } : {}),
+        ...(plan.resumeSessionAt
+          ? { resumeSessionAt: plan.resumeSessionAt }
+          : {}),
         abortController: controller,
         includePartialMessages: true,
         maxTurns: PI_SDK_MAX_TURNS,
@@ -921,7 +1035,11 @@ async function* runSdkAttempt(
                   // Calls after the visible checkpoint belong to the hidden
                   // digest branch. Block them, but never expose them to Pi.
                   if (!checkpoint) {
-                    captured.push({ id: input.tool_use_id, name: bare, input: input.tool_input ?? {} });
+                    captured.push({
+                      id: input.tool_use_id,
+                      name: bare,
+                      input: input.tool_input ?? {},
+                    });
                   }
                   if (turnGenerating && !controller.signal.aborted) {
                     await holdDenyUntilTurnEnd();
@@ -952,10 +1070,20 @@ async function* runSdkAttempt(
         // upstream tracker has attached to the visible assistant message.
         if (!earlyStop.expected.has(c.id)) break;
         emittedCaptures += 1;
-        const toolCall = { type: "toolCall", id: c.id, name: c.name, arguments: c.input ?? {} };
+        const toolCall = {
+          type: "toolCall",
+          id: c.id,
+          name: c.name,
+          arguments: c.input ?? {},
+        };
         const contentIndex = partial.content.push(toolCall) - 1;
         yield { type: "toolcall_start", contentIndex, partial };
-        yield { type: "toolcall_delta", contentIndex, delta: JSON.stringify(c.input ?? {}), partial };
+        yield {
+          type: "toolcall_delta",
+          contentIndex,
+          delta: JSON.stringify(c.input ?? {}),
+          partial,
+        };
         yield { type: "toolcall_end", contentIndex, toolCall, partial };
       }
     }
@@ -1010,7 +1138,8 @@ async function* runSdkAttempt(
           if (clientDone) {
             if (ev.type === "message_start") {
               turnGenerating = true;
-              if (ev.message?.usage) sdkUsage = { ...sdkUsage, ...ev.message.usage };
+              if (ev.message?.usage)
+                sdkUsage = { ...sdkUsage, ...ev.message.usage };
             } else if (ev.type === "message_delta" && ev.usage) {
               sdkUsage = { ...sdkUsage, ...ev.usage };
             }
@@ -1020,7 +1149,8 @@ async function* runSdkAttempt(
             turnGenerating = true;
             idxMap = new Map();
             pendingText = new Map();
-            if (ev.message?.usage) sdkUsage = { ...sdkUsage, ...ev.message.usage };
+            if (ev.message?.usage)
+              sdkUsage = { ...sdkUsage, ...ev.message.usage };
           } else if (ev.type === "message_delta") {
             if (ev.usage) sdkUsage = { ...sdkUsage, ...ev.usage };
           } else if (ev.type === "content_block_start") {
@@ -1031,7 +1161,8 @@ async function* runSdkAttempt(
               pendingText.set(sdkIdx, { text: "", accountUnavailable: false });
             } else if (block?.type === "thinking") {
               sawStreamContent = true;
-              const contentIndex = partial.content.push({ type: "thinking", thinking: "" }) - 1;
+              const contentIndex =
+                partial.content.push({ type: "thinking", thinking: "" }) - 1;
               idxMap.set(sdkIdx, contentIndex);
               yield { type: "thinking_start", contentIndex, partial };
             } else {
@@ -1043,31 +1174,65 @@ async function* runSdkAttempt(
             const sdkIdx = Number(ev.index);
             const pending = pendingText.get(sdkIdx);
             const delta = ev.delta as Record<string, any> | undefined;
-            if (pending && delta?.type === "text_delta" && typeof delta.text === "string") {
+            if (
+              pending &&
+              delta?.type === "text_delta" &&
+              typeof delta.text === "string"
+            ) {
               pending.text += delta.text;
-              pending.accountUnavailable ||= isClaudeAccountUnavailable(pending.text, false);
-              if (pending.accountUnavailable || shouldDeferClaudeText(pending.text)) continue;
-              const contentIndex = partial.content.push({ type: "text", text: pending.text }) - 1;
+              pending.accountUnavailable ||= isClaudeAccountUnavailable(
+                pending.text,
+                false,
+              );
+              if (
+                pending.accountUnavailable ||
+                shouldDeferClaudeText(pending.text)
+              )
+                continue;
+              const contentIndex =
+                partial.content.push({ type: "text", text: pending.text }) - 1;
               idxMap.set(sdkIdx, contentIndex);
               pendingText.delete(sdkIdx);
               yield { type: "text_start", contentIndex, partial };
-              yield { type: "text_delta", contentIndex, delta: pending.text, partial };
+              yield {
+                type: "text_delta",
+                contentIndex,
+                delta: pending.text,
+                partial,
+              };
               continue;
             }
             const contentIndex = idxMap.get(sdkIdx);
             if (contentIndex === undefined || contentIndex === -1) continue;
             const blk = partial.content[contentIndex];
-            if (delta?.type === "text_delta" && typeof delta.text === "string" && blk?.type === "text") {
+            if (
+              delta?.type === "text_delta" &&
+              typeof delta.text === "string" &&
+              blk?.type === "text"
+            ) {
               blk.text += delta.text;
-              yield { type: "text_delta", contentIndex, delta: delta.text, partial };
+              yield {
+                type: "text_delta",
+                contentIndex,
+                delta: delta.text,
+                partial,
+              };
             } else if (
               delta?.type === "thinking_delta" &&
               typeof delta.thinking === "string" &&
               blk?.type === "thinking"
             ) {
               blk.thinking += delta.thinking;
-              yield { type: "thinking_delta", contentIndex, delta: delta.thinking, partial };
-            } else if (delta?.type === "signature_delta" && blk?.type === "thinking") {
+              yield {
+                type: "thinking_delta",
+                contentIndex,
+                delta: delta.thinking,
+                partial,
+              };
+            } else if (
+              delta?.type === "signature_delta" &&
+              blk?.type === "thinking"
+            ) {
               blk.thinkingSignature = `${blk.thinkingSignature || ""}${delta.signature || ""}`;
             }
           } else if (ev.type === "content_block_stop") {
@@ -1082,20 +1247,41 @@ async function* runSdkAttempt(
                 deferredAccountUnavailable = pending.text;
                 continue;
               }
-              const contentIndex = partial.content.push({ type: "text", text: pending.text }) - 1;
+              const contentIndex =
+                partial.content.push({ type: "text", text: pending.text }) - 1;
               idxMap.set(sdkIdx, contentIndex);
               yield { type: "text_start", contentIndex, partial };
-              yield { type: "text_delta", contentIndex, delta: pending.text, partial };
-              yield { type: "text_end", contentIndex, content: pending.text, partial };
+              yield {
+                type: "text_delta",
+                contentIndex,
+                delta: pending.text,
+                partial,
+              };
+              yield {
+                type: "text_end",
+                contentIndex,
+                content: pending.text,
+                partial,
+              };
               continue;
             }
             const contentIndex = idxMap.get(sdkIdx);
             if (contentIndex === undefined || contentIndex === -1) continue;
             const blk = partial.content[contentIndex];
             if (blk?.type === "text") {
-              yield { type: "text_end", contentIndex, content: blk.text, partial };
+              yield {
+                type: "text_end",
+                contentIndex,
+                content: blk.text,
+                partial,
+              };
             } else if (blk?.type === "thinking") {
-              yield { type: "thinking_end", contentIndex, content: blk.thinking, partial };
+              yield {
+                type: "thinking_end",
+                contentIndex,
+                content: blk.thinking,
+                partial,
+              };
             }
           }
           continue;
@@ -1105,7 +1291,8 @@ async function* runSdkAttempt(
           if (!checkpoint && earlyStop.resolved.size === 0) {
             const expectedBefore = earlyStop.expected.size;
             noteAssistantMessage(earlyStop, m);
-            assistantAddedForwardedCall = earlyStop.expected.size > expectedBefore;
+            assistantAddedForwardedCall =
+              earlyStop.expected.size > expectedBefore;
           }
           if (m.message?.usage) sdkUsage = { ...sdkUsage, ...m.message.usage };
           if (!clientDone && !sawStreamContent) {
@@ -1114,15 +1301,27 @@ async function* runSdkAttempt(
             const blocks = m.message?.content;
             if (Array.isArray(blocks)) {
               for (const b of blocks) {
-                if (!b || typeof b !== "object" || b.type !== "text" || !b.text) continue;
+                if (!b || typeof b !== "object" || b.type !== "text" || !b.text)
+                  continue;
                 if (isClaudeAccountUnavailable(b.text, false)) {
                   deferredAccountUnavailable = b.text;
                   continue;
                 }
-                const contentIndex = partial.content.push({ type: "text", text: b.text }) - 1;
+                const contentIndex =
+                  partial.content.push({ type: "text", text: b.text }) - 1;
                 yield { type: "text_start", contentIndex, partial };
-                yield { type: "text_delta", contentIndex, delta: b.text, partial };
-                yield { type: "text_end", contentIndex, content: b.text, partial };
+                yield {
+                  type: "text_delta",
+                  contentIndex,
+                  delta: b.text,
+                  partial,
+                };
+                yield {
+                  type: "text_end",
+                  contentIndex,
+                  content: b.text,
+                  partial,
+                };
               }
             }
           }
@@ -1142,14 +1341,19 @@ async function* runSdkAttempt(
         }
         if (m.type === "result") {
           sdkSessionId = String(m.session_id || "") || sdkSessionId;
-          if (deferredAccountUnavailable) throw new Error(deferredAccountUnavailable);
+          if (deferredAccountUnavailable)
+            throw new Error(deferredAccountUnavailable);
           // error_max_turns WITH captures is a SUCCESS (the bridge's fix):
           // models that answer a blocked call by trying the next tool burn a
           // turn per call and can blow the cap before ending cleanly — the
           // captures are the whole point. Only a capture-less max-turns (the
           // model never called a tool) stays an error.
-          const maxTurnsWithCaptures = m.subtype === "error_max_turns" && captured.length > 0;
-          if ((m.is_error || m.subtype !== "success") && !maxTurnsWithCaptures) {
+          const maxTurnsWithCaptures =
+            m.subtype === "error_max_turns" && captured.length > 0;
+          if (
+            (m.is_error || m.subtype !== "success") &&
+            !maxTurnsWithCaptures
+          ) {
             const detail =
               (typeof m.result === "string" && m.result) ||
               partial.content
@@ -1199,7 +1403,13 @@ async function* runSdkAttempt(
     }
 
     if (sdkSessionId) {
-      rememberSdkTurn(storeKey, sdkSessionId, wireMessages.length, account.id, checkpoint);
+      rememberSdkTurn(
+        storeKey,
+        sdkSessionId,
+        wireMessages.length,
+        account.id,
+        checkpoint,
+      );
     }
 
     const usage = usageFromSdkResult(model, sdkUsage);
@@ -1229,7 +1439,7 @@ async function* runSdkAttempt(
         partial.content
           .filter((b) => b.type === "text" && b.text)
           .map((b) => b.text)
-          .join("\n")
+          .join("\n"),
       ),
     });
     if (!clientDone) yield { type: "done", reason: stopReason, message };
@@ -1292,7 +1502,11 @@ async function* runSdkAttempt(
     // never ran: multiple accounts were consulted and the reader was shown the
     // last one's sentence, so working rotation read as no rotation at all.
     let poolRefusal: string | undefined;
-    if (account && (accountUnavailable || localCap) && partial.content.length === 0) {
+    if (
+      account &&
+      (accountUnavailable || localCap) &&
+      partial.content.length === 0
+    ) {
       excluded.add(account.id);
       const next = pickBridgeAccount(model.id, {
         accountId: opts.accountId,
@@ -1316,7 +1530,7 @@ async function* runSdkAttempt(
     if (rotateTo && account) {
       console.warn(
         `[pi-anthropic] usage limit on "${account.name}" (${model.id}): ` +
-          `retrying this turn on "${rotateTo.name}"`
+          `retrying this turn on "${rotateTo.name}"`,
       );
       rotate.retry = true;
       return;
@@ -1331,14 +1545,14 @@ async function* runSdkAttempt(
       // still classifies this as exhaustion upstream.
       console.warn(
         `[pi-anthropic] usage limit on "${account.name}" (${model.id}) and no other ` +
-          `account can serve it: ${poolRefusal}`
+          `account can serve it: ${poolRefusal}`,
       );
       const reset = describeUsageLimitReset(message);
       yield fail(
         "error",
         `every Claude account is usage-limited for ${model.id}` +
           (reset ? `, the soonest resets ${reset}` : "") +
-          `. Last account tried ("${account.name}") said: ${message}`
+          `. Last account tried ("${account.name}") said: ${message}`,
       );
       return;
     }

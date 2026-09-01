@@ -50,7 +50,10 @@ export function addStaging(a: StagingCount, b: StagingCount): StagingCount {
   return { images: a.images + b.images, files: a.files + b.files };
 }
 
-export function subtractStaging(a: StagingCount, b: StagingCount): StagingCount {
+export function subtractStaging(
+  a: StagingCount,
+  b: StagingCount,
+): StagingCount {
   return { images: a.images - b.images, files: a.files - b.files };
 }
 

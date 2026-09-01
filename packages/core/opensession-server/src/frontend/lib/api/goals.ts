@@ -1,63 +1,96 @@
 import { request } from "./request";
 
-// ── Goals (long-running, self-pacing missions) ──
+export type GoalStatus = "active" | "paused" | "done" | "failed";
 
-export async function fetchGoals() {
-	return request<any>("/goals", { label: "Failed to fetch goals" });
+export interface Goal {
+  id: string;
+  name: string;
+  mission: string;
+  status: GoalStatus;
+  mode: "ask" | "code";
+  repo?: string;
+  bksSessionId?: string;
+  nextWakeAt: string;
+  minWakeMinutes: number;
+  maxWakes?: number;
+  wakeCount: number;
+  lastRunAt?: string;
+  lastRunStatus?: "running" | "ok" | "error";
+  lastRunError?: string;
+  phase?: string;
+  pauseReason?: string;
+  doneReason?: string;
+  model?: string;
+  fallbackModel?: string;
+  mcpServers?: string[];
+  createdBy: string;
+  isRunning?: boolean;
 }
 
-/** Single goal incl. its ledger text (for the detail view). */
-export async function fetchGoal(id: string) {
-	return request<any>(`/goals/${encodeURIComponent(id)}`, {
-		label: "Failed to fetch goal",
-	});
+export interface GoalMutationInput {
+  name: string;
+  mission: string;
+  mode?: "ask" | "code";
+  repo?: string;
+  model?: string;
+  fallbackModel?: string;
+  mcpServers?: string[];
+  minWakeMinutes?: number;
+  maxWakes?: number;
 }
 
-export async function createGoalApi(input: {
-	name: string;
-	mission: string;
-	mode?: "ask" | "code";
-	repo?: string;
-	model?: string;
-	fallbackModel?: string;
-	mcpServers?: string[];
-	minWakeMinutes?: number;
-	maxWakes?: number;
-	createdBy: string;
-}) {
-	return request<any>("/goals", { method: "POST", body: input });
+export function fetchGoals(): Promise<Goal[]> {
+  return request<Goal[]>("/goals", { label: "Failed to fetch goals" });
 }
 
-export async function updateGoalApi(id: string, patch: object) {
-	return request<any>(`/goals/${encodeURIComponent(id)}`, {
-		method: "PUT",
-		body: patch,
-	});
+export function fetchGoal(id: string): Promise<Goal & { ledger?: string }> {
+  return request<Goal & { ledger?: string }>(
+    `/goals/${encodeURIComponent(id)}`,
+    {
+      label: "Failed to fetch goal",
+    },
+  );
 }
 
-export async function deleteGoalApi(id: string) {
-	await request<void>(`/goals/${encodeURIComponent(id)}`, {
-		method: "DELETE",
-		label: "Failed to delete",
-	});
+export function createGoalApi(
+  input: GoalMutationInput & { createdBy: string },
+): Promise<Goal> {
+  return request<Goal>("/goals", { method: "POST", body: input });
 }
 
-export async function runGoalApi(id: string) {
-	await request<void>(`/goals/${encodeURIComponent(id)}/run`, {
-		method: "POST",
-	});
+export function updateGoalApi(
+  id: string,
+  patch: GoalMutationInput,
+): Promise<Goal> {
+  return request<Goal>(`/goals/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: patch,
+  });
 }
 
-export async function resumeGoalApi(id: string) {
-	return request<any>(`/goals/${encodeURIComponent(id)}/resume`, {
-		method: "POST",
-		body: {},
-	});
+export async function deleteGoalApi(id: string): Promise<void> {
+  await request<void>(`/goals/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    label: "Failed to delete",
+  });
 }
 
-export async function pauseGoalApi(id: string, reason?: string) {
-	return request<any>(`/goals/${encodeURIComponent(id)}/pause`, {
-		method: "POST",
-		body: { reason },
-	});
+export async function runGoalApi(id: string): Promise<void> {
+  await request<void>(`/goals/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+  });
+}
+
+export function resumeGoalApi(id: string): Promise<Goal> {
+  return request<Goal>(`/goals/${encodeURIComponent(id)}/resume`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+export function pauseGoalApi(id: string, reason?: string): Promise<Goal> {
+  return request<Goal>(`/goals/${encodeURIComponent(id)}/pause`, {
+    method: "POST",
+    body: { reason },
+  });
 }

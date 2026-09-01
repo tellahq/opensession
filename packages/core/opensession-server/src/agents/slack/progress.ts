@@ -213,7 +213,7 @@ export class SlackProgress {
           .replace(/^#{1,6}\s+/gm, "")
           .replace(/[*`]+/g, "")
           .replace(/\s+/g, " ")
-          .trim()
+          .trim(),
       )
       .filter((p) => p.length >= 2);
     const last = paras[paras.length - 1];
@@ -232,7 +232,7 @@ export class SlackProgress {
     if (idx < 0) idx = this.todos.length - 1;
     const start = Math.max(
       0,
-      Math.min(idx - 1, this.todos.length - MAX_TODO_LINES)
+      Math.min(idx - 1, this.todos.length - MAX_TODO_LINES),
     );
     const done = this.todos.filter((t) => t.status === "completed").length;
     return {
@@ -448,7 +448,10 @@ export class SlackProgress {
           {
             type: "context",
             elements: [
-              { type: "mrkdwn", text: "_Open Session is restarting. Continuing shortly._" },
+              {
+                type: "mrkdwn",
+                text: "_Open Session is restarting. Continuing shortly._",
+              },
             ],
           },
         ],

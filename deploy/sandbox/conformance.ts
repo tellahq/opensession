@@ -2,7 +2,7 @@
  * Sandbox provider CONFORMANCE suite (the sandbox rollout plan, Phase 3.3) —
  * the verify.ts checks parameterized over providers. Run MANUALLY:
  *
- *   bun run deploy/sandbox/conformance.ts [docker-socket] [docker-ws] [daytona] [e2b] [box] [modal] [microvm] [lambda-microvm]
+ *   bun run deploy/sandbox/conformance.ts [docker-socket] [docker-ws] [daytona] [e2b] [box] [modal] [lambda-microvm]
  *
  * (no args = the full matrix). Per entry: ensure/reuse, exec argv+stderr
  * semantics, workspace git (bind worktree for docker, in-sandbox volume-style
@@ -55,27 +55,35 @@ process.env.OPENSESSION_SANDBOX_CERTIFICATION_RUN = "1";
 import { homedir } from "os";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
 
-const { getSandboxProvider } = await import("../../packages/core/opensession-server/src/server/sandbox/index");
-const runWs = await import("../../packages/core/opensession-server/src/server/run-ws");
-const { hostRunBusy } = await import("../../packages/core/opensession-server/src/server/host-registry");
-const { OPENSESSION_SESSIONS_DIR } = await import("../../packages/core/opensession-server/src/server/paths");
-const { statePath } = await import("../../packages/core/opensession-server/src/server/paths");
+const { getSandboxProvider } =
+  await import("../../packages/core/opensession-server/src/server/sandbox/index");
+const runWs =
+  await import("../../packages/core/opensession-server/src/server/run-ws");
+const { hostRunBusy } =
+  await import("../../packages/core/opensession-server/src/server/host-registry");
+const { OPENSESSION_SESSIONS_DIR } =
+  await import("../../packages/core/opensession-server/src/server/paths");
+const { statePath } =
+  await import("../../packages/core/opensession-server/src/server/paths");
 const {
   invalidateRemoteRepoTemplate,
   readRemoteRepoTemplate,
   remoteRepoTemplateProofPath,
-} = await import(
-  "../../packages/core/opensession-server/src/server/sandbox/remote-repo-template"
-);
+} =
+  await import("../../packages/core/opensession-server/src/server/sandbox/remote-repo-template");
 // The orphan-snapshot sweep (docker.ts, piggybacked on the idle sweep) reads
 // session/state files through the — now scratch-redirected — chats dir, so it
 // would see every LIVE session as gone. Arm its once-an-hour throttle up
 // front so it never runs inside this suite.
-(globalThis as unknown as { __sandboxSnapOrphanSweepAt?: number }).__sandboxSnapOrphanSweepAt =
-  Date.now();
-type RunHostSpec = import("../../packages/core/opensession-server/src/runner-host/protocol").RunHostSpec;
-type Sandbox = import("../../packages/core/opensession-server/src/server/sandbox/provider").Sandbox;
-type PortMap = import("../../packages/core/opensession-server/src/server/sandbox/provider").PortMap;
+(
+  globalThis as unknown as { __sandboxSnapOrphanSweepAt?: number }
+).__sandboxSnapOrphanSweepAt = Date.now();
+type RunHostSpec =
+  import("../../packages/core/opensession-server/src/runner-host/protocol").RunHostSpec;
+type Sandbox =
+  import("../../packages/core/opensession-server/src/server/sandbox/provider").Sandbox;
+type PortMap =
+  import("../../packages/core/opensession-server/src/server/sandbox/provider").PortMap;
 
 const RUN_TS = Date.now().toString(36);
 const HOME = process.env.HOME || homedir();
@@ -99,7 +107,10 @@ function ok(name: string, cond: boolean, detail = ""): void {
   }
 }
 
-async function sh(cmd: string[], cwd?: string): Promise<{ code: number; out: string; err: string }> {
+async function sh(
+  cmd: string[],
+  cwd?: string,
+): Promise<{ code: number; out: string; err: string }> {
   const p = Bun.spawn(cmd, { cwd, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([
     new Response(p.stdout).text(),
@@ -112,7 +123,10 @@ async function sh(cmd: string[], cwd?: string): Promise<{ code: number; out: str
 // ── credentials (never logged) ────────────────────────────────────────────────
 
 function liveSandboxFileConfig(): any {
-  for (const path of [`${HOME}/.opensession-sandbox.json`, `${HOME}/.opensession-sandbox.json`]) {
+  for (const path of [
+    `${HOME}/.opensession-sandbox.json`,
+    `${HOME}/.opensession-sandbox.json`,
+  ]) {
     try {
       return JSON.parse(readFileSync(path, "utf-8"));
     } catch {}
@@ -122,14 +136,20 @@ function liveSandboxFileConfig(): any {
 const liveCfg = liveSandboxFileConfig();
 function liveConnection(provider: string): any {
   return Array.isArray(liveCfg?.connections)
-    ? liveCfg.connections.find((connection: any) => connection?.provider === provider)
+    ? liveCfg.connections.find(
+        (connection: any) => connection?.provider === provider,
+      )
     : undefined;
 }
 function liveWorkspaceSecret(ref?: string): string {
   if (!ref) return "";
   try {
-    const store = JSON.parse(readFileSync(`${HOME}/.opensession-workspace-secrets.json`, "utf-8"));
-    return String(store?.secrets?.find((secret: any) => secret?.id === ref)?.value || "");
+    const store = JSON.parse(
+      readFileSync(`${HOME}/.opensession-workspace-secrets.json`, "utf-8"),
+    );
+    return String(
+      store?.secrets?.find((secret: any) => secret?.id === ref)?.value || "",
+    );
   } catch {
     return "";
   }
@@ -143,15 +163,16 @@ const e2bKey: string = liveCfg?.e2b?.apiKey || process.env.E2B_API_KEY || "";
 const boxKey: string =
   liveWorkspaceSecret(liveConnection("box")?.credentialRef) || "";
 const boxApiUrl: string =
-  liveConnection("box")?.settings?.apiUrl ||
-  "https://ascii.dev/api/box/v1";
-const modalTokenId: string = liveCfg?.modal?.tokenId || process.env.MODAL_TOKEN_ID || "";
+  liveConnection("box")?.settings?.apiUrl || "https://ascii.dev/api/box/v1";
+const modalTokenId: string =
+  liveCfg?.modal?.tokenId || process.env.MODAL_TOKEN_ID || "";
 const modalTokenSecret: string =
   liveCfg?.modal?.tokenSecret || process.env.MODAL_TOKEN_SECRET || "";
-const modalProfileAvailable = existsSync(process.env.MODAL_CONFIG_PATH || `${HOME}/.modal.toml`);
-const lambdaMicrovmImage: string = liveCfg?.awsLambdaMicrovm?.imageIdentifier || "";
-const microvmCallbackBase: string =
-  process.env.SBX_CONF_MICROVM_BASE || liveCfg?.callbackBaseUrl || "";
+const modalProfileAvailable = existsSync(
+  process.env.MODAL_CONFIG_PATH || `${HOME}/.modal.toml`,
+);
+const lambdaMicrovmImage: string =
+  liveCfg?.awsLambdaMicrovm?.imageIdentifier || "";
 
 // ── account pool gate (real model runs) ───────────────────────────────────────
 
@@ -184,13 +205,17 @@ for (const c of [
   ["git", "init", "-q", "-b", "main"],
   ["git", "config", "user.email", "sbxtest@opensession.local"],
   ["git", "config", "user.name", "Sandbox Conformance"],
-]) await sh(c, MAIN);
+])
+  await sh(c, MAIN);
 await Bun.write(`${MAIN}/README.md`, "sandbox conformance scratch repo\n");
 await sh(["git", "add", "README.md"], MAIN);
 await sh(["git", "commit", "-q", "-m", "init"], MAIN);
 await sh(["git", "clone", "-q", "--bare", MAIN, BARE]);
 await sh(["git", "remote", "add", "origin", BARE], MAIN);
-await sh(["git", "worktree", "add", "-q", WT, "-b", "sbxtest-conf-branch"], MAIN);
+await sh(
+  ["git", "worktree", "add", "-q", WT, "-b", "sbxtest-conf-branch"],
+  MAIN,
+);
 // Register the scratch repos through the config-driven registry (REPOS is a
 // read-only Proxy now; OPENSESSION_CONFIG points at this scratch file — same
 // pattern as verify.ts). sbxpub points at this repo's origin so certification
@@ -199,7 +224,12 @@ await Bun.write(
   process.env.OPENSESSION_CONFIG!,
   JSON.stringify({
     repos: {
-      sbxtest: { repo: MAIN, wtPrefix: "sbxtest", defaultBranch: "main", ghRepo: "sbxtest/sbxtest" },
+      sbxtest: {
+        repo: MAIN,
+        wtPrefix: "sbxtest",
+        defaultBranch: "main",
+        ghRepo: "sbxtest/sbxtest",
+      },
       [PUB_REPO_ID]: {
         repo: `${SCRATCH}/no-local-checkout`,
         wtPrefix: PUB_REPO_ID,
@@ -216,7 +246,9 @@ await Bun.write(
 mkdirSync(`${OPENSESSION_SESSIONS_DIR}/warm-templates`, { recursive: true });
 await Bun.write(
   `${OPENSESSION_SESSIONS_DIR}/warm-templates/config.json`,
-  JSON.stringify({ repos: { [PUB_REPO_ID]: { enabled: true, intervalHours: 24 } } }),
+  JSON.stringify({
+    repos: { [PUB_REPO_ID]: { enabled: true, intervalHours: 24 } },
+  }),
 );
 
 // ── shared dial-back WS server (docker-ws + remote entries) ──────────────────
@@ -230,8 +262,14 @@ await Bun.write(
 //   SBX_CONF_LISTEN_PORT=3860 SBX_CONF_PUBLIC_BASE=wss://sessions.example.com \
 //     bun run deploy/sandbox/conformance.ts daytona
 const LISTEN_PORT = parseInt(process.env.SBX_CONF_LISTEN_PORT || "0", 10) || 0;
-const PUBLIC_BASE = (process.env.SBX_CONF_PUBLIC_BASE || "").replace(/\/+$/, "");
-const CADDY_PREFIX = (process.env.SBX_CONF_CADDY_PREFIX || "").replace(/\/+$/, "");
+const PUBLIC_BASE = (process.env.SBX_CONF_PUBLIC_BASE || "").replace(
+  /\/+$/,
+  "",
+);
+const CADDY_PREFIX = (process.env.SBX_CONF_CADDY_PREFIX || "").replace(
+  /\/+$/,
+  "",
+);
 
 const wsSrv = Bun.serve({
   port: LISTEN_PORT,
@@ -255,17 +293,32 @@ const wsSrv = Bun.serve({
   },
 });
 const bridgeGw =
-  (await sh(["docker", "network", "inspect", "bridge", "-f", "{{(index .IPAM.Config 0).Gateway}}"])).out.trim() ||
-  "172.17.0.1";
-const publicIp = (await (async () => {
+  (
+    await sh([
+      "docker",
+      "network",
+      "inspect",
+      "bridge",
+      "-f",
+      "{{(index .IPAM.Config 0).Gateway}}",
+    ])
+  ).out.trim() || "172.17.0.1";
+const publicIp = await (async () => {
   try {
-    return (await (await fetch("https://checkip.amazonaws.com", { signal: AbortSignal.timeout(5000) })).text()).trim();
+    return (
+      await (
+        await fetch("https://checkip.amazonaws.com", {
+          signal: AbortSignal.timeout(5000),
+        })
+      ).text()
+    ).trim();
   } catch {
     return "";
   }
-})());
+})();
 /** Base URL remote sandboxes dial back to; docker uses the bridge gateway. */
-const remoteBase = PUBLIC_BASE || (publicIp ? `ws://${publicIp}:${wsSrv.port}` : "");
+const remoteBase =
+  PUBLIC_BASE || (publicIp ? `ws://${publicIp}:${wsSrv.port}` : "");
 console.log(
   `dial-back listener on 0.0.0.0:${wsSrv.port} (bridge ${bridgeGw}, remote base ${remoteBase || "unknown"})`,
 );
@@ -280,10 +333,13 @@ const CADDY_ROUTES_URL =
 const caddyRouteId = `sandbox-conformance-${RUN_TS}`;
 
 async function mutateCaddyRoutes(
-  mutate: (routes: Array<Record<string, unknown>>) => Array<Record<string, unknown>>,
+  mutate: (
+    routes: Array<Record<string, unknown>>,
+  ) => Array<Record<string, unknown>>,
 ): Promise<void> {
   const currentRes = await fetch(CADDY_ROUTES_URL);
-  if (!currentRes.ok) throw new Error(`Caddy route read failed (${currentRes.status})`);
+  if (!currentRes.ok)
+    throw new Error(`Caddy route read failed (${currentRes.status})`);
   const current = (await currentRes.json()) as Array<Record<string, unknown>>;
   const updated = mutate(current);
   const patchRes = await fetch(CADDY_ROUTES_URL, {
@@ -292,14 +348,18 @@ async function mutateCaddyRoutes(
     body: JSON.stringify(updated),
   });
   if (!patchRes.ok) {
-    throw new Error(`Caddy route update failed (${patchRes.status}): ${await patchRes.text()}`);
+    throw new Error(
+      `Caddy route update failed (${patchRes.status}): ${await patchRes.text()}`,
+    );
   }
 }
 
 async function installScratchIngress(): Promise<void> {
   if (!CADDY_PREFIX) return;
   if (!/^\/[A-Za-z0-9._-]+$/.test(CADDY_PREFIX)) {
-    throw new Error("SBX_CONF_CADDY_PREFIX must be one safe path segment beginning with /");
+    throw new Error(
+      "SBX_CONF_CADDY_PREFIX must be one safe path segment beginning with /",
+    );
   }
   if (!PUBLIC_BASE.endsWith(CADDY_PREFIX)) {
     throw new Error("SBX_CONF_PUBLIC_BASE must end with SBX_CONF_CADDY_PREFIX");
@@ -311,13 +371,18 @@ async function installScratchIngress(): Promise<void> {
       match: [{ path: [CADDY_PREFIX, `${CADDY_PREFIX}/*`] }],
       handle: [
         { handler: "rewrite", strip_path_prefix: CADDY_PREFIX },
-        { handler: "reverse_proxy", upstreams: [{ dial: `127.0.0.1:${wsSrv.port}` }] },
+        {
+          handler: "reverse_proxy",
+          upstreams: [{ dial: `127.0.0.1:${wsSrv.port}` }],
+        },
       ],
     },
     ...routes.filter((route) => route["@id"] !== caddyRouteId),
   ]);
   const healthBase = PUBLIC_BASE.replace(/^ws(s?):/, "http$1:");
-  const health = await fetch(`${healthBase}/ingress-health`, { signal: AbortSignal.timeout(10_000) });
+  const health = await fetch(`${healthBase}/ingress-health`, {
+    signal: AbortSignal.timeout(10_000),
+  });
   if (!health.ok || (await health.text()) !== "ok") {
     throw new Error(`scratch public ingress health failed (${health.status})`);
   }
@@ -326,21 +391,16 @@ async function installScratchIngress(): Promise<void> {
 
 async function removeScratchIngress(): Promise<void> {
   if (!CADDY_PREFIX) return;
-  await mutateCaddyRoutes((routes) => routes.filter((route) => route["@id"] !== caddyRouteId));
+  await mutateCaddyRoutes((routes) =>
+    routes.filter((route) => route["@id"] !== caddyRouteId),
+  );
 }
 
 // ── matrix entries ────────────────────────────────────────────────────────────
 
 interface Entry {
   name: string;
-  providerId:
-    | "docker"
-    | "daytona"
-    | "e2b"
-    | "box"
-    | "modal"
-    | "microvm"
-    | "lambda-microvm";
+  providerId: "docker" | "daytona" | "e2b" | "box" | "modal" | "lambda-microvm";
   /** null = run it; string = print SKIPPED reason. */
   skip: string | null;
   /** Scratch config for this entry (credentials included, never logged). */
@@ -390,7 +450,9 @@ const entries: Entry[] = [
   {
     name: "daytona",
     providerId: "daytona",
-    skip: daytonaKey ? null : "SKIPPED: no credentials (set daytona.apiKey in ~/.opensession-sandbox.json or DAYTONA_API_KEY)",
+    skip: daytonaKey
+      ? null
+      : "SKIPPED: no credentials (set daytona.apiKey in ~/.opensession-sandbox.json or DAYTONA_API_KEY)",
     config: {
       provider: "daytona",
       callbackBaseUrl: remoteBase,
@@ -412,7 +474,9 @@ const entries: Entry[] = [
   {
     name: "e2b",
     providerId: "e2b",
-    skip: e2bKey ? null : "SKIPPED: no credentials (set e2b.apiKey in ~/.opensession-sandbox.json or E2B_API_KEY)",
+    skip: e2bKey
+      ? null
+      : "SKIPPED: no credentials (set e2b.apiKey in ~/.opensession-sandbox.json or E2B_API_KEY)",
     config: {
       provider: "e2b",
       callbackBaseUrl: remoteBase,
@@ -466,24 +530,6 @@ const entries: Entry[] = [
     remote: true,
   },
   {
-    name: "microvm",
-    providerId: "microvm",
-    skip: !liveCfg?.firecrackerMicrovm?.enabled
-      ? "SKIPPED: local Firecracker is not enabled in ~/.opensession-sandbox.json"
-      : !microvmCallbackBase
-        ? "SKIPPED: no private callback URL (set callbackBaseUrl or SBX_CONF_MICROVM_BASE)"
-        : null,
-    config: {
-      provider: "microvm",
-      callbackBaseUrl: microvmCallbackBase,
-      firecrackerMicrovm: liveCfg?.firecrackerMicrovm || {},
-    },
-    repoId: PUB_REPO_ID,
-    branch: PUB_BRANCH,
-    expectPort: "none",
-    remote: true,
-  },
-  {
     name: "lambda-microvm",
     providerId: "lambda-microvm",
     skip: lambdaMicrovmImage
@@ -502,12 +548,18 @@ const entries: Entry[] = [
 ];
 
 const wanted = process.argv.slice(2);
-const selected = entries.filter((e) => !wanted.length || wanted.includes(e.name));
+const selected = entries.filter(
+  (e) => !wanted.length || wanted.includes(e.name),
+);
 
 // ── the parameterized checks ──────────────────────────────────────────────────
 
-async function waitForPrewarm(entry: Entry, checkPrefix = "prewarm"): Promise<string> {
-  const { requestPrewarm } = await import("../../packages/core/opensession-server/src/server/sandbox/prewarm");
+async function waitForPrewarm(
+  entry: Entry,
+  checkPrefix = "prewarm",
+): Promise<string> {
+  const { requestPrewarm } =
+    await import("../../packages/core/opensession-server/src/server/sandbox/prewarm");
   const startedAt = Date.now();
   let st = await requestPrewarm(entry.providerId, entry.repoId, "sbxtest");
   ok(
@@ -529,7 +581,12 @@ async function waitForPrewarm(entry: Entry, checkPrefix = "prewarm"): Promise<st
 }
 
 async function cleanupCertificationTemplate(entry: Entry): Promise<void> {
-  if (entry.providerId !== "daytona" && entry.providerId !== "box" && entry.providerId !== "modal") return;
+  if (
+    entry.providerId !== "daytona" &&
+    entry.providerId !== "box" &&
+    entry.providerId !== "modal"
+  )
+    return;
   const template = readRemoteRepoTemplate(entry.providerId, entry.repoId);
   if (!template) return;
   try {
@@ -539,11 +596,14 @@ async function cleanupCertificationTemplate(entry: Entry): Promise<void> {
       const snapshot = await client.snapshot.get(template.artifactId);
       await client.snapshot.delete(snapshot);
     } else if (entry.providerId === "box") {
-      await fetch(`${boxApiUrl}/named-snapshots/${encodeURIComponent(template.artifactId)}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${boxKey}` },
-        signal: AbortSignal.timeout(60_000),
-      });
+      await fetch(
+        `${boxApiUrl}/named-snapshots/${encodeURIComponent(template.artifactId)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${boxKey}` },
+          signal: AbortSignal.timeout(60_000),
+        },
+      );
     } else {
       const { ModalClient } = await import("modal");
       const modalCfg = liveCfg?.modal || {};
@@ -565,7 +625,11 @@ async function cleanupCertificationTemplate(entry: Entry): Promise<void> {
       }
     }
     invalidateRemoteRepoTemplate(entry.providerId, entry.repoId);
-    ok("certification repo-template artifact removed", true, template.artifactId);
+    ok(
+      "certification repo-template artifact removed",
+      true,
+      template.artifactId,
+    );
   } catch (error) {
     ok(
       "certification repo-template artifact removed",
@@ -582,22 +646,33 @@ async function runEntry(entry: Entry): Promise<void> {
     console.log(`  ${entry.skip}`);
     return;
   }
-  await Bun.write(process.env.OPENSESSION_SANDBOX_CONFIG!, JSON.stringify(entry.config));
-  const { connectSandboxProvider, setSandboxConnectionQualification } = await import(
-    "../../packages/core/opensession-server/src/server/sandbox/connections"
+  await Bun.write(
+    process.env.OPENSESSION_SANDBOX_CONFIG!,
+    JSON.stringify(entry.config),
   );
+  const { connectSandboxProvider, setSandboxConnectionQualification } =
+    await import("../../packages/core/opensession-server/src/server/sandbox/connections");
   if (entry.providerId === "daytona") {
     connectSandboxProvider("daytona", {
       secret: daytonaKey,
       settings: {
-        apiUrl: liveConnection("daytona")?.settings?.apiUrl || liveCfg?.daytona?.apiUrl,
-        target: liveConnection("daytona")?.settings?.target || liveCfg?.daytona?.target,
-        snapshot: liveConnection("daytona")?.settings?.snapshot || liveCfg?.daytona?.snapshot,
+        apiUrl:
+          liveConnection("daytona")?.settings?.apiUrl ||
+          liveCfg?.daytona?.apiUrl,
+        target:
+          liveConnection("daytona")?.settings?.target ||
+          liveCfg?.daytona?.target,
+        snapshot:
+          liveConnection("daytona")?.settings?.snapshot ||
+          liveCfg?.daytona?.snapshot,
       },
     });
     setSandboxConnectionQualification("daytona", { status: "ready" });
   } else if (entry.providerId === "box") {
-    connectSandboxProvider("box", { secret: boxKey, settings: { apiUrl: boxApiUrl } });
+    connectSandboxProvider("box", {
+      secret: boxKey,
+      settings: { apiUrl: boxApiUrl },
+    });
     setSandboxConnectionQualification("box", { status: "ready" });
   }
   const provider = getSandboxProvider(entry.providerId);
@@ -627,7 +702,11 @@ async function runEntry(entry: Entry): Promise<void> {
     const t0 = Date.now();
     sandbox = await provider.ensure(spec);
     const ensureMs = Date.now() - t0;
-    ok("ensure() created the sandbox", !!sandbox.id, `${sandbox.id} in ${(ensureMs / 1000).toFixed(1)}s`);
+    ok(
+      "ensure() created the sandbox",
+      !!sandbox.id,
+      `${sandbox.id} in ${(ensureMs / 1000).toFixed(1)}s`,
+    );
     if (prewarmedId) {
       ok(
         "ensure() adopted the prewarmed sandbox",
@@ -643,33 +722,67 @@ async function runEntry(entry: Entry): Promise<void> {
     ok("status() is running", (await sandbox.status()) === "running");
     const t1 = Date.now();
     const again = await provider.ensure(spec);
-    ok("ensure() is idempotent (reuse)", again.id === sandbox.id, `${((Date.now() - t1) / 1000).toFixed(1)}s`);
+    ok(
+      "ensure() is idempotent (reuse)",
+      again.id === sandbox.id,
+      `${((Date.now() - t1) / 1000).toFixed(1)}s`,
+    );
 
     // 2. exec — argv semantics, exit codes, stderr separation
     const argv = await sandbox.exec(["printf", "%s", "a b$c'd"]);
-    ok("exec preserves argv words (quoting)", argv.exitCode === 0 && argv.stdout === "a b$c'd", JSON.stringify(argv.stdout));
+    ok(
+      "exec preserves argv words (quoting)",
+      argv.exitCode === 0 && argv.stdout === "a b$c'd",
+      JSON.stringify(argv.stdout),
+    );
     const code = await sandbox.exec(["sh", "-c", "exit 7"]);
-    ok("exec surfaces the real exit code", code.exitCode === 7, String(code.exitCode));
+    ok(
+      "exec surfaces the real exit code",
+      code.exitCode === 7,
+      String(code.exitCode),
+    );
     const streams = await sandbox.exec(["sh", "-c", "echo up; echo down >&2"]);
     ok(
       "exec separates stdout from stderr",
-      streams.stdout.includes("up") && !streams.stdout.includes("down") && streams.stderr.includes("down"),
-      JSON.stringify({ out: streams.stdout.trim(), err: streams.stderr.trim() }),
+      streams.stdout.includes("up") &&
+        !streams.stdout.includes("down") &&
+        streams.stderr.includes("down"),
+      JSON.stringify({
+        out: streams.stdout.trim(),
+        err: streams.stderr.trim(),
+      }),
     );
-    const envd = await sandbox.exec(["sh", "-c", "printf %s \"$SBX_CONF\""], { env: { SBX_CONF: "e1" } });
+    const envd = await sandbox.exec(["sh", "-c", 'printf %s "$SBX_CONF"'], {
+      env: { SBX_CONF: "e1" },
+    });
     ok("exec threads env", envd.stdout === "e1", JSON.stringify(envd.stdout));
 
     // 3. workspace git
     const status = await sandbox.exec(["git", "status", "--porcelain"]);
-    ok("git works in the workspace", status.exitCode === 0, status.stderr.trim().slice(0, 120));
+    ok(
+      "git works in the workspace",
+      status.exitCode === 0,
+      status.stderr.trim().slice(0, 120),
+    );
     const branch = await sandbox.exec(["git", "branch", "--show-current"]);
     const expectBranch = entry.branch || "sbxtest-conf-branch";
-    ok("workspace is on the session branch", branch.stdout.trim() === expectBranch, branch.stdout.trim());
+    ok(
+      "workspace is on the session branch",
+      branch.stdout.trim() === expectBranch,
+      branch.stdout.trim(),
+    );
     await sandbox.exec(["sh", "-c", "echo conf > sbx-conf-file.txt"]);
     const dirty = await sandbox.exec(["git", "status", "--porcelain"]);
-    ok("workspace edits are visible to git", dirty.stdout.includes("sbx-conf-file.txt"));
+    ok(
+      "workspace edits are visible to git",
+      dirty.stdout.includes("sbx-conf-file.txt"),
+    );
     if (entry.remote) {
-      ok("no host dir was created (volume-style workspace)", !existsSync(sandbox.cwd), sandbox.cwd);
+      ok(
+        "no host dir was created (volume-style workspace)",
+        !existsSync(sandbox.cwd),
+        sandbox.cwd,
+      );
     }
 
     // Provider-native post-setup template certification. The first prewarm
@@ -703,7 +816,10 @@ async function runEntry(entry: Entry): Promise<void> {
           firstPrepared.stdout === "post-setup" &&
           firstSetupLog.exitCode === 0,
       );
-      const restoredPrewarmId = await waitForPrewarm(entry, "snapshot restore prewarm");
+      const restoredPrewarmId = await waitForPrewarm(
+        entry,
+        "snapshot restore prewarm",
+      );
       const restoredSpec = {
         ...spec,
         sessionId: `${sessionId}-snapshot-restore`,
@@ -711,7 +827,8 @@ async function runEntry(entry: Entry): Promise<void> {
       restoredSandbox = await provider.ensure(restoredSpec);
       ok(
         "snapshot restore used a new provider sandbox",
-        restoredSandbox.id === restoredPrewarmId && restoredSandbox.id !== sandbox.id,
+        restoredSandbox.id === restoredPrewarmId &&
+          restoredSandbox.id !== sandbox.id,
         `${sandbox.id} → ${restoredSandbox.id}`,
       );
       const restoredSeal = await restoredSandbox.exec(["cat", proofPath]);
@@ -764,7 +881,11 @@ async function runEntry(entry: Entry): Promise<void> {
     const ports: PortMap = await sandbox.ports();
     const portEntry = ports[entry.expectPort === "url" ? 8080 : PREVIEW_PORT];
     if (entry.expectPort === "hostPort") {
-      ok("ports() maps to a numeric host port", typeof portEntry === "number" && portEntry > 0, JSON.stringify(ports));
+      ok(
+        "ports() maps to a numeric host port",
+        typeof portEntry === "number" && portEntry > 0,
+        JSON.stringify(ports),
+      );
     } else if (entry.expectPort === "url") {
       ok(
         "ports() maps to a preview url",
@@ -779,12 +900,15 @@ async function runEntry(entry: Entry): Promise<void> {
     // (Caddy/tunnel) actually forwards; /ping only exists on direct listeners.
     const callbackBase = String(entry.config.callbackBaseUrl || "");
     const probeUrl = entry.remote
-      ? callbackBase && `${callbackBase.replace(/^ws(s?):\/\//, "http$1://")}/ingress-health`
+      ? callbackBase &&
+        `${callbackBase.replace(/^ws(s?):\/\//, "http$1://")}/ingress-health`
       : `http://${bridgeGw}:${wsSrv.port}/ping`;
     let reachable = false;
     if (probeUrl) {
       const probe = await sandbox.exec([
-        "sh", "-c", `curl -s -m 8 ${probeUrl} || echo UNREACHABLE`,
+        "sh",
+        "-c",
+        `curl -s -m 8 ${probeUrl} || echo UNREACHABLE`,
       ]);
       reachable = probe.stdout.includes("pong") || /\bok\b/.test(probe.stdout);
       if (entry.remote && !reachable) {
@@ -798,7 +922,11 @@ async function runEntry(entry: Entry): Promise<void> {
             ` — launchRun cannot be certified in this environment; fix egress/callbackBaseUrl`,
         );
       } else {
-        ok(`dial-back listener reachable from the sandbox`, reachable, probe.stdout.trim().slice(0, 60));
+        ok(
+          `dial-back listener reachable from the sandbox`,
+          reachable,
+          probe.stdout.trim().slice(0, 60),
+        );
       }
     } else {
       console.log("  (no public IP/base — skipping reachability probe)");
@@ -809,14 +937,17 @@ async function runEntry(entry: Entry): Promise<void> {
     if (!hasAccounts) {
       console.log("  (dry-run: no account pool — skipping launchRun checks)");
     } else if (wsTransport && !reachable) {
-      console.log("  (skipping launchRun: sandbox cannot reach the dial-back listener)");
+      console.log(
+        "  (skipping launchRun: sandbox cannot reach the dial-back listener)",
+      );
       // Runner-payload smoke: prove the bootstrapped payload actually RUNS —
       // HOST_ENTRY loads its full module graph (agent-runner and friends from
       // the in-sandbox bun install) and reaches its "dialing" state. This
       // certifies everything about launchRun except the provider's egress
       // (e.g. Daytona Tier-1/2 sandboxes cannot reach arbitrary hosts).
       if (entry.remote) {
-        const { HOST_ENTRY, HOST_SPEC_NAME } = await import("../../packages/core/opensession-server/src/runner-host/protocol");
+        const { HOST_ENTRY, HOST_SPEC_NAME } =
+          await import("../../packages/core/opensession-server/src/runner-host/protocol");
         const smokeDir = `/home/ubuntu/.bks-runs/smoke-${RUN_TS}`;
         const smokeSpec = {
           hostId: `rh-smoke-${RUN_TS}`,
@@ -828,7 +959,8 @@ async function runEntry(entry: Entry): Promise<void> {
           cwd: "/nonexistent-bks-smoke",
         };
         const boot = await sandbox.exec([
-          "sh", "-c",
+          "sh",
+          "-c",
           `mkdir -p ${smokeDir} && cat > ${smokeDir}/${HOST_SPEC_NAME} <<'EOF'\n${JSON.stringify(smokeSpec)}\nEOF\n` +
             `env HOME=/home/ubuntu OPENSESSION_RUN_WS_URL=ws://127.0.0.1:9/dead OPENSESSION_RUN_WS_TOKEN=smoke ` +
             `OPENSESSION_RUN_JOURNAL=${smokeDir}/journal.json nohup /home/ubuntu/.bun/bin/bun run ${HOST_ENTRY} ` +
@@ -838,14 +970,19 @@ async function runEntry(entry: Entry): Promise<void> {
         const smokeDeadline = Date.now() + 90_000;
         while (Date.now() < smokeDeadline && !/dialing/.test(smokeLog)) {
           await new Promise((r) => setTimeout(r, 3000));
-          smokeLog = (await sandbox.exec(["cat", `${smokeDir}/host.log`])).stdout;
+          smokeLog = (await sandbox.exec(["cat", `${smokeDir}/host.log`]))
+            .stdout;
         }
         ok(
           "runner payload boots in-sandbox (HOST_ENTRY reaches its dialing state)",
           boot.exitCode === 0 && /dialing ws:/.test(smokeLog),
           smokeLog.split("\n").slice(-2).join(" | ").slice(0, 160),
         );
-        await sandbox.exec(["sh", "-c", "pkill -f runner-host/host.ts || true"]);
+        await sandbox.exec([
+          "sh",
+          "-c",
+          "pkill -f runner-host/host.ts || true",
+        ]);
       }
     } else {
       const runSpec: RunHostSpec = {
@@ -871,7 +1008,9 @@ async function runEntry(entry: Entry): Promise<void> {
       let longExec: Promise<unknown> | null = null;
       if (entry.remote) {
         longExec = sandbox
-          .exec(["sh", "-c", "sleep 90; echo long-exec-done"], { background: true })
+          .exec(["sh", "-c", "sleep 90; echo long-exec-done"], {
+            background: true,
+          })
           .catch(() => {});
       }
       const t2 = Date.now();
@@ -919,7 +1058,11 @@ async function runEntry(entry: Entry): Promise<void> {
           ? `${result.type}: ${String(result.result || result.content || "").slice(0, 120)} (${((Date.now() - t2) / 1000).toFixed(1)}s)`
           : "timed out after 240s",
       );
-      ok("model replied", /\bOK\b/i.test(text) || /\bOK\b/i.test(String(result?.result || "")), JSON.stringify(text.slice(0, 60)));
+      ok(
+        "model replied",
+        /\bOK\b/i.test(text) || /\bOK\b/i.test(String(result?.result || "")),
+        JSON.stringify(text.slice(0, 60)),
+      );
 
       // steer + cancel on a second short run
       const cancelSpec: RunHostSpec = {
@@ -935,7 +1078,8 @@ async function runEntry(entry: Entry): Promise<void> {
         }
       })();
       const cDeadline = Date.now() + 90_000;
-      while (!cInit && Date.now() < cDeadline) await new Promise((r) => setTimeout(r, 500));
+      while (!cInit && Date.now() < cDeadline)
+        await new Promise((r) => setTimeout(r, 500));
       ok("second run started (for steer/cancel)", cInit);
 
       // A provider/account-capacity failure to initialize the second model
@@ -949,57 +1093,73 @@ async function runEntry(entry: Entry): Promise<void> {
           new Promise<void>((r) => setTimeout(r, 5_000)),
         ]);
       } else {
-
-      // WS transport resilience: kill the dialed-in connection server-side
-      // mid-run. The host must redial (≤5s backoff), replay the disconnect
-      // window (seq/ack — ws-buffer.ts), and the handle must reattach so
-      // steer/cancel below still land. Replay-exactly-once semantics are
-      // unit-tested in src/server/zz-run-ws.test.ts; this proves the live
-      // wiring end-to-end on a real run.
-      if (wsTransport) {
-        ok("ws connection dropped server-side (mid-run)", runWs.dropRunWsConnection(cancelSpec.hostId));
-        let redialed = false;
-        const wsDeadline = Date.now() + 30_000;
-        while (!redialed && Date.now() < wsDeadline) {
-          await new Promise((r) => setTimeout(r, 500));
-          redialed = runWs.hasLiveRunWsConnection(cancelSpec.hostId);
+        // WS transport resilience: kill the dialed-in connection server-side
+        // mid-run. The host must redial (≤5s backoff), replay the disconnect
+        // window (seq/ack — ws-buffer.ts), and the handle must reattach so
+        // steer/cancel below still land. Replay-exactly-once semantics are
+        // unit-tested in src/server/zz-run-ws.test.ts; this proves the live
+        // wiring end-to-end on a real run.
+        if (wsTransport) {
+          ok(
+            "ws connection dropped server-side (mid-run)",
+            runWs.dropRunWsConnection(cancelSpec.hostId),
+          );
+          let redialed = false;
+          const wsDeadline = Date.now() + 30_000;
+          while (!redialed && Date.now() < wsDeadline) {
+            await new Promise((r) => setTimeout(r, 500));
+            redialed = runWs.hasLiveRunWsConnection(cancelSpec.hostId);
+          }
+          ok("host redialed after the drop", redialed);
         }
-        ok("host redialed after the drop", redialed);
-      }
 
-      // The handle reconnects on its own cadence (2s polls) after a ws drop —
-      // retry the steer until it lands instead of asserting the first attempt.
-      let steered = cHandle.steer("Nudge: you may stop early.");
-      const steerDeadline = Date.now() + 30_000;
-      while (!steered && Date.now() < steerDeadline) {
-        await new Promise((r) => setTimeout(r, 1000));
-        steered = cHandle.steer("Nudge: you may stop early.");
-      }
-      ok("steer delivered", steered);
-      ok("cancel delivered", cHandle.cancel());
-      const cEnded = await Promise.race([
-        cConsume.then(() => true),
-        new Promise<false>((r) => setTimeout(() => r(false), 90_000)),
-      ]);
-      ok("cancelled run's stream terminated", cEnded === true);
-      ok("session not busy after cancel", !hostRunBusy(sessionId));
+        // The handle reconnects on its own cadence (2s polls) after a ws drop —
+        // retry the steer until it lands instead of asserting the first attempt.
+        let steered = cHandle.steer("Nudge: you may stop early.");
+        const steerDeadline = Date.now() + 30_000;
+        while (!steered && Date.now() < steerDeadline) {
+          await new Promise((r) => setTimeout(r, 1000));
+          steered = cHandle.steer("Nudge: you may stop early.");
+        }
+        ok("steer delivered", steered);
+        ok("cancel delivered", cHandle.cancel());
+        const cEnded = await Promise.race([
+          cConsume.then(() => true),
+          new Promise<false>((r) => setTimeout(() => r(false), 90_000)),
+        ]);
+        ok("cancelled run's stream terminated", cEnded === true);
+        ok("session not busy after cancel", !hostRunBusy(sessionId));
       }
     }
 
     // 7. get() reattach
     const got = await provider.get(sandbox.id);
-    ok("get() reattaches by id", got !== null && got.cwd === sandbox.cwd, got?.cwd);
+    ok(
+      "get() reattaches by id",
+      got !== null && got.cwd === sandbox.cwd,
+      got?.cwd,
+    );
   } finally {
     // 8. destroy — always, even on failures above (paid remote compute).
-    if (restoredSandbox) await provider.destroy(restoredSandbox.id).catch(() => {});
+    if (restoredSandbox)
+      await provider.destroy(restoredSandbox.id).catch(() => {});
     if (sandbox) {
       await provider.destroy(sandbox.id);
-      const gone = (await (await provider.get(sandbox.id))?.status()?.catch(() => "gone")) ?? "gone";
+      const gone =
+        (await (
+          await provider.get(sandbox.id)
+        )
+          ?.status()
+          ?.catch(() => "gone")) ?? "gone";
       ok("destroy() removed the sandbox", gone === "gone", String(gone));
       ok(
         "provider state file removed",
-        !existsSync(`${OPENSESSION_SESSIONS_DIR}/sandboxes/${entry.providerId}-${sandbox.id}.json`) &&
-          !existsSync(`${OPENSESSION_SESSIONS_DIR}/sandboxes/${sandbox.id}.json`),
+        !existsSync(
+          `${OPENSESSION_SESSIONS_DIR}/sandboxes/${entry.providerId}-${sandbox.id}.json`,
+        ) &&
+          !existsSync(
+            `${OPENSESSION_SESSIONS_DIR}/sandboxes/${sandbox.id}.json`,
+          ),
       );
     }
     await cleanupCertificationTemplate(entry);
@@ -1014,9 +1174,13 @@ async function auditDaytonaLeftovers(): Promise<void> {
   try {
     const { Daytona } = await import("@daytonaio/sdk");
     const client = new Daytona({ apiKey: daytonaKey });
-    const listLeftovers = async (): Promise<Array<{ id: string; state: string }>> => {
+    const listLeftovers = async (): Promise<
+      Array<{ id: string; state: string }>
+    > => {
       const out: Array<{ id: string; state: string }> = [];
-      for await (const s of client.list({ labels: { "opensession.sandbox": "1" } } as any)) {
+      for await (const s of client.list({
+        labels: { "opensession.sandbox": "1" },
+      } as any)) {
         // Deletion is async server-side — a sandbox mid-teardown still lists
         // with its labels (and even state "started") for a few seconds.
         const state = String((s as any).state || "");
@@ -1030,8 +1194,10 @@ async function auditDaytonaLeftovers(): Promise<void> {
         // pool's (daytona:tella-fusion, …) are equally off-limits here.
         const labels = (s as any).labels || {};
         const session = String(labels["opensession.session"] || "");
-        const prewarmRepo = String(labels["opensession.prewarm.key"] || "").split(":")[1] || "";
-        if (!session.startsWith("sbxtest-") && !prewarmRepo.startsWith("sbx")) continue;
+        const prewarmRepo =
+          String(labels["opensession.prewarm.key"] || "").split(":")[1] || "";
+        if (!session.startsWith("sbxtest-") && !prewarmRepo.startsWith("sbx"))
+          continue;
         out.push({ id: (s as any).id, state });
       }
       return out;
@@ -1081,7 +1247,9 @@ async function auditE2bLeftovers(): Promise<void> {
       // Same live-account guard as the daytona audit: only sbxtest sessions
       // are suite leftovers — never reap a real session's sandbox.
       return (infos || [])
-        .filter((s: any) => String(s.metadata?.bksSession || "").startsWith("sbxtest-"))
+        .filter((s: any) =>
+          String(s.metadata?.bksSession || "").startsWith("sbxtest-"),
+        )
         .map((s: any) => String(s.sandboxId || s.id || ""))
         .filter(Boolean);
     };
@@ -1122,7 +1290,9 @@ async function auditBoxLeftovers(): Promise<void> {
       signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) throw new Error(`list boxes: HTTP ${res.status}`);
-    const listActive = (boxes: Array<{ id: string; name?: string; state?: string }>) =>
+    const listActive = (
+      boxes: Array<{ id: string; name?: string; state?: string }>,
+    ) =>
       (boxes || []).filter(
         (box) =>
           String(box.name || "").startsWith("sbxtest-") &&
@@ -1140,7 +1310,8 @@ async function auditBoxLeftovers(): Promise<void> {
           headers: { Authorization: `Bearer ${boxKey}` },
           signal: AbortSignal.timeout(30_000),
         });
-        if (again.ok) leftovers = listActive(((await again.json()) as any).boxes);
+        if (again.ok)
+          leftovers = listActive(((await again.json()) as any).boxes);
       }
     }
     ok(
@@ -1180,9 +1351,12 @@ async function auditModalLeftovers(): Promise<void> {
         : {}),
       environment: liveCfg?.modal?.environment,
     });
-    const app = await client.apps.fromName(liveCfg?.modal?.app || "opensession-sandboxes", {
-      createIfMissing: true,
-    });
+    const app = await client.apps.fromName(
+      liveCfg?.modal?.app || "opensession-sandboxes",
+      {
+        createIfMissing: true,
+      },
+    );
     const listLeftovers = async () => {
       const out: Array<{ id: string; session: string }> = [];
       for await (const sandbox of client.sandboxes.list({
@@ -1191,7 +1365,8 @@ async function auditModalLeftovers(): Promise<void> {
       })) {
         const tags = await sandbox.getTags();
         const session = String(tags["opensession.session"] || "");
-        if (session.startsWith("sbxtest-")) out.push({ id: sandbox.sandboxId, session });
+        if (session.startsWith("sbxtest-"))
+          out.push({ id: sandbox.sandboxId, session });
       }
       return out;
     };
@@ -1242,28 +1417,45 @@ try {
     console.warn("  scratch ingress cleanup failed:", String(e).slice(0, 200));
   }
   // Docker scratch containers/volumes/state for both docker entries.
-  const { containerNameFor } = await import("../../packages/core/opensession-server/src/server/sandbox/docker");
+  const { containerNameFor } =
+    await import("../../packages/core/opensession-server/src/server/sandbox/docker");
   for (const e of entries.filter((x) => x.providerId === "docker")) {
     const c = containerNameFor(`sbxtest-conf-${e.name}-${RUN_TS}`);
     await sh(["docker", "rm", "-f", c]);
-    await sh(["docker", "volume", "rm", "-f", `${c}-claude`, `${c}-codex`, `${c}-ws`]);
+    await sh([
+      "docker",
+      "volume",
+      "rm",
+      "-f",
+      `${c}-claude`,
+      `${c}-codex`,
+      `${c}-ws`,
+    ]);
     rmSync(`${OPENSESSION_SESSIONS_DIR}/sandboxes/${c}.json`, { force: true });
   }
   for (const e of entries) {
-    rmSync(`${OPENSESSION_SESSIONS_DIR}/sandbox-runs/sbxtest-conf-${e.name}-${RUN_TS}`, {
-      recursive: true,
-      force: true,
-    });
+    rmSync(
+      `${OPENSESSION_SESSIONS_DIR}/sandbox-runs/sbxtest-conf-${e.name}-${RUN_TS}`,
+      {
+        recursive: true,
+        force: true,
+      },
+    );
   }
   // (scratch repo registrations die with the scratch OPENSESSION_CONFIG below)
   for (const dir of [WT]) {
     const munged = `-${dir.replaceAll("/", "-").replace(/^-/, "")}`;
-    rmSync(`${HOME}/.claude/projects/${munged}`, { recursive: true, force: true });
+    rmSync(`${HOME}/.claude/projects/${munged}`, {
+      recursive: true,
+      force: true,
+    });
   }
   rmSync(SCRATCH, { recursive: true, force: true });
   wsSrv.stop(true);
   console.log("  removed scratch repos, containers, state");
 }
 
-console.log(`\n${pass} passed, ${fail} failed${fail ? `:\n  - ${failures.join("\n  - ")}` : ""}`);
+console.log(
+  `\n${pass} passed, ${fail} failed${fail ? `:\n  - ${failures.join("\n  - ")}` : ""}`,
+);
 process.exit(fail ? 1 : 0);

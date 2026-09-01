@@ -20,10 +20,7 @@
  */
 
 import type { TranscriptEntry } from "./types";
-import {
-  appendSessionFeed,
-  type SessionFeedFrame,
-} from "./session-feed";
+import { appendSessionFeed, type SessionFeedFrame } from "./session-feed";
 
 /** A stored transcript entry annotated with its per-session sequence number. */
 export type SeqEntry = TranscriptEntry & { seq: number; changeSeq: number };
@@ -58,7 +55,7 @@ function bus(): Map<string, Set<TranscriptSubscriber>> {
  */
 export function subscribeTranscript(
   sessionId: string,
-  fn: TranscriptSubscriber
+  fn: TranscriptSubscriber,
 ): () => void {
   const map = bus();
   let subs = map.get(sessionId);
@@ -83,13 +80,13 @@ export function subscribeTranscript(
  */
 export function publishTranscript(
   sessionId: string,
-  event: TranscriptBusEvent
+  event: TranscriptBusEvent,
 ): void {
   const subscribers = [...(bus().get(sessionId) ?? [])];
   queueMicrotask(() => {
     const lastChangeSeq = event.entries.reduce(
       (last, entry) => Math.max(last, entry.changeSeq),
-      0
+      0,
     );
     // Assign the feed sequence at delivery time. Appending it before this
     // microtask let a later stream_tool_* frame send synchronously with a

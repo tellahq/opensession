@@ -4,27 +4,27 @@ import { mergeStylexProps } from "../ui/cn";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	overflowVisible: {
-			overflow: "visible"
-	},
-	flex: {
-			display: "flex"
-	},
-	translateYPx: {
-			translate: "0 1px"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	h4: { height: "16px" },
-	minW4: { minWidth: "16px" },
-	flexShrink0: { flexShrink: "0" },
-	px05: { paddingInline: "2px" },
-	fontBold: { fontWeight: "var(--font-weight-bold)" },
-	leadingNone: { lineHeight: "1" },
+  overflowVisible: {
+    overflow: "visible",
+  },
+  flex: {
+    display: "flex",
+  },
+  translateYPx: {
+    translate: "0 1px",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  h4: { height: "16px" },
+  minW4: { minWidth: "16px" },
+  flexShrink0: { flexShrink: "0" },
+  px05: { paddingInline: "2px" },
+  fontBold: { fontWeight: "var(--font-weight-bold)" },
+  leadingNone: { lineHeight: "1" },
 });
 
 /**
@@ -204,10 +204,28 @@ export function ExtBadge({
   const Glyph = LANG_MARKS[ext];
   return (
     <span
-      {...mergeStylexProps(className, sx.flex, sx.h4, sx.minW4, sx.flexShrink0, sx.itemsCenter, sx.justifyCenter, sx.px05, sx.fontBold, sx.leadingNone)}
+      {...mergeStylexProps(
+        className,
+        sx.flex,
+        sx.h4,
+        sx.minW4,
+        sx.flexShrink0,
+        sx.itemsCenter,
+        sx.justifyCenter,
+        sx.px05,
+        sx.fontBold,
+        sx.leadingNone,
+      )}
       style={{ color: `color-mix(in oklab, ${color} 75%, var(--text))` }}
     >
-      <span {...stylex.props(sx.flex, sx.translateYPx, sx.itemsCenter, sx.justifyCenter)}>
+      <span
+        {...stylex.props(
+          sx.flex,
+          sx.translateYPx,
+          sx.itemsCenter,
+          sx.justifyCenter,
+        )}
+      >
         {Glyph ? <Glyph size={size} /> : extLabel(ext)}
       </span>
     </span>

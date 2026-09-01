@@ -165,11 +165,23 @@ enum SettingsAPI {
     }
 
     /// Per-user sidebar lanes, shared with the web sidebar (session id → the
-    /// lane it is claimed into). Read-only here: claiming is a browser action,
-    /// and this app only asks which rows are yours (see `LaneStore`).
+    /// lane it is claimed into). Writes are per-key deltas so this client
+    /// cannot erase claims another client made from an older snapshot.
     static func lanes(user: String) async throws -> [String: String] {
         struct Response: Decodable, Sendable { var lanes: [String: String]? }
         let response: Response = try await request("/api/lanes", query: ["user": user])
+        return response.lanes ?? [:]
+    }
+
+    @discardableResult
+    static func saveLanes(
+        user: String,
+        set: [String: String],
+        remove: [String] = []
+    ) async throws -> [String: String] {
+        struct Response: Decodable, Sendable { var lanes: [String: String]? }
+        let body: [String: Any] = ["user": user, "set": set, "remove": remove]
+        let response: Response = try await request("/api/lanes", method: "PUT", body: body)
         return response.lanes ?? [:]
     }
 

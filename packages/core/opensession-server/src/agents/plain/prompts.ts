@@ -7,7 +7,10 @@ import {
   personaProduct,
 } from "../../server/config";
 
-export function buildMentionPrompt(request: string, threadContext: string): string {
+export function buildMentionPrompt(
+  request: string,
+  threadContext: string,
+): string {
   const agent = personaName();
   return `You are ${agent}, a support assistant for ${personaCompany()} and ${personaProduct()}. A support team member has mentioned you in an internal note asking for help.
 
@@ -58,7 +61,10 @@ Respond concisely and helpfully.`;
  * explicit approval note. Runs with the Stripe money tools UNLOCKED, so it is
  * deliberately strict: execute ONLY the exact action already proposed.
  */
-export function buildRefundExecutionPrompt(request: string, threadContext: string): string {
+export function buildRefundExecutionPrompt(
+  request: string,
+  threadContext: string,
+): string {
   const agent = personaName();
   return `You are ${agent}, a support assistant for ${personaCompany()} and ${personaProduct()}. A verified support agent has approved executing a refund/cancellation that you previously PROPOSED in this thread.
 
@@ -83,7 +89,10 @@ After a successful execution, do BOTH:
 If you aborted, do not include a DRAFT REPLY.`;
 }
 
-export function buildWorkPrompt(workDescription: string, threadContext: string): string {
+export function buildWorkPrompt(
+  workDescription: string,
+  threadContext: string,
+): string {
   return `You are working on a support-related code task.
 
 **Task:** ${workDescription}

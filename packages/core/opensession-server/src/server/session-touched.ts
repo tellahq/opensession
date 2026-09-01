@@ -48,10 +48,17 @@ function toolPaths(entry: TranscriptEntry): string[] {
   if (!input || typeof input !== "object") return [];
   const inp = input as Record<string, unknown>;
   const str = (...names: string[]) => {
-    for (const n of names) if (typeof inp[n] === "string" && inp[n]) return inp[n] as string;
+    for (const n of names)
+      if (typeof inp[n] === "string" && inp[n]) return inp[n] as string;
     return "";
   };
-  const file = str("file_path", "filePath", "notebook_path", "notebookPath", "path");
+  const file = str(
+    "file_path",
+    "filePath",
+    "notebook_path",
+    "notebookPath",
+    "path",
+  );
   if (file) return [file];
   return patchPaths(str("patchText", "patch"));
 }
@@ -79,7 +86,9 @@ const CACHE_TTL = 30_000;
 const cache = new Map<string, CacheEntry>();
 
 /** What mergedSessionTranscriptAsync needs to find a session's entries. */
-export type TouchedSessionRef = Pick<UnifiedSession, "transcriptPath"> & { id: string };
+export type TouchedSessionRef = Pick<UnifiedSession, "transcriptPath"> & {
+  id: string;
+};
 
 /** Repo-relative paths of every file this session's tool calls wrote. */
 export async function sessionTouchedPaths(

@@ -17,11 +17,11 @@ const PART_OVERHEAD = 32;
 
 /** True when this part ends inside an unclosed fenced code block. */
 function endsInsideFence(part: string): boolean {
-	let open = false;
-	for (const line of part.split("\n")) {
-		if (line.startsWith("```")) open = !open;
-	}
-	return open;
+  let open = false;
+  for (const line of part.split("\n")) {
+    if (line.startsWith("```")) open = !open;
+  }
+  return open;
 }
 
 /**
@@ -32,41 +32,41 @@ function endsInsideFence(part: string): boolean {
  * A body that already fits is returned unchanged and unnumbered.
  */
 export function splitNoteText(
-	text: string,
-	max: number = PLAIN_NOTE_MAX_CHARS,
+  text: string,
+  max: number = PLAIN_NOTE_MAX_CHARS,
 ): string[] {
-	if (text.length <= max) return [text];
+  if (text.length <= max) return [text];
 
-	const budget = Math.max(1, max - PART_OVERHEAD);
-	const parts: string[] = [];
-	let rest = text;
+  const budget = Math.max(1, max - PART_OVERHEAD);
+  const parts: string[] = [];
+  let rest = text;
 
-	while (rest.length > budget) {
-		let cut = 0;
-		for (const sep of ["\n\n", "\n", " "]) {
-			const at = rest.lastIndexOf(sep, budget);
-			// Only honour a boundary that still fills most of the part, so one
-			// early newline in a wall of text cannot produce 40 tiny notes.
-			if (at > budget / 2) {
-				cut = at + sep.length;
-				break;
-			}
-		}
-		if (!cut) cut = budget;
-		parts.push(rest.slice(0, cut).trimEnd());
-		rest = rest.slice(cut).trimStart();
-	}
-	if (rest.length) parts.push(rest);
+  while (rest.length > budget) {
+    let cut = 0;
+    for (const sep of ["\n\n", "\n", " "]) {
+      const at = rest.lastIndexOf(sep, budget);
+      // Only honour a boundary that still fills most of the part, so one
+      // early newline in a wall of text cannot produce 40 tiny notes.
+      if (at > budget / 2) {
+        cut = at + sep.length;
+        break;
+      }
+    }
+    if (!cut) cut = budget;
+    parts.push(rest.slice(0, cut).trimEnd());
+    rest = rest.slice(cut).trimStart();
+  }
+  if (rest.length) parts.push(rest);
 
-	// Close and re-open a code fence the cut landed inside, so each part still
-	// renders as its own valid markdown.
-	for (let i = 0; i < parts.length - 1; i++) {
-		const part = parts[i] ?? "";
-		if (endsInsideFence(part)) {
-			parts[i] = `${part}\n\`\`\``;
-			parts[i + 1] = `\`\`\`\n${parts[i + 1] ?? ""}`;
-		}
-	}
+  // Close and re-open a code fence the cut landed inside, so each part still
+  // renders as its own valid markdown.
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i] ?? "";
+    if (endsInsideFence(part)) {
+      parts[i] = `${part}\n\`\`\``;
+      parts[i + 1] = `\`\`\`\n${parts[i + 1] ?? ""}`;
+    }
+  }
 
-	return parts.map((part, i) => `${part}\n\n(${i + 1}/${parts.length})`);
+  return parts.map((part, i) => `${part}\n\n(${i + 1}/${parts.length})`);
 }

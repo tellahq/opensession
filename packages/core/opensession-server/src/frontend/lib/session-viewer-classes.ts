@@ -58,21 +58,24 @@ import { RAIL_GUTTER_CLASS } from "./message-rail";
  * rests on.
  */
 export const VIEWER_HEADER =
-	utilityClassName("viewer-header wco-chrome flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 ") +
-	utilityClassName("bg-surface px-4 ") +
-	// Collapsed desktop sidebar: the floating re-open + nav cluster overlays the
-	// pane's left edge, so the row's text starts past it.
-	"desktop:[.app-body.sidebar-collapsed_&]:pl-[148px] " +
-	// On phones the bar is a set of floating pills inside the app header, not a
-	// row of its own.
-	"phone:[.app-header-actions_&]:h-auto phone:[.app-header-actions_&]:gap-1.5 " +
-	"phone:[.app-header-actions_&]:bg-transparent " +
-	"phone:[.app-header-actions_&]:p-0";
+  utilityClassName(
+    "viewer-header wco-chrome flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 ",
+  ) +
+  utilityClassName("bg-surface px-4 ") +
+  // Collapsed desktop sidebar: the floating re-open + nav cluster overlays the
+  // pane's left edge, so the row's text starts past it.
+  "desktop:[.app-body.sidebar-collapsed_&]:pl-[148px] " +
+  // On phones the bar is a set of floating pills inside the app header, not a
+  // row of its own.
+  "phone:[.app-header-actions_&]:h-auto phone:[.app-header-actions_&]:gap-1.5 " +
+  "phone:[.app-header-actions_&]:bg-transparent " +
+  "phone:[.app-header-actions_&]:p-0";
 
 /** Workspace name + origin chip + status. Hidden on phones, where the ⋯ menu
  *  carries what it holds. */
-export const VIEWER_TITLE =
-	utilityClassName("flex min-w-0 items-center gap-2.5 font-medium phone:hidden");
+export const VIEWER_TITLE = utilityClassName(
+  "flex min-w-0 items-center gap-2.5 font-medium phone:hidden",
+);
 
 /**
  * The workspace name. Capped so a long one clips instead of eating the whole
@@ -81,10 +84,12 @@ export const VIEWER_TITLE =
  * stays selectable and copyable.
  */
 export const VIEWER_BRANCH =
-	utilityClassName("min-w-0 max-w-[420px] -translate-y-px select-text overflow-hidden whitespace-nowrap text-item-title ") +
-	"[-webkit-touch-callout:default] " +
-	"[html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] " +
-	"[html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]";
+  utilityClassName(
+    "min-w-0 max-w-[420px] -translate-y-px select-text overflow-hidden whitespace-nowrap text-item-title ",
+  ) +
+  utilityClassName("[-webkit-touch-callout:default] ") +
+  "[html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] " +
+  "[html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]";
 
 /**
  * A crumb BEFORE the session's own name: the session a worker was spawned from.
@@ -93,18 +98,27 @@ export const VIEWER_BRANCH =
  * precedes, since the name is what the bar is about.
  */
 export const VIEWER_CRUMB_UP =
-	utilityClassName("-mx-2 -my-[5px] max-w-[240px] shrink cursor-pointer overflow-hidden text-ellipsis rounded-[calc(6px*var(--rf))] px-2 py-[5px] ") +
-	utilityClassName("text-label font-medium text-dim transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] ") +
-	utilityClassName("hover:bg-hover hover:text-fg");
+  utilityClassName(
+    "-mx-2 -my-[5px] max-w-[240px] shrink cursor-pointer overflow-hidden text-ellipsis rounded-[calc(6px*var(--rf))] px-2 py-[5px] ",
+  ) +
+  utilityClassName(
+    "text-label font-medium text-dim transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] ",
+  ) +
+  utilityClassName("hover:bg-hover hover:text-fg");
 
 /** Double-clickable to rename — hinted on hover without shifting the row. */
-export const VIEWER_BRANCH_EDITABLE =
-	utilityClassName("-mx-2 -my-[5px] cursor-text rounded-[calc(6px*var(--rf))] px-2 py-[5px] hover:bg-hover");
+export const VIEWER_BRANCH_EDITABLE = utilityClassName(
+  "-mx-2 -my-[5px] cursor-text rounded-[calc(6px*var(--rf))] px-2 py-[5px] hover:bg-hover",
+);
 
 /** Inline rename input, sized to sit in place of the name. */
 export const VIEWER_BRANCH_RENAME =
-	utilityClassName("my-[-2px] min-w-0 max-w-[280px] rounded-[calc(8px*var(--rf))] border border-accent bg-surface ") +
-	utilityClassName("px-1 py-px font-[inherit] text-item-title text-[inherit] outline-none");
+  utilityClassName(
+    "my-[-2px] min-w-0 max-w-[280px] rounded-[calc(8px*var(--rf))] border border-accent bg-surface ",
+  ) +
+  utilityClassName(
+    "px-1 py-px font-[inherit] text-item-title text-[inherit] outline-none",
+  );
 
 /**
  * The trailing controls. Icon buttons sit in a tight cluster so they read as
@@ -115,18 +129,20 @@ export const VIEWER_BRANCH_RENAME =
  * PWA.
  */
 export const VIEWER_HEADER_ACTIONS =
-	// The tab strip overlaps the header's lower edge to tighten the two rows.
-	// Keep every header action above that overlap so its bottom edge and hit area
-	// remain intact.
-	utilityClassName("viewer-header-actions pwa-header-actions relative z-[1] flex shrink-0 items-center gap-0.5 phone:justify-end ") +
-	// Phones give every control in the row a 44px touch target. Keyed off the
-	// row rather than written on each control because these are shared
-	// primitives (Button, and the source links below). A descendant selector also
-	// lets this outrank the primitive's own padding, exactly as the legacy rule
-	// did. `inline-flex` and `items-center` are not carried because the primitive
-	// is already both on every viewport.
-	"phone:[&_button]:min-h-11 phone:[&_button]:px-[11px] phone:[&_button]:py-[7px] " +
-	"phone:[&_button]:text-label";
+  // The tab strip overlaps the header's lower edge to tighten the two rows.
+  // Keep every header action above that overlap so its bottom edge and hit area
+  // remain intact.
+  utilityClassName(
+    "viewer-header-actions pwa-header-actions relative z-[1] flex shrink-0 items-center gap-0.5 phone:justify-end ",
+  ) +
+  // Phones give every control in the row a 44px touch target. Keyed off the
+  // row rather than written on each control because these are shared
+  // primitives (Button, and the source links below). A descendant selector also
+  // lets this outrank the primitive's own padding, exactly as the legacy rule
+  // did. `inline-flex` and `items-center` are not carried because the primitive
+  // is already both on every viewport.
+  "phone:[&_button]:min-h-11 phone:[&_button]:px-[11px] phone:[&_button]:py-[7px] " +
+  "phone:[&_button]:text-label";
 
 /** The presence facepile (Figma/Notion-style), just before Share. Labelled
  *  items in the row space themselves off the icon cluster; the icons keep the
@@ -151,18 +167,26 @@ export const VIEWER_PRESENCE_AVATAR = utilityClassName("-ml-2 first:ml-0");
  * for and swapping in one would be a redesign.
  */
 export const SESSION_LINK =
-	utilityClassName("session-link mr-1.5 rounded-control border border-line-strong px-[11px] py-[5px] ") +
-	utilityClassName("text-label font-semibold text-dim no-underline ") +
-	// Phones give it the same 44px touch target as the buttons beside it. These
-	// sit on the link rather than on the row, where the buttons' copy lives,
-	// because this is the element's own styling and nothing else wears the class
-	// in this row. Only the declarations that actually change are written: the
-	// 11px sides are already the resting value. A `phone:` variant beats the
-	// unprefixed `py-[5px]` and `text-label` on the same element because Tailwind
-	// emits every breakpoint variant after the unprefixed utilities.
-	utilityClassName("phone:inline-flex phone:min-h-11 phone:items-center phone:py-[7px] phone:text-label");
-export const SESSION_LINK_LINEAR = utilityClassName("border-[rgba(94,106,210,0.5)] text-[#7b86e8]");
-export const SESSION_LINK_PLAIN = utilityClassName("border-[rgba(13,148,136,0.5)] text-[#5eead4]");
+  utilityClassName(
+    "session-link mr-1.5 rounded-control border border-line-strong px-[11px] py-[5px] ",
+  ) +
+  utilityClassName("text-label font-semibold text-dim no-underline ") +
+  // Phones give it the same 44px touch target as the buttons beside it. These
+  // sit on the link rather than on the row, where the buttons' copy lives,
+  // because this is the element's own styling and nothing else wears the class
+  // in this row. Only the declarations that actually change are written: the
+  // 11px sides are already the resting value. A `phone:` variant beats the
+  // unprefixed `py-[5px]` and `text-label` on the same element because Tailwind
+  // emits every breakpoint variant after the unprefixed utilities.
+  utilityClassName(
+    "phone:inline-flex phone:min-h-11 phone:items-center phone:py-[7px] phone:text-label",
+  );
+export const SESSION_LINK_LINEAR = utilityClassName(
+  "border-[rgba(94,106,210,0.5)] text-[#7b86e8]",
+);
+export const SESSION_LINK_PLAIN = utilityClassName(
+  "border-[rgba(13,148,136,0.5)] text-[#5eead4]",
+);
 
 /** ⋯ overflow: the secondary actions collapse into the shared Menu popup when
  *  they would otherwise crowd the title. */
@@ -178,7 +202,7 @@ export const VIEWER_OVERFLOW = utilityClassName("relative inline-flex");
  * carries nothing else.
  */
 export const VIEWER_MENU_SEP =
-	"session-menu-sep first:hidden [.session-menu-sep+&]:hidden";
+  "session-menu-sep first:hidden [.session-menu-sep+&]:hidden";
 
 /* ── Panes ──────────────────────────────────────────────────────────────── */
 
@@ -189,8 +213,10 @@ export const VIEWER_MENU_SEP =
  * bar, so it is pushed below them instead.
  */
 export const VIEWER_REVIEW_MAIN =
-	utilityClassName("flex min-h-0 flex-1 flex-col ") +
-	utilityClassName("phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px))]");
+  utilityClassName("flex min-h-0 flex-1 flex-col ") +
+  utilityClassName(
+    "phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px))]",
+  );
 
 /* ── Transcript ─────────────────────────────────────────────────────────── */
 
@@ -206,7 +232,9 @@ export const VIEWER_REVIEW_MAIN =
  * VIEWER_MESSAGES), where the chrome overlays the content instead of sitting
  * above it.
  */
-export const VIEWER_MESSAGES_REGION = utilityClassName("relative flex min-h-0 flex-1 flex-col");
+export const VIEWER_MESSAGES_REGION = utilityClassName(
+  "relative flex min-h-0 flex-1 flex-col",
+);
 
 /**
  * The scroll container.
@@ -229,34 +257,44 @@ export const VIEWER_MESSAGES_REGION = utilityClassName("relative flex min-h-0 fl
  * session column by SessionViewer, sized by SUGGESTIONS_CLEARANCE).
  */
 export const VIEWER_MESSAGES =
-	utilityClassName("viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain ") +
-	// Keep the reader's place when content loads or expands above them.
-	utilityClassName("[overflow-anchor:auto] px-5 pt-0 ") +
-	utilityClassName("pb-[calc(var(--session-under)_+_var(--suggestions-under,0px)_+_16px)] ") +
-	// A focused phone composer is fixed and no longer reserves flow height,
-	// while the transcript's layout viewport still extends behind the keyboard.
-	// Clear both measured obstructions so even a tall draft and the last live
-	// status row can scroll completely into the visible strip above them.
-	"phone:[body.kb-open_&]:pb-[calc(var(--kb-inset,0px)_+_var(--viewer-input-height,64px)_+_var(--suggestions-under,0px)_+_8px)] " +
-	// Wider side padding where the message rail lives, so its ticks have a
-	// gutter of their own instead of sitting on the bubbles (lib/message-rail.ts).
-	`${RAIL_GUTTER_CLASS} ` +
-	"[&>*]:w-full [&>*]:shrink-0 " +
-	// 12px of clear space under the bar so the first row starts below it rather
-	// than against it, and so a tab strip's baseline rule (the only line that
-	// still sits above the transcript) has nothing resting on it. Only at rest:
-	// scrolled content still runs right up under the chrome.
-	utilityClassName("desktop:pt-3 ") +
-	// Phone: clear the floating pills at rest, then scroll under them.
-	// --strip-clearance is 0 by default and the docked tab bar's height on a
-	// multi-session workspace.
-	utilityClassName("phone:px-3 ") +
-	utilityClassName("phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)] ") +
-	// Dissolve the transcript into the header as it scrolls up under the pills.
-	// A non-linear fade mirrored into mask alpha:
-	// hidden for the first fifth, 45% by three fifths, full at the bar height.
-	"phone:[-webkit-mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] " +
-	"phone:[mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))]";
+  utilityClassName(
+    "viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain ",
+  ) +
+  // Keep the reader's place when content loads or expands above them.
+  utilityClassName("[overflow-anchor:auto] px-5 pt-0 ") +
+  utilityClassName(
+    "pb-[calc(var(--session-under)_+_var(--suggestions-under,0px)_+_16px)] ",
+  ) +
+  // A focused phone composer is fixed and no longer reserves flow height,
+  // while the transcript's layout viewport still extends behind the keyboard.
+  // Clear both measured obstructions so even a tall draft and the last live
+  // status row can scroll completely into the visible strip above them.
+  "phone:[body.kb-open_&]:pb-[calc(var(--kb-inset,0px)_+_var(--viewer-input-height,64px)_+_var(--suggestions-under,0px)_+_8px)] " +
+  // Wider side padding where the message rail lives, so its ticks have a
+  // gutter of their own instead of sitting on the bubbles (lib/message-rail.ts).
+  `${RAIL_GUTTER_CLASS} ` +
+  "[&>*]:w-full [&>*]:shrink-0 " +
+  // 12px of clear space under the bar so the first row starts below it rather
+  // than against it, and so a tab strip's baseline rule (the only line that
+  // still sits above the transcript) has nothing resting on it. Only at rest:
+  // scrolled content still runs right up under the chrome.
+  utilityClassName("desktop:pt-3 ") +
+  // Phone: clear the floating pills at rest, then scroll under them.
+  // --strip-clearance is 0 by default and the docked tab bar's height on a
+  // multi-session workspace.
+  utilityClassName("phone:px-3 ") +
+  utilityClassName(
+    "phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)] ",
+  ) +
+  // Dissolve the transcript into the header as it scrolls up under the pills.
+  // A non-linear fade mirrored into mask alpha:
+  // hidden for the first fifth, 45% by three fifths, full at the bar height.
+  utilityClassName(
+    "phone:[-webkit-mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] ",
+  ) +
+  utilityClassName(
+    "phone:[mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))]",
+  );
 
 /**
  * The composer floats up over the transcript so the session scrolls UNDER it,
@@ -270,26 +308,32 @@ export const VIEWER_MESSAGES =
  * the input, then disappears behind the composer itself without a blank band.
  */
 export const VIEWER_INPUT =
-	utilityClassName("relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 px-5 pt-1 pb-3.5 ") +
-	// The same gutter the transcript keeps, so the input stays on the column's
-	// edges rather than reaching past them.
-	`${RAIL_GUTTER_CLASS} ` +
-	// The fade is a later sibling of the native scroller, so painting it edge to
-	// edge also fades an overlay scrollbar. Leave its narrow gutter unpainted;
-	// raising the scroller would incorrectly lift transcript content too.
-	"[background:linear-gradient(to_bottom,transparent_0,var(--bg)_var(--session-under))_left_top/calc(100%_-_14px)_100%_no-repeat] " +
-	// Phone: clear the home indicator rather than jamming the composer against
-	// the very bottom edge. That gap is also all the room the composer's shadow
-	// gets in mobile Safari, where there is no safe-area inset.
-	utilityClassName("phone:px-3 phone:pb-[max(16px,env(safe-area-inset-bottom,0px))] ") +
-	// Keyboard up: pin the input to Safari's fixed viewport instead of relying on
-	// its focus pan, which can stop with the toolbar floating above the keyboard.
-	// Fixed bottom already follows the visible keyboard edge on iOS Safari, so do
-	// not add `--kb-inset` again: that double-counts the keyboard and lifts the
-	// composer by hundreds of pixels. The painted wrapper keeps the solid tail of
-	// the fade behind a compact 8px gap down to the keyboard.
-	"phone:[body.kb-open_&]:fixed phone:[body.kb-open_&]:inset-x-0 phone:[body.kb-open_&]:bottom-0 " +
-	"phone:[body.kb-open_&]:pb-2";
+  utilityClassName(
+    "relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 px-5 pt-1 pb-3.5 ",
+  ) +
+  // The same gutter the transcript keeps, so the input stays on the column's
+  // edges rather than reaching past them.
+  `${RAIL_GUTTER_CLASS} ` +
+  // The fade is a later sibling of the native scroller, so painting it edge to
+  // edge also fades an overlay scrollbar. Leave its narrow gutter unpainted;
+  // raising the scroller would incorrectly lift transcript content too.
+  utilityClassName(
+    "[background:linear-gradient(to_bottom,transparent_0,var(--bg)_var(--session-under))_left_top/calc(100%_-_14px)_100%_no-repeat] ",
+  ) +
+  // Phone: clear the home indicator rather than jamming the composer against
+  // the very bottom edge. That gap is also all the room the composer's shadow
+  // gets in mobile Safari, where there is no safe-area inset.
+  utilityClassName(
+    "phone:px-3 phone:pb-[max(16px,env(safe-area-inset-bottom,0px))] ",
+  ) +
+  // Keyboard up: pin the input to Safari's fixed viewport instead of relying on
+  // its focus pan, which can stop with the toolbar floating above the keyboard.
+  // Fixed bottom already follows the visible keyboard edge on iOS Safari, so do
+  // not add `--kb-inset` again: that double-counts the keyboard and lifts the
+  // composer by hundreds of pixels. The painted wrapper keeps the solid tail of
+  // the fade behind a compact 8px gap down to the keyboard.
+  "phone:[body.kb-open_&]:fixed phone:[body.kb-open_&]:inset-x-0 phone:[body.kb-open_&]:bottom-0 " +
+  "phone:[body.kb-open_&]:pb-2";
 
 /**
  * The step the transcript and the composer take while the workspace summary
@@ -303,7 +347,7 @@ export const VIEWER_INPUT =
  * own box, its padding and its overflow exactly where they were.
  */
 export const VIEWER_SUMMARY_STEP =
-	"desktop:[&>*]:translate-x-[var(--ws-summary-step,0px)]";
+  "desktop:[&>*]:translate-x-[var(--ws-summary-step,0px)]";
 
 /**
  * The session's floating actions on the composer's own width. Desktop keeps
@@ -314,14 +358,16 @@ export const VIEWER_SUMMARY_STEP =
  * here is the composer's own box. Desktop keeps the input's 20px right inset.
  */
 export const VIEWER_ACTION_ROW =
-	utilityClassName("flex w-full max-w-[calc(var(--session-col)+40px)] items-center justify-end gap-3 pr-5 ") +
-	utilityClassName("phone:flex-col phone:gap-2 phone:pr-0");
+  utilityClassName(
+    "flex w-full max-w-[calc(var(--session-col)+40px)] items-center justify-end gap-3 pr-5 ",
+  ) + utilityClassName("phone:flex-col phone:gap-2 phone:pr-0");
 
 /** Keep the reading action centred between replies and Next when all three
  * share the desktop row. Equal side tracks let either side yield and scroll
  * without moving the middle control off the conversation's centre line. */
-export const VIEWER_ACTION_ROW_WITH_SCROLL =
-	utilityClassName("desktop:grid desktop:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]");
+export const VIEWER_ACTION_ROW_WITH_SCROLL = utilityClassName(
+  "desktop:grid desktop:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]",
+);
 
 /**
  * The band the session's own offers hang in: the quick-reply chips and the
@@ -347,8 +393,9 @@ export const VIEWER_ACTION_ROW_WITH_SCROLL =
  * of the band is transcript you should still be able to select.
  */
 export const VIEWER_SUGGESTIONS =
-	utilityClassName("pointer-events-none absolute inset-x-0 bottom-full flex justify-center px-5 pb-1.5 ") +
-	utilityClassName(`${RAIL_GUTTER_CLASS} phone:px-3`);
+  utilityClassName(
+    "pointer-events-none absolute inset-x-0 bottom-full flex justify-center px-5 pb-1.5 ",
+  ) + utilityClassName(`${RAIL_GUTTER_CLASS} phone:px-3`);
 
 /**
  * The room the transcript keeps clear while that band is up, set on the session
@@ -374,13 +421,15 @@ export const SCROLL_ACTION_CLEARANCE = "[--suggestions-under:38px]";
  * Written out rather than derived, because Tailwind compiles the class names it
  * can find spelled in the source.
  */
-export const ACTION_CLEARANCE =
-	"[--suggestions-under:46px] phone:[--suggestions-under:54px] phone:[body.kb-open_&]:[--suggestions-under:0px]";
+export const ACTION_CLEARANCE = utilityClassName(
+  "[--suggestions-under:46px] phone:[--suggestions-under:54px] phone:[body.kb-open_&]:[--suggestions-under:0px]",
+);
 
 /** Phone stacks quick replies above the 48px action bar. With the keyboard up,
  * only the 28px reply row and its 6px standoff remain. */
-export const ACTION_WITH_REPLIES_CLEARANCE =
-	"[--suggestions-under:46px] phone:[--suggestions-under:90px] phone:[body.kb-open_&]:[--suggestions-under:34px]";
+export const ACTION_WITH_REPLIES_CLEARANCE = utilityClassName(
+  "[--suggestions-under:46px] phone:[--suggestions-under:90px] phone:[body.kb-open_&]:[--suggestions-under:34px]",
+);
 
 /**
  * The chips themselves, filling the action row beside Next.
@@ -403,8 +452,9 @@ export const ACTION_WITH_REPLIES_CLEARANCE =
  * composer box itself, so it is not in scope here. ReplySuggestions.test.tsx
  * holds the two together.
  */
-export const VIEWER_SUGGESTIONS_ROW =
-	utilityClassName("min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[17px]");
+export const VIEWER_SUGGESTIONS_ROW = utilityClassName(
+  "min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[17px]",
+);
 
 /**
  * The same chips once Next shares the row with them.
@@ -415,21 +465,27 @@ export const VIEWER_SUGGESTIONS_ROW =
  * than clipping the final capsule for an indent the narrow row cannot afford.
  * `min-w-0` still lets longer choices scroll sideways instead of pushing Next.
  */
-export const VIEWER_SUGGESTIONS_ROW_INLINE =
-	utilityClassName("min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[10px]");
+export const VIEWER_SUGGESTIONS_ROW_INLINE = utilityClassName(
+  "min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[10px]",
+);
 
 /* ── Banners and the delete overlay ─────────────────────────────────────── */
 
-export const SESSION_BANNERS =
-	utilityClassName("flex flex-wrap gap-2 border-b border-divider bg-raised px-4 py-[7px]");
+export const SESSION_BANNERS = utilityClassName(
+  "flex flex-wrap gap-2 border-b border-divider bg-raised px-4 py-[7px]",
+);
 
 /** A single notice pill. It carries no ink of its own: the caller supplies the
  *  tone, because two text-colour utilities on one element are resolved by
  *  Tailwind's output order rather than the order they are written. 12px in the
  *  old sheet; it is interface copy, so it snaps to `text-label`. */
 export const SESSION_BANNER =
-	utilityClassName("inline-flex max-w-full items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap ") +
-	utilityClassName("rounded-full border border-line bg-panel px-3 py-[3px] text-label");
+  utilityClassName(
+    "inline-flex max-w-full items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap ",
+  ) +
+  utilityClassName(
+    "rounded-full border border-line bg-panel px-3 py-[3px] text-label",
+  );
 
 /** Shown while a delete (optionally + worktree) is in flight — worktree
  *  cleanup can take a few seconds, so the view shows progress instead of
@@ -457,11 +513,17 @@ export const SESSION_DELETE_LABEL = utilityClassName("text-label text-dim");
  *  one property resolve by Tailwind's output order, not by the order they are
  *  written in. */
 const PILL_SHAPE =
-	utilityClassName("inline-flex min-h-8 items-center rounded-[999px] pr-3.5 pl-2.5 ") +
-	utilityClassName("text-label font-semibold text-fg ") +
-	"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm";
+  utilityClassName(
+    "inline-flex min-h-8 items-center rounded-[999px] pr-3.5 pl-2.5 ",
+  ) +
+  utilityClassName("text-label font-semibold text-fg ") +
+  utilityClassName(
+    "[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
+  );
 
-const PILL_BASE = utilityClassName(`${PILL_SHAPE} bg-popup-glass [backdrop-filter:var(--popup-blur)]`);
+const PILL_BASE = utilityClassName(
+  `${PILL_SHAPE} bg-popup-glass [backdrop-filter:var(--popup-blur)]`,
+);
 
 /**
  * The same pill, opaque — a lid rather than glass.
@@ -498,20 +560,34 @@ export const FLOATING_PILL = utilityClassName(`${PILL_LID} gap-1.5`);
  * square off the corners it extends past.
  */
 const PILL_PRESSABLE =
-	utilityClassName("group relative cursor-pointer transition-[scale] ") +
-	utilityClassName("before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] ") +
-	utilityClassName("before:[corner-shape:inherit] before:bg-transparent before:transition-colors before:content-[''] ") +
-	utilityClassName("after:absolute after:content-[''] hover:before:bg-hover ") +
-	utilityClassName("focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]");
+  utilityClassName("group relative cursor-pointer transition-[scale] ") +
+  utilityClassName(
+    "before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] ",
+  ) +
+  utilityClassName(
+    "before:[corner-shape:inherit] before:bg-transparent before:transition-colors before:content-[''] ",
+  ) +
+  utilityClassName("after:absolute after:content-[''] hover:before:bg-hover ") +
+  utilityClassName(
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]",
+  );
 
-export const TRANSCRIPT_PILL_BUTTON = `${TRANSCRIPT_PILL} ${PILL_PRESSABLE} after:-inset-1`;
-export const FLOATING_PILL_BUTTON = `${FLOATING_PILL} ${PILL_PRESSABLE} after:-inset-1`;
+export const TRANSCRIPT_PILL_BUTTON = utilityClassName(
+  `${TRANSCRIPT_PILL} ${PILL_PRESSABLE} after:-inset-1`,
+);
+export const FLOATING_PILL_BUTTON = utilityClassName(
+  `${FLOATING_PILL} ${PILL_PRESSABLE} after:-inset-1`,
+);
 
 /** A compact transcript action whose visible surface is only the glyph. */
 export const TRANSCRIPT_ICON_BUTTON =
-	utilityClassName("inline-flex size-8 items-center justify-center rounded-full bg-popup-glass text-fg ") +
-	"[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm " +
-	`${PILL_PRESSABLE} after:-inset-1.5`;
+  utilityClassName(
+    "inline-flex size-8 items-center justify-center rounded-full bg-popup-glass text-fg ",
+  ) +
+  utilityClassName(
+    "[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm ",
+  ) +
+  utilityClassName(`${PILL_PRESSABLE} after:-inset-1.5`);
 
 /**
  * Centring for a pill that floats over the transcript.
@@ -529,16 +605,18 @@ export const TRANSCRIPT_ICON_BUTTON =
  * is up, which never happens on a phone, so its default leaves every other
  * case at a plain -50%.
  */
-export const PILL_CENTRED =
-	utilityClassName("translate-x-[calc(-50%+var(--ws-summary-step,0px))]");
+export const PILL_CENTRED = utilityClassName(
+  "translate-x-[calc(-50%+var(--ws-summary-step,0px))]",
+);
 
 /** The loading state's leading spinner, and the wider gap it asks for: an arrow
  *  glyph carries side bearing of its own, a bare 12px ring carries none, so at
  *  the label's own spacing the two sit on top of each other. */
 export const TRANSCRIPT_PILL_LOADING = utilityClassName(`${PILL_BASE} gap-2`);
 export const FLOATING_PILL_LOADING = utilityClassName(`${PILL_LID} gap-2`);
-export const TRANSCRIPT_PILL_SPINNER =
-	utilityClassName("size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim");
+export const TRANSCRIPT_PILL_SPINNER = utilityClassName(
+  "size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim",
+);
 
 /**
  * Where the top pill ("Load all", and the loading state it swaps to) floats.
@@ -552,17 +630,15 @@ export const TRANSCRIPT_PILL_SPINNER =
  * same chrome the transcript clears.
  *
  * SessionViewer shows it only within a screenful of the head of the
- * transcript. As secondary chrome collapses, the pill follows the docked tabs
- * upward and tucks behind the still-pinned navigation bar rather than hanging
- * in the strip's vacated space. A transform rather than a moved `top` composes
- * with the `translate` property doing the centring and costs no layout.
+ * transcript. Its phone position clears the fixed navigation and tab chrome.
  */
 export const TRANSCRIPT_PILL_TOP =
-	utilityClassName(`pointer-events-none absolute top-3 left-1/2 z-[5] ${PILL_CENTRED} `) +
-	utilityClassName("phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)] ") +
-	utilityClassName("phone:[transition-property:transform] phone:duration-[var(--dur-lg)] ") +
-	utilityClassName("phone:ease-[var(--ease)] ") +
-	"phone:[body.chrome-collapsed_&]:[transform:translateY(calc(4px-var(--pane-header-h)-var(--strip-clearance,0px)))]";
+  utilityClassName(
+    `pointer-events-none absolute top-3 left-1/2 z-[5] ${PILL_CENTRED} `,
+  ) +
+  utilityClassName(
+    "phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)]",
+  );
 
 /* ── Session info page (phone) ──────────────────────────────────────────────
  *
@@ -591,69 +667,88 @@ export const TRANSCRIPT_PILL_TOP =
  *  height first and clipped the strip inside it, down to nothing on a short
  *  viewport, while the sections that cannot shrink kept theirs. */
 export const INFO_PAGE =
-	utilityClassName("fixed inset-0 z-[60] flex flex-col gap-0.5 overflow-y-auto overscroll-contain bg-surface ") +
-	utilityClassName("pb-[max(16px,env(safe-area-inset-bottom,0px))] [&>*]:shrink-0 ") +
-	"[animation:session-info-in_var(--dur)_var(--ease)]";
+  utilityClassName(
+    "fixed inset-0 z-[60] flex flex-col gap-0.5 overflow-y-auto overscroll-contain bg-surface ",
+  ) +
+  utilityClassName(
+    "pb-[max(16px,env(safe-area-inset-bottom,0px))] [&>*]:shrink-0 ",
+  ) +
+  utilityClassName("[animation:session-info-in_var(--dur)_var(--ease)]");
 
 const INFO_TOPBAR =
-	utilityClassName("session-info-topbar sticky top-0 z-[4] flex items-center ") +
-	utilityClassName("min-h-[calc(env(safe-area-inset-top,0px)+52px)] ") +
-	utilityClassName("pt-[env(safe-area-inset-top,0px)] px-2 pb-0 ") +
-	"[transition:background-color_var(--dur)_var(--ease)]";
+  utilityClassName(
+    "session-info-topbar sticky top-0 z-[4] flex items-center ",
+  ) +
+  utilityClassName("min-h-[calc(env(safe-area-inset-top,0px)+52px)] ") +
+  utilityClassName("pt-[env(safe-area-inset-top,0px)] px-2 pb-0 ") +
+  utilityClassName("[transition:background-color_var(--dur)_var(--ease)]");
 
 /** Transparent until the page scrolls, then a frosted surface. The fill and
  *  blur separate the fixed chrome without drawing a grey rule across it. */
 export const infoTopbarClass = (scrolled: boolean) =>
-	`${INFO_TOPBAR} ` +
-	(scrolled
-		? utilityClassName("bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] ") +
-			"backdrop-blur-[18px] backdrop-saturate-[1.35]"
-		: utilityClassName("bg-transparent"));
+  `${INFO_TOPBAR} ` +
+  (scrolled
+    ? "bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] " +
+      "backdrop-blur-[18px] backdrop-saturate-[1.35]"
+    : "bg-transparent");
 
 const INFO_TOPBAR_TITLE =
-	utilityClassName("pointer-events-none absolute right-14 bottom-0 left-14 block h-[52px] ") +
-	utilityClassName("overflow-hidden text-ellipsis whitespace-nowrap text-center text-item-title font-semibold leading-[52px] tracking-[-0.01em] text-fg ") +
-	// `transform`, not Tailwind's `translate` property: that is what the
-	// transition beside it names.
-	"[transition:opacity_var(--dur)_var(--ease),transform_var(--dur)_var(--ease)]";
+  utilityClassName(
+    "pointer-events-none absolute right-14 bottom-0 left-14 block h-[52px] ",
+  ) +
+  utilityClassName(
+    "overflow-hidden text-ellipsis whitespace-nowrap text-center text-item-title font-semibold leading-[52px] tracking-[-0.01em] text-fg ",
+  ) +
+  // `transform`, not Tailwind's `translate` property: that is what the
+  // transition beside it names.
+  utilityClassName(
+    "[transition:opacity_var(--dur)_var(--ease),transform_var(--dur)_var(--ease)]",
+  );
 
 /** The bar's own title can fade with a page hero or stay visible when the
  * compact summary starts immediately below it. */
 export const infoTopbarTitleClass = (scrolled: boolean) =>
-	`${INFO_TOPBAR_TITLE} ` +
-	(scrolled
-		? utilityClassName("opacity-100 [transform:translateY(0)]")
-		: utilityClassName("opacity-0 [transform:translateY(5px)]"));
+  `${INFO_TOPBAR_TITLE} ` +
+  (scrolled
+    ? "opacity-100 [transform:translateY(0)]"
+    : "opacity-0 [transform:translateY(5px)]");
 
 /** Identity block: repo tile, name, and the repo · model line. The tile gets a
  *  soft key shadow here that it doesn't carry elsewhere. */
 export const INFO_HERO =
-	utilityClassName("flex flex-col items-center gap-0 px-5 pt-0.5 pb-5 text-center ") +
-	"[&_.repo-tile]:smooth-shadow-ring-sm";
+  utilityClassName(
+    "flex flex-col items-center gap-0 px-5 pt-0.5 pb-5 text-center ",
+  ) + "[&_.repo-tile]:smooth-shadow-ring-sm";
 
 /** 20px in the old sheet — the page's one heading, so it snaps to
  *  `text-page-title` (22px). */
-export const INFO_NAME =
-	utilityClassName("mt-[9px] max-w-full text-page-title font-semibold leading-[1.2] tracking-[-0.02em] break-words text-fg");
-export const INFO_SUB =
-	utilityClassName("flex min-h-11 w-full max-w-full items-center justify-center gap-x-1 px-6 text-label font-medium text-dim");
+export const INFO_NAME = utilityClassName(
+  "mt-[9px] max-w-full text-page-title font-semibold leading-[1.2] tracking-[-0.02em] break-words text-fg",
+);
+export const INFO_SUB = utilityClassName(
+  "flex min-h-11 w-full max-w-full items-center justify-center gap-x-1 px-6 text-label font-medium text-dim",
+);
 
 /** Phone PR strip frame: spacing + clipping only. The status tone itself
  * reaches the outer radius, so the row does not become a card inside a card. */
 export const INFO_STATUS =
-	// `empty:hidden` for the same reason as PANEL_PR_PLATE: the strip renders
-	// nothing when the session has no pull request to report, and a wrapper with
-	// only a margin left in it is a gap with no row above it.
-	//
-	// `mx-3` + `rounded-lg`, like every plate under it: the page has one edge.
-	utilityClassName("session-info-status mx-3 mb-3 overflow-hidden rounded-lg empty:hidden");
+  // `empty:hidden` for the same reason as PANEL_PR_PLATE: the strip renders
+  // nothing when the session has no pull request to report, and a wrapper with
+  // only a margin left in it is a gap with no row above it.
+  //
+  // `mx-3` + `rounded-lg`, like every plate under it: the page has one edge.
+  utilityClassName(
+    "session-info-status mx-3 mb-3 overflow-hidden rounded-lg empty:hidden",
+  );
 
 export const INFO_CONTENT = utilityClassName("min-h-[320px] pb-2");
 
 /** The phone Workspace summary's card stack. Each semantic section supplies
  * its own quiet background, so Review, Changes and media can be scanned as
  * separate groups without returning to the old bordered dashboard. */
-export const INFO_SUMMARY_CARD = utilityClassName("mx-3 mt-2 flex flex-col gap-2.5");
+export const INFO_SUMMARY_CARD = utilityClassName(
+  "mx-3 mt-2 flex flex-col gap-2.5",
+);
 
 /** A section rendered by a component of its own (Agents, Reports) rather than
  *  by WorkspaceInfo. It gets the page's inset and the same 16px gap the panel
@@ -679,19 +774,24 @@ export const INFO_SECTION_CLASS = utilityClassName("grid gap-[5px]");
  * insets (8, 11, 12, 13, 16) with the label aligned to none of them, which is
  * the kind of thing nobody can name and everybody can feel.
  */
-export const INFO_LABEL_CLASS =
-	utilityClassName("px-3 text-label font-semibold tracking-[-0.01em] text-faint");
-export const INFO_LIST_CLASS = utilityClassName("grid gap-px overflow-hidden rounded-lg bg-panel p-1");
+export const INFO_LABEL_CLASS = utilityClassName(
+  "px-3 text-label font-semibold tracking-[-0.01em] text-faint",
+);
+export const INFO_LIST_CLASS = utilityClassName(
+  "grid gap-px overflow-hidden rounded-lg bg-panel p-1",
+);
 
 /** Repo and model controls at the top of the phone summary card. They keep
  * their labelled two-line content, but give up the separate plate and border
  * now that the summary card supplies one shared surface. */
 export const INFO_LIST =
-	utilityClassName("session-info-list grid gap-px overflow-hidden rounded-2xl bg-panel p-2 ") +
-	"[&>button]:min-h-11 [&>button]:w-full [&>button]:justify-start [&>button]:gap-2 [&>button]:text-left " +
-	"[&>button]:rounded-row [&>button]:border-0 " +
-	"[&>button]:bg-transparent [&>button]:px-3 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
-	"[&>button:hover]:bg-hover";
+  utilityClassName(
+    "session-info-list grid gap-px overflow-hidden rounded-2xl bg-panel p-2 ",
+  ) +
+  "[&>button]:min-h-11 [&>button]:w-full [&>button]:justify-start [&>button]:gap-2 [&>button]:text-left " +
+  "[&>button]:rounded-row [&>button]:border-0 " +
+  "[&>button]:bg-transparent [&>button]:px-3 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
+  "[&>button:hover]:bg-hover";
 
 /** The whole-workspace view embedded below the actions.
  *
@@ -699,5 +799,6 @@ export const INFO_LIST =
  *  it through the `px-1` its mounts wrap it in. The phone page has no such
  *  wrapper, so it names its own 12px here and every plate on the page lands on
  *  the same edge as the strip and the repo list above them. */
-export const INFO_OVERVIEW =
-	utilityClassName("pt-4 [&_.workspace-info-panel]:pt-0 [&_.workspace-info-panel]:px-3");
+export const INFO_OVERVIEW = utilityClassName(
+  "pt-4 [&_.workspace-info-panel]:pt-0 [&_.workspace-info-panel]:px-3",
+);

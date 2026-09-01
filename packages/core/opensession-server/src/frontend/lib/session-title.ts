@@ -8,7 +8,10 @@
 export function cleanSessionTitle(title: string): string {
   return (
     title
-      .replace(/^(Review|Auto-fix|Mention|Simplify|Fix)\s*·\s*PR\s*#\d+\s*/i, "")
+      .replace(
+        /^(Review|Auto-fix|Mention|Simplify|Fix)\s*·\s*PR\s*#\d+\s*/i,
+        "",
+      )
       .trim() || title
   );
 }
@@ -23,5 +26,7 @@ export function sessionReferenceTitle(session: {
   workspaceName?: string;
   parentSessionId?: string;
 }): string {
-  return session.parentSessionId ? session.title : session.workspaceName || session.title;
+  return session.parentSessionId
+    ? session.title
+    : session.workspaceName || session.title;
 }

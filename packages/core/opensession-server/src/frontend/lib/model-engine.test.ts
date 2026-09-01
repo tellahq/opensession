@@ -18,7 +18,9 @@ describe("Pi model ids", () => {
   });
 
   test("routes bare ids and presets", () => {
-    expect(engineModelId("pi", "claude-opus-5")).toBe("pi/anthropic/claude-opus-5");
+    expect(engineModelId("pi", "claude-opus-5")).toBe(
+      "pi/anthropic/claude-opus-5",
+    );
     expect(engineModelId("pi", "dial/opus-fable")).toBe("pi/dial/opus-fable");
   });
 

@@ -26,8 +26,18 @@ type Tally = { errors: number; warnings: number };
 
 const TOOLS = [
   { bin: "bun", label: "Bun", required: true, hint: "https://bun.sh" },
-  { bin: "git", label: "git", required: true, hint: "sessions run in git worktrees" },
-  { bin: "gh", label: "GitHub CLI", required: false, hint: "needed for PR operations" },
+  {
+    bin: "git",
+    label: "git",
+    required: true,
+    hint: "sessions run in git worktrees",
+  },
+  {
+    bin: "gh",
+    label: "GitHub CLI",
+    required: false,
+    hint: "needed for PR operations",
+  },
   // Installed by install.sh, but only there — a manual clone or a
   // `--no-engine` run still has to get these two, and both back a credential
   // path: `claude setup-token` for the default model, `codex login` for the
@@ -44,7 +54,12 @@ const TOOLS = [
     required: false,
     hint: "backs the ChatGPT device sign-in — curl -fsSL https://chatgpt.com/codex/install.sh | sh",
   },
-  { bin: "docker", label: "Docker", required: false, hint: "optional sandboxed sessions" },
+  {
+    bin: "docker",
+    label: "Docker",
+    required: false,
+    hint: "optional sandboxed sessions",
+  },
 ];
 
 async function checkTools(t: Tally): Promise<void> {
@@ -60,7 +75,8 @@ async function checkTools(t: Tally): Promise<void> {
     // mean Bun is missing — it means PATH is thin (a non-login shell, cron,
     // systemd). Trust the running interpreter over the lookup.
     const path =
-      Bun.which(tool.bin) ?? (tool.bin === "bun" ? process.execPath : undefined);
+      Bun.which(tool.bin) ??
+      (tool.bin === "bun" ? process.execPath : undefined);
     if (path) {
       const { stdout } = await run([tool.bin, "--version"]);
       ok(tool.label, stdout.split("\n")[0] || path);
@@ -76,7 +92,9 @@ async function checkTools(t: Tally): Promise<void> {
   }
 }
 
-async function checkConfig(t: Tally): Promise<Record<string, unknown> | undefined> {
+async function checkConfig(
+  t: Tally,
+): Promise<Record<string, unknown> | undefined> {
   heading("Configuration");
 
   if (!existsSync(CONFIG_PATH)) {
@@ -96,19 +114,26 @@ async function checkConfig(t: Tally): Promise<Record<string, unknown> | undefine
   ok("config.json", CONFIG_PATH);
 
   if (!existsSync(ENV_PATH)) {
-    warn(`no env file at ${ENV_PATH}`, "integrations and secrets come from here");
+    warn(
+      `no env file at ${ENV_PATH}`,
+      "integrations and secrets come from here",
+    );
     t.warnings++;
   } else {
     const mode = statSync(ENV_PATH).mode & 0o777;
     if (mode & 0o077) {
-      warn(`${ENV_PATH} is mode ${mode.toString(8)}`, "should be 600 — it holds secrets");
+      warn(
+        `${ENV_PATH} is mode ${mode.toString(8)}`,
+        "should be 600 — it holds secrets",
+      );
       t.warnings++;
     } else {
       ok("env file", ENV_PATH);
     }
   }
 
-  const team = ((config.identity as { team?: unknown[] } | undefined)?.team ?? []) as unknown[];
+  const team = ((config.identity as { team?: unknown[] } | undefined)?.team ??
+    []) as unknown[];
   if (!team.length) {
     info(
       dim(
@@ -143,7 +168,10 @@ async function checkConfig(t: Tally): Promise<Record<string, unknown> | undefine
  * single most common broken-install state: it boots, logs nothing obvious, and
  * silently does nothing.
  */
-async function checkIntegrations(t: Tally, config?: Record<string, unknown>): Promise<void> {
+async function checkIntegrations(
+  t: Tally,
+  config?: Record<string, unknown>,
+): Promise<void> {
   heading("Integrations");
 
   // Read the env file directly rather than trusting this process's env — the
@@ -157,7 +185,10 @@ async function checkIntegrations(t: Tally, config?: Record<string, unknown>): Pr
   }
 
   const value = (name: string) => process.env[name] ?? envFile[name] ?? "";
-  const configured = (config?.integrations ?? {}) as Record<string, { enabled?: boolean }>;
+  const configured = (config?.integrations ?? {}) as Record<
+    string,
+    { enabled?: boolean }
+  >;
   let anyEnabled = false;
 
   // Same resolution the server uses (see integrations/load.ts): an env flag
@@ -190,12 +221,19 @@ async function checkIntegrations(t: Tally, config?: Record<string, unknown>): Pr
   if (!anyEnabled) info(dim("none enabled — that is a fine place to start"));
 }
 
-async function checkService(t: Tally, config?: Record<string, unknown>): Promise<void> {
+async function checkService(
+  t: Tally,
+  config?: Record<string, unknown>,
+): Promise<void> {
   heading("Server");
 
   const kind = service.supervisor();
   if (kind === "none") {
-    info(dim("no service manager here — run in the foreground with `opensession start`"));
+    info(
+      dim(
+        "no service manager here — run in the foreground with `opensession start`",
+      ),
+    );
   } else if (!(await service.isInstalled())) {
     warn(`no ${kind} service installed`, "run `opensession service install`");
     t.warnings++;
@@ -204,7 +242,10 @@ async function checkService(t: Tally, config?: Record<string, unknown>): Promise
     if (state === "active") {
       ok(`${kind} service active`);
     } else if (state === "inactive") {
-      fail(`${kind} service installed but not running`, "`opensession logs` to see why");
+      fail(
+        `${kind} service installed but not running`,
+        "`opensession logs` to see why",
+      );
       t.errors++;
     } else {
       // Could not ask. The health probe below is the real answer.
@@ -218,7 +259,8 @@ async function checkService(t: Tally, config?: Record<string, unknown>): Promise
     port?: number;
     publicBaseUrl?: string;
   };
-  const host = server.host === "0.0.0.0" ? "127.0.0.1" : server.host || "127.0.0.1";
+  const host =
+    server.host === "0.0.0.0" ? "127.0.0.1" : server.host || "127.0.0.1";
   const port = server.port || 3850;
 
   try {
@@ -239,7 +281,8 @@ async function checkService(t: Tally, config?: Record<string, unknown>): Promise
   // case a reverse proxy is fronting the loopback bind on purpose.
   const ts = tailnetIp();
   const proxied =
-    server.publicBaseUrl && !/https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(server.publicBaseUrl);
+    server.publicBaseUrl &&
+    !/https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(server.publicBaseUrl);
   if (ts && host === "127.0.0.1" && !proxied) {
     info(
       dim(
@@ -257,7 +300,8 @@ async function checkService(t: Tally, config?: Record<string, unknown>): Promise
  */
 async function checkEngine(t: Tally): Promise<void> {
   heading("Engine");
-  const { engineStatus } = await import("../../packages/core/opensession-server/src/server/engine-status");
+  const { engineStatus } =
+    await import("../../packages/core/opensession-server/src/server/engine-status");
   const e = engineStatus();
 
   info(dim(`default model ${e.defaultModel}`));

@@ -32,11 +32,14 @@ test("rejects a prepared steer when a replacement run wins during actor await", 
     },
   };
 
-  const result = prepareAndSteerQueuedPrompt({
-    sessionId: "session-1",
-    itemId: "item-1",
-    text: "hello",
-  }, deps);
+  const result = prepareAndSteerQueuedPrompt(
+    {
+      sessionId: "session-1",
+      itemId: "item-1",
+      text: "hello",
+    },
+    deps,
+  );
   target = { token: "run-new", runId: "run-new", generation: 5 };
   prepared.resolve({ id: "item-1", content: "hello" });
 
@@ -54,11 +57,14 @@ test("surfaces an unconfirmed fenced rejection", async () => {
     accept: async () => true,
     reject: async () => false,
   };
-  const result = prepareAndSteerQueuedPrompt({
-    sessionId: "session-1",
-    itemId: "item-1",
-    text: "hello",
-  }, deps);
+  const result = prepareAndSteerQueuedPrompt(
+    {
+      sessionId: "session-1",
+      itemId: "item-1",
+      text: "hello",
+    },
+    deps,
+  );
   target = { token: "run-new", runId: "run-new", generation: 5 };
 
   await expect(result).rejects.toThrow("fenced rejection");
@@ -78,11 +84,14 @@ test("does not interrupt a successor that wins during actor preparation", async 
     accept: async () => true,
     reject: async () => true,
   };
-  const result = prepareAndInterruptQueuedPrompt({
-    sessionId: "session-1",
-    itemId: "item-1",
-    text: "hello",
-  }, deps);
+  const result = prepareAndInterruptQueuedPrompt(
+    {
+      sessionId: "session-1",
+      itemId: "item-1",
+      text: "hello",
+    },
+    deps,
+  );
   target = { token: "run-new", runId: "run-new", generation: 5 };
   prepared.resolve({ id: "item-1", content: "hello" });
 
@@ -109,12 +118,17 @@ test("publishes the sent transcript receipt before touching the runner", async (
     reject: async () => true,
   };
 
-  expect(await prepareAndSteerQueuedPrompt({
-    sessionId: "session-1",
-    itemId: "item-1",
-    item: { content: "hello" },
-    text: "hello",
-  }, deps)).toBe("steered");
+  expect(
+    await prepareAndSteerQueuedPrompt(
+      {
+        sessionId: "session-1",
+        itemId: "item-1",
+        item: { content: "hello" },
+        text: "hello",
+      },
+      deps,
+    ),
+  ).toBe("steered");
   expect(order).toEqual(["transcript:item-1:item-1", "runner"]);
 });
 
@@ -123,7 +137,9 @@ test("restores actor ownership when transcript admission fails", async () => {
   const deps: QueuedSteerDeps = {
     target: () => ({ token: "run-exact", runId: "run-exact", generation: 2 }),
     prepare: async () => ({ id: "item-1", content: "hello" }),
-    prepared: async () => { throw new Error("transcript unavailable"); },
+    prepared: async () => {
+      throw new Error("transcript unavailable");
+    },
     steer: () => true,
     accept: async () => true,
     reject: async (_sessionId, itemId) => {
@@ -132,11 +148,16 @@ test("restores actor ownership when transcript admission fails", async () => {
     },
   };
 
-  await expect(prepareAndSteerQueuedPrompt({
-    sessionId: "session-1",
-    itemId: "item-1",
-    text: "hello",
-  }, deps)).rejects.toThrow("transcript unavailable");
+  await expect(
+    prepareAndSteerQueuedPrompt(
+      {
+        sessionId: "session-1",
+        itemId: "item-1",
+        text: "hello",
+      },
+      deps,
+    ),
+  ).rejects.toThrow("transcript unavailable");
   expect(rejected).toEqual(["item-1"]);
 });
 
@@ -152,10 +173,15 @@ test("steers and accepts only the captured immutable run token", async () => {
     accept: async () => true,
     reject: async () => true,
   };
-  expect(await prepareAndSteerQueuedPrompt({
-    sessionId: "session-1",
-    itemId: "item-1",
-    text: "hello",
-  }, deps)).toBe("steered");
+  expect(
+    await prepareAndSteerQueuedPrompt(
+      {
+        sessionId: "session-1",
+        itemId: "item-1",
+        text: "hello",
+      },
+      deps,
+    ),
+  ).toBe("steered");
   expect(steered).toEqual(["run-exact"]);
 });

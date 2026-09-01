@@ -13,10 +13,10 @@
  */
 
 export interface RepoSelection {
-	/** The session's own repo. */
-	repo: string;
-	/** Repos attached beside it, in the order they were added. */
-	extras: string[];
+  /** The session's own repo. */
+  repo: string;
+  /** Repos attached beside it, in the order they were added. */
+  extras: string[];
 }
 
 /**
@@ -27,17 +27,17 @@ export interface RepoSelection {
  * nothing picked has no meaning here — "No repo" is its own row.
  */
 export function toggleRepoSelection(
-	selection: RepoSelection,
-	id: string,
+  selection: RepoSelection,
+  id: string,
 ): RepoSelection {
-	const { repo, extras } = selection;
-	if (id === repo)
-		return extras.length
-			? { repo: extras[0], extras: extras.slice(1) }
-			: selection;
-	if (extras.includes(id))
-		return { repo, extras: extras.filter((item) => item !== id) };
-	return { repo, extras: [...extras, id] };
+  const { repo, extras } = selection;
+  if (id === repo)
+    return extras.length
+      ? { repo: extras[0], extras: extras.slice(1) }
+      : selection;
+  if (extras.includes(id))
+    return { repo, extras: extras.filter((item) => item !== id) };
+  return { repo, extras: [...extras, id] };
 }
 
 /**
@@ -46,16 +46,16 @@ export function toggleRepoSelection(
  * otherwise teaches the gesture, which nothing else on screen can show.
  */
 export function repoSelectionHint(
-	extras: string[],
-	labelFor: (id: string) => string,
-	modifier: string,
+  extras: string[],
+  labelFor: (id: string) => string,
+  modifier: string,
 ): string {
-	if (!extras.length) return `${modifier}-click to work in more than one repo.`;
-	return `Also working in ${joinWithAnd(extras.map(labelFor))}.`;
+  if (!extras.length) return `${modifier}-click to work in more than one repo.`;
+  return `Also working in ${joinWithAnd(extras.map(labelFor))}.`;
 }
 
 /** "a", "a and b", "a, b and c" — the list voice used in prose, not a table. */
 function joinWithAnd(items: string[]): string {
-	if (items.length < 2) return items[0] ?? "";
-	return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+  if (items.length < 2) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }

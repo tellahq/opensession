@@ -91,28 +91,29 @@ export type TurnActorRequest =
       runGeneration: number;
     };
 
-export type TurnActorResult<T extends TurnActorRequest> =
-  T extends { op: "snapshot" }
-    ? DurableTurnState
-    : T extends { op: "request_cancel_command" }
-      ? TurnCancelCommandPlan
-      : T extends { op: "complete_cancel_command" }
-        ? boolean
-        : T extends { op: "fail_cancel_command" }
-          ? void
-          : T extends { op: "prepare_cancel" }
-            ? {
-                cancel: NonNullable<DurableTurnState["cancel"]>;
-                runState: DurableRunState;
-              }
-            : T extends { op: "begin_cancel_effect" }
-              ? "execute" | "retry" | "adopt_confirmed" | "settled" | "missing"
-              : T extends { op: "settle_cancel" }
-                ? boolean
-                : T extends { op: "prepare_outcome_projection" }
-                  ? DurableTurnOutcomeProjection | "stale"
-                  : T extends { op: "begin_outcome_projection" }
-                    ? "execute" | "wait" | "completed" | "missing"
-                    : T extends { op: "settle_outcome_projection" }
-                      ? boolean
-                      : never;
+export type TurnActorResult<T extends TurnActorRequest> = T extends {
+  op: "snapshot";
+}
+  ? DurableTurnState
+  : T extends { op: "request_cancel_command" }
+    ? TurnCancelCommandPlan
+    : T extends { op: "complete_cancel_command" }
+      ? boolean
+      : T extends { op: "fail_cancel_command" }
+        ? void
+        : T extends { op: "prepare_cancel" }
+          ? {
+              cancel: NonNullable<DurableTurnState["cancel"]>;
+              runState: DurableRunState;
+            }
+          : T extends { op: "begin_cancel_effect" }
+            ? "execute" | "retry" | "adopt_confirmed" | "settled" | "missing"
+            : T extends { op: "settle_cancel" }
+              ? boolean
+              : T extends { op: "prepare_outcome_projection" }
+                ? DurableTurnOutcomeProjection | "stale"
+                : T extends { op: "begin_outcome_projection" }
+                  ? "execute" | "wait" | "completed" | "missing"
+                  : T extends { op: "settle_outcome_projection" }
+                    ? boolean
+                    : never;

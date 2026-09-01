@@ -6,7 +6,10 @@ describe("sandbox trust policy resolution", () => {
     expect(
       resolveTrustPolicy(
         {},
-        { trustProfile: "automation", egressAllowlist: ["https://api.plain.com"] },
+        {
+          trustProfile: "automation",
+          egressAllowlist: ["https://api.plain.com"],
+        },
       ),
     ).toEqual({
       trustProfile: "automation",
@@ -34,15 +37,24 @@ describe("sandbox trust policy resolution", () => {
     // The automation's own ensure() is authoritative over its allowlist.
     expect(
       resolveTrustPolicy(
-        { trustProfile: "automation", egressAllowlist: ["https://api.linear.app"] },
-        { trustProfile: "automation", egressAllowlist: ["https://api.plain.com"] },
+        {
+          trustProfile: "automation",
+          egressAllowlist: ["https://api.linear.app"],
+        },
+        {
+          trustProfile: "automation",
+          egressAllowlist: ["https://api.plain.com"],
+        },
       ).egressAllowlist,
     ).toEqual(["https://api.linear.app"]);
     // A bare allowlist without a profile does not widen the recorded firewall.
     expect(
       resolveTrustPolicy(
         { egressAllowlist: ["https://evil.example"] },
-        { trustProfile: "automation", egressAllowlist: ["https://api.plain.com"] },
+        {
+          trustProfile: "automation",
+          egressAllowlist: ["https://api.plain.com"],
+        },
       ).egressAllowlist,
     ).toEqual(["https://api.plain.com"]);
   });

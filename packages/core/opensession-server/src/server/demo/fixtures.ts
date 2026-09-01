@@ -178,7 +178,8 @@ export const DEMO_UNCOMMITTED_CHANGE: Record<string, string> = {
 };
 
 export const DEMO_UNTRACKED_FILE: Record<string, string> = {
-  "NOTES.md": "# Scratch notes\n\n- reproduce with `bun test --rerun-each 50`\n",
+  "NOTES.md":
+    "# Scratch notes\n\n- reproduce with `bun test --rerun-each 50`\n",
 };
 
 // ── Sessions + transcripts ──────────────────────────────────────────────────
@@ -423,7 +424,11 @@ export function demoSessions(opts: {
           "long",
           n + 2,
           "Edit",
-          { file_path: `src/settings/${table}.ts`, old_string: "…", new_string: "…" },
+          {
+            file_path: `src/settings/${table}.ts`,
+            old_string: "…",
+            new_string: "…",
+          },
           `Edited src/settings/${table}.ts`,
           at + 60_000,
         ),
@@ -473,7 +478,12 @@ export function demoSessions(opts: {
         usage: usage(6.4, 148_000, 22_500, 34, iso(now - 2_840 * min)),
         modelHistory: [
           { model: MODEL_SONNET, at: iso(t0) },
-          { model: MODEL_FABLE, from: MODEL_SONNET, at: iso(t0 + 10 * min), by: "Alex" },
+          {
+            model: MODEL_FABLE,
+            from: MODEL_SONNET,
+            at: iso(t0 + 10 * min),
+            by: "Alex",
+          },
         ],
       }),
       lines,
@@ -674,11 +684,13 @@ export function demoAskQuestions() {
       options: [
         {
           label: "Self-hosted OIDC",
-          description: "Full control, more ops surface — needs a keyholder rotation story",
+          description:
+            "Full control, more ops surface — needs a keyholder rotation story",
         },
         {
           label: "Magic links",
-          description: "Smallest build, no passwords — email deliverability becomes critical-path",
+          description:
+            "Smallest build, no passwords — email deliverability becomes critical-path",
         },
       ],
       multiSelect: false,
@@ -694,7 +706,13 @@ export function demoAskQuestions() {
 export function demoReplayScript(): Array<() => JsonlLine[]> {
   const t = () => new Date().toISOString();
   const step =
-    (n: number, name: string, input: unknown, output: string, isError?: boolean) =>
+    (
+      n: number,
+      name: string,
+      input: unknown,
+      output: string,
+      isError?: boolean,
+    ) =>
     (): JsonlLine[] => {
       const id = `demo-live-t${n}`;
       return [
@@ -702,9 +720,9 @@ export function demoReplayScript(): Array<() => JsonlLine[]> {
         transcriptLineToolResult(id, output, isError, t()),
       ];
     };
-  const say =
-    (id: string, text: string) =>
-    (): JsonlLine[] => [transcriptLineAssistantText(text, id, t(), MODEL_FABLE)];
+  const say = (id: string, text: string) => (): JsonlLine[] => [
+    transcriptLineAssistantText(text, id, t(), MODEL_FABLE),
+  ];
 
   return [
     (): JsonlLine[] => [
@@ -718,7 +736,12 @@ export function demoReplayScript(): Array<() => JsonlLine[]> {
       "demo-live-a1",
       "Plan: find the route registration choke point, wrap it once instead of editing 40 handlers, then verify a trace end-to-end.",
     ),
-    step(1, "Grep", { pattern: "registerRoute\\(", path: "src/gateway/" }, "src/gateway/router.ts:88\nsrc/gateway/router.ts:132"),
+    step(
+      1,
+      "Grep",
+      { pattern: "registerRoute\\(", path: "src/gateway/" },
+      "src/gateway/router.ts:88\nsrc/gateway/router.ts:132",
+    ),
     step(
       2,
       "Read",
@@ -763,7 +786,8 @@ export function demoReplayScript(): Array<() => JsonlLine[]> {
       {
         file_path: "src/gateway/tracing.ts",
         old_string: "new OTLPTraceExporter()",
-        new_string: "exporterFromEnv() // OTLP when configured, console otherwise",
+        new_string:
+          "exporterFromEnv() // OTLP when configured, console otherwise",
       },
       "Edited src/gateway/tracing.ts",
     ),
@@ -1028,11 +1052,36 @@ export function demoPrDetails(now: number, ghRepo: string) {
       "- Verified with `--rerun-each 100`: 100/100 green",
     ].join("\n"),
     checks: [
-      { name: "test", status: "COMPLETED", conclusion: "SUCCESS", workflowName: "CI" },
-      { name: "typecheck", status: "COMPLETED", conclusion: "SUCCESS", workflowName: "CI" },
-      { name: "lint", status: "COMPLETED", conclusion: "SUCCESS", workflowName: "CI" },
-      { name: "build", status: "COMPLETED", conclusion: "SUCCESS", workflowName: "CI" },
-      { name: "smoke", status: "COMPLETED", conclusion: "SUCCESS", workflowName: "CI" },
+      {
+        name: "test",
+        status: "COMPLETED",
+        conclusion: "SUCCESS",
+        workflowName: "CI",
+      },
+      {
+        name: "typecheck",
+        status: "COMPLETED",
+        conclusion: "SUCCESS",
+        workflowName: "CI",
+      },
+      {
+        name: "lint",
+        status: "COMPLETED",
+        conclusion: "SUCCESS",
+        workflowName: "CI",
+      },
+      {
+        name: "build",
+        status: "COMPLETED",
+        conclusion: "SUCCESS",
+        workflowName: "CI",
+      },
+      {
+        name: "smoke",
+        status: "COMPLETED",
+        conclusion: "SUCCESS",
+        workflowName: "CI",
+      },
     ],
     comments: [
       {
@@ -1086,7 +1135,7 @@ export function demoPrPatch(): string {
     "index 2a1b3c4..5d6e7f8 100644",
     "--- a/src/upload.test.ts",
     "+++ b/src/upload.test.ts",
-    "@@ -3,4 +3,11 @@ import { uploadChunk } from \"./upload\";",
+    '@@ -3,4 +3,11 @@ import { uploadChunk } from "./upload";',
     " ",
     ' it("retries up to the configured limit", async () => {',
     "   await uploadChunk(new Uint8Array(8), { retries: 3 });",

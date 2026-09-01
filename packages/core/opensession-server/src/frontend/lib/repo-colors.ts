@@ -15,16 +15,16 @@
  */
 
 export const REPO_TILE_COLORS = [
-	"#ff3156", // rose
-	"#e85800", // orange
-	"#b37d00", // gold
-	"#4e9800", // lime
-	"#009a69", // jade
-	"#009697", // teal
-	"#0090c8", // azure
-	"#4d80ff", // blue
-	"#946cff", // violet
-	"#d744e2", // magenta
+  "#ff3156", // rose
+  "#e85800", // orange
+  "#b37d00", // gold
+  "#4e9800", // lime
+  "#009a69", // jade
+  "#009697", // teal
+  "#0090c8", // azure
+  "#4d80ff", // blue
+  "#946cff", // violet
+  "#d744e2", // magenta
 ];
 
 /**
@@ -38,7 +38,7 @@ export const REPO_TILE_COLORS = [
  * hue doesn't drift on the way (a plain sRGB mix pulls the blues purple).
  */
 export function repoIconFill(color: string): string {
-	return `linear-gradient(180deg, color-mix(in oklab, ${color} 92%, white) 0%, color-mix(in oklab, ${color} 95%, black) 100%)`;
+  return `linear-gradient(180deg, color-mix(in oklab, ${color} 92%, white) 0%, color-mix(in oklab, ${color} 95%, black) 100%)`;
 }
 
 /**
@@ -60,34 +60,34 @@ const iconSources = new Map<string, "github" | "upload">();
 
 /** Record the assignment that came down with the repo list. */
 export function rememberRepoColors(
-	repos: Array<{
-		id: string;
-		color?: string;
-		hasIcon?: boolean;
-		iconSource?: "github" | "upload" | null;
-		iconRev?: number | null;
-	}>,
+  repos: Array<{
+    id: string;
+    color?: string;
+    hasIcon?: boolean;
+    iconSource?: "github" | "upload" | null;
+    iconRev?: number | null;
+  }>,
 ): void {
-	for (const repo of repos) {
-		if (repo.color) assigned.set(repo.id, repo.color);
-		if (repo.hasIcon) iconRepos.add(repo.id);
-		else iconRepos.delete(repo.id);
-		if (repo.iconSource) iconSources.set(repo.id, repo.iconSource);
-		else iconSources.delete(repo.id);
-		if (repo.iconRev) revisions.set(repo.id, repo.iconRev);
-		else revisions.delete(repo.id);
-	}
+  for (const repo of repos) {
+    if (repo.color) assigned.set(repo.id, repo.color);
+    if (repo.hasIcon) iconRepos.add(repo.id);
+    else iconRepos.delete(repo.id);
+    if (repo.iconSource) iconSources.set(repo.id, repo.iconSource);
+    else iconSources.delete(repo.id);
+    if (repo.iconRev) revisions.set(repo.id, repo.iconRev);
+    else revisions.delete(repo.id);
+  }
 }
 
 /** Whether the repository has custom artwork worth requesting from the server. */
 export function hasRepoIcon(id: string): boolean {
-	return iconRepos.has(id);
+  return iconRepos.has(id);
 }
 
 /** Whether the available artwork is inherently circular. Keeping its container
  * circular avoids a squircle outline floating around transparent corners. */
 export function hasRoundRepoIcon(id: string): boolean {
-	return iconSources.get(id) === "github";
+  return iconSources.get(id) === "github";
 }
 
 /**
@@ -96,20 +96,20 @@ export function hasRoundRepoIcon(id: string): boolean {
  * this the tile keeps painting the old picture until the cache lets go.
  */
 export function repoIconRevision(id: string): number | null {
-	return revisions.get(id) ?? null;
+  return revisions.get(id) ?? null;
 }
 
 /** FNV-1a over the lowercased id — mirrored from the server module. */
 function hashIndex(id: string): number {
-	let hash = 0x811c9dc5;
-	const key = id.toLowerCase();
-	for (let i = 0; i < key.length; i++) {
-		hash ^= key.charCodeAt(i);
-		hash = Math.imul(hash, 0x01000193) >>> 0;
-	}
-	return hash % REPO_TILE_COLORS.length;
+  let hash = 0x811c9dc5;
+  const key = id.toLowerCase();
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash % REPO_TILE_COLORS.length;
 }
 
 export function repoColor(id: string): string {
-	return assigned.get(id) ?? REPO_TILE_COLORS[hashIndex(id)];
+  return assigned.get(id) ?? REPO_TILE_COLORS[hashIndex(id)];
 }

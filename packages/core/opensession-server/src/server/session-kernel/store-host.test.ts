@@ -17,6 +17,44 @@ function paths() {
   };
 }
 
+function runtimeWork(
+  host: SessionKernelStoreHost,
+  now: number,
+  timerKinds: string[],
+  effectKinds: string[],
+  limit: number,
+  additionalOutboxGroups: Array<{ effectKinds: string[]; limit: number }> = [],
+  activeOutbox: Array<{ id: number; sessionId: string }> = [],
+  activeOutboxRecheckAt = now,
+) {
+  const catalog = host.runtimeCatalogWork(
+    now,
+    timerKinds,
+    effectKinds,
+    limit,
+    additionalOutboxGroups,
+    activeOutbox,
+  );
+  const timers = [...catalog.timers];
+  const outbox = new Map(catalog.outbox.map((item) => [item.id, item]));
+  for (const sessionId of catalog.sessionIds) {
+    const work = host.runtimeSessionWork(
+      sessionId,
+      catalog.sessionIds.length,
+      now,
+      timerKinds,
+      effectKinds,
+      limit,
+      additionalOutboxGroups,
+      activeOutbox,
+      activeOutboxRecheckAt,
+    );
+    timers.push(...work.timers);
+    for (const item of work.outbox) outbox.set(item.id, item);
+  }
+  return { timers: timers.slice(0, limit), outbox: [...outbox.values()] };
+}
+
 function failWithSqliteIo(store: SessionKernelStore, method: string): void {
   Object.defineProperty(store, method, {
     configurable: true,
@@ -29,19 +67,22 @@ function failWithSqliteIo(store: SessionKernelStore, method: string): void {
 }
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
 
 describe("per-session session kernel storage", () => {
   test("claims a new session before writing only its isolated database", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    const state = host.call("setRunState", [{
-      sessionId: "new-session",
-      state: "running",
-      event: "prompt",
-      currentRunId: "run-one",
-    }]);
+    const state = host.call("setRunState", [
+      {
+        sessionId: "new-session",
+        state: "running",
+        event: "prompt",
+        currentRunId: "run-one",
+      },
+    ]);
 
     expect(state).toMatchObject({ state: "running", currentRunId: "run-one" });
     expect(host.central.hasSessionDurableState("new-session")).toBe(false);
@@ -50,7 +91,9 @@ describe("per-session session kernel storage", () => {
       transcriptAuthority: "actor",
       needsScan: true,
     });
-    expect(host.storeForSession("new-session").runState("new-session")).toMatchObject({
+    expect(
+      host.storeForSession("new-session").runState("new-session"),
+    ).toMatchObject({
       state: "running",
       currentRunId: "run-one",
     });
@@ -72,7 +115,9 @@ describe("per-session session kernel storage", () => {
     for (const sessionId of ["cache-one", "cache-one", "cache-two"]) {
       host.transcript({ op: "tail", sessionId, limit: 1 });
     }
-    host.recordSqliteBusy(Object.assign(new Error("locked"), { code: "SQLITE_BUSY" }));
+    host.recordSqliteBusy(
+      Object.assign(new Error("locked"), { code: "SQLITE_BUSY" }),
+    );
     host.recordSqliteBusy(new Error("database is locked"));
     host.recordSqliteBusy(new Error("ordinary failure"));
 
@@ -90,17 +135,19 @@ describe("per-session session kernel storage", () => {
     const path = paths();
     const sessionId = "oversized-transcript";
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    expect(() => host.transcript({
-      op: "append",
-      sessionId,
-      requestId: "oversized",
-      entries: Array.from({ length: 10_001 }, (_, index) => ({
-        id: String(index),
-        type: "user" as const,
-        timestamp: "2026-01-01T00:00:00.000Z",
-        content: "x",
-      })),
-    })).toThrow("too many entries");
+    expect(() =>
+      host.transcript({
+        op: "append",
+        sessionId,
+        requestId: "oversized",
+        entries: Array.from({ length: 10_001 }, (_, index) => ({
+          id: String(index),
+          type: "user" as const,
+          timestamp: "2026-01-01T00:00:00.000Z",
+          content: "x",
+        })),
+      }),
+    ).toThrow("too many entries");
     expect(host.central.sessionPlacement(sessionId)).toBeUndefined();
     host.close();
   });
@@ -109,17 +156,21 @@ describe("per-session session kernel storage", () => {
     const path = paths();
     const sessionId = "transcript-first-session";
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    expect(host.transcript({
-      op: "append",
-      sessionId,
-      requestId: "append-first",
-      entries: [{
-        id: "first",
-        type: "user",
-        timestamp: "2026-01-01T00:00:00.000Z",
-        content: "hello",
-      }],
-    })).toMatchObject({ result: { inserted: 1 } });
+    expect(
+      host.transcript({
+        op: "append",
+        sessionId,
+        requestId: "append-first",
+        entries: [
+          {
+            id: "first",
+            type: "user",
+            timestamp: "2026-01-01T00:00:00.000Z",
+            content: "hello",
+          },
+        ],
+      }),
+    ).toMatchObject({ result: { inserted: 1 } });
     expect(host.central.sessionPlacement(sessionId)).toMatchObject({
       placement: "isolated",
       transcriptAuthority: "actor",
@@ -138,53 +189,73 @@ describe("per-session session kernel storage", () => {
       op: "append",
       sessionId,
       requestId: "append-one",
-      entries: [{
-        id: "entry-one",
-        type: "user",
-        timestamp: "2026-01-01T00:00:00.000Z",
-        content: "hello",
-      }],
+      entries: [
+        {
+          id: "entry-one",
+          type: "user",
+          timestamp: "2026-01-01T00:00:00.000Z",
+          content: "hello",
+        },
+      ],
     });
     expect(appended).toMatchObject({
       replay: false,
       result: { firstSeq: 1, lastSeq: 1, inserted: 1, updated: 0 },
     });
-    expect(host.transcript({ op: "tail", sessionId, limit: 10 })).toMatchObject({
-      firstSeq: 1,
-      lastSeq: 1,
-      entries: [{ id: "entry-one", seq: 1 }],
-    });
-    expect(host.transcript({
-      op: "append",
-      sessionId,
-      requestId: "append-one",
-      entries: [{
-        id: "entry-one",
-        type: "user",
-        timestamp: "2026-01-01T00:00:00.000Z",
-        content: "hello",
-      }],
-    })).toMatchObject({ replay: true });
+    expect(host.transcript({ op: "tail", sessionId, limit: 10 })).toMatchObject(
+      {
+        firstSeq: 1,
+        lastSeq: 1,
+        entries: [{ id: "entry-one", seq: 1 }],
+      },
+    );
+    expect(
+      host.transcript({
+        op: "append",
+        sessionId,
+        requestId: "append-one",
+        entries: [
+          {
+            id: "entry-one",
+            type: "user",
+            timestamp: "2026-01-01T00:00:00.000Z",
+            content: "hello",
+          },
+        ],
+      }),
+    ).toMatchObject({ replay: true });
     host.close();
 
     const actorDb = new Database(
       sessionKernelSessionDbPath(sessionId, path.isolated),
       { readonly: true },
     );
-    const tables = (actorDb.query(
-      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
-    ).all() as Array<{ name: string }>).map(({ name }) => name);
+    const tables = (
+      actorDb
+        .query(
+          "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+        )
+        .all() as Array<{ name: string }>
+    ).map(({ name }) => name);
     expect(tables).toContain("session_kernel_state");
     expect(tables).toContain("transcript_events");
-    expect(actorDb.query(
-      "SELECT COUNT(*) AS count FROM transcript_events WHERE session_id = ?",
-    ).get(sessionId)).toEqual({ count: 1 });
+    expect(
+      actorDb
+        .query(
+          "SELECT COUNT(*) AS count FROM transcript_events WHERE session_id = ?",
+        )
+        .get(sessionId),
+    ).toEqual({ count: 1 });
     actorDb.close();
 
     const catalog = new Database(path.central, { readonly: true });
-    expect(catalog.query(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'transcript_events'",
-    ).get()).toBeNull();
+    expect(
+      catalog
+        .query(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'transcript_events'",
+        )
+        .get(),
+    ).toBeNull();
     catalog.close();
   });
 
@@ -193,20 +264,24 @@ describe("per-session session kernel storage", () => {
     const sessionId = "destination-fence";
     const host = new SessionKernelStoreHost(path.central, path.isolated);
     const kernel = host.storeForSession(sessionId, true);
-    expect(kernel.applyRunEvent({
-      sessionId,
-      event: "prompt",
-      runKey: "run-current",
-    }).accepted).toBe(true);
-    expect(kernel.registerAgentHostPlan({
-      op: "register_plan",
-      registrationId: "registration-current",
-      sessionId,
-      runId: "run-current",
-      turnId: "turn-current",
-      generation: 1,
-      planHash: `sha256:${"a".repeat(64)}`,
-    }).accepted).toBe(true);
+    expect(
+      kernel.applyRunEvent({
+        sessionId,
+        event: "prompt",
+        runKey: "run-current",
+      }).accepted,
+    ).toBe(true);
+    expect(
+      kernel.registerAgentHostPlan({
+        op: "register_plan",
+        registrationId: "registration-current",
+        sessionId,
+        runId: "run-current",
+        turnId: "turn-current",
+        generation: 1,
+        planHash: `sha256:${"a".repeat(64)}`,
+      }).accepted,
+    ).toBe(true);
     const request = {
       op: "append_destination" as const,
       sessionId,
@@ -215,27 +290,47 @@ describe("per-session session kernel storage", () => {
       runId: "run-current",
       turnId: "turn-current",
       generation: 1,
-      entries: [{
-        id: "destination-entry",
-        type: "assistant" as const,
-        timestamp: "2026-01-01T00:00:00.000Z",
-        content: "current",
-      }],
+      entries: [
+        {
+          id: "destination-entry",
+          type: "assistant" as const,
+          timestamp: "2026-01-01T00:00:00.000Z",
+          content: "current",
+        },
+      ],
     };
     expect(host.transcript(request)).toMatchObject({
       result: { firstSeq: 1, lastSeq: 1 },
     });
-    expect(kernel.applyRunEvent({
-      sessionId,
-      event: "run_failed",
-      runKey: "run-current",
-    }).accepted).toBe(true);
+    expect(
+      kernel.applyRunEvent({
+        sessionId,
+        event: "run_failed",
+        runKey: "run-current",
+      }).accepted,
+    ).toBe(true);
     expect(host.transcript(request)).toMatchObject({ replay: true });
     for (const stale of [
-      { ...request, requestId: "stale-run", appendId: "stale-run", runId: "run-old" },
-      { ...request, requestId: "stale-turn", appendId: "stale-turn", turnId: "turn-old" },
-      { ...request, requestId: "stale-generation", appendId: "stale-generation", generation: 2 },
-    ]) expect(() => host.transcript(stale)).toThrow("fence rejected");
+      {
+        ...request,
+        requestId: "stale-run",
+        appendId: "stale-run",
+        runId: "run-old",
+      },
+      {
+        ...request,
+        requestId: "stale-turn",
+        appendId: "stale-turn",
+        turnId: "turn-old",
+      },
+      {
+        ...request,
+        requestId: "stale-generation",
+        appendId: "stale-generation",
+        generation: 2,
+      },
+    ])
+      expect(() => host.transcript(stale)).toThrow("fence rejected");
     expect(host.transcript({ op: "count", sessionId })).toBe(1);
     host.close();
   });
@@ -251,12 +346,14 @@ describe("per-session session kernel storage", () => {
     seed.close();
 
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    host.call("setRunState", [{
-      sessionId: "legacy-session",
-      state: "running",
-      event: "prompt",
-      currentRunId: "legacy-run",
-    }]);
+    host.call("setRunState", [
+      {
+        sessionId: "legacy-session",
+        state: "running",
+        event: "prompt",
+        currentRunId: "legacy-run",
+      },
+    ]);
 
     expect(host.central.sessionPlacement("legacy-session")).toBeUndefined();
     expect(host.central.runState("legacy-session")).toMatchObject({
@@ -276,7 +373,9 @@ describe("per-session session kernel storage", () => {
       event: "prompt",
       currentRunId: "legacy-run",
     });
-    seed.setDeliverySlot(sessionId, "queued", [{ id: "queued", content: "later" }]);
+    seed.setDeliverySlot(sessionId, "queued", [
+      { id: "queued", content: "later" },
+    ]);
     seed.scheduleTimer({
       sessionId,
       timerId: "wake",
@@ -299,33 +398,44 @@ describe("per-session session kernel storage", () => {
       transcriptAuthority: "shared",
       needsScan: false,
     });
-    expect(() => host.transcript({
-      op: "append",
-      sessionId,
-      requestId: "not-authoritative",
-      entries: [{
-        id: "blocked",
-        type: "user",
-        timestamp: "2026-01-01T00:00:00.000Z",
-        content: "blocked",
-      }],
-    })).toThrow("no isolated actor transcript placement");
+    expect(() =>
+      host.transcript({
+        op: "append",
+        sessionId,
+        requestId: "not-authoritative",
+        entries: [
+          {
+            id: "blocked",
+            type: "user",
+            timestamp: "2026-01-01T00:00:00.000Z",
+            content: "blocked",
+          },
+        ],
+      }),
+    ).toThrow("no isolated actor transcript placement");
     expect(host.central.hasSessionDurableState(sessionId)).toBe(false);
     expect(host.central.isolatedOutboxSessionId(outboxId)).toBe(sessionId);
     expect(host.storeForSession(sessionId).runState(sessionId)).toMatchObject({
       state: "running",
       currentRunId: "legacy-run",
     });
-    expect(host.storeForSession(sessionId).deliverySnapshot(sessionId).queued)
-      .toEqual([{ id: "queued", content: "later" }]);
-    expect(host.storeForSession(sessionId).timer(sessionId, "wake")).toBeTruthy();
-    expect(host.storeForOutbox(outboxId).outboxSessionId(outboxId)).toBe(sessionId);
+    expect(
+      host.storeForSession(sessionId).deliverySnapshot(sessionId).queued,
+    ).toEqual([{ id: "queued", content: "later" }]);
+    expect(
+      host.storeForSession(sessionId).timer(sessionId, "wake"),
+    ).toBeTruthy();
+    expect(host.storeForOutbox(outboxId).outboxSessionId(outboxId)).toBe(
+      sessionId,
+    );
     expect(host.call("ackOutbox", [outboxId])).toBeUndefined();
     expect(host.central.isolatedOutboxSessionId(outboxId)).toBeUndefined();
     host.close();
 
     const reopened = new SessionKernelStoreHost(path.central, path.isolated);
-    expect(reopened.storeForSession(sessionId).runState(sessionId).state).toBe("running");
+    expect(reopened.storeForSession(sessionId).runState(sessionId).state).toBe(
+      "running",
+    );
     expect(reopened.central.hasSessionDurableState(sessionId)).toBe(false);
     reopened.close();
   });
@@ -339,7 +449,9 @@ describe("per-session session kernel storage", () => {
 
     const host = new SessionKernelStoreHost(path.central, path.isolated);
     expect(host.migrateLegacySessions(1)).toBe(1);
-    expect(host.central.sessionPlacement(sessionId)?.transcriptAuthority).toBe("shared");
+    expect(host.central.sessionPlacement(sessionId)?.transcriptAuthority).toBe(
+      "shared",
+    );
 
     const published = host.central.publishActorTranscriptAuthority(
       sessionId,
@@ -350,12 +462,16 @@ describe("per-session session kernel storage", () => {
       transcriptMigrationReceipt: "sha256:verified-target",
     });
     expect(host.central.actorTranscriptSessionIds()).toEqual([sessionId]);
-    expect(() => host.central.publishActorTranscriptAuthority(
-      sessionId,
-      "sha256:other-target",
-    )).toThrow("receipt conflict");
+    expect(() =>
+      host.central.publishActorTranscriptAuthority(
+        sessionId,
+        "sha256:other-target",
+      ),
+    ).toThrow("receipt conflict");
 
-    expect(host.central.rollbackActorTranscriptAuthority(sessionId)).toMatchObject({
+    expect(
+      host.central.rollbackActorTranscriptAuthority(sessionId),
+    ).toMatchObject({
       transcriptAuthority: "shared",
       transcriptMigrationReceipt: "sha256:verified-target",
     });
@@ -366,16 +482,20 @@ describe("per-session session kernel storage", () => {
   test("global diagnostics never open an unreadable session database", () => {
     const path = paths();
     const first = new SessionKernelStoreHost(path.central, path.isolated);
-    first.call("setRunState", [{
-      sessionId: "broken-session",
-      state: "running",
-      event: "prompt",
-    }]);
-    first.call("setRunState", [{
-      sessionId: "healthy-session",
-      state: "running",
-      event: "prompt",
-    }]);
+    first.call("setRunState", [
+      {
+        sessionId: "broken-session",
+        state: "running",
+        event: "prompt",
+      },
+    ]);
+    first.call("setRunState", [
+      {
+        sessionId: "healthy-session",
+        state: "running",
+        event: "prompt",
+      },
+    ]);
     first.close();
     writeFileSync(
       sessionKernelSessionDbPath("broken-session", path.isolated),
@@ -396,21 +516,30 @@ describe("per-session session kernel storage", () => {
       },
     });
     expect(recovered.metrics().kernelStoreCacheMisses).toBe(cacheMisses);
-    expect(recovered.central.quarantinedSession("broken-session")).toBeUndefined();
-    expect(recovered.storeForSession("healthy-session").runState("healthy-session").state)
-      .toBe("running");
+    expect(
+      recovered.central.quarantinedSession("broken-session"),
+    ).toBeUndefined();
+    expect(
+      recovered.storeForSession("healthy-session").runState("healthy-session")
+        .state,
+    ).toBe("running");
     recovered.close();
   });
 
   test("refuses repair while isolated durable state still has a live run", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    host.call("setRunState", [{
-      sessionId: "repair-session",
-      state: "running",
-      event: "prompt",
-    }]);
-    failWithSqliteIo(host.storeForSession("repair-session"), "releaseQuarantine");
+    host.call("setRunState", [
+      {
+        sessionId: "repair-session",
+        state: "running",
+        event: "prompt",
+      },
+    ]);
+    failWithSqliteIo(
+      host.storeForSession("repair-session"),
+      "releaseQuarantine",
+    );
     host.central.quarantineSession(
       "repair-session",
       "disk I/O error",
@@ -422,8 +551,9 @@ describe("per-session session kernel storage", () => {
     });
     expect(host.call("releaseQuarantine", ["repair-session"])).toBe(false);
     expect(host.central.quarantinedSession("repair-session")).toBeDefined();
-    expect(host.storeForSession("repair-session").runState("repair-session").state)
-      .toBe("running");
+    expect(
+      host.storeForSession("repair-session").runState("repair-session").state,
+    ).toBe("running");
     host.close();
   });
 
@@ -439,7 +569,9 @@ describe("per-session session kernel storage", () => {
     expect(host.quarantinedSession("settled-repair-session")).toMatchObject({
       repairable: true,
     });
-    expect(host.call("releaseQuarantine", ["settled-repair-session"])).toBe(true);
+    expect(host.call("releaseQuarantine", ["settled-repair-session"])).toBe(
+      true,
+    );
     expect(host.quarantinedSession("settled-repair-session")).toBeUndefined();
     host.close();
   });
@@ -488,12 +620,16 @@ describe("per-session session kernel storage", () => {
     const host = new SessionKernelStoreHost(path.central, path.isolated);
     const owner = "actual-outbox-owner";
     const wrongSession = "wrong-outbox-owner";
-    host.call("setRunState", [{ sessionId: owner, state: "idle", event: "seed" }]);
-    host.call("setRunState", [{
-      sessionId: wrongSession,
-      state: "idle",
-      event: "seed",
-    }]);
+    host.call("setRunState", [
+      { sessionId: owner, state: "idle", event: "seed" },
+    ]);
+    host.call("setRunState", [
+      {
+        sessionId: wrongSession,
+        state: "idle",
+        event: "seed",
+      },
+    ]);
     const outboxId = host.call("enqueueOutbox", [
       owner,
       "turn_outcome_project",
@@ -522,31 +658,33 @@ describe("per-session session kernel storage", () => {
   test("contains failures from already-open isolated databases per session", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    for (const sessionId of [
-      "runtime-broken",
-      "healthy-session",
-    ]) {
-      host.call("setRunState", [{ sessionId, state: "running", event: "prompt" }]);
+    for (const sessionId of ["runtime-broken", "healthy-session"]) {
+      host.call("setRunState", [
+        { sessionId, state: "running", event: "prompt" },
+      ]);
     }
 
     failWithSqliteIo(host.storeForSession("runtime-broken"), "dueTimers");
 
-    expect(() => host.runtimeWork(Date.now(), [], [], 100)).not.toThrow();
+    expect(() => runtimeWork(host, Date.now(), [], [], 100)).not.toThrow();
     expect(host.quarantinedSession("runtime-broken")).toMatchObject({
       commandKind: "runtime:scan",
     });
-    expect(host.storeForSession("healthy-session").runState("healthy-session").state)
-      .toBe("running");
+    expect(
+      host.storeForSession("healthy-session").runState("healthy-session").state,
+    ).toBe("running");
 
     // A failure in the central identity allocator is not misattributed to the
     // isolated session. It must escape so the actor can fail-stop globally.
     failWithSqliteIo(host.central, "allocateIsolatedOutboxId");
-    expect(() => host.call("enqueueOutbox", [
-      "healthy-session",
-      "known_effect",
-      null,
-      "central-failure",
-    ])).toThrow("disk I/O error");
+    expect(() =>
+      host.call("enqueueOutbox", [
+        "healthy-session",
+        "known_effect",
+        null,
+        "central-failure",
+      ]),
+    ).toThrow("disk I/O error");
     expect(host.quarantinedSession("healthy-session")).toBeUndefined();
     host.close();
   });
@@ -554,24 +692,29 @@ describe("per-session session kernel storage", () => {
   test("lazily reactivates a passivated session store", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated, 1);
-    host.call("setRunState", [{
-      sessionId: "first-session",
-      state: "running",
-      event: "first",
-      currentRunId: "first-run",
-    }]);
+    host.call("setRunState", [
+      {
+        sessionId: "first-session",
+        state: "running",
+        event: "first",
+        currentRunId: "first-run",
+      },
+    ]);
     const firstActivation = host.storeForSession("first-session");
 
-    host.call("setRunState", [{
-      sessionId: "second-session",
-      state: "running",
-      event: "second",
-      currentRunId: "second-run",
-    }]);
+    host.call("setRunState", [
+      {
+        sessionId: "second-session",
+        state: "running",
+        event: "second",
+        currentRunId: "second-run",
+      },
+    ]);
     expect(() => firstActivation.command("first-session", "missing")).toThrow();
 
-    expect(host.storeForSession("first-session").runState("first-session"))
-      .toMatchObject({ state: "running", currentRunId: "first-run" });
+    expect(
+      host.storeForSession("first-session").runState("first-session"),
+    ).toMatchObject({ state: "running", currentRunId: "first-run" });
     const cacheMisses = host.metrics().kernelStoreCacheMisses;
     expect(host.stats()).toMatchObject({ sessions: 0, quarantinedSessions: 0 });
     expect(host.metrics().kernelStoreCacheMisses).toBe(cacheMisses);
@@ -609,19 +752,22 @@ describe("per-session session kernel storage", () => {
       "isolated-effect",
     ]) as number;
     const central = new Database(path.central);
-    central.run(`
+    central.run(
+      `
       INSERT INTO session_kernel_outbox
         (id, effect_id, effect_key, session_id, kind, payload, attempts,
          next_attempt_at, created_at)
       VALUES (?, ?, ?, ?, ?, 'null', 0, 0, ?)
-    `, [
-      id,
-      "central-conflict:known_effect:central-effect",
-      "central-effect",
-      "central-conflict",
-      "known_effect",
-      Date.now(),
-    ]);
+    `,
+      [
+        id,
+        "central-conflict:known_effect:central-effect",
+        "central-effect",
+        "central-conflict",
+        "known_effect",
+        Date.now(),
+      ],
+    );
     central.close();
 
     expect(() => host.outboxSessionId(id)).toThrow(
@@ -636,10 +782,13 @@ describe("per-session session kernel storage", () => {
   test("keeps sparse global projections current after mutations", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    host.call("setAskRecord", ["cache-session", {
-      questionId: "ask-one",
-      questions: [{ question: "First?" }],
-    }]);
+    host.call("setAskRecord", [
+      "cache-session",
+      {
+        questionId: "ask-one",
+        questions: [{ question: "First?" }],
+      },
+    ]);
     host.call("setDeliverySlot", [
       "cache-session",
       "queued",
@@ -649,8 +798,11 @@ describe("per-session session kernel storage", () => {
     const asks = host.allAskEntries();
     const deliveries = host.allDeliveryEntries("queued");
     (asks[0]![1] as { questionId: string }).questionId = "caller-mutated";
-    (deliveries[0]![1] as Array<{ content: string }>)[0]!.content = "caller-mutated";
-    expect(host.allAskEntries()[0]![1]).toMatchObject({ questionId: "ask-one" });
+    (deliveries[0]![1] as Array<{ content: string }>)[0]!.content =
+      "caller-mutated";
+    expect(host.allAskEntries()[0]![1]).toMatchObject({
+      questionId: "ask-one",
+    });
     expect(host.allDeliveryEntries("queued")[0]![1]).toMatchObject([
       { id: "queue-one", content: "First" },
     ]);
@@ -661,18 +813,28 @@ describe("per-session session kernel storage", () => {
         throw new Error("cached ask entries must not rescan isolated stores");
       },
     });
-    Object.defineProperty(host.storeForSession("cache-session"), "deliveryEntries", {
-      configurable: true,
-      value: () => {
-        throw new Error("cached delivery entries must not rescan isolated stores");
+    Object.defineProperty(
+      host.storeForSession("cache-session"),
+      "deliveryEntries",
+      {
+        configurable: true,
+        value: () => {
+          throw new Error(
+            "cached delivery entries must not rescan isolated stores",
+          );
+        },
       },
+    );
+    host.call("setRunState", [
+      {
+        sessionId: "cache-session",
+        state: "running",
+        event: "cache-test",
+      },
+    ]);
+    expect(host.allAskEntries()[0]![1]).toMatchObject({
+      questionId: "ask-one",
     });
-    host.call("setRunState", [{
-      sessionId: "cache-session",
-      state: "running",
-      event: "cache-test",
-    }]);
-    expect(host.allAskEntries()[0]![1]).toMatchObject({ questionId: "ask-one" });
     expect(host.allDeliveryEntries("queued")[0]![1]).toMatchObject([
       { id: "queue-one", content: "First" },
     ]);
@@ -693,10 +855,13 @@ describe("per-session session kernel storage", () => {
   test("persists sparse projections across a catalog actor restart", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    host.call("setAskRecord", ["durable-projection", {
-      questionId: "ask-durable",
-      questions: [{ question: "Still there?" }],
-    }]);
+    host.call("setAskRecord", [
+      "durable-projection",
+      {
+        questionId: "ask-durable",
+        questions: [{ question: "Still there?" }],
+      },
+    ]);
     host.call("setDeliverySlot", [
       "durable-projection",
       "queued",
@@ -754,7 +919,9 @@ describe("per-session session kernel storage", () => {
     Object.defineProperty(recovered, "quarantinedSession", {
       configurable: true,
       value: () => {
-        throw new Error("catalog listing must not open authoritative session stores");
+        throw new Error(
+          "catalog listing must not open authoritative session stores",
+        );
       },
     });
     Object.defineProperty(
@@ -779,11 +946,13 @@ describe("per-session session kernel storage", () => {
   test("publishes projections for new actors without an online backfill sweep", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    host.call("setRunState", [{
-      sessionId: "projected-at-claim",
-      state: "idle",
-      event: "seed",
-    }]);
+    host.call("setRunState", [
+      {
+        sessionId: "projected-at-claim",
+        state: "idle",
+        event: "seed",
+      },
+    ]);
 
     expect(host.central.isolatedProjectionPendingSessionIds(1)).toEqual([]);
     expect(host.allAskEntries()).toEqual([]);
@@ -794,65 +963,79 @@ describe("per-session session kernel storage", () => {
   test("settles only isolated stores that contain pending steers", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    host.call("setRunState", [{
-      sessionId: "empty-session",
-      state: "idle",
-      event: "seed",
-    }]);
-    host.call("setRunState", [{
-      sessionId: "pending-session",
-      state: "running",
-      event: "run_registered",
-      currentRunId: "run-one",
-      generation: 1,
-    }]);
+    host.call("setRunState", [
+      {
+        sessionId: "empty-session",
+        state: "idle",
+        event: "seed",
+      },
+    ]);
+    host.call("setRunState", [
+      {
+        sessionId: "pending-session",
+        state: "running",
+        event: "run_registered",
+        currentRunId: "run-one",
+        generation: 1,
+      },
+    ]);
     host.call("prepareSteerDelivery", [
       "pending-session",
       "steer-one",
       { token: "token-one", runId: "run-one", generation: 1 },
       { id: "steer-one", content: "recover me" },
     ]);
-    Object.defineProperty(host.storeForSession("empty-session"), "settlePendingSteers", {
-      configurable: true,
-      value: () => {
-        throw new Error("empty stores must not enter the mutation sweep");
+    Object.defineProperty(
+      host.storeForSession("empty-session"),
+      "settlePendingSteers",
+      {
+        configurable: true,
+        value: () => {
+          throw new Error("empty stores must not enter the mutation sweep");
+        },
       },
-    });
+    );
 
     expect(host.call("settlePendingSteers", [])).toBe(1);
-    expect(host.storeForSession("pending-session").deliverySnapshot("pending-session"))
-      .toMatchObject({
-        pendingSteers: [],
-        steered: [{ id: "steer-one", content: "recover me" }],
-      });
+    expect(
+      host
+        .storeForSession("pending-session")
+        .deliverySnapshot("pending-session"),
+    ).toMatchObject({
+      pendingSteers: [],
+      steered: [{ id: "steer-one", content: "recover me" }],
+    });
     host.close();
   });
 
   test("rejects the retired global creation dead-letter sweep", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
-    host.call("setRunState", [{
-      sessionId: "empty-creation-session",
-      state: "idle",
-      event: "seed",
-    }]);
-    expect(() => host.call(
-      "retryCompatibleCreationBranchDeadLetters",
-      [[], Date.now()],
-    )).toThrow("Unrouted session kernel store method");
+    host.call("setRunState", [
+      {
+        sessionId: "empty-creation-session",
+        state: "idle",
+        event: "seed",
+      },
+    ]);
+    expect(() =>
+      host.call("retryCompatibleCreationBranchDeadLetters", [[], Date.now()]),
+    ).toThrow("Unrouted session kernel store method");
     host.close();
   });
 
   test("recovers isolated wake work from the durable dirty placement", () => {
     const path = paths();
     const first = new SessionKernelStoreHost(path.central, path.isolated);
-    first.call("scheduleTimer", [{
-      sessionId: "wake-session",
-      timerId: "wake",
-      kind: "known_timer",
-      dueAt: Date.now() - 1,
-      payload: { stable: true },
-    }]);
+    first.call("scheduleTimer", [
+      {
+        sessionId: "wake-session",
+        timerId: "wake",
+        kind: "known_timer",
+        dueAt: Date.now() - 1,
+        payload: { stable: true },
+      },
+    ]);
     const outboxId = first.call("enqueueOutbox", [
       "wake-session",
       "known_effect",
@@ -860,20 +1043,25 @@ describe("per-session session kernel storage", () => {
       "effect-one",
     ]) as number;
     expect(outboxId).toBeGreaterThanOrEqual(4_000_000_000_000_000);
-    expect(first.call("enqueueOutbox", [
-      "wake-session",
-      "known_effect",
-      { stable: true },
-      "effect-one",
-    ])).toBe(outboxId);
+    expect(
+      first.call("enqueueOutbox", [
+        "wake-session",
+        "known_effect",
+        { stable: true },
+        "effect-one",
+      ]),
+    ).toBe(outboxId);
     expect(first.central.isolatedOutboxRoutes()).toEqual([
       { id: outboxId, sessionId: "wake-session" },
     ]);
-    expect(first.central.isolatedOutboxSessionId(outboxId)).toBe("wake-session");
+    expect(first.central.isolatedOutboxSessionId(outboxId)).toBe(
+      "wake-session",
+    );
     first.close();
 
     const recovered = new SessionKernelStoreHost(path.central, path.isolated);
-    const work = recovered.runtimeWork(
+    const work = runtimeWork(
+      recovered,
       Date.now(),
       ["known_timer"],
       ["known_effect"],
@@ -892,7 +1080,9 @@ describe("per-session session kernel storage", () => {
 
     recovered.call("ackOutbox", [outboxId]);
     expect(recovered.central.isolatedOutboxSessionId(outboxId)).toBeUndefined();
-    expect(recovered.storeForSession("wake-session").pendingOutbox()).toEqual([]);
+    expect(recovered.storeForSession("wake-session").pendingOutbox()).toEqual(
+      [],
+    );
     const successorId = recovered.call("enqueueOutbox", [
       "successor-session",
       "known_effect",
@@ -900,8 +1090,71 @@ describe("per-session session kernel storage", () => {
       "effect-two",
     ]) as number;
     expect(successorId).toBeGreaterThan(outboxId);
-    expect(recovered.central.isolatedOutboxSessionId(successorId))
-      .toBe("successor-session");
+    expect(recovered.central.isolatedOutboxSessionId(successorId)).toBe(
+      "successor-session",
+    );
+    recovered.close();
+  });
+
+  test("fetches separate outbox quotas while opening each actor once", () => {
+    const path = paths();
+    const first = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "grouped-runtime-work";
+    first.call("enqueueOutbox", [
+      sessionId,
+      "ordinary_effect",
+      null,
+      "ordinary-one",
+    ]);
+    first.call("enqueueOutbox", [
+      sessionId,
+      "creation_opening_turn",
+      null,
+      "opening-one",
+    ]);
+    first.call("enqueueOutbox", [
+      sessionId,
+      "creation_opening_turn",
+      null,
+      "opening-two",
+    ]);
+    first.close();
+
+    const recovered = new SessionKernelStoreHost(path.central, path.isolated);
+    const work = runtimeWork(
+      recovered,
+      Date.now(),
+      [],
+      ["ordinary_effect"],
+      1,
+      [{ effectKinds: ["creation_opening_turn"], limit: 100 }],
+    );
+
+    expect(work.outbox.map((item) => item.kind)).toEqual([
+      "ordinary_effect",
+      "creation_opening_turn",
+      "creation_opening_turn",
+    ]);
+    expect(recovered.metrics().kernelStoreCacheMisses).toBe(1);
+
+    const recheckAt = Date.now() + 30_000;
+    const whileActive = runtimeWork(
+      recovered,
+      Date.now(),
+      [],
+      ["ordinary_effect"],
+      1,
+      [{ effectKinds: ["creation_opening_turn"], limit: 100 }],
+      work.outbox.map((item) => ({ id: item.id, sessionId: item.sessionId })),
+      recheckAt,
+    );
+    expect(whileActive.outbox).toEqual([]);
+    expect(
+      recovered.central.isolatedDueWakeCandidates(recheckAt - 1, 100),
+    ).not.toContain(sessionId);
+    expect(
+      recovered.central.isolatedDueWakeCandidates(recheckAt, 100),
+    ).toContain(sessionId);
     recovered.close();
   });
 
@@ -913,24 +1166,27 @@ describe("per-session session kernel storage", () => {
     const host = new SessionKernelStoreHost(path.central, path.isolated);
     const dueAt = Date.now() - 1;
     for (let index = 0; index < 24; index += 1) {
-      host.call("scheduleTimer", [{
-        sessionId: `bounded-runtime-${index.toString().padStart(2, "0")}`,
-        timerId: "wake",
-        kind: "known_timer",
-        dueAt,
-        payload: null,
-      }]);
+      host.call("scheduleTimer", [
+        {
+          sessionId: `bounded-runtime-${index.toString().padStart(2, "0")}`,
+          timerId: "wake",
+          kind: "known_timer",
+          dueAt,
+          payload: null,
+        },
+      ]);
     }
 
-    const first = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
-    const second = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
+    const passes = Array.from({ length: 12 }, () =>
+      runtimeWork(host, Date.now(), ["known_timer"], [], 100),
+    );
 
-    expect(first.timers).toHaveLength(16);
-    expect(second.timers).toHaveLength(16);
-    expect(new Set([
-      ...first.timers.map((timer) => timer.sessionId),
-      ...second.timers.map((timer) => timer.sessionId),
-    ]).size).toBe(24);
+    expect(passes.every((pass) => pass.timers.length === 4)).toBe(true);
+    expect(
+      new Set(
+        passes.flatMap((pass) => pass.timers.map((timer) => timer.sessionId)),
+      ).size,
+    ).toBe(24);
     host.close();
   }, 30_000);
 
@@ -939,25 +1195,30 @@ describe("per-session session kernel storage", () => {
     const host = new SessionKernelStoreHost(path.central, path.isolated);
     const dueAt = Date.now() - 1;
     for (let index = 0; index < 24; index += 1) {
-      host.call("scheduleTimer", [{
-        sessionId: `aaa-historical-${index.toString().padStart(2, "0")}`,
+      host.call("scheduleTimer", [
+        {
+          sessionId: `aaa-historical-${index.toString().padStart(2, "0")}`,
+          timerId: "wake",
+          kind: "known_timer",
+          dueAt,
+          payload: null,
+        },
+      ]);
+    }
+    host.call("scheduleTimer", [
+      {
+        sessionId: "zzz-live-create",
         timerId: "wake",
         kind: "known_timer",
         dueAt,
         payload: null,
-      }]);
-    }
-    host.call("scheduleTimer", [{
-      sessionId: "zzz-live-create",
-      timerId: "wake",
-      kind: "known_timer",
-      dueAt,
-      payload: null,
-    }]);
+      },
+    ]);
 
-    const first = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
-    expect(first.timers.map((timer) => timer.sessionId))
-      .toContain("zzz-live-create");
+    const first = runtimeWork(host, Date.now(), ["known_timer"], [], 100);
+    expect(first.timers.map((timer) => timer.sessionId)).toContain(
+      "zzz-live-create",
+    );
     host.close();
   }, 30_000);
 
@@ -965,27 +1226,32 @@ describe("per-session session kernel storage", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
     const dueAt = Date.now() - 1;
-    host.call("scheduleTimer", [{
-      sessionId: "zzz-overdue-effect",
-      timerId: "wake",
-      kind: "known_timer",
-      dueAt,
-      payload: null,
-    }]);
-    host.central.settleIsolatedSessionWake("zzz-overdue-effect", dueAt);
-    for (let index = 0; index < 24; index += 1) {
-      host.call("scheduleTimer", [{
-        sessionId: `aaa-recovery-${index.toString().padStart(2, "0")}`,
+    host.call("scheduleTimer", [
+      {
+        sessionId: "zzz-overdue-effect",
         timerId: "wake",
         kind: "known_timer",
         dueAt,
         payload: null,
-      }]);
+      },
+    ]);
+    host.central.settleIsolatedSessionWake("zzz-overdue-effect", dueAt);
+    for (let index = 0; index < 24; index += 1) {
+      host.call("scheduleTimer", [
+        {
+          sessionId: `aaa-recovery-${index.toString().padStart(2, "0")}`,
+          timerId: "wake",
+          kind: "known_timer",
+          dueAt,
+          payload: null,
+        },
+      ]);
     }
 
-    const first = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
-    expect(first.timers.map((timer) => timer.sessionId))
-      .toContain("zzz-overdue-effect");
+    const first = runtimeWork(host, Date.now(), ["known_timer"], [], 100);
+    expect(first.timers.map((timer) => timer.sessionId)).toContain(
+      "zzz-overdue-effect",
+    );
     host.close();
   }, 30_000);
 
@@ -995,24 +1261,28 @@ describe("per-session session kernel storage", () => {
     const dueAt = Date.now() - 1;
     for (let index = 0; index < 6; index += 1) {
       const sessionId = `due-priority-${index.toString().padStart(2, "0")}`;
-      host.call("scheduleTimer", [{
-        sessionId,
-        timerId: "wake",
-        kind: "known_timer",
-        dueAt,
-        payload: null,
-      }]);
+      host.call("scheduleTimer", [
+        {
+          sessionId,
+          timerId: "wake",
+          kind: "known_timer",
+          dueAt,
+          payload: null,
+        },
+      ]);
       host.central.settleIsolatedSessionWake(sessionId, dueAt);
     }
 
-    const first = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
-    const second = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
-    const third = host.runtimeWork(Date.now(), ["known_timer"], [], 100);
-    expect(new Set([
-      ...first.timers.map((timer) => timer.sessionId),
-      ...second.timers.map((timer) => timer.sessionId),
-      ...third.timers.map((timer) => timer.sessionId),
-    ]).size).toBe(6);
+    const first = runtimeWork(host, Date.now(), ["known_timer"], [], 100);
+    const second = runtimeWork(host, Date.now(), ["known_timer"], [], 100);
+    const third = runtimeWork(host, Date.now(), ["known_timer"], [], 100);
+    expect(
+      new Set([
+        ...first.timers.map((timer) => timer.sessionId),
+        ...second.timers.map((timer) => timer.sessionId),
+        ...third.timers.map((timer) => timer.sessionId),
+      ]).size,
+    ).toBe(6);
     host.close();
   }, 30_000);
 });

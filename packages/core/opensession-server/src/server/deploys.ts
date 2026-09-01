@@ -33,7 +33,14 @@
  */
 
 import { homeDir } from "./paths";
-import { existsSync, mkdirSync, readFileSync, rmSync, cpSync, readdirSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  cpSync,
+  readdirSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { writeJsonAtomic } from "./shared/atomic-write";
@@ -125,7 +132,9 @@ export function dataDir(id: string): string {
 
 function persist(): void {
   mkdirSync(rootDir(), { recursive: true });
-  writeJsonAtomic(registryPath(), { deploys: [...deploys.values()] } satisfies Stored);
+  writeJsonAtomic(registryPath(), {
+    deploys: [...deploys.values()],
+  } satisfies Stored);
 }
 
 function load(): void {
@@ -147,7 +156,10 @@ export function listDeploys(): Deploy[] {
 
 export function getDeploy(ref: string): Deploy | undefined {
   load();
-  return deploys.get(ref) || [...deploys.values()].find((d) => d.name === ref.toLowerCase());
+  return (
+    deploys.get(ref) ||
+    [...deploys.values()].find((d) => d.name === ref.toLowerCase())
+  );
 }
 
 export function isValidDeployName(name: string): boolean {
@@ -165,7 +177,9 @@ function allocatePort(): number {
 
 function crashLooping(id: string): boolean {
   const now = Date.now();
-  const recent = (crashes.get(id) || []).filter((t) => now - t < CRASH_WINDOW_MS);
+  const recent = (crashes.get(id) || []).filter(
+    (t) => now - t < CRASH_WINDOW_MS,
+  );
   crashes.set(id, recent);
   return recent.length >= MAX_CRASHES_IN_WINDOW;
 }
@@ -215,7 +229,7 @@ async function killProcess(id: string, graceMs = 3_000): Promise<void> {
  */
 export async function launchDeploy(
   id: string,
-  opts?: { force?: boolean }
+  opts?: { force?: boolean },
 ): Promise<Deploy | undefined> {
   load();
   const d = deploys.get(id);
@@ -267,19 +281,31 @@ export async function launchDeploy(
         // A deliberate teardown (redeploy, rollback, stop) is not a crash and
         // must not schedule a restart — the caller is already launching the
         // replacement, and a second launcher would fight it for the port.
-        if (!current || current.state === "stopped" || intentionalKills.has(proc)) return;
+        if (
+          !current ||
+          current.state === "stopped" ||
+          intentionalKills.has(proc)
+        )
+          return;
         noteCrash(id);
         current.lastError = `exited (code ${exitCode ?? "null"}${signalCode ? `, signal ${signalCode}` : ""})`;
         if (crashLooping(id)) {
           current.state = "crashed";
           persist();
-          audit({ kind: "deploy_crash_looping", deploy: current.name, error: current.lastError });
-          console.error(`[deploys] ${current.name} is crash-looping — not restarting`);
+          audit({
+            kind: "deploy_crash_looping",
+            deploy: current.name,
+            error: current.lastError,
+          });
+          console.error(
+            `[deploys] ${current.name} is crash-looping — not restarting`,
+          );
           return;
         }
         persist();
         setTimeout(() => {
-          if (deploys.get(id)?.state !== "stopped") void launchDeploy(id, { force: true });
+          if (deploys.get(id)?.state !== "stopped")
+            void launchDeploy(id, { force: true });
         }, RESTART_DELAY_MS).unref?.();
       },
     });
@@ -295,7 +321,12 @@ export async function launchDeploy(
   delete d.lastError;
   d.updatedAt = new Date().toISOString();
   persist();
-  audit({ kind: "deploy_launched", deploy: d.name, version: d.currentVersion, port: d.port });
+  audit({
+    kind: "deploy_launched",
+    deploy: d.name,
+    version: d.currentVersion,
+    port: d.port,
+  });
   return d;
 }
 
@@ -361,7 +392,14 @@ export interface PublishResult {
 }
 
 /** Files a snapshot never carries: build detritus and anything git. */
-const SNAPSHOT_SKIP = new Set([".git", "node_modules", ".next", "dist", ".turbo", ".cache"]);
+const SNAPSHOT_SKIP = new Set([
+  ".git",
+  "node_modules",
+  ".next",
+  "dist",
+  ".turbo",
+  ".cache",
+]);
 
 export function snapshotFilter(src: string): boolean {
   const base = src.split("/").pop() || "";
@@ -389,18 +427,21 @@ export function publishDeploy(input: PublishInput): PublishResult {
   const name = input.name.trim().toLowerCase();
   if (!isValidDeployName(name)) {
     throw new Error(
-      "name must be 1-40 lowercase letters, digits or hyphens, starting and ending alphanumeric"
+      "name must be 1-40 lowercase letters, digits or hyphens, starting and ending alphanumeric",
     );
   }
   if (!input.entrypoint.trim()) throw new Error("entrypoint is required");
   const compound = compoundEntrypointError(input.entrypoint.trim());
   if (compound) throw new Error(compound);
-  if (!existsSync(input.dir)) throw new Error(`directory does not exist: ${input.dir}`);
+  if (!existsSync(input.dir))
+    throw new Error(`directory does not exist: ${input.dir}`);
 
   let d = input.renameFrom ? getDeploy(input.renameFrom) : getDeploy(name);
-  if (input.renameFrom && !d) throw new Error(`no deploy named "${input.renameFrom}" to rename`);
+  if (input.renameFrom && !d)
+    throw new Error(`no deploy named "${input.renameFrom}" to rename`);
   const clash = getDeploy(name);
-  if (clash && d && clash.id !== d.id) throw new Error(`the name "${name}" is already taken`);
+  if (clash && d && clash.id !== d.id)
+    throw new Error(`the name "${name}" is already taken`);
 
   const now = new Date().toISOString();
   if (!d) {
@@ -427,7 +468,11 @@ export function publishDeploy(input: PublishInput): PublishResult {
   const version = d.currentVersion + 1;
   const dest = versionDir(d.id, version);
   mkdirSync(dest, { recursive: true });
-  cpSync(input.dir, dest, { recursive: true, dereference: true, filter: snapshotFilter });
+  cpSync(input.dir, dest, {
+    recursive: true,
+    dereference: true,
+    filter: snapshotFilter,
+  });
 
   d.versions.push({
     version,
@@ -441,7 +486,10 @@ export function publishDeploy(input: PublishInput): PublishResult {
   d.updatedAt = now;
 
   // Prune old snapshots, keeping the tail rollbackTo can reach.
-  const prunable = d.versions.slice(0, Math.max(0, d.versions.length - MAX_VERSIONS));
+  const prunable = d.versions.slice(
+    0,
+    Math.max(0, d.versions.length - MAX_VERSIONS),
+  );
   for (const v of prunable) {
     try {
       rmSync(versionDir(d.id, v.version), { recursive: true, force: true });
@@ -470,7 +518,7 @@ export function rollbackDeploy(ref: string, toVersion: number): Deploy {
   if (!d) throw new Error(`no deploy named "${ref}"`);
   if (!d.versions.some((v) => v.version === toVersion)) {
     throw new Error(
-      `version ${toVersion} isn't retained — available: ${d.versions.map((v) => v.version).join(", ")}`
+      `version ${toVersion} isn't retained — available: ${d.versions.map((v) => v.version).join(", ")}`,
     );
   }
   d.currentVersion = toVersion;
@@ -483,7 +531,10 @@ export function rollbackDeploy(ref: string, toVersion: number): Deploy {
 }
 
 export function deployUrl(name: string): string {
-  const base = (process.env.OPENSESSION_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+  const base = (process.env.OPENSESSION_PUBLIC_BASE_URL || "").replace(
+    /\/+$/,
+    "",
+  );
   return `${base}/d/${name}/`;
 }
 

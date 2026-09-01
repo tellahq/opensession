@@ -246,12 +246,21 @@ struct ToolCallRow: View {
     private var detailBody: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let detail {
-                if !detail.inputText.isEmpty {
+                if detail.inputKind != .none {
                     let inputLines = ToolCodeMetrics.lines(detail.inputText)
                     switch detail.inputKind {
                     case .diff:
                         ToolCodeBox(label: detail.inputLabel, lines: inputLines) {
                             DiffText(patch: detail.inputText)
+                        }
+                    case .additionDiff:
+                        ToolCodeBox(label: detail.inputLabel, lines: inputLines) {
+                            SyntaxHighlightedCodeText(
+                                text: detail.inputText,
+                                language: detail.inputLanguage ?? "plaintext",
+                                linePrefix: "+",
+                                linePrefixColor: OS1VisualStyle.codeWellAdd
+                            )
                         }
                     case .code, .json:
                         ToolCodeBox(label: detail.inputLabel, lines: inputLines) {
@@ -484,7 +493,7 @@ struct DiffText: View {
 
 /// What a tool call's expanded view should show, resolved per tool.
 struct ToolDetail: Equatable {
-    enum Kind: Equatable { case none, code, diff, json }
+    enum Kind: Equatable { case none, code, diff, additionDiff, json }
 
     var inputKind: Kind = .none
     var inputLabel = "Input"
@@ -527,13 +536,17 @@ struct ToolDetail: Equatable {
                 detail.inputLanguage = "json"
             }
         case "Write":
-            detail.inputKind = .code
-            detail.inputLabel = "Content"
-            detail.inputText = clamp(
-                string(input, "content") ?? string(input, "contents") ?? ""
-            )
-            detail.inputLanguage = SyntaxHighlighting.language(forPath: filePath(input))
-                ?? "markdown"
+            if let content = writeContent(input) {
+                detail.inputKind = .additionDiff
+                detail.inputLabel = "Diff"
+                detail.inputText = clamp(content)
+                detail.inputLanguage = SyntaxHighlighting.language(forPath: filePath(input))
+                    ?? "markdown"
+            } else {
+                detail.inputKind = .json
+                detail.inputText = clamp(input?.pretty ?? "")
+                detail.inputLanguage = "json"
+            }
         case "Read":
             // The path is already in the summary line; only extra arguments
             // (offset, limit) are worth repeating.
@@ -676,6 +689,15 @@ struct ToolDetail: Equatable {
             }
         }
         return SyntaxHighlighting.language(forExtension: string(input, "type"))
+    }
+
+    /// Unlike ordinary string arguments, an empty Write body is meaningful: it
+    /// creates an empty file and still gets an additions gutter in the row.
+    private static func writeContent(_ input: JSONValue?) -> String? {
+        for key in ["content", "contents"] {
+            if case .string(let value)? = input?[key] { return value }
+        }
+        return nil
     }
 
     private static func string(_ input: JSONValue?, _ key: String) -> String? {

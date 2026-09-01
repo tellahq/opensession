@@ -28,7 +28,8 @@ const savedProviders = process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
 const savedPi = process.env.OPENSESSION_PI_CONFIG;
 
 afterEach(() => {
-  if (savedProviders === undefined) delete process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
+  if (savedProviders === undefined)
+    delete process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
   else process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = savedProviders;
   if (savedPi === undefined) delete process.env.OPENSESSION_PI_CONFIG;
   else process.env.OPENSESSION_PI_CONFIG = savedPi;

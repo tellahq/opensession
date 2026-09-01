@@ -45,13 +45,13 @@ Fixtures live in `packages/core/opensession-server/src/server/testing/snapshots/
 
 ## The scenarios
 
-| Fixture | What it pins |
-| --- | --- |
-| `plain-turn-context-fencing` | A teammate's prompt with a sibling session attached as context. The visible prompt and transcript keep the human's message; the model gets an `<opensession:context>` attachment block and the `[Name]` attribution. |
-| `mcp-allowlist-filtering` | An automation-owned session prompted by a human. The allowlist drops one server, the `allowedUsers` gate drops another, and the automation's denied tools are stripped from the projected tool list. |
-| `session-stamped-mcp-allowlist` | An ordinary session whose file contains a picked server set. Reading the session back preserves that scope for the turn. |
-| `engine-switch-handoff` | Two turns with a model/provider change between them. Turn two carries the handoff note built from stored history and supplies prior entries for transcript seeding. |
-| `memory-scope-injection` | Query-matched repo and team/workspace memories injected as fenced turn context and logged as a context-injection entry. The seeded but unrelated user preference is intentionally not retrieved. |
+| Fixture                         | What it pins                                                                                                                                                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plain-turn-context-fencing`    | A teammate's prompt with a sibling session attached as context. The visible prompt and transcript keep the human's message; the model gets an `<opensession:context>` attachment block and the `[Name]` attribution. |
+| `mcp-allowlist-filtering`       | An automation-owned session prompted by a human. The allowlist drops one server, the `allowedUsers` gate drops another, and the automation's denied tools are stripped from the projected tool list.                 |
+| `session-stamped-mcp-allowlist` | An ordinary session whose file contains a picked server set. Reading the session back preserves that scope for the turn.                                                                                             |
+| `engine-switch-handoff`         | Two turns with a model/provider change between them. Turn two carries the handoff note built from stored history and supplies prior entries for transcript seeding.                                                  |
+| `memory-scope-injection`        | Query-matched repo and team/workspace memories injected as fenced turn context and logged as a context-injection entry. The seeded but unrelated user preference is intentionally not retrieved.                     |
 
 ## When a change requires re-recording
 

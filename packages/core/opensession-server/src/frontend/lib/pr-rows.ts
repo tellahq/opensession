@@ -65,8 +65,16 @@ function worktreesForSession(session: UnifiedSession): WorktreeRow[] {
 export function dateGroup(value: string): string {
   const date = new Date(value);
   const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const then = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const start = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  const then = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  ).getTime();
   const days = Math.max(0, Math.floor((start - then) / 86_400_000));
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
@@ -77,7 +85,9 @@ export function dateGroup(value: string): string {
   }
   const months = Math.max(
     1,
-    (now.getFullYear() - date.getFullYear()) * 12 + now.getMonth() - date.getMonth(),
+    (now.getFullYear() - date.getFullYear()) * 12 +
+      now.getMonth() -
+      date.getMonth(),
   );
   if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
   const years = Math.floor(months / 12);
@@ -85,7 +95,10 @@ export function dateGroup(value: string): string {
 }
 
 export function compactAge(value: string): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  const seconds = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(value).getTime()) / 1000),
+  );
   if (seconds < 60) return "now";
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
   if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h`;
@@ -108,7 +121,10 @@ export function personLabel(person: string): string {
     .join(" ");
 }
 
-export function buildWorktreeRows(recentPrs: RecentPr[], sessions: UnifiedSession[]): WorktreeRow[] {
+export function buildWorktreeRows(
+  recentPrs: RecentPr[],
+  sessions: UnifiedSession[],
+): WorktreeRow[] {
   const byPr = new Map<string, WorktreeRow>();
   for (const pr of recentPrs) {
     byPr.set(pr.url, {

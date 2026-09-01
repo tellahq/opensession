@@ -1,113 +1,113 @@
 .announcement-page {
-	height: 100dvh;
-	min-height: 0;
-	overflow-y: auto;
-	overscroll-behavior-y: contain;
-	background:
-		linear-gradient(
-			to bottom,
-			rgba(255, 255, 255, 0.8),
-			rgba(255, 255, 255, 0.93) 680px,
-			rgba(255, 255, 255, 0.97) 1280px
-		),
-		url("../../landing-background.webp") center top / cover fixed;
+  height: 100dvh;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.8),
+      rgba(255, 255, 255, 0.93) 680px,
+      rgba(255, 255, 255, 0.97) 1280px
+    ),
+    url("../../landing-background.webp") center top / cover fixed;
 }
 
 .announcement-page-nav {
-	position: fixed;
-	top: 22px;
-	left: 22px;
-	z-index: 2;
-	display: flex;
-	align-items: center;
-	gap: 12px;
+  position: fixed;
+  top: 22px;
+  left: 22px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .announcement-page-logo {
-	display: block;
-	width: 44px;
-	height: 44px;
-	border-radius: calc(8px * var(--rf));
-	corner-shape: var(--cs);
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
 }
 
 .announcement-page-logo img {
-	display: block;
-	width: 100%;
-	height: 100%;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* The landing page's blue scene behind the product shot: landing-glass.css
    only loads on the landing bundle, so the announcement page supplies the same
    artwork itself. */
 .announcement-article-demo {
-	margin-top: 40px;
-	background-image: url("../../demo-background.webp");
-	background-position: center;
-	background-size: cover;
+  margin-top: 40px;
+  background-image: url("../../demo-background.webp");
+  background-position: center;
+  background-size: cover;
 }
 
 .announcement-home {
-	position: static;
-	border-color: rgba(10, 10, 10, 0.08);
-	border-radius: 999px;
-	background: rgba(255, 255, 255, 0.72);
-	-webkit-backdrop-filter: blur(14px) saturate(1.3);
-	backdrop-filter: blur(14px) saturate(1.3);
-	box-shadow:
-		0 8px 24px rgba(24, 48, 64, 0.09),
-		inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  position: static;
+  border-color: rgba(10, 10, 10, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow:
+    0 8px 24px rgba(24, 48, 64, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .announcement-home:hover {
-	background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .announcement-page .announcement-article {
-	padding-top: clamp(96px, 9vw, 128px);
+  padding-top: clamp(96px, 9vw, 128px);
 }
 
 @media (prefers-color-scheme: dark) {
-	.announcement-page {
-		background:
-			linear-gradient(
-				to bottom,
-				color-mix(in srgb, var(--page) 84%, transparent),
-				color-mix(in srgb, var(--page) 93%, transparent) 680px,
-				color-mix(in srgb, var(--page) 97%, transparent) 1280px
-			),
-			url("../../landing-background-dark.webp") center top / cover fixed;
-	}
+  .announcement-page {
+    background:
+      linear-gradient(
+        to bottom,
+        color-mix(in srgb, var(--page) 84%, transparent),
+        color-mix(in srgb, var(--page) 93%, transparent) 680px,
+        color-mix(in srgb, var(--page) 97%, transparent) 1280px
+      ),
+      url("../../landing-background-dark.webp") center top / cover fixed;
+  }
 
-	.announcement-home {
-		border-color: rgba(var(--ink-rgb), 0.1);
-		background: color-mix(in srgb, var(--surface) 76%, transparent);
-		box-shadow:
-			0 8px 24px oklch(0 0 0 / 0.28),
-			inset 0 1px 0 oklch(1 0 0 / 0.1);
-	}
+  .announcement-home {
+    border-color: rgba(var(--ink-rgb), 0.1);
+    background: color-mix(in srgb, var(--surface) 76%, transparent);
+    box-shadow:
+      0 8px 24px oklch(0 0 0 / 0.28),
+      inset 0 1px 0 oklch(1 0 0 / 0.1);
+  }
 
-	.announcement-home:hover {
-		background: color-mix(in srgb, var(--surface) 90%, transparent);
-	}
+  .announcement-home:hover {
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-	.announcement-home {
-		background: var(--surface);
-		-webkit-backdrop-filter: none;
-		backdrop-filter: none;
-	}
+  .announcement-home {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 @media (max-width: 720px) {
-	.announcement-page-nav {
-		top: 12px;
-		left: 12px;
-		gap: 10px;
-	}
+  .announcement-page-nav {
+    top: 12px;
+    left: 12px;
+    gap: 10px;
+  }
 
-	.announcement-page .announcement-article {
-		padding-top: 96px;
-	}
+  .announcement-page .announcement-article {
+    padding-top: 96px;
+  }
 }

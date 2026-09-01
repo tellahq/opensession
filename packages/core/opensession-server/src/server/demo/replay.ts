@@ -21,16 +21,18 @@
  * across hot reloads. Never started unless startDemo() runs (OPENSESSION_DEMO=1).
  */
 
-import {
-  markSessionStarting,
-} from "../agent-runner";
+import { markSessionStarting } from "../agent-runner";
 import { transitionRunState } from "../run-state";
 import {
   appendTranscriptEntries,
   recordEngineSessionOwner,
 } from "../transcript-persistence";
 import { parseJsonlLines } from "../jsonl-parser";
-import { importLegacyTranscript, replaceTranscriptEvents, transcript } from "../actor-transcript";
+import {
+  importLegacyTranscript,
+  replaceTranscriptEvents,
+  transcript,
+} from "../actor-transcript";
 import { touchNativeSession } from "../session-cache";
 import {
   DEMO_LIVE_ENGINE_SESSION_ID,

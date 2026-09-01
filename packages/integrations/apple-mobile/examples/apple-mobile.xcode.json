@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "backend": "xcode",
+  "bundleId": "com.example.MySwiftUIApp",
+  "teamId": "YOUR_TEAM_ID",
+  "xcode": {
+    "container": "workspace",
+    "path": "MySwiftUIApp.xcworkspace",
+    "scheme": "MySwiftUIApp",
+    "configuration": "Release"
+  },
+  "release": {
+    "requireClean": true,
+    "allowedBranches": ["main"],
+    "artifactDirectory": ".build/apple-mobile"
+  }
+}

@@ -12,53 +12,53 @@
  */
 
 export interface DraftSyncState {
-	/** key → the text in the composer store right now. */
-	local: Record<string, string>;
-	/** key → the text last agreed with the server. Absent = never synced. */
-	synced: Record<string, string>;
+  /** key → the text in the composer store right now. */
+  local: Record<string, string>;
+  /** key → the text last agreed with the server. Absent = never synced. */
+  synced: Record<string, string>;
 }
 
 export type DraftSyncAction =
-	/** Replace the local text with the server's (`text` may be ""). */
-	| { kind: "adopt"; key: string; text: string }
-	/** Already equal; just record it as agreed. */
-	| { kind: "agree"; key: string; text: string }
-	/** Typed here since the last agreement: send it. */
-	| { kind: "push"; key: string };
+  /** Replace the local text with the server's (`text` may be ""). */
+  | { kind: "adopt"; key: string; text: string }
+  /** Already equal; just record it as agreed. */
+  | { kind: "agree"; key: string; text: string }
+  /** Typed here since the last agreement: send it. */
+  | { kind: "push"; key: string };
 
 export function reconcileDrafts(
-	server: Record<string, { text: string }>,
-	state: DraftSyncState,
-	keyFor: (sessionId: string) => string,
+  server: Record<string, { text: string }>,
+  state: DraftSyncState,
+  keyFor: (sessionId: string) => string,
 ): DraftSyncAction[] {
-	const actions: DraftSyncAction[] = [];
-	const isDirty = (key: string) =>
-		(state.local[key] ?? "") !== (state.synced[key] ?? "");
-	const seen = new Set<string>();
+  const actions: DraftSyncAction[] = [];
+  const isDirty = (key: string) =>
+    (state.local[key] ?? "") !== (state.synced[key] ?? "");
+  const seen = new Set<string>();
 
-	for (const [sessionId, entry] of Object.entries(server)) {
-		const key = keyFor(sessionId);
-		seen.add(key);
-		if (isDirty(key)) continue;
-		if ((state.local[key] ?? "") === entry.text) {
-			actions.push({ kind: "agree", key, text: entry.text });
-		} else {
-			actions.push({ kind: "adopt", key, text: entry.text });
-		}
-	}
+  for (const [sessionId, entry] of Object.entries(server)) {
+    const key = keyFor(sessionId);
+    seen.add(key);
+    if (isDirty(key)) continue;
+    if ((state.local[key] ?? "") === entry.text) {
+      actions.push({ kind: "agree", key, text: entry.text });
+    } else {
+      actions.push({ kind: "adopt", key, text: entry.text });
+    }
+  }
 
-	// Keys we had agreed on that the server no longer holds: sent or cleared
-	// on the other device.
-	for (const key of Object.keys(state.synced)) {
-		if (seen.has(key) || isDirty(key)) continue;
-		if (state.local[key]) actions.push({ kind: "adopt", key, text: "" });
-	}
+  // Keys we had agreed on that the server no longer holds: sent or cleared
+  // on the other device.
+  for (const key of Object.keys(state.synced)) {
+    if (seen.has(key) || isDirty(key)) continue;
+    if (state.local[key]) actions.push({ kind: "adopt", key, text: "" });
+  }
 
-	// Everything typed here that the server hasn't agreed to yet, including
-	// text entered before the first load landed.
-	for (const key of Object.keys(state.local)) {
-		if (isDirty(key)) actions.push({ kind: "push", key });
-	}
+  // Everything typed here that the server hasn't agreed to yet, including
+  // text entered before the first load landed.
+  for (const key of Object.keys(state.local)) {
+    if (isDirty(key)) actions.push({ kind: "push", key });
+  }
 
-	return actions;
+  return actions;
 }

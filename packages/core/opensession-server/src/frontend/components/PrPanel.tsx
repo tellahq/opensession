@@ -1,39 +1,35 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import { AGENT_NAME } from "../lib/brand";
 import { randomUUID } from "../lib/random-uuid";
 import React, {
-  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
   useState,
   useRef,
 } from "react";
+import { createPortal } from "react-dom";
 import type {
-  GitStatusInfo,
-  DiffFileGroup,
   PrCheck,
   PrDetails,
-  CodeFlowResult,
   SessionWalkthrough,
   UnifiedSession,
+  WSClientMessage,
   WSServerMessage,
 } from "../lib/types";
 import { PrSessionsList, prRelatedSessions } from "./PrSessions";
 import { WalkthroughCard } from "./WalkthroughCard";
+import { PrOverviewPage } from "./pr/PrOverviewPage";
+import { PrFilesPage } from "./pr/PrFilesPage";
 import { DiffPanel } from "./DiffPanel";
 import {
   API_BASE,
-  fetchPr,
-  fetchPrDiff,
-  fetchPrCodeFlow,
-  fetchPrDiffGroups,
-  fetchPrReviewThreads,
   fetchPrViewedFiles,
   fetchPrFile,
   setPrFileViewed,
   fetchGitStatus,
-  fetchReviewGuide,
   fetchWorktreeFile,
   saveWorktreeFile,
   submitPrReviewApi,
@@ -42,25 +38,15 @@ import {
   unlinkPrApi,
 } from "../lib/api";
 import {
-  fetchPrPreview,
-  fetchPrPreviewDiff,
-  fetchPrPreviewCodeFlow,
-  fetchPrPreviewGuide,
   submitPrPreviewReviewApi,
   mergePrPreviewApi,
   closePrPreviewApi,
 } from "../lib/api";
-import type { PrReviewThread } from "../lib/api/prs";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
-import {
-  CommentableDiff,
-  type CommentTarget,
-  type PendingComment,
-} from "./CommentableDiff";
-import { SelectionToSession } from "./SelectionToSession";
+import type { CommentTarget, PendingComment } from "../lib/commentable-diff";
 import { getCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import { renderPrCommentMarkdown } from "../lib/markdown";
@@ -73,9 +59,9 @@ import {
   type PrTarget,
 } from "../lib/pr-focus";
 import { providerFromUrl, prCapabilities } from "../lib/provider";
-import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
-
+import { WS_SUMMARY_REVIEW_CANVAS_CLEARANCE } from "../lib/workspace-summary-classes";
 import { Textarea } from "../ui/input";
+import { errorMessage } from "../lib/error-message";
 import {
   IconBranches,
   IconCheck,
@@ -85,6 +71,8 @@ import {
   IconGitMerge,
   IconGlobe,
   IconMessage,
+  IconMessages,
+  IconPlus,
   IconPullRequest,
   IconSliders,
   IconUndo,
@@ -109,27 +97,26 @@ import {
 
 import { checkClass, isDeployment, summarize } from "../lib/pr-status-derive";
 import { prStatusMark } from "../lib/pr-status";
-
-import { formatPrCommentPrompt, stripHtmlComments } from "../lib/pr-prompts";
-import { CheckRow } from "./pr/CheckRow";
+import { PR_NO_PR_BAR, PR_REPO_TABS } from "../lib/pr-tone-classes";
+import { stripHtmlComments } from "../lib/pr-prompts";
 import { PrStateIcon } from "./pr/PrStateIcon";
-import { ConversationView } from "./pr/PrViews";
 import { LinkPrControl } from "./pr/LinkPrControl";
 import { PrCard } from "./pr/PrCard";
-import { MergeUndoControl } from "./pr/MergeUndoControl";
 import { StackLinkSection } from "./pr/Stack";
 import { PrStackChip } from "./pr/StackPopover";
 import { ReviewRail } from "./pr/ReviewRail";
 import { GitStatusRows } from "./pr/GitStatus";
 import { ReviewToolbar } from "./pr/ReviewToolbar";
 import { EmptyState, LoadingState } from "../ui/state";
-import { CodeFlow } from "./CodeFlow";
+import { ResponsiveDialog } from "../ui/sheet";
+import { useIsPhone } from "../hooks/useIsPhone";
 import { revealDiffFile } from "../lib/diff-navigation";
-import { PrFileTree } from "./pr/PrFileTree";
-import { reviewDiffLoadPolicy } from "../lib/review-diff";
 import { BrandMark } from "./BrandTile";
 import { useCopy } from "../ui/copy";
 import { useDeferredMergePhase } from "../hooks/useDeferredMerge";
+import { useOptionalSessionSocket } from "../hooks/useSessionSocket";
+import { usePrData } from "../hooks/usePrData";
+import { sectionsWithPatches } from "../lib/pr-review-guide";
 import {
   cancelDeferredMergeByKey,
   deferredMergeKey,
@@ -137,631 +124,461 @@ import {
 } from "../lib/deferred-merge";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
-import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	minW0: {
-			minWidth: "0"
-	},
-	maxW180px: {
-			maxWidth: "180px"
-	},
-	px2: {
-			paddingInline: "8px"
-	},
-	truncate: {
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap",
-			overflow: "hidden"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	w280px: {
-			width: "280px"
-	},
-	p15: {
-			padding: "6px"
-	},
-	py15: {
-			paddingBlock: "6px"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	flex: {
-			display: "flex"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	gap05: {
-			gap: "2px"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	flex1: {
-			flex: "1"
-	},
-	block: {
-			display: "block"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	mt15: {
-			marginTop: "6px"
-	},
-	borderT: {
-			borderTopStyle: "solid",
-			borderTopWidth: "1px"
-	},
-	borderDividerSoft: {
-			borderColor: "var(--divider-soft)"
-	},
-	px1: {
-			paddingInline: "4px"
-	},
-	pt15: {
-			paddingTop: "6px"
-	},
-	minH0: {
-			minHeight: "0"
-	},
-	textRed: {
-			color: "var(--red)"
-	},
-	mlAuto: {
-			marginLeft: "auto"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap25: {
-			gap: "10px"
-	},
-	mxAuto: {
-			marginInline: "auto"
-	},
-	wFull: {
-			width: "100%"
-	},
-	maxW760px: {
-			maxWidth: "760px"
-	},
-	px4: {
-			paddingInline: "16px"
-	},
-	pt4: {
-			paddingTop: "16px"
-	},
-	gap4: {
-			gap: "16px"
-	},
-	py4: {
-			paddingBlock: "16px"
-	},
-	w340px: {
-			width: "340px"
-	},
-	p3: {
-			padding: "12px"
-	},
-	mx2: {
-			marginInline: "8px"
-	},
-	my15: {
-			marginBlock: "6px"
-	},
-	hPx: {
-			height: "1px"
-	},
-	bgLine: {
-			backgroundColor: "var(--border)"
-	},
-	gap15: {
-			gap: "6px"
-	},
-	h8: {
-			height: "32px"
-	},
-	overflowXAuto: {
-			overflowX: "auto"
-	},
-	overflowYHidden: {
-			overflowY: "hidden"
-	},
-	bgSurface: {
-			backgroundColor: "var(--bg)"
-	},
-	ScrollbarWidthNone: {
-			scrollbarWidth: "none"
-	},
-	selfStretch: {
-			alignSelf: "stretch"
-	},
-	h10: {
-			height: "40px"
-	},
-	gap7px: {
-			gap: "7px"
-	},
-	itemsBaseline: {
-			alignItems: "baseline"
-	},
-	gap1: {
-			gap: "4px"
-	},
-	leading12: {
-			lineHeight: "1.2"
-	},
-	fontNormal: {
-			fontWeight: "var(--font-weight-normal)"
-	},
-	noUnderline: {
-			textDecorationLine: "none"
-	},
-	Mr15: {
-			marginRight: "-6px"
-	},
-	gap5: {
-			gap: "20px"
-	},
-	py12: {
-			paddingBlock: "48px"
-	},
-	textCenter: {
-			textAlign: "center"
-	},
-	textSm: {
-			fontSize: "var(--type-label)",
-			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
-	},
-	ml2: {
-			marginLeft: "8px"
-	},
-	border0: {
-			borderStyle: "solid",
-			borderWidth: "0"
-	},
-	bgTransparent: {
-			backgroundColor: "transparent"
-	},
-	textLink: {
-			color: "var(--link)"
-	},
-	mb4: {
-			marginBottom: "16px"
-	},
-	roundedSm: {
-			borderRadius: "calc(4px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	borderLine: {
-			borderColor: "var(--border)"
-	},
-	bgPanel: {
-			backgroundColor: "var(--bg-panel)"
-	},
-	px3: {
-			paddingInline: "12px"
-	},
-	py2: {
-			paddingBlock: "8px"
-	},
-	textXs: {
-			fontSize: "var(--type-label)",
-			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
-	},
-	mb7: {
-			marginBottom: "28px"
-	},
-	grid: {
-			display: "grid"
-	},
-	leadingRelaxed: {
-			lineHeight: "var(--leading-relaxed)"
-	},
-	m0: {
-			margin: "0"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-	tracking001em: {
-			letterSpacing: "-.01em"
-	},
-	mt1: {
-			marginTop: "4px"
-	},
-	maxW680px: {
-			maxWidth: "680px"
-	},
-	mb8: {
-			marginBottom: "32px"
-	},
-	scrollMt64px: {
-			scrollMarginTop: "64px"
-	},
-	mb3: {
-			marginBottom: "12px"
-	},
-	absolute: {
-			position: "absolute"
-	},
-	inset0: {
-			inset: "0"
-	},
-	z20: {
-			zIndex: "20"
-	},
-	cursorDefault: {
-			cursor: "default"
-	},
-	bgBlack25: {
-			backgroundColor: "color-mix(in srgb, var(--color-black) 25%, transparent)"
-	},
-	mb2: {
-			marginBottom: "8px"
-	},
-	pointerEventsNone: {
-			pointerEvents: "none"
-	},
-	bottom4: {
-			bottom: "16px"
-	},
-	left4: {
-			left: "16px"
-	},
-	right4: {
-			right: "16px"
-	},
-	z10: {
-			zIndex: "10"
-	},
-	minH54px: {
-			minHeight: "54px"
-	},
-	gap3: {
-			gap: "12px"
-	},
-	roundedMd: {
-			borderRadius: "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	borderLineStrong: {
-			borderColor: "var(--border-strong)"
-	},
-	bgPanel95: {
-			backgroundColor: "var(--bg-panel)"
-	},
-	smoothShadowSoft: {
-			boxShadow: "0 3px 10px -3px var(--smooth-shadow-color), 0 20px 56px -16px var(--smooth-shadow-color)"
-	},
-	pointerEventsAuto: {
-			pointerEvents: "auto"
-	},
-	flexWrap: {
-			flexWrap: "wrap"
-	},
-	justifyEnd: {
-			justifyContent: "flex-end"
-	},
-	gap2: {
-			gap: "8px"
-	},
-	leftAuto: {
-			left: "auto"
-	},
-	topAuto: {
-			top: "auto"
-	},
-	translateX0: {
-			translate: "0 0"
-	},
-	translateY0: {
-			translate: "0 0"
-	},
-	originBottomRight: {
-			transformOrigin: "100% 100%"
-	},
-	focusRing: {
-			":focus-visible": {
-					outline: "2px solid var(--accent-ink)",
-					outlineOffset: "2px"
-			}
-	},
-	cursorPointer: {
-			cursor: "pointer"
-	},
-	itemsStart: {
-			alignItems: "flex-start"
-	},
-	roundedRow: {
-			borderRadius: "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	py25: {
-			paddingBlock: "10px"
-	},
-	textLeft: {
-			textAlign: "left"
-	},
-	mtPx: {
-			marginTop: "1px"
-	},
-	size4: {
-			width: "16px",
-			height: "16px"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	roundedFull: {
-			borderRadius: "calc(infinity * 1px)"
-	,
-		cornerShape: "round"},
-	transitionColors: {
-			transitionProperty: "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
-			transitionTimingFunction: "var(--tw-ease,var(--ease))",
-			transitionDuration: "var(--tw-duration,var(--dur-micro))"
-	},
-	size15: {
-			width: "6px",
-			height: "6px"
-	},
-	bgOnAccent: {
-			backgroundColor: "var(--on-accent)"
-	},
-	opacity0: {
-			opacity: "0"
-	},
-	h20: {
-			height: "80px"
-	},
-	resizeNone: {
-			resize: "none"
-	},
-	px05: {
-			paddingInline: "2px"
-	},
-	justifyBetween: {
-			justifyContent: "space-between"
-	},
-	bgRedSoft: {
-			backgroundColor: "var(--red-soft)"
-	},
+  flexNone: {
+    flex: "none",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  maxW180px: {
+    maxWidth: "180px",
+  },
+  px2: {
+    paddingInline: "calc(4px * 2)",
+  },
   phoneMinH9: {
-    "@media (max-width: 720px)": { minHeight: "36px" },
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 9)",
+    },
   },
   phoneMaxW104px: {
-    "@media (max-width: 720px)": { maxWidth: "104px" },
-  },
-  minH10: { minHeight: "40px" },
-  hoverBgHover: { ":hover": { "@media (hover: hover)": { backgroundColor: "var(--hover)" } } },
-  phoneMinH11: {
-    "@media (max-width: 720px)": { minHeight: "44px" },
-  },
-  bgActive: { backgroundColor: "var(--bg-active)" },
-  relative: { position: "relative" },
-  hFull: { height: "100%" },
-  overflowXHidden: { overflowX: "hidden" },
-  overflowYAuto: { overflowY: "auto" },
-  overflowHidden: { overflow: "hidden" },
-  overflowYVisible: { overflowY: "visible" },
-  smPx5: {
-    "@media (min-width: 640px)": { paddingInline: "20px" },
-  },
-  maxW1500px: { maxWidth: "1500px" },
-  pb2: { paddingBottom: "8px" },
-  phoneWFull: {
-    "@media (max-width: 720px)": { width: "100%" },
-  },
-  phonePx1: {
-    "@media (max-width: 720px)": { paddingInline: "4px" },
-  },
-  wAuto: { width: "auto" },
-  pt0: { paddingTop: "0" },
-  pt2: { paddingTop: "8px" },
-  summaryCanvasClearance: {
-    "@media (min-width: 721px)": { marginRight: "312px" },
-  },
-  translateYMinus5: { translate: "0 -20px" },
-  repoTabs: {
-    display: "flex",
-    gap: "4px",
-    overflowX: "auto",
-    borderBottomStyle: "solid",
-    borderBottomWidth: "1px",
-    borderColor: "var(--divider)",
-    paddingInline: "12px",
-    paddingBlock: "8px",
-  },
-  noPrBar: {
-    display: "flex",
-    flexShrink: 0,
-    alignItems: "center",
-    gap: "8px",
-    overflowX: "auto",
-    paddingInline: "12px",
-    paddingBlock: "8px",
-    whiteSpace: "nowrap",
-    scrollbarWidth: "none",
     "@media (max-width: 720px)": {
-      borderBottomStyle: "solid",
-      borderBottomWidth: "1px",
-      borderColor: "var(--divider)",
+      maxWidth: "104px",
     },
   },
-  w264px: { width: "264px" },
-  desktopMrMinus15: {
-    "@media (min-width: 721px)": { marginRight: "-6px" },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
-  phoneH11: {
-    "@media (max-width: 720px)": { height: "44px" },
+  shrink0: {
+    flexShrink: "0",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  w280px: {
+    width: "280px",
+  },
+  p15: {
+    padding: "calc(4px * 1.5)",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap05: {
+    gap: "calc(4px * 0.5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  flex1: {
+    flex: "1",
+  },
+  block: {
+    display: "block",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  mt15: {
+    marginTop: "calc(4px * 1.5)",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  borderDividerSoft: {
+    borderColor: "var(--divider-soft)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  pt15: {
+    paddingTop: "calc(4px * 1.5)",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  mxAuto: {
+    marginInline: "auto",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxW760px: {
+    maxWidth: "760px",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  pt4: {
+    paddingTop: "calc(4px * 4)",
+  },
+  smPx5: {
+    "@media (min-width: 40rem)": {
+      paddingInline: "calc(4px * 5)",
+    },
+  },
+  gap4: {
+    gap: "calc(4px * 4)",
+  },
+  py4: {
+    paddingBlock: "calc(4px * 4)",
+  },
+  desktopMr15: {
+    "@media (min-width: 721px)": {
+      marginRight: "calc(4px * -1.5)",
+    },
+  },
+  w340px: {
+    width: "340px",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  mx2: {
+    marginInline: "calc(4px * 2)",
+  },
+  my15: {
+    marginBlock: "calc(4px * 1.5)",
+  },
+  hPx: {
+    height: "1px",
+  },
+  bgLine: {
+    backgroundColor: "var(--border)",
+  },
+  phoneHidden: {
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
   },
   phoneGap2: {
-    "@media (max-width: 720px)": { gap: "8px" },
-  },
-  hoverTextFg: { ":hover": { "@media (hover: hover)": { color: "var(--text)" } } },
-  minW5: { minWidth: "20px" },
-  px7px: { paddingInline: "7px" },
-  pyPx: { paddingBlock: "1px" },
-  tabularNums: { fontVariantNumeric: "tabular-nums" },
-  bgAccentSoft: { backgroundColor: "var(--accent-soft)" },
-  textAccent: { color: "var(--accent-ink)" },
-  desktopReviewBar: {
-    "@media (min-width: 721px)": {
-      position: "absolute",
-      left: "8px",
-      top: "calc(100% + 8px)",
-      zIndex: 20,
-      borderRadius: "calc(14px * var(--rf))",
-      borderStyle: "solid",
-      borderWidth: "1px",
-      borderColor: "var(--border)",
-    },
-  },
-  phoneReviewBar: {
     "@media (max-width: 720px)": {
-      height: "44px",
-      gap: "8px",
-      paddingInline: "8px",
-      boxShadow: "inset 0 -1px 0 var(--border)",
+      gap: "calc(4px * 2)",
     },
+  },
+  h11: {
+    height: "calc(4px * 11)",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  overflowXAuto: {
+    overflowX: "auto",
+  },
+  overflowYHidden: {
+    overflowY: "hidden",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  ScrollbarWidthNone: {
+    scrollbarWidth: "none",
+  },
+  desktopHidden: {
+    "@media (min-width: 721px)": {
+      display: "none",
+    },
+  },
+  selfStretch: {
+    alignSelf: "stretch",
+  },
+  h10: {
+    height: "calc(4px * 10)",
   },
   phonePx3: {
-    "@media (max-width: 720px)": { paddingInline: "12px" },
-  },
-  mr15: { marginRight: "6px" },
-  h6: { height: "24px" },
-  roundedControl: { borderRadius: "calc(12px * var(--rf))" ,
-    cornerShape: "var(--cs)"},
-  textPurple: { color: "var(--purple)" },
-  textYellow: { color: "var(--yellow)" },
-  textGreen: { color: "var(--green)" },
-  bgStatusPurple: {
-    backgroundColor: "color-mix(in srgb, var(--purple) 10%, transparent)",
-  },
-  bgStatusMuted: { backgroundColor: "var(--hover)" },
-  bgStatusYellow: {
-    backgroundColor: "color-mix(in srgb, var(--yellow) 9%, transparent)",
-  },
-  bgGreenSoft: { backgroundColor: "var(--green-soft)" },
-  hoverTextLink: { ":hover": { "@media (hover: hover)": { color: "var(--link)" } } },
-  inlineFlex: { display: "inline-flex" },
-  size8: { width: "32px", height: "32px" },
-  mrMinus15: { marginRight: "-6px" },
-  desktopFlexNone: {
-    "@media (min-width: 721px)": { flex: "none" },
-  },
-  desktopPt12: {
-    "@media (min-width: 721px)": { paddingTop: "48px" },
-  },
-  pb24: { paddingBottom: "96px" },
-  phonePb36: {
-    "@media (max-width: 720px)": { paddingBottom: "144px" },
-  },
-  pb4: { paddingBottom: "16px" },
-  maxW1120px: { maxWidth: "1120px" },
-  px6: { paddingInline: "24px" },
-  py6: { paddingBlock: "24px" },
-  phoneFlexCol: {
-    "@media (max-width: 720px)": { flexDirection: "column" },
-  },
-  phoneItemsStretch: {
-    "@media (max-width: 720px)": { alignItems: "stretch" },
-  },
-  gap6: { gap: "24px" },
-  gap8: { gap: "32px" },
-  guideGrid: { gridTemplateColumns: "54px minmax(0, 1fr)" },
-  right5: { right: "20px" },
-  top108px: { top: "108px" },
-  top16: { top: "64px" },
-  z30: { zIndex: "30" },
-  w460px: { width: "460px" },
-  maxWCalc40px: { maxWidth: "calc(100% - 40px)" },
-  p4: { padding: "16px" },
-  backdropBlur: {
-    WebkitBackdropFilter: "blur(8px)",
-    backdropFilter: "blur(8px)",
-  },
-  mt05: { marginTop: "2px" },
-  maxW30rem: { maxWidth: "30rem" },
-  modalPosition: {
-    bottom: "max(1rem, env(safe-area-inset-bottom))",
-    left: "auto",
-    right: "16px",
-    top: "auto",
-    translate: "0 0",
-    transformOrigin: "100% 100%",
     "@media (max-width: 720px)": {
-      left: "50%",
-      right: "auto",
-      translate: "-50% 0",
-      transformOrigin: "50% 100%",
+      paddingInline: "calc(4px * 3)",
     },
   },
-  transitionBgBorder: {
-    transitionProperty: "background-color,border-color",
-    transitionTimingFunction: "var(--tw-ease,var(--ease))",
-    transitionDuration: "var(--tw-duration,var(--dur-micro))",
+  gap7px: {
+    gap: "7px",
   },
-
-	desktopReviewFileTreeGap0px: {
-		"@media (min-width: 721px)": {
-			"--review-file-tree-gap": "0px"
-		}
-	},
-	desktopReviewFileTreeTop60px: {
-		"@media (min-width: 721px)": {
-			"--review-file-tree-top": "60px"
-		}
-	},
-	ReviewFileHeaderTop0px: {
-		"--review-file-header-top": "0px"
-	},
-
-	desktopReviewFileHeaderTop61px: {
-		"@media (min-width: 721px)": {
-			"--review-file-header-top": "61px"
-		}
-	},
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  leading12: {
+    lineHeight: "1.2",
+  },
+  fontNormal: {
+    fontWeight: "var(--font-weight-normal)",
+  },
+  noUnderline: {
+    textDecorationLine: "none",
+  },
+  hoverTextLink: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--link)",
+      },
+    },
+  },
+  Mr15: {
+    marginRight: "calc(4px * -1.5)",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  pb3: {
+    paddingBottom: "calc(4px * 3)",
+  },
+  pt5: {
+    paddingTop: "calc(4px * 5)",
+  },
+  phonePt2: {
+    "@media (max-width: 720px)": {
+      paddingTop: "calc(4px * 2)",
+    },
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  size10: {
+    width: "calc(4px * 10)",
+    height: "calc(4px * 10)",
+  },
+  phoneSize11: {
+    "@media (max-width: 720px)": {
+      width: "calc(4px * 11)",
+      height: "calc(4px * 11)",
+    },
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  pb5: {
+    paddingBottom: "calc(4px * 5)",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  bottom4: {
+    bottom: "calc(4px * 4)",
+  },
+  left4: {
+    left: "calc(4px * 4)",
+  },
+  right4: {
+    right: "calc(4px * 4)",
+  },
+  z10: {
+    zIndex: "10",
+  },
+  minH54px: {
+    minHeight: "54px",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderLineStrong: {
+    borderColor: "var(--border-strong)",
+  },
+  bgPanel95: {
+    backgroundColor: "color-mix(in oklab, var(--bg-panel) 95%, transparent)",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  smoothShadowSoft: {
+    boxShadow:
+      "0 3px 10px -3px color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent), 0 20px 56px -16px color-mix(in srgb, var(--smooth-shadow-color) 12%, transparent)",
+  },
+  phoneFlexCol: {
+    "@media (max-width: 720px)": {
+      flexDirection: "column",
+    },
+  },
+  phoneItemsStretch: {
+    "@media (max-width: 720px)": {
+      alignItems: "stretch",
+    },
+  },
+  textXs: {
+    fontSize: "var(--type-label)",
+    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
+  },
+  pointerEventsAuto: {
+    pointerEvents: "auto",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  bottomMax1remEnvSafeAreaInsetBottom: {
+    bottom: "max(1rem, env(safe-area-inset-bottom))",
+  },
+  leftAuto: {
+    left: "auto",
+  },
+  topAuto: {
+    top: "auto",
+  },
+  translateX0: {
+    translate: "0 0",
+  },
+  translateY0: {
+    translate: "0 0",
+  },
+  originBottomRight: {
+    transformOrigin: "100% 100%",
+  },
+  phoneLeft12: {
+    "@media (max-width: 720px)": {
+      left: "calc(1 / 2 * 100%)",
+    },
+  },
+  phoneRightAuto: {
+    "@media (max-width: 720px)": {
+      right: "auto",
+    },
+  },
+  phoneTranslateX12: {
+    "@media (max-width: 720px)": {
+      translate: "calc(calc(1 / 2 * 100%) * -1) 0",
+    },
+  },
+  phoneOriginBottom: {
+    "@media (max-width: 720px)": {
+      transformOrigin: "bottom",
+    },
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  roundedRow: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  transitionBackgroundColorBorderColor: {
+    transitionProperty: "background-color,border-color",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  mtPx: {
+    marginTop: "1px",
+  },
+  size4: {
+    width: "calc(4px * 4)",
+    height: "calc(4px * 4)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  size15: {
+    width: "calc(4px * 1.5)",
+    height: "calc(4px * 1.5)",
+  },
+  bgOnAccent: {
+    backgroundColor: "var(--on-accent)",
+  },
+  opacity0: {
+    opacity: "0%",
+  },
+  h20: {
+    height: "calc(4px * 20)",
+  },
+  resizeNone: {
+    resize: "none",
+  },
+  px05: {
+    paddingInline: "calc(4px * 0.5)",
+  },
+  justifyBetween: {
+    justifyContent: "space-between",
+  },
+  bgRedSoft: {
+    backgroundColor: "var(--red-soft)",
+  },
 });
-
-const STATUS_TEXT_STYLE = {
-  purple: sx.textPurple,
-  muted: sx.textFaint,
-  red: sx.textRed,
-  yellow: sx.textYellow,
-  green: sx.textGreen,
-} as const;
-
-const STATUS_BG_STYLE = {
-  purple: sx.bgStatusPurple,
-  muted: sx.bgStatusMuted,
-  red: sx.bgRedSoft,
-  yellow: sx.bgStatusYellow,
-  green: sx.bgGreenSoft,
-} as const;
-
-// Re-exported so existing importers of these (formerly local) helpers keep working.
-export {
-  checkClass,
-  isDeployment,
-  formatPrCommentPrompt,
-  CheckRow,
-  PrStateIcon,
-};
 
 type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 
@@ -808,7 +625,7 @@ interface Props {
    * "Send to session" popover that delivers the selection + a message to this PR's
    * session (via a `prompt` message — the server steers/queues if it's busy).
    */
-  send?: (msg: any) => void;
+  send?: (msg: WSClientMessage) => void;
   /** Agent-published walkthrough (session.walkthrough) — rendered at the top
    *  of the info column; its mirrored section is stripped from the PR body. */
   walkthrough?: SessionWalkthrough;
@@ -830,6 +647,9 @@ interface Props {
   sessions?: UnifiedSession[];
   /** Navigate to a session picked from the linked-sessions list. */
   onOpenSessionById?: (id: string) => void;
+  /** Host the session action in surrounding workspace chrome. `undefined`
+   * keeps it in this PR toolbar for standalone review views. */
+  sessionActionTarget?: HTMLElement | null;
   /** Open another PR in this panel — used by the stack map to move between
    *  layers in-app. Without it the layer rows still link, just via a full
    *  page load. */
@@ -839,21 +659,13 @@ interface Props {
   /** The surrounding review header already offers the workspace summary.
    * Keep this panel's metadata rail only when it stacks for a narrow canvas. */
   hideWideOverviewRail?: boolean;
-  /** Controlled page for hosts that move Review navigation into the summary. */
+  /** Controlled page for hosts that preserve Review state outside the panel. */
   page?: PrReviewPage;
   onPageChange?: (page: PrReviewPage) => void;
   /** Move file controls into the identity row and omit the secondary row. */
   compactToolbar?: boolean;
   /** Legacy caller hint; Review now keeps its desktop top inset either way. */
   flushToolbarTop?: boolean;
-}
-
-interface PrDiffData {
-  number: number;
-  headRefOid: string;
-  patch: string;
-  diffVersion?: string;
-  skippedFiles?: number;
 }
 
 /** A PR manually linked to the session (mirrors session.linkedPrs entries). */
@@ -867,75 +679,6 @@ export interface LinkedPrEntry {
 
 const NO_LINKED_PRS: LinkedPrEntry[] = [];
 
-/** One narrative section of the AI review guide (mirrors the server shape). */
-interface ReviewGuideSection {
-  title: string;
-  explanation: string;
-  files: string[];
-}
-
-export interface ReviewGuideData {
-  number: number;
-  headRefOid: string;
-  sections: ReviewGuideSection[];
-}
-
-/** Split a unified diff into per-file chunks keyed by the new-side path. */
-function splitPatchByFile(patch: string): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const part of patch.split(/^(?=diff --git )/m)) {
-    if (!part.startsWith("diff --git ")) continue;
-    const m = part.match(/^diff --git a\/(.+?) b\/(.+)$/m);
-    if (m) map.set(m[2], part);
-  }
-  return map;
-}
-
-/**
- * Pair each guide section with the slice of the unified diff covering its
- * files (so inline commenting keeps working inside the guide). Model paths are
- * matched exactly, then by suffix; files no section claimed come back as a
- * trailing "Everything else" section so guide mode never hides part of a PR.
- */
-export function sectionsWithPatches(guide: ReviewGuideData, patch: string) {
-  const byFile = splitPatchByFile(patch);
-  const unclaimed = new Set(byFile.keys());
-  // A suffix match can only ever pair two paths that end in the same segment,
-  // so bucket the patch's paths by basename once rather than scanning every
-  // one of them per section file.
-  const basename = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-  const byBasename = new Map<string, string[]>();
-  for (const path of byFile.keys()) {
-    const bucket = byBasename.get(basename(path));
-    if (bucket) bucket.push(path);
-    else byBasename.set(basename(path), [path]);
-  }
-  const resolve = (file: string): string | null => {
-    if (byFile.has(file)) return file;
-    for (const path of byBasename.get(basename(file)) ?? [])
-      if (path.endsWith(`/${file}`) || file.endsWith(`/${path}`)) return path;
-    return null;
-  };
-  const out = guide.sections.map((s) => {
-    const chunks: string[] = [];
-    for (const file of s.files) {
-      const path = resolve(file);
-      if (!path || !unclaimed.has(path)) continue;
-      unclaimed.delete(path);
-      chunks.push(byFile.get(path)!);
-    }
-    return { ...s, patch: chunks.join("") };
-  });
-  if (unclaimed.size > 0)
-    out.push({
-      title: "Everything else",
-      explanation: "Changes the guide didn't group into a section.",
-      files: [...unclaimed],
-      patch: [...unclaimed].map((f) => byFile.get(f)!).join(""),
-    });
-  return out;
-}
-
 export function PrPanel({
   sessionId,
   onOpenSession,
@@ -945,19 +688,23 @@ export function PrPanel({
   discoveredPrs,
   focusTarget,
   linkable,
-  send,
+  send: sendProp,
   walkthrough,
   editGate,
   previewTarget,
   sessions,
   onOpenSessionById,
+  sessionActionTarget,
   onOpenPr,
-  addHandler,
+  addHandler: addHandlerProp,
   hideWideOverviewRail = false,
   page: controlledPage,
   onPageChange,
   compactToolbar = false,
 }: Props) {
+  const sessionSocket = useOptionalSessionSocket();
+  const send = sendProp ?? sessionSocket?.send;
+  const addHandler = addHandlerProp ?? sessionSocket?.addHandler;
   // Local copy of the linked-PR list so link/unlink applies instantly; the
   // sessions list catches up on its next refresh.
   const [linkedLocal, setLinkedLocal] = useState<LinkedPrEntry[] | null>(null);
@@ -965,46 +712,46 @@ export function PrPanel({
   // every render for the (common) session with none.
   const linked = linkedLocal ?? linkedPrs ?? NO_LINKED_PRS;
   const [targetPickerOpen, setTargetPickerOpen] = useState(false);
-  const targets = (dedupeTargets([
-      ...(previewTarget
-        ? [
-            {
-              key: `preview:${previewTarget.repo}:${previewTarget.branch}`,
-              repo: previewTarget.repo,
-              branch: previewTarget.branch,
-              primary: true,
-              label: previewTarget.repo,
-            },
-          ]
-        : (repos ?? []).map((r) => ({
-            key: r.repo,
-            repo: r.repo,
-            primary: r.primary,
-            label: r.repo,
-          }))),
-      ...linked.map((lp) => ({
-        key: `${lp.repo} ${lp.branch}`,
-        repo: lp.repo,
-        branch: lp.branch,
-        number: lp.number,
-        linked: true,
-        label: lp.number
-          ? `${repoLabel(lp.repo)} #${lp.number}`
-          : `${repoLabel(lp.repo)}:${lp.branch}`,
-      })),
-      // Last, so an explicit link (which owns the unlink affordance) wins the
-      // dedupe over the same PR discovered from its body footer.
-        ...(previewTarget ? [] : (discoveredPrs ?? [])).map((dp) => ({
-        key: `${dp.repo} ${dp.branch}`,
-        repo: dp.repo,
-        branch: dp.branch,
-        number: dp.number,
-        discovered: true,
-        label: dp.number
-          ? `${repoLabel(dp.repo)} #${dp.number}`
-          : `${repoLabel(dp.repo)}:${dp.branch}`,
-      })),
-    ]));
+  const targets = dedupeTargets([
+    ...(previewTarget
+      ? [
+          {
+            key: `preview:${previewTarget.repo}:${previewTarget.branch}`,
+            repo: previewTarget.repo,
+            branch: previewTarget.branch,
+            primary: true,
+            label: previewTarget.repo,
+          },
+        ]
+      : (repos ?? []).map((r) => ({
+          key: r.repo,
+          repo: r.repo,
+          primary: r.primary,
+          label: r.repo,
+        }))),
+    ...linked.map((lp) => ({
+      key: `${lp.repo} ${lp.branch}`,
+      repo: lp.repo,
+      branch: lp.branch,
+      number: lp.number,
+      linked: true,
+      label: lp.number
+        ? `${repoLabel(lp.repo)} #${lp.number}`
+        : `${repoLabel(lp.repo)}:${lp.branch}`,
+    })),
+    // Last, so an explicit link (which owns the unlink affordance) wins the
+    // dedupe over the same PR discovered from its body footer.
+    ...(previewTarget ? [] : (discoveredPrs ?? [])).map((dp) => ({
+      key: `${dp.repo} ${dp.branch}`,
+      repo: dp.repo,
+      branch: dp.branch,
+      number: dp.number,
+      discovered: true,
+      label: dp.number
+        ? `${repoLabel(dp.repo)} #${dp.number}`
+        : `${repoLabel(dp.repo)}:${dp.branch}`,
+    })),
+  ]);
   const [activeKey, setActiveKey] = useState<string | undefined>(
     () => (targets.find((t) => t.primary) ?? targets[0])?.key,
   );
@@ -1012,8 +759,9 @@ export function PrPanel({
   const loadTargetKey = previewTarget
     ? `preview:${previewTarget.repo}:${previewTarget.branch}`
     : active?.key || sessionId;
-  // Scalars so the loaders below can be useCallback'd on stable values
-  // instead of the per-render preview object.
+  // Scalars rather than the per-render preview object: usePrData takes these
+  // as primitive props, so its effect dependencies only change when the
+  // preview target actually changes.
   const previewRepo = previewTarget?.repo;
   const previewBranch = previewTarget?.branch;
   // `#5528` in a PR body or review comment means a PR in the repo THIS panel is
@@ -1021,29 +769,6 @@ export function PrPanel({
   // is on a sibling PR. Only fall back to the surrounding surface's repo.
   const contextRepo = useMarkdownRepo();
   const markdownRepo = previewTarget?.repo || active?.repo || contextRepo;
-  const [pr, setPr] = useState<PrDetails | null>(null);
-  const mergeKey = deferredMergeKey(pr?.url);
-  const mergePhase = useDeferredMergePhase(mergeKey);
-  const merging = mergePhase === "running";
-  const mergeScheduled = mergePhase === "scheduled";
-  const [git, setGit] = useState<GitStatusInfo | null>(null);
-  const [loadedDiff, setDiff] = useState<PrDiffData | null>(null);
-  const diff = loadedDiff?.headRefOid === pr?.headRefOid ? loadedDiff : null;
-  const diffOutOfDate = !!loadedDiff && !diff;
-  const diffLoadPolicy = reviewDiffLoadPolicy(
-    diff?.patch.length ?? 0,
-    pr?.changedFiles ?? 0,
-  );
-  const [diffGroups, setDiffGroups] = useState<{
-    oid: string;
-    groups: DiffFileGroup[] | null;
-  } | null>(null);
-  const [diffGroupsLoading, setDiffGroupsLoading] = useState(false);
-  const [diffGroupsRetry, setDiffGroupsRetry] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [diffLoading, setDiffLoading] = useState(true);
-  const [diffError, setDiffError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingComment[]>([]);
   const [reviewing, setReviewing] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -1073,6 +798,7 @@ export function PrPanel({
   // reviewer opts into it, and the primary action stays "Approve".
   const [mergeAfterReview, setMergeAfterReview] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const isPhone = useIsPhone();
   /**
    * The review is two places, not six tabs: Overview (the conversation and the
    * PR's metadata) and Files changed (the code). `codeView` is which lens the
@@ -1082,16 +808,15 @@ export function PrPanel({
   const [localPage, setLocalPage] = useState<PrReviewPage>("files");
   const page = controlledPage ?? localPage;
   const setPage = (next: PrReviewPage) => {
-      setLocalPage(next);
-      onPageChange?.(next);
-    };
+    setLocalPage(next);
+    onPageChange?.(next);
+  };
   const [codeView, setCodeView] = useState<"all" | "guide" | "flow">("all");
   const [diffSource, setDiffSource] = useState<DiffSource>("pull-request");
   const worktreeAvailable =
     !!sessionId && !previewTarget && !active?.linked && !active?.discovered;
-  const sessionRunning = !!sessions?.find(
-    (session) => session.id === sessionId,
-  )?.isRunning;
+  const sessionRunning = !!sessions?.find((session) => session.id === sessionId)
+    ?.isRunning;
   useEffect(() => setDiffSource("pull-request"), [loadTargetKey]);
   /** A check chip elsewhere in the app asked for the checks (focusTarget). */
   const [focusChecksSeq, setFocusChecksSeq] = useState(0);
@@ -1133,29 +858,8 @@ export function PrPanel({
     codeTheme,
   } = codeDisplaySettings;
   const organizationSettings = useCodeOrganizationSettings();
-  const {
-    grouping,
-    fileListMode,
-    fileOrder,
-    sortDirection,
-    hideReviewed,
-  } = organizationSettings;
-  // Keyed like the code flow below, so one target's guide never renders under
-  // another's diff and a slow response can't land after the panel moved on.
-  const [guide, setGuide] = useState<{
-    key: string;
-    data: ReviewGuideData;
-  } | null>(null);
-  const [guideLoading, setGuideLoading] = useState(false);
-  const [guideFailed, setGuideFailed] = useState(false);
-  const guideGenerationRef = useRef(0);
-  const [codeFlow, setCodeFlow] = useState<{
-    key: string;
-    data: CodeFlowResult;
-  } | null>(null);
-  const [codeFlowLoading, setCodeFlowLoading] = useState(false);
-  const [codeFlowError, setCodeFlowError] = useState<string | null>(null);
-  const codeFlowGenerationRef = useRef(0);
+  const { grouping, fileListMode, fileOrder, sortDirection, hideReviewed } =
+    organizationSettings;
   // GitHub's per-viewer "Viewed" file state for the shown PR (review canvas
   // checkboxes). Keyed so a stale PR's set never leaks onto the next one.
   const [prViewed, setPrViewed] = useState<{
@@ -1167,10 +871,6 @@ export function PrPanel({
   useLayoutEffect(() => {
     prViewedRef.current = prViewed;
   }, [prViewed]);
-  const [reviewThreads, setReviewThreads] = useState<{
-    key: string;
-    threads: PrReviewThread[];
-  } | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   /**
    * The rail collapses on the panel's own width, not the viewport's. In the
@@ -1201,366 +901,72 @@ export function PrPanel({
     observer.observe(rootEl);
     return () => observer.disconnect();
   }, [rootEl]);
-  const loadGenerationRef = useRef(0);
-  const activeLoadTargetRef = useRef(loadTargetKey);
-  const loadInFlightRef = useRef<{
-    key: string;
-    promise: Promise<void>;
-  } | null>(null);
-  useLayoutEffect(() => {
-    activeLoadTargetRef.current = loadTargetKey;
-  }, [loadTargetKey]);
-
-  const load = useCallback(
-    (force = false): Promise<void> => {
-      if (loadTargetKey !== activeLoadTargetRef.current)
-        return Promise.resolve();
-    const existing = loadInFlightRef.current;
-    if (!force && existing?.key === loadTargetKey) return existing.promise;
-
-    const generation = ++loadGenerationRef.current;
-    setDiffLoading(true);
-    let prSettled = false;
-    let diffSettled = false;
-    let prResult: PrDetails | null = null;
-    let diffResult: PrDiffData | null = null;
-    const isCurrent = () =>
-      generation === loadGenerationRef.current &&
-      loadTargetKey === activeLoadTargetRef.current;
-    const commitDiff = () => {
-      if (!isCurrent() || !prSettled || !diffSettled) return;
-      setDiff(
-        diffResult?.headRefOid === prResult?.headRefOid ? diffResult : null,
-      );
-      setDiffLoading(false);
-    };
-      const prRequest = (
-        previewRepo && previewBranch
-      ? fetchPrPreview(previewRepo, previewBranch)
-      : fetchPr(sessionId, active?.repo, active?.branch)
-    )
-      .then((data) => {
-        prSettled = true;
-        prResult = data;
-        if (isCurrent()) {
-          setPr(data);
-          setLoadError(null);
-        }
-        commitDiff();
-      })
-      .catch((e: any) => {
-        prSettled = true;
-        prResult = null;
-          if (isCurrent())
-            setLoadError(e?.message || "Failed to load the pull request.");
-        commitDiff();
-      })
-      .finally(() => {
-        if (isCurrent()) setLoading(false);
-      });
-      const diffRequest = (
-        previewRepo && previewBranch
-      ? fetchPrPreviewDiff(previewRepo, previewBranch)
-      : fetchPrDiff(sessionId, active?.repo, active?.branch)
-    )
-      .then((data) => {
-        diffSettled = true;
-        diffResult = data;
-        if (isCurrent()) setDiffError(null);
-        commitDiff();
-      })
-      .catch((e: any) => {
-        diffSettled = true;
-        diffResult = null;
-          if (isCurrent())
-            setDiffError(e?.message || "Failed to load pull request changes.");
-        commitDiff();
-      });
-    // A linked PR has no local worktree in this session — no git state.
-      const gitRequest = (
-        previewRepo || active?.linked
-      ? Promise.resolve(null)
-      : fetchGitStatus(sessionId, active?.repo)
-    )
-      .then((data) => {
-        if (isCurrent()) setGit(data);
-      })
-      .catch(() => {
-        if (isCurrent()) setGit(null);
-      });
-      const reviewThreadsRequest = prRequest.then(async () => {
-        if (!prResult) return;
-        await (async () => {
-const threads = await fetchPrReviewThreads(
-            active?.repo,
-            prResult.number,
-          );
-          if (isCurrent()) setReviewThreads({ key: loadTargetKey, threads });
-})().catch(async () => {
-// Resolved threads are supporting context. A provider or credential
-          // failure must not block the diff itself.
-});
-      });
-
-      const promise = Promise.allSettled([
-        prRequest,
-        diffRequest,
-        gitRequest,
-        reviewThreadsRequest,
-      ]).then(() => undefined);
-    loadInFlightRef.current = { key: loadTargetKey, promise };
-      void promise.then(() => {
-        if (loadInFlightRef.current?.promise === promise)
-          loadInFlightRef.current = null;
-      });
-      return promise;
-    },
-    [sessionId, loadTargetKey, previewRepo, previewBranch, active?.repo, active?.branch, active?.linked],
-  );
-
-  useEffect(() => {
-    setLoading(true);
-    setLoadError(null);
-    setDiffLoading(true);
-    setDiffError(null);
-    setPr(null);
-    setDiff(null);
-    setGit(null);
-    setPending([]);
-    setReviewing(false);
-    setReviewOpen(false);
-    setPrViewed(null);
-    setReviewThreads(null);
-    setCodeFlow(null);
-    setCodeFlowLoading(false);
-    setCodeFlowError(null);
-    codeFlowGenerationRef.current += 1;
-    load();
-    const stopPolling = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
-    return () => {
-      stopPolling();
-      loadGenerationRef.current += 1;
-    };
-  }, [load]);
-
-  // A GitHub webhook reported activity on the shown PR's branch (review, CI,
-  // push, merge) — refetch immediately. Primary targets omit their branch, so
-  // match those through the loaded PR number/head branch instead.
-  // The server invalidated its caches before broadcasting, so this reads
-  // fresh data.
-  const hasLoadedPr = pr !== null;
-  useEffect(() => {
-    if (!addHandler) return;
-    return addHandler((msg) => {
-      if (msg.type !== "pr_updated") return;
-      const branch = previewTarget?.branch ?? active?.branch;
-      const repo = previewTarget?.repo ?? active?.repo;
-      if (
-        msg.repo === repo &&
-        (branch
-          ? msg.branch === branch
-          : !hasLoadedPr || msg.number === pr?.number || msg.branch === pr?.headRefName)
-      )
-        void load(true);
-    });
-  }, [
-    addHandler,
-    load,
-    previewTarget?.repo,
-    previewTarget?.branch,
-    active?.repo,
-    active?.branch,
-    hasLoadedPr,
-    pr?.number,
-    pr?.headRefName,
-  ]);
-
-  const loadDiffGroups = useEffectEvent(() => {
-    const files = pr?.files || [];
-    if (!diff?.patch || files.length < 3 || !diffLoadPolicy.groupFiles) {
-      setDiffGroups(null);
-      setDiffGroupsLoading(false);
-      return;
-    }
-    setDiffGroups(null);
-    setDiffGroupsLoading(true);
-    let live = true;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    const retryLater = () => {
-      retryTimer = setTimeout(
-        () => setDiffGroupsRetry((attempt) => attempt + 1),
-        125_000,
-      );
-    };
-    fetchPrDiffGroups(
-      sessionId,
-      files,
-      diff.patch,
-      active?.repo,
-      active?.branch,
-    )
-      .then((result) => {
-        if (!live) return;
-        setDiffGroups({ oid: diff.headRefOid, groups: result.groups });
-        if (!result.groups) retryLater();
-      })
-      .catch(() => {
-        if (!live) return;
-        setDiffGroups({ oid: diff.headRefOid, groups: null });
-        retryLater();
-      })
-      .finally(() => {
-        if (live) setDiffGroupsLoading(false);
-      });
-    return () => {
-      live = false;
-      if (retryTimer) clearTimeout(retryTimer);
-    };
-  });
-  useEffect(() => loadDiffGroups(), [
-    sessionId,
-    active?.repo,
-    active?.branch,
-    diff?.headRefOid,
-    diffLoadPolicy.groupFiles,
-    pr?.files?.length,
-    diffGroupsRetry,
-  ]);
-
-  // A guide belongs to one target's head commit: the key is what makes a
-  // guide from the PR the panel just left read as absent rather than current.
-  const guideKey = diff ? `${loadTargetKey}\0${diff.headRefOid}` : "";
-  const loadGuide = useCallback(async () => {
-    if (!guideKey) return;
-    const generation = ++guideGenerationRef.current;
-    setGuideLoading(true);
-    setGuideFailed(false);
-    await (async () => {
-const data = previewRepo && previewBranch
-        ? await fetchPrPreviewGuide(previewRepo, previewBranch)
-        : await fetchReviewGuide(sessionId, active?.repo, active?.branch);
-      if (generation !== guideGenerationRef.current) return;
-      if (data) setGuide({ key: guideKey, data });
-      else setGuideFailed(true);
-})().catch(async () => {
-if (generation === guideGenerationRef.current) setGuideFailed(true);
-}).finally(async () => {
-if (generation === guideGenerationRef.current) setGuideLoading(false);
-});
-  }, [guideKey, sessionId, previewRepo, previewBranch, active?.repo, active?.branch]);
-
-  const prPatchVersion = diff?.diffVersion || "";
-  const codeFlowKey =
-    diff && prPatchVersion
-      ? `${loadTargetKey}\0${diff.headRefOid}\0${prPatchVersion}`
-      : "";
-  const loadCodeFlow = useCallback(async () => {
-    if ((!diff?.patch && !diff?.skippedFiles) || !codeFlowKey) return;
-    const generation = ++codeFlowGenerationRef.current;
-    setCodeFlowLoading(true);
-    setCodeFlowError(null);
-    await (async () => {
-const data = previewRepo && previewBranch
-        ? await fetchPrPreviewCodeFlow(previewRepo, previewBranch)
-        : await fetchPrCodeFlow(sessionId, active?.repo, active?.branch);
-      if (!data)
-        throw new Error("Code flow isn't available for this pull request.");
-      if (data.diffVersion !== prPatchVersion) {
-        if (generation === codeFlowGenerationRef.current) {
-          setCodeFlowError(
-            "The pull request updated while code flow was loading. Try again.",
-          );
-        }
-        return;
-      }
-      if (generation === codeFlowGenerationRef.current)
-        setCodeFlow({ key: codeFlowKey, data });
-})().catch(async (error: any) => {
-if (generation === codeFlowGenerationRef.current)
-        setCodeFlowError(error?.message || "Couldn't load code flow.");
-}).finally(async () => {
-if (generation === codeFlowGenerationRef.current)
-        setCodeFlowLoading(false);
-});
-  }, [diff, codeFlowKey, sessionId, prPatchVersion, previewRepo, previewBranch, active?.repo, active?.branch]);
-
-  const refreshCodeFlow = async () => {
-    codeFlowGenerationRef.current += 1;
-    setCodeFlow(null);
-    setCodeFlowError(null);
-    setCodeFlowLoading(true);
-    await load(true);
-    setCodeFlowLoading(false);
-  };
-
-  // The guide is generated on demand (the first request per head commit takes
-  // the model a while) — only fetch once the reviewer opens the Guide tab, and
-  // refetch when a new push moves the head commit.
+  const loadRepo = active?.repo;
+  const loadBranch = active?.branch;
+  const loadLinked = active?.linked;
   const showingGuide = page === "files" && codeView === "guide";
   const showingFlow = page === "files" && codeView === "flow";
-  const hasSkippedFiles = !!diff?.skippedFiles;
-  // A different PR or a new head commit is a different guide: drop the in-flight
-  // and failed flags with it, or one failure would disable auto-load for the
-  // rest of the panel's life. The keyed `guide` itself goes stale on its own.
-  useEffect(() => {
-    guideGenerationRef.current += 1;
-    setGuideLoading(false);
-    setGuideFailed(false);
-  }, [guideKey]);
-
-  useEffect(() => {
-    if (!showingGuide || !diff?.patch || !guideKey) return;
-    if (guideLoading || guideFailed) return;
-    if (guide?.key === guideKey) return;
-    void loadGuide();
-  }, [
-    showingGuide,
-    diff?.patch,
-    guideKey,
-    guide,
+  const {
+    pr,
+    git,
+    setGit,
+    diff,
+    diffOutOfDate,
+    diffLoadPolicy,
+    diffGroups,
+    diffGroupsLoading,
+    loading,
+    loadError,
+    diffLoading,
+    diffError,
+    load,
+    retryPr,
+    retryDiff,
+    currentGuide,
     guideLoading,
     guideFailed,
     loadGuide,
-  ]);
-
-  useEffect(() => {
-    if (!showingFlow || codeFlowLoading || codeFlowError) return;
-    if (!diff?.patch && !hasSkippedFiles) {
-      if (diffLoading || diffOutOfDate) return;
-      setCodeView("all");
-      return;
-    }
-    if (codeFlow && codeFlow.key !== codeFlowKey) {
-      setCodeFlowError(
-        "The pull request updated. Refresh code flow to analyze the latest diff.",
-      );
-      return;
-    }
-    if (!codeFlow) void loadCodeFlow();
-  }, [
-    showingFlow,
-    diff?.patch,
-    hasSkippedFiles,
-    diffLoading,
-    diffOutOfDate,
-    codeFlow,
     codeFlowKey,
+    codeFlow,
     codeFlowLoading,
     codeFlowError,
-    loadCodeFlow,
-  ]);
+    prPatchVersion,
+    refreshCodeFlow,
+    resetCodeFlowError,
+    reviewThreads,
+    activeLoadTargetRef,
+  } = usePrData({
+    sessionId,
+    loadTargetKey,
+    previewRepo,
+    previewBranch,
+    loadRepo,
+    loadBranch,
+    loadLinked,
+    addHandler,
+    showingGuide,
+    showingFlow,
+    onCodeViewChange: setCodeView,
+    onTargetReset: () => {
+      setPending([]);
+      setReviewing(false);
+      setReviewOpen(false);
+      setPrViewed(null);
+    },
+  });
+  const mergeKey = deferredMergeKey(pr?.url);
+  const mergePhase = useDeferredMergePhase(mergeKey);
+  const merging = mergePhase === "running";
+  const mergeScheduled = mergePhase === "scheduled";
 
   // Inline comments don't post one-by-one — they accumulate as pending and ship
   // together when the reviewer finishes the review (the provider's native flow).
-  // Both are stable: they ride diffProps into every mounted file row, so a new
+  // Both are stable: they ride diffOptions into every mounted file row, so a new
   // identity here re-renders the whole diff.
   const handleAddPending = async (target: CommentTarget, text: string) => {
-      setPending((prev) => [
-        ...prev,
-        { ...target, text, id: randomUUID() },
-      ]);
+    setPending((prev) => [...prev, { ...target, text, id: randomUUID() }]);
     setReviewDone(null);
-    };
+  };
 
   const handleRemovePending = (id: string) => {
     setPending((prev) => prev.filter((c) => c.id !== id));
@@ -1590,19 +996,24 @@ if (generation === codeFlowGenerationRef.current)
     }
     setSubmitting(true);
     setReviewError(null);
-    await (async () => {
-const payload = {
+    try {
+      const payload = {
         user: getCurrentUser(),
         event: reviewEvent,
         summary: summary.trim() || undefined,
         repo: active?.repo,
         branch: active?.branch,
-        comments: pending.map((c) => ({
-          text: c.text,
-          path: c.path,
-          line: c.endLine,
-          startLine: c.startLine !== c.endLine ? c.startLine : undefined,
-          side: (c.side === "deletions" ? "LEFT" : "RIGHT") as "LEFT" | "RIGHT",
+        comments: pending.map((comment) => ({
+          text: comment.text,
+          path: comment.path,
+          line: comment.endLine,
+          startLine:
+            comment.startLine !== comment.endLine
+              ? comment.startLine
+              : undefined,
+          side: (comment.side === "deletions" ? "LEFT" : "RIGHT") as
+            | "LEFT"
+            | "RIGHT",
         })),
       };
       const result = previewTarget
@@ -1614,41 +1025,43 @@ const payload = {
         : await submitPrReviewApi(sessionId, payload);
       let merged = false;
       if (reviewEvent === "APPROVE" && mergeAfterReview) {
-        await (async () => {
-if (previewTarget)
+        try {
+          if (previewTarget) {
             await mergePrPreviewApi(
               previewTarget.repo,
               previewTarget.branch,
               "squash",
             );
-          else
+          } else {
             await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
+          }
           merged = true;
-})().catch(async (e: any) => {
-setMergeError(
-            `Review approved, but merge failed: ${e.message || "unknown error"}`,
+        } catch (error) {
+          setMergeError(
+            `Review approved, but merge failed: ${errorMessage(error, "unknown error")}`,
           );
-});
+        }
       }
-      if (actionTargetKey !== activeLoadTargetRef.current) return;
-      setPending([]);
-      setSummaryDraft("");
-      setReviewOpen(false);
-      setReviewEvent("APPROVE");
-      setMergeAfterReview(false);
-      setReviewDone(merged ? "merged" : result.url || "submitted");
-      setTimeout(() => {
-        if (actionTargetKey !== activeLoadTargetRef.current) return;
-        setReviewDone(null);
-        setReviewing(false);
-      }, 6000);
-      await load(true);
-})().catch(async (e: any) => {
-if (actionTargetKey === activeLoadTargetRef.current)
-        setReviewError(e.message || "Failed to submit review");
-}).finally(async () => {
-setSubmitting(false);
-});
+      if (actionTargetKey === activeLoadTargetRef.current) {
+        setPending([]);
+        setSummaryDraft("");
+        setReviewOpen(false);
+        setReviewEvent("APPROVE");
+        setMergeAfterReview(false);
+        setReviewDone(merged ? "merged" : result.url || "submitted");
+        setTimeout(() => {
+          if (actionTargetKey !== activeLoadTargetRef.current) return;
+          setReviewDone(null);
+          setReviewing(false);
+        }, 6000);
+        await load(true);
+      }
+    } catch (error) {
+      if (actionTargetKey === activeLoadTargetRef.current) {
+        setReviewError(errorMessage(error, "Failed to submit review"));
+      }
+    }
+    setSubmitting(false);
   }
 
   function handleMerge() {
@@ -1661,22 +1074,24 @@ setSubmitting(false);
     setMergeError(null);
     const actionTargetKey = loadTargetKey;
     scheduleDeferredMerge(mergeKey, async () => {
-      await (async () => {
-if (previewTarget)
+      try {
+        if (previewTarget) {
           await mergePrPreviewApi(
             previewTarget.repo,
             previewTarget.branch,
             "squash",
           );
-        else await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
+        } else {
+          await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
+        }
         if (actionTargetKey === activeLoadTargetRef.current) await load(true);
-})().catch(async (e: any) => {
-if (actionTargetKey === activeLoadTargetRef.current) {
-          const message = e.message || "Merge failed";
+      } catch (error) {
+        if (actionTargetKey === activeLoadTargetRef.current) {
+          const message = errorMessage(error, "Merge failed");
           setMergeError(message);
           toast(message);
         }
-});
+      }
     });
   }
 
@@ -1691,17 +1106,19 @@ if (actionTargetKey === activeLoadTargetRef.current) {
     setClosing(true);
     setCloseError(null);
     const actionTargetKey = loadTargetKey;
-    await (async () => {
-if (previewTarget)
+    try {
+      if (previewTarget) {
         await closePrPreviewApi(previewTarget.repo, previewTarget.branch);
-      else await closePrApi(sessionId, active?.repo, active?.branch);
+      } else {
+        await closePrApi(sessionId, active?.repo, active?.branch);
+      }
       if (actionTargetKey === activeLoadTargetRef.current) await load(true);
-})().catch(async (e: any) => {
-if (actionTargetKey === activeLoadTargetRef.current)
-        setCloseError(e.message || "Failed to close pull request");
-}).finally(async () => {
-setClosing(false);
-});
+    } catch (error) {
+      if (actionTargetKey === activeLoadTargetRef.current) {
+        setCloseError(errorMessage(error, "Failed to close pull request"));
+      }
+    }
+    setClosing(false);
   }
 
   // Roll the per-check list up into headline counts, and split deployments
@@ -1744,7 +1161,7 @@ setClosing(false);
       ? renderPrCommentMarkdown(stripped, { repo: markdownRepo })
       : "";
   })();
-  const provider = (providerFromUrl(pr?.url));
+  const provider = providerFromUrl(pr?.url);
   // Host capability gating: absent (GitHub, older cache entries) means all
   // true, so nothing GitHub-shaped ever disappears. code.storage payloads
   // carry an explicit set (no checks/reviewers/comments/viewed state/stacks).
@@ -1755,14 +1172,14 @@ setClosing(false);
   // loads on its own clock. Park the path and let the effect below spend it
   // once both are true, rather than revealing into a tree that isn't there.
   const scrollToFile = (path: string) => {
-      if (page === "files" && codeView !== "flow") {
-        revealDiffFile(rootRef.current, path);
-        return;
-      }
-      setPage("files");
-      if (codeView === "flow") setCodeView("all");
-      setPendingReveal(path);
-    };
+    if (page === "files" && codeView !== "flow") {
+      revealDiffFile(rootRef.current, path);
+      return;
+    }
+    setPage("files");
+    if (codeView === "flow") setCodeView("all");
+    setPendingReveal(path);
+  };
   useEffect(() => {
     if (
       !pendingReveal ||
@@ -1786,13 +1203,13 @@ setClosing(false);
   const prHead = pr?.headRefName;
   const activeRepoId = active?.repo;
   const prImageSrcs = (file: FileDiffMetadata) => {
-      const src = (ref: string, p: string) =>
-        `${API_BASE}/pr-image?${activeRepoId ? `repo=${encodeURIComponent(activeRepoId)}&` : ""}ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(p)}`;
-      return {
-        oldSrc: prBase ? src(prBase, file.prevName || file.name) : undefined,
-        newSrc: prHead ? src(prHead, file.name) : undefined,
-      };
+    const src = (ref: string, p: string) =>
+      `${API_BASE}/pr-image?${activeRepoId ? `repo=${encodeURIComponent(activeRepoId)}&` : ""}ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(p)}`;
+    return {
+      oldSrc: prBase ? src(prBase, file.prevName || file.name) : undefined,
+      newSrc: prHead ? src(prHead, file.name) : undefined,
     };
+  };
   // The pr-image endpoint serves blobs through the GitHub API — on hosts
   // without it, image files fall back to the plain binary-diff placeholder.
   const imageSrcs = caps.images ? prImageSrcs : undefined;
@@ -1818,7 +1235,8 @@ setClosing(false);
       },
       loadContents:
         provider.key === "github" && ref
-          ? (file: FileDiffMetadata) => fetchPrFile(activeRepoId, ref, file.name)
+          ? (file: FileDiffMetadata) =>
+              fetchPrFile(activeRepoId, ref, file.name)
           : undefined,
     };
   })();
@@ -1834,28 +1252,28 @@ setClosing(false);
   useEffect(() => setHandEdited([]), [sessionId, activeRepoId]);
   const worktreeEditable =
     !!editGate && !previewTarget && !!active && !active.branch;
-  const editFile = (worktreeEditable
-        ? {
-            load: (file: FileDiffMetadata, side: "new" | "base") =>
-              fetchWorktreeFile(
-                sessionId,
-                side === "base" ? file.prevName || file.name : file.name,
-                activeRepoId,
-                side,
-              ),
-            save: async (path: string, content: string) => {
-              await saveWorktreeFile(sessionId, path, content, activeRepoId);
-              setHandEdited((prev) =>
-                prev.includes(path) ? prev : [...prev, path],
-              );
-              // The diff column is the PR's committed state, so it can't show
-              // the edit yet — but the divergence strip's dirty state can.
-              void fetchGitStatus(sessionId, activeRepoId)
-                .then((g) => setGit(g))
-                .catch(() => {});
-            },
-          }
-        : undefined);
+  const editFile = worktreeEditable
+    ? {
+        load: (file: FileDiffMetadata, side: "new" | "base") =>
+          fetchWorktreeFile(
+            sessionId,
+            side === "base" ? file.prevName || file.name : file.name,
+            activeRepoId,
+            side,
+          ),
+        save: async (path: string, content: string) => {
+          await saveWorktreeFile(sessionId, path, content, activeRepoId);
+          setHandEdited((prev) =>
+            prev.includes(path) ? prev : [...prev, path],
+          );
+          // The diff column is the PR's committed state, so it can't show
+          // the edit yet — but the divergence strip's dirty state can.
+          void fetchGitStatus(sessionId, activeRepoId)
+            .then((g) => setGit(g))
+            .catch(() => {});
+        },
+      }
+    : undefined;
   const tellAgentAboutEdits = () => {
     if (!send || !handEdited.length) return;
     const list = handEdited.map((p) => `- \`${p}\``).join("\n");
@@ -1895,7 +1313,13 @@ setClosing(false);
     return () => {
       live = false;
     };
-  }, [viewedKey, viewedPrNumber, diff?.headRefOid, activeRepoId, caps.viewedState]);
+  }, [
+    viewedKey,
+    viewedPrNumber,
+    diff?.headRefOid,
+    activeRepoId,
+    caps.viewedState,
+  ]);
 
   const handleToggleViewed = (path: string, next: boolean) => {
     const info = prViewedRef.current;
@@ -1922,16 +1346,20 @@ setClosing(false);
     setActiveKey(`${justLinked.repo} ${justLinked.branch}`);
   }
 
-  async function handleUnlink(t: PrTarget) {
-    await (async () => {
-const res = await unlinkPrApi(sessionId, t.repo, t.branch!);
-      setLinkedLocal(res.all);
-      if (activeKey === t.key)
-        setActiveKey((targets.find((x) => x.primary) ?? targets[0])?.key);
+  async function handleUnlink(target: PrTarget) {
+    if (!target.branch) return;
+    try {
+      const result = await unlinkPrApi(sessionId, target.repo, target.branch);
+      setLinkedLocal(result.all);
+      if (activeKey === target.key) {
+        setActiveKey(
+          (targets.find((candidate) => candidate.primary) ?? targets[0])?.key,
+        );
+      }
       toast("PR unlinked");
-})().catch(async (e: any) => {
-toast(e.message || "Couldn't unlink the PR");
-});
+    } catch (error) {
+      toast(errorMessage(error, "Couldn't unlink the PR"));
+    }
   }
 
   // Tab bar across the top: one tab per PR (primary repo, attached repos,
@@ -1940,9 +1368,43 @@ toast(e.message || "Couldn't unlink the PR");
   // Sessions linked to the shown PR — only when the caller wires the list.
   // Matched against the ACTIVE target (linked PRs carry their own branch; the
   // primary/attached branch resolves through the loaded PR's headRefName).
-  const relatedSessions = (sessions && active
-        ? prRelatedSessions(sessions, active.repo, active.branch, pr)
-        : []);
+  const relatedSessions =
+    sessions && active
+      ? prRelatedSessions(sessions, active.repo, active.branch, pr)
+      : [];
+  const sessionActionLabel =
+    relatedSessions.length === 0
+      ? "Start session"
+      : relatedSessions.length === 1
+        ? "Open session"
+        : `Open ${relatedSessions.length} sessions`;
+  const sessionActionButton = sessions ? (
+    sessionActionTarget === undefined ? (
+      <Button
+        variant="default"
+        size="sm"
+        icon={<IconMessages size={18} />}
+        onClick={() => setSessionsOpen(true)}
+      >
+        {sessionActionLabel}
+      </Button>
+    ) : (
+      <Tooltip label={sessionActionLabel}>
+        <Button
+          variant="ghost"
+          size="md"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.flexNone,
+            sx.roundedControl,
+          )}
+          aria-label={sessionActionLabel}
+          icon={<IconPlus size={22} />}
+          onClick={() => setSessionsOpen(true)}
+        />
+      </Tooltip>
+    )
+  ) : null;
 
   const files = pr?.files ?? NO_PR_FILES;
   const reviewedFiles =
@@ -1963,52 +1425,52 @@ toast(e.message || "Couldn't unlink the PR");
       return (result || left.path.localeCompare(right.path)) * direction;
     });
   })();
-  const visibleFileOrder = (reviewFiles.map((file) => file.path));
+  const visibleFileOrder = reviewFiles.map((file) => file.path);
 
-  const currentGuide = guide?.key === guideKey ? guide.data : null;
   // Slicing the patch per section walks every byte of it, so it cannot run on
   // renders it has nothing to do with — while the guide is the open lens, that
   // would be once per keystroke in the review summary.
-  const guideSections = (currentGuide && diff?.patch
-        ? sectionsWithPatches(currentGuide, diff.patch)
-        : []);
+  const guideSections =
+    currentGuide && diff?.patch
+      ? sectionsWithPatches(currentGuide, diff.patch)
+      : [];
 
   // Every diff on the code page is the same commentable surface; only the
-  // patch it is handed differs (the whole PR, or one guide section). Memoized
-  // because it is the props object of every mounted file row: rebuilding it
-  // re-renders the whole diff, however unrelated the state change was.
-  const diffProps = (diff && {
-        diffStyle,
-        controlsTarget: codeView === "all" ? diffControlsTarget : undefined,
-        showViewedProgress: false,
-        wrapLines,
-        structuralHighlighting,
-        showFileStats,
-        codeTheme,
-        visibleFileOrder,
-        stickyFileHeaders: true,
-        defaultExpandedFiles: diffLoadPolicy.defaultExpandedFiles,
-        allowExpandAll: diffLoadPolicy.allowExpandAll,
-        viewedFiles: prViewed?.key === viewedKey ? prViewed.viewed : undefined,
-        onToggleViewed: handleToggleViewed,
-        disabled: !reviewing || !caps.reviewComments,
-        disabledHint: !caps.reviewComments
-          ? `Inline review comments aren't supported on ${provider.name}`
-          : "Start a review to add inline comments.",
-        submitLabel: "Add comment",
-        placeholder: `Comment on #${diff.number}, added to your pending review…`,
-        pendingComments: reviewing ? pending : undefined,
-        onRemovePending: handleRemovePending,
-        reviewThreads:
-          reviewThreads?.key === loadTargetKey
-            ? reviewThreads.threads
-            : undefined,
-        commentRepo: markdownRepo,
-        onSubmit: handleAddPending,
-        imageSrcs,
-        fileActions,
-        editFile,
-      });
+  // patch it is handed differs (the whole PR, or one guide section). The React
+  // Compiler keeps this options object stable so unrelated state changes do not
+  // re-render every mounted file row.
+  const diffOptions = diff && {
+    diffStyle,
+    controlsTarget: codeView === "all" ? diffControlsTarget : undefined,
+    showViewedProgress: false,
+    wrapLines,
+    structuralHighlighting,
+    showFileStats,
+    codeTheme,
+    visibleFileOrder,
+    // PR file cards scroll beneath the sticky toolbar as one surface. Sidebar
+    // Changes opts into pinned file headers separately.
+    stickyFileHeaders: false,
+    defaultExpandedFiles: diffLoadPolicy.defaultExpandedFiles,
+    allowExpandAll: diffLoadPolicy.allowExpandAll,
+    viewedFiles: prViewed?.key === viewedKey ? prViewed.viewed : undefined,
+    onToggleViewed: handleToggleViewed,
+    disabled: !reviewing || !caps.reviewComments,
+    disabledHint: !caps.reviewComments
+      ? `Inline review comments aren't supported on ${provider.name}`
+      : "Start a review to add inline comments.",
+    submitLabel: "Add comment",
+    placeholder: `Comment on #${diff.number}, added to your pending review…`,
+    pendingComments: reviewing ? pending : undefined,
+    onRemovePending: handleRemovePending,
+    reviewThreads:
+      reviewThreads?.key === loadTargetKey ? reviewThreads.threads : undefined,
+    commentRepo: markdownRepo,
+    onSubmit: handleAddPending,
+    imageSrcs,
+    fileActions,
+    editFile,
+  };
 
   const showBar = targets.length > 1;
   const targetPicker = showBar ? (
@@ -2019,7 +1481,15 @@ toast(e.message || "Couldn't unlink the PR");
             <Button
               variant="ghost"
               size="sm"
-              className={mergeStylexOverrideClassName("", sx.minW0, sx.maxW180px, sx.px2, typography.label, sx.phoneMinH9, sx.phoneMaxW104px)}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.minW0,
+                sx.maxW180px,
+                sx.px2,
+                sx.phoneMinH9,
+                sx.phoneMaxW104px,
+                typography.label,
+              )}
               aria-label={`Switch review target. Current: ${active?.label || "repository"}`}
               caret
             >
@@ -2039,7 +1509,15 @@ toast(e.message || "Couldn't unlink the PR");
         initialFocus
         className={mergeStylexOverrideClassName("", sx.w280px, sx.p15)}
       >
-        <div {...stylex.props(sx.px2, sx.py15, sx.fontMedium, sx.textFaint, typography.meta)}>
+        <div
+          {...stylex.props(
+            sx.px2,
+            sx.py15,
+            sx.fontMedium,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
           Review target
         </div>
         <div {...stylex.props(sx.flex, sx.flexCol, sx.gap05)}>
@@ -2056,19 +1534,8 @@ toast(e.message || "Couldn't unlink the PR");
               <button
                 key={target.key}
                 type="button"
-                {...stylex.props(
-                  sx.flex,
-                  sx.minH10,
-                  sx.wFull,
-                  sx.itemsCenter,
-                  sx.gap2,
-                  sx.roundedMd,
-                  sx.border0,
-                  sx.px2,
-                  sx.textLeft,
-                  sx.hoverBgHover,
-                  sx.phoneMinH11,
-                  selected ? sx.bgActive : sx.bgTransparent,
+                className={utilityClassName(
+                  `flex min-h-10 w-full items-center gap-2 rounded-md border-0 px-2 text-left hover:bg-hover phone:min-h-11 ${selected ? "bg-active" : "bg-transparent"}`,
                 )}
                 aria-current={selected ? "page" : undefined}
                 onClick={() => {
@@ -2076,24 +1543,61 @@ toast(e.message || "Couldn't unlink the PR");
                   setActiveKey(target.key);
                 }}
               >
-                <IconBranches size={17} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textDim)} />
+                <IconBranches
+                  size={17}
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.shrink0,
+                    sx.textDim,
+                  )}
+                />
                 <span {...stylex.props(sx.minW0, sx.flex1)}>
-                  <span {...stylex.props(sx.block, sx.truncate, sx.fontMedium, sx.textFg, typography.label)}>
+                  <span
+                    {...stylex.props(
+                      sx.block,
+                      sx.truncate,
+                      sx.fontMedium,
+                      sx.textFg,
+                      typography.label,
+                    )}
+                  >
                     {target.label}
                   </span>
-                  <span {...stylex.props(sx.block, sx.truncate, sx.textFaint, typography.meta)}>
+                  <span
+                    {...stylex.props(
+                      sx.block,
+                      sx.truncate,
+                      sx.textFaint,
+                      typography.meta,
+                    )}
+                  >
                     {detail}
                   </span>
                 </span>
                 {selected && (
-                  <IconCheck size={16} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFg)} />
+                  <IconCheck
+                    size={16}
+                    className={mergeStylexOverrideClassName(
+                      "",
+                      sx.shrink0,
+                      sx.textFg,
+                    )}
+                  />
                 )}
               </button>
             );
           })}
         </div>
         {linkable && (
-          <div {...stylex.props(sx.mt15, sx.borderT, sx.borderDividerSoft, sx.px1, sx.pt15)}>
+          <div
+            {...stylex.props(
+              sx.mt15,
+              sx.borderT,
+              sx.borderDividerSoft,
+              sx.px1,
+              sx.pt15,
+            )}
+          >
             <LinkPrControl
               sessionId={sessionId}
               variant="action"
@@ -2105,22 +1609,23 @@ toast(e.message || "Couldn't unlink the PR");
     </Popover.Root>
   ) : null;
   const switcher = showBar ? (
-    <div {...stylex.props(sx.repoTabs)}>{targetPicker}</div>
+    <div className={PR_REPO_TABS}>{targetPicker}</div>
   ) : null;
 
-  const reviewStateClass = stylex.props(
-    sx.flex1,
-    compactToolbar && sx.summaryCanvasClearance,
-  ).className;
+  const reviewStateClass = utilityClassName(
+    `flex-1 ${compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE : ""}`,
+  );
 
   if (loading)
     return (
       <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
         {switcher}
         <LoadingState
-          className={`${reviewStateClass} ${stylex.props(sx.translateYMinus5).className}`}
+          className={utilityClassName(`${reviewStateClass} -translate-y-5`)}
         >
-          <span {...stylex.props(sx.fontMedium, sx.textFg, typography.controlLabel)}>
+          <span
+            {...stylex.props(sx.fontMedium, sx.textFg, typography.controlLabel)}
+          >
             Loading pull request…
           </span>
         </LoadingState>
@@ -2134,17 +1639,15 @@ toast(e.message || "Couldn't unlink the PR");
         <EmptyState
           className={reviewStateClass}
           role="alert"
-          icon={<IconX size={22} className={mergeStylexOverrideClassName("", sx.textRed)} />}
+          icon={
+            <IconX
+              size={22}
+              className={mergeStylexOverrideClassName("", sx.textRed)}
+            />
+          }
           title="Couldn’t load pull request"
           action={
-            <Button
-              size="sm"
-              onClick={() => {
-                setLoading(true);
-                setLoadError(null);
-                void load(true);
-              }}
-            >
+            <Button size="sm" onClick={retryPr}>
               Try again
             </Button>
           }
@@ -2172,23 +1675,13 @@ toast(e.message || "Couldn't unlink the PR");
     };
     return (
       <div
-        className={`selectable ${stylex.props(
-          sx.relative,
-          sx.flex,
-          sx.hFull,
-          sx.minH0,
-          sx.flexCol,
-          sx.bgSurface,
-          compactToolbar && sx.overflowXHidden,
-          compactToolbar && sx.overflowYAuto,
-          !compactToolbar && sx.overflowHidden,
-        ).className}`}
+        className={utilityClassName(
+          `selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`,
+        )}
         data-review-canvas="true"
       >
         <ReviewToolbar compact={compactToolbar}>
-          <div
-            className={`[&>*]:shrink-0 [&::-webkit-scrollbar]:hidden ${stylex.props(sx.noPrBar).className}`}
-          >
+          <div className={PR_NO_PR_BAR}>
             {targetPicker}
             {/* Opening the PR is what this state is for, so its action leads
                 before the shared diff controls. */}
@@ -2214,7 +1707,14 @@ toast(e.message || "Couldn't unlink the PR");
             {showWorktreeDiff && (
               <div
                 ref={setWorktreeToolbarTarget}
-                {...stylex.props(sx.mlAuto, sx.flex, sx.shrink0, sx.itemsCenter, sx.gap25, typography.label)}
+                {...stylex.props(
+                  sx.mlAuto,
+                  sx.flex,
+                  sx.shrink0,
+                  sx.itemsCenter,
+                  sx.gap25,
+                  typography.label,
+                )}
               />
             )}
           </div>
@@ -2223,29 +1723,28 @@ toast(e.message || "Couldn't unlink the PR");
             owns the scrollport and the toolbar stays outside it. With the
             summary, the shared outer scrollport lets its toolbar stick. */}
         <main
-          {...stylex.props(
-            sx.minH0,
-            sx.flex1,
-            sx.bgSurface,
-            compactToolbar ? sx.overflowYVisible : sx.overflowYAuto,
+          className={utilityClassName(
+            `min-h-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"}`,
           )}
         >
           {walkthrough && (
-            <div {...stylex.props(sx.mxAuto, sx.wFull, sx.maxW760px, sx.px4, sx.pt4, sx.smPx5)}>
+            <div
+              {...stylex.props(
+                sx.mxAuto,
+                sx.wFull,
+                sx.maxW760px,
+                sx.px4,
+                sx.pt4,
+                sx.smPx5,
+              )}
+            >
               <WalkthroughCard walkthrough={walkthrough} />
             </div>
           )}
           {showWorktreeDiff ? (
             <div
-              {...stylex.props(
-                sx.maxW1500px,
-                sx.px2,
-                sx.pb2,
-                sx.phoneWFull,
-                sx.phonePx1,
-                compactToolbar ? sx.wAuto : sx.wFull,
-                compactToolbar ? sx.pt0 : sx.pt2,
-                compactToolbar ? sx.summaryCanvasClearance : sx.mxAuto,
+              className={utilityClassName(
+                `max-w-[1500px] px-2 pb-2 phone:w-full phone:px-1 ${compactToolbar ? `w-auto pt-0 ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full pt-2"}`,
               )}
               data-no-pr-worktree-diff
             >
@@ -2258,7 +1757,19 @@ toast(e.message || "Couldn't unlink the PR");
               />
             </div>
           ) : (
-            <div {...stylex.props(sx.mxAuto, sx.flex, sx.wFull, sx.maxW760px, sx.flexCol, sx.gap4, sx.px4, sx.py4, sx.smPx5)}>
+            <div
+              {...stylex.props(
+                sx.mxAuto,
+                sx.flex,
+                sx.wFull,
+                sx.maxW760px,
+                sx.flexCol,
+                sx.gap4,
+                sx.px4,
+                sx.py4,
+                sx.smPx5,
+              )}
+            >
               <PrCard title="Git status">
                 <GitStatusRows
                   git={git}
@@ -2311,10 +1822,11 @@ toast(e.message || "Couldn't unlink the PR");
         : "Submit review";
   const rail = (
     <ReviewRail
-      className={stylex.props(
-        railStacked ? sx.minW0 : sx.w264px,
-        !railStacked && sx.shrink0,
-      ).className}
+      className={
+        railStacked
+          ? utilityClassName("min-w-0")
+          : utilityClassName("w-[264px] shrink-0")
+      }
       pr={pr}
       git={git}
       sessionId={sessionId}
@@ -2345,7 +1857,7 @@ toast(e.message || "Couldn't unlink the PR");
             <Button
               variant="ghost"
               size="sm"
-              className={mergeStylexOverrideClassName("", sx.desktopMrMinus15)}
+              className={mergeStylexOverrideClassName("", sx.desktopMr15)}
               aria-label="Code view settings"
               icon={<IconSliders size={18} />}
             />
@@ -2360,12 +1872,25 @@ toast(e.message || "Couldn't unlink the PR");
         side="bottom"
         align="end"
         initialFocus
-        className={mergeStylexOverrideClassName("", sx.flex, sx.w340px, sx.flexCol, sx.gap05, sx.p3)}
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.flex,
+          sx.w340px,
+          sx.flexCol,
+          sx.gap05,
+          sx.p3,
+        )}
       >
         {worktreeAvailable && (
           <>
-            <DiffSourceSetting value={diffSource} onValueChange={setDiffSource} />
-            <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
+            <DiffSourceSetting
+              value={diffSource}
+              onValueChange={setDiffSource}
+            />
+            <div
+              aria-hidden
+              {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+            />
           </>
         )}
         <SettingRow label="Code view">
@@ -2376,8 +1901,7 @@ toast(e.message || "Couldn't unlink the PR");
             onValueChange={(next) => {
               const key = next as CodeView;
               if (key === "flow" && codeView !== "flow" && codeFlowError) {
-                setCodeFlow(null);
-                setCodeFlowError(null);
+                resetCodeFlowError();
               }
               setCodeView(key);
             }}
@@ -2395,7 +1919,10 @@ toast(e.message || "Couldn't unlink the PR");
           </Segmented>
         </SettingRow>
 
-        <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
+        <div
+          aria-hidden
+          {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+        />
 
         <CodeOrganizationSettings
           settings={organizationSettings}
@@ -2403,58 +1930,71 @@ toast(e.message || "Couldn't unlink the PR");
           defaultOrderLabel="Pull request"
         />
 
-        <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
+        <div
+          aria-hidden
+          {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)}
+        />
 
         <CodeDisplaySettings {...codeDisplaySettings} />
       </Popover.Popup>
     </Popover.Root>
   );
 
-  /* The review has two pages. Without the workspace summary they sit in a
-     small floating switcher, leaving the identity and file controls in the
-     same toolbar positions used while the summary is open. */
-  const pageTabs = (
-    [
-      ["overview", "Overview", comments.length || undefined],
-      ["files", "Files", files.length || undefined],
-    ] as const
-  ).map(([key, label, count]) => (
+  const pageOptions = [
+    ["overview", "Overview", comments.length || undefined],
+    ["files", "Files", files.length || undefined],
+  ] as const;
+
+  // Page navigation shares the identity bar on desktop, preserving the code
+  // canvas' vertical space. Phone keeps the full-width row and larger targets.
+  const titlePageSwitcher = (
+    <Segmented
+      label="Pull request pages"
+      value={page}
+      onValueChange={(next) => {
+        if (next === "overview" || next === "files") setPage(next);
+      }}
+      size="sm"
+      className={mergeStylexOverrideClassName("", sx.shrink0, sx.phoneHidden)}
+    >
+      {pageOptions.map(([key, label, count]) => (
+        <SegmentedOption key={key} value={key}>
+          {label}
+          {count !== undefined && (
+            <span
+              {...mergeStylexProps(
+                "tabular-nums",
+                sx.textFaint,
+                typography.meta,
+              )}
+            >
+              {count}
+            </span>
+          )}
+        </SegmentedOption>
+      ))}
+    </Segmented>
+  );
+
+  const phonePageTabs = pageOptions.map(([key, label, count]) => (
     <button
       key={key}
       role="tab"
       aria-selected={page === key}
-      {...stylex.props(
-        sx.flex,
-        sx.h8,
-        sx.shrink0,
-        sx.itemsCenter,
-        sx.gap15,
-        sx.border0,
-        sx.bgTransparent,
-        sx.px3,
-        typography.label,
-        sx.fontMedium,
-        sx.transitionColors,
-        sx.phoneH11,
-        page === key ? sx.textFg : sx.textDim,
-        page !== key && sx.hoverTextFg,
+      className={utilityClassName(
+        `flex h-11 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-control-label font-medium transition-colors ${
+          page === key ? "text-fg" : "text-dim hover:text-fg"
+        }`,
       )}
       onClick={() => setPage(key)}
     >
       {label}
       {count !== undefined && (
         <span
-          {...stylex.props(
-            sx.minW5,
-            sx.roundedFull,
-            sx.px7px,
-            sx.pyPx,
-            sx.textCenter,
-            typography.meta,
-            sx.fontSemibold,
-            sx.tabularNums,
-            page === key ? sx.bgAccentSoft : sx.bgActive,
-            page === key ? sx.textAccent : sx.textDim,
+          className={utilityClassName(
+            `min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold tabular-nums ${
+              page === key ? "bg-accent-soft text-accent" : "bg-active text-dim"
+            }`,
           )}
         >
           {count}
@@ -2465,19 +2005,20 @@ toast(e.message || "Couldn't unlink the PR");
 
   const fileControls = page === "files" && (
     <div
-      {...stylex.props(
-        sx.flex,
-        sx.shrink0,
-        sx.itemsCenter,
-        sx.gap15,
-        sx.phoneGap2,
-        !compactToolbar && sx.mlAuto,
+      className={utilityClassName(
+        `flex shrink-0 items-center gap-1.5 phone:gap-2 ${compactToolbar ? "" : "ml-auto"}`,
       )}
     >
       {diffSource === "worktree" ? (
         <div
           ref={setWorktreeToolbarTarget}
-          {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap25, typography.label)}
+          {...stylex.props(
+            sx.flex,
+            sx.shrink0,
+            sx.itemsCenter,
+            sx.gap25,
+            typography.label,
+          )}
         />
       ) : (
         <>
@@ -2494,7 +2035,13 @@ toast(e.message || "Couldn't unlink the PR");
           )}
           <div
             ref={setDiffControlsTarget}
-            {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap15, sx.phoneGap2)}
+            {...stylex.props(
+              sx.flex,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.gap15,
+              sx.phoneGap2,
+            )}
           />
           {codeSettings}
         </>
@@ -2502,29 +2049,36 @@ toast(e.message || "Couldn't unlink the PR");
     </div>
   );
 
-  const reviewBar = !compactToolbar && (
+  const reviewBar = (
     <div
-      className={`[&::-webkit-scrollbar]:hidden ${stylex.props(
+      {...mergeStylexProps(
+        "[&::-webkit-scrollbar]:hidden",
         sx.flex,
-        sx.h8,
+        sx.h11,
         sx.shrink0,
         sx.itemsCenter,
-        sx.gap15,
+        sx.gap2,
         sx.overflowXAuto,
         sx.overflowYHidden,
         sx.bgSurface,
+        sx.px2,
         sx.ScrollbarWidthNone,
-        sx.desktopReviewBar,
-        sx.phoneReviewBar,
-      ).className}`}
+        sx.desktopHidden,
+      )}
     >
       <div
-        {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap05, sx.selfStretch)}
+        {...stylex.props(
+          sx.flex,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.gap05,
+          sx.selfStretch,
+        )}
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Pull request pages"
       >
-        {pageTabs}
+        {phonePageTabs}
       </div>
       {phoneLayout && fileControls}
     </div>
@@ -2532,514 +2086,417 @@ toast(e.message || "Couldn't unlink the PR");
 
   return (
     <div
-      className={`selectable ${stylex.props(
-        sx.relative,
-        sx.flex,
-        sx.hFull,
-        sx.minH0,
-        sx.flexCol,
-        sx.bgSurface,
-        compactToolbar && sx.overflowXHidden,
-        compactToolbar && sx.overflowYAuto,
-        !compactToolbar && sx.overflowHidden,
-      ).className}`}
+      className={utilityClassName(
+        `selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`,
+      )}
       data-review-canvas="true"
       ref={setRoot}
     >
-      {/* Desktop always keeps file controls in the identity row, so opening
-          the summary only relocates page navigation. Phone keeps one
-          edge-to-edge navigation and controls row below the identity. */}
+      {sessionActionTarget && sessionActionButton
+        ? createPortal(sessionActionButton, sessionActionTarget)
+        : null}
+      {/* Desktop keeps page navigation and file controls in the identity row.
+          Phone keeps one edge-to-edge navigation and controls row below it. */}
       <ReviewToolbar compact={compactToolbar}>
-      <TopBar as="header" className={mergeStylexOverrideClassName("", sx.h10, sx.shrink0, sx.gap25, sx.px4, sx.phonePx3)}>
-        {/* State, in the app's own PR language, filled rather than drawn: the
+        <TopBar
+          as="header"
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.h10,
+            sx.shrink0,
+            sx.gap25,
+            sx.px4,
+            sx.phonePx3,
+          )}
+        >
+          {/* State, in the app's own PR language, filled rather than drawn: the
             tone washes the whole chip and the glyph and word share its ink.
             It is its own object, so it gets more air than the pieces of the
             identity line it precedes. */}
-        <Tooltip label={statusMark.label}>
-          <span
-            {...stylex.props(
-              sx.mr15,
-              sx.flex,
-              sx.h6,
-              sx.shrink0,
-              sx.itemsCenter,
-              sx.gap15,
-              sx.roundedControl,
-              sx.px2,
-              STATUS_BG_STYLE[statusMark.tone],
-              STATUS_TEXT_STYLE[statusMark.tone],
-            )}
-          >
-            <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
-            {!headerCompact && (
-              <span {...stylex.props(sx.fontMedium, typography.label)}>{stateLabel}</span>
-            )}
-          </span>
-        </Tooltip>
-        {targetPicker}
-        {/* Author and title in the session header's own breadcrumb shape: a
+          <Tooltip label={statusMark.label}>
+            <span
+              className={utilityClassName(
+                `mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`,
+              )}
+            >
+              <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
+              {!headerCompact && (
+                <span {...stylex.props(sx.fontMedium, typography.label)}>
+                  {stateLabel}
+                </span>
+              )}
+            </span>
+          </Tooltip>
+          {targetPicker}
+          {/* Author and title in the session header's own breadcrumb shape: a
             tight picture-and-name pill, a chevron, then the name of the thing
             you are looking at. Same spacing and weights as RepoBar's
             `[icon] repo › title`, so the two headers read as one bar. */}
-        {!headerCompact && (
-          <>
-            <span {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap7px, sx.fontMedium, sx.textFg, typography.itemTitle)}>
-              <UserAvatar
-                name={pr.author}
-                login={provider.key === "github" ? pr.author : null}
+          {!headerCompact && (
+            <>
+              <span
+                {...stylex.props(
+                  sx.flex,
+                  sx.shrink0,
+                  sx.itemsCenter,
+                  sx.gap7px,
+                  sx.fontMedium,
+                  sx.textFg,
+                  typography.itemTitle,
+                )}
+              >
+                <UserAvatar
+                  name={pr.author}
+                  login={provider.key === "github" ? pr.author : null}
+                  size={18}
+                  edge={false}
+                  title={pr.author}
+                />
+                <span {...stylex.props(sx.maxW180px, sx.truncate)}>
+                  {pr.author}
+                </span>
+              </span>
+              <IconChevronRight
                 size={18}
-                edge={false}
-                title={pr.author}
+                className={mergeStylexOverrideClassName(
+                  "",
+                  sx.shrink0,
+                  sx.textFaint,
+                )}
               />
-              <span {...stylex.props(sx.maxW180px, sx.truncate)}>{pr.author}</span>
-            </span>
-            <IconChevronRight size={18} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} />
-          </>
-        )}
-        {/* Title only. Counts, commits and the sessions on this PR are the
+            </>
+          )}
+          {/* Title only. Counts, commits and the sessions on this PR are the
             rail's job, so the bar stays one line of identity.
 
             The title is the name of the page you are already on, so it is
             inert. The outbound jump rides the number, which is the reference
             everywhere else in the app. */}
-        <h1
-          {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.itemsBaseline, sx.gap1, sx.fontMedium, sx.leading12, sx.textFg, typography.itemTitle)}
-          title={`${pr.title} #${pr.number}`}
-        >
-          <span {...stylex.props(sx.truncate)}>{pr.title}</span>
-          <Tooltip label={`Open on ${provider.name}`}>
-            <a
-              {...stylex.props(sx.shrink0, sx.fontNormal, sx.textFaint, sx.noUnderline, sx.hoverTextLink)}
-              href={pr.url}
-              target="_blank"
-              rel="noopener"
-            >
-              #{pr.number}
-            </a>
-          </Tooltip>
-        </h1>
-        {(compactToolbar || !phoneLayout) && fileControls}
-        {/* A stack is secondary navigation, not page content. Keep its compact
+          <h1
+            {...stylex.props(
+              sx.flex,
+              sx.minW0,
+              sx.flex1,
+              sx.itemsBaseline,
+              sx.gap1,
+              sx.fontMedium,
+              sx.leading12,
+              sx.textFg,
+              typography.itemTitle,
+            )}
+            title={`${pr.title} #${pr.number}`}
+          >
+            <span {...stylex.props(sx.truncate)}>{pr.title}</span>
+            <Tooltip label={`Open on ${provider.name}`}>
+              <a
+                {...stylex.props(
+                  sx.shrink0,
+                  sx.fontNormal,
+                  sx.textFaint,
+                  sx.noUnderline,
+                  sx.hoverTextLink,
+                )}
+                href={pr.url}
+                target="_blank"
+                rel="noopener"
+              >
+                #{pr.number}
+              </a>
+            </Tooltip>
+          </h1>
+          {titlePageSwitcher}
+          {(compactToolbar || !phoneLayout) && fileControls}
+          {/* A stack is secondary navigation, not page content. Keep its compact
             position/size chip in the identity bar and reveal the full rail in
             the shared popover instead of spending permanent canvas height. */}
-        {caps.stacks && pr.stack && (
-          <PrStackChip
-            pr={pr}
-            tone={statusMark.tone}
-            size="bar"
-            headline={statusMark.label}
-            repo={active?.repo}
-            onOpenPr={onOpenPr}
-          />
-        )}
-        {pr.staging?.url && !headerCompact && (
-          <Tooltip label="Open the preview environment">
-            <a
-              /* An icon-only control carries its glyph ~6px inside its box,
+          {caps.stacks && pr.stack && (
+            <PrStackChip
+              pr={pr}
+              tone={statusMark.tone}
+              size="bar"
+              headline={statusMark.label}
+              repo={active?.repo}
+              onOpenPr={onOpenPr}
+            />
+          )}
+          {pr.staging?.url && !headerCompact && (
+            <Tooltip label="Open the preview environment">
+              <a
+                /* An icon-only control carries its glyph ~6px inside its box,
                  so the last one in the row is outdented to put that glyph on
                  the row's content edge — where the view control below it
                  sits, since a bordered control is flush with its own box. */
-              {...stylex.props(
-                sx.mlAuto,
-                sx.inlineFlex,
-                sx.size8,
-                sx.shrink0,
-                sx.itemsCenter,
-                sx.justifyCenter,
-                sx.roundedControl,
-                sx.textDim,
-                sx.noUnderline,
-                sx.hoverBgHover,
-                sx.hoverTextFg,
-                pr.state !== "OPEN" && sx.mrMinus15,
-              )}
-              href={pr.staging.url}
-              target="_blank"
-              rel="noopener"
-              aria-label="Open the preview environment"
-            >
-              <IconGlobe size={19} />
-            </a>
-          </Tooltip>
-        )}
-        {pr.state === "OPEN" &&
-          !pr.isDraft &&
-          caps.reviewComments &&
-          !reviewing &&
-          !headerCompact && (
-            /* The one call to action on a wide canvas, so it takes the accent
+                className={utilityClassName(
+                  `ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`,
+                )}
+                href={pr.staging.url}
+                target="_blank"
+                rel="noopener"
+                aria-label="Open the preview environment"
+              >
+                <IconGlobe size={19} />
+              </a>
+            </Tooltip>
+          )}
+          {pr.state === "OPEN" &&
+            !pr.isDraft &&
+            caps.reviewComments &&
+            !reviewing &&
+            !headerCompact && (
+              /* The one call to action on a wide canvas, so it takes the accent
                plate. Compact canvases move it into the actions menu instead
                of squeezing the repository and pull request identity. */
-            <Button
-              variant="primary"
-              size="sm"
-              className={
-                pr.staging?.url ? undefined : stylex.props(sx.mlAuto).className
-              }
-              onClick={() => {
-                setDiffSource("pull-request");
-                setReviewing(true);
-                setPage("files");
-              }}
-            >
-              Review
-            </Button>
-          )}
-        <Menu.Root>
-          <Tooltip label="Pull request actions">
-            <Menu.Trigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={mergeStylexOverrideClassName("", sx.Mr15)}
-                  aria-label="Pull request actions"
-                  icon={<IconDotsHorizontal size={18} />}
-                />
-              }
-            />
-          </Tooltip>
-          <Menu.Popup align="end">
-            {headerCompact &&
-              pr.state === "OPEN" &&
-              !pr.isDraft &&
-              caps.reviewComments &&
-              !reviewing && (
-                <Menu.Item
-                  onClick={() => {
-                    setDiffSource("pull-request");
-                    setReviewing(true);
-                    setPage("files");
-                  }}
-                >
-                  <IconMessage size={18} className={MENU_ICON} />
-                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Start review</span>
-                </Menu.Item>
-              )}
-            <Menu.Item
-              render={<a href={pr.url} target="_blank" rel="noopener" />}
-            >
-              <BrandMark name={provider.key} size={16} className={MENU_ICON} />
-              <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
-                Open on {provider.name}
-              </span>
-            </Menu.Item>
-            {pr.staging?.url && (
-              <Menu.Item
+              <Button
+                variant="primary"
+                size="sm"
+                className={
+                  pr.staging?.url ? undefined : utilityClassName("ml-auto")
+                }
+                onClick={() => {
+                  setDiffSource("pull-request");
+                  setReviewing(true);
+                  setPage("files");
+                }}
+              >
+                Review
+              </Button>
+            )}
+          {sessionActionTarget === undefined &&
+            !headerCompact &&
+            sessionActionButton}
+          <Menu.Root>
+            <Tooltip label="Pull request actions">
+              <Menu.Trigger
                 render={
-                  <a
-                    href={pr.staging.url}
-                    target="_blank"
-                    rel="noopener"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={mergeStylexOverrideClassName("", sx.Mr15)}
+                    aria-label="Pull request actions"
+                    icon={<IconDotsHorizontal size={18} />}
                   />
                 }
-              >
-                <IconGlobe size={18} className={MENU_ICON} />
-                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Open preview</span>
-              </Menu.Item>
-            )}
-            <Menu.Item
-              onClick={() =>
-                copyPrLink(pr.url, { toast: "Pull request link copied" })
-              }
-            >
-              <IconCopy size={18} className={MENU_ICON} />
-              <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Copy PR link</span>
-            </Menu.Item>
-            {pr.state === "OPEN" && (
-              <>
-                <Menu.Separator />
-                {canMergeAfterReview && (
-                  <Menu.Item onClick={handleMerge} disabled={merging}>
-                    {mergeScheduled ? (
-                      <IconUndo size={18} className={MENU_ICON} />
-                    ) : (
-                      <IconGitMerge size={18} className={MENU_ICON} />
-                    )}
-                    {merging
-                      ? "Merging…"
-                      : mergeScheduled
-                        ? "Undo"
-                        : "Squash and merge"}
+              />
+            </Tooltip>
+            <Menu.Popup align="end">
+              {headerCompact &&
+                pr.state === "OPEN" &&
+                !pr.isDraft &&
+                caps.reviewComments &&
+                !reviewing && (
+                  <Menu.Item
+                    onClick={() => {
+                      setDiffSource("pull-request");
+                      setReviewing(true);
+                      setPage("files");
+                    }}
+                  >
+                    <IconMessage size={18} className={MENU_ICON} />
+                    <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                      Start review
+                    </span>
                   </Menu.Item>
                 )}
-                <Menu.Item {...mergeStylexProps("data-[highlighted]:bg-red-soft", sx.textRed)}
-                  onClick={handleClose}
-                  closeOnClick={confirmClose}
-                  disabled={closing}
+              {sessions &&
+                sessionActionTarget === undefined &&
+                headerCompact && (
+                  <Menu.Item onClick={() => setSessionsOpen(true)}>
+                    <IconMessages size={18} className={MENU_ICON} />
+                    <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                      {relatedSessions.length === 0
+                        ? "Start a session"
+                        : relatedSessions.length === 1
+                          ? "Open session"
+                          : `Open ${relatedSessions.length} sessions`}
+                    </span>
+                  </Menu.Item>
+                )}
+              <Menu.Item
+                render={<a href={pr.url} target="_blank" rel="noopener" />}
+              >
+                <BrandMark
+                  name={provider.key}
+                  size={16}
+                  className={MENU_ICON}
+                />
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                  Open on {provider.name}
+                </span>
+              </Menu.Item>
+              {pr.staging?.url && (
+                <Menu.Item
+                  render={
+                    <a href={pr.staging.url} target="_blank" rel="noopener" />
+                  }
                 >
-                  <IconX size={18} className={MENU_ICON} />
-                  {closing
-                    ? "Closing…"
-                    : confirmClose
-                      ? "Confirm close pull request"
-                      : "Close pull request"}
+                  <IconGlobe size={18} className={MENU_ICON} />
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                    Open preview
+                  </span>
                 </Menu.Item>
-              </>
-            )}
-          </Menu.Popup>
-        </Menu.Root>
-      </TopBar>
-      {reviewBar}
+              )}
+              <Menu.Item
+                onClick={() =>
+                  copyPrLink(pr.url, { toast: "Pull request link copied" })
+                }
+              >
+                <IconCopy size={18} className={MENU_ICON} />
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                  Copy PR link
+                </span>
+              </Menu.Item>
+              {pr.state === "OPEN" && (
+                <>
+                  <Menu.Separator />
+                  {canMergeAfterReview && (
+                    <Menu.Item onClick={handleMerge} disabled={merging}>
+                      {mergeScheduled ? (
+                        <IconUndo size={18} className={MENU_ICON} />
+                      ) : (
+                        <IconGitMerge size={18} className={MENU_ICON} />
+                      )}
+                      {merging
+                        ? "Merging…"
+                        : mergeScheduled
+                          ? "Undo"
+                          : "Squash and merge"}
+                    </Menu.Item>
+                  )}
+                  <Menu.Item
+                    className={mergeStylexOverrideClassName(
+                      "data-[highlighted]:bg-red-soft",
+                      sx.textRed,
+                    )}
+                    onClick={handleClose}
+                    closeOnClick={confirmClose}
+                    disabled={closing}
+                  >
+                    <IconX size={18} className={MENU_ICON} />
+                    {closing
+                      ? "Closing…"
+                      : confirmClose
+                        ? "Confirm close pull request"
+                        : "Close pull request"}
+                  </Menu.Item>
+                </>
+              )}
+            </Menu.Popup>
+          </Menu.Root>
+        </TopBar>
+        {reviewBar}
       </ReviewToolbar>
 
       {caps.stacks && !pr.stack && (
         <StackLinkSection pr={pr} sessionId={sessionId} onLinked={load} />
       )}
 
-      <div
-        className={
-          compactToolbar
-            ? [mergeStylexClassName("", sx.desktopReviewFileTreeGap0px, sx.desktopReviewFileTreeTop60px), stylex.props(
-                sx.flex,
-                sx.minH0,
-                sx.flex1,
-                sx.summaryCanvasClearance,
-                sx.desktopFlexNone,
-              ).className].filter(Boolean).join(" ")
-            : stylex.props(sx.flex, sx.minH0, sx.flex1, sx.desktopPt12)
-                .className
-        }
-      >
-        {page === "files" &&
-          diffSource === "pull-request" &&
-          fileListMode !== "hidden" &&
-          files.length > 0 && (
-            <PrFileTree
-              files={reviewFiles}
-              mode={fileListMode}
-              showFileStats={showFileStats}
-              onOpenFile={scrollToFile}
-            />
-          )}
+      {page === "overview" ? (
+        <PrOverviewPage
+          compactToolbar={compactToolbar}
+          reviewing={reviewing}
+          sessionId={sessionId}
+          provider={provider}
+          pr={pr}
+          send={send}
+          railStacked={railStacked}
+          rail={rail}
+          hideWideOverviewRail={hideWideOverviewRail}
+          walkthrough={walkthrough}
+          bodyHtml={bodyHtml}
+          comments={comments}
+          markdownRepo={markdownRepo}
+          onAddToInput={onAddToInput}
+        />
+      ) : (
+        <PrFilesPage
+          compactToolbar={compactToolbar}
+          reviewing={reviewing}
+          diffSource={diffSource}
+          fileListMode={fileListMode}
+          files={files}
+          reviewFiles={reviewFiles}
+          showFileStats={showFileStats}
+          onOpenFile={scrollToFile}
+          sessionId={sessionId}
+          sessionRunning={sessionRunning}
+          canSend={!!send && !!editGate}
+          send={send ?? NOOP_SEND}
+          activeRepoId={activeRepoId}
+          worktreeToolbarTarget={worktreeToolbarTarget}
+          onDiffSourceChange={setDiffSource}
+          codeView={codeView}
+          codeFlowData={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
+          codeFlowLoading={
+            codeFlowLoading || (codeFlow?.key !== codeFlowKey && !codeFlowError)
+          }
+          codeFlowError={codeFlowError}
+          onRetryCodeFlow={() => void refreshCodeFlow()}
+          diff={diff}
+          diffOptions={diffOptions}
+          diffError={diffError}
+          diffLoading={diffLoading}
+          diffOutOfDate={diffOutOfDate}
+          onRetryDiff={retryDiff}
+          guideLoading={guideLoading}
+          currentGuide={currentGuide}
+          guideFailed={guideFailed}
+          onRetryGuide={() => void loadGuide()}
+          guideSections={guideSections}
+          grouping={grouping}
+          diffGroups={diffGroups}
+          diffGroupsLoading={diffGroupsLoading}
+        />
+      )}
 
-        <main
-          // Wide review scrolls the toolbar and canvas in one container. Once
-          // the toolbar sticks, file titles clear its 10px inset, 40px row,
-          // 2px border, 8px section gap, and the file card's own 1px border.
-          className={[mergeStylexClassName("", sx.ReviewFileHeaderTop0px), compactToolbar
-              ? mergeStylexClassName("", sx.desktopReviewFileHeaderTop61px)
-              : "", stylex.props(
-            sx.minW0,
-            sx.flex1,
-            sx.bgSurface,
-            compactToolbar ? sx.overflowYVisible : sx.overflowYAuto,
-            reviewing ? sx.pb24 : sx.pb4,
-            reviewing && sx.phonePb36,
-          ).className].filter(Boolean).join(" ")}
-        >
-          {page === "overview" ? (
-            <SelectionToSession
-              sessionId={sessionId}
-              label={`${provider.changeAbbr} #${pr.number}`}
-              send={send}
-            >
-              <div
+      <ResponsiveDialog
+        open={sessionsOpen}
+        onClose={() => setSessionsOpen(false)}
+        phone={isPhone}
+        label="Sessions on this pull request"
+        sheetClassName={utilityClassName("max-h-[88dvh]")}
+        modalClassName={utilityClassName("w-[min(460px,calc(100vw-32px))]")}
+      >
+        <div {...stylex.props(sx.flex, sx.minH0, sx.flexCol)}>
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.gap3,
+              sx.px5,
+              sx.pb3,
+              sx.pt5,
+              sx.phonePt2,
+            )}
+          >
+            <div {...stylex.props(sx.minW0, sx.flex1)}>
+              <h2
                 {...stylex.props(
-                  sx.mxAuto,
-                  sx.wFull,
-                  sx.maxW1120px,
-                  sx.px6,
-                  sx.py6,
-                  sx.phonePx3,
-                  sx.flex,
-                  railStacked && sx.flexCol,
-                  railStacked ? sx.gap6 : sx.gap8,
+                  sx.fontSemibold,
+                  sx.textFg,
+                  typography.itemTitle,
                 )}
               >
-                {railStacked && rail}
-                <div {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.gap5)}>
-                  {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
-                  <ConversationView
-                    author={pr.author}
-                    descriptionHtml={bodyHtml}
-                    comments={comments}
-                    repo={markdownRepo}
-                    onAddToInput={onAddToInput}
-                    pr={pr}
-                  />
-                </div>
-                {!railStacked && !hideWideOverviewRail && rail}
-              </div>
-            </SelectionToSession>
-          ) : (
-            // Keep the review canvas close to the viewport edge. The file
-            // section's own border now carries the shape instead of a wide
-            // gray gutter around it.
-            <div
-              {...stylex.props(
-                sx.mxAuto,
-                sx.maxW1500px,
-                sx.px2,
-                sx.pb2,
-                sx.phonePx1,
-                compactToolbar ? sx.pt0 : sx.pt2,
-              )}
-            >
-              {diffSource === "worktree" ? (
-                <DiffPanel
-                  sessionId={sessionId}
-                  isRunning={sessionRunning}
-                  canSend={!!send && !!editGate}
-                  send={send ?? NOOP_SEND}
-                  repo={activeRepoId}
-                  toolbarTarget={worktreeToolbarTarget}
-                  source="worktree"
-                  onSourceChange={setDiffSource}
-                />
-              ) : codeView === "flow" ? (
-                <CodeFlow
-                  data={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
-                  loading={
-                    codeFlowLoading ||
-                    (codeFlow?.key !== codeFlowKey && !codeFlowError)
-                  }
-                  error={codeFlowError}
-                  onRetry={() => void refreshCodeFlow()}
-                  onOpenLocation={scrollToFile}
-                />
-              ) : !diff?.patch || !diffProps ? (
-                <div {...stylex.props(sx.py12, sx.textCenter, sx.textSm, sx.textFaint)}>
-                  {diffError ? (
-                    <>
-                      <span {...stylex.props(sx.textRed)}>{diffError}</span>
-                      <button
-                        {...stylex.props(sx.ml2, sx.border0, sx.bgTransparent, sx.textLink)}
-                        onClick={() => {
-                          setDiffLoading(true);
-                          setDiffError(null);
-                          void load(true);
-                        }}
-                      >
-                        Retry
-                      </button>
-                    </>
-                  ) : diffLoading ? (
-                    "Loading pull request changes…"
-                  ) : diffOutOfDate ? (
-                    "The pull request changed while loading. It will refresh automatically."
-                  ) : (
-                    "No text diff is available for this pull request."
-                  )}
-                </div>
-              ) : codeView === "guide" ? (
-                guideLoading || (!currentGuide && !guideFailed) ? (
-                  <>
-                    <div {...stylex.props(sx.mb4, sx.roundedSm, sx.border, sx.borderLine, sx.bgPanel, sx.px3, sx.py2, sx.textXs, sx.textFaint)}>
-                      Writing the review guide… You can review the file diff
-                      while it groups the change by intent.
-                    </div>
-                    <CommentableDiff patch={diff.patch} {...diffProps} />
-                  </>
-                ) : guideFailed ? (
-                  <div {...stylex.props(sx.py12, sx.textCenter, sx.textSm, sx.textFaint)}>
-                    Couldn't generate a guide for this PR.
-                    <button
-                      {...stylex.props(sx.ml2, sx.border0, sx.bgTransparent, sx.textLink)}
-                      onClick={() => void loadGuide()}
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : currentGuide ? (
-                  <>
-                    <div {...stylex.props(sx.mb7, sx.grid, sx.guideGrid, sx.gap4, sx.px1)}>
-                      <div {...stylex.props(sx.fontMedium, sx.leadingRelaxed, sx.textFaint, typography.meta)}>
-                        Review guide
-                      </div>
-                      <div>
-                        <h2 {...stylex.props(sx.m0, sx.fontSemibold, sx.tracking001em, sx.textFg, typography.itemTitle)}>
-                          {currentGuide.sections.length} focused review step
-                          {currentGuide.sections.length === 1 ? "" : "s"}
-                        </h2>
-                        <p {...stylex.props(sx.mt1, sx.maxW680px, sx.textXs, sx.leadingRelaxed, sx.textDim)}>
-                          {reviewing
-                            ? "Review the change by intent rather than alphabetically. Comments stay pending until you finish the review."
-                            : "Read the change by intent rather than alphabetically."}
-                        </p>
-                      </div>
-                    </div>
-                    {guideSections.map((section, index, all) => (
-                      <section
-                        id={`review-guide-${index}`}
-                        {...stylex.props(sx.mb8, sx.scrollMt64px)}
-                        key={`${section.title}-${index}`}
-                      >
-                        <div {...stylex.props(sx.mb3, sx.grid, sx.guideGrid, sx.gap4, sx.px1)}>
-                          <div {...stylex.props(sx.textFaint, typography.meta)}>
-                            {String(index + 1).padStart(2, "0")} /{" "}
-                            {String(all.length).padStart(2, "0")}
-                          </div>
-                          <div>
-                            <div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>
-                              {section.title}
-                            </div>
-                            <div {...stylex.props(sx.mt1, sx.leadingRelaxed, sx.textDim, typography.supporting)}>
-                              {section.explanation}
-                            </div>
-                          </div>
-                        </div>
-                        {section.patch && (
-                          <CommentableDiff
-                            patch={section.patch}
-                            {...diffProps}
-                          />
-                        )}
-                      </section>
-                    ))}
-                  </>
-                ) : null
-              ) : (
-                <CommentableDiff
-                  patch={diff.patch}
-                  {...diffProps}
-                  groups={
-                    grouping === "ai" && diffGroups?.oid === diff.headRefOid
-                      ? diffGroups.groups || undefined
-                      : undefined
-                  }
-                  groupsLoading={grouping === "ai" && diffGroupsLoading}
-                />
-              )}
-            </div>
-          )}
-        </main>
-      </div>
-
-      {sessionsOpen && (
-        <>
-          <button
-            {...stylex.props(sx.absolute, sx.inset0, sx.z20, sx.cursorDefault, sx.border0, sx.bgBlack25)}
-            aria-label="Close sessions"
-            onClick={() => setSessionsOpen(false)}
-          />
-          <div
-            className={`smooth-shadow-lg ${stylex.props(
-              sx.absolute,
-              sx.right5,
-              showBar ? sx.top108px : sx.top16,
-              sx.z30,
-              sx.w460px,
-              sx.maxWCalc40px,
-              sx.roundedMd,
-              sx.border,
-              sx.borderLineStrong,
-              sx.bgPanel,
-              sx.p4,
-            ).className}`}
-          >
-            <div {...stylex.props(sx.mb2, sx.flex, sx.itemsCenter)}>
-              <span {...stylex.props(sx.textSm, sx.fontSemibold, sx.textFg)}>
                 Sessions on this PR
-              </span>
-              <button
-                {...stylex.props(sx.mlAuto, sx.border0, sx.bgTransparent, sx.textFaint, typography.itemTitle, sx.hoverTextFg)}
-                onClick={() => setSessionsOpen(false)}
-                aria-label="Close"
-              >
-                ×
-              </button>
+              </h2>
+              <p {...stylex.props(sx.mt05, sx.textDim, typography.supporting)}>
+                Open existing work or start something new on this branch.
+              </p>
             </div>
+            <Button
+              variant="ghost"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.size10,
+                sx.shrink0,
+                sx.phoneSize11,
+              )}
+              icon={<IconX size={20} />}
+              aria-label="Close sessions"
+              onClick={() => setSessionsOpen(false)}
+            />
+          </div>
+          <div {...stylex.props(sx.minH0, sx.overflowYAuto, sx.px5, sx.pb5)}>
             <PrSessionsList
               sessions={relatedSessions}
               repo={active?.repo || ""}
@@ -3055,13 +2512,37 @@ toast(e.message || "Couldn't unlink the PR");
               compose
             />
           </div>
-        </>
-      )}
+        </div>
+      </ResponsiveDialog>
 
       {/* Review controls only exist while the person is actively reviewing.
           Passive PR browsing should not imply that a review is in progress. */}
       {reviewing && (
-        <div {...stylex.props(sx.pointerEventsNone, sx.absolute, sx.bottom4, sx.left4, sx.right4, sx.z10, sx.flex, sx.minH54px, sx.itemsCenter, sx.gap3, sx.roundedMd, sx.border, sx.borderLineStrong, sx.bgPanel95, sx.px3, sx.py2, sx.smoothShadowSoft, sx.backdropBlur, sx.phoneFlexCol, sx.phoneItemsStretch, sx.phoneGap2)}>
+        <div
+          {...mergeStylexProps(
+            "backdrop-blur",
+            sx.pointerEventsNone,
+            sx.absolute,
+            sx.bottom4,
+            sx.left4,
+            sx.right4,
+            sx.z10,
+            sx.flex,
+            sx.minH54px,
+            sx.itemsCenter,
+            sx.gap3,
+            sx.roundedMd,
+            sx.border,
+            sx.borderLineStrong,
+            sx.bgPanel95,
+            sx.px3,
+            sx.py2,
+            sx.smoothShadowSoft,
+            sx.phoneFlexCol,
+            sx.phoneItemsStretch,
+            sx.phoneGap2,
+          )}
+        >
           <div {...stylex.props(sx.minW0, sx.flex1)}>
             <div {...stylex.props(sx.textXs, sx.fontMedium, sx.textFg)}>
               {reviewDone === "merged"
@@ -3075,11 +2556,8 @@ toast(e.message || "Couldn't unlink the PR");
                       : "No pending comments"}
             </div>
             <div
-              {...stylex.props(
-                sx.mt05,
-                sx.truncate,
-                typography.supporting,
-                closeError ? sx.textRed : sx.textFaint,
+              className={utilityClassName(
+                `mt-0.5 truncate text-supporting ${closeError ? "text-red" : "text-faint"}`,
               )}
               title={closeError || undefined}
             >
@@ -3089,7 +2567,16 @@ toast(e.message || "Couldn't unlink the PR");
                   : `${provider.name} has no reviews. Merge or close when you're done.`)}
             </div>
           </div>
-          <div {...stylex.props(sx.pointerEventsAuto, sx.flex, sx.shrink0, sx.flexWrap, sx.justifyEnd, sx.gap2)}>
+          <div
+            {...stylex.props(
+              sx.pointerEventsAuto,
+              sx.flex,
+              sx.shrink0,
+              sx.flexWrap,
+              sx.justifyEnd,
+              sx.gap2,
+            )}
+          >
             {onOpenSession && (
               <Button
                 variant="soft"
@@ -3212,8 +2699,21 @@ function FinishReviewDialog({
   return (
     <Modal.Root open={open} onOpenChange={(next) => !next && onClose(summary)}>
       <Modal.Content
-        widthClassName={stylex.props(sx.maxW30rem).className}
-        className={mergeStylexOverrideClassName("", sx.modalPosition)}
+        widthClassName={utilityClassName("max-w-[30rem]")}
+        className={mergeStylexOverrideClassName(
+          "",
+          sx.bottomMax1remEnvSafeAreaInsetBottom,
+          sx.leftAuto,
+          sx.right4,
+          sx.topAuto,
+          sx.translateX0,
+          sx.translateY0,
+          sx.originBottomRight,
+          sx.phoneLeft12,
+          sx.phoneRightAuto,
+          sx.phoneTranslateX12,
+          sx.phoneOriginBottom,
+        )}
         initialFocus={summaryRef}
       >
         <Modal.Header
@@ -3236,8 +2736,8 @@ function FinishReviewDialog({
               role="radio"
               aria-checked={event === verdict.event}
               data-active={event === verdict.event || undefined}
-              className={`group data-active:border-accent data-active:bg-accent-soft ${stylex.props(
-                sx.focusRing,
+              {...mergeStylexProps(
+                "group focus-ring data-active:border-accent data-active:bg-accent-soft",
                 sx.flex,
                 sx.cursorPointer,
                 sx.itemsStart,
@@ -3249,13 +2749,14 @@ function FinishReviewDialog({
                 sx.px3,
                 sx.py25,
                 sx.textLeft,
-                sx.transitionBgBorder,
+                sx.transitionBackgroundColorBorderColor,
                 sx.hoverBgHover,
-              ).className}`}
+              )}
               onClick={() => onEventChange(verdict.event)}
             >
               <span
-                className={`group-data-active:border-accent group-data-active:bg-accent ${stylex.props(
+                {...mergeStylexProps(
+                  "group-data-active:border-accent group-data-active:bg-accent",
                   sx.mtPx,
                   sx.flex,
                   sx.size4,
@@ -3266,22 +2767,31 @@ function FinishReviewDialog({
                   sx.border,
                   sx.borderLineStrong,
                   sx.transitionColors,
-                ).className}`}
+                )}
               >
                 <span
-                  className={`group-data-active:opacity-100 ${stylex.props(
+                  {...mergeStylexProps(
+                    "group-data-active:opacity-100",
                     sx.size15,
                     sx.roundedFull,
                     sx.bgOnAccent,
                     sx.opacity0,
-                  ).className}`}
+                  )}
                 />
               </span>
               <span {...stylex.props(sx.flex, sx.minW0, sx.flexCol, sx.gap05)}>
-                <span {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}>
+                <span
+                  {...stylex.props(
+                    sx.fontSemibold,
+                    sx.textFg,
+                    typography.label,
+                  )}
+                >
                   {verdict.label}
                 </span>
-                <span {...stylex.props(sx.textDim, typography.supporting)}>{verdict.hint}</span>
+                <span {...stylex.props(sx.textDim, typography.supporting)}>
+                  {verdict.hint}
+                </span>
               </span>
             </button>
           ))}
@@ -3298,21 +2808,41 @@ function FinishReviewDialog({
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
         />
-        {event === "APPROVE" && canMerge && (
-          // Quieter than the verdict rows on purpose: merging is an extra you
-          // opt into here, not a fourth thing to choose between.
-          <label {...stylex.props(sx.flex, sx.cursorPointer, sx.itemsCenter, sx.gap25, sx.px05)}>
-            <Checkbox
-              checked={mergeAfterReview}
-              onCheckedChange={onMergeAfterReviewChange}
-            />
-            <span {...stylex.props(sx.textDim, typography.supporting)}>
-              Squash and merge as well
-            </span>
-          </label>
-        )}
+        {event === "APPROVE" &&
+          canMerge && (
+            // Quieter than the verdict rows on purpose: merging is an extra you
+            // opt into here, not a fourth thing to choose between.
+            <label
+              {...stylex.props(
+                sx.flex,
+                sx.cursorPointer,
+                sx.itemsCenter,
+                sx.gap25,
+                sx.px05,
+              )}
+            >
+              <Checkbox
+                checked={mergeAfterReview}
+                onCheckedChange={onMergeAfterReviewChange}
+              />
+              <span {...stylex.props(sx.textDim, typography.supporting)}>
+                Squash and merge as well
+              </span>
+            </label>
+          )}
         {event === "APPROVE" && !canMerge && onFixChecks && (
-          <div {...stylex.props(sx.flex, sx.itemsCenter, sx.justifyBetween, sx.gap3, sx.roundedRow, sx.bgRedSoft, sx.px3, sx.py2)}>
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.itemsCenter,
+              sx.justifyBetween,
+              sx.gap3,
+              sx.roundedRow,
+              sx.bgRedSoft,
+              sx.px3,
+              sx.py2,
+            )}
+          >
             <span {...stylex.props(sx.textRed, typography.supporting)}>
               Checks must pass before you can merge.
             </span>
@@ -3326,7 +2856,11 @@ function FinishReviewDialog({
             </Button>
           </div>
         )}
-        {error && <div {...stylex.props(sx.textRed, typography.supporting)}>{error}</div>}
+        {error && (
+          <div {...stylex.props(sx.textRed, typography.supporting)}>
+            {error}
+          </div>
+        )}
         <Modal.Footer>
           <Button onClick={() => onClose(summary)}>Cancel</Button>
           <Button

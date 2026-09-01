@@ -12,7 +12,8 @@ import {
 
 const roots: string[] = [];
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
 
 function fixture(maxOpen = 1) {
@@ -23,16 +24,21 @@ function fixture(maxOpen = 1) {
   const host = new SessionKernelStoreHost(central, isolated, maxOpen);
   const sessionId = "session-agent-destination";
   const kernel = host.storeForSession(sessionId, true);
-  expect(kernel.applyRunEvent({ sessionId, event: "prompt", runKey: "run-1" }).accepted).toBe(true);
-  expect(kernel.registerAgentHostPlan({
-    op: "register_plan",
-    registrationId: "registration-1",
-    sessionId,
-    runId: "run-1",
-    turnId: "turn-1",
-    generation: 1,
-    planHash: `sha256:${"a".repeat(64)}`,
-  }).accepted).toBe(true);
+  expect(
+    kernel.applyRunEvent({ sessionId, event: "prompt", runKey: "run-1" })
+      .accepted,
+  ).toBe(true);
+  expect(
+    kernel.registerAgentHostPlan({
+      op: "register_plan",
+      registrationId: "registration-1",
+      sessionId,
+      runId: "run-1",
+      turnId: "turn-1",
+      generation: 1,
+      planHash: `sha256:${"a".repeat(64)}`,
+    }).accepted,
+  ).toBe(true);
   const anchor = Object.freeze({
     throughChangeSeq: 0,
     entryIds: Object.freeze([] as string[]),
@@ -47,12 +53,14 @@ function fixture(maxOpen = 1) {
     turnId: "turn-1",
     generation: 1,
     transcriptAnchor: anchor,
-    entries: [{
-      id: "assistant-1",
-      type: "assistant" as const,
-      timestamp: "2026-01-01T00:00:00.000Z",
-      content: "bounded result",
-    }],
+    entries: [
+      {
+        id: "assistant-1",
+        type: "assistant" as const,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        content: "bounded result",
+      },
+    ],
   };
   return { root, central, isolated, host, kernel, sessionId, anchor, request };
 }
@@ -72,25 +80,29 @@ describe("actor-authoritative Agent transcript destination", () => {
       },
     });
     const ref = first.result;
-    expect(f.host.transcript({
-      op: "agent_query_destination_receipt",
-      sessionId: f.sessionId,
-      runId: "run-1",
-      turnId: "turn-1",
-      generation: 1,
-      transcriptAnchor: f.anchor,
-      appendId: "append-1",
-      requestDigest: ref.requestDigest,
-    })).toEqual(ref);
-    expect(f.host.transcript({
-      op: "agent_validate_destination_receipt",
-      sessionId: f.sessionId,
-      runId: "run-1",
-      turnId: "turn-1",
-      generation: 1,
-      transcriptAnchor: f.anchor,
-      receipt: ref,
-    })).toEqual(ref);
+    expect(
+      f.host.transcript({
+        op: "agent_query_destination_receipt",
+        sessionId: f.sessionId,
+        runId: "run-1",
+        turnId: "turn-1",
+        generation: 1,
+        transcriptAnchor: f.anchor,
+        appendId: "append-1",
+        requestDigest: ref.requestDigest,
+      }),
+    ).toEqual(ref);
+    expect(
+      f.host.transcript({
+        op: "agent_validate_destination_receipt",
+        sessionId: f.sessionId,
+        runId: "run-1",
+        turnId: "turn-1",
+        generation: 1,
+        transcriptAnchor: f.anchor,
+        receipt: ref,
+      }),
+    ).toEqual(ref);
     expect(f.host.transcript({ op: "count", sessionId: f.sessionId })).toBe(1);
     f.host.close();
   });
@@ -98,60 +110,81 @@ describe("actor-authoritative Agent transcript destination", () => {
   test("replays exactly after passivation/reassignment without duplicate rows or wakes", () => {
     const f = fixture();
     const first = f.host.transcript(f.request);
-    const wake = f.host.transcript({ op: "pending_wake", sessionId: f.sessionId });
+    const wake = f.host.transcript({
+      op: "pending_wake",
+      sessionId: f.sessionId,
+    });
     expect(wake?.cursor).toBe(first.wakeCursor);
-    f.host.transcript({ op: "ack_wake", sessionId: f.sessionId, cursor: first.wakeCursor });
-    f.host.call("setRunState", [{ sessionId: "evict-me", state: "idle", event: "seed" }]);
+    f.host.transcript({
+      op: "ack_wake",
+      sessionId: f.sessionId,
+      cursor: first.wakeCursor,
+    });
+    f.host.call("setRunState", [
+      { sessionId: "evict-me", state: "idle", event: "seed" },
+    ]);
     f.host.transcript({ op: "tail", sessionId: "evict-me", limit: 1 });
     f.host.close();
 
     const reassigned = new SessionKernelStoreHost(f.central, f.isolated, 1);
     const replay = reassigned.transcript(f.request);
     expect(replay).toMatchObject({ replay: true, result: first.result });
-    expect(reassigned.transcript({ op: "count", sessionId: f.sessionId })).toBe(1);
-    expect(reassigned.transcript({ op: "pending_wake", sessionId: f.sessionId })).toBeNull();
+    expect(reassigned.transcript({ op: "count", sessionId: f.sessionId })).toBe(
+      1,
+    );
+    expect(
+      reassigned.transcript({ op: "pending_wake", sessionId: f.sessionId }),
+    ).toBeNull();
     reassigned.close();
   });
 
   test("fails closed for stale anchors, missing anchor rows, wrong generations, and tombstones", () => {
     const f = fixture();
     const first = f.host.transcript(f.request);
-    expect(() => f.host.transcript({
-      ...f.request,
-      requestId: "stale-anchor",
-      appendId: "stale-anchor",
-      entries: [{ ...f.request.entries[0], id: "stale-entry" }],
-    })).toThrow(/receipt does not match/);
-    expect(() => f.host.transcript({
-      ...f.request,
-      requestId: "missing-anchor-row",
-      appendId: "missing-anchor-row",
-      transcriptAnchor: {
-        throughChangeSeq: 1,
-        entryIds: ["does-not-exist"],
-        digest: `sha256:${"c".repeat(64)}`,
-      },
-      entries: [{ ...f.request.entries[0], id: "missing-entry" }],
-    })).toThrow(/receipt does not match/);
-    expect(() => f.host.transcript({
-      ...f.request,
-      requestId: "wrong-generation",
-      appendId: "wrong-generation",
-      generation: 2,
-      entries: [{ ...f.request.entries[0], id: "wrong-generation-entry" }],
-    })).toThrow(/run fence rejected/);
+    expect(() =>
+      f.host.transcript({
+        ...f.request,
+        requestId: "stale-anchor",
+        appendId: "stale-anchor",
+        entries: [{ ...f.request.entries[0], id: "stale-entry" }],
+      }),
+    ).toThrow(/receipt does not match/);
+    expect(() =>
+      f.host.transcript({
+        ...f.request,
+        requestId: "missing-anchor-row",
+        appendId: "missing-anchor-row",
+        transcriptAnchor: {
+          throughChangeSeq: 1,
+          entryIds: ["does-not-exist"],
+          digest: `sha256:${"c".repeat(64)}`,
+        },
+        entries: [{ ...f.request.entries[0], id: "missing-entry" }],
+      }),
+    ).toThrow(/receipt does not match/);
+    expect(() =>
+      f.host.transcript({
+        ...f.request,
+        requestId: "wrong-generation",
+        appendId: "wrong-generation",
+        generation: 2,
+        entries: [{ ...f.request.entries[0], id: "wrong-generation-entry" }],
+      }),
+    ).toThrow(/run fence rejected/);
     f.kernel.tombstoneSession(f.sessionId);
     expect(() => f.host.transcript(f.request)).toThrow(/was deleted/);
-    expect(() => f.host.transcript({
-      op: "agent_query_destination_receipt",
-      sessionId: f.sessionId,
-      runId: "run-1",
-      turnId: "turn-1",
-      generation: 1,
-      transcriptAnchor: f.anchor,
-      appendId: "append-1",
-      requestDigest: first.result.requestDigest,
-    })).toThrow(/was deleted/);
+    expect(() =>
+      f.host.transcript({
+        op: "agent_query_destination_receipt",
+        sessionId: f.sessionId,
+        runId: "run-1",
+        turnId: "turn-1",
+        generation: 1,
+        transcriptAnchor: f.anchor,
+        appendId: "append-1",
+        requestDigest: first.result.requestDigest,
+      }),
+    ).toThrow(/was deleted/);
     expect(first.result.appendId).toBe("append-1");
     f.host.close();
   });
@@ -159,25 +192,31 @@ describe("actor-authoritative Agent transcript destination", () => {
   test("rejects historical receipt rows after reset or delete and preserves commit-before-wake recovery", () => {
     const reset = fixture();
     const committed = reset.host.transcript(reset.request);
-    expect(reset.host.transcript({ op: "pending_wake", sessionId: reset.sessionId })).not.toBeNull();
+    expect(
+      reset.host.transcript({ op: "pending_wake", sessionId: reset.sessionId }),
+    ).not.toBeNull();
     reset.host.close();
     const recovered = new SessionKernelStoreHost(reset.central, reset.isolated);
-    expect(recovered.transcript({ op: "pending_wake", sessionId: reset.sessionId })).not.toBeNull();
+    expect(
+      recovered.transcript({ op: "pending_wake", sessionId: reset.sessionId }),
+    ).not.toBeNull();
     recovered.transcript({
       op: "replace",
       sessionId: reset.sessionId,
       requestId: "reset-transcript",
       entries: [],
     });
-    expect(() => recovered.transcript({
-      op: "agent_validate_destination_receipt",
-      sessionId: reset.sessionId,
-      runId: "run-1",
-      turnId: "turn-1",
-      generation: 1,
-      transcriptAnchor: reset.anchor,
-      receipt: committed.result,
-    })).toThrow(/receipt does not match/);
+    expect(() =>
+      recovered.transcript({
+        op: "agent_validate_destination_receipt",
+        sessionId: reset.sessionId,
+        runId: "run-1",
+        turnId: "turn-1",
+        generation: 1,
+        transcriptAnchor: reset.anchor,
+        receipt: committed.result,
+      }),
+    ).toThrow(/receipt does not match/);
     recovered.close();
 
     const deleted = fixture();
@@ -187,15 +226,17 @@ describe("actor-authoritative Agent transcript destination", () => {
       sessionId: deleted.sessionId,
       requestId: "delete-transcript",
     });
-    expect(() => deleted.host.transcript({
-      op: "agent_validate_destination_receipt",
-      sessionId: deleted.sessionId,
-      runId: "run-1",
-      turnId: "turn-1",
-      generation: 1,
-      transcriptAnchor: deleted.anchor,
-      receipt: beforeDelete.result,
-    })).toThrow();
+    expect(() =>
+      deleted.host.transcript({
+        op: "agent_validate_destination_receipt",
+        sessionId: deleted.sessionId,
+        runId: "run-1",
+        turnId: "turn-1",
+        generation: 1,
+        transcriptAnchor: deleted.anchor,
+        receipt: beforeDelete.result,
+      }),
+    ).toThrow();
     deleted.host.close();
   });
 
@@ -204,23 +245,36 @@ describe("actor-authoritative Agent transcript destination", () => {
     const decoded = decodeAgentTranscriptActorRequest(f.request);
     expect(decoded?.op).toBe("agent_append_destination");
     expect(Object.isFrozen(decoded)).toBe(true);
-    expect(Object.isFrozen(decoded && "entries" in decoded ? decoded.entries : undefined)).toBe(true);
-    expect(Object.isFrozen(decoded && "entries" in decoded ? decoded.entries[0] : undefined)).toBe(true);
-    expect(() => assertTranscriptActorRequest({ ...f.request, injected: true } as never))
-      .toThrow(/invalid keys/);
-    expect(() => assertTranscriptActorRequest({
-      ...f.request,
-      transcriptAnchor: { ...f.anchor, injected: true },
-    } as never)).toThrow(/invalid keys/);
-    expect(() => assertTranscriptActorRequest({
-      op: "agent_validate_destination_receipt",
-      sessionId: f.sessionId,
-      runId: "run-1",
-      turnId: "turn-1",
-      generation: 1,
-      transcriptAnchor: f.anchor,
-      receipt: { appendId: "not-complete" },
-    } as never)).toThrow(/receipt is invalid/);
+    expect(
+      Object.isFrozen(
+        decoded && "entries" in decoded ? decoded.entries : undefined,
+      ),
+    ).toBe(true);
+    expect(
+      Object.isFrozen(
+        decoded && "entries" in decoded ? decoded.entries[0] : undefined,
+      ),
+    ).toBe(true);
+    expect(() =>
+      assertTranscriptActorRequest({ ...f.request, injected: true } as never),
+    ).toThrow(/invalid keys/);
+    expect(() =>
+      assertTranscriptActorRequest({
+        ...f.request,
+        transcriptAnchor: { ...f.anchor, injected: true },
+      } as never),
+    ).toThrow(/invalid keys/);
+    expect(() =>
+      assertTranscriptActorRequest({
+        op: "agent_validate_destination_receipt",
+        sessionId: f.sessionId,
+        runId: "run-1",
+        turnId: "turn-1",
+        generation: 1,
+        transcriptAnchor: f.anchor,
+        receipt: { appendId: "not-complete" },
+      } as never),
+    ).toThrow(/receipt is invalid/);
     f.host.close();
   });
 
@@ -229,12 +283,21 @@ describe("actor-authoritative Agent transcript destination", () => {
     f.host.transcript(f.request);
     f.host.close();
     const central = new Database(f.central, { readonly: true });
-    expect(central.query(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='transcript_events'",
-    ).get()).toBeNull();
+    expect(
+      central
+        .query(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='transcript_events'",
+        )
+        .get(),
+    ).toBeNull();
     central.close();
-    const actor = new Database(sessionKernelSessionDbPath(f.sessionId, f.isolated), { readonly: true });
-    expect(actor.query("SELECT COUNT(*) AS count FROM transcript_events").get()).toEqual({ count: 1 });
+    const actor = new Database(
+      sessionKernelSessionDbPath(f.sessionId, f.isolated),
+      { readonly: true },
+    );
+    expect(
+      actor.query("SELECT COUNT(*) AS count FROM transcript_events").get(),
+    ).toEqual({ count: 1 });
     actor.close();
   });
 });

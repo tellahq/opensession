@@ -62,7 +62,10 @@ export function audit(event: Record<string, unknown>): void {
       service: "opensession",
       ...event,
     });
-    appendFileSync(`${AUDIT_DIR}/audit-${now.toISOString().slice(0, 10)}.jsonl`, line + "\n");
+    appendFileSync(
+      `${AUDIT_DIR}/audit-${now.toISOString().slice(0, 10)}.jsonl`,
+      line + "\n",
+    );
   } catch (e) {
     console.error("[audit] write failed:", e);
   }
@@ -115,7 +118,10 @@ export interface TextSummary {
  * length + full sha256, so the log stays small but the exact body can still
  * be reconciled against the on-disk Claude session jsonl when needed.
  */
-export function summarizeText(text: string | undefined, snippetBytes = 300): TextSummary {
+export function summarizeText(
+  text: string | undefined,
+  snippetBytes = 300,
+): TextSummary {
   const s = text ?? "";
   return {
     text_sha256: createHash("sha256").update(s).digest("hex"),
@@ -202,7 +208,11 @@ export function readAuditEvents(opts: {
     types.add(t);
     if (opts.type && t !== opts.type) continue;
     if (!opts.type && significantOnly && NOISY_KINDS.has(t)) continue;
-    if (opts.session && !String(e.session_id || e.bks_session_id || "").includes(opts.session)) continue;
+    if (
+      opts.session &&
+      !String(e.session_id || e.bks_session_id || "").includes(opts.session)
+    )
+      continue;
     if (q && !line.toLowerCase().includes(q)) continue;
     matches.push(e);
   }
@@ -286,7 +296,10 @@ export function buildAuditDigestFromLines(
 
   // Group key for recurring failures: ids and counts vary per occurrence.
   const normalize = (msg: string) =>
-    msg.replace(/[0-9a-f-]{12,}/gi, "*").replace(/\d+/g, "#").slice(0, 160);
+    msg
+      .replace(/[0-9a-f-]{12,}/gi, "*")
+      .replace(/\d+/g, "#")
+      .slice(0, 160);
 
   interface ErrGroup {
     count: number;
@@ -362,7 +375,8 @@ export function buildAuditDigestFromLines(
       const genericTerminals = pendingGeneric.get(id) || [];
       if (attempts.length) {
         piTurns.set(e, { attempts });
-        for (const terminal of genericTerminals) genericTerminalsToSkip.add(terminal);
+        for (const terminal of genericTerminals)
+          genericTerminalsToSkip.add(terminal);
       }
       pendingPi.delete(id);
       pendingGeneric.delete(id);
@@ -395,9 +409,14 @@ export function buildAuditDigestFromLines(
         s.durationMs += Number(e.duration_ms) || 0;
         s.costUsd += cost;
       }
-      const terminalModel = [...piTurn.attempts].reverse().find((attempt) => attempt.model)?.model;
+      const terminalModel = [...piTurn.attempts]
+        .reverse()
+        .find((attempt) => attempt.model)?.model;
       if (terminalModel) {
-        models.set(String(terminalModel), (models.get(String(terminalModel)) || 0) + 1);
+        models.set(
+          String(terminalModel),
+          (models.get(String(terminalModel)) || 0) + 1,
+        );
       }
       if (failed) {
         errors++;
@@ -422,8 +441,10 @@ export function buildAuditDigestFromLines(
 
     switch (String(e.kind || "")) {
       case "user_prompt":
-        if (e.model) models.set(String(e.model), (models.get(String(e.model)) || 0) + 1);
-        if (s && !s.firstPrompt) s.firstPrompt = String(e.text_snippet || "").slice(0, 200);
+        if (e.model)
+          models.set(String(e.model), (models.get(String(e.model)) || 0) + 1);
+        if (s && !s.firstPrompt)
+          s.firstPrompt = String(e.text_snippet || "").slice(0, 200);
         break;
       case "result": {
         turns++;
@@ -460,7 +481,10 @@ export function buildAuditDigestFromLines(
           toolNameById.set(String(e.tool_use_id), String(e.tool_name));
         }
         if (e.tool_name) {
-          toolCalls.set(String(e.tool_name), (toolCalls.get(String(e.tool_name)) || 0) + 1);
+          toolCalls.set(
+            String(e.tool_name),
+            (toolCalls.get(String(e.tool_name)) || 0) + 1,
+          );
         }
         break;
       case "tool_result": {
@@ -511,7 +535,10 @@ export function buildAuditDigestFromLines(
         else if (verdict === "silent-drop") {
           verdicts.silentDrop++;
           const kind = String(e.run_kind || "unknown");
-          silentDropsByRunKind.set(kind, (silentDropsByRunKind.get(kind) || 0) + 1);
+          silentDropsByRunKind.set(
+            kind,
+            (silentDropsByRunKind.get(kind) || 0) + 1,
+          );
         }
         break;
       }
@@ -520,10 +547,22 @@ export function buildAuditDigestFromLines(
 
   const byRunKind: Record<
     string,
-    { sessions: number; turns: number; errors: number; toolErrors: number; costUsd: number }
+    {
+      sessions: number;
+      turns: number;
+      errors: number;
+      toolErrors: number;
+      costUsd: number;
+    }
   > = {};
   for (const s of sessions.values()) {
-    const k = (byRunKind[s.runKind] ||= { sessions: 0, turns: 0, errors: 0, toolErrors: 0, costUsd: 0 });
+    const k = (byRunKind[s.runKind] ||= {
+      sessions: 0,
+      turns: 0,
+      errors: 0,
+      toolErrors: 0,
+      costUsd: 0,
+    });
     k.sessions++;
     k.turns += s.turns;
     k.errors += s.errors;
@@ -532,7 +571,11 @@ export function buildAuditDigestFromLines(
   }
   // Most troubled sessions first; quiet ones fall off the capped list.
   const topSessions = [...sessions.values()]
-    .sort((a, b) => b.errors + b.toolErrors - (a.errors + a.toolErrors) || b.turns - a.turns)
+    .sort(
+      (a, b) =>
+        b.errors + b.toolErrors - (a.errors + a.toolErrors) ||
+        b.turns - a.turns,
+    )
     .slice(0, 60)
     .map((s) => ({
       id: s.id,
@@ -610,7 +653,7 @@ export function buildAuditDigestFromLines(
  */
 export async function audited<T>(
   ctx: { context: string; action: string; args?: unknown },
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
 ): Promise<T> {
   const start = Date.now();
   const base = {

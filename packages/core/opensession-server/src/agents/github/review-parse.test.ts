@@ -59,13 +59,19 @@ describe("parseReviewOutput", () => {
     expect(out?.confidence).toBe(2);
     expect(out?.summary_markdown).toBe("Unsafe until the P1 is fixed.");
     expect(out?.findings).toHaveLength(1);
-    expect(out?.findings?.[0]).toMatchObject({ path: "src/a.ts", line: 12, body: "It breaks." });
+    expect(out?.findings?.[0]).toMatchObject({
+      path: "src/a.ts",
+      line: 12,
+      body: "It breaks.",
+    });
   });
 
   test("accepts summary/file/details aliases", () => {
     const out = parseReviewOutput(solShaped);
     expect(out?.verdict).toBe("request_changes");
-    expect(out?.summary_markdown).toBe("The primitive cannot render image-backed Lottie files correctly.");
+    expect(out?.summary_markdown).toBe(
+      "The primitive cannot render image-backed Lottie files correctly.",
+    );
     expect(out?.findings).toHaveLength(2);
     expect(out?.findings?.[0]).toMatchObject({
       path: "packages/core/render_engine/src/skia_primitives.rs",
@@ -76,11 +82,15 @@ describe("parseReviewOutput", () => {
   });
 
   test("accepts the native Codex code-review schema", () => {
-    const out = parseReviewOutput(codexReviewShaped, "/home/ubuntu/worktrees/pr-review");
+    const out = parseReviewOutput(
+      codexReviewShaped,
+      "/home/ubuntu/worktrees/pr-review",
+    );
     expect(isCompleteReviewOutput(out)).toBe(true);
     expect(out).toMatchObject({
       verdict: "request_changes",
-      summary_markdown: "The verification can extend a visual clip beyond video EOF.",
+      summary_markdown:
+        "The verification can extend a visual clip beyond video EOF.",
       findings: [
         {
           path: "packages/core/render_engine/src/engine.rs",
@@ -135,16 +145,23 @@ describe("parseReviewOutput", () => {
 \`\`\``;
     const out = parseReviewOutput(both);
     expect(out?.summary_markdown).toBe("Real summary.");
-    expect(out?.findings?.[0]).toMatchObject({ path: "src/a.ts", body: "Real body." });
+    expect(out?.findings?.[0]).toMatchObject({
+      path: "src/a.ts",
+      body: "Real body.",
+    });
   });
 
   test("requires a postable verdict and summary", () => {
     expect(isCompleteReviewOutput(parseReviewOutput(canonical))).toBe(true);
     expect(isCompleteReviewOutput(null)).toBe(false);
-    expect(isCompleteReviewOutput(parseReviewOutput('{"verdict":"approve"}'))).toBe(false);
+    expect(
+      isCompleteReviewOutput(parseReviewOutput('{"verdict":"approve"}')),
+    ).toBe(false);
     expect(
       isCompleteReviewOutput(
-        parseReviewOutput('{"verdict":"thinking","summary_markdown":"Still reviewing."}'),
+        parseReviewOutput(
+          '{"verdict":"thinking","summary_markdown":"Still reviewing."}',
+        ),
       ),
     ).toBe(false);
   });

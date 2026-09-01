@@ -55,7 +55,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const PUBLIC_BASE =
   process.env.OPENSESSION_PR_IMAGES_BASE ||
   (typeof configuredIntegration("media").publicBaseUrl === "string"
-    ? configuredIntegration("media").publicBaseUrl as string
+    ? (configuredIntegration("media").publicBaseUrl as string)
     : configuredServer().publicBaseUrl);
 
 const PR_IMAGES_DIR = `${UPLOADS_DIR}/pr-images`;
@@ -93,11 +93,12 @@ function readablePath(p: string): boolean {
 function safeName(localPath: string): string {
   const name = basename(localPath);
   const dot = name.lastIndexOf(".");
-  const stem = (dot > 0 ? name.slice(0, dot) : name)
-    .toLowerCase()
-    .replace(/[^a-z0-9-_]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || "image";
+  const stem =
+    (dot > 0 ? name.slice(0, dot) : name)
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "image";
   return `${stem}${ext(name)}`;
 }
 
@@ -111,9 +112,13 @@ export function uploadPrImages(images: PrImageInput[]): UploadedPrImage[] {
   for (const img of images) {
     const p = (img.path || "").trim();
     if (!readablePath(p))
-      throw new Error(`image path must be absolute under /tmp or ${HOME || "the service home"}: ${p}`);
+      throw new Error(
+        `image path must be absolute under /tmp or ${HOME || "the service home"}: ${p}`,
+      );
     if (!IMAGE_EXTS.has(ext(p)))
-      throw new Error(`image must be one of ${[...IMAGE_EXTS].join(" ")}: ${p}`);
+      throw new Error(
+        `image must be one of ${[...IMAGE_EXTS].join(" ")}: ${p}`,
+      );
     if (!existsSync(p)) throw new Error(`image file not found: ${p}`);
     if (statSync(p).size > MAX_IMAGE_BYTES)
       throw new Error(
@@ -197,7 +202,8 @@ export function spliceImagesIntoMarkdown(
   return body;
 }
 
-const PUBLIC_PATH_RE = /^\/pr-images\/([a-f0-9]{32})\/([a-z0-9-_]+\.(?:png|jpe?g|gif|webp))$/;
+const PUBLIC_PATH_RE =
+  /^\/pr-images\/([a-f0-9]{32})\/([a-z0-9-_]+\.(?:png|jpe?g|gif|webp))$/;
 
 /**
  * Public routes for the webhook server: serve a staged image by its
@@ -209,12 +215,16 @@ export function prImagePublicRoutes(): Map<
   string,
   (req: Request, url: URL) => Promise<Response>
 > {
-  const routes = new Map<string, (req: Request, url: URL) => Promise<Response>>();
+  const routes = new Map<
+    string,
+    (req: Request, url: URL) => Promise<Response>
+  >();
   routes.set("GET /pr-images/*", async (_req, url) => {
     const m = url.pathname.match(PUBLIC_PATH_RE);
     if (!m) return Response.json({ error: "Not found" }, { status: 404 });
     const path = `${PR_IMAGES_DIR}/${m[1]}/${m[2]}`;
-    if (!existsSync(path)) return Response.json({ error: "Not found" }, { status: 404 });
+    if (!existsSync(path))
+      return Response.json({ error: "Not found" }, { status: 404 });
     return new Response(Bun.file(path), {
       headers: {
         "Content-Type": CONTENT_TYPES[ext(m[2])] || "application/octet-stream",

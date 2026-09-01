@@ -59,34 +59,49 @@ export async function runTestOnBaseCheck(opts: {
     });
     return result;
   };
-  const skip = (reason: string) => done({ checked: [], vacuous: [], skipped: reason });
+  const skip = (reason: string) =>
+    done({ checked: [], vacuous: [], skipped: reason });
 
   if (opts.sharedCheckout) return skip("shared-checkout repo");
 
-  const mb = await runCommand(["git", "merge-base", "HEAD", `origin/${opts.baseRefName}`], {
-    cwd: opts.cwd,
-    timeoutMs: GIT_TIMEOUT_MS,
-  });
+  const mb = await runCommand(
+    ["git", "merge-base", "HEAD", `origin/${opts.baseRefName}`],
+    {
+      cwd: opts.cwd,
+      timeoutMs: GIT_TIMEOUT_MS,
+    },
+  );
   const mergeBase = mb.stdout.trim();
-  if (mb.status !== 0 || !mergeBase) return skip(`merge-base failed: ${mb.stderr.trim().slice(0, 200)}`);
+  if (mb.status !== 0 || !mergeBase)
+    return skip(`merge-base failed: ${mb.stderr.trim().slice(0, 200)}`);
 
   const diff = await runCommand(
     ["git", "diff", "--name-only", "--diff-filter=AM", mergeBase, "HEAD"],
     { cwd: opts.cwd, timeoutMs: GIT_TIMEOUT_MS },
   );
-  if (diff.status !== 0) return skip(`diff failed: ${diff.stderr.trim().slice(0, 200)}`);
-  const testFiles = diff.stdout.split("\n").filter((f) => f && isRunnableTest(f));
+  if (diff.status !== 0)
+    return skip(`diff failed: ${diff.stderr.trim().slice(0, 200)}`);
+  const testFiles = diff.stdout
+    .split("\n")
+    .filter((f) => f && isRunnableTest(f));
   if (!testFiles.length) return skip("no new/changed bun-runnable test files");
   const checked = testFiles.slice(0, MAX_TEST_FILES);
 
   const baseDir = `${opts.cwd}-tob`;
-  await runCommand(["git", "worktree", "remove", "--force", baseDir], { cwd: opts.cwd, timeoutMs: GIT_TIMEOUT_MS });
-  rmSync(baseDir, { recursive: true, force: true });
-  const add = await runCommand(["git", "worktree", "add", "--detach", "--force", baseDir, mergeBase], {
+  await runCommand(["git", "worktree", "remove", "--force", baseDir], {
     cwd: opts.cwd,
     timeoutMs: GIT_TIMEOUT_MS,
   });
-  if (add.status !== 0) return skip(`base worktree failed: ${add.stderr.trim().slice(0, 200)}`);
+  rmSync(baseDir, { recursive: true, force: true });
+  const add = await runCommand(
+    ["git", "worktree", "add", "--detach", "--force", baseDir, mergeBase],
+    {
+      cwd: opts.cwd,
+      timeoutMs: GIT_TIMEOUT_MS,
+    },
+  );
+  if (add.status !== 0)
+    return skip(`base worktree failed: ${add.stderr.trim().slice(0, 200)}`);
 
   try {
     const vacuous: string[] = [];
@@ -96,7 +111,10 @@ export async function runTestOnBaseCheck(opts: {
       // one (monorepo packages resolve their own).
       for (let dir = dirname(file); ; dir = dirname(dir)) {
         const rel = dir === "." ? "node_modules" : join(dir, "node_modules");
-        if (existsSync(join(opts.mainCheckout, rel)) && !existsSync(join(baseDir, rel))) {
+        if (
+          existsSync(join(opts.mainCheckout, rel)) &&
+          !existsSync(join(baseDir, rel))
+        ) {
           try {
             symlinkSync(join(opts.mainCheckout, rel), join(baseDir, rel));
           } catch {}
@@ -108,10 +126,17 @@ export async function runTestOnBaseCheck(opts: {
 
       // Run from the nearest package dir so workspace-relative config applies.
       let pkgDir = dirname(file);
-      while (pkgDir !== "." && !existsSync(join(baseDir, pkgDir, "package.json"))) pkgDir = dirname(pkgDir);
+      while (
+        pkgDir !== "." &&
+        !existsSync(join(baseDir, pkgDir, "package.json"))
+      )
+        pkgDir = dirname(pkgDir);
       const cwd = pkgDir === "." ? baseDir : join(baseDir, pkgDir);
       const relFile = pkgDir === "." ? file : file.slice(pkgDir.length + 1);
-      const run = await runCommand(["bun", "test", relFile], { cwd, timeoutMs: PER_FILE_TIMEOUT_MS });
+      const run = await runCommand(["bun", "test", relFile], {
+        cwd,
+        timeoutMs: PER_FILE_TIMEOUT_MS,
+      });
       // Exit 0 on the base = the test proves nothing about this change.
       // Failures and errors (broken imports on base) both count as exercising
       // the change — only a clean pass is flagged.
@@ -119,7 +144,10 @@ export async function runTestOnBaseCheck(opts: {
     }
     return done({ checked, vacuous, skipped: "" });
   } finally {
-    await runCommand(["git", "worktree", "remove", "--force", baseDir], { cwd: opts.cwd, timeoutMs: GIT_TIMEOUT_MS });
+    await runCommand(["git", "worktree", "remove", "--force", baseDir], {
+      cwd: opts.cwd,
+      timeoutMs: GIT_TIMEOUT_MS,
+    });
     rmSync(baseDir, { recursive: true, force: true });
   }
 }

@@ -26,12 +26,11 @@ function existsIn(paths: string[]) {
   return (p: string) => paths.includes(p);
 }
 
-
 describe("sandbox preview identity", () => {
   test("carries the sandbox trust profile into the preview grant", () => {
     expect(
       sandboxPreviewIdentityContext(
-        {id: "sandbox-1", provider: "daytona"},
+        { id: "sandbox-1", provider: "daytona" },
         "tella-fusion",
         "interactive",
       ),
@@ -47,12 +46,21 @@ describe("sandbox preview identity", () => {
   test("adds WEBAPP_PORT when Portal records created the registry first", async () => {
     const scratch = mkdtempSync(join(tmpdir(), "sandbox-preview-ports-"));
     const conf = join(scratch, ".ports.conf");
-    writeFileSync(conf, "# opensession-portal {}\nPORTAL_RELAY_SMOKE_PORT=4000\n");
+    writeFileSync(
+      conf,
+      "# opensession-portal {}\nPORTAL_RELAY_SMOKE_PORT=4000\n",
+    );
     const sandbox = {
       async exec(command: string[]) {
-        const proc = Bun.spawn(command, { cwd: scratch, stdout: "pipe", stderr: "pipe" });
+        const proc = Bun.spawn(command, {
+          cwd: scratch,
+          stdout: "pipe",
+          stderr: "pipe",
+        });
         const [stdout, stderr, exitCode] = await Promise.all([
-          new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited,
+          new Response(proc.stdout).text(),
+          new Response(proc.stderr).text(),
+          proc.exited,
         ]);
         return { stdout, stderr, exitCode };
       },
@@ -60,7 +68,9 @@ describe("sandbox preview identity", () => {
     try {
       await seedSandboxPortsConf(sandbox, scratch, 3300);
       expect(await Bun.file(conf).text()).toContain("WEBAPP_PORT=3300");
-      expect(await Bun.file(conf).text()).toContain("PORTAL_RELAY_SMOKE_PORT=4000");
+      expect(await Bun.file(conf).text()).toContain(
+        "PORTAL_RELAY_SMOKE_PORT=4000",
+      );
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
@@ -97,7 +107,10 @@ describe("resolvePreviewBoot", () => {
       { id: "widget", previewCommand: PREVIEW_COMMAND },
       existsIn([PREVIEW_COMMAND]),
     );
-    expect(boot).toEqual({ kind: "preview-command", cmd: `${PREVIEW_COMMAND} ${WT}` });
+    expect(boot).toEqual({
+      kind: "preview-command",
+      cmd: `${PREVIEW_COMMAND} ${WT}`,
+    });
   });
 
   test("non-absolute previewCommand is trusted without an existence check", async () => {
@@ -140,12 +153,14 @@ describe("listenerLinesForPort", () => {
   test("matches only the local listening port across IPv4 and IPv6", () => {
     const raw = [
       'LISTEN 0 512 127.0.0.1:3850 0.0.0.0:* users:(("bun",pid=42,fd=20))',
-      'LISTEN 0 512 [::]:3850 [::]:*',
+      "LISTEN 0 512 [::]:3850 [::]:*",
       'LISTEN 0 512 127.0.0.1:13850 0.0.0.0:* users:(("bun",pid=43,fd=20))',
-      'LISTEN 0 512 127.0.0.1:4000 127.0.0.1:3850',
+      "LISTEN 0 512 127.0.0.1:4000 127.0.0.1:3850",
     ].join("\n");
 
-    expect(listenerLinesForPort(raw, 3850)).toEqual(raw.split("\n").slice(0, 2));
+    expect(listenerLinesForPort(raw, 3850)).toEqual(
+      raw.split("\n").slice(0, 2),
+    );
   });
 });
 
@@ -187,11 +202,7 @@ describe("repoLifecycle", () => {
   test("reports each committed lifecycle file", () => {
     expect(
       repoLifecycle(
-        repoWith([
-          ".agents/setup",
-          ".agents/start.sh",
-          ".agents/preview.json",
-        ]),
+        repoWith([".agents/setup", ".agents/start.sh", ".agents/preview.json"]),
       ),
     ).toEqual({
       dir: ".agents",
@@ -212,7 +223,9 @@ describe("repoLifecycle", () => {
 
   test("the retired .opensession/ dir contributes nothing", () => {
     expect(
-      repoLifecycle(repoWith([".opensession/start.sh", ".opensession/setup.sh"])),
+      repoLifecycle(
+        repoWith([".opensession/start.sh", ".opensession/setup.sh"]),
+      ),
     ).toEqual({
       dir: null,
       setup: false,

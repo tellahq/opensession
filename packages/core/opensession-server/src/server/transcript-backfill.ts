@@ -46,11 +46,11 @@ const BIG_IMPORT_EXTRA_MS = 150;
  *  Only plain- now: linear runs thread transcriptSessionId to the runner, so
  *  linear- sessions import like everything else. */
 function v2EligibleId(sessionId: string): boolean {
-	return !sessionId.startsWith("plain-");
+  return !sessionId.startsWith("plain-");
 }
 
 function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -70,16 +70,16 @@ function mirrorFileSize(
 }
 
 export interface TranscriptBackfillSummary {
-	/** Sessions whose transcript was imported (counted, not written, on dryRun). */
-	imported: number;
-	/** Already-imported, v2-ineligible, or no resolvable transcript. */
-	skipped: number;
-	/** Sessions whose import threw (logged, backfill continues). */
-	failed: number;
-	/** Total transcript entries across imported sessions. */
-	entries: number;
-	/** Wall-clock duration. */
-	ms: number;
+  /** Sessions whose transcript was imported (counted, not written, on dryRun). */
+  imported: number;
+  /** Already-imported, v2-ineligible, or no resolvable transcript. */
+  skipped: number;
+  /** Sessions whose import threw (logged, backfill continues). */
+  failed: number;
+  /** Total transcript entries across imported sessions. */
+  entries: number;
+  /** Wall-clock duration. */
+  ms: number;
 }
 
 /**
@@ -90,83 +90,86 @@ export interface TranscriptBackfillSummary {
  * imported without writing.
  */
 export async function runTranscriptBackfill(
-	opts: { limit?: number; dryRun?: boolean } = {}
+  opts: { limit?: number; dryRun?: boolean } = {},
 ): Promise<TranscriptBackfillSummary> {
-	const started = Date.now();
-	// Dynamic imports: keep run-rpc.ts out of this module's static graph (see
-	// module doc). In the live process these resolve to the already-loaded
-	// modules instantly.
-	const { getAllSessions, mergedSessionTranscriptAsync } = await import(
-		"./sessions"
-	);
+  const started = Date.now();
+  // Dynamic imports: keep run-rpc.ts out of this module's static graph (see
+  // module doc). In the live process these resolve to the already-loaded
+  // modules instantly.
+  const { getAllSessions, mergedSessionTranscriptAsync } =
+    await import("./sessions");
 
-	let sessions = getAllSessions()
-		.slice()
-		.sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
-	if (opts.limit && opts.limit > 0) sessions = sessions.slice(0, opts.limit);
+  let sessions = getAllSessions()
+    .slice()
+    .sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
+  if (opts.limit && opts.limit > 0) sessions = sessions.slice(0, opts.limit);
 
-	const summary: TranscriptBackfillSummary = {
-		imported: 0,
-		skipped: 0,
-		failed: 0,
-		entries: 0,
-		ms: 0,
-	};
+  const summary: TranscriptBackfillSummary = {
+    imported: 0,
+    skipped: 0,
+    failed: 0,
+    entries: 0,
+    ms: 0,
+  };
 
-	let examined = 0;
-	for (const session of sessions) {
-		examined++;
-		if (examined % 50 === 0) {
-			console.log(
-				`[transcript-backfill] ${examined}/${sessions.length} sessions — ` +
-					`imported=${summary.imported} skipped=${summary.skipped} ` +
-					`failed=${summary.failed} entries=${summary.entries}`
-			);
-		}
-		try {
-			if (!v2EligibleId(session.id) || !(await transcript.needsImport(session.id))) {
-				summary.skipped++;
-				continue;
-			}
-			const entries = await mergedSessionTranscriptAsync(session);
-			if (!entries.length) {
-				summary.skipped++;
-				continue;
-			}
-			if (!opts.dryRun) {
-				const watermark = mirrorFileSize(session);
-				// WP-A touchpoint: chunked import (≤500 rows/tx, design §1);
-				// importLegacyTranscript marks the session imported with the
-				// src + mirror watermark internally.
-				await importLegacyTranscript(session.id, entries, "merged", watermark);
-			}
-			summary.imported++;
-			summary.entries += entries.length;
-			if (entries.length >= BIG_IMPORT_ENTRIES) await sleep(BIG_IMPORT_EXTRA_MS);
-		} catch (err) {
-			summary.failed++;
-			console.warn(
-				`[transcript-backfill] import failed for ${session.id}:`,
-				err instanceof Error ? err.message : err
-			);
-		}
-		// Pace between sessions so the event loop keeps serving.
-		await sleep(PACE_MS);
-	}
+  let examined = 0;
+  for (const session of sessions) {
+    examined++;
+    if (examined % 50 === 0) {
+      console.log(
+        `[transcript-backfill] ${examined}/${sessions.length} sessions — ` +
+          `imported=${summary.imported} skipped=${summary.skipped} ` +
+          `failed=${summary.failed} entries=${summary.entries}`,
+      );
+    }
+    try {
+      if (
+        !v2EligibleId(session.id) ||
+        !(await transcript.needsImport(session.id))
+      ) {
+        summary.skipped++;
+        continue;
+      }
+      const entries = await mergedSessionTranscriptAsync(session);
+      if (!entries.length) {
+        summary.skipped++;
+        continue;
+      }
+      if (!opts.dryRun) {
+        const watermark = mirrorFileSize(session);
+        // WP-A touchpoint: chunked import (≤500 rows/tx, design §1);
+        // importLegacyTranscript marks the session imported with the
+        // src + mirror watermark internally.
+        await importLegacyTranscript(session.id, entries, "merged", watermark);
+      }
+      summary.imported++;
+      summary.entries += entries.length;
+      if (entries.length >= BIG_IMPORT_ENTRIES)
+        await sleep(BIG_IMPORT_EXTRA_MS);
+    } catch (err) {
+      summary.failed++;
+      console.warn(
+        `[transcript-backfill] import failed for ${session.id}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+    // Pace between sessions so the event loop keeps serving.
+    await sleep(PACE_MS);
+  }
 
-	summary.ms = Date.now() - started;
-	console.log(
-		`[transcript-backfill] done${opts.dryRun ? " (dry run)" : ""}: ` +
-			`imported=${summary.imported} skipped=${summary.skipped} ` +
-			`failed=${summary.failed} entries=${summary.entries} in ${summary.ms}ms`
-	);
-	audit({
-		kind: "transcript_backfill",
-		dryRun: !!opts.dryRun,
-		limit: opts.limit ?? null,
-		...summary,
-	});
-	return summary;
+  summary.ms = Date.now() - started;
+  console.log(
+    `[transcript-backfill] done${opts.dryRun ? " (dry run)" : ""}: ` +
+      `imported=${summary.imported} skipped=${summary.skipped} ` +
+      `failed=${summary.failed} entries=${summary.entries} in ${summary.ms}ms`,
+  );
+  audit({
+    kind: "transcript_backfill",
+    dryRun: !!opts.dryRun,
+    limit: opts.limit ?? null,
+    ...summary,
+  });
+  return summary;
 }
 
 /**
@@ -177,30 +180,30 @@ export async function runTranscriptBackfill(
  * yet.
  */
 export function kickTranscriptBackfillOnce(): void {
-	if (existsSync(MARKER_PATH)) return;
-	const g = globalThis as typeof globalThis & {
-		__osTranscriptBackfillKick?: boolean;
-	};
-	if (g.__osTranscriptBackfillKick) return;
-	g.__osTranscriptBackfillKick = true;
-	void runTranscriptBackfill()
-		.then((summary) => {
-			try {
-				writeFileSync(
-					MARKER_PATH,
-					JSON.stringify(
-						{ finishedAt: new Date().toISOString(), ...summary },
-						null,
-						2
-					)
-				);
-			} catch (err) {
-				console.warn("[transcript-backfill] marker write failed:", err);
-			}
-		})
-		.catch((err) => {
-			// Leave the latch unset so a later boot/hot-reload can retry.
-			g.__osTranscriptBackfillKick = false;
-			console.error("[transcript-backfill] boot backfill failed:", err);
-		});
+  if (existsSync(MARKER_PATH)) return;
+  const g = globalThis as typeof globalThis & {
+    __osTranscriptBackfillKick?: boolean;
+  };
+  if (g.__osTranscriptBackfillKick) return;
+  g.__osTranscriptBackfillKick = true;
+  void runTranscriptBackfill()
+    .then((summary) => {
+      try {
+        writeFileSync(
+          MARKER_PATH,
+          JSON.stringify(
+            { finishedAt: new Date().toISOString(), ...summary },
+            null,
+            2,
+          ),
+        );
+      } catch (err) {
+        console.warn("[transcript-backfill] marker write failed:", err);
+      }
+    })
+    .catch((err) => {
+      // Leave the latch unset so a later boot/hot-reload can retry.
+      g.__osTranscriptBackfillKick = false;
+      console.error("[transcript-backfill] boot backfill failed:", err);
+    });
 }

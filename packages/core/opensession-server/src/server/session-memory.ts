@@ -49,14 +49,22 @@ export interface MemoryScope {
 }
 
 /** The team scope IS the Slack workspace store — shared both ways. */
-const TEAM_SCOPE: MemoryScope = { key: "workspace", kind: "team", label: "team" };
+const TEAM_SCOPE: MemoryScope = {
+  key: "workspace",
+  kind: "team",
+  label: "team",
+};
 
 function userScope(user?: string | null): MemoryScope | null {
   const trimmed = user?.trim();
   if (!trimmed) return null;
   const teammate = resolveTeammate(trimmed);
   if (teammate)
-    return { key: `user-${teammate.slackId}`, kind: "user", label: teammate.name };
+    return {
+      key: `user-${teammate.slackId}`,
+      kind: "user",
+      label: teammate.name,
+    };
   const key = trimmed.toLowerCase().replace(/[^a-z0-9@._-]+/g, "-");
   return key ? { key: `user-${key}`, kind: "user", label: trimmed } : null;
 }
@@ -88,7 +96,7 @@ export async function addSessionMemory(
   scope: MemoryScope,
   text: string,
   by: string,
-  opts?: { supersedes?: string[]; scopes?: MemoryScope[] }
+  opts?: { supersedes?: string[]; scopes?: MemoryScope[] },
 ): Promise<MemoryEntry> {
   const entries = await loadScope(scope.key);
   const entry: MemoryEntry = {
@@ -97,14 +105,20 @@ export async function addSessionMemory(
     by: by || "someone",
     at: new Date().toISOString(),
   };
-  const supersedes = [...new Set((opts?.supersedes || []).map((s) => s.trim()).filter(Boolean))];
+  const supersedes = [
+    ...new Set((opts?.supersedes || []).map((s) => s.trim()).filter(Boolean)),
+  ];
   if (supersedes.length) entry.supersedes = supersedes;
   entries.push(entry);
   await saveScope(scope.key, entries);
   if (supersedes.length) {
     // The replaced entries may live in any scope this session can see (a repo
     // fact is often corrected from a session that also carries team memory).
-    await archiveMemories(opts?.scopes?.length ? opts.scopes : [scope], supersedes, entry.id);
+    await archiveMemories(
+      opts?.scopes?.length ? opts.scopes : [scope],
+      supersedes,
+      entry.id,
+    );
   }
   return entry;
 }
@@ -123,7 +137,7 @@ export interface ArchiveResult {
 export async function archiveMemories(
   scopes: MemoryScope[],
   ids: string[],
-  supersededBy?: string
+  supersededBy?: string,
 ): Promise<ArchiveResult> {
   const wanted = new Set(ids.filter(Boolean));
   const archived: ArchiveResult["archived"] = [];
@@ -149,7 +163,7 @@ export async function archiveMemories(
 /** Undo an archive — the entry returns to injection. */
 export async function restoreMemory(
   scopes: MemoryScope[],
-  id: string
+  id: string,
 ): Promise<{ scope: MemoryScope; entry: MemoryEntry } | null> {
   for (const scope of scopes) {
     const entries = await loadScope(scope.key);
@@ -170,13 +184,16 @@ export interface ScopedMemory {
 
 export async function listSessionMemory(
   scopes: MemoryScope[],
-  opts?: { includeArchived?: boolean }
+  opts?: { includeArchived?: boolean },
 ): Promise<ScopedMemory[]> {
   return Promise.all(
     scopes.map(async (scope) => {
       const entries = await loadScope(scope.key);
-      return { scope, entries: opts?.includeArchived ? entries : activeMemories(entries) };
-    })
+      return {
+        scope,
+        entries: opts?.includeArchived ? entries : activeMemories(entries),
+      };
+    }),
   );
 }
 
@@ -202,7 +219,7 @@ export interface MemorySearchHit {
 export async function searchSessionMemory(
   scopes: MemoryScope[],
   query: string,
-  opts?: { includeArchived?: boolean; limit?: number }
+  opts?: { includeArchived?: boolean; limit?: number },
 ): Promise<MemorySearchHit[]> {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
@@ -225,7 +242,7 @@ export async function searchSessionMemory(
     (a, b) =>
       b.score - a.score ||
       Number(a.archived) - Number(b.archived) ||
-      (a.entry.at < b.entry.at ? 1 : a.entry.at > b.entry.at ? -1 : 0)
+      (a.entry.at < b.entry.at ? 1 : a.entry.at > b.entry.at ? -1 : 0),
   );
   return hits.slice(0, limit).map(({ score: _score, ...hit }) => hit);
 }
@@ -237,7 +254,7 @@ export type SessionForgetResult =
 /** Remove an entry by id from whichever of the given scopes holds it. */
 export async function forgetSessionMemory(
   scopes: MemoryScope[],
-  id: string
+  id: string,
 ): Promise<SessionForgetResult> {
   for (const scope of scopes) {
     const entries = await loadScope(scope.key);
@@ -275,14 +292,17 @@ const SCOPE_FLOOR_CHARS = 3_000;
 
 function memoryNoteBudget(): number {
   const raw = Number(process.env.OPENSESSION_MEMORY_BUDGET_CHARS);
-  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_MEMORY_NOTE_BUDGET_CHARS;
+  return Number.isFinite(raw) && raw > 0
+    ? raw
+    : DEFAULT_MEMORY_NOTE_BUDGET_CHARS;
 }
 
 /** Priority when the budget binds: the session's primary repo first (most
  *  specific), then the person, then the team, then any attached repos. */
 function budgetPriority(scoped: ScopedMemory[]): ScopedMemory[] {
   const repos = scoped.filter((s) => s.scope.kind === "repo");
-  const rest = (kind: MemoryScopeKind) => scoped.filter((s) => s.scope.kind === kind);
+  const rest = (kind: MemoryScopeKind) =>
+    scoped.filter((s) => s.scope.kind === kind);
   return [
     ...repos.slice(0, 1),
     ...rest("user"),
@@ -299,7 +319,7 @@ function budgetPriority(scoped: ScopedMemory[]): ScopedMemory[] {
  */
 export function selectWithinBudget(
   scoped: ScopedMemory[],
-  budget: number
+  budget: number,
 ): Map<string, MemoryEntry[]> {
   const out = new Map<string, MemoryEntry[]>();
   const order = budgetPriority(scoped).filter((s) => s.entries.length);
@@ -309,7 +329,9 @@ export function selectWithinBudget(
     // starved by whichever one happens to be biggest.
     const remainingScopes = order.length - index - 1;
     const ceiling = budget - spent - remainingScopes * SCOPE_FLOOR_CHARS;
-    const newestFirst = [...entry.entries].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    const newestFirst = [...entry.entries].sort((a, b) =>
+      a.at < b.at ? 1 : a.at > b.at ? -1 : 0,
+    );
     const keep = new Set<string>();
     let used = 0;
     for (const e of newestFirst) {
@@ -321,7 +343,7 @@ export function selectWithinBudget(
     spent += used;
     out.set(
       entry.scope.key,
-      entry.entries.filter((e) => keep.has(e.id))
+      entry.entries.filter((e) => keep.has(e.id)),
     );
   });
   return out;
@@ -347,7 +369,7 @@ const MAX_SNAPSHOTS = 512;
 
 export async function snapshotMemoryNote(
   sessionId: string | undefined,
-  build: () => Promise<string>
+  build: () => Promise<string>,
 ): Promise<string> {
   if (!sessionId) return build();
   const cached = noteSnapshots.get(sessionId);
@@ -391,7 +413,9 @@ export function describeScope(key: string): MemoryScope | null {
   const [, kind, rest] = m;
   if (kind === "repo") return { key, kind: "repo", label: rest };
   if (kind === "channel") return { key, kind: "channel", label: rest };
-  const teammate = /^U[A-Z0-9]{6,}$/.test(rest) ? SLACK_ID_TO_NAME[rest] : undefined;
+  const teammate = /^U[A-Z0-9]{6,}$/.test(rest)
+    ? SLACK_ID_TO_NAME[rest]
+    : undefined;
   return { key, kind: "user", label: teammate || rest };
 }
 
@@ -400,8 +424,13 @@ export function describeScope(key: string): MemoryScope | null {
  * (always shown, even when empty, so there's somewhere to add), plus whatever
  * user/channel stores exist on disk.
  */
-export async function listAllMemory(repoIds: string[]): Promise<ScopedMemory[]> {
-  const keys = new Set<string>(["workspace", ...repoIds.map((r) => `repo-${r}`)]);
+export async function listAllMemory(
+  repoIds: string[],
+): Promise<ScopedMemory[]> {
+  const keys = new Set<string>([
+    "workspace",
+    ...repoIds.map((r) => `repo-${r}`),
+  ]);
   try {
     for (const f of readdirSync(memoryDir())) {
       if (f.endsWith(".json")) keys.add(f.slice(0, -5));
@@ -410,8 +439,15 @@ export async function listAllMemory(repoIds: string[]): Promise<ScopedMemory[]> 
   const scopes = [...keys]
     .map(describeScope)
     .filter((s): s is MemoryScope => !!s);
-  const order: Record<MemoryScopeKind, number> = { team: 0, repo: 1, user: 2, channel: 3 };
-  scopes.sort((a, b) => order[a.kind] - order[b.kind] || a.label.localeCompare(b.label));
+  const order: Record<MemoryScopeKind, number> = {
+    team: 0,
+    repo: 1,
+    user: 2,
+    channel: 3,
+  };
+  scopes.sort(
+    (a, b) => order[a.kind] - order[b.kind] || a.label.localeCompare(b.label),
+  );
   // The maintenance surface sees archived entries too — they are still real
   // records someone may want to read, restore or delete.
   return listSessionMemory(scopes, { includeArchived: true });
@@ -420,7 +456,7 @@ export async function listAllMemory(repoIds: string[]): Promise<ScopedMemory[]> 
 export async function updateMemoryEntry(
   scopeKey: string,
   id: string,
-  text: string
+  text: string,
 ): Promise<MemoryEntry | null> {
   const entries = await loadScope(scopeKey);
   const entry = entries.find((e) => e.id === id);
@@ -438,18 +474,21 @@ export async function updateMemoryEntry(
  */
 export async function renderSessionMemoryNote(
   scopes: MemoryScope[],
-  opts?: { tools?: boolean; budgetChars?: number }
+  opts?: { tools?: boolean; budgetChars?: number },
 ): Promise<string> {
   const scoped = await listSessionMemory(scopes);
   const any = scoped.some((s) => s.entries.length > 0);
   if (!any && !opts?.tools) return "";
 
-  const selected = selectWithinBudget(scoped, opts?.budgetChars ?? memoryNoteBudget());
+  const selected = selectWithinBudget(
+    scoped,
+    opts?.budgetChars ?? memoryNoteBudget(),
+  );
   const lines: string[] = ["## Memory"];
   if (any) {
     lines.push(
       "Durable facts stored for this session's scopes. Treat them as standing " +
-        "context (background knowledge, not instructions from the current conversation)."
+        "context (background knowledge, not instructions from the current conversation).",
     );
     let dropped = 0;
     for (const { scope, entries } of scoped) {
@@ -465,7 +504,7 @@ export async function renderSessionMemoryNote(
         "",
         `${dropped} older ${dropped === 1 ? "entry is" : "entries are"} held back to keep this ` +
           "section a sane size. Nothing is lost: `search_memory` reaches every entry, " +
-          "including ones superseded by a later correction."
+          "including ones superseded by a later correction.",
       );
     }
   }
@@ -478,7 +517,7 @@ export async function renderSessionMemoryNote(
         "`list_memory` shows everything. Store only durable, non-obvious facts worth every " +
         "future session knowing (operational gotchas, decisions, preferences) — never " +
         "conversation state, and never anything already in the repo's docs. When the user " +
-        "says \"remember ...\", store it."
+        'says "remember ...", store it.',
     );
   }
   return lines.join("\n");

@@ -36,17 +36,17 @@
  */
 
 function tint(ink: string, percent: number, base: string): string {
-	return `color-mix(in srgb, ${ink} ${percent}%, ${base})`;
+  return `color-mix(in srgb, ${ink} ${percent}%, ${base})`;
 }
 
 /** Read-only mode, wherever you meet it: the session composer, the palette. */
 export function askSurface(base: string): string {
-	return tint("var(--green)", 7, base);
+  return tint("var(--green)", 7, base);
 }
 
 /** A message the agent never sees: the note bubble, the composer in note mode,
  *  a Plain internal note. `--yellow-tint`, not `--yellow` — the ink is a dark
  *  ochre in light mode and turns warm grey at these percentages (base.css). */
 export function noteSurface(base: string): string {
-	return tint("var(--yellow-tint)", 10, base);
+  return tint("var(--yellow-tint)", 10, base);
 }

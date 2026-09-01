@@ -134,6 +134,74 @@ final class SessionsListLensTests: XCTestCase {
         XCTAssertFalse(AutoCreatedOrigin.wasAutoCreated(row))
     }
 
+    // MARK: - Team activity
+
+    func testTeamActivityUsesDirectoryOwnersAndRecentWindow() throws {
+        let now = try XCTUnwrap(Session.parseISO("2026-08-24T12:00:00Z"))
+        let rows = try sessions(
+            """
+            [{"id":"recent","startedBy":"Michiel Westerbeek","ran":true,"lastActivity":"2026-08-24T11:45:00Z"},
+             {"id":"old","startedBy":"Michiel","ran":true,"lastActivity":"2026-08-24T11:44:59Z"},
+             {"id":"running","startedBy":"Jeroen","isRunning":true,"lastActivity":"2020-01-01T00:00:00Z"},
+             {"id":"draft","startedBy":"Jeroen","ran":false,"lastActivity":"2026-08-24T11:59:00Z"},
+             {"id":"worker","startedBy":"worker os-123","isRunning":true},
+             {"id":"mine","startedBy":"kentdebruin","isRunning":true}]
+            """
+        )
+        let members = [
+            TeamActivity.Member(name: "Kent", aliases: ["Kent", "Kent de Bruin", "kentdebruin"]),
+            TeamActivity.Member(name: "Michiel", aliases: ["Michiel", "Michiel Westerbeek"]),
+            TeamActivity.Member(name: "Jeroen")
+        ]
+
+        let groups = TeamActivity.groups(
+            sessions: rows, members: members, currentUser: "Kent", now: now
+        )
+
+        XCTAssertEqual(groups.map(\.label), ["Michiel", "Jeroen"])
+        XCTAssertEqual(groups[0].activeSessions.map(\.id), ["recent"])
+        XCTAssertEqual(groups[0].allSessions.map(\.id), ["recent", "old"])
+        XCTAssertEqual(groups[1].activeSessions.map(\.id), ["running"])
+    }
+
+    func testTeamActivityFilesAutomationsUnderOwnerOrAgent() throws {
+        let rows = try sessions(
+            """
+            [{"id":"owned","automation":"Daily report","isRunning":true},
+             {"id":"agent","automation":"PR review","isRunning":true},
+             {"id":"mine","automation":"My job","isRunning":true}]
+            """
+        )
+        let members = [TeamActivity.Member(name: "Kent"), TeamActivity.Member(name: "Michiel")]
+
+        let groups = TeamActivity.groups(
+            sessions: rows,
+            members: members,
+            currentUser: "Kent",
+            automationOwners: ["Daily report": "Michiel", "My job": "Kent"]
+        )
+
+        XCTAssertEqual(groups.map(\.label), ["Michiel", "Agent"])
+        XCTAssertEqual(groups.flatMap(\.activeSessions).map(\.id), ["owned", "agent"])
+    }
+
+    // MARK: - Workspace deletion
+
+    func testWorkspaceDeletionStateTracksSuccessAndFailure() {
+        var state = WorkspaceDeletionState()
+        state.begin("ws-1")
+        XCTAssertEqual(state.deletingWorkspaceId, "ws-1")
+        XCTAssertNil(state.failure)
+
+        state.fail("ws-1", message: "Nope")
+        XCTAssertNil(state.deletingWorkspaceId)
+        XCTAssertEqual(state.failure, .init(workspaceId: "ws-1", message: "Nope"))
+
+        state.begin("ws-2")
+        state.succeed("ws-2")
+        XCTAssertEqual(state, WorkspaceDeletionState())
+    }
+
     // MARK: - Archived owners
 
     private let roster = ["kent": "Kent", "michiel": "Michiel"]

@@ -79,9 +79,7 @@ function stageMedia(
       `${kind} path must be absolute under /tmp or ${HOME || "the service home"}: ${p}`,
     );
   if (!allowed.has(ext(p)))
-    throw new Error(
-      `${kind} must be one of ${[...allowed].join(" ")}: ${p}`,
-    );
+    throw new Error(`${kind} must be one of ${[...allowed].join(" ")}: ${p}`);
   if (!existsSync(p)) throw new Error(`${kind} file not found: ${p}`);
   const dir = `${UPLOADS_DIR}/walkthrough/${sessionId}`;
   mkdirSync(dir, { recursive: true });
@@ -114,7 +112,9 @@ function stageMedia(
  * call the store hasn't flushed yet — and leaves the viewer's fallback in
  * charge, exactly as before.
  */
-async function publishingEntryId(sessionId: string): Promise<string | undefined> {
+async function publishingEntryId(
+  sessionId: string,
+): Promise<string | undefined> {
   try {
     const { entries } = await transcript.readTail(sessionId, 60);
     for (let i = entries.length - 1; i >= 0; i--) {
@@ -150,7 +150,8 @@ export async function publishWalkthrough(
   };
   if (input.video) {
     walkthrough.video = stageMedia(sessionId, input.video, "video");
-    if (input.videoTitle?.trim()) walkthrough.videoTitle = input.videoTitle.trim();
+    if (input.videoTitle?.trim())
+      walkthrough.videoTitle = input.videoTitle.trim();
   }
   const shots: WalkthroughShot[] = [];
   for (const s of input.shots || []) {
@@ -206,7 +207,11 @@ function walkthroughPrSection(
   }
   lines.push(w.summary.trim(), "");
   if (w.shots?.length) {
-    const cell = (path: string | undefined, label: string, caption?: string) => {
+    const cell = (
+      path: string | undefined,
+      label: string,
+      caption?: string,
+    ) => {
       if (!path) return "—";
       const text = `${label}${caption ? ` — ${caption}` : ""}`;
       const gh = attached.get(path);
@@ -216,7 +221,9 @@ function walkthroughPrSection(
     };
     lines.push("| Before | After |", "| --- | --- |");
     for (const s of w.shots) {
-      lines.push(`| ${cell(s.before, "Before", s.caption)} | ${cell(s.after, "After", s.caption)} |`);
+      lines.push(
+        `| ${cell(s.before, "Before", s.caption)} | ${cell(s.after, "After", s.caption)} |`,
+      );
     }
     lines.push("");
   }
@@ -237,11 +244,11 @@ function spliceWalkthroughSection(body: string, section: string): string {
   const start = body.indexOf(START_MARKER);
   const end = body.indexOf(END_MARKER);
   if (start !== -1 && end !== -1 && end > start) {
-    return (
-      body.slice(0, start) + block + body.slice(end + END_MARKER.length)
-    );
+    return body.slice(0, start) + block + body.slice(end + END_MARKER.length);
   }
-  const footer = body.match(/\n*(Started by|Created by) .*\[this [^\]]* session\]\([^)]*\)[^\n]*\s*$/);
+  const footer = body.match(
+    /\n*(Started by|Created by) .*\[this [^\]]* session\]\([^)]*\)[^\n]*\s*$/,
+  );
   if (footer && typeof footer.index === "number") {
     return `${body.slice(0, footer.index).trimEnd()}\n\n${block}\n${body.slice(footer.index).trimStart() ? "\n" + body.slice(footer.index).trim() : ""}`;
   }
@@ -275,7 +282,10 @@ async function mirrorWalkthroughToPr(
     console.debug(
       `[walkthrough] ${sessionId}: skipping PR mirror — code.storage branches have no PR description`,
     );
-    return { mirrored: false, reason: "code.storage changes have no PR description to mirror into" };
+    return {
+      mirrored: false,
+      reason: "code.storage changes have no PR description to mirror into",
+    };
   }
   const host = prHostFor(repo);
   const details = await host.getPrDetails(target.branch, target.ghRepo);

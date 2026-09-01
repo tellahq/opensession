@@ -1,6 +1,6 @@
 /** Persistent per-repository sandbox environment readiness. */
 
-import { existsSync, readFileSync, statSync } from "fs";
+import { readFileSync } from "fs";
 import { stateDir } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
 import { REPOS } from "../worktree";
@@ -22,8 +22,9 @@ import {
 } from "./prewarm";
 import { listSandboxOperations, startSandboxOperation } from "./operations";
 
-const invalidationTimers: Map<string, ReturnType<typeof setTimeout>> =
-  ((globalThis as any).__sandboxEnvironmentInvalidationTimers ??= new Map());
+const invalidationTimers: Map<string, ReturnType<typeof setTimeout>> = ((
+  globalThis as any
+).__sandboxEnvironmentInvalidationTimers ??= new Map());
 const PROVIDER_QUOTA_RETRY_MS = 60 * 60_000;
 
 export interface SandboxEnvironment {
@@ -47,12 +48,17 @@ interface StoredEnvironments {
 }
 
 function storePath(): string {
-  return process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE || stateDir("sandbox-environments.json");
+  return (
+    process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE ||
+    stateDir("sandbox-environments.json")
+  );
 }
 
 function readStored(): SandboxEnvironment[] {
   try {
-    const raw = JSON.parse(readFileSync(storePath(), "utf-8")) as StoredEnvironments;
+    const raw = JSON.parse(
+      readFileSync(storePath(), "utf-8"),
+    ) as StoredEnvironments;
     return Array.isArray(raw?.environments) ? raw.environments : [];
   } catch {
     return [];
@@ -62,10 +68,14 @@ function readStored(): SandboxEnvironment[] {
 function writeEnvironment(environment: SandboxEnvironment): void {
   const all = readStored().filter(
     (candidate) =>
-      candidate.repo !== environment.repo || candidate.provider !== environment.provider,
+      candidate.repo !== environment.repo ||
+      candidate.provider !== environment.provider,
   );
   all.push(environment);
-  writeJsonAtomic(storePath(), { version: 1, environments: all } satisfies StoredEnvironments);
+  writeJsonAtomic(storePath(), {
+    version: 1,
+    environments: all,
+  } satisfies StoredEnvironments);
 }
 
 function storedEnvironment(
@@ -73,7 +83,8 @@ function storedEnvironment(
   provider: WorkspaceSandboxProvider,
 ): SandboxEnvironment | undefined {
   return readStored().find(
-    (environment) => environment.repo === repo && environment.provider === provider,
+    (environment) =>
+      environment.repo === repo && environment.provider === provider,
   );
 }
 
@@ -81,7 +92,10 @@ export function sandboxEnvironmentSettings(
   repo: string,
   provider: string,
 ): SandboxMachineSettings | undefined {
-  const settings = storedEnvironment(repo, provider as WorkspaceSandboxProvider)?.settings;
+  const settings = storedEnvironment(
+    repo,
+    provider as WorkspaceSandboxProvider,
+  )?.settings;
   return settings ? { ...settings } : undefined;
 }
 
@@ -97,19 +111,31 @@ function normalizeMachineSettings(
         ? Number.isFinite(raw.cpu) && raw.cpu >= 0.125 && raw.cpu <= 16
         : Number.isInteger(raw.cpu) && raw.cpu >= 1 && raw.cpu <= 64;
     if (!validCpu) {
-      throw Object.assign(new Error("CPU is outside this provider's supported range"), { code: "MACHINE_SETTINGS_INVALID" });
+      throw Object.assign(
+        new Error("CPU is outside this provider's supported range"),
+        { code: "MACHINE_SETTINGS_INVALID" },
+      );
     }
     settings.cpu = raw.cpu;
   }
   if (raw.memoryMb != null) {
-    if (!Number.isInteger(raw.memoryMb) || raw.memoryMb < 512 || raw.memoryMb > 262_144) {
-      throw Object.assign(new Error("Memory must be between 512 and 262144 MB"), { code: "MACHINE_SETTINGS_INVALID" });
+    if (
+      !Number.isInteger(raw.memoryMb) ||
+      raw.memoryMb < 512 ||
+      raw.memoryMb > 262_144
+    ) {
+      throw Object.assign(
+        new Error("Memory must be between 512 and 262144 MB"),
+        { code: "MACHINE_SETTINGS_INVALID" },
+      );
     }
     settings.memoryMb = raw.memoryMb;
   }
-  if (raw.diskGb != null && (provider === "daytona" || provider === "microvm")) {
+  if (raw.diskGb != null && provider === "daytona") {
     if (!Number.isInteger(raw.diskGb) || raw.diskGb < 1 || raw.diskGb > 1_000) {
-      throw Object.assign(new Error("Disk must be between 1 and 1000 GB"), { code: "MACHINE_SETTINGS_INVALID" });
+      throw Object.assign(new Error("Disk must be between 1 and 1000 GB"), {
+        code: "MACHINE_SETTINGS_INVALID",
+      });
     }
     settings.diskGb = raw.diskGb;
   }
@@ -125,30 +151,14 @@ function normalizeMachineSettings(
         profile.diskGb === raw.diskGb,
     );
     if (!supported) {
-      throw Object.assign(new Error("Choose one of Box's Small, Default, or Large machine sizes"), {
-        code: "MACHINE_SETTINGS_INVALID",
-      });
+      throw Object.assign(
+        new Error("Choose one of Box's Small, Default, or Large machine sizes"),
+        {
+          code: "MACHINE_SETTINGS_INVALID",
+        },
+      );
     }
     settings.diskGb = raw.diskGb;
-  }
-  if (provider === "microvm") {
-    const supported = [
-      { cpu: 2, memoryMb: 4_096, diskGb: 25 },
-      { cpu: 4, memoryMb: 8_192, diskGb: 25 },
-      { cpu: 4, memoryMb: 12_288, diskGb: 25 },
-      { cpu: 4, memoryMb: 12_288, diskGb: 50 },
-      { cpu: 8, memoryMb: 24_576, diskGb: 100 },
-    ].some(
-      (profile) =>
-        profile.cpu === settings.cpu &&
-        profile.memoryMb === settings.memoryMb &&
-        profile.diskGb === settings.diskGb,
-    );
-    if (!supported) {
-      throw Object.assign(new Error("Choose one of the supported Local MicroVM sizes"), {
-        code: "MACHINE_SETTINGS_INVALID",
-      });
-    }
   }
   return Object.keys(settings).length ? settings : undefined;
 }
@@ -210,35 +220,6 @@ async function derivedEnvironment(
         ...(stored?.settings ? { settings: stored.settings } : {}),
       };
     }
-  } else if (provider === "microvm") {
-    const { microvmRepoTemplatePath } = await import("./adapters/microvm");
-    const path = microvmRepoTemplatePath(repo);
-    if (path && existsSync(path)) {
-      const stat = statSync(path);
-      const expires = stat.mtimeMs + 24 * 60 * 60_000;
-      if (expires > Date.now()) {
-        return {
-          repo,
-          provider,
-          state: "ready",
-          mode: "template",
-          updatedAt: stat.mtime.toISOString(),
-          preparedAt: stat.mtime.toISOString(),
-          expiresAt: new Date(expires).toISOString(),
-          ...(stored?.settings ? { settings: stored.settings } : {}),
-        };
-      }
-      return {
-        repo,
-        provider,
-        state: "stale",
-        mode: "template",
-        updatedAt: stat.mtime.toISOString(),
-        preparedAt: stat.mtime.toISOString(),
-        expiresAt: new Date(expires).toISOString(),
-        ...(stored?.settings ? { settings: stored.settings } : {}),
-      };
-    }
   }
   return (
     interruptedPreparation(stored) || {
@@ -252,9 +233,15 @@ async function derivedEnvironment(
 
 export async function listSandboxEnvironments(): Promise<SandboxEnvironment[]> {
   const out: SandboxEnvironment[] = [];
-  const providers: WorkspaceSandboxProvider[] = ["docker", "daytona", "box", "modal", "microvm"];
+  const providers: WorkspaceSandboxProvider[] = [
+    "docker",
+    "daytona",
+    "box",
+    "modal",
+  ];
   for (const repo of Object.keys(REPOS)) {
-    for (const provider of providers) out.push(await derivedEnvironment(repo, provider));
+    for (const provider of providers)
+      out.push(await derivedEnvironment(repo, provider));
   }
   return out;
 }
@@ -271,19 +258,18 @@ async function removeTemplate(
     const previous = invalidateRemoteRepoTemplate(provider, repo);
     if (previous?.artifactId) {
       if (provider === "daytona") {
-        const { deleteDaytonaTemplateArtifact } = await import("./adapters/daytona");
+        const { deleteDaytonaTemplateArtifact } =
+          await import("./adapters/daytona");
         await deleteDaytonaTemplateArtifact(previous.artifactId);
       } else if (provider === "box") {
         const { deleteBoxTemplateArtifact } = await import("./adapters/box");
         await deleteBoxTemplateArtifact(previous.artifactId);
       } else {
-        const { deleteModalTemplateArtifact } = await import("./adapters/modal");
+        const { deleteModalTemplateArtifact } =
+          await import("./adapters/modal");
         await deleteModalTemplateArtifact(previous.artifactId);
       }
     }
-  } else if (provider === "microvm") {
-    const { deleteMicrovmRepoTemplate } = await import("./adapters/microvm");
-    await deleteMicrovmRepoTemplate(repo);
   }
 }
 
@@ -292,9 +278,11 @@ async function removeTemplate(
  * deletion is best-effort, but mappings are invalidated first so a stale image
  * can never be selected while provider cleanup is retrying.
  */
-export async function invalidateSandboxEnvironmentsForRepo(repo: string): Promise<void> {
+export async function invalidateSandboxEnvironmentsForRepo(
+  repo: string,
+): Promise<void> {
   if (!(repo in REPOS)) return;
-  for (const provider of ["daytona", "box", "modal", "microvm"] as const) {
+  for (const provider of ["daytona", "box", "modal"] as const) {
     const stored = storedEnvironment(repo, provider);
     if (!stored) continue;
     // Remote repo templates contain a credential-free warm clone. Adoption
@@ -303,21 +291,31 @@ export async function invalidateSandboxEnvironmentsForRepo(repo: string): Promis
     // minutes-long cold-start gap without improving source freshness.
     if (provider === "daytona" || provider === "box" || provider === "modal") {
       const current = await derivedEnvironment(repo, provider);
-      writeEnvironment(current.state === "ready" ? current : {
-        repo,
-        provider,
-        state: "stale",
-        mode: "template",
-        updatedAt: new Date().toISOString(),
-        ...(stored.settings ? { settings: stored.settings } : {}),
-      });
+      writeEnvironment(
+        current.state === "ready"
+          ? current
+          : {
+              repo,
+              provider,
+              state: "stale",
+              mode: "template",
+              updatedAt: new Date().toISOString(),
+              ...(stored.settings ? { settings: stored.settings } : {}),
+            },
+      );
       continue;
     }
     await invalidatePrewarm(provider, repo).catch((error) => {
-      console.warn(`[sandbox:${provider}] failed to release prewarm for ${repo}:`, error);
+      console.warn(
+        `[sandbox:${provider}] failed to release prewarm for ${repo}:`,
+        error,
+      );
     });
     await removeTemplate(repo, provider).catch((error) => {
-      console.warn(`[sandbox:${provider}] failed to delete stale template for ${repo}:`, error);
+      console.warn(
+        `[sandbox:${provider}] failed to delete stale template for ${repo}:`,
+        error,
+      );
     });
     writeEnvironment({
       repo,
@@ -338,7 +336,10 @@ export function scheduleSandboxEnvironmentInvalidation(repo: string): void {
     setTimeout(() => {
       invalidationTimers.delete(repo);
       void invalidateSandboxEnvironmentsForRepo(repo).catch((error) => {
-        console.error(`[sandbox] environment invalidation failed for ${repo}:`, error);
+        console.error(
+          `[sandbox] environment invalidation failed for ${repo}:`,
+          error,
+        );
       });
     }, 2_000),
   );
@@ -355,9 +356,14 @@ export async function prepareSandboxEnvironment(
     onProgress?: (stage: string, progress: number, detail?: string) => void;
   } = {},
 ): Promise<void> {
-  if (!(repo in REPOS)) throw Object.assign(new Error(`Unknown repository "${repo}"`), { code: "REPO_UNKNOWN" });
+  if (!(repo in REPOS))
+    throw Object.assign(new Error(`Unknown repository "${repo}"`), {
+      code: "REPO_UNKNOWN",
+    });
   if (!sandboxConnectionReady(provider)) {
-    throw Object.assign(new Error(`${provider} is not Ready`), { code: "CONNECTION_NOT_READY" });
+    throw Object.assign(new Error(`${provider} is not Ready`), {
+      code: "CONNECTION_NOT_READY",
+    });
   }
   if (provider === "docker") {
     writeEnvironment({
@@ -418,28 +424,42 @@ export async function prepareSandboxEnvironment(
         options.onProgress?.("Verifying template", 98);
         const derived = await derivedEnvironment(repo, provider);
         if (derived.state !== "ready") {
-          throw Object.assign(new Error("Prepared template could not be verified"), {
-            code: "TEMPLATE_VERIFY_FAILED",
-          });
+          throw Object.assign(
+            new Error("Prepared template could not be verified"),
+            {
+              code: "TEMPLATE_VERIFY_FAILED",
+            },
+          );
         }
         writeEnvironment(derived);
         return;
       }
       if (requested.state === "failed" || entry?.state === "failed") {
-        throw Object.assign(new Error(entry?.error || "Repository setup failed in the sandbox provider"), {
-          code: "ENVIRONMENT_SETUP_FAILED",
-        });
+        throw Object.assign(
+          new Error(
+            entry?.error || "Repository setup failed in the sandbox provider",
+          ),
+          {
+            code: "ENVIRONMENT_SETUP_FAILED",
+          },
+        );
       }
       if (requested.state === "disabled" || requested.state === "unsupported") {
-        throw Object.assign(new Error("This provider cannot prepare project environments"), {
-          code: "ENVIRONMENT_UNSUPPORTED",
-        });
+        throw Object.assign(
+          new Error("This provider cannot prepare project environments"),
+          {
+            code: "ENVIRONMENT_UNSUPPORTED",
+          },
+        );
       }
       await delay(2_000);
     }
-    throw Object.assign(new Error("Project environment preparation timed out"), {
-      code: "ENVIRONMENT_TIMEOUT",
-    });
+    throw Object.assign(
+      new Error("Project environment preparation timed out"),
+      {
+        code: "ENVIRONMENT_TIMEOUT",
+      },
+    );
   } catch (error) {
     const code =
       typeof (error as { code?: unknown })?.code === "string"
@@ -451,7 +471,9 @@ export async function prepareSandboxEnvironment(
         : error instanceof Error
           ? error.message.slice(0, 500)
           : "Project setup failed. Rebuild it to try again.";
-    const quotaLimited = /(?:rate.?limit|quota|plan allows|per day)/i.test(failureSummary);
+    const quotaLimited = /(?:rate.?limit|quota|plan allows|per day)/i.test(
+      failureSummary,
+    );
     const retryDelayMs = quotaLimited
       ? PROVIDER_QUOTA_RETRY_MS
       : isTransientSandboxStartError(error)
@@ -475,8 +497,12 @@ export async function prepareSandboxEnvironment(
   }
 }
 
-const providerQueues: Map<string, Promise<void>> = ((globalThis as any).__sandboxEnvironmentQueues ??= new Map());
-let maintenanceTimer: ReturnType<typeof setInterval> | undefined = (globalThis as any).__sandboxEnvironmentMaintenanceTimer;
+const providerQueues: Map<string, Promise<void>> = ((
+  globalThis as any
+).__sandboxEnvironmentQueues ??= new Map());
+let maintenanceTimer: ReturnType<typeof setInterval> | undefined = (
+  globalThis as any
+).__sandboxEnvironmentMaintenanceTimer;
 
 /** Resume explicitly prepared template environments whose preparation inputs
  * changed or whose provider artifact disappeared. A stored record means a
@@ -488,11 +514,14 @@ function maintainSandboxEnvironments(): void {
       !["daytona", "box", "modal"].includes(environment.provider) ||
       (environment.mode !== "template" && environment.state !== "preparing") ||
       !sandboxConnectionReady(environment.provider)
-    ) continue;
+    )
+      continue;
     if (environment.state === "failed") {
       const retryAt = environment.retryAt
         ? Date.parse(environment.retryAt)
-        : /(?:rate.?limit|quota|plan allows|per day)/i.test(environment.failureSummary || "")
+        : /(?:rate.?limit|quota|plan allows|per day)/i.test(
+              environment.failureSummary || "",
+            )
           ? Date.parse(environment.updatedAt) + PROVIDER_QUOTA_RETRY_MS
           : Number.NaN;
       if (!Number.isFinite(retryAt) || retryAt > Date.now()) continue;
@@ -505,8 +534,13 @@ function maintainSandboxEnvironments(): void {
       // Publication is the durable completion boundary. A coordinator may
       // restart while the disposable validation sandbox is still parking;
       // promote the recovered artifact instead of deleting it.
-      void derivedEnvironment(environment.repo, environment.provider).then(writeEnvironment);
-      if (environment.provider === "daytona" || environment.provider === "box") {
+      void derivedEnvironment(environment.repo, environment.provider).then(
+        writeEnvironment,
+      );
+      if (
+        environment.provider === "daytona" ||
+        environment.provider === "box"
+      ) {
         const standby = prewarmStatus(environment.provider, environment.repo);
         if (!(standby?.standby && standby.parked)) {
           void requestPrewarm(
@@ -522,7 +556,8 @@ function maintainSandboxEnvironments(): void {
     if (template) {
       const standby = prewarmStatus(environment.provider, environment.repo);
       if (
-        (environment.provider === "daytona" || environment.provider === "box") &&
+        (environment.provider === "daytona" ||
+          environment.provider === "box") &&
         standby?.standby &&
         standby.parked
       ) {
@@ -530,7 +565,9 @@ function maintainSandboxEnvironments(): void {
         // it on a source-only timer creates an avoidable availability gap,
         // especially while Daytona seals or restores a large snapshot. Setup
         // input changes invalidate both the template and standby immediately.
-        void derivedEnvironment(environment.repo, environment.provider).then(writeEnvironment);
+        void derivedEnvironment(environment.repo, environment.provider).then(
+          writeEnvironment,
+        );
         continue;
       }
       scheduleSandboxEnvironment(environment.repo, environment.provider, {
@@ -559,7 +596,12 @@ export function startSandboxEnvironmentMaintenance(): void {
 export function scheduleSandboxEnvironment(
   repo: string,
   provider: WorkspaceSandboxProvider,
-  options: { rebuild?: boolean; refresh?: boolean; user?: string; settings?: SandboxMachineSettings } = {},
+  options: {
+    rebuild?: boolean;
+    refresh?: boolean;
+    user?: string;
+    settings?: SandboxMachineSettings;
+  } = {},
 ) {
   const existing = listSandboxOperations().find(
     (operation) =>
@@ -573,17 +615,21 @@ export function scheduleSandboxEnvironment(
   const operation = startSandboxOperation(
     { kind: "environment_rebuild", provider, repo },
     async (update) => {
-      const run = previous.catch(() => {}).then(() =>
-        prepareSandboxEnvironment(repo, provider, {
-          ...options,
-          onProgress: (stage, progress, detail) => update({ stage, progress, detail }),
-        }),
-      );
+      const run = previous
+        .catch(() => {})
+        .then(() =>
+          prepareSandboxEnvironment(repo, provider, {
+            ...options,
+            onProgress: (stage, progress, detail) =>
+              update({ stage, progress, detail }),
+          }),
+        );
       providerQueues.set(provider, run);
       try {
         await run;
       } finally {
-        if (providerQueues.get(provider) === run) providerQueues.delete(provider);
+        if (providerQueues.get(provider) === run)
+          providerQueues.delete(provider);
       }
     },
   );

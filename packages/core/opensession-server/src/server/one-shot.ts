@@ -8,12 +8,7 @@
  */
 import { mkdirSync, rmSync } from "fs";
 import { audit } from "./audit";
-import {
-  cancelPiRun,
-  parsePiModel,
-  PI_STATE_DIR,
-  runPi,
-} from "./pi-runner";
+import { cancelPiRun, parsePiModel, PI_STATE_DIR, runPi } from "./pi-runner";
 import {
   configuredHaikuFallbackModel,
   toPiModel,
@@ -92,7 +87,8 @@ export function haikuOneShotFallbackModel(
   if (!model?.startsWith("pi/anthropic/claude-haiku-")) return undefined;
   if (!haikuOneShotShouldFallOver(error)) return undefined;
   const fallback = configuredHaikuFallbackModel();
-  if (!fallback?.startsWith("pi/openai/") || fallback === model) return undefined;
+  if (!fallback?.startsWith("pi/openai/") || fallback === model)
+    return undefined;
   return fallback;
 }
 
@@ -139,7 +135,9 @@ export async function oneShotDetailed(
     text: null,
     error: [
       primary.error ? `Haiku: ${primary.error}` : "Haiku: empty answer",
-      fallback.error ? `OpenAI fallback: ${fallback.error}` : "OpenAI fallback: empty answer",
+      fallback.error
+        ? `OpenAI fallback: ${fallback.error}`
+        : "OpenAI fallback: empty answer",
     ].join("; "),
   };
 }
@@ -154,8 +152,7 @@ async function runOneShotAttempt(
   // Derived one-shots have deterministic fallbacks and no caller-owned durable
   // intent. Once shutdown starts, both new calls and calls waiting on bounded
   // capacity must park instead of creating fresh model work during the drain.
-  if (isShuttingDown())
-    return { text: null, error: "server restarting" };
+  if (isShuttingDown()) return { text: null, error: "server restarting" };
 
   const model = oneShotModel(opts.model);
   const label = opts.label || "oneshot";

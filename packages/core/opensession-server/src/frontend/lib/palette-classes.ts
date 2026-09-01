@@ -1,154 +1,153 @@
-
 import * as stylex from "@stylexjs/stylex";
 import { mergeStylexClassName } from "../ui/cn";
 import { type as typography } from "../styles/typography.stylex";
 import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
 
 const sx = stylex.create({
-	relative: {
-		"position": "relative"
-	},
-	inlineFlex: {
-		"display": "inline-flex"
-	},
-	size10: {
-		"width": "40px",
-		"height": "40px"
-	},
-	itemsCenter: {
-		"alignItems": "center"
-	},
-	justifyCenter: {
-		"justifyContent": "center"
-	},
-	roundedControl: {
-		"borderRadius": "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	border: {
-		"borderStyle": "var(--tw-border-style)",
-		"borderWidth": "1px"
-	},
-	borderTransparent: {
-		"borderColor": "transparent"
-	},
-	textDim: {
-		"color": "var(--text-dim)"
-	},
-	transitionColor: {
-		"transitionProperty": "color",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	hoverTextFg: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text)"
-			}
-		}
-	},
-	disabledCursorDefault: {
-		":disabled": {
-			"cursor": "default"
-		}
-	},
-	disabledOpacity50: {
-		":disabled": {
-			"opacity": ".5"
-		}
-	},
-	roundedFull: {
-		"borderRadius": "3.40282e38px"
-	,
-		cornerShape: "round"},
-	textAccent: {
-		"color": "var(--accent-ink)"
-	},
-	minH8: {
-		"minHeight": "32px"
-	},
-	maxW180px: {
-		"maxWidth": "180px"
-	},
-	gap15: {
-		"gap": "6px"
-	},
-	px11px: {
-		"paddingInline": "11px"
-	},
-	py5px: {
-		"paddingBlock": "5px"
-	},
-	fontMedium: {
-		"--tw-font-weight": "var(--font-weight-medium)",
-		"fontWeight": "var(--font-weight-medium)"
-	},
-	hoverBgHover: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--hover)"
-			}
-		}
-	},
-	disabledOpacity55: {
-		":disabled": {
-			"opacity": ".55"
-		}
-	},
+  relative: {
+    position: "relative",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  size10: {
+    width: "40px",
+    height: "40px",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "var(--tw-border-style)",
+    borderWidth: "1px",
+  },
+  borderTransparent: {
+    borderColor: "transparent",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  transitionColor: {
+    transitionProperty: "color",
+    transitionTimingFunction: "var(--tw-ease,var(--ease))",
+    transitionDuration: "var(--tw-duration,var(--dur-micro))",
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  disabledCursorDefault: {
+    ":disabled": {
+      cursor: "default",
+    },
+  },
+  disabledOpacity50: {
+    ":disabled": {
+      opacity: ".5",
+    },
+  },
+  roundedFull: {
+    borderRadius: "3.40282e38px",
+    cornerShape: "round",
+  },
+  textAccent: {
+    color: "var(--accent-ink)",
+  },
+  minH8: {
+    minHeight: "32px",
+  },
+  maxW180px: {
+    maxWidth: "180px",
+  },
+  gap15: {
+    gap: "6px",
+  },
+  px11px: {
+    paddingInline: "11px",
+  },
+  py5px: {
+    paddingBlock: "5px",
+  },
+  fontMedium: {
+    "--tw-font-weight": "var(--font-weight-medium)",
+    fontWeight: "var(--font-weight-medium)",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  disabledOpacity55: {
+    ":disabled": {
+      opacity: ".55",
+    },
+  },
 
-	beforeRoundedFull: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"borderRadius": "3.40282e38px"
-		}
-	},
-	beforeCornerShapeRound: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"cornerShape": "round"
-		}
-	},
-	beforeBgColorMixInSrgbVarAccent16Transparent: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"backgroundColor": "var(--accent)"
-		},
-		"@supports (color: color-mix(in lab, red, red))": {
-			"::before": {
-				"backgroundColor": "color-mix(in srgb,var(--accent) 16%,transparent)"
-			}
-		}
-	},
-	hoverBeforeBgColorMixInSrgbVarAccent24Transparent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"::before": {
-					"content": "var(--tw-content)",
-					"backgroundColor": "var(--accent)"
-				}
-			},
-			"@supports (color: color-mix(in lab, red, red))": {
-				":hover": {
-					"::before": {
-						"backgroundColor": "color-mix(in srgb,var(--accent) 24%,transparent)"
-					}
-				}
-			}
-		}
-	},
-	transitionBackgroundBorderColorColor: {
-		"transitionProperty": "background,border-color,color",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
+  beforeRoundedFull: {
+    "::before": {
+      content: "var(--tw-content)",
+      borderRadius: "3.40282e38px",
+    },
+  },
+  beforeCornerShapeRound: {
+    "::before": {
+      content: "var(--tw-content)",
+      cornerShape: "round",
+    },
+  },
+  beforeBgColorMixInSrgbVarAccent16Transparent: {
+    "::before": {
+      content: "var(--tw-content)",
+      backgroundColor: "var(--accent)",
+    },
+    "@supports (color: color-mix(in lab, red, red))": {
+      "::before": {
+        backgroundColor: "color-mix(in srgb,var(--accent) 16%,transparent)",
+      },
+    },
+  },
+  hoverBeforeBgColorMixInSrgbVarAccent24Transparent: {
+    "@media (hover: hover)": {
+      ":hover": {
+        "::before": {
+          content: "var(--tw-content)",
+          backgroundColor: "var(--accent)",
+        },
+      },
+      "@supports (color: color-mix(in lab, red, red))": {
+        ":hover": {
+          "::before": {
+            backgroundColor: "color-mix(in srgb,var(--accent) 24%,transparent)",
+          },
+        },
+      },
+    },
+  },
+  transitionBackgroundBorderColorColor: {
+    transitionProperty: "background,border-color,color",
+    transitionTimingFunction: "var(--tw-ease,var(--ease))",
+    transitionDuration: "var(--tw-duration,var(--dur-micro))",
+  },
 
-	hoverTextAccent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--accent-ink)"
-			}
-		}
-	},
+  hoverTextAccent: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--accent-ink)",
+      },
+    },
+  },
 });
 
 /**
@@ -199,9 +198,37 @@ const sx = stylex.create({
      `background`, `padding` and `border: none`, so only the deviations are
      written here. */
 export const paletteIconBtn =
-	mergeStylexClassName("", sx.relative, sx.inlineFlex, sx.size10, sx.itemsCenter, sx.justifyCenter, sx.roundedControl, sx.border, sx.borderTransparent, typography.itemTitle, sx.textDim, sx.transitionColor, sx.hoverTextFg, sx.disabledCursorDefault, sx.disabledOpacity50) + " " +
-	mergeStylexClassName("", sharedClassStyles.beforeAbsolute, sharedClassStyles.beforeInset1, sharedClassStyles.beforeZ0, sharedClassStyles.beforeRoundedControl, sharedClassStyles.beforeCornerShapeVarCs, sharedClassStyles.beforeTransitionBackgroundBoxShadow, sharedClassStyles.beforeContent, sharedClassStyles.hoverBeforeBgHover) +
-	" " + "[&>*]:relative [&>*]:z-[1] phone:[&_svg]:size-5";
+  mergeStylexClassName(
+    "",
+    sx.relative,
+    sx.inlineFlex,
+    sx.size10,
+    sx.itemsCenter,
+    sx.justifyCenter,
+    sx.roundedControl,
+    sx.border,
+    sx.borderTransparent,
+    typography.itemTitle,
+    sx.textDim,
+    sx.transitionColor,
+    sx.hoverTextFg,
+    sx.disabledCursorDefault,
+    sx.disabledOpacity50,
+  ) +
+  " " +
+  mergeStylexClassName(
+    "",
+    sharedClassStyles.beforeAbsolute,
+    sharedClassStyles.beforeInset1,
+    sharedClassStyles.beforeZ0,
+    sharedClassStyles.beforeRoundedControl,
+    sharedClassStyles.beforeCornerShapeVarCs,
+    sharedClassStyles.beforeTransitionBackgroundBoxShadow,
+    sharedClassStyles.beforeContent,
+    sharedClassStyles.hoverBeforeBgHover,
+  ) +
+  " " +
+  "[&>*]:relative [&>*]:z-[1] phone:[&_svg]:size-5";
 
 /** The phone composer's resting pill, and the ONE place `rounded-full` is the
  *  right spelling in this family. base.css grants `corner-shape: squircle` to
@@ -211,8 +238,12 @@ export const paletteIconBtn =
  *  they have to be circles. A squircle at 50% is a lobed blob, not a circle.
  *  The wash needs the same treatment or a circular button hovers into a
  *  squircle. Everywhere else this family keeps its squircle. */
-export const paletteIconBtnRound =
-	mergeStylexClassName("", sx.beforeRoundedFull, sx.beforeCornerShapeRound, sx.roundedFull);
+export const paletteIconBtnRound = mergeStylexClassName(
+  "",
+  sx.beforeRoundedFull,
+  sx.beforeCornerShapeRound,
+  sx.roundedFull,
+);
 
 /** On reads as one filled accent chip: the glyph lights up with its wash. The
  *  hover colour is restated because the base's `hover:text-fg` is a different
@@ -221,8 +252,13 @@ export const paletteIconBtnRound =
  *  Both hover fills stay in the wash rather than a border: a full-strength
  *  ring read as a validation outline, and it is the one thing that survived
  *  on the plan-mode surface, which carries its own accent tint. */
-export const paletteIconBtnOn =
-	mergeStylexClassName("", sx.hoverTextAccent, sx.beforeBgColorMixInSrgbVarAccent16Transparent, sx.hoverBeforeBgColorMixInSrgbVarAccent24Transparent, sx.textAccent);
+export const paletteIconBtnOn = mergeStylexClassName(
+  "",
+  sx.hoverTextAccent,
+  sx.beforeBgColorMixInSrgbVarAccent16Transparent,
+  sx.hoverBeforeBgColorMixInSrgbVarAccent24Transparent,
+  sx.textAccent,
+);
 
 /* ── The model/effort pill ────────────────────────────────────────
    ModelEffortSelect's trigger, in the composer toolbar and in the new-session
@@ -239,5 +275,25 @@ export const paletteIconBtnOn =
    `border-transparent` ("quiet pill: no outline at rest, hover state only"),
    and as a utility it outranked the stylesheet's `var(--border)` on source
    order. Written out here so the constant describes what actually paints. */
-export const palettePill =
-	mergeStylexClassName("", sx.transitionBackgroundBorderColorColor, sx.relative, sx.inlineFlex, sx.minH8, sx.maxW180px, sx.itemsCenter, sx.gap15, sx.roundedFull, sx.border, sx.borderTransparent, sx.px11px, sx.py5px, typography.label, sx.fontMedium, sx.textDim, sx.hoverBgHover, sx.hoverTextFg, sx.disabledCursorDefault, sx.disabledOpacity55);
+export const palettePill = mergeStylexClassName(
+  "",
+  sx.transitionBackgroundBorderColorColor,
+  sx.relative,
+  sx.inlineFlex,
+  sx.minH8,
+  sx.maxW180px,
+  sx.itemsCenter,
+  sx.gap15,
+  sx.roundedFull,
+  sx.border,
+  sx.borderTransparent,
+  sx.px11px,
+  sx.py5px,
+  typography.label,
+  sx.fontMedium,
+  sx.textDim,
+  sx.hoverBgHover,
+  sx.hoverTextFg,
+  sx.disabledCursorDefault,
+  sx.disabledOpacity55,
+);

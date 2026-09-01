@@ -7,7 +7,13 @@ import { personaName } from "../../server/config";
 import { getPrDetails, getPrDiff } from "../../server/pr-info";
 import { createWorktreeForPrBranch } from "../../server/worktree";
 import { claimLock, releaseLock, readPrState, updatePrState } from "./state";
-import { announceGithubRun, runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
+import {
+  announceGithubRun,
+  runGithubAgent,
+  authorForLogin,
+  finalSummary,
+  sessionUrl,
+} from "./run";
 import { buildSimplifyPrompt } from "./prompts";
 import { postOrEditComment, removeLabel, SIMPLIFY_MARKER } from "./github-rest";
 import { LABEL_SIMPLIFY, labelAliases, repoForFullName } from "./constants";
@@ -21,15 +27,22 @@ export async function runSimplify(
   steer?: string,
 ): Promise<void> {
   if (!claimLock("code", pr.number, pr.ghRepo)) {
-    console.log(`[github] a code action (fix/simplify) is already running for PR #${pr.number}, skipping simplify`);
+    console.log(
+      `[github] a code action (fix/simplify) is already running for PR #${pr.number}, skipping simplify`,
+    );
     return;
   }
   const author = authorForLogin(requestedBy);
   try {
     // By number, not branch — by-branch lookups lag for fresh PRs (see runReview).
-    const details = await getPrDetails(pr.number ? String(pr.number) : pr.headRef, pr.ghRepo || undefined);
+    const details = await getPrDetails(
+      pr.number ? String(pr.number) : pr.headRef,
+      pr.ghRepo || undefined,
+    );
     if (!details) {
-      console.warn(`[github] no PR details for #${pr.number} (${pr.headRef}); skipping simplify`);
+      console.warn(
+        `[github] no PR details for #${pr.number} (${pr.headRef}); skipping simplify`,
+      );
       return;
     }
     if (details.state !== "OPEN") return;
@@ -50,7 +63,10 @@ export async function runSimplify(
     const prior = readPrState(pr.number, pr.ghRepo);
     // Reuse this run's comment only when recovering an interrupted run; a fresh
     // trigger (no activeRun) posts a new comment.
-    const reuseId = prior?.activeRun?.kind === "simplify" ? prior.activeRun.progressCommentId : undefined;
+    const reuseId =
+      prior?.activeRun?.kind === "simplify"
+        ? prior.activeRun.progressCommentId
+        : undefined;
     const progressId = await postOrEditComment(
       pr.number,
       reuseId,
@@ -61,7 +77,13 @@ export async function runSimplify(
       pr.number,
       pr.headRef,
       (s) => {
-        s.activeRun = { kind: "simplify", requestedBy, startedAt, progressCommentId: progressId ?? undefined, steer };
+        s.activeRun = {
+          kind: "simplify",
+          requestedBy,
+          startedAt,
+          progressCommentId: progressId ?? undefined,
+          steer,
+        };
       },
       pr.ghRepo,
     );
@@ -112,8 +134,15 @@ export async function runSimplify(
         title: fresh?.title || pr.title,
         ...(pr.ghRepo ? { ghRepo: pr.ghRepo } : {}),
       };
-      await runReview(ref, resolveReviewConfig().config, onSessionCreated).catch((e) =>
-        console.error(`[github] post-simplify review failed for PR #${pr.number}:`, e),
+      await runReview(
+        ref,
+        resolveReviewConfig().config,
+        onSessionCreated,
+      ).catch((e) =>
+        console.error(
+          `[github] post-simplify review failed for PR #${pr.number}:`,
+          e,
+        ),
       );
     }
   } catch (e) {

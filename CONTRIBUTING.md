@@ -22,7 +22,7 @@ reports, include what you ran, what happened, and `opensession doctor` output;
 if it is an install problem, the full installer output — it prints every step
 it took.
 
-One thing that should *not* go through the issue tracker:
+One thing that should _not_ go through the issue tracker:
 
 - **Vulnerabilities** — report privately, see [SECURITY.md](SECURITY.md).
   Never a public issue.
@@ -110,7 +110,7 @@ repository ships only generic recipes — see
 Match the file you are editing. The codebase is fairly consistent about this,
 and consistency beats any individual preference.
 
-Comments should explain *why*, particularly when the code looks odd. A lot of
+Comments should explain _why_, particularly when the code looks odd. A lot of
 the stranger-looking decisions here encode a specific incident — `KillMode=mixed`
 in the systemd unit, the `IPAddressDeny` line, the deny-before-allow ordering in
 permission maps. If you find one of those and it has no comment, adding the

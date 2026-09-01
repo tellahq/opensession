@@ -34,7 +34,7 @@ export interface SelfImproveContext {
   /** Backup + persist a new prompt for this automation only. */
   updateOwnPrompt: (
     newPrompt: string,
-    reason: string
+    reason: string,
   ) => { ok: true; backupPath: string } | { ok: false; error: string };
 }
 
@@ -53,7 +53,10 @@ export function createSelfImproveMcpServer(ctx: SelfImproveContext) {
         {},
         async () => {
           const a = ctx.getOwn();
-          if (!a) return text("Could not read this automation's record (was it deleted?).");
+          if (!a)
+            return text(
+              "Could not read this automation's record (was it deleted?).",
+            );
           return text(
             [
               `*${a.name}*`,
@@ -61,9 +64,9 @@ export function createSelfImproveMcpServer(ctx: SelfImproveContext) {
               "",
               "── current prompt ──",
               a.prompt,
-            ].join("\n")
+            ].join("\n"),
           );
-        }
+        },
       ),
       tool(
         "update_own_prompt",
@@ -71,7 +74,9 @@ export function createSelfImproveMcpServer(ctx: SelfImproveContext) {
         {
           new_prompt: z
             .string()
-            .describe("The complete replacement prompt (full text, not a diff)."),
+            .describe(
+              "The complete replacement prompt (full text, not a diff).",
+            ),
           reason: z
             .string()
             .describe("One line: what you changed and why (audited)."),
@@ -80,9 +85,9 @@ export function createSelfImproveMcpServer(ctx: SelfImproveContext) {
           const res = ctx.updateOwnPrompt(args.new_prompt, args.reason);
           if (!res.ok) return text(res.error);
           return text(
-            `Prompt updated (takes effect next run). Backup: \`${res.backupPath}\`. Mention this change — and why — in your Slack post/reply so a human sees it.`
+            `Prompt updated (takes effect next run). Backup: \`${res.backupPath}\`. Mention this change — and why — in your Slack post/reply so a human sees it.`,
           );
-        }
+        },
       ),
     ],
   });

@@ -13,10 +13,10 @@
  * Fast Refresh); the native app carries its own copy in DeskSheet.swift.
  */
 export const DESK_SUGGESTIONS = [
-	"What's running?",
-	"What needs me?",
-	"Archive what's done",
-	"What shipped today?",
-	"Look into…",
-	"Remind me to…",
+  "What's running?",
+  "What needs me?",
+  "Archive what's done",
+  "What shipped today?",
+  "Look into…",
+  "Remind me to…",
 ];

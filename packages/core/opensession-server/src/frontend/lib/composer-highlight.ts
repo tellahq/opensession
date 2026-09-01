@@ -9,21 +9,47 @@ import type { Person } from "./people";
 import { UUIDV7 } from "./session-url";
 
 function esc(s: string): string {
-	return s
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /** One finished @-mention of a teammate, as offsets into the draft. */
 export interface MentionRange {
-	start: number;
-	/** Exclusive: the character after the name. */
-	end: number;
-	/** Roster spelling, which may differ in case from what was typed. */
-	name: string;
-	/** GitHub login, when they have one — the pill's face comes from it. */
-	github?: string;
+  start: number;
+  /** Exclusive: the character after the name. */
+  end: number;
+  /** Roster spelling, which may differ in case from what was typed. */
+  name: string;
+  /** GitHub login, when they have one — the pill's face comes from it. */
+  github?: string;
+}
+
+/** One model-readable selected-area reference added from an attachment preview. */
+export interface ImageAttachmentRange {
+  start: number;
+  end: number;
+  attachmentIndex: number;
+}
+
+const IMAGE_ATTACHMENT_RE = /\[Image (\d+) · \d+–\d+% × \d+–\d+%\]/g;
+
+export function composerImageAttachmentRanges(
+  text: string,
+): ImageAttachmentRange[] {
+  if (!text.includes("[Image ")) return [];
+  const ranges: ImageAttachmentRange[] = [];
+  IMAGE_ATTACHMENT_RE.lastIndex = 0;
+  for (
+    let match = IMAGE_ATTACHMENT_RE.exec(text);
+    match;
+    match = IMAGE_ATTACHMENT_RE.exec(text)
+  ) {
+    ranges.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      attachmentIndex: Number(match[1]) - 1,
+    });
+  }
+  return ranges;
 }
 
 /** An `@` that starts a word, and the name after it. */
@@ -43,29 +69,29 @@ const TERMINATOR = /[\s.,;:!?)\]]/;
  * a teammate (same rule as lib/mention-text.ts and the markdown renderer).
  */
 export function composerMentionRanges(
-	text: string,
-	people: Person[],
+  text: string,
+  people: Person[],
 ): MentionRange[] {
-	if (!people.length || !text.includes("@")) return [];
-	const out: MentionRange[] = [];
-	MENTION_RE.lastIndex = 0;
-	for (let m = MENTION_RE.exec(text); m; m = MENTION_RE.exec(text)) {
-		// Trailing punctuation belongs to the sentence, not to the name.
-		const name = m[2]!.replace(/[.,;:!?]+$/, "");
-		if (!name) continue;
-		const start = m.index + m[1]!.length;
-		const end = start + 1 + name.length;
-		const after = text[end];
-		if (after === undefined || !TERMINATOR.test(after)) continue;
-		const person = people.find(
-			(p) =>
-				p.name.toLowerCase() === name.toLowerCase() ||
-				p.fullName.toLowerCase() === name.toLowerCase(),
-		);
-		if (person)
-			out.push({ start, end, name: person.name, github: person.github });
-	}
-	return out;
+  if (!people.length || !text.includes("@")) return [];
+  const out: MentionRange[] = [];
+  MENTION_RE.lastIndex = 0;
+  for (let m = MENTION_RE.exec(text); m; m = MENTION_RE.exec(text)) {
+    // Trailing punctuation belongs to the sentence, not to the name.
+    const name = m[2]!.replace(/[.,;:!?]+$/, "");
+    if (!name) continue;
+    const start = m.index + m[1]!.length;
+    const end = start + 1 + name.length;
+    const after = text[end];
+    if (after === undefined || !TERMINATOR.test(after)) continue;
+    const person = people.find(
+      (p) =>
+        p.name.toLowerCase() === name.toLowerCase() ||
+        p.fullName.toLowerCase() === name.toLowerCase(),
+    );
+    if (person)
+      out.push({ start, end, name: person.name, github: person.github });
+  }
+  return out;
 }
 
 /**
@@ -91,15 +117,15 @@ export const SESSION_PILL_MARGIN = "\u2009";
 
 /** One stable session or workspace reference in the draft. */
 export interface SessionRange {
-	start: number;
-	/** Exclusive. */
-	end: number;
-	id: string;
-	kind?: "session" | "workspace";
-	/** Visible title when the textarea is projecting this id as a named token. */
-	label?: string;
-	/** The resolved session is archived, so its glyph names that state. */
-	archived?: boolean;
+  start: number;
+  /** Exclusive. */
+  end: number;
+  id: string;
+  kind?: "session" | "workspace";
+  /** Visible title when the textarea is projecting this id as a named token. */
+  label?: string;
+  /** The resolved session is archived, so its glyph names that state. */
+  archived?: boolean;
 }
 
 /**
@@ -110,7 +136,7 @@ export interface SessionRange {
  */
 const SESSION_RE = new RegExp(`(^|[^\\w/-])((?:os|bks)-${UUIDV7})`, "gi");
 const WORKSPACE_RE =
-	/(^|[\s(\[])@workspace:(ws-[A-Za-z0-9_-]{1,61})(?=$|[\s.,;:!?)\]])/gi;
+  /(^|[\s(\[])@workspace:(ws-[A-Za-z0-9_-]{1,61})(?=$|[\s.,;:!?)\]])/gi;
 
 /**
  * Stable references in a draft. Session ids use the minted shape that the
@@ -121,58 +147,61 @@ const WORKSPACE_RE =
  * the URL to the id it carries, and the pill is what says so.
  */
 export function composerSessionRanges(text: string): SessionRange[] {
-	if (!text.includes("-")) return [];
-	const out: SessionRange[] = [];
-	SESSION_RE.lastIndex = 0;
-	for (let match = SESSION_RE.exec(text); match; match = SESSION_RE.exec(text)) {
-		const start = match.index + match[1]!.length;
-		out.push({ start, end: start + match[2]!.length, id: match[2]! });
-	}
-	WORKSPACE_RE.lastIndex = 0;
-	for (
-		let match = WORKSPACE_RE.exec(text);
-		match;
-		match = WORKSPACE_RE.exec(text)
-	) {
-		const start = match.index + match[1]!.length;
-		out.push({
-			start,
-			end: start + match[0].length - match[1]!.length,
-			id: match[2]!,
-			kind: "workspace",
-		});
-	}
-	return out.sort((a, b) => a.start - b.start);
+  if (!text.includes("-")) return [];
+  const out: SessionRange[] = [];
+  SESSION_RE.lastIndex = 0;
+  for (
+    let match = SESSION_RE.exec(text);
+    match;
+    match = SESSION_RE.exec(text)
+  ) {
+    const start = match.index + match[1]!.length;
+    out.push({ start, end: start + match[2]!.length, id: match[2]! });
+  }
+  WORKSPACE_RE.lastIndex = 0;
+  for (
+    let match = WORKSPACE_RE.exec(text);
+    match;
+    match = WORKSPACE_RE.exec(text)
+  ) {
+    const start = match.index + match[1]!.length;
+    out.push({
+      start,
+      end: start + match[0].length - match[1]!.length,
+      id: match[2]!,
+      kind: "workspace",
+    });
+  }
+  return out.sort((a, b) => a.start - b.start);
 }
 
 /** Both kinds of pill, in the order they appear in the draft. */
-type DraftRange = MentionRange | SessionRange;
+type DraftRange = MentionRange | SessionRange | ImageAttachmentRange;
 
 function draftRanges(
-	text: string,
-	people: Person[],
-	sessions: SessionRange[],
+  text: string,
+  people: Person[],
+  sessions: SessionRange[],
 ): DraftRange[] {
-	const ranges: DraftRange[] = [
-		...composerMentionRanges(text, people),
-		...sessions,
-	];
-	// A person mention and a stable reference cannot overlap. Sorting by start
-	// is enough to walk them as one list.
-	return ranges.sort((a, b) => a.start - b.start);
+  const ranges: DraftRange[] = [
+    ...composerMentionRanges(text, people),
+    ...sessions,
+    ...composerImageAttachmentRanges(text),
+  ];
+  // A person mention and a stable reference cannot overlap. Sorting by start
+  // is enough to walk them as one list.
+  return ranges.sort((a, b) => a.start - b.start);
 }
 
 /** Hide title backticks from the code scanner without changing offsets. */
 function syntaxText(text: string, sessions: SessionRange[]): string {
-	let out = text;
-	for (const session of sessions) {
-		if (!session.label) continue;
-		const title = out
-			.slice(session.start, session.end)
-			.replaceAll("`", " ");
-		out = out.slice(0, session.start) + title + out.slice(session.end);
-	}
-	return out;
+  let out = text;
+  for (const session of sessions) {
+    if (!session.label) continue;
+    const title = out.slice(session.start, session.end).replaceAll("`", " ");
+    out = out.slice(0, session.start) + title + out.slice(session.end);
+  }
+  return out;
 }
 
 /**
@@ -189,14 +218,14 @@ function syntaxText(text: string, sessions: SessionRange[]): string {
  * `@` and just gets the pill.
  */
 function mentionHtml(text: string, range: MentionRange): string {
-	const at = esc(text.slice(range.start, range.start + 1));
-	const name = esc(text.slice(range.start + 1, range.end));
-	if (!range.github) return `<span class="cmp-mention">${at}${name}</span>`;
-	const face = `https://github.com/${encodeURIComponent(range.github)}.png?size=48`;
-	return (
-		`<span class="cmp-mention cmp-faced" style="--cmp-face:url(&quot;${face}&quot;)">` +
-		`<span class="cmp-at">${at}</span>${name}</span>`
-	);
+  const at = esc(text.slice(range.start, range.start + 1));
+  const name = esc(text.slice(range.start + 1, range.end));
+  if (!range.github) return `<span class="cmp-mention">${at}${name}</span>`;
+  const face = `https://github.com/${encodeURIComponent(range.github)}.png?size=48`;
+  return (
+    `<span class="cmp-mention cmp-faced" style="--cmp-face:url(&quot;${face}&quot;)">` +
+    `<span class="cmp-at">${at}</span>${name}</span>`
+  );
 }
 
 /**
@@ -205,90 +234,104 @@ function mentionHtml(text: string, range: MentionRange): string {
  * unknown session keeps its id and lends its prefix to the chat glyph. An
  * unknown workspace keeps its explicit token intact.
  */
+function imageAttachmentHtml(
+  text: string,
+  range: ImageAttachmentRange,
+): string {
+  return `<span class="cmp-image-attachment">${esc(text.slice(range.start, range.end))}</span>`;
+}
+
 function sessionHtml(text: string, range: SessionRange): string {
-	const shown = text.slice(range.start, range.end);
-	const leadingMargin = shown.startsWith(SESSION_PILL_MARGIN)
-		? SESSION_PILL_MARGIN
-		: "";
-	const trailingMargin = shown.endsWith(SESSION_PILL_MARGIN)
-		? SESSION_PILL_MARGIN
-		: "";
-	const token = shown.slice(
-		leadingMargin.length,
-		shown.length - trailingMargin.length,
-	);
-	const before = esc(leadingMargin);
-	const after = esc(trailingMargin);
-	if (range.label) {
-		const slot = token.startsWith(SESSION_GLYPH_SLOT)
-			? SESSION_GLYPH_SLOT.length
-			: 0;
-		return (
-			before +
-			`<span class="cmp-session cmp-session-named${range.kind === "workspace" ? " cmp-workspace" : ""}${range.archived ? " cmp-archived" : ""}">` +
-			(slot ? `<span class="cmp-sglyph">${esc(token.slice(0, slot))}</span>` : "") +
-			`${esc(token.slice(slot))}</span>` +
-			after
-		);
-	}
-	if (range.kind === "workspace") {
-		return (
-			before +
-			`<span class="cmp-session cmp-workspace">${esc(token)}</span>` +
-			after
-		);
-	}
-	const prefixEnd = token.indexOf("-") + 1;
-	const prefix = esc(token.slice(0, prefixEnd));
-	const rest = esc(token.slice(prefixEnd));
-	return (
-		before +
-		`<span class="cmp-session"><span class="cmp-sid">${prefix}</span>` +
-		`${rest}</span>` +
-		after
-	);
+  const shown = text.slice(range.start, range.end);
+  const leadingMargin = shown.startsWith(SESSION_PILL_MARGIN)
+    ? SESSION_PILL_MARGIN
+    : "";
+  const trailingMargin = shown.endsWith(SESSION_PILL_MARGIN)
+    ? SESSION_PILL_MARGIN
+    : "";
+  const token = shown.slice(
+    leadingMargin.length,
+    shown.length - trailingMargin.length,
+  );
+  const before = esc(leadingMargin);
+  const after = esc(trailingMargin);
+  if (range.label) {
+    const slot = token.startsWith(SESSION_GLYPH_SLOT)
+      ? SESSION_GLYPH_SLOT.length
+      : 0;
+    return (
+      before +
+      `<span class="cmp-session cmp-session-named${range.kind === "workspace" ? " cmp-workspace" : ""}${range.archived ? " cmp-archived" : ""}">` +
+      (slot
+        ? `<span class="cmp-sglyph">${esc(token.slice(0, slot))}</span>`
+        : "") +
+      `${esc(token.slice(slot))}</span>` +
+      after
+    );
+  }
+  if (range.kind === "workspace") {
+    return (
+      before +
+      `<span class="cmp-session cmp-workspace">${esc(token)}</span>` +
+      after
+    );
+  }
+  const prefixEnd = token.indexOf("-") + 1;
+  const prefix = esc(token.slice(0, prefixEnd));
+  const rest = esc(token.slice(prefixEnd));
+  return (
+    before +
+    `<span class="cmp-session"><span class="cmp-sid">${prefix}</span>` +
+    `${rest}</span>` +
+    after
+  );
 }
 
 /** Pills inside a plain (non-code) run of the draft. */
 function chips(
-	text: string,
-	from: number,
-	to: number,
-	ranges: DraftRange[],
+  text: string,
+  from: number,
+  to: number,
+  ranges: DraftRange[],
 ): string {
-	let out = "";
-	let last = from;
-	for (const range of ranges) {
-		if (range.start < last || range.end > to) continue;
-		out += esc(text.slice(last, range.start));
-		out += "id" in range ? sessionHtml(text, range) : mentionHtml(text, range);
-		last = range.end;
-	}
-	return out + esc(text.slice(last, to));
+  let out = "";
+  let last = from;
+  for (const range of ranges) {
+    if (range.start < last || range.end > to) continue;
+    out += esc(text.slice(last, range.start));
+    out +=
+      "attachmentIndex" in range
+        ? imageAttachmentHtml(text, range)
+        : "id" in range
+          ? sessionHtml(text, range)
+          : mentionHtml(text, range);
+    last = range.end;
+  }
+  return out + esc(text.slice(last, to));
 }
 
 /** Wrap `inline code` spans within a non-fence segment. A pill inside code
  * stays plain — it is quoted text, not somebody being addressed or a place
  * being pointed at. */
 function inlineCode(
-	text: string,
-	syntax: string,
-	from: number,
-	to: number,
-	ranges: DraftRange[],
+  text: string,
+  syntax: string,
+  from: number,
+  to: number,
+  ranges: DraftRange[],
 ): string {
-	const seg = syntax.slice(from, to);
-	let out = "";
-	let last = from;
-	const re = /`[^`\n]+`/g;
-	let m: RegExpExecArray | null;
-	while ((m = re.exec(seg))) {
-		const at = from + m.index;
-		out += chips(text, last, at, ranges);
-		out += `<span class="cmp-code">${esc(text.slice(at, at + m[0].length))}</span>`;
-		last = at + m[0].length;
-	}
-	return out + chips(text, last, to, ranges);
+  const seg = syntax.slice(from, to);
+  let out = "";
+  let last = from;
+  const re = /`[^`\n]+`/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(seg))) {
+    const at = from + m.index;
+    out += chips(text, last, at, ranges);
+    out += `<span class="cmp-code">${esc(text.slice(at, at + m[0].length))}</span>`;
+    last = at + m[0].length;
+  }
+  return out + chips(text, last, to, ranges);
 }
 
 /**
@@ -300,36 +343,36 @@ function inlineCode(
  * ends in \n.
  */
 export function composerHighlightHtml(
-	text: string,
-	people: Person[] = [],
-	sessions: SessionRange[] = composerSessionRanges(text),
+  text: string,
+  people: Person[] = [],
+  sessions: SessionRange[] = composerSessionRanges(text),
 ): string {
-	const ranges = draftRanges(text, people, sessions);
-	const syntax = syntaxText(text, sessions);
-	let out = "";
-	let last = 0;
-	const re = /```[\s\S]*?```|```[\s\S]*$/g;
-	let m: RegExpExecArray | null;
-	while ((m = re.exec(syntax))) {
-		out += inlineCode(text, syntax, last, m.index, ranges);
-		out += `<span class="cmp-fence">${esc(text.slice(m.index, m.index + m[0].length))}</span>`;
-		last = m.index + m[0].length;
-	}
-	out += inlineCode(text, syntax, last, text.length, ranges);
-	return out + "​";
+  const ranges = draftRanges(text, people, sessions);
+  const syntax = syntaxText(text, sessions);
+  let out = "";
+  let last = 0;
+  const re = /```[\s\S]*?```|```[\s\S]*$/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(syntax))) {
+    out += inlineCode(text, syntax, last, m.index, ranges);
+    out += `<span class="cmp-fence">${esc(text.slice(m.index, m.index + m[0].length))}</span>`;
+    last = m.index + m[0].length;
+  }
+  out += inlineCode(text, syntax, last, text.length, ranges);
+  return out + "​";
 }
 
 /** The frame each caller's hit test is waiting on, plus the point to run it
  *  with. Keyed by the caller's `hovered` ref, which is per composer. */
 const pendingHover = new WeakMap<
-	object,
-	{
-		frame: number;
-		mirror: HTMLElement;
-		field: HTMLTextAreaElement;
-		x: number;
-		y: number;
-	}
+  object,
+  {
+    frame: number;
+    mirror: HTMLElement;
+    field: HTMLTextAreaElement;
+    x: number;
+    y: number;
+  }
 >();
 
 /**
@@ -350,27 +393,27 @@ const pendingHover = new WeakMap<
  * page schedule independently.
  */
 export function paintPillHover(
-	mirror: HTMLElement | null,
-	field: HTMLTextAreaElement | null,
-	x: number,
-	y: number,
-	hovered: { current: HTMLElement | null },
+  mirror: HTMLElement | null,
+  field: HTMLTextAreaElement | null,
+  x: number,
+  y: number,
+  hovered: { current: HTMLElement | null },
 ): void {
-	if (!mirror || !field) return;
-	const queued = pendingHover.get(hovered);
-	if (queued) {
-		queued.mirror = mirror;
-		queued.field = field;
-		queued.x = x;
-		queued.y = y;
-		return;
-	}
-	const next = { frame: 0, mirror, field, x, y };
-	next.frame = requestAnimationFrame(() => {
-		pendingHover.delete(hovered);
-		hitTestPillHover(next.mirror, next.field, next.x, next.y, hovered);
-	});
-	pendingHover.set(hovered, next);
+  if (!mirror || !field) return;
+  const queued = pendingHover.get(hovered);
+  if (queued) {
+    queued.mirror = mirror;
+    queued.field = field;
+    queued.x = x;
+    queued.y = y;
+    return;
+  }
+  const next = { frame: 0, mirror, field, x, y };
+  next.frame = requestAnimationFrame(() => {
+    pendingHover.delete(hovered);
+    hitTestPillHover(next.mirror, next.field, next.x, next.y, hovered);
+  });
+  pendingHover.set(hovered, next);
 }
 
 /**
@@ -383,42 +426,52 @@ export function paintPillHover(
  * mounted, which is every draft short of one (`needsComposerHighlight`).
  */
 export function pillRectAt(
-	mirror: HTMLElement | null,
-	x: number,
-	y: number,
+  mirror: HTMLElement | null,
+  x: number,
+  y: number,
 ): DOMRect | null {
-	if (!mirror) return null;
-	for (const span of mirror.querySelectorAll<HTMLElement>(
-		".cmp-mention, .cmp-session",
-	))
-		for (const rect of span.getClientRects())
-			if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom)
-				return rect;
-	return null;
+  if (!mirror) return null;
+  for (const span of mirror.querySelectorAll<HTMLElement>(
+    ".cmp-mention, .cmp-session",
+  ))
+    for (const rect of span.getClientRects())
+      if (
+        x >= rect.left &&
+        x <= rect.right &&
+        y >= rect.top &&
+        y <= rect.bottom
+      )
+        return rect;
+  return null;
 }
 
 function hitTestPillHover(
-	mirror: HTMLElement,
-	field: HTMLTextAreaElement,
-	x: number,
-	y: number,
-	hovered: { current: HTMLElement | null },
+  mirror: HTMLElement,
+  field: HTMLTextAreaElement,
+  x: number,
+  y: number,
+  hovered: { current: HTMLElement | null },
 ): void {
-	let hit: HTMLElement | null = null;
-	for (const span of mirror.querySelectorAll<HTMLElement>(
-		".cmp-mention, .cmp-session",
-	)) {
-		// Per fragment, not per span: a name that wraps has two boxes.
-		for (const rect of span.getClientRects())
-			if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom)
-				hit = span;
-		if (hit) break;
-	}
-	if (hovered.current === hit) return;
-	hovered.current?.removeAttribute("data-hover");
-	hit?.setAttribute("data-hover", "");
-	hovered.current = hit;
-	field.style.cursor = hit ? "pointer" : "";
+  let hit: HTMLElement | null = null;
+  for (const span of mirror.querySelectorAll<HTMLElement>(
+    ".cmp-mention, .cmp-session",
+  )) {
+    // Per fragment, not per span: a name that wraps has two boxes.
+    for (const rect of span.getClientRects())
+      if (
+        x >= rect.left &&
+        x <= rect.right &&
+        y >= rect.top &&
+        y <= rect.bottom
+      )
+        hit = span;
+    if (hit) break;
+  }
+  if (hovered.current === hit) return;
+  hovered.current?.removeAttribute("data-hover");
+  hit?.setAttribute("data-hover", "");
+  hovered.current = hit;
+  field.style.cursor = hit ? "pointer" : "";
 }
 
 /**
@@ -435,14 +488,15 @@ export const COMPOSER_HIGHLIGHT_MAX_CHARS = 8000;
  * a finished mention, or a session id. Plain drafts keep the stock opaque
  * textarea (zero desync risk). */
 export function needsComposerHighlight(
-	text: string,
-	people: Person[] = [],
-	sessions: SessionRange[] = composerSessionRanges(text),
+  text: string,
+  people: Person[] = [],
+  sessions: SessionRange[] = composerSessionRanges(text),
 ): boolean {
-	if (text.length > COMPOSER_HIGHLIGHT_MAX_CHARS) return false;
-	return (
-		text.includes("`") ||
-		composerMentionRanges(text, people).length > 0 ||
-		sessions.length > 0
-	);
+  if (text.length > COMPOSER_HIGHLIGHT_MAX_CHARS) return false;
+  return (
+    text.includes("`") ||
+    composerMentionRanges(text, people).length > 0 ||
+    composerImageAttachmentRanges(text).length > 0 ||
+    sessions.length > 0
+  );
 }

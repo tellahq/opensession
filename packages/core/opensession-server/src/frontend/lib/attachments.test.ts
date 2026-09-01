@@ -1,52 +1,76 @@
 import { expect, test, beforeEach, afterEach } from "bun:test";
 
+interface WindowStub {
+  addEventListener?: (type: string, handler: (event: unknown) => void) => void;
+  removeEventListener?: (
+    type: string,
+    handler: (event: unknown) => void,
+  ) => boolean | undefined;
+  dispatchEvent?: (event: { type: string }) => boolean;
+  setInterval?: () => number;
+}
+
+interface BrowserGlobals {
+  window?: WindowStub;
+  Event?: new (type: string) => { type: string };
+  document?: { visibilityState: string };
+  localStorage?: ReturnType<typeof memoryStorage>;
+  sessionStorage?: ReturnType<typeof memoryStorage>;
+}
+
 // These browser-facing stores need a small DOM/storage surface in Bun.
-const globals = globalThis as Record<string, any>;
-if (!globals.window) globals.window = {};
+const globals = globalThis as unknown as BrowserGlobals;
+globals.window ??= {};
 const win = globals.window;
 const handlers = new Map<string, Set<(event: unknown) => void>>();
 if (typeof win.addEventListener !== "function")
-	win.addEventListener = (type: string, handler: (event: unknown) => void) => {
-		if (!handlers.has(type)) handlers.set(type, new Set());
-		handlers.get(type)!.add(handler);
-	};
+  win.addEventListener = (type: string, handler: (event: unknown) => void) => {
+    if (!handlers.has(type)) handlers.set(type, new Set());
+    handlers.get(type)!.add(handler);
+  };
 if (typeof win.removeEventListener !== "function")
-	win.removeEventListener = (type: string, handler: (event: unknown) => void) =>
-		handlers.get(type)?.delete(handler);
+  win.removeEventListener = (type: string, handler: (event: unknown) => void) =>
+    handlers.get(type)?.delete(handler);
 if (typeof win.dispatchEvent !== "function")
-	win.dispatchEvent = (event: { type: string }) => {
-		for (const handler of handlers.get(event.type) ?? []) handler(event);
-		return true;
-	};
+  win.dispatchEvent = (event: { type: string }) => {
+    for (const handler of handlers.get(event.type) ?? []) handler(event);
+    return true;
+  };
 if (typeof win.setInterval !== "function") win.setInterval = () => 0;
 if (typeof globals.Event !== "function")
-	globals.Event = class {
-		type: string;
-		constructor(type: string) {
-			this.type = type;
-		}
-	};
+  globals.Event = class {
+    type: string;
+    constructor(type: string) {
+      this.type = type;
+    }
+  };
 if (!globals.document) globals.document = { visibilityState: "hidden" };
 // The store reads the signed-in user and mirrors to sessionStorage on the way
 // through. Neither is what these tests are about, so give them the smallest
 // thing that behaves.
 function memoryStorage() {
-	const values = new Map<string, string>();
-	return {
-		getItem: (key: string) => values.get(key) ?? null,
-		setItem: (key: string, value: string) => void values.set(key, String(value)),
-		removeItem: (key: string) => void values.delete(key),
-		key: (index: number) => [...values.keys()][index] ?? null,
-		get length() {
-			return values.size;
-		},
-	};
+  const values = new Map<string, string>();
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) =>
+      void values.set(key, String(value)),
+    removeItem: (key: string) => void values.delete(key),
+    key: (index: number) => [...values.keys()][index] ?? null,
+    get length() {
+      return values.size;
+    },
+  };
 }
 if (!globals.localStorage) globals.localStorage = memoryStorage();
-if (!globals.sessionStorage) globals.sessionStorage = memoryStorage();
+const sessionStorage = (globals.sessionStorage ??= memoryStorage());
 
-const { attachToDraft, dropStagingAttachments, removeDraftImage, attachingLabel, countStaging } =
-	await import("./attachments");
+const {
+  attachToDraft,
+  dropStagingAttachments,
+  removeDraftImage,
+  attachingLabel,
+  countStaging,
+} = await import("./attachments");
 const { loadDraft, saveDraft, clearDraft } = await import("./drafts");
 
 const KEY = "test-attachments";
@@ -55,100 +79,112 @@ const realFetch = globalThis.fetch;
 /** Stand in for POST /api/upload, held open until `release` is called, so a
  *  test can do things while a paste is still on its way to disk. */
 function stagingServer() {
-	let release = () => {};
-	const held = new Promise<void>((resolve) => {
-		release = resolve;
-	});
-	globalThis.fetch = (async (input: any, init: any) => {
-		const url = String(input);
-		if (url.includes("/api/upload")) {
-			await held;
-			const name = decodeURIComponent(init?.headers?.["x-file-name"] ?? "file");
-			return new Response(
-				JSON.stringify({ ok: true, name, path: `/uploads/staged/${name}` }),
-				{ headers: { "content-type": "application/json" } },
-			);
-		}
-		return new Response("{}", { headers: { "content-type": "application/json" } });
-	}) as typeof fetch;
-	return { release };
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const fetchStub = async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const url = String(input);
+    if (url.includes("/api/upload")) {
+      await held;
+      const name = decodeURIComponent(
+        new Headers(init?.headers).get("x-file-name") ?? "file",
+      );
+      return new Response(
+        JSON.stringify({ ok: true, name, path: `/uploads/staged/${name}` }),
+        { headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response("{}", {
+      headers: { "content-type": "application/json" },
+    });
+  };
+  globalThis.fetch = Object.assign(fetchStub, {
+    preconnect: realFetch.preconnect,
+  });
+  return { release };
 }
 
 const png = (name: string) =>
-	new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], name, { type: "image/png" });
+  new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], name, {
+    type: "image/png",
+  });
 
 beforeEach(() => clearDraft(KEY));
 afterEach(() => {
-	globalThis.fetch = realFetch;
-	clearDraft(KEY);
+  globalThis.fetch = realFetch;
+  clearDraft(KEY);
 });
 
 // The bug this module exists for: the upload outlives the composer, so a
 // screenshot pasted while the app is still loading used to die with the card
 // that closed before it landed, with the file already staged on the server.
 test("a staged image reaches the draft even when nothing is listening", async () => {
-	const server = stagingServer();
-	const attaching = attachToDraft(KEY, [png("screenshot.png")]);
+  const server = stagingServer();
+  const attaching = attachToDraft(KEY, [png("screenshot.png")]);
 
-	expect(loadDraft(KEY).images).toEqual([]);
-	server.release();
-	await attaching;
+  expect(loadDraft(KEY).images).toEqual([]);
+  server.release();
+  await attaching;
 
-	expect(loadDraft(KEY).images).toEqual([
-		`/media?path=${encodeURIComponent("/uploads/staged/screenshot.png")}`,
-	]);
+  expect(loadDraft(KEY).images).toEqual([
+    `/media?path=${encodeURIComponent("/uploads/staged/screenshot.png")}`,
+  ]);
 });
 
 test("staging merges with what the draft holds now, not what it held at paste", async () => {
-	const server = stagingServer();
-	const first = attachToDraft(KEY, [png("one.png")]);
-	const second = attachToDraft(KEY, [png("two.png")]);
-	saveDraft(KEY, { text: "typed while both were uploading" });
-	server.release();
-	await Promise.all([first, second]);
+  const server = stagingServer();
+  const first = attachToDraft(KEY, [png("one.png")]);
+  const second = attachToDraft(KEY, [png("two.png")]);
+  saveDraft(KEY, { text: "typed while both were uploading" });
+  server.release();
+  await Promise.all([first, second]);
 
-	// Neither paste wins: both are there, and the text they were typed beside
-	// survived them landing.
-	expect(loadDraft(KEY).images).toHaveLength(2);
-	expect(loadDraft(KEY).text).toBe("typed while both were uploading");
+  // Neither paste wins: both are there, and the text they were typed beside
+  // survived them landing.
+  expect(loadDraft(KEY).images).toHaveLength(2);
+  expect(loadDraft(KEY).text).toBe("typed while both were uploading");
 });
 
 // The other half of the trade: a completion must not write itself back into a
 // draft whose prompt has already been sent.
 test("an upload that lands after the draft was used is dropped", async () => {
-	const server = stagingServer();
-	const attaching = attachToDraft(KEY, [png("late.png")]);
+  const server = stagingServer();
+  const attaching = attachToDraft(KEY, [png("late.png")]);
 
-	dropStagingAttachments(KEY);
-	clearDraft(KEY);
-	server.release();
+  dropStagingAttachments(KEY);
+  clearDraft(KEY);
+  server.release();
 
-	expect((await attaching).applied).toBe(false);
-	expect(loadDraft(KEY).images).toEqual([]);
+  expect((await attaching).applied).toBe(false);
+  expect(loadDraft(KEY).images).toEqual([]);
 });
 
 test("canceling an upload prevents the image from reappearing", async () => {
-	const server = stagingServer();
-	const controller = new AbortController();
-	const attaching = attachToDraft(KEY, [png("removed.png")], controller.signal);
+  const server = stagingServer();
+  const controller = new AbortController();
+  const attaching = attachToDraft(KEY, [png("removed.png")], controller.signal);
 
-	controller.abort();
-	server.release();
+  controller.abort();
+  server.release();
 
-	expect((await attaching).applied).toBe(false);
-	expect(loadDraft(KEY).images).toEqual([]);
+  expect((await attaching).applied).toBe(false);
+  expect(loadDraft(KEY).images).toEqual([]);
 });
 
 test("removing an image goes through the store", async () => {
-	const server = stagingServer();
-	server.release();
-	await attachToDraft(KEY, [png("a.png"), png("b.png")]);
+  const server = stagingServer();
+  server.release();
+  await attachToDraft(KEY, [png("a.png"), png("b.png")]);
 
-	removeDraftImage(KEY, 0);
+  removeDraftImage(KEY, 0);
 
-	expect(loadDraft(KEY).images).toEqual([
-		`/media?path=${encodeURIComponent("/uploads/staged/b.png")}`,
-	]);
+  expect(loadDraft(KEY).images).toEqual([
+    `/media?path=${encodeURIComponent("/uploads/staged/b.png")}`,
+  ]);
 });
 
 // A staged attachment is a ~90-character ref, but an image the server refused
@@ -156,28 +192,33 @@ test("removing an image goes through the store", async () => {
 // mirror's size cap. Losing them to a reload is the trade; losing the writing
 // they were attached to is not.
 test("an inline image too big for the mirror does not take the text with it", async () => {
-	saveDraft(KEY, {
-		text: "keep me",
-		images: [`data:image/png;base64,${"A".repeat(3_100_000)}`],
-	});
-	await new Promise((resolve) => setTimeout(resolve, 500));
+  saveDraft(KEY, {
+    text: "keep me",
+    images: [`data:image/png;base64,${"A".repeat(3_100_000)}`],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
-	const mirrored = JSON.parse(globals.sessionStorage.getItem(`backstage-draft:${KEY}`)!);
-	expect(mirrored.text).toBe("keep me");
-	expect(mirrored.images).toEqual([]);
+  const mirrored = JSON.parse(
+    sessionStorage.getItem(`backstage-draft:${KEY}`)!,
+  );
+  expect(mirrored.text).toBe("keep me");
+  expect(mirrored.images).toEqual([]);
 });
 
 test("the pending row names what it is waiting for", () => {
-	expect(attachingLabel({ images: 0, files: 0 })).toBeNull();
-	expect(attachingLabel({ images: 1, files: 0 })).toBe("Attaching 1 image…");
-	expect(attachingLabel({ images: 2, files: 0 })).toBe("Attaching 2 images…");
-	// Anything that is not a picture is counted as a file, images included, so
-	// a mixed pick does not claim to be attaching two pictures.
-	expect(attachingLabel({ images: 1, files: 1 })).toBe("Attaching 2 files…");
+  expect(attachingLabel({ images: 0, files: 0 })).toBeNull();
+  expect(attachingLabel({ images: 1, files: 0 })).toBe("Attaching 1 image…");
+  expect(attachingLabel({ images: 2, files: 0 })).toBe("Attaching 2 images…");
+  // Anything that is not a picture is counted as a file, images included, so
+  // a mixed pick does not claim to be attaching two pictures.
+  expect(attachingLabel({ images: 1, files: 1 })).toBe("Attaching 2 files…");
 });
 
 test("what is staging is counted by kind", () => {
-	expect(
-		countStaging([png("a.png"), new File(["x"], "notes.txt", { type: "text/plain" })]),
-	).toEqual({ images: 1, files: 1 });
+  expect(
+    countStaging([
+      png("a.png"),
+      new File(["x"], "notes.txt", { type: "text/plain" }),
+    ]),
+  ).toEqual({ images: 1, files: 1 });
 });

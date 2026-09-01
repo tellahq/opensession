@@ -8,7 +8,10 @@
  * resolve one from the server-side account store.
  */
 
-export function githubCredentialResponse(action: string | undefined, input: string): string {
+export function githubCredentialResponse(
+  action: string | undefined,
+  input: string,
+): string {
   if (action !== "get") return "";
 
   const attrs: Record<string, string> = {};
@@ -23,7 +26,11 @@ export function githubCredentialResponse(action: string | undefined, input: stri
   return token ? `username=x-access-token\npassword=${token}\n` : "";
 }
 
-export async function githubCredentialHelper(action: string | undefined): Promise<number> {
-  process.stdout.write(githubCredentialResponse(action, await Bun.stdin.text()));
+export async function githubCredentialHelper(
+  action: string | undefined,
+): Promise<number> {
+  process.stdout.write(
+    githubCredentialResponse(action, await Bun.stdin.text()),
+  );
   return 0;
 }

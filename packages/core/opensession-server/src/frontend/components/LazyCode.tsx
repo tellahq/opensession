@@ -6,7 +6,7 @@ import { TOOL_PRE } from "../lib/tool-classes";
 // expanded, or a turn's file chip opened. Until the chunk arrives, the code
 // shows as a plain pre, which is the same text without the colour.
 const CodeHighlightLazy = lazy(() =>
-  import("./CodeHighlight").then((m) => ({ default: m.CodeHighlight }))
+  import("./CodeHighlight").then((m) => ({ default: m.CodeHighlight })),
 );
 
 export function CodeHighlight(props: {

@@ -6,23 +6,24 @@
  * token twice and invalidate the account.
  */
 
-const authTails: Map<string, Promise<void>> = ((globalThis as any)
-	.__codexAuthOperationTails ??= new Map());
+const authTails: Map<string, Promise<void>> = ((
+  globalThis as any
+).__codexAuthOperationTails ??= new Map());
 
 export async function withCodexAuthLock<T>(
-	codexHome: string,
-	action: () => Promise<T>,
+  codexHome: string,
+  action: () => Promise<T>,
 ): Promise<T> {
-	const previous = authTails.get(codexHome) || Promise.resolve();
-	const run = previous.catch(() => {}).then(action);
-	const tail = run.then(
-		() => {},
-		() => {},
-	);
-	authTails.set(codexHome, tail);
-	try {
-		return await run;
-	} finally {
-		if (authTails.get(codexHome) === tail) authTails.delete(codexHome);
-	}
+  const previous = authTails.get(codexHome) || Promise.resolve();
+  const run = previous.catch(() => {}).then(action);
+  const tail = run.then(
+    () => {},
+    () => {},
+  );
+  authTails.set(codexHome, tail);
+  try {
+    return await run;
+  } finally {
+    if (authTails.get(codexHome) === tail) authTails.delete(codexHome);
+  }
 }

@@ -16,48 +16,48 @@
  */
 
 export interface MapDelta {
-	set?: Record<string, unknown>;
-	remove?: string[];
+  set?: Record<string, unknown>;
+  remove?: string[];
 }
 
 const MAX_OPERATIONS = 10_000;
 const BLOCKED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 const hasOwn = (value: object, key: string): boolean =>
-	Object.prototype.hasOwnProperty.call(value, key);
+  Object.prototype.hasOwnProperty.call(value, key);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-	const prototype = Object.getPrototypeOf(value);
-	return prototype === Object.prototype || prototype === null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function validKey(key: string): boolean {
-	return key.length > 0 && key.length <= 128 && !BLOCKED_KEYS.has(key);
+  return key.length > 0 && key.length <= 128 && !BLOCKED_KEYS.has(key);
 }
 
 /** Whether the body declares either delta field, valid or not. */
 export function hasMapDeltaFields(body: unknown): boolean {
-	return Boolean(
-		body &&
-			typeof body === "object" &&
-			(hasOwn(body, "set") || hasOwn(body, "remove")),
-	);
+  return Boolean(
+    body &&
+    typeof body === "object" &&
+    (hasOwn(body, "set") || hasOwn(body, "remove")),
+  );
 }
 
 /** Validate a delta before any part of it is applied. */
 export function isMapDelta(body: unknown): body is MapDelta {
-	if (!isRecord(body) || !hasMapDeltaFields(body)) return false;
-	const set = hasOwn(body, "set") ? body.set : {};
-	const remove = hasOwn(body, "remove") ? body.remove : [];
-	if (!isRecord(set) || !Array.isArray(remove)) return false;
-	const setKeys = Object.keys(set);
-	if (
-		setKeys.length + remove.length > MAX_OPERATIONS ||
-		setKeys.some((key) => !validKey(key)) ||
-		remove.some((key) => typeof key !== "string" || !validKey(key))
-	)
-		return false;
-	return true;
+  if (!isRecord(body) || !hasMapDeltaFields(body)) return false;
+  const set = hasOwn(body, "set") ? body.set : {};
+  const remove = hasOwn(body, "remove") ? body.remove : [];
+  if (!isRecord(set) || !Array.isArray(remove)) return false;
+  const setKeys = Object.keys(set);
+  if (
+    setKeys.length + remove.length > MAX_OPERATIONS ||
+    setKeys.some((key) => !validKey(key)) ||
+    remove.some((key) => typeof key !== "string" || !validKey(key))
+  )
+    return false;
+  return true;
 }
 
 /**
@@ -66,14 +66,14 @@ export function isMapDelta(body: unknown): body is MapDelta {
  * removals would preserve the original cross-client data-loss bug.
  */
 export function requestedMapDelta(
-	body: unknown,
-	legacyField: string,
+  body: unknown,
+  legacyField: string,
 ): MapDelta | null {
-	if (!body || typeof body !== "object") return null;
-	if (hasMapDeltaFields(body)) return isMapDelta(body) ? body : null;
-	const legacy = (body as Record<string, unknown>)[legacyField];
-	const candidate: MapDelta = { set: legacy as Record<string, unknown> };
-	return isMapDelta(candidate) ? candidate : null;
+  if (!body || typeof body !== "object") return null;
+  if (hasMapDeltaFields(body)) return isMapDelta(body) ? body : null;
+  const legacy = (body as Record<string, unknown>)[legacyField];
+  const candidate: MapDelta = { set: legacy as Record<string, unknown> };
+  return isMapDelta(candidate) ? candidate : null;
 }
 
 /**
@@ -82,11 +82,11 @@ export function requestedMapDelta(
  * being accidentally revived.
  */
 export function mergeMapDelta(
-	current: Record<string, unknown>,
-	delta: MapDelta,
+  current: Record<string, unknown>,
+  delta: MapDelta,
 ): Record<string, unknown> {
-	const next: Record<string, unknown> = { ...current };
-	for (const [key, value] of Object.entries(delta.set ?? {})) next[key] = value;
-	for (const key of delta.remove ?? []) delete next[key];
-	return next;
+  const next: Record<string, unknown> = { ...current };
+  for (const [key, value] of Object.entries(delta.set ?? {})) next[key] = value;
+  for (const key of delta.remove ?? []) delete next[key];
+  return next;
 }

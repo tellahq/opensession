@@ -90,6 +90,22 @@ enum TranscriptScroll {
         return distanceFromBottom(geometry) <= tolerance
     }
 
+    /// Whether a measured tail-height change should be followed immediately.
+    /// A settling hold covers programmatic navigation whose intermediate
+    /// geometry frame briefly falls outside the bottom tolerance.
+    static func shouldFollowContentGrowth(
+        previousContentHeight: CGFloat,
+        contentHeight: CGFloat,
+        readerMovedTowardHistory: Bool,
+        wasFollowing: Bool,
+        holdingAtLatest: Bool,
+        readerScrollActive: Bool
+    ) -> Bool {
+        contentHeight > previousContentHeight
+            && !readerMovedTowardHistory
+            && (wasFollowing || (holdingAtLatest && !readerScrollActive))
+    }
+
     /// Keep an upward reader gesture authoritative even when it remains inside
     /// the near-bottom tolerance. Layout-driven scroll updates must not re-arm
     /// following until the reader moves back toward the latest message.

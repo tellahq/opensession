@@ -47,17 +47,25 @@ function jwtExpMs(jwt: string): number | null {
   try {
     const payload = jwt.split(".")[1];
     if (!payload) return null;
-    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
+    const claims = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf-8"),
+    );
     return typeof claims.exp === "number" ? claims.exp * 1000 : null;
   } catch {
     return null;
   }
 }
 
-function readTokens(path: string): { access?: string; refresh?: string; raw: any } | null {
+function readTokens(
+  path: string,
+): { access?: string; refresh?: string; raw: any } | null {
   try {
     const raw = JSON.parse(readFileSync(path, "utf-8"));
-    return { access: raw?.tokens?.access_token, refresh: raw?.tokens?.refresh_token, raw };
+    return {
+      access: raw?.tokens?.access_token,
+      refresh: raw?.tokens?.refresh_token,
+      raw,
+    };
   } catch {
     return null; // unreadable auth.json is account-health's problem, not ours
   }
@@ -93,18 +101,24 @@ async function doRefresh(path: string, name: string): Promise<void> {
     });
   } catch (e: any) {
     refreshBlockedUntil.set(path, Date.now() + FAILED_REFRESH_WAIT_MS);
-    console.warn(`[codex-refresh] ${name}: token refresh failed: ${e?.message || e}`);
+    console.warn(
+      `[codex-refresh] ${name}: token refresh failed: ${e?.message || e}`,
+    );
     return;
   }
   if (!res.ok) {
     refreshBlockedUntil.set(path, Date.now() + FAILED_REFRESH_WAIT_MS);
-    console.warn(`[codex-refresh] ${name}: token refresh failed: HTTP ${res.status}`);
+    console.warn(
+      `[codex-refresh] ${name}: token refresh failed: HTTP ${res.status}`,
+    );
     return;
   }
   const body: any = await res.json().catch(() => null);
   if (!body?.access_token) {
     refreshBlockedUntil.set(path, Date.now() + FAILED_REFRESH_WAIT_MS);
-    console.warn(`[codex-refresh] ${name}: refresh response carried no access token`);
+    console.warn(
+      `[codex-refresh] ${name}: refresh response carried no access token`,
+    );
     return;
   }
   // Merge onto yet another fresh read so only the token fields move.
@@ -143,8 +157,8 @@ export async function refreshIdleCodexTokens(): Promise<void> {
       await existing;
       continue;
     }
-    const p = withCodexAuthLock(a.value, () => doRefresh(path, a.name)).finally(() =>
-      inFlight.delete(path)
+    const p = withCodexAuthLock(a.value, () => doRefresh(path, a.name)).finally(
+      () => inFlight.delete(path),
     );
     inFlight.set(path, p);
     await p;

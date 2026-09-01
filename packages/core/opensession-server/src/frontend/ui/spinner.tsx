@@ -1,51 +1,6 @@
+import { utilityClassName } from "./cn";
 import * as React from "react";
-import { cn, mergeStylexProps, mergeStylexClassName } from "./cn";
-import * as stylex from "@stylexjs/stylex";
-import { motionStyles } from "../styles/animations.stylex";
-
-/* Converted from Tailwind utilities; names mirror the original class tokens. */
-const sx = stylex.create({
-	inlineBlock: {
-			display: "inline-block"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	animateSpin: {
-			animation: "var(--animate-spin)"
-	},
-	roundedFull: {
-			borderRadius: "calc(infinity * 1px)"
-	,
-		cornerShape: "round"},
-	borderCurrent25: {
-			borderColor: "currentColor"
-	},
-	borderTCurrent: {
-			borderTopColor: "currentColor"
-	},
-
-	size3: {
-		"width": "12px",
-		"height": "12px"
-	},
-	border: {
-		"borderStyle": "var(--tw-border-style)",
-		"borderWidth": "1px"
-	},
-	size4: {
-		"width": "16px",
-		"height": "16px"
-	},
-	border2: {
-		"borderStyle": "var(--tw-border-style)",
-		"borderWidth": "2px"
-	},
-	size5: {
-		"width": "20px",
-		"height": "20px"
-	},
-});
+import { cn } from "./cn";
 
 /**
  * The waiting spinner: a turning ring, for anything that is fetching,
@@ -66,20 +21,27 @@ const sx = stylex.create({
 export type SpinnerSize = "sm" | "md" | "lg";
 
 const sizes: Record<SpinnerSize, string> = {
-	sm: mergeStylexClassName("", sx.size3, sx.border),
-	md: mergeStylexClassName("", sx.size4, sx.border2),
-	lg: mergeStylexClassName("", sx.size5, sx.border2),
+  sm: utilityClassName("size-3 border"),
+  md: utilityClassName("size-4 border-2"),
+  lg: utilityClassName("size-5 border-2"),
 };
 
 export function Spinner({
-	size = "sm",
-	className,
-	...props
+  size = "sm",
+  className,
+  ...props
 }: React.ComponentPropsWithoutRef<"span"> & { size?: SpinnerSize }) {
-	return (
-		<span
-			aria-hidden {...mergeStylexProps(cn(sizes[size], className), sx.inlineBlock, sx.shrink0, motionStyles.spin, sx.roundedFull, sx.borderCurrent25, sx.borderTCurrent)}
-			{...props}
-		/>
-	);
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        utilityClassName(
+          "inline-block shrink-0 animate-spin rounded-full border-current/25 border-t-current",
+        ),
+        sizes[size],
+        className,
+      )}
+      {...props}
+    />
+  );
 }

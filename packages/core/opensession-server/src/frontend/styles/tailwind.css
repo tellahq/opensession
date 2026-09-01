@@ -51,140 +51,140 @@
    `bg-panel text-dim border-line` and legacy CSS read the same values and
    re-theme together. `inline` makes utilities emit var(--bg) directly. */
 @theme inline {
-	/* Surfaces */
-	--color-bg: var(--bg);
-	--color-surface: var(--bg);
-	--color-raised: var(--bg-raised);
-	/* The sidebar column and the chrome band around it. Same surface as
+  /* Surfaces */
+  --color-bg: var(--bg);
+  --color-surface: var(--bg);
+  --color-raised: var(--bg-raised);
+  /* The sidebar column and the chrome band around it. Same surface as
 	   `raised` in dark; in light it sits closer to the page (see base.css). */
-	--color-sidebar: var(--sidebar-bg);
-	--color-panel: var(--bg-panel);
-	/* The session's right-hand panel column. A hair off the page rather than a
+  --color-sidebar: var(--sidebar-bg);
+  --color-panel: var(--bg-panel);
+  /* The session's right-hand panel column. A hair off the page rather than a
 	   tier below it, the way `sidebar` is (see base.css). The plate its sections
 	   sit on has no utility of its own: PANEL_SHELL re-points --bg-panel at
 	   `--panel-plate`, so `bg-panel` inside the column resolves to the lighter
 	   step and every plate, chip and pill in there moves together. */
-	--color-panel-surface: var(--panel-surface);
-	/* The plate a settings group sits on. Its own surface rather than `raised`:
+  --color-panel-surface: var(--panel-surface);
+  /* The plate a settings group sits on. Its own surface rather than `raised`:
 	   a settings page stacks several of them down one reading column, which is
 	   the same argument `panel-surface` makes for the right-hand panel (see
 	   base.css). */
-	--color-settings-plate: var(--settings-plate);
-	/* Floating popups (hover cards, menus). Its own surface rather than
+  --color-settings-plate: var(--settings-plate);
+  /* Floating popups (hover cards, menus). Its own surface rather than
 	   bg-panel: in light a popup is paper on the page, not a panel in it.
 	   `popup-glass` is that same paper held up to the light — pair it with
 	   `[backdrop-filter:var(--popup-blur)]`, and it falls back to the opaque
 	   `popup` on its own where the blur can't run (see base.css). */
-	--color-popup: var(--popup-surface);
-	--color-popup-glass: var(--popup-glass);
-	/* The same paper, denser, for the command palette — a big box over a dimming
+  --color-popup: var(--popup-surface);
+  --color-popup-glass: var(--popup-glass);
+  /* The same paper, denser, for the command palette — a big box over a dimming
 	   backdrop needs more body than a strip of menu rows (see base.css). */
-	--color-palette-glass: var(--palette-glass);
-	/* bg-hover is the interaction *wash* (translucent ink, so it reads the same
+  --color-palette-glass: var(--palette-glass);
+  /* bg-hover is the interaction *wash* (translucent ink, so it reads the same
 	   strength over any surface) — that's what `hover:bg-hover` wants at all of
 	   its call sites. bg-active stays an opaque surface: it's used as one (switch
 	   tracks, meter tracks, avatar fallbacks that put white text on it), not as a
 	   pressed state. A press paints `bg-pressed`. */
-	--color-hover: var(--hover);
-	--color-pressed: var(--hover-strong);
-	/* What is open, not what is being pressed: the selected sidebar row, the
+  --color-hover: var(--hover);
+  --color-pressed: var(--hover-strong);
+  /* What is open, not what is being pressed: the selected sidebar row, the
 	   active tool. Quieter than a press, because it stays on the screen and the
 	   title's ink says it too (see base.css). */
-	--color-selected: var(--selected);
-	--color-active: var(--bg-active);
+  --color-selected: var(--selected);
+  --color-active: var(--bg-active);
 
-	/* Borders (border-border reads terribly, so: line) */
-	--color-line: var(--border);
-	--color-line-strong: var(--border-strong);
-	/* The chrome seam: a top bar's underline, the sidebar and panel edges, a
+  /* Borders (border-border reads terribly, so: line) */
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  /* The chrome seam: a top bar's underline, the sidebar and panel edges, a
 	   pane header. Softer than `line`, which stays for the edge of a control.
 	   See base.css for why the chrome takes a wash and not a full hairline. */
-	--color-divider: var(--divider);
-	/* Lighter still: the outline of a block that already has its own fill (the
+  --color-divider: var(--divider);
+  /* Lighter still: the outline of a block that already has its own fill (the
 	   settings plate). See base.css. */
-	--color-divider-soft: var(--divider-soft);
+  --color-divider-soft: var(--divider-soft);
 
-	/* Text */
-	--color-fg: var(--text);
-	--color-dim: var(--text-dim);
-	--color-faint: var(--text-faint);
+  /* Text */
+  --color-fg: var(--text);
+  --color-dim: var(--text-dim);
+  --color-faint: var(--text-faint);
 
-	/* Accent + status */
-	--color-accent: var(--accent);
-	--color-accent-ink: var(--accent-ink);
-	--color-accent-soft: var(--accent-soft);
-	/* What sits ON an --accent fill: its inverse. Pair it with bg-accent —
+  /* Accent + status */
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  /* What sits ON an --accent fill: its inverse. Pair it with bg-accent —
 	   text-white only worked while the accent was a saturated red. */
-	--color-on-accent: var(--on-accent);
-	/* Hover for a filled accent plate. Every call site used to spell the
+  --color-on-accent: var(--on-accent);
+  /* Hover for a filled accent plate. Every call site used to spell the
 	   ink-toward-page mix inline, which turned a themed accent black on hover;
 	   base.css picks the right direction per accent. */
-	--color-accent-hover: var(--accent-hover);
-	/* A switch track is the one accent surface that is read as on/off rather
+  --color-accent-hover: var(--accent-hover);
+  /* A switch track is the one accent surface that is read as on/off rather
 	   than as a colour, so two accents swap it for a blue: white and yellow
 	   tracks are unreadable as "on" against a dark page. Everything else
 	   resolves straight through to the accent. */
-	--color-accent-control: var(--accent-control, var(--accent));
-	--color-on-accent-control: var(--on-accent-control, var(--on-accent));
-	/* Inline affordances (a link, a PR title that opens). The accent is ink
+  --color-accent-control: var(--accent-control, var(--accent));
+  --color-on-accent-control: var(--on-accent-control, var(--on-accent));
+  /* Inline affordances (a link, a PR title that opens). The accent is ink
 	   now, so it cannot mark a link inside running text; this can. */
-	--color-link: var(--link);
-	--color-focus-ring: var(--accent);
-	--color-green: var(--green);
-	--color-green-soft: var(--green-soft);
-	--color-yellow: var(--yellow);
-	--color-yellow-soft: var(--yellow-soft);
-	/* Yellow as a surface, not as ink — see base.css. */
-	--color-yellow-tint: var(--yellow-tint);
-	--color-blue: var(--blue);
-	--color-blue-soft: var(--blue-soft);
-	--color-red: var(--red);
-	--color-red-soft: var(--red-soft);
-	--color-purple: var(--purple);
+  --color-link: var(--link);
+  --color-focus-ring: var(--accent);
+  --color-green: var(--green);
+  --color-green-soft: var(--green-soft);
+  --color-yellow: var(--yellow);
+  --color-yellow-soft: var(--yellow-soft);
+  /* Yellow as a surface, not as ink — see base.css. */
+  --color-yellow-tint: var(--yellow-tint);
+  --color-blue: var(--blue);
+  --color-blue-soft: var(--blue-soft);
+  --color-red: var(--red);
+  --color-red-soft: var(--red-soft);
+  --color-purple: var(--purple);
 
-	/* Tool-family hues (transcript timeline) */
-	--color-tool-run: var(--tool-run);
-	--color-tool-file: var(--tool-file);
-	--color-tool-edit: var(--tool-edit);
-	--color-tool-find: var(--tool-find);
-	--color-tool-web: var(--tool-web);
-	--color-tool-agent: var(--tool-agent);
-	--color-tool-mcp: var(--tool-mcp);
-	--color-tool-skill: var(--tool-skill);
+  /* Tool-family hues (transcript timeline) */
+  --color-tool-run: var(--tool-run);
+  --color-tool-file: var(--tool-file);
+  --color-tool-edit: var(--tool-edit);
+  --color-tool-find: var(--tool-find);
+  --color-tool-web: var(--tool-web);
+  --color-tool-agent: var(--tool-agent);
+  --color-tool-mcp: var(--tool-mcp);
+  --color-tool-skill: var(--tool-skill);
 
-	/* The code well a tool call's input/output sits in — its own scheme, not a
+  /* The code well a tool call's input/output sits in — its own scheme, not a
 	   step of the chrome ramp. See the note on the tokens in base.css. */
-	--color-code-well: var(--code-well);
-	--color-code-well-line: var(--code-well-line);
-	--color-code-well-ink: var(--code-well-ink);
-	--color-code-well-gutter: var(--code-well-gutter);
+  --color-code-well: var(--code-well);
+  --color-code-well-line: var(--code-well-line);
+  --color-code-well-ink: var(--code-well-ink);
+  --color-code-well-gutter: var(--code-well-gutter);
 
-	/* Tooltip chip (near-black in both themes) */
-	--color-tooltip: var(--tooltip-bg);
-	--color-tooltip-fg: var(--tooltip-fg);
-	--color-tooltip-ring: var(--tooltip-ring);
+  /* Tooltip chip (near-black in both themes) */
+  --color-tooltip: var(--tooltip-bg);
+  --color-tooltip-fg: var(--tooltip-fg);
+  --color-tooltip-ring: var(--tooltip-ring);
 
-	/* Control chrome (filled chips, inputs, option rows): the raised
+  /* Control chrome (filled chips, inputs, option rows): the raised
 	   white/graphite surface — pairs with border-line. */
-	--color-control: var(--control-surface);
-	/* The plate under a *pressable* control. Same fill as above in dark; paper
+  --color-control: var(--control-surface);
+  /* The plate under a *pressable* control. Same fill as above in dark; paper
 	   in light, because a button carries a cast shadow and a hairline to say it
 	   is raised, so it does not need a grey fill to say it too. */
-	--color-button: var(--button-surface);
+  --color-button: var(--button-surface);
 
-	/* Type + shape */
-	--font-sans: var(--sans);
-	--font-mono: var(--mono);
-	/* `font-title`: the weight a page's own name and the headings under it
+  /* Type + shape */
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+  /* `font-title`: the weight a page's own name and the headings under it
 	   take. It resolves through base.css, so it re-cuts per theme the way every
 	   colour token here does: 500 in dark, 600 in light. Write it on a heading
 	   instead of `font-semibold`, or that heading is the one that stays heavy
 	   in dark. */
-	--font-weight-title: var(--title-weight);
-	--radius-panel: calc(var(--radius) * var(--rf));
-	/* The large standalone section shared by the website and first-run setup. */
-	--radius-section: calc(28px * var(--rf));
-	/* The corner every button and chip in the chrome shares. legacy.css authors
+  --font-weight-title: var(--title-weight);
+  --radius-panel: calc(var(--radius) * var(--rf));
+  /* The large standalone section shared by the website and first-run setup. */
+  --radius-section: calc(28px * var(--rf));
+  /* The corner every button and chip in the chrome shares. legacy.css authors
 	   it as `calc(10px * var(--rf))` on .btn-viewer-pin / .btn-panel-toggle /
 	   .btn-viewer-newsession and friends; naming it here lets the Button primitive
 	   and any Tailwind-authored control land on the same corner instead of
@@ -198,8 +198,8 @@
 	   rows (a 36px button at 13.5px is barely a third of the way to its own
 	   half-height). One token carries the whole chrome, so buttons, chips and
 	   the split Create button move together rather than drifting apart. */
-	--radius-control: calc(12px * var(--rf));
-	/* The corner of a full-width selectable ROW in a left rail — a session in
+  --radius-control: calc(12px * var(--rf));
+  /* The corner of a full-width selectable ROW in a left rail — a session in
 	   the sidebar, a section in settings' side nav, a person, a tool. It used
 	   to be one step softer than a control; the control has since caught up to
 	   it, so the two now describe the same corner. The token stays because the
@@ -211,19 +211,19 @@
 	   (also 18.9px) and landing a third of a corner away from the rows it is
 	   stacked against. There is no 12px step in the scale below, which is
 	   precisely why those rows had drifted. */
-	--radius-row: calc(12px * var(--rf));
-	/* The corner of a floating popup — hover card, menu, filter panel. Rounder
+  --radius-row: calc(12px * var(--rf));
+  /* The corner of a floating popup — hover card, menu, filter panel. Rounder
 	   than the controls inside it, on purpose: those are pressed, this is a
 	   whole surface that arrived over the page, and at 300px a control's
 	   corner reads as a square box. It sits below the composer's 28px, which
 	   stays the roundest thing on a session page. */
-	--radius-popup: calc(16px * var(--rf));
+  --radius-popup: calc(16px * var(--rf));
 
-	/* base.css sets html { font-size: 14px }, which silently shrinks every
+  /* base.css sets html { font-size: 14px }, which silently shrinks every
 	   rem-based utility to 87.5% of its px design value (p-3 → 10.5px). Anchor
 	   the scales this codebase designs in px so utilities mean what they say. */
-	--spacing: 4px;
-	/* Radii are authored the way base.css authors every corner in the app —
+  --spacing: 4px;
+  /* Radii are authored the way base.css authors every corner in the app —
 	   `calc(<px> * var(--rf))` — so the one token flip at base.css's
 	   `@supports (corner-shape: squircle)` (1 round → 1.35 squircle) moves
 	   the legacy stylesheet and this scale together.
@@ -237,30 +237,30 @@
 	   --rf is what makes a step here interchangeable with the same step in
 	   base.css. corner-shape itself needs no help: base.css already gives
 	   every `rounded-*` class `corner-shape: squircle`. */
-	--radius-xs: calc(2px * var(--rf));
-	--radius-sm: calc(4px * var(--rf));
-	--radius-md: calc(7px * var(--rf));
-	--radius-lg: calc(14px * var(--rf));
-	--radius-xl: calc(18px * var(--rf));
-	--radius-2xl: calc(22px * var(--rf));
-	--radius-3xl: calc(26px * var(--rf));
-	/* The person tile: a face, a photo or an initial, at every size from the
+  --radius-xs: calc(2px * var(--rf));
+  --radius-sm: calc(4px * var(--rf));
+  --radius-md: calc(7px * var(--rf));
+  --radius-lg: calc(14px * var(--rf));
+  --radius-xl: calc(18px * var(--rf));
+  --radius-2xl: calc(22px * var(--rf));
+  --radius-3xl: calc(26px * var(--rf));
+  /* The person tile: a face, a photo or an initial, at every size from the
 	   14px chip to the 26px people row. It is the one corner in the app
 	   written as a share of its box rather than in px, because it has to hold
 	   the same shape across that range, so it scales through --rp instead of
 	   --rf. Named here because `rounded-[32%]` was written out at nine call
 	   sites and a tenth would have had no way of knowing it was a shape the
 	   product repeats rather than a number somebody picked. */
-	--radius-avatar: calc(32% * var(--rp));
-	--text-xs: var(--type-label);
-	--text-sm: var(--type-label);
-	/* Tailwind's stock body alias, kept level with --text-body on purpose: it is
+  --radius-avatar: calc(32% * var(--rp));
+  --text-xs: var(--type-label);
+  --text-sm: var(--type-label);
+  /* Tailwind's stock body alias, kept level with --text-body on purpose: it is
 	   the size `lg` controls and a few headings ask for, and if it lags a step
 	   behind it becomes a second, smaller body that nobody chose. The real type
 	   properties live in base.css so phone width can promote the whole scale. */
-	--text-base: var(--type-body);
+  --text-base: var(--type-body);
 
-	/* THE SCALE. Eight steps, and text is set from one of them. Each role
+  /* THE SCALE. Eight steps, and text is set from one of them. Each role
 	   resolves through a `--type-*` property in base.css, which is where the
 	   values live and where a phone promotes every one of them a rung:
 
@@ -314,41 +314,41 @@
 	   Chips inside running text (inline code, a session link, a commit ref)
 	   take a RATIO of their sentence in base.css, not a step, so they ride the
 	   prose they interrupt. */
-	--text-meta: var(--type-meta);
-	--text-meta--font-weight: var(--font-weight-normal);
-	--text-label: var(--type-label);
-	--text-supporting: var(--type-label);
-	--text-supporting--font-weight: var(--font-weight-normal);
-	--text-control-label: var(--type-label);
-	--text-body: var(--type-body);
-	--text-item-title: var(--type-item-title);
-	--text-dialog-title: var(--type-dialog-title);
-	--text-section-title: var(--type-section-title);
-	--text-page-title: var(--type-page-title);
-	/* Not a step: iOS Safari zooms the page in when a focused input is under
+  --text-meta: var(--type-meta);
+  --text-meta--font-weight: var(--font-weight-normal);
+  --text-label: var(--type-label);
+  --text-supporting: var(--type-label);
+  --text-supporting--font-weight: var(--font-weight-normal);
+  --text-control-label: var(--type-label);
+  --text-body: var(--type-body);
+  --text-item-title: var(--type-item-title);
+  --text-dialog-title: var(--type-dialog-title);
+  --text-section-title: var(--type-section-title);
+  --text-page-title: var(--type-page-title);
+  /* Not a step: iOS Safari zooms the page in when a focused input is under
 	   16px, so every text input a phone can reach has to be at least this. It
 	   is a size the platform picks, so it is spelled once here rather than as
 	   an arbitrary value at each field. On a phone it rides the promoted body
 	   (17px), which clears the threshold and puts a field at the size of the
 	   prose around it. */
-	--text-input-phone: var(--type-input-phone);
+  --text-input-phone: var(--type-input-phone);
 
-	/* The display step, above every heading: the number on a stat tile, whose
+  /* The display step, above every heading: the number on a stat tile, whose
 	   whole job is to be read before the label above it. A heading token is the
 	   wrong size for it, since a section title is a heading rather than a figure, and
 	   without a step of its own each dashboard invents an arbitrary one. Its
 	   tracking is part of the role: large numerals read too loose at the
 	   tracking a heading wants. */
-	--text-stat: var(--type-stat);
-	--text-stat--line-height: var(--type-stat-line);
-	--text-stat--letter-spacing: -0.025em;
+  --text-stat: var(--type-stat);
+  --text-stat--line-height: var(--type-stat-line);
+  --text-stat--letter-spacing: -0.025em;
 
-	/* Interaction geometry: `hit-target` uses 40px for pointer layouts and
+  /* Interaction geometry: `hit-target` uses 40px for pointer layouts and
 	   expands to the WCAG-friendly 44px touch convention on coarse pointers. */
-	--spacing-hit-target: 40px;
-	--spacing-hit-target-touch: 44px;
+  --spacing-hit-target: 40px;
+  --spacing-hit-target-touch: 44px;
 
-	/* Motion. Without these the utility layer runs its own motion system: a
+  /* Motion. Without these the utility layer runs its own motion system: a
 	   bare `transition-colors` emits Tailwind's stock cubic-bezier(0.4, 0, 0.2, 1),
 	   so the ~40 components using it were easing differently from the
 	   stylesheet rule right next to them — which is most of what made the app
@@ -358,10 +358,10 @@
 	   `ease-out` and `ease-in-out` are remapped onto --ease too. That is not a
 	   downgrade: --ease IS a strong ease-out, considerably stronger than the
 	   stock curves, and the point of the exercise is that the app has one. */
-	--default-transition-duration: var(--dur-micro);
-	--default-transition-timing-function: var(--ease);
-	--ease-out: var(--ease);
-	--ease-in-out: var(--ease);
+  --default-transition-duration: var(--dur-micro);
+  --default-transition-timing-function: var(--ease);
+  --ease-out: var(--ease);
+  --ease-in-out: var(--ease);
 }
 
 /* Accent is intentionally a bright fill/ring. Text needs the readable ink
@@ -369,12 +369,12 @@
    established class name makes every existing text/hover variant safe while
    bg-accent and border-accent retain the saturated active-state colour. */
 @utility text-accent {
-	/* The theme also generates a generic color utility with this name. Doubling
+  /* The theme also generates a generic color utility with this name. Doubling
 	   the class keeps the semantic text treatment ahead without !important, so
 	   state/responsive variants remain composable. */
-	&& {
-		color: var(--accent-ink);
-	}
+  && {
+    color: var(--accent-ink);
+  }
 }
 
 /* The light on a solid plate: the accent CTA, the destructive confirm. A flat
@@ -390,38 +390,38 @@
    clipped edge draws a false hairline. The light begins inside the face, then
    a low-alpha foot gives the plate depth without outlining it. */
 @utility plate-sheen {
-	background-image: linear-gradient(
-		to bottom,
-		transparent,
-		rgb(255 255 255 / 0.035) 35%,
-		rgb(255 255 255 / 0.01) 55%,
-		rgb(0 0 0 / 0.05)
-	);
+  background-image: linear-gradient(
+    to bottom,
+    transparent,
+    rgb(255 255 255 / 0.035) 35%,
+    rgb(255 255 255 / 0.01) 55%,
+    rgb(0 0 0 / 0.05)
+  );
 }
 
 /* One keyboard-focus treatment for raw controls. It intentionally does not
    animate, so focus is immediate and reduced-motion needs no special case. */
 @utility focus-ring {
-	&:focus-visible {
-		outline: 2px solid var(--accent-ink);
-		outline-offset: 2px;
-	}
+  &:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
+  }
 
-	@media (forced-colors: active) {
-		&:focus-visible {
-			outline-color: Highlight;
-		}
-	}
+  @media (forced-colors: active) {
+    &:focus-visible {
+      outline-color: Highlight;
+    }
+  }
 }
 
 @utility hit-target {
-	min-inline-size: var(--spacing-hit-target);
-	min-block-size: var(--spacing-hit-target);
+  min-inline-size: var(--spacing-hit-target);
+  min-block-size: var(--spacing-hit-target);
 
-	@media (pointer: coarse) {
-		min-inline-size: var(--spacing-hit-target-touch);
-		min-block-size: var(--spacing-hit-target-touch);
-	}
+  @media (pointer: coarse) {
+    min-inline-size: var(--spacing-hit-target-touch);
+    min-block-size: var(--spacing-hit-target-touch);
+  }
 }
 
 /* Tailwind's bare `rounded` is a stock 0.25rem that predates this scale, and it
@@ -429,5 +429,5 @@
    smallest step so the few remaining call sites stay on the grid; prefer
    `rounded-sm` / `rounded-md` / `rounded-lg`. */
 .rounded {
-	border-radius: var(--radius-xs);
+  border-radius: var(--radius-xs);
 }

@@ -1,43 +1,45 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import {
-	newStylexCollector,
-	stylexCss,
-	stylexTransform,
-} from "../../server/stylex-build";
+  ONGOING_TOAST_POSITION,
+  PERSISTENT_NOTICE_SHELF,
+  TOAST_NOTICE_LANE,
+  TRANSIENT_NOTICE_LANE,
+} from "./notification-classes";
 
-const SOURCE = new URL("./notification-classes.ts", import.meta.url).pathname;
-const UTILITY_COMPAT = new URL("../styles/utility-compat.stylex.ts", import.meta.url).pathname;
-const collector = newStylexCollector();
-stylexTransform(SOURCE, readFileSync(SOURCE, "utf8"), collector);
-stylexTransform(UTILITY_COMPAT, readFileSync(UTILITY_COMPAT, "utf8"), collector);
-const css = stylexCss(collector);
 describe("notification lanes", () => {
-	test("keeps live status clear of the reading column", () => {
-		expect(css).toContain("right:calc(4px * 4)");
-		expect(css).toContain("top:calc(var(--desktop-header-h) + 8px)");
-		expect(css).toContain("@media (max-width: 720px)");
-		expect(css).toContain("inset-inline:0");
-		expect(css).toContain("right:0");
-		expect(css).toContain("top:calc(var(--header-h) + 8px)");
-	});
+  test("keeps live status clear of the reading column", () => {
+    expect(TRANSIENT_NOTICE_LANE).toContain("right-4");
+    expect(TRANSIENT_NOTICE_LANE).toContain(
+      "top-[calc(var(--desktop-header-h)+8px)]",
+    );
+    expect(TRANSIENT_NOTICE_LANE).toContain("phone:inset-x-0");
+    expect(TRANSIENT_NOTICE_LANE).toContain(
+      "phone:top-[calc(var(--header-h)+8px)]",
+    );
+    // The desktop `right-4` outranks `inset-x-0` in the compiled sheet, so the
+    // phone lane has to reset the right edge itself or the pill sits flush left.
+    expect(TRANSIENT_NOTICE_LANE).toContain("phone:right-0");
+    expect(TRANSIENT_NOTICE_LANE).not.toContain("phone:right-auto");
+    expect(TRANSIENT_NOTICE_LANE).not.toContain("bottom-");
+  });
 
-	test("centres toast receipts above the composer", () => {
-		expect(css).toContain("inset-inline:0");
-		expect(css).toContain("bottom:124px");
-	});
+  test("centres toast receipts above the composer", () => {
+    expect(TOAST_NOTICE_LANE).toContain("inset-x-0");
+    expect(TOAST_NOTICE_LANE).toContain("bottom-[124px]");
+    expect(TOAST_NOTICE_LANE).not.toContain("top-");
+  });
 
-	test("moves ongoing phone status below the header and tab strip", () => {
-		expect(css).toContain(
-			"top:calc(var(--pane-header-h) + var(--strip-clearance,0px) + 8px)",
-		);
-		expect(css).toContain("position:fixed");
-		expect(css).toContain("bottom:auto");
-	});
+  test("centres ongoing status across the product in a lower lane", () => {
+    expect(ONGOING_TOAST_POSITION).toContain("fixed");
+    expect(ONGOING_TOAST_POSITION).toContain("bottom-10");
+    expect(ONGOING_TOAST_POSITION).toContain("var(--pane-header-h)");
+    expect(ONGOING_TOAST_POSITION).toContain("var(--strip-clearance,0px)");
+    expect(ONGOING_TOAST_POSITION).toContain("phone:bottom-auto");
+  });
 
-	test("keeps durable desktop prompts in a separate shelf", () => {
-		expect(css).toContain("bottom:calc(4px * 2)");
-		expect(css).toContain("left:calc(4px * 2)");
-		expect(css).toContain("z-index:9500");
-	});
+  test("keeps durable desktop prompts in a separate shelf", () => {
+    expect(PERSISTENT_NOTICE_SHELF).toContain("bottom-2");
+    expect(PERSISTENT_NOTICE_SHELF).toContain("left-2");
+    expect(PERSISTENT_NOTICE_SHELF).not.toContain("phone:");
+  });
 });

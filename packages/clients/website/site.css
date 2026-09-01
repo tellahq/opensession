@@ -3,43 +3,49 @@
    applied. Subset to latin with every layout feature kept, because two of them
    are the point (see font-feature-settings). */
 @font-face {
-	font-family: Inter;
-	src: url("./fonts/inter-latin.woff2") format("woff2");
-	font-weight: 100 900;
-	font-style: normal;
-	font-display: swap;
+  font-family: Inter;
+  src: url("./fonts/inter-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
 }
 
 :root {
-	color-scheme: light;
-	font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-	/* cv11 is Inter's single-storey a, ss07 its square punctuation. They are
+  color-scheme: light;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  /* cv11 is Inter's single-storey a, ss07 its square punctuation. They are
 	   what make the face read as a grotesque rather than default Inter, and
 	   they cost nothing but the two lines. */
-	font-feature-settings: "cv11", "ss07";
-	font-synthesis: none;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
-	/* Neutral greys, not blue-black ink on a warm card: text is near-black,
+  font-feature-settings: "cv11", "ss07";
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Neutral greys, not blue-black ink on a warm card: text is near-black,
 	   everything secondary is one flat mid grey, and the hairline is plain
 	   black at 6%. A single hue family is what keeps the page quiet. */
-	--ink: #0a0a0a;
-	--page: #fff;
-	/* One quiet card fill and one hairline, used by every section in the feed.
+  --ink: #0a0a0a;
+  --page: #fff;
+  /* One quiet card fill and one hairline, used by every section in the feed.
 	   The page is white and the cards are a step off it, so a section reads as
 	   a panel without a shadow or a second colour doing the work. */
-	--card: #fafafb;
-	--line: rgba(var(--ink-rgb), 0.06);
-	--muted: #787878;
-	/* The product's accent with more chroma, so the one filled control on the
+  --card: #fafafb;
+  --line: rgba(var(--ink-rgb), 0.06);
+  --muted: #787878;
+  /* The product's accent with more chroma, so the one filled control on the
 	   page carries some voltage: the app's own #1f82bb reads muted at this size
 	   on white. The life comes from saturation rather than lightness, which is
 	   what keeps the label readable. The foot is the darker of the pair on
 	   purpose, so white gains contrast as the fill deepens: 4.2:1 on the top
 	   stop, 5.1:1 at the foot. */
-	--accent-blue: #1280cf;
-	--accent-blue-deep: #0f72b9;
-	/* Corner treatment. A superellipse hugs the corner tighter than a circular
+  --accent-blue: #1280cf;
+  --accent-blue-deep: #0f72b9;
+  /* Corner treatment. A superellipse hugs the corner tighter than a circular
 	   arc, so a browser that can draw one carries a larger radius: every corner
 	   here is authored at its circular value and multiplied by --rf, and the
 	   pair below is flipped in one @supports block. WebKit does not ship
@@ -48,81 +54,81 @@
 	   retaining the radius gives the fallback a smooth curve instead of the
 	   visibly tight corners produced by shrinking it to match the squircle's
 	   cutout area. */
-	--rf: 1;
-	--cs: round;
-	/* The ink channel behind every hairline, wash and dimmed glyph. Flipping
+  --rf: 1;
+  --cs: round;
+  /* The ink channel behind every hairline, wash and dimmed glyph. Flipping
 	   this one token is most of what dark mode is. */
-	--ink-rgb: 0, 0, 0;
-	/* Surfaces that are not the page or a card: the demo window, the modal, the
+  --ink-rgb: 0, 0, 0;
+  /* Surfaces that are not the page or a card: the demo window, the modal, the
 	   email field, and the two states the form can end in. */
-	--stage-bg: #cfcdc8;
-	--window: #f6f6f4;
-	--window-shadow: rgba(28, 34, 40, 0.24);
-	--surface: #fff;
-	/* The shared modal owns one material contract. Pages can tune its fill and
+  --stage-bg: #cfcdc8;
+  --window: #f6f6f4;
+  --window-shadow: rgba(28, 34, 40, 0.24);
+  --surface: #fff;
+  /* The shared modal owns one material contract. Pages can tune its fill and
 	   filter without giving individual dialogs their own surface treatment. */
-	--modal-surface: var(--surface);
-	--modal-filter: none;
-	--modal-ring: transparent;
-	--modal-glow: transparent;
-	--surface-shadow: rgba(16, 18, 22, 0.22);
-	--scrim: rgba(16, 18, 22, 0.32);
-	--field: #fbfbfa;
-	--ok: #0b7a4b;
-	--err: #b42318;
+  --modal-surface: var(--surface);
+  --modal-filter: none;
+  --modal-ring: transparent;
+  --modal-glow: transparent;
+  --surface-shadow: rgba(16, 18, 22, 0.22);
+  --scrim: rgba(16, 18, 22, 0.32);
+  --field: #fbfbfa;
+  --ok: #0b7a4b;
+  --err: #b42318;
 }
 
 * {
-	box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 /* The product's corner. base.css grants `corner-shape: squircle` to everything
    it rounds; the site's own surfaces get the same treatment so a card here and
    a card in the app are cut the same way, and the radius grows to match. */
 @supports (corner-shape: squircle) {
-	:root {
-		--rf: 1.35;
-		--cs: squircle;
-	}
+  :root {
+    --rf: 1.35;
+    --cs: squircle;
+  }
 }
 
 body {
-	margin: 0;
-	background: var(--page);
-	color: var(--ink);
-	/* Medium, slightly tightened, everywhere. Inter at 400 goes thin and loose
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  /* Medium, slightly tightened, everywhere. Inter at 400 goes thin and loose
 	   on a near-white panel; 500 with a hair of negative tracking is what the
 	   text on this kind of page is set in. */
-	font-weight: 500;
-	letter-spacing: -0.011em;
+  font-weight: 500;
+  letter-spacing: -0.011em;
 }
 
 button,
 a {
-	font: inherit;
+  font: inherit;
 }
 
 a {
-	color: inherit;
-	text-decoration: none;
+  color: inherit;
+  text-decoration: none;
 }
 
 a:focus-visible,
 button:focus-visible,
 summary:focus-visible {
-	outline: 3px solid rgba(31, 130, 187, 0.5);
-	outline-offset: 3px;
+  outline: 3px solid rgba(31, 130, 187, 0.5);
+  outline-offset: 3px;
 }
 
 /* ── The page: a rail that stays, a feed that scrolls ─────────────────── */
 
 .shell {
-	display: grid;
-	width: min(100% - 96px, 1400px);
-	margin-inline: auto;
-	align-items: start;
-	gap: 52px;
-	grid-template-columns: minmax(0, 470px) minmax(0, 1fr);
+  display: grid;
+  width: min(100% - 96px, 1400px);
+  margin-inline: auto;
+  align-items: start;
+  gap: 52px;
+  grid-template-columns: minmax(0, 470px) minmax(0, 1fr);
 }
 
 /* Sticky rather than fixed, so it participates in the grid and needs no
@@ -130,46 +136,46 @@ summary:focus-visible {
    the bottom, which is what keeps the ask on screen at every scroll position
    without a floating bar. */
 .rail {
-	display: flex;
-	position: sticky;
-	top: 0;
-	height: 100svh;
-	flex-direction: column;
-	padding: 40px 0 44px;
+  display: flex;
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  flex-direction: column;
+  padding: 40px 0 44px;
 }
 
 .brand {
-	display: inline-flex;
-	align-self: flex-start;
+  display: inline-flex;
+  align-self: flex-start;
 }
 
 .mark {
-	display: inline-grid;
-	width: 44px;
-	height: 44px;
-	border-radius: calc(8px * var(--rf));
-	corner-shape: var(--cs);
-	place-items: center;
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  place-items: center;
 }
 
 .mark img {
-	display: block;
-	width: 100%;
-	height: 100%;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .rail h1 {
-	margin: 30px 0 0;
-	color: var(--ink);
+  margin: 30px 0 0;
+  color: var(--ink);
 }
 
 .rail h1,
 .announcement-article h1 {
-	font-size: clamp(28px, 2.4vw, 35px);
-	font-weight: 600;
-	letter-spacing: -0.012em;
-	line-height: 1.12;
-	text-wrap: balance;
+  font-size: clamp(28px, 2.4vw, 35px);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.12;
+  text-wrap: balance;
 }
 
 /* The qualifier, in the same sentence and a lighter voice: it is the half of
@@ -177,461 +183,466 @@ summary:focus-visible {
    breaks where the thought does instead of wherever the column runs out. Keep
    the ink translucent so the page background comes through in either theme. */
 .rail h1 span {
-	display: block;
-	opacity: 0.45;
+  display: block;
+  opacity: 0.45;
 }
 
 .rail-foot {
-	margin-top: auto;
-	padding-top: 40px;
+  margin-top: auto;
+  padding-top: 40px;
 }
 
 .rail-actions {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .rail-actions .button {
-	flex: 0 0 auto;
-	padding-inline: 18px;
-	white-space: normal;
-	text-align: center;
+  flex: 0 0 auto;
+  padding-inline: 18px;
+  white-space: normal;
+  text-align: center;
 }
 
 .rail-actions .button svg {
-	flex: none;
+  flex: none;
 }
 
 .rail-note {
-	margin: 16px 0 0;
-	color: rgba(var(--ink-rgb), 0.64);
-	font-size: 14px;
-	line-height: 1.5;
+  margin: 16px 0 0;
+  color: rgba(var(--ink-rgb), 0.64);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-
 .feed {
-	display: flex;
-	flex-direction: column;
-	gap: 22px;
-	padding: 40px 0 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 40px 0 44px;
 }
 
 /* ── Cards ───────────────────────────────────────────────────────────── */
 
 .card {
-	padding: 34px;
-	border: 1px solid var(--line);
-	border-radius: calc(28px * var(--rf));
-	corner-shape: var(--cs);
-	background: var(--card);
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: calc(28px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--card);
 }
 
 .card h2 {
-	margin: 0;
-	font-size: 26px;
-	font-weight: 600;
-	letter-spacing: -0.012em;
-	line-height: 1.1;
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.1;
 }
 
 .card-sub {
-	margin: 10px 0 0;
-	color: var(--muted);
-	font-size: 15px;
-	line-height: 1.42;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.42;
 }
 
 /* ── Setup overview ─────────────────────────────────────────────────── */
 
 .landing-setup-steps {
-	display: grid;
-	margin: 30px 0 0;
-	padding: 0;
-	gap: 16px;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	list-style: none;
+  display: grid;
+  margin: 30px 0 0;
+  padding: 0;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
 }
 
 .landing-setup-steps > li {
-	display: flex;
-	min-width: 0;
-	flex-direction: column;
-	align-items: stretch;
-	padding: 20px;
-	border-radius: calc(18px * var(--rf));
-	corner-shape: var(--cs);
-	background: rgba(var(--ink-rgb), 0.03);
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 20px;
+  border-radius: calc(18px * var(--rf));
+  corner-shape: var(--cs);
+  background: rgba(var(--ink-rgb), 0.03);
 }
 
 .landing-setup-step-icon,
 .landing-setup-app-mark {
-	display: grid;
-	width: 40px;
-	height: 40px;
-	border-radius: calc(12px * var(--rf));
-	corner-shape: var(--cs);
-	background: rgba(var(--ink-rgb), 0.055);
-	color: rgba(var(--ink-rgb), 0.62);
-	place-items: center;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  border-radius: calc(12px * var(--rf));
+  corner-shape: var(--cs);
+  background: rgba(var(--ink-rgb), 0.055);
+  color: rgba(var(--ink-rgb), 0.62);
+  place-items: center;
 }
 
 .landing-setup-step-icon {
-	border-radius: 50%;
-	corner-shape: round;
+  border-radius: 50%;
+  corner-shape: round;
 }
 
 .landing-setup-step-copy {
-	display: flex;
-	min-width: 0;
-	flex-direction: column;
-	gap: 5px;
-	margin-top: 18px;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 18px;
 }
 
 .landing-setup-step-copy strong,
 .landing-setup-app-copy strong {
-	font-size: 15px;
-	font-weight: 600;
-	line-height: 1.3;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .landing-setup-step-copy > span {
-	color: var(--muted);
-	font-size: 13px;
-	line-height: 1.42;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.42;
 }
 
 .landing-setup-step-action {
-	display: inline-flex;
-	min-height: 44px;
-	align-items: center;
-	align-self: flex-start;
-	justify-content: center;
-	gap: 7px;
-	margin-top: 18px;
-	padding: 0 14px;
-	border: 0;
-	border-radius: calc(11px * var(--rf));
-	corner-shape: var(--cs);
-	background-color: var(--accent-blue);
-	background-image: linear-gradient(
-		180deg,
-		var(--accent-blue) 0%,
-		var(--accent-blue-deep) 100%
-	);
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-	color: #fff;
-	cursor: pointer;
-	font-size: 13px;
-	font-weight: 600;
-	white-space: nowrap;
-	transition: filter 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  align-self: flex-start;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 18px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: calc(11px * var(--rf));
+  corner-shape: var(--cs);
+  background-color: var(--accent-blue);
+  background-image: linear-gradient(
+    180deg,
+    var(--accent-blue) 0%,
+    var(--accent-blue-deep) 100%
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    filter 160ms ease,
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .landing-setup-step-action:hover {
-	filter: brightness(1.06);
+  filter: brightness(1.06);
 }
 
 .landing-setup-step-action svg {
-	flex: none;
+  flex: none;
 }
 
 .landing-setup-step-action-secondary {
-	background: rgba(var(--ink-rgb), 0.075);
-	box-shadow: none;
-	color: var(--ink);
+  background: rgba(var(--ink-rgb), 0.075);
+  box-shadow: none;
+  color: var(--ink);
 }
 
 .landing-setup-step-action-secondary:hover {
-	background: rgba(var(--ink-rgb), 0.12);
-	filter: none;
+  background: rgba(var(--ink-rgb), 0.12);
+  filter: none;
 }
 
 .landing-setup-step-action:active {
-	transform: scale(0.96);
+  transform: scale(0.96);
 }
 
 .landing-setup-app-action {
-	color: var(--accent-blue);
-	font-size: 12px;
-	font-weight: 600;
-	white-space: nowrap;
+  color: var(--accent-blue);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .landing-setup-app-download {
-	display: inline-flex;
-	min-height: 40px;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	padding: 0 12px;
-	border-radius: calc(10px * var(--rf));
-	corner-shape: var(--cs);
-	background: #0a0a0a;
-	color: #fff;
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: calc(10px * var(--rf));
+  corner-shape: var(--cs);
+  background: #0a0a0a;
+  color: #fff;
 }
 
 .landing-setup-app-download svg {
-	flex: none;
+  flex: none;
 }
 
 .landing-setup-apps {
-	display: grid;
-	min-width: 0;
-	gap: 8px;
-	margin-top: 18px;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin-top: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .landing-setup-app {
-	display: grid;
-	width: 100%;
-	min-height: 60px;
-	align-items: center;
-	gap: 12px;
-	padding: 8px 12px 8px 10px;
-	border: 0;
-	border-radius: calc(15px * var(--rf));
-	corner-shape: var(--cs);
-	background: transparent;
-	color: var(--ink);
-	cursor: pointer;
-	text-align: left;
-	grid-template-columns: 40px minmax(0, 1fr) auto;
-	transition: background-color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  display: grid;
+  width: 100%;
+  min-height: 60px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 10px;
+  border: 0;
+  border-radius: calc(15px * var(--rf));
+  corner-shape: var(--cs);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  transition:
+    background-color 160ms ease,
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .landing-setup-app:hover {
-	background: rgba(var(--ink-rgb), 0.075);
+  background: rgba(var(--ink-rgb), 0.075);
 }
 
 .landing-setup-app:active {
-	transform: scale(0.98);
+  transform: scale(0.98);
 }
 
 .landing-setup-app[aria-disabled="true"] {
-	cursor: default;
-	opacity: 0.58;
+  cursor: default;
+  opacity: 0.58;
 }
 
 .landing-setup-app[aria-disabled="true"]:hover {
-	background: transparent;
+  background: transparent;
 }
 
 .landing-setup-app[aria-disabled="true"]:active {
-	transform: none;
+  transform: none;
 }
 
 .landing-setup-app > img {
-	display: block;
-	width: 40px;
-	height: 40px;
-	border-radius: calc(10px * var(--rf));
-	corner-shape: var(--cs);
+  display: block;
+  width: 40px;
+  height: 40px;
+  border-radius: calc(10px * var(--rf));
+  corner-shape: var(--cs);
 }
 
 .landing-setup-app-mark-web {
-	background: #fff;
-	color: #111;
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  background: #fff;
+  color: #111;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
 .landing-setup-app-copy {
-	display: flex;
-	min-width: 0;
-	flex-direction: column;
-	gap: 2px;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .landing-setup-app-copy small {
-	overflow: hidden;
-	color: var(--muted);
-	font-size: 12px;
-	font-weight: 500;
-	line-height: 1.35;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .landing-install-command {
-	display: grid;
-	min-width: 0;
-	min-height: 56px;
-	align-items: center;
-	gap: 10px;
-	padding: 7px 7px 7px 13px;
-	border-radius: calc(15px * var(--rf));
-	corner-shape: var(--cs);
-	background: #161719;
-	box-shadow: 0 8px 22px rgba(10, 11, 13, 0.09);
-	grid-template-columns: minmax(0, 1fr) auto;
+  display: grid;
+  min-width: 0;
+  min-height: 56px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 7px 7px 13px;
+  border-radius: calc(15px * var(--rf));
+  corner-shape: var(--cs);
+  background: #161719;
+  box-shadow: 0 8px 22px rgba(10, 11, 13, 0.09);
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .landing-install-command code {
-	display: block;
-	width: 100%;
-	min-width: 0;
-	max-width: 100%;
-	color: #ededed;
-	font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-	font-size: 11.5px;
-	line-height: 1.4;
-	overflow-wrap: anywhere;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  color: #ededed;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .landing-install-command button {
-	display: inline-flex;
-	min-width: 74px;
-	height: 42px;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	padding: 0 11px;
-	border: 0;
-	border-radius: calc(10px * var(--rf));
-	corner-shape: var(--cs);
-	background: #2a2c30;
-	color: #fff;
-	cursor: pointer;
-	font-size: 12px;
-	font-weight: 600;
-	transition: background-color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  display: inline-flex;
+  min-width: 74px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: calc(10px * var(--rf));
+  corner-shape: var(--cs);
+  background: #2a2c30;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    background-color 160ms ease,
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .landing-install-command button:hover {
-	background: #36383d;
+  background: #36383d;
 }
 
 .landing-install-command button:active {
-	transform: scale(0.96);
+  transform: scale(0.96);
 }
 
 /* One native-dialog shell serves every website modal. The browser owns focus
    trapping, Escape and top-layer placement; the shared panel owns material,
    edge, glow and close chrome. Variant classes only set size and content flow. */
 .website-modal {
-	padding: 0;
-	border: 0;
-	background: transparent;
-	color: var(--ink);
-	overflow: visible;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  overflow: visible;
 }
 
 .pwa-guide {
-	width: min(520px, calc(100% - 32px));
-	max-height: calc(100dvh - 32px);
+  width: min(520px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
 }
 
 .website-modal::backdrop {
-	background: var(--scrim);
-	-webkit-backdrop-filter: blur(8px);
-	backdrop-filter: blur(8px);
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .website-modal-panel {
-	position: relative;
-	padding: 30px;
-	border-radius: calc(32px * var(--rf));
-	corner-shape: var(--cs);
-	background: var(--modal-surface);
-	-webkit-backdrop-filter: var(--modal-filter);
-	backdrop-filter: var(--modal-filter);
-	box-shadow:
-		inset 0 0 0 1px var(--modal-ring),
-		0 0 72px -10px var(--modal-glow),
-		0 24px 70px var(--surface-shadow);
+  position: relative;
+  padding: 30px;
+  border-radius: calc(32px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--modal-surface);
+  -webkit-backdrop-filter: var(--modal-filter);
+  backdrop-filter: var(--modal-filter);
+  box-shadow:
+    inset 0 0 0 1px var(--modal-ring),
+    0 0 72px -10px var(--modal-glow),
+    0 24px 70px var(--surface-shadow);
 }
 
 .website-modal-close {
-	display: grid;
-	position: absolute;
-	top: 14px;
-	right: 14px;
-	z-index: 1;
-	width: 44px;
-	height: 44px;
-	padding: 0;
-	border: 0;
-	border-radius: 50%;
-	corner-shape: round;
-	background: rgba(var(--ink-rgb), 0.055);
-	color: var(--muted);
-	cursor: pointer;
-	place-items: center;
+  display: grid;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  corner-shape: round;
+  background: rgba(var(--ink-rgb), 0.055);
+  color: var(--muted);
+  cursor: pointer;
+  place-items: center;
 }
 
 .website-modal-close:hover {
-	background: rgba(var(--ink-rgb), 0.1);
-	color: var(--ink);
+  background: rgba(var(--ink-rgb), 0.1);
+  color: var(--ink);
 }
 
 .pwa-guide-mark {
-	display: grid;
-	width: 46px;
-	height: 46px;
-	margin-bottom: 20px;
-	border-radius: calc(14px * var(--rf));
-	corner-shape: var(--cs);
-	background: rgba(var(--ink-rgb), 0.055);
-	color: rgba(var(--ink-rgb), 0.68);
-	place-items: center;
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 20px;
+  border-radius: calc(14px * var(--rf));
+  corner-shape: var(--cs);
+  background: rgba(var(--ink-rgb), 0.055);
+  color: rgba(var(--ink-rgb), 0.68);
+  place-items: center;
 }
 
 .pwa-guide h2 {
-	margin: 0;
-	font-size: 24px;
-	font-weight: 600;
-	letter-spacing: -0.012em;
-	line-height: 1.15;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.15;
 }
 
 .pwa-guide h2 + p {
-	margin: 9px 0 20px;
-	color: var(--muted);
-	font-size: 14px;
-	line-height: 1.45;
+  margin: 9px 0 20px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .setup-guide .landing-setup-apps {
-	margin-top: 0;
-	grid-template-columns: minmax(0, 1fr);
+  margin-top: 0;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .pwa-guide-options {
-	overflow: hidden;
-	border-radius: calc(16px * var(--rf));
-	corner-shape: var(--cs);
-	background: rgba(var(--ink-rgb), 0.045);
+  overflow: hidden;
+  border-radius: calc(16px * var(--rf));
+  corner-shape: var(--cs);
+  background: rgba(var(--ink-rgb), 0.045);
 }
 
 .pwa-guide-options > div {
-	display: flex;
-	flex-direction: column;
-	gap: 5px;
-	padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px;
 }
 
 .pwa-guide-options > div + div {
-	border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line);
 }
 
 .pwa-guide-options strong {
-	font-size: 14px;
-	font-weight: 600;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .pwa-guide-options span,
 .pwa-guide-note {
-	color: var(--muted);
-	font-size: 13px;
-	line-height: 1.48;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.48;
 }
 
 .pwa-guide-note {
-	margin: 18px 2px 0;
+  margin: 18px 2px 0;
 }
 
 /* ── The product, on its own background ──────────────────────────────── */
@@ -640,91 +651,91 @@ summary:focus-visible {
    corner: the background gives them air above and to the left, while the crop
    makes the product feel larger than a screenshot centred in a frame. */
 .stage {
-	position: relative;
-	overflow: hidden;
-	/* A size container, so the window inside can be inset by one value that
+  position: relative;
+  overflow: hidden;
+  /* A size container, so the window inside can be inset by one value that
 	   means the same number of pixels on all four sides. A percentage cannot:
 	   top and bottom resolve against the height, left and right against the
 	   width, so equal percentages draw unequal margins on anything that is not
 	   square. */
-	container-type: size;
-	aspect-ratio: 3 / 2;
-	border-radius: calc(28px * var(--rf));
-	corner-shape: var(--cs);
-	background: var(--stage-bg);
+  container-type: size;
+  aspect-ratio: 3 / 2;
+  border-radius: calc(28px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--stage-bg);
 }
 
 .preview-wrap {
-	--demo-scale: 1;
-	position: absolute;
-	/* Keep one quiet inset above and to the left, then let the window continue
+  --demo-scale: 1;
+  position: absolute;
+  /* Keep one quiet inset above and to the left, then let the window continue
 	   through the stage's bottom-right corner. This enlarges the product without
 	   shrinking its fixed app layout, and the stage itself supplies the crop. */
-	top: 5.6cqw;
-	right: -1px;
-	bottom: -1px;
-	left: 5.6cqw;
-	overflow: hidden;
-	/* It is a <figure>, and a figure's UA margin offsets an absolutely
+  top: 5.6cqw;
+  right: -1px;
+  bottom: -1px;
+  left: 5.6cqw;
+  overflow: hidden;
+  /* It is a <figure>, and a figure's UA margin offsets an absolutely
 	   positioned box even with all four insets set. */
-	margin: 0;
-	border: 1px solid rgba(var(--ink-rgb), 0.1);
-	/* A macOS 26 window corner, measured off Finder and Safari at 2x. Only the
+  margin: 0;
+  border: 1px solid rgba(var(--ink-rgb), 0.1);
+  /* A macOS 26 window corner, measured off Finder and Safari at 2x. Only the
 	   corner contained by the stage is rounded; the other three carry through
 	   an edge, so rounding them would make the window look finished just where
 	   it is meant to continue. */
-	border-radius: calc(15px * var(--rf)) 0 0 0;
-	corner-shape: var(--cs);
-	/* The iframe is a transformed composited surface, and its fixed backdrop
+  border-radius: calc(15px * var(--rf)) 0 0 0;
+  corner-shape: var(--cs);
+  /* The iframe is a transformed composited surface, and its fixed backdrop
 	   layer can bypass overflow clipping. A border-box clip stays on this outer
 	   surface and follows its squircle exactly, without a circular inset that
 	   leaves a white crescent around the corner. */
-	clip-path: border-box;
-	contain: paint;
-	/* The poster and frame are opaque. Keeping their backing transparent lets
+  clip-path: border-box;
+  contain: paint;
+  /* The poster and frame are opaque. Keeping their backing transparent lets
 	   the stage fill the antialiased edge instead of exposing a white halo when
 	   the iframe's search backdrop darkens. */
-	background: transparent;
-	box-shadow: 0 22px 54px var(--window-shadow);
+  background: transparent;
+  box-shadow: 0 22px 54px var(--window-shadow);
 }
 
 /* The poster is the immediate first frame. The real client runs over local,
    deterministic fixtures in the iframe and replaces it only after rendering,
    so interactivity does not trade away a fast or stable first paint. */
 .product-demo-poster {
-	position: absolute;
-	inset: 0;
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-	object-position: top left;
-	opacity: 1;
-	pointer-events: none;
-	user-select: none;
-	transition: opacity 220ms ease;
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  opacity: 1;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 220ms ease;
 }
 
 .product-demo-frame {
-	display: block;
-	width: calc(100% / var(--demo-scale));
-	height: calc(100% / var(--demo-scale));
-	border: 0;
-	background: var(--window);
-	opacity: 0;
-	pointer-events: none;
-	transform: scale(var(--demo-scale));
-	transform-origin: top left;
-	transition: opacity 180ms ease;
+  display: block;
+  width: calc(100% / var(--demo-scale));
+  height: calc(100% / var(--demo-scale));
+  border: 0;
+  background: var(--window);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(var(--demo-scale));
+  transform-origin: top left;
+  transition: opacity 180ms ease;
 }
 
 .preview-wrap[data-ready="true"] .product-demo-poster {
-	opacity: 0;
+  opacity: 0;
 }
 
 .preview-wrap[data-ready="true"] .product-demo-frame {
-	opacity: 1;
-	pointer-events: auto;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* The phone, in front of the window near their shared bottom-right origin.
@@ -748,156 +759,156 @@ summary:focus-visible {
    circular and multiplied by --rf like every other corner here, so Safari
    reaches the same visual weight with a plain arc. */
 .demo-phone {
-	position: absolute;
-	right: 2.5cqw;
-	bottom: -4cqw;
-	width: 22.5cqw;
-	height: 46.9cqw;
-	object-fit: cover;
-	object-position: top center;
-	border-radius: calc(3.4cqw * var(--rf)) calc(3.4cqw * var(--rf)) 0 0;
-	corner-shape: var(--cs);
-	background: var(--window);
-	/* A hairline for the device's own edge, and a shadow deeper than the
+  position: absolute;
+  right: 2.5cqw;
+  bottom: -4cqw;
+  width: 22.5cqw;
+  height: 46.9cqw;
+  object-fit: cover;
+  object-position: top center;
+  border-radius: calc(3.4cqw * var(--rf)) calc(3.4cqw * var(--rf)) 0 0;
+  corner-shape: var(--cs);
+  background: var(--window);
+  /* A hairline for the device's own edge, and a shadow deeper than the
 	   window's: this one is the nearer object. */
-	box-shadow:
-		0 0 0 1px rgba(0, 0, 0, 0.1),
-		0 16px 40px rgba(20, 22, 26, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.1),
+    0 16px 40px rgba(20, 22, 26, 0.3);
 }
 
 /* ── Capabilities ────────────────────────────────────────────────────── */
 
 .features {
-	display: grid;
-	gap: 38px 44px;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: grid;
+  gap: 38px 44px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .feature-icon {
-	display: block;
-	margin-bottom: 16px;
-	color: rgba(var(--ink-rgb), 0.62);
+  display: block;
+  margin-bottom: 16px;
+  color: rgba(var(--ink-rgb), 0.62);
 }
 
 /* The name shares its line with the availability tag when there is one, so the
    caveat cannot be read separately from the capability it qualifies. Baseline
    alignment keeps the smaller tag sitting on the name's line, not floating. */
 .feature-head {
-	display: flex;
-	align-items: baseline;
-	flex-wrap: wrap;
-	gap: 4px 8px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
 
 /* Quieter than the name and quieter than the sentence: a caveat, not a badge
    asking to be noticed first. */
 .feature-soon {
-	border: 1px solid rgba(var(--ink-rgb), 0.16);
-	border-radius: 999px;
-	color: var(--muted);
-	font-size: 11px;
-	font-weight: 500;
-	letter-spacing: 0.01em;
-	line-height: 1.55;
-	padding: 0 7px;
-	white-space: nowrap;
+  border: 1px solid rgba(var(--ink-rgb), 0.16);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.55;
+  padding: 0 7px;
+  white-space: nowrap;
 }
 
 /* A name on its own line, then what it means: the capability is the thing you
    scan for, so it gets a line rather than a bold run-in that the eye has to
    find inside a sentence. */
 .feature h3 {
-	margin: 0;
-	color: var(--ink);
-	font-size: 16px;
-	font-weight: 600;
-	letter-spacing: -0.008em;
-	line-height: 1.3;
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  line-height: 1.3;
 }
 
 .feature p {
-	margin: 7px 0 0;
-	color: var(--muted);
-	font-size: 15px;
-	line-height: 1.42;
-	text-wrap: pretty;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.42;
+  text-wrap: pretty;
 }
 
 /* ── Questions ───────────────────────────────────────────────────────── */
 
 .faq {
-	margin-top: 22px;
+  margin-top: 22px;
 }
 
 .faq-item {
-	border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line);
 }
 
 .faq-item summary {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 20px;
-	padding: 15px 0;
-	cursor: pointer;
-	font-size: 15px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-	list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 15px 0;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  list-style: none;
 }
 
 .faq-item summary::-webkit-details-marker {
-	display: none;
+  display: none;
 }
 
 /* A plus that becomes a minus: two bars, one of which folds away when the
    answer is open. */
 .faq-sign {
-	position: relative;
-	width: 13px;
-	height: 13px;
-	flex: none;
-	color: rgba(var(--ink-rgb), 0.45);
+  position: relative;
+  width: 13px;
+  height: 13px;
+  flex: none;
+  color: rgba(var(--ink-rgb), 0.45);
 }
 
 .faq-sign::before,
 .faq-sign::after {
-	position: absolute;
-	top: 50%;
-	left: 0;
-	width: 13px;
-	height: 1.5px;
-	border-radius: 2px;
-	background: currentcolor;
-	content: "";
-	transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 13px;
+  height: 1.5px;
+  border-radius: 2px;
+  background: currentcolor;
+  content: "";
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .faq-sign::after {
-	transform: rotate(90deg);
+  transform: rotate(90deg);
 }
 
 .faq-item[open] .faq-sign::after {
-	transform: rotate(0deg);
+  transform: rotate(0deg);
 }
 
 .faq-item p {
-	margin: 0 0 18px;
-	max-width: 62ch;
-	color: var(--muted);
-	font-size: 15px;
-	line-height: 1.45;
-	text-wrap: pretty;
+  margin: 0 0 18px;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.45;
+  text-wrap: pretty;
 }
 
 .feed-foot {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: flex-end;
-	gap: 8px;
-	padding: 2px 6px;
-	color: rgba(var(--ink-rgb), 0.38);
-	font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 2px 6px;
+  color: rgba(var(--ink-rgb), 0.38);
+  font-size: 13px;
 }
 
 /* ── Controls ────────────────────────────────────────────────────────── */
@@ -906,20 +917,22 @@ summary:focus-visible {
    shadow, and a medium weight rather than a bold one. The corner goes to 16
    because a squircle reads squarer than a plain radius at the same number. */
 .button {
-	display: inline-flex;
-	min-height: 50px;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	padding: 0 24px;
-	border: 1px solid transparent;
-	border-radius: calc(15px * var(--rf));
-	corner-shape: var(--cs);
-	cursor: pointer;
-	font-size: 15px;
-	font-weight: 600;
-	letter-spacing: -0.012em;
-	transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), filter 160ms ease;
+  display: inline-flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 24px;
+  border: 1px solid transparent;
+  border-radius: calc(15px * var(--rf));
+  corner-shape: var(--cs);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    filter 160ms ease;
 }
 
 /* The filled control uses the product's blue at the top edge, shading one
@@ -927,34 +940,34 @@ summary:focus-visible {
    read as a marketing badge; the relief comes from the fill itself plus the
    lit top edge. */
 .button-primary {
-	border: 0;
-	background-color: var(--accent-blue);
-	background-image: linear-gradient(
-		180deg,
-		var(--accent-blue) 0%,
-		var(--accent-blue-deep) 100%
-	);
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-	color: #fff;
+  border: 0;
+  background-color: var(--accent-blue);
+  background-image: linear-gradient(
+    180deg,
+    var(--accent-blue) 0%,
+    var(--accent-blue-deep) 100%
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  color: #fff;
 }
 
 .button-primary:hover {
-	filter: brightness(1.06);
+  filter: brightness(1.06);
 }
 
 .button-secondary {
-	border-color: #d1d1d1;
-	background: #fff;
-	color: #0a0a0a;
+  border-color: #d1d1d1;
+  background: #fff;
+  color: #0a0a0a;
 }
 
 .button-secondary:hover {
-	background: #f7f7f7;
-	filter: none;
+  background: #f7f7f7;
+  filter: none;
 }
 
 .button:active {
-	transform: scale(0.96);
+  transform: scale(0.96);
 }
 
 /* ── Announcement ───────────────────────────────────────────────────── */
@@ -963,573 +976,596 @@ summary:focus-visible {
    variant only supplies the larger reading viewport. Direct visitors still
    get the article as a normal, server-rendered page below. */
 .announcement-dialog {
-	position: relative;
-	width: min(760px, calc(100% - 32px));
-	height: min(800px, calc(100dvh - 48px));
-	max-height: none;
-	margin: auto;
+  position: relative;
+  width: min(760px, calc(100% - 32px));
+  height: min(800px, calc(100dvh - 48px));
+  max-height: none;
+  margin: auto;
 }
 
 /* Larger screens get a roomier reading viewport. */
 @media (min-width: 1440px) and (min-height: 900px) {
-	.announcement-dialog {
-		width: min(860px, calc(100% - 32px));
-		height: min(880px, calc(100dvh - 48px));
-	}
+  .announcement-dialog {
+    width: min(860px, calc(100% - 32px));
+    height: min(880px, calc(100dvh - 48px));
+  }
 }
 
 .announcement-dialog .website-modal-panel {
-	width: 100%;
-	height: 100%;
-	padding: 0;
-	overflow: hidden;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
 }
 
 .announcement-page {
-	position: relative;
-	min-height: 100svh;
-	padding-inline: clamp(20px, 5vw, 72px);
-	background: var(--page);
-	color: var(--ink);
+  position: relative;
+  min-height: 100svh;
+  padding-inline: clamp(20px, 5vw, 72px);
+  background: var(--page);
+  color: var(--ink);
 }
 
 .announcement-scroll {
-	width: 100%;
-	height: 100%;
-	padding-inline: 36px;
-	background: transparent;
-	overflow-y: auto;
-	overscroll-behavior: contain;
-	scrollbar-gutter: stable;
+  width: 100%;
+  height: 100%;
+  padding-inline: 36px;
+  background: transparent;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .announcement-home {
-	display: inline-flex;
-	position: fixed;
-	top: 22px;
-	right: 22px;
-	z-index: 1;
-	min-height: 44px;
-	align-items: center;
-	justify-content: center;
-	gap: 4px;
-	padding: 0 18px 0 14px;
-	border: 1px solid var(--line);
-	border-radius: calc(12px * var(--rf));
-	corner-shape: var(--cs);
-	background: var(--surface);
-	color: var(--ink);
-	font-size: 15px;
-	font-weight: 600;
-	letter-spacing: -0.012em;
-	transition: background-color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  display: inline-flex;
+  position: fixed;
+  top: 22px;
+  right: 22px;
+  z-index: 1;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 18px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: calc(12px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  transition:
+    background-color 140ms ease,
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .announcement-home svg {
-	flex: none;
+  flex: none;
 }
 
 .announcement-home:hover {
-	background: color-mix(in srgb, var(--surface) 94%, var(--ink));
+  background: color-mix(in srgb, var(--surface) 94%, var(--ink));
 }
 
 .announcement-home:active {
-	transform: scale(0.96);
+  transform: scale(0.96);
 }
 
 .announcement-page .announcement-article {
-	padding-top: 40px;
+  padding-top: 40px;
 }
 
 /* Inside the compact dialog the article steps down from page scale. */
 .announcement-dialog .announcement-article {
-	padding-block: 56px 72px;
-	color: var(--muted);
-	font-size: 17px;
+  padding-block: 56px 72px;
+  color: var(--muted);
+  font-size: 17px;
 }
 
 .announcement-dialog .announcement-article h1 {
-	color: var(--ink);
-	font-size: 27px;
+  color: var(--ink);
+  font-size: 27px;
 }
 
 .announcement-dialog .announcement-article h1 + * {
-	margin-top: 32px;
+  margin-top: 32px;
 }
 
 .announcement-dialog .announcement-article h2 {
-	margin-top: 52px;
-	color: var(--ink);
-	font-size: 21px;
+  margin-top: 52px;
+  color: var(--ink);
+  font-size: 21px;
 }
 
 .announcement-page-mark {
-	display: block;
-	width: 44px;
-	height: 44px;
-	border-radius: calc(8px * var(--rf));
-	corner-shape: var(--cs);
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
 }
 
 .announcement-page-mark + h1 {
-	margin-top: 32px;
+  margin-top: 32px;
 }
 
 .announcement-article {
-	width: 100%;
-	max-width: 760px;
-	margin-inline: auto;
-	padding-block: clamp(92px, 11vh, 124px) 128px;
-	color: var(--muted);
-	font-size: 20px;
-	font-weight: 450;
-	letter-spacing: -0.012em;
-	line-height: 1.55;
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  padding-block: clamp(92px, 11vh, 124px) 128px;
+  color: var(--muted);
+  font-size: 20px;
+  font-weight: 450;
+  letter-spacing: -0.012em;
+  line-height: 1.55;
 }
 
 .announcement-article > * {
-	margin-block: 0;
+  margin-block: 0;
 }
 
 .announcement-article > * + * {
-	margin-top: 1.5em;
+  margin-top: 1.5em;
 }
 
 .announcement-article h1 {
-	color: var(--ink);
+  color: var(--ink);
 }
 
 .announcement-article h1 + * {
-	margin-top: 52px;
+  margin-top: 52px;
 }
 
 .announcement-article h2 {
-	margin-top: 72px;
-	color: rgba(var(--ink-rgb), 0.75);
-	font-size: 28px;
-	font-weight: 600;
-	letter-spacing: -0.012em;
-	line-height: 1.15;
+  margin-top: 72px;
+  color: rgba(var(--ink-rgb), 0.75);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.15;
 }
 
 .announcement-article h2 + p {
-	margin-top: 16px;
+  margin-top: 16px;
 }
 
 .announcement-article ol {
-	padding-inline-start: 1.35em;
+  padding-inline-start: 1.35em;
 }
 
 .announcement-article li {
-	padding-inline-start: 0.25em;
+  padding-inline-start: 0.25em;
 }
 
 .announcement-article li + li {
-	margin-top: 0.35em;
+  margin-top: 0.35em;
 }
 
 .announcement-article strong {
-	font-weight: 650;
+  font-weight: 650;
 }
 
 /* Focused product views use the landing demo's blue artwork as one shared
    stage. Each image is a crop of the real fixture app, enlarged past the frame
    so the feature named by the surrounding paragraph stays readable. */
 .announcement-feature-shot {
-	position: relative;
-	overflow: hidden;
-	aspect-ratio: 16 / 10;
-	margin-inline: 0;
-	border-radius: calc(28px * var(--rf));
-	corner-shape: var(--cs);
-	background: url("./demo-background.webp") center / cover;
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  margin-inline: 0;
+  border-radius: calc(28px * var(--rf));
+  corner-shape: var(--cs);
+  background: url("./demo-background.webp") center / cover;
 }
 
 .announcement-feature-shot img {
-	position: absolute;
-	display: block;
-	max-width: none;
-	border-radius: calc(15px * var(--rf));
-	corner-shape: var(--cs);
-	outline: 1px solid rgba(var(--ink-rgb), 0.1);
-	box-shadow: 0 22px 54px var(--window-shadow);
+  position: absolute;
+  display: block;
+  max-width: none;
+  border-radius: calc(15px * var(--rf));
+  corner-shape: var(--cs);
+  outline: 1px solid rgba(var(--ink-rgb), 0.1);
+  box-shadow: 0 22px 54px var(--window-shadow);
 }
 
 .announcement-feature-collaboration img {
-	top: 7%;
-	left: 7%;
-	width: calc(93% + 2px);
-	border-radius: calc(15px * var(--rf)) 0 0 0;
+  top: 7%;
+  left: 7%;
+  width: calc(93% + 2px);
+  border-radius: calc(15px * var(--rf)) 0 0 0;
 }
 
 .announcement-feature-desk img {
-	top: 3%;
-	left: 3%;
-	width: 94%;
+  top: 3%;
+  left: 3%;
+  width: 94%;
 }
 
 .announcement-feature-sessions img {
-	top: 4%;
-	left: 4%;
-	width: 92%;
+  top: 4%;
+  left: 4%;
+  width: 92%;
 }
 
 .announcement-feature-automations {
-	aspect-ratio: 2 / 1;
+  aspect-ratio: 2 / 1;
 }
 
 .announcement-feature-automations img {
-	right: 0;
-	bottom: 0;
-	width: 120%;
+  right: 0;
+  bottom: 0;
+  width: 120%;
 }
 
 .announcement-feature-walkthroughs img {
-	top: 7%;
-	left: 5%;
-	width: 96%;
+  top: 7%;
+  left: 5%;
+  width: 96%;
 }
 
 .announcement-inline-link {
-	color: inherit;
-	text-decoration-line: underline;
-	text-decoration-thickness: from-font;
-	text-underline-offset: 0.14em;
-	text-decoration-skip-ink: auto;
-	transition: color 140ms ease;
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-thickness: from-font;
+  text-underline-offset: 0.14em;
+  text-decoration-skip-ink: auto;
+  transition: color 140ms ease;
 }
 
 .announcement-inline-link:hover {
-	color: var(--accent-blue);
+  color: var(--accent-blue);
 }
 
 .announcement-cta {
-	width: fit-content;
-	margin-top: 56px;
+  width: fit-content;
+  margin-top: 56px;
 }
 
 /* ── Narrower ────────────────────────────────────────────────────────── */
 
 @media (max-width: 1120px) {
-	.shell {
-		width: min(100% - 64px, 1400px);
-		gap: 40px;
-		grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
-	}
+  .shell {
+    width: min(100% - 64px, 1400px);
+    gap: 40px;
+    grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  }
 
-	.card {
-		padding: 28px;
-	}
+  .card {
+    padding: 28px;
+  }
 
-	/* Two feature columns need about 300px each to set more than five words to
+  /* Two feature columns need about 300px each to set more than five words to
 	   a line. Below that the grid stops helping and starts shredding the
 	   sentences, so it goes to one column well before the layout does. */
-	.features {
-		gap: 32px;
-		grid-template-columns: minmax(0, 1fr);
-	}
+  .features {
+    gap: 32px;
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* One column: the rail stops being a rail and becomes the top of the page.
    A screen this narrow has no room for a column that stays. */
 @media (max-width: 1000px) {
-	.shell {
-		width: min(100% - 40px, 1400px);
-		gap: 0;
-		grid-template-columns: minmax(0, 1fr);
-	}
+  .shell {
+    width: min(100% - 40px, 1400px);
+    gap: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-	.rail {
-		position: static;
-		height: auto;
-		padding: 32px 0 0;
-	}
+  .rail {
+    position: static;
+    height: auto;
+    padding: 32px 0 0;
+  }
 
-	.rail h1 {
-		max-width: 20ch;
-	}
+  .rail h1 {
+    max-width: 20ch;
+  }
 
-	.rail h1,
-	.announcement-article h1 {
-		font-size: clamp(30px, 6.4vw, 40px);
-	}
+  .rail h1,
+  .announcement-article h1 {
+    font-size: clamp(30px, 6.4vw, 40px);
+  }
 
-	.rail-foot {
-		padding-top: 28px;
-	}
+  .rail-foot {
+    padding-top: 28px;
+  }
 
-	.feed {
-		padding-top: 32px;
-	}
+  .feed {
+    padding-top: 32px;
+  }
 
-	.stage {
-		aspect-ratio: 4 / 3;
-	}
+  .stage {
+    aspect-ratio: 4 / 3;
+  }
 }
 
 @media (max-width: 1120px) {
-	.landing-setup-steps {
-		gap: 12px;
-		grid-template-columns: minmax(0, 1fr);
-	}
+  .landing-setup-steps {
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 720px) {
-	/* The preview is display-only on phones so drag gestures keep scrolling the
+  /* The preview is display-only on phones so drag gestures keep scrolling the
 	   page instead of being captured by the embedded app. */
-	.preview-wrap[data-ready="true"] .product-demo-frame {
-		pointer-events: none;
-	}
+  .preview-wrap[data-ready="true"] .product-demo-frame {
+    pointer-events: none;
+  }
 
-	.landing-setup-step-icon {
-		display: none;
-	}
+  .landing-setup-step-icon {
+    display: none;
+  }
 
-	.landing-setup-step-copy {
-		margin-top: 0;
-	}
+  .landing-setup-step-copy {
+    margin-top: 0;
+  }
 }
 
 @media (max-width: 560px) {
-	.shell {
-		width: min(100% - 32px, 1400px);
-	}
+  .shell {
+    width: min(100% - 32px, 1400px);
+  }
 
-	.card {
-		padding: 22px;
-		border-radius: calc(22px * var(--rf));
-		corner-shape: var(--cs);
-	}
+  .card {
+    padding: 22px;
+    border-radius: calc(22px * var(--rf));
+    corner-shape: var(--cs);
+  }
 
-	.card h2 {
-		font-size: 22px;
-	}
+  .card h2 {
+    font-size: 22px;
+  }
 
-	.feature {
-		display: grid;
-		grid-template-columns: 28px minmax(0, 1fr);
-		column-gap: 14px;
-	}
+  .feature {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    column-gap: 14px;
+  }
 
-	.feature-icon {
-		margin-bottom: 0;
-	}
+  .feature-icon {
+    margin-bottom: 0;
+  }
 
-	.feature-icon,
-	.feature-head {
-		align-self: center;
-	}
+  .feature-icon,
+  .feature-head {
+    align-self: center;
+  }
 
-	.feature-head,
-	.feature p {
-		grid-column: 2;
-	}
+  .feature-head,
+  .feature p {
+    grid-column: 2;
+  }
 
-	.landing-setup-steps > li {
-		padding: 16px;
-	}
+  .landing-setup-steps > li {
+    padding: 16px;
+  }
 
-	.landing-setup-step-action {
-		width: 100%;
-		align-self: stretch;
-		margin-top: 16px;
-	}
+  .landing-setup-step-action {
+    width: 100%;
+    align-self: stretch;
+    margin-top: 16px;
+  }
 
-	.landing-setup-apps {
-		margin-top: 16px;
-	}
+  .landing-setup-apps {
+    margin-top: 16px;
+  }
 
-	.landing-setup-app {
-		padding-right: 10px;
-	}
+  .landing-setup-app {
+    padding-right: 10px;
+  }
 
-	.landing-setup-app-action {
-		font-size: 11px;
-	}
+  .landing-setup-app-action {
+    font-size: 11px;
+  }
 
-	.landing-install-command {
-		grid-template-columns: minmax(0, 1fr);
-	}
+  .landing-install-command {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-	.landing-install-command code {
-		font-size: 11px;
-	}
+  .landing-install-command code {
+    font-size: 11px;
+  }
 
-	.landing-install-command button {
-		height: 44px;
-		justify-self: end;
-	}
+  .landing-install-command button {
+    height: 44px;
+    justify-self: end;
+  }
 
-	.pwa-guide {
-		width: calc(100% - 24px);
-		max-height: calc(100dvh - 24px);
-	}
+  .pwa-guide {
+    width: calc(100% - 24px);
+    max-height: calc(100dvh - 24px);
+  }
 
-	.announcement-dialog {
-		width: calc(100% - 16px);
-		height: calc(100dvh - 16px);
-		border-radius: calc(24px * var(--rf));
-	}
+  .announcement-dialog {
+    width: calc(100% - 16px);
+    height: calc(100dvh - 16px);
+    border-radius: calc(24px * var(--rf));
+  }
 
-	.announcement-home {
-		top: 12px;
-		right: 12px;
-	}
+  .announcement-home {
+    top: 12px;
+    right: 12px;
+  }
 
-	.announcement-scroll {
-		padding-inline: 20px;
-		scrollbar-gutter: auto;
-	}
+  .announcement-scroll {
+    padding-inline: 20px;
+    scrollbar-gutter: auto;
+  }
 
-	.announcement-article {
-		padding-block: 78px 88px;
-	}
+  .announcement-article {
+    padding-block: 78px 88px;
+  }
 
-	.announcement-article h1 + * {
-		margin-top: 40px;
-	}
+  .announcement-article h1 + * {
+    margin-top: 40px;
+  }
 
-	.announcement-feature-shot {
-		aspect-ratio: 5 / 4;
-		border-radius: calc(22px * var(--rf));
-	}
+  .announcement-feature-shot {
+    aspect-ratio: 5 / 4;
+    border-radius: calc(22px * var(--rf));
+  }
 
-	.announcement-feature-collaboration img {
-		top: 6%;
-		left: 5%;
-		width: 95%;
-	}
+  .announcement-feature-collaboration img {
+    top: 6%;
+    left: 5%;
+    width: 95%;
+  }
 
-	.announcement-feature-desk img {
-		top: 2%;
-		left: -12%;
-		width: 124%;
-	}
+  .announcement-feature-desk img {
+    top: 2%;
+    left: -12%;
+    width: 124%;
+  }
 
-	.announcement-feature-sessions {
-		aspect-ratio: 16 / 10;
-	}
+  .announcement-feature-sessions {
+    aspect-ratio: 16 / 10;
+  }
 
-	.announcement-feature-automations {
-		aspect-ratio: 2 / 1;
-	}
+  .announcement-feature-automations {
+    aspect-ratio: 2 / 1;
+  }
 
-	.announcement-feature-automations img {
-		right: 0;
-		bottom: 0;
-		width: 150%;
-	}
+  .announcement-feature-automations img {
+    right: 0;
+    bottom: 0;
+    width: 150%;
+  }
 
-	.announcement-feature-walkthroughs img {
-		top: 7%;
-		left: 5%;
-		width: 130%;
-	}
+  .announcement-feature-walkthroughs img {
+    top: 7%;
+    left: 5%;
+    width: 130%;
+  }
 
-	.website-modal-panel {
-		padding: 24px;
-		border-radius: calc(28px * var(--rf));
-	}
+  .website-modal-panel {
+    padding: 24px;
+    border-radius: calc(28px * var(--rf));
+  }
 
-	.website-modal-close {
-		top: 10px;
-		right: 10px;
-	}
+  .website-modal-close {
+    top: 10px;
+    right: 10px;
+  }
 
-	.pwa-guide h2 {
-		font-size: 22px;
-	}
+  .pwa-guide h2 {
+    font-size: 22px;
+  }
 
-	.demo-phone {
-		display: none;
-	}
+  .demo-phone {
+    display: none;
+  }
 
-	.stage {
-		aspect-ratio: 5 / 4;
-		border-radius: calc(22px * var(--rf));
-		corner-shape: var(--cs);
-	}
+  .stage {
+    aspect-ratio: 5 / 4;
+    border-radius: calc(22px * var(--rf));
+    corner-shape: var(--cs);
+  }
 
-	/* A phone has no room to float a whole window inside a frame: at this width
+  /* A phone has no room to float a whole window inside a frame: at this width
 	   the app ends up too small to read. It runs off the right and bottom edges
 	   instead, which buys the same picture at a larger scale and reads as a
 	   window carrying on past the frame. The stage clips it, so the bleed costs
 	   no layout. */
-	.preview-wrap {
-		top: 7%;
-		right: -2px;
-		bottom: -2px;
-		left: 5%;
-		/* Only the corner that is still inside the frame stays round. A rounded
+  .preview-wrap {
+    top: 7%;
+    right: -2px;
+    bottom: -2px;
+    left: 5%;
+    /* Only the corner that is still inside the frame stays round. A rounded
 		   corner on an edge that runs off the frame reads as a window that
 		   stops there; square ones read as one that carries on. */
-		border-radius: calc(15px * var(--rf)) 0 0 0;
-	}
+    border-radius: calc(15px * var(--rf)) 0 0 0;
+  }
 
-	.button {
-		width: 100%;
-	}
+  .button {
+    width: 100%;
+  }
 
-	.rail-actions {
-		align-items: stretch;
-		flex-direction: column;
-	}
+  .rail-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
 
-	.rail-actions .button {
-		flex: none;
-	}
+  .rail-actions .button {
+    flex: none;
+  }
 
-	.feed-foot {
-		justify-content: flex-start;
-	}
+  .feed-foot {
+    justify-content: flex-start;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-	.rail > *,
-	.stage,
-	.feature-card {
-		animation: enter 700ms cubic-bezier(0.23, 1, 0.32, 1) both;
-	}
+  .rail > *,
+  .stage,
+  .feature-card {
+    animation: enter 700ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
 
-	.pwa-guide[open] .website-modal-panel {
-		animation: dialog-enter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
-	}
+  .pwa-guide[open] .website-modal-panel {
+    animation: dialog-enter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
 
-	.announcement-dialog[open] {
-		animation: announcement-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
-	}
+  .announcement-dialog[open] {
+    animation: announcement-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
 
-	.announcement-dialog[open]::backdrop {
-		animation: announcement-backdrop-enter 180ms ease-out both;
-	}
+  .announcement-dialog[open]::backdrop {
+    animation: announcement-backdrop-enter 180ms ease-out both;
+  }
 
-	.rail > :nth-child(2) { animation-delay: 60ms; }
-	.stage { animation-delay: 110ms; }
-	.feature-card { animation-delay: 150ms; }
-	.rail > :nth-child(3) { animation-delay: 190ms; }
+  .rail > :nth-child(2) {
+    animation-delay: 60ms;
+  }
+  .stage {
+    animation-delay: 110ms;
+  }
+  .feature-card {
+    animation-delay: 150ms;
+  }
+  .rail > :nth-child(3) {
+    animation-delay: 190ms;
+  }
 }
 
 @keyframes enter {
-	from { opacity: 0; filter: blur(4px); transform: translateY(12px); }
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(12px);
+  }
 }
 
 @keyframes dialog-enter {
-	from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
 }
 
 @keyframes announcement-enter {
-	from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
 }
 
 @keyframes announcement-backdrop-enter {
-	from { background: transparent; backdrop-filter: blur(0); }
+  from {
+    background: transparent;
+    backdrop-filter: blur(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.product-demo-poster,
-	.product-demo-frame {
-		transition: none;
-	}
+  .product-demo-poster,
+  .product-demo-frame {
+    transition: none;
+  }
 }
 
 /* Dark mode follows the system rather than offering a switch: the page has one
@@ -1539,29 +1575,29 @@ summary:focus-visible {
    already clears its contrast on white, and it only gains presence on a dark
    page. */
 @media (prefers-color-scheme: dark) {
-	:root {
-		color-scheme: dark;
-		--ink: #f4f4f5;
-		--page: #0c0c0d;
-		--card: #141416;
-		--line: rgba(255, 255, 255, 0.07);
-		--muted: #939397;
-		--ink-rgb: 255, 255, 255;
-		--stage-bg: #14171d;
-		--window: #0d0d0f;
-		--window-shadow: rgba(0, 0, 0, 0.5);
-		--surface: #151517;
-		/* Pages without artwork keep a neutral modal surface. The marketing page
+  :root {
+    color-scheme: dark;
+    --ink: #f4f4f5;
+    --page: #0c0c0d;
+    --card: #141416;
+    --line: rgba(255, 255, 255, 0.07);
+    --muted: #939397;
+    --ink-rgb: 255, 255, 255;
+    --stage-bg: #14171d;
+    --window: #0d0d0f;
+    --window-shadow: rgba(0, 0, 0, 0.5);
+    --surface: #151517;
+    /* Pages without artwork keep a neutral modal surface. The marketing page
 		   overrides this token with the same blue glass used by its sections. */
-		--modal-surface: color-mix(in oklch, var(--surface) 90%, var(--ink));
-		--modal-ring: oklch(1 0 0 / 0.11);
-		--modal-glow: color-mix(in oklch, var(--accent-blue) 32%, transparent);
-		--surface-shadow: color-mix(in srgb, black 38%, transparent);
-		--scrim: color-mix(in srgb, black 24%, transparent);
-		--field: #1a1a1d;
-		--ok: #3fb950;
-		--err: #f87171;
-	}
+    --modal-surface: color-mix(in oklch, var(--surface) 90%, var(--ink));
+    --modal-ring: oklch(1 0 0 / 0.11);
+    --modal-glow: color-mix(in oklch, var(--accent-blue) 32%, transparent);
+    --surface-shadow: color-mix(in srgb, black 38%, transparent);
+    --scrim: color-mix(in srgb, black 24%, transparent);
+    --field: #1a1a1d;
+    --ok: #3fb950;
+    --err: #f87171;
+  }
 }
 
 /* ── The download dialog's two cards ─────────────────────────────────────
@@ -1573,158 +1609,171 @@ summary:focus-visible {
    the content rather than a second class, so the dialog stays one component. */
 .setup-guide:has(.download-cards),
 .setup-guide:has(.download-steps) {
-	width: min(760px, calc(100% - 32px));
+  width: min(760px, calc(100% - 32px));
 }
 
 .setup-guide:has(.download-cards) .website-modal-panel,
 .setup-guide:has(.download-steps) .website-modal-panel {
-	padding: 36px;
+  padding: 36px;
 }
 
 .setup-guide:has(.download-cards) .website-modal-close,
 .setup-guide:has(.download-steps) .website-modal-close {
-	top: 18px;
-	right: 18px;
+  top: 18px;
+  right: 18px;
 }
 
 .setup-guide:has(.download-cards) h2,
 .setup-guide:has(.download-steps) h2 {
-	margin-bottom: 24px;
-	padding-right: 48px;
+  margin-bottom: 24px;
+  padding-right: 48px;
 }
 
 .download-cards {
-	display: grid;
-	gap: 14px;
-	grid-template-columns: 3fr 2fr;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 3fr 2fr;
 }
 
 .download-card {
-	--download-card-surface: color-mix(in oklch, var(--card) 97%, var(--accent-blue) 3%);
-	display: flex;
-	overflow: hidden;
-	flex-direction: column;
-	height: 320px;
-	border-radius: calc(24px * var(--rf));
-	corner-shape: var(--cs);
-	background: var(--download-card-surface);
+  --download-card-surface: color-mix(
+    in oklch,
+    var(--card) 97%,
+    var(--accent-blue) 3%
+  );
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  height: 320px;
+  border-radius: calc(24px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--download-card-surface);
 }
 
 .download-card-preview {
-	position: relative;
-	min-height: 0;
-	flex: 1;
-	overflow: hidden;
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .download-card-preview-mac {
-	padding: 18px 0 0 18px;
-	background-image: url("./demo-background.webp");
-	background-position: center;
-	background-size: cover;
+  padding: 18px 0 0 18px;
+  background-image: url("./demo-background.webp");
+  background-position: center;
+  background-size: cover;
 }
 
 .download-card-preview-mac img {
-	width: 100%;
-	height: 100%;
-	border-top-left-radius: calc(12px * var(--rf));
-	corner-shape: var(--cs);
-	object-fit: cover;
-	object-position: left top;
-	outline: 1px solid rgba(0, 0, 0, 0.1);
-	outline-offset: -1px;
+  width: 100%;
+  height: 100%;
+  border-top-left-radius: calc(12px * var(--rf));
+  corner-shape: var(--cs);
+  object-fit: cover;
+  object-position: left top;
+  outline: 1px solid rgba(0, 0, 0, 0.1);
+  outline-offset: -1px;
 }
 
 .download-card-preview-phone {
-	display: flex;
-	padding: 22px 12px 0;
-	justify-content: center;
-	background-image:
-		linear-gradient(oklch(0.952 0.187 117.448 / 0.6), oklch(0.952 0.187 117.448 / 0.6)),
-		url("./demo-background.webp");
-	background-position: center;
-	background-size: cover;
+  display: flex;
+  padding: 22px 12px 0;
+  justify-content: center;
+  background-image:
+    linear-gradient(
+      oklch(0.952 0.187 117.448 / 0.6),
+      oklch(0.952 0.187 117.448 / 0.6)
+    ),
+    url("./demo-background.webp");
+  background-position: center;
+  background-size: cover;
 }
 
 .download-card-preview-phone img {
-	width: auto;
-	max-width: none;
-	height: 155%;
-	border-radius: calc(18px * var(--rf));
-	corner-shape: var(--cs);
-	filter: drop-shadow(0 14px 30px rgba(16, 18, 22, 0.22));
-	object-fit: contain;
-	object-position: top;
+  width: auto;
+  max-width: none;
+  height: 155%;
+  border-radius: calc(18px * var(--rf));
+  corner-shape: var(--cs);
+  filter: drop-shadow(0 14px 30px rgba(16, 18, 22, 0.22));
+  object-fit: contain;
+  object-position: top;
 }
 
 /* The wash runs under the copy, so the screenshot ends in the card rather
    than against a line. */
 .download-card-fade {
-	position: absolute;
-	right: 0;
-	bottom: 0;
-	left: 0;
-	height: 34%;
-	background: linear-gradient(to bottom, transparent, var(--download-card-surface));
-	pointer-events: none;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 34%;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--download-card-surface)
+  );
+  pointer-events: none;
 }
 
 .download-card-body {
-	position: relative;
-	z-index: 1;
-	display: flex;
-	flex: none;
-	flex-direction: column;
-	padding: 0 18px 18px;
-	background: var(--download-card-surface);
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  padding: 0 18px 18px;
+  background: var(--download-card-surface);
 }
 
 .download-card-body strong {
-	font-size: 17px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-	line-height: 1.25;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
 }
 
 .download-card-body small {
-	margin: 3px 0 14px;
-	color: var(--muted);
-	font-size: 13px;
-	font-weight: 500;
+  margin: 3px 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .download-card-action {
-	display: inline-flex;
-	min-height: 40px;
-	align-items: center;
-	justify-content: center;
-	gap: 7px;
-	border: 0;
-	border-radius: calc(11px * var(--rf));
-	corner-shape: var(--cs);
-	background: var(--ink);
-	color: var(--page);
-	cursor: pointer;
-	font-size: 13px;
-	font-weight: 600;
-	transition: background-color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: calc(11px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--ink);
+  color: var(--page);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background-color 160ms ease,
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .download-card-action:hover {
-	background: rgba(var(--ink-rgb), 0.82);
+  background: rgba(var(--ink-rgb), 0.82);
 }
 
 .download-card-action:active {
-	transform: scale(0.96);
+  transform: scale(0.96);
 }
 
 .download-card-action-soft {
-	background: rgba(var(--ink-rgb), 0.075);
-	color: var(--ink);
+  background: rgba(var(--ink-rgb), 0.075);
+  color: var(--ink);
 }
 
 .download-card-action-soft:hover {
-	background: rgba(var(--ink-rgb), 0.12);
+  background: rgba(var(--ink-rgb), 0.12);
 }
 
 /* In dark mode the filled action trades white ink for the product's blue:
@@ -1734,100 +1783,102 @@ summary:focus-visible {
    where the blue would fight the screenshot above it. The soft PWA button
    stays an ink wash in both modes so the pair keeps its hierarchy. */
 @media (prefers-color-scheme: dark) {
-	.download-card-action:not(.download-card-action-soft) {
-		background-color: var(--accent-blue);
-		background-image: linear-gradient(
-			180deg,
-			var(--accent-blue) 0%,
-			var(--accent-blue-deep) 100%
-		);
-		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-		color: #fff;
-		transition: filter 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-	}
+  .download-card-action:not(.download-card-action-soft) {
+    background-color: var(--accent-blue);
+    background-image: linear-gradient(
+      180deg,
+      var(--accent-blue) 0%,
+      var(--accent-blue-deep) 100%
+    );
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    color: #fff;
+    transition:
+      filter 160ms ease,
+      transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
 
-	.download-card-action:not(.download-card-action-soft):hover {
-		filter: brightness(1.08);
-	}
+  .download-card-action:not(.download-card-action-soft):hover {
+    filter: brightness(1.08);
+  }
 }
 
 .download-steps-back {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	margin-bottom: 16px;
-	padding: 0;
-	border: 0;
-	background: transparent;
-	color: var(--muted);
-	cursor: pointer;
-	font-size: 13px;
-	font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .download-steps-back:hover {
-	color: var(--ink);
+  color: var(--ink);
 }
 
 .download-steps ol {
-	display: grid;
-	margin: 0;
-	padding: 0;
-	gap: 10px;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	counter-reset: download-step;
-	list-style: none;
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  counter-reset: download-step;
+  list-style: none;
 }
 
 .download-steps li {
-	display: flex;
-	flex-direction: column;
-	padding: 18px;
-	border-radius: calc(16px * var(--rf));
-	corner-shape: var(--cs);
-	background: rgba(var(--ink-rgb), 0.04);
-	counter-increment: download-step;
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  border-radius: calc(16px * var(--rf));
+  corner-shape: var(--cs);
+  background: rgba(var(--ink-rgb), 0.04);
+  counter-increment: download-step;
 }
 
 .download-steps li::before {
-	display: grid;
-	width: 30px;
-	height: 30px;
-	margin-bottom: 42px;
-	border-radius: calc(10px * var(--rf));
-	corner-shape: var(--cs);
-	background: var(--ink);
-	color: var(--page);
-	content: counter(download-step);
-	font-size: 13px;
-	font-weight: 600;
-	place-items: center;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 42px;
+  border-radius: calc(10px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--ink);
+  color: var(--page);
+  content: counter(download-step);
+  font-size: 13px;
+  font-weight: 600;
+  place-items: center;
 }
 
 .download-steps strong {
-	font-size: 15px;
-	font-weight: 600;
-	line-height: 1.25;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 .download-steps span {
-	margin-top: 5px;
-	color: var(--muted);
-	font-size: 13px;
-	line-height: 1.45;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 @media (max-width: 560px) {
-	.download-cards,
-	.download-steps ol {
-		grid-template-columns: minmax(0, 1fr);
-	}
+  .download-cards,
+  .download-steps ol {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-	.download-card {
-		height: 300px;
-	}
+  .download-card {
+    height: 300px;
+  }
 
-	.download-steps li::before {
-		margin-bottom: 14px;
-	}
+  .download-steps li::before {
+    margin-bottom: 14px;
+  }
 }

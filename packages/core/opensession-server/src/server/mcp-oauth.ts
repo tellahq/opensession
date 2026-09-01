@@ -602,9 +602,10 @@ function grantHeader(name: string, slot: GrantSlot): string | undefined {
 }
 
 /** Connection status for the UI: who's connected on each grant. */
-export function mcpOauthStatus(
-  name: string,
-): { shared?: { connectedBy?: string; updatedAt: string }; users: string[] } {
+export function mcpOauthStatus(name: string): {
+  shared?: { connectedBy?: string; updatedAt: string };
+  users: string[];
+} {
   const auth = readStore()[name];
   return {
     ...(auth?.shared
@@ -781,9 +782,49 @@ const TOKEN_VALIDATORS: Record<
       signal: AbortSignal.timeout(10_000),
     });
     if (res.status === 401 || res.status === 403)
-      return { ok: false, error: "Vercel rejected that token. Create a new one at vercel.com/account/settings/tokens and paste it again." };
+      return {
+        ok: false,
+        error:
+          "Vercel rejected that token. Create a new one at vercel.com/account/settings/tokens and paste it again.",
+      };
     if (!res.ok)
-      return { ok: false, error: `Could not check the token with Vercel (HTTP ${res.status})` };
+      return {
+        ok: false,
+        error: `Could not check the token with Vercel (HTTP ${res.status})`,
+      };
+    return { ok: true };
+  },
+  vero: async (token) => {
+    const res = await fetch("https://api.getvero.com/mcp", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "Open Session", version: "1" },
+        },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 401 || res.status === 403)
+      return {
+        ok: false,
+        error:
+          "Vero rejected that key. Create a Campaigns API secret key in Vero and paste it again.",
+      };
+    if (!res.ok)
+      return {
+        ok: false,
+        error: `Could not check the key with Vero (HTTP ${res.status})`,
+      };
     return { ok: true };
   },
 };
@@ -793,6 +834,17 @@ export function supportsManualToken(name: string): boolean {
   return !!TOKEN_VALIDATORS[name];
 }
 
+/** Validate a provider token without persisting it. */
+export async function validateManualMcpToken(
+  name: string,
+  token: string,
+): Promise<void> {
+  const validate = TOKEN_VALIDATORS[name];
+  if (!validate) throw new Error(`${name} has no token connect flow`);
+  const checked = await validate(token);
+  if (!checked.ok) throw new Error(checked.error);
+}
+
 /** Validate a pasted API token live, then store it as a grant. */
 export async function saveManualMcpGrant(
   name: string,
@@ -800,15 +852,14 @@ export async function saveManualMcpGrant(
   token: string,
   opts: { connectedBy?: string; forUser?: string } = {},
 ): Promise<void> {
-  const validate = TOKEN_VALIDATORS[name];
-  if (!validate) throw new Error(`${name} has no token connect flow`);
-  const checked = await validate(token);
-  if (!checked.ok) throw new Error(checked.error);
+  await validateManualMcpToken(name, token);
   const teamName = opts.forUser
     ? resolveTeammate(opts.forUser)?.name
     : undefined;
   if (opts.forUser && !teamName)
-    throw new Error(`"${opts.forUser}" doesn't resolve to a configured teammate`);
+    throw new Error(
+      `"${opts.forUser}" doesn't resolve to a configured teammate`,
+    );
   const store = readStore();
   const entry = store[name] ?? {
     serverUrl,

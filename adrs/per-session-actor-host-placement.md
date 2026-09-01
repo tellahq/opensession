@@ -12,24 +12,24 @@ The non-negotiable boundary is one logical actor, serial mailbox, and authoritat
 
 Schema 22 creates these tables in every `SessionKernelStore` because the same store implementation serves legacy and isolated databases:
 
-| Table | Ownership after placement | Purpose |
-| --- | --- | --- |
-| `session_kernel_owner` | system and session DB | Single-writer process/incarnation claim. |
-| `session_kernel_migrations` | temporary compatibility in both | One-time schema/import markers. Session copies must not use this as routing authority. |
-| `session_kernel_tombstones` | session DB | Permanent deletion fence. Legacy copies remain evidence until cleanup. |
-| `session_kernel_quarantine` | session DB; system DB only for storage/migration quarantine | Fail-closed ambiguous settlement and infrastructure quarantine. |
-| `session_kernel_placements` | system DB only | Durable route, conservative dirty wake bit, and derived next timer/outbox wake. |
-| `session_kernel_outbox_routes` | system DB only, temporary | Globally unique numeric outbox ID to session route while numeric IDs remain in the wire protocol. Remove after effect receipts use session-scoped/string identity. |
-| `session_kernel_state` | session DB | Run state, run ID, generation, and change sequence. |
-| `session_kernel_creation` | session DB | Creation state machine, setup/opening plan, and bounded effect receipts. |
-| `session_kernel_asks` | session DB | Blocking ask aggregate and revision. |
-| `session_kernel_delivery` | session DB | Prompt queue, dispatch, interrupt, steer receipts, and revision. |
-| `session_kernel_turn` | session DB | Cancel aggregate. |
-| `session_kernel_turn_projections` | session DB | Generation-fenced outcome projections. |
-| `session_kernel_commands` | session DB | Durable request journal, payload fingerprint, result, acknowledgement, and retry/indeterminate state. |
-| `session_kernel_changes` | session DB | Monotonic actor change stream. |
-| `session_kernel_timers` | session DB | Durable timer authority, attempts, execution token, and dead-letter state. |
-| `session_kernel_outbox` | session DB | Durable external effects, stable effect identity, attempts, execution token, and dead-letter state. |
+| Table                             | Ownership after placement                                   | Purpose                                                                                                                                                            |
+| --------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `session_kernel_owner`            | system and session DB                                       | Single-writer process/incarnation claim.                                                                                                                           |
+| `session_kernel_migrations`       | temporary compatibility in both                             | One-time schema/import markers. Session copies must not use this as routing authority.                                                                             |
+| `session_kernel_tombstones`       | session DB                                                  | Permanent deletion fence. Legacy copies remain evidence until cleanup.                                                                                             |
+| `session_kernel_quarantine`       | session DB; system DB only for storage/migration quarantine | Fail-closed ambiguous settlement and infrastructure quarantine.                                                                                                    |
+| `session_kernel_placements`       | system DB only                                              | Durable route, conservative dirty wake bit, and derived next timer/outbox wake.                                                                                    |
+| `session_kernel_outbox_routes`    | system DB only, temporary                                   | Globally unique numeric outbox ID to session route while numeric IDs remain in the wire protocol. Remove after effect receipts use session-scoped/string identity. |
+| `session_kernel_state`            | session DB                                                  | Run state, run ID, generation, and change sequence.                                                                                                                |
+| `session_kernel_creation`         | session DB                                                  | Creation state machine, setup/opening plan, and bounded effect receipts.                                                                                           |
+| `session_kernel_asks`             | session DB                                                  | Blocking ask aggregate and revision.                                                                                                                               |
+| `session_kernel_delivery`         | session DB                                                  | Prompt queue, dispatch, interrupt, steer receipts, and revision.                                                                                                   |
+| `session_kernel_turn`             | session DB                                                  | Cancel aggregate.                                                                                                                                                  |
+| `session_kernel_turn_projections` | session DB                                                  | Generation-fenced outcome projections.                                                                                                                             |
+| `session_kernel_commands`         | session DB                                                  | Durable request journal, payload fingerprint, result, acknowledgement, and retry/indeterminate state.                                                              |
+| `session_kernel_changes`          | session DB                                                  | Monotonic actor change stream.                                                                                                                                     |
+| `session_kernel_timers`           | session DB                                                  | Durable timer authority, attempts, execution token, and dead-letter state.                                                                                         |
+| `session_kernel_outbox`           | session DB                                                  | Durable external effects, stable effect identity, attempts, execution token, and dead-letter state.                                                                |
 
 The final system database contains only process ownership, placements, storage quarantine, the repairable wake index, and the temporary numeric outbox route allocator. Schema 23 removes a session's central rows in the same transaction that publishes its placement and outbox routes, so retained central evidence can never be mistaken for a second authority.
 
@@ -86,20 +86,20 @@ Each cutover is independently crash-safe. Rerunning the offline command resumes 
 
 ### Crash points and recovery
 
-| Crash point | Recovery |
-| --- | --- |
-| Before route claim commit | No route exists; retry claim. No session mutation occurred. |
-| After route claim, before first session write | Route exists with dirty wake; lazy activation opens an empty DB and retries the same durable request ID. |
-| During isolated transaction | SQLite rollback plus request journal semantics decide retry. Critical commit ambiguity quarantines only that session. |
-| After isolated commit, before reply | Replay returns the durable command/effect/timer receipt. |
-| After isolated commit, before wake repair | Dirty placement forces a rescan. |
-| Worker crash or timeout | Supervisor removes the Worker, preserves mailbox ordering, starts a replacement, and re-enters only replay-safe work. Other lanes continue. |
-| During migration snapshot or verification | Delete/rebuild only the unpublished temporary target. Central rows remain authoritative. |
-| After target rename, before route cutover | No placement exists, so recovery may remove and rebuild the unpublished target from central rows. |
-| During cutover | Placement, outbox routes, and central-row removal commit or roll back together. |
-| After cutover with unreadable target | Quarantine that session. Do not silently recreate or fall back to central writes. |
-| During deletion | Tombstone and ownership fences remain in the session authority. Route/evidence removal occurs only after physical ownership is proven absent. |
-| System DB commit ambiguity | Fail-stop the actor host because route authority is unknown. |
+| Crash point                                   | Recovery                                                                                                                                      |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before route claim commit                     | No route exists; retry claim. No session mutation occurred.                                                                                   |
+| After route claim, before first session write | Route exists with dirty wake; lazy activation opens an empty DB and retries the same durable request ID.                                      |
+| During isolated transaction                   | SQLite rollback plus request journal semantics decide retry. Critical commit ambiguity quarantines only that session.                         |
+| After isolated commit, before reply           | Replay returns the durable command/effect/timer receipt.                                                                                      |
+| After isolated commit, before wake repair     | Dirty placement forces a rescan.                                                                                                              |
+| Worker crash or timeout                       | Supervisor removes the Worker, preserves mailbox ordering, starts a replacement, and re-enters only replay-safe work. Other lanes continue.   |
+| During migration snapshot or verification     | Delete/rebuild only the unpublished temporary target. Central rows remain authoritative.                                                      |
+| After target rename, before route cutover     | No placement exists, so recovery may remove and rebuild the unpublished target from central rows.                                             |
+| During cutover                                | Placement, outbox routes, and central-row removal commit or roll back together.                                                               |
+| After cutover with unreadable target          | Quarantine that session. Do not silently recreate or fall back to central writes.                                                             |
+| During deletion                               | Tombstone and ownership fences remain in the session authority. Route/evidence removal occurs only after physical ownership is proven absent. |
+| System DB commit ambiguity                    | Fail-stop the actor host because route authority is unknown.                                                                                  |
 
 ## Compatibility and removal gates
 

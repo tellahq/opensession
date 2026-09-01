@@ -27,8 +27,7 @@ const OPENSESSION_ROOT = resolvePath(import.meta.dir, "../../../../..");
 
 export function configPath(): string {
   return (
-    process.env.OPENSESSION_CONFIG ||
-    statePath(".opensession/config.json")
+    process.env.OPENSESSION_CONFIG || statePath(".opensession/config.json")
   );
 }
 
@@ -362,7 +361,9 @@ const obj = (v: unknown): Record<string, unknown> | undefined =>
     ? (v as Record<string, unknown>)
     : undefined;
 const strArray = (v: unknown): string[] | undefined =>
-  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined;
+  Array.isArray(v)
+    ? v.filter((x): x is string => typeof x === "string")
+    : undefined;
 
 /** Drop undefined values so spreading a partial never clobbers a default. */
 function defined<T extends Record<string, unknown>>(o: T): Partial<T> {
@@ -436,8 +437,16 @@ function parseReviewTeam(v: unknown): ReviewTeam | undefined {
   const o = obj(v);
   const name = str(o?.name);
   const github = str(o?.github);
-  const members = strArray(o?.members)?.map((member) => member.trim()).filter(Boolean);
-  if (!o || !name || !github || !members?.length || !/^[\w.-]+\/[\w.-]+$/.test(github))
+  const members = strArray(o?.members)
+    ?.map((member) => member.trim())
+    .filter(Boolean);
+  if (
+    !o ||
+    !name ||
+    !github ||
+    !members?.length ||
+    !/^[\w.-]+\/[\w.-]+$/.test(github)
+  )
     return undefined;
   return { name, github, members };
 }
@@ -463,7 +472,9 @@ function parseConfig(text: string): OpenSessionConfig {
     if (ingress) {
       const rawExposure = str(ingress.exposure);
       const exposure: IngressExposure | undefined =
-        rawExposure === "cloudflare" || rawExposure === "custom" ? rawExposure : undefined;
+        rawExposure === "cloudflare" || rawExposure === "custom"
+          ? rawExposure
+          : undefined;
       cfg.ingress = defined({
         publicBaseUrl: str(ingress.publicBaseUrl),
         exposure,
@@ -591,14 +602,24 @@ function parseConfig(text: string): OpenSessionConfig {
 // Read fresh per call, with an mtime/size guard so hot paths (the REPOS proxy
 // in worktree.ts hits this on every property access) don't re-parse an
 // unchanged file. Missing/unreadable/invalid file = {} = built-in defaults.
-let cache: { path: string; mtimeMs: number; size: number; value: OpenSessionConfig } | null = null;
+let cache: {
+  path: string;
+  mtimeMs: number;
+  size: number;
+  value: OpenSessionConfig;
+} | null = null;
 
 /** Raw config.json contents (typed, tolerant). Never throws. */
 export function getConfig(): OpenSessionConfig {
   const path = configPath();
   try {
     const st = statSync(path);
-    if (cache && cache.path === path && cache.mtimeMs === st.mtimeMs && cache.size === st.size) {
+    if (
+      cache &&
+      cache.path === path &&
+      cache.mtimeMs === st.mtimeMs &&
+      cache.size === st.size
+    ) {
       return cache.value;
     }
     const value = parseConfig(readFileSync(path, "utf-8"));
@@ -616,8 +637,10 @@ export function getConfig(): OpenSessionConfig {
 
 export function configuredServer(): ResolvedServer {
   const s = getConfig().server || {};
+  // PORT remains the stable TCP supervisor's public listener; only the
+  // entrypoint consumes the child's private OPENSESSION_GATEWAY_BACKEND_PORT.
   const envPort = parseInt(process.env.PORT || "");
-  const port = Number.isFinite(envPort) ? envPort : s.port ?? 3850;
+  const port = Number.isFinite(envPort) ? envPort : (s.port ?? 3850);
   const publicBaseUrl =
     process.env.OPENSESSION_UI_BASE ||
     s.publicBaseUrl ||
@@ -646,7 +669,11 @@ export function configuredServer(): ResolvedServer {
 export function configuredIngress(): ResolvedIngress {
   const ingress = getConfig().ingress || {};
   return {
-    publicBaseUrl: (process.env.OPENSESSION_INGRESS_BASE || ingress.publicBaseUrl || "").replace(/\/+$/, ""),
+    publicBaseUrl: (
+      process.env.OPENSESSION_INGRESS_BASE ||
+      ingress.publicBaseUrl ||
+      ""
+    ).replace(/\/+$/, ""),
     exposure: ingress.exposure || null,
     cloudflareTunnelId: ingress.cloudflareTunnelId || "",
   };
@@ -708,7 +735,8 @@ export function configuredAssetStorage(): ResolvedAssetStorage {
     bucket: required.bucket!,
     region: assets.region?.trim() || "us-east-1",
     ...(assets.endpoint?.trim() ? { endpoint: assets.endpoint.trim() } : {}),
-    prefix: assets.prefix?.trim().replace(/^\/+|\/+$/g, "") || "opensession-assets",
+    prefix:
+      assets.prefix?.trim().replace(/^\/+|\/+$/g, "") || "opensession-assets",
     accessKeyId: required.accessKeyId!,
     secretAccessKey: required.secretAccessKey!,
     forcePathStyle: assets.forcePathStyle === true,
@@ -824,10 +852,8 @@ export function newSessionRepoDefault(): string {
 /** The instance's operational default repository. */
 export function defaultRepo(): Repo {
   const repos = configuredRepos();
-  const repo = (
-    Object.values(repos).find((r) => r.default) ||
-    Object.values(repos)[0]
-  );
+  const repo =
+    Object.values(repos).find((r) => r.default) || Object.values(repos)[0];
   if (!repo) throw new Error("No repositories are registered");
   return repo;
 }
@@ -889,7 +915,11 @@ export function updateIdentityConfig(patch: IdentityPatch): void {
     }
     raw = parsed as Record<string, unknown>;
   }
-  const setOrDelete = (section: "persona" | "branding", key: string, value: string | undefined) => {
+  const setOrDelete = (
+    section: "persona" | "branding",
+    key: string,
+    value: string | undefined,
+  ) => {
     if (value === undefined) return;
     const cur = obj(raw[section]) || {};
     const trimmed = value.trim();
@@ -911,7 +941,12 @@ export function updateIdentityConfig(patch: IdentityPatch): void {
 export function configuredIdentity(): ResolvedIdentity {
   const id = getConfig().identity;
   if (!id)
-    return { team: [], reviewTeams: [], slackNames: {}, defaultTimezone: "UTC" };
+    return {
+      team: [],
+      reviewTeams: [],
+      slackNames: {},
+      defaultTimezone: "UTC",
+    };
   return {
     team: id.team ?? [],
     reviewTeams: id.reviewTeams ?? [],
@@ -931,7 +966,8 @@ export function personaProduct(): string {
 /** Owners represented by registered GitHub repos unless policy narrows them. */
 export function githubWriteOwners(): string[] {
   const configured = getConfig().policy?.githubWriteOwners;
-  if (configured) return [...new Set(configured.map((owner) => owner.toLowerCase()))];
+  if (configured)
+    return [...new Set(configured.map((owner) => owner.toLowerCase()))];
   return [
     ...new Set(
       Object.values(configuredRepos())
@@ -974,9 +1010,7 @@ export function isGithubBotLogin(login: string | null | undefined): boolean {
 
 /** Tolerant access for integration-specific modules. Integration schemas can
  * evolve independently without making the core loader reject unknown keys. */
-export function configuredIntegration(
-  name: string,
-): Record<string, unknown> {
+export function configuredIntegration(name: string): Record<string, unknown> {
   const value = getConfig().integrations?.[name];
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)

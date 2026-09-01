@@ -31,7 +31,7 @@ restart Open Session.
 Two separate pieces:
 
 1. **Dispute webhook agent** (`packages/core/opensession-server/src/agents/stripe/`): route `POST
-   /stripe/webhook` on [Public ingress](install.md#public-ingress),
+/stripe/webhook` on [Public ingress](install.md#public-ingress),
    verified with `STRIPE_WEBHOOK_SECRET`. It only acts on
    `charge.dispute.created`, firing the `stripe:charge.dispute.created`
    automation event with a minimal payload (the automation re-fetches details
@@ -91,11 +91,11 @@ by explicit tool name, not by a wildcard.
 `packages/core/opensession-server/src/agents/grafana-poller/` polls Loki for failure signatures and spins up
 investigation automations with a Slack control card per fresh failure.
 
-| Var | Default | Notes |
-| --- | --- | --- |
-| `GRAFANA_URL` | — | required; without it (or the token) startup logs "poller disabled" and the agent is a complete no-op |
-| `GRAFANA_SERVICE_ACCOUNT_TOKEN` | — | bearer token for the datasource proxy |
-| `LOKI_DATASOURCE_UID` | `loki` | queried via `/api/datasources/proxy/uid/<uid>/loki/api/v1/query` |
+| Var                             | Default | Notes                                                                                                |
+| ------------------------------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| `GRAFANA_URL`                   | —       | required; without it (or the token) startup logs "poller disabled" and the agent is a complete no-op |
+| `GRAFANA_SERVICE_ACCOUNT_TOKEN` | —       | bearer token for the datasource proxy                                                                |
+| `LOKI_DATASOURCE_UID`           | `loki`  | queried via `/api/datasources/proxy/uid/<uid>/loki/api/v1/query`                                     |
 
 The Slack integration and bot token must also work because each investigation
 uses a Slack control card. Configure each enabled automation with a
@@ -180,11 +180,11 @@ to protect, set `OPENSESSION_ALLOW_IMDS=1` to skip that installer check.
 **Off by default.** The mint is EC2-specific and needs passwordless sudo, so it
 only runs when you turn it on:
 
-| Setting | Meaning |
-| --- | --- |
-| `AGENT_AWS_CREDS` | Only the literal `true` enables, any other value disables. Checked first, so it is also the off switch on a host that pins a region. |
-| `integrations.aws.enabled` | Used when `AGENT_AWS_CREDS` is unset. |
-| `AGENT_AWS_REGION` / `integrations.aws.region` | With neither of the above set, pinning a region for agent runs enables the mint. |
+| Setting                                             | Meaning                                                                                                                                                   |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENT_AWS_CREDS`                                   | Only the literal `true` enables, any other value disables. Checked first, so it is also the off switch on a host that pins a region.                      |
+| `integrations.aws.enabled`                          | Used when `AGENT_AWS_CREDS` is unset.                                                                                                                     |
+| `AGENT_AWS_REGION` / `integrations.aws.region`      | With neither of the above set, pinning a region for agent runs enables the mint.                                                                          |
 | `AGENT_AWS_MINT_USER` / `integrations.aws.mintUser` | The unprivileged account the transient unit runs as. Defaults to the account the server runs as. This selects the unit's UID/GID; it does not grant sudo. |
 
 The service installer's fixed run-host helper permission does not grant the

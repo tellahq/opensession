@@ -26,53 +26,53 @@ const MAX_STORED = 200;
 const PREVIEW_LEN = 140;
 
 export interface Mention {
-	sessionId: string;
-	/** Display name of whoever wrote the mention. */
-	by: string;
-	/** Where it was written: a prompt in the transcript, or a team note. */
-	source: "prompt" | "note";
-	/** First line or so of the text, for a hover card or a mentions list. */
-	preview: string;
-	/** ms epoch */
-	ts: number;
+  sessionId: string;
+  /** Display name of whoever wrote the mention. */
+  by: string;
+  /** Where it was written: a prompt in the transcript, or a team note. */
+  source: "prompt" | "note";
+  /** First line or so of the text, for a hover card or a mentions list. */
+  preview: string;
+  /** ms epoch */
+  ts: number;
 }
 
 /** Person keys become filenames, so keep the mapping defensive. */
 function isValidPerson(name: string): boolean {
-	return /^[A-Za-z0-9._-]{1,64}$/.test(name);
+  return /^[A-Za-z0-9._-]{1,64}$/.test(name);
 }
 
 function fileFor(person: string): string {
-	return `${MENTIONS_DIR}/${person.toLowerCase()}.json`;
+  return `${MENTIONS_DIR}/${person.toLowerCase()}.json`;
 }
 
 function readAll(person: string): Mention[] {
-	if (!isValidPerson(person)) return [];
-	try {
-		const f = fileFor(person);
-		if (!existsSync(f)) return [];
-		const raw = JSON.parse(readFileSync(f, "utf8"));
-		if (!Array.isArray(raw?.mentions)) return [];
-		return raw.mentions.filter(
-			(m: unknown): m is Mention =>
-				!!m &&
-				typeof (m as any).sessionId === "string" &&
-				typeof (m as any).by === "string" &&
-				typeof (m as any).ts === "number",
-		);
-	} catch {
-		return [];
-	}
+  if (!isValidPerson(person)) return [];
+  try {
+    const f = fileFor(person);
+    if (!existsSync(f)) return [];
+    const raw = JSON.parse(readFileSync(f, "utf8"));
+    if (!Array.isArray(raw?.mentions)) return [];
+    return raw.mentions.filter(
+      (m: unknown): m is Mention =>
+        !!m &&
+        typeof (m as any).sessionId === "string" &&
+        typeof (m as any).by === "string" &&
+        typeof (m as any).ts === "number",
+    );
+  } catch {
+    return [];
+  }
 }
 
 function write(person: string, mentions: Mention[]): void {
-	if (!existsSync(MENTIONS_DIR)) mkdirSync(MENTIONS_DIR, { recursive: true });
-	writeJsonAtomic(fileFor(person), { mentions: mentions.slice(-MAX_STORED) });
+  if (!existsSync(MENTIONS_DIR)) mkdirSync(MENTIONS_DIR, { recursive: true });
+  writeJsonAtomic(fileFor(person), { mentions: mentions.slice(-MAX_STORED) });
 }
 
 /** This person's outstanding mentions, oldest first. */
 export function listMentions(person: string): Mention[] {
-	return readAll(person);
+  return readAll(person);
 }
 
 /**
@@ -80,36 +80,36 @@ export function listMentions(person: string): Mention[] {
  * record so the caller can broadcast exactly what it wrote.
  */
 export function addMention(
-	person: string,
-	mention: Omit<Mention, "ts"> & { ts?: number },
+  person: string,
+  mention: Omit<Mention, "ts"> & { ts?: number },
 ): Mention | null {
-	if (!isValidPerson(person)) return null;
-	const record: Mention = {
-		sessionId: mention.sessionId,
-		by: mention.by.trim().slice(0, 64),
-		source: mention.source,
-		preview: mention.preview.trim().slice(0, PREVIEW_LEN),
-		ts: mention.ts ?? Date.now(),
-	};
-	// The newest mention in a session replaces the older one: one row, one badge.
-	const rest = readAll(person).filter((m) => m.sessionId !== record.sessionId);
-	write(person, [...rest, record]);
-	return record;
+  if (!isValidPerson(person)) return null;
+  const record: Mention = {
+    sessionId: mention.sessionId,
+    by: mention.by.trim().slice(0, 64),
+    source: mention.source,
+    preview: mention.preview.trim().slice(0, PREVIEW_LEN),
+    ts: mention.ts ?? Date.now(),
+  };
+  // The newest mention in a session replaces the older one: one row, one badge.
+  const rest = readAll(person).filter((m) => m.sessionId !== record.sessionId);
+  write(person, [...rest, record]);
+  return record;
 }
 
 /** Clear this person's mention for one session — what opening it does. */
 export function clearMention(person: string, sessionId: string): boolean {
-	const all = readAll(person);
-	const rest = all.filter((m) => m.sessionId !== sessionId);
-	if (rest.length === all.length) return false;
-	write(person, rest);
-	return true;
+  const all = readAll(person);
+  const rest = all.filter((m) => m.sessionId !== sessionId);
+  if (rest.length === all.length) return false;
+  write(person, rest);
+  return true;
 }
 
 /** Clear every mention for a person. */
 export function clearAllMentions(person: string): void {
-	if (!isValidPerson(person)) return;
-	write(person, []);
+  if (!isValidPerson(person)) return;
+  write(person, []);
 }
 
 /**
@@ -121,24 +121,24 @@ export function clearAllMentions(person: string): void {
  * Returns the people recorded, for the caller's push loop.
  */
 export function recordMentions(
-	text: string,
-	sender: string,
-	sessionId: string,
-	source: Mention["source"],
-	onRecorded?: (person: string, mention: Mention) => void,
+  text: string,
+  sender: string,
+  sessionId: string,
+  source: Mention["source"],
+  onRecorded?: (person: string, mention: Mention) => void,
 ): string[] {
-	if (!text.includes("@")) return [];
-	const people = mentionedUsers(text, sender);
-	for (const person of people) {
-		const mention = addMention(person, {
-			sessionId,
-			by: sender || "Someone",
-			source,
-			preview: text,
-		});
-		if (mention) onRecorded?.(person, mention);
-	}
-	return people;
+  if (!text.includes("@")) return [];
+  const people = mentionedUsers(text, sender);
+  for (const person of people) {
+    const mention = addMention(person, {
+      sessionId,
+      by: sender || "Someone",
+      source,
+      preview: text,
+    });
+    if (mention) onRecorded?.(person, mention);
+  }
+  return people;
 }
 
 /**
@@ -152,35 +152,40 @@ export function recordMentions(
  * session's title for a message, "a session note" for a note.
  */
 export async function notifyMentions(
-	text: string,
-	sender: string,
-	sessionId: string,
-	source: Mention["source"],
-	where: string,
+  text: string,
+  sender: string,
+  sessionId: string,
+  source: Mention["source"],
+  where: string,
 ): Promise<string[]> {
-	const { broadcastToAll } = await import("./ws-hub");
-	const mentioned = recordMentions(text, sender, sessionId, source, (person, mention) =>
-		broadcastToAll({ type: "mention", user: person, mention }),
-	);
-	if (!mentioned.length) return mentioned;
-	const { sendPushToUser } = await import("./push");
-	const body = mentionPreview(text);
-	for (const name of mentioned)
-		void sendPushToUser(name, {
-			title: `${sender || "Someone"} mentioned you in ${where}`,
-			body,
-			url: `/session/${encodeURIComponent(sessionId)}`,
-			// One tag per session per kind: a second mention replaces the
-			// notification instead of stacking, and a note never collapses a
-			// message (or the other way round).
-			tag: `opensession-${source === "note" ? "note" : "mention"}-${sessionId}`,
-		});
-	return mentioned;
+  const { broadcastToAll } = await import("./ws-hub");
+  const mentioned = recordMentions(
+    text,
+    sender,
+    sessionId,
+    source,
+    (person, mention) =>
+      broadcastToAll({ type: "mention", user: person, mention }),
+  );
+  if (!mentioned.length) return mentioned;
+  const { sendPushToUser } = await import("./push");
+  const body = mentionPreview(text);
+  for (const name of mentioned)
+    void sendPushToUser(name, {
+      title: `${sender || "Someone"} mentioned you in ${where}`,
+      body,
+      url: `/session/${encodeURIComponent(sessionId)}`,
+      // One tag per session per kind: a second mention replaces the
+      // notification instead of stacking, and a note never collapses a
+      // message (or the other way round).
+      tag: `opensession-${source === "note" ? "note" : "mention"}-${sessionId}`,
+    });
+  return mentioned;
 }
 
 /** The push body shares the mention's preview rule. */
 export function mentionPreview(text: string): string {
-	return text.length > PREVIEW_LEN
-		? `${text.slice(0, PREVIEW_LEN - 1)}…`
-		: text;
+  return text.length > PREVIEW_LEN
+    ? `${text.slice(0, PREVIEW_LEN - 1)}…`
+    : text;
 }

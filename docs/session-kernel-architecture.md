@@ -45,12 +45,13 @@ run hosts, sandboxes, or Runners. Active effect receipts do not hold the actor
 mailbox, so Stop, steering, and fenced run events remain responsive.
 
 The gateway retains a Worker bridge for typed reductions. Mutations and durable
-reads perform authenticated bounded HTTP RPC and wake the gateway through its
-existing `SharedArrayBuffer`. Reads also route through the actor host because a
-central WAL mirror cannot authoritatively represent sessions placed in separate
-databases. Hot run-state projections remain cached in the gateway and are
-invalidated by committed actor replies. A missing credential,
-actor/transport/incarnation mismatch, service failure, or invalid response
+reads perform authenticated bounded HTTP RPC over an awaited posted-message
+transport. The gateway event loop never blocks on `Atomics.wait`. Reads also
+route through the actor host because a central WAL mirror cannot authoritatively
+represent sessions placed in separate databases. Hot run-state projections
+remain cached in the gateway and are invalidated by committed actor replies. A
+missing credential, actor/transport/incarnation mismatch, service failure, or
+invalid response
 fail-stops the gateway. There is no in-process actor or direct writer fallback
 in production.
 
@@ -423,9 +424,12 @@ summaries are read projections. They may be rebuilt or served stale while a
 refresh runs. Admission and recovery consult SessionKernel and the engine
 control plane, never those projections.
 
-Transcript clients already reconnect by durable `changeSeq`. This keeps a
-future gateway process split mechanical: the gateway can translate commands
-and replay committed changes without becoming another session owner.
+Transcript clients already reconnect by durable `changeSeq`. Current user
+entries also carry the stable source delivery ids that formed the turn, so
+optimistic clients reconcile repeated or batched messages by identity; text and
+clock matching remains only for older rows during compatibility rollout. This
+keeps a future gateway process split mechanical: the gateway can translate
+commands and replay committed changes without becoming another session owner.
 
 ## Process boundary
 
@@ -450,8 +454,21 @@ existing settlement protocols remain additive and mixed-version safe.
 
 Before every isolated mutation, the host durably marks that session's catalog
 wake record dirty. A crash can therefore leave an extra scan but cannot hide a
-committed timer or outbox item. Runtime reconciliation reads the authoritative
-session database, dispatches due work, and repairs its next-wake projection.
+committed timer or outbox item. Runtime reconciliation first asks the catalog
+for at most four dirty or due session ids. The service then enqueues one claim
+on each session's normal actor mailbox. That actor reads its authoritative
+database through its existing lane-local connection and repairs the catalog
+wake projection before ending the same turn. The catalog lane never opens an
+isolated actor database, and runtime discovery creates no fleet-wide mutation
+barrier.
+
+Ordinary and opening-effect quotas share that bounded reconciliation pass, so a
+runtime tick never opens the same actor once per effect pool. While a physical
+effect is active or waiting for an execution slot, the gateway keeps its durable
+item in a bounded memory queue and advances its catalog projection to a
+30-second recovery horizon instead of rereading the same actor every second. A
+gateway crash drops that cache, and the horizon makes the durable effect
+discoverable again.
 
 The gateway starts and handshakes the actor host before hydrating projections. A
 failed session-scoped critical settlement durably quarantines only that session,

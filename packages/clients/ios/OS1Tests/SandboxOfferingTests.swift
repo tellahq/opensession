@@ -20,7 +20,7 @@ final class SandboxOfferingTests: XCTestCase {
                         {"provider":"daytona","state":"ready"},
                         {"provider":"box","state":"ready"},
                         {"provider":"modal","state":"not_configured"},
-                        {"provider":"microvm","state":"disabled"}]}
+                        {"provider":"legacy","state":"disabled"}]}
         """)
         XCTAssertEqual(SandboxOffering.choices(payload), ["daytona", "box"])
     }

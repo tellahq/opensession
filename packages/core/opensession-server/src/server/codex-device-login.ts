@@ -17,7 +17,11 @@
 import { homeDir } from "./paths";
 import { spawn, type ChildProcess } from "child_process";
 import { existsSync, mkdirSync } from "fs";
-import { addCodexAccount, listCodexAccounts, type CodexAccountPublic } from "./codex-accounts";
+import {
+  addCodexAccount,
+  listCodexAccounts,
+  type CodexAccountPublic,
+} from "./codex-accounts";
 
 const HOME = homeDir();
 const ACCOUNTS_DIR = `${HOME}/.codex-accounts`;
@@ -26,7 +30,12 @@ const LOGIN_TIMEOUT_MS = 16 * 60 * 1000;
 // Prune finished attempts (the UI has long stopped polling by then).
 const RETENTION_MS = 60 * 60 * 1000;
 
-export type DeviceLoginState = "starting" | "awaiting_code" | "done" | "error" | "cancelled";
+export type DeviceLoginState =
+  | "starting"
+  | "awaiting_code"
+  | "done"
+  | "error"
+  | "cancelled";
 
 interface DeviceLogin {
   id: string;
@@ -55,7 +64,9 @@ export interface DeviceLoginPublic {
   account?: CodexAccountPublic;
 }
 
-const logins: Map<string, DeviceLogin> = ((globalThis as any).__codexDeviceLogins ??= new Map());
+const logins: Map<string, DeviceLogin> = ((
+  globalThis as any
+).__codexDeviceLogins ??= new Map());
 
 function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "");
@@ -76,7 +87,8 @@ function toPublic(l: DeviceLogin): DeviceLoginPublic {
 }
 
 function finish(l: DeviceLogin, state: DeviceLoginState, error?: string): void {
-  if (l.state === "done" || l.state === "error" || l.state === "cancelled") return;
+  if (l.state === "done" || l.state === "error" || l.state === "cancelled")
+    return;
   l.state = state;
   if (error) l.error = error;
   l.finishedAt = Date.now();
@@ -106,7 +118,7 @@ function prune(): void {
  */
 export function startDeviceLogin(
   name = "",
-  owner?: string
+  owner?: string,
 ): DeviceLoginPublic | { error: string } {
   prune();
   const loginId = crypto.randomUUID();
@@ -114,13 +126,19 @@ export function startDeviceLogin(
   // names its login directory; addCodexAccount replaces it with the email from
   // auth.json once sign-in completes. Keep accepting a name for older clients.
   const trimmed = name.trim() || `chatgpt-${loginId.slice(0, 8)}`;
-  const slug = trimmed.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  const slug = trimmed
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   if (!slug) return { error: "Name must contain letters or digits" };
   if (listCodexAccounts().some((a) => a.name === trimmed)) {
     return { error: `An account named "${trimmed}" already exists` };
   }
   for (const l of logins.values()) {
-    if (l.name === trimmed && (l.state === "starting" || l.state === "awaiting_code")) {
+    if (
+      l.name === trimmed &&
+      (l.state === "starting" || l.state === "awaiting_code")
+    ) {
       return toPublic(l); // already in flight — hand back the same attempt
     }
   }
@@ -177,7 +195,10 @@ export function startDeviceLogin(
     return toPublic(l);
   }
   l.proc = proc;
-  l.timer = setTimeout(() => finish(l, "error", "Device code expired (15 min) — start again."), LOGIN_TIMEOUT_MS);
+  l.timer = setTimeout(
+    () => finish(l, "error", "Device code expired (15 min) — start again."),
+    LOGIN_TIMEOUT_MS,
+  );
 
   const onChunk = (chunk: Buffer) => {
     l.output += chunk.toString();
@@ -193,24 +214,32 @@ export function startDeviceLogin(
   proc.stdout?.on("data", onChunk);
   proc.stderr?.on("data", onChunk);
 
-  proc.on("error", (e) => finish(l, "error", `codex login failed to run: ${e.message}`));
+  proc.on("error", (e) =>
+    finish(l, "error", `codex login failed to run: ${e.message}`),
+  );
   proc.on("exit", (exitCode) => {
     if (l.state === "cancelled") return;
     if (existsSync(`${dir}/auth.json`)) {
       const result = addCodexAccount(l.name, "home", dir, l.owner);
       if ("error" in result) {
-        finish(l, "error", `Signed in, but registering failed: ${result.error}`);
+        finish(
+          l,
+          "error",
+          `Signed in, but registering failed: ${result.error}`,
+        );
       } else {
         l.account = result;
         finish(l, "done");
-        console.log(`[codex-device-login] ${l.name} signed in and registered (${dir})`);
+        console.log(
+          `[codex-device-login] ${l.name} signed in and registered (${dir})`,
+        );
       }
     } else {
       const tail = stripAnsi(l.output).trim().split("\n").slice(-4).join("\n");
       finish(
         l,
         "error",
-        `Sign-in did not complete (codex exited ${exitCode ?? "?"}).${tail ? `\n${tail}` : ""}`
+        `Sign-in did not complete (codex exited ${exitCode ?? "?"}).${tail ? `\n${tail}` : ""}`,
       );
     }
   });

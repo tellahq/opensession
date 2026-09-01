@@ -22,7 +22,7 @@ extension EnvironmentValues {
 /// renderable-document construction happen asynchronously inside the library.
 struct MarkdownBody: View {
     let text: String
-    /// Narration inside a work fold renders dimmer than a final answer — the
+    /// Reasoning inside a work fold renders dimmer than a final answer — the
     /// library owns its own colours, so a `.foregroundStyle` on the outside
     /// would be ignored.
     var dimmed = false
@@ -292,6 +292,22 @@ private extension TextFonts {
 }
 #endif
 
+private extension TextFonts {
+    /// Reasoning keeps markdown structure, but strong markers are provider
+    /// activity chrome rather than answer emphasis. Match the web transcript
+    /// by resolving bold runs to the surrounding regular or italic face.
+    var withoutStrongWeight: TextFonts {
+        TextFonts(
+            normal: normal,
+            italic: italic,
+            bold: normal,
+            boldItalic: italic ?? normal,
+            preferredLetterSpacing: preferredLetterSpacing,
+            preferredLineHeight: preferredLineHeight
+        )
+    }
+}
+
 // Not fileprivate: `MarkdownTableView` renders with the same configs when it
 // hands a table too wide to fit back to the library.
 extension MarkdownRenderConfig {
@@ -311,7 +327,14 @@ extension MarkdownRenderConfig {
     /// files came out as four underlined boxes. The tint alone is enough to
     /// separate a name from the prose around it, so the underline is
     /// `.clear`.
-    static func os1Config(text: Color, quote: Color) -> MarkdownRenderConfig {
+    static func os1Config(
+        text: Color,
+        quote: Color,
+        withoutStrongWeight: Bool = false
+    ) -> MarkdownRenderConfig {
+        func fonts(_ value: TextFonts) -> TextFonts {
+            withoutStrongWeight ? value.withoutStrongWeight : value
+        }
         // Inline chips are attachments, and an attachment is only drawn by the
         // view provider once that provider owns the file type. Registering
         // here rather than at launch keeps the two halves of the mechanism in
@@ -322,7 +345,7 @@ extension MarkdownRenderConfig {
         let base = MarkdownRenderConfig.default
         return MarkdownRenderConfig(
             blockQuoteStyle: .init(
-                textFonts: base.blockQuoteStyle.textFonts,
+                textFonts: fonts(base.blockQuoteStyle.textFonts),
                 textColor: quote
             ),
             // Stepped 22/20/18/17 against the 17pt body, semibold and lightly
@@ -330,24 +353,24 @@ extension MarkdownRenderConfig {
             // Agent answers lean on h2/h3, so those levels stay close to body
             // size — the emphasis carries the structure, not the scale.
             headingStyle: .init(
-                h1Font: .ios(size: 22, lineHeight: 28, letterSpacing: -0.35),
-                h2Font: .ios(size: 20, lineHeight: 26, letterSpacing: -0.3),
-                h3Font: .ios(size: 18, lineHeight: 24, letterSpacing: -0.25),
-                h4Font: .ios(size: 17, lineHeight: 23, letterSpacing: -0.2),
-                h5Font: .ios(size: 17, lineHeight: 23, letterSpacing: -0.2),
-                h6Font: .ios(size: 17, lineHeight: 23, letterSpacing: -0.2),
+                h1Font: fonts(.ios(size: 22, lineHeight: 28, letterSpacing: -0.35)),
+                h2Font: fonts(.ios(size: 20, lineHeight: 26, letterSpacing: -0.3)),
+                h3Font: fonts(.ios(size: 18, lineHeight: 24, letterSpacing: -0.25)),
+                h4Font: fonts(.ios(size: 17, lineHeight: 23, letterSpacing: -0.2)),
+                h5Font: fonts(.ios(size: 17, lineHeight: 23, letterSpacing: -0.2)),
+                h6Font: fonts(.ios(size: 17, lineHeight: 23, letterSpacing: -0.2)),
                 textColor: text
             ),
             orderedListStyle: .init(
-                textFonts: base.orderedListStyle.textFonts,
+                textFonts: fonts(base.orderedListStyle.textFonts),
                 textColor: text
             ),
             paragraphStyle: .init(
-                textFonts: base.paragraphStyle.textFonts,
+                textFonts: fonts(base.paragraphStyle.textFonts),
                 textColor: text
             ),
             tableStyle: .init(
-                textFonts: base.tableStyle.textFonts,
+                textFonts: fonts(base.tableStyle.textFonts),
                 headerTextColor: OS1VisualStyle.text,
                 regularTextColor: OS1VisualStyle.text,
                 headerBackgroundColor: OS1VisualStyle.panel,
@@ -376,22 +399,22 @@ extension MarkdownRenderConfig {
         // Same deliberate palette as the iOS branch, at Mac text metrics:
         // 13pt body on a 19pt line, headings stepped 20/17/15/14/13, 12pt
         // code, and a 12pt block gap for readable paragraph rhythm.
-        let body = TextFonts.mac(size: 13, lineHeight: 19)
+        let body = fonts(.mac(size: 13, lineHeight: 19))
         return MarkdownRenderConfig(
             blockQuoteStyle: .init(textFonts: body, textColor: quote),
             headingStyle: .init(
-                h1Font: .mac(size: 20, weight: .bold),
-                h2Font: .mac(size: 17, weight: .semibold),
-                h3Font: .mac(size: 15, weight: .semibold),
-                h4Font: .mac(size: 14, weight: .semibold),
-                h5Font: .mac(size: 13, weight: .semibold),
-                h6Font: .mac(size: 13, weight: .semibold),
+                h1Font: fonts(.mac(size: 20, weight: .bold)),
+                h2Font: fonts(.mac(size: 17, weight: .semibold)),
+                h3Font: fonts(.mac(size: 15, weight: .semibold)),
+                h4Font: fonts(.mac(size: 14, weight: .semibold)),
+                h5Font: fonts(.mac(size: 13, weight: .semibold)),
+                h6Font: fonts(.mac(size: 13, weight: .semibold)),
                 textColor: text
             ),
             orderedListStyle: .init(textFonts: body, textColor: text),
             paragraphStyle: .init(textFonts: body, textColor: text),
             tableStyle: .init(
-                textFonts: .mac(size: 12),
+                textFonts: fonts(.mac(size: 12)),
                 headerTextColor: OS1VisualStyle.text,
                 regularTextColor: OS1VisualStyle.text,
                 headerBackgroundColor: OS1VisualStyle.panel,
@@ -429,7 +452,8 @@ extension MarkdownRenderConfig {
 
     static let os1Dim = os1Config(
         text: OS1VisualStyle.textNarration,
-        quote: OS1VisualStyle.textNarration
+        quote: OS1VisualStyle.textNarration,
+        withoutStrongWeight: true
     )
     .withShouldAnimateText(value: false)
 

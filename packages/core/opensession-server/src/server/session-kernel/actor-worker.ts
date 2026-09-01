@@ -44,9 +44,12 @@ function reducerMutatesSparseProjection(
   command: SessionActorReducerCommand,
 ): boolean {
   if (command.kind === "ask") return !isReadReducer(command);
-  if (command.kind === "delivery") return !isDeliveryReadRequest(command.request);
-  return command.kind === "core" &&
-    (command.request.op === "clear" || command.request.op === "tombstone");
+  if (command.kind === "delivery")
+    return !isDeliveryReadRequest(command.request);
+  return (
+    command.kind === "core" &&
+    (command.request.op === "clear" || command.request.op === "tombstone")
+  );
 }
 
 function routedStoreCall(
@@ -58,7 +61,10 @@ function routedStoreCall(
   if (route.scope === "session")
     return { sessionId: route.sessionId, mutation: route.mutation };
   if (route.scope === "outbox")
-    return { sessionId: host.outboxSessionId(route.id), mutation: route.mutation };
+    return {
+      sessionId: host.outboxSessionId(route.id),
+      mutation: route.mutation,
+    };
   return { mutation: false };
 }
 
@@ -86,7 +92,8 @@ export function startSessionKernelActorWorker(): void {
           assertTranscriptActorRequest(command.request);
         if (!isReadReducer(command) && sessionId) {
           const quarantine = host.quarantinedSession(sessionId);
-          if (quarantine) throw new SessionQuarantinedError(sessionId, quarantine.reason);
+          if (quarantine)
+            throw new SessionQuarantinedError(sessionId, quarantine.reason);
         }
         if (sessionId)
           store = host.storeForSession(
@@ -99,7 +106,8 @@ export function startSessionKernelActorWorker(): void {
           !isReadReducer(command) &&
           command.request.op !== "delete" &&
           store.isTombstoned(command.request.sessionId)
-        ) throw new Error(`Session ${command.request.sessionId} is tombstoned`);
+        )
+          throw new Error(`Session ${command.request.sessionId} is tombstoned`);
         else if (command.kind === "transcript")
           result = host.transcript(command.request);
         else if (command.kind === "creation_event")
@@ -138,7 +146,10 @@ export function startSessionKernelActorWorker(): void {
               delivery.item,
             );
           else if (delivery.op === "delete")
-            result = store.deleteDeliverySlot(delivery.sessionId, delivery.slot);
+            result = store.deleteDeliverySlot(
+              delivery.sessionId,
+              delivery.slot,
+            );
           else if (delivery.op === "clear_slot")
             result = host.call("clearDeliverySlot", [delivery.slot]);
           else if (delivery.op === "prepare_steer")
@@ -193,7 +204,10 @@ export function startSessionKernelActorWorker(): void {
             result = {
               result,
               ...("sessionId" in delivery
-                ? { revision: store.deliverySnapshot(delivery.sessionId).revision }
+                ? {
+                    revision: store.deliverySnapshot(delivery.sessionId)
+                      .revision,
+                  }
                 : {}),
             };
         } else if (command.kind === "gateway") {
@@ -245,7 +259,8 @@ export function startSessionKernelActorWorker(): void {
             host.refreshSessionProjections(core.sessionId);
         } else if (command.kind === "turn") {
           const turn = command.request;
-          if (turn.op === "snapshot") result = store.turnSnapshot(turn.sessionId);
+          if (turn.op === "snapshot")
+            result = store.turnSnapshot(turn.sessionId);
           else if (turn.op === "request_cancel_command")
             result = store.requestTurnCancelCommand(turn);
           else if (turn.op === "complete_cancel_command")
@@ -268,10 +283,12 @@ export function startSessionKernelActorWorker(): void {
           if (timer.op === "schedule") result = store.scheduleTimer(timer);
           else if (timer.op === "cancel")
             result = store.cancelTimer(timer.sessionId, timer.timerId);
-          else if (timer.op === "begin") result = store.beginTimerExecution(timer);
+          else if (timer.op === "begin")
+            result = store.beginTimerExecution(timer);
           else if (timer.op === "complete")
             result = store.completeTimerExecution(timer);
-          else if (timer.op === "fail") result = store.failTimerExecution(timer);
+          else if (timer.op === "fail")
+            result = store.failTimerExecution(timer);
           else result = store.recordTimerRuntimeFailure(timer);
         } else {
           const ask = command.request;
@@ -320,8 +337,8 @@ export function startSessionKernelActorWorker(): void {
       let responseSessionId: string | undefined;
       const sessionId = requestSessionId;
       const infrastructure = isSessionKernelInfrastructureFailure(error);
-      const critical = request.t === "reduce" &&
-        isCriticalSettlementCommand(request.command);
+      const critical =
+        request.t === "reduce" && isCriticalSettlementCommand(request.command);
       if (infrastructure || critical) {
         if (
           !sessionId ||
@@ -332,9 +349,10 @@ export function startSessionKernelActorWorker(): void {
           responseCode = "actor_fatal";
         } else {
           try {
-            const commandKind = request.t === "reduce"
-              ? `${request.command.kind}:${"request" in request.command ? request.command.request.op : "event"}`
-              : `store:${request.method}`;
+            const commandKind =
+              request.t === "reduce"
+                ? `${request.command.kind}:${"request" in request.command ? request.command.request.op : "event"}`
+                : `store:${request.method}`;
             host.quarantineSession(
               sessionId,
               error instanceof Error ? error.message : String(error),
@@ -361,7 +379,10 @@ export function startSessionKernelActorWorker(): void {
       }
       const body = JSON.stringify({
         ok: false,
-        error: (error instanceof Error ? error.message : String(error)).slice(0, 8_000),
+        error: (error instanceof Error ? error.message : String(error)).slice(
+          0,
+          8_000,
+        ),
         ...(responseCode ? { code: responseCode } : {}),
         ...(responseSessionId ? { sessionId: responseSessionId } : {}),
       });
@@ -371,14 +392,16 @@ export function startSessionKernelActorWorker(): void {
   }
 
   function asyncCall(request: KernelActorClientCallRequest): void {
-    const retryableRead = request.t === "reduce"
-      ? isReadReducer(request.command)
-      : READ_METHODS.has(request.method);
+    const retryableRead =
+      request.t === "reduce"
+        ? isReadReducer(request.command)
+        : READ_METHODS.has(request.method);
     let outputBytes = 256 * 1024;
     for (;;) {
       const result = executeCall(request, outputBytes);
       if (
-        result.status === 2 && retryableRead &&
+        result.status === 2 &&
+        retryableRead &&
         result.length > outputBytes &&
         result.length <= SESSION_KERNEL_MAX_RESPONSE_BYTES
       ) {
@@ -399,12 +422,17 @@ export function startSessionKernelActorWorker(): void {
   function serviceCall(request: KernelActorServiceCall): void {
     const outputBytes = Math.floor(request.outputBytes);
     if (outputBytes <= 0 || outputBytes > SESSION_KERNEL_MAX_RESPONSE_BYTES) {
-      post({ t: "error", rpcId: request.rpcId, error: "Invalid kernel actor response bound" });
+      post({
+        t: "error",
+        rpcId: request.rpcId,
+        error: "Invalid kernel actor response bound",
+      });
       return;
     }
-    const retryableRead = request.request.t === "reduce"
-      ? isReadReducer(request.request.command)
-      : READ_METHODS.has(request.request.method);
+    const retryableRead =
+      request.request.t === "reduce"
+        ? isReadReducer(request.request.command)
+        : READ_METHODS.has(request.request.method);
     const result = executeCall(request.request, outputBytes);
     post({
       t: "call_result",
@@ -416,7 +444,11 @@ export function startSessionKernelActorWorker(): void {
   }
 
   self.onmessage = (
-    event: MessageEvent<KernelActorAsyncRequest | KernelActorClientCallRequest | KernelActorServiceCall>,
+    event: MessageEvent<
+      | KernelActorAsyncRequest
+      | KernelActorClientCallRequest
+      | KernelActorServiceCall
+    >,
   ) => {
     const request = event.data;
     if (request.t === "call") {
@@ -458,21 +490,44 @@ export function startSessionKernelActorWorker(): void {
       } else if (request.t === "maintain") {
         const pending = host.maintain();
         post({ t: "maintain_result", rpcId: request.rpcId, pending });
-      } else if (request.t === "runtime_work") {
+      } else if (request.t === "runtime_catalog_work") {
         post({
-          t: "runtime_work_result",
+          t: "runtime_catalog_work_result",
           rpcId: request.rpcId,
-          ...host.runtimeWork(
+          ...host.runtimeCatalogWork(
             request.now,
             request.timerKinds,
             request.effectKinds,
             request.limit,
+            request.additionalOutboxGroups,
+            request.activeOutbox,
           ),
         });
+      } else if (request.t === "runtime_session_work") {
+        post({
+          t: "runtime_session_work_result",
+          rpcId: request.rpcId,
+          ...host.runtimeSessionWork(
+            request.sessionId,
+            request.candidateCount,
+            request.now,
+            request.timerKinds,
+            request.effectKinds,
+            request.limit,
+            request.additionalOutboxGroups,
+            request.activeOutbox,
+            request.activeOutboxRecheckAt,
+          ),
+        });
+      } else if (request.t === "runtime_work") {
+        throw new Error(
+          "Runtime work must be routed through session mailboxes",
+        );
       }
     } catch (error) {
       host.recordSqliteBusy(error);
-      const sessionId = request.t === "acknowledge" ? request.sessionId : undefined;
+      const sessionId =
+        request.t === "acknowledge" ? request.sessionId : undefined;
       const isolatedFailure =
         !!sessionId &&
         isSessionKernelInfrastructureFailure(error) &&
@@ -495,6 +550,7 @@ export function startSessionKernelActorWorker(): void {
         t: "error",
         rpcId: request.rpcId,
         error: error instanceof Error ? error.message : String(error),
+        ...(isSessionKernelCentralStoreFailure(error) ? { fatal: true } : {}),
       });
     }
   };

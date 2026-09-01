@@ -260,10 +260,9 @@ struct GoalSheet: View {
     }
 }
 
-/// The `@`-mention picker: search the session's repos (plus any attached ones)
-/// and drop a reference into the draft. The web composer does this inline from
-/// a typed "@"; a phone keyboard has no room for an inline popup, so it gets a
-/// sheet with the same search behind it.
+/// Dedicated file-reference search for the composer's `+` menu. Typing `@`
+/// now opens the shared inline palette; this sheet remains the direct route
+/// when someone wants to browse files without starting a token first.
 struct ReferenceFileSheet: View {
     let sessionId: String
     let onPick: (FileMention) -> Void

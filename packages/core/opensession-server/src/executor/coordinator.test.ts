@@ -348,7 +348,9 @@ describe("ExecutorCoordinator", () => {
     let launches = 0;
     const replacement = new ExecutorCoordinator(root, TOKEN, {
       ...inertDeps(),
-      launch: async () => { launches++; },
+      launch: async () => {
+        launches++;
+      },
       hostStarted: () => true,
     });
     const response = await replacement.handle({

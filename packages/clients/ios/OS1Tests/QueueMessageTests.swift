@@ -43,7 +43,7 @@ final class QueueMessageTests: XCTestCase {
         XCTAssertEqual(message.label, "Worker report")
         XCTAssertEqual(
             message.body,
-            "Worker task `bks-42` ended in error without reporting back."
+            "worker task `bks-42` ended in error without reporting back."
         )
     }
 

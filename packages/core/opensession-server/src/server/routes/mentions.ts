@@ -14,32 +14,33 @@ import { broadcastToAll } from "../ws-hub";
 import { conditionalJsonResponse } from "../http-json";
 
 export async function handleMentionsRoutes(
-	ctx: RouteContext,
+  ctx: RouteContext,
 ): Promise<Response | undefined> {
-	const { req, url, path } = ctx;
+  const { req, url, path } = ctx;
 
-	if (path === "/api/mentions" && req.method === "GET") {
-		const user = requestUser(ctx, url.searchParams.get("user"));
-		if (!user) return conditionalJsonResponse(req, { mentions: [] });
-		return conditionalJsonResponse(req, { mentions: listMentions(user) });
-	}
+  if (path === "/api/mentions" && req.method === "GET") {
+    const user = requestUser(ctx, url.searchParams.get("user"));
+    if (!user) return conditionalJsonResponse(req, { mentions: [] });
+    return conditionalJsonResponse(req, { mentions: listMentions(user) });
+  }
 
-	if (path === "/api/mentions/clear" && req.method === "POST") {
-		const body = await req.json().catch(() => null);
-		const user = requestUser(ctx, body?.user);
-		if (!user) return Response.json({ error: "user required" }, { status: 400 });
-		const sessionId =
-			typeof body?.sessionId === "string" ? body.sessionId : null;
-		if (!sessionId) {
-			clearAllMentions(user);
-			// Every device the person is signed in on drops the badge together.
-			broadcastToAll({ type: "mentions_cleared", user });
-			return Response.json({ ok: true });
-		}
-		const cleared = clearMention(user, sessionId);
-		if (cleared) broadcastToAll({ type: "mentions_cleared", user, sessionId });
-		return Response.json({ ok: true, cleared });
-	}
+  if (path === "/api/mentions/clear" && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    const user = requestUser(ctx, body?.user);
+    if (!user)
+      return Response.json({ error: "user required" }, { status: 400 });
+    const sessionId =
+      typeof body?.sessionId === "string" ? body.sessionId : null;
+    if (!sessionId) {
+      clearAllMentions(user);
+      // Every device the person is signed in on drops the badge together.
+      broadcastToAll({ type: "mentions_cleared", user });
+      return Response.json({ ok: true });
+    }
+    const cleared = clearMention(user, sessionId);
+    if (cleared) broadcastToAll({ type: "mentions_cleared", user, sessionId });
+    return Response.json({ ok: true, cleared });
+  }
 
-	return undefined;
+  return undefined;
 }

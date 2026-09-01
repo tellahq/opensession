@@ -12,12 +12,12 @@ The app's label is **OS** (`productName`), the full product name is **Open
 Session**. On macOS that label is one knob for four things, and they cannot be
 separated:
 
-| Follows `productName` | Why it matters |
-| --- | --- |
-| `OS.app` and its executable | what Finder and the Dock show |
-| `CFBundleName` | the menu-bar title |
-| `OS Helper.app` (and friends) | Electron looks child processes up by `CFBundleName`; a mismatch is a fatal "Unable to find helper app" |
-| Keychain item `OS Safe Storage` | the key Chromium encrypts the cookie jar with |
+| Follows `productName`           | Why it matters                                                                                         |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `OS.app` and its executable     | what Finder and the Dock show                                                                          |
+| `CFBundleName`                  | the menu-bar title                                                                                     |
+| `OS Helper.app` (and friends)   | Electron looks child processes up by `CFBundleName`; a mismatch is a fatal "Unable to find helper app" |
+| Keychain item `OS Safe Storage` | the key Chromium encrypts the cookie jar with                                                          |
 
 So each rename costs one sign-in: Electron resolves the Keychain name from the
 bundle before `src/main.js` is loaded, and the new key cannot read what the old
@@ -81,9 +81,10 @@ host is tried over HTTPS first, except localhost and loopback addresses use
 HTTP. If HTTPS does not answer, the shell retries a bare host over HTTP. Both
 setup flows probe `/api/health` by default but allow the normalized address to
 be saved with **Use anyway** or **Add anyway**. The organization row above Feed
-and **OS → Organizations** both switch accounts; ⌘⇧1…9 remains available from
-the keyboard. Inactive organizations stay loaded in hidden sandboxed windows
-so WebSockets and notifications remain live.
+and **OS → Organizations** both switch the focused window; ⌘⇧1…9 remains
+available from the keyboard. Other visible windows keep their own organizations
+and routes. Organizations without a visible window stay loaded in hidden
+sandboxed windows so WebSockets and notifications remain live.
 
 `OS1_URL` overrides the stored answer for one run. Distributions set the address
 the first-run screen offers with `opensession.defaultServer` in `package.json`
@@ -92,13 +93,17 @@ asked.
 
 ## Architecture
 
-- `src/main.js` — sandboxed `BrowserWindow`s for the active server plus hidden
-  sandboxed windows for inactive organizations (`contextIsolation`, no Node in
-  the renderer). Use **File → New Window** or ⌘N to keep different workspaces
-  open side by side. In-window navigation is limited to the active app origin;
-  everything else opens in the default browser. Additional windows close
+- `src/main.js` — sandboxed `BrowserWindow`s that each own an organization and
+  route, plus hidden sandboxed windows for organizations not already visible
+  (`contextIsolation`, no Node in the renderer). Use **File → New Window** or
+  ⌘N to keep different organizations or workspaces open side by side. Switching
+  organizations changes only the focused window. In-window navigation is
+  limited to app pages for that window's organization; everything else opens
+  in the default browser. Additional windows close
   normally; closing the last one hides it to the Dock so its route and drafts
-  stay intact. Window state persists across launches.
+  stay intact. Same-origin documents that are not app pages, including raw
+  reports, assets and downloads, open in the default browser. Window state
+  persists across launches.
 - `src/preload.js`: exposes `window.os1` with `desktop`, `materialBackdrop`,
   `setBadge`, `clearBadge`, `focusWindow`, `organizations`, `updates`,
   `dictation`, and `server`. The main process refuses `server` calls from
@@ -142,7 +147,7 @@ persists in Electron's default session.
 
 ## Deep links
 
-- `os1://…` opens the app and maps to the active server
+- `os1://…` opens the app and maps to the focused window's server
   (e.g. `os1://session/abc` → `/session/abc`). Shared session, workspace and
   PR pages show a dismissible **View in the app** card with an **Open** button
   at the bottom of the sidebar in an eligible Mac browser. The click opens this
@@ -182,13 +187,13 @@ publishes a GitHub Release for matching version tags. Manual "Run workflow" does
 run with artifacts attached to the run. Repository secrets (the values below
 are Tella's — supply your own):
 
-| Secret | Value |
-|---|---|
-| `APPLE_CERTIFICATES_P12` | "Developer ID Application: Tella HQ Inc. (6GUXT43C8B)" as base64 .p12 |
-| `APPLE_CERTIFICATES_PASSWORD` | password of that .p12 export |
+| Secret                            | Value                                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `APPLE_CERTIFICATES_P12`          | "Developer ID Application: Tella HQ Inc. (6GUXT43C8B)" as base64 .p12                                        |
+| `APPLE_CERTIFICATES_PASSWORD`     | password of that .p12 export                                                                                 |
 | `OS1_PROVISIONING_PROFILE_BASE64` | Developer ID provisioning profile for `dev.tella.os1.shell`, including Associated Domains, encoded as base64 |
-| `APPLE_ID` | Apple ID with app access |
-| `APPLE_APP_PASSWORD` | app-specific password for that Apple ID |
+| `APPLE_ID`                        | Apple ID with app access                                                                                     |
+| `APPLE_APP_PASSWORD`              | app-specific password for that Apple ID                                                                      |
 
 Set `version` in `packages/clients/mac/package.json` to the intended `X.Y.Z`
 and commit it, then run `git tag vX.Y.Z && git push origin vX.Y.Z`. The package
@@ -205,7 +210,7 @@ Chromium's unused locale set otherwise adds roughly 49 MB to the installed app.
 The shell has no production dependencies, and `package.json` declares an empty
 `workspaces` list to say so structurally. Without it, electron-builder finds no
 node modules here, walks up to the repository's own workspace root and tries to
-resolve *that* package's production dependencies, which the release runner never
+resolve _that_ package's production dependencies, which the release runner never
 installs: the build then fails with "Production dependency ... not found for
 package opensession". The empty list stops the search at this directory.
 

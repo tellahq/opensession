@@ -36,8 +36,8 @@ export const FALLBACK_REPO = "repository";
 export const NO_REPO = "none";
 
 export function sessionRepoOr(
-	s: Pick<UnifiedSession, "repo">,
-	fallback: string,
+  s: Pick<UnifiedSession, "repo">,
+  fallback: string,
 ): string {
-	return s.repo || fallback;
+  return s.repo || fallback;
 }

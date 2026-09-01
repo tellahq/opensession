@@ -11,12 +11,12 @@ import { auditCounts } from "./ui-audit";
  * does not have — add the variant to `src/frontend/ui/` and land it there.
  */
 test("design-system drift stays under budget", () => {
-	for (const { id, count, budget } of auditCounts()) {
-		expect(
-			count,
-			`${id}: ${count} exceeds ${budget}. See bun scripts/ui-audit.ts --files ${id}`,
-		).toBeLessThanOrEqual(budget);
-	}
+  for (const { id, count, budget } of auditCounts()) {
+    expect(
+      count,
+      `${id}: ${count} exceeds ${budget}. See bun scripts/ui-audit.ts --files ${id}`,
+    ).toBeLessThanOrEqual(budget);
+  }
 });
 
 /*

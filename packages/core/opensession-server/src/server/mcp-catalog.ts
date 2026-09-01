@@ -32,7 +32,10 @@ import { createAdminMcpServer } from "../agents/slack/admin-tools";
 import { createAskUserMcpServer } from "../agents/slack/ask-tools";
 import { createAssetsMcpServer } from "../agents/slack/assets-tools";
 import { createGithubMcpServer } from "../agents/slack/github-tools";
-import { createGoalSelfMcpServer, createGoalsMcpServer } from "../agents/slack/goal-tools";
+import {
+  createGoalSelfMcpServer,
+  createGoalsMcpServer,
+} from "../agents/slack/goal-tools";
 import { createHumansMcpServer } from "../agents/slack/humans-tools";
 import { createKeychainMcpServer } from "../agents/slack/keychain-tools";
 import { createMemoryMcpServer } from "../agents/slack/memory-tools";
@@ -119,14 +122,23 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
   {
     name: "opensession-sessions",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-sessions"].summary,
-    source: "packages/core/opensession-server/src/agents/slack/sessions-tools.ts",
-    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts", "packages/core/opensession-server/src/agents/slack/handlers.ts", "packages/core/opensession-server/src/server/automations.ts"],
+    source:
+      "packages/core/opensession-server/src/agents/slack/sessions-tools.ts",
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/agents/slack/handlers.ts",
+      "packages/core/opensession-server/src/server/automations.ts",
+    ],
     runClasses: ["interactive", "slack", "automation"],
     condition:
       "Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below.",
     note: "The control tools (answer/send/cancel/create) are gated on `isAdmin`; Slack passes isAdmin only for the configured trusted user.",
     build: () =>
-      createSessionsMcpServer({ createdBy: USER, isAdmin: true, currentSessionId: SESSION_ID }),
+      createSessionsMcpServer({
+        createdBy: USER,
+        isAdmin: true,
+        currentSessionId: SESSION_ID,
+      }),
     variants: [
       {
         label: "selfImprove automation (isAdmin: false, automationSelf: true)",
@@ -145,7 +157,10 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     name: "opensession-admin",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-admin"].summary,
     source: "packages/core/opensession-server/src/agents/slack/admin-tools.ts",
-    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts", "packages/core/opensession-server/src/agents/slack/handlers.ts"],
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/agents/slack/handlers.ts",
+    ],
     runClasses: ["interactive", "slack"],
     note: "Automation and MCP-connection tools are gated on `isAdmin`; channel memory is not.",
     build: () =>
@@ -189,22 +204,34 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     source: "packages/core/opensession-server/src/server/self-deploy.ts",
     wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
     runClasses: ["interactive"],
-    condition: "Withheld from dev instances (isDevInstance()) — the script targets the production service and state.",
+    condition:
+      "Withheld from dev instances (isDevInstance()) — the script targets the production service and state.",
     build: () => createSelfDeployMcpServer({ user: USER }),
   },
   {
     name: "opensession-humans",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-humans"].summary,
     source: "packages/core/opensession-server/src/agents/slack/humans-tools.ts",
-    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts", "packages/core/opensession-server/src/agents/slack/handlers.ts", "packages/core/opensession-server/src/server/goal-runner.ts"],
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/agents/slack/handlers.ts",
+      "packages/core/opensession-server/src/server/goal-runner.ts",
+    ],
     runClasses: ["interactive", "slack", "goal"],
-    condition: "Interactive runs need a session id (the answer routes back to it).",
-    build: () => createHumansMcpServer({ sessionId: SESSION_ID, createdBy: USER, isAdmin: true }),
+    condition:
+      "Interactive runs need a session id (the answer routes back to it).",
+    build: () =>
+      createHumansMcpServer({
+        sessionId: SESSION_ID,
+        createdBy: USER,
+        isAdmin: true,
+      }),
   },
   {
     name: "opensession-keychain",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-keychain"].summary,
-    source: "packages/core/opensession-server/src/agents/slack/keychain-tools.ts",
+    source:
+      "packages/core/opensession-server/src/agents/slack/keychain-tools.ts",
     wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
     runClasses: ["interactive"],
     condition: "Needs a session id.",
@@ -213,7 +240,8 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
   {
     name: "opensession-publish",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-publish"].summary,
-    source: "packages/core/opensession-server/src/agents/slack/publish-tools.ts",
+    source:
+      "packages/core/opensession-server/src/agents/slack/publish-tools.ts",
     wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
     runClasses: ["interactive"],
     condition: "Needs a session id.",
@@ -237,7 +265,9 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
         attach: () => unused("attach"),
         switchPrimary: () => unused("switchPrimary"),
         snapshot: () => null,
-        repos: () => [{ id: "example", defaultBranch: "main", sharedCheckout: false }],
+        repos: () => [
+          { id: "example", defaultBranch: "main", sharedCheckout: false },
+        ],
         linkPr: () => unused("linkPr"),
       }),
   },
@@ -249,14 +279,18 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     runClasses: ["interactive"],
     condition: "Needs a session id.",
     note: "Write tools are interactive-only; automation runs get read-only memory injected into their prompt instead.",
-    build: () => createMemoryMcpServer({ user: USER, repos: () => ["example"] }),
+    build: () =>
+      createMemoryMcpServer({ user: USER, repos: () => ["example"] }),
   },
   {
     name: "opensession-web",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-web"].summary,
     source: "packages/core/opensession-server/src/server/web-mcp.ts",
-    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
-    runClasses: ["interactive"],
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/server/goal-runner.ts",
+    ],
+    runClasses: ["interactive", "goal"],
     condition: "Needs a session id.",
     build: () => createWebMcpServer({ sessionId: SESSION_ID }),
   },
@@ -271,7 +305,7 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
       createPortalsMcpServer({
         sessionId: SESSION_ID,
         worktreeDir: () => undefined,
-        setDefaultPath: () => undefined,
+        setDefaultPath: async () => ({}),
         sandbox: async () => null,
         hasSandbox: () => false,
         runner: () => undefined,
@@ -280,16 +314,19 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
   {
     name: "opensession-walkthrough",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-walkthrough"].summary,
-    source: "packages/core/opensession-server/src/agents/slack/walkthrough-tools.ts",
+    source:
+      "packages/core/opensession-server/src/agents/slack/walkthrough-tools.ts",
     wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
     runClasses: ["interactive"],
     condition: "Needs a session id.",
-    build: () => createWalkthroughMcpServer({ sessionId: SESSION_ID, by: USER }),
+    build: () =>
+      createWalkthroughMcpServer({ sessionId: SESSION_ID, by: USER }),
   },
   {
     name: "opensession-slack",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-slack"].summary,
-    source: "packages/core/opensession-server/src/agents/slack/slack-compose-tools.ts",
+    source:
+      "packages/core/opensession-server/src/agents/slack/slack-compose-tools.ts",
     wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
     runClasses: ["interactive"],
     condition: "Needs a session id.",
@@ -299,7 +336,10 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     name: "opensession-ask",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-ask"].summary,
     source: "packages/core/opensession-server/src/agents/slack/ask-tools.ts",
-    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts", "packages/core/opensession-server/src/agents/slack/handlers.ts"],
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/agents/slack/handlers.ts",
+    ],
     runClasses: ["interactive", "slack"],
     condition: "Needs a session id.",
     build: () => createAskUserMcpServer({ ask: () => unused("ask") }),
@@ -307,10 +347,15 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
   {
     name: "opensession-workflows",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-workflows"].summary,
-    source: "packages/core/opensession-server/src/agents/slack/workflow-tools.ts",
-    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts", "packages/core/opensession-server/src/server/automations.ts"],
+    source:
+      "packages/core/opensession-server/src/agents/slack/workflow-tools.ts",
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/server/automations.ts",
+    ],
     runClasses: ["interactive", "automation"],
-    condition: "Automation runs get it ONLY with the human-set `workflows` flag.",
+    condition:
+      "Automation runs get it ONLY with the human-set `workflows` flag.",
     note: "An automation's build passes its own mcpAllowlist + AUTOMATION_DENIED_TOOLS, so a script's mcp.* calls cannot widen the run's least-privilege surface. Same tools either way.",
     build: () =>
       createWorkflowsMcpServer({
@@ -325,7 +370,8 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     source: "packages/core/opensession-server/src/agents/slack/assets-tools.ts",
     wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
     runClasses: ["interactive"],
-    condition: "Needs a session id. Works in read-only Ask mode — assets land outside the checkout.",
+    condition:
+      "Needs a session id. Works in read-only Ask mode — assets land outside the checkout.",
     build: () => createAssetsMcpServer({ sessionId: SESSION_ID }),
   },
   {
@@ -341,10 +387,15 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
   {
     name: "opensession-papercuts",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-papercuts"].summary,
-    source: "packages/core/opensession-server/src/agents/slack/papercuts-tools.ts",
-    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts", "packages/core/opensession-server/src/server/automations.ts"],
+    source:
+      "packages/core/opensession-server/src/agents/slack/papercuts-tools.ts",
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/server/automations.ts",
+    ],
     runClasses: ["interactive", "automation"],
-    condition: "Dropped when the session's repo opted out (Settings → Papercuts).",
+    condition:
+      "Dropped when the session's repo opted out (Settings → Papercuts).",
     note: "Automation-safe friction log: append-only, reads nothing sensitive, and exposes no control surface.",
     build: () =>
       createPapercutsMcpServer({
@@ -397,7 +448,8 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
   {
     name: "opensession-self",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-self"].summary,
-    source: "packages/core/opensession-server/src/agents/slack/self-improve-tools.ts",
+    source:
+      "packages/core/opensession-server/src/agents/slack/self-improve-tools.ts",
     wiring: ["packages/core/opensession-server/src/server/automations.ts"],
     runClasses: ["automation"],
     condition: "Only with the human-set `selfImprove` flag on that automation.",
@@ -421,7 +473,10 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     name: "opensession-goal-self",
     summary: INTERNAL_MCP_CAPABILITIES["opensession-goal-self"].summary,
     source: "packages/core/opensession-server/src/agents/slack/goal-tools.ts",
-    wiring: ["packages/core/opensession-server/src/server/goal-runner.ts", "packages/core/opensession-server/src/server/interactive-mcp.ts"],
+    wiring: [
+      "packages/core/opensession-server/src/server/goal-runner.ts",
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+    ],
     runClasses: ["goal"],
     condition: "Only on a session that carries a goalId.",
     note: "Deliberately NOT in SHARED_INPROCESS_SERVERS: goal wakes keep per-session engine servers, because the tool list is discovered once per directory instance.",

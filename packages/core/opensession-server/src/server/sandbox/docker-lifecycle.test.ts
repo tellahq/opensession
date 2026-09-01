@@ -4,7 +4,9 @@ import { _withDockerLifecycleLockForTest } from "./docker";
 describe("Docker sandbox lifecycle ownership", () => {
   test("serializes ensure and destroy work for one sandbox", async () => {
     let releaseEnsure!: () => void;
-    const ensureGate = new Promise<void>((resolve) => (releaseEnsure = resolve));
+    const ensureGate = new Promise<void>(
+      (resolve) => (releaseEnsure = resolve),
+    );
     const events: string[] = [];
 
     const ensure = _withDockerLifecycleLockForTest("sandbox-a", async () => {

@@ -60,17 +60,32 @@ export function createWalkthroughMcpServer(ctx: WalkthroughToolContext) {
         video_title: z
           .string()
           .optional()
-          .describe('Short human title for the video, e.g. "Model picker alignment — after".'),
+          .describe(
+            'Short human title for the video, e.g. "Model picker alignment — after".',
+          ),
         shots: z
           .array(
             z.object({
-              before: z.string().optional().describe("Absolute path to the BEFORE screenshot (png/jpg/webp/gif)."),
-              after: z.string().optional().describe("Absolute path to the AFTER screenshot."),
-              caption: z.string().optional().describe("What this pair shows, one short phrase."),
+              before: z
+                .string()
+                .optional()
+                .describe(
+                  "Absolute path to the BEFORE screenshot (png/jpg/webp/gif).",
+                ),
+              after: z
+                .string()
+                .optional()
+                .describe("Absolute path to the AFTER screenshot."),
+              caption: z
+                .string()
+                .optional()
+                .describe("What this pair shows, one short phrase."),
             }),
           )
           .optional()
-          .describe("Before/after screenshot pairs (either side may be omitted)."),
+          .describe(
+            "Before/after screenshot pairs (either side may be omitted).",
+          ),
       },
       async (args: {
         summary: string;
@@ -92,7 +107,8 @@ export function createWalkthroughMcpServer(ctx: WalkthroughToolContext) {
           const parts = [
             `Walkthrough published — it now shows inline in the session and in this session's Review tab (${walkthrough.video ? "video, " : ""}${walkthrough.shots?.length ? `${walkthrough.shots.length} before/after pair(s), ` : ""}writeup).`,
           ];
-          if (pr.mirrored) parts.push(`Mirrored into the PR description: ${pr.url}`);
+          if (pr.mirrored)
+            parts.push(`Mirrored into the PR description: ${pr.url}`);
           else
             parts.push(
               `Not yet on a PR (${pr.reason}). Call publish_walkthrough again after opening the PR and it will be spliced into the description.`,
@@ -117,8 +133,13 @@ export function createWalkthroughMcpServer(ctx: WalkthroughToolContext) {
             z.object({
               path: z
                 .string()
-                .describe("Absolute path to the image (png/jpg/jpeg/webp/gif) under /tmp or the current user's home directory."),
-              alt: z.string().optional().describe("Alt/caption text for the image."),
+                .describe(
+                  "Absolute path to the image (png/jpg/jpeg/webp/gif) under /tmp or the current user's home directory.",
+                ),
+              alt: z
+                .string()
+                .optional()
+                .describe("Alt/caption text for the image."),
             }),
           )
           .min(1)
@@ -132,7 +153,9 @@ export function createWalkthroughMcpServer(ctx: WalkthroughToolContext) {
         pr_number: z
           .number()
           .optional()
-          .describe("Explicit PR number in that repo. Defaults to the open PR on the session's branch."),
+          .describe(
+            "Explicit PR number in that repo. Defaults to the open PR on the session's branch.",
+          ),
       },
       async (args: {
         comment: string;
@@ -186,7 +209,9 @@ export function createWalkthroughMcpServer(ctx: WalkthroughToolContext) {
             `Comment posted${res.url ? `: ${res.url}` : ""} — ${uploaded.length} image(s) attached from ${configuredServer().publicBaseUrl}; they render inline via GitHub's image proxy.`,
           );
         } catch (e: any) {
-          return text(`comment_on_pr_with_images failed: ${e?.message || String(e)}`);
+          return text(
+            `comment_on_pr_with_images failed: ${e?.message || String(e)}`,
+          );
         }
       },
     ),

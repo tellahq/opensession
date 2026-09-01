@@ -15,7 +15,11 @@ import {
 } from "./slack-api";
 import { slackTeamId } from "./state";
 import { extractBlocks } from "./blocks";
-import { describeSkippedMedia, type SlackMedia, type SkippedMedia } from "./media";
+import {
+  describeSkippedMedia,
+  type SlackMedia,
+  type SkippedMedia,
+} from "./media";
 
 // ---------------------------------------------------------------------------
 // Tool status helpers
@@ -54,7 +58,13 @@ function shortPath(filePath: string): string {
 /** The path an edit or write names. Engines disagree on the spelling, and a
  *  status that misses it degrades to a bare "Editing file". */
 function inputPath(input: any): string {
-  for (const key of ["file_path", "filePath", "path", "notebook_path", "notebookPath"]) {
+  for (const key of [
+    "file_path",
+    "filePath",
+    "path",
+    "notebook_path",
+    "notebookPath",
+  ]) {
     const value = input?.[key];
     if (typeof value === "string" && value) return value;
   }
@@ -131,13 +141,13 @@ export class SlackStreamer {
       this.useStreaming = true;
     } else {
       console.log(
-        `[slack] Streaming unavailable (${resp.error || "unknown"}), using fallback`
+        `[slack] Streaming unavailable (${resp.error || "unknown"}), using fallback`,
       );
       this.useStreaming = false;
       const msg = await sendSlackMessage(
         this.channel,
         "Thinking...",
-        this.threadTs
+        this.threadTs,
       );
       this.fallbackTs = msg?.ts || null;
     }
@@ -180,7 +190,11 @@ export class SlackStreamer {
       });
       this.streamMessageTs = null;
     } else if (this.fallbackTs) {
-      await updateSlackMessage(this.channel, this.fallbackTs, streamText || " ");
+      await updateSlackMessage(
+        this.channel,
+        this.fallbackTs,
+        streamText || " ",
+      );
       this.fallbackTs = null;
     } else if (!mediaOnly) {
       await sendSlackMessage(this.channel, streamText, this.threadTs);

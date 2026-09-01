@@ -16,8 +16,8 @@
  */
 
 import {
-	AGENT_PERSON_KEY,
-	AUTOMATION_MACHINE_IDENTITY,
+  AGENT_PERSON_KEY,
+  AUTOMATION_MACHINE_IDENTITY,
 } from "./automation-audience";
 import { AGENT_NAME } from "./brand";
 import type { Person } from "./people";
@@ -25,14 +25,14 @@ import type { UnifiedSession } from "./types";
 
 /** Lowercased first name, full name and GitHub login → the roster's display name. */
 export function canonicalNames(roster: Person[]): Map<string, string> {
-	const map = new Map<string, string>();
-	for (const p of roster) {
-		if (!p.name) continue;
-		map.set(p.name.toLowerCase(), p.name);
-		if (p.fullName) map.set(p.fullName.toLowerCase(), p.name);
-		if (p.github) map.set(p.github.toLowerCase(), p.name);
-	}
-	return map;
+  const map = new Map<string, string>();
+  for (const p of roster) {
+    if (!p.name) continue;
+    map.set(p.name.toLowerCase(), p.name);
+    if (p.fullName) map.set(p.fullName.toLowerCase(), p.name);
+    if (p.github) map.set(p.github.toLowerCase(), p.name);
+  }
+  return map;
 }
 
 /**
@@ -41,16 +41,16 @@ export function canonicalNames(roster: Person[]): Map<string, string> {
  * "Kent (loop)" is Kent's session, started on his behalf by the loop he set.
  */
 export function rosterNameFor(
-	raw: string | null | undefined,
-	canonical: Map<string, string>,
+  raw: string | null | undefined,
+  canonical: Map<string, string>,
 ): string | null {
-	const name = (raw || "").trim().toLowerCase();
-	if (!name) return null;
-	return (
-		canonical.get(name) ||
-		canonical.get(name.replace(/\s*\([^)]*\)$/, "").trim()) ||
-		null
-	);
+  const name = (raw || "").trim().toLowerCase();
+  if (!name) return null;
+  return (
+    canonical.get(name) ||
+    canonical.get(name.replace(/\s*\([^)]*\)$/, "").trim()) ||
+    null
+  );
 }
 
 /**
@@ -59,28 +59,32 @@ export function rosterNameFor(
  * before /api/people lands and for people the directory doesn't carry.
  */
 export function ownerKey(
-	name: string | null | undefined,
-	canonical: Map<string, string>,
+  name: string | null | undefined,
+  canonical: Map<string, string>,
 ): string {
-	const raw = (name || "").trim().toLowerCase();
-	if (raw === AUTOMATION_MACHINE_IDENTITY) return AGENT_PERSON_KEY;
-	return rosterNameFor(raw, canonical)?.toLowerCase() || raw;
+  const raw = (name || "").trim().toLowerCase();
+  if (raw === AUTOMATION_MACHINE_IDENTITY) return AGENT_PERSON_KEY;
+  return rosterNameFor(raw, canonical)?.toLowerCase() || raw;
 }
 
 /** The owner key a session filters under. */
 export function ownerKeyOf(
-	session: UnifiedSession,
-	canonical: Map<string, string>,
+  session: UnifiedSession,
+  canonical: Map<string, string>,
 ): string {
-	return ownerKey(session.startedBy, canonical);
+  return ownerKey(session.startedBy, canonical);
 }
 
 export function sessionHasOwner(
-	session: UnifiedSession,
-	owner: string,
-	canonical: Map<string, string>,
+  session: UnifiedSession,
+  owner: string,
+  canonical: Map<string, string>,
 ): boolean {
-	return !session.automation && !!session.startedBy && ownerKeyOf(session, canonical) === owner;
+  return (
+    !session.automation &&
+    !!session.startedBy &&
+    ownerKeyOf(session, canonical) === owner
+  );
 }
 
 /**
@@ -91,24 +95,26 @@ export function sessionHasOwner(
  * signed-in person where their own row is offered separately.
  */
 export function sessionOwners(
-	sessions: UnifiedSession[],
-	canonical: Map<string, string>,
-	exclude = "",
+  sessions: UnifiedSession[],
+  canonical: Map<string, string>,
+  exclude = "",
 ): Array<{ key: string; label: string }> {
-	const entries = new Map<string, { label: string; count: number }>();
-	for (const s of sessions) {
-		if (s.automation || !s.startedBy) continue;
-		const key = ownerKeyOf(s, canonical);
-		const label =
-			key === AGENT_PERSON_KEY
-				? AGENT_NAME
-				: rosterNameFor(s.startedBy, canonical);
-		if (!label || key === exclude) continue;
-		const entry = entries.get(key) || { label, count: 0 };
-		entry.count++;
-		entries.set(key, entry);
-	}
-	return Array.from(entries.entries())
-		.sort((a, b) => b[1].count - a[1].count || a[1].label.localeCompare(b[1].label))
-		.map(([key, { label }]) => ({ key, label }));
+  const entries = new Map<string, { label: string; count: number }>();
+  for (const s of sessions) {
+    if (s.automation || !s.startedBy) continue;
+    const key = ownerKeyOf(s, canonical);
+    const label =
+      key === AGENT_PERSON_KEY
+        ? AGENT_NAME
+        : rosterNameFor(s.startedBy, canonical);
+    if (!label || key === exclude) continue;
+    const entry = entries.get(key) || { label, count: 0 };
+    entry.count++;
+    entries.set(key, entry);
+  }
+  return Array.from(entries.entries())
+    .sort(
+      (a, b) => b[1].count - a[1].count || a[1].label.localeCompare(b[1].label),
+    )
+    .map(([key, { label }]) => ({ key, label }));
 }

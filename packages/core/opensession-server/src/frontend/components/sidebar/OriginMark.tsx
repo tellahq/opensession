@@ -5,21 +5,21 @@ import * as stylex from "@stylexjs/stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	ml1: {
-			marginLeft: "4px"
-	},
-	flex: {
-			display: "flex"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
+  ml1: {
+    marginLeft: "4px",
+  },
+  flex: {
+    display: "flex",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
 });
 
 /**
@@ -36,17 +36,24 @@ const sx = stylex.create({
  * 1.5-stroke icon set.
  */
 export function OriginMark({ source }: { source?: string | null }) {
-	if (!source || source === "opensession" || source === "backstage") return null;
-	if (!brandLogo(source)) return null;
-	const label = `From ${sessionSourceName(source)}`;
-	return (
-		<span
-			{...stylex.props(sx.ml1, sx.flex, sx.shrink0, sx.itemsCenter, sx.textFaint)}
-			role="img"
-			aria-label={label}
-			title={label}
-		>
-			<BrandMark name={source} size={13} />
-		</span>
-	);
+  if (!source || source === "opensession" || source === "backstage")
+    return null;
+  if (!brandLogo(source)) return null;
+  const label = `From ${sessionSourceName(source)}`;
+  return (
+    <span
+      {...stylex.props(
+        sx.ml1,
+        sx.flex,
+        sx.shrink0,
+        sx.itemsCenter,
+        sx.textFaint,
+      )}
+      role="img"
+      aria-label={label}
+      title={label}
+    >
+      <BrandMark name={source} size={13} />
+    </span>
+  );
 }

@@ -44,114 +44,121 @@ import { resolve } from "path";
 export const REPO_ROOT = resolve(import.meta.dir, "..");
 
 export interface SideEffectHit {
-	/** setInterval, Bun.serve, … */
-	kind: string;
-	/** the module whose import triggered it (may differ from `frame`) */
-	module: string;
-	/** repo-relative file:line that actually called it */
-	frame: string;
+  /** setInterval, Bun.serve, … */
+  kind: string;
+  /** the module whose import triggered it (may differ from `frame`) */
+  module: string;
+  /** repo-relative file:line that actually called it */
+  frame: string;
 }
 
 export interface SideEffectScan {
-	scanned: number;
-	hits: SideEffectHit[];
-	failed: { module: string; error: string }[];
+  scanned: number;
+  hits: SideEffectHit[];
+  failed: { module: string; error: string }[];
 }
 
-
 export const EXECUTABLE_ENTRYPOINT_EXEMPTIONS = new Set([
-	"packages/core/opensession-server/src/runner-host/host.ts",
-	"packages/core/opensession-server/src/runner-host/mcp-proxy.ts",
-	// Bun Worker entrypoints do not report import.meta.main; importing this file
-	// intentionally starts the actor worker.
-	"packages/core/opensession-server/src/session-kernel-worker.ts",
+  "packages/core/opensession-server/src/runner-host/host.ts",
+  "packages/core/opensession-server/src/runner-host/mcp-proxy.ts",
+  // Bun Worker entrypoints do not report import.meta.main; importing this file
+  // intentionally starts the actor worker.
+  "packages/core/opensession-server/src/session-kernel-worker.ts",
 ]);
 
 /** Every module a server process could plausibly pull in. Tests and test
  *  helpers are excluded: they are not on any live import chain. */
 export function serverModules(root = REPO_ROOT): string[] {
-	const glob = new Bun.Glob(
-		"packages/core/opensession-server/src/{server,executor,runner-host}/**/*.ts",
-	);
-	return [...glob.scanSync({ cwd: root }),
-		"packages/core/opensession-server/src/session-kernel-worker.ts"]
-		.filter((p) =>
-			!p.endsWith(".test.ts") &&
-			!p.includes("/testing/") &&
-			!EXECUTABLE_ENTRYPOINT_EXEMPTIONS.has(p)
-		)
-		.sort();
+  const glob = new Bun.Glob(
+    "packages/core/opensession-server/src/{server,executor,runner-host}/**/*.ts",
+  );
+  return [
+    ...glob.scanSync({ cwd: root }),
+    "packages/core/opensession-server/src/session-kernel-worker.ts",
+  ]
+    .filter(
+      (p) =>
+        !p.endsWith(".test.ts") &&
+        !p.includes("/testing/") &&
+        !EXECUTABLE_ENTRYPOINT_EXEMPTIONS.has(p),
+    )
+    .sort();
 }
 
 /** Run the scan in a fresh child process. Never throws for a violation — the
  *  caller decides what to do with the hits. */
 export async function scanModuleSideEffects(
-	modules: string[] = serverModules(),
+  modules: string[] = serverModules(),
 ): Promise<SideEffectScan> {
-	const scratch = mkdtempSync(`${tmpdir()}/os-side-effect-scan-`);
-	try {
-		const listPath = `${scratch}/modules.json`;
-		const outPath = `${scratch}/result.json`;
-		await Bun.write(listPath, JSON.stringify(modules));
-		const env: Record<string, string> = {
-			...(process.env as Record<string, string>),
-			// Isolate every state path the graph might resolve at import.
-			OPENSESSION_STATE_DIR: scratch,
-			OPENSESSION_SESSIONS_DIR: `${scratch}/sessions`,
-			OPENSESSION_SEARCH_DB: `${scratch}/search.db`,
-		};
-		// NODE_ENV=test is one of the guards under test (run-rpc skips binding
-		// under it), so the child must not inherit `bun test`'s value — that
-		// would hide exactly the regression this guard exists to catch.
-		delete env.NODE_ENV;
-		const proc = Bun.spawn(
-			[process.execPath, `${import.meta.dir}/module-side-effect-probe.ts`, listPath, outPath],
-			{ cwd: REPO_ROOT, env, stdout: "pipe", stderr: "pipe" },
-		);
-		const code = await proc.exited;
-		if (code !== 0) {
-			const err = await new Response(proc.stderr).text();
-			throw new Error(`side-effect probe exited ${code}:\n${err.slice(-2000)}`);
-		}
-		return (await Bun.file(outPath).json()) as SideEffectScan;
-	} finally {
-		rmSync(scratch, { recursive: true, force: true });
-	}
+  const scratch = mkdtempSync(`${tmpdir()}/os-side-effect-scan-`);
+  try {
+    const listPath = `${scratch}/modules.json`;
+    const outPath = `${scratch}/result.json`;
+    await Bun.write(listPath, JSON.stringify(modules));
+    const env: Record<string, string> = {
+      ...(process.env as Record<string, string>),
+      // Isolate every state path the graph might resolve at import.
+      OPENSESSION_STATE_DIR: scratch,
+      OPENSESSION_SESSIONS_DIR: `${scratch}/sessions`,
+      OPENSESSION_SEARCH_DB: `${scratch}/search.db`,
+    };
+    // NODE_ENV=test is one of the guards under test (run-rpc skips binding
+    // under it), so the child must not inherit `bun test`'s value — that
+    // would hide exactly the regression this guard exists to catch.
+    delete env.NODE_ENV;
+    const proc = Bun.spawn(
+      [
+        process.execPath,
+        `${import.meta.dir}/module-side-effect-probe.ts`,
+        listPath,
+        outPath,
+      ],
+      { cwd: REPO_ROOT, env, stdout: "pipe", stderr: "pipe" },
+    );
+    const code = await proc.exited;
+    if (code !== 0) {
+      const err = await new Response(proc.stderr).text();
+      throw new Error(`side-effect probe exited ${code}:\n${err.slice(-2000)}`);
+    }
+    return (await Bun.file(outPath).json()) as SideEffectScan;
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 export function formatScan(scan: SideEffectScan): string {
-	const lines: string[] = [];
-	for (const h of scan.hits) {
-		lines.push(
-			`  ${h.kind.padEnd(14)} ${h.frame}${h.module === h.frame ? "" : `   (imported via ${h.module})`}`,
-		);
-	}
-	return lines.join("\n");
+  const lines: string[] = [];
+  for (const h of scan.hits) {
+    lines.push(
+      `  ${h.kind.padEnd(14)} ${h.frame}${h.module === h.frame ? "" : `   (imported via ${h.module})`}`,
+    );
+  }
+  return lines.join("\n");
 }
 
 if (import.meta.main) {
-	const scan = await scanModuleSideEffects();
-	if (process.argv.includes("--json")) {
-		console.log(JSON.stringify(scan, null, 2));
-	}
-	for (const f of scan.failed) {
-		console.error(`could not import ${f.module}: ${f.error}`);
-	}
-	if (scan.hits.length === 0 && scan.failed.length === 0) {
-		console.log(
-			`ok — ${scan.scanned} server/executor modules import cleanly (no listener, timer or subprocess at import time)`,
-		);
-		process.exit(0);
-	}
-	if (scan.hits.length) {
-		console.error(
-			`\n${scan.hits.length} resource(s) created at import time by ${scan.scanned} modules:\n${formatScan(scan)}\n`,
-		);
-		console.error(
-			"Move each one behind an exported start*/ensure* function and call it from\n" +
-				"opensession.ts (the boot block for tickers, the listener block for binds),\n" +
-				"or arm it lazily on first real use. See scripts/check-module-side-effects.ts.",
-		);
-	}
-	process.exit(1);
+  const scan = await scanModuleSideEffects();
+  if (process.argv.includes("--json")) {
+    console.log(JSON.stringify(scan, null, 2));
+  }
+  for (const f of scan.failed) {
+    console.error(`could not import ${f.module}: ${f.error}`);
+  }
+  if (scan.hits.length === 0 && scan.failed.length === 0) {
+    console.log(
+      `ok — ${scan.scanned} server/executor modules import cleanly (no listener, timer or subprocess at import time)`,
+    );
+    process.exit(0);
+  }
+  if (scan.hits.length) {
+    console.error(
+      `\n${scan.hits.length} resource(s) created at import time by ${scan.scanned} modules:\n${formatScan(scan)}\n`,
+    );
+    console.error(
+      "Move each one behind an exported start*/ensure* function and call it from\n" +
+        "opensession.ts (the boot block for tickers, the listener block for binds),\n" +
+        "or arm it lazily on first real use. See scripts/check-module-side-effects.ts.",
+    );
+  }
+  process.exit(1);
 }

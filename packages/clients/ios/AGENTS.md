@@ -80,7 +80,7 @@ syncs this directory to the Mac node, regenerates the project, builds, boots a
 simulator of its own, installs, launches against the live server, screenshots
 at device resolution and copies the PNG back. Use it for the walkthrough every
 user-visible change here is expected to publish — a native change is the one
-that gets skipped because capturing it *looks* expensive.
+that gets skipped because capturing it _looks_ expensive.
 
 ```sh
 bun scripts/capture-ios.ts /tmp/after.png
@@ -93,7 +93,7 @@ bun scripts/capture-ios.ts /tmp/before.png --source /tmp/wt-x/packages/clients/i
   simulator underneath, so it costs a fraction of the load and renders when
   the box is too busy for a device. For a transcript row, a chip, a colour or
   a layout fix it is the better picture. Reach for the simulator when the
-  change is about a *phone*: safe areas, the keyboard, sheets, Dynamic Type.
+  change is about a _phone_: safe areas, the keyboard, sheets, Dynamic Type.
 - **The first build is 5-8 minutes; later ones are ~90 seconds.** The build
   tree is keyed on your session and reused, so take the second screenshot.
 - **It talks to the server over the tailnet, never a reverse tunnel.** Tunnels
@@ -119,17 +119,17 @@ a task needs real Apple hardware, not just for compiles:
   Mac (a private/VPN-only instance), reverse-tunnel it:
   `ssh -R 13850:127.0.0.1:3850 <mac-node> '…'` and launch with
   `OS1_SERVER=http://127.0.0.1:13850 OS1_TOKEN=<token>
-  "<build>/Open Session.app/Contents/MacOS/Open Session"` (quote it: the Mac
+"<build>/Open Session.app/Contents/MacOS/Open Session"` (quote it: the Mac
   target's `PRODUCT_NAME` is the product name, spaces and all; tokens:
   `~/.opensession/web-sessions.json` on the server host). On the iOS simulator the
   same overrides inject via `SIMCTL_CHILD_*`.
 - **Profile it.** `sample <pid> 15 -file out.txt` gives per-thread call
   graphs — enough to see exactly what runs on the main thread; `xctrace
-  record --template "Time Profiler" --attach <pid>` when a full Instruments
+record --template "Time Profiler" --attach <pid>` when a full Instruments
   trace is needed.
 - **Micro-benchmark suspect code.** The model files are plain Foundation:
   compile them against a `main.swift` harness (`swiftc -O main.swift
-  Session.swift`) and feed real payloads fetched from the live server.
+Session.swift`) and feed real payloads fetched from the live server.
 
 This is how the 2026-07 sessions-poll hitch was found and verified: the old
 formatter-per-parse comparator sort measured ~400ms per poll on the Mac (the

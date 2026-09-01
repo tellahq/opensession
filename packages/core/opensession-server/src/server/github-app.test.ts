@@ -19,7 +19,8 @@ const dirs: string[] = [];
 afterEach(() => {
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
   else process.env.OPENSESSION_CONFIG = savedConfig;
-  if (savedClientId === undefined) delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
+  if (savedClientId === undefined)
+    delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
   else process.env.OPENSESSION_GITHUB_CLIENT_ID = savedClientId;
   globalThis.fetch = originalFetch;
   __setGithubAppKeyPathForTest(undefined);
@@ -28,7 +29,8 @@ afterEach(() => {
   cache.__ghAppTokenCacheWrite = null;
   cache.__ghAppLastMintOk = undefined;
   cache.__ghAppLastMintIdentity = undefined;
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0))
+    rmSync(dir, { recursive: true, force: true });
 });
 
 describe("GitHub App webhook", () => {
@@ -53,16 +55,18 @@ describe("GitHub App webhook", () => {
     globalThis.fetch = (async (input, init) => {
       expect(String(input)).toBe("https://api.github.com/app/hook/config");
       expect(init?.method).toBe("PATCH");
-      expect(String((init?.headers as Record<string, string>).Authorization)).toMatch(
-        /^Bearer /,
-      );
+      expect(
+        String((init?.headers as Record<string, string>).Authorization),
+      ).toMatch(/^Bearer /);
       expect(JSON.parse(String(init?.body))).toEqual({
         url: "https://ingress.example.test/github/webhook",
         content_type: "json",
         secret: "shared-secret",
         insecure_ssl: "0",
       });
-      return Response.json({ url: "https://ingress.example.test/github/webhook" });
+      return Response.json({
+        url: "https://ingress.example.test/github/webhook",
+      });
     }) as typeof fetch;
 
     await updateGithubAppWebhook(
@@ -74,10 +78,21 @@ describe("GitHub App webhook", () => {
 
 describe("repository-scoped App installation identity", () => {
   test("requires the requested repository owner to match the selected installation", () => {
-    expect(githubRepositoryMatchesInstallation("tellahq/opensession", "TellaHQ")).toBe(true);
-    expect(githubRepositoryMatchesInstallation("acme/opensession", "tellahq")).toBe(false);
-    expect(githubRepositoryMatchesInstallation("tellahq/opensession/extra", "tellahq")).toBe(false);
-    expect(githubRepositoryMatchesInstallation("tellahq/opensession", undefined)).toBe(false);
+    expect(
+      githubRepositoryMatchesInstallation("tellahq/opensession", "TellaHQ"),
+    ).toBe(true);
+    expect(
+      githubRepositoryMatchesInstallation("acme/opensession", "tellahq"),
+    ).toBe(false);
+    expect(
+      githubRepositoryMatchesInstallation(
+        "tellahq/opensession/extra",
+        "tellahq",
+      ),
+    ).toBe(false);
+    expect(
+      githubRepositoryMatchesInstallation("tellahq/opensession", undefined),
+    ).toBe(false);
   });
 
   test("does not reuse a token cached for a previous installation owner", async () => {

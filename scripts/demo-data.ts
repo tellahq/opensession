@@ -41,7 +41,8 @@ if (stateRoot) {
 } else {
 }
 
-const { generateDemoData } = await import("../packages/core/opensession-server/src/server/demo/generate");
+const { generateDemoData } =
+  await import("../packages/core/opensession-server/src/server/demo/generate");
 
 const result = generateDemoData({ homeStores: !!stateRoot });
 if (!stateRoot && result.created) {

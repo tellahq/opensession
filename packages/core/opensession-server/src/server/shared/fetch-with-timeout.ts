@@ -13,7 +13,7 @@ export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
 export async function fetchWithTimeout(
   url: string,
   init: RequestInit = {},
-  timeoutMs = DEFAULT_FETCH_TIMEOUT_MS
+  timeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
 ): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);

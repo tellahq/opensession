@@ -5,24 +5,22 @@
  */
 
 export interface RouteContext {
-	req: Request;
-	url: URL;
-	/** Pathname normalized onto the historical /backstage prefix (the
-	 *  /opensession alias is folded in before dispatch — rename-compat). */
-	path: string;
-	/** The prefix THIS request used ("/opensession" | "/backstage") —
-	 *  responses that embed it (manifest, sw.js scope, redirects) answer in
-	 *  kind so each install/bookmark stays self-consistent. */
-	publicPrefix: string;
-	/** Verified sign-in identity (web-auth.ts) when GitHub web sign-in is
-	 *  active; null when signed out or when the feature is off. When set,
-	 *  handlers should prefer it over any client-supplied `user` field. */
-	authUser?: { login: string; name: string } | null;
+  req: Request;
+  url: URL;
+  /** Pathname normalized onto the historical /backstage prefix (the
+   *  /opensession alias is folded in before dispatch — rename-compat). */
+  path: string;
+  /** The prefix THIS request used ("/opensession" | "/backstage") —
+   *  responses that embed it (manifest, sw.js scope, redirects) answer in
+   *  kind so each install/bookmark stays self-consistent. */
+  publicPrefix: string;
+  /** Verified sign-in identity (web-auth.ts) when GitHub web sign-in is
+   *  active; null when signed out or when the feature is off. When set,
+   *  handlers should prefer it over any client-supplied `user` field. */
+  authUser?: { login: string; name: string } | null;
 }
 
-export type RouteHandler = (
-	ctx: RouteContext,
-) => Promise<Response | undefined>;
+export type RouteHandler = (ctx: RouteContext) => Promise<Response | undefined>;
 
 /**
  * The request's attributed user: the verified sign-in identity when GitHub
@@ -33,6 +31,6 @@ export type RouteHandler = (
  * enforces this at the socket).
  */
 export function requestUser(ctx: RouteContext, claimed?: unknown): string {
-	if (ctx.authUser?.name) return ctx.authUser.name.split(" ")[0];
-	return typeof claimed === "string" ? claimed.trim() : "";
+  if (ctx.authUser?.name) return ctx.authUser.name.split(" ")[0];
+  return typeof claimed === "string" ? claimed.trim() : "";
 }

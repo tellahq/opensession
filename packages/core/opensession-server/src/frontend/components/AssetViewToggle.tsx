@@ -1,47 +1,11 @@
-import * as stylex from "@stylexjs/stylex";
+import { utilityClassName } from "../ui/cn";
 import type { AssetViewMode } from "../lib/asset-view-mode";
 import { cn } from "../ui/cn";
 import { IconViewGrid, IconViewList } from "./icons";
 
-const sx = stylex.create({
-	root: {
-		display: "flex",
-		flexShrink: 0,
-		alignItems: "center",
-		gap: "1px",
-		opacity: 0,
-		transitionProperty: "opacity",
-		transitionDuration: "150ms",
-		":focus-within": { opacity: 1 },
-		"@media (max-width: 720px)": { opacity: 1 },
-	},
-	button: {
-		display: "grid",
-		width: "20px",
-		height: "20px",
-		placeItems: "center",
-		borderRadius: "var(--radius-control)",
-		transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
-		transitionDuration: "150ms",
-		":focus-visible": {
-			outline: "2px solid var(--accent-ink)",
-			outlineOffset: "2px",
-		},
-
-		cornerShape: "var(--cs)",},
-	active: {
-		backgroundColor: "var(--hover)",
-		color: "var(--text)",
-	},
-	inactive: {
-		color: "var(--text-faint)",
-		":hover": { "@media (hover: hover)": { color: "var(--text-dim)" } },
-	},
-});
-
 const OPTIONS = [
-	{ mode: "preview" as const, label: "Show previews", icon: IconViewGrid },
-	{ mode: "list" as const, label: "Show as list", icon: IconViewList },
+  { mode: "preview" as const, label: "Show previews", icon: IconViewGrid },
+  { mode: "list" as const, label: "Show as list", icon: IconViewList },
 ];
 
 /**
@@ -60,43 +24,54 @@ const OPTIONS = [
  * buttons occupy.
  */
 export function AssetViewToggle({
-	mode,
-	onChange,
-	className,
+  mode,
+  onChange,
+  className,
 }: {
-	mode: AssetViewMode;
-	onChange: (mode: AssetViewMode) => void;
-	className?: string;
+  mode: AssetViewMode;
+  onChange: (mode: AssetViewMode) => void;
+  className?: string;
 }) {
-	return (
-		<span
-			className={cn(
-				stylex.props(sx.root).className,
-				"group-hover/assets:opacity-100",
-				className,
-			)}
-		>
-			{OPTIONS.map((option) => {
-				const active = option.mode === mode;
-				return (
-					<button
-						key={option.mode}
-						type="button"
-						aria-pressed={active}
-						aria-label={option.label}
-						title={option.label}
-						onClick={(event) => {
-							// Both headings sit in surfaces where a click means "open what
-							// this row is about", so the toggle keeps its click.
-							event.stopPropagation();
-							onChange(option.mode);
-						}}
-						{...stylex.props(sx.button, active ? sx.active : sx.inactive)}
-					>
-						<option.icon size={16} />
-					</button>
-				);
-			})}
-		</span>
-	);
+  return (
+    <span
+      className={cn(
+        utilityClassName(
+          "flex shrink-0 items-center gap-px opacity-0 transition-opacity",
+        ),
+        utilityClassName(
+          "focus-within:opacity-100 group-hover/assets:opacity-100 phone:opacity-100",
+        ),
+        className,
+      )}
+    >
+      {OPTIONS.map((option) => {
+        const active = option.mode === mode;
+        return (
+          <button
+            key={option.mode}
+            type="button"
+            aria-pressed={active}
+            aria-label={option.label}
+            title={option.label}
+            onClick={(event) => {
+              // Both headings sit in surfaces where a click means "open what
+              // this row is about", so the toggle keeps its click.
+              event.stopPropagation();
+              onChange(option.mode);
+            }}
+            className={cn(
+              utilityClassName(
+                "focus-ring grid size-5 place-items-center rounded-control transition-colors",
+              ),
+              active
+                ? utilityClassName("bg-hover text-fg")
+                : utilityClassName("text-faint hover:text-dim"),
+            )}
+          >
+            <option.icon size={16} />
+          </button>
+        );
+      })}
+    </span>
+  );
 }

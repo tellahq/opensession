@@ -89,12 +89,16 @@ export interface IssueWebhook {
 // concurrent prompt would otherwise spawn a second query() resuming the SAME
 // claudeSessionId in the same worktree — corrupting the turn. Parked on
 // globalThis so a hot reload doesn't lose in-flight state.
-const inFlightPrompts: Set<string> = ((globalThis as any).__linearInFlightPrompts ??=
-  new Set<string>());
+const inFlightPrompts: Set<string> = ((
+  globalThis as any
+).__linearInFlightPrompts ??= new Set<string>());
 
 // --- Issue status change → auto-implement ---
 
-export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTokens): Promise<Response> {
+export async function handleIssueUpdate(
+  webhook: IssueWebhook,
+  tokens: LinearTokens,
+): Promise<Response> {
   const { data: issue, organizationId, updatedFrom } = webhook;
 
   if (webhook.action !== "update") {
@@ -111,7 +115,9 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
   }
 
   const details = await getIssueDetails(accessToken, issue.id);
-  console.log(`[linear] Issue ${issue.identifier} status changed to: ${details.status}`);
+  console.log(
+    `[linear] Issue ${issue.identifier} status changed to: ${details.status}`,
+  );
 
   if (details.status.toLowerCase() !== "in progress") {
     return Response.json({ ok: true });
@@ -120,7 +126,10 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
   // Check for existing session
   let existingSession: ActiveSession | undefined;
   for (const [, session] of activeSessions) {
-    if (session.issueIdentifier === issue.identifier || session.issueId === issue.id) {
+    if (
+      session.issueIdentifier === issue.identifier ||
+      session.issueId === issue.id
+    ) {
       existingSession = session;
       break;
     }
@@ -143,7 +152,10 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
         planningConversation: [],
         // The ticket is in progress, so direction was given long ago; only a
         // pending implementation confirmation survives the hydrate.
-        phase: diskSession.phase === "awaiting_implementation" ? "awaiting_implementation" : "working",
+        phase:
+          diskSession.phase === "awaiting_implementation"
+            ? "awaiting_implementation"
+            : "working",
         issueCreator: diskSession.issueCreator || details.creator || null,
       };
       if (diskSession.linearSessionId) {
@@ -161,17 +173,22 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
     return Response.json({ ok: true });
   }
 
-  console.log(`[linear] Auto-implementing ${issue.identifier} - has plan and moved to In Progress`);
+  console.log(
+    `[linear] Auto-implementing ${issue.identifier} - has plan and moved to In Progress`,
+  );
 
   if (existingSession.claudeSessionId) {
     existingSession.phase = "working";
 
-    const { participantsSection, coAuthorInstruction } = buildParticipantSections(
-      existingSession.participants || [],
-      existingSession.lastActiveUser || null
-    );
-    const implementationPrompt = IMPLEMENTATION_PROMPT
-      .replaceAll("$ISSUE_ID", issue.identifier)
+    const { participantsSection, coAuthorInstruction } =
+      buildParticipantSections(
+        existingSession.participants || [],
+        existingSession.lastActiveUser || null,
+      );
+    const implementationPrompt = IMPLEMENTATION_PROMPT.replaceAll(
+      "$ISSUE_ID",
+      issue.identifier,
+    )
       .replaceAll("$ISSUE_URL", details.url)
       .replaceAll("$ISSUE_TITLE", details.title)
       .replaceAll("$ISSUE_DESCRIPTION", details.description)
@@ -181,10 +198,14 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
     (async () => {
       try {
         if (existingSession!.linearSessionId) {
-          await createAgentActivity(accessToken, existingSession!.linearSessionId, {
-            type: "thought",
-            body: `Auto-starting implementation (ticket moved to In Progress)`,
-          });
+          await createAgentActivity(
+            accessToken,
+            existingSession!.linearSessionId,
+            {
+              type: "thought",
+              body: `Auto-starting implementation (ticket moved to In Progress)`,
+            },
+          );
         }
 
         const { result, claudeSessionId } = await runAgentHeadless(
@@ -193,7 +214,7 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
           existingSession!.linearSessionId,
           accessToken,
           existingSession!.claudeSessionId || undefined,
-          existingSession!
+          existingSession!,
         );
 
         existingSession!.claudeSessionId = claudeSessionId;
@@ -213,26 +234,38 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
           model: existingSession!.model,
         });
 
-        if (result?.includes("IMPLEMENTATION_COMPLETE") && existingSession!.linearSessionId) {
-          const creatorGithub = linearEmailToGithubUsername(existingSession!.issueCreator?.email || null);
+        if (
+          result?.includes("IMPLEMENTATION_COMPLETE") &&
+          existingSession!.linearSessionId
+        ) {
+          const creatorGithub = linearEmailToGithubUsername(
+            existingSession!.issueCreator?.email || null,
+          );
           const prUrl = await createPrWithAttribution(
             existingSession!.worktreeDir,
             issue.identifier,
             details.url,
             details.title,
             existingSession!.participants || [],
-            creatorGithub
+            creatorGithub,
           );
 
-          await createAgentActivity(accessToken, existingSession!.linearSessionId, {
-            type: "response",
-            body: prUrl
-              ? `Implementation complete! PR: ${prUrl}`
-              : "Implementation complete! PR creation may have failed - please check manually.",
-          });
+          await createAgentActivity(
+            accessToken,
+            existingSession!.linearSessionId,
+            {
+              type: "response",
+              body: prUrl
+                ? `Implementation complete! PR: ${prUrl}`
+                : "Implementation complete! PR creation may have failed - please check manually.",
+            },
+          );
         }
       } catch (e) {
-        console.error(`[linear] Error auto-implementing ${issue.identifier}:`, e);
+        console.error(
+          `[linear] Error auto-implementing ${issue.identifier}:`,
+          e,
+        );
       }
     })();
   }
@@ -244,13 +277,15 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
 
 export async function handleAgentSession(
   webhook: AgentSessionWebhook,
-  tokens: LinearTokens
+  tokens: LinearTokens,
 ): Promise<Response> {
   const { agentSession, organizationId, action } = webhook;
 
   // Stop signal
   if (action === "prompted" && webhook.agentActivity?.signal === "stop") {
-    console.log(`[linear] Stop signal for issue: ${agentSession.issue.identifier}`);
+    console.log(
+      `[linear] Stop signal for issue: ${agentSession.issue.identifier}`,
+    );
     const session = activeSessions.get(agentSession.id);
     if (session) {
       if (session.abortController) {
@@ -270,18 +305,30 @@ export async function handleAgentSession(
 
     // Recover from disk
     if (!session) {
-      const branch = await generateBranchName(agentSession.issue.title, agentSession.issue.identifier);
+      const branch = await generateBranchName(
+        agentSession.issue.title,
+        agentSession.issue.identifier,
+      );
       const diskSession = await loadSessionInfo(branch);
       if (diskSession) {
-        console.log(`[linear] Recovered session from disk for branch: ${branch}`);
+        console.log(
+          `[linear] Recovered session from disk for branch: ${branch}`,
+        );
         // Older sessions may predate external links — idempotent by url
-        getValidToken(organizationId, tokens).then((t) => {
-          if (t) {
-            updateAgentSession(t, agentSession.id, {
-              addedExternalUrls: [{ url: opensessionSessionUrl(branch), label: `Open in ${personaName()}` }],
-            }).catch(() => {});
-          }
-        }).catch(() => {});
+        getValidToken(organizationId, tokens)
+          .then((t) => {
+            if (t) {
+              updateAgentSession(t, agentSession.id, {
+                addedExternalUrls: [
+                  {
+                    url: opensessionSessionUrl(branch),
+                    label: `Open in ${personaName()}`,
+                  },
+                ],
+              }).catch(() => {});
+            }
+          })
+          .catch(() => {});
         session = {
           ...diskSession,
           branch,
@@ -313,9 +360,14 @@ export async function handleAgentSession(
         // Track participant
         const promptUserId = webhook.agentActivity?.userId;
         if (promptUserId) {
-          const existingIdx = session.participants.findIndex((p) => p.id === promptUserId);
+          const existingIdx = session.participants.findIndex(
+            (p) => p.id === promptUserId,
+          );
           if (existingIdx === -1) {
-            const userParticipant = await fetchLinearUser(accessToken, promptUserId);
+            const userParticipant = await fetchLinearUser(
+              accessToken,
+              promptUserId,
+            );
             if (userParticipant) {
               session.participants.push(userParticipant);
               session.lastActiveUser = userParticipant;
@@ -333,11 +385,16 @@ export async function handleAgentSession(
 
           if (lowerPrompt.includes("plan")) {
             session.phase = "planning";
-            effectivePrompt = PLANNING_PROMPT
-              .replaceAll("$ISSUE_ID", session.issueIdentifier)
+            effectivePrompt = PLANNING_PROMPT.replaceAll(
+              "$ISSUE_ID",
+              session.issueIdentifier,
+            )
               .replaceAll("$ISSUE_URL", session.issueUrl)
               .replaceAll("$ISSUE_TITLE", session.issueTitle)
-              .replaceAll("$ISSUE_DESCRIPTION", session.issueDescription || "(No description)");
+              .replaceAll(
+                "$ISSUE_DESCRIPTION",
+                session.issueDescription || "(No description)",
+              );
 
             await createAgentActivity(accessToken, agentSession.id, {
               type: "thought",
@@ -345,17 +402,28 @@ export async function handleAgentSession(
             });
           } else if (lowerPrompt.includes("implement")) {
             session.phase = "working";
-            await moveToStatus(accessToken, session.issueId, session.teamId, "In Progress");
-
-            const { participantsSection, coAuthorInstruction } = buildParticipantSections(
-              session.participants || [],
-              session.lastActiveUser || null
+            await moveToStatus(
+              accessToken,
+              session.issueId,
+              session.teamId,
+              "In Progress",
             );
-            effectivePrompt = IMPLEMENTATION_PROMPT
-              .replaceAll("$ISSUE_ID", session.issueIdentifier)
+
+            const { participantsSection, coAuthorInstruction } =
+              buildParticipantSections(
+                session.participants || [],
+                session.lastActiveUser || null,
+              );
+            effectivePrompt = IMPLEMENTATION_PROMPT.replaceAll(
+              "$ISSUE_ID",
+              session.issueIdentifier,
+            )
               .replaceAll("$ISSUE_URL", session.issueUrl)
               .replaceAll("$ISSUE_TITLE", session.issueTitle)
-              .replaceAll("$ISSUE_DESCRIPTION", session.issueDescription || "(No description)")
+              .replaceAll(
+                "$ISSUE_DESCRIPTION",
+                session.issueDescription || "(No description)",
+              )
               .replaceAll("$PARTICIPANTS_SECTION", participantsSection)
               .replaceAll("$CO_AUTHOR_INSTRUCTION", coAuthorInstruction);
 
@@ -379,19 +447,27 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
         // Implementation confirmation
         else if (session.phase === "awaiting_implementation") {
           session.phase = "working";
-          const { participantsSection, coAuthorInstruction } = buildParticipantSections(
-            session.participants || [],
-            session.lastActiveUser || null
-          );
-          effectivePrompt = IMPLEMENTATION_PROMPT
-            .replaceAll("$ISSUE_ID", session.issueIdentifier)
+          const { participantsSection, coAuthorInstruction } =
+            buildParticipantSections(
+              session.participants || [],
+              session.lastActiveUser || null,
+            );
+          effectivePrompt = IMPLEMENTATION_PROMPT.replaceAll(
+            "$ISSUE_ID",
+            session.issueIdentifier,
+          )
             .replaceAll("$ISSUE_URL", session.issueUrl)
             .replaceAll("$ISSUE_TITLE", session.issueTitle)
             .replaceAll("$ISSUE_DESCRIPTION", session.issueDescription)
             .replaceAll("$PARTICIPANTS_SECTION", participantsSection)
             .replaceAll("$CO_AUTHOR_INSTRUCTION", coAuthorInstruction);
 
-          await moveToStatus(accessToken, session.issueId, session.teamId, "In Progress");
+          await moveToStatus(
+            accessToken,
+            session.issueId,
+            session.teamId,
+            "In Progress",
+          );
           await createAgentActivity(accessToken, agentSession.id, {
             type: "thought",
             body: MESSAGES.implementationStarted,
@@ -399,15 +475,25 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
         }
 
         // Planning continuation
-        if (session.phase === "planning" && session.planningConversation.length > 0) {
+        if (
+          session.phase === "planning" &&
+          session.planningConversation.length > 0
+        ) {
           session.planningConversation.push({
             role: "user",
             content: prompt,
             timestamp: new Date().toISOString(),
           });
-          effectivePrompt = PLANNING_CONTINUATION_PROMPT
-            .replaceAll("$ISSUE_ID", session.issueIdentifier)
-            .replaceAll("$CONVERSATION_HISTORY", formatConversationHistory(session.planningConversation.slice(0, -1)))
+          effectivePrompt = PLANNING_CONTINUATION_PROMPT.replaceAll(
+            "$ISSUE_ID",
+            session.issueIdentifier,
+          )
+            .replaceAll(
+              "$CONVERSATION_HISTORY",
+              formatConversationHistory(
+                session.planningConversation.slice(0, -1),
+              ),
+            )
             .replaceAll("$LATEST_RESPONSE", prompt);
         }
 
@@ -418,7 +504,7 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
         const issueId = agentSession.issue.id;
         if (inFlightPrompts.has(issueId)) {
           console.log(
-            `[linear] Refusing concurrent prompt for ${s.issueIdentifier} — a run is already in flight`
+            `[linear] Refusing concurrent prompt for ${s.issueIdentifier} — a run is already in flight`,
           );
           await createAgentActivity(accessToken, agentSession.id, {
             type: "response",
@@ -435,7 +521,7 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
               agentSession.id,
               accessToken,
               s.claudeSessionId || undefined,
-              s
+              s,
             );
 
             s.claudeSessionId = claudeSessionId;
@@ -456,10 +542,17 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
             });
 
             if (result) {
-              if (result.includes("PLANNING_COMPLETE") && s.phase === "planning") {
+              if (
+                result.includes("PLANNING_COMPLETE") &&
+                s.phase === "planning"
+              ) {
                 const planMatch = result.split("PLANNING_COMPLETE")[0].trim();
                 if (planMatch) {
-                  await postComment(accessToken, s.issueId, `# Implementation Plan\n\n${planMatch}`);
+                  await postComment(
+                    accessToken,
+                    s.issueId,
+                    `# Implementation Plan\n\n${planMatch}`,
+                  );
                 }
 
                 await moveToStatus(accessToken, s.issueId, s.teamId, "Ready");
@@ -486,14 +579,16 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
                   body: `${MESSAGES.planningComplete}\n\nReply when you're ready and I'll start implementing.`,
                 });
               } else if (result.includes("IMPLEMENTATION_COMPLETE")) {
-                const creatorGithub = linearEmailToGithubUsername(s.issueCreator?.email || null);
+                const creatorGithub = linearEmailToGithubUsername(
+                  s.issueCreator?.email || null,
+                );
                 const prUrl = await createPrWithAttribution(
                   s.worktreeDir,
                   s.issueIdentifier,
                   s.issueUrl,
                   s.issueTitle,
                   s.participants || [],
-                  creatorGithub
+                  creatorGithub,
                 );
 
                 await createAgentActivity(accessToken, agentSession.id, {
@@ -512,11 +607,12 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
                 }
                 // Planning-interview turns are questions by design → elicitation
                 // (Linear prompts the user to answer); runner failures → error.
-                const type = s.phase === "planning"
-                  ? "elicitation"
-                  : result.startsWith("Error:")
-                    ? "error"
-                    : "response";
+                const type =
+                  s.phase === "planning"
+                    ? "elicitation"
+                    : result.startsWith("Error:")
+                      ? "error"
+                      : "response";
                 await createAgentActivity(accessToken, agentSession.id, {
                   type,
                   body: result,
@@ -542,8 +638,13 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
 
   // Dismissed/ended — cleanup
   if (action === "dismissed" || action === "ended") {
-    console.log(`[linear] Session ${action} for issue: ${agentSession.issue.identifier}`);
-    const branch = await generateBranchName(agentSession.issue.title, agentSession.issue.identifier);
+    console.log(
+      `[linear] Session ${action} for issue: ${agentSession.issue.identifier}`,
+    );
+    const branch = await generateBranchName(
+      agentSession.issue.title,
+      agentSession.issue.identifier,
+    );
     try {
       deleteWorktree(branch);
       deleteSessionFile(branch);
@@ -572,7 +673,9 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
   }
 
   const { issue } = agentSession;
-  console.log(`[linear] New session for issue: ${issue.identifier} - ${issue.title}`);
+  console.log(
+    `[linear] New session for issue: ${issue.identifier} - ${issue.title}`,
+  );
 
   await createAgentActivity(accessToken, agentSession.id, {
     type: "thought",
@@ -607,7 +710,13 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
 
   (async () => {
     try {
-      await createWorktree(branch, issue.identifier, issue.title, issue.description || "", issue.url);
+      await createWorktree(
+        branch,
+        issue.identifier,
+        issue.title,
+        issue.description || "",
+        issue.url,
+      );
 
       await saveSessionInfo(branch, {
         claudeSessionId: null,
@@ -626,12 +735,18 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
 
       // Link the Linear session to the web UI session viewer
       updateAgentSession(accessToken, agentSession.id, {
-        addedExternalUrls: [{ url: opensessionSessionUrl(branch), label: `Open in ${personaName()}` }],
+        addedExternalUrls: [
+          {
+            url: opensessionSessionUrl(branch),
+            label: `Open in ${personaName()}`,
+          },
+        ],
       }).catch(() => {});
 
-      const greeting = GREETING_PROMPT
-        .replaceAll("$ISSUE_ID", issue.identifier)
-        .replaceAll("$ISSUE_TITLE", issue.title);
+      const greeting = GREETING_PROMPT.replaceAll(
+        "$ISSUE_ID",
+        issue.identifier,
+      ).replaceAll("$ISSUE_TITLE", issue.title);
 
       // The greeting asks for direction (plan/implement/other) → elicitation
       await createAgentActivity(accessToken, agentSession.id, {

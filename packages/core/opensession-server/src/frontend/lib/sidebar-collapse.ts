@@ -6,9 +6,9 @@ export const SIDEBAR_COLLAPSED_KEY = "opensession-sidebar-collapsed";
  * that explicit choice persists.
  */
 export function sidebarStartsCollapsed(): boolean {
-	return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
 }
 
 export function storeSidebarCollapsed(collapsed: boolean): void {
-	localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
 }

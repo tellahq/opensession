@@ -6,10 +6,7 @@ import type { CreationActorEffect } from "./creation-effect-protocol";
 import type { TurnActorRequest } from "./turn-protocol";
 import type { TimerActorRequest } from "./timer-protocol";
 import type { TranscriptActorRequest } from "./transcript-protocol";
-import type {
-  CreationEventDecision,
-  RunEventDecision,
-} from "./store";
+import type { CreationEventDecision, RunEventDecision } from "./store";
 
 export type RunFence = {
   runId: string;

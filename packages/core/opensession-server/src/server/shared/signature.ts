@@ -12,18 +12,20 @@ export function verifySlackSignature(
   body: string,
   timestamp: string,
   signature: string,
-  secret: string
+  secret: string,
 ): boolean {
   // An absent secret must never turn into a known, forgeable HMAC key.
   if (!secret) return false;
 
   // Reject requests older than 5 minutes
   const ts = Number(timestamp);
-  if (!Number.isSafeInteger(ts) || Math.abs(Date.now() / 1000 - ts) > 300) return false;
+  if (!Number.isSafeInteger(ts) || Math.abs(Date.now() / 1000 - ts) > 300)
+    return false;
 
   const sigBasestring = `v0:${timestamp}:${body}`;
   const expected =
-    "v0=" + createHmac("sha256", secret).update(sigBasestring, "utf8").digest("hex");
+    "v0=" +
+    createHmac("sha256", secret).update(sigBasestring, "utf8").digest("hex");
 
   try {
     return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
@@ -40,7 +42,7 @@ export function verifySlackSignature(
 export function verifyGitHubSignature(
   body: string,
   signature: string,
-  secret: string
+  secret: string,
 ): boolean {
   // An absent secret must never turn into a known, forgeable HMAC key.
   if (!secret) return false;
@@ -62,7 +64,7 @@ export function verifyGitHubSignature(
 export function verifyLinearSignature(
   body: string,
   signature: string,
-  secret: string
+  secret: string,
 ): boolean {
   if (!secret) return false;
   const computed = createHmac("sha256", secret).update(body).digest("hex");
@@ -83,7 +85,7 @@ export function verifyLinearSignature(
 export function verifyPlainSignature(
   body: string,
   signature: string,
-  secret: string
+  secret: string,
 ): boolean {
   if (!secret) return false;
   const computed = createHmac("sha256", secret).update(body).digest("hex");
@@ -106,21 +108,26 @@ export function verifyPlainSignature(
 export function verifyStripeSignature(
   body: string,
   signature: string,
-  secret: string
+  secret: string,
 ): boolean {
   if (!signature || !secret) return false;
 
   const parts = signature.split(",").map((p) => p.trim());
   const timestamp = parts.find((p) => p.startsWith("t="))?.slice(2);
   // A secret rotation yields multiple v1 signatures; accept a match on any.
-  const candidates = parts.filter((p) => p.startsWith("v1=")).map((p) => p.slice(3));
+  const candidates = parts
+    .filter((p) => p.startsWith("v1="))
+    .map((p) => p.slice(3));
   if (!timestamp || candidates.length === 0) return false;
 
   // Reject signatures outside a 5-minute tolerance (replay protection).
   const ts = parseInt(timestamp, 10);
-  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) return false;
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300)
+    return false;
 
-  const expected = createHmac("sha256", secret).update(`${timestamp}.${body}`, "utf8").digest("hex");
+  const expected = createHmac("sha256", secret)
+    .update(`${timestamp}.${body}`, "utf8")
+    .digest("hex");
   const expectedBuf = Buffer.from(expected);
 
   return candidates.some((candidate) => {

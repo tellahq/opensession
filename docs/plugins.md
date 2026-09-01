@@ -32,14 +32,14 @@ designs are wrong and why.
 
 ## The ask, and the two products hiding in it
 
-The starting brief was: *some features (tasks, notes) are not useful for
+The starting brief was: _some features (tasks, notes) are not useful for
 everyone, so make them plugins and give us a library to browse — like Obsidian.
 Eventually, people should be able to build their own tools on top of Open
-Session, alter the UI, and have those tools work directly with their sessions.*
+Session, alter the UI, and have those tools work directly with their sessions._
 
 That is two products, and they have almost nothing to do with each other:
 
-1. **A library.** Browse and install things that are *already data* in this
+1. **A library.** Browse and install things that are _already data_ in this
    codebase — MCP servers, automations, skills, feed projects — plus first-party
    features behind a real switch. Buildable now, no new architecture.
 2. **A plugin runtime.** Third-party code contributing UI surfaces. This is the
@@ -67,7 +67,7 @@ A tool defined as a **connected MCP server plus a feed descriptor**
 - the item's content injected into a session's opening prompt (the `context`
   spec in `feeds-config.ts`)
 
-Those last three bullets *are* "it works directly with all their chats." That
+Those last three bullets _are_ "it works directly with all their chats." That
 part is done.
 
 The gap is narrow and precise: **a feed can display items, but nothing can create
@@ -98,11 +98,11 @@ permission model, and — fatally — it creates a second data plane that **agen
 cannot reach**.
 
 Since an agent has to read and write the plugin's data anyway, the MCP server
-has to exist anyway. So the plugin's data API *is* its MCP server, reached from
+has to exist anyway. So the plugin's data API _is_ its MCP server, reached from
 the UI through one authenticated `POST /api/mcp/:server/:tool` proxy, scoped by
 the same allowlist and identity machinery sessions already use
-(`filterMcpServers`). One storage story, one permission story, and *anything the
-UI can do, a chat can do by construction* — the brief's headline requirement
+(`filterMcpServers`). One storage story, one permission story, and _anything the
+UI can do, a chat can do by construction_ — the brief's headline requirement
 falls out of the architecture instead of being built twice.
 
 The Obsidian-vault equivalent here is not an API at all: it is a directory per
@@ -113,11 +113,11 @@ pattern — notes, assets and feeds are each "an MCP surface with its own files.
 
 Three mechanisms were considered for third-party UI:
 
-| | Verdict |
-| --- | --- |
-| **iframe + postMessage host API** | No. Expensive to build, weakest expressiveness, and the hardest tier to secure. Keep iframes as what they are today — an escape hatch for embedding *external products* — and do not grow them a host API. |
-| **Build-time only** (npm dep + one registry line, rebuild) | Viable, and this is Backstage's model. But see below. |
-| **Runtime-loaded ESM bundle sharing one React instance** | Yes. |
+|                                                            | Verdict                                                                                                                                                                                                    |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **iframe + postMessage host API**                          | No. Expensive to build, weakest expressiveness, and the hardest tier to secure. Keep iframes as what they are today — an escape hatch for embedding _external products_ — and do not grow them a host API. |
+| **Build-time only** (npm dep + one registry line, rebuild) | Viable, and this is Backstage's model. But see below.                                                                                                                                                      |
+| **Runtime-loaded ESM bundle sharing one React instance**   | Yes.                                                                                                                                                                                                       |
 
 The third is what [bb](https://github.com/get-bb/bb) does, and it is strictly
 better than the other two: the plugin's own React is compiled to a separate ESM
@@ -128,8 +128,8 @@ reload is per-plugin; full UI power.
 
 Note what this costs and what it does not. It does **not** avoid a trust
 decision — see the security section. It does avoid the rebuild, which matters
-less here than anywhere else, because in this product *the agent is the
-installer*: the server rebuilds its own frontend in-process and runs code
+less here than anywhere else, because in this product _the agent is the
+installer_: the server rebuilds its own frontend in-process and runs code
 sessions against its own checkout. "Install a plugin" can legitimately be "ask a
 session to add the dep and rebuild." That is why the build-time tier is not
 obviously worse, and why the runtime tier should be judged on ergonomics rather
@@ -139,7 +139,7 @@ than on necessity.
 
 Ship a handful of primitives at most, and have plugins vendor component source
 (the shadcn model) rather than importing ours. bb learned this the expensive
-way: publishing dozens of component prop types makes *every* host component
+way: publishing dozens of component prop types makes _every_ host component
 change a plugin-breaking change.
 
 The corollary for everything else in the contract: **one blessed import
@@ -151,7 +151,7 @@ churned underneath.
 ### Host semantics arrive precomputed
 
 When a plugin draws something the host also draws — a status indicator, an
-unread state, a sort order — hand it the *already-resolved* answer, not the
+unread state, a sort order — hand it the _already-resolved_ answer, not the
 inputs. The plugin draws the glyph; it never re-implements the precedence rules.
 It then gets correct behaviour for free and cannot drift.
 
@@ -181,7 +181,7 @@ proposal.
 
 ### Install scope
 
-Installation is per-instance; *enablement* is per-project. Per-project
+Installation is per-instance; _enablement_ is per-project. Per-project
 installation would fragment the trust decision — vetting the same MCP server
 once per project — while scoping at point of use is already the pattern three
 times over (feeds scope `mcpServers`, automations carry allowlists, servers
@@ -229,7 +229,7 @@ push and Desk reach, is the acceptance test for whether the gate is genuine.
 
 Two rules that go beyond what comparable products enforce, because the blast
 radius here is bigger: an Open Session instance holds Slack, GitHub and Stripe
-credentials *and* runs autonomous agents over untrusted ticket text.
+credentials _and_ runs autonomous agents over untrusted ticket text.
 
 - **A plugin-originated session must be least-privilege.** Interactive runs
   currently receive `opensession-admin` and `opensession-sessions`. If a plugin
@@ -240,7 +240,7 @@ credentials *and* runs autonomous agents over untrusted ticket text.
   enabled, same-origin JavaScript cannot read the HttpOnly session token, but
   its API and WebSocket requests carry the browser's credentials and can act as
   the signed-in user. With web auth disabled there is no session token, and the
-  same-origin APIs remain reachable. The library may one-click *declarative*
+  same-origin APIs remain reachable. The library may one-click _declarative_
   entries only; code plugins go through an explicit trust prompt that a
   non-interactive caller cannot skip.
 
@@ -266,17 +266,17 @@ nowhere near worth freezing.
 The Library and data-package parts of phase 2 have shipped. The runtime and
 server-side feature gates remain proposed.
 
-| Phase | What | Why here |
-| --- | --- | --- |
-| 1 | MCP proxy route + schema-derived CRUD panel | Makes the backlog example real with no platform work, and gives every future plugin a working default UI |
-| 2 | Library browse UI + git-distributed data-package envelope; server-side feature gates for Tasks and any future Notes plugin | The installables already exist; this is the whole library value at near-zero architectural risk |
-| 3 | Surface registry: flat `PLUGINS: PluginDef[]` in one file, generic lookups replacing the hardcoded sites | Dogfood on Notes, Tasks and `slack-channel` — deleting those two ternaries is the proof the seam is real |
-| 4 | Plugin runtime: manifest block, server + app entry points, shared-runtime shim, scoped CSS, per-slot error boundaries, per-plugin reload | Only worth building once three first-party consumers have shaped the slots |
-| 5 | Scaffold (`bun create`), optimised for an *agent* to run — that is who will write most of these | |
+| Phase | What                                                                                                                                     | Why here                                                                                                 |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 1     | MCP proxy route + schema-derived CRUD panel                                                                                              | Makes the backlog example real with no platform work, and gives every future plugin a working default UI |
+| 2     | Library browse UI + git-distributed data-package envelope; server-side feature gates for Tasks and any future Notes plugin               | The installables already exist; this is the whole library value at near-zero architectural risk          |
+| 3     | Surface registry: flat `PLUGINS: PluginDef[]` in one file, generic lookups replacing the hardcoded sites                                 | Dogfood on Notes, Tasks and `slack-channel` — deleting those two ternaries is the proof the seam is real |
+| 4     | Plugin runtime: manifest block, server + app entry points, shared-runtime shim, scoped CSS, per-slot error boundaries, per-plugin reload | Only worth building once three first-party consumers have shaped the slots                               |
+| 5     | Scaffold (`bun create`), optimised for an _agent_ to run — that is who will write most of these                                          |                                                                                                          |
 
 Phase 3 is worth a note. It looks like a refactor and gets deprioritised for
 that reason, but it is the only phase the brief's UI requirement strictly needs,
-and it *reduces* collision pressure in the shared checkout rather than adding
+and it _reduces_ collision pressure in the shared checkout rather than adding
 it: today a new tool edits `App.tsx` and `Sidebar.tsx` in around eleven places;
 afterwards a fork touches one line in one small file plus its own directory. Do
 it as four small mechanical commits — generic `activeTool`/`onOpenTool` props,
@@ -319,5 +319,5 @@ component map — each landable in a single session.
   notes app rather than a credential concentrator.
 - **Backstage** — the "good boilerplate, build your own tools on our core"
   model, plugins as npm packages compiled into your app. Its lesson is that the
-  difference between a plugin and a patch is *rebaseability*, not runtime
+  difference between a plugin and a patch is _rebaseability_, not runtime
   loading.

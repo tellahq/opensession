@@ -12,9 +12,9 @@ export const BASE_PATH = "";
  *  ("/" rooted). Old deep links may still arrive prefixed (e.g. a stored
  *  post-login redirect target) before the server 301 normalizes them. */
 export function stripBasePath(pathname: string): string {
-	for (const prefix of ["/opensession", "/backstage"]) {
-		if (pathname === prefix) return "/";
-		if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length);
-	}
-	return pathname;
+  for (const prefix of ["/opensession", "/backstage"]) {
+    if (pathname === prefix) return "/";
+    if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length);
+  }
+  return pathname;
 }

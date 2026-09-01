@@ -46,7 +46,6 @@ describe("transcript snapshots", () => {
     expect(h.ready).toBe(true);
   });
 
-
   // A plain turn from a teammate, with a sibling session's transcript attached
   // as context. Proves the fence contract end to end: the store keeps the
   // human's message, the model gets the injected block, and the attribution
@@ -62,19 +61,24 @@ describe("transcript snapshots", () => {
       piSessionId: "ses_snap_attached",
     });
     await h.writeEngineTranscript("ses_snap_attached", [
-        {
-          type: "user",
-          uuid: "attached-1",
-          timestamp: "2026-01-01T00:00:00.000Z",
-          message: { role: "user", content: [{ type: "text", text: "why is the sweep slow?" }] },
+      {
+        type: "user",
+        uuid: "attached-1",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "why is the sweep slow?" }],
         },
+      },
       {
         type: "assistant",
         uuid: "attached-2",
         timestamp: "2026-01-01T00:00:01.000Z",
         message: {
           role: "assistant",
-          content: [{ type: "text", text: "It re-reads every shard on each tick." }],
+          content: [
+            { type: "text", text: "It re-reads every shard on each tick." },
+          ],
         },
       },
     ]);
@@ -96,7 +100,13 @@ describe("transcript snapshots", () => {
           kind: "clean",
           engineSessionId: "ses_snap_plain",
           text: ["The sweep re-reads every shard per tick."],
-          tools: [{ name: "bash", input: { command: "rg -n tick" }, result: "3 matches" }],
+          tools: [
+            {
+              name: "bash",
+              input: { command: "rg -n tick" },
+              result: "3 matches",
+            },
+          ],
         },
       ],
     });
@@ -132,7 +142,13 @@ describe("transcript snapshots", () => {
       content: "list what you can reach",
       user: "SnapshotOwner",
       collect: calls,
-      turns: [{ kind: "clean", engineSessionId: "ses_snap_mcp", text: ["Only alpha."] }],
+      turns: [
+        {
+          kind: "clean",
+          engineSessionId: "ses_snap_mcp",
+          text: ["Only alpha."],
+        },
+      ],
     });
 
     expect(calls[0].opts.mcpServers).toEqual([
@@ -164,7 +180,13 @@ describe("transcript snapshots", () => {
       content: "what can you reach on this turn?",
       user: "SnapshotOwner",
       collect: calls,
-      turns: [{ kind: "clean", engineSessionId: "ses_snap_session_mcp", text: ["Only alpha."] }],
+      turns: [
+        {
+          kind: "clean",
+          engineSessionId: "ses_snap_session_mcp",
+          text: ["Only alpha."],
+        },
+      ],
     });
 
     expect(calls[0].opts.mcpServers).toEqual(["snapshot-alpha"]);
@@ -208,12 +230,21 @@ describe("transcript snapshots", () => {
       content: "keep going",
       user: "SnapshotOwner",
       collect: calls,
-      turns: [{ kind: "clean", provider: "pi", engineSessionId: "pi-session-1", text: ["Continuing."] }],
+      turns: [
+        {
+          kind: "clean",
+          provider: "pi",
+          engineSessionId: "pi-session-1",
+          text: ["Continuing."],
+        },
+      ],
     });
 
     expect(calls).toHaveLength(2);
     // Pi is the only engine, so the second turn resumes the same engine session.
-    expect(calls[1].opts.sessionId).toBe("11111111-2222-4333-8444-555555555555");
+    expect(calls[1].opts.sessionId).toBe(
+      "11111111-2222-4333-8444-555555555555",
+    );
     expect(calls[1].prompt).toContain('<opensession:context source="handoff">');
     h.snapshot("engine-switch-handoff", { sessionId: sid, calls });
   });
@@ -242,10 +273,18 @@ describe("transcript snapshots", () => {
           },
         ],
         "user-snapshotuser": [
-          { id: "mem-user-1", text: "SnapshotUser prefers short reports.", by: "SnapshotUser" },
+          {
+            id: "mem-user-1",
+            text: "SnapshotUser prefers short reports.",
+            by: "SnapshotUser",
+          },
         ],
         workspace: [
-          { id: "mem-team-1", text: "Team fact: never push to the fixture remote.", by: "SnapshotOwner" },
+          {
+            id: "mem-team-1",
+            text: "Team fact: never push to the fixture remote.",
+            by: "SnapshotOwner",
+          },
         ],
       },
       async () => {
@@ -254,12 +293,20 @@ describe("transcript snapshots", () => {
           content: "How do this fixture repo's tests run?",
           user: "SnapshotUser",
           collect: calls,
-          turns: [{ kind: "clean", engineSessionId: "ses_snap_memory", text: ["Three standing facts."] }],
+          turns: [
+            {
+              kind: "clean",
+              engineSessionId: "ses_snap_memory",
+              text: ["Three standing facts."],
+            },
+          ],
         });
       },
     );
 
-    expect(calls[0].opts.prompt).toContain("tests only run from its own worktree");
+    expect(calls[0].opts.prompt).toContain(
+      "tests only run from its own worktree",
+    );
     h.snapshot("memory-scope-injection", { sessionId: sid, calls });
   });
 });

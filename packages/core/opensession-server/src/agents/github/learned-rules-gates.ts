@@ -45,7 +45,9 @@ const MIN_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export function validateDistilledRules(parsed: unknown): LearnedRule[] | null {
   const arr = Array.isArray(parsed)
     ? parsed
-    : parsed && typeof parsed === "object" && Array.isArray((parsed as any).rules)
+    : parsed &&
+        typeof parsed === "object" &&
+        Array.isArray((parsed as any).rules)
       ? (parsed as any).rules
       : null;
   if (!arr) return null;

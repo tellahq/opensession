@@ -25,8 +25,8 @@ import { join, resolve } from "path";
  * installed package's skill and a shipped one in the same place.
  */
 export const SHIPPED_SKILLS_DIR =
-	process.env.OPENSESSION_SKILLS_DIR ||
-	join(resolve(import.meta.dir, "../../../../.."), ".agents", "skills");
+  process.env.OPENSESSION_SKILLS_DIR ||
+  join(resolve(import.meta.dir, "../../../../.."), ".agents", "skills");
 
 /**
  * Every skills directory a run in `worktreeDir` loads, most specific first.
@@ -34,34 +34,37 @@ export const SHIPPED_SKILLS_DIR =
  * that does not exist, and most checkouts carry neither directory.
  */
 export function skillSearchPaths(worktreeDir?: string): string[] {
-	const candidates = [
-		...(worktreeDir
-			? [join(worktreeDir, ".claude", "skills"), join(worktreeDir, ".agents", "skills")]
-			: []),
-		SHIPPED_SKILLS_DIR,
-	];
-	const seen = new Set<string>();
-	const out: string[] = [];
-	for (const dir of candidates) {
-		if (!existsSync(dir)) continue;
-		// A session on this repo has the shipped directory as its own project
-		// directory; loading it twice would report every skill as a collision.
-		let key = resolve(dir);
-		try {
-			key = realpathSync(key);
-		} catch {}
-		if (seen.has(key)) continue;
-		seen.add(key);
-		out.push(dir);
-	}
-	return out;
+  const candidates = [
+    ...(worktreeDir
+      ? [
+          join(worktreeDir, ".claude", "skills"),
+          join(worktreeDir, ".agents", "skills"),
+        ]
+      : []),
+    SHIPPED_SKILLS_DIR,
+  ];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const dir of candidates) {
+    if (!existsSync(dir)) continue;
+    // A session on this repo has the shipped directory as its own project
+    // directory; loading it twice would report every skill as a collision.
+    let key = resolve(dir);
+    try {
+      key = realpathSync(key);
+    } catch {}
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(dir);
+  }
+  return out;
 }
 
 /** The fields of pi's `Skill` this module needs. */
 export interface LoadedSkill {
-	name: string;
-	filePath: string;
-	baseDir: string;
+  name: string;
+  filePath: string;
+  baseDir: string;
 }
 
 /**
@@ -79,23 +82,28 @@ export interface LoadedSkill {
  * Byte-for-byte the same block as pi's `_expandSkillCommand`, so a session
  * that later resumes through pi sees one consistent shape.
  */
-export function expandSkillCommand(text: string, skills: LoadedSkill[]): string {
-	if (!text.startsWith("/")) return text;
-	const match = text.match(/^\/(\S+)(?:\s+([\s\S]*))?$/);
-	if (!match) return text;
-	const requested = match[1].startsWith("skill:") ? match[1].slice(6) : match[1];
-	const args = (match[2] || "").trim();
-	const skill = skills.find((s) => s.name === requested);
-	if (!skill) return text;
-	try {
-		const body = readFileSync(skill.filePath, "utf8")
-			.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
-			.trim();
-		const block =
-			`<skill name="${skill.name}" location="${skill.filePath}">\n` +
-			`References are relative to ${skill.baseDir}.\n\n${body}\n</skill>`;
-		return args ? `${block}\n\n${args}` : block;
-	} catch {
-		return text;
-	}
+export function expandSkillCommand(
+  text: string,
+  skills: LoadedSkill[],
+): string {
+  if (!text.startsWith("/")) return text;
+  const match = text.match(/^\/(\S+)(?:\s+([\s\S]*))?$/);
+  if (!match) return text;
+  const requested = match[1].startsWith("skill:")
+    ? match[1].slice(6)
+    : match[1];
+  const args = (match[2] || "").trim();
+  const skill = skills.find((s) => s.name === requested);
+  if (!skill) return text;
+  try {
+    const body = readFileSync(skill.filePath, "utf8")
+      .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
+      .trim();
+    const block =
+      `<skill name="${skill.name}" location="${skill.filePath}">\n` +
+      `References are relative to ${skill.baseDir}.\n\n${body}\n</skill>`;
+    return args ? `${block}\n\n${args}` : block;
+  } catch {
+    return text;
+  }
 }

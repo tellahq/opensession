@@ -63,7 +63,8 @@ export interface RouterConfig {
 
 function readConfigFile(): { prompt?: string; basicModel?: string } {
   try {
-    if (existsSync(CONFIG_PATH)) return JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+    if (existsSync(CONFIG_PATH))
+      return JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
   } catch (e) {
     console.error("[plain] Failed to read router config:", e);
   }
@@ -72,7 +73,10 @@ function readConfigFile(): { prompt?: string; basicModel?: string } {
 
 export function getRouterConfig(): RouterConfig {
   const file = readConfigFile();
-  const prompt = typeof file.prompt === "string" && file.prompt.trim() ? file.prompt : DEFAULT_ROUTER_PROMPT;
+  const prompt =
+    typeof file.prompt === "string" && file.prompt.trim()
+      ? file.prompt
+      : DEFAULT_ROUTER_PROMPT;
   const basicModel =
     typeof file.basicModel === "string" && resolveModel(file.basicModel)
       ? resolveModel(file.basicModel)!.id
@@ -107,7 +111,9 @@ export function setRouterConfig(patch: {
 }
 
 /** Route a ticket. Returns null when no verdict could be reached (fail open → full triage). */
-export async function classifyTicketRoute(ticketContent: string): Promise<RouteVerdict | null> {
+export async function classifyTicketRoute(
+  ticketContent: string,
+): Promise<RouteVerdict | null> {
   try {
     // Untrusted ticket text — the one-shot is tool-less by construction, so
     // the content can only influence the classification, never act.
@@ -123,11 +129,18 @@ export async function classifyTicketRoute(ticketContent: string): Promise<RouteV
 
     const match = resultText.match(/\{[\s\S]*?\}/);
     if (!match) {
-      console.error(`[plain] Ticket router returned no JSON: ${resultText.slice(0, 200)}`);
+      console.error(
+        `[plain] Ticket router returned no JSON: ${resultText.slice(0, 200)}`,
+      );
       return null;
     }
     const parsed = JSON.parse(match[0]);
-    if (parsed.route !== "spam" && parsed.route !== "basic" && parsed.route !== "full") return null;
+    if (
+      parsed.route !== "spam" &&
+      parsed.route !== "basic" &&
+      parsed.route !== "full"
+    )
+      return null;
     return {
       route: parsed.route,
       reason: typeof parsed.reason === "string" ? parsed.reason : "",

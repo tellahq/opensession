@@ -25,7 +25,13 @@
  *   bun scripts/papercuts-prune-machine.ts          # dry run
  *   bun scripts/papercuts-prune-machine.ts --apply  # rewrite the day files
  */
-import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "fs";
 import { stateDir } from "../packages/core/opensession-server/src/server/paths";
 
 /** The stable opening of silentDropMessage(). Matching the whole string would
@@ -88,4 +94,6 @@ for (const day of perDay) {
   copyFileSync(path, `${path}.bak`);
   writeFileSync(path, day.keep.length ? `${day.keep.join("\n")}\n` : "");
 }
-console.log(`\nRewrote ${perDay.length} day file(s); each original is beside it as .bak.`);
+console.log(
+  `\nRewrote ${perDay.length} day file(s); each original is beside it as .bak.`,
+);

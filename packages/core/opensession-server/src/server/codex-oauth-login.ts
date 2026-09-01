@@ -59,8 +59,9 @@ export interface CodexOauthLoginStart {
   name: string;
 }
 
-const pending: Map<string, PendingLogin> = ((globalThis as any).__codexOauthLogins ??=
-  new Map());
+const pending: Map<string, PendingLogin> = ((
+  globalThis as any
+).__codexOauthLogins ??= new Map());
 
 function prune(): void {
   const now = Date.now();
@@ -86,7 +87,7 @@ function jwtClaims(jwt: string): any {
 /** Begin a PKCE sign-in that will create pool account `name` on completion. */
 export async function startCodexOauthLogin(
   name = "",
-  owner?: string
+  owner?: string,
 ): Promise<CodexOauthLoginStart | { error: string }> {
   prune();
   const loginId = crypto.randomUUID();
@@ -94,7 +95,10 @@ export async function startCodexOauthLogin(
   // its email from the returned ID token; `name` remains a compatibility input
   // for older clients that still send one.
   const trimmed = name.trim() || `chatgpt-${loginId.slice(0, 8)}`;
-  const slug = trimmed.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  const slug = trimmed
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   if (!slug) return { error: "Name must contain letters or digits" };
   if (listCodexAccounts().some((a) => a.name === trimmed)) {
     return { error: `An account named "${trimmed}" already exists` };
@@ -106,7 +110,9 @@ export async function startCodexOauthLogin(
   }
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(64)));
   const challenge = b64url(
-    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)))
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
+    ),
   );
   const login: PendingLogin = {
     id: loginId,
@@ -138,13 +144,16 @@ export async function startCodexOauthLogin(
  *  authorization code. */
 function parsePastedCode(
   pasted: string,
-  expectedState: string
+  expectedState: string,
 ): { code: string } | { error: string } {
   const cleaned = pasted.trim();
-  if (!cleaned) return { error: "Paste the full localhost URL from the address bar." };
+  if (!cleaned)
+    return { error: "Paste the full localhost URL from the address bar." };
   if (cleaned.includes("://") || cleaned.startsWith("localhost")) {
     try {
-      const url = new URL(cleaned.includes("://") ? cleaned : `http://${cleaned}`);
+      const url = new URL(
+        cleaned.includes("://") ? cleaned : `http://${cleaned}`,
+      );
       const code = url.searchParams.get("code");
       if (!code) {
         return {
@@ -155,11 +164,17 @@ function parsePastedCode(
       }
       const state = url.searchParams.get("state");
       if (state && state !== expectedState) {
-        return { error: "State mismatch — this paste belongs to a different sign-in attempt. Start again." };
+        return {
+          error:
+            "State mismatch — this paste belongs to a different sign-in attempt. Start again.",
+        };
       }
       return { code };
     } catch {
-      return { error: "Couldn't parse that as a URL — paste the full address bar contents." };
+      return {
+        error:
+          "Couldn't parse that as a URL — paste the full address bar contents.",
+      };
     }
   }
   return { code: cleaned };
@@ -172,7 +187,7 @@ function parsePastedCode(
  */
 export async function completeCodexOauthLogin(
   id: string,
-  pasted: string
+  pasted: string,
 ): Promise<{ account: CodexAccountPublic } | { error: string }> {
   prune();
   const login = pending.get(id);
@@ -199,7 +214,9 @@ export async function completeCodexOauthLogin(
   }
   if (!res.ok) {
     const detail = (await res.text().catch(() => "")).slice(0, 200);
-    return { error: `Token exchange failed (HTTP ${res.status})${detail ? `: ${detail}` : ""}` };
+    return {
+      error: `Token exchange failed (HTTP ${res.status})${detail ? `: ${detail}` : ""}`,
+    };
   }
   const body: any = await res.json().catch(() => null);
   if (!body?.access_token || !body?.refresh_token) {
@@ -209,10 +226,12 @@ export async function completeCodexOauthLogin(
   // id_token's auth claim. Absent is tolerable — the CLI re-derives it on its
   // next real login — but log it, since backend calls may need it.
   const accountId: string | undefined =
-    jwtClaims(body.id_token || "")?.["https://api.openai.com/auth"]?.chatgpt_account_id ||
-    undefined;
+    jwtClaims(body.id_token || "")?.["https://api.openai.com/auth"]
+      ?.chatgpt_account_id || undefined;
   if (!accountId) {
-    console.warn(`[codex-oauth-login] ${login.name}: id_token carried no chatgpt_account_id`);
+    console.warn(
+      `[codex-oauth-login] ${login.name}: id_token carried no chatgpt_account_id`,
+    );
   }
 
   const dir = `${ACCOUNTS_DIR}/${login.slug}`;
@@ -232,8 +251,8 @@ export async function completeCodexOauthLogin(
         last_refresh: new Date().toISOString(),
       },
       null,
-      2
-    ) + "\n"
+      2,
+    ) + "\n",
   );
   chmodSync(`${dir}/auth.json`, 0o600);
   pending.delete(id);
@@ -242,7 +261,9 @@ export async function completeCodexOauthLogin(
   if ("error" in result) {
     return { error: `Signed in, but registering failed: ${result.error}` };
   }
-  console.log(`[codex-oauth-login] ${login.name} signed in and registered (${dir})`);
+  console.log(
+    `[codex-oauth-login] ${login.name} signed in and registered (${dir})`,
+  );
   return { account: result };
 }
 

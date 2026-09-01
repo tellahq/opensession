@@ -33,6 +33,18 @@ export interface SkillEntry {
  */
 const BUILTIN_COMMANDS: SkillEntry[] = [
   {
+    name: "pstack",
+    description:
+      "Enable rigorous pstack mode for this session (/pstack <task>, /pstack off)",
+    source: "builtin",
+  },
+  {
+    name: "poteto-mode",
+    description:
+      "Enable Poteto mode for this session (/poteto-mode <task>, /poteto-mode off)",
+    source: "builtin",
+  },
+  {
     name: "compact",
     description:
       "Summarize the conversation so far to shrink context and cost (Claude sessions only)",
@@ -118,7 +130,8 @@ function readSkillsDir(
           const text = readFileSync(md, "utf8");
           out.push({
             name: frontmatterField(text, "name") || name.name,
-            description: frontmatterField(text, "description") || firstContentLine(text),
+            description:
+              frontmatterField(text, "description") || firstContentLine(text),
             source,
           });
         } catch {}
@@ -131,7 +144,10 @@ function readSkillsDir(
 }
 
 /** All skills a run in `worktreeDir` would see (deduped by name; the directory the run would load it from wins). */
-function loadSkills(worktreeDir?: string, includeBuiltins = false): SkillEntry[] {
+function loadSkills(
+  worktreeDir?: string,
+  includeBuiltins = false,
+): SkillEntry[] {
   const key = `${includeBuiltins ? "b|" : ""}${worktreeDir || ""}`;
   const hit = cache.get(key);
   if (hit && performance.now() - hit.at < CACHE_TTL_MS) return hit.entries;
@@ -145,7 +161,9 @@ function loadSkills(worktreeDir?: string, includeBuiltins = false): SkillEntry[]
     ...skillSearchPaths(worktreeDir)
       .slice()
       .reverse()
-      .flatMap((dir) => readSkillsDir(dir, resolve(dir) === shipped ? "user" : "project")),
+      .flatMap((dir) =>
+        readSkillsDir(dir, resolve(dir) === shipped ? "user" : "project"),
+      ),
     // Last so they win dedupe: opensession intercepts these names before any
     // same-named file skill could run, so the menu should describe the builtin.
     // Only for existing-session composers (includeBuiltins) — an opening prompt

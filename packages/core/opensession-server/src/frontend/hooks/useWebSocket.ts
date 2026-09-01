@@ -1,4 +1,13 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import {
+  use,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+} from "react";
+import { useAtomValue } from "@effect/atom-react/Hooks";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { WSServerMessage, WSClientMessage } from "../lib/types";
 import { API_BASE, getWebSocketUrl } from "../lib/api";
 import { countSessionPerf } from "../lib/session-performance";
@@ -12,13 +21,15 @@ import {
   shouldRetireCommandResult,
   wsCommandOutboxForScope,
 } from "../lib/ws-command-outbox";
+import { webSocketReconnectDelay } from "../lib/ws-reconnect";
+import { IGNORE_WS_MESSAGES, type SessionSocket } from "./useSessionSocket";
+import { makeSessionSocketRuntime } from "../lib/session-socket-runtime";
 
 // Liveness probe cadence. iOS/Safari kills backgrounded sockets without firing
 // onclose, leaving a half-open socket that reads as OPEN but delivers nothing —
 // the "session frozen until refresh" trap. We ping over the app protocol (browsers
 // can't send WS protocol pings) and force-close if nothing arrives back, which
 // triggers the normal reconnect + re-watch path.
-const HEARTBEAT_MS = 20_000;
 // Tighter deadline for the visibility-resume probe: coming back to a
 // backgrounded PWA is exactly when the socket is most likely dead.
 const RESUME_PROBE_MS = 4_000;
@@ -38,39 +49,12 @@ const ACTIVE_REFRESH_MS = 60_000;
 // A pause retires it promptly even when the draft stays in the field.
 const TYPING_REFRESH_MS = 2_000;
 const TYPING_IDLE_MS = 3_000;
-// What proves a person is at the keyboard. Passive and cheap: the handler
-// throttles itself to one call a second.
-const ACTIVITY_EVENTS = [
-  "pointerdown",
-  "pointermove",
-  "keydown",
-  "wheel",
-  "touchstart",
-] as const;
-
 /**
  * One UI WebSocket. `presenceActive` controls only whether this surface may
  * claim the user's presence; its watch and transcript stream stay alive. This
  * matters for persistent/background surfaces such as the unfocused half of a
  * split and the dismissed Desk overlay.
  */
-
-// Teardown helpers for the socket effect. They read the refs' LATEST values at
-// cleanup time on purpose — that is what "dispose whatever is live now" means —
-// and live at module scope so the effect-cleanup analysis sees plain calls.
-function clearSocketTimers(
-  reconnectTimer: { current: ReturnType<typeof setTimeout> | undefined },
-  idleTimer: { current: ReturnType<typeof setTimeout> | undefined },
-  typingRef: {
-    current: { timer?: ReturnType<typeof setTimeout> };
-  },
-  heartbeat: ReturnType<typeof setInterval> | undefined,
-) {
-  clearTimeout(reconnectTimer.current);
-  clearInterval(heartbeat);
-  clearTimeout(idleTimer.current);
-  clearTimeout(typingRef.current.timer);
-}
 
 function flushTypingOffSignal(
   typingRef: {
@@ -95,12 +79,12 @@ function flushTypingOffSignal(
 }
 
 export function useWebSocket(presenceActive = true) {
-  const [connected, setConnected] = useState(false);
+  const registry = use(RegistryContext);
+  const [runtime] = useState(() => makeSessionSocketRuntime({ registry }));
+  const connected = useAtomValue(runtime.connectedAtom);
+  const setConnected = runtime.setConnected;
   const wsRef = useRef<WebSocket | null>(null);
   const handlersRef = useRef<((msg: WSServerMessage) => void)[]>([]);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
   // Set on unmount so a straggling onclose (close() fires it async) can't
   // schedule a fresh reconnect into a dead component — the zombie-loop trap.
   const disposedRef = useRef(false);
@@ -113,6 +97,9 @@ export function useWebSocket(presenceActive = true) {
   // never opens and the upgrade 401s for ever. Reloading on that would be an
   // endless refresh of the sign-in card.
   const everOpenRef = useRef(false);
+  // A graceful handoff gets a bounded fast reconnect loop until a replacement
+  // server completes its hello. Ordinary outages retain the calmer 2s backoff.
+  const handoffPendingRef = useRef(false);
   const commandResultsRef = useRef(false);
   const commandOutboxRef = useRef(wsCommandOutboxForScope(localCommandScope()));
   const commandNegotiatedRef = useRef(false);
@@ -126,14 +113,10 @@ export function useWebSocket(presenceActive = true) {
     presenceActiveRef.current = presenceActive;
   }, [presenceActive]);
   const syncPresenceRef = useRef<() => void>(() => {});
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
   const typingRef = useRef<{
     sessionId: string;
     active: boolean;
     lastSent: number;
-    timer?: ReturnType<typeof setTimeout>;
   }>({ sessionId: "", active: false, lastSent: 0 });
   // Outbound messages issued while the socket wasn't OPEN (wifi switch, server
   // restart, PWA resume): held here and flushed in order on the next onopen, so
@@ -159,13 +142,23 @@ export function useWebSocket(presenceActive = true) {
     wsRef.current = ws;
     aliveRef.current = true;
 
-    const finishCommandNegotiation = (supported: boolean, commandScope?: string) => {
+    const finishCommandNegotiation = (
+      supported: boolean,
+      commandScope?: string,
+    ) => {
       if (wsRef.current !== ws || commandNegotiatedRef.current) return;
       commandResultsRef.current = supported;
-      const commandOutbox = wsCommandOutboxForScope(commandScope || localCommandScope());
+      const commandOutbox = wsCommandOutboxForScope(
+        commandScope || localCommandScope(),
+      );
       const provisional = wsCommandOutboxForScope(localCommandScope());
       commandOutboxRef.current = commandOutbox;
-      try { localStorage.setItem("opensession-command-scope", commandScope || localCommandScope()); } catch {}
+      try {
+        localStorage.setItem(
+          "opensession-command-scope",
+          commandScope || localCommandScope(),
+        );
+      } catch {}
       const inMemory = [...negotiatingCommandsRef.current.values()];
       negotiatingCommandsRef.current.clear();
       commandNegotiatedRef.current = true;
@@ -183,12 +176,16 @@ export function useWebSocket(presenceActive = true) {
         return;
       }
       for (const ack of commandOutbox.pendingAcks()) {
-        try { ws.send(JSON.stringify(ack)); } catch {}
+        try {
+          ws.send(JSON.stringify(ack));
+        } catch {}
       }
       const existing = commandOutbox.pending();
       const existingIds = new Set(existing.map((command) => command.requestId));
       for (const command of existing) {
-        try { ws.send(JSON.stringify(command)); } catch {}
+        try {
+          ws.send(JSON.stringify(command));
+        } catch {}
       }
       const candidates = new Map<string, WSClientMessage>();
       for (const candidate of [...provisional.pending(), ...inMemory])
@@ -247,17 +244,16 @@ export function useWebSocket(presenceActive = true) {
       try {
         const msg = JSON.parse(e.data) as WSServerMessage;
         if (!commandNegotiatedRef.current) {
-          if (msg.type === "hello")
+          if (msg.type === "hello") {
+            handoffPendingRef.current = false;
             finishCommandNegotiation(
               msg.capabilities?.commandResults === true,
               msg.commandScope,
             );
-          else finishCommandNegotiation(false);
+          } else finishCommandNegotiation(false);
         }
-        if (
-          msg.type === "command_result" &&
-          shouldRetireCommandResult(msg)
-        ) {
+        if (msg.type === "server_restarting") handoffPendingRef.current = true;
+        if (msg.type === "command_result" && shouldRetireCommandResult(msg)) {
           const acknowledged = commandOutboxRef.current.ack(
             msg.requestId,
             msg.sessionId,
@@ -278,9 +274,12 @@ export function useWebSocket(presenceActive = true) {
           for (const [requestId, command] of negotiatingCommandsRef.current) {
             if (!commandOutboxRef.current.put(command)) continue;
             negotiatingCommandsRef.current.delete(requestId);
-            try { ws.send(JSON.stringify(command)); } catch {}
+            try {
+              ws.send(JSON.stringify(command));
+            } catch {}
             const provisional = wsCommandOutboxForScope(localCommandScope());
-            if (provisional !== commandOutboxRef.current) provisional.forget(requestId);
+            if (provisional !== commandOutboxRef.current)
+              provisional.forget(requestId);
           }
           return;
         }
@@ -369,11 +368,15 @@ export function useWebSocket(presenceActive = true) {
         } catch {}
       }
       if (disposedRef.current || wsRef.current !== ws) return;
-      reconnectTimer.current = setTimeout(() => connectRef.current(), 2000);
+      runtime.schedule(
+        "reconnect",
+        webSocketReconnectDelay(event.code, handoffPendingRef.current),
+        () => connectRef.current(),
+      );
     };
 
     ws.onerror = () => ws.close();
-  }, []);
+  }, [runtime, setConnected]);
   useLayoutEffect(() => {
     connectRef.current = connect;
   }, [connect]);
@@ -382,23 +385,6 @@ export function useWebSocket(presenceActive = true) {
     disposedRef.current = false;
     const cancelInitialConnect = whenCurrentUserReady(() => connect());
 
-    // Steady-state heartbeat: ping every beat; a socket that answered nothing
-    // since the previous ping is dead — close it so onclose reconnects.
-    const heartbeat = setInterval(() => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      if (!aliveRef.current) {
-        try {
-          ws.close();
-        } catch {}
-        return;
-      }
-      aliveRef.current = false;
-      try {
-        ws.send('{"type":"ping"}');
-      } catch {}
-    }, HEARTBEAT_MS);
-
     // Foregrounding the tab/PWA (or the network coming back): reconnect a
     // closed socket immediately (skip the 2s backoff), and probe an "open" one
     // right away — if the probe gets no answer, close → reconnect.
@@ -406,7 +392,7 @@ export function useWebSocket(presenceActive = true) {
       if (disposedRef.current) return;
       const ws = wsRef.current;
       if (!ws || ws.readyState === WebSocket.CLOSED) {
-        clearTimeout(reconnectTimer.current);
+        runtime.cancel("reconnect");
         connect();
         return;
       }
@@ -415,14 +401,14 @@ export function useWebSocket(presenceActive = true) {
       try {
         ws.send('{"type":"ping"}');
       } catch {}
-      setTimeout(() => {
+      runtime.schedule("resume-probe", RESUME_PROBE_MS, () => {
         // Only judge the same socket we probed — it may have been replaced.
         if (wsRef.current === ws && !aliveRef.current) {
           try {
             ws.close();
           } catch {}
         }
-      }, RESUME_PROBE_MS);
+      });
     };
     // Presence follows attention: this window is visible AND focused AND its
     // owner has touched it recently. The watch deliberately outlives all three
@@ -447,7 +433,7 @@ export function useWebSocket(presenceActive = true) {
       document.hasFocus();
     const syncPresence = () => {
       if (!focused()) {
-        clearTimeout(idleTimer.current);
+        runtime.cancel("presence-idle");
         sendAway(true);
         return;
       }
@@ -467,61 +453,9 @@ export function useWebSocket(presenceActive = true) {
       // reader who has stopped moving simply stops paying it, and their face
       // comes off — which is the point.
       sendAway(false, now - lastSentAway >= ACTIVE_REFRESH_MS);
-      clearTimeout(idleTimer.current);
-      idleTimer.current = setTimeout(() => sendAway(true), IDLE_MS);
+      runtime.schedule("presence-idle", IDLE_MS, () => sendAway(true));
     }
     syncPresenceRef.current = syncPresence;
-    // Disposal marks. Kept in a setup-scope helper so teardown reads/writes
-    // the latest refs without touching them directly in the cleanup body.
-    const stopPresence = () => {
-      disposedRef.current = true;
-      syncPresenceRef.current = () => {};
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") {
-        resync();
-      }
-      syncPresence();
-    };
-    const onFocus = () => {
-      resync();
-      syncPresence();
-    };
-    syncPresence();
-    for (const type of ACTIVITY_EVENTS)
-      window.addEventListener(type, onActivity, { passive: true });
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("focus", onFocus);
-    window.addEventListener("blur", syncPresence);
-    window.addEventListener("online", resync);
-    window.addEventListener("pageshow", resync);
-
-    return () => {
-      stopPresence();
-      cancelInitialConnect();
-      clearSocketTimers(reconnectTimer, idleTimer, typingRef, heartbeat);
-      flushTypingOffSignal(typingRef, wsRef);
-      for (const type of ACTIVITY_EVENTS)
-        window.removeEventListener(type, onActivity);
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("blur", syncPresence);
-      window.removeEventListener("online", resync);
-      window.removeEventListener("pageshow", resync);
-      const closeTarget = () => wsRef.current;
-      closeTarget()?.close();
-    };
-  }, [connect]);
-
-  // A mounted surface can become foreground/background without replacing its
-  // socket (split focus changes; the Desk opens and closes). Re-evaluate its
-  // presence immediately instead of waiting for the next pointer or focus event.
-  useEffect(() => {
-    syncPresenceRef.current();
-  }, [presenceActive]);
-
-
-  useEffect(() => {
     const reconnectForIdentity = () => {
       commandNegotiatedRef.current = false;
       commandResultsRef.current = false;
@@ -530,18 +464,57 @@ export function useWebSocket(presenceActive = true) {
       oldSocket?.close();
       connect();
     };
-    window.addEventListener("opensession-user-changed", reconnectForIdentity);
-    window.addEventListener("opensession-command-outbox-retry", reconnectForIdentity);
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === "opensession-user") reconnectForIdentity();
+    // Disposal marks. Kept in a setup-scope helper so teardown reads/writes
+    // the latest refs without touching them directly in the cleanup body.
+    const stopPresence = () => {
+      disposedRef.current = true;
+      syncPresenceRef.current = () => {};
     };
-    window.addEventListener("storage", onStorage);
+    runtime.configure({
+      heartbeat: () => {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        if (!aliveRef.current) {
+          try {
+            ws.close();
+          } catch {}
+          return;
+        }
+        aliveRef.current = false;
+        try {
+          ws.send('{"type":"ping"}');
+        } catch {}
+      },
+      resync,
+      syncPresence,
+      activity: onActivity,
+      reconnectIdentity: reconnectForIdentity,
+      storage: (event) => {
+        if ("key" in event && event.key === "opensession-user")
+          reconnectForIdentity();
+      },
+    });
+    const stopRuntime = runtime.start();
+
     return () => {
-      window.removeEventListener("opensession-user-changed", reconnectForIdentity);
-      window.removeEventListener("opensession-command-outbox-retry", reconnectForIdentity);
-      window.removeEventListener("storage", onStorage);
+      stopPresence();
+      cancelInitialConnect();
+      flushTypingOffSignal(typingRef, wsRef);
+      stopRuntime();
+      const closeTarget = wsRef.current;
+      // Fence every late callback before close dispatches its asynchronous
+      // event. A disposed registry must never receive a stale setConnected.
+      wsRef.current = null;
+      closeTarget?.close();
     };
-  }, [connect]);
+  }, [connect, runtime]);
+
+  // A mounted surface can become foreground/background without replacing its
+  // socket (split focus changes; the Desk opens and closes). Re-evaluate its
+  // presence immediately instead of waiting for the next pointer or focus event.
+  useEffect(() => {
+    syncPresenceRef.current();
+  }, [presenceActive]);
 
   const send = useCallback(
     (msg: WSClientMessage) => {
@@ -553,11 +526,13 @@ export function useWebSocket(presenceActive = true) {
       if (mutationRequestId && !commandNegotiatedRef.current) {
         const provisional = wsCommandOutboxForScope(localCommandScope());
         if (!provisional.put(msg))
-          throw new Error("Pending sends are using local storage. Reconnect or forget one before sending more.");
+          throw new Error(
+            "Pending sends are using local storage. Reconnect or forget one before sending more.",
+          );
         negotiatingCommandsRef.current.set(mutationRequestId, msg);
         const pendingSocket = wsRef.current;
         if (!pendingSocket || pendingSocket.readyState === WebSocket.CLOSED) {
-          clearTimeout(reconnectTimer.current);
+          runtime.cancel("reconnect");
           connect();
         }
         return;
@@ -566,7 +541,9 @@ export function useWebSocket(presenceActive = true) {
         ? commandOutboxRef.current.put(msg)
         : false;
       if (mutationRequestId && commandResultsRef.current && !durableMutation)
-        throw new Error("Could not save this command for reconnect. It was not sent.");
+        throw new Error(
+          "Could not save this command for reconnect. It was not sent.",
+        );
       if (msg.type === "watch") {
         const cursor = feedCursorsRef.current.get(msg.sessionId);
         msg = {
@@ -592,7 +569,7 @@ export function useWebSocket(presenceActive = true) {
       // Durable mutations replay from their receipt outbox after reconnect.
       if (durableMutation) {
         if (!ws || ws.readyState === WebSocket.CLOSED) {
-          clearTimeout(reconnectTimer.current);
+          runtime.cancel("reconnect");
           connect();
         }
         return;
@@ -606,57 +583,61 @@ export function useWebSocket(presenceActive = true) {
       // Don't wait out the 2s backoff — try to reconnect right now so the
       // queued message goes out as soon as possible.
       if (!ws || ws.readyState === WebSocket.CLOSED) {
-        clearTimeout(reconnectTimer.current);
+        runtime.cancel("reconnect");
         connect();
       }
     },
-    [connect],
+    [connect, runtime],
   );
 
-  const setTyping = useCallback((sessionId: string, active: boolean) => {
-    const state = typingRef.current;
-    const ws = wsRef.current;
-    const emit = (id: string, typing: boolean) => {
-      if (ws?.readyState !== WebSocket.OPEN) return;
-      try {
-        ws.send(JSON.stringify({ type: "typing", sessionId: id, typing }));
-      } catch {}
-    };
-
-    if (!active) {
-      clearTimeout(state.timer);
-      if (state.active) emit(state.sessionId, false);
-      state.active = false;
-      state.lastSent = 0;
-      return;
-    }
-
-    if (state.active && state.sessionId !== sessionId) {
-      emit(state.sessionId, false);
-      state.active = false;
-      state.lastSent = 0;
-    }
-    state.sessionId = sessionId;
-    const now = Date.now();
-    if (!state.active || now - state.lastSent >= TYPING_REFRESH_MS) {
-      emit(sessionId, true);
-      state.lastSent = now;
-    }
-    state.active = true;
-    clearTimeout(state.timer);
-    state.timer = setTimeout(() => {
-      const latest = typingRef.current;
-      if (!latest.active || latest.sessionId !== sessionId) return;
-      const socket = wsRef.current;
-      if (socket?.readyState === WebSocket.OPEN) {
+  const setTyping = useCallback(
+    (sessionId: string, active: boolean) => {
+      const state = typingRef.current;
+      const ws = wsRef.current;
+      const emit = (id: string, typing: boolean) => {
+        if (ws?.readyState !== WebSocket.OPEN) return;
         try {
-          socket.send(JSON.stringify({ type: "typing", sessionId, typing: false }),);
+          ws.send(JSON.stringify({ type: "typing", sessionId: id, typing }));
         } catch {}
+      };
+
+      if (!active) {
+        runtime.cancel("typing-idle");
+        if (state.active) emit(state.sessionId, false);
+        state.active = false;
+        state.lastSent = 0;
+        return;
       }
-      latest.active = false;
-      latest.lastSent = 0;
-    }, TYPING_IDLE_MS);
-  }, []);
+
+      if (state.active && state.sessionId !== sessionId) {
+        emit(state.sessionId, false);
+        state.active = false;
+        state.lastSent = 0;
+      }
+      state.sessionId = sessionId;
+      const now = Date.now();
+      if (!state.active || now - state.lastSent >= TYPING_REFRESH_MS) {
+        emit(sessionId, true);
+        state.lastSent = now;
+      }
+      state.active = true;
+      runtime.schedule("typing-idle", TYPING_IDLE_MS, () => {
+        const latest = typingRef.current;
+        if (!latest.active || latest.sessionId !== sessionId) return;
+        const socket = wsRef.current;
+        if (socket?.readyState === WebSocket.OPEN) {
+          try {
+            socket.send(
+              JSON.stringify({ type: "typing", sessionId, typing: false }),
+            );
+          } catch {}
+        }
+        latest.active = false;
+        latest.lastSent = 0;
+      });
+    },
+    [runtime],
+  );
 
   const addHandler = useCallback((handler: (msg: WSServerMessage) => void) => {
     handlersRef.current.push(handler);
@@ -664,6 +645,18 @@ export function useWebSocket(presenceActive = true) {
       handlersRef.current = handlersRef.current.filter((h) => h !== handler);
     };
   }, []);
+  const [sessionSocket] = useState<SessionSocket>(() => ({ send, addHandler }));
+  const [sessionSocketIgnoringMessages] = useState<SessionSocket>(() => ({
+    send,
+    addHandler: IGNORE_WS_MESSAGES,
+  }));
 
-  return { connected, send, setTyping, addHandler };
+  return {
+    connected,
+    send,
+    setTyping,
+    addHandler,
+    sessionSocket,
+    sessionSocketIgnoringMessages,
+  };
 }

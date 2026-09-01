@@ -31,9 +31,13 @@ const tempDirs: string[] = [];
 function createGitRepo(dir: string): string {
   const repo = join(dir, "repo");
   const remote = join(dir, "remote.git");
-  expect(Bun.spawnSync(["git", "init", "-q", "-b", "main", repo]).exitCode).toBe(0);
+  expect(
+    Bun.spawnSync(["git", "init", "-q", "-b", "main", repo]).exitCode,
+  ).toBe(0);
   writeFileSync(join(repo, "README.md"), "test\n");
-  expect(Bun.spawnSync(["git", "-C", repo, "add", "README.md"]).exitCode).toBe(0);
+  expect(Bun.spawnSync(["git", "-C", repo, "add", "README.md"]).exitCode).toBe(
+    0,
+  );
   expect(
     Bun.spawnSync([
       "git",
@@ -49,9 +53,16 @@ function createGitRepo(dir: string): string {
       "initial",
     ]).exitCode,
   ).toBe(0);
-  expect(Bun.spawnSync(["git", "-C", repo, "branch", "master"]).exitCode).toBe(0);
-  expect(Bun.spawnSync(["git", "init", "-q", "--bare", remote]).exitCode).toBe(0);
-  expect(Bun.spawnSync(["git", "-C", repo, "remote", "add", "origin", remote]).exitCode).toBe(0);
+  expect(Bun.spawnSync(["git", "-C", repo, "branch", "master"]).exitCode).toBe(
+    0,
+  );
+  expect(Bun.spawnSync(["git", "init", "-q", "--bare", remote]).exitCode).toBe(
+    0,
+  );
+  expect(
+    Bun.spawnSync(["git", "-C", repo, "remote", "add", "origin", remote])
+      .exitCode,
+  ).toBe(0);
   expect(
     Bun.spawnSync([
       "git",
@@ -71,7 +82,8 @@ function createGitRepo(dir: string): string {
 afterEach(() => {
   if (originalConfig === undefined) delete process.env.OPENSESSION_CONFIG;
   else process.env.OPENSESSION_CONFIG = originalConfig;
-  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs.splice(0))
+    rmSync(dir, { recursive: true, force: true });
 });
 
 describe("validGithubFullName", () => {
@@ -130,7 +142,9 @@ describe("App installation repository listing", () => {
     }) as typeof fetch;
     try {
       const repos = await listReposViaAppInstallation("ghs_installation");
-      expect(repos.map((repo) => repo.fullName)).toEqual(["tellahq/opensession"]);
+      expect(repos.map((repo) => repo.fullName)).toEqual([
+        "tellahq/opensession",
+      ]);
       expect(urls).toEqual([
         "https://api.github.com/installation/repositories?per_page=100&page=1",
       ]);
@@ -143,12 +157,18 @@ describe("App installation repository listing", () => {
 describe("githubCredentialHelperCommand", () => {
   test("uses the stable installed command for compiled releases", () => {
     expect(
-      githubCredentialHelperCommand("/home/alice/Open Session/bin/opensession", true),
+      githubCredentialHelperCommand(
+        "/home/alice/Open Session/bin/opensession",
+        true,
+      ),
     ).toBe("!'/home/alice/Open Session/bin/opensession' github-credential");
   });
 
   test("falls back to the source script before the shim is installed", () => {
-    const command = githubCredentialHelperCommand("/missing/opensession", false);
+    const command = githubCredentialHelperCommand(
+      "/missing/opensession",
+      false,
+    );
     expect(command).toStartWith("!bun ");
     expect(command).toEndWith("scripts/gh-credential.ts");
   });
@@ -157,7 +177,9 @@ describe("githubCredentialHelperCommand", () => {
 describe("normalizeDefaultBranch", () => {
   test("accepts ordinary and nested branch names", async () => {
     await expect(normalizeDefaultBranch("master")).resolves.toBe("master");
-    await expect(normalizeDefaultBranch(" release/12.x ")).resolves.toBe("release/12.x");
+    await expect(normalizeDefaultBranch(" release/12.x ")).resolves.toBe(
+      "release/12.x",
+    );
   });
 
   test("rejects values git cannot use as branch names", async () => {
@@ -169,9 +191,13 @@ describe("normalizeDefaultBranch", () => {
   });
 
   test("rejects git-valid shell and Markdown metacharacters", async () => {
-    await expect(normalizeDefaultBranch("release;echo-not-a-command")).resolves.toBeNull();
+    await expect(
+      normalizeDefaultBranch("release;echo-not-a-command"),
+    ).resolves.toBeNull();
     await expect(normalizeDefaultBranch("release`whoami`")).resolves.toBeNull();
-    await expect(normalizeDefaultBranch("release$(whoami)")).resolves.toBeNull();
+    await expect(
+      normalizeDefaultBranch("release$(whoami)"),
+    ).resolves.toBeNull();
   });
 });
 
@@ -235,7 +261,11 @@ describe("repository default branch settings", () => {
             sharedCheckout: true,
             customSetting: "preserved",
           },
-          docs: { repo: join(dir, "docs"), defaultBranch: "main", sharedCheckout: true },
+          docs: {
+            repo: join(dir, "docs"),
+            defaultBranch: "main",
+            sharedCheckout: true,
+          },
         },
       }),
     );
@@ -276,7 +306,11 @@ describe("repository default branch settings", () => {
         selfDev: "worktree",
         repos: {
           app: { repo, defaultBranch: "main", sharedCheckout: true },
-          docs: { repo: join(dir, "docs"), defaultBranch: "main", sharedCheckout: true },
+          docs: {
+            repo: join(dir, "docs"),
+            defaultBranch: "main",
+            sharedCheckout: true,
+          },
         },
       }),
     );
@@ -306,7 +340,10 @@ describe("repository default branch settings", () => {
     const path = join(dir, "config.json");
     const repo = createGitRepo(dir);
     process.env.OPENSESSION_CONFIG = path;
-    writeFileSync(path, JSON.stringify({ repos: { app: { repo, defaultBranch: "main" } } }));
+    writeFileSync(
+      path,
+      JSON.stringify({ repos: { app: { repo, defaultBranch: "main" } } }),
+    );
 
     const url = new URL("http://localhost/api/setup/repos/app");
     const response = await handleSetupRepoRoutes({
@@ -321,7 +358,9 @@ describe("repository default branch settings", () => {
     });
 
     expect(response?.status).toBe(400);
-    expect(JSON.parse(readFileSync(path, "utf8")).repos.app.sharedCheckout).toBeUndefined();
+    expect(
+      JSON.parse(readFileSync(path, "utf8")).repos.app.sharedCheckout,
+    ).toBeUndefined();
   });
 
   test("rejects a branch that does not exist without changing config", async () => {
@@ -330,7 +369,10 @@ describe("repository default branch settings", () => {
     const path = join(dir, "config.json");
     const repo = createGitRepo(dir);
     process.env.OPENSESSION_CONFIG = path;
-    writeFileSync(path, JSON.stringify({ repos: { compiler: { repo, defaultBranch: "main" } } }));
+    writeFileSync(
+      path,
+      JSON.stringify({ repos: { compiler: { repo, defaultBranch: "main" } } }),
+    );
 
     const url = new URL("http://localhost/api/setup/repos/compiler");
     const response = await handleSetupRepoRoutes({
@@ -345,7 +387,9 @@ describe("repository default branch settings", () => {
     });
 
     expect(response?.status).toBe(400);
-    expect(JSON.parse(readFileSync(path, "utf8")).repos.compiler.defaultBranch).toBe("main");
+    expect(
+      JSON.parse(readFileSync(path, "utf8")).repos.compiler.defaultBranch,
+    ).toBe("main");
   });
 
   test("rejects prototype-special repository ids", async () => {
@@ -393,7 +437,9 @@ describe("repository default branch settings", () => {
     });
 
     expect(response?.status).toBe(400);
-    expect(JSON.parse(readFileSync(path, "utf8")).repos.app.defaultBranch).toBe("main");
+    expect(JSON.parse(readFileSync(path, "utf8")).repos.app.defaultBranch).toBe(
+      "main",
+    );
   });
 });
 
@@ -419,7 +465,9 @@ describe("adoptExistingCheckout", () => {
   }
 
   test("returns null when nothing is at the destination", async () => {
-    expect(await adoptExistingCheckout(join(tmpRoot(), "absent"), () => true)).toBe(null);
+    expect(
+      await adoptExistingCheckout(join(tmpRoot(), "absent"), () => true),
+    ).toBe(null);
   });
 
   test("adopts a checkout of the same repo (no token needed)", async () => {
@@ -440,15 +488,13 @@ describe("adoptExistingCheckout", () => {
       join(tmpRoot(), "widget"),
       "https://old-org.code.storage/acme/widget.git",
     );
-    const inspected = await adoptExistingCheckout(
-      dest,
-      (i) => matchesCodeStorageCheckout(i, "old-org", "acme/widget"),
+    const inspected = await adoptExistingCheckout(dest, (i) =>
+      matchesCodeStorageCheckout(i, "old-org", "acme/widget"),
     );
     expect(inspected?.cs).toEqual({ org: "old-org", repoId: "acme/widget" });
     expect(
-      adoptExistingCheckout(
-        dest,
-        (i) => matchesCodeStorageCheckout(i, "new-org", "acme/widget"),
+      adoptExistingCheckout(dest, (i) =>
+        matchesCodeStorageCheckout(i, "new-org", "acme/widget"),
       ),
     ).rejects.toThrow(/Clone destination already exists/);
   });
@@ -459,7 +505,10 @@ describe("adoptExistingCheckout", () => {
       "https://github.com/acme/other.git",
     );
     expect(
-      adoptExistingCheckout(dest, (i) => (i.ghRepo || "").toLowerCase() === "acme/widget"),
+      adoptExistingCheckout(
+        dest,
+        (i) => (i.ghRepo || "").toLowerCase() === "acme/widget",
+      ),
     ).rejects.toThrow(/Clone destination already exists/);
   });
 
@@ -481,11 +530,13 @@ const localRoots: string[] = [];
 afterEach(() => {
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
   else process.env.OPENSESSION_CONFIG = savedConfig;
-  if (savedWorktreesDir === undefined) delete process.env.OPENSESSION_WORKTREES_DIR;
+  if (savedWorktreesDir === undefined)
+    delete process.env.OPENSESSION_WORKTREES_DIR;
   else process.env.OPENSESSION_WORKTREES_DIR = savedWorktreesDir;
   if (savedHome === undefined) delete process.env.HOME;
   else process.env.HOME = savedHome;
-  for (const dir of localRoots.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of localRoots.splice(0))
+    rmSync(dir, { recursive: true, force: true });
 });
 
 function localRoot(): string {
@@ -564,9 +615,14 @@ describe("local repository registration", () => {
       defaultBranch: "trunk",
       default: true,
     });
-    const worktree = await createWorktree("registered-worktree", "existing-checkout");
+    const worktree = await createWorktree(
+      "registered-worktree",
+      "existing-checkout",
+    );
     expect(existsSync(worktree)).toBe(true);
-    expect(git(["branch", "--show-current"], worktree)).toBe("registered-worktree");
+    expect(git(["branch", "--show-current"], worktree)).toBe(
+      "registered-worktree",
+    );
   });
 
   test.serial("preserves the implicit built-in repository", async () => {
@@ -592,26 +648,29 @@ describe("local repository registration", () => {
     });
   });
 
-  test.serial("uses the remote default instead of the checked-out topic branch", async () => {
-    const root = localRoot();
-    const checkout = createRemoteCheckout(root, "topic-checkout", "main");
-    git(["switch", "-c", "topic"], checkout);
-    writeFileSync(join(checkout, "topic.txt"), "topic\n");
-    git(["add", "topic.txt"], checkout);
-    git(["commit", "-m", "Topic commit"], checkout);
-    git(["push", "-u", "origin", "topic"], checkout);
-    git(["remote", "set-head", "origin", "-d"], checkout);
-    const configPath = join(root, "config.json");
-    writeFileSync(configPath, JSON.stringify({ repos: {} }));
-    process.env.OPENSESSION_CONFIG = configPath;
+  test.serial(
+    "uses the remote default instead of the checked-out topic branch",
+    async () => {
+      const root = localRoot();
+      const checkout = createRemoteCheckout(root, "topic-checkout", "main");
+      git(["switch", "-c", "topic"], checkout);
+      writeFileSync(join(checkout, "topic.txt"), "topic\n");
+      git(["add", "topic.txt"], checkout);
+      git(["commit", "-m", "Topic commit"], checkout);
+      git(["push", "-u", "origin", "topic"], checkout);
+      git(["remote", "set-head", "origin", "-d"], checkout);
+      const configPath = join(root, "config.json");
+      writeFileSync(configPath, JSON.stringify({ repos: {} }));
+      process.env.OPENSESSION_CONFIG = configPath;
 
-    const response = await handleSetupRepoRoutes(
-      postRepo({ source: "local", path: checkout }),
-    );
+      const response = await handleSetupRepoRoutes(
+        postRepo({ source: "local", path: checkout }),
+      );
 
-    expect(response?.status).toBe(201);
-    expect(await response?.json()).toMatchObject({ defaultBranch: "main" });
-  });
+      expect(response?.status).toBe(201);
+      expect(await response?.json()).toMatchObject({ defaultBranch: "main" });
+    },
+  );
 
   test.serial("rejects a repository without a usable origin", async () => {
     const root = localRoot();
@@ -642,11 +701,18 @@ describe("local repository registration", () => {
     const symlink = join(root, "checkout-link");
     symlinkSync(checkout, symlink);
     const configPath = join(root, "config.json");
-    writeFileSync(configPath, JSON.stringify({
-      repos: {
-        existing: { repo: symlink, wtPrefix: "existing", defaultBranch: "trunk" },
-      },
-    }));
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        repos: {
+          existing: {
+            repo: symlink,
+            wtPrefix: "existing",
+            defaultBranch: "trunk",
+          },
+        },
+      }),
+    );
     process.env.OPENSESSION_CONFIG = configPath;
 
     const response = await handleSetupRepoRoutes(
@@ -663,15 +729,18 @@ describe("local repository registration", () => {
     const root = localRoot();
     const checkout = createRemoteCheckout(root, "prefix-target");
     const configPath = join(root, "config.json");
-    writeFileSync(configPath, JSON.stringify({
-      repos: {
-        existing: {
-          repo: join(root, "different-checkout"),
-          wtPrefix: "prefix-target",
-          defaultBranch: "main",
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        repos: {
+          existing: {
+            repo: join(root, "different-checkout"),
+            wtPrefix: "prefix-target",
+            defaultBranch: "main",
+          },
         },
-      },
-    }));
+      }),
+    );
     process.env.OPENSESSION_CONFIG = configPath;
 
     const response = await handleSetupRepoRoutes(
@@ -690,17 +759,23 @@ describe("local repository registration", () => {
     const remote = join(root, "registered.git");
     const duplicateCheckout = join(root, "duplicate");
     git(["clone", remote, duplicateCheckout]);
-    git(["remote", "set-url", "origin", pathToFileURL(remote).href], duplicateCheckout);
+    git(
+      ["remote", "set-url", "origin", pathToFileURL(remote).href],
+      duplicateCheckout,
+    );
     const configPath = join(root, "config.json");
-    writeFileSync(configPath, JSON.stringify({
-      repos: {
-        existing: {
-          repo: registeredCheckout,
-          wtPrefix: "existing",
-          defaultBranch: "main",
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        repos: {
+          existing: {
+            repo: registeredCheckout,
+            wtPrefix: "existing",
+            defaultBranch: "main",
+          },
         },
-      },
-    }));
+      }),
+    );
     process.env.OPENSESSION_CONFIG = configPath;
 
     const response = await handleSetupRepoRoutes(
@@ -713,45 +788,62 @@ describe("local repository registration", () => {
     });
   });
 
-  test.serial("rejects a remote registration whose checkout path is already owned", async () => {
-    const root = localRoot();
-    const checkouts = join(root, "checkouts");
-    mkdirSync(checkouts, { recursive: true });
-    const checkout = createRemoteCheckout(checkouts, "widget", "main");
-    const configPath = join(root, "config.json");
-    writeFileSync(configPath, JSON.stringify({
-      repos: {
-        legacy: {
-          repo: checkout,
-          wtPrefix: "legacy",
-          defaultBranch: "main",
-        },
-      },
-    }));
-    process.env.HOME = root;
-    process.env.OPENSESSION_CONFIG = configPath;
+  test.serial(
+    "rejects a remote registration whose checkout path is already owned",
+    async () => {
+      const root = localRoot();
+      const checkouts = join(root, "checkouts");
+      mkdirSync(checkouts, { recursive: true });
+      const checkout = createRemoteCheckout(checkouts, "widget", "main");
+      const configPath = join(root, "config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          repos: {
+            legacy: {
+              repo: checkout,
+              wtPrefix: "legacy",
+              defaultBranch: "main",
+            },
+          },
+        }),
+      );
+      process.env.HOME = root;
+      process.env.OPENSESSION_CONFIG = configPath;
 
-    const response = await handleSetupRepoRoutes(
-      postRepo({ fullName: "acme/widget" }),
-    );
+      const response = await handleSetupRepoRoutes(
+        postRepo({ fullName: "acme/widget" }),
+      );
 
-    expect(response?.status).toBe(409);
-    expect(await response?.json()).toEqual({
-      error: `Repository is already registered: ${realpathSync(checkout)}`,
-    });
-  });
+      expect(response?.status).toBe(409);
+      expect(await response?.json()).toEqual({
+        error: `Repository is already registered: ${realpathSync(checkout)}`,
+      });
+    },
+  );
 
   test.serial("configures a detected code.storage checkout", async () => {
     const root = localRoot();
     const checkout = createRemoteCheckout(root, "cs-checkout");
-    git(["remote", "set-url", "origin", "https://acme.code.storage/team/widget.git"], checkout);
+    git(
+      [
+        "remote",
+        "set-url",
+        "origin",
+        "https://acme.code.storage/team/widget.git",
+      ],
+      checkout,
+    );
     const configPath = join(root, "config.json");
-    writeFileSync(configPath, JSON.stringify({
-      repos: {},
-      integrations: {
-        codeStorage: { org: "acme", privateKeyPath: join(root, "key.pem") },
-      },
-    }));
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        repos: {},
+        integrations: {
+          codeStorage: { org: "acme", privateKeyPath: join(root, "key.pem") },
+        },
+      }),
+    );
     process.env.OPENSESSION_CONFIG = configPath;
 
     const response = await handleSetupRepoRoutes(
@@ -764,11 +856,12 @@ describe("local repository registration", () => {
       csRepo: "team/widget",
     });
     expect(
-      gitRaw([
-        "config",
-        "--get-all",
-        "credential.https://acme.code.storage.helper",
-      ], checkout).replace(/\n$/, "").split("\n"),
+      gitRaw(
+        ["config", "--get-all", "credential.https://acme.code.storage.helper"],
+        checkout,
+      )
+        .replace(/\n$/, "")
+        .split("\n"),
     ).toEqual(["", expect.stringContaining("scripts/cs-credential.ts")]);
   });
 
@@ -787,7 +880,9 @@ describe("local repository registration", () => {
     expect(await response?.json()).toEqual({
       error: "Config repos must contain a JSON object",
     });
-    expect(JSON.parse(readFileSync(configPath, "utf-8"))).toEqual({ repos: [] });
+    expect(JSON.parse(readFileSync(configPath, "utf-8"))).toEqual({
+      repos: [],
+    });
   });
 
   test.serial("requires an absolute path", async () => {

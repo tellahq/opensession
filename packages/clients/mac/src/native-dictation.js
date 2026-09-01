@@ -10,7 +10,9 @@ function helperPath() {
 }
 
 function commandFrame(type, payload) {
-  const body = payload ? Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength) : Buffer.alloc(0);
+  const body = payload
+    ? Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength)
+    : Buffer.alloc(0);
   const frame = Buffer.allocUnsafe(5 + body.length);
   frame[0] = type;
   frame.writeUInt32LE(body.length, 1);
@@ -29,17 +31,27 @@ class NativeDictation {
 
   start(id, sampleRate, language, onText) {
     this.cancel();
-    if (!validID(id) || !Number.isFinite(sampleRate) || sampleRate < 8_000 || sampleRate > 192_000) {
+    if (
+      !validID(id) ||
+      !Number.isFinite(sampleRate) ||
+      sampleRate < 8_000 ||
+      sampleRate > 192_000
+    ) {
       return { ok: false };
     }
     const executable = helperPath();
-    if (process.platform !== "darwin" || !fs.existsSync(executable)) return { ok: false };
+    if (process.platform !== "darwin" || !fs.existsSync(executable))
+      return { ok: false };
 
     let child;
     try {
-      child = spawn(executable, [String(sampleRate), String(language || "en-US")], {
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      child = spawn(
+        executable,
+        [String(sampleRate), String(language || "en-US")],
+        {
+          stdio: ["pipe", "pipe", "pipe"],
+        },
+      );
     } catch (error) {
       console.error("[dictation] native helper could not start", error);
       return { ok: false };
@@ -97,7 +109,9 @@ class NativeDictation {
     child.on("close", (code) => {
       entry.closed = true;
       if (code && !entry.failed) {
-        console.error(`[dictation] native helper exited ${code}: ${entry.stderr}`);
+        console.error(
+          `[dictation] native helper exited ${code}: ${entry.stderr}`,
+        );
       }
       this.settle(entry, entry.failed ? "" : entry.latest);
     });
@@ -107,7 +121,11 @@ class NativeDictation {
   push(id, samples) {
     const entry = this.active;
     if (!entry || entry.id !== id || entry.closed || entry.failed) return;
-    if (!(samples instanceof Float32Array) || samples.byteLength > MAX_AUDIO_CHUNK_BYTES) return;
+    if (
+      !(samples instanceof Float32Array) ||
+      samples.byteLength > MAX_AUDIO_CHUNK_BYTES
+    )
+      return;
     entry.child.stdin.write(commandFrame(1, samples));
   }
 

@@ -2,6 +2,10 @@
 Description=Open Session detached engines and previews aggregate resource budget
 
 [Slice]
+# Preview processes yield CPU and disk service to system-scope control-plane
+# units during contention while retaining all otherwise-idle host capacity.
+CPUWeight=10
+IOWeight=10
 # Keep enough headroom for the OS, SSH/SSM, Caddy, Docker, and the main
 # Open Session service even if many independent engine scopes grow together.
 MemoryHigh=72G

@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 /**
  * The Settings shell — what used to be the `settings-page` / `settings-back` /
  * `settings-content` / `settings-panel-frame` rules in legacy.css.
@@ -33,275 +34,12 @@
 import { cn } from "../ui/cn";
 import { SCROLL_EDGE_DIVIDER } from "./app-shell-classes";
 import {
-	SIDEBAR_DENSITY_VARS,
-	SIDEBAR_GROUP,
-	SIDEBAR_HOVER_LAYER,
-	SIDEBAR_RAIL,
-	SIDEBAR_RAIL_GAP,
+  SIDEBAR_DENSITY_VARS,
+  SIDEBAR_GROUP,
+  SIDEBAR_HOVER_LAYER,
+  SIDEBAR_RAIL,
+  SIDEBAR_RAIL_GAP,
 } from "./sidebar-classes";
-import * as stylex from "@stylexjs/stylex";
-import { mergeStylexClassName } from "../ui/cn";
-import { type as typography } from "../styles/typography.stylex";
-import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
-
-const sx = stylex.create({
-	flex: {
-		"display": "flex"
-	},
-	minH0: {
-		"minHeight": "0"
-	},
-	flex1: {
-		"flex": "1"
-	},
-	bgSidebar: {
-		"backgroundColor": "var(--sidebar-bg)"
-	},
-	pb2: {
-		"paddingBottom": "8px"
-	},
-	afterInsetX3: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"insetInline": "-12px"
-		}
-	},
-	Mx15: {
-		"marginInline": "-6px"
-	},
-	flexCol: {
-		"flexDirection": "column"
-	},
-	overflowXHidden: {
-		"overflowX": "hidden"
-	},
-	overflowYAuto: {
-		"overflowY": "auto"
-	},
-	pt2: {
-		"paddingTop": "8px"
-	},
-	ScrollbarWidthNone: {
-		"scrollbarWidth": "none"
-	},
-	hVarSidebarCapH: {
-		"height": "var(--sidebar-cap-h)"
-	},
-	shrink0: {
-		"flexShrink": "0"
-	},
-	itemsCenter: {
-		"alignItems": "center"
-	},
-	px25: {
-		"paddingInline": "10px"
-	},
-	fontSemibold: {
-		"--tw-font-weight": "var(--font-weight-semibold)",
-		"fontWeight": "var(--font-weight-semibold)"
-	},
-	textDim: {
-		"color": "var(--text-dim)"
-	},
-	minW0: {
-		"minWidth": "0"
-	},
-	justifyCenter: {
-		"justifyContent": "center"
-	},
-	borderL: {
-		"borderLeftStyle": "var(--tw-border-style)",
-		"borderLeftWidth": "1px"
-	},
-	borderDivider: {
-		"borderColor": "var(--divider)"
-	},
-	bgSurface: {
-		"backgroundColor": "var(--bg)"
-	},
-	px8: {
-		"paddingInline": "32px"
-	},
-	pt11: {
-		"paddingTop": "44px"
-	},
-	desktopBoxShadowVarContentEdgeShadow: {
-		"@media (min-width: 721px)": {
-			"boxShadow": "var(--content-edge-shadow)"
-		}
-	},
-	p0: {
-		"padding": "0"
-	},
-	px2: {
-		"paddingInline": "8px"
-	},
-	pt4: {
-		"paddingTop": "16px"
-	},
-	wFull: {
-		"width": "100%"
-	},
-	maxW720px: {
-		"maxWidth": "720px"
-	},
-	selfStart: {
-		"alignSelf": "flex-start"
-	},
-	pb22: {
-		"paddingBottom": "88px"
-	},
-	maxW980px: {
-		"maxWidth": "980px"
-	},
-	pb12: {
-		"paddingBottom": "48px"
-	},
-	hFull: {
-		"height": "100%"
-	},
-	px4: {
-		"paddingInline": "16px"
-	},
-	pb72px: {
-		"paddingBottom": "72px"
-	},
-	absolute: {
-		"position": "absolute"
-	},
-	insetX0: {
-		"insetInline": "0"
-	},
-	bottom0: {
-		"bottom": "0"
-	},
-	z1: {
-		"zIndex": "1"
-	},
-	pb25: {
-		"paddingBottom": "10px"
-	},
-	beforePointerEventsNone: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"pointerEvents": "none"
-		}
-	},
-	beforeAbsolute: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"position": "absolute"
-		}
-	},
-	beforeInsetX0: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"insetInline": "0"
-		}
-	},
-	beforeBottom0: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"bottom": "0"
-		}
-	},
-	beforeTopAuto: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"top": "auto"
-		}
-	},
-	beforeZ1: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"zIndex": "-1"
-		}
-	},
-	beforeHCalc10030px: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"height": "calc(100% + 30px)"
-		}
-	},
-	beforeContent: {
-		"::before": {
-			"--tw-content": "\"\"",
-			"content": "var(--tw-content)"
-		}
-	},
-	beforeBackdropBlur16px: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"--tw-backdrop-blur": "blur(16px)",
-			"WebkitBackdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)",
-			"backdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)"
-		}
-	},
-	beforeBackdropSaturate135: {
-		"::before": {
-			"content": "var(--tw-content)",
-			"--tw-backdrop-saturate": "saturate(1.35)",
-			"WebkitBackdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)",
-			"backdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)"
-		}
-	},
-
-	w58: {
-		"width": "232px"
-	},
-	px3: {
-		"paddingInline": "12px"
-	},
-	py4: {
-		"paddingBlock": "16px"
-	},
-	mb2: {
-		"marginBottom": "8px"
-	},
-	cursorPointer: {
-		"cursor": "pointer"
-	},
-	roundedRow: {
-		"borderRadius": "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	borderNone: {
-		"--tw-border-style": "none",
-		"borderStyle": "none"
-	},
-	bgTransparent: {
-		"backgroundColor": "transparent"
-	},
-	pyVarSidebarRowPad: {
-		"paddingBlock": "var(--sidebar-row-pad)"
-	},
-	pr2: {
-		"paddingRight": "8px"
-	},
-	pl25: {
-		"paddingLeft": "10px"
-	},
-	textLeft: {
-		"textAlign": "left"
-	},
-	fontMedium: {
-		"--tw-font-weight": "var(--font-weight-medium)",
-		"fontWeight": "var(--font-weight-medium)"
-	},
-	hoverTextFg: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text)"
-			}
-		}
-	},
-	mt05: {
-		"marginTop": "2px"
-	},
-	textFaint: {
-		"color": "var(--text-faint)"
-	},
-});
 
 /**
  * The full-window page: side nav + content, filling the app body.
@@ -312,7 +50,18 @@ const sx = stylex.create({
  * and the shadow on the content's left edge (see SETTINGS_CONTENT), so the
  * column itself needs no fill and no border of its own.
  */
-export const SETTINGS_PAGE = mergeStylexClassName("", sx.flex, sx.minH0, sx.flex1, sx.bgSidebar);
+export const SETTINGS_PAGE = utilityClassName(
+  "relative flex h-full min-h-0 flex-1 bg-sidebar",
+);
+
+/**
+ * The otherwise-empty desktop titlebar strip. `wco-chrome` makes it a window
+ * drag region in Electron; `settings-drag-handle` lets base.css keep this
+ * platform chrome out of browser and phone layouts.
+ */
+export const SETTINGS_DRAG_HANDLE = utilityClassName(
+  "settings-drag-handle wco-chrome absolute inset-x-0 top-0 z-10 h-[var(--desktop-header-h)]",
+);
 
 /**
  * The nav column. No fill, no edge: the page under it is already the sidebar
@@ -324,8 +73,9 @@ export const SETTINGS_PAGE = mergeStylexClassName("", sx.flex, sx.minH0, sx.flex
  * attribute this element deliberately does not carry: the preference is named
  * "Compact sidebar" and retunes the rail you work in, not a nav you visit.
  */
-export const SETTINGS_NAV =
-	[mergeStylexClassName("[html.wco_&]:pt-(--desktop-header-h)", sx.flex, sx.w58, sx.shrink0, sx.flexCol, sx.px3, sx.py4), SIDEBAR_DENSITY_VARS].filter(Boolean).join(" ");
+export const SETTINGS_NAV = utilityClassName(
+  `settings-nav flex w-58 shrink-0 flex-col px-3 py-4 ${SIDEBAR_DENSITY_VARS}`,
+);
 
 /**
  * The nav's search field, and the seam it grows once the section list travels
@@ -344,7 +94,10 @@ export const SETTINGS_NAV =
  * half-scrolled row off the field's edge, and the list's own `pt-2` matches it
  * at rest, so the line lands centred in the gap it appears in.
  */
-export const SETTINGS_NAV_SEARCH = cn(SCROLL_EDGE_DIVIDER, mergeStylexClassName("", sx.pb2, sx.afterInsetX3));
+export const SETTINGS_NAV_SEARCH = cn(
+  SCROLL_EDGE_DIVIDER,
+  utilityClassName("pb-2 after:-inset-x-3"),
+);
 
 /**
  * The scrolling section list, and one group inside it.
@@ -356,10 +109,13 @@ export const SETTINGS_NAV_SEARCH = cn(SCROLL_EDGE_DIVIDER, mergeStylexClassName(
  * other direction. Its scrollbar is hidden for the reason the app's is: a
  * track down the middle of the window cuts the nav off from the content.
  */
-export const SETTINGS_NAV_LIST =
-	mergeStylexClassName("[&::-webkit-scrollbar]:hidden", sx.Mx15, sx.flex, sx.minH0, sx.flex1, sx.flexCol, sx.overflowXHidden, sx.overflowYAuto, sx.pt2, sx.ScrollbarWidthNone);
+export const SETTINGS_NAV_LIST = utilityClassName(
+  "-mx-1.5 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+);
 
-export const SETTINGS_NAV_GROUP = [mergeStylexClassName("", sx.flex, sx.flexCol), SIDEBAR_GROUP].filter(Boolean).join(" ");
+export const SETTINGS_NAV_GROUP = utilityClassName(
+  `flex flex-col ${SIDEBAR_GROUP}`,
+);
 
 /**
  * A group's caption: Personal, Organization. The app's band headings in every
@@ -367,8 +123,9 @@ export const SETTINGS_NAV_GROUP = [mergeStylexClassName("", sx.flex, sx.flexCol)
  * than faint. It was 11px bold with letterspacing, which is a different
  * typographic idea (a small-caps label) from the one the sidebar uses.
  */
-export const SETTINGS_NAV_CAPTION =
-	mergeStylexClassName("", sx.flex, sx.hVarSidebarCapH, sx.shrink0, sx.itemsCenter, sx.px25, typography.label, sx.fontSemibold, sx.textDim);
+export const SETTINGS_NAV_CAPTION = utilityClassName(
+  "flex h-[var(--sidebar-cap-h)] shrink-0 items-center px-2.5 text-label font-semibold text-dim",
+);
 
 /**
  * "Back to app" is the first row of the nav, and now a member of the row family
@@ -379,8 +136,9 @@ export const SETTINGS_NAV_CAPTION =
  * already measures its container plus those two negative margins; `w-full`
  * would size it to the container alone and pull the pill back in on the right.
  */
-export const SETTINGS_BACK =
-	[mergeStylexClassName("group", sx.Mx15, sx.mb2, sx.flex, sx.cursorPointer, sx.itemsCenter), SIDEBAR_RAIL_GAP, mergeStylexClassName("", sx.roundedRow, sx.borderNone, sx.bgTransparent, sx.pyVarSidebarRowPad, sx.pr2, sx.pl25, sx.textLeft, typography.itemTitle, sx.fontMedium, sx.textDim, sx.hoverTextFg), SIDEBAR_HOVER_LAYER].filter(Boolean).join(" ");
+export const SETTINGS_BACK = utilityClassName(
+  `group -mx-1.5 mb-2 flex cursor-pointer items-center ${SIDEBAR_RAIL_GAP} rounded-row border-none bg-transparent py-[var(--sidebar-row-pad)] pr-2 pl-2.5 text-left text-item-title font-medium text-dim hover:text-fg ${SIDEBAR_HOVER_LAYER}`,
+);
 
 /**
  * The scrolling content column beside the nav. `tool` sections fill it
@@ -398,16 +156,22 @@ export const SETTINGS_BACK =
  * that arrives, and any motion here delays a page you already asked for. It
  * cuts.
  */
-export const SETTINGS_CONTENT =
-	mergeStylexClassName("", sx.flex, sx.minW0, sx.flex1, sx.justifyCenter, sx.overflowYAuto, sx.borderL, sx.borderDivider, sx.bgSurface, sx.px8, sx.pt11, sx.desktopBoxShadowVarContentEdgeShadow);
-export const SETTINGS_CONTENT_TOOL = mergeStylexClassName("", sx.minH0, sx.p0);
+export const SETTINGS_CONTENT = utilityClassName(
+  "settings-content flex min-w-0 flex-1 justify-center overflow-y-auto border-l border-divider bg-surface px-8 pt-11 desktop:[box-shadow:var(--content-edge-shadow)]",
+);
+export const SETTINGS_CONTENT_TOOL = utilityClassName(
+  "settings-content-tool min-h-0 p-0",
+);
 
 /** Same column inside the phone sheet — a phone gutter instead of the desktop one. */
-export const SETTINGS_CONTENT_SHEET =
-	mergeStylexClassName("", sx.flex, sx.minH0, sx.minW0, sx.flex1, sx.justifyCenter, sx.overflowYAuto, sx.px2, sx.pt4);
+export const SETTINGS_CONTENT_SHEET = utilityClassName(
+  "flex min-h-0 min-w-0 flex-1 justify-center overflow-y-auto px-2 pt-4",
+);
 
 /** The reading column a settings panel sits in, and its bottom air. */
-export const SETTINGS_PANEL_FRAME = mergeStylexClassName("", sx.wFull, sx.maxW720px, sx.selfStart, sx.pb22);
+export const SETTINGS_PANEL_FRAME = utilityClassName(
+  "w-full max-w-[720px] self-start pb-22",
+);
 
 /**
  * The column a settings panel that BROWSES sits in. The Library is a catalog
@@ -415,8 +179,12 @@ export const SETTINGS_PANEL_FRAME = mergeStylexClassName("", sx.wFull, sx.maxW72
  * a card is narrow enough that the sentence saying what it does gets cut off
  * mid-word. The measure that matters here is the card's, not the paragraph's.
  */
-export const SETTINGS_PANEL_FRAME_GALLERY = mergeStylexClassName("", sx.wFull, sx.maxW980px, sx.selfStart, sx.pb22);
-export const SETTINGS_PANEL_FRAME_SHEET = mergeStylexClassName("", sx.wFull, sx.maxW720px, sx.selfStart, sx.pb12);
+export const SETTINGS_PANEL_FRAME_GALLERY = utilityClassName(
+  "w-full max-w-[980px] self-start pb-22",
+);
+export const SETTINGS_PANEL_FRAME_SHEET = utilityClassName(
+  "w-full max-w-[720px] self-start pb-12",
+);
 
 /**
  * The phone sheet's section list and the search bar floating over its bottom
@@ -433,19 +201,31 @@ export const SETTINGS_PANEL_FRAME_SHEET = mergeStylexClassName("", sx.wFull, sx.
  * its own, a negative-z pseudo drops behind the list rather than sitting under
  * its parent's content.
  */
-export const SETTINGS_SHEET_LIST = mergeStylexClassName("", sx.hFull, sx.overflowYAuto, sx.px4, sx.pb72px);
+export const SETTINGS_SHEET_LIST = utilityClassName(
+  "h-full overflow-y-auto px-4 pb-[72px]",
+);
 
 export const SETTINGS_SHEET_SEARCH_BAR =
-	mergeStylexClassName("", sx.absolute, sx.insetX0, sx.bottom0, sx.z1, sx.px4, sx.pb25, sx.pt2) + " " +
-	mergeStylexClassName("", sx.beforePointerEventsNone, sx.beforeAbsolute, sx.beforeInsetX0, sx.beforeBottom0) + " " +
-	mergeStylexClassName("", sx.beforeTopAuto, sx.beforeZ1, sx.beforeHCalc10030px, sx.beforeContent) +
-	// Translucent all the way down, not opaque at the base: glass that admits
-	// nothing is just a panel. It only firms up (88%) at the very bottom edge,
-	// where a row would otherwise read THROUGH the field rather than behind it.
-	" " + mergeStylexClassName("", sharedClassStyles.beforeBackgroundLinearGradientToTopColorMixInSrgbVarBg88Transparent0ColorMixInSrgbVarBg76Transparent55ColorMixInSrgbVarBg45Transparent78Transparent100) +
-	" " + mergeStylexClassName("", sx.beforeBackdropBlur16px, sx.beforeBackdropSaturate135) + " " +
-	mergeStylexClassName("", sharedClassStyles.beforeWebkitMaskImageLinearGradientToTopVarColorBlack0VarColorBlack62Transparent100) +
-	" " + mergeStylexClassName("", sharedClassStyles.beforeMaskImageLinearGradientToTopVarColorBlack0VarColorBlack62Transparent100);
+  utilityClassName("absolute inset-x-0 bottom-0 z-1 px-4 pb-2.5 pt-2 ") +
+  utilityClassName(
+    "before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 ",
+  ) +
+  utilityClassName(
+    "before:top-auto before:z-[-1] before:h-[calc(100%+30px)] before:content-[''] ",
+  ) +
+  // Translucent all the way down, not opaque at the base: glass that admits
+  // nothing is just a panel. It only firms up (88%) at the very bottom edge,
+  // where a row would otherwise read THROUGH the field rather than behind it.
+  utilityClassName(
+    "before:[background:linear-gradient(to_top,color-mix(in_srgb,var(--bg)_88%,transparent)_0%,color-mix(in_srgb,var(--bg)_76%,transparent)_55%,color-mix(in_srgb,var(--bg)_45%,transparent)_78%,transparent_100%)] ",
+  ) +
+  "before:backdrop-blur-[16px] before:backdrop-saturate-[1.35] " +
+  utilityClassName(
+    "before:[-webkit-mask-image:linear-gradient(to_top,#000_0%,#000_62%,transparent_100%)] ",
+  ) +
+  utilityClassName(
+    "before:[mask-image:linear-gradient(to_top,#000_0%,#000_62%,transparent_100%)]",
+  );
 
 /**
  * A row in the settings navigation: the section list and the account block
@@ -463,8 +243,9 @@ export const SETTINGS_SHEET_SEARCH_BAR =
  * selected row lifts it instead of swapping one wash for a lighter one. See
  * SIDEBAR_HOVER_LAYER, which explains why that has to be a layer.
  */
-export const SETTINGS_NAV_ROW =
-	[mergeStylexClassName("group", sx.mt05, sx.flex, sx.wFull, sx.cursorPointer, sx.itemsCenter), SIDEBAR_RAIL_GAP, mergeStylexClassName("data-active:bg-selected data-active:text-fg", sx.roundedRow, sx.borderNone, sx.bgTransparent, sx.pyVarSidebarRowPad, sx.pr2, sx.pl25, sx.textLeft, typography.itemTitle, sx.fontMedium, sx.textDim, sx.hoverTextFg), SIDEBAR_HOVER_LAYER].filter(Boolean).join(" ");
+export const SETTINGS_NAV_ROW = utilityClassName(
+  `group mt-0.5 flex w-full cursor-pointer items-center ${SIDEBAR_RAIL_GAP} rounded-row border-none bg-transparent py-[var(--sidebar-row-pad)] pr-2 pl-2.5 text-left text-item-title font-medium text-dim hover:text-fg data-active:bg-selected data-active:text-fg ${SIDEBAR_HOVER_LAYER}`,
+);
 
 /**
  * The row's glyph well: the sidebar's 22px rail, not an 18px box. The glyphs
@@ -472,5 +253,6 @@ export const SETTINGS_NAV_ROW =
  * every settings label on the same left edge as every sidebar title, and it
  * centres each mark on that column.
  */
-export const SETTINGS_NAV_ICON =
-	[SIDEBAR_RAIL, mergeStylexClassName("group-hover:text-fg group-data-active:text-fg", sx.textFaint)].filter(Boolean).join(" ");
+export const SETTINGS_NAV_ICON = utilityClassName(
+  `${SIDEBAR_RAIL} text-faint group-hover:text-fg group-data-active:text-fg`,
+);

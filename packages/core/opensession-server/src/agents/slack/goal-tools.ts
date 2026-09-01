@@ -64,9 +64,9 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
               ].filter(Boolean);
               return `• ${bits.join(" · ")}`;
             })
-            .join("\n")
+            .join("\n"),
         );
-      }
+      },
     ),
     tool(
       "get_goal",
@@ -88,9 +88,9 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
             (g.phase ? `phase: ${g.phase}\n` : "") +
             (g.osSessionId ? `session: \`${g.osSessionId}\`\n` : "") +
             `\n*Mission:*\n${g.mission}\n` +
-            (ledgerTail ? `\n*Ledger (tail):*\n${ledgerTail}` : "")
+            (ledgerTail ? `\n*Ledger (tail):*\n${ledgerTail}` : ""),
         );
-      }
+      },
     ),
   ];
 
@@ -103,32 +103,49 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
           name: z.string().describe("Short display name."),
           mission: z
             .string()
-            .describe("The full mission brief — restated to the agent every wake."),
+            .describe(
+              "The full mission brief — restated to the agent every wake.",
+            ),
           mode: z
             .enum(["ask", "code"])
             .optional()
-            .describe("'ask' = read-only (default), 'code' = persistent worktree + can open PRs."),
+            .describe(
+              "'ask' = read-only (default), 'code' = persistent worktree + can open PRs.",
+            ),
           repo: z
             .string()
             .optional()
-            .describe("Registered project id for code mode (defaults to the instance's primary repo)."),
-          model: z.string().optional().describe("Optional model id (e.g. 'claude-opus-5')."),
+            .describe(
+              "Registered project id for code mode (defaults to the instance's primary repo).",
+            ),
+          model: z
+            .string()
+            .optional()
+            .describe("Optional model id (e.g. 'claude-opus-5')."),
           mcpServers: z
             .array(z.string())
             .optional()
-            .describe("Optional allowlist of external MCP servers the runs may use (e.g. ['ahrefs'])."),
+            .describe(
+              "Optional allowlist of external MCP servers the runs may use (e.g. ['ahrefs']).",
+            ),
           firstWakeAt: z
             .string()
             .optional()
-            .describe("Natural-language time for the FIRST wake, e.g. 'now', 'tomorrow 9am'. Default: next tick."),
+            .describe(
+              "Natural-language time for the FIRST wake, e.g. 'now', 'tomorrow 9am'. Default: next tick.",
+            ),
           minWakeMinutes: z
             .number()
             .optional()
-            .describe("Minimum minutes between wakes (cadence floor). Default 30."),
+            .describe(
+              "Minimum minutes between wakes (cadence floor). Default 30.",
+            ),
           maxWakes: z
             .number()
             .optional()
-            .describe("Safety cap on total wakes; auto-pauses on hit. Omit for none."),
+            .describe(
+              "Safety cap on total wakes; auto-pauses on hit. Omit for none.",
+            ),
         },
         async (args: {
           name: string;
@@ -142,9 +159,15 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
           maxWakes?: number;
         }) => {
           let firstWakeAt: string | undefined;
-          if (args.firstWakeAt?.trim() && args.firstWakeAt.trim().toLowerCase() !== "now") {
+          if (
+            args.firstWakeAt?.trim() &&
+            args.firstWakeAt.trim().toLowerCase() !== "now"
+          ) {
             const iso = await parseWhen(args.firstWakeAt);
-            if (!iso) return text(`Couldn't read "${args.firstWakeAt}" as a future time.`);
+            if (!iso)
+              return text(
+                `Couldn't read "${args.firstWakeAt}" as a future time.`,
+              );
             firstWakeAt = iso;
           }
           const res = createGoal({
@@ -162,9 +185,9 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
           if ("error" in res) return text(`Couldn't create it: ${res.error}`);
           return text(
             `Created goal *${res.name}* [\`${res.id}\`], mode ${res.mode}. ` +
-              `First wake ${res.nextWakeAt}. It'll drive its own session and pace itself from there.`
+              `First wake ${res.nextWakeAt}. It'll drive its own session and pace itself from there.`,
           );
-        }
+        },
       ),
       tool(
         "update_goal",
@@ -185,8 +208,10 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
           const { id, ...patch } = args;
           const res = updateGoal(id, patch as any);
           if ("error" in res) return text(`Couldn't update it: ${res.error}`);
-          return text(`Updated *${res.name}* [\`${res.id}\`] — ${res.status}, ${res.mode}.`);
-        }
+          return text(
+            `Updated *${res.name}* [\`${res.id}\`] — ${res.status}, ${res.mode}.`,
+          );
+        },
       ),
       tool(
         "pause_goal",
@@ -199,12 +224,18 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
           });
           if ("error" in res) return text(`Couldn't pause it: ${res.error}`);
           return text(`Paused *${res.name}* [\`${res.id}\`].`);
-        }
+        },
       ),
       tool(
         "resume_goal",
         "Resume a paused (or finished) goal and schedule its next wake. Optionally give a time for when it should next wake.",
-        { id: z.string(), when: z.string().optional().describe("Natural-language next wake; default now.") },
+        {
+          id: z.string(),
+          when: z
+            .string()
+            .optional()
+            .describe("Natural-language next wake; default now."),
+        },
         async (args: { id: string; when?: string }) => {
           let iso: string | undefined;
           if (args.when?.trim() && args.when.trim().toLowerCase() !== "now") {
@@ -213,8 +244,10 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
           }
           const res = resumeGoal(args.id, iso);
           if ("error" in res) return text(`Couldn't resume it: ${res.error}`);
-          return text(`Resumed *${res.name}* [\`${res.id}\`] — next wake ${res.nextWakeAt}.`);
-        }
+          return text(
+            `Resumed *${res.name}* [\`${res.id}\`] — next wake ${res.nextWakeAt}.`,
+          );
+        },
       ),
       tool(
         "run_goal_now",
@@ -223,9 +256,13 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
         async (args: { id: string }) => {
           const g = getGoal(args.id);
           if (!g) return text(`No goal with id \`${args.id}\`.`);
-          saveGoal({ ...g, status: "active", nextWakeAt: new Date().toISOString() });
+          saveGoal({
+            ...g,
+            status: "active",
+            nextWakeAt: new Date().toISOString(),
+          });
           return text(`*${g.name}* will wake within a minute.`);
-        }
+        },
       ),
       tool(
         "delete_goal",
@@ -237,14 +274,18 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
           return text(
             ok
               ? `Deleted goal ${g ? `*${g.name}* ` : ""}[\`${args.id}\`].`
-              : `No goal with id \`${args.id}\`.`
+              : `No goal with id \`${args.id}\`.`,
           );
-        }
-      )
+        },
+      ),
     );
   }
 
-  return createSdkMcpServer({ name: "opensession-goals", version: "1.0.0", tools });
+  return createSdkMcpServer({
+    name: "opensession-goals",
+    version: "1.0.0",
+    tools,
+  });
 }
 
 // ── opensession-goal-self (the running goal's own controls) ──────
@@ -256,7 +297,11 @@ export function createGoalSelfMcpServer(goalId: string) {
     tool(
       "set_next_wake",
       "Schedule when you should next wake to continue this mission. `when` is natural language ('in 7 days', 'tomorrow 9am', 'in 4 hours'). Use a long gap after shipping (e.g. 'in 7 days') so rankings/metrics can actually move before you re-measure. Clamped to the goal's minimum cadence.",
-      { when: z.string().describe("Natural-language next wake, e.g. 'in 7 days'.") },
+      {
+        when: z
+          .string()
+          .describe("Natural-language next wake, e.g. 'in 7 days'."),
+      },
       async (args: { when: string }) => {
         const g = load();
         if (!g) return text("Goal record missing.");
@@ -267,7 +312,7 @@ export function createGoalSelfMcpServer(goalId: string) {
         const nextWakeAt = new Date(at).toISOString();
         saveGoal({ ...g, nextWakeAt, status: "active" });
         return text(`Next wake set to ${nextWakeAt}.`);
-      }
+      },
     ),
     tool(
       "mark_paused",
@@ -276,20 +321,34 @@ export function createGoalSelfMcpServer(goalId: string) {
       async (args: { reason: string }) => {
         const g = load();
         if (!g) return text("Goal record missing.");
-        saveGoal({ ...g, status: "paused", pauseReason: args.reason?.trim() || "Awaiting human input" });
-        return text("Marked paused. I'll stay put until a human resumes this goal.");
-      }
+        saveGoal({
+          ...g,
+          status: "paused",
+          pauseReason: args.reason?.trim() || "Awaiting human input",
+        });
+        return text(
+          "Marked paused. I'll stay put until a human resumes this goal.",
+        );
+      },
     ),
     tool(
       "mark_done",
       "Declare this mission complete (its success condition is met). Stops the wake cycle. Summarize the outcome in `reason`.",
-      { reason: z.string().describe("How the mission was completed / final outcome.") },
+      {
+        reason: z
+          .string()
+          .describe("How the mission was completed / final outcome."),
+      },
       async (args: { reason: string }) => {
         const g = load();
         if (!g) return text("Goal record missing.");
-        saveGoal({ ...g, status: "done", doneReason: args.reason?.trim() || "Completed" });
+        saveGoal({
+          ...g,
+          status: "done",
+          doneReason: args.reason?.trim() || "Completed",
+        });
         return text("Marked done. The wake cycle is stopped.");
-      }
+      },
     ),
     tool(
       "mark_failed",
@@ -298,9 +357,13 @@ export function createGoalSelfMcpServer(goalId: string) {
       async (args: { reason: string }) => {
         const g = load();
         if (!g) return text("Goal record missing.");
-        saveGoal({ ...g, status: "failed", doneReason: args.reason?.trim() || "Failed" });
+        saveGoal({
+          ...g,
+          status: "failed",
+          doneReason: args.reason?.trim() || "Failed",
+        });
         return text("Marked failed. The wake cycle is stopped.");
-      }
+      },
     ),
     tool(
       "update_phase",
@@ -311,7 +374,7 @@ export function createGoalSelfMcpServer(goalId: string) {
         if (!g) return text("Goal record missing.");
         saveGoal({ ...g, phase: args.phase?.trim() || undefined });
         return text("Phase updated.");
-      }
+      },
     ),
     tool(
       "append_ledger",
@@ -323,9 +386,13 @@ export function createGoalSelfMcpServer(goalId: string) {
         if (!args.text?.trim()) return text("Nothing to append.");
         appendLedger(g, args.text);
         return text("Appended to ledger.");
-      }
+      },
     ),
   ];
 
-  return createSdkMcpServer({ name: "opensession-goal-self", version: "1.0.0", tools });
+  return createSdkMcpServer({
+    name: "opensession-goal-self",
+    version: "1.0.0",
+    tools,
+  });
 }

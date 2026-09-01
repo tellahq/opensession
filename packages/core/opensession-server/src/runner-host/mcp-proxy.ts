@@ -32,7 +32,12 @@ const WS_HOST = process.env.OPENSESSION_RPC_WS_HOST || "";
 const WS_AUTH = process.env.OPENSESSION_RPC_WS_AUTH || "";
 const TOKEN = process.env.OPENSESSION_RPC_TOKEN || "";
 const SERVER_NAME = process.env.OPENSESSION_MCP_SERVER || "";
-if ((!SOCK && !WS_URL) || !TOKEN || !SERVER_NAME || (WS_URL && (!WS_HOST || !WS_AUTH))) {
+if (
+  (!SOCK && !WS_URL) ||
+  !TOKEN ||
+  !SERVER_NAME ||
+  (WS_URL && (!WS_HOST || !WS_AUTH))
+) {
   console.error(
     "mcp-proxy: OPENSESSION_RPC_SOCKET or OPENSESSION_RPC_WS_URL (+ OPENSESSION_RPC_WS_HOST/OPENSESSION_RPC_WS_AUTH), plus OPENSESSION_RPC_TOKEN and OPENSESSION_MCP_SERVER are required",
   );
@@ -51,7 +56,10 @@ const WS_DIAL_URL = WS_URL
  * the token. Retrying that one answer lets the proxy bridge the recovery gap.
  */
 class RpcError extends Error {
-  constructor(message: string, readonly retryable = false) {
+  constructor(
+    message: string,
+    readonly retryable = false,
+  ) {
     super(message);
   }
 }
@@ -75,11 +83,15 @@ let wsLive: WebSocket | null = null;
 let wsDialing: Promise<WebSocket> | null = null;
 const wsPending = new Map<
   string,
-  { resolve: (v: { status: number; body: any }) => void; reject: (e: unknown) => void }
+  {
+    resolve: (v: { status: number; body: any }) => void;
+    reject: (e: unknown) => void;
+  }
 >();
 
 function ensureWs(): Promise<WebSocket> {
-  if (wsLive && wsLive.readyState === WebSocket.OPEN) return Promise.resolve(wsLive);
+  if (wsLive && wsLive.readyState === WebSocket.OPEN)
+    return Promise.resolve(wsLive);
   if (wsDialing) return wsDialing;
   wsDialing = new Promise<WebSocket>((resolve, reject) => {
     let settled = false;
@@ -144,27 +156,48 @@ if (WS_URL) {
   }, 30_000).unref?.();
 }
 
-async function rpcOnceWs(path: string, body: Record<string, unknown>): Promise<any> {
+async function rpcOnceWs(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<any> {
   const sock = await ensureWs();
   const id = crypto.randomUUID();
-  const res = await new Promise<{ status: number; body: any }>((resolve, reject) => {
-    wsPending.set(id, { resolve, reject });
-    try {
-      sock.send(JSON.stringify({ id, path, token: TOKEN, server: SERVER_NAME, ...body }));
-    } catch (e) {
-      wsPending.delete(id);
-      reject(e);
-    }
-  });
+  const res = await new Promise<{ status: number; body: any }>(
+    (resolve, reject) => {
+      wsPending.set(id, { resolve, reject });
+      try {
+        sock.send(
+          JSON.stringify({
+            id,
+            path,
+            token: TOKEN,
+            server: SERVER_NAME,
+            ...body,
+          }),
+        );
+      } catch (e) {
+        wsPending.delete(id);
+        reject(e);
+      }
+    },
+  );
   const data = res.body;
   if (res.status !== 200) throw rpcError(res.status, data);
-  if (data && typeof data === "object" && typeof data.error === "string" && data.error) {
+  if (
+    data &&
+    typeof data === "object" &&
+    typeof data.error === "string" &&
+    data.error
+  ) {
     throw rpcError(res.status, data);
   }
   return data;
 }
 
-async function rpcOnceSocket(path: string, body: Record<string, unknown>): Promise<any> {
+async function rpcOnceSocket(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<any> {
   const res = await fetch(`http://backstage${path}`, {
     method: "POST",
     // Bun extension: route the request over a unix socket.
@@ -179,7 +212,12 @@ async function rpcOnceSocket(path: string, body: Record<string, unknown>): Promi
   if (!res.ok) throw rpcError(res.status, data);
   // Long tool calls stream a 200 with heartbeat padding and report failures
   // in the body instead of the status — treat those as answered errors too.
-  if (data && typeof data === "object" && typeof data.error === "string" && data.error) {
+  if (
+    data &&
+    typeof data === "object" &&
+    typeof data.error === "string" &&
+    data.error
+  ) {
     throw rpcError(res.status, data);
   }
   return data;
@@ -191,7 +229,11 @@ async function rpcOnceSocket(path: string, body: Record<string, unknown>): Promi
  * until the deadline. Answered errors surface immediately, except an unknown
  * run token during restart recovery (see rpcError above).
  */
-async function rpc(path: string, body: Record<string, unknown>, timeoutMs = 120_000): Promise<any> {
+async function rpc(
+  path: string,
+  body: Record<string, unknown>,
+  timeoutMs = 120_000,
+): Promise<any> {
   const deadline = Date.now() + timeoutMs;
   let lastErr: unknown;
   for (;;) {
@@ -203,7 +245,7 @@ async function rpc(path: string, body: Record<string, unknown>, timeoutMs = 120_
     }
     if (Date.now() >= deadline) {
       throw new Error(
-        `opensession unreachable at ${WS_URL || SOCK} for ${Math.round(timeoutMs / 1000)}s: ${lastErr}`
+        `opensession unreachable at ${WS_URL || SOCK} for ${Math.round(timeoutMs / 1000)}s: ${lastErr}`,
       );
     }
     await new Promise((r) => setTimeout(r, 1500));
@@ -212,7 +254,7 @@ async function rpc(path: string, body: Record<string, unknown>, timeoutMs = 120_
 
 const server = new Server(
   { name: `backstage-proxy-${SERVER_NAME}`, version: "1.0.0" },
-  { capabilities: { tools: {} } }
+  { capabilities: { tools: {} } },
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -243,7 +285,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         tool: req.params.name,
         args,
       },
-      32 * 60_000
+      32 * 60_000,
     );
     return data.result;
   } catch (e: any) {

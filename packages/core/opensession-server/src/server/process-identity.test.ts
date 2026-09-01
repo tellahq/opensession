@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { linuxProcessStartTicks, processIdentity, sameProcess } from "./process-identity";
+import {
+  linuxProcessStartTicks,
+  processIdentity,
+  sameProcess,
+} from "./process-identity";
 
 describe("process identity", () => {
   test("matches the current process by boot and start ticks", () => {
@@ -7,6 +11,8 @@ describe("process identity", () => {
     if (!identity) return;
     expect(linuxProcessStartTicks(process.pid)).toBe(identity.startTicks);
     expect(sameProcess(identity)).toBe(true);
-    expect(sameProcess({ ...identity, startTicks: `${identity.startTicks}0` })).toBe(false);
+    expect(
+      sameProcess({ ...identity, startTicks: `${identity.startTicks}0` }),
+    ).toBe(false);
   });
 });

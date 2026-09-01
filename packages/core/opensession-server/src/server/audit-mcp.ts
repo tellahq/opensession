@@ -57,7 +57,7 @@ export interface AuditDigestDeps {
  */
 export function auditDigestPayload(
   date: string | undefined,
-  deps: AuditDigestDeps = { build: buildAuditDigest, dates: listAuditDates }
+  deps: AuditDigestDeps = { build: buildAuditDigest, dates: listAuditDates },
 ): Record<string, unknown> {
   const day = date?.trim() || yesterdayUtc();
   if (!DATE_RE.test(day)) {
@@ -96,7 +96,10 @@ export function auditDigestPayload(
     if (size() <= MAX_CHARS) break;
     const list = payload[key];
     if (!Array.isArray(list) || list.length === 0) continue;
-    truncated[key] = { kept: 0, dropped: list.length + (truncated[key]?.dropped || 0) };
+    truncated[key] = {
+      kept: 0,
+      dropped: list.length + (truncated[key]?.dropped || 0),
+    };
     payload[key] = [];
   }
   if (Object.keys(truncated).length > 0) {
@@ -116,7 +119,9 @@ export function createAuditMcpServer() {
         date: z
           .string()
           .optional()
-          .describe("Day to read, as YYYY-MM-DD. Defaults to yesterday (UTC). One day only."),
+          .describe(
+            "Day to read, as YYYY-MM-DD. Defaults to yesterday (UTC). One day only.",
+          ),
       },
       async ({ date }) => ({
         content: [
@@ -125,8 +130,12 @@ export function createAuditMcpServer() {
             text: JSON.stringify(auditDigestPayload(date), null, 2),
           },
         ],
-      })
+      }),
     ),
   ];
-  return createSdkMcpServer({ name: "opensession-audit", version: "1.0.0", tools });
+  return createSdkMcpServer({
+    name: "opensession-audit",
+    version: "1.0.0",
+    tools,
+  });
 }

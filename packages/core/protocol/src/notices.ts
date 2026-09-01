@@ -178,16 +178,23 @@ export interface AnsweredAskData {
 
 /** Validate the optional structured ask payload at the parser/classifier
  *  boundary. A malformed or future version falls back to the markdown record. */
-export function parseAnsweredAskData(value: unknown): AnsweredAskData | undefined {
+export function parseAnsweredAskData(
+  value: unknown,
+): AnsweredAskData | undefined {
   if (!value || typeof value !== "object") return undefined;
   const record = value as { version?: unknown; questions?: unknown };
-  if (record.version !== 1 || !Array.isArray(record.questions) || !record.questions.length)
+  if (
+    record.version !== 1 ||
+    !Array.isArray(record.questions) ||
+    !record.questions.length
+  )
     return undefined;
   const questions: AnsweredAskData["questions"] = [];
   for (const valueQuestion of record.questions) {
     if (!valueQuestion || typeof valueQuestion !== "object") return undefined;
     const q = valueQuestion as Record<string, unknown>;
-    if (typeof q.question !== "string" || typeof q.answer !== "string") return undefined;
+    if (typeof q.question !== "string" || typeof q.answer !== "string")
+      return undefined;
     let options: AnsweredAskData["questions"][number]["options"];
     if (q.options !== undefined) {
       if (!Array.isArray(q.options)) return undefined;
@@ -196,7 +203,10 @@ export function parseAnsweredAskData(value: unknown): AnsweredAskData | undefine
         if (!valueOption || typeof valueOption !== "object") return undefined;
         const option = valueOption as Record<string, unknown>;
         if (typeof option.label !== "string") return undefined;
-        if (option.description !== undefined && typeof option.description !== "string")
+        if (
+          option.description !== undefined &&
+          typeof option.description !== "string"
+        )
           return undefined;
         options.push({
           label: option.label,
@@ -206,14 +216,18 @@ export function parseAnsweredAskData(value: unknown): AnsweredAskData | undefine
         });
       }
     }
-    if (q.header !== undefined && typeof q.header !== "string") return undefined;
-    if (q.multiSelect !== undefined && typeof q.multiSelect !== "boolean") return undefined;
+    if (q.header !== undefined && typeof q.header !== "string")
+      return undefined;
+    if (q.multiSelect !== undefined && typeof q.multiSelect !== "boolean")
+      return undefined;
     questions.push({
       question: q.question,
       answer: q.answer,
       ...(typeof q.header === "string" ? { header: q.header } : {}),
       ...(options ? { options } : {}),
-      ...(typeof q.multiSelect === "boolean" ? { multiSelect: q.multiSelect } : {}),
+      ...(typeof q.multiSelect === "boolean"
+        ? { multiSelect: q.multiSelect }
+        : {}),
     });
   }
   return { version: 1, questions };
@@ -344,7 +358,8 @@ const LEADING_SENTINEL_RE = /^\s*<!--os:[a-z-]+(?::[^\s>]+)?-->\s*/;
 
 function stripLeadingSentinels(text: string): string {
   let out = text;
-  while (LEADING_SENTINEL_RE.test(out)) out = out.replace(LEADING_SENTINEL_RE, "");
+  while (LEADING_SENTINEL_RE.test(out))
+    out = out.replace(LEADING_SENTINEL_RE, "");
   return out;
 }
 
@@ -547,7 +562,11 @@ function parseLegacyAnsweredAsk(body: string): AnsweredAskData | undefined {
   for (const raw of body.split("\n")) {
     const line = raw.trim();
     if (!line) continue;
-    if (line.startsWith("**") && line.endsWith("**") && !line.startsWith("- ")) {
+    if (
+      line.startsWith("**") &&
+      line.endsWith("**") &&
+      !line.startsWith("- ")
+    ) {
       finish();
       const combined = line.slice(2, -2).trim();
       const headed = combined.match(/^([^:*_`\[\]{}]{1,40}):\s+(.+)$/);
@@ -584,7 +603,10 @@ function parseLegacyAnsweredAsk(body: string): AnsweredAskData | undefined {
   if (!questions.length) return undefined;
   for (const q of questions) {
     if (!q.options?.length) delete q.options;
-    if ((q.options?.filter((o) => q.answer.split(", ").includes(o.label)).length ?? 0) > 1)
+    if (
+      (q.options?.filter((o) => q.answer.split(", ").includes(o.label))
+        .length ?? 0) > 1
+    )
       q.multiSelect = true;
   }
   return { version: 1, questions };
@@ -712,7 +734,12 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
         tone: "info",
         body: "collapsed",
         ...(sessionNotice.sessionId
-          ? { link: { label: "Open session", sessionId: sessionNotice.sessionId } }
+          ? {
+              link: {
+                label: "Open session",
+                sessionId: sessionNotice.sessionId,
+              },
+            }
           : {}),
       },
     };

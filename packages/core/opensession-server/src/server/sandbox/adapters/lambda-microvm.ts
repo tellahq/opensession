@@ -9,7 +9,10 @@
  * sessions that push their work regularly.
  */
 
-import type { GetMicrovmResponse, LambdaMicrovmsClient } from "@aws-sdk/client-lambda-microvms";
+import type {
+  GetMicrovmResponse,
+  LambdaMicrovmsClient,
+} from "@aws-sdk/client-lambda-microvms";
 import { getRepo, worktreePathFor } from "../../worktree";
 import { sandboxConfig } from "../config";
 import type {
@@ -57,16 +60,17 @@ function awsConfig() {
     );
   }
   const region =
-    cfg.region || process.env.AGENT_AWS_REGION || process.env.AWS_REGION || "us-east-1";
+    cfg.region ||
+    process.env.AGENT_AWS_REGION ||
+    process.env.AWS_REGION ||
+    "us-east-1";
   return { cfg, region };
 }
 
 async function awsClient(): Promise<LambdaMicrovmsClient> {
   const { region } = awsConfig();
-  const clients = ((globalThis as any).__opensessionLambdaMicrovmClients ||= new Map()) as Map<
-    string,
-    LambdaMicrovmsClient
-  >;
+  const clients = ((globalThis as any).__opensessionLambdaMicrovmClients ||=
+    new Map()) as Map<string, LambdaMicrovmsClient>;
   const cached = clients.get(region);
   if (cached) return cached;
   const { LambdaMicrovmsClient } = await awsModule();
@@ -77,7 +81,8 @@ async function awsClient(): Promise<LambdaMicrovmsClient> {
 
 function statusOf(state: string | undefined): SandboxStatus {
   if (state === "RUNNING") return "running";
-  if (state === "SUSPENDED" || state === "SUSPENDING" || state === "PENDING") return "stopped";
+  if (state === "SUSPENDED" || state === "SUSPENDING" || state === "PENDING")
+    return "stopped";
   return "gone";
 }
 
@@ -89,7 +94,8 @@ async function getMicrovm(
   try {
     return await client.send(new GetMicrovmCommand({ microvmIdentifier: id }));
   } catch (e) {
-    if ((e as { name?: string })?.name === "ResourceNotFoundException") return null;
+    if ((e as { name?: string })?.name === "ResourceNotFoundException")
+      return null;
     throw e;
   }
 }
@@ -105,7 +111,9 @@ async function ensureRunning(
   const deadline = Date.now() + 5 * 60_000;
   while (info.state !== "RUNNING" && Date.now() < deadline) {
     if (statusOf(info.state) === "gone") {
-      throw new Error(`Lambda MicroVM ${id} terminated: ${info.stateReason || info.state}`);
+      throw new Error(
+        `Lambda MicroVM ${id} terminated: ${info.stateReason || info.state}`,
+      );
     }
     if (info.state === "SUSPENDED" && !resumeSent) {
       await client.send(new ResumeMicrovmCommand({ microvmIdentifier: id }));
@@ -115,7 +123,8 @@ async function ensureRunning(
     info = await getMicrovm(client, id);
     if (!info) throw new Error(`Lambda MicroVM ${id} is gone`);
   }
-  if (info.state !== "RUNNING") throw new Error(`Lambda MicroVM ${id} did not become ready`);
+  if (info.state !== "RUNNING")
+    throw new Error(`Lambda MicroVM ${id} did not become ready`);
   return info;
 }
 
@@ -149,7 +158,9 @@ function lambdaDriver(
     if (!endpoint) endpoint = (await ensureRunning(client, id)).endpoint;
     if (!endpoint) throw new Error(`Lambda MicroVM ${id} returned no endpoint`);
     const { cfg } = awsConfig();
-    const base = /^https?:\/\//.test(endpoint) ? endpoint : `https://${endpoint}`;
+    const base = /^https?:\/\//.test(endpoint)
+      ? endpoint
+      : `https://${endpoint}`;
     const response = await fetch(`${base}${path}`, {
       method: "POST",
       headers: {
@@ -192,7 +203,11 @@ function lambdaDriver(
       }
     },
     async execBackground(cmd: string, opts?: RemoteExecOpts) {
-      await request("/background", { command: cmd, cwd: opts?.cwd, env: opts?.env });
+      await request("/background", {
+        command: cmd,
+        cwd: opts?.cwd,
+        env: opts?.env,
+      });
     },
     async writeFile(path: string, content: string) {
       await request("/files", {
@@ -211,12 +226,16 @@ export class LambdaMicrovmProvider implements SandboxProvider {
   readonly id = "lambda-microvm" as const;
 
   ensure(spec: SandboxSessionSpec): Promise<Sandbox> {
-    return withRemoteEnsureLock(this.id, spec.sessionId, () => this.ensureInner(spec));
+    return withRemoteEnsureLock(this.id, spec.sessionId, () =>
+      this.ensureInner(spec),
+    );
   }
 
   private async ensureInner(spec: SandboxSessionSpec): Promise<Sandbox> {
     if (spec.attachedDirs?.length) {
-      throw new Error("attached repos are not supported in remote sandboxes — detach them or use docker/local");
+      throw new Error(
+        "attached repos are not supported in remote sandboxes — detach them or use docker/local",
+      );
     }
     const { cfg, region } = awsConfig();
     const client = await awsClient();
@@ -225,12 +244,15 @@ export class LambdaMicrovmProvider implements SandboxProvider {
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
     const cwd =
-      spec.cwd || prevState?.cwd || worktreePathFor(branch, repo.id, { isolated: true });
+      spec.cwd ||
+      prevState?.cwd ||
+      worktreePathFor(branch, repo.id, { isolated: true });
 
     const pendingClientToken = prevState?.pendingClientToken;
-    let info = prevState && !pendingClientToken
-      ? await getMicrovm(client, prevState.sandboxId)
-      : null;
+    let info =
+      prevState && !pendingClientToken
+        ? await getMicrovm(client, prevState.sandboxId)
+        : null;
     const configuredDuration = Math.max(
       3600,
       Math.min(
@@ -248,7 +270,11 @@ export class LambdaMicrovmProvider implements SandboxProvider {
         (info.maximumDurationInSeconds || DEFAULT_MAX_DURATION_SECONDS) * 1000 -
           rolloverMarginMs
     ) {
-      const oldDriver = lambdaDriver(client, prevState!.sandboxId, info.endpoint);
+      const oldDriver = lambdaDriver(
+        client,
+        prevState!.sandboxId,
+        info.endpoint,
+      );
       await oldDriver.ensureStarted();
       const pending = await oldDriver.exec(
         `cd ${shellQuoteWord(cwd)} && ` +
@@ -325,7 +351,8 @@ export class LambdaMicrovmProvider implements SandboxProvider {
             : {}),
         }),
       );
-      if (!response.microvmId) throw new Error("RunMicrovm returned no microvmId");
+      if (!response.microvmId)
+        throw new Error("RunMicrovm returned no microvmId");
       removeRemoteState(this.id, `pending-${clientToken}`);
       info = response;
       created = true;
@@ -337,7 +364,8 @@ export class LambdaMicrovmProvider implements SandboxProvider {
         cwd,
         repoId: repo.id,
         branch,
-        createdAt: response.startedAt?.toISOString() || new Date().toISOString(),
+        createdAt:
+          response.startedAt?.toISOString() || new Date().toISOString(),
         lastActivityAt: new Date().toISOString(),
         ...trust,
       });
@@ -356,7 +384,13 @@ export class LambdaMicrovmProvider implements SandboxProvider {
         branch,
         repo.defaultBranch,
         repo.id,
-        { sandboxId: id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
+        {
+          sandboxId: id,
+          provider: this.id,
+          sessionId: spec.sessionId,
+          repoId: repo.id,
+          trustProfile: trust.trustProfile,
+        },
       );
     } catch (e) {
       if (created) await this.terminate(client, id).catch(() => {});
@@ -419,9 +453,14 @@ export class LambdaMicrovmProvider implements SandboxProvider {
     }
   }
 
-  private async terminate(client: LambdaMicrovmsClient, sandboxId: string): Promise<void> {
+  private async terminate(
+    client: LambdaMicrovmsClient,
+    sandboxId: string,
+  ): Promise<void> {
     const { TerminateMicrovmCommand } = await awsModule();
-    await client.send(new TerminateMicrovmCommand({ microvmIdentifier: sandboxId }));
+    await client.send(
+      new TerminateMicrovmCommand({ microvmIdentifier: sandboxId }),
+    );
   }
 
   async destroy(sandboxId: string): Promise<void> {

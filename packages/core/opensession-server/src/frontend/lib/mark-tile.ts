@@ -46,9 +46,9 @@ import { contrastRatio, hexToOklch, maxChroma, oklchToHex } from "./oklch";
 /** Sizes are px, and the boundaries are where a step stops being a corner and
  *  starts being a circle. Proportions land at ~25% / ~31% / ~45% of the box. */
 export function markTileClass(size: number): string {
-	const radius =
-		size <= 24 ? "rounded-sm" : size <= 32 ? "rounded-md" : "rounded-control";
-	return `flex shrink-0 items-center justify-center overflow-hidden font-semibold ${radius}`;
+  const radius =
+    size <= 24 ? "rounded-sm" : size <= 32 ? "rounded-md" : "rounded-control";
+  return `flex shrink-0 items-center justify-center overflow-hidden font-semibold ${radius}`;
 }
 
 /**
@@ -58,10 +58,10 @@ export function markTileClass(size: number): string {
  * it. Kept under 30% so a grid of marks does not haze.
  */
 export function markTileShadow(color: string): string {
-	return [
-		"0 1px 2px rgba(0, 0, 0, 0.08)",
-		`0 5px 14px -6px color-mix(in srgb, ${color} 50%, transparent)`,
-	].join(", ");
+  return [
+    "0 1px 2px rgba(0, 0, 0, 0.08)",
+    `0 5px 14px -6px color-mix(in srgb, ${color} 50%, transparent)`,
+  ].join(", ");
 }
 
 /**
@@ -118,31 +118,31 @@ const WHITE_INK_FLOOR = 3.05;
 const rampCache = new Map<MarkTone, { top: string; bottom: string }>();
 
 function markTileRamp(tone: MarkTone) {
-	const cached = rampCache.get(tone);
-	if (cached) return cached;
+  const cached = rampCache.get(tone);
+  if (cached) return cached;
 
-	const base = hexToOklch(getAccentThemeOption(tone).light);
-	const stop = (lightness: number, hue: number) =>
-		oklchToHex({
-			L: lightness,
-			C: Math.min(maxChroma(lightness, hue) * CHROMA_HEADROOM, CHROMA_CEILING),
-			h: hue,
-		});
+  const base = hexToOklch(getAccentThemeOption(tone).light);
+  const stop = (lightness: number, hue: number) =>
+    oklchToHex({
+      L: lightness,
+      C: Math.min(maxChroma(lightness, hue) * CHROMA_HEADROOM, CHROMA_CEILING),
+      h: hue,
+    });
 
-	const litHue = base.h + HUE_TILT;
-	let lit = base.L + RAMP_LIGHTNESS;
-	while (
-		lit > base.L &&
-		contrastRatio("#ffffff", stop(lit, litHue)) < WHITE_INK_FLOOR
-	)
-		lit -= 0.005;
+  const litHue = base.h + HUE_TILT;
+  let lit = base.L + RAMP_LIGHTNESS;
+  while (
+    lit > base.L &&
+    contrastRatio("#ffffff", stop(lit, litHue)) < WHITE_INK_FLOOR
+  )
+    lit -= 0.005;
 
-	const ramp = {
-		top: stop(lit, litHue),
-		bottom: stop(base.L - RAMP_LIGHTNESS, base.h - HUE_TILT),
-	};
-	rampCache.set(tone, ramp);
-	return ramp;
+  const ramp = {
+    top: stop(lit, litHue),
+    bottom: stop(base.L - RAMP_LIGHTNESS, base.h - HUE_TILT),
+  };
+  rampCache.set(tone, ramp);
+  return ramp;
 }
 
 /**
@@ -157,14 +157,14 @@ function markTileRamp(tone: MarkTone) {
  * hue's own ceiling brightens the plate while it stays the same colour.
  */
 export function markTileGradient(tone: MarkTone): string {
-	const { top, bottom } = markTileRamp(tone);
-	return `linear-gradient(155deg, ${top}, ${bottom})`;
+  const { top, bottom } = markTileRamp(tone);
+  return `linear-gradient(155deg, ${top}, ${bottom})`;
 }
 
 /** The deep end of the ramp. It is what `markTileShadow` wants: the glow
  *  belongs under the weight of the plate, not under the light on it. */
 export function markTileInk(tone: MarkTone): string {
-	return markTileRamp(tone).bottom;
+  return markTileRamp(tone).bottom;
 }
 
 export type MarkTone = (typeof MARK_TONES)[number];
@@ -187,9 +187,9 @@ export type MarkTone = (typeof MARK_TONES)[number];
  * an identity for a row rather than a preference someone chose.
  */
 export const MARK_TONES = [
-	"sky",
-	"indigo",
-	"green",
-	"orange",
-	"coral",
+  "sky",
+  "indigo",
+  "green",
+  "orange",
+  "coral",
 ] as const satisfies readonly AccentTheme[];

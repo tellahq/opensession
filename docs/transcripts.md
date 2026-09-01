@@ -188,12 +188,12 @@ existing row instead of duplicating it.
 
 Four sources are currently written:
 
-| source | written at | content |
-| --- | --- | --- |
-| `tools` | `runOnModel` | Engine-neutral run scope: MCP allowlist, in-process servers, denied and confirmed tools, mode, and local-workspace-tool status |
-| `mcp-servers` | Pi runner after tool policy | The effective MCP/discovery and local tool names, scope, strips, and optional oracle tool |
-| `instructions` | Pi runner after `buildRunInstructions` | Open Session's finalized instruction append, including the repos/memory note and local `AGENTS.local.md` / `CLAUDE.local.md` content |
-| `session-start` | Pi runner after creating a fresh engine session | The final effective Pi system prompt, after AGENTS files, skills, and tool guidance, plus the active tool descriptions and schemas |
+| source          | written at                                      | content                                                                                                                              |
+| --------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `tools`         | `runOnModel`                                    | Engine-neutral run scope: MCP allowlist, in-process servers, denied and confirmed tools, mode, and local-workspace-tool status       |
+| `mcp-servers`   | Pi runner after tool policy                     | The effective MCP/discovery and local tool names, scope, strips, and optional oracle tool                                            |
+| `instructions`  | Pi runner after `buildRunInstructions`          | Open Session's finalized instruction append, including the repos/memory note and local `AGENTS.local.md` / `CLAUDE.local.md` content |
+| `session-start` | Pi runner after creating a fresh engine session | The final effective Pi system prompt, after AGENTS files, skills, and tool guidance, plus the active tool descriptions and schemas   |
 
 The `session-start` source makes the initial provider system-and-tool context
 exact for current Pi sessions, including tool schemas. The web viewer exposes

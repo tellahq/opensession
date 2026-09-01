@@ -53,8 +53,7 @@ describe("prompt-context", () => {
     expect(parseContextBlocks(prompt)).toEqual([
       {
         source: "pinned-goal",
-        body:
-          "Pinned session goal. Keep working toward it:\n\nShip the stable sandbox flow.",
+        body: "Pinned session goal. Keep working toward it:\n\nShip the stable sandbox flow.",
       },
     ]);
   });
@@ -99,6 +98,7 @@ describe("prompt-context", () => {
 });
 
 it("strips the pre-rename backstage fence pair (old transcripts)", () => {
-	const text = "<backstage:context>\nplumbing\n</backstage:context>\nreal message";
-	expect(stripContext(text)).toBe("real message");
+  const text =
+    "<backstage:context>\nplumbing\n</backstage:context>\nreal message";
+  expect(stripContext(text)).toBe("real message");
 });

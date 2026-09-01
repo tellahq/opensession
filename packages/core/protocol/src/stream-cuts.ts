@@ -27,7 +27,12 @@ function lastSentenceEnd(line: string): number {
   for (let i = line.length - 1; i >= 1; i--) {
     if (line[i] !== " ") continue;
     const punctuation = line[i - 1];
-    if (punctuation !== "." && punctuation !== "!" && punctuation !== "?" && punctuation !== ":") {
+    if (
+      punctuation !== "." &&
+      punctuation !== "!" &&
+      punctuation !== "?" &&
+      punctuation !== ":"
+    ) {
       continue;
     }
     // "e.g. " and friends are not the end of anything worth cutting at.
@@ -63,7 +68,10 @@ function inlineClosed(text: string): boolean {
   if (lastOpen !== -1 && body.indexOf(")", lastOpen) === -1) return false;
   const bold = body.match(/\*\*/g);
   if (bold && bold.length % 2 !== 0) return false;
-  const stars = body.replace(/\*\*/g, "").replace(/^ {0,3}\* /gm, "").match(/\*/g);
+  const stars = body
+    .replace(/\*\*/g, "")
+    .replace(/^ {0,3}\* /gm, "")
+    .match(/\*/g);
   if (stars && stars.length % 2 !== 0) return false;
   return true;
 }
@@ -91,7 +99,10 @@ export function safeFlushLength(text: string): number {
       // The trailing partial line: a sentence inside it is still a boundary.
       if (!inFence) {
         const sentence = lastSentenceEnd(line);
-        if (sentence > 0 && inlineClosed(text.slice(paragraphStart, i + sentence))) {
+        if (
+          sentence > 0 &&
+          inlineClosed(text.slice(paragraphStart, i + sentence))
+        ) {
           cut = Math.max(cut, i + sentence);
         }
       }
@@ -138,7 +149,11 @@ export function safeFlushLength(text: string): number {
  * never flashes. A space cut also needs a word on the line already — "## "
  * alone renders as an empty heading.
  */
-export function advanceReveal(text: string, from: number, budget: number): number {
+export function advanceReveal(
+  text: string,
+  from: number,
+  budget: number,
+): number {
   if (from >= text.length) return text.length;
   const desired = Math.min(from + Math.max(1, budget), text.length);
   if (desired >= text.length) return text.length;

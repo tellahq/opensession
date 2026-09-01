@@ -1,68 +1,107 @@
 import { utilityClassName } from "../ui/cn";
 import {
-	Virtualizer,
-	defaultRangeExtractor,
-	elementScroll,
-	observeElementOffset,
-	observeElementRect,
-	type VirtualItem,
-	type VirtualizerOptions,
+  Virtualizer,
+  defaultRangeExtractor,
+  elementScroll,
+  observeElementOffset,
+  observeElementRect,
+  type VirtualItem,
+  type VirtualizerOptions,
 } from "@tanstack/react-virtual";
 import React from "react";
-import { flushSync } from "react-dom";
+import { PHONE_QUERY } from "../lib/breakpoints";
 import {
-	loadTranscriptSizes,
-	recordTranscriptSizes,
-	seededBlockEstimate,
-	type TranscriptSizes,
+  loadTranscriptSizes,
+  recordTranscriptSizes,
+  seededBlockEstimate,
+  type TranscriptSizes,
 } from "../lib/transcript-sizes";
-import { newTailBlockKeys } from "../lib/transcript-block-identity";
 import {
-	registerTranscriptVirtualNavigation,
-	type TranscriptVirtualNavigation,
+  newTailBlockKeys,
+  shouldAnimateTranscriptItemArrival,
+} from "../lib/transcript-block-identity";
+import {
+  TRANSCRIPT_ARRIVING_POSITION_CLASS,
+  transcriptEnterClass,
+} from "../lib/transcript-motion";
+import { TranscriptTopApproachGate } from "../lib/transcript-top-approach";
+import {
+  registerTranscriptVirtualNavigation,
+  type TranscriptVirtualNavigation,
 } from "../lib/transcript-virtual-navigation";
 import { cn } from "../ui/cn";
 import * as stylex from "@stylexjs/stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	relative: {
-			position: "relative"
-	},
-	wFull: {
-			width: "100%"
-	},
+  relative: {
+    position: "relative",
+  },
+  wFull: {
+    width: "100%",
+  },
 });
 
 export interface VirtualTranscriptItem {
-	key: string;
-	anchorId: string;
-	entryIds: string[];
-	estimateSize: number;
-	/** Keep the estimate until sparse payload content is available to measure. */
-	measure?: boolean;
-	className?: string;
-	content: React.ReactNode;
+  key: string;
+  anchorId: string;
+  entryIds: string[];
+  /** Previously rendered entry identities this row durably replaces. A fresh
+   * outer block with one of these aliases is reconciliation, not an arrival. */
+  arrivalAliases?: string[];
+  /** Semantic entry revisions for content changes that do not add another id.
+   * Used only to select the handful of rows that need a synchronous
+   * post-commit measurement. */
+  measureVersion?: readonly unknown[];
+  /** False for indexed ranges whose payload arrives in read-only hydration
+   * slices. Those rows are appearing from history, not arriving live. */
+  animateArrival?: boolean;
+  /** False when position changes represent hydration rather than a live
+   * semantic insert. */
+  animatePositionChanges?: boolean;
+  estimateSize: number;
+  /** Keep the estimate until sparse payload content is available to measure. */
+  measure?: boolean;
+  className?: string;
+  content: React.ReactNode;
+}
+
+export function measureTranscriptElement(
+  element: Pick<HTMLDivElement, "getBoundingClientRect">,
+  entry: ResizeObserverEntry | undefined,
+): number {
+  const borderBox = entry?.borderBoxSize?.[0];
+  return Math.round(
+    borderBox?.blockSize ?? element.getBoundingClientRect().height,
+  );
 }
 
 interface Props {
-	items: VirtualTranscriptItem[];
-	/** Keep the live-edge tail mounted inside the same virtual coordinate space. */
-	trailingMounted: number;
-	onVisibleItems?: (items: VirtualTranscriptItem[]) => void;
-	/** Fired when the reader climbs near the top of what is mounted, so a
-	 * caller loading history incrementally can hydrate the next page. */
-	onTopApproach?: () => void;
-	/** Re-evaluate top demand after the caller enables or retries loading. */
-	topApproachGeneration?: number;
-	/** Head of the incrementally hydrated range window. */
-	topGrowthKey?: string | null;
-	/** Loaded-row count while the head range is partial. */
-	topGrowthVersion?: number;
-	/** Range children reuse the renderer without nesting another virtualizer. */
-	enabled?: boolean;
-	/** Session identity for the measured-height cache. */
-	sizeCacheKey?: string;
+  items: VirtualTranscriptItem[];
+  /** Keep the live-edge tail mounted inside the same virtual coordinate space. */
+  trailingMounted: number;
+  onVisibleItems?: (items: VirtualTranscriptItem[]) => void;
+  /** Explicit host scroller for transcript surfaces outside SessionViewer. */
+  scrollElement?: HTMLDivElement | null;
+  /** Whether measurement may maintain the live edge in this frame. */
+  shouldMaintainEnd?: () => boolean;
+  /** The measured virtual extent changed after commit. Following readers use
+   * this to reaffirm the live edge after sparse history finishes measuring. */
+  onLayout?: () => void;
+  /** Fired when the reader climbs near the top of what is mounted, so a
+   * caller loading history incrementally can hydrate the next page. Returns
+   * whether more history remains available for an underfilled viewport. */
+  onTopApproach?: () => boolean;
+  /** Re-evaluate visible demand after the caller enables or retries loading. */
+  topApproachGeneration?: number;
+  /** Head range whose missing prefix is hydrating into an existing row. */
+  topGrowthKey?: string | null;
+  /** Loaded-row count while that head range is a partial suffix. */
+  topGrowthVersion?: number;
+  /** Range children reuse the renderer without nesting another virtualizer. */
+  enabled?: boolean;
+  /** Session identity for the measured-height cache. */
+  sizeCacheKey?: string;
 }
 
 /** A block that just arrived at the live edge fades up into place instead of
@@ -71,10 +110,14 @@ interface Props {
  *  animation does not restart when its element re-renders). The transform
  *  lives on this inner wrapper because the virtualized row itself positions
  *  with an inline translateY that the keyframe must not fight. */
-const ENTER_CLASS = "[animation:transcript-enter_var(--dur)_var(--ease)]";
-
-function EnterRow({ enter, children }: { enter?: boolean; children: React.ReactNode }) {
-	return <div className={enter ? ENTER_CLASS : undefined}>{children}</div>;
+function EnterRow({
+  enter,
+  children,
+}: {
+  enter?: boolean;
+  children: React.ReactNode;
+}) {
+  return <div className={transcriptEnterClass(Boolean(enter))}>{children}</div>;
 }
 
 /**
@@ -86,10 +129,10 @@ function EnterRow({ enter, children }: { enter?: boolean; children: React.ReactN
  * the browser virtualizer and the semantic static fallback.
  */
 export function VirtualTranscriptList({ enabled = true, ...props }: Props) {
-	const canVirtualize =
-		enabled && typeof ResizeObserver !== "undefined" && props.items.length > 0;
-	if (!canVirtualize) return <>{props.items.map(renderStaticItem)}</>;
-	return <TranscriptVirtualizer {...props} />;
+  const canVirtualize =
+    enabled && typeof ResizeObserver !== "undefined" && props.items.length > 0;
+  if (!canVirtualize) return <>{props.items.map(renderStaticItem)}</>;
+  return <TranscriptVirtualizer {...props} />;
 }
 
 type AdapterState = { revision: number };
@@ -97,415 +140,855 @@ type AdapterState = { revision: number };
 /** Imperative adapter for TanStack Virtual core. Class components are outside
  * the React Compiler's function-component transform, so no compiler bailout or
  * opt-out is involved. Its lifecycle mirrors TanStack's official React hook. */
-class TranscriptVirtualizer extends React.Component<Omit<Props, "enabled">, AdapterState> {
-	state: AdapterState = { revision: 0 };
-	private root: HTMLDivElement | null = null;
-	private mounted = false;
-	private rendering = false;
-	private mountCleanup: (() => void) | undefined;
-	private navigationCleanup: (() => void) | undefined;
-	private navigationContainer: HTMLDivElement | null = null;
-	private navigationItems: VirtualTranscriptItem[] | null = null;
-	private visibleTimer: number | undefined;
-	private containerFor: HTMLDivElement | null = null;
-	private container: HTMLDivElement | null = null;
-	private topApproachContainer: HTMLDivElement | null = null;
-	private topApproachCallback: (() => void) | undefined;
-	private topApproachGeneration: number | undefined;
-	private topApproachItemsLength = -1;
-	private topApproachFirstKey: string | undefined;
-	private topApproachTimer: number | undefined;
-	private topApproachLastFire = Number.NEGATIVE_INFINITY;
-	private rowObserver: ResizeObserver | null = null;
-	private rowRefs = new Map<string, (node: HTMLDivElement | null) => void>();
-	/** Every block key this adapter instance has ever mounted. The first build
-	 *  seeds it (opening a session is not an arrival); afterwards, a tail key
-	 *  missing from the set just arrived live and plays the entrance fade. Keys
-	 *  stay in the set once seen, so a virtualizer remount never replays it. */
-	private mountedKeys: Set<string> | null = null;
-	private seeded: { session: string; sizes?: TranscriptSizes } | null = null;
-	private virtualizer: Virtualizer<HTMLDivElement, HTMLDivElement>;
+class TranscriptVirtualizer extends React.Component<
+  Omit<Props, "enabled">,
+  AdapterState
+> {
+  state: AdapterState = { revision: 0 };
+  private root: HTMLDivElement | null = null;
+  private mounted = false;
+  private rendering = false;
+  private committing = false;
+  private renderAfterCommit = false;
+  private renderQueued = false;
+  private mountCleanup: (() => void) | undefined;
+  private navigationCleanup: (() => void) | undefined;
+  private navigationContainer: HTMLDivElement | null = null;
+  private navigationItems: VirtualTranscriptItem[] | null = null;
+  private visibleTimer: number | undefined;
+  private renderedTotalSize = 0;
+  private notifiedTotalSize = -1;
+  private containerFor: HTMLDivElement | null = null;
+  private explicitContainerFor: HTMLDivElement | null | undefined;
+  private container: HTMLDivElement | null = null;
+  private innerAnchorContainer: HTMLDivElement | null = null;
+  private innerAnchor:
+    | { node: HTMLElement; id: string; top: number }
+    | undefined;
+  private innerAnchorFrame: number | undefined;
+  private topApproachContainer: HTMLDivElement | null = null;
+  private topApproachCallback: (() => boolean) | undefined;
+  private topApproachTimer: number | undefined;
+  private underfilledHistoryTimer: number | undefined;
+  private topApproachTouchY: number | null = null;
+  private topApproachScrollTop: number | null = null;
+  private topApproachGate = new TranscriptTopApproachGate();
+  private rowObserver: ResizeObserver | null = null;
+  private rowRefs = new Map<string, (node: HTMLDivElement | null) => void>();
+  /** A bounded opening payload can be a suffix of its structural row. When
+   * older payload joins that row's start, preserve the point inside the row;
+   * ordinary pages append at the end and native keyed anchoring owns them. */
+  private headGrowthKeys = new Set<string>();
+  private headGrowthGeneration = 0;
+  private scheduledHeadGrowthGeneration = 0;
+  private headGrowthTimer: number | undefined;
+  private renderedGrowth:
+    | { key: string; version: number | undefined }
+    | undefined;
+  /** Every block key this adapter instance has ever mounted. The first build
+   *  seeds it (opening a session is not an arrival); afterwards, a tail key
+   *  missing from the set just arrived live and plays the entrance fade. Keys
+   *  stay in the set once seen, so a virtualizer remount never replays it. */
+  private mountedKeys: Set<string> | null = null;
+  /** Entry identities already painted inside those blocks. Unlike block keys,
+   * these survive an optimistic row becoming a new durable transcript range. */
+  private mountedEntryIds = new Set<string>();
+  private seeded: { session: string; sizes?: TranscriptSizes } | null = null;
+  private virtualizer: Virtualizer<HTMLDivElement, HTMLDivElement>;
 
-	constructor(props: Omit<Props, "enabled">) {
-		super(props);
-		this.syncSeeded(props.sizeCacheKey);
-		this.virtualizer = new Virtualizer(this.options(props));
-	}
+  constructor(props: Omit<Props, "enabled">) {
+    super(props);
+    this.syncSeeded(props.sizeCacheKey);
+    this.virtualizer = new Virtualizer(this.options(props));
+  }
 
-	componentDidMount() {
-		this.mounted = true;
-		this.mountCleanup = this.virtualizer._didMount();
-		this.virtualizer._willUpdate();
-		this.syncTopApproach();
-		this.syncNavigation();
-		this.scheduleVisibleItems();
-	}
+  componentDidMount() {
+    this.mounted = true;
+    this.runCommitLifecycle(() => {
+      this.mountCleanup = this.virtualizer._didMount();
+      this.virtualizer._willUpdate();
+      this.syncTopApproach();
+      this.scheduleUnderfilledHistory();
+      this.syncNavigation();
+      this.syncInnerAnchor();
+      this.scheduleVisibleItems();
+      this.notifyLayout();
+    });
+  }
 
-	/** Pre-mutation scroller height, captured only for commits that prepend
-	 * history above the reader (growth key handoff or a partial head range
-	 * completing). Detecting those from props alone keeps ordinary commits free
-	 * of forced layout: the unconditional scrollHeight read that used to live in
-	 * every componentDidUpdate was the largest non-idle self-time entry in
-	 * history-scroll profiles. */
-	getSnapshotBeforeUpdate(prevProps: Omit<Props, "enabled">): number | null {
-		const growthKey = this.props.topGrowthKey ?? this.props.items[0]?.key ?? "";
-		if (!growthKey) return null;
-		const previousKey = prevProps.topGrowthKey ?? prevProps.items[0]?.key ?? "";
-		const prependedRange =
-			growthKey !== previousKey &&
-			this.props.items.some((item) => item.key === previousKey);
-		const completedPartialRange =
-			growthKey === previousKey &&
-			prevProps.topGrowthVersion !== undefined &&
-			this.props.topGrowthVersion !== prevProps.topGrowthVersion;
-		if (!prependedRange && !completedPartialRange) return null;
-		return this.scrollContainer()?.scrollHeight ?? null;
-	}
+  componentDidUpdate(prevProps: Omit<Props, "enabled">) {
+    this.runCommitLifecycle(() => {
+      this.measureCommittedRows(prevProps);
+      this.virtualizer._willUpdate();
+      this.restoreInnerAnchor();
+      this.scheduleHeadGrowthClear();
+      this.syncTopApproach();
+      if (
+        prevProps.items.length !== this.props.items.length ||
+        prevProps.topGrowthKey !== this.props.topGrowthKey ||
+        prevProps.topGrowthVersion !== this.props.topGrowthVersion ||
+        prevProps.topApproachGeneration !== this.props.topApproachGeneration
+      )
+        this.scheduleUnderfilledHistory();
+      this.syncNavigation();
+      this.syncInnerAnchor();
+      this.scheduleVisibleItems();
+      this.notifyLayout();
+    });
+  }
 
-	componentDidUpdate(
-		_prevProps: Omit<Props, "enabled">,
-		_prevState: AdapterState,
-		snapshot: number | null,
-	) {
-		this.virtualizer._willUpdate();
-		if (snapshot !== null) {
-			// Height gained by this commit's own mutation goes back on scrollTop
-			// before paint, holding the reader's place while history grows above.
-			const container = this.scrollContainer();
-			if (container) {
-				const delta = container.scrollHeight - snapshot;
-				if (delta > 0) container.scrollTop += delta;
-			}
-		}
-		this.syncTopApproach();
-		this.syncNavigation();
-		this.scheduleVisibleItems();
-	}
+  componentWillUnmount() {
+    this.mounted = false;
+    this.mountCleanup?.();
+    this.navigationCleanup?.();
+    this.clearInnerAnchor();
+    this.clearTopApproach();
+    if (this.underfilledHistoryTimer !== undefined)
+      window.clearTimeout(this.underfilledHistoryTimer);
+    if (this.visibleTimer !== undefined) window.clearTimeout(this.visibleTimer);
+    if (this.headGrowthTimer !== undefined)
+      window.clearTimeout(this.headGrowthTimer);
+    this.rowObserver?.disconnect();
+  }
 
-	componentWillUnmount() {
-		this.mounted = false;
-		this.mountCleanup?.();
-		this.navigationCleanup?.();
-		this.clearTopApproach();
-		if (this.visibleTimer !== undefined) window.clearTimeout(this.visibleTimer);
-		this.rowObserver?.disconnect();
-	}
+  private notifyLayout() {
+    if (this.renderedTotalSize === this.notifiedTotalSize) return;
+    this.notifiedTotalSize = this.renderedTotalSize;
+    this.props.onLayout?.();
+  }
 
-	private syncSeeded(sizeCacheKey?: string) {
-		if (!sizeCacheKey) {
-			this.seeded = null;
-			return;
-		}
-		if (this.seeded?.session === sizeCacheKey) return;
-		this.seeded = {
-			session: sizeCacheKey,
-			sizes: loadTranscriptSizes(sizeCacheKey),
-		};
-	}
+  private prepareHeadGrowth(props: Omit<Props, "enabled">) {
+    const key = props.topGrowthKey ?? "";
+    const next = { key, version: props.topGrowthVersion };
+    const previous = this.renderedGrowth;
+    this.renderedGrowth = next;
+    if (
+      !previous ||
+      !key ||
+      key !== previous.key ||
+      next.version === previous.version
+    )
+      return;
+    // This is the one hydration shape that is not a keyed insertion: the
+    // opening payload was a suffix of the row, and older content joined its
+    // start. Ordinary range pages append at the end and must not use this path.
+    this.headGrowthKeys.add(key);
+    this.headGrowthGeneration++;
+  }
 
-	private requestRender = (_instance: Virtualizer<HTMLDivElement, HTMLDivElement>, sync: boolean) => {
-		if (!this.mounted) return;
-		const update = () => {
-			if (this.mounted)
-				this.setState(({ revision }) => ({ revision: revision + 1 }));
-		};
-		// setOptions can notify while render is deriving the next range. Hooks can
-		// queue a render-phase update; classes cannot, so finish this render first.
-		if (this.rendering) queueMicrotask(update);
-		else if (sync) flushSync(update);
-		else update();
-	};
+  private scheduleHeadGrowthClear() {
+    if (
+      this.headGrowthKeys.size === 0 ||
+      this.scheduledHeadGrowthGeneration === this.headGrowthGeneration
+    )
+      return;
+    this.scheduledHeadGrowthGeneration = this.headGrowthGeneration;
+    if (this.headGrowthTimer !== undefined)
+      window.clearTimeout(this.headGrowthTimer);
+    const generation = this.headGrowthGeneration;
+    this.headGrowthTimer = window.setTimeout(() => {
+      this.headGrowthTimer = undefined;
+      if (this.headGrowthGeneration === generation) this.headGrowthKeys.clear();
+    }, 750);
+  }
 
-	private options(
-		props: Omit<Props, "enabled">,
-	): VirtualizerOptions<HTMLDivElement, HTMLDivElement> {
-		return {
-			count: props.items.length,
-			getScrollElement: () => this.scrollContainer(),
-			estimateSize: (index) => {
-				const item = props.items[index];
-				if (!item) return 96;
-				return seededBlockEstimate(item.estimateSize, this.seeded?.sizes, item.key);
-			},
-			getItemKey: (index) => props.items[index]?.key ?? index,
-			overscan: 8,
-			rangeExtractor: (range) =>
-				virtualTranscriptRange(
-					defaultRangeExtractor(range),
-					range.count,
-					props.trailingMounted,
-				),
-			observeElementRect,
-			observeElementOffset,
-			scrollToFn: elementScroll,
-			useAnimationFrameWithResizeObserver: true,
-			onChange: this.requestRender,
-		};
-	}
+  private syncSeeded(sizeCacheKey?: string) {
+    if (!sizeCacheKey) {
+      this.seeded = null;
+      return;
+    }
+    if (this.seeded?.session === sizeCacheKey) return;
+    this.seeded = {
+      session: sizeCacheKey,
+      sizes: loadTranscriptSizes(sizeCacheKey),
+    };
+  }
 
-	private setRoot = (node: HTMLDivElement | null) => {
-		this.root = node;
-	};
+  private queueRender() {
+    if (this.renderQueued) return;
+    this.renderQueued = true;
+    queueMicrotask(() => {
+      this.renderQueued = false;
+      if (this.mounted)
+        this.setState(({ revision }) => ({ revision: revision + 1 }));
+    });
+  }
 
-	/** The nearest message scroller, cached per root node: `closest` walks the
-	 * whole ancestor chain and used to run several times on every commit. */
-	private scrollContainer(): HTMLDivElement | null {
-		if (this.root !== this.containerFor) {
-			this.containerFor = this.root;
-			this.container =
-				this.root?.closest<HTMLDivElement>(".viewer-messages") ?? null;
-		}
-		return this.container;
-	}
+  private requestRender = (
+    _instance: Virtualizer<HTMLDivElement, HTMLDivElement>,
+    sync: boolean,
+  ) => {
+    if (!this.mounted) return;
+    if (this.committing) {
+      // Mount/update lifecycles already run before paint. Batch virtualizer
+      // notifications into one nested update after the lifecycle returns.
+      this.renderAfterCommit = true;
+      return;
+    }
+    // setOptions can notify while render is deriving the next range, and DOM
+    // observers can notify while React is committing a different subtree.
+    // A microtask still lands before the next paint without forcing React to
+    // flush from inside a lifecycle. Coalesce same-turn geometry notifications
+    // so a theme-wide style change costs one render rather than one per row.
+    if (this.rendering || sync) this.queueRender();
+    else this.setState(({ revision }) => ({ revision: revision + 1 }));
+  };
 
-	private observeRowNode(key: string, node: HTMLElement) {
-		node.dataset.transcriptKey = key;
-		if (!this.rowObserver) {
-			this.rowObserver = new ResizeObserver((entries) => {
-				const cache = this.seeded?.sizes;
-				if (!cache || entries.length === 0) return;
-				const measured: Array<readonly [string, number]> = [];
-				let width = 0;
-				for (const entry of entries) {
-					const target = entry.target as HTMLElement;
-					const entryKey = target.dataset.transcriptKey;
-					const height =
-						entry.borderBoxSize?.[0]?.blockSize ??
-						target.getBoundingClientRect().height;
-					if (entryKey && Number.isFinite(height) && height > 0)
-						measured.push([entryKey, height]);
-					width ||= entry.borderBoxSize?.[0]?.inlineSize ?? target.offsetWidth;
-				}
-				recordTranscriptSizes(cache, width, measured);
-			});
-		}
-		this.rowObserver.observe(node);
-	}
+  private runCommitLifecycle(work: () => void) {
+    this.committing = true;
+    this.renderAfterCommit = false;
+    try {
+      work();
+    } finally {
+      this.committing = false;
+    }
+    if (!this.renderAfterCommit) return;
+    this.renderAfterCommit = false;
+    this.setState(({ revision }) => ({ revision: revision + 1 }));
+  }
 
-	private rowRef(key: string) {
-		let callback = this.rowRefs.get(key);
-		if (!callback) {
-			callback = (node) => {
-				this.virtualizer.measureElement(node);
-				if (this.props.sizeCacheKey && node) this.observeRowNode(key, node);
-			};
-			if (this.rowRefs.size > 1_000) this.rowRefs.clear();
-			this.rowRefs.set(key, callback);
-		}
-		return callback;
-	}
+  private options(
+    props: Omit<Props, "enabled">,
+  ): VirtualizerOptions<HTMLDivElement, HTMLDivElement> {
+    return {
+      count: props.items.length,
+      getScrollElement: () => this.scrollContainer(),
+      // TanStack keeps a stable keyed item in place when older rows prepend.
+      // Product-level following includes non-virtual tail rows, selections,
+      // and disclosure intent, so the host is the sole owner of end following.
+      // A negative threshold disables core's independent geometry-only end
+      // correction without disabling keyed prepend anchoring.
+      anchorTo: "end",
+      scrollEndThreshold: -1,
+      estimateSize: (index) => {
+        const item = props.items[index];
+        if (!item) return 96;
+        return seededBlockEstimate(
+          item.estimateSize,
+          this.seeded?.sizes,
+          item.key,
+        );
+      },
+      getItemKey: (index) => props.items[index]?.key ?? index,
+      // Touch momentum can move a phone viewport farther between committed
+      // frames than wheel scrolling. Keep twice as much history mounted there
+      // so the leading edge cannot expose an unmounted row during a fast fling.
+      overscan: transcriptOverscan(
+        typeof window !== "undefined" && window.matchMedia(PHONE_QUERY).matches,
+      ),
+      rangeExtractor: (range) =>
+        virtualTranscriptRange(
+          defaultRangeExtractor(range),
+          range.count,
+          props.trailingMounted,
+        ),
+      observeElementRect,
+      observeElementOffset,
+      scrollToFn: elementScroll,
+      measureElement: measureTranscriptElement,
+      // Semantic transcript revisions are measured synchronously in
+      // componentDidUpdate. ResizeObserver is only the fallback for external
+      // geometry changes, so let TanStack coalesce those into the next frame;
+      // flushing React from inside observer delivery can resize another row and
+      // trigger the browser's undelivered-notifications warning.
+      useAnimationFrameWithResizeObserver: true,
+      onChange: this.requestRender,
+    };
+  }
 
-	private syncNavigation() {
-		const container = this.scrollContainer();
-		if (
-			container === this.navigationContainer &&
-			this.props.items === this.navigationItems &&
-			this.navigationCleanup
-		)
-			return;
-		this.navigationCleanup?.();
-		this.navigationCleanup = undefined;
-		this.navigationContainer = container;
-		this.navigationItems = this.props.items;
-		if (!container || this.props.items.length === 0) return;
-		const indexByEntry = new Map<string, number>();
-		for (let index = 0; index < this.props.items.length; index++) {
-			for (const entryId of this.props.items[index]?.entryIds ?? [])
-				if (!indexByEntry.has(entryId)) indexByEntry.set(entryId, index);
-		}
-		const navigation: TranscriptVirtualNavigation = {
-			scrollToEntry: (entryId) => {
-				const index = indexByEntry.get(entryId);
-				if (index === undefined) return false;
-				this.virtualizer.scrollToIndex(index, { align: "start" });
-				return true;
-			},
-		};
-		this.navigationCleanup = registerTranscriptVirtualNavigation(container, navigation);
-	}
+  private setRoot = (node: HTMLDivElement | null) => {
+    this.root = node;
+  };
 
-	private evaluateTopApproach = () => {
-		const container = this.topApproachContainer;
-		const callback = this.topApproachCallback;
-		if (!container || !callback || container.scrollTop > container.clientHeight) return;
-		const now = performance.now();
-		if (now - this.topApproachLastFire < 900) return;
-		this.topApproachLastFire = now;
-		callback();
-	};
+  private measureCommittedRows(prevProps: Omit<Props, "enabled">) {
+    const keys = committedTranscriptMeasureKeys(
+      prevProps.items,
+      this.props.items,
+    );
+    if (!this.root || keys.size === 0) return;
+    for (const node of this.root.querySelectorAll<HTMLDivElement>(
+      "[data-transcript-key]",
+    )) {
+      if (!keys.has(node.dataset.transcriptKey ?? "")) continue;
+      // ResizeObserver reports after the commit. Re-running TanStack's own
+      // measurement path here lets it update root height and compensation in
+      // the same pre-paint layout phase. Do not mix resizeItem with
+      // measureElement on the same index: TanStack documents that as
+      // unpredictable because both paths race to own the cached size.
+      this.virtualizer.measureElement(node);
+    }
+  }
 
-	private onTopApproachScroll = () => {
-		if (this.topApproachTimer !== undefined) return;
-		this.topApproachTimer = window.setTimeout(() => {
-			this.topApproachTimer = undefined;
-			this.evaluateTopApproach();
-		}, 100);
-	};
+  /** The nearest message scroller, cached per root node: `closest` walks the
+   * whole ancestor chain and used to run several times on every commit. */
+  private scrollContainer(): HTMLDivElement | null {
+    const explicit = this.props.scrollElement;
+    if (
+      this.root !== this.containerFor ||
+      explicit !== this.explicitContainerFor
+    ) {
+      this.containerFor = this.root;
+      this.explicitContainerFor = explicit;
+      this.container =
+        explicit ??
+        this.root?.closest<HTMLDivElement>(".viewer-messages") ??
+        null;
+    }
+    return this.container;
+  }
 
-	private onTopApproachWheel = (event: WheelEvent) => {
-		if (event.deltaY < 0) this.onTopApproachScroll();
-	};
+  private captureInnerAnchor = () => {
+    const container = this.innerAnchorContainer;
+    const root = this.root;
+    if (!container || !root) return;
+    const viewport = container.getBoundingClientRect();
+    let deepest:
+      | { node: HTMLElement; id: string; top: number; bottom: number }
+      | undefined;
+    for (const node of root.querySelectorAll<HTMLElement>(
+      "[data-eid]:not([data-transcript-key])",
+    )) {
+      const id = node.dataset.eid;
+      if (!id) continue;
+      const rect = node.getBoundingClientRect();
+      if (
+        rect.height <= 0 ||
+        rect.bottom <= viewport.top + 1 ||
+        rect.top >= viewport.bottom - 1 ||
+        (deepest && rect.bottom <= deepest.bottom)
+      )
+        continue;
+      deepest = {
+        node,
+        id,
+        top: rect.top - viewport.top,
+        bottom: rect.bottom,
+      };
+    }
+    this.innerAnchor = deepest;
+  };
 
-	private clearTopApproach() {
-		this.topApproachContainer?.removeEventListener("scroll", this.onTopApproachScroll);
-		this.topApproachContainer?.removeEventListener("wheel", this.onTopApproachWheel);
-		this.topApproachContainer = null;
-		if (this.topApproachTimer !== undefined) {
-			window.clearTimeout(this.topApproachTimer);
-			this.topApproachTimer = undefined;
-		}
-	}
+  private onInnerAnchorScroll = () => {
+    if (this.props.shouldMaintainEnd?.()) return;
+    if (!this.innerAnchor) {
+      this.captureInnerAnchor();
+      return;
+    }
+    if (this.innerAnchorFrame !== undefined) return;
+    this.innerAnchorFrame = requestAnimationFrame(() => {
+      this.innerAnchorFrame = undefined;
+      this.captureInnerAnchor();
+    });
+  };
 
-	private syncTopApproach() {
-		const container = this.scrollContainer();
-		const callback = this.props.onTopApproach;
-		const containerChanged = container !== this.topApproachContainer;
-		const wiringChanged =
-			containerChanged || callback !== this.topApproachCallback;
-		const firstKey = this.props.items[0]?.key;
-		if (
-			!wiringChanged &&
-			this.props.topApproachGeneration === this.topApproachGeneration &&
-			this.props.items.length === this.topApproachItemsLength &&
-			firstKey === this.topApproachFirstKey
-		)
-			return;
-		this.clearTopApproach();
-		this.topApproachCallback = callback;
-		this.topApproachGeneration = this.props.topApproachGeneration;
-		this.topApproachItemsLength = this.props.items.length;
-		this.topApproachFirstKey = firstKey;
-		// Range completions change the generation, length, and first key together.
-		// Preserve the cooldown across those commits so a fast response cannot
-		// immediately chain another batch. A continued upward wheel gesture still
-		// re-evaluates demand even while native scrolling is pinned at scrollTop 0.
-		if (containerChanged) this.topApproachLastFire = Number.NEGATIVE_INFINITY;
-		if (!container || !callback) return;
-		this.topApproachContainer = container;
-		container.addEventListener("scroll", this.onTopApproachScroll, { passive: true });
-		container.addEventListener("wheel", this.onTopApproachWheel, { passive: true });
-		this.evaluateTopApproach();
-	}
+  private clearInnerAnchor() {
+    this.innerAnchorContainer?.removeEventListener(
+      "scroll",
+      this.onInnerAnchorScroll,
+      true,
+    );
+    if (this.innerAnchorFrame !== undefined)
+      cancelAnimationFrame(this.innerAnchorFrame);
+    this.innerAnchorFrame = undefined;
+    this.innerAnchorContainer = null;
+    this.innerAnchor = undefined;
+  }
 
-	// Geometry reads and the near-visible filter run inside the debounce, not
-	// at schedule time: scheduling happens on every commit, and reading
-	// scrollTop/clientHeight there forced a layout per commit for a result the
-	// timeout usually threw away. Firing late also reports the freshest window.
-	private scheduleVisibleItems() {
-		if (this.visibleTimer !== undefined) window.clearTimeout(this.visibleTimer);
-		if (!this.props.onVisibleItems) return;
-		this.visibleTimer = window.setTimeout(() => {
-			this.visibleTimer = undefined;
-			const { onVisibleItems, items } = this.props;
-			const virtualItems = this.virtualizer.getVirtualItems();
-			if (!onVisibleItems || virtualItems.length === 0) return;
-			const container = this.scrollContainer();
-			const top = container?.scrollTop ?? 0;
-			const viewport = container?.clientHeight ?? 0;
-			const bottom = top + viewport;
-			onVisibleItems(
-				virtualItems
-					.filter(
-						(item) =>
-							!container ||
-							(item.end >= top - viewport && item.start <= bottom + viewport),
-					)
-					.map((virtualItem) => items[virtualItem.index])
-					.filter((item): item is VirtualTranscriptItem => Boolean(item)),
-			);
-		}, 120);
-	}
+  private syncInnerAnchor() {
+    const container = this.scrollContainer();
+    if (container !== this.innerAnchorContainer) {
+      this.clearInnerAnchor();
+      this.innerAnchorContainer = container;
+      container?.addEventListener("scroll", this.onInnerAnchorScroll, {
+        passive: true,
+        capture: true,
+      });
+    }
+    this.captureInnerAnchor();
+  }
 
-	render() {
-		this.rendering = true;
-		this.syncSeeded(this.props.sizeCacheKey);
-		this.virtualizer.setOptions(this.options(this.props));
-		this.virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
-			item,
-			_delta,
-			instance,
-		) => {
-			// At the live edge the follow glue owns positioning: TanStack's
-			// per-row compensation pairs every size change with an equal instant
-			// scrollTop step, which turns a turn's end-of-stream restructure into
-			// a one-frame teleport past the glide (measured 1716px). Readers away
-			// from the edge keep the compensation — it holds their place while
-			// history hydrates above them.
-			const scrollEl = instance.scrollElement;
-			if (scrollEl) {
-				const fromBottom =
-					scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
-				if (fromBottom < 120) return false;
-			}
-			return shouldAdjustTranscriptScroll(item.end, instance.scrollOffset ?? 0);
-		};
-		const virtualItems = this.virtualizer.getVirtualItems();
-		const totalSize = this.virtualizer.getTotalSize();
-		// Tail-arrival detection runs here, in the imperative adapter, because
-		// "mounted by the previous build" is virtualizer knowledge: the function
-		// component above is compiler-managed and may re-render without a new
-		// item list, and a ref-based previous-set there is a compile error.
-		const entering = newTailBlockKeys(
-			this.mountedKeys,
-			this.props.items.map((item) => item.key),
-		);
-		if (this.mountedKeys === null) this.mountedKeys = new Set();
-		for (const item of this.props.items) this.mountedKeys.add(item.key);
-		const enteringSet = new Set(entering);
-		const result = (
-			<div
-				ref={this.setRoot}
-				{...stylex.props(sx.relative, sx.wFull)}
-				style={{ height: totalSize }}
-				data-virtual-transcript
-				data-virtual-count={this.props.items.length}
-				data-transcript-blocks={this.props.items.length}
-			>
-				{virtualItems.map((virtualItem: VirtualItem) => {
-					const item = this.props.items[virtualItem.index];
-					if (!item) return null;
-					return (
-						<div
-							key={item.key}
-							ref={item.measure === false ? undefined : this.rowRef(item.key)}
-							data-index={virtualItem.index}
-							data-eid={item.anchorId}
-							className={cn(utilityClassName("absolute left-0 top-0 w-full"), item.className)}
-							style={{ transform: `translateY(${virtualItem.start}px)` }}
-						>
-							<EnterRow enter={enteringSet.has(item.key)}>{item.content}</EnterRow>
-						</div>
-					);
-				})}
-			</div>
-		);
-		this.rendering = false;
-		return result;
-	}
+  /** Native keyed anchoring owns the structural move first. Grouped rows can
+   * still change internally, and estimate-to-measurement correction may leave
+   * a small residual. Preserve the deepest entry the reader could actually
+   * see, then yield again until the next committed item revision. */
+  private restoreInnerAnchor() {
+    const container = this.scrollContainer();
+    const root = this.root;
+    const anchor = this.innerAnchor;
+    if (!container || !root || !anchor || this.props.shouldMaintainEnd?.())
+      return;
+    const node = anchor.node.isConnected
+      ? anchor.node
+      : [...root.querySelectorAll<HTMLElement>("[data-eid]")].find(
+          (candidate) => candidate.dataset.eid === anchor.id,
+        );
+    if (!node) return;
+    const top =
+      node.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    const delta = top - anchor.top;
+    if (Math.abs(delta) > 0.5) container.scrollTop += delta;
+  }
+
+  private observeRowNode(key: string, node: HTMLElement) {
+    node.dataset.transcriptKey = key;
+    if (!this.rowObserver) {
+      this.rowObserver = new ResizeObserver((entries) => {
+        const cache = this.seeded?.sizes;
+        if (!cache || entries.length === 0) return;
+        const measured: Array<readonly [string, number]> = [];
+        let width = 0;
+        for (const entry of entries) {
+          const target = entry.target as HTMLElement;
+          const entryKey = target.dataset.transcriptKey;
+          const height =
+            entry.borderBoxSize?.[0]?.blockSize ??
+            target.getBoundingClientRect().height;
+          if (entryKey && Number.isFinite(height) && height > 0)
+            measured.push([entryKey, height]);
+          width ||= entry.borderBoxSize?.[0]?.inlineSize ?? target.offsetWidth;
+        }
+        recordTranscriptSizes(cache, width, measured);
+      });
+    }
+    this.rowObserver.observe(node);
+  }
+
+  private rowRef(key: string) {
+    let callback = this.rowRefs.get(key);
+    if (!callback) {
+      callback = (node) => {
+        this.virtualizer.measureElement(node);
+        if (this.props.sizeCacheKey && node) this.observeRowNode(key, node);
+      };
+      if (this.rowRefs.size > 1_000) this.rowRefs.clear();
+      this.rowRefs.set(key, callback);
+    }
+    return callback;
+  }
+
+  private syncNavigation() {
+    const container = this.scrollContainer();
+    if (
+      container === this.navigationContainer &&
+      this.props.items === this.navigationItems &&
+      this.navigationCleanup
+    )
+      return;
+    this.navigationCleanup?.();
+    this.navigationCleanup = undefined;
+    this.navigationContainer = container;
+    this.navigationItems = this.props.items;
+    if (!container || this.props.items.length === 0) return;
+    const indexByEntry = new Map<string, number>();
+    for (let index = 0; index < this.props.items.length; index++) {
+      for (const entryId of this.props.items[index]?.entryIds ?? [])
+        if (!indexByEntry.has(entryId)) indexByEntry.set(entryId, index);
+    }
+    const navigation: TranscriptVirtualNavigation = {
+      scrollToEntry: (entryId) => {
+        const index = indexByEntry.get(entryId);
+        if (index === undefined) return false;
+        this.virtualizer.scrollToIndex(index, { align: "start" });
+        return true;
+      },
+    };
+    this.navigationCleanup = registerTranscriptVirtualNavigation(
+      container,
+      navigation,
+    );
+  }
+
+  private evaluateTopApproach = () => {
+    const container = this.topApproachContainer;
+    const callback = this.topApproachCallback;
+    if (
+      !container ||
+      !callback ||
+      !this.topApproachGate.shouldFire(
+        container.scrollTop <= container.clientHeight,
+        performance.now(),
+      )
+    )
+      return;
+    callback();
+  };
+
+  private onTopApproachScroll = () => {
+    const scrollTop = this.topApproachContainer?.scrollTop;
+    if (scrollTop !== undefined) {
+      const viewportHeight = this.topApproachContainer?.clientHeight ?? 0;
+      const movedTowardHistory = didScrollTranscriptTowardHistory(
+        this.topApproachScrollTop ?? scrollTop,
+        scrollTop,
+        viewportHeight,
+        this.topApproachContainer?.scrollHeight ?? 0,
+      );
+      this.topApproachScrollTop = scrollTop;
+      if (movedTowardHistory) {
+        this.topApproachGate.request();
+        // A scrollbar/Home jump can arrive as one top-edge scroll event. Fire
+        // from that event rather than requiring a second gesture to retry the
+        // debounced proximity check.
+        if (scrollTop <= viewportHeight) {
+          this.evaluateTopApproach();
+          return;
+        }
+      }
+    }
+    if (this.topApproachTimer !== undefined) return;
+    this.topApproachTimer = window.setTimeout(() => {
+      this.topApproachTimer = undefined;
+      this.evaluateTopApproach();
+    }, 100);
+  };
+
+  private requestTopApproach = () => {
+    this.topApproachGate.request();
+    this.onTopApproachScroll();
+  };
+
+  private scheduleUnderfilledHistory() {
+    if (this.underfilledHistoryTimer !== undefined) return;
+    const container = this.topApproachContainer;
+    if (
+      !container ||
+      !this.topApproachCallback ||
+      !transcriptViewportNeedsHistory(
+        container.scrollHeight,
+        container.clientHeight,
+      )
+    )
+      return;
+    // The complete index becomes demand-ready one frame after positioning.
+    // Recheck asynchronously so an opening tail that cannot scroll can request
+    // enough real history to create an upward scroll path.
+    this.underfilledHistoryTimer = window.setTimeout(() => {
+      this.underfilledHistoryTimer = undefined;
+      const current = this.topApproachContainer;
+      const callback = this.topApproachCallback;
+      if (
+        !current ||
+        !callback ||
+        !transcriptViewportNeedsHistory(
+          current.scrollHeight,
+          current.clientHeight,
+        )
+      )
+        return;
+      if (callback()) this.scheduleUnderfilledHistory();
+    }, 250);
+  }
+
+  private onTopApproachWheel = (event: WheelEvent) => {
+    if (event.deltaY < 0) this.requestTopApproach();
+  };
+
+  private onTopApproachTouchStart = (event: TouchEvent) => {
+    this.topApproachTouchY = event.touches[0]?.clientY ?? null;
+  };
+
+  private onTopApproachTouchMove = (event: TouchEvent) => {
+    const y = event.touches[0]?.clientY;
+    if (y === undefined || this.topApproachTouchY === null) return;
+    if (y > this.topApproachTouchY + 1) this.requestTopApproach();
+    this.topApproachTouchY = y;
+  };
+
+  private clearTopApproach() {
+    this.topApproachContainer?.removeEventListener(
+      "scroll",
+      this.onTopApproachScroll,
+      true,
+    );
+    this.topApproachContainer?.removeEventListener(
+      "wheel",
+      this.onTopApproachWheel,
+    );
+    this.topApproachContainer?.removeEventListener(
+      "touchstart",
+      this.onTopApproachTouchStart,
+    );
+    this.topApproachContainer?.removeEventListener(
+      "touchmove",
+      this.onTopApproachTouchMove,
+    );
+    this.topApproachContainer = null;
+    this.topApproachTouchY = null;
+    this.topApproachScrollTop = null;
+    if (this.topApproachTimer !== undefined) {
+      window.clearTimeout(this.topApproachTimer);
+      this.topApproachTimer = undefined;
+    }
+  }
+
+  private syncTopApproach() {
+    const container = this.scrollContainer();
+    const callback = this.props.onTopApproach;
+    const containerChanged = container !== this.topApproachContainer;
+    if (!containerChanged && callback === this.topApproachCallback) return;
+    this.clearTopApproach();
+    this.topApproachCallback = callback;
+    if (containerChanged) this.topApproachGate.reset();
+    if (!container || !callback) return;
+    this.topApproachContainer = container;
+    this.topApproachScrollTop = container.scrollTop;
+    // Capture before React's scroll listener can synchronously rerender this
+    // adapter and replace its listener. In bubble order, a one-step scrollbar
+    // jump removed this callback before the same event ever reached it.
+    container.addEventListener("scroll", this.onTopApproachScroll, {
+      passive: true,
+      capture: true,
+    });
+    container.addEventListener("wheel", this.onTopApproachWheel, {
+      passive: true,
+    });
+    container.addEventListener("touchstart", this.onTopApproachTouchStart, {
+      passive: true,
+    });
+    container.addEventListener("touchmove", this.onTopApproachTouchMove, {
+      passive: true,
+    });
+  }
+
+  // Geometry reads and the near-visible filter run inside the debounce, not
+  // at schedule time: scheduling happens on every commit, and reading
+  // scrollTop/clientHeight there forced a layout per commit for a result the
+  // timeout usually threw away. Firing late also reports the freshest window.
+  private scheduleVisibleItems() {
+    if (this.visibleTimer !== undefined) window.clearTimeout(this.visibleTimer);
+    if (!this.props.onVisibleItems) return;
+    this.visibleTimer = window.setTimeout(() => {
+      this.visibleTimer = undefined;
+      const { onVisibleItems, items } = this.props;
+      const virtualItems = this.virtualizer.getVirtualItems();
+      if (!onVisibleItems || virtualItems.length === 0) return;
+      const container = this.scrollContainer();
+      const top = container?.scrollTop ?? 0;
+      const viewport = container?.clientHeight ?? 0;
+      const bottom = top + viewport;
+      onVisibleItems(
+        virtualItems
+          .filter(
+            (item) =>
+              !container ||
+              (item.end >= top - viewport && item.start <= bottom + viewport),
+          )
+          .map((virtualItem) => items[virtualItem.index])
+          .filter((item): item is VirtualTranscriptItem => Boolean(item)),
+      );
+    }, 120);
+  }
+
+  render() {
+    this.rendering = true;
+    this.syncSeeded(this.props.sizeCacheKey);
+    this.prepareHeadGrowth(this.props);
+    this.virtualizer.setOptions(this.options(this.props));
+    this.virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
+      item,
+      delta,
+      instance,
+    ) => {
+      // A growing live row must carry scrollTop in the same virtualizer frame.
+      // Leaving all live-edge movement to the React layout effect exposed three
+      // distinct phone paints: new tool content, then a taller virtual root,
+      // then the corrected bottom. Shrinks still fall through to the browser's
+      // clamp/follow pass; compensating only positive growth avoids pushing a
+      // reader past the new end during a turn's final restructure.
+      const liveEdgeDelta = this.props.shouldMaintainEnd?.()
+        ? delta
+        : undefined;
+      return shouldAdjustTranscriptScroll({
+        itemStart: item.start,
+        itemEnd: item.end,
+        scrollOffset: instance.scrollOffset ?? 0,
+        firstMeasurement: !instance.itemSizeCache.has(item.key),
+        scrollingBackward: instance.scrollDirection === "backward",
+        growsAtStart: this.headGrowthKeys.has(String(item.key)),
+        liveEdgeDelta,
+      });
+    };
+    const virtualItems = this.virtualizer.getVirtualItems();
+    const totalSize = this.virtualizer.getTotalSize();
+    this.renderedTotalSize = totalSize;
+    // Tail-arrival detection runs here, in the imperative adapter, because
+    // "mounted by the previous build" is virtualizer knowledge: the function
+    // component above is compiler-managed and may re-render without a new
+    // item list, and a ref-based previous-set there is a compile error.
+    const itemsByKey = new Map(
+      this.props.items.map((item) => [item.key, item]),
+    );
+    const entering = newTailBlockKeys(
+      this.mountedKeys,
+      this.props.items.map((item) => item.key),
+    ).filter((key) => {
+      const item = itemsByKey.get(key);
+      return (
+        !item || shouldAnimateTranscriptItemArrival(item, this.mountedEntryIds)
+      );
+    });
+    if (this.mountedKeys === null) this.mountedKeys = new Set();
+    for (const item of this.props.items) {
+      this.mountedKeys.add(item.key);
+      for (const entryId of item.entryIds) this.mountedEntryIds.add(entryId);
+    }
+    const enteringSet = new Set(entering);
+    const result = (
+      <div
+        ref={this.setRoot}
+        {...stylex.props(sx.relative, sx.wFull)}
+        style={{ height: totalSize }}
+        data-virtual-transcript
+        data-virtual-count={this.props.items.length}
+        data-transcript-blocks={this.props.items.length}
+      >
+        {virtualItems.map((virtualItem: VirtualItem) => {
+          const item = this.props.items[virtualItem.index];
+          if (!item) return null;
+          return (
+            <div
+              key={item.key}
+              ref={item.measure === false ? undefined : this.rowRef(item.key)}
+              data-index={virtualItem.index}
+              data-eid={item.anchorId}
+              data-transcript-key={item.key}
+              className={cn(
+                utilityClassName("absolute left-0 top-0 w-full"),
+                item.className,
+                // Live machine rows glide when their measured position moves.
+                // Indexed transcript slices opt out: hydration is not arrival.
+                virtualItem.index >=
+                  Math.max(
+                    0,
+                    this.props.items.length - this.props.trailingMounted,
+                  ) &&
+                  shouldTransitionTranscriptItemPosition(item) &&
+                  TRANSCRIPT_ARRIVING_POSITION_CLASS,
+              )}
+              style={{ transform: `translateY(${virtualItem.start}px)` }}
+            >
+              <EnterRow enter={enteringSet.has(item.key)}>
+                {item.content}
+              </EnterRow>
+            </div>
+          );
+        })}
+      </div>
+    );
+    this.rendering = false;
+    return result;
+  }
 }
 
-export function shouldAdjustTranscriptScroll(
-	itemEnd: number,
-	scrollOffset: number,
+export function committedTranscriptMeasureKeys(
+  previous: VirtualTranscriptItem[],
+  next: VirtualTranscriptItem[],
+): Set<string> {
+  const previousItems = new Map(previous.map((item) => [item.key, item]));
+  const changed = new Set<string>();
+  for (const item of next) {
+    if (item.measure === false) continue;
+    const before = previousItems.get(item.key);
+    const beforeVersion = before?.measureVersion;
+    const nextVersion = item.measureVersion;
+    if (
+      !before ||
+      before.entryIds.length !== item.entryIds.length ||
+      before.entryIds.some((id, index) => id !== item.entryIds[index]) ||
+      beforeVersion?.length !== nextVersion?.length ||
+      Boolean(
+        nextVersion?.some(
+          (version, index) => version !== beforeVersion?.[index],
+        ),
+      )
+    )
+      changed.add(item.key);
+  }
+  return changed;
+}
+
+export function shouldTransitionTranscriptItemPosition(
+  item: VirtualTranscriptItem,
 ): boolean {
-	return itemEnd <= scrollOffset + 1;
+  // A prompt may move when its optimistic row becomes a durable transcript
+  // range. That identity handoff must be visually inert, not a delayed glide.
+  // Indexed range payload slices likewise fill history rather than arrive live.
+  return item.animatePositionChanges !== false && !item.arrivalAliases?.length;
+}
+
+export function transcriptViewportNeedsHistory(
+  scrollHeight: number,
+  clientHeight: number,
+): boolean {
+  return clientHeight > 0 && scrollHeight <= clientHeight + 1;
+}
+
+export function didScrollTranscriptTowardHistory(
+  previousOffset: number,
+  nextOffset: number,
+  viewportHeight = 0,
+  contentHeight = 0,
+): boolean {
+  if (nextOffset < previousOffset - 0.5) return true;
+  // A child virtualizer can subscribe before its parent restores the live edge,
+  // leaving the sampled offset at zero. A one-step Home key or scrollbar jump
+  // then reports zero again. Treat that top-edge event as intent only when the
+  // mounted window is genuinely scrollable and movement was not toward latest.
+  return (
+    contentHeight > viewportHeight * 2 &&
+    nextOffset <= viewportHeight &&
+    nextOffset <= previousOffset + 0.5
+  );
+}
+
+export function shouldAdjustTranscriptScroll({
+  itemStart,
+  itemEnd,
+  scrollOffset,
+  firstMeasurement = false,
+  scrollingBackward = false,
+  growsAtStart = false,
+  liveEdgeDelta,
+}: {
+  itemStart: number;
+  itemEnd: number;
+  scrollOffset: number;
+  firstMeasurement?: boolean;
+  scrollingBackward?: boolean;
+  growsAtStart?: boolean;
+  liveEdgeDelta?: number;
+}): boolean {
+  if (liveEdgeDelta !== undefined) return liveEdgeDelta > 0;
+  // Preserve the point inside a partial opening suffix as older content joins
+  // its start. A continuation page grows at the end and should not move a
+  // reader whose viewport intersects that row.
+  if (growsAtStart) return itemStart < scrollOffset + 1;
+  // Match TanStack's native measurement predicate everywhere else. Supplying
+  // the transcript exception above replaces the core callback, so its default
+  // behavior needs to remain intact here.
+  if (firstMeasurement) return itemStart < scrollOffset;
+  return itemEnd <= scrollOffset + 1 && !scrollingBackward;
+}
+
+export function transcriptOverscan(phone: boolean): number {
+  return phone ? 16 : 8;
 }
 
 export function virtualTranscriptRange(
-	visible: number[],
-	count: number,
-	trailingMounted: number,
+  visible: number[],
+  count: number,
+  trailingMounted: number,
 ): number[] {
-	const indexes = new Set(visible);
-	const start = Math.max(0, count - Math.max(0, trailingMounted));
-	for (let index = start; index < count; index++) indexes.add(index);
-	return [...indexes].sort((a, b) => a - b);
+  const indexes = new Set(visible);
+  const start = Math.max(0, count - Math.max(0, trailingMounted));
+  for (let index = start; index < count; index++) indexes.add(index);
+  return [...indexes].sort((a, b) => a - b);
 }
 
 function renderStaticItem(item: VirtualTranscriptItem) {
-	return (
-		<div key={item.key} data-eid={item.anchorId} className={item.className}>
-			{item.content}
-		</div>
-	);
+  return (
+    <div key={item.key} data-eid={item.anchorId} className={item.className}>
+      {item.content}
+    </div>
+  );
 }

@@ -21,11 +21,14 @@ export function identityIsWorkspaceAdmin(
   if (!explicitRoles) return true;
   const login = identity.login.trim().toLowerCase();
   return team.some(
-    (member) => member.admin === true && member.github?.trim().toLowerCase() === login,
+    (member) =>
+      member.admin === true && member.github?.trim().toLowerCase() === login,
   );
 }
 
-export function workspaceAdminAuthorized(ctx: Pick<RouteContext, "authUser">): boolean {
+export function workspaceAdminAuthorized(
+  ctx: Pick<RouteContext, "authUser">,
+): boolean {
   if (!webAuthRequired()) return true;
   return identityIsWorkspaceAdmin(ctx.authUser, configuredIdentity().team);
 }

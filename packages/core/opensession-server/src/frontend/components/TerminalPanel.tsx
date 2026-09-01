@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { WSServerMessage } from "../lib/types";
+import { useSessionSocket } from "../hooks/useSessionSocket";
 import { Button } from "../ui/button";
 import { EmptyState } from "../ui/state";
 import {
@@ -16,61 +16,61 @@ import * as stylex from "@stylexjs/stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	flex: {
-			display: "flex"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	hFull: {
-			height: "100%"
-	},
-	minH0: {
-			minHeight: "0"
-	},
-	relative: {
-			position: "relative"
-	},
-	h10: {
-			height: "40px"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap3px: {
-			gap: "3px"
-	},
-	borderB: {
-			borderBottomStyle: "solid",
-			borderBottomWidth: "1px"
-	},
-	borderDivider: {
-			borderColor: "var(--divider)"
-	},
-	bgSurface: {
-			backgroundColor: "var(--bg)"
-	},
-	px2: {
-			paddingInline: "8px"
-	},
-	sizeFull: {
-			width: "100%",
-			height: "100%"
-	},
-	overflowHidden: {
-			overflow: "hidden"
-	},
-	flex1: { flex: "1" },
-	pl4: { paddingLeft: "16px" },
-	pt2: { paddingTop: "8px" },
-	pb15: { paddingBottom: "6px" },
-	hidden: { display: "none" },
+  flex: {
+    display: "flex",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  hFull: {
+    height: "100%",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  relative: {
+    position: "relative",
+  },
+  h10: {
+    height: "40px",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap3px: {
+    gap: "3px",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  px2: {
+    paddingInline: "8px",
+  },
+  sizeFull: {
+    width: "100%",
+    height: "100%",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  flex1: { flex: "1" },
+  pl4: { paddingLeft: "16px" },
+  pt2: { paddingTop: "8px" },
+  pb15: { paddingBottom: "6px" },
+  hidden: { display: "none" },
 });
 
 /**
@@ -105,11 +105,45 @@ function b64decode(s: string): Uint8Array {
   return out;
 }
 
-/** The pluggable terminal engine (constructors + extra Terminal options). */
+interface TerminalDisposable {
+  dispose(): void;
+}
+
+interface TerminalAddon {
+  activate: (...args: never[]) => void;
+  dispose(): void;
+  fit(): void;
+}
+
+interface TerminalInstance {
+  cols: number;
+  rows: number;
+  loadAddon(addon: TerminalAddon): void;
+  open(element: HTMLElement): void;
+  onData(handler: (data: string) => void): TerminalDisposable;
+  write(data: string | Uint8Array): void;
+  focus(): void;
+  dispose(): void;
+}
+
+interface TerminalOptions {
+  fontSize: number;
+  fontFamily: string;
+  cursorBlink: boolean;
+  scrollback: number;
+  theme: {
+    background: string;
+    foreground: string;
+    cursor: string;
+    selectionBackground: string;
+  };
+  [key: string]: unknown;
+}
+
 interface TermEngine {
-  Terminal: new (opts: object) => any;
-  FitAddon: new () => any;
-  extraOptions: object;
+  Terminal: new (options: TerminalOptions) => TerminalInstance;
+  FitAddon: new () => TerminalAddon;
+  extraOptions: Record<string, unknown>;
 }
 
 /**
@@ -128,8 +162,8 @@ function loadTerminalEngine(): Promise<TermEngine> {
       // chunk's import.meta.url can't locate the package-relative default.
       const ghostty = await g.Ghostty.load("/ghostty-vt.wasm");
       return {
-        Terminal: g.Terminal as unknown as TermEngine["Terminal"],
-        FitAddon: g.FitAddon as unknown as TermEngine["FitAddon"],
+        Terminal: g.Terminal,
+        FitAddon: g.FitAddon,
         extraOptions: { ghostty },
       };
     } catch (e) {
@@ -139,8 +173,8 @@ function loadTerminalEngine(): Promise<TermEngine> {
         import("@xterm/addon-fit"),
       ]);
       return {
-        Terminal: x.Terminal as unknown as TermEngine["Terminal"],
-        FitAddon: f.FitAddon as unknown as TermEngine["FitAddon"],
+        Terminal: x.Terminal,
+        FitAddon: f.FitAddon,
         extraOptions: {},
       };
     }
@@ -163,17 +197,15 @@ const MAX_SHELL_TABS = 8;
 
 export function ShellPanel({
   sessionId,
-  send,
-  addHandler,
   visible,
 }: {
   sessionId: string;
-  send: (msg: any) => void;
-  addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
   /** False while another side-panel tab covers the (still-mounted) panel. */
   visible: boolean;
 }) {
-  const [tabs, setTabs] = useState<ShellTabSpec[]>(() => [{ id: newTermId(), n: 1 }]);
+  const [tabs, setTabs] = useState<ShellTabSpec[]>(() => [
+    { id: newTermId(), n: 1 },
+  ]);
   const [activeId, setActiveId] = useState<string>(() => tabs[0]!.id);
   const nextN = useRef(2);
 
@@ -196,7 +228,19 @@ export function ShellPanel({
   return (
     <div {...stylex.props(sx.flex, sx.flexCol, sx.hFull, sx.minH0)}>
       <div
-        {...stylex.props(sx.relative, sx.flex, sx.h10, sx.minW0, sx.shrink0, sx.itemsCenter, sx.gap3px, sx.borderB, sx.borderDivider, sx.bgSurface, sx.px2)}
+        {...stylex.props(
+          sx.relative,
+          sx.flex,
+          sx.h10,
+          sx.minW0,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.gap3px,
+          sx.borderB,
+          sx.borderDivider,
+          sx.bgSurface,
+          sx.px2,
+        )}
         role="tablist"
         aria-label="Terminals"
       >
@@ -264,8 +308,6 @@ export function ShellPanel({
             key={t.id}
             sessionId={sessionId}
             termId={t.id}
-            send={send}
-            addHandler={addHandler}
             visible={visible && t.id === activeId}
           />
         ))
@@ -277,16 +319,13 @@ export function ShellPanel({
 function ShellView({
   sessionId,
   termId,
-  send,
-  addHandler,
   visible,
 }: {
   sessionId: string;
   termId: string;
-  send: (msg: any) => void;
-  addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
   visible: boolean;
 }) {
+  const { send, addHandler } = useSessionSocket();
   const hostRef = useRef<HTMLDivElement>(null);
   const showRef = useRef<() => void>(() => {});
 
@@ -322,7 +361,13 @@ function ShellView({
       // actual available canvas instead of drawing beneath visual padding.
       fit.fit();
 
-      send({ type: "term_start", sessionId, termId, cols: term.cols, rows: term.rows });
+      send({
+        type: "term_start",
+        sessionId,
+        termId,
+        cols: term.cols,
+        rows: term.rows,
+      });
 
       const offData = term.onData((d: string) =>
         send({ type: "term_input", termId, data: b64encode(d) }),
@@ -354,7 +399,12 @@ function ShellView({
         if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
         try {
           fit.fit();
-          send({ type: "term_resize", termId, cols: term.cols, rows: term.rows });
+          send({
+            type: "term_resize",
+            termId,
+            cols: term.cols,
+            rows: term.rows,
+          });
         } catch {}
       };
       showRef.current = () => {
@@ -388,12 +438,24 @@ function ShellView({
 
   return (
     <div
-      {...stylex.props(sx.flex1, sx.minH0, sx.overflowHidden, sx.bgSurface, sx.pl4, sx.pt2, sx.pb15, !visible && sx.hidden)}
+      {...stylex.props(
+        sx.flex1,
+        sx.minH0,
+        sx.overflowHidden,
+        sx.bgSurface,
+        sx.pl4,
+        sx.pt2,
+        sx.pb15,
+        !visible && sx.hidden,
+      )}
     >
       {/* Ghostty mounts its hidden keyboard textarea absolutely. Keep this
           host positioned so that input remains inside the terminal instead of
           escaping to the page's top-left corner. */}
-      <div ref={hostRef} {...stylex.props(sx.relative, sx.sizeFull, sx.overflowHidden)} />
+      <div
+        ref={hostRef}
+        {...stylex.props(sx.relative, sx.sizeFull, sx.overflowHidden)}
+      />
     </div>
   );
 }

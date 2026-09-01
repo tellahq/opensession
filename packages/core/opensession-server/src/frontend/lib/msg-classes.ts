@@ -1,153 +1,4 @@
-
-import * as stylex from "@stylexjs/stylex";
-import { mergeStylexClassName } from "../ui/cn";
-import { type as typography } from "../styles/typography.stylex";
-
-const sx = stylex.create({
-	mxAuto: {
-		"marginInline": "auto"
-	},
-	flex: {
-		"display": "flex"
-	},
-	wFull: {
-		"width": "100%"
-	},
-	maxWVarSessionCol: {
-		"maxWidth": "var(--session-col)"
-	},
-	flexCol: {
-		"flexDirection": "column"
-	},
-	mt1: {
-		"marginTop": "4px"
-	},
-	mb125: {
-		"marginBottom": "5px"
-	},
-	flexRowReverse: {
-		"flexDirection": "row-reverse"
-	},
-	itemsCenter: {
-		"alignItems": "center"
-	},
-	gap175: {
-		"gap": "7px"
-	},
-	fontSemibold: {
-		"--tw-font-weight": "var(--font-weight-semibold)",
-		"fontWeight": "var(--font-weight-semibold)"
-	},
-	tracking001em: {
-		"--tw-tracking": "-.01em",
-		"letterSpacing": "-.01em"
-	},
-	textFaint: {
-		"color": "var(--text-faint)"
-	},
-	text1f9e8a: {
-		"color": "#1f9e8a"
-	},
-	itemsStretch: {
-		"alignItems": "stretch"
-	},
-	leading6: {
-		"--tw-leading": "calc(4px * 6)",
-		"lineHeight": "24px"
-	},
-	breakWords: {
-		"overflowWrap": "break-word"
-	},
-	block: {
-		"display": "block"
-	},
-	selfEnd: {
-		"alignSelf": "flex-end"
-	},
-	textFg: {
-		"color": "var(--text)"
-	},
-	OverflowAnchorNone: {
-		"overflowAnchor": "none"
-	},
-	inlineBlock: {
-		"display": "inline-block"
-	},
-	selfCenter: {
-		"alignSelf": "center"
-	},
-	py15: {
-		"paddingBlock": "6px"
-	},
-	textCenter: {
-		"textAlign": "center"
-	},
-	leading145: {
-		"--tw-leading": "1.45",
-		"lineHeight": "1.45"
-	},
-	mt15: {
-		"marginTop": "6px"
-	},
-	flexWrap: {
-		"flexWrap": "wrap"
-	},
-	gap2: {
-		"gap": "8px"
-	},
-	ml15: {
-		"marginLeft": "6px"
-	},
-	cursorDefault: {
-		"cursor": "default"
-	},
-	fontMedium: {
-		"--tw-font-weight": "var(--font-weight-medium)",
-		"fontWeight": "var(--font-weight-medium)"
-	},
-	trackingNormal: {
-		"--tw-tracking": "0",
-		"letterSpacing": "0"
-	},
-
-	mb45: {
-		"marginBottom": "18px"
-	},
-	mb3: {
-		"marginBottom": "12px"
-	},
-	roundedLg: {
-		"borderRadius": "calc(14px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgPanel: {
-		"backgroundColor": "var(--bg-panel)"
-	},
-	px35: {
-		"paddingInline": "14px"
-	},
-	py25: {
-		"paddingBlock": "10px"
-	},
-	roundedRow: {
-		"borderRadius": "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	py225: {
-		"paddingBlock": "9px"
-	},
-
-	maxWMin600px90: {
-		"maxWidth": "min(600px,90%)"
-	},
-	bgRgba31158138012: {
-		"backgroundColor": "#1f9e8a1f"
-	},
-	maxWMin560px100: {
-		"maxWidth": "min(560px,100%)"
-	},
-});
-
+import { utilityClassName } from "../ui/cn";
 /**
  * Transcript message classes — what used to be the `msg-*` family in
  * legacy.css.
@@ -175,22 +26,24 @@ const sx = stylex.create({
  * WebKit paints selection as full-width bands across block gaps; a flex column
  * makes the highlight hug the words (same reason as .viewer-messages).
  */
-const msgRowBase = mergeStylexClassName("msg", sx.mxAuto, sx.flex, sx.wFull, sx.maxWVarSessionCol, sx.flexCol);
+const msgRowBase = utilityClassName(
+  "msg mx-auto flex w-full max-w-[var(--session-col)] flex-col",
+);
 
 /** A normal turn: assistant answer, user bubble, teammate reply. */
-export const msgRow = [msgRowBase, mergeStylexClassName("", sx.mb45)].filter(Boolean).join(" ");
+export const msgRow = utilityClassName(`${msgRowBase} mb-4.5`);
 
 /**
  * A centered notice pill. Tighter bottom margin than a turn, and no top margin
  * at all: flex margins don't collapse, so the previous row's 18px is the gap.
  */
-export const msgSystemRow = [msgRowBase, mergeStylexClassName("", sx.mb3, sx.textCenter)].filter(Boolean).join(" ");
+export const msgSystemRow = utilityClassName(`${msgRowBase} mb-3 text-center`);
 
 /**
  * Your own and a teammate's turns start 4px lower — the old 22px collapsed
  * against the previous sibling's bottom margin, which flex margins don't do.
  */
-export const msgOwnTurn = mergeStylexClassName("", sx.mt1);
+export const msgOwnTurn = utilityClassName("mt-1");
 
 /**
  * Speaker label. Right-aligned (row-reverse) so the identity dot lands on the
@@ -201,58 +54,98 @@ export const msgOwnTurn = mergeStylexClassName("", sx.mt1);
  * Teammate labels put a UserAvatar on the outer edge. The identity mark used
  * to be `.msg-label::before`; that rule is gone from legacy.css.
  */
-export const msgLabel =
-	mergeStylexClassName("msg-label selection:bg-[rgba(0,0,0,0.01)] [&_*::selection]:bg-[rgba(0,0,0,0.01)]", sx.mb125, sx.flex, sx.flexRowReverse, sx.itemsCenter, sx.gap175, typography.meta, sx.fontSemibold, sx.tracking001em, sx.textFaint);
+export const msgLabel = utilityClassName(
+  "msg-label mb-1.25 flex flex-row-reverse items-center gap-1.75 text-meta font-semibold tracking-[-0.01em] text-faint selection:bg-[rgba(0,0,0,0.01)] [&_*::selection]:bg-[rgba(0,0,0,0.01)]",
+);
 
 /** A teammate's reply routed back into the session — a warm teal, so it reads
  *  as someone else stepping in rather than the driver's own words. */
-export const msgLabelHuman = mergeStylexClassName("", sx.text1f9e8a);
+export const msgLabelHuman = utilityClassName("text-[#1f9e8a]");
 
 /**
  * Prose body. Flex column for the same WebKit selection-band reason as the row.
  * Bubbles use `msgBubbleUser` / `msgBubbleHuman` instead, which stay block —
  * they have a surface of their own, so there is no gap to band-paint.
  */
-export const msgBody =
-	mergeStylexClassName("msg-body", sx.flex, sx.flexCol, sx.itemsStretch, typography.body, sx.leading6, sx.breakWords);
+export const msgBody = utilityClassName(
+  "msg-body flex flex-col items-stretch text-body leading-6 break-words",
+);
 
 /** Bubble bodies: shrink-wrapped to their words and hugging the right edge,
  *  capped short of the column so a long message still reads right-aligned. */
-const msgBubble =
-	mergeStylexClassName("msg-body", sx.maxWMin600px90, sx.block, sx.selfEnd, typography.body, sx.leading6, sx.breakWords, sx.textFg);
-export const msgBubbleUser = [msgBubble, mergeStylexClassName("", sx.roundedLg, sx.bgPanel, sx.px35, sx.py25)].filter(Boolean).join(" ");
-export const msgBubbleHuman = [msgBubble, mergeStylexClassName("", sx.bgRgba31158138012, sx.roundedRow, sx.px35, sx.py225)].filter(Boolean).join(" ");
+const msgBubble = utilityClassName(
+  "msg-body block max-w-[min(600px,90%)] self-end text-body leading-6 break-words text-fg",
+);
+export const msgBubbleUser = utilityClassName(
+  `${msgBubble} rounded-lg bg-panel px-3.5 py-2.5`,
+);
+export const msgBubbleHuman = utilityClassName(
+  `${msgBubble} rounded-row bg-[rgba(31,158,138,0.12)] px-3.5 py-2.25`,
+);
 
 /**
  * The row a live turn streams into. `overflow-anchor: none` keeps the browser's
  * scroll anchoring off the growing tail, which would otherwise fight a
  * glued-to-bottom follow as tokens append.
  */
-export const msgStreamingRow = mergeStylexClassName("msg-streaming", sx.OverflowAnchorNone);
+export const msgStreamingRow = utilityClassName(
+  "msg-streaming [overflow-anchor:none]",
+);
 
 /** Assistant prose. Block while streaming so the caret ::after (base.css, with
  *  the reduced-motion exception that keeps it blinking) stays on the text's
  *  line — as a flex child it would wrap onto its own row. */
-export const msgBodyStreaming =
-	mergeStylexClassName("msg-body msg-body-assistant", sx.block, typography.body, sx.leading6, sx.breakWords, sx.textFg);
+export const msgBodyStreaming = utilityClassName(
+  "msg-body msg-body-assistant block text-body leading-6 break-words text-fg",
+);
+
+/** Provider reasoning summaries are activity, not answer hierarchy. Codex
+ * Desktop treats the generated `**title**` as chrome and keeps the body quiet;
+ * these do the same while leaving every summary visible in the timeline. */
+export const msgReasoningTitle = utilityClassName(
+  "whitespace-pre-line text-body font-normal leading-6 break-words text-dim",
+);
+// Reasoning is never answer emphasis. Keep provider-authored strong markers
+// structurally intact for markdown while preventing them from becoming bold.
+export const msgReasoningBody = utilityClassName(
+  `${msgBody} text-dim [&_strong]:font-normal`,
+);
+
+/** Active model text doubles as its loading indicator. Match ChatGPT's quieter
+ * wash: the text rests at its normal secondary color while a short,
+ * low-contrast band crosses the glyphs. TextShimmer sizes the sweep to this
+ * inline label, and base.css freezes it for reduced motion. Shared by streamed
+ * reasoning and the turn-level fallback, so a silent provider still leaves one
+ * legible liveness signal. */
+export const msgActivityShimmer =
+  utilityClassName(
+    "text-dim [--text-shimmer-highlight:var(--reasoning-shimmer-contrast)] ",
+  ) +
+  "[--text-shimmer-duration:3s] [--text-shimmer-easing:ease] [--text-shimmer-delay:0.5s]";
+
+export const msgReasoningShimmer = msgActivityShimmer;
 
 /**
  * Type and measure shared by every notice line, pill or not. The
  * `.msg-system-text` name stays on both variants: base.css's selection policy
  * names it.
  */
-const msgSystemBase =
-	mergeStylexClassName("msg-system-text", sx.maxWMin560px100, sx.inlineBlock, sx.selfCenter, sx.py15, sx.textCenter, typography.meta, sx.leading145, sx.textFaint);
+const msgSystemBase = utilityClassName(
+  "msg-system-text inline-block max-w-[min(560px,100%)] self-center py-1.5 text-center text-meta leading-[1.45] text-faint",
+);
 
 /** The centered notice pill itself. */
-export const msgSystemText = [msgSystemBase, mergeStylexClassName("", sx.roundedRow, sx.bgPanel, sx.px35)].filter(Boolean).join(" ");
+export const msgSystemText = utilityClassName(
+  `${msgSystemBase} rounded-row bg-panel px-3.5`,
+);
 
 /** A catch-up line, meaning a recap, reads as an aside in the transcript
  *  rather than as a card: the muted type, with no surface under it. It takes
  *  the full reading column rather than the pill's narrower cap, so a recap
  *  wraps on the same measure as the turns around it, inside the same row. */
-export const msgSystemInline =
-	mergeStylexClassName("msg-system-text", sx.block, sx.wFull, sx.py15, typography.meta, sx.leading145, sx.textFaint);
+export const msgSystemInline = utilityClassName(
+  "msg-system-text block w-full py-1.5 text-meta leading-[1.45] text-faint",
+);
 
 /**
  * A toned notice reads as a sentence, not a banner: everything the server and
@@ -270,7 +163,7 @@ export const msgSystemInline =
  * depending on where the compiler happened to emit them.
  */
 export const msgSystemToned =
-	"data-[tone]:inline-flex data-[tone]:items-start data-[tone]:gap-1.5 data-[tone]:text-left";
+  "data-[tone]:inline-flex data-[tone]:items-start data-[tone]:gap-1.5 data-[tone]:text-left";
 
 /**
  * The colour a toned notice wears — a LOOKUP of literal strings, never a built
@@ -279,20 +172,21 @@ export const msgSystemToned =
  * `sourceChipTone` in lib/source-chip-classes.
  */
 const SYSTEM_TONE: Record<string, string> = {
-	error: "data-[tone=error]:bg-red-soft data-[tone=error]:text-red",
-	warn:
-		"data-[tone=warn]:bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)] " +
-		"data-[tone=warn]:text-yellow",
+  error: "data-[tone=error]:bg-red-soft data-[tone=error]:text-red",
+  warn:
+    "data-[tone=warn]:bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)] " +
+    "data-[tone=warn]:text-yellow",
 };
 
 /** `info` deliberately resolves to nothing: it is the pill's resting look. */
 export function msgSystemTone(tone: string): string {
-	return SYSTEM_TONE[tone] ?? "";
+  return SYSTEM_TONE[tone] ?? "";
 }
 
 /** Inline attachments under a turn. Right-aligned inside a bubble's column. */
-export const msgMedia = mergeStylexClassName("", sx.mt15, sx.flex, sx.flexWrap, sx.gap2);
+export const msgMedia = utilityClassName("mt-1.5 flex flex-wrap gap-2");
 
 /** Short relative time in a label row (hover for the real one). */
-export const msgTime =
-	mergeStylexClassName("", sx.ml15, sx.cursorDefault, typography.meta, sx.fontMedium, sx.trackingNormal, sx.textFaint);
+export const msgTime = utilityClassName(
+  "ml-1.5 cursor-default text-meta font-medium tracking-normal text-faint",
+);

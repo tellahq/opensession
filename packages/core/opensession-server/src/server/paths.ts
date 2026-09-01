@@ -170,7 +170,9 @@ export function isNativeSessionId(id: string): boolean {
 export function isClientSessionId(id: unknown): id is string {
   return (
     typeof id === "string" &&
-    /^os-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+    /^os-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      id,
+    )
   );
 }
 

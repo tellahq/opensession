@@ -18,7 +18,8 @@ import { repoForFullName } from "./constants";
 import { readPrState } from "./state";
 import { recordFalseNegative } from "./feedback";
 
-const FIX_TITLE_RE = /\b(fix(es|ed)?|bug|regress\w*|revert|hotfix|broken|crash)\b/i;
+const FIX_TITLE_RE =
+  /\b(fix(es|ed)?|bug|regress\w*|revert|hotfix|broken|crash)\b/i;
 const MAX_FILES = 20;
 const MAX_HUNKS_PER_FILE = 3;
 const MAX_BLAMES = 30;
@@ -27,7 +28,9 @@ const CULPRIT_MAX_AGE_MS = 21 * 24 * 60 * 60 * 1000;
 
 /** Old-side line ranges from a unified-diff patch (deleted/changed lines only —
  *  a pure addition blames nothing). Exported for tests. */
-export function oldSideRanges(patch: string): Array<{ start: number; end: number }> {
+export function oldSideRanges(
+  patch: string,
+): Array<{ start: number; end: number }> {
   const out: Array<{ start: number; end: number }> = [];
   for (const m of patch.matchAll(/^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/gm)) {
     const start = parseInt(m[1], 10);
@@ -45,16 +48,22 @@ export function prNumberFromSubject(subject: string): number | null {
 }
 
 /** `pull_request` webhook payload with action=closed & merged=true. */
-export async function analyzeMergedPrForMissedBugs(payload: any): Promise<void> {
+export async function analyzeMergedPrForMissedBugs(
+  payload: any,
+): Promise<void> {
   const pr = payload?.pull_request;
   if (!pr?.merged || typeof pr.number !== "number") return;
   const title: string = pr.title || "";
   if (!FIX_TITLE_RE.test(title)) return; // only PRs that present as fixes
 
-  const repoFull: string = payload?.repository?.full_name || defaultRepo().ghRepo;
+  const repoFull: string =
+    payload?.repository?.full_name || defaultRepo().ghRepo;
   const repo = repoForFullName(repoFull);
   if (!repo?.repo) return; // no local checkout to blame in
-  const ghRepo = repoFull.toLowerCase() === defaultRepo().ghRepo.toLowerCase() ? undefined : repoFull;
+  const ghRepo =
+    repoFull.toLowerCase() === defaultRepo().ghRepo.toLowerCase()
+      ? undefined
+      : repoFull;
   const baseSha: string = pr.base?.sha || "";
   const baseRef: string = pr.base?.ref || "";
   if (!baseSha) return;
@@ -70,7 +79,9 @@ export async function analyzeMergedPrForMissedBugs(payload: any): Promise<void> 
     await $`git -C ${repo.repo} fetch --quiet origin ${baseRef || baseSha}`.quiet();
     await $`git -C ${repo.repo} cat-file -e ${baseSha}`.quiet();
   } catch {
-    console.warn(`[github] missed-bug: base ${baseSha.slice(0, 7)} unavailable in ${repo.repo}`);
+    console.warn(
+      `[github] missed-bug: base ${baseSha.slice(0, 7)} unavailable in ${repo.repo}`,
+    );
     return;
   }
 
@@ -82,9 +93,10 @@ export async function analyzeMergedPrForMissedBugs(payload: any): Promise<void> 
       if (blames >= MAX_BLAMES) break;
       blames++;
       try {
-        const out = await $`git -C ${repo.repo} blame -l -s -L ${range.start},${range.end} ${baseSha} -- ${f.filename}`
-          .quiet()
-          .text();
+        const out =
+          await $`git -C ${repo.repo} blame -l -s -L ${range.start},${range.end} ${baseSha} -- ${f.filename}`
+            .quiet()
+            .text();
         for (const line of out.split("\n")) {
           const sha = line.split(" ")[0]?.replace(/^\^/, "");
           if (sha && /^[0-9a-f]{40}$/.test(sha)) blamedShas.add(sha);
@@ -99,7 +111,9 @@ export async function analyzeMergedPrForMissedBugs(payload: any): Promise<void> 
   const culprits = new Map<number, string[]>(); // culprit PR → blamed paths note
   for (const sha of [...blamedShas].slice(0, 30)) {
     try {
-      const subject = (await $`git -C ${repo.repo} show -s --format=%s ${sha}`.quiet().text()).trim();
+      const subject = (
+        await $`git -C ${repo.repo} show -s --format=%s ${sha}`.quiet().text()
+      ).trim();
       const culpritPr = prNumberFromSubject(subject);
       if (!culpritPr || culpritPr === pr.number) continue;
       const state = readPrState(culpritPr, ghRepo);
@@ -112,7 +126,9 @@ export async function analyzeMergedPrForMissedBugs(payload: any): Promise<void> 
   }
 
   for (const [culpritPr, subjects] of culprits) {
-    console.log(`[github] missed bug: fix PR #${pr.number} touches code from reviewed PR #${culpritPr}`);
+    console.log(
+      `[github] missed bug: fix PR #${pr.number} touches code from reviewed PR #${culpritPr}`,
+    );
     audit({
       msg: "review_missed_bug",
       fix_pr: pr.number,

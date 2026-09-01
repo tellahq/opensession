@@ -23,35 +23,35 @@ import type { UnifiedSession } from "../lib/types";
  * here closes a tab, and a teammate's close can wait for the next visit.
  */
 export function useWorkspaceArchive(
-	workspaceId: string | null,
-	revision: number,
+  workspaceId: string | null,
+  revision: number,
 ): UnifiedSession[] {
-	const [rows, setRows] = useState<UnifiedSession[]>([]);
-	useEffect(() => {
-		if (!workspaceId) {
-			setRows([]);
-			return;
-		}
-		let active = true;
-		const controller = new AbortController();
-		void (async () => {
-			await (async () => {
-const sessions = await fetchWorkspaceArchivedSessions(
-					workspaceId,
-					controller.signal,
-				);
-				if (!active) return;
-				setRows(sessions);
-})().catch(async () => {
-// The history menu is an extra; a failed fetch just leaves it out
-				// rather than putting an error in front of the session someone
-				// came here to read.
-});
-		})();
-		return () => {
-			active = false;
-			controller.abort();
-		};
-	}, [workspaceId, revision]);
-	return rows;
+  const [rows, setRows] = useState<UnifiedSession[]>([]);
+  useEffect(() => {
+    if (!workspaceId) {
+      setRows([]);
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    void (async () => {
+      await (async () => {
+        const sessions = await fetchWorkspaceArchivedSessions(
+          workspaceId,
+          controller.signal,
+        );
+        if (!active) return;
+        setRows(sessions);
+      })().catch(async () => {
+        // The history menu is an extra; a failed fetch just leaves it out
+        // rather than putting an error in front of the session someone
+        // came here to read.
+      });
+    })();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [workspaceId, revision]);
+  return rows;
 }

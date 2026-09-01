@@ -14,7 +14,8 @@ afterEach(() => {
   else process.env.OPENSESSION_CONFIG = savedConfig;
   if (savedStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
   else process.env.OPENSESSION_STATE_DIR = savedStateDir;
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0))
+    rmSync(dir, { recursive: true, force: true });
 });
 
 test("auth status names the server before sign-in", async () => {
@@ -65,7 +66,10 @@ test("auth status carries the organization icon when one is configured", async (
   // An uploaded icon answers with its revisioned static URL, which the sign-in
   // gate can load because static assets stay pre-auth.
   mkdirSync(join(dir, ".opensession-organization"), { recursive: true });
-  writeFileSync(join(dir, ".opensession-organization", "icon.png"), "png-bytes");
+  writeFileSync(
+    join(dir, ".opensession-organization", "icon.png"),
+    "png-bytes",
+  );
   const withIcon = await handleAuthRoutes(context);
   expect((await withIcon?.json()).organizationIconUrl).toMatch(
     /^\/organization-icon\.png\?v=[a-f0-9]{12}$/,

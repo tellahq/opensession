@@ -10,7 +10,16 @@ const $ = (id) => document.getElementById(id);
 
 let defaultServer = "http://127.0.0.1:3850";
 let accountStore = { accounts: [], activeId: "" };
-let cfg = { id: "", label: "Organization", serverUrl: defaultServer, token: "", login: "", name: "", repositories: [], badge: 0 };
+let cfg = {
+  id: "",
+  label: "Organization",
+  serverUrl: defaultServer,
+  token: "",
+  login: "",
+  name: "",
+  repositories: [],
+  badge: 0,
+};
 
 function newAccount(serverUrl = "") {
   return {
@@ -45,7 +54,9 @@ function renderAccountPicker() {
 }
 
 async function activateAccount(id, { keepView = false } = {}) {
-  const account = accountStore.accounts.find((candidate) => candidate.id === id);
+  const account = accountStore.accounts.find(
+    (candidate) => candidate.id === id,
+  );
   if (!account || account.id === accountStore.activeId) return;
   deviceFlow = null;
   accountStore.activeId = account.id;
@@ -96,9 +107,12 @@ async function durableIntent(name, identity) {
   if (stored?.version === 3 && typeof stored.id === "string")
     return { key, id: stored.id };
   const id = crypto.randomUUID();
-  await chrome.storage.local.set({ [key]: { version: 3, id, createdAt: Date.now() } });
+  await chrome.storage.local.set({
+    [key]: { version: 3, id, createdAt: Date.now() },
+  });
   const verified = (await chrome.storage.local.get(key))[key];
-  if (verified?.id !== id) throw new Error("Could not save this request for retry.");
+  if (verified?.id !== id)
+    throw new Error("Could not save this request for retry.");
   return { key, id };
 }
 
@@ -140,28 +154,34 @@ async function api(path, opts = {}) {
 }
 
 async function refreshAccountRepoOwners() {
-  await Promise.all(accountStore.accounts.map(async (account) => {
-    if (!account.token || !account.serverUrl) return;
-    try {
-      const root = account.serverUrl.replace(/\/+$/, "");
-      const headers = { Authorization: `Bearer ${account.token}` };
-      const [reposResponse, organizationResponse] = await Promise.all([
-        fetch(`${root}/api/repos`, { credentials: "omit", headers }),
-        fetch(`${root}/api/settings/general`, { credentials: "omit", headers }),
-      ]);
-      if (reposResponse.ok) {
-        const repos = await reposResponse.json();
-        account.repositories = (repos.repos || []).map((repo) => ({
-          id: repo.id,
-          ghRepo: repo.ghRepo || repo.id,
-        }));
-      }
-      if (organizationResponse.ok) {
-        const organization = await organizationResponse.json();
-        if (organization?.organizationName) account.label = organization.organizationName;
-      }
-    } catch {}
-  }));
+  await Promise.all(
+    accountStore.accounts.map(async (account) => {
+      if (!account.token || !account.serverUrl) return;
+      try {
+        const root = account.serverUrl.replace(/\/+$/, "");
+        const headers = { Authorization: `Bearer ${account.token}` };
+        const [reposResponse, organizationResponse] = await Promise.all([
+          fetch(`${root}/api/repos`, { credentials: "omit", headers }),
+          fetch(`${root}/api/settings/general`, {
+            credentials: "omit",
+            headers,
+          }),
+        ]);
+        if (reposResponse.ok) {
+          const repos = await reposResponse.json();
+          account.repositories = (repos.repos || []).map((repo) => ({
+            id: repo.id,
+            ghRepo: repo.ghRepo || repo.id,
+          }));
+        }
+        if (organizationResponse.ok) {
+          const organization = await organizationResponse.json();
+          if (organization?.organizationName)
+            account.label = organization.organizationName;
+        }
+      } catch {}
+    }),
+  );
   await saveAccounts();
   renderAccountPicker();
   guessRepo();
@@ -175,7 +195,10 @@ function showView(next) {
     $(`view-${v}`).hidden = v !== next;
   }
   $("tab-new").classList.toggle("active", next === "new");
-  $("tab-sessions").classList.toggle("active", next === "sessions" || next === "detail");
+  $("tab-sessions").classList.toggle(
+    "active",
+    next === "sessions" || next === "detail",
+  );
   clearInterval(pollTimer);
   pollTimer = null;
   if (next === "sessions") {
@@ -249,16 +272,25 @@ function renderChips() {
     });
   }
   if (ctx.selection) {
-    chip(`“${ctx.selection.slice(0, 40)}${ctx.selection.length > 40 ? "…" : ""}”`, ctx.selection, () => {
-      ctx.selection = "";
-      renderChips();
-    });
+    chip(
+      `“${ctx.selection.slice(0, 40)}${ctx.selection.length > 40 ? "…" : ""}”`,
+      ctx.selection,
+      () => {
+        ctx.selection = "";
+        renderChips();
+      },
+    );
   }
   if (ctx.screenshot) {
-    chip("Screenshot", null, () => {
-      ctx.screenshot = null;
-      renderChips();
-    }, ctx.screenshot);
+    chip(
+      "Screenshot",
+      null,
+      () => {
+        ctx.screenshot = null;
+        renderChips();
+      },
+      ctx.screenshot,
+    );
   }
   if (ctx.element) {
     const reactName = ctx.element.react?.components?.[0];
@@ -287,26 +319,32 @@ async function refreshPageChip() {
 }
 
 async function guessRepo() {
-  const match = /^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/?#]+)/i.exec(ctx.page?.url || "");
+  const match = /^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/?#]+)/i.exec(
+    ctx.page?.url || "",
+  );
   if (!match) return;
   const owner = match[1].toLowerCase();
   const repo = match[2].replace(/\.git$/i, "").toLowerCase();
   const ghRepo = `${owner}/${repo}`;
   const matchedAccount = accountStore.accounts.find((account) =>
-    (account.repositories || []).some((candidate) =>
-      String(candidate.ghRepo || "").toLowerCase() === ghRepo,
+    (account.repositories || []).some(
+      (candidate) => String(candidate.ghRepo || "").toLowerCase() === ghRepo,
     ),
   );
   if (matchedAccount && matchedAccount.id !== accountStore.activeId) {
     await activateAccount(matchedAccount.id, { keepView: true });
   }
   const picker = $("sel-repo");
-  const configuredRepo = (cfg.repositories || []).find((candidate) =>
-    String(candidate.ghRepo || "").toLowerCase() === ghRepo,
+  const configuredRepo = (cfg.repositories || []).find(
+    (candidate) => String(candidate.ghRepo || "").toLowerCase() === ghRepo,
   );
   const option = configuredRepo
-    ? [...picker.options].find((candidate) => candidate.value === configuredRepo.id)
-    : [...picker.options].find((candidate) => candidate.value.toLowerCase() === ghRepo);
+    ? [...picker.options].find(
+        (candidate) => candidate.value === configuredRepo.id,
+      )
+    : [...picker.options].find(
+        (candidate) => candidate.value.toLowerCase() === ghRepo,
+      );
   if (option) picker.value = option.value;
 }
 
@@ -316,7 +354,9 @@ async function captureScreenshot() {
   const tab = await activeTab();
   if (!tab) return;
   try {
-    ctx.screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+    ctx.screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, {
+      format: "png",
+    });
     renderChips();
     toast("new-status", "");
   } catch (e) {
@@ -355,7 +395,8 @@ function readPickedReactInfo() {
     if (typeof t === "function") name = t.displayName || t.name || null;
     else if (t && typeof t === "object") {
       const inner = t.type || t.render;
-      name = t.displayName || (inner && (inner.displayName || inner.name)) || null;
+      name =
+        t.displayName || (inner && (inner.displayName || inner.name)) || null;
     }
     if (name) {
       let src = "";
@@ -371,8 +412,10 @@ function readPickedReactInfo() {
         for (const [k, v] of Object.entries(f.memoizedProps)) {
           if (k === "children" || count >= 12) continue;
           const tv = typeof v;
-          if (tv === "string") props[k] = v.length > 60 ? v.slice(0, 60) + "…" : v;
-          else if (tv === "number" || tv === "boolean" || v === null) props[k] = v;
+          if (tv === "string")
+            props[k] = v.length > 60 ? v.slice(0, 60) + "…" : v;
+          else if (tv === "number" || tv === "boolean" || v === null)
+            props[k] = v;
           else props[k] = tv === "function" ? "ƒ" : tv;
           count++;
         }
@@ -442,7 +485,9 @@ async function pickElement() {
     } catch {}
     let shot = null;
     try {
-      const full = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+      const full = await chrome.tabs.captureVisibleTab(tab.windowId, {
+        format: "png",
+      });
       shot = await cropDataUrl(full, msg.info.rect);
     } catch {}
     ctx.element = { info: msg.info, react, shot };
@@ -472,7 +517,9 @@ function buildPrompt(text) {
     if (i.text) lines.push(`  Text: "${i.text.slice(0, 120)}"`);
     const r = ctx.element.react;
     if (r?.react && r.components?.length) {
-      lines.push(`  React components (innermost first): ${r.components.join(" ← ")}`);
+      lines.push(
+        `  React components (innermost first): ${r.components.join(" ← ")}`,
+      );
       if (r.props && Object.keys(r.props).length) {
         lines.push(`  Props of nearest component: ${JSON.stringify(r.props)}`);
       }
@@ -538,7 +585,9 @@ async function loadSessions() {
     list.textContent = "";
     const rows = sessions
       .filter((s) => !s.archived)
-      .sort((a, b) => new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0))
+      .sort(
+        (a, b) => new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0),
+      )
       .slice(0, 40);
     if (!rows.length) list.append(el("div", "status", "No sessions."));
     for (const s of rows) {
@@ -562,7 +611,9 @@ async function loadSessions() {
     }
   } catch (e) {
     $("sessions-list").textContent = "";
-    $("sessions-list").append(el("div", "status err", `Failed to load: ${e.message}`));
+    $("sessions-list").append(
+      el("div", "status err", `Failed to load: ${e.message}`),
+    );
   }
 }
 
@@ -588,7 +639,13 @@ function renderEntry(e) {
   const wrap = el("div", `msg ${type}`);
   wrap.append(el("div", "who", type === "user" ? e.user || "you" : "agent"));
   // Clamp giant messages; the web UI is the place for full reading.
-  wrap.append(el("div", "body", content.length > 4000 ? content.slice(0, 4000) + "\n…" : content));
+  wrap.append(
+    el(
+      "div",
+      "body",
+      content.length > 4000 ? content.slice(0, 4000) + "\n…" : content,
+    ),
+  );
   return wrap;
 }
 
@@ -596,7 +653,9 @@ async function loadTranscript(initial = false) {
   if (!detail.id) return;
   const accountID = cfg.id;
   try {
-    const entries = await api(`/sessions/${encodeURIComponent(detail.id)}/transcript`);
+    const entries = await api(
+      `/sessions/${encodeURIComponent(detail.id)}/transcript`,
+    );
     if (cfg.id !== accountID) return;
     if (Array.isArray(entries) && entries.length !== detail.entryCount) {
       detail.entryCount = entries.length;
@@ -612,10 +671,10 @@ async function loadTranscript(initial = false) {
     }
     // Session meta (state/queue) every other tick — it's a full list fetch.
     if (detail.metaTick++ % 2 === 0) {
-    // The side panel only ever shows live sessions, so it asks the server to
-    // leave archived ones out — ~46% of the payload on a busy instance. The
-    // filter below stays for older servers, which ignore the parameter.
-    const sessions = await api("/sessions?archived=exclude");
+      // The side panel only ever shows live sessions, so it asks the server to
+      // leave archived ones out — ~46% of the payload on a busy instance. The
+      // filter below stays for older servers, which ignore the parameter.
+      const sessions = await api("/sessions?archived=exclude");
       if (cfg.id !== accountID) return;
       const s = sessions.find((x) => x.id === detail.id);
       if (s) {
@@ -686,7 +745,8 @@ async function loadComposerData() {
       id: repo.id,
       ghRepo: repo.ghRepo || repo.id,
     }));
-    if (organization?.organizationName) cfg.label = organization.organizationName;
+    if (organization?.organizationName)
+      cfg.label = organization.organizationName;
     await saveAccounts();
     renderAccountPicker();
     const rs = $("sel-repo");
@@ -705,7 +765,9 @@ async function loadComposerData() {
     ms.textContent = "";
     const dflt = document.createElement("option");
     dflt.value = "";
-    const dfltLabel = (models.models || []).find((m) => m.id === models.default);
+    const dfltLabel = (models.models || []).find(
+      (m) => m.id === models.default,
+    );
     dflt.textContent = `Model: default${dfltLabel?.label ? ` (${dfltLabel.label})` : ""}`;
     ms.append(dflt);
     for (const m of models.models || []) {
@@ -747,7 +809,9 @@ async function startSignIn() {
     $("device-flow").hidden = false;
     $("device-code").textContent = flow.userCode;
     $("btn-open-verify").onclick = () =>
-      chrome.tabs.create({ url: flow.verificationUri || "https://github.com/login/device" });
+      chrome.tabs.create({
+        url: flow.verificationUri || "https://github.com/login/device",
+      });
     toast("device-status", "Waiting for authorization…");
     pollDeviceFlow(flow.deviceCode);
   } catch (e) {
@@ -823,7 +887,9 @@ async function applyPendingContext() {
 
 async function init() {
   try {
-    const deployment = await fetch(chrome.runtime.getURL("deployment.json")).then((res) => res.json());
+    const deployment = await fetch(
+      chrome.runtime.getURL("deployment.json"),
+    ).then((res) => res.json());
     if (deployment?.defaultServer) defaultServer = deployment.defaultServer;
   } catch {}
   const stored = await chrome.storage.local.get(["accountStore", "cfg"]);
@@ -837,15 +903,19 @@ async function init() {
     await saveAccounts();
     await chrome.storage.local.remove("cfg");
   }
-  cfg = accountStore.accounts.find((account) => account.id === accountStore.activeId)
-    || accountStore.accounts[0];
+  cfg =
+    accountStore.accounts.find(
+      (account) => account.id === accountStore.activeId,
+    ) || accountStore.accounts[0];
   accountStore.activeId = cfg.id;
   renderAccountPicker();
 
   $("tab-new").addEventListener("click", () => showView("new"));
   $("tab-sessions").addEventListener("click", () => showView("sessions"));
   $("btn-settings").addEventListener("click", () => showView("settings"));
-  $("account-picker").addEventListener("change", (event) => activateAccount(event.target.value));
+  $("account-picker").addEventListener("change", (event) =>
+    activateAccount(event.target.value),
+  );
   $("in-account-label").addEventListener("change", async () => {
     cfg.label = $("in-account-label").value.trim() || "Organization";
     await saveAccounts();
@@ -867,7 +937,9 @@ async function init() {
     if (accountStore.accounts.length === 1) return;
     deviceFlow = null;
     $("device-flow").hidden = true;
-    accountStore.accounts = accountStore.accounts.filter((account) => account.id !== cfg.id);
+    accountStore.accounts = accountStore.accounts.filter(
+      (account) => account.id !== cfg.id,
+    );
     cfg = accountStore.accounts[0];
     accountStore.activeId = cfg.id;
     await saveAccounts();
@@ -890,7 +962,11 @@ async function init() {
       const origin = new URL(cfg.serverUrl).origin + "/*";
       const granted = await chrome.permissions.request({ origins: [origin] });
       if (!granted) {
-        toast("settings-status", "Permission to connect to this server was declined.", true);
+        toast(
+          "settings-status",
+          "Permission to connect to this server was declined.",
+          true,
+        );
         return;
       }
     } catch {

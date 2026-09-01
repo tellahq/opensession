@@ -11,7 +11,11 @@
 import { defaultRepo, personaName } from "../../server/config";
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { z } from "zod";
-import { parsePrNumber, triggerPrAction, type PrActionKind } from "../github/trigger";
+import {
+  parsePrNumber,
+  triggerPrAction,
+  type PrActionKind,
+} from "../github/trigger";
 import { sendSlackMessage } from "./slack-api";
 
 export interface GithubToolContext {
@@ -36,7 +40,9 @@ const KIND_LABEL: Record<PrActionKind, string> = {
 const prArg = {
   pr: z
     .union([z.number(), z.string()])
-    .describe(`The PR number on ${defaultRepo().ghRepo} (a number, '#4296', or a PR URL).`),
+    .describe(
+      `The PR number on ${defaultRepo().ghRepo} (a number, '#4296', or a PR URL).`,
+    ),
 };
 
 export function createGithubMcpServer(ctx: GithubToolContext) {
@@ -87,5 +93,9 @@ export function createGithubMcpServer(ctx: GithubToolContext) {
     ),
   ];
 
-  return createSdkMcpServer({ name: "opensession-github", version: "1.0.0", tools });
+  return createSdkMcpServer({
+    name: "opensession-github",
+    version: "1.0.0",
+    tools,
+  });
 }

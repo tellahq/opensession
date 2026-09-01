@@ -109,15 +109,21 @@ function classifyCsError(e: unknown, org: string): string {
 
 // 60s cheap-status cache for the repo-list probe, so the Connections card's
 // refetches don't hammer the org API. Reset on connect/disconnect.
-let statusProbeCache: { at: number; repoCount?: number; error?: string } | null =
-  null;
+let statusProbeCache: {
+  at: number;
+  repoCount?: number;
+  error?: string;
+} | null = null;
 const STATUS_PROBE_TTL_MS = 60_000;
 const STATUS_PROBE_TIMEOUT_MS = 8_000;
 
 async function probeRepoCount(
   org: string,
 ): Promise<{ repoCount?: number; error?: string }> {
-  if (statusProbeCache && Date.now() - statusProbeCache.at < STATUS_PROBE_TTL_MS) {
+  if (
+    statusProbeCache &&
+    Date.now() - statusProbeCache.at < STATUS_PROBE_TTL_MS
+  ) {
     return statusProbeCache;
   }
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -148,7 +154,8 @@ async function ensureWebhookSecret(): Promise<void> {
     if (codeStorageConfig()?.webhookSecret) return; // raced another caller
     const config = rawConfig();
     const { section } = integrationsSection(config);
-    if (typeof section.webhookSecret === "string" && section.webhookSecret) return;
+    if (typeof section.webhookSecret === "string" && section.webhookSecret)
+      return;
     section.webhookSecret = randomBytes(32).toString("hex");
     persistRawConfig(config);
   });
@@ -164,7 +171,8 @@ export async function handleSetupCodestorageRoutes(
       org?: unknown;
       privateKeyPem?: unknown;
     } | null;
-    const org = typeof body?.org === "string" ? body.org.trim().toLowerCase() : "";
+    const org =
+      typeof body?.org === "string" ? body.org.trim().toLowerCase() : "";
     if (!CS_ORG_RE.test(org)) {
       return Response.json(
         {
@@ -201,7 +209,9 @@ export async function handleSetupCodestorageRoutes(
       // — the key is the whole org credential.
       mkdirSync(dirname(keyPath), { recursive: true });
       const tmp = `${keyPath}.tmp.${process.pid}`;
-      writeFileSync(tmp, pem.endsWith("\n") ? pem : `${pem}\n`, { mode: 0o600 });
+      writeFileSync(tmp, pem.endsWith("\n") ? pem : `${pem}\n`, {
+        mode: 0o600,
+      });
       renameSync(tmp, keyPath);
       const config = rawConfig();
       const { section } = integrationsSection(config);

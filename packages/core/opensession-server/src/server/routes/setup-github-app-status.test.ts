@@ -24,7 +24,8 @@ afterEach(() => {
   restore("OPENSESSION_CONFIG", saved.config);
   restore("OPENSESSION_ENV_FILE", saved.envFile);
   restore("ENABLE_GITHUB_AGENT", saved.enabled);
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0))
+    rmSync(dir, { recursive: true, force: true });
 });
 
 describe("GitHub integration status", () => {
@@ -71,7 +72,7 @@ describe("GitHub integration status", () => {
     };
     const response = await handleSetupRoutes(context);
     expect(response?.status).toBe(200);
-    const body = await response?.json() as any;
+    const body = (await response?.json()) as any;
     expect(body.github).toMatchObject({
       appSlug: "open-session-test",
       installationOwner: "acme",
@@ -80,6 +81,8 @@ describe("GitHub integration status", () => {
     });
     const github = body.integrations.find((item: any) => item.id === "github");
     expect(github.missingRequired).toEqual([]);
-    expect(github.env.map((item: any) => item.name)).not.toContain("GITHUB_API_TOKEN");
+    expect(github.env.map((item: any) => item.name)).not.toContain(
+      "GITHUB_API_TOKEN",
+    );
   });
 });

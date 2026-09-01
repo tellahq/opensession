@@ -48,10 +48,16 @@ describe("transcript store durability", () => {
         last_ts INTEGER, imported_at INTEGER, import_src TEXT, import_watermark INTEGER
       );
     `);
-    old.query("INSERT INTO transcript_sessions (session_id, next_seq) VALUES ('s', 2)").run();
-    old.query(
-      "INSERT INTO transcript_events VALUES ('s', 1, 'a', 1, 'assistant', ?, NULL)"
-    ).run(JSON.stringify(entry("a", "old")));
+    old
+      .query(
+        "INSERT INTO transcript_sessions (session_id, next_seq) VALUES ('s', 2)",
+      )
+      .run();
+    old
+      .query(
+        "INSERT INTO transcript_events VALUES ('s', 1, 'a', 1, 'assistant', ?, NULL)",
+      )
+      .run(JSON.stringify(entry("a", "old")));
     old.close();
 
     const store = new TranscriptStore(path);
@@ -95,7 +101,10 @@ describe("transcript store durability", () => {
 
   test("authoritative replacement removes stale ids and preserves change monotonicity", () => {
     withStore((store) => {
-      store.appendTranscriptEvents("s", [entry("old", "old"), entry("keep", "v1")]);
+      store.appendTranscriptEvents("s", [
+        entry("old", "old"),
+        entry("keep", "v1"),
+      ]);
       const before = store.getLastChangeSeq("s");
       store.replaceTranscriptEvents("s", [entry("keep", "v2")]);
       expect(store.readTail("s").entries).toEqual([
@@ -142,7 +151,7 @@ describe("transcript store durability", () => {
           .query("SELECT data FROM transcript_events WHERE session_id = 's'")
           .get() as { data: string };
         expect(Buffer.byteLength(row.data)).toBeLessThanOrEqual(
-          TRANSCRIPT_DATA_MAX_BYTES
+          TRANSCRIPT_DATA_MAX_BYTES,
         );
         expect(() => JSON.parse(row.data)).not.toThrow();
       } finally {
@@ -183,7 +192,7 @@ describe("deterministic mutation fuzz", () => {
         const all = store.readTail("fuzz", 1000).entries;
         expect(all.map((e) => e.id)).toEqual(firstSeen);
         expect(all.map((e) => e.seq)).toEqual(
-          Array.from({ length: firstSeen.length }, (_, i) => i + 1)
+          Array.from({ length: firstSeen.length }, (_, i) => i + 1),
         );
         for (const row of all) expect(row.content).toBe(expected.get(row.id)!);
         expect(store.getLastChangeSeq("fuzz")).toBe(500);

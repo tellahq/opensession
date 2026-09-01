@@ -30,7 +30,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   one, sharing `/api/hides` — while the session keeps running for everyone else.
   A hidden row comes back while one of its sessions is blocked on a question,
   prompting in a session clears its hide, and search ignores hides, so a hidden
-  row stays findable and its menu offers "Restore to my sidebar". Unread rows
+  row stays findable and its menu offers "Restore to my sidebar". An open
+  teammate, automation, or spawned session can also be claimed from its native
+  action surface with "Add to sidebar", sharing `/api/lanes` with the web.
+  Unread rows
   read like the web sidebar's, off the same shared store (`/api/reads`): a row
   whose sessions carry activity past your last read goes semibold at full label
   strength instead of the usual dimmed medium, and reading a session here clears
@@ -49,7 +52,7 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   opened from the bottom toolbar beside the Desk; an unread queue uses the
   filled accent icon. Filter and New Session remain top-right controls. One
   card per unread
-  *workspace* (the same grouping the list shows,
+  _workspace_ (the same grouping the list shows,
   built by `CatchUpQueue` from the shared `/api/reads` marks with the web
   deck's rules: yours, not archived, not an automation, not the Desk). The card
   renders the workspace's main chat with a compact title, state and repo header,
@@ -85,8 +88,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   and renders as a normal message. On phones, one changed-files summary
   replaces the footer chip cloud while opening the same Changes panel. Team
   notes sit in that timeline without entering the agent context. The
-   yellow composer mode posts them directly to the team and offers only the
-   author edit and delete actions.
+  yellow composer mode posts them directly to the team and offers only the
+  author edit and delete actions.
   Tool rows use the server's presentation metadata for canonical names,
   humanized MCP server/tool labels, glyph families, summaries and ±lines; the
   native derivation remains as an older-server fallback. Expanding one renders
@@ -106,37 +109,42 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   links labelled with the referenced session's title, and tapping one opens
   that session in the app (falling back to the web app for a session this
   client hasn't polled).
-   Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
-   refetch on demand), system events are toned by severity, and a floating pill
-   offers the way back down — reading `New messages` when output arrived while
-   you were scrolled up. On wide pointer layouts, a native rail indexes the
-   current person's sent messages; hover previews one and activation jumps the
-   transcript to it. It stays hidden on iPhone and compact widths. A selected
-   Markdown passage stays highlighted as
-   composer context, then rides with the next prompt, team note, or scheduled
-   message as a block quote. When the server offers `reply_suggestions`, the
-   idle composer shows optional quick-reply chips; choosing one adds its full
-   text to the draft for editing rather than sending it. The Personal setting
-   shares the web client's `reply-suggestions` account preference. `stream_text`
-   provides token-level streaming when Settings → Personal → Preferences → Live
-   typing is on; it defaults off. A horizontally scrollable session tab strip
-   appears when a workspace/worktree contains multiple sessions. Its history menu
-   queries only that workspace's closed siblings and restores one directly into
-   the strip. A workspace down to one session draws no strip, so that history
-   moves to the Closed sessions submenu of the session's overflow menu, which
-   reopens a row the same way. On macOS, where the sidebar is the live-session
-   switcher, the same scoped history lives in the selected session's toolbar
-   instead. On iOS, the PWA-style Liquid Glass action bar floats above the
-   composer with Archive, session actions, New session, and Next chat. It stays
-   directly above the composer when the keyboard opens. The actions menu carries
-   worktree details, the pull request panel, rename, share, hide or restore, and
-   archive, matching the sidebar row's long-press menu. A bounded cache keeps
-   recently visited conversations loaded while their
+  Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
+  refetch on demand), system events are toned by severity, and a floating pill
+  offers the way back down — reading `New messages` when output arrived while
+  you were scrolled up. On wide pointer layouts, a native rail indexes the
+  current person's sent messages; hover previews one and activation jumps the
+  transcript to it. It stays hidden on iPhone and compact widths. A selected
+  Markdown passage stays highlighted as
+  composer context, then rides with the next prompt, team note, or scheduled
+  message as a block quote. When the server offers `reply_suggestions`, the
+  idle composer shows optional quick-reply chips; choosing one adds its full
+  text to the draft for editing rather than sending it. The Personal setting
+  shares the web client's `reply-suggestions` account preference. `stream_text`
+  provides token-level streaming when Settings → Personal → Preferences → Live
+  typing is on; it defaults off. A horizontally scrollable session tab strip
+  appears when a workspace/worktree contains multiple sessions. Its history menu
+  queries only that workspace's closed siblings and restores one directly into
+  the strip. A workspace down to one session draws no strip, so that history
+  moves to the Closed sessions submenu of the session's overflow menu, which
+  reopens a row the same way. On macOS, where the sidebar is the live-session
+  switcher, the same scoped history lives in the selected session's toolbar
+  instead. On iOS, the PWA-style Liquid Glass action bar floats above the
+  composer with Archive, session actions, New session, and Next chat. It stays
+  directly above the composer when the keyboard opens. The actions menu carries
+  worktree details, the pull request panel, Add to sidebar when needed, rename,
+  share, hide or restore, and archive, matching the sidebar row's long-press
+  menu. Completed native sessions can also fork from the current transcript tip
+  or a message menu; the composer names the source and opens the new session
+  after creation. A bounded cache keeps
+  recently visited conversations loaded while their
   off-screen sockets remain disconnected, so returning to a page does not show
   a loading screen. Fenced Markdown, expanded tool inputs and code assets use
   the PWA's GitHub light/dark syntax palette. Native-owned code surfaces show
   plain text immediately while highlighting finishes and keep large files plain.
   ```mermaid fences render as diagrams (see "Mermaid diagrams" below).
+
+  ```
 - **Workspace details** — tapping the session title opens a native worktree sheet
   with repository and branch metadata, local git status, changed files, a
   color-coded pull request card for checks, review state and conflicts,
@@ -201,6 +209,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   The floating glass composer uses a
   progressive material fade so transcript content recedes cleanly beneath it;
   its full surface focuses the field and keeps a comfortable keyboard gap.
+  Typing `@` in either this input or the new-session prompt opens the same
+  inline people, tools, workspaces, sessions, and files palette as the web UI.
 - **Dictation** — the composer's mic (first of the trailing controls, ahead of
   stop, every session) is speech to text, not a call: `Dictation.swift` runs
   `SFSpeechRecognizer` over an `AVAudioEngine` tap and streams the utterance
@@ -212,8 +222,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   the button renders in and would otherwise destroy its state mid-sentence.
 - **Session creation** — a full-height prompt editor with attachments and a
   compact single-row iOS toolbar for repository, mode, and model settings. The
-  same controls move into the keyboard accessory while the prompt is focused,
-  so attachments, options, model, and dictation remain reachable while typing.
+  same controls move into a keyboard-aware safe-area row while the prompt is
+  focused, with an 8pt gap above the keys and a trailing keyboard-dismiss button.
+  Dragging the editor down dismisses the keyboard before the sheet can move.
   Opening a file with OS from Files or another app starts a fresh composer with
   that file attached. Images use the vision channel; other files upload to the
   session's staged file channel before Start becomes available.
@@ -238,8 +249,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   becomes the shipped-change composer: it suggests copy from the walkthrough,
   preloads its after image, accepts up to 10 images, and reconnects Slack when
   the person's existing grant lacks image access. Agent-requested Slack
-  composers settle into a sent or cancelled receipt; sent receipts keep the
-  channel and an **Open in Slack** link. A workspace row's
+  composers save edited copy, channel, and images while pending, including on
+  dismiss or background. They settle into a sent or cancelled receipt; sent
+  receipts keep the channel and an **Open in Slack** link. A workspace row's
   long-press menu also rolls the
   cached PR state into one next action: merge when ready, fix failed checks,
   resolve conflicts, address feedback, view running checks, or archive after it
@@ -303,7 +315,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   unread session count on the iPhone Home Screen and Dock icon without enabling
   alert banners or sounds.
 - **Connection care** — client-initiated pings every 10s and reconnects when
-  no inbound frame arrives for 30s. The server never initiates pings. The UI
+  no inbound frame arrives for 30s. The server never initiates pings. An
+  announced server restart uses a 250ms retry cadence until the replacement
+  handshake arrives; ordinary outages retain the calmer 2s backoff. The UI
   shows a reconnect banner and keeps an optimistic local echo of prompts until
   the server's copy arrives.
 - **Settings** — native SwiftUI Tools, Personal, and Workspace administration,
@@ -426,7 +440,7 @@ against both schemes.
 
 ## Architecture
 
-```
+````
 OS1/
   OS1App.swift               App entry; forces Settings on first run
   NativePreferences.swift    Cross-device preference hydration/cache
@@ -503,7 +517,7 @@ OS1/
     MermaidHostPage.swift    Locates the bundled renderer page
     MermaidRenderer.swift    Offscreen WebKit render + snapshot + cache
     MermaidDiagramView.swift The diagram row: code fence, then the picture
-```
+````
 
 ## Protocol notes (from the server source)
 

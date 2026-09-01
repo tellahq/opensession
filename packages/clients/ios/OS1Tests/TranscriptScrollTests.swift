@@ -134,6 +134,45 @@ final class TranscriptScrollTests: XCTestCase {
         XCTAssertTrue(state.readerMovedTowardHistory)
     }
 
+    func testSubmittedAnswerKeepsFollowingWhenTheResponseReplacesItsReceipt() {
+        // Reproduction: answering from halfway up starts an animated scroll to
+        // the optimistic answer receipt. An intermediate animation frame is
+        // still outside the bottom tolerance, so geometry temporarily drops
+        // the pin before the resumed run appends its first response row.
+        let interruptedScroll = TranscriptScroll.followState(
+            previousOffset: 1_000,
+            offset: 1_600,
+            previousContentHeight: 4_000,
+            contentHeight: 4_000,
+            previousDistanceFromBottom: 2_000,
+            isNearBottom: false,
+            readerGestureActive: false,
+            layoutChanged: false,
+            readerMovedTowardHistory: false
+        )
+        XCTAssertFalse(interruptedScroll.pinned)
+
+        XCTAssertFalse(TranscriptScroll.shouldFollowContentGrowth(
+            previousContentHeight: 4_000,
+            contentHeight: 4_240,
+            readerMovedTowardHistory: interruptedScroll.readerMovedTowardHistory,
+            wasFollowing: interruptedScroll.pinned,
+            holdingAtLatest: false,
+            readerScrollActive: false
+        ))
+        // Answer submission arms the same settling hold as an ordinary send.
+        // That hold makes the response's first measured height change reclaim
+        // the bottom even though the animation's intermediate frame lost it.
+        XCTAssertTrue(TranscriptScroll.shouldFollowContentGrowth(
+            previousContentHeight: 4_000,
+            contentHeight: 4_240,
+            readerMovedTowardHistory: interruptedScroll.readerMovedTowardHistory,
+            wasFollowing: interruptedScroll.pinned,
+            holdingAtLatest: true,
+            readerScrollActive: false
+        ))
+    }
+
     func testInsetLayoutCannotRearmFollowingDuringAGesture() {
         let state = TranscriptScroll.followState(
             previousOffset: 980,

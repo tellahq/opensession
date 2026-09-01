@@ -22,7 +22,10 @@ export interface PromptMemoryResult {
   omitted: number;
 }
 
-function pinnedRecords(store: MemoryStore, scopeKeys: string[]): MemoryRecord[] {
+function pinnedRecords(
+  store: MemoryStore,
+  scopeKeys: string[],
+): MemoryRecord[] {
   const records: MemoryRecord[] = [];
   let cursor: string | undefined;
   do {
@@ -70,10 +73,13 @@ export async function renderAmbientMemoryForPrompt(
   }
   const { store } = await ensureMemoryV2Ready();
   store.expireDue();
-  const selected = renderAmbientMemory(asRetrievalRecords(pinnedRecords(store, scopes.scopeKeys)), {
-    scopeKeys: scopes.scopeKeys,
-    primaryRepoKey: scopes.primaryRepoKey,
-  });
+  const selected = renderAmbientMemory(
+    asRetrievalRecords(pinnedRecords(store, scopes.scopeKeys)),
+    {
+      scopeKeys: scopes.scopeKeys,
+      primaryRepoKey: scopes.primaryRepoKey,
+    },
+  );
   const result = {
     text: selected.text,
     ids: selected.records.map((record) => record.id),
@@ -99,17 +105,20 @@ export async function retrieveMemoryForPrompt(
   const { store } = await ensureMemoryV2Ready();
   store.expireDue();
   const selected = retrieveMemory(
-    asRetrievalRecords(matchingRecords(store, scopes.scopeKeys, query)).map((record) => ({
-      ...record,
-      summary: neutralizeContextSentinels(record.summary),
-    })),
+    asRetrievalRecords(matchingRecords(store, scopes.scopeKeys, query)).map(
+      (record) => ({
+        ...record,
+        summary: neutralizeContextSentinels(record.summary),
+      }),
+    ),
     query,
     {
       scopeKeys: scopes.scopeKeys,
       primaryRepoKey: scopes.primaryRepoKey,
       budgetBytes: Math.max(
         0,
-        RETRIEVED_MEMORY_BUDGET_BYTES - Buffer.byteLength(wrapContext("", "memory"), "utf8"),
+        RETRIEVED_MEMORY_BUDGET_BYTES -
+          Buffer.byteLength(wrapContext("", "memory"), "utf8"),
       ),
     },
   );

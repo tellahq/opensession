@@ -11,10 +11,7 @@
     "my-custom-server": {
       "_comment": "Example: your own stdio MCP server. `command` (+ optional `args`) is spawned per run; pass its credentials via the per-server `env` block.",
       "command": "bun",
-      "args": [
-        "run",
-        "/path/to/your-mcp-server/src/index.ts"
-      ],
+      "args": ["run", "/path/to/your-mcp-server/src/index.ts"],
       "env": {
         "MY_SERVER_API_KEY": "<your-api-key>"
       }

@@ -23,9 +23,10 @@ export type CoreActorRequest =
   | { op: "clear"; sessionId: string }
   | { op: "tombstone"; sessionId: string };
 
-export type CoreActorResult<T extends CoreActorRequest> =
-  T extends { op: "enqueue_effect" }
-    ? number
-    : T extends { op: "fail_outbox" }
-      ? { updated: boolean; deadLetteredNow: boolean }
-      : void;
+export type CoreActorResult<T extends CoreActorRequest> = T extends {
+  op: "enqueue_effect";
+}
+  ? number
+  : T extends { op: "fail_outbox" }
+    ? { updated: boolean; deadLetteredNow: boolean }
+    : void;

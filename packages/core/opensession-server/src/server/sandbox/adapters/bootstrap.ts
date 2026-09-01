@@ -61,10 +61,19 @@ import {
 } from "fs";
 import { dirname, isAbsolute, relative, resolve } from "path";
 import { OPENSESSION_SESSIONS_DIR, homeDir, stateDir } from "../../paths";
-import { journalSet, journalClear, journalClearIfLineage, journalRecordAbnormalCompletion, type ActiveRunRecord } from "../../run-journal";
+import {
+  journalSet,
+  journalClear,
+  journalClearIfLineage,
+  journalRecordAbnormalCompletion,
+  type ActiveRunRecord,
+} from "../../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
 import { recoveryKind, restartContinuationPrompt } from "../../agent-runner";
-import { accountsForRemoteUpload, type ClaudeAccount } from "../../claude-accounts";
+import {
+  accountsForRemoteUpload,
+  type ClaudeAccount,
+} from "../../claude-accounts";
 import { audit } from "../../audit";
 import { authedRemoteUrl } from "../../codestorage/auth";
 import { parseCsRemote } from "../../codestorage/remote";
@@ -84,10 +93,7 @@ import {
   toPiModel,
 } from "../../models";
 import { filterMcpServers } from "../../runner-shared";
-import {
-  GITHUB_RUN_AUTH_FILE_ENV,
-  githubAuthEnv,
-} from "../../github-auth";
+import { GITHUB_RUN_AUTH_FILE_ENV, githubAuthEnv } from "../../github-auth";
 import {
   appendTranscriptEntries,
   recordEngineSessionOwner,
@@ -99,9 +105,16 @@ import {
 } from "../../transcript-persistence";
 import { hostSteer, hostInterruptSteer, hostCancel } from "../../host-registry";
 import { registerRunToken, unregisterRunToken } from "../../run-rpc";
-import { registerRunWsHost, unregisterRunWsHost, runWsConnector } from "../../run-ws";
+import {
+  registerRunWsHost,
+  unregisterRunWsHost,
+  runWsConnector,
+} from "../../run-ws";
 import { writeJsonAtomic } from "../../shared/atomic-write";
-import { createWorkloadIdentityEnv, type WorkloadIdentityContext } from "../../workload-identity";
+import {
+  createWorkloadIdentityEnv,
+  type WorkloadIdentityContext,
+} from "../../workload-identity";
 import {
   HostHandle,
   HostLaunchNotDispatchedError,
@@ -203,7 +216,9 @@ export function shellQuote(argv: string[]): string {
 }
 
 function envPrefix(env: Record<string, string>): string {
-  const parts = Object.entries(env).map(([k, v]) => `${k}=${shellQuoteWord(v)}`);
+  const parts = Object.entries(env).map(
+    ([k, v]) => `${k}=${shellQuoteWord(v)}`,
+  );
   return parts.length ? `env ${parts.join(" ")} ` : "";
 }
 
@@ -223,7 +238,9 @@ function jsonRecord(value: unknown): JsonRecord | null {
 
 /** The third-party provider selected by an pi/<provider>/<model> id.
  * Anthropic/OpenAI use subscription material, never native auth. */
-export function remoteModelProviderId(model: string | undefined): string | null {
+export function remoteModelProviderId(
+  model: string | undefined,
+): string | null {
   const match = String(model || "").match(/^pi\/([^/]+)\//);
   const provider = match?.[1];
   return provider && provider !== "anthropic" && provider !== "openai"
@@ -258,8 +275,13 @@ function remoteReachableModels(
   const primary = toPiModel(model) || model;
   return [
     primary,
-    ...fallbackPlan(primary, fallbackModel).map((hop) => toPiModel(hop.id) || hop.id),
-  ].filter((candidate): candidate is string => typeof candidate === "string" && !!candidate);
+    ...fallbackPlan(primary, fallbackModel).map(
+      (hop) => toPiModel(hop.id) || hop.id,
+    ),
+  ].filter(
+    (candidate): candidate is string =>
+      typeof candidate === "string" && !!candidate,
+  );
 }
 
 export function remoteRunNeedsOpenai(
@@ -292,7 +314,9 @@ function remoteSettingsProviderIds(
 }
 
 /** Strip host-only and unknown account fields before writing Claude tokens to a guest. */
-export function projectRemoteClaudeAccounts(accounts: ClaudeAccount[]): ClaudeAccount[] {
+export function projectRemoteClaudeAccounts(
+  accounts: ClaudeAccount[],
+): ClaudeAccount[] {
   return accounts.map((account) => ({
     id: account.id,
     name: account.name,
@@ -324,7 +348,8 @@ export function projectRemoteModelProviderConfig(
     out.turnTimeoutMinutes = source.turnTimeoutMinutes;
   if (typeof source.bridgeMaxRequestsPerHour === "number")
     out.bridgeMaxRequestsPerHour = source.bridgeMaxRequestsPerHour;
-  if (typeof source.orchestrator === "boolean") out.orchestrator = source.orchestrator;
+  if (typeof source.orchestrator === "boolean")
+    out.orchestrator = source.orchestrator;
   if (Array.isArray(source.pickerModels))
     out.pickerModels = source.pickerModels.filter(
       (value): value is string => typeof value === "string",
@@ -359,9 +384,14 @@ export function projectRemoteModelProviderConfig(
   }
 
   const settingsProviders: JsonRecord = {};
-  const reachableSettingsProviders = remoteSettingsProviderIds(model, fallbackModel);
+  const reachableSettingsProviders = remoteSettingsProviderIds(
+    model,
+    fallbackModel,
+  );
   if (reachableSettingsProviders.size) {
-    for (const [id, value] of Object.entries(jsonRecord(source.providers) || {})) {
+    for (const [id, value] of Object.entries(
+      jsonRecord(source.providers) || {},
+    )) {
       if (id === "anthropic" || id === "openai") continue;
       if (!reachableSettingsProviders.has(id)) continue;
       const provider = jsonRecord(value);
@@ -456,7 +486,10 @@ export function recordedTrustPolicy(
 ): SandboxTrustPolicy | null {
   const state = findRemoteStateBySession(provider, sessionId);
   if (!state) return null;
-  return { trustProfile: state.trustProfile, egressAllowlist: state.egressAllowlist };
+  return {
+    trustProfile: state.trustProfile,
+    egressAllowlist: state.egressAllowlist,
+  };
 }
 
 function sanitizeName(s: string): string {
@@ -499,7 +532,10 @@ export function removeRemoteState(provider: string, sandboxId: string): void {
   } catch {}
   if (state) {
     try {
-      rmSync(`${RUNS_BASE}/${sanitizeName(state.sessionId)}`, { recursive: true, force: true });
+      rmSync(`${RUNS_BASE}/${sanitizeName(state.sessionId)}`, {
+        recursive: true,
+        force: true,
+      });
     } catch {}
   }
 }
@@ -518,7 +554,10 @@ export function findRemoteStateBySession(
   provider: string,
   sessionId: string,
 ): RemoteSandboxState | null {
-  return listRemoteStates(provider).find((state) => state.sessionId === sessionId) || null;
+  return (
+    listRemoteStates(provider).find((state) => state.sessionId === sessionId) ||
+    null
+  );
 }
 
 /** Enumerate a provider's persisted sandboxes. Used by provider-side orphan
@@ -530,7 +569,9 @@ export function listRemoteStates(provider: string): RemoteSandboxState[] {
     for (const f of readdirSync(STATE_DIR)) {
       if (!f.startsWith(`${provider}-`) || !f.endsWith(".json")) continue;
       try {
-        const s: RemoteSandboxState = JSON.parse(readFileSync(`${STATE_DIR}/${f}`, "utf-8"));
+        const s: RemoteSandboxState = JSON.parse(
+          readFileSync(`${STATE_DIR}/${f}`, "utf-8"),
+        );
         if (s.provider === provider && s.sandboxId && s.sessionId)
           states.push(withTrustPolicy(s));
       } catch {}
@@ -567,7 +608,10 @@ export function withRemoteEnsureLock<T>(
 // ── Clone URL resolution ──────────────────────────────────────────────────────
 
 async function hostGit(args: string[], cwd: string): Promise<string> {
-  const proc = Bun.spawn(["git", "-C", cwd, ...args], { stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn(["git", "-C", cwd, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [out, , code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -596,7 +640,10 @@ function credentialFreeHttpsUrl(httpsUrl: string): string {
 function isGithubHttpsUrl(httpsUrl: string): boolean {
   try {
     const parsed = new URL(httpsUrl);
-    return parsed.protocol === "https:" && parsed.hostname.toLowerCase() === "github.com";
+    return (
+      parsed.protocol === "https:" &&
+      parsed.hostname.toLowerCase() === "github.com"
+    );
   } catch {
     return false;
   }
@@ -613,7 +660,8 @@ export async function injectCloneCredential(httpsUrl: string): Promise<string> {
     return httpsUrl;
   }
   const github =
-    parsed.protocol === "https:" && parsed.hostname.toLowerCase() === "github.com";
+    parsed.protocol === "https:" &&
+    parsed.hostname.toLowerCase() === "github.com";
   let token: string | undefined;
 
   if (github) {
@@ -640,16 +688,25 @@ export async function injectCloneCredential(httpsUrl: string): Promise<string> {
  * ssh origin converted), else derived from `ghRepo`. Local-path origins are
  * unreachable remotely — loud error. `cloneCredential` is applied here.
  */
-export async function remoteCloneUrl(repo: {
-  id: string;
-  repo: string;
-  ghRepo?: string;
-  host?: "github" | "codestorage";
-  csRepo?: string;
-}): Promise<string> {
+export async function remoteCloneUrl(
+  repo: {
+    id: string;
+    repo: string;
+    ghRepo?: string;
+    host?: "github" | "codestorage";
+    csRepo?: string;
+  },
+  options: { credential?: "configured" | "none" } = {},
+): Promise<string> {
   const origin = await hostGit(["remote", "get-url", "origin"], repo.repo);
   if (repo.host === "codestorage") {
-    const csRepoId = repo.csRepo || (origin ? parseCsRemote(origin)?.repoId : undefined);
+    if (options.credential === "none") {
+      throw new Error(
+        `repo ${repo.id} does not expose a credential-free code.storage clone`,
+      );
+    }
+    const csRepoId =
+      repo.csRepo || (origin ? parseCsRemote(origin)?.repoId : undefined);
     if (!csRepoId) {
       throw new Error(
         `repo ${repo.id} is code.storage-hosted but has neither csRepo nor a code.storage origin`,
@@ -664,13 +721,17 @@ export async function remoteCloneUrl(repo: {
     // exactly this. One-shot operations keep short default TTLs.
     return authedRemoteUrl(csRepoId, { ttlSeconds: 30 * 24 * 3600 });
   }
-  const https = (origin && toHttpsUrl(origin)) || (repo.ghRepo ? `https://github.com/${repo.ghRepo}.git` : null);
+  const https =
+    (origin && toHttpsUrl(origin)) ||
+    (repo.ghRepo ? `https://github.com/${repo.ghRepo}.git` : null);
   if (!https) {
     throw new Error(
       `repo ${repo.id} has no https-reachable origin (origin="${redactUrl(origin) || "none"}") — remote sandboxes clone over https; set an origin or ghRepo`,
     );
   }
-  return await injectCloneCredential(https);
+  return options.credential === "none"
+    ? credentialFreeHttpsUrl(https)
+    : await injectCloneCredential(https);
 }
 
 /**
@@ -732,6 +793,53 @@ export function bootstrapSignature(): string {
   );
 }
 
+/** Toolchain identity for DURABLE repo templates: everything bootstrap
+ * installs that a restored sandbox cannot cheaply reconcile in place.
+ * Deliberately excludes the runnerSha commit pin itself: on adoption,
+ * bootstrapRemoteSandbox already reconciles a stale checkout with a shallow
+ * fetch + detached checkout of the pin, an incremental frozen-lockfile
+ * install, and a forced runner recompile — seconds to a minute inside the
+ * restored filesystem. Keying templates on the pin instead threw away every
+ * provider artifact (full re-clone + project setup + re-snapshot) on every
+ * deploy. The runner repo's committed lockfile stands in for the dependency
+ * payload: templates survive code-only runner bumps and still rotate when
+ * the dependency set actually moves. */
+export function runnerToolchainSignature(): string {
+  const cfg = sandboxConfig();
+  const base = cfg.runnerSha
+    ? runnerLockfileOid(cfg.runnerSha)
+    : cfg.runnerBundleUrl || "unpinned";
+  return (
+    `${base}+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
+    `+gh@${REMOTE_GH_VERSION}+${REMOTE_RUNTIME_REVISION}`
+  );
+}
+
+/** bun.lock blob oid at the pinned runner commit — falling back to the local
+ * checkout's HEAD when the pin isn't resolvable here, then to the pin itself
+ * so an unreadable repo degrades to per-deploy invalidation, never to silent
+ * reuse across an unknown dependency change. */
+function runnerLockfileOid(runnerSha: string): string {
+  for (const rev of [runnerSha, "HEAD"]) {
+    const proc = Bun.spawnSync({
+      cmd: [
+        "git",
+        "-C",
+        REPO_ROOT,
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        `${rev}:bun.lock`,
+      ],
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const oid = proc.exitCode === 0 ? proc.stdout.toString().trim() : "";
+    if (oid) return `lock:${oid}`;
+  }
+  return runnerSha;
+}
+
 function remoteRunnerInstallCommand(force = false): string {
   const temporary = `${REMOTE_RUNNER_BINARY}.tmp`;
   return (
@@ -772,10 +880,12 @@ async function bootstrapRemoteBaseRuntime(
   // deploy/sandbox/Dockerfile: native build tools for dependency installs,
   // direnv/lsof for lifecycle scripts, and the generic runner utilities.
   const tools = await driver.exec(
-    "for c in git curl unzip rg sed nl wc base64 python3 make g++ direnv lsof; do command -v \"$c\" >/dev/null 2>&1 || echo \"$c\"; done",
+    'for c in git curl unzip rg sed nl wc base64 python3 make g++ direnv lsof; do command -v "$c" >/dev/null 2>&1 || echo "$c"; done',
   );
   if (tools.stdout.trim()) {
-    log(`installing workspace tools (${tools.stdout.trim().replaceAll("\n", ", ")})…`);
+    log(
+      `installing workspace tools (${tools.stdout.trim().replaceAll("\n", ", ")})…`,
+    );
     need(
       await driver.exec(
         `run_root() { if [ "$(id -u)" = 0 ]; then "$@"; ` +
@@ -797,7 +907,7 @@ async function bootstrapRemoteBaseRuntime(
   }
   need(
     await driver.exec(
-      "for c in git curl unzip rg sed nl wc base64 python3 make g++ direnv lsof; do command -v \"$c\" >/dev/null 2>&1 || { echo \"missing $c\" >&2; exit 1; }; done",
+      'for c in git curl unzip rg sed nl wc base64 python3 make g++ direnv lsof; do command -v "$c" >/dev/null 2>&1 || { echo "missing $c" >&2; exit 1; }; done',
     ),
     "workspace tools check",
   );
@@ -940,7 +1050,8 @@ export async function bootstrapRemoteSandbox(
     );
     return;
   }
-  const log = (msg: string) => console.log(`[sandbox:${label}] bootstrap: ${msg}`);
+  const log = (msg: string) =>
+    console.log(`[sandbox:${label}] bootstrap: ${msg}`);
 
   await bootstrapRemoteBaseRuntime(driver, label);
 
@@ -988,10 +1099,14 @@ export async function bootstrapRemoteSandbox(
       // Tarball payload (runnerBundleUrl) — no git history to reconcile; the
       // signature marker keys on the sha, so a bump with a stale bundle keeps
       // re-running bootstrap loudly instead of pretending it applied.
-      log(`runnerSha ${cfg.runnerSha} pinned but ${REMOTE_REPO} is not a git checkout — skipping reconcile`);
+      log(
+        `runnerSha ${cfg.runnerSha} pinned but ${REMOTE_REPO} is not a git checkout — skipping reconcile`,
+      );
     } else {
       const head = async () =>
-        (await driver.exec(`git -C ${REMOTE_REPO} rev-parse HEAD`)).stdout.trim();
+        (
+          await driver.exec(`git -C ${REMOTE_REPO} rev-parse HEAD`)
+        ).stdout.trim();
       const resolvePin = async () =>
         (
           await driver.exec(
@@ -1030,9 +1145,12 @@ export async function bootstrapRemoteSandbox(
 
   log("bun install (this is the slow part — several minutes cold)…");
   need(
-    await driver.exec(`cd ${REMOTE_REPO} && HOME=${REMOTE_HOME} ${REMOTE_BUN} install --frozen-lockfile`, {
-      timeoutMs: 900_000,
-    }),
+    await driver.exec(
+      `cd ${REMOTE_REPO} && HOME=${REMOTE_HOME} ${REMOTE_BUN} install --frozen-lockfile`,
+      {
+        timeoutMs: 900_000,
+      },
+    ),
     "bun install of the runner bundle",
   );
   need(
@@ -1073,7 +1191,9 @@ export async function bootstrapRemoteSandbox(
   // (see the module header's credential note).
 
   need(
-    await driver.exec(`printf '%s' ${shellQuoteWord(signature)} > ${BOOTSTRAP_MARKER}`),
+    await driver.exec(
+      `printf '%s' ${shellQuoteWord(signature)} > ${BOOTSTRAP_MARKER}`,
+    ),
     "bootstrap marker",
   );
   log("done");
@@ -1116,7 +1236,15 @@ export function loadRemoteWorkspaceSeedFiles(repo: {
   if (repo.defaultBranch) {
     const ref = `refs/remotes/origin/${repo.defaultBranch}`;
     const refExists = Bun.spawnSync({
-      cmd: ["git", "-C", repo.repo, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+      cmd: [
+        "git",
+        "-C",
+        repo.repo,
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        `${ref}^{commit}`,
+      ],
       stdout: "ignore",
       stderr: "ignore",
     });
@@ -1144,8 +1272,13 @@ export function loadRemoteWorkspaceSeedFiles(repo: {
     );
   }
   const seedFiles = (raw as { seedFiles?: unknown })?.seedFiles;
-  if (!Array.isArray(seedFiles) || !seedFiles.every((file) => typeof file === "string")) {
-    throw new Error(`${repo.id} ${REMOTE_SEED_MANIFEST} must contain a string[] seedFiles`);
+  if (
+    !Array.isArray(seedFiles) ||
+    !seedFiles.every((file) => typeof file === "string")
+  ) {
+    throw new Error(
+      `${repo.id} ${REMOTE_SEED_MANIFEST} must contain a string[] seedFiles`,
+    );
   }
 
   const seen = new Set<string>();
@@ -1158,7 +1291,9 @@ export function loadRemoteWorkspaceSeedFiles(repo: {
       path.includes("\\") ||
       path.split("/").some((part) => !part || part === "." || part === "..")
     ) {
-      throw new Error(`${repo.id} ${REMOTE_SEED_MANIFEST} has unsafe path ${JSON.stringify(path)}`);
+      throw new Error(
+        `${repo.id} ${REMOTE_SEED_MANIFEST} has unsafe path ${JSON.stringify(path)}`,
+      );
     }
     if (seen.has(path)) continue;
     seen.add(path);
@@ -1174,7 +1309,9 @@ export function loadRemoteWorkspaceSeedFiles(repo: {
     }
     const stat = lstatSync(source);
     if (!stat.isFile() || stat.isSymbolicLink()) {
-      throw new Error(`${repo.id} seed file must be a regular file, not a symlink: ${path}`);
+      throw new Error(
+        `${repo.id} seed file must be a regular file, not a symlink: ${path}`,
+      );
     }
     const ignored = Bun.spawnSync({
       cmd: ["git", "-C", repo.repo, "check-ignore", "-q", "--", path],
@@ -1182,7 +1319,9 @@ export function loadRemoteWorkspaceSeedFiles(repo: {
       stderr: "ignore",
     });
     if (ignored.exitCode !== 0) {
-      throw new Error(`${repo.id} seed file must be gitignored before upload: ${path}`);
+      throw new Error(
+        `${repo.id} seed file must be gitignored before upload: ${path}`,
+      );
     }
     if (stat.size > MAX_REMOTE_SEED_FILE_BYTES) {
       throw new Error(`${repo.id} seed file exceeds 1 MiB: ${path}`);
@@ -1216,7 +1355,9 @@ async function materializeRemoteWorkspaceSeedFiles(
     await driver.writeFile(target, file.content);
     const secured = await driver.exec(`chmod 600 ${shellQuoteWord(target)}`);
     if (secured.exitCode !== 0) {
-      throw new Error(`could not secure remote seed file ${repoId}:${file.path}`);
+      throw new Error(
+        `could not secure remote seed file ${repoId}:${file.path}`,
+      );
     }
   }
   if (files.length) {
@@ -1240,12 +1381,23 @@ export function remoteWarmWorkspaceDir(repoId: string): string {
  */
 export async function warmRemoteWorkspace(
   driver: RemoteDriver,
-  repo: { id: string; repo: string; ghRepo?: string; defaultBranch: string; depsInstall?: string },
+  repo: {
+    id: string;
+    repo: string;
+    ghRepo?: string;
+    defaultBranch: string;
+    depsInstall?: string;
+  },
   label: string,
-  opts?: { installDeps?: boolean; runSetup?: boolean; identity?: Omit<WorkloadIdentityContext, "lifecycle"> },
+  opts?: {
+    installDeps?: boolean;
+    runSetup?: boolean;
+    identity?: Omit<WorkloadIdentityContext, "lifecycle">;
+  },
 ): Promise<boolean> {
   const dir = remoteWarmWorkspaceDir(repo.id);
-  const log = (msg: string) => console.log(`[sandbox:${label}] warm workspace: ${msg}`);
+  const log = (msg: string) =>
+    console.log(`[sandbox:${label}] warm workspace: ${msg}`);
   const has = await driver.exec(`test -d ${shellQuoteWord(dir)}/.git`);
   if (has.exitCode !== 0) {
     const url = await remoteCloneUrl(repo);
@@ -1255,7 +1407,9 @@ export async function warmRemoteWorkspace(
       { timeoutMs: 600_000 },
     );
     if (clone.exitCode !== 0) {
-      log(`clone failed (adoption will set up cold): ${redactUrl(clone.stderr.trim().slice(0, 300))}`);
+      log(
+        `clone failed (adoption will set up cold): ${redactUrl(clone.stderr.trim().slice(0, 300))}`,
+      );
       return false;
     }
   }
@@ -1264,7 +1418,14 @@ export async function warmRemoteWorkspace(
   // including when adopting an existing partially prepared warm checkout.
   await scrubRemoteWarmWorkspaceAuthority(driver, repo, dir);
   if (opts?.runSetup) {
-    await runRemoteLifecycleHook(driver, dir, "setup", "fresh", repo.id, opts.identity);
+    await runRemoteLifecycleHook(
+      driver,
+      dir,
+      "setup",
+      "fresh",
+      repo.id,
+      opts.identity,
+    );
   }
   if (opts?.installDeps === false) {
     log(opts.runSetup ? "ready (post-setup)" : "ready (clone only)");
@@ -1279,7 +1440,9 @@ export async function warmRemoteWorkspace(
   log("installing deps…");
   const r = await driver.exec(deps, { timeoutMs: 900_000 });
   if (r.exitCode !== 0) {
-    log(`deps install failed (non-fatal): ${(r.stderr || r.stdout).trim().slice(0, 300)}`);
+    log(
+      `deps install failed (non-fatal): ${(r.stderr || r.stdout).trim().slice(0, 300)}`,
+    );
   } else {
     log("ready");
   }
@@ -1335,9 +1498,13 @@ export async function setupRemoteWorkspace(
   defaultBranch: string,
   repoId?: string,
   identity?: Omit<WorkloadIdentityContext, "lifecycle">,
+  options: { seedPrivateFiles?: boolean; runLifecycleHooks?: boolean } = {},
 ): Promise<void> {
   const startedAt = Date.now();
-  const mark = (stage: string) => console.log(`[sandbox-remote] workspace ${repoId || cwd}: ${stage} (+${Date.now() - startedAt}ms)`);
+  const mark = (stage: string) =>
+    console.log(
+      `[sandbox-remote] workspace ${repoId || cwd}: ${stage} (+${Date.now() - startedAt}ms)`,
+    );
   const warmDir = repoId ? remoteWarmWorkspaceDir(repoId) : undefined;
   const probe = warmDir
     ? `if test -d ${shellQuoteWord(cwd)}/.git; then echo cwd; ` +
@@ -1379,12 +1546,14 @@ export async function setupRemoteWorkspace(
     if (adopted.exitCode === 0) {
       adoptedBranchPrepared = true;
       cloned = true;
-      console.log(`[sandbox-remote] mounted warm workspace clone for ${repoId} at ${cwd}`);
+      console.log(
+        `[sandbox-remote] mounted warm workspace clone for ${repoId} at ${cwd}`,
+      );
       mark("warm clone fetched");
     } else if (adopted.exitCode !== 73) {
       console.warn(
         `[sandbox-remote] warm workspace sync failed for ${repoId}; falling back to a clean clone: ` +
-        `${(adopted.stderr || adopted.stdout).trim().slice(0, 300)}`,
+          `${(adopted.stderr || adopted.stdout).trim().slice(0, 300)}`,
       );
     }
   }
@@ -1410,9 +1579,9 @@ export async function setupRemoteWorkspace(
       throw new Error(
         full
           ? `remote workspace clone failed: sandbox disk is full (${df.stdout.trim()}). ` +
-            `The sandbox is too small for this repo — configure a bigger snapshot ` +
-            `(daytona.snapshot in ~/.opensession-sandbox.json) and recreate the session.` +
-            (detail ? ` git: ${detail}` : "")
+              `The sandbox is too small for this repo — configure a bigger snapshot ` +
+              `(daytona.snapshot in ~/.opensession-sandbox.json) and recreate the session.` +
+              (detail ? ` git: ${detail}` : "")
           : `remote workspace clone failed: ${detail || "(no stderr)"}`,
       );
     }
@@ -1420,12 +1589,16 @@ export async function setupRemoteWorkspace(
   const cur = adoptedBranchPrepared
     ? { exitCode: 0, stdout: branch, stderr: "" }
     : await driver.exec("git branch --show-current", { cwd });
-  if (!adoptedBranchPrepared && (cur.exitCode !== 0 || cur.stdout.trim() !== branch)) {
+  if (
+    !adoptedBranchPrepared &&
+    (cur.exitCode !== 0 || cur.stdout.trim() !== branch)
+  ) {
     const hasRemote = await driver.exec(
       `git rev-parse --verify --quiet origin/${shellQuoteWord(branch)}`,
       { cwd },
     );
-    const startPoint = hasRemote.exitCode === 0 ? `origin/${branch}` : `origin/${defaultBranch}`;
+    const startPoint =
+      hasRemote.exitCode === 0 ? `origin/${branch}` : `origin/${defaultBranch}`;
     const co = await driver.exec(
       `git checkout -B ${shellQuoteWord(branch)} ${shellQuoteWord(startPoint)}`,
       { cwd },
@@ -1448,21 +1621,38 @@ export async function setupRemoteWorkspace(
       { cwd },
     );
     if (scrubbed.exitCode !== 0)
-      throw new Error(`could not scrub GitHub clone credential: ${scrubbed.stderr.trim().slice(0, 300)}`);
+      throw new Error(
+        `could not scrub GitHub clone credential: ${scrubbed.stderr.trim().slice(0, 300)}`,
+      );
   }
   // Per-session only: warm/template preparation never calls this path, so
   // private files are injected after restore and can never land in a shared
-  // provider snapshot.
-  await materializeRemoteWorkspaceSeedFiles(driver, cwd, repoId);
-  mark("private files seeded");
-  await runRemoteLifecycleHook(driver, cwd, "setup", "fresh", repoId, identity);
-  mark("lifecycle ready");
+  // provider snapshot. Source-verification guests explicitly skip both seed
+  // files and repository-controlled lifecycle hooks.
+  if (options.seedPrivateFiles !== false) {
+    await materializeRemoteWorkspaceSeedFiles(driver, cwd, repoId);
+    mark("private files seeded");
+  }
+  if (options.runLifecycleHooks !== false) {
+    await runRemoteLifecycleHook(
+      driver,
+      cwd,
+      "setup",
+      "fresh",
+      repoId,
+      identity,
+    );
+    mark("lifecycle ready");
+  }
 }
 
 const REMOTE_LIFECYCLE_DIR = `${REMOTE_HOME}/.opensession/lifecycle`;
 
 function remoteLifecycleKey(cwd: string): string {
-  return cwd.replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(-120);
+  return cwd
+    .replace(/[^A-Za-z0-9_.-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(-120);
 }
 
 /** A source-image refresh changes the checked-out project after the original
@@ -1476,7 +1666,9 @@ export async function resetRemoteSetupLifecycleStamp(
   const stamp = `${REMOTE_LIFECYCLE_DIR}/${key}-setup.done`;
   const cleared = await driver.exec(`rm -f ${shellQuoteWord(stamp)}`);
   if (cleared.exitCode !== 0) {
-    throw new Error(`could not reset ${scopeKey} setup stamp: ${cleared.stderr.trim()}`);
+    throw new Error(
+      `could not reset ${scopeKey} setup stamp: ${cleared.stderr.trim()}`,
+    );
   }
 }
 
@@ -1497,15 +1689,18 @@ export async function runRemoteLifecycleHook(
   const key = remoteLifecycleKey(scopeKey || cwd) || "workspace";
   const log = `${REMOTE_LIFECYCLE_DIR}/${key}-${hook}.log`;
   const stamp = `${REMOTE_LIFECYCLE_DIR}/${key}-setup.done`;
-  const inspectCommand = hook === "setup"
-    ? `if [ -f ${shellQuoteWord(stamp)} ]; then echo stamped; elif [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`
-    : `if [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`;
+  const inspectCommand =
+    hook === "setup"
+      ? `if [ -f ${shellQuoteWord(stamp)} ]; then echo stamped; elif [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`
+      : `if [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`;
   const readProbe = async (command: string) => {
     let result = await driver.exec(command);
     const detail = `${result.stderr} ${result.stdout}`;
     if (
       result.exitCode !== 0 &&
-      /(?:operation )?timed? ?out|timeout|temporar|connection|socket|transport/i.test(detail)
+      /(?:operation )?timed? ?out|timeout|temporar|connection|socket|transport/i.test(
+        detail,
+      )
     ) {
       // Provider command transports can transiently stall immediately after a
       // snapshot wake. These probes are read-only and therefore safe to retry;
@@ -1518,7 +1713,9 @@ export async function runRemoteLifecycleHook(
   };
   const probe = await readProbe(inspectCommand);
   if (probe.exitCode !== 0)
-    throw new Error(`could not inspect .agents/${hook}: ${probe.stderr.trim()}`);
+    throw new Error(
+      `could not inspect .agents/${hook}: ${probe.stderr.trim()}`,
+    );
   const state = probe.stdout.trim();
   if (state === "stamped" || state === "absent") return { ran: false, log };
   const executable = await readProbe(`test -x ${shellQuoteWord(script)}`);
@@ -1537,10 +1734,12 @@ export async function runRemoteLifecycleHook(
   // to learn an Open Session-specific flag.
   const setupBin = `${REMOTE_LIFECYCLE_DIR}/setup-bin`;
   const bunShim = `#!/bin/sh\nif [ "$1" = install ]; then shift; exec ${REMOTE_BUN} install --frozen-lockfile "$@"; fi\nexec ${REMOTE_BUN} "$@"\n`;
-  const setupGuard = hook === "setup"
-    ? `mkdir -p ${shellQuoteWord(setupBin)} && printf %s ${shellQuoteWord(bunShim)} > ${shellQuoteWord(`${setupBin}/bun`)} && chmod 755 ${shellQuoteWord(`${setupBin}/bun`)} && `
-    : "";
-  const lifecyclePath = hook === "setup" ? `${setupBin}:${REMOTE_PATH}` : REMOTE_PATH;
+  const setupGuard =
+    hook === "setup"
+      ? `mkdir -p ${shellQuoteWord(setupBin)} && printf %s ${shellQuoteWord(bunShim)} > ${shellQuoteWord(`${setupBin}/bun`)} && chmod 755 ${shellQuoteWord(`${setupBin}/bun`)} && `
+      : "";
+  const lifecyclePath =
+    hook === "setup" ? `${setupBin}:${REMOTE_PATH}` : REMOTE_PATH;
   const command =
     `mkdir -p ${shellQuoteWord(REMOTE_LIFECYCLE_DIR)} && ` +
     setupGuard +
@@ -1551,7 +1750,9 @@ export async function runRemoteLifecycleHook(
     (hook === "setup" ? ` && touch ${shellQuoteWord(stamp)}` : "");
   const result = await driver.exec(command, { cwd, timeoutMs: 20 * 60_000 });
   if (result.exitCode !== 0) {
-    const tail = await driver.exec(`tail -80 ${shellQuoteWord(log)} 2>/dev/null || true`);
+    const tail = await driver.exec(
+      `tail -80 ${shellQuoteWord(log)} 2>/dev/null || true`,
+    );
     const detail = (tail.stdout || tail.stderr).trim().slice(-4_000);
     throw new Error(
       `.agents/${hook} failed with exit ${result.exitCode}; see ${log}` +
@@ -1590,7 +1791,9 @@ function makeRemoteLauncher(
 ): HostLauncher {
   return {
     async alive(dir) {
-      const meta = await driver.exec(`cat ${shellQuoteWord(`${dir}/meta.json`)} 2>/dev/null`);
+      const meta = await driver.exec(
+        `cat ${shellQuoteWord(`${dir}/meta.json`)} 2>/dev/null`,
+      );
       if (meta.exitCode !== 0) return false;
       let pid = 0;
       try {
@@ -1599,62 +1802,85 @@ function makeRemoteLauncher(
       if (!pid) return false;
       return (await driver.exec(`kill -0 ${pid}`)).exitCode === 0;
     },
-    newRunDir: (hostId) => `${sessionRunsDir(sessionId)}/${sanitizeName(hostId)}`,
-    connector: (_dir, spec) => (spec.wsToken ? runWsConnector(spec.hostId) : undefined),
+    newRunDir: (hostId) =>
+      `${sessionRunsDir(sessionId)}/${sanitizeName(hostId)}`,
+    connector: (_dir, spec) =>
+      spec.wsToken ? runWsConnector(spec.hostId) : undefined,
     async writeSpec(dir, spec) {
       mkdirSync(dir, { recursive: true });
       writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec, true, 0o600); // host mirror (resume)
       const mk = await driver.exec(`mkdir -p ${shellQuoteWord(dir)}`);
       if (mk.exitCode !== 0) {
-        throw new Error(`remote run dir create failed: ${mk.stderr.trim().slice(0, 300)}`);
+        throw new Error(
+          `remote run dir create failed: ${mk.stderr.trim().slice(0, 300)}`,
+        );
       }
       const guestSpecPath = `${dir}/${HOST_SPEC_NAME}`;
       await driver.writeFile(guestSpecPath, JSON.stringify(spec));
-      const secured = await driver.exec(`chmod 600 ${shellQuoteWord(guestSpecPath)}`);
+      const secured = await driver.exec(
+        `chmod 600 ${shellQuoteWord(guestSpecPath)}`,
+      );
       if (secured.exitCode !== 0) {
-        throw new Error(`remote run spec chmod failed: ${secured.stderr.trim().slice(0, 300)}`);
+        throw new Error(
+          `remote run spec chmod failed: ${secured.stderr.trim().slice(0, 300)}`,
+        );
       }
     },
     async launch(hostId, dir, onDispatching) {
       let dispatchAttempted = false;
       const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
       if (!spec?.wsToken) {
-        throw new Error(`remote launch of ${hostId}: spec.json (with wsToken) missing from ${dir}`);
+        throw new Error(
+          `remote launch of ${hostId}: spec.json (with wsToken) missing from ${dir}`,
+        );
       }
       // Per-step timing marks: when a provider SDK call stalls (see the
       // bounded execBackground below), the last mark names the culprit.
       const t0 = Date.now();
       const mark = (step: string) =>
-        console.log(`[sandbox-remote] launch ${hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`);
+        console.log(
+          `[sandbox-remote] launch ${hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`,
+        );
       await driver.ensureStarted();
       mark("sandbox started");
       const secureFiles: string[] = [];
       const secureDirectories: string[] = [];
       const automationProfile = spec.trustProfile === "automation";
       if (automationProfile && !spec.accountId) {
-        throw new Error("automation sandbox runs require a pinned model account");
+        throw new Error(
+          "automation sandbox runs require a pinned model account",
+        );
       }
       // Scoped Claude account upload. A run whose reachable model walk never
       // enters Anthropic receives no Claude token. Otherwise an explicit pin
       // narrows every trust profile, and the guest record drops host-only and
       // unknown fields before serialization.
-      const usesAnthropic = remoteRunNeedsAnthropic(spec.model, spec.fallbackModel);
+      const usesAnthropic = remoteRunNeedsAnthropic(
+        spec.model,
+        spec.fallbackModel,
+      );
       const accounts = usesAnthropic
-        ? projectRemoteClaudeAccounts(accountsForRemoteUpload(spec.user, spec.accountId))
+        ? projectRemoteClaudeAccounts(
+            accountsForRemoteUpload(spec.user, spec.accountId),
+          )
         : [];
       if (
         automationProfile &&
         usesAnthropic &&
         !accounts.some((account) => account.id === spec.accountId)
       ) {
-        throw new Error("the pinned automation account is not an eligible Claude account");
+        throw new Error(
+          "the pinned automation account is not an eligible Claude account",
+        );
       }
       // Resolve the run's MCP allowlist and dynamic credentials on the trusted
       // host, then project only those entries. Remote guests never receive the
       // instance-wide mcp-config.json. Automation specs are required to carry
       // an explicit array (including [] for no external connectors).
       if (automationProfile && spec.mcpServers === "all") {
-        throw new Error("automation sandbox runs require an explicit MCP allowlist");
+        throw new Error(
+          "automation sandbox runs require an explicit MCP allowlist",
+        );
       }
       const projectedMcp = filterMcpServers(
         spec.mcpServers ?? "all",
@@ -1686,7 +1912,10 @@ function makeRemoteLauncher(
         automationProfile &&
         spec.mode === "code" &&
         (spec.journalKind || "").startsWith("github-");
-      if (!githubAuth.GH_TOKEN && (!automationProfile || githubCodeAutomation)) {
+      if (
+        !githubAuth.GH_TOKEN &&
+        (!automationProfile || githubCodeAutomation)
+      ) {
         // The sandbox origin is mutable by repository setup code. Bind service
         // authority only to the server-owned repo id recorded at ensure time.
         const repoId = readRemoteState(provider, sandboxId)?.repoId;
@@ -1694,7 +1923,8 @@ function makeRemoteLauncher(
           ? (await import("../../worktree")).getRepo(repoId)
           : undefined;
         if (registeredRepo?.host !== "codestorage" && registeredRepo?.ghRepo) {
-          const { githubServiceCredentialEnv } = await import("../../github-app");
+          const { githubServiceCredentialEnv } =
+            await import("../../github-app");
           githubAuth = await githubServiceCredentialEnv(registeredRepo.ghRepo);
         }
       }
@@ -1724,7 +1954,9 @@ function makeRemoteLauncher(
         try {
           raw = JSON.parse(readFileSync(ocCfgSrc, "utf-8"));
         } catch (error) {
-          throw new Error(`Cannot project sandbox Pi config ${ocCfgSrc}: ${error}`);
+          throw new Error(
+            `Cannot project sandbox Pi config ${ocCfgSrc}: ${error}`,
+          );
         }
         const projected = projectRemoteModelProviderConfig(
           raw,
@@ -1734,10 +1966,15 @@ function makeRemoteLauncher(
           spec.fallbackModel,
         );
         settingsProviderIds = projected.settingsProviderIds;
-        await driver.writeFile(REMOTE_MODEL_PROVIDERS_CONFIG, projected.content);
+        await driver.writeFile(
+          REMOTE_MODEL_PROVIDERS_CONFIG,
+          projected.content,
+        );
         secureFiles.push(REMOTE_MODEL_PROVIDERS_CONFIG);
       } else {
-        await driver.exec(`rm -f ${shellQuoteWord(REMOTE_MODEL_PROVIDERS_CONFIG)}`);
+        await driver.exec(
+          `rm -f ${shellQuoteWord(REMOTE_MODEL_PROVIDERS_CONFIG)}`,
+        );
       }
 
       // Pi stays architecturally in-process: the guest runner-host imports the
@@ -1769,21 +2006,24 @@ function makeRemoteLauncher(
       // stay the legacy .opensession-* names the (dual-reading) in-sandbox
       // build resolves — same convention as the bridge config above.
       const usesOpenai = remoteRunNeedsOpenai(spec.model, spec.fallbackModel);
-      const openaiUpload: ReturnType<typeof buildOpenaiRemoteSeedUpload> = usesOpenai
-        ? buildOpenaiRemoteSeedUpload(
-            listCodexAccounts(),
-            spec.accountId
-              ? [spec.accountId]
-              : readModelProviderConfig()?.openaiAccounts,
-            spec.user,
-          )
-        : { accounts: [], seeds: [], skipped: [] };
+      const openaiUpload: ReturnType<typeof buildOpenaiRemoteSeedUpload> =
+        usesOpenai
+          ? buildOpenaiRemoteSeedUpload(
+              listCodexAccounts(),
+              spec.accountId
+                ? [spec.accountId]
+                : readModelProviderConfig()?.openaiAccounts,
+              spec.user,
+            )
+          : { accounts: [], seeds: [], skipped: [] };
       if (
         automationProfile &&
         usesOpenai &&
         !openaiUpload.accounts.some((account) => account.id === spec.accountId)
       ) {
-        throw new Error("the pinned automation account is not an eligible OpenAI account");
+        throw new Error(
+          "the pinned automation account is not an eligible OpenAI account",
+        );
       }
       for (const { account, reason } of openaiUpload.skipped) {
         console.warn(
@@ -1812,7 +2052,9 @@ function makeRemoteLauncher(
         await driver.exec(
           `rm -rf ${shellQuoteWord(REMOTE_OPENAI_SEED_DIR)} && mkdir -p ${seedDirectories.map(shellQuoteWord).join(" ")}`,
         );
-        await Promise.all(seeds.map((seed) => driver.writeFile(seed.path, seed.content)));
+        await Promise.all(
+          seeds.map((seed) => driver.writeFile(seed.path, seed.content)),
+        );
         secureFiles.push(...seeds.map((seed) => seed.path));
         secureDirectories.push(...seedDirectories);
         audit({
@@ -1822,7 +2064,9 @@ function makeRemoteLauncher(
           mechanism: "scoped-openai-account-remote",
           accounts: openaiUpload.accounts.map((a) => maskOpenaiAccount(a)),
           oauth_seeds: openaiUpload.seeds.length,
-          api_key_accounts: openaiUpload.accounts.filter((a) => a.kind === "api_key").length,
+          api_key_accounts: openaiUpload.accounts.filter(
+            (a) => a.kind === "api_key",
+          ).length,
           skipped: openaiUpload.skipped.map(
             (s) => `${maskOpenaiAccount(s.account)}: ${s.reason}`,
           ),
@@ -1840,10 +2084,14 @@ function makeRemoteLauncher(
           secureFiles.length
             ? `chmod 600 ${[...new Set(secureFiles)].map(shellQuoteWord).join(" ")}`
             : "",
-        ].filter(Boolean).join(" && "),
+        ]
+          .filter(Boolean)
+          .join(" && "),
       );
       if (secured.exitCode !== 0) {
-        throw new Error(`could not secure remote launch material: ${secured.stderr.trim().slice(0, 300)}`);
+        throw new Error(
+          `could not secure remote launch material: ${secured.stderr.trim().slice(0, 300)}`,
+        );
       }
       mark("accounts uploaded");
       // Remote sandboxes default to the public ingress when it is enabled.
@@ -1897,8 +2145,13 @@ function makeRemoteLauncher(
         const bg = driver.execBackground(
           `${envPrefix(env)}sh -c ${shellQuoteWord(remoteRunnerHostCommand(`${dir}/${HOST_SPEC_NAME}`))} >> ${dir}/host.log 2>&1`,
         );
-        const bgTimeout = new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 30_000));
-        const raced = await Promise.race([bg.then(() => "ok" as const), bgTimeout]);
+        const bgTimeout = new Promise<"timeout">((r) =>
+          setTimeout(() => r("timeout"), 30_000),
+        );
+        const raced = await Promise.race([
+          bg.then(() => "ok" as const),
+          bgTimeout,
+        ]);
         if (raced === "timeout") {
           console.warn(
             `[sandbox-remote] execBackground for ${hostId.slice(0, 11)} still pending after 30s — ` +
@@ -1914,23 +2167,36 @@ function makeRemoteLauncher(
     },
     async evidence(dir) {
       const [metaResult, journalResult] = await Promise.all([
-        driver.exec(`cat ${shellQuoteWord(`${dir}/${HOST_META_NAME}`)} 2>/dev/null`),
-        driver.exec(`cat ${shellQuoteWord(`${dir}/${HOST_JOURNAL_NAME}`)} 2>/dev/null`),
+        driver.exec(
+          `cat ${shellQuoteWord(`${dir}/${HOST_META_NAME}`)} 2>/dev/null`,
+        ),
+        driver.exec(
+          `cat ${shellQuoteWord(`${dir}/${HOST_JOURNAL_NAME}`)} 2>/dev/null`,
+        ),
       ]);
       let meta: RunHostMeta | undefined;
       let journal: Record<string, ActiveRunRecord> | undefined;
-      try { if (metaResult.exitCode === 0) meta = JSON.parse(metaResult.stdout); } catch {}
-      try { if (journalResult.exitCode === 0) journal = JSON.parse(journalResult.stdout); } catch {}
+      try {
+        if (metaResult.exitCode === 0) meta = JSON.parse(metaResult.stdout);
+      } catch {}
+      try {
+        if (journalResult.exitCode === 0)
+          journal = JSON.parse(journalResult.stdout);
+      } catch {}
       return {
         started: !!meta?.pid || !!journal,
-        ...(meta?.engineSessionId ? { engineSessionId: meta.engineSessionId } : {}),
+        ...(meta?.engineSessionId
+          ? { engineSessionId: meta.engineSessionId }
+          : {}),
         ...(meta?.done ? { done: meta.done } : {}),
       };
     },
     async stop(hostId, dir) {
       await driver.writeFile(`${dir}/cancelled`, "cancelled\n");
       const [metaResult, startupResult] = await Promise.all([
-        driver.exec(`cat ${shellQuoteWord(`${dir}/${HOST_META_NAME}`)} 2>/dev/null`),
+        driver.exec(
+          `cat ${shellQuoteWord(`${dir}/${HOST_META_NAME}`)} 2>/dev/null`,
+        ),
         driver.exec(`cat ${shellQuoteWord(`${dir}/startup.json`)} 2>/dev/null`),
       ]);
       let pid = 0;
@@ -1952,7 +2218,9 @@ function makeRemoteLauncher(
           `is_host && kill -KILL ${pid} 2>/dev/null || true; sleep 0.2; ! is_host`;
         const result = await driver.exec(script);
         if (result.exitCode !== 0)
-          throw new Error(`Could not prove remote sandbox host ${hostId} absent`);
+          throw new Error(
+            `Could not prove remote sandbox host ${hostId} absent`,
+          );
       }
       unregisterRunWsHost(hostId);
     },
@@ -2011,7 +2279,11 @@ async function* withRunJournal(
   let sawTerminal = false;
   try {
     for await (const ev of events) {
-      if (ev.type === "init" && ev.sessionId && ev.sessionId !== record.claudeSessionId) {
+      if (
+        ev.type === "init" &&
+        ev.sessionId &&
+        ev.sessionId !== record.claudeSessionId
+      ) {
         record.claudeSessionId = ev.sessionId;
         await journalSet(record);
       }
@@ -2051,7 +2323,10 @@ export interface RemoteSandboxParts {
 }
 
 /** Internal accessor resume uses to reach a handle's driver/launcher. */
-const remoteParts = new WeakMap<object, { driver: RemoteDriver; launcher: HostLauncher }>();
+const remoteParts = new WeakMap<
+  object,
+  { driver: RemoteDriver; launcher: HostLauncher }
+>();
 
 export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
   const launcher = makeRemoteLauncher(
@@ -2094,7 +2369,11 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
           touch();
           return { exitCode: 0, stdout: "", stderr: "" };
         } catch (error) {
-          return { exitCode: 1, stdout: "", stderr: error instanceof Error ? error.message : String(error) };
+          return {
+            exitCode: 1,
+            stdout: "",
+            stderr: error instanceof Error ? error.message : String(error),
+          };
         }
       }
       const result = await parts.driver.exec(shellQuote(cmd), remoteOptions);
@@ -2102,7 +2381,10 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
       return result;
     },
 
-    async launchRunEager(spec: RunHostSpec, cb?: RunHandleCallbacks): Promise<RunHandle> {
+    async launchRunEager(
+      spec: RunHostSpec,
+      cb?: RunHandleCallbacks,
+    ): Promise<RunHandle> {
       const dir = launcher.newRunDir(spec.hostId);
       const callbacks: HandleCallbacks = {
         onAskUser: cb?.onAskUser,
@@ -2114,7 +2396,9 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
       let uncertainLaunch = false;
       const t0 = Date.now();
       const mark = (step: string) =>
-        console.log(`[sandbox-remote] launch ${spec.hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`);
+        console.log(
+          `[sandbox-remote] launch ${spec.hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`,
+        );
       try {
         await launcher.writeSpec!(dir, spec);
         mark("spec written");
@@ -2153,7 +2437,9 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
           handle?.abandon();
           unregisterRunToken(spec.rpcToken);
           unregisterRunWsHost(spec.hostId);
-          try { rmSync(dir, { recursive: true, force: true }); } catch {}
+          try {
+            rmSync(dir, { recursive: true, force: true });
+          } catch {}
           throw error;
         }
         // execBackground may have delivered the command. Transfer the
@@ -2228,7 +2514,10 @@ export async function resumeRemoteSandboxRun(
   try {
     sandbox = await getSandboxProvider(run.sandboxProvider).get(run.sandboxId);
   } catch (e) {
-    console.warn(`[sandbox-remote] resume: provider.get(${run.sandboxId}) failed:`, e);
+    console.warn(
+      `[sandbox-remote] resume: provider.get(${run.sandboxId}) failed:`,
+      e,
+    );
   }
   if (!sandbox) return null;
   const parts = remoteParts.get(sandbox);
@@ -2253,7 +2542,10 @@ export async function resumeRemoteSandboxRun(
   } catch {}
   try {
     if (journalResult.exitCode === 0) {
-      const journal = JSON.parse(journalResult.stdout) as Record<string, ActiveRunRecord>;
+      const journal = JSON.parse(journalResult.stdout) as Record<
+        string,
+        ActiveRunRecord
+      >;
       privateRun = Object.values(journal)[0];
     }
   } catch {}
@@ -2281,10 +2573,15 @@ export async function resumeRemoteSandboxRun(
     }
     if (await launcher.alive(oldDir, null)) {
       if (oldSpec.rpcToken) {
-        registerRunToken(oldSpec.rpcToken, { sessionId: oldSpec.osSessionId, user: oldSpec.user });
+        registerRunToken(oldSpec.rpcToken, {
+          sessionId: oldSpec.osSessionId,
+          user: oldSpec.user,
+        });
       }
       registerRunWsHost(oldSpec.hostId, oldSpec.wsToken);
-      console.log(`[sandbox-remote] reattaching to live run ${run.runKey} in ${run.sandboxId}`);
+      console.log(
+        `[sandbox-remote] reattaching to live run ${run.runKey} in ${run.sandboxId}`,
+      );
       const handle = new HostHandle(oldDir, oldSpec, cb, launcher, run.runKey);
       try {
         // The host redials with ≤5s backoff once its token is re-registered.
@@ -2319,58 +2616,69 @@ export async function resumeRemoteSandboxRun(
     ? restartContinuationPrompt(run.prompt)
     : run.prompt;
   if (!prompt) return null;
-  const rpcToken = oldSpec?.proxyMcpServers?.length ? crypto.randomUUID() : undefined;
-  if (rpcToken) registerRunToken(rpcToken, { sessionId: run.osSessionId, user: run.user });
+  const rpcToken = oldSpec?.proxyMcpServers?.length
+    ? crypto.randomUUID()
+    : undefined;
+  if (rpcToken)
+    registerRunToken(rpcToken, { sessionId: run.osSessionId, user: run.user });
   const hostId = `rh-${Bun.randomUUIDv7()}`;
-  const spec: RunHostSpec = recovery.kind === "replay"
-    ? {
-        ...(oldSpec as RunHostSpec),
-        hostId,
-        rpcToken,
-        ...((oldSpec as RunHostSpec).wsToken ? { wsToken: crypto.randomUUID() } : {}),
-        journalKind: recoveryKind(run.kind, "resume"),
-        firstJournaledAt: run.firstJournaledAt,
-        resumeAttempts: run.resumeAttempts,
-        lastResumeAt: run.lastResumeAt,
-      }
-    : {
-    hostId,
-    osSessionId: run.osSessionId,
-    prompt,
-    promptEntryId: effectiveEngineSessionId ? undefined : run.promptEntryId,
-    engineSessionId: effectiveEngineSessionId,
-    cwd: run.cwd,
-    mode: run.mode,
-    model: run.model,
-    selectedModel: run.selectedModel ?? run.model,
-    transientFallback: run.transientFallback,
-    mcpServers: run.mcpServers,
-    proxyMcpServers: oldSpec?.proxyMcpServers,
-    rpcToken,
-    reposNote: oldSpec?.reposNote,
-    deniedTools: run.deniedTools,
-    confirmTools: run.confirmTools,
-    aws: run.aws,
-    author: oldSpec?.author,
-    user: run.user,
-    fallbackModel: run.fallbackModel,
-    effort: run.effort,
-    fastMode: run.fastMode,
-    accountId: run.accountId,
-    accountStrict: run.accountStrict,
-    usageCredits: run.usageCredits,
-    trustProfile: oldSpec?.trustProfile ?? run.trustProfile,
-    journalKind: recoveryKind(run.kind, "resume"),
-    firstJournaledAt: run.firstJournaledAt,
-    resumeAttempts: run.resumeAttempts,
-    lastResumeAt: run.lastResumeAt,
-  };
-  console.log(`[sandbox-remote] relaunching interrupted run ${run.runKey} in ${run.sandboxId} as ${spec.hostId}`);
+  const spec: RunHostSpec =
+    recovery.kind === "replay"
+      ? {
+          ...(oldSpec as RunHostSpec),
+          hostId,
+          rpcToken,
+          ...((oldSpec as RunHostSpec).wsToken
+            ? { wsToken: crypto.randomUUID() }
+            : {}),
+          journalKind: recoveryKind(run.kind, "resume"),
+          firstJournaledAt: run.firstJournaledAt,
+          resumeAttempts: run.resumeAttempts,
+          lastResumeAt: run.lastResumeAt,
+        }
+      : {
+          hostId,
+          osSessionId: run.osSessionId,
+          prompt,
+          promptEntryId: effectiveEngineSessionId
+            ? undefined
+            : run.promptEntryId,
+          engineSessionId: effectiveEngineSessionId,
+          cwd: run.cwd,
+          mode: run.mode,
+          model: run.model,
+          selectedModel: run.selectedModel ?? run.model,
+          transientFallback: run.transientFallback,
+          mcpServers: run.mcpServers,
+          proxyMcpServers: oldSpec?.proxyMcpServers,
+          rpcToken,
+          reposNote: oldSpec?.reposNote,
+          deniedTools: run.deniedTools,
+          confirmTools: run.confirmTools,
+          aws: run.aws,
+          author: oldSpec?.author,
+          user: run.user,
+          fallbackModel: run.fallbackModel,
+          effort: run.effort,
+          fastMode: run.fastMode,
+          accountId: run.accountId,
+          accountStrict: run.accountStrict,
+          usageCredits: run.usageCredits,
+          trustProfile: oldSpec?.trustProfile ?? run.trustProfile,
+          journalKind: recoveryKind(run.kind, "resume"),
+          firstJournaledAt: run.firstJournaledAt,
+          resumeAttempts: run.resumeAttempts,
+          lastResumeAt: run.lastResumeAt,
+        };
+  console.log(
+    `[sandbox-remote] relaunching interrupted run ${run.runKey} in ${run.sandboxId} as ${spec.hostId}`,
+  );
   const replacement = sandbox.launchRunEager
     ? await sandbox.launchRunEager(spec, { onAskUser: cb.onAskUser })
     : sandbox.launchRun(spec, { onAskUser: cb.onAskUser });
   try {
-    if (oldDir && existsSync(oldDir)) rmSync(oldDir, { recursive: true, force: true });
+    if (oldDir && existsSync(oldDir))
+      rmSync(oldDir, { recursive: true, force: true });
   } catch {}
   return replacement.events();
 }

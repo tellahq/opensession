@@ -391,7 +391,10 @@ export async function externalRefsOpeningContext(
         const text = await entry.provider.contextForRef(r.id, opts.user);
         if (text) out += `\n\n${desc!.title} context for ${r.id}:\n\n${text}`;
       } catch (e) {
-        console.error(`[feeds] plugin context failed for ${r.kind} ${r.id}:`, e);
+        console.error(
+          `[feeds] plugin context failed for ${r.kind} ${r.id}:`,
+          e,
+        );
       }
       continue;
     }
@@ -411,8 +414,7 @@ export async function externalRefsOpeningContext(
         args,
         opts.user,
       );
-      const text =
-        typeof raw === "string" ? raw : JSON.stringify(raw, null, 1);
+      const text = typeof raw === "string" ? raw : JSON.stringify(raw, null, 1);
       const cap = ctxSpec.maxChars || 6_000;
       out += `\n\n${desc!.title} context for ${r.id}${text.length > cap ? ` (first ${cap} chars — use the ${ctxSpec.server} MCP tools for the rest)` : ""}:\n\n${text.slice(0, cap)}`;
     } catch (e) {

@@ -15,7 +15,7 @@
 
 import { existsSync } from "fs";
 import { parseTranscriptAsync } from "./jsonl-parser";
-import { getRecentCommitsForSessions } from "./recent-commits";
+import { createRecentCommitMatcher } from "./recent-commits";
 import { mergedSessionTranscriptAsync } from "./sessions";
 import type { TranscriptEntry, UnifiedSession } from "./types";
 
@@ -72,7 +72,12 @@ function isOpeningPrompt(e: TranscriptEntry): boolean {
   return e.type === "user" && t.length > 0 && !t.startsWith("/");
 }
 
-function imageSrcFor(sessionId: string, entry: TranscriptEntry, idx: number, raw: string): string {
+function imageSrcFor(
+  sessionId: string,
+  entry: TranscriptEntry,
+  idx: number,
+  raw: string,
+): string {
   // Real bytes need the indirection — inline as a data URL, or held back in
   // the store behind an `os-blob:` marker (docs/transcripts.md §1), which no
   // browser can load. Everything else is already a URL the panel can request.
@@ -99,7 +104,10 @@ function imageSrcFor(sessionId: string, entry: TranscriptEntry, idx: number, raw
  * stays in the transcript, and an `OPENSESSION_IMAGE:`/`OPENSESSION_VIDEO:`
  * marker is how an agent says "show this one".
  */
-export function isWorkspaceArtifact(src: string, featured: Set<string>): boolean {
+export function isWorkspaceArtifact(
+  src: string,
+  featured: Set<string>,
+): boolean {
   if (featured.has(src)) return true;
   if (src.startsWith("data:") || src.startsWith("os-blob:")) return true;
   if (src.startsWith("/api/sessions/")) return true;
@@ -122,6 +130,10 @@ export async function buildWorkspaceOverview(
   let prompt: WorkspaceOverview["prompt"] = null;
   let lastMessage: WorkspaceOverview["lastMessage"] = null;
   const media: WorkspaceMediaItem[] = [];
+  // The loop already reads every explicit member transcript. Match commits
+  // against those entries as they pass instead of launching a fleet-wide actor
+  // sweep from this request.
+  const commitMatcher = await createRecentCommitMatcher();
 
   for (const session of ordered) {
     // Async: this loops over EVERY session in the workspace — back-to-back sync
@@ -131,10 +143,15 @@ export async function buildWorkspaceOverview(
     // overview for every session written since the store landed.
     const entries = await mergedSessionTranscriptAsync(session);
     if (entries.length === 0) continue;
+    commitMatcher.observe(session.id, entries);
     if (!prompt) {
       const first = entries.find(isOpeningPrompt);
       if (first)
-        prompt = { content: first.content, sessionId: session.id, at: first.timestamp };
+        prompt = {
+          content: first.content,
+          sessionId: session.id,
+          at: first.timestamp,
+        };
     }
     for (const e of entries) {
       if (
@@ -142,7 +159,11 @@ export async function buildWorkspaceOverview(
         (e.content?.trim().length || 0) > 0 &&
         (!lastMessage || e.timestamp > lastMessage.at)
       )
-        lastMessage = { content: e.content, sessionId: session.id, at: e.timestamp };
+        lastMessage = {
+          content: e.content,
+          sessionId: session.id,
+          at: e.timestamp,
+        };
     }
     for (const e of entries) {
       const featured = new Set(e.featuredMedia || []);
@@ -171,14 +192,21 @@ export async function buildWorkspaceOverview(
   }
 
   media.sort((a, b) => (b.at || "").localeCompare(a.at || ""));
-  const commits = await getRecentCommitsForSessions(
-    new Set(sessions.map((session) => session.id)),
-  );
+  const commits = commitMatcher.commits();
   return {
     prompt,
     lastMessage,
     commits: commits.map(
-      ({ repo, sha, title, url, committedAt, filesChanged, additions, deletions }) => ({
+      ({
+        repo,
+        sha,
+        title,
+        url,
+        committedAt,
+        filesChanged,
+        additions,
+        deletions,
+      }) => ({
         repo,
         sha,
         title,
@@ -202,7 +230,9 @@ export async function resolveTranscriptImage(
   transcriptPath: string,
   entryId: string,
   idx: number,
-): Promise<{ bytes: ArrayBuffer; contentType: string } | { redirect: string } | null> {
+): Promise<
+  { bytes: ArrayBuffer; contentType: string } | { redirect: string } | null
+> {
   const entry = (await parseTranscriptAsync(transcriptPath)).find(
     (e) => e.id === entryId,
   );
@@ -214,7 +244,10 @@ export async function resolveTranscriptImage(
   try {
     const buf = Buffer.from(m[2], "base64");
     return {
-      bytes: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
+      bytes: buf.buffer.slice(
+        buf.byteOffset,
+        buf.byteOffset + buf.byteLength,
+      ) as ArrayBuffer,
       contentType: m[1],
     };
   } catch {

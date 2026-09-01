@@ -6,12 +6,13 @@
 import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
+  canonicalProviderPickerModelId,
   configuredPickerModels,
   modelProviders,
   waferModelEfforts,
   waferModelName,
   BRIDGE_PROVIDER_IDS,
-  OX_ALPHA_MODEL_ID,
+  GLM_5_3_MODEL_ID,
 } from "./model-providers";
 import { stateDir } from "./paths";
 import { piEngineEnabled, piPickerModels } from "./pi-config";
@@ -51,11 +52,30 @@ export interface ModelInfo {
   description?: string;
 }
 
-export const SESSION_EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"] as const;
+export const SESSION_EFFORTS = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
 export type SessionEffort = (typeof SESSION_EFFORTS)[number];
 
-const OPENAI_EFFORTS: SessionEffort[] = ["none", "low", "medium", "high", "xhigh"];
-const CLAUDE_EFFORTS: SessionEffort[] = ["low", "medium", "high", "xhigh", "max"];
+const OPENAI_EFFORTS: SessionEffort[] = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+];
+const CLAUDE_EFFORTS: SessionEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
 
 /** Pi variants exposed by the configured model. Keep this aligned with
  * `Pi models <provider> --verbose`; the selected value is sent verbatim
@@ -64,7 +84,8 @@ export function modelEfforts(model: string): SessionEffort[] {
   // Every engine exposes the same variants as its Pi sibling: our
   // effort levels map 1:1 onto pi's ThinkingLevel (pi-runner.ts) and onto the
   // direct SDKs' reasoning levels.
-  const id = model.replace(ENGINE_PREFIX_RE, "");
+  const rawId = model.replace(ENGINE_PREFIX_RE, "");
+  const id = canonicalProviderPickerModelId(`pi/${rawId}`).slice("pi/".length);
   const slash = id.indexOf("/");
   const provider =
     slash === -1
@@ -81,8 +102,10 @@ export function modelEfforts(model: string): SessionEffort[] {
     if (slug.startsWith("claude-haiku-4-5")) return ["high", "max"];
     if (/^claude-(?:fable|opus|sonnet)-/.test(slug)) return CLAUDE_EFFORTS;
   }
-  if (provider === "cerebras" && slug === "gpt-oss-120b") return ["low", "medium", "high"];
-  if (provider === "openrouter" && slug === OX_ALPHA_MODEL_ID) return ["low", "high", "max"];
+  if (provider === "cerebras" && slug === "gpt-oss-120b")
+    return ["low", "medium", "high"];
+  if (provider === "openrouter" && slug === GLM_5_3_MODEL_ID)
+    return ["low", "high", "max"];
   // Wafer's ladder is per model (its catalog owns the table) and doubles as
   // the thinking switch: Wafer serves every model with reasoning off until a
   // request carries an effort.
@@ -97,7 +120,7 @@ export function modelEfforts(model: string): SessionEffort[] {
 /** Preserve a supported selection, otherwise prefer High (the UI default). */
 export function normalizeModelEffort(
   model: string,
-  effort?: string | null
+  effort?: string | null,
 ): SessionEffort | undefined {
   const supported = modelEfforts(model);
   if (!supported.length) return undefined;
@@ -117,31 +140,101 @@ export const DEFAULT_BRIDGE_PICKER_MODELS = [
 ] as const;
 
 export const KNOWN_MODELS: ModelInfo[] = [
-  { id: "claude-fable-5", provider: "claude", label: "Claude Fable 5", aliases: ["fable"] },
-  { id: "claude-opus-5", provider: "claude", label: "Claude Opus 5", aliases: ["opus", "opus5"] },
+  {
+    id: "claude-fable-5",
+    provider: "claude",
+    label: "Claude Fable 5",
+    aliases: ["fable"],
+  },
+  {
+    id: "claude-opus-5",
+    provider: "claude",
+    label: "Claude Opus 5",
+    aliases: ["opus", "opus5"],
+  },
   // Kept resolvable for old sessions' labels/pricing, but the Meridian bridge
   // collapses every *opus* id to ONE canonical version (the
   // ANTHROPIC_DEFAULT_OPUS_MODEL pin in meridianAccountEnv, now Opus 5), so a
   // 4.8 selection is served as Opus 5 — it's out of the picker config for that
   // reason.
-  { id: "claude-opus-4-8", provider: "claude", label: "Claude Opus 4.8", aliases: ["opus4.8"] },
-  { id: "claude-sonnet-5", provider: "claude", label: "Claude Sonnet 5", aliases: ["sonnet", "sonnet5"] },
-  { id: "claude-sonnet-4-6", provider: "claude", label: "Claude Sonnet 4.6", aliases: ["sonnet4.6"] },
-  { id: "claude-haiku-4-5", provider: "claude", label: "Claude Haiku 4.5", aliases: ["haiku"] },
-  { id: "codex-best-available", provider: "codex", label: "Best available (Codex)", aliases: ["best", "best-available", "best-codex"] },
-  { id: "gpt-5.6-sol", provider: "codex", label: "GPT-5.6 Sol", aliases: ["sol", "gpt5.6", "codex", "gpt"] },
-  { id: "gpt-5.6-terra", provider: "codex", label: "GPT-5.6 Terra", aliases: ["terra"] },
-  { id: "gpt-5.6-luna", provider: "codex", label: "GPT-5.6 Luna", aliases: ["luna"] },
+  {
+    id: "claude-opus-4-8",
+    provider: "claude",
+    label: "Claude Opus 4.8",
+    aliases: ["opus4.8"],
+  },
+  {
+    id: "claude-sonnet-5",
+    provider: "claude",
+    label: "Claude Sonnet 5",
+    aliases: ["sonnet", "sonnet5"],
+  },
+  {
+    id: "claude-sonnet-4-6",
+    provider: "claude",
+    label: "Claude Sonnet 4.6",
+    aliases: ["sonnet4.6"],
+  },
+  {
+    id: "claude-haiku-4-5",
+    provider: "claude",
+    label: "Claude Haiku 4.5",
+    aliases: ["haiku"],
+  },
+  {
+    id: "codex-best-available",
+    provider: "codex",
+    label: "Best available (Codex)",
+    aliases: ["best", "best-available", "best-codex"],
+  },
+  {
+    id: "gpt-5.6-sol",
+    provider: "codex",
+    label: "GPT-5.6 Sol",
+    aliases: ["sol", "gpt5.6", "codex", "gpt"],
+  },
+  {
+    id: "gpt-5.6-terra",
+    provider: "codex",
+    label: "GPT-5.6 Terra",
+    aliases: ["terra"],
+  },
+  {
+    id: "gpt-5.6-luna",
+    provider: "codex",
+    label: "GPT-5.6 Luna",
+    aliases: ["luna"],
+  },
   // Retired (operator decision: drop 5.5/5.4 and spark) but
   // kept resolvable for old sessions' labels/pricing — toPiModel
   // reroutes any dispatch of them to a 5.6 model (see RETIRED_CODEX_REROUTE
   // for why: 272k backend window − 128k output reservation leaves a 144k
   // input cap, which our ~125k fixed session payload turns into a
   // compact-every-turn loop).
-  { id: "gpt-5.5", provider: "codex", label: "GPT-5.5 (Codex)", aliases: ["gpt5.5"] },
-  { id: "gpt-5.4", provider: "codex", label: "GPT-5.4 (Codex)", aliases: ["gpt5.4"] },
-  { id: "gpt-5.4-mini", provider: "codex", label: "GPT-5.4 mini (Codex)", aliases: ["mini"] },
-  { id: "gpt-5.3-codex-spark", provider: "codex", label: "GPT-5.3 Codex Spark", aliases: ["spark"] },
+  {
+    id: "gpt-5.5",
+    provider: "codex",
+    label: "GPT-5.5 (Codex)",
+    aliases: ["gpt5.5"],
+  },
+  {
+    id: "gpt-5.4",
+    provider: "codex",
+    label: "GPT-5.4 (Codex)",
+    aliases: ["gpt5.4"],
+  },
+  {
+    id: "gpt-5.4-mini",
+    provider: "codex",
+    label: "GPT-5.4 mini (Codex)",
+    aliases: ["mini"],
+  },
+  {
+    id: "gpt-5.3-codex-spark",
+    provider: "codex",
+    label: "GPT-5.3 Codex Spark",
+    aliases: ["spark"],
+  },
 ];
 
 // ── The Dial ──────────────────────────────────────────────────────────────
@@ -250,7 +343,10 @@ export const DIAL_ORACLE_FALLBACKS: Record<string, string[]> = {
  * substitute (openai → Terra, anthropic → Opus). Unknown/native providers keep
  * the preset's choice (status quo).
  */
-export function sameBridgeDialOracle(oracleAgent: string, mainProviderID: string): string {
+export function sameBridgeDialOracle(
+  oracleAgent: string,
+  mainProviderID: string,
+): string {
   const oracle = DIAL_ORACLE_AGENTS[oracleAgent];
   if (!oracle) return oracleAgent;
   const oracleProvider = oracle.model.split("/")[0];
@@ -264,7 +360,8 @@ export const DIAL_PRESETS: DialPreset[] = [
   {
     id: "dial/ultra",
     label: "Dial · Ultra",
-    description: "The most capable combo for hard, open-ended tasks — Fable 5 high with a Sol-xhigh oracle",
+    description:
+      "The most capable combo for hard, open-ended tasks — Fable 5 high with a Sol-xhigh oracle",
     model: "claude-fable-5",
     effort: "high",
     oracleAgent: "oracle-sol",
@@ -272,7 +369,8 @@ export const DIAL_PRESETS: DialPreset[] = [
   {
     id: "dial/high",
     label: "Dial · High",
-    description: "Deep reasoning for hard tasks — Sol at extra-high effort with a Fable 5-high oracle",
+    description:
+      "Deep reasoning for hard tasks — Sol at extra-high effort with a Fable 5-high oracle",
     model: "gpt-5.6-sol",
     effort: "xhigh",
     oracleAgent: "oracle-fable",
@@ -280,7 +378,8 @@ export const DIAL_PRESETS: DialPreset[] = [
   {
     id: "dial/medium",
     label: "Dial · Medium",
-    description: "Balanced depth and speed for everyday work — Sol-high with a Sol-xhigh oracle",
+    description:
+      "Balanced depth and speed for everyday work — Sol-high with a Sol-xhigh oracle",
     model: "gpt-5.6-sol",
     effort: "high",
     oracleAgent: "oracle-sol",
@@ -288,7 +387,8 @@ export const DIAL_PRESETS: DialPreset[] = [
   {
     id: "dial/low",
     label: "Dial · Low",
-    description: "Fast edits and small tasks — Luna-high with a Sol-xhigh oracle",
+    description:
+      "Fast edits and small tasks — Luna-high with a Sol-xhigh oracle",
     model: "gpt-5.6-luna",
     effort: "high",
     oracleAgent: "oracle-sol",
@@ -358,7 +458,10 @@ export const ORCHESTRATOR_WORKER_AGENTS: Record<
     /** Task-tool description the main model sees — when to pick this worker. */
     description: string;
     /** Per-bridge backing model + effort variant. */
-    bridges: Record<string, { model: string; variant: SessionEffort; label: string }>;
+    bridges: Record<
+      string,
+      { model: string; variant: SessionEffort; label: string }
+    >;
   }
 > = {
   worker: {
@@ -369,11 +472,19 @@ export const ORCHESTRATOR_WORKER_AGENTS: Record<
       "files, constraints, acceptance criteria); it sees the checkout but none of your " +
       "conversation. Not for design decisions or final review.",
     bridges: {
-      anthropic: { model: "anthropic/claude-sonnet-5", variant: "medium", label: "Sonnet 5" },
+      anthropic: {
+        model: "anthropic/claude-sonnet-5",
+        variant: "medium",
+        label: "Sonnet 5",
+      },
       // Terra medium, not 5.5/5.4: the 272k-window codex models are retired
       // (see RETIRED_CODEX_REROUTE) — the cheap codex tiers are the 5.6
       // siblings Terra/Luna, never a smaller-window model.
-      openai: { model: "openai/gpt-5.6-terra", variant: "medium", label: "Terra" },
+      openai: {
+        model: "openai/gpt-5.6-terra",
+        variant: "medium",
+        label: "Terra",
+      },
     },
   },
   "worker-fast": {
@@ -383,9 +494,21 @@ export const ORCHESTRATOR_WORKER_AGENTS: Record<
       "straightforward lookups. Cheapest and fastest; escalate anything needing judgment " +
       "to the standard worker or do it yourself.",
     bridges: {
-      anthropic: { model: "anthropic/claude-haiku-4-5", variant: "high", label: "Haiku 4.5" },
-      openai: { model: "openai/gpt-5.6-luna", variant: "low", label: "Luna low" },
-      cerebras: { model: "cerebras/gpt-oss-120b", variant: "medium", label: "GPT OSS 120B" },
+      anthropic: {
+        model: "anthropic/claude-haiku-4-5",
+        variant: "high",
+        label: "Haiku 4.5",
+      },
+      openai: {
+        model: "openai/gpt-5.6-luna",
+        variant: "low",
+        label: "Luna low",
+      },
+      cerebras: {
+        model: "cerebras/gpt-oss-120b",
+        variant: "medium",
+        label: "GPT OSS 120B",
+      },
     },
   },
 };
@@ -399,12 +522,13 @@ export function orchestratorWorkerForBridge(
   availableProviderIDs = new Set(
     Object.entries(modelProviders())
       .filter(([, config]) => !!config.apiKey)
-      .map(([id]) => id)
-  )
+      .map(([id]) => id),
+  ),
 ): { model: string; variant: SessionEffort; label: string } | undefined {
   const w = ORCHESTRATOR_WORKER_AGENTS[name];
   if (!w) return undefined;
-  if (name === "worker-fast" && availableProviderIDs.has("cerebras")) return w.bridges.cerebras;
+  if (name === "worker-fast" && availableProviderIDs.has("cerebras"))
+    return w.bridges.cerebras;
   return w.bridges[mainProviderID] ?? w.bridges.anthropic;
 }
 
@@ -428,7 +552,9 @@ export const ORCHESTRATOR_PRESETS: OrchestratorPreset[] = [
 ];
 
 function orchestratorPickerDescription(preset: OrchestratorPreset): string {
-  const mainProviderID = preset.model.startsWith("claude-") ? "anthropic" : "openai";
+  const mainProviderID = preset.model.startsWith("claude-")
+    ? "anthropic"
+    : "openai";
   const workers = preset.workerAgents.flatMap((name) => {
     const backing = orchestratorWorkerForBridge(name, mainProviderID);
     if (!backing) return [];
@@ -440,7 +566,9 @@ function orchestratorPickerDescription(preset: OrchestratorPreset): string {
 
 /** The orchestrator preset behind a model id, or undefined. Strips a leading
  *  engine prefix like dialPreset so the same preset routes through any engine. */
-export function orchestratorPreset(model?: string | null): OrchestratorPreset | undefined {
+export function orchestratorPreset(
+  model?: string | null,
+): OrchestratorPreset | undefined {
   const id = (model || "").trim().toLowerCase().replace(ENGINE_PREFIX_RE, "");
   if (!id.startsWith("orchestrator/")) return undefined;
   return ORCHESTRATOR_PRESETS.find((p) => p.id === id);
@@ -450,7 +578,9 @@ export function orchestratorPreset(model?: string | null): OrchestratorPreset | 
  *  preset id itself, so callers that persist runner-reported models must not
  *  overwrite it — gate on this, not dialPreset, so both preset families keep
  *  their wiring across turns. */
-export function modelPreset(model?: string | null): DialPreset | OrchestratorPreset | undefined {
+export function modelPreset(
+  model?: string | null,
+): DialPreset | OrchestratorPreset | undefined {
   return dialPreset(model) ?? orchestratorPreset(model);
 }
 
@@ -463,7 +593,10 @@ function prettifyModelSlug(slug: string): string {
   if (glm) {
     const prefix = glm[1] ? "Z.ai " : "";
     const suffix = glm[3]
-      ? ` ${glm[3].split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")}`
+      ? ` ${glm[3]
+          .split("-")
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(" ")}`
       : "";
     return `${prefix}GLM-${glm[2]}${suffix}`;
   }
@@ -474,9 +607,12 @@ function prettifyModelSlug(slug: string): string {
   if (slug.startsWith("gpt-")) {
     const m = slug.slice(4).match(/^(\d+(?:[.-]\d+)*)(?:-(.+))?$/);
     if (m) {
-      const suffix = m[2]?.replace(/-/g, " ").replace(/^(sol|terra|luna)$/i, (name) =>
-        name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
-      );
+      const suffix = m[2]
+        ?.replace(/-/g, " ")
+        .replace(
+          /^(sol|terra|luna)$/i,
+          (name) => name.charAt(0).toUpperCase() + name.slice(1).toLowerCase(),
+        );
       return `GPT-${m[1].replace(/-/g, ".")}${suffix ? ` ${suffix}` : ""}`;
     }
     return `GPT-${slug.slice(4)}`;
@@ -495,10 +631,11 @@ function prettifyModelSlug(slug: string): string {
 export function piModelLabel(id: string): string {
   const preset = modelPreset(id);
   if (preset) return preset.label;
-  const tail = id.split("/").pop() || id;
-  const native = KNOWN_MODELS.find(
-    (m) => m.provider !== "pi" && m.id === tail
+  const canonical = canonicalProviderPickerModelId(
+    id.startsWith("pi/") ? id : `pi/${id}`,
   );
+  const tail = canonical.split("/").pop() || id;
+  const native = KNOWN_MODELS.find((m) => m.provider !== "pi" && m.id === tail);
   return (native?.label || prettifyModelSlug(tail))
     .replace(/^Claude\s+/i, "")
     .replace(/\s*\(Codex\)$/i, "");
@@ -527,7 +664,7 @@ export function refreshPickerModels(): void {
     const keyed = new Set(
       Object.entries(modelProviders())
         .filter(([, provider]) => !!provider.apiKey)
-        .map(([id]) => id)
+        .map(([id]) => id),
     );
     const usable = (id: string) => {
       const provider = id.split("/")[1] || "";
@@ -550,7 +687,12 @@ export function refreshPickerModels(): void {
       const id = toPiModel(configured);
       if (!id || !usable(id) || ids.has(id)) continue;
       ids.add(id);
-      KNOWN_MODELS.push({ id, provider: "pi", label: piModelLabel(id), aliases: [] });
+      KNOWN_MODELS.push({
+        id,
+        provider: "pi",
+        label: piModelLabel(id),
+        aliases: [],
+      });
     }
   } catch {}
 }
@@ -561,11 +703,7 @@ export const DEFAULT_CLAUDE_MODEL = "claude-fable-5";
 export const DEFAULT_CODEX_MODEL = "gpt-5.6-sol";
 export const BEST_AVAILABLE_CODEX_MODEL = "codex-best-available";
 
-const CODEX_MODEL_ORDER = [
-  "gpt-5.6-sol",
-  "gpt-5.6-terra",
-  "gpt-5.6-luna",
-];
+const CODEX_MODEL_ORDER = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
 
 /**
  * Fallback ROUTING tiers (higher = smarter). NOT an absolute capability
@@ -676,7 +814,8 @@ function patchDefaultModelStore(patch: Record<string, string | null>): void {
   try {
     if (existsSync(defaultModelStore())) {
       const parsed = JSON.parse(readFileSync(defaultModelStore(), "utf8"));
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+        raw = parsed;
     }
   } catch {}
   writeJsonAtomic(defaultModelStore(), { ...raw, ...patch });
@@ -688,7 +827,9 @@ function patchDefaultModelStore(patch: Record<string, string | null>): void {
  * the next run without a restart.
  */
 export function getDefaultModel(): string {
-  return loadOverride() || process.env.OPENSESSION_MODEL || DEFAULT_CLAUDE_MODEL;
+  return (
+    loadOverride() || process.env.OPENSESSION_MODEL || DEFAULT_CLAUDE_MODEL
+  );
 }
 
 /**
@@ -761,7 +902,9 @@ export function configuredHaikuFallbackModel(): string | undefined {
 /** Default provider failover for any run kind. Explicit per-run fallbacks may
  * still override this, but an otherwise-default Haiku run always crosses to
  * OpenAI instead of spending another attempt in the exhausted Claude pool. */
-export function automaticFallbackModel(primaryModel?: string): string | undefined {
+export function automaticFallbackModel(
+  primaryModel?: string,
+): string | undefined {
   if (toPiModel(primaryModel)?.startsWith("pi/anthropic/claude-haiku-")) {
     return configuredHaikuFallbackModel();
   }
@@ -805,9 +948,11 @@ export function setModelFallbackAuto(auto: boolean): boolean {
 
 export function resolveConcreteModel(
   model?: string | null,
-  exclude?: Set<string>
+  exclude?: Set<string>,
 ): string {
-  const resolved = model ? resolveModel(model) : resolveModel(getDefaultModel());
+  const resolved = model
+    ? resolveModel(model)
+    : resolveModel(getDefaultModel());
   if (resolved?.id !== BEST_AVAILABLE_CODEX_MODEL) {
     return resolved?.id || getDefaultModel();
   }
@@ -820,7 +965,9 @@ export function resolveConcreteModel(
 
 /** Fallback model for an interactive session. Haiku crosses to its explicit
  * OpenAI peer; other models retain the configured global preference. */
-export function interactiveFallbackModel(primaryModel?: string): string | undefined {
+export function interactiveFallbackModel(
+  primaryModel?: string,
+): string | undefined {
   if (!getModelFallbackAuto()) return undefined;
   return automaticFallbackModel(primaryModel);
 }
@@ -845,6 +992,11 @@ export function toPiModel(model?: string | null): string | undefined {
     : requested;
   const preset = modelPreset(pickerId);
   if (preset) return toPiModel(preset.model);
+  if (requested.includes("/")) {
+    const piId = requested.startsWith("pi/") ? requested : `pi/${requested}`;
+    const canonical = canonicalProviderPickerModelId(piId);
+    if (canonical !== piId) return canonical;
+  }
   if (requested.startsWith("pi/")) {
     const match = requested.match(/^pi\/openai\/(.+)$/);
     const replacement = match && RETIRED_CODEX_REROUTE[match[1]];
@@ -854,7 +1006,10 @@ export function toPiModel(model?: string | null): string | undefined {
     const native = requested.slice("openai/".length);
     return `pi/openai/${RETIRED_CODEX_REROUTE[native] || native}`;
   }
-  if (requested === BEST_AVAILABLE_CODEX_MODEL || requested.startsWith("codex-")) {
+  if (
+    requested === BEST_AVAILABLE_CODEX_MODEL ||
+    requested.startsWith("codex-")
+  ) {
     return `pi/openai/${DEFAULT_CODEX_MODEL}`;
   }
   if (requested.startsWith("gpt-")) {
@@ -868,7 +1023,7 @@ export function toPiModel(model?: string | null): string | undefined {
 /** Pi is the only execution engine. */
 export function toEngineModel(
   model: string | null | undefined,
-  _engine: Provider
+  _engine: Provider,
 ): string | undefined {
   return toPiModel(model);
 }
@@ -883,7 +1038,9 @@ function pickerBaseId(id: string): string {
   const value = id.trim();
   if (!value.startsWith("pi/")) return value;
   const rest = value.slice("pi/".length);
-  return PRESET_HEADS.some((head) => rest.startsWith(head)) ? rest : rest.split("/").slice(1).join("/");
+  return PRESET_HEADS.some((head) => rest.startsWith(head))
+    ? rest
+    : rest.split("/").slice(1).join("/");
 }
 
 export function modelEngineKey(model?: string | null): string {
@@ -896,17 +1053,20 @@ export function modelSupportsSteer(_model?: string | null): boolean {
 
 export function routeModel(
   model: string | null | undefined,
-  _opts?: { interactive?: boolean }
+  _opts?: { interactive?: boolean },
 ): { engine: "pi"; model: string } {
   const requested = (model || "").trim();
-  return { engine: "pi", model: toPiModel(requested) || toPiModel(getDefaultModel())! };
+  return {
+    engine: "pi",
+    model: toPiModel(requested) || toPiModel(getDefaultModel())!,
+  };
 }
 
 export type AccountProvider = "claude" | "codex";
 
 /** Account pool used by a model after resolving presets and legacy ids. */
 export function accountProviderForModel(
-  model?: string | null
+  model?: string | null,
 ): AccountProvider | undefined {
   const requested = model || interactiveDefaultModel();
   const resolved = toPiModel(requested) || requested;
@@ -914,8 +1074,13 @@ export function accountProviderForModel(
   const piPreset = modelPreset(resolved);
   if (piPreset) return accountProviderForModel(piPreset.model);
   const upstream = resolved.match(ENGINE_UPSTREAM_RE)?.[1];
-  if (upstream === "anthropic" || resolved.startsWith("claude-")) return "claude";
-  if (upstream === "openai" || resolved.startsWith("gpt-") || resolved.startsWith("codex-")) {
+  if (upstream === "anthropic" || resolved.startsWith("claude-"))
+    return "claude";
+  if (
+    upstream === "openai" ||
+    resolved.startsWith("gpt-") ||
+    resolved.startsWith("codex-")
+  ) {
     return "codex";
   }
   return undefined;
@@ -968,7 +1133,7 @@ export interface FallbackHop {
 export function nextFallbackModel(
   currentModel: string,
   exhausted: Set<string>,
-  preferredFallbackModel?: string
+  preferredFallbackModel?: string,
 ): FallbackHop | null {
   const currentRouted = toPiModel(currentModel) || currentModel;
   const currentTier = fallbackTier(currentRouted);
@@ -991,7 +1156,8 @@ export function nextFallbackModel(
     if (!resolveModel(routed)) return;
     candidates.push(routed);
   };
-  if (preferredFallbackModel && preferredFallbackModel !== "none") add(preferredFallbackModel);
+  if (preferredFallbackModel && preferredFallbackModel !== "none")
+    add(preferredFallbackModel);
   for (const id of FALLBACK_DESTINATIONS) add(id);
   if (!candidates.length) return null;
 
@@ -1025,12 +1191,13 @@ export function nextFallbackModel(
  */
 export function fallbackPlan(
   primaryModel: string | undefined,
-  preferredFallbackModel: string | undefined
+  preferredFallbackModel: string | undefined,
 ): FallbackHop[] {
   if (!preferredFallbackModel || preferredFallbackModel === "none") return [];
   const exhausted = new Set<string>();
   const out: FallbackHop[] = [];
-  let current = toPiModel(primaryModel || getDefaultModel()) || getDefaultModel();
+  let current =
+    toPiModel(primaryModel || getDefaultModel()) || getDefaultModel();
   for (let i = 0; i < 32; i++) {
     const hop = nextFallbackModel(current, exhausted, preferredFallbackModel);
     if (!hop) break;
@@ -1058,8 +1225,8 @@ export function resolveModel(input: string): ModelInfo | null {
     }
   }
   // Provider-backed picker ids can carry extra routing segments that are not
-  // part of the model's human name (`pi/openrouter/stealth/ox-alpha`). Agents
-  // naturally pass the visible final slug (`ox-alpha`) to create_session. Let
+  // part of the model's human name (`pi/openrouter/z-ai/glm-5.3`). Agents
+  // naturally pass the visible final slug (`glm-5.3`) to create_session. Let
   // that shorthand resolve when it names exactly one selectable Pi model;
   // collisions stay rejected rather than silently choosing a provider.
   const pickerAlias = value.replace(/\s+/g, "-");
@@ -1071,7 +1238,14 @@ export function resolveModel(input: string): ModelInfo | null {
   if (value.startsWith("dial/") || value.startsWith("orchestrator/")) {
     const preset = modelPreset(value);
     return preset
-      ? { id: preset.id, provider: "pi", label: preset.label, aliases: [], group: value.split("/")[0], description: preset.description }
+      ? {
+          id: preset.id,
+          provider: "pi",
+          label: preset.label,
+          aliases: [],
+          group: value.split("/")[0],
+          description: preset.description,
+        }
       : null;
   }
   if (value.startsWith("pi/")) {
@@ -1080,7 +1254,8 @@ export function resolveModel(input: string): ModelInfo | null {
       ? { id: routed, provider: "pi", label: piModelLabel(routed), aliases: [] }
       : null;
   }
-  if (value.startsWith("claude-")) return { id: value, provider: "claude", label: value, aliases: [] };
+  if (value.startsWith("claude-"))
+    return { id: value, provider: "claude", label: value, aliases: [] };
   if (value.startsWith("gpt-") || value.startsWith("codex-")) {
     return { id: value, provider: "codex", label: value, aliases: [] };
   }
@@ -1089,7 +1264,9 @@ export function resolveModel(input: string): ModelInfo | null {
   }
   if (value.includes("/")) {
     const id = toPiModel(value);
-    return id ? { id, provider: "pi", label: piModelLabel(id), aliases: [] } : null;
+    return id
+      ? { id, provider: "pi", label: piModelLabel(id), aliases: [] }
+      : null;
   }
   return null;
 }
@@ -1101,8 +1278,10 @@ export function providerFor(_model?: string | null): Provider {
 
 export function modelLabel(model?: string | null): string {
   const id = model || getDefaultModel();
-  return KNOWN_MODELS.find((entry) => entry.id === id)?.label ||
-    (id.startsWith("pi/") ? piModelLabel(id) : directModelLabel(id));
+  return (
+    KNOWN_MODELS.find((entry) => entry.id === id)?.label ||
+    (id.startsWith("pi/") ? piModelLabel(id) : directModelLabel(id))
+  );
 }
 
 // ── Context windows (for live context reporting) ────────────────────────────

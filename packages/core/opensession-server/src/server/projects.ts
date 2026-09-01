@@ -104,7 +104,5 @@ export function listProjects(): Project[] {
 }
 
 export function getProject(kind: ProjectKind, id: string): Project | null {
-  return (
-    listProjects().find((p) => p.kind === kind && p.id === id) ?? null
-  );
+  return listProjects().find((p) => p.kind === kind && p.id === id) ?? null;
 }

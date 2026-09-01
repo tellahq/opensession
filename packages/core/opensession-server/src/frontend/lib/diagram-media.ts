@@ -14,56 +14,56 @@
  */
 
 export interface DiagramMedia {
-	/** Standalone SVG markup, carrying its own intrinsic size. */
-	svg: string;
-	/** That size, so the viewer can letterbox the diagram like a picture. */
-	size: { w: number; h: number };
+  /** Standalone SVG markup, carrying its own intrinsic size. */
+  svg: string;
+  /** That size, so the viewer can letterbox the diagram like a picture. */
+  size: { w: number; h: number };
 }
 
 const OPEN_TAG = /^\s*<svg\b([^>]*)>/i;
 
 /** The lookbehind keeps `width` from also matching `stroke-width`. */
 function attrPattern(name: string, flags: string): RegExp {
-	return new RegExp(`(?<![-\\w])${name}\\s*=\\s*("[^"]*"|'[^']*')`, flags);
+  return new RegExp(`(?<![-\\w])${name}\\s*=\\s*("[^"]*"|'[^']*')`, flags);
 }
 
 function attrValue(attrs: string, name: string): string | null {
-	const match = attrPattern(name, "i").exec(attrs);
-	return match ? match[1].slice(1, -1) : null;
+  const match = attrPattern(name, "i").exec(attrs);
+  return match ? match[1].slice(1, -1) : null;
 }
 
 function withoutAttrs(attrs: string, names: string[]): string {
-	return names
-		.reduce((rest, name) => rest.replace(attrPattern(name, "gi"), " "), attrs)
-		.replace(/\s+/g, " ")
-		.trim();
+  return names
+    .reduce((rest, name) => rest.replace(attrPattern(name, "gi"), " "), attrs)
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** The diagram's own coordinate size. The viewBox is the honest one; the
  * width/height attributes describe the column mermaid rendered into. */
 function intrinsicSize(attrs: string): { w: number; h: number } | null {
-	const view = (attrValue(attrs, "viewBox") ?? "")
-		.split(/[\s,]+/)
-		.filter(Boolean)
-		.map(Number);
-	if (view.length === 4 && view[2] > 0 && view[3] > 0)
-		return { w: view[2], h: view[3] };
-	const w = Number.parseFloat(attrValue(attrs, "width") ?? "");
-	const h = Number.parseFloat(attrValue(attrs, "height") ?? "");
-	return w > 0 && h > 0 ? { w, h } : null;
+  const view = (attrValue(attrs, "viewBox") ?? "")
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map(Number);
+  if (view.length === 4 && view[2] > 0 && view[3] > 0)
+    return { w: view[2], h: view[3] };
+  const w = Number.parseFloat(attrValue(attrs, "width") ?? "");
+  const h = Number.parseFloat(attrValue(attrs, "height") ?? "");
+  return w > 0 && h > 0 ? { w, h } : null;
 }
 
 /** Drop just the max-width declaration, keeping any other inline style. */
 function withoutMaxWidth(attrs: string): string {
-	const style = attrValue(attrs, "style");
-	if (style === null) return attrs;
-	const kept = style
-		.split(";")
-		.filter((rule) => rule.trim() && !/^\s*max-width\s*:/i.test(rule))
-		.join("; ")
-		.trim();
-	const rest = withoutAttrs(attrs, ["style"]);
-	return kept ? `${rest} style="${kept}"` : rest;
+  const style = attrValue(attrs, "style");
+  if (style === null) return attrs;
+  const kept = style
+    .split(";")
+    .filter((rule) => rule.trim() && !/^\s*max-width\s*:/i.test(rule))
+    .join("; ")
+    .trim();
+  const rest = withoutAttrs(attrs, ["style"]);
+  return kept ? `${rest} style="${kept}"` : rest;
 }
 
 /**
@@ -77,21 +77,21 @@ function withoutMaxWidth(attrs: string): string {
  * refs resolve to the same shapes either way.
  */
 export function readDiagramSvg(markup: string): DiagramMedia | null {
-	const open = OPEN_TAG.exec(markup);
-	if (!open) return null;
-	const size = intrinsicSize(open[1]);
-	if (!size) return null;
-	const attrs = withoutMaxWidth(
-		withoutAttrs(open[1], ["width", "height", "preserveAspectRatio"]),
-	);
-	const tag =
-		`<svg ${attrs} width="${size.w}" height="${size.h}"` +
-		` preserveAspectRatio="xMidYMid meet">`;
-	return { svg: tag + markup.slice(open[0].length), size };
+  const open = OPEN_TAG.exec(markup);
+  if (!open) return null;
+  const size = intrinsicSize(open[1]);
+  if (!size) return null;
+  const attrs = withoutMaxWidth(
+    withoutAttrs(open[1], ["width", "height", "preserveAspectRatio"]),
+  );
+  const tag =
+    `<svg ${attrs} width="${size.w}" height="${size.h}"` +
+    ` preserveAspectRatio="xMidYMid meet">`;
+  return { svg: tag + markup.slice(open[0].length), size };
 }
 
 /** The diagram as a file, for Download. encodeURIComponent rather than btoa:
  * a label can hold anything, and btoa throws on anything outside Latin-1. */
 export function diagramDataUrl(svg: string): string {
-	return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

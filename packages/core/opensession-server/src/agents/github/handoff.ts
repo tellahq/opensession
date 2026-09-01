@@ -15,15 +15,30 @@
 import { defaultRepo } from "../../server/config";
 import { audit } from "../../server/audit";
 import { tryGetSessionControl } from "../../server/session-control";
-import { editIssueComment, fetchReviewFindings, getComment } from "./github-rest";
-import { getOrInitPrState, isLockHeld, readPrState, updatePrState } from "./state";
+import {
+  editIssueComment,
+  fetchReviewFindings,
+  getComment,
+} from "./github-rest";
+import {
+  getOrInitPrState,
+  isLockHeld,
+  readPrState,
+  updatePrState,
+} from "./state";
 import { matchSessions, workspaceIdForRepo } from "./session-notify";
-import { handoffActive, handoffDecision, reviewSatisfied } from "./handoff-gates";
+import {
+  handoffActive,
+  handoffDecision,
+  reviewSatisfied,
+} from "./handoff-gates";
 import { buildHandoffMessage } from "./prompts";
 import { uiSessionUrl } from "./run";
 import type { PrRef, ReviewResult } from "./review";
 
-const MAX_ROUNDS = parseInt(process.env.OPENSESSION_REVIEW_HANDOFF_ROUNDS || "6");
+const MAX_ROUNDS = parseInt(
+  process.env.OPENSESSION_REVIEW_HANDOFF_ROUNDS || "6",
+);
 /** An abandoned round stops holding the bot-push review carve-out open after this. */
 const ACTIVE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -38,7 +53,11 @@ export function handoffEnabled(): boolean {
  */
 export function isHandoffActive(prNumber: number, ghRepo?: string): boolean {
   if (!handoffEnabled()) return false;
-  return handoffActive(readPrState(prNumber, ghRepo)?.handoff, Date.now(), ACTIVE_TTL_MS);
+  return handoffActive(
+    readPrState(prNumber, ghRepo)?.handoff,
+    Date.now(),
+    ACTIVE_TTL_MS,
+  );
 }
 
 /** Drop round tracking (PR closed, or a review came back satisfied). */
@@ -59,7 +78,10 @@ export function clearHandoff(prNumber: number, ghRepo?: string): void {
  * Called after every webhook-triggered review with its result. Decides whether
  * to start (or stop) a fix round in the PR's owning session. Never throws.
  */
-export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | null): Promise<void> {
+export async function maybeHandoffFindings(
+  pr: PrRef,
+  review: ReviewResult | null,
+): Promise<void> {
   try {
     // null = the review was skipped (dedup/lock) or died before producing a result.
     if (!handoffEnabled() || !review || review.error) return;
@@ -81,7 +103,10 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
     // those; deliver to the most recently active real session.
     const owners = matchSessions(control, workspaceId, pr.headRef)
       .filter((s) => !s.id.startsWith("bks-ghpr-"))
-      .sort((a, b) => Date.parse(b.lastActivity || "0") - Date.parse(a.lastActivity || "0"));
+      .sort(
+        (a, b) =>
+          Date.parse(b.lastActivity || "0") - Date.parse(a.lastActivity || "0"),
+      );
     const target = owners[0];
     if (!target) {
       // No live owning session — the os-auto-fix label remains the path, but
@@ -112,12 +137,14 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
     }
 
     const round = (state.handoff?.rounds || 0) + 1;
-    const findingsBlock = await fetchReviewFindings(pr.number, pr.ghRepo).catch(() => "");
-		const message = buildHandoffMessage({
+    const findingsBlock = await fetchReviewFindings(pr.number, pr.ghRepo).catch(
+      () => "",
+    );
+    const message = buildHandoffMessage({
       prNumber: pr.number,
       title: pr.title,
-			headRef: pr.headRef,
-			reviewedSha: sha,
+      headRef: pr.headRef,
+      reviewedSha: sha,
       repoFull,
       round,
       cap: MAX_ROUNDS,
@@ -126,16 +153,18 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
       findingsBlock,
     });
 
-		// Review findings must not steer into a person's active request. Queue the
-		// handoff behind it and mark it as a phase boundary so the queue drains it
-		// alone, after the user's turn has settled.
-		const res = await control.deliverToSession(target.id, message, "GitHub", {
-			busy: "queue",
-			reviewHandoff: true,
-			deliveryId: `github-handoff:${repoFull}:${pr.number}:${sha}:${round}`,
-		});
+    // Review findings must not steer into a person's active request. Queue the
+    // handoff behind it and mark it as a phase boundary so the queue drains it
+    // alone, after the user's turn has settled.
+    const res = await control.deliverToSession(target.id, message, "GitHub", {
+      busy: "queue",
+      reviewHandoff: true,
+      deliveryId: `github-handoff:${repoFull}:${pr.number}:${sha}:${round}`,
+    });
     if (res.status === "error") {
-      console.error(`[github] review handoff → ${target.id} failed for PR #${pr.number}: ${res.message}`);
+      console.error(
+        `[github] review handoff → ${target.id} failed for PR #${pr.number}: ${res.message}`,
+      );
       return;
     }
 
@@ -197,13 +226,20 @@ async function announceCap(pr: PrRef): Promise<void> {
 }
 
 /** Append a status line to the current review summary comment (best-effort). */
-async function appendToSummary(pr: PrRef, id: number | undefined, line: string): Promise<void> {
+async function appendToSummary(
+  pr: PrRef,
+  id: number | undefined,
+  line: string,
+): Promise<void> {
   if (!id) return;
   try {
     const existing = await getComment(id, pr.ghRepo);
     if (!existing || existing.body.includes(line)) return;
     await editIssueComment(id, `${existing.body}\n\n${line}`, pr.ghRepo);
   } catch (e) {
-    console.error(`[github] appending handoff note to PR #${pr.number} summary failed:`, e);
+    console.error(
+      `[github] appending handoff note to PR #${pr.number} summary failed:`,
+      e,
+    );
   }
 }

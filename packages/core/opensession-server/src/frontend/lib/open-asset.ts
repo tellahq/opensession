@@ -1,7 +1,15 @@
-import { createContext, createElement, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
-	assetToolPath,
-	parseMcpTool,
+  createContext,
+  createElement,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  assetToolPath,
+  parseMcpTool,
 } from "@tellahq/opensession-protocol/tool-presentation";
 import type { TranscriptEntry } from "./types";
 
@@ -21,12 +29,12 @@ export const OpenAssetProvider = OpenAssetContext.Provider;
 
 const EMPTY_ASSET_PATHS: readonly string[] = [];
 type OpenAssetPathsValue = {
-	getPaths: () => readonly string[];
-	empty: boolean;
+  getPaths: () => readonly string[];
+  empty: boolean;
 };
 const OpenAssetPathsContext = createContext<OpenAssetPathsValue>({
-	getPaths: () => EMPTY_ASSET_PATHS,
-	empty: true,
+  getPaths: () => EMPTY_ASSET_PATHS,
+  empty: true,
 });
 
 /**
@@ -37,27 +45,31 @@ const OpenAssetPathsContext = createContext<OpenAssetPathsValue>({
  * the moment the first/last asset appears or disappears.
  */
 export function OpenAssetPathsProvider({
-	value,
-	children,
+  value,
+  children,
 }: {
-	value: readonly string[];
-	children: ReactNode;
+  value: readonly string[];
+  children: ReactNode;
 }) {
-	const paths = useRef(value);
-	useLayoutEffect(() => {
-		paths.current = value;
-	});
-	const empty = value.length === 0;
-	const [context, setContext] = useState<OpenAssetPathsValue>(() => ({
-		getPaths: () => paths.current,
-		empty,
-	}));
-	useLayoutEffect(() => {
-		setContext((current) =>
-			current.empty === empty ? current : { ...current, empty },
-		);
-	}, [empty]);
-	return createElement(OpenAssetPathsContext.Provider, { value: context }, children);
+  const paths = useRef(value);
+  useLayoutEffect(() => {
+    paths.current = value;
+  });
+  const empty = value.length === 0;
+  const [context, setContext] = useState<OpenAssetPathsValue>(() => ({
+    getPaths: () => paths.current,
+    empty,
+  }));
+  useLayoutEffect(() => {
+    setContext((current) =>
+      current.empty === empty ? current : { ...current, empty },
+    );
+  }, [empty]);
+  return createElement(
+    OpenAssetPathsContext.Provider,
+    { value: context },
+    children,
+  );
 }
 
 /**
@@ -66,22 +78,22 @@ export function OpenAssetPathsProvider({
  * affordance out entirely.
  */
 export function useOpenAsset(): {
-	available: boolean;
-	open: (path: string) => void;
+  available: boolean;
+  open: (path: string) => void;
 } {
-	const openInOverlay = useContext(OpenAssetContext);
-	return {
-		available: Boolean(openInOverlay),
-		open(path) {
-			openInOverlay?.(path);
-		},
-	};
+  const openInOverlay = useContext(OpenAssetContext);
+  return {
+    available: Boolean(openInOverlay),
+    open(path) {
+      openInOverlay?.(path);
+    },
+  };
 }
 
 /** Current files in this session's scratch folder. Markdown uses this exact
  * set to link names in prose without guessing that file-looking text exists. */
 export function useOpenAssetPaths(): readonly string[] {
-	return useContext(OpenAssetPathsContext).getPaths();
+  return useContext(OpenAssetPathsContext).getPaths();
 }
 
 /**
@@ -90,12 +102,12 @@ export function useOpenAssetPaths(): readonly string[] {
  * and a delete leaves nothing to open.
  */
 export function collectWrittenAssets(items: TranscriptEntry[]): string[] {
-	const seen = new Set<string>();
-	for (const item of items) {
-		if (item.type !== "tool_use" || !item.toolName) continue;
-		if (parseMcpTool(item.toolName)?.tool !== "write_asset") continue;
-		const path = assetToolPath(item.toolName, item.toolInput);
-		if (path) seen.add(path);
-	}
-	return [...seen];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (item.type !== "tool_use" || !item.toolName) continue;
+    if (parseMcpTool(item.toolName)?.tool !== "write_asset") continue;
+    const path = assetToolPath(item.toolName, item.toolInput);
+    if (path) seen.add(path);
+  }
+  return [...seen];
 }

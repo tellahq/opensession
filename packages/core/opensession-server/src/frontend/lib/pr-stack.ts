@@ -12,7 +12,7 @@ import type { PrDetails, PrStack, PrStackLayer } from "./types";
 
 /** Layers top-first, the way a stack is drawn. Never mutates the input. */
 export function stackLayersTopFirst(stack: PrStack): PrStackLayer[] {
-	return [...stack.layers].sort((a, b) => b.position - a.position);
+  return [...stack.layers].sort((a, b) => b.position - a.position);
 }
 
 /**
@@ -23,19 +23,19 @@ export function stackLayersTopFirst(stack: PrStack): PrStackLayer[] {
  * when the merge runs).
  */
 export interface StackMergePlan {
-	/** Bottom-first: the order the layers land in. */
-	layers: PrStackLayer[];
-	/** A draft in that set — GitHub's stack merge would refuse the whole thing. */
-	blockedBy: PrStackLayer | null;
+  /** Bottom-first: the order the layers land in. */
+  layers: PrStackLayer[];
+  /** A draft in that set — GitHub's stack merge would refuse the whole thing. */
+  blockedBy: PrStackLayer | null;
 }
 
 /** Null when this PR isn't a stack layer, or is no longer open. */
 export function stackMergePlan(pr: PrDetails | null): StackMergePlan | null {
-	const stack = pr?.stack;
-	if (!stack || pr!.state !== "OPEN") return null;
-	const layers = stack.layers
-		.filter((l) => l.position <= stack.position && l.state === "OPEN")
-		.sort((a, b) => a.position - b.position);
-	if (!layers.length) return null;
-	return { layers, blockedBy: layers.find((l) => l.isDraft) || null };
+  const stack = pr?.stack;
+  if (!stack || pr!.state !== "OPEN") return null;
+  const layers = stack.layers
+    .filter((l) => l.position <= stack.position && l.state === "OPEN")
+    .sort((a, b) => a.position - b.position);
+  if (!layers.length) return null;
+  return { layers, blockedBy: layers.find((l) => l.isDraft) || null };
 }

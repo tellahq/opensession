@@ -208,11 +208,12 @@ export function buildAutoFixPrompt(
     ? `Failing CI checks to fix:\n${failingChecks.map((c) => `- ${c}`).join("\n")}`
     : "CI is currently green or pending — focus on the review findings.";
   const mergeability = mergeabilityState(pr);
-  const conflicts = mergeability === "conflicting"
-    ? `GitHub reports that this PR conflicts with \`${pr.baseRefName}\`. Resolving those conflicts is required work for this iteration, even if CI is green and there are no review findings. Fetch \`origin/${pr.baseRefName}\`, merge it into the current branch without rebasing, resolve every conflict while preserving both the PR's intent and relevant upstream changes, validate the result, commit the merge resolution, and push it. Never force-push.`
-    : mergeability === "clear"
-      ? `GitHub currently reports no merge conflicts with \`${pr.baseRefName}\`.`
-      : `GitHub is still calculating whether this PR conflicts with \`${pr.baseRefName}\`. Check mergeability yourself before finishing; do not assume the branch is conflict-free.`;
+  const conflicts =
+    mergeability === "conflicting"
+      ? `GitHub reports that this PR conflicts with \`${pr.baseRefName}\`. Resolving those conflicts is required work for this iteration, even if CI is green and there are no review findings. Fetch \`origin/${pr.baseRefName}\`, merge it into the current branch without rebasing, resolve every conflict while preserving both the PR's intent and relevant upstream changes, validate the result, commit the merge resolution, and push it. Never force-push.`
+      : mergeability === "clear"
+        ? `GitHub currently reports no merge conflicts with \`${pr.baseRefName}\`.`
+        : `GitHub is still calculating whether this PR conflicts with \`${pr.baseRefName}\`. Check mergeability yourself before finishing; do not assume the branch is conflict-free.`;
 
   return `You are ${personaName()}, working on PR #${pr.number} ("${pr.title}") in the current repository. You are checked out on the PR's head branch \`${pr.headRefName}\` in a worktree. This is auto-fix iteration ${iteration}.
 
@@ -260,10 +261,10 @@ export const REVIEW_HANDOFF_SENTINEL = "<!--os:review-handoff-->";
 export function buildHandoffMessage(opts: {
   prNumber: number;
   title: string;
-	headRef: string;
-	/** Commit the findings describe. The session may have moved on while this
-	 * handoff waited behind a human request. */
-	reviewedSha?: string;
+  headRef: string;
+  /** Commit the findings describe. The session may have moved on while this
+   * handoff waited behind a human request. */
+  reviewedSha?: string;
   /** owner/name, for gh api commands. */
   repoFull: string;
   round: number;
@@ -274,7 +275,9 @@ export function buildHandoffMessage(opts: {
 }): string {
   const verdict = [
     opts.verdict ? `verdict: ${opts.verdict.replace(/_/g, " ")}` : "",
-    typeof opts.confidence === "number" ? `confidence ${opts.confidence}/5` : "",
+    typeof opts.confidence === "number"
+      ? `confidence ${opts.confidence}/5`
+      : "",
   ]
     .filter(Boolean)
     .join(", ");
@@ -310,8 +313,10 @@ export function mergeabilityState(
   pr: Pick<PrDetails, "mergeable" | "mergeStateStatus" | "headRefOid"> | null,
   expectedHeadSha?: string,
 ): MergeabilityState {
-  if (!pr || (expectedHeadSha && pr.headRefOid !== expectedHeadSha)) return "pending";
-  if (pr.mergeable === "CONFLICTING" || pr.mergeStateStatus === "DIRTY") return "conflicting";
+  if (!pr || (expectedHeadSha && pr.headRefOid !== expectedHeadSha))
+    return "pending";
+  if (pr.mergeable === "CONFLICTING" || pr.mergeStateStatus === "DIRTY")
+    return "conflicting";
   return pr.mergeable === "MERGEABLE" ? "clear" : "pending";
 }
 

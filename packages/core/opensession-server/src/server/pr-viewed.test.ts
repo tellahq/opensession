@@ -42,15 +42,21 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
   else process.env.OPENSESSION_CONFIG = savedConfig;
-  if (savedStore === undefined) delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
+  if (savedStore === undefined)
+    delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
   else process.env.OPENSESSION_GITHUB_AUTH_STORE = savedStore;
 });
 
 describe("PR viewed state credential", () => {
   test("uses the sole connected account in simple mode", async () => {
     let authorization = "";
-    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
-      authorization = String((init?.headers as Record<string, string>)?.Authorization || "");
+    globalThis.fetch = (async (
+      _input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      authorization = String(
+        (init?.headers as Record<string, string>)?.Authorization || "",
+      );
       return Response.json({
         data: {
           repository: {

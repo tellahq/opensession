@@ -27,21 +27,21 @@ export type SidebarDensity = "default" | "compact";
  * filled by three lines or four. See components/icons.tsx.
  */
 export const DENSITY_OPTIONS: {
-	value: SidebarDensity;
-	label: string;
-	Icon: typeof IconDensityDefault;
+  value: SidebarDensity;
+  label: string;
+  Icon: typeof IconDensityDefault;
 }[] = [
-	{ value: "default", label: "Default", Icon: IconDensityDefault },
-	{ value: "compact", label: "Compact", Icon: IconDensityCompact },
+  { value: "default", label: "Default", Icon: IconDensityDefault },
+  { value: "compact", label: "Compact", Icon: IconDensityCompact },
 ];
 
 const pref = makeUserPref<SidebarDensity>({
-	localKey: "opensession-sidebar-density",
-	prefKey: "sidebar-density",
-	changeEvent: "opensession-sidebar-density-changed",
-	defaultValue: "default",
-	decode: (v) => (v === "compact" || v === "default" ? v : null),
-	encode: (v) => v,
+  localKey: "opensession-sidebar-density",
+  prefKey: "sidebar-density",
+  changeEvent: "opensession-sidebar-density-changed",
+  defaultValue: "default",
+  decode: (v) => (v === "compact" || v === "default" ? v : null),
+  encode: (v) => v,
 });
 
 export const getSidebarDensity = pref.get;

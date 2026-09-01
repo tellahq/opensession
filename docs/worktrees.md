@@ -40,9 +40,11 @@ change in a browser. See [repo-lifecycle.md](repo-lifecycle.md).
 ## Modes
 
 **`code` sessions** have write access. This is the default. A new code workspace
-normally gets its own branch and worktree, while additional sessions in that
-workspace can share it or create a stacked worktree. They can commit and use the
-repository's configured pull-request flow.
+normally follows its repository setting, while each person can override each
+repository under **Preferences** with **Local checkout** or **Separate worktree**.
+Additional sessions in an existing workspace keep its worktree, and
+a deliberately selected branch or pull request stays isolated. Worktree sessions
+can commit and use the repository's configured pull-request flow.
 
 **`ask` sessions** are read-only. For an isolated repository they share one
 per-repo detached checkout (`<wtPrefix>-ask-checkout`) pinned to
@@ -103,10 +105,10 @@ directories marked by `CACHEDIR.TAG`, under host worktrees:
   the last 24 hours; if usage remains at least 80%, a final pass can reclaim
   caches idle for more than 2 hours.
 
-The sweep reads `/proc` and skips everything if it cannot determine which
-worktrees contain live build processes. It protects Ask checkouts and warm
-infrastructure. It does not remove worktrees, branches, commits,
-`node_modules`, or non-Rust build output.
+The sweep reads `/proc` on Linux and uses `ps` plus `lsof` on macOS. It skips
+everything if it cannot determine which worktrees contain live build
+processes. It protects Ask checkouts and warm infrastructure. It does not
+remove worktrees, branches, commits, `node_modules`, or non-Rust build output.
 
 Disable it with `OPENSESSION_DISK_GC=0`. The thresholds and cadence can be
 overridden at startup with `OPENSESSION_DISK_GC_COLD_DAYS`,

@@ -22,31 +22,34 @@ export const ASSET_VIEW_MODE_KEY = "opensession-asset-view";
 export const ASSET_VIEW_MODE_EVENT = "opensession-asset-view-changed";
 
 export function assetViewMode(): AssetViewMode {
-	return localStorage.getItem(ASSET_VIEW_MODE_KEY) === "list"
-		? "list"
-		: "preview";
+  return localStorage.getItem(ASSET_VIEW_MODE_KEY) === "list"
+    ? "list"
+    : "preview";
 }
 
 export function setAssetViewMode(mode: AssetViewMode): void {
-	localStorage.setItem(ASSET_VIEW_MODE_KEY, mode);
-	window.dispatchEvent(new Event(ASSET_VIEW_MODE_EVENT));
+  localStorage.setItem(ASSET_VIEW_MODE_KEY, mode);
+  window.dispatchEvent(new Event(ASSET_VIEW_MODE_EVENT));
 }
 
 /** The preference, plus every route it can change by: this surface, the other
  *  one in the same window, and another tab. */
-export function useAssetViewMode(): [AssetViewMode, (mode: AssetViewMode) => void] {
-	const [mode, setMode] = useState<AssetViewMode>(assetViewMode);
-	useEffect(() => {
-		const sync = () => setMode(assetViewMode());
-		const syncStorage = (event: StorageEvent) => {
-			if (event.key === ASSET_VIEW_MODE_KEY) sync();
-		};
-		window.addEventListener(ASSET_VIEW_MODE_EVENT, sync);
-		window.addEventListener("storage", syncStorage);
-		return () => {
-			window.removeEventListener(ASSET_VIEW_MODE_EVENT, sync);
-			window.removeEventListener("storage", syncStorage);
-		};
-	}, []);
-	return [mode, setAssetViewMode];
+export function useAssetViewMode(): [
+  AssetViewMode,
+  (mode: AssetViewMode) => void,
+] {
+  const [mode, setMode] = useState<AssetViewMode>(assetViewMode);
+  useEffect(() => {
+    const sync = () => setMode(assetViewMode());
+    const syncStorage = (event: StorageEvent) => {
+      if (event.key === ASSET_VIEW_MODE_KEY) sync();
+    };
+    window.addEventListener(ASSET_VIEW_MODE_EVENT, sync);
+    window.addEventListener("storage", syncStorage);
+    return () => {
+      window.removeEventListener(ASSET_VIEW_MODE_EVENT, sync);
+      window.removeEventListener("storage", syncStorage);
+    };
+  }, []);
+  return [mode, setAssetViewMode];
 }

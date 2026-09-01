@@ -35,14 +35,17 @@ async function callTranscript<T extends TranscriptActorRequest>(
     } catch (error) {
       // Keep pre-cutover sessions usable while the one-time actor transcript
       // migration is still pending. Actor-owned sessions never take this path.
-      if (!(error instanceof Error) ||
-          !error.message.includes("has no isolated actor transcript placement"))
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes("has no isolated actor transcript placement")
+      )
         throw error;
     }
   }
   const { transcriptStore } = await import("./transcript-store");
-  return transcriptStore().applyActorRequest(request) as
-    import("./session-kernel").TranscriptActorResult<T>;
+  return transcriptStore().applyActorRequest(
+    request,
+  ) as import("./session-kernel").TranscriptActorResult<T>;
 }
 
 async function reconcilePendingWake(
@@ -130,7 +133,9 @@ export async function drainPendingTranscriptWakesAfter(
 async function mutate<T>(
   request: Extract<TranscriptActorRequest, { requestId: string }>,
 ): Promise<T> {
-  const mutation = await callTranscript(request) as TranscriptMutationResult<T>;
+  const mutation = (await callTranscript(
+    request,
+  )) as TranscriptMutationResult<T>;
   await reconcilePendingWake(request.sessionId, mutation.wakeCursor);
   return mutation.result;
 }
@@ -211,7 +216,10 @@ function importChunks(entries: TranscriptEntry[]): TranscriptEntry[][] {
   let bytes = 2;
   for (const entry of entries) {
     const entryBytes = Buffer.byteLength(JSON.stringify(entry)) + 1;
-    if (chunk.length > 0 && (chunk.length >= 500 || bytes + entryBytes > byteBudget)) {
+    if (
+      chunk.length > 0 &&
+      (chunk.length >= 500 || bytes + entryBytes > byteBudget)
+    ) {
       chunks.push(chunk);
       chunk = [];
       bytes = 2;
@@ -232,11 +240,14 @@ export async function importLegacyTranscript(
   const importId = crypto.randomUUID();
   let inserted = 0;
   let updated = 0;
-  let finalMutation: TranscriptMutationResult<{ inserted: number; updated: number }> | null = null;
+  let finalMutation: TranscriptMutationResult<{
+    inserted: number;
+    updated: number;
+  }> | null = null;
   const chunks = importChunks(entries);
   for (let index = 0; index < chunks.length; index++) {
     const final = index === chunks.length - 1;
-    const mutation = await callTranscript({
+    const mutation = (await callTranscript({
       op: "import",
       sessionId,
       requestId: `import:${importId}:${index}`,
@@ -244,12 +255,13 @@ export async function importLegacyTranscript(
       src,
       watermark,
       final,
-    }) as TranscriptMutationResult<{ inserted: number; updated: number }>;
+    })) as TranscriptMutationResult<{ inserted: number; updated: number }>;
     inserted += mutation.result.inserted;
     updated += mutation.result.updated;
     finalMutation = mutation;
   }
-  if (finalMutation) await reconcilePendingWake(sessionId, finalMutation.wakeCursor);
+  if (finalMutation)
+    await reconcilePendingWake(sessionId, finalMutation.wakeCursor);
   return { inserted, updated };
 }
 
@@ -267,7 +279,9 @@ export async function replaceTranscriptEvents(
   });
 }
 
-export async function deleteSessionTranscript(sessionId: string): Promise<void> {
+export async function deleteSessionTranscript(
+  sessionId: string,
+): Promise<void> {
   await mutate({
     op: "delete",
     sessionId,
@@ -288,7 +302,9 @@ export const transcript = {
   ): Promise<TranscriptPage> => {
     const { weigh, ...bounded } = options;
     if (weigh && weigh !== v2SnapshotEntryWeight)
-      return Promise.reject(new TypeError("Unsupported transcript tail weight profile"));
+      return Promise.reject(
+        new TypeError("Unsupported transcript tail weight profile"),
+      );
     return callTranscript({
       op: "tail_window",
       sessionId,
@@ -311,7 +327,11 @@ export const transcript = {
         weightProfile: "handoff",
       },
     }),
-  readSince: (sessionId: string, sinceSeq: number, limit?: number): Promise<TranscriptPage> =>
+  readSince: (
+    sessionId: string,
+    sinceSeq: number,
+    limit?: number,
+  ): Promise<TranscriptPage> =>
     callTranscript({ op: "since", sessionId, sinceSeq, limit }),
   readChangesSince: (
     sessionId: string,
@@ -332,7 +352,11 @@ export const transcript = {
       limit,
       maxBytes,
     }),
-  readBefore: (sessionId: string, beforeSeq: number, limit?: number): Promise<TranscriptPage> =>
+  readBefore: (
+    sessionId: string,
+    beforeSeq: number,
+    limit?: number,
+  ): Promise<TranscriptPage> =>
     callTranscript({ op: "before", sessionId, beforeSeq, limit }),
   readRange: (
     sessionId: string,
@@ -349,7 +373,9 @@ export const transcript = {
       afterSeq,
       limit,
     }),
-  readTranscriptIndex: async (sessionId: string): Promise<TranscriptOutline> => {
+  readTranscriptIndex: async (
+    sessionId: string,
+  ): Promise<TranscriptOutline> => {
     const entries: TranscriptOutline["entries"] = [];
     let afterSeq = 0;
     let lastChangeSeq = 0;
@@ -377,7 +403,10 @@ export const transcript = {
       epoch,
     };
   },
-  getFullEntry: (sessionId: string, entryId: string): Promise<TranscriptEntry | null> =>
+  getFullEntry: (
+    sessionId: string,
+    entryId: string,
+  ): Promise<TranscriptEntry | null> =>
     callTranscript({ op: "full_entry", sessionId, entryId }),
   getLastSeq: (sessionId: string): Promise<number> =>
     callTranscript({ op: "last_seq", sessionId }),

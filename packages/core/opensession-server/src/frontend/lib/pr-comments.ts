@@ -2,7 +2,7 @@ import { GITHUB_BOT_LOGINS } from "./brand";
 
 /** Superseded automated reviews remain on GitHub for history, not as actionable discussion. */
 export function isOutdatedReviewComment(body: string): boolean {
-	return /<!--\s*os-review-outdated\s*-->/.test(body);
+  return /<!--\s*os-review-outdated\s*-->/.test(body);
 }
 
 /**
@@ -11,13 +11,13 @@ export function isOutdatedReviewComment(body: string): boolean {
  * suffixes GitHub hands its apps.
  */
 export function isBotAuthor(author?: string | null): boolean {
-	const login = author?.trim().toLowerCase();
-	if (!login) return false;
-	return (
-		GITHUB_BOT_LOGINS.has(login) ||
-		login.endsWith("[bot]") ||
-		login.endsWith("-bot")
-	);
+  const login = author?.trim().toLowerCase();
+  if (!login) return false;
+  return (
+    GITHUB_BOT_LOGINS.has(login) ||
+    login.endsWith("[bot]") ||
+    login.endsWith("-bot")
+  );
 }
 
 /**
@@ -38,11 +38,11 @@ const RELAYED_BY_PERSON = /^\s*(?:Review by\s+)?\*\*[^*\n]+\*\*\s+via\s+\S/;
  * (`<!-- os-review -->`, `[vc]: #…`), and a person never does.
  */
 export function isMachinePrComment(comment: {
-	author?: string | null;
-	body?: string | null;
+  author?: string | null;
+  body?: string | null;
 }): boolean {
-	const body = comment.body || "";
-	if (RELAYED_BY_PERSON.test(body)) return false;
-	if (isBotAuthor(comment.author)) return true;
-	return /^\s*(?:<!--|\[[a-z][a-z0-9-]*\]:\s*#)/i.test(body);
+  const body = comment.body || "";
+  if (RELAYED_BY_PERSON.test(body)) return false;
+  if (isBotAuthor(comment.author)) return true;
+  return /^\s*(?:<!--|\[[a-z][a-z0-9-]*\]:\s*#)/i.test(body);
 }

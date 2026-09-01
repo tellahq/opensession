@@ -106,7 +106,9 @@ describe("renderMarkdown session links", () => {
     expect(html).toContain(
       'data-session-id="bks-019f9608-ab20-7000-b98e-4de52d5fe436"',
     );
-    expect(html).toContain('<span class="session-link-label">this session</span>');
+    expect(html).toContain(
+      '<span class="session-link-label">this session</span>',
+    );
     expect(html).not.toContain("target=");
   });
 
@@ -118,7 +120,9 @@ describe("renderMarkdown session links", () => {
       'data-session-id="bks-019f9608-ab20-7000-b98e-4de52d5fe436"',
     );
     // the ~90-char URL is the href, never the chip's (nowrap) label
-    expect(html).toContain('<span class="session-link-label">bks-019f9608…</span>');
+    expect(html).toContain(
+      '<span class="session-link-label">bks-019f9608…</span>',
+    );
     expect(html).toContain(`href="${url}"`);
     expect(html).not.toContain(`>${url}</a>`);
   });
@@ -127,7 +131,9 @@ describe("renderMarkdown session links", () => {
     const html = renderMarkdown(
       "See [the worker](http://127.0.0.1:3850/session/bks-019f9608-ab20-7000-b98e-4de52d5fe436).",
     );
-    expect(html).toContain('<span class="session-link-label">the worker</span>');
+    expect(html).toContain(
+      '<span class="session-link-label">the worker</span>',
+    );
   });
 
   it("keeps other internal OS1 links same-tab without a chip", () => {
@@ -169,7 +175,9 @@ describe("renderMarkdown automation links", () => {
     const url = `http://127.0.0.1:3850/automations/${id}`;
     const html = renderMarkdown(`[Production Watchdog](${url})`);
     expect(html).toContain(`data-automation-id="${id}"`);
-    expect(html).toContain('<span class="automation-link-label">Production Watchdog</span>');
+    expect(html).toContain(
+      '<span class="automation-link-label">Production Watchdog</span>',
+    );
     expect(html).not.toContain("target=");
   });
 
@@ -192,7 +200,9 @@ describe("session chip labels", () => {
   it("labels a chip with the session's title once registered", () => {
     setSessionTitles([[id, "Fix the sidebar hover states"]]);
     const html = renderMarkdown(`Delegated to \`${id}\`.`);
-    expect(html).toContain('<span class="session-link-label">Fix the sidebar hover states</span>');
+    expect(html).toContain(
+      '<span class="session-link-label">Fix the sidebar hover states</span>',
+    );
     expect(html).toContain(`data-session-id="${id}"`);
     // the full id stays reachable in the tooltip
     expect(html).toContain(`title="Open Fix the sidebar hover states (${id})"`);
@@ -265,8 +275,9 @@ describe("session chip labels", () => {
       title: `Open session ${id}`,
       querySelector: () => label,
     };
-    const previousDocument = globalThis.document;
-    (globalThis as any).document = {
+    const globals = globalThis as unknown as Record<string, unknown>;
+    const previousDocument = globals.document;
+    globals.document = {
       querySelectorAll: () => [anchor],
     };
     try {
@@ -275,15 +286,22 @@ describe("session chip labels", () => {
       expect(anchor.dataset.sessionLabel).toBeUndefined();
       expect(anchor.title).toBe(`Open Fix the sidebar hover states (${id})`);
     } finally {
-      if (previousDocument === undefined) delete (globalThis as any).document;
-      else (globalThis as any).document = previousDocument;
+      if (previousDocument === undefined) delete globals.document;
+      else globals.document = previousDocument;
     }
   });
 
   it("keeps the session's own title in the tooltip when it differs", () => {
     // The label names the workspace, so two chips into one workspace read the
     // same; the tip is where they come apart.
-    setSessionTitles([[id, "Ship the movavi comparison page", false, "Review · PR #5778 Alternatives"]]);
+    setSessionTitles([
+      [
+        id,
+        "Ship the movavi comparison page",
+        false,
+        "Review · PR #5778 Alternatives",
+      ],
+    ]);
     const html = renderMarkdown(`Delegated to \`${id}\`.`);
     expect(html).toContain(
       '<span class="session-link-label">Ship the movavi comparison page</span>',
@@ -294,7 +312,14 @@ describe("session chip labels", () => {
   });
 
   it("leaves the tooltip alone when the session's title is the workspace's", () => {
-    setSessionTitles([[id, "Fix the sidebar hover states", false, "Fix the sidebar hover states"]]);
+    setSessionTitles([
+      [
+        id,
+        "Fix the sidebar hover states",
+        false,
+        "Fix the sidebar hover states",
+      ],
+    ]);
     expect(renderMarkdown(`Delegated to \`${id}\`.`)).toContain(
       `title="Open Fix the sidebar hover states (${id})"`,
     );
@@ -302,7 +327,9 @@ describe("session chip labels", () => {
 
   it("falls back to a shortened id, marked for monospace", () => {
     const html = renderMarkdown(`Delegated to \`${id}\`.`);
-    expect(html).toContain('<span class="session-link-label">bks-019f24b5…</span>');
+    expect(html).toContain(
+      '<span class="session-link-label">bks-019f24b5…</span>',
+    );
     expect(html).toContain('data-session-label="id"');
     expect(html).toContain(`title="Open session ${id}"`);
   });
@@ -311,12 +338,16 @@ describe("session chip labels", () => {
     const html = renderMarkdown(
       "Delegated to `os-019fd30a-785b-7000-ad89-9c2fb5b74a19`.",
     );
-    expect(html).toContain('<span class="session-link-label">os-019fd30a…</span>');
+    expect(html).toContain(
+      '<span class="session-link-label">os-019fd30a…</span>',
+    );
   });
 
   it("keeps short legacy slug ids whole", () => {
     const html = renderMarkdown("Delegated to `bks-worker-two`.");
-    expect(html).toContain('<span class="session-link-label">bks-worker-two</span>');
+    expect(html).toContain(
+      '<span class="session-link-label">bks-worker-two</span>',
+    );
   });
 
   it("truncates a long title", () => {
@@ -324,18 +355,26 @@ describe("session chip labels", () => {
       [id, "A very long session title that would eat the whole sentence"],
     ]);
     const html = renderMarkdown(`Delegated to \`${id}\`.`);
-    expect(html).toContain('<span class="session-link-label">A very long session title that would…</span>');
+    expect(html).toContain(
+      '<span class="session-link-label">A very long session title that would…</span>',
+    );
   });
 
   it("re-labels already-rendered markdown when titles arrive", () => {
     const src = `Delegated to \`${id}\`.`;
-    expect(renderMarkdown(src)).toContain('<span class="session-link-label">bks-019f24b5…</span>');
+    expect(renderMarkdown(src)).toContain(
+      '<span class="session-link-label">bks-019f24b5…</span>',
+    );
     setSessionTitles([[id, "Late title"]]);
-    expect(renderMarkdown(src)).toContain('<span class="session-link-label">Late title</span>');
+    expect(renderMarkdown(src)).toContain(
+      '<span class="session-link-label">Late title</span>',
+    );
   });
 
   it("drops the automation prefix a session was named after", () => {
-    setSessionTitles([[id, "Simplify · PR #5517 Give floating surfaces a rounder corner"]]);
+    setSessionTitles([
+      [id, "Simplify · PR #5517 Give floating surfaces a rounder corner"],
+    ]);
     const html = renderMarkdown(`Delegated to \`${id}\`.`);
     expect(html).toContain(
       '<span class="session-link-label">Give floating surfaces a rounder corn…</span>',
@@ -373,7 +412,9 @@ describe("session chip labels", () => {
   it("shortens an id-only link label when no title is known", () => {
     const url = `http://127.0.0.1:3850/session/${id}`;
     const html = renderMarkdown(`Session: [${id}](${url})`);
-    expect(html).toContain('<span class="session-link-label">bks-019f24b5…</span>');
+    expect(html).toContain(
+      '<span class="session-link-label">bks-019f24b5…</span>',
+    );
     expect(html).toContain('data-session-label="id"');
   });
 
@@ -487,9 +528,9 @@ describe("renderMarkdown asset references", () => {
   });
 
   it("does not treat an @-prefixed unknown name as an asset", () => {
-    expect(renderMarkdown("Ask @report.html for details.", assets)).not.toContain(
-      "asset-ref",
-    );
+    expect(
+      renderMarkdown("Ask @report.html for details.", assets),
+    ).not.toContain("asset-ref");
   });
 
   it("keeps exact asset names linkable past the former alias cap", () => {
@@ -558,11 +599,36 @@ describe("renderMarkdown PR mentions", () => {
 
   it("uses mergeability, reviews, and checks to color the whole chip", () => {
     for (const [input, label, state, tone] of [
-      [{ state: "OPEN", mergeable: "MERGEABLE" }, "Mergeable", "mergeable", "green"],
-      [{ state: "OPEN", reviewDecision: "APPROVED" }, "Approved", "approved", "green"],
-      [{ state: "OPEN", mergeable: "CONFLICTING" }, "Conflicts", "conflicts", "red"],
-      [{ state: "OPEN", checks: { failed: 1 } }, "Checks failing", "checks-failing", "red"],
-      [{ state: "OPEN", checks: { pending: 2 } }, "Checks running", "checks-running", "yellow"],
+      [
+        { state: "OPEN", mergeable: "MERGEABLE" },
+        "Mergeable",
+        "mergeable",
+        "green",
+      ],
+      [
+        { state: "OPEN", reviewDecision: "APPROVED" },
+        "Approved",
+        "approved",
+        "green",
+      ],
+      [
+        { state: "OPEN", mergeable: "CONFLICTING" },
+        "Conflicts",
+        "conflicts",
+        "red",
+      ],
+      [
+        { state: "OPEN", checks: { failed: 1 } },
+        "Checks failing",
+        "checks-failing",
+        "red",
+      ],
+      [
+        { state: "OPEN", checks: { pending: 2 } },
+        "Checks running",
+        "checks-running",
+        "yellow",
+      ],
     ] as const) {
       setKnownPrStates([{ repo: "tella-fusion", number: 5528, ...input }]);
       const html = renderMarkdown("Fixed in #5528.", fusion);
@@ -639,18 +705,14 @@ describe("renderMarkdown PR mentions", () => {
     setKnownRepoPrStates([
       { repo: "tella-fusion", number: 5528, state: "OPEN" },
     ]);
-    setKnownPrStates([
-      { repo: "tella-fusion", number: 5528, state: "MERGED" },
-    ]);
+    setKnownPrStates([{ repo: "tella-fusion", number: 5528, state: "MERGED" }]);
     const html = renderMarkdown("Fixed in #5528.", fusion);
     expect(html).toContain('data-pr-state="merged"');
     expect(html).toContain('data-pr-tone="purple"');
   });
 
   it("does not let stale session state resurrect an archived PR", () => {
-    setKnownPrStates([
-      { repo: "tella-fusion", number: 5528, state: "OPEN" },
-    ]);
+    setKnownPrStates([{ repo: "tella-fusion", number: 5528, state: "OPEN" }]);
     setKnownRepoPrStates([
       { repo: "tella-fusion", number: 5528, state: "MERGED" },
     ]);
@@ -660,9 +722,7 @@ describe("renderMarkdown PR mentions", () => {
   });
 
   it("drops stale state when the PR cache no longer contains the reference", () => {
-    setKnownPrStates([
-      { repo: "tella-fusion", number: 5528, state: "OPEN" },
-    ]);
+    setKnownPrStates([{ repo: "tella-fusion", number: 5528, state: "OPEN" }]);
     expect(renderMarkdown("Fixed in #5528.", fusion)).toContain(
       'data-pr-state="open"',
     );
@@ -903,7 +963,10 @@ describe("renderMarkdown commit references", () => {
 
   it("turns a sha codespan into a hoverable reference", () => {
     withGithub();
-    const html = renderMarkdown("This is reverting `4ed1ef09` + `437cba77`.", os);
+    const html = renderMarkdown(
+      "This is reverting `4ed1ef09` + `437cba77`.",
+      os,
+    );
     expect(html).toContain('class="commit-ref"');
     expect(html).toContain('data-commit-sha="4ed1ef09"');
     expect(html).toContain('data-commit-sha="437cba77"');
@@ -944,7 +1007,9 @@ describe("renderMarkdown commit references", () => {
     const html = renderMarkdown("The id 4ed1ef09 came back from the API.", os);
     expect(html).not.toContain("commit-ref");
     expect(html).toContain("4ed1ef09");
-    expect(renderMarkdown("precommit 4ed1ef09 hook", os)).not.toContain("commit-ref");
+    expect(renderMarkdown("precommit 4ed1ef09 hook", os)).not.toContain(
+      "commit-ref",
+    );
   });
 
   it("does not fire on the things that merely look like a sha", () => {
@@ -981,7 +1046,8 @@ describe("renderMarkdown commit references", () => {
 
   it("turns a pasted GitHub commit URL into the same reference", () => {
     withGithub();
-    const url = "https://github.com/tellahq/opensession/commit/4ed1ef09aa11bb22cc33dd44ee55ff6600778899";
+    const url =
+      "https://github.com/tellahq/opensession/commit/4ed1ef09aa11bb22cc33dd44ee55ff6600778899";
     const html = renderMarkdown(url, os);
     expect(html).toContain('class="commit-ref"');
     expect(html).toContain(">4ed1ef09</a>");
@@ -1030,13 +1096,16 @@ describe("renderMarkdown strikethrough (double-tilde only)", () => {
   });
 
   it("still renders real ~~strikethrough~~", () => {
-    expect(renderMarkdown("this is ~~struck~~ text")).toContain("<del>struck</del>");
+    expect(renderMarkdown("this is ~~struck~~ text")).toContain(
+      "<del>struck</del>",
+    );
   });
 });
 
 describe("renderPrCommentMarkdown GitHub details", () => {
   it("renders collapsible reviews and subtext", () => {
-    const html = renderPrCommentMarkdown(`<details> <summary>Outdated review</summary>
+    const html =
+      renderPrCommentMarkdown(`<details> <summary>Outdated review</summary>
 **Ada review** · request changes
 
 <sub>Reviewed 3147253 · open session</sub>
@@ -1152,7 +1221,7 @@ describe("renderMarkdown @-mentions", () => {
     const html = renderMarkdown("@Nolan too");
     expect(persons(html)).toEqual(["Nolan"]);
     expect(html).toContain("person-chip-initial");
-    expect(html).not.toContain("<img class=\"person-chip-face\"");
+    expect(html).not.toContain('<img class="person-chip-face"');
   });
 
   it("matches case-insensitively and reports the roster spelling", () => {
@@ -1195,7 +1264,9 @@ describe("GitHub user-attachment media", () => {
   const proxied = `/gh-asset/${id}?repo=opensession`;
 
   it("proxies image syntax through /gh-asset", () => {
-    const html = renderPrCommentMarkdown(`![shot](${url})`, { repo: "opensession" });
+    const html = renderPrCommentMarkdown(`![shot](${url})`, {
+      repo: "opensession",
+    });
     expect(html).toContain(`<img class="md-image" src="${proxied}"`);
     expect(html).toContain(`<a href="${proxied}"`);
   });
@@ -1206,7 +1277,9 @@ describe("GitHub user-attachment media", () => {
   });
 
   it("keeps a labelled link a link, pointed at the proxy", () => {
-    const html = renderPrCommentMarkdown(`[demo](${url})`, { repo: "opensession" });
+    const html = renderPrCommentMarkdown(`[demo](${url})`, {
+      repo: "opensession",
+    });
     expect(html).toContain(`<a href="${proxied}"`);
     expect(html).toContain(">demo</a>");
     expect(html).not.toContain("<video");
@@ -1214,7 +1287,9 @@ describe("GitHub user-attachment media", () => {
 
   it("rewrites an expired signed URL onto the same proxy", () => {
     const signed = `https://private-user-images.githubusercontent.com/213769834/636480332-${id}.png?jwt=eyJ0`;
-    const html = renderPrCommentMarkdown(`![shot](${signed})`, { repo: "opensession" });
+    const html = renderPrCommentMarkdown(`![shot](${signed})`, {
+      repo: "opensession",
+    });
     expect(html).toContain(`src="${proxied}"`);
   });
 

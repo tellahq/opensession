@@ -44,9 +44,10 @@ beforeAll(async () => {
   webhooks.configureWebhookRoutes([
     {
       name: "test-webhook",
-      getRoutes: () => new Map([
-        ["POST /github/webhook", async () => new Response("accepted")],
-      ]),
+      getRoutes: () =>
+        new Map([
+          ["POST /github/webhook", async () => new Response("accepted")],
+        ]),
     } as any,
   ]);
   handle = ingress.startPublicIngress({ port: 0, host: "127.0.0.1" });
@@ -56,7 +57,8 @@ beforeAll(async () => {
 
 afterAll(() => {
   ingress?.stopPublicIngress();
-  if (prevConfigEnv === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
+  if (prevConfigEnv === undefined)
+    delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = prevConfigEnv;
   rmSync(scratch, { recursive: true, force: true });
 });
@@ -69,7 +71,9 @@ describe("public ingress surface", () => {
   });
 
   test("dispatches a registered webhook without exposing the app", async () => {
-    const accepted = await fetch(`http://${BASE}/github/webhook`, { method: "POST" });
+    const accepted = await fetch(`http://${BASE}/github/webhook`, {
+      method: "POST",
+    });
     expect(accepted.status).toBe(200);
     expect(await accepted.text()).toBe("accepted");
     expect((await fetch(`http://${BASE}/github/webhook`)).status).toBe(404);
@@ -181,12 +185,17 @@ describe("rate limiting", () => {
   test("a valid Portal grant bypasses stale sidecars that exhausted the IP bucket", async () => {
     ingress.resetPublicIngressRateLimit();
     for (let i = 0; i < 31; i++) {
-      await fetch(`http://${BASE}/sandbox-portal-ws?session=os-stale&sandbox=stale&port=4300`, {
-        headers: { upgrade: "websocket", authorization: "Bearer expired" },
-      });
+      await fetch(
+        `http://${BASE}/sandbox-portal-ws?session=os-stale&sandbox=stale&port=4300`,
+        {
+          headers: { upgrade: "websocket", authorization: "Bearer expired" },
+        },
+      );
     }
     const grant = portalRelay.mintSandboxPortalGrant({
-      sessionId: "os-current", sandboxId: "sandbox-current", port: 4300,
+      sessionId: "os-current",
+      sandboxId: "sandbox-current",
+      port: 4300,
     });
     const ws = new WebSocket(
       `ws://${BASE}/sandbox-portal-ws?session=os-current&sandbox=sandbox-current&port=4300`,

@@ -37,9 +37,8 @@ export {}; // module marker so top-level await is allowed
 // with "Cannot find module './openai-codex.js'". Register the statically
 // bundled flows up front, exactly like pi's own standalone CLI entrypoint.
 {
-  const { registerBunOAuthFlows } = await import(
-    "@earendil-works/pi-ai/bun-oauth"
-  );
+  const { registerBunOAuthFlows } =
+    await import("@earendil-works/pi-ai/bun-oauth");
   registerBunOAuthFlows();
 }
 

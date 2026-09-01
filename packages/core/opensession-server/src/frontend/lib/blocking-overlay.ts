@@ -24,12 +24,12 @@
 
 /** Blocking overlays, each required to be actually rendered. */
 export const BLOCKING_OVERLAY_SELECTOR =
-	".palette-backdrop:not([hidden]), .composer-schedule-modal-backdrop:not([hidden]), .session-delete-overlay:not([hidden])";
+  ".palette-backdrop:not([hidden]), .composer-schedule-modal-backdrop:not([hidden]), .session-delete-overlay:not([hidden])";
 
 /**
  * True when a blocking overlay is open, so a window-level shortcut should
  * decline the keystroke.
  */
 export function blockingOverlayOpen(root: ParentNode = document): boolean {
-	return !!root.querySelector(BLOCKING_OVERLAY_SELECTOR);
+  return !!root.querySelector(BLOCKING_OVERLAY_SELECTOR);
 }

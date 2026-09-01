@@ -47,7 +47,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { cpus, loadavg } from "node:os";
 import { audit } from "./audit";
 import { dispatchRunRpc, timingSafeEqStr } from "./run-rpc";
-import type { HostConnection, HostConnectionHandlers, HostConnector } from "./host-client";
+import type {
+  HostConnection,
+  HostConnectionHandlers,
+  HostConnector,
+} from "./host-client";
 import { stateDir } from "./paths";
 
 const g = globalThis as any;
@@ -125,8 +129,10 @@ const wsConns: Map<string, RunWsState> = (g.__runWsConns ??= new Map());
  *  tripwire at the bottom), which is exactly what parked the 2026-07-09
  *  launches (bks-019f46e9, bks-019f4729) — connectWithWait's 300ms poll died
  *  and the consumer never attached even though the host had dialed in. */
-const wsDialWaiters: Map<string, Set<(err?: Error) => void>> = (g.__runWsDialWaiters ??=
-  new Map());
+const wsDialWaiters: Map<
+  string,
+  Set<(err?: Error) => void>
+> = (g.__runWsDialWaiters ??= new Map());
 
 /** Park until the host dials in (resolved by wsOpen), the registration is
  *  dropped (rejected), or `timeoutMs` passes (rejected — but only in a
@@ -134,7 +140,9 @@ const wsDialWaiters: Map<string, Set<(err?: Error) => void>> = (g.__runWsDialWai
 function waitForDialIn(hostId: string, timeoutMs: number): Promise<void> {
   if (!wsTokens.get(hostId)) {
     // Nothing is registered to dial — fail fast instead of parking forever.
-    return Promise.reject(new Error(`no run-ws token registered for ${hostId}`));
+    return Promise.reject(
+      new Error(`no run-ws token registered for ${hostId}`),
+    );
   }
   return new Promise<void>((resolve, reject) => {
     const set = wsDialWaiters.get(hostId) ?? new Set();
@@ -143,7 +151,8 @@ function waitForDialIn(hostId: string, timeoutMs: number): Promise<void> {
     const waiter = (err?: Error) => {
       if (timer !== undefined) clearTimeout(timer);
       set.delete(waiter);
-      if (set.size === 0 && wsDialWaiters.get(hostId) === set) wsDialWaiters.delete(hostId);
+      if (set.size === 0 && wsDialWaiters.get(hostId) === set)
+        wsDialWaiters.delete(hostId);
       if (err) reject(err);
       else resolve();
     };
@@ -317,7 +326,10 @@ function wsMessage(ws: any, message: string | Buffer): boolean {
       st.consumer.onMsg(msg);
       if (typeof msg?.seq === "number") {
         rec.seq = msg.seq;
-        if (++rec.unacked >= ACK_EVERY_N_FRAMES || Date.now() - rec.lastAckAt >= ACK_MIN_INTERVAL_MS) {
+        if (
+          ++rec.unacked >= ACK_EVERY_N_FRAMES ||
+          Date.now() - rec.lastAckAt >= ACK_MIN_INTERVAL_MS
+        ) {
           sendAck(st);
         }
       }
@@ -361,7 +373,10 @@ function wsClose(ws: any): boolean {
   return data?.sandboxWs === "rpc";
 }
 
-async function handleRpcFrame(ws: any, message: string | Buffer): Promise<void> {
+async function handleRpcFrame(
+  ws: any,
+  message: string | Buffer,
+): Promise<void> {
   let frame: any;
   try {
     frame = JSON.parse(String(message));
@@ -569,13 +584,17 @@ export function shouldDeferTimerPoisonForStarvation(
  * probe never fired, timers are provably dead and we escalate.
  */
 export function timerPoisonRequestCheck(): void {
-  const hb = g.__timerPoisonHeartbeat as { at: number; armed: boolean } | undefined;
+  const hb = g.__timerPoisonHeartbeat as
+    | { at: number; armed: boolean }
+    | undefined;
   if (!hb?.armed || g.__timerPoisonExiting || g.__timerPoisonHalted) return;
   if (Date.now() - hb.at < POISON_STALE_MS) {
     g.__timerPoisonSuspicion = undefined;
     return;
   }
-  let s = g.__timerPoisonSuspicion as { since: number; probeFired: boolean } | undefined;
+  let s = g.__timerPoisonSuspicion as
+    | { since: number; probeFired: boolean }
+    | undefined;
   if (!s) {
     s = g.__timerPoisonSuspicion = { since: Date.now(), probeFired: false };
     const captured = s;
@@ -591,7 +610,8 @@ export function timerPoisonRequestCheck(): void {
     g.__timerPoisonSuspicion = undefined;
     return;
   }
-  if (Date.now() - s.since >= POISON_CONFIRM_MS) escalateTimerPoison(Date.now() - hb.at);
+  if (Date.now() - s.since >= POISON_CONFIRM_MS)
+    escalateTimerPoison(Date.now() - hb.at);
 }
 
 function escalateTimerPoison(staleMs: number): void {
@@ -627,7 +647,8 @@ function escalateTimerPoison(staleMs: number): void {
   const guardPath = stateDir("timer-poison.json");
   let exits: string[] = [];
   try {
-    exits = (JSON.parse(readFileSync(guardPath, "utf8")).exits ?? []) as string[];
+    exits = (JSON.parse(readFileSync(guardPath, "utf8")).exits ??
+      []) as string[];
   } catch {}
   const cutoff = Date.now() - 30 * 60_000;
   exits = exits.filter((t) => Date.parse(t) > cutoff);

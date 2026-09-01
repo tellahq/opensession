@@ -1,4 +1,4 @@
-import { Marked } from "marked";
+import { Marked, type Token, type TokenizerThis, type Tokens } from "marked";
 import { BASE_PATH } from "./base";
 import { sanitizeHtmlFragment } from "./html-sanitize";
 import { prStatusDisplay, type PrStatusInput } from "./pr-status";
@@ -161,13 +161,17 @@ function assetLinkTarget(href: string | null | undefined): string | null {
   try {
     url = new URL(
       raw,
-      typeof location !== "undefined" ? location.href : "http://127.0.0.1:3850/",
+      typeof location !== "undefined"
+        ? location.href
+        : "http://127.0.0.1:3850/",
     );
   } catch {
     return null;
   }
   if (!INTERNAL_ORIGINS.has(url.origin)) return null;
-  const match = /\/api\/sessions\/([^/]+)\/assets\/raw\/(.+)$/.exec(url.pathname);
+  const match = /\/api\/sessions\/([^/]+)\/assets\/raw\/(.+)$/.exec(
+    url.pathname,
+  );
   if (!match) return null;
   // Another session's scratch folder is not this session's to open over.
   if (decodeUriComponentSafe(match[1]) !== renderAssetSessionId) return null;
@@ -194,10 +198,7 @@ const SESSION_ID_EXACT = new RegExp(
 // ordinary text.
 const SESSION_ID_BARE = new RegExp(`(?:os|bks)-${UUIDV7}`, "i");
 const AUTOMATION_ID_EXACT = new RegExp(`^auto-${UUIDV7}$`, "i");
-const AUTOMATION_ID_BARE = new RegExp(
-  `(?:^|[^\\w/-])(?=auto-${UUIDV7})`,
-  "i",
-);
+const AUTOMATION_ID_BARE = new RegExp(`(?:^|[^\\w/-])(?=auto-${UUIDV7})`, "i");
 
 // Chip labels. A raw `bks-<uuid>` is 40 characters of noise in the middle of a
 // sentence, so a chip shows the name of the work it points at when we know it.
@@ -265,7 +266,8 @@ export function onSessionTitleResolutionRequested(
   sessionTitleRequestListeners.add(listener);
   // A transcript can render before App's effect subscribes. Requeue any work a
   // Strict Mode effect cleanup may also have left in flight.
-  for (const id of inFlightSessionTitleRequests) queuedSessionTitleRequests.add(id);
+  for (const id of inFlightSessionTitleRequests)
+    queuedSessionTitleRequests.add(id);
   inFlightSessionTitleRequests.clear();
   if (queuedSessionTitleRequests.size && !sessionTitleRequestFlushQueued) {
     sessionTitleRequestFlushQueued = true;
@@ -452,9 +454,7 @@ export function setKnownPeople(
       });
   if (
     next.size === knownPeople.size &&
-    [...next].every(
-      ([key, p]) => knownPeople.get(key)?.github === p.github,
-    )
+    [...next].every(([key, p]) => knownPeople.get(key)?.github === p.github)
   )
     return;
   knownPeople = next;
@@ -468,7 +468,7 @@ const PERSON_MENTION_EXACT = /^@([A-Za-z][\w.-]*)/;
 
 /** Trailing punctuation belongs to the sentence, not to the name. */
 function mentionName(typed: string): string {
-	return typed.replace(/[.,;:!?]+$/, "");
+  return typed.replace(/[.,;:!?]+$/, "");
 }
 
 /**
@@ -479,12 +479,16 @@ function mentionName(typed: string): string {
  * stood alone — which is how `@report.html` briefly became an asset link.
  */
 function personMentionStart(src: string): number | undefined {
-	PERSON_MENTION_START.lastIndex = 0;
-	for (let m = PERSON_MENTION_START.exec(src); m; m = PERSON_MENTION_START.exec(src)) {
-		if (knownPeople.has(mentionName(m[2]!).toLowerCase()))
-			return m.index + m[0].indexOf("@");
-	}
-	return undefined;
+  PERSON_MENTION_START.lastIndex = 0;
+  for (
+    let m = PERSON_MENTION_START.exec(src);
+    m;
+    m = PERSON_MENTION_START.exec(src)
+  ) {
+    if (knownPeople.has(mentionName(m[2]!).toLowerCase()))
+      return m.index + m[0].indexOf("@");
+  }
+  return undefined;
 }
 
 function personChip(person: { name: string; github?: string }): string {
@@ -760,7 +764,11 @@ function displayPrState(pr: PrStateInput): PrDisplayState | null {
     : null;
 }
 
-function prRefTitle(repo: string, number: string, state?: PrDisplayState): string {
+function prRefTitle(
+  repo: string,
+  number: string,
+  state?: PrDisplayState,
+): string {
   return `Open the review for ${repoLabel(repo)} #${number}${
     state ? ` · ${state.label}` : ""
   }`;
@@ -830,7 +838,9 @@ function syncRenderedPrStates(): void {
   }
 }
 
-function collectPrStates(prs: Iterable<PrStateInput>): Map<string, PrDisplayState> {
+function collectPrStates(
+  prs: Iterable<PrStateInput>,
+): Map<string, PrDisplayState> {
   const next = new Map<string, PrDisplayState>();
   for (const pr of prs) {
     if (!pr.repo || !pr.number) continue;
@@ -885,7 +895,9 @@ export function setKnownRepos(
   for (const repo of repos) if (repo.id) next.set(repo.id, repo.ghRepo);
   if (
     next.size === knownRepos.size &&
-    [...next].every(([id, gh]) => knownRepos.has(id) && knownRepos.get(id) === gh)
+    [...next].every(
+      ([id, gh]) => knownRepos.has(id) && knownRepos.get(id) === gh,
+    )
   )
     return;
   knownRepos = next;
@@ -1077,14 +1089,16 @@ function collapseDuplicatePrReferences(src: string): string {
 // because the 13-39 range held no commits at all, only md5s and 16-hex ids.
 const COMMIT_SHA_SRC = "(?:[0-9a-f]{7,12}|[0-9a-f]{40})";
 const COMMIT_CUE_SRC = "(?:commits?|sha)";
-const COMMIT_REF_SRC =
-  `(?:\`(${COMMIT_SHA_SRC})\`|(${COMMIT_CUE_SRC} +)(${COMMIT_SHA_SRC})(?![\\w-]))`;
+const COMMIT_REF_SRC = `(?:\`(${COMMIT_SHA_SRC})\`|(${COMMIT_CUE_SRC} +)(${COMMIT_SHA_SRC})(?![\\w-]))`;
 const COMMIT_REF_EXACT = new RegExp(`^${COMMIT_REF_SRC}`, "i");
 // The leading guard, which only a `start` can express (a tokenizer is handed
 // the source from its own match position on): a backtick in front means this
 // is the inside of a longer code span, and a word character in front of the
 // cue means another word ends in it (`precommit 4ed…`).
-const COMMIT_REF_START = new RegExp(`(?:^|[^\\w\`-])(?=${COMMIT_REF_SRC})`, "i");
+const COMMIT_REF_START = new RegExp(
+  `(?:^|[^\\w\`-])(?=${COMMIT_REF_SRC})`,
+  "i",
+);
 
 /** Whether an abbreviation is shaped like a sha rather than a number. */
 function shaIsCommitShaped(sha: string): boolean {
@@ -1102,8 +1116,7 @@ function commitRefChip(repo: string, sha: string): string {
   const ghRepo = knownRepos.get(repo);
   const href = ghRepo ? `https://github.com/${ghRepo}/commit/${sha}` : "";
   const short = sha.slice(0, 8);
-  const data =
-    `class="commit-ref" data-commit-repo="${attr(repo)}" data-commit-sha="${attr(sha)}"`;
+  const data = `class="commit-ref" data-commit-repo="${attr(repo)}" data-commit-sha="${attr(sha)}"`;
   // Without a GitHub page there is nothing to open, so it is a term you can
   // read rather than a link that goes nowhere. It stays focusable: the hover
   // card is what it has to say, and the keyboard has to reach it.
@@ -1132,7 +1145,9 @@ function githubCommitTarget(
     url.hash
   )
     return null;
-  const match = /^\/([^/]+)\/([^/]+)\/commit\/([0-9a-f]{7,40})\/?$/i.exec(url.pathname);
+  const match = /^\/([^/]+)\/([^/]+)\/commit\/([0-9a-f]{7,40})\/?$/i.exec(
+    url.pathname,
+  );
   if (!match) return null;
   const githubRepo = `${match[1]}/${match[2]}`.toLowerCase();
   for (const [repo, configuredGithubRepo] of knownRepos) {
@@ -1148,7 +1163,7 @@ function githubCommitTarget(
  * raw text of all chip kinds is plain (ids, digits, `#`, `/`, `.`, `-`), so
  * it needs no escaping the text renderer wouldn't already skip.
  */
-function flattenChips(tokens: any[] | undefined): void {
+function flattenChips(tokens: Token[] | undefined): void {
   for (const token of tokens ?? []) {
     if (token.type === "assetPath") {
       token.type = token.coded ? "codespan" : "text";
@@ -1169,13 +1184,15 @@ function flattenChips(tokens: any[] | undefined): void {
       token.type = "text";
       token.text = token.raw;
       token.tokens = undefined;
-    } else if (Array.isArray(token.tokens)) flattenChips(token.tokens);
+    } else if ("tokens" in token && Array.isArray(token.tokens)) {
+      flattenChips(token.tokens);
+    }
   }
 }
 
 // An auto-linked (or <bracketed>) bare URL: marked hands the raw URL over as
 // the link text. Trailing-slash tolerant so `…/session/bks-x/` still counts.
-function isBareUrlLink(token: any): boolean {
+function isBareUrlLink(token: Tokens.Link): boolean {
   const strip = (v: string) => String(v ?? "").replace(/\/+$/, "");
   const text = strip(token.text);
   return text.length > 0 && text === strip(token.href);
@@ -1189,7 +1206,7 @@ md.use({
     // approximate numbers (`~350 files`), home paths (`~/.config`) — and two of
     // them on a line struck everything between. Returning undefined on a
     // single tilde lets marked fall through to plain text.
-    del(this: any, src: string) {
+    del(this: TokenizerThis, src: string) {
       const m = /^~~(?=\S)([\s\S]*?\S)~~/.exec(src);
       if (!m) return undefined;
       return {
@@ -1211,11 +1228,13 @@ md.use({
     // PR prose is the exception: bots write markup markdown has no syntax for,
     // so those callers ask for the allowlist sanitizer instead (see
     // html-sanitize.ts). Escaping stays the default everywhere else.
-    html(token: any) {
+    html(token: Tokens.HTML | Tokens.Tag) {
       const raw = String(token.text ?? token.raw ?? "");
-      return renderRawHtml === "sanitize" ? sanitizeHtmlFragment(raw) : attr(raw);
+      return renderRawHtml === "sanitize"
+        ? sanitizeHtmlFragment(raw)
+        : attr(raw);
     },
-    link(token: any) {
+    link(token: Tokens.Link) {
       // `[PR #5528](https://github.com/…)` is everyday agent output, and the
       // chip extensions fire inside a link's own text just as they do in
       // prose — which would nest an <a> inside an <a>, markup the HTML parser
@@ -1297,14 +1316,15 @@ md.use({
       }
       return `<a href="${attr(token.href)}"${title} target="_blank" rel="noopener noreferrer">${text}</a>`;
     },
-    codespan(token: any) {
+    codespan(token: Tokens.Codespan) {
       const t = token.text ?? "";
       // A codespan that is exactly a session id becomes a link into that session.
       if (!renderInLink && SESSION_ID_EXACT.test(t)) return sessionLink(t);
-      if (!renderInLink && AUTOMATION_ID_EXACT.test(t)) return automationChip(t);
+      if (!renderInLink && AUTOMATION_ID_EXACT.test(t))
+        return automationChip(t);
       return `<code>${attr(t)}</code>`;
     },
-    image(token: any) {
+    image(token: Tokens.Image) {
       const title = token.title ? ` title="${attr(token.title)}"` : "";
       // Video files pasted with image syntax would render as a broken <img>
       // linking to a new tab — play them inline instead. Clicks on .md-image
@@ -1349,7 +1369,7 @@ md.use({
           coded: match[1] !== undefined,
         };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         return assetReferenceLink(token.path, token.label, token.coded);
       },
     },
@@ -1365,7 +1385,7 @@ md.use({
         if (!person) return undefined;
         return { type: "personMention", raw: `@${typed}`, name: person.name };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         const person = knownPeople.get(String(token.name).toLowerCase());
         return person ? personChip(person) : attr(`@${token.name}`);
       },
@@ -1381,7 +1401,7 @@ md.use({
         const m = new RegExp(`^auto-${UUIDV7}`, "i").exec(src);
         if (m) return { type: "automationId", raw: m[0], id: m[0] };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         return automationChip(token.id);
       },
     },
@@ -1396,7 +1416,7 @@ md.use({
         const m = new RegExp(`^(?:os|bks)-${UUIDV7}`, "i").exec(src);
         if (m) return { type: "sessionId", raw: m[0], id: m[0] };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         return sessionLink(token.id);
       },
     },
@@ -1432,7 +1452,7 @@ md.use({
           repo: renderRepo,
         };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         // The cue stays prose, like the PR chip's: it reads as `commit` plus
         // the sha, not as a capsule that has swallowed the word.
         return attr(token.cue) + commitRefChip(token.repo, token.sha);
@@ -1471,7 +1491,7 @@ md.use({
           unqualified: !qualifier,
         };
       },
-      renderer(token: any) {
+      renderer(token: Tokens.Generic) {
         // The cue stays prose: it reads as `PR` + a chip labelled `#92`, so a
         // chip already carrying a PR icon doesn't also spell the word out.
         return (
@@ -1626,11 +1646,14 @@ function placeholderPrefix(src: string, base: string): string {
 function renderPrMarkdownWithSub(src: string, ctx?: MarkdownContext): string {
   const subs: string[] = [];
   const prefix = placeholderPrefix(src, "OPENSESSIONSUBTOKEN");
-  const prepared = src.replace(/<sub>([\s\S]*?)<\/sub>/gi, (_match, content) => {
-    const token = `${prefix}${subs.length}END`;
-    subs.push(content);
-    return token;
-  });
+  const prepared = src.replace(
+    /<sub>([\s\S]*?)<\/sub>/gi,
+    (_match, content) => {
+      const token = `${prefix}${subs.length}END`;
+      subs.push(content);
+      return token;
+    },
+  );
   let html = renderMarkdown(prepared, ctx);
   subs.forEach((content, index) => {
     html = html.replaceAll(
@@ -1722,9 +1745,7 @@ export function renderPrCommentMarkdown(
       // Recursive, so a `<details>` inside this one becomes its own card.
       `<div class="md-details-body">${renderPrCommentMarkdown(body, ctx)}</div>` +
       `</details>`;
-    html = html
-      .replace(`<p>${token}</p>`, rendered)
-      .replace(token, rendered);
+    html = html.replace(`<p>${token}</p>`, rendered).replace(token, rendered);
   });
   return html;
 }

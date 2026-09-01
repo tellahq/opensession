@@ -21,10 +21,17 @@ describe("public Caddy ingress", () => {
           http: {
             servers: {
               ingress: {
-                routes: [{
-                  match: [{ host: ["hooks.example.com"] }],
-                  handle: [{ handler: "reverse_proxy", upstreams: [{ dial: "127.0.0.1:3860" }] }],
-                }],
+                routes: [
+                  {
+                    match: [{ host: ["hooks.example.com"] }],
+                    handle: [
+                      {
+                        handler: "reverse_proxy",
+                        upstreams: [{ dial: "127.0.0.1:3860" }],
+                      },
+                    ],
+                  },
+                ],
               },
             },
           },
@@ -44,7 +51,9 @@ describe("public Caddy ingress", () => {
     expect(installed).toContain("# BEGIN OPENSESSION SANDBOX INGRESS");
     expect(installed.match(/127\.0\.0\.1:3860/g)).toHaveLength(1);
     expect(installed).not.toContain("3848");
-    expect(upsertCaddyIngress(installed, "https://hooks.example.com")).toBe(installed);
+    expect(upsertCaddyIngress(installed, "https://hooks.example.com")).toBe(
+      installed,
+    );
   });
 
   test("creates a dedicated, interface-bound host without exposing the private app", () => {
@@ -57,11 +66,13 @@ describe("public Caddy ingress", () => {
     expect(installed).toContain("bind 172.31.21.26");
     expect(installed).toContain("reverse_proxy 127.0.0.1:3860");
     expect(installed.match(/3850/g)).toHaveLength(1);
-    expect(upsertCaddyIngress(
-      installed,
-      "https://hooks.example.com",
-      "172.31.21.26",
-    )).toBe(installed);
+    expect(
+      upsertCaddyIngress(
+        installed,
+        "https://hooks.example.com",
+        "172.31.21.26",
+      ),
+    ).toBe(installed);
   });
 
   test("refuses duplicate target site blocks", () => {

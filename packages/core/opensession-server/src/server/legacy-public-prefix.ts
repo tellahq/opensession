@@ -7,14 +7,14 @@
  * enough for the current worker to activate and migrate its cached shell.
  */
 export function shouldRedirectLegacyPublicPath(
-	method: string,
-	upgrade: string | null,
-	normalizedPath: string,
+  method: string,
+  upgrade: string | null,
+  normalizedPath: string,
 ): boolean {
-	return (
-		(method === "GET" || method === "HEAD") &&
-		!upgrade &&
-		!normalizedPath.startsWith("/api/") &&
-		normalizedPath !== "/sw.js"
-	);
+  return (
+    (method === "GET" || method === "HEAD") &&
+    !upgrade &&
+    !normalizedPath.startsWith("/api/") &&
+    normalizedPath !== "/sw.js"
+  );
 }

@@ -10,20 +10,20 @@ import { describe, expect, test } from "bun:test";
 import { authGatesOut } from "./auth-ready";
 
 describe("authGatesOut", () => {
-	test("gated: sign-in required and this browser is not authenticated", () => {
-		expect(authGatesOut({ required: true, authenticated: false })).toBe(true);
-	});
+  test("gated: sign-in required and this browser is not authenticated", () => {
+    expect(authGatesOut({ required: true, authenticated: false })).toBe(true);
+  });
 
-	test("not gated: signed in", () => {
-		expect(authGatesOut({ required: true, authenticated: true })).toBe(false);
-	});
+  test("not gated: signed in", () => {
+    expect(authGatesOut({ required: true, authenticated: true })).toBe(false);
+  });
 
-	test("not gated: instance does not require sign-in", () => {
-		expect(authGatesOut({ required: false, authenticated: false })).toBe(false);
-	});
+  test("not gated: instance does not require sign-in", () => {
+    expect(authGatesOut({ required: false, authenticated: false })).toBe(false);
+  });
 
-	test("unknown status (null/undefined) is never a lockout", () => {
-		expect(authGatesOut(null)).toBe(false);
-		expect(authGatesOut(undefined)).toBe(false);
-	});
+  test("unknown status (null/undefined) is never a lockout", () => {
+    expect(authGatesOut(null)).toBe(false);
+    expect(authGatesOut(undefined)).toBe(false);
+  });
 });

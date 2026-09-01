@@ -16,12 +16,12 @@ const inflightGets = new Map<string, Promise<unknown>>();
 /** Single error shape for every API failure: HTTP status + the server's
  * `error` field when it sent one, else a "<label>: <status>" message. */
 export class ApiError extends Error {
-	status: number;
-	constructor(message: string, status: number) {
-		super(message);
-		this.name = "ApiError";
-		this.status = status;
-	}
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
 }
 
 /**
@@ -31,76 +31,78 @@ export class ApiError extends Error {
  * JSON defensively (a bodyless 204/500 just yields null).
  */
 export function request<T>(
-	path: string,
-	opts: {
-		method?: string;
-		/** JSON-encoded and sent with a Content-Type header when present. */
-		body?: unknown;
-		signal?: AbortSignal;
-		keepalive?: boolean;
-		/** Error-message prefix when the server didn't provide an `error` field. */
-		label?: string;
-	} = {},
+  path: string,
+  opts: {
+    method?: string;
+    /** JSON-encoded and sent with a Content-Type header when present. */
+    body?: unknown;
+    signal?: AbortSignal;
+    keepalive?: boolean;
+    /** Error-message prefix when the server didn't provide an `error` field. */
+    label?: string;
+  } = {},
 ): Promise<T> {
-	const method = opts.method || "GET";
-	if (method === "GET" && /[?&]user=Anonymous(?:&|$)/.test(path)) {
-		return resolveAnonymousUserPath(path).then((resolvedPath) =>
-			request<T>(resolvedPath, opts),
-		);
-	}
-	const share = method === "GET" && opts.body === undefined && !opts.signal;
-	if (share) {
-		const existing = inflightGets.get(path);
-		if (existing) return existing as Promise<T>;
-	}
+  const method = opts.method || "GET";
+  if (method === "GET" && /[?&]user=Anonymous(?:&|$)/.test(path)) {
+    return resolveAnonymousUserPath(path).then((resolvedPath) =>
+      request<T>(resolvedPath, opts),
+    );
+  }
+  const share = method === "GET" && opts.body === undefined && !opts.signal;
+  if (share) {
+    const existing = inflightGets.get(path);
+    if (existing) return existing as Promise<T>;
+  }
 
-	const pending = (async () => {
-		const res = await fetch(`${BASE}${path}`, {
-			method,
-			signal: opts.signal,
-			keepalive: opts.keepalive,
-			...(opts.body !== undefined
-				? {
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify(opts.body),
-					}
-				: {}),
-		});
-		if (!res.ok) {
-			const body = (await res.json().catch(() => null)) as { error?: string } | null;
-			throw new ApiError(
-				body?.error || `${opts.label || "Failed"}: ${res.status}`,
-				res.status,
-			);
-		}
-		return (await res.json().catch(() => null)) as T;
-	})();
+  const pending = (async () => {
+    const res = await fetch(`${BASE}${path}`, {
+      method,
+      signal: opts.signal,
+      keepalive: opts.keepalive,
+      ...(opts.body !== undefined
+        ? {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(opts.body),
+          }
+        : {}),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      throw new ApiError(
+        body?.error || `${opts.label || "Failed"}: ${res.status}`,
+        res.status,
+      );
+    }
+    return (await res.json().catch(() => null)) as T;
+  })();
 
-	if (share) {
-		inflightGets.set(path, pending);
-		void pending
-			.finally(() => {
-				if (inflightGets.get(path) === pending) inflightGets.delete(path);
-			})
-			.catch(() => {});
-	}
-	return pending;
+  if (share) {
+    inflightGets.set(path, pending);
+    void pending
+      .finally(() => {
+        if (inflightGets.get(path) === pending) inflightGets.delete(path);
+      })
+      .catch(() => {});
+  }
+  return pending;
 }
 
 export function getWebSocketUrl(): string {
-	const proto = location.protocol === "https:" ? "wss:" : "ws:";
-	return `${proto}//${location.host}${BASE_PATH}/ws`;
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${location.host}${BASE_PATH}/ws`;
 }
 
 export function relativeTime(dateStr: string): string {
-	const now = Date.now();
-	const then = new Date(dateStr).getTime();
-	const diff = now - then;
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
 
-	if (diff < 0) return "just now";
-	if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
-	if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-	if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-	if (diff < 604_800_000) return `${Math.floor(diff / 86_400_000)}d ago`;
-	return new Date(dateStr).toLocaleDateString();
+  if (diff < 0) return "just now";
+  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  if (diff < 604_800_000) return `${Math.floor(diff / 86_400_000)}d ago`;
+  return new Date(dateStr).toLocaleDateString();
 }

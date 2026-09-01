@@ -13,8 +13,12 @@ export function githubDeliveriesStore(): string {
 }
 const GITHUB_DELIVERY_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_GITHUB_DELIVERIES = 500;
-const githubDeliveryExpiry: Map<string, number> = ((globalThis as any).__githubDeliveryExpiry ??=
-  new Map<string, number>());
+const githubDeliveryExpiry: Map<string, number> = ((
+  globalThis as any
+).__githubDeliveryExpiry ??= new Map<string, number>());
+const githubDeliveriesInFlight: Set<string> = ((
+  globalThis as any
+).__githubDeliveriesInFlight ??= new Set<string>());
 let githubDeliveriesLoaded = false;
 
 function pruneGithubDeliveries(now = Date.now()): void {
@@ -49,10 +53,17 @@ export function loadGithubDeliveries(force = false): void {
   try {
     const store = githubDeliveriesStore();
     if (existsSync(store)) {
-      const entries = JSON.parse(readFileSync(store, "utf-8")) as [string, number][];
+      const entries = JSON.parse(readFileSync(store, "utf-8")) as [
+        string,
+        number,
+      ][];
       const now = Date.now();
       for (const [id, expiresAt] of entries) {
-        if (typeof id === "string" && Number.isFinite(expiresAt) && expiresAt > now) {
+        if (
+          typeof id === "string" &&
+          Number.isFinite(expiresAt) &&
+          expiresAt > now
+        ) {
           githubDeliveryExpiry.set(id, expiresAt);
         }
       }
@@ -77,12 +88,27 @@ export function isGithubDeliveryProcessed(id: string): boolean {
   return true;
 }
 
-/** Record a signed GitHub delivery before dispatching its side effects. */
+export type GithubDeliveryClaim = "claimed" | "in_flight" | "processed";
+
+/** Claim one delivery in this process without durably calling it complete yet. */
+export function claimGithubDelivery(id: string): GithubDeliveryClaim {
+  if (isGithubDeliveryProcessed(id)) return "processed";
+  if (githubDeliveriesInFlight.has(id)) return "in_flight";
+  githubDeliveriesInFlight.add(id);
+  return "claimed";
+}
+
+/** Record a signed GitHub delivery after its durable admission step succeeds. */
 export function markGithubDeliveryProcessed(id: string): void {
   loadGithubDeliveries();
+  githubDeliveriesInFlight.delete(id);
   githubDeliveryExpiry.set(id, Date.now() + GITHUB_DELIVERY_TTL_MS);
   pruneGithubDeliveries();
   persistGithubDeliveries();
+}
+
+export function releaseGithubDelivery(id: string): void {
+  githubDeliveriesInFlight.delete(id);
 }
 
 let githubWebhooksReceived = 0;

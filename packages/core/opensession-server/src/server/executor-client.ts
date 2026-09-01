@@ -23,7 +23,9 @@ interface ExecutorClientStats {
   protocolVersion?: number;
 }
 
-const stats: ExecutorClientStats = ((globalThis as any).__executorClientStats ??= {
+const stats: ExecutorClientStats = ((
+  globalThis as any
+).__executorClientStats ??= {
   delegatedLaunches: 0,
   fallbackLaunches: 0,
 });
@@ -49,26 +51,41 @@ export function executorClientHealth(): Record<string, unknown> {
 let readinessCache: { at: number; ready: boolean; error?: string } | undefined;
 let readinessRefresh: Promise<{ ready: boolean; error?: string }> | undefined;
 
-function refreshExecutorReadiness(): Promise<{ ready: boolean; error?: string }> {
+function refreshExecutorReadiness(): Promise<{
+  ready: boolean;
+  error?: string;
+}> {
   if (!readinessRefresh) {
     readinessRefresh = (async () => {
       const socketPath = executorSocketPath(OPENSESSION_SESSIONS_DIR);
       const token = readExecutorCredential();
       if (!existsSync(socketPath) || !token) {
-        readinessCache = { at: Date.now(), ready: false, error: "executor socket or credential is unavailable" };
+        readinessCache = {
+          at: Date.now(),
+          ready: false,
+          error: "executor socket or credential is unavailable",
+        };
         return readinessCache;
       }
       const requestId = crypto.randomUUID();
       try {
-        const response = await requestExecutor(socketPath, {
-          t: "hello",
-          requestId,
-          token,
-          minVersion: EXECUTOR_PROTOCOL_MIN_VERSION,
-          maxVersion: EXECUTOR_PROTOCOL_VERSION,
-        }, 2_000);
+        const response = await requestExecutor(
+          socketPath,
+          {
+            t: "hello",
+            requestId,
+            token,
+            minVersion: EXECUTOR_PROTOCOL_MIN_VERSION,
+            maxVersion: EXECUTOR_PROTOCOL_VERSION,
+          },
+          2_000,
+        );
         const ready = response.ok && response.compatible === true;
-        readinessCache = { at: Date.now(), ready, ...(ready ? {} : { error: "executor protocol is incompatible" }) };
+        readinessCache = {
+          at: Date.now(),
+          ready,
+          ...(ready ? {} : { error: "executor protocol is incompatible" }),
+        };
       } catch (cause) {
         readinessCache = { at: Date.now(), ready: false, error: String(cause) };
       }
@@ -82,14 +99,22 @@ function refreshExecutorReadiness(): Promise<{ ready: boolean; error?: string }>
 
 /** Readiness probes report executor degradation but never wait on its IPC
  * lane. The executor still fails closed at launchHostViaExecutor(). */
-export function executorClientReadinessSnapshot(): { ready: boolean; error?: string } {
+export function executorClientReadinessSnapshot(): {
+  ready: boolean;
+  error?: string;
+} {
   if (process.env.OPENSESSION_EXECUTOR === "0") return { ready: true };
   if (!readinessCache || Date.now() - readinessCache.at >= 2_000)
     void refreshExecutorReadiness();
-  return readinessCache ?? { ready: false, error: "executor readiness is pending" };
+  return (
+    readinessCache ?? { ready: false, error: "executor readiness is pending" }
+  );
 }
 
-export async function executorClientReady(): Promise<{ ready: boolean; error?: string }> {
+export async function executorClientReady(): Promise<{
+  ready: boolean;
+  error?: string;
+}> {
   if (process.env.OPENSESSION_EXECUTOR === "0") return { ready: true };
   if (readinessCache && Date.now() - readinessCache.at < 2_000)
     return readinessCache;
@@ -116,7 +141,9 @@ export async function launchHostViaExecutor(
   const socketPath =
     options?.socketPath ?? executorSocketPath(OPENSESSION_SESSIONS_DIR);
   if (!existsSync(socketPath))
-    throw new ExecutorProtocolError(`executor socket is unavailable: ${socketPath}`);
+    throw new ExecutorProtocolError(
+      `executor socket is unavailable: ${socketPath}`,
+    );
   const token = options?.token ?? readExecutorCredential();
   if (!token)
     throw new ExecutorProtocolError("executor credential is unavailable");
@@ -133,7 +160,9 @@ export async function launchHostViaExecutor(
     });
   } catch (cause) {
     stats.lastError = String(cause);
-    throw new ExecutorProtocolError(`executor handshake failed: ${String(cause)}`);
+    throw new ExecutorProtocolError(
+      `executor handshake failed: ${String(cause)}`,
+    );
   }
   const negotiated = assertResponse(
     hello,
@@ -142,7 +171,9 @@ export async function launchHostViaExecutor(
   );
   if (!hello.ok || !hello.compatible || negotiated) {
     // Hello never carries a host status. A status here means a malformed peer.
-    throw new ExecutorProtocolError("executor handshake returned an invalid shape");
+    throw new ExecutorProtocolError(
+      "executor handshake returned an invalid shape",
+    );
   }
   const version = hello.version;
   stats.protocolVersion = version;
@@ -172,10 +203,23 @@ export async function launchHostViaExecutor(
       );
     } catch (cause) {
       if (cause instanceof ExecutorTransportError && !cause.sent)
-        throw new ExecutorProtocolError(`executor launch transport failed: ${String(cause)}`);
-      return reconcileLaunch({ socketPath, token, version, hostId, specHash, dir });
+        throw new ExecutorProtocolError(
+          `executor launch transport failed: ${String(cause)}`,
+        );
+      return reconcileLaunch({
+        socketPath,
+        token,
+        version,
+        hostId,
+        specHash,
+        dir,
+      });
     }
-    if (launched.ok || launched.code !== "executor_busy" || Date.now() >= launchDeadline)
+    if (
+      launched.ok ||
+      launched.code !== "executor_busy" ||
+      Date.now() >= launchDeadline
+    )
       break;
     await Bun.sleep(250);
   }
@@ -227,7 +271,11 @@ function assertResponse(
   prefix: string,
   sideEffectPossible = false,
 ): ExecutorHostStatus | undefined {
-  if (!response || response.requestId !== requestId || typeof response.ok !== "boolean") {
+  if (
+    !response ||
+    response.requestId !== requestId ||
+    typeof response.ok !== "boolean"
+  ) {
     throw new ExecutorProtocolError(
       `${prefix}: malformed or mismatched response`,
       sideEffectPossible,
@@ -246,7 +294,10 @@ function assertResponse(
     response.version > EXECUTOR_PROTOCOL_VERSION
   ) {
     stats.lastError = `unsupported executor protocol ${response.version}`;
-    throw new ExecutorProtocolError(`${prefix}: ${stats.lastError}`, sideEffectPossible);
+    throw new ExecutorProtocolError(
+      `${prefix}: ${stats.lastError}`,
+      sideEffectPossible,
+    );
   }
   if (
     response.status !== undefined &&
@@ -255,7 +306,10 @@ function assertResponse(
       typeof response.status.ready !== "boolean" ||
       typeof response.status.state !== "string")
   ) {
-    throw new ExecutorProtocolError(`${prefix}: malformed host status`, sideEffectPossible);
+    throw new ExecutorProtocolError(
+      `${prefix}: malformed host status`,
+      sideEffectPossible,
+    );
   }
   return response.status;
 }
@@ -373,13 +427,23 @@ function requestExecutor(
           const written = s.write(line);
           sent = written > 0;
           if (written < line.length) {
-            finish(new ExecutorTransportError("executor request write was partial", sent));
+            finish(
+              new ExecutorTransportError(
+                "executor request write was partial",
+                sent,
+              ),
+            );
           }
         },
         data(_s, chunk) {
           buffer += Buffer.from(chunk).toString("utf8");
           if (Buffer.byteLength(buffer) > 1024 * 1024) {
-            finish(new ExecutorTransportError("executor response exceeded 1 MB", sent));
+            finish(
+              new ExecutorTransportError(
+                "executor response exceeded 1 MB",
+                sent,
+              ),
+            );
             return;
           }
           const newline = buffer.indexOf("\n");
@@ -397,7 +461,12 @@ function requestExecutor(
         },
         close() {
           if (!settled) {
-            finish(new ExecutorTransportError("executor closed without a response", sent));
+            finish(
+              new ExecutorTransportError(
+                "executor closed without a response",
+                sent,
+              ),
+            );
           }
         },
         error(_s, cause) {

@@ -86,6 +86,18 @@ current_sha() {
   git -C "$path" rev-parse HEAD
 }
 
+prepare_frontend() {
+  local path
+  path="$(prepare_release "$1")"
+  log "building frontend before cut-over for $(basename "$path" | cut -c1-10)"
+  (
+    cd "$path"
+    "$BUN_BIN" run scripts/build-frontend.ts
+    "$BUN_BIN" run scripts/validate-frontend-build.ts
+  ) >&2
+  printf '%s\n' "$path"
+}
+
 switch_release() {
   local sha path next
   sha="$(resolve_sha "$1")"
@@ -112,6 +124,10 @@ case "${1:-}" in
     [ "$#" -eq 2 ] || exit 2
     prepare_release "$2"
     ;;
+  prepare-frontend)
+    [ "$#" -eq 2 ] || exit 2
+    prepare_frontend "$2"
+    ;;
   path)
     [ "$#" -eq 2 ] || exit 2
     release_path "$2"
@@ -129,7 +145,7 @@ case "${1:-}" in
     switch_release "$2"
     ;;
   *)
-    echo "usage: release-checkout.sh prepare <ref> | path <ref> | current-path | current-sha | switch <ref>" >&2
+    echo "usage: release-checkout.sh prepare <ref> | prepare-frontend <ref> | path <ref> | current-path | current-sha | switch <ref>" >&2
     exit 2
     ;;
 esac

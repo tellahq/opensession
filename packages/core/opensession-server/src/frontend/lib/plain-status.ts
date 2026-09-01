@@ -23,74 +23,16 @@
  * token now, which does re-resolve per theme.
  */
 import {
-	IconCheck,
-	IconInbox,
-	IconMoon,
-	IconStatusRing,
+  IconCheck,
+  IconInbox,
+  IconMoon,
+  IconStatusRing,
 } from "../components/icons";
-import * as stylex from "@stylexjs/stylex";
-import { mergeStylexClassName } from "../ui/cn";
-
-const sx = stylex.create({
-	inlineFlex: {
-		"display": "inline-flex"
-	},
-	size26px: {
-		"width": "26px",
-		"height": "26px"
-	},
-	shrink0: {
-		"flexShrink": "0"
-	},
-	itemsCenter: {
-		"alignItems": "center"
-	},
-	justifyCenter: {
-		"justifyContent": "center"
-	},
-	roundedControl: {
-		"borderRadius": "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgColorMixInSrgbVarBlue18Transparent: {
-		"backgroundColor": "var(--blue)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"backgroundColor": "color-mix(in srgb,var(--blue) 18%,transparent)"
-		}
-	},
-	textBlue: {
-		"color": "var(--blue)"
-	},
-	bgColorMixInSrgbVarGreen18Transparent: {
-		"backgroundColor": "var(--green)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"backgroundColor": "color-mix(in srgb,var(--green) 18%,transparent)"
-		}
-	},
-	textGreen: {
-		"color": "var(--green)"
-	},
-	bgColorMixInSrgbVarYellow20Transparent: {
-		"backgroundColor": "var(--yellow)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"backgroundColor": "color-mix(in srgb,var(--yellow) 20%,transparent)"
-		}
-	},
-	textYellow: {
-		"color": "var(--yellow)"
-	},
-	bgActive: {
-		"backgroundColor": "var(--bg-active)"
-	},
-	textFaint: {
-		"color": "var(--text-faint)"
-	},
-});
 
 export const STATUS_LABEL: Record<string, string> = {
-	TODO: "Todo",
-	SNOOZED: "Snoozed",
-	DONE: "Done",
+  TODO: "Todo",
+  SNOOZED: "Snoozed",
+  DONE: "Done",
 };
 
 /**
@@ -101,12 +43,12 @@ export const STATUS_LABEL: Record<string, string> = {
  * the tint reading as a disc around it.
  */
 const BASE =
-	mergeStylexClassName("", sx.inlineFlex, sx.size26px, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedControl);
+  "inline-flex size-[26px] shrink-0 items-center justify-center rounded-control";
 
 const TONES: Record<string, string> = {
-	todo: mergeStylexClassName("", sx.bgColorMixInSrgbVarBlue18Transparent, sx.textBlue),
-	done: mergeStylexClassName("", sx.bgColorMixInSrgbVarGreen18Transparent, sx.textGreen),
-	snoozed: mergeStylexClassName("", sx.bgColorMixInSrgbVarYellow20Transparent, sx.textYellow),
+  todo: "bg-[color-mix(in_srgb,var(--blue)_18%,transparent)] text-blue",
+  done: "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green",
+  snoozed: "bg-[color-mix(in_srgb,var(--yellow)_20%,transparent)] text-yellow",
 };
 
 /**
@@ -116,16 +58,16 @@ const TONES: Record<string, string> = {
  * than the clock its own Snooze button wears, and Done is the bare check.
  */
 const ICONS: Record<string, typeof IconCheck> = {
-	todo: IconInbox,
-	done: IconCheck,
-	snoozed: IconMoon,
+  todo: IconInbox,
+  done: IconCheck,
+  snoozed: IconMoon,
 };
 
 export function plainStatusClass(status: string): string {
-	const tone = TONES[status.toLowerCase()] ?? mergeStylexClassName("", sx.bgActive, sx.textFaint);
-	return `${BASE} ${tone}`;
+  const tone = TONES[status.toLowerCase()] ?? "bg-active text-faint";
+  return `${BASE} ${tone}`;
 }
 
 export function plainStatusIcon(status: string): typeof IconCheck {
-	return ICONS[status.toLowerCase()] ?? IconStatusRing;
+  return ICONS[status.toLowerCase()] ?? IconStatusRing;
 }

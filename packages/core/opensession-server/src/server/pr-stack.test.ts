@@ -4,7 +4,12 @@ import { parseStackResponse, unmergedLayersBelow } from "./pr-stack";
 /** A GraphQL response for a three-layer stack, viewed from `number`. */
 function response(
   number: number,
-  layers: Array<{ number: number; position: number; state?: string; isDraft?: boolean }>,
+  layers: Array<{
+    number: number;
+    position: number;
+    state?: string;
+    isDraft?: boolean;
+  }>,
 ) {
   const entry = layers.find((l) => l.number === number)!;
   return {
@@ -27,7 +32,8 @@ function response(
                     state: l.state || "OPEN",
                     isDraft: !!l.isDraft,
                     headRefName: `branch-${l.position}`,
-                    baseRefName: l.position === 1 ? "main" : `branch-${l.position - 1}`,
+                    baseRefName:
+                      l.position === 1 ? "main" : `branch-${l.position - 1}`,
                   },
                 })),
               },
@@ -56,7 +62,9 @@ describe("parseStackResponse", () => {
     expect(stack?.position).toBe(2);
     expect(stack?.size).toBe(3);
     expect(stack?.baseRefName).toBe("main");
-    expect(stack?.layers.filter((l) => l.current).map((l) => l.number)).toEqual([42]);
+    expect(stack?.layers.filter((l) => l.current).map((l) => l.number)).toEqual(
+      [42],
+    );
   });
 
   test("a PR in no stack reads as null, not an error", () => {

@@ -146,7 +146,12 @@ async function githubSnapshot() {
   } = await import("../github-auth");
   const { githubAppConfigured, githubAppPrivateKeyConfigured } =
     await import("../github-app");
-  const { configuredIngress, configuredIntegration, configuredServer, personaName } = await import("../config");
+  const {
+    configuredIngress,
+    configuredIntegration,
+    configuredServer,
+    personaName,
+  } = await import("../config");
   const github = githubUserAuthSettings();
   const app = githubAppIdentity();
   const integration = configuredIntegration("github");
@@ -155,10 +160,16 @@ async function githubSnapshot() {
   const mentionHandle = (
     process.env.GITHUB_MENTION_HANDLES?.split(",")[0] ||
     (Array.isArray(configuredHandles)
-      ? configuredHandles.find((value): value is string => typeof value === "string")
+      ? configuredHandles.find(
+          (value): value is string => typeof value === "string",
+        )
       : "") ||
-    personaName().toLowerCase().replace(/[^a-z0-9-]/g, "")
-  ).trim().replace(/^@/, "");
+    personaName()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "")
+  )
+    .trim()
+    .replace(/^@/, "");
   return {
     userPrAuth: github.enabled,
     clientIdConfigured: !!github.clientId,
@@ -210,8 +221,9 @@ function processIsSupervised(): boolean {
 
 // Restart-pending flag on globalThis so a duplicate POST (or a hot reload
 // between POST and SIGTERM) stays idempotent.
-const restartState: { pending: boolean } = ((globalThis as any)
-  .__osSetupRestartState ??= { pending: false });
+const restartState: { pending: boolean } = ((
+  globalThis as any
+).__osSetupRestartState ??= { pending: false });
 
 export async function handleSetupRoutes(
   ctx: RouteContext,
@@ -247,9 +259,14 @@ export async function handleSetupRoutes(
   if (githubManifestResponse) return githubManifestResponse;
 
   if (path === "/api/setup/onboarding" && req.method === "PUT") {
-    const body = (await req.json().catch(() => null)) as { completed?: unknown } | null;
+    const body = (await req.json().catch(() => null)) as {
+      completed?: unknown;
+    } | null;
     if (body?.completed !== true) {
-      return Response.json({ error: "completed must be true" }, { status: 400 });
+      return Response.json(
+        { error: "completed must be true" },
+        { status: 400 },
+      );
     }
     const { rawConfig, persistRawConfig, withConfigMutationLock } =
       await import("../config-mutation");
@@ -257,9 +274,8 @@ export async function handleSetupRoutes(
       const config = rawConfig();
       if (config.onboardingCompleted !== true) {
         const { parseTeamMember } = await import("../config");
-        const { connectedGithubAccounts, soleGithubLogin } = await import(
-          "../github-auth"
-        );
+        const { connectedGithubAccounts, soleGithubLogin } =
+          await import("../github-auth");
         const { isDisposableLocalMember, LOCAL_USER_NAME, rawTeam } =
           await import("./setup-team");
         const team = rawTeam(config);
@@ -281,7 +297,8 @@ export async function handleSetupRoutes(
             ? team.find(
                 (member) =>
                   typeof member.github === "string" &&
-                  member.github.trim().toLowerCase() === connectedLogin.toLowerCase(),
+                  member.github.trim().toLowerCase() ===
+                    connectedLogin.toLowerCase(),
               )
             : undefined;
           if (!existingGithub) {
@@ -301,7 +318,10 @@ export async function handleSetupRoutes(
         }
         config.onboardingCompleted = true;
         persistRawConfig(config);
-        audit({ kind: "setup_onboarding_complete", by: ctx.authUser?.login || null });
+        audit({
+          kind: "setup_onboarding_complete",
+          by: ctx.authUser?.login || null,
+        });
       }
       return Response.json({ completed: true });
     });
@@ -361,9 +381,7 @@ export async function handleSetupRoutes(
   }
 
   // ── PUT /api/setup/integrations/:id — credentials + enable flag ──────────
-  const integrationMatch = path.match(
-    /^\/api\/setup\/integrations\/([^/]+)$/,
-  );
+  const integrationMatch = path.match(/^\/api\/setup\/integrations\/([^/]+)$/);
   if (integrationMatch && req.method === "PUT") {
     const { findIntegration } = await import("../integrations/registry");
     const spec = findIntegration(decodeURIComponent(integrationMatch[1]));
@@ -378,9 +396,13 @@ export async function handleSetupRoutes(
       return Response.json({ error: "Invalid JSON body" }, { status: 400 });
     }
     if (body.enabled !== undefined && typeof body.enabled !== "boolean") {
-      return Response.json({ error: "enabled must be a boolean" }, { status: 400 });
+      return Response.json(
+        { error: "enabled must be a boolean" },
+        { status: 400 },
+      );
     }
-    const enabled = typeof body.enabled === "boolean" ? body.enabled : undefined;
+    const enabled =
+      typeof body.enabled === "boolean" ? body.enabled : undefined;
     const envBody =
       body.env === undefined
         ? {}
@@ -417,7 +439,8 @@ export async function handleSetupRoutes(
       return Response.json({ error: "Nothing to change" }, { status: 400 });
     }
 
-    const { applyEnvFileEdits, readEnvFileValues } = await import("../env-file-edit");
+    const { applyEnvFileEdits, readEnvFileValues } =
+      await import("../env-file-edit");
     const { rawConfig, persistRawConfig, withConfigMutationLock } =
       await import("../config-mutation");
 
@@ -470,7 +493,10 @@ export async function handleSetupRoutes(
       return Response.json({ error: "Invalid JSON body" }, { status: 400 });
     }
     if (body.userPrAuth !== undefined && typeof body.userPrAuth !== "boolean") {
-      return Response.json({ error: "userPrAuth must be a boolean" }, { status: 400 });
+      return Response.json(
+        { error: "userPrAuth must be a boolean" },
+        { status: 400 },
+      );
     }
     for (const field of [
       "oauthClientId",
@@ -481,7 +507,10 @@ export async function handleSetupRoutes(
       if (body[field] === undefined) continue;
       const invalid = await validateSetting(body[field]);
       if (invalid) {
-        return Response.json({ error: `${field}: ${invalid}` }, { status: 400 });
+        return Response.json(
+          { error: `${field}: ${invalid}` },
+          { status: 400 },
+        );
       }
     }
     const mentionHandle =
@@ -491,7 +520,8 @@ export async function handleSetupRoutes(
     if (
       mentionHandle !== undefined &&
       (typeof mentionHandle !== "string" ||
-        (mentionHandle !== "" && !/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(mentionHandle)))
+        (mentionHandle !== "" &&
+          !/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(mentionHandle)))
     ) {
       return Response.json(
         { error: "mentionHandle must be a valid GitHub handle" },
@@ -556,7 +586,8 @@ export async function handleSetupRoutes(
       integrations.github = github;
 
       const nextClientId = body.oauthClientId;
-      const keyMutation = privateKey ||
+      const keyMutation =
+        privateKey ||
         (nextClientId !== undefined && github.oauthClientId !== nextClientId
           ? null
           : undefined);
@@ -572,7 +603,10 @@ export async function handleSetupRoutes(
         body.appSlug !== undefined ||
         body.installationOwner !== undefined ||
         !!privateKey;
-      if ((appSettingsChanging || body.userPrAuth === true) && !effectiveAppSlug) {
+      if (
+        (appSettingsChanging || body.userPrAuth === true) &&
+        !effectiveAppSlug
+      ) {
         return Response.json(
           { error: "Configure the GitHub App slug" },
           { status: 409 },
@@ -580,7 +614,10 @@ export async function handleSetupRoutes(
       }
       if (keyMutation === null) {
         return Response.json(
-          { error: "Changing the GitHub App client id requires its replacement private key" },
+          {
+            error:
+              "Changing the GitHub App client id requires its replacement private key",
+          },
           { status: 409 },
         );
       }
@@ -606,10 +643,15 @@ export async function handleSetupRoutes(
             : "";
       if (
         (appSettingsChanging || body.userPrAuth === true) &&
-        (!effectiveClientId || !effectiveOwner || (!privateKey && !githubAppConfigured()))
+        (!effectiveClientId ||
+          !effectiveOwner ||
+          (!privateKey && !githubAppConfigured()))
       ) {
         return Response.json(
-          { error: "Client id, installation owner and private key are required for the GitHub App" },
+          {
+            error:
+              "Client id, installation owner and private key are required for the GitHub App",
+          },
           { status: 409 },
         );
       }
@@ -628,7 +670,8 @@ export async function handleSetupRoutes(
       // SAME config write as userPrAuth. If neither a sign-in-capable admin nor a
       // connected account exists, refuse the flip and leave the instance open.
       if (body.userPrAuth === true && github.userPrAuth !== true) {
-        const { isDisposableLocalMember, rawTeam } = await import("./setup-team");
+        const { isDisposableLocalMember, rawTeam } =
+          await import("./setup-team");
         const team = rawTeam(config);
         const explicitRoles = team.some((member) => member.admin !== undefined);
         const hasSigninAdmin = team.some(
@@ -638,13 +681,13 @@ export async function handleSetupRoutes(
             (!explicitRoles || member.admin === true),
         );
         if (!hasSigninAdmin) {
-          const { connectedGithubAccounts, soleGithubLogin } = await import(
-            "../github-auth"
-          );
+          const { connectedGithubAccounts, soleGithubLogin } =
+            await import("../github-auth");
           const login = soleGithubLogin();
           const account = login
             ? connectedGithubAccounts().find(
-                (candidate) => candidate.login.toLowerCase() === login.toLowerCase(),
+                (candidate) =>
+                  candidate.login.toLowerCase() === login.toLowerCase(),
               )
             : undefined;
           if (!login || !account) {
@@ -692,14 +735,14 @@ export async function handleSetupRoutes(
       ] as const) {
         const value = body[field];
         if (value === undefined) continue;
-        if (value === "") delete github[field]; // empty string clears
+        if (value === "")
+          delete github[field]; // empty string clears
         else github[field] = value;
       }
       try {
         const { commitGithubAppKeyMutation } = await import("../github-app");
-        await commitGithubAppKeyMutation(
-          keyMutation,
-          () => persistRawConfig(config),
+        await commitGithubAppKeyMutation(keyMutation, () =>
+          persistRawConfig(config),
         );
       } catch (e) {
         return Response.json(
@@ -709,16 +752,16 @@ export async function handleSetupRoutes(
       }
       audit({
         kind: "setup_github_update",
-        fields: ([
-          "userPrAuth",
-          "oauthClientId",
-          "oauthClientSecret",
-          "appSlug",
-          "installationOwner",
-          "mentionHandle",
-        ] as const).filter(
-          (f) => body[f] !== undefined,
-        ),
+        fields: (
+          [
+            "userPrAuth",
+            "oauthClientId",
+            "oauthClientSecret",
+            "appSlug",
+            "installationOwner",
+            "mentionHandle",
+          ] as const
+        ).filter((f) => body[f] !== undefined),
       });
       // githubUserAuthSettings() reads getConfig() per call (mtime-guarded
       // re-read), and the web-auth gate calls webAuthRequired() →

@@ -14,11 +14,23 @@
  * as automations too (single source of scheduling truth).
  */
 import { randomUUIDv7 } from "bun";
-import { mkdirSync, readdirSync, readFileSync, existsSync, unlinkSync } from "fs";
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  existsSync,
+  unlinkSync,
+} from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { runAgent } from "./agent-runner";
 import { declaredRunFailure, hasRunStatusDeclaration } from "./runner-shared";
-import { createWorktree, listWorktrees, REPOS, getRepo, type Repo } from "./worktree";
+import {
+  createWorktree,
+  listWorktrees,
+  REPOS,
+  getRepo,
+  type Repo,
+} from "./worktree";
 import { personaName, productName } from "./config";
 import { newSessionId } from "./paths";
 import { providerFor, modelLabel } from "./models";
@@ -183,7 +195,10 @@ export function scannableRepos(): Repo[] {
 
 // ── Prompt builders ──────────────────────────────────────────
 
-function scanExtras(profile?: ScanProfile | null, instructions?: string): string {
+function scanExtras(
+  profile?: ScanProfile | null,
+  instructions?: string,
+): string {
   let out = "";
   if (profile) {
     out += `\n\n## Scan profile: ${profile.name}\n\nThis scan runs under a saved profile that tailors the threat model. Follow it when triaging and verifying findings:\n\n${profile.prompt}`;
@@ -262,15 +277,25 @@ ${buildScanPrompt(repo, profile, instructions).replace(/^You are [^\n]*\n\n/, ""
 // ── Headless scan execution ──────────────────────────────────
 
 function slug(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 30);
 }
 
-function updateScanSession(scanId: string, repoId: string, patch: Partial<ScanSessionRef>): void {
+function updateScanSession(
+  scanId: string,
+  repoId: string,
+  patch: Partial<ScanSessionRef>,
+): void {
   const fresh = getScan(scanId);
   if (!fresh) return;
   saveScan({
     ...fresh,
-    sessions: fresh.sessions.map((s) => (s.repo === repoId ? { ...s, ...patch } : s)),
+    sessions: fresh.sessions.map((s) =>
+      s.repo === repoId ? { ...s, ...patch } : s,
+    ),
   });
 }
 
@@ -325,13 +350,22 @@ export async function executeScan(
           mode: "code",
           repo: repo.id,
         };
-        void updateSessionFile(bksId, (current) => ({ ...current, ...data })).catch(
-          (error) => console.error(`[security] Failed to persist session ${bksId}:`, error),
+        void updateSessionFile(bksId, (current) => ({
+          ...current,
+          ...data,
+        })).catch((error) =>
+          console.error(
+            `[security] Failed to persist session ${bksId}:`,
+            error,
+          ),
         );
       };
       persistSession();
 
-      updateScanSession(scan.id, repo.id, { sessionId: bksId, status: "running" });
+      updateScanSession(scan.id, repo.id, {
+        sessionId: bksId,
+        status: "running",
+      });
       opts?.onSessionCreated?.(bksId);
       console.log(`[security] Scan ${scan.id}: ${repo.id} → ${bksId}`);
 
@@ -412,9 +446,7 @@ export async function executeScan(
     saveScan({
       ...fresh,
       status: anyError ? "error" : "done",
-      error: anyError
-        ? fresh.sessions.find((s) => s.error)?.error
-        : undefined,
+      error: anyError ? fresh.sessions.find((s) => s.error)?.error : undefined,
       finishedAt: new Date().toISOString(),
     });
   }
@@ -443,8 +475,18 @@ export function createScanRecord(input: {
     createdBy: input.createdBy || "Anonymous",
     createdAt: new Date().toISOString(),
     sessions: input.interactive
-      ? [{ repo: input.repos[0], sessionId: input.sessionId || "", status: "running" }]
-      : input.repos.map((r) => ({ repo: r, sessionId: "", status: "running" as const })),
+      ? [
+          {
+            repo: input.repos[0],
+            sessionId: input.sessionId || "",
+            status: "running",
+          },
+        ]
+      : input.repos.map((r) => ({
+          repo: r,
+          sessionId: "",
+          status: "running" as const,
+        })),
   };
   saveScan(scan);
   return scan;

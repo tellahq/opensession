@@ -29,8 +29,14 @@ import {
   type RepoSection,
 } from "../config";
 import { remoteUrl as csRemoteUrl } from "../codestorage/auth";
-import { getRepo as getCsRepo, listRepos as listCsRepos } from "../codestorage/client";
-import { cloneCsCheckout, ensureCsCredentialHelper } from "../codestorage/remote";
+import {
+  getRepo as getCsRepo,
+  listRepos as listCsRepos,
+} from "../codestorage/client";
+import {
+  cloneCsCheckout,
+  ensureCsCredentialHelper,
+} from "../codestorage/remote";
 import {
   persistRawConfig,
   rawConfig,
@@ -71,7 +77,9 @@ export function validGithubFullName(value: unknown): value is string {
 
 /** After the shared shell/Markdown boundary check, let Git enforce the
  * remaining ref grammar. */
-export async function normalizeDefaultBranch(value: unknown): Promise<string | null> {
+export async function normalizeDefaultBranch(
+  value: unknown,
+): Promise<string | null> {
   const branch = shellSafeDefaultBranch(value);
   if (!branch) return null;
   const checked = Bun.spawn(["git", "check-ref-format", "--branch", branch], {
@@ -81,7 +89,9 @@ export async function normalizeDefaultBranch(value: unknown): Promise<string | n
   return (await checked.exited) === 0 ? branch : null;
 }
 
-async function normalizeInspectedDefaultBranch(value: unknown): Promise<string> {
+async function normalizeInspectedDefaultBranch(
+  value: unknown,
+): Promise<string> {
   const branch = await normalizeDefaultBranch(value);
   if (branch) return branch;
   throw new Error(
@@ -95,7 +105,9 @@ async function normalizeInspectedDefaultBranch(value: unknown): Promise<string> 
  * authenticated teammate, repository setup uses the workspace App.
  */
 function actingGithubCredential(ctx: RouteContext): GithubCredential | null {
-  return ctx.authUser?.login ? githubCredentialForLogin(ctx.authUser.login) : null;
+  return ctx.authUser?.login
+    ? githubCredentialForLogin(ctx.authUser.login)
+    : null;
 }
 
 /** Prefer the configured App installation, whose selected repositories are the
@@ -103,7 +115,9 @@ function actingGithubCredential(ctx: RouteContext): GithubCredential | null {
  * closed instead of being masked by a user's narrower token. Without a service
  * configuration, a signed-in teammate remains the compatibility path.
  * Repository setup never inherits the server user's ambient gh login. */
-async function setupGithubCredential(ctx: RouteContext): Promise<GithubCredential | null> {
+async function setupGithubCredential(
+  ctx: RouteContext,
+): Promise<GithubCredential | null> {
   const { githubConfiguredCredential } = await import("../github-app");
   if (githubConfiguredCredential()) {
     try {
@@ -151,7 +165,11 @@ async function githubJson(
       "User-Agent": "opensession",
     },
   });
-  return { ok: res.ok, status: res.status, body: await res.json().catch(() => null) };
+  return {
+    ok: res.ok,
+    status: res.status,
+    body: await res.json().catch(() => null),
+  };
 }
 
 function toPickerRepo(r: any, registeredNames: Set<string>): PickerRepo | null {
@@ -163,7 +181,8 @@ function toPickerRepo(r: any, registeredNames: Set<string>): PickerRepo | null {
     ...(typeof r.description === "string" && r.description
       ? { description: r.description }
       : {}),
-    defaultBranch: typeof r.default_branch === "string" ? r.default_branch : "main",
+    defaultBranch:
+      typeof r.default_branch === "string" ? r.default_branch : "main",
     registered: registeredNames.has(fullName.toLowerCase()),
     ...(typeof r.pushed_at === "string" ? { pushedAt: r.pushed_at } : {}),
   };
@@ -199,7 +218,9 @@ async function listReposViaUserRepos(token: string): Promise<PickerRepo[]> {
 
 /** GitHub App installation-token path. Installation tokens cannot call the
  * user endpoints used by PATs and App user tokens. */
-export async function listReposViaAppInstallation(token: string): Promise<PickerRepo[]> {
+export async function listReposViaAppInstallation(
+  token: string,
+): Promise<PickerRepo[]> {
   const registered = registeredGhRepos();
   const repos: PickerRepo[] = [];
   for (let page = 1; repos.length < REPO_LIST_CAP && page <= 5; page++) {
@@ -220,7 +241,9 @@ export async function listReposViaAppInstallation(token: string): Promise<Picker
 /** GitHub App user-token path: union of the token's accessible installations.
  *  Returns null when the token isn't installation-scoped (a non-installation OAuth token)
  *  so the caller can fall back to /user/repos. */
-async function listReposViaInstallations(token: string): Promise<PickerRepo[] | null> {
+async function listReposViaInstallations(
+  token: string,
+): Promise<PickerRepo[] | null> {
   const installations = await githubJson(
     token,
     "https://api.github.com/user/installations?per_page=100",
@@ -359,7 +382,13 @@ async function cloneGithubRepo(
     chmodSync(askpass, 0o700); // belt against a permissive umask on create
     try {
       const result = await runCommand(
-        ["git", "clone", "--", `https://x-access-token@github.com/${fullName}.git`, dest],
+        [
+          "git",
+          "clone",
+          "--",
+          `https://x-access-token@github.com/${fullName}.git`,
+          dest,
+        ],
         5 * 60_000,
         {
           GIT_ASKPASS: askpass,
@@ -369,17 +398,25 @@ async function cloneGithubRepo(
         },
       );
       if (result.exitCode !== 0) {
-        throw new Error(scrubSecret(result.stderr, userToken) || "git clone failed");
+        throw new Error(
+          scrubSecret(result.stderr, userToken) || "git clone failed",
+        );
       }
       // The token never touched the persisted remote (it lived only in the
       // askpass env), but drop the username too so origin is the plain URL.
-      await runCommand(["git", "-C", dest, "remote", "set-url", "origin", cleanUrl], 30_000);
+      await runCommand(
+        ["git", "-C", dest, "remote", "set-url", "origin", cleanUrl],
+        30_000,
+      );
     } finally {
       rmSync(askpassDir, { recursive: true, force: true });
     }
     return;
   }
-  const result = await runCommand(["git", "clone", "--", cleanUrl, dest], 5 * 60_000);
+  const result = await runCommand(
+    ["git", "clone", "--", cleanUrl, dest],
+    5 * 60_000,
+  );
   if (result.exitCode !== 0) {
     throw new Error(result.stderr || "git clone failed");
   }
@@ -425,7 +462,10 @@ function assertRepoSlotAvailable(
   }
 }
 
-function assertRepoPathAvailable(path: string, registered: Record<string, Repo>): void {
+function assertRepoPathAvailable(
+  path: string,
+  registered: Record<string, Repo>,
+): void {
   const canonical = canonicalRepoPath(path);
   if (
     Object.values(registered).some(
@@ -447,7 +487,9 @@ async function assertRepoOriginAvailable(
       originIdentity: await repoOriginIdentity(repo.repo),
     })),
   );
-  const duplicate = matches.find((match) => match.originIdentity === originIdentity);
+  const duplicate = matches.find(
+    (match) => match.originIdentity === originIdentity,
+  );
   if (duplicate) {
     throw setupRepoError(
       `Repository origin is already registered: ${duplicate.repo.id}`,
@@ -465,10 +507,17 @@ function repoSectionsForMutation(
 ): Record<string, RepoSection> {
   if (config.repos === undefined) {
     return Object.fromEntries(
-      Object.entries(registered).map(([id, repo]) => [id, sectionFromRepo(repo)]),
+      Object.entries(registered).map(([id, repo]) => [
+        id,
+        sectionFromRepo(repo),
+      ]),
     );
   }
-  if (!config.repos || typeof config.repos !== "object" || Array.isArray(config.repos)) {
+  if (
+    !config.repos ||
+    typeof config.repos !== "object" ||
+    Array.isArray(config.repos)
+  ) {
     throw new Error("Config repos must contain a JSON object");
   }
   return { ...(config.repos as Record<string, RepoSection>) };
@@ -504,7 +553,9 @@ function persistRepoRegistration(input: {
   return { id: input.id, ...entry };
 }
 
-async function configureGithubCredentialHelper(checkoutPath: string): Promise<void> {
+async function configureGithubCredentialHelper(
+  checkoutPath: string,
+): Promise<void> {
   const helperKey = "credential.https://github.com.helper";
   await $`git -C ${checkoutPath} config --replace-all ${helperKey} ${""}`.quiet();
   await $`git -C ${checkoutPath} config --add ${helperKey} ${githubCredentialHelperCommand()}`.quiet();
@@ -555,7 +606,10 @@ async function registerGithubRepo(input: {
       (repo) => repo.ghRepo.toLowerCase() === input.fullName.toLowerCase(),
     )
   ) {
-    throw setupRepoError(`GitHub repository is already registered: ${input.fullName}`, 409);
+    throw setupRepoError(
+      `GitHub repository is already registered: ${input.fullName}`,
+      409,
+    );
   }
   const root = checkoutsRoot();
   const dest = `${root}/${id}`;
@@ -571,14 +625,20 @@ async function registerGithubRepo(input: {
   mkdirSync(root, { recursive: true });
   try {
     if (!adopted) {
-      await cloneGithubRepo(input.fullName, dest, input.credential?.env.GH_TOKEN);
+      await cloneGithubRepo(
+        input.fullName,
+        dest,
+        input.credential?.env.GH_TOKEN,
+      );
     }
     // A private clone authenticated through a one-shot GIT_ASKPASS leaves a
     // tokenless remote. Wire the helper for future fetches and pushes, and
     // refresh it on a checkout preserved from an earlier install.
     if (input.credential) await configureGithubCredentialHelper(dest);
     const inspected = adopted ?? (await inspectRepo(dest));
-    const defaultBranch = await normalizeInspectedDefaultBranch(inspected.defaultBranch);
+    const defaultBranch = await normalizeInspectedDefaultBranch(
+      inspected.defaultBranch,
+    );
     return persistRepoRegistration({
       id,
       registered,
@@ -634,7 +694,10 @@ async function registerLocalRepo(input: {
       (repo) => repo.ghRepo.toLowerCase() === inspected.ghRepo!.toLowerCase(),
     )
   ) {
-    throw setupRepoError(`GitHub repository is already registered: ${inspected.ghRepo}`, 409);
+    throw setupRepoError(
+      `GitHub repository is already registered: ${inspected.ghRepo}`,
+      409,
+    );
   }
   if (
     inspected.cs &&
@@ -667,7 +730,9 @@ async function registerLocalRepo(input: {
     await ensureCsCredentialHelper(inspected.path, inspected.cs.org);
   }
 
-  const defaultBranch = await normalizeInspectedDefaultBranch(inspected.defaultBranch);
+  const defaultBranch = await normalizeInspectedDefaultBranch(
+    inspected.defaultBranch,
+  );
   return persistRepoRegistration({
     id,
     registered,
@@ -709,7 +774,10 @@ async function registerCodestorageRepo(input: {
   id?: string;
 }): Promise<RepoSection & { id: string }> {
   const cfg = codeStorageConfig();
-  if (!cfg) throw new Error("code.storage is not configured (integrations.codeStorage)");
+  if (!cfg)
+    throw new Error(
+      "code.storage is not configured (integrations.codeStorage)",
+    );
   // Resolve through the REST API: validates existence and canonicalizes the
   // repo path before anything touches disk or config.
   const resolved = await getCsRepo(input.repoId);
@@ -725,7 +793,10 @@ async function registerCodestorageRepo(input: {
         repo.csRepo?.toLowerCase() === csRepo.toLowerCase(),
     )
   ) {
-    throw setupRepoError(`code.storage repository is already registered: ${csRepo}`, 409);
+    throw setupRepoError(
+      `code.storage repository is already registered: ${csRepo}`,
+      409,
+    );
   }
   const root = checkoutsRoot();
   const dest = `${root}/${id}`;
@@ -734,9 +805,8 @@ async function registerCodestorageRepo(input: {
     normalizeRepoOrigin(csRemoteUrl(cfg.org, csRepo)),
     registered,
   );
-  const adopted = await adoptExistingCheckout(
-    dest,
-    (i) => matchesCodeStorageCheckout(i, cfg.org, csRepo),
+  const adopted = await adoptExistingCheckout(dest, (i) =>
+    matchesCodeStorageCheckout(i, cfg.org, csRepo),
   );
   mkdirSync(root, { recursive: true });
   try {
@@ -745,7 +815,9 @@ async function registerCodestorageRepo(input: {
     // rewires the helper on a checkout preserved from an earlier install.
     if (!adopted) await cloneCsCheckout(csRepo, dest);
     const inspected = adopted ?? (await inspectRepo(dest));
-    const defaultBranch = await normalizeInspectedDefaultBranch(inspected.defaultBranch);
+    const defaultBranch = await normalizeInspectedDefaultBranch(
+      inspected.defaultBranch,
+    );
     return persistRepoRegistration({
       id,
       registered,
@@ -822,7 +894,9 @@ export async function handleSetupRepoRoutes(
     const credential = await setupGithubCredential(ctx);
     const token = credential?.env.GH_TOKEN;
     const source: "user" | "app" | null = credential
-      ? credential.kind === "user" ? "user" : "app"
+      ? credential.kind === "user"
+        ? "user"
+        : "app"
       : null;
     if (!token || !source) {
       const { githubConfiguredCredential } = await import("../github-app");
@@ -845,8 +919,8 @@ export async function handleSetupRepoRoutes(
       const repos =
         source === "app"
           ? await listReposViaAppInstallation(token)
-          : (await listReposViaInstallations(token)) ??
-            (await listReposViaUserRepos(token));
+          : ((await listReposViaInstallations(token)) ??
+            (await listReposViaUserRepos(token)));
       repos.sort((a, b) => (b.pushedAt || "").localeCompare(a.pushedAt || ""));
       const payload = {
         source,
@@ -866,7 +940,10 @@ export async function handleSetupRepoRoutes(
     // Same well-formed empty answer as the GitHub route when unconfigured, so
     // the wizard can probe both hosts unconditionally.
     if (!codeStorageConfig()) return Response.json({ source: null, repos: [] });
-    if (csRepoListCache && Date.now() - csRepoListCache.at < REPO_CACHE_TTL_MS) {
+    if (
+      csRepoListCache &&
+      Date.now() - csRepoListCache.at < REPO_CACHE_TTL_MS
+    ) {
       return Response.json(csRepoListCache.payload);
     }
     try {
@@ -902,8 +979,14 @@ export async function handleSetupRepoRoutes(
         );
       }
       const localPath = body.path.trim();
-      if (body?.id !== undefined && (typeof body.id !== "string" || !body.id.trim())) {
-        return Response.json({ error: "id must be a non-empty string" }, { status: 400 });
+      if (
+        body?.id !== undefined &&
+        (typeof body.id !== "string" || !body.id.trim())
+      ) {
+        return Response.json(
+          { error: "id must be a non-empty string" },
+          { status: 400 },
+        );
       }
       let inspected: Awaited<ReturnType<typeof inspectLocalRepo>>;
       try {
@@ -922,16 +1005,26 @@ export async function handleSetupRepoRoutes(
       const repoId = body?.repoId ?? body?.fullName;
       if (!validCsRepoId(repoId)) {
         return Response.json(
-          { error: "repoId must be a code.storage repo path (e.g. acme/widget)" },
+          {
+            error: "repoId must be a code.storage repo path (e.g. acme/widget)",
+          },
           { status: 400 },
         );
       }
-      if (body?.id !== undefined && (typeof body.id !== "string" || !body.id.trim())) {
-        return Response.json({ error: "id must be a non-empty string" }, { status: 400 });
+      if (
+        body?.id !== undefined &&
+        (typeof body.id !== "string" || !body.id.trim())
+      ) {
+        return Response.json(
+          { error: "id must be a non-empty string" },
+          { status: 400 },
+        );
       }
       if (!codeStorageConfig()) {
         return Response.json(
-          { error: "code.storage is not configured (integrations.codeStorage)" },
+          {
+            error: "code.storage is not configured (integrations.codeStorage)",
+          },
           { status: 400 },
         );
       }
@@ -948,8 +1041,14 @@ export async function handleSetupRepoRoutes(
         { status: 400 },
       );
     }
-    if (body?.id !== undefined && (typeof body.id !== "string" || !body.id.trim())) {
-      return Response.json({ error: "id must be a non-empty string" }, { status: 400 });
+    if (
+      body?.id !== undefined &&
+      (typeof body.id !== "string" || !body.id.trim())
+    ) {
+      return Response.json(
+        { error: "id must be a non-empty string" },
+        { status: 400 },
+      );
     }
     // The acting token lets a private clone succeed without ambient gh /
     // credential-helper auth; absent, the clone stays anonymous (public repos).
@@ -997,7 +1096,10 @@ export async function handleSetupRepoRoutes(
     const changesBranch = body.defaultBranch !== undefined;
     const changesWorktrees = body.isolatedWorktrees !== undefined;
     if (!changesBranch && !changesWorktrees) {
-      return Response.json({ error: "No repository setting provided" }, { status: 400 });
+      return Response.json(
+        { error: "No repository setting provided" },
+        { status: 400 },
+      );
     }
     if (changesWorktrees && typeof body.isolatedWorktrees !== "boolean") {
       return Response.json(
@@ -1017,7 +1119,10 @@ export async function handleSetupRepoRoutes(
 
     const repos = configuredRepos();
     if (!Object.hasOwn(repos, id)) {
-      return Response.json({ error: `Unknown repository: ${id}` }, { status: 404 });
+      return Response.json(
+        { error: `Unknown repository: ${id}` },
+        { status: 404 },
+      );
     }
     const repo = repos[id];
     if (defaultBranch && !(await repoHasBranch(repo.repo, defaultBranch))) {
@@ -1060,7 +1165,10 @@ export async function handleSetupRepoRoutes(
         return result;
       });
       if (!updated) {
-        return Response.json({ error: `Unknown repository: ${id}` }, { status: 404 });
+        return Response.json(
+          { error: `Unknown repository: ${id}` },
+          { status: 404 },
+        );
       }
       if (defaultBranch && process.env.NODE_ENV !== "test") {
         const [

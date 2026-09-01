@@ -15,8 +15,11 @@ export type SessionActorRoute =
 
 export function isReadReducer(command: SessionActorReducerCommand): boolean {
   if (command.kind === "ask")
-    return command.request.op === "snapshot" || command.request.op === "entries";
-  if (command.kind === "delivery") return isDeliveryReadRequest(command.request);
+    return (
+      command.request.op === "snapshot" || command.request.op === "entries"
+    );
+  if (command.kind === "delivery")
+    return isDeliveryReadRequest(command.request);
   if (command.kind === "transcript") return isTranscriptRead(command.request);
   return command.kind === "turn" && command.request.op === "snapshot";
 }
@@ -73,15 +76,21 @@ export function sessionActorServiceRoute(
     // These lists are durable catalog projections. They may be read concurrently
     // with unrelated session mailboxes; waiting for every session turn would
     // make the ordinary sessions API disappear during long runs.
-    if (["askEntries", "deliveryEntries", "quarantinedSessions"].includes(
-      request.request.method,
-    )) return { scope: "catalog_read" };
+    if (
+      ["askEntries", "deliveryEntries", "quarantinedSessions"].includes(
+        request.request.method,
+      )
+    )
+      return { scope: "catalog_read" };
     return sessionKernelStoreRoute(
       request.request.method,
       request.request.args,
     );
   }
   if (request.t === "acknowledge")
+    return { scope: "session", sessionId: request.sessionId, mutation: true };
+  if (request.t === "runtime_catalog_work") return { scope: "catalog_read" };
+  if (request.t === "runtime_session_work")
     return { scope: "session", sessionId: request.sessionId, mutation: true };
   return { scope: "global" };
 }
@@ -126,15 +135,19 @@ export function isPrioritySessionActorRequest(
     command.request.op === "request"
   ) {
     const identity = command.request.identity;
-    return !!identity && typeof identity === "object" &&
+    return (
+      !!identity &&
+      typeof identity === "object" &&
       (("priority" in identity && identity.priority === true) ||
-        ("command" in identity && [
-          "cancel",
-          "steer",
-          "interrupt_prompt",
-          "steer_queued_prompt",
-          "interrupt_queued_prompt",
-        ].includes(String(identity.command))));
+        ("command" in identity &&
+          [
+            "cancel",
+            "steer",
+            "interrupt_prompt",
+            "steer_queued_prompt",
+            "interrupt_queued_prompt",
+          ].includes(String(identity.command))))
+    );
   }
   return false;
 }

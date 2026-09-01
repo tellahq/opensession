@@ -11,7 +11,8 @@ import type { TranscriptEntry } from "./types";
  * identify "code-like" URLs: MCP tools legitimately return JSON containing a
  * real media URL, and those should continue to render implicitly.
  */
-const GREP_RESULT_HEADER = /^Found \d+ match(?:es)?(?: \(more matches available\))?\s*$/;
+const GREP_RESULT_HEADER =
+  /^Found \d+ match(?:es)?(?: \(more matches available\))?\s*$/;
 
 export function isGrepResultOutput(text: string): boolean {
   const firstLine = text.trimStart().split(/\r?\n/, 1)[0]?.trim() || "";
@@ -154,7 +155,8 @@ export function extractImplicitMedia(text: string): {
   // Quoted code is not an artifact: search snippets and file listings carry
   // fixture URLs (see the envelope predicates above for why this stays
   // envelope-shaped).
-  if (isGrepResultOutput(text) || isFileReadOutput(text)) return { images, videos };
+  if (isGrepResultOutput(text) || isFileReadOutput(text))
+    return { images, videos };
   const seen = new Set<string>();
   const add = (src: string, pathLike: string) => {
     if (seen.has(src)) return;
@@ -247,7 +249,9 @@ export function toolResultMedia(
  * reserved-name URL — is removed. This is the only path that heals the rows
  * already in the store, so it carries every predicate the extractor applies.
  */
-export function sanitizeTranscriptMediaEntry<T extends TranscriptEntry>(entry: T): T {
+export function sanitizeTranscriptMediaEntry<T extends TranscriptEntry>(
+  entry: T,
+): T {
   if (!entry.images?.length && !entry.videos?.length) return entry;
 
   const content = entry.content || "";

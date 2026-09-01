@@ -16,16 +16,16 @@ export const WS_SUMMARY_OPEN_KEY = "opensession-workspace-summary-open";
 /** Same-tab notification that the preference changed. `storage` only fires in
  *  the OTHER tabs, and a second viewer in this one has to follow along. */
 export const WS_SUMMARY_OPEN_EVENT =
-	"opensession-workspace-summary-open-changed";
+  "opensession-workspace-summary-open-changed";
 
 export function workspaceSummaryOpen(): boolean {
-	return localStorage.getItem(WS_SUMMARY_OPEN_KEY) !== "false";
+  return localStorage.getItem(WS_SUMMARY_OPEN_KEY) !== "false";
 }
 
 /** Bring the compact workspace summary back when another surface yields room. */
 export function openWorkspaceSummary(): void {
-	localStorage.setItem(WS_SUMMARY_OPEN_KEY, "true");
-	window.dispatchEvent(new Event(WS_SUMMARY_OPEN_EVENT));
+  localStorage.setItem(WS_SUMMARY_OPEN_KEY, "true");
+  window.dispatchEvent(new Event(WS_SUMMARY_OPEN_EVENT));
 }
 
 /**
@@ -61,7 +61,7 @@ export const WS_SUMMARY_MAX_SHIFT = 160;
  * does not move. Every pane that can show the card gets the full step.
  */
 export function workspaceSummaryShift(headerW: number): number {
-	return headerW >= WS_SUMMARY_ROOM_W ? WS_SUMMARY_MAX_SHIFT : 0;
+  return headerW >= WS_SUMMARY_ROOM_W ? WS_SUMMARY_MAX_SHIFT : 0;
 }
 
 /**
@@ -72,11 +72,23 @@ export function workspaceSummaryShift(headerW: number): number {
  * enough shows the card, and Review gives it a column of its own.
  */
 export function workspaceSummaryCanStand(hasRoom: boolean): boolean {
-	return hasRoom;
+  return hasRoom;
+}
+
+/**
+ * Whether navigation from a summary row should dismiss the card.
+ *
+ * A narrow overlay must leave after routing because it covers the destination.
+ * A standing card stays pinned, including when its Review row opens Review.
+ */
+export function workspaceSummaryShouldDismissAfterRouting(
+  canStand: boolean,
+): boolean {
+  return !canStand;
 }
 
 /** Place the card directly below the workspace tab strip. Review gives the
  *  card its own column, so its inner PR bars need no extra clearance. */
 export function workspaceSummarySideOffset(tabStripVisible: boolean): number {
-	return tabStripVisible ? 49 : 20;
+  return tabStripVisible ? 49 : 20;
 }

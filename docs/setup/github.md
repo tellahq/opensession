@@ -27,9 +27,9 @@ Configure it from Settings → Integrations, or under
       "oauthClientSecret": "…",
       "appSlug": "open-session-example",
       "installationOwner": "your-org",
-      "userPrAuth": true
-    }
-  }
+      "userPrAuth": true,
+    },
+  },
 }
 ```
 
@@ -50,17 +50,17 @@ pin its known numeric installation.
 The create-App link in Settings → Integrations is generated from the same
 canonical permission set used when tokens are minted:
 
-| Scope | Access | Why |
-| --- | --- | --- |
-| Actions | Read | failing workflow logs for trusted fixes |
-| Checks | Read | check runs |
-| Commit statuses | Read | status rollups |
-| Contents | Read and write | clone and push |
-| Deployments | Read | preview deployment state |
-| Issues | Read and write | issue and PR comments |
-| Metadata | Read | GitHub baseline |
-| Pull requests | Read and write | reviews, PRs, merges |
-| Members (organization) | Read | roster and attribution |
+| Scope                  | Access         | Why                                     |
+| ---------------------- | -------------- | --------------------------------------- |
+| Actions                | Read           | failing workflow logs for trusted fixes |
+| Checks                 | Read           | check runs                              |
+| Commit statuses        | Read           | status rollups                          |
+| Contents               | Read and write | clone and push                          |
+| Deployments            | Read           | preview deployment state                |
+| Issues                 | Read and write | issue and PR comments                   |
+| Metadata               | Read           | GitHub baseline                         |
+| Pull requests          | Read and write | reviews, PRs, merges                    |
+| Members (organization) | Read           | roster and attribution                  |
 
 Enable **Device Flow**, generate a client secret and private key, then install
 the App only on the organization and repositories Open Session should reach.
@@ -117,14 +117,14 @@ GitHub-side subscription checkboxes take effect without an Open Session restart.
 These are the subscribed events the code consumes
 (`packages/core/opensession-server/src/agents/github/webhook.ts`):
 
-| Event | What happens |
-| --- | --- |
-| `issue_comment`, `pull_request_review_comment` (action `created`) | if the body matches a configured mention handle: intent-classified → whole-PR action (review / autofix / simplify / adversarial) or a conversational reply run in a PR-branch worktree |
-| `pull_request` action `labeled` | labels `os-review` / `os-auto-fix` / `os-simplify` / `os-adversarial` trigger the corresponding behavior; create the labels on your repo first. Auto-fix also merges the current base into conflicting PR branches and resolves the conflicts without force-pushing. |
-| `pull_request` `opened`/`reopened`/`synchronize`/`ready_for_review` | auto-review, if the PR is non-draft and either carries `os-review` or the review automation is enabled |
-| `pull_request` action `closed` + merged | notifies linked sessions; fires the docs-sync automation on `github:pr_merged` |
-| `pull_request_review` | refreshes PR state; when the Slack agent is enabled, review → Slack notification |
-| `workflow_run` | notifies sessions waiting on a merged PR's deploy |
+| Event                                                               | What happens                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `issue_comment`, `pull_request_review_comment` (action `created`)   | if the body matches a configured mention handle: intent-classified → whole-PR action (review / autofix / simplify / adversarial) or a conversational reply run in a PR-branch worktree                                                                               |
+| `pull_request` action `labeled`                                     | labels `os-review` / `os-auto-fix` / `os-simplify` / `os-adversarial` trigger the corresponding behavior; create the labels on your repo first. Auto-fix also merges the current base into conflicting PR branches and resolves the conflicts without force-pushing. |
+| `pull_request` `opened`/`reopened`/`synchronize`/`ready_for_review` | auto-review, if the PR is non-draft and either carries `os-review` or the review automation is enabled                                                                                                                                                               |
+| `pull_request` action `closed` + merged                             | notifies linked sessions; fires the docs-sync automation on `github:pr_merged`                                                                                                                                                                                       |
+| `pull_request_review`                                               | refreshes PR state; when the Slack agent is enabled, review → Slack notification                                                                                                                                                                                     |
+| `workflow_run`                                                      | notifies sessions waiting on a merged PR's deploy                                                                                                                                                                                                                    |
 
 ### Public-repository actor gate
 
@@ -132,15 +132,54 @@ The webhook secret authenticates GitHub, not the person who caused an event.
 Before an event can command the agent, the actor's exact login must appear in
 `identity.team[].github`; the configured `policy.githubBotLogins` are trusted
 separately for machine-originated events. This gate covers PR comments and
-inline comments, labels, automatic review events, merge automations, workflow
-notifications, Slack review notifications, reconcile retries, and restart
-recovery. Unknown actors are ignored. GitHub's `author_association` field is
-not a trust source.
+inline comments, labels, same-repository automatic reviews, merge automations,
+workflow notifications, Slack review notifications, and restart recovery.
+GitHub's `author_association` field is not a trust source.
 
-This means a public contributor can still open a PR and receive ordinary
-credential-free GitHub Actions CI, but cannot wake the Open Session agent,
-spend its model budget, push code, steer a session, or trigger a privileged PR
-behavior. Keep the team GitHub roster current; an empty roster fails closed.
+An external fork is the narrow exception. When review automation is enabled,
+its open and update events may start an automatic isolated review. Open Session
+verifies the immutable PR refs in a fresh disposable Daytona Executor, confirms
+provider deletion, and gives a tool-less model only the bounded patch. No contributor
+code runs on the host, and no model or GitHub credential enters the guest.
+External PRs cannot trigger mentions, autofix, simplify, adversarial review,
+conversational work, pushes or handoffs. Public review comments do not contain
+the private Open Session URL. See [Security model](../security-model.md#isolated-public-pr-reviews).
+
+GitHub Actions policy is independent. A repository may keep outside-contributor
+workflows disabled or approval-gated while still receiving Open Session's
+isolated semantic review. The shipped PR workflows also gate every job to
+same-repository branches, so fork jobs remain skipped if the platform setting
+is loosened accidentally. Keep the team GitHub roster current; an empty roster
+still fails closed for every write-capable behavior.
+
+### Enabling public contributions
+
+Keep public PR creation restricted until every item below is complete:
+
+1. Configure and qualify the Daytona provider. Confirm it reports **Ready** in
+   Workspace → Sandboxes. Public review fails closed when it is
+   unavailable, but opening submissions before readiness leaves contributors
+   without the promised automatic review.
+2. Enable the `github-pr-review` automation. This is the budget switch for
+   automatic review events; it does not grant external contributors any
+   write-capable command.
+3. In GitHub repository settings, have a human repository administrator change
+   the pull-request creation policy from **Collaborators only** to **All**. The
+   GitHub App does not need Administration permission for normal operation, and
+   should not receive it just for this one-time setting.
+4. In **Settings → Actions → General**, keep workflows from fork PRs disabled or
+   require maintainer approval before they run. This is separate from Open
+   Session review and complements the same-repository job gates in the shipped
+   workflows. With the least-privilege App permission set above, GitHub's
+   Actions-policy API returns 403 by design, so a repository administrator must
+   verify this setting in GitHub.
+5. Open a disposable fork PR and confirm the review uses the isolated public
+   path, contains no private session URL, and leaves autofix, commands, pushes,
+   handoffs and GitHub Actions unavailable.
+
+Changing the PR creation policy is the only step above that requires repository
+Administration authority. Runtime checkout, review and result posting continue
+to use the narrower App permissions documented in this guide.
 
 **Multi-repo**: the App webhook covers every repository on which the App is
 installed. A repo joins the PR agent when it is also in the config registry
@@ -194,8 +233,9 @@ neither `GH_TOKEN` nor `GITHUB_TOKEN`. Only interactive trusted runs and the
 dedicated `github-*` code workflows receive a user or repository-scoped App
 credential. An ordinary automation therefore cannot push or open a GitHub PR.
 Its optional `prReviewer` value is validated, preserved across resume, and
-added to the run instructions, but it grants no GitHub authority. Do not rely
-on it to publish or surface automation work.
+added to unattended run instructions, but it grants no GitHub authority. The
+reviewer is not added to existing PRs or PRs created from human-steered turns.
+Do not rely on this setting to publish or surface automation work.
 
 For a PR created by an authorized path, request a GitHub login or `org/team`
 reviewer directly. The reviewer must be a repository collaborator; a requested
@@ -226,6 +266,7 @@ below without enabling the sign-in gate.
    app without it refuses every attempt (`device_flow_disabled`) and nobody
    can get in. The callback URL, by contrast, is unused, because sign-in never
    redirects; put your instance's URL in if GitHub insists on the field.
+
 2. Configure `~/.opensession/config.json`:
 
    ```json
@@ -249,6 +290,7 @@ below without enabling the sign-in gate.
    separately as described above. Environment `OPENSESSION_GITHUB_*` values
    win over config. Signing in needs the client id; the secret renews user
    tokens; the key mints bot installation tokens.
+
 3. App and authentication config is read live; no restart is required. Restart
    only after load-time agent settings change, or once if you want the boot-only
    `createdByLogin` migration to backfill existing sessions immediately.
@@ -313,7 +355,7 @@ updates the App webhook URL and shared secret with App JWT authentication. This
 keeps networking out of first-run onboarding while allowing comments, labels,
 and other webhook events to be enabled later.
 
-The single connected account is *the* account for this install (there is no
+The single connected account is _the_ account for this install (there is no
 roster in simple mode; the one connected account is the acting identity).
 **Disconnect** removes it. For a UI-managed App, **Remove app** then clears the
 configured client id, slug, secret, private key, and installation intent; the
@@ -326,7 +368,7 @@ connect.
 
 Connecting the app does **not** by itself turn on the sign-in gate (governed
 solely by `integrations.github.userPrAuth`). Because the App's client id is the
-*same* key sign-in reads, graduating a team to
+_same_ key sign-in reads, graduating a team to
 [per-user GitHub auth](#per-user-github-auth-prs-as-the-session-owner) is a
 one-flag change, or automatic for an org-owned app: `install.sh --org <name>`
 (or choosing the Organization owner in the wizard) records the org, and at the

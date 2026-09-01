@@ -136,6 +136,7 @@ case "$action" in
       --collect --quiet \
       "--unit=$unit" \
       "--description=Open Session run host $host_id" \
+      "--slice=opensession-workloads.slice" \
       "--uid=$service_uid" \
       "--gid=$service_gid" \
       -p "WorkingDirectory=$repo_dir" \

@@ -43,7 +43,9 @@ const strategies = requested.length
   : BENCH_STRATEGIES;
 if (requested.length && strategies.length !== requested.length) {
   const known = BENCH_STRATEGIES.map((s) => s.name).join(", ");
-  console.error(`unknown strategy in MEMORY_BENCH_STRATEGIES (known: ${known})`);
+  console.error(
+    `unknown strategy in MEMORY_BENCH_STRATEGIES (known: ${known})`,
+  );
   process.exit(1);
 }
 
@@ -55,7 +57,12 @@ const wantedFixtures = (process.env.MEMORY_BENCH_FIXTURES ?? "")
 const conversations = readdirSync(fixtureDir)
   .filter((f) => f.endsWith(".json"))
   .sort()
-  .map((f) => parseBenchConversation(JSON.parse(readFileSync(join(fixtureDir, f), "utf8")), f))
+  .map((f) =>
+    parseBenchConversation(
+      JSON.parse(readFileSync(join(fixtureDir, f), "utf8")),
+      f,
+    ),
+  )
   .filter((c) => !wantedFixtures.length || wantedFixtures.includes(c.id));
 if (!conversations.length) {
   console.error("no conversations selected — check MEMORY_BENCH_FIXTURES");
@@ -68,7 +75,9 @@ const strategyOneShot: OneShot = (system, prompt) =>
   oneShot(prompt, {
     system,
     label: "memory-bench",
-    ...(process.env.MEMORY_BENCH_MODEL ? { model: process.env.MEMORY_BENCH_MODEL } : {}),
+    ...(process.env.MEMORY_BENCH_MODEL
+      ? { model: process.env.MEMORY_BENCH_MODEL }
+      : {}),
   });
 
 const judgeOneShot: OneShot = (system, prompt) =>
@@ -83,18 +92,26 @@ for (const strategy of strategies) {
   for (const conversation of conversations) {
     const facts = await strategy.run(conversation, strategyOneShot);
     const notebook = renderNotebook(facts);
-    const judgeOut = await judgeOneShot(JUDGE_PROMPT, renderJudgeInput(conversation, notebook));
+    const judgeOut = await judgeOneShot(
+      JUDGE_PROMPT,
+      renderJudgeInput(conversation, notebook),
+    );
     if (!judgeOut) {
       console.error(
-        `[${strategy.name}] ${conversation.id}: judge call failed (engine down or no usable account) — aborting`
+        `[${strategy.name}] ${conversation.id}: judge call failed (engine down or no usable account) — aborting`,
       );
       process.exit(1);
     }
     const verdict = parseJudgeVerdict(judgeOut);
-    results.push({ strategy: strategy.name, conversationId: conversation.id, notebook, verdict });
+    results.push({
+      strategy: strategy.name,
+      conversationId: conversation.id,
+      notebook,
+      verdict,
+    });
     console.log(
       `[${strategy.name}] ${conversation.id}: s/n=${verdict.signalToNoise} stale=${verdict.staleness} ` +
-        `infer=${verdict.inferenceVsObservation} — ${verdict.notes}`
+        `infer=${verdict.inferenceVsObservation} — ${verdict.notes}`,
     );
   }
 }
@@ -106,7 +123,11 @@ const outPath = process.env.MEMORY_BENCH_OUT;
 if (outPath) {
   writeFileSync(
     outPath,
-    JSON.stringify({ generatedAt: new Date().toISOString(), rows, results }, null, 2)
+    JSON.stringify(
+      { generatedAt: new Date().toISOString(), rows, results },
+      null,
+      2,
+    ),
   );
   console.log(`report written to ${outPath}`);
 }

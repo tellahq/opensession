@@ -25,5 +25,5 @@ import { Spinner } from "./spinner";
  * the app is still working, and a frozen one reads as hung.
  */
 export function PageLoader(props: React.ComponentPropsWithoutRef<"span">) {
-	return <Spinner size="lg" {...props} />;
+  return <Spinner size="lg" {...props} />;
 }

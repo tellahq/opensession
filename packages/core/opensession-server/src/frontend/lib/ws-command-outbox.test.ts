@@ -1,14 +1,23 @@
 import { describe, expect, test } from "bun:test";
-import { shouldRetireCommandResult, WsCommandOutbox } from "./ws-command-outbox";
+import {
+  shouldRetireCommandResult,
+  WsCommandOutbox,
+} from "./ws-command-outbox";
 
 class MemoryStorage {
   values = new Map<string, string>();
   failWrites = false;
   failItemWriteAt: number | undefined;
   itemWrites = 0;
-  get length() { return this.values.size; }
-  key(index: number) { return [...this.values.keys()][index] ?? null; }
-  getItem(key: string) { return this.values.get(key) ?? null; }
+  get length() {
+    return this.values.size;
+  }
+  key(index: number) {
+    return [...this.values.keys()][index] ?? null;
+  }
+  getItem(key: string) {
+    return this.values.get(key) ?? null;
+  }
   setItem(key: string, value: string) {
     if (key.includes(":item:")) {
       this.itemWrites += 1;
@@ -17,7 +26,9 @@ class MemoryStorage {
     if (this.failWrites) throw new Error("quota");
     this.values.set(key, value);
   }
-  removeItem(key: string) { this.values.delete(key); }
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
 }
 
 const KEY = "opensession-ws-command-outbox:v1:test";
@@ -38,20 +49,28 @@ describe("WebSocket command outbox", () => {
       { type: "command_ack", sessionId: "s1", requestId: "request-1" },
     ]);
     expect(awaitingServer.confirmAck("request-1")).toBe(true);
-    expect(new WsCommandOutbox(storage, () => 103, KEY).pendingAcks()).toEqual([]);
-    expect([...storage.values.keys()].some((key) => key.includes(":retired:")))
-      .toBe(false);
+    expect(new WsCommandOutbox(storage, () => 103, KEY).pendingAcks()).toEqual(
+      [],
+    );
+    expect(
+      [...storage.values.keys()].some((key) => key.includes(":retired:")),
+    ).toBe(false);
   });
 
   test("migrates the actual shipped v1 aggregate key in place", () => {
     const storage = new MemoryStorage();
-    storage.setItem(KEY, JSON.stringify({
-      version: 1,
-      items: [{
-        message: { type: "cancel", requestId: "legacy" },
-        createdAt: 1,
-      }],
-    }));
+    storage.setItem(
+      KEY,
+      JSON.stringify({
+        version: 1,
+        items: [
+          {
+            message: { type: "cancel", requestId: "legacy" },
+            createdAt: 1,
+          },
+        ],
+      }),
+    );
     const migrated = new WsCommandOutbox(storage, () => 2, KEY);
     expect(migrated.pending()).toEqual([
       { type: "cancel", requestId: "legacy" },
@@ -68,7 +87,11 @@ describe("WebSocket command outbox", () => {
     storage.setItem(KEY, JSON.stringify({ version: 1, items: legacy }));
     storage.failItemWriteAt = 2;
     const partial = new WsCommandOutbox(storage, () => 4, KEY);
-    expect(partial.pending().map((item) => item.requestId)).toEqual(["a", "b", "c"]);
+    expect(partial.pending().map((item) => item.requestId)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
     expect(JSON.parse(storage.getItem(KEY)!)).toMatchObject({ version: 1 });
 
     storage.itemWrites = 0;
@@ -82,14 +105,20 @@ describe("WebSocket command outbox", () => {
     expect(reconstructed.confirmAck("a")).toBe(true);
     storage.itemWrites = 0;
     const afterAck = new WsCommandOutbox(storage, () => 6, KEY);
-    expect(afterAck.pending().map((item) => item.requestId)).toEqual(["b", "c"]);
+    expect(afterAck.pending().map((item) => item.requestId)).toEqual([
+      "b",
+      "c",
+    ]);
 
     // A stale tab can finish its old migration write after confirmAck. The
     // permanent retired record must still suppress that resurrected item.
     storage.failItemWriteAt = undefined;
     storage.setItem(`${KEY}:item:a`, JSON.stringify(legacy[0]));
-    expect(new WsCommandOutbox(storage, () => 7, KEY).pending()
-      .map((item) => item.requestId)).toEqual(["b", "c"]);
+    expect(
+      new WsCommandOutbox(storage, () => 7, KEY)
+        .pending()
+        .map((item) => item.requestId),
+    ).toEqual(["b", "c"]);
     expect(storage.getItem(`${KEY}:retired:a`)).not.toBeNull();
   });
 
@@ -106,11 +135,19 @@ describe("WebSocket command outbox", () => {
     const storage = new MemoryStorage();
     const prior = new WsCommandOutbox(storage, () => 1, `${KEY}:github:ada`);
     expect(prior.put({ type: "cancel", requestId: "prior" })).toBe(true);
-    const encoded = new WsCommandOutbox(storage, () => 2, `${KEY}:github%3Aada`);
+    const encoded = new WsCommandOutbox(
+      storage,
+      () => 2,
+      `${KEY}:github%3Aada`,
+    );
     encoded.adoptLegacyPrefix(`${KEY}:github:ada`);
     expect(encoded.pending().map((item) => item.requestId)).toEqual(["prior"]);
     expect(storage.getItem(`${KEY}:github:ada:item:prior`)).toBeNull();
-    const other = new WsCommandOutbox(storage, () => 3, `${KEY}:github%3Agrace`);
+    const other = new WsCommandOutbox(
+      storage,
+      () => 3,
+      `${KEY}:github%3Agrace`,
+    );
     other.adoptLegacyPrefix(`${KEY}:github:ada`);
     expect(other.pending()).toEqual([]);
   });
@@ -182,7 +219,9 @@ describe("WebSocket command outbox", () => {
 
   test("keeps transient failures until a completed or terminal receipt", () => {
     expect(shouldRetireCommandResult({ status: "failed" })).toBe(false);
-    expect(shouldRetireCommandResult({ status: "failed", terminal: true })).toBe(true);
+    expect(
+      shouldRetireCommandResult({ status: "failed", terminal: true }),
+    ).toBe(true);
     expect(shouldRetireCommandResult({ status: "completed" })).toBe(true);
   });
 });

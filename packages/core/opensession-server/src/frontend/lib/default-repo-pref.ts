@@ -14,12 +14,12 @@
 import { makeUserPref } from "./user-pref";
 
 const pref = makeUserPref<string>({
-	localKey: "opensession-default-repo-pref",
-	prefKey: "default-repo",
-	changeEvent: "opensession-default-repo-pref-changed",
-	defaultValue: "",
-	decode: (v) => (typeof v === "string" ? (v === "auto" ? "" : v) : null),
-	encode: (v) => v,
+  localKey: "opensession-default-repo-pref",
+  prefKey: "default-repo",
+  changeEvent: "opensession-default-repo-pref-changed",
+  defaultValue: "",
+  decode: (v) => (typeof v === "string" ? (v === "auto" ? "" : v) : null),
+  encode: (v) => v,
 });
 
 /** The user's preferred new-session repo id, or "" for no preference. */

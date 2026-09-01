@@ -36,14 +36,20 @@ describe("session actor priority routing", () => {
       "steer_queued_prompt",
       "interrupt_queued_prompt",
     ]) {
-      expect(isPrioritySessionActorRequest(websocketCommand(command))).toBe(true);
+      expect(isPrioritySessionActorRequest(websocketCommand(command))).toBe(
+        true,
+      );
     }
   });
 
   test("lets a steer-mode prompt opt into control priority", () => {
-    expect(isPrioritySessionActorRequest(websocketCommand("prompt"))).toBe(false);
+    expect(isPrioritySessionActorRequest(websocketCommand("prompt"))).toBe(
+      false,
+    );
     expect(
-      isPrioritySessionActorRequest(websocketCommand("prompt", { priority: true })),
+      isPrioritySessionActorRequest(
+        websocketCommand("prompt", { priority: true }),
+      ),
     ).toBe(true);
   });
 });

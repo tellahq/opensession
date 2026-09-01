@@ -17,10 +17,9 @@
  * interactive run fleet-wide (2026-07-16/17 outages).
  */
 
-
 /** True iff this process is a dev instance (OPENSESSION_DEV=1). */
 export function isDevInstance(): boolean {
-	return process.env.OPENSESSION_DEV === "1";
+  return process.env.OPENSESSION_DEV === "1";
 }
 
 /**
@@ -31,15 +30,15 @@ export function isDevInstance(): boolean {
  * (module side effects run before the entry file's statements).
  */
 export function devInstanceBootError(
-	env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): string | null {
-	if (env.OPENSESSION_DEV !== "1") return null;
-	if (env.OPENSESSION_STATE_DIR) return null;
-	if (env.OPENSESSION_SESSIONS_DIR) return null;
-	return (
-		"OPENSESSION_DEV=1 refuses to boot on the live state: set OPENSESSION_STATE_DIR " +
-		"(isolated state root; every ~/.opensession-* store resolves under it) or at " +
-		"least OPENSESSION_SESSIONS_DIR. A dev instance sharing the live sessions dir would " +
-		"steal the production run-rpc socket and wedge every interactive run."
-	);
+  if (env.OPENSESSION_DEV !== "1") return null;
+  if (env.OPENSESSION_STATE_DIR) return null;
+  if (env.OPENSESSION_SESSIONS_DIR) return null;
+  return (
+    "OPENSESSION_DEV=1 refuses to boot on the live state: set OPENSESSION_STATE_DIR " +
+    "(isolated state root; every ~/.opensession-* store resolves under it) or at " +
+    "least OPENSESSION_SESSIONS_DIR. A dev instance sharing the live sessions dir would " +
+    "steal the production run-rpc socket and wedge every interactive run."
+  );
 }

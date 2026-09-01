@@ -57,7 +57,7 @@ const MAX_IMAGES_PER_PROMPT = 6;
  * what else came with the message.
  */
 export async function downloadSlackImages(
-  files: SlackFileRef[]
+  files: SlackFileRef[],
 ): Promise<{ images: ImageInput[]; note: string }> {
   const images: ImageInput[] = [];
   const lines: string[] = [];
@@ -152,12 +152,9 @@ export async function slackApiGet(
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined) qs.set(k, String(v));
   }
-  const resp = await fetchWithTimeout(
-    `https://slack.com/api/${method}?${qs}`,
-    {
-      headers: { Authorization: `Bearer ${tokenOverride || SLACK_BOT_TOKEN}` },
-    },
-  );
+  const resp = await fetchWithTimeout(`https://slack.com/api/${method}?${qs}`, {
+    headers: { Authorization: `Bearer ${tokenOverride || SLACK_BOT_TOKEN}` },
+  });
   const data = await resp.json();
   if (!(data as any).ok) {
     console.warn(`[slack] Slack API ${method} error:`, (data as any).error);
@@ -175,19 +172,22 @@ export async function sendSlackMessage(
   threadTs?: string,
   tokenOverride?: string,
 ): Promise<any> {
-  const response = await fetchWithTimeout("https://slack.com/api/chat.postMessage", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${tokenOverride || SLACK_BOT_TOKEN}`,
+  const response = await fetchWithTimeout(
+    "https://slack.com/api/chat.postMessage",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${tokenOverride || SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({
+        channel,
+        text,
+        thread_ts: threadTs,
+        mrkdwn: true,
+      }),
     },
-    body: JSON.stringify({
-      channel,
-      text,
-      thread_ts: threadTs,
-      mrkdwn: true,
-    }),
-  });
+  );
   return response.json();
 }
 
@@ -206,7 +206,9 @@ export async function slackPermalink(
       { channel, message_ts: ts },
       tokenOverride,
     );
-    return data?.ok && typeof data.permalink === "string" ? data.permalink : undefined;
+    return data?.ok && typeof data.permalink === "string"
+      ? data.permalink
+      : undefined;
   } catch {
     return undefined;
   }
@@ -243,7 +245,11 @@ export async function slackUploadTs(
   if (ts) return ts;
   if (typeof posted?.id !== "string") return undefined;
   try {
-    const info = await slackApiGet("files.info", { file: posted.id }, tokenOverride);
+    const info = await slackApiGet(
+      "files.info",
+      { file: posted.id },
+      tokenOverride,
+    );
     return slackFileShareTs(info?.file, channel);
   } catch {
     return undefined;
@@ -269,10 +275,15 @@ export async function deleteSlackMessage(
   ts: string,
   tokenOverride?: string,
 ): Promise<void> {
-  const data = await slackApiCall("chat.delete", { channel, ts }, tokenOverride);
+  const data = await slackApiCall(
+    "chat.delete",
+    { channel, ts },
+    tokenOverride,
+  );
   if (!data?.ok) {
     throw new Error(
-      data?.error === "cant_delete_message" || data?.error === "message_not_found"
+      data?.error === "cant_delete_message" ||
+        data?.error === "message_not_found"
         ? "Slack would not delete that message"
         : data?.error || "Slack would not delete that message",
     );
@@ -282,7 +293,7 @@ export async function deleteSlackMessage(
 export async function updateSlackMessage(
   channel: string,
   ts: string,
-  text: string
+  text: string,
 ): Promise<any> {
   const response = await fetchWithTimeout("https://slack.com/api/chat.update", {
     method: "POST",
@@ -298,7 +309,7 @@ export async function updateSlackMessage(
 export async function addReaction(
   channel: string,
   ts: string,
-  emoji: string
+  emoji: string,
 ): Promise<void> {
   await fetchWithTimeout("https://slack.com/api/reactions.add", {
     method: "POST",
@@ -313,7 +324,7 @@ export async function addReaction(
 export async function removeReaction(
   channel: string,
   ts: string,
-  emoji: string
+  emoji: string,
 ): Promise<void> {
   await fetchWithTimeout("https://slack.com/api/reactions.remove", {
     method: "POST",
@@ -332,22 +343,29 @@ export async function postSlackBlocks(
   threadTs?: string,
   opts?: { unfurlLinks?: boolean; unfurlMedia?: boolean; clientMsgId?: string },
 ): Promise<any> {
-  const response = await fetchWithTimeout("https://slack.com/api/chat.postMessage", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+  const response = await fetchWithTimeout(
+    "https://slack.com/api/chat.postMessage",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({
+        channel,
+        text: fallbackText,
+        blocks,
+        thread_ts: threadTs,
+        ...(opts?.clientMsgId ? { client_msg_id: opts.clientMsgId } : {}),
+        ...(opts?.unfurlLinks !== undefined
+          ? { unfurl_links: opts.unfurlLinks }
+          : {}),
+        ...(opts?.unfurlMedia !== undefined
+          ? { unfurl_media: opts.unfurlMedia }
+          : {}),
+      }),
     },
-    body: JSON.stringify({
-      channel,
-      text: fallbackText,
-      blocks,
-      thread_ts: threadTs,
-      ...(opts?.clientMsgId ? { client_msg_id: opts.clientMsgId } : {}),
-      ...(opts?.unfurlLinks !== undefined ? { unfurl_links: opts.unfurlLinks } : {}),
-      ...(opts?.unfurlMedia !== undefined ? { unfurl_media: opts.unfurlMedia } : {}),
-    }),
-  });
+  );
   return response.json();
 }
 
@@ -357,7 +375,8 @@ async function slackFormCall(
   tokenOverride?: string,
 ): Promise<any> {
   const body = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) body.set(key, String(value));
+  for (const [key, value] of Object.entries(params))
+    body.set(key, String(value));
   const response = await fetchWithTimeout(`https://slack.com/api/${method}`, {
     method: "POST",
     headers: {
@@ -407,20 +426,25 @@ export async function postSlackFiles(
   for (const [index, path] of paths.entries()) {
     const filename = basename(path);
     const stat = statSync(path);
-    if (!stat.isFile()) throw new Error(`Slack upload path is not a regular file: ${path}`);
+    if (!stat.isFile())
+      throw new Error(`Slack upload path is not a regular file: ${path}`);
     const length = stat.size;
     if (!length || length > MAX_SLACK_UPLOAD_BYTES) {
       throw new Error(`Slack upload must be between 1 byte and 20 MB: ${path}`);
     }
-    const reserved = await slackFormCall("files.getUploadURLExternal", {
-      filename,
-      length,
-      ...(opts?.altText ? { alt_txt: opts.altText.slice(0, 1000) } : {}),
-    }, tokenOverride);
+    const reserved = await slackFormCall(
+      "files.getUploadURLExternal",
+      {
+        filename,
+        length,
+        ...(opts?.altText ? { alt_txt: opts.altText.slice(0, 1000) } : {}),
+      },
+      tokenOverride,
+    );
     if (!reserved?.ok || !reserved.upload_url || !reserved.file_id) {
-		if (reserved?.error === "missing_scope") {
-			throw new Error("SLACK_RECONNECT_REQUIRED");
-		}
+      if (reserved?.error === "missing_scope") {
+        throw new Error("SLACK_RECONNECT_REQUIRED");
+      }
       throw new Error(
         `Slack upload reservation failed: ${reserved?.error || "invalid response"}`,
       );
@@ -446,14 +470,18 @@ export async function postSlackFiles(
     });
   }
 
-  const completed = await slackFormCall("files.completeUploadExternal", {
-    files: JSON.stringify(files),
-    channel_id: channel,
-    // An empty comment is not "no comment" to Slack: it posts the share with a
-    // blank line above the files.
-    ...(initialComment ? { initial_comment: initialComment } : {}),
-    ...(opts?.threadTs ? { thread_ts: opts.threadTs } : {}),
-  }, tokenOverride);
+  const completed = await slackFormCall(
+    "files.completeUploadExternal",
+    {
+      files: JSON.stringify(files),
+      channel_id: channel,
+      // An empty comment is not "no comment" to Slack: it posts the share with a
+      // blank line above the files.
+      ...(initialComment ? { initial_comment: initialComment } : {}),
+      ...(opts?.threadTs ? { thread_ts: opts.threadTs } : {}),
+    },
+    tokenOverride,
+  );
   if (!completed?.ok) {
     throw new Error(
       `Slack upload completion failed: ${completed?.error || "invalid response"}`,
@@ -480,8 +508,12 @@ export async function updateSlackBlocks(
       ts,
       text,
       blocks,
-      ...(opts?.unfurlLinks !== undefined ? { unfurl_links: opts.unfurlLinks } : {}),
-      ...(opts?.unfurlMedia !== undefined ? { unfurl_media: opts.unfurlMedia } : {}),
+      ...(opts?.unfurlLinks !== undefined
+        ? { unfurl_links: opts.unfurlLinks }
+        : {}),
+      ...(opts?.unfurlMedia !== undefined
+        ? { unfurl_media: opts.unfurlMedia }
+        : {}),
     }),
   });
   return response.json();
@@ -490,7 +522,7 @@ export async function updateSlackBlocks(
 export async function openSlackModal(
   triggerId: string,
   questionId: string,
-  questionText: string
+  questionText: string,
 ): Promise<any> {
   const response = await fetchWithTimeout("https://slack.com/api/views.open", {
     method: "POST",
@@ -540,7 +572,7 @@ export async function openSlackModal(
 export async function openHumanAskModal(
   triggerId: string,
   askId: string,
-  questionText: string
+  questionText: string,
 ): Promise<any> {
   const response = await fetchWithTimeout("https://slack.com/api/views.open", {
     method: "POST",
@@ -589,11 +621,11 @@ export interface ThreadContext {
 
 export async function fetchThreadContext(
   channel: string,
-  threadTs: string
+  threadTs: string,
 ): Promise<ThreadContext> {
   const response = await fetchWithTimeout(
     `https://slack.com/api/conversations.replies?channel=${channel}&ts=${threadTs}&limit=20`,
-    { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } }
+    { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } },
   );
   const data = (await response.json()) as any;
 
@@ -621,7 +653,7 @@ export async function fetchThreadContext(
 // ---------------------------------------------------------------------------
 
 export async function getChannelInfo(
-  channelId: string
+  channelId: string,
 ): Promise<{ is_private?: boolean; is_im?: boolean; name?: string } | null> {
   const data = await slackApiCall("conversations.info", { channel: channelId });
   if (data.ok && data.channel) return data.channel;
@@ -640,12 +672,16 @@ const CHANNEL_KIND_TTL_MS = 60 * 60 * 1000;
  * tell them apart from the id alone and must ask conversations.info.
  */
 export async function getChannelKind(
-  channelId: string
+  channelId: string,
 ): Promise<{ isDM: boolean; isPrivate: boolean; name?: string }> {
   if (channelId.startsWith("D")) return { isDM: true, isPrivate: false };
   const cached = channelKindCache.get(channelId);
   if (cached && Date.now() - cached.at < CHANNEL_KIND_TTL_MS) {
-    return { isDM: cached.isDM, isPrivate: cached.isPrivate, name: cached.name };
+    return {
+      isDM: cached.isDM,
+      isPrivate: cached.isPrivate,
+      name: cached.name,
+    };
   }
   const info = await getChannelInfo(channelId);
   const kind = {
@@ -666,17 +702,19 @@ export async function getChannelKind(
  * so we can post a message into a teammate's DM. Used by the human-in-the-loop
  * asks (src/server/human-asks.ts). Returns null if Slack refuses.
  */
-export async function openDirectMessage(slackUserId: string): Promise<string | null> {
+export async function openDirectMessage(
+  slackUserId: string,
+): Promise<string | null> {
   const data = await slackApiCall("conversations.open", { users: slackUserId });
   return data.ok && data.channel?.id ? data.channel.id : null;
 }
 
 export async function getUserInfo(
-  userId: string
+  userId: string,
 ): Promise<{ name: string; real_name: string } | null> {
   const response = await fetchWithTimeout(
     `https://slack.com/api/users.info?user=${userId}`,
-    { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } }
+    { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } },
   );
   const data = (await response.json()) as any;
   if (data.ok && data.user) {
@@ -720,7 +758,7 @@ const USER_PROFILE_TTL_MS = 60 * 60 * 1000;
 
 /** Resolve a Slack user id → display name + avatar (cached). */
 export async function resolveSlackUser(
-  userId: string
+  userId: string,
 ): Promise<{ name: string; avatarUrl?: string }> {
   const cached = userProfileCache.get(userId);
   if (cached && Date.now() - cached.at < USER_PROFILE_TTL_MS) {
@@ -731,7 +769,7 @@ export async function resolveSlackUser(
   try {
     const resp = await fetchWithTimeout(
       `https://slack.com/api/users.info?user=${userId}`,
-      { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } }
+      { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } },
     );
     const data = (await resp.json()) as any;
     if (data.ok && data.user) {
@@ -751,7 +789,7 @@ export async function resolveSlackUser(
  */
 export async function fetchChannelHistory(
   channelId: string,
-  limit = 50
+  limit = 50,
 ): Promise<SlackHistoryMessage[]> {
   const data = await slackApiCall("conversations.history", {
     channel: channelId,

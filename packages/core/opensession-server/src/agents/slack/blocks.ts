@@ -6,12 +6,7 @@
  * and https://docs.slack.dev/reference/block-kit/blocks/alert-block
  */
 
-export type AlertLevel =
-  | "default"
-  | "info"
-  | "success"
-  | "warning"
-  | "error";
+export type AlertLevel = "default" | "info" | "success" | "warning" | "error";
 
 export interface ExtractedBlock {
   type: "table" | "alert";

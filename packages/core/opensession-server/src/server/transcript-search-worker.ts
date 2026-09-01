@@ -45,7 +45,11 @@ interface CandidateRow {
   data: string;
 }
 
-function bounded(value: number | undefined, fallback: number, ceiling: number): number {
+function bounded(
+  value: number | undefined,
+  fallback: number,
+  ceiling: number,
+): number {
   return Math.min(Math.max(1, Math.floor(value ?? fallback)), ceiling);
 }
 
@@ -61,8 +65,16 @@ export function searchStoredTranscripts(
     TRANSCRIPT_SEARCH_MAX_SESSIONS,
     TRANSCRIPT_SEARCH_MAX_SESSIONS,
   );
-  const maxRows = bounded(input.maxRows, TRANSCRIPT_SEARCH_MAX_ROWS, TRANSCRIPT_SEARCH_MAX_ROWS);
-  const maxMs = bounded(input.maxMs, TRANSCRIPT_SEARCH_MAX_MS, TRANSCRIPT_SEARCH_MAX_MS);
+  const maxRows = bounded(
+    input.maxRows,
+    TRANSCRIPT_SEARCH_MAX_ROWS,
+    TRANSCRIPT_SEARCH_MAX_ROWS,
+  );
+  const maxMs = bounded(
+    input.maxMs,
+    TRANSCRIPT_SEARCH_MAX_MS,
+    TRANSCRIPT_SEARCH_MAX_MS,
+  );
   const matches: StoredTranscriptMatch[] = [];
   let searchedSessions = 0;
   let candidateRows = 0;
@@ -90,10 +102,12 @@ export function searchStoredTranscripts(
     if (!existsSync(path)) continue;
     const db = new Database(path, { readonly: true, strict: true });
     try {
-      const hasTranscriptEvents = db.query(`
+      const hasTranscriptEvents = db
+        .query(`
         SELECT 1 FROM sqlite_master
         WHERE type = 'table' AND name = 'transcript_events'
-      `).get();
+      `)
+        .get();
       if (!hasTranscriptEvents) continue;
       let beforeSeq = Number.MAX_SAFE_INTEGER;
       while (true) {
@@ -107,11 +121,13 @@ export function searchStoredTranscripts(
           break sessionLoop;
         }
         const limit = Math.min(SEARCH_PAGE_ROWS, remainingRows);
-        const rows = db.query(`
+        const rows = db
+          .query(`
           SELECT seq, data FROM transcript_events
           WHERE session_id = ? AND seq < ?
           ORDER BY seq DESC LIMIT ?
-        `).all(id, beforeSeq, limit) as CandidateRow[];
+        `)
+          .all(id, beforeSeq, limit) as CandidateRow[];
         candidateRows += rows.length;
         let matched = false;
         for (const row of rows) {
@@ -136,12 +152,15 @@ export function searchStoredTranscripts(
   }
   if (!exhausted && candidateRows >= maxRows) exhausted = "rows";
   if (!exhausted && matches.length >= maxMatches) exhausted = "matches";
-  if (!exhausted && input.sessionIds.length > ids.length) exhausted = "sessions";
+  if (!exhausted && input.sessionIds.length > ids.length)
+    exhausted = "sessions";
   return { matches, searchedSessions, candidateRows, exhausted };
 }
 
 export async function runTranscriptSearchWorker(): Promise<void> {
-  const input = JSON.parse(await Bun.stdin.text()) as StoredTranscriptSearchInput;
+  const input = JSON.parse(
+    await Bun.stdin.text(),
+  ) as StoredTranscriptSearchInput;
   process.stdout.write(JSON.stringify(searchStoredTranscripts(input)));
 }
 

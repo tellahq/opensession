@@ -24,10 +24,7 @@ import { writeFileAtomic } from "./shared/atomic-write";
 /** Same resolution the CLI uses (scripts/lib/paths.ts): env override first,
  *  then the dual-read home path. Read per call so tests can repoint it. */
 export function envFilePath(): string {
-  return (
-    process.env.OPENSESSION_ENV_FILE ||
-    statePath(".opensession.env")
-  );
+  return process.env.OPENSESSION_ENV_FILE || statePath(".opensession.env");
 }
 
 export const WEB_SETUP_MARKER = "# --- added via web setup ---";

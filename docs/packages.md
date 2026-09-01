@@ -4,12 +4,12 @@ A package is how you hand somebody an extension instead of a paragraph of
 instructions. It is **a git repository with `opensession-plugin.json` at its
 root**, bundling any of four things this instance already knows how to store:
 
-| In the manifest | Installs into |
-| --- | --- |
-| `mcpServers` | `mcp-config.json` |
-| `feeds` | `~/.opensession/feeds.json` |
-| `automations` | the config seed list, disabled |
-| `skills` | `.agents/skills/<name>/` |
+| In the manifest | Installs into                  |
+| --------------- | ------------------------------ |
+| `mcpServers`    | `mcp-config.json`              |
+| `feeds`         | `~/.opensession/feeds.json`    |
+| `automations`   | the config seed list, disabled |
+| `skills`        | `.agents/skills/<name>/`       |
 
 These are fresh-install defaults. If the corresponding new path does not exist,
 an existing `~/.opensession-feeds.json`, `~/.opensession-plugins.json`, or

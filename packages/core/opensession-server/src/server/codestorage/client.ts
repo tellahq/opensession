@@ -23,17 +23,28 @@ const tokenCache = new Map<string, { token: string; exp: number }>();
 
 function requireConfig(): CodeStorageConfig {
   const cfg = codeStorageConfig();
-  if (!cfg) throw new Error("code.storage is not configured (integrations.codeStorage)");
+  if (!cfg)
+    throw new Error(
+      "code.storage is not configured (integrations.codeStorage)",
+    );
   return cfg;
 }
 
-async function bearer(repo: string | undefined, scopes: CsScope[]): Promise<string> {
+async function bearer(
+  repo: string | undefined,
+  scopes: CsScope[],
+): Promise<string> {
   const cfg = requireConfig();
   const key = `${cfg.org}|${repo ?? ""}|${[...scopes].sort().join(",")}`;
   const now = Math.floor(Date.now() / 1000);
   const cached = tokenCache.get(key);
   if (cached && cached.exp - now > TOKEN_MIN_REMAINING_S) return cached.token;
-  const token = await mintCsJwt({ org: cfg.org, repo, scopes, ttlSeconds: TOKEN_TTL_S });
+  const token = await mintCsJwt({
+    org: cfg.org,
+    repo,
+    scopes,
+    ttlSeconds: TOKEN_TTL_S,
+  });
   tokenCache.set(key, { token, exp: now + TOKEN_TTL_S });
   return token;
 }
@@ -56,14 +67,17 @@ async function csFetch(
   const url = new URL(cfg.apiBase + path);
   for (const [k, v] of Object.entries(opts.query ?? {})) {
     if (v === undefined) continue;
-    for (const item of Array.isArray(v) ? v : [v]) url.searchParams.append(k, String(item));
+    for (const item of Array.isArray(v) ? v : [v])
+      url.searchParams.append(k, String(item));
   }
   const method = opts.method || "GET";
   const res = await fetch(url, {
     method,
     headers: {
       authorization: `Bearer ${await bearer(opts.repo, opts.scopes)}`,
-      ...(opts.body !== undefined ? { "content-type": "application/json" } : {}),
+      ...(opts.body !== undefined
+        ? { "content-type": "application/json" }
+        : {}),
     },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -261,7 +275,10 @@ export async function listRepos(q?: string): Promise<CsRepoSummary[]> {
 
 /** GET /repos/{repo} (git:read). */
 export async function getRepo(repoId: string): Promise<CsRepoSummary> {
-  const res = await csFetch(repoPath(repoId), { scopes: ["git:read"], repo: repoId });
+  const res = await csFetch(repoPath(repoId), {
+    scopes: ["git:read"],
+    repo: repoId,
+  });
   return (await res.json()) as CsRepoSummary;
 }
 
@@ -328,7 +345,9 @@ export async function mergeBranch(
       target_branch: opts.targetBranch,
       strategy: opts.strategy ?? "merge",
       ...(opts.commitMessage ? { commit_message: opts.commitMessage } : {}),
-      ...(opts.expectedTargetSha ? { expected_target_sha: opts.expectedTargetSha } : {}),
+      ...(opts.expectedTargetSha
+        ? { expected_target_sha: opts.expectedTargetSha }
+        : {}),
       ...(opts.squash ? { squash: true } : {}),
       ...(opts.author ? { author: opts.author } : {}),
     },
@@ -363,13 +382,21 @@ export async function listCommits(
   const res = await csFetch(`${repoPath(repoId)}/commits`, {
     scopes: ["git:read"],
     repo: repoId,
-    query: { branch: opts?.branch, path: opts?.path, cursor: opts?.cursor, limit: opts?.limit },
+    query: {
+      branch: opts?.branch,
+      path: opts?.path,
+      cursor: opts?.cursor,
+      limit: opts?.limit,
+    },
   });
   return (await res.json()) as CsCommitPage;
 }
 
 /** GET /repos/{repo}/commit (git:read). `sha` may be a branch, short or full SHA. */
-export async function getCommit(repoId: string, sha: string): Promise<CsCommit> {
+export async function getCommit(
+  repoId: string,
+  sha: string,
+): Promise<CsCommit> {
   const res = await csFetch(`${repoPath(repoId)}/commit`, {
     scopes: ["git:read"],
     repo: repoId,
@@ -497,7 +524,12 @@ export async function listNotesRefs(
  *  cursors up to `maxEntries`. */
 export async function listFiles(
   repoId: string,
-  opts?: { ref?: string; path?: string; recursive?: boolean; maxEntries?: number },
+  opts?: {
+    ref?: string;
+    path?: string;
+    recursive?: boolean;
+    maxEntries?: number;
+  },
 ): Promise<CsTreeEntry[]> {
   const max = opts?.maxEntries ?? 5000;
   const entries: CsTreeEntry[] = [];
@@ -520,7 +552,8 @@ export async function listFiles(
       next_cursor?: string;
     };
     entries.push(...page.entries);
-    cursor = page.has_more && entries.length < max ? page.next_cursor : undefined;
+    cursor =
+      page.has_more && entries.length < max ? page.next_cursor : undefined;
   } while (cursor);
   return entries.slice(0, max);
 }

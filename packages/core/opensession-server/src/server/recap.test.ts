@@ -22,9 +22,9 @@ describe("walkthroughStandsInForRecap", () => {
 
   it("falls back to recapping when either side is missing or unparseable", () => {
     expect(walkthroughStandsInForRecap(undefined, turnStart)).toBe(false);
-    expect(walkthroughStandsInForRecap("2026-08-12T10:42:00.000Z", undefined)).toBe(
-      false,
-    );
+    expect(
+      walkthroughStandsInForRecap("2026-08-12T10:42:00.000Z", undefined),
+    ).toBe(false);
     expect(walkthroughStandsInForRecap("not a date", turnStart)).toBe(false);
   });
 });

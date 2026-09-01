@@ -33,7 +33,9 @@ export class DuplicateMemoryError extends Error {
     public readonly scopeKey: string,
     public readonly existingId: string,
   ) {
-    super(`An identical memory already exists in scope "${scopeKey}" (${existingId}).`);
+    super(
+      `An identical memory already exists in scope "${scopeKey}" (${existingId}).`,
+    );
     this.name = "DuplicateMemoryError";
   }
 }
@@ -131,13 +133,19 @@ export class MemoryStore {
       );
     `);
     try {
-      this.db.exec("ALTER TABLE memory_legacy_imports ADD COLUMN raw_json TEXT;");
+      this.db.exec(
+        "ALTER TABLE memory_legacy_imports ADD COLUMN raw_json TEXT;",
+      );
     } catch {}
     try {
-      this.db.exec("ALTER TABLE memory_legacy_imports ADD COLUMN source_present INTEGER NOT NULL DEFAULT 1;");
+      this.db.exec(
+        "ALTER TABLE memory_legacy_imports ADD COLUMN source_present INTEGER NOT NULL DEFAULT 1;",
+      );
     } catch {}
     try {
-      this.db.exec("ALTER TABLE memory_legacy_imports ADD COLUMN record_owned INTEGER NOT NULL DEFAULT 0;");
+      this.db.exec(
+        "ALTER TABLE memory_legacy_imports ADD COLUMN record_owned INTEGER NOT NULL DEFAULT 0;",
+      );
       this.db.exec(
         `UPDATE memory_legacy_imports SET record_owned = 1 WHERE memory_id IN
          (SELECT id FROM memory_records WHERE tags_json LIKE '%"legacy-import"%')`,
@@ -151,31 +159,58 @@ export class MemoryStore {
   }
 
   get(id: string): MemoryRecord | null {
-    const direct = this.db.query("SELECT * FROM memory_records WHERE id = ?").get(id) as RecordRow | null;
+    const direct = this.db
+      .query("SELECT * FROM memory_records WHERE id = ?")
+      .get(id) as RecordRow | null;
     if (direct) return fromRow(direct);
-    const row = this.db.query(
-      `SELECT r.* FROM memory_legacy_imports i
+    const row = this.db
+      .query(
+        `SELECT r.* FROM memory_legacy_imports i
        JOIN memory_records r ON r.id = i.memory_id
        WHERE i.legacy_id = ? ORDER BY i.imported_at DESC LIMIT 1`,
-    ).get(id) as RecordRow | null;
+      )
+      .get(id) as RecordRow | null;
     return row ? fromRow(row) : null;
   }
 
   update(id: string, patch: UpdateMemoryInput, now = new Date()): MemoryRecord {
     const current = this.require(id);
-    if (current.state !== "active") throw new Error("Only active memories can be updated.");
+    if (current.state !== "active")
+      throw new Error("Only active memories can be updated.");
     const recordId = current.id;
-    const summary = patch.summary === undefined ? current.summary : validateSummary(patch.summary);
-    const details = patch.details === undefined ? current.details : cleanDetails(patch.details);
-    const kind = patch.kind === undefined ? current.kind : validateEnum(patch.kind, MEMORY_KINDS, "kind");
-    const tier = patch.tier === undefined ? current.tier : validateEnum(patch.tier, MEMORY_TIERS, "tier");
-    const source = patch.source === undefined ? current.source : validateSource(patch.source);
-    const tags = patch.tags === undefined ? current.tags : normalizeTags(patch.tags);
-    const expiresAt = patch.expiresAt === undefined ? current.expiresAt : validateOptionalDate(patch.expiresAt);
+    const summary =
+      patch.summary === undefined
+        ? current.summary
+        : validateSummary(patch.summary);
+    const details =
+      patch.details === undefined
+        ? current.details
+        : cleanDetails(patch.details);
+    const kind =
+      patch.kind === undefined
+        ? current.kind
+        : validateEnum(patch.kind, MEMORY_KINDS, "kind");
+    const tier =
+      patch.tier === undefined
+        ? current.tier
+        : validateEnum(patch.tier, MEMORY_TIERS, "tier");
+    const source =
+      patch.source === undefined
+        ? current.source
+        : validateSource(patch.source);
+    const tags =
+      patch.tags === undefined ? current.tags : normalizeTags(patch.tags);
+    const expiresAt =
+      patch.expiresAt === undefined
+        ? current.expiresAt
+        : validateOptionalDate(patch.expiresAt);
     validateKindExpiry(kind, expiresAt);
     let state: MemoryState = current.state;
     if (state === "active" || state === "expired") {
-      state = expiresAt && Date.parse(expiresAt) <= now.getTime() ? "expired" : "active";
+      state =
+        expiresAt && Date.parse(expiresAt) <= now.getTime()
+          ? "expired"
+          : "active";
     }
     const fingerprint = memoryFingerprint(summary, details);
     const updatedAt = now.toISOString();
@@ -184,8 +219,19 @@ export class MemoryStore {
       this.db.run(
         `UPDATE memory_records SET summary = ?, details = ?, kind = ?, tier = ?, state = ?,
          source_json = ?, updated_at = ?, expires_at = ?, fingerprint = ?, tags_json = ? WHERE id = ?`,
-        [summary, details ?? null, kind, tier, state, JSON.stringify(source), updatedAt,
-          expiresAt ?? null, fingerprint, JSON.stringify(tags), recordId],
+        [
+          summary,
+          details ?? null,
+          kind,
+          tier,
+          state,
+          JSON.stringify(source),
+          updatedAt,
+          expiresAt ?? null,
+          fingerprint,
+          JSON.stringify(tags),
+          recordId,
+        ],
       );
       this.syncFts(recordId, summary, details, tags);
     });
@@ -198,7 +244,10 @@ export class MemoryStore {
     if (!record) return false;
     const tx = this.db.transaction(() => {
       this.db.run("DELETE FROM memory_fts WHERE id = ?", [record.id]);
-      return this.db.run("DELETE FROM memory_records WHERE id = ?", [record.id]).changes > 0;
+      return (
+        this.db.run("DELETE FROM memory_records WHERE id = ?", [record.id])
+          .changes > 0
+      );
     });
     return tx.immediate();
   }
@@ -209,10 +258,12 @@ export class MemoryStore {
 
   restore(id: string, now = new Date()): MemoryRecord {
     const record = this.require(id);
-    if (record.state !== "archived") throw new Error("Only archived memories can be restored.");
-    const nextState: MemoryState = record.expiresAt && Date.parse(record.expiresAt) <= now.getTime()
-      ? "expired"
-      : "active";
+    if (record.state !== "archived")
+      throw new Error("Only archived memories can be restored.");
+    const nextState: MemoryState =
+      record.expiresAt && Date.parse(record.expiresAt) <= now.getTime()
+        ? "expired"
+        : "active";
     const tx = this.db.transaction(() => {
       this.db.run(
         "UPDATE memory_records SET state = ?, superseded_by = NULL, updated_at = ? WHERE id = ?",
@@ -225,7 +276,8 @@ export class MemoryStore {
 
   confirm(id: string, now = new Date()): MemoryRecord {
     const record = this.require(id);
-    if (record.state !== "active") throw new Error("Only active memories can be confirmed.");
+    if (record.state !== "active")
+      throw new Error("Only active memories can be confirmed.");
     const iso = now.toISOString();
     const tx = this.db.transaction(() => {
       this.db.run(
@@ -238,9 +290,15 @@ export class MemoryStore {
   }
 
   /** Create the replacement and retire every replaced record atomically. */
-  supersede(input: CreateMemoryInput & { supersedes: string[] }, now = new Date()): MemoryRecord {
-    const ids = uniqueStrings(input.supersedes).map((id) => this.require(id).id);
-    if (!ids.length) throw new Error("supersede requires at least one record id.");
+  supersede(
+    input: CreateMemoryInput & { supersedes: string[] },
+    now = new Date(),
+  ): MemoryRecord {
+    const ids = uniqueStrings(input.supersedes).map(
+      (id) => this.require(id).id,
+    );
+    if (!ids.length)
+      throw new Error("supersede requires at least one record id.");
     const prepared = prepareCreate({ ...input, supersedes: ids }, now);
     const tx = this.db.transaction(() => {
       for (const id of ids) {
@@ -269,11 +327,14 @@ export class MemoryStore {
   }
 
   expireDue(now = new Date()): number {
-    const tx = this.db.transaction(() => this.db.run(
-      `UPDATE memory_records SET state = 'expired', updated_at = ?
+    const tx = this.db.transaction(
+      () =>
+        this.db.run(
+          `UPDATE memory_records SET state = 'expired', updated_at = ?
        WHERE state = 'active' AND expires_at IS NOT NULL AND expires_at <= ?`,
-      [now.toISOString(), now.toISOString()],
-    ).changes);
+          [now.toISOString(), now.toISOString()],
+        ).changes,
+    );
     return tx.immediate();
   }
 
@@ -285,16 +346,21 @@ export class MemoryStore {
       where.clauses.push("(created_at < ? OR (created_at = ? AND id < ?))");
       where.params.push(cursor.createdAt, cursor.createdAt, cursor.id);
     }
-    const rows = this.db.query(
-      `SELECT * FROM memory_records ${where.clauses.length ? `WHERE ${where.clauses.join(" AND ")}` : ""}
+    const rows = this.db
+      .query(
+        `SELECT * FROM memory_records ${where.clauses.length ? `WHERE ${where.clauses.join(" AND ")}` : ""}
        ORDER BY created_at DESC, id DESC LIMIT ?`,
-    ).all(...where.params, limit + 1) as RecordRow[];
+      )
+      .all(...where.params, limit + 1) as RecordRow[];
     const more = rows.length > limit;
     const items = rows.slice(0, limit).map(fromRow);
     const last = items.at(-1);
     return {
       items,
-      nextCursor: more && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : undefined,
+      nextCursor:
+        more && last
+          ? encodeCursor({ createdAt: last.createdAt, id: last.id })
+          : undefined,
     };
   }
 
@@ -304,19 +370,26 @@ export class MemoryStore {
     const limit = pageLimit(options.limit);
     const offset = decodeSearchCursor(options.cursor);
     const where = buildFilterSql(options, "r");
-    const rows = this.db.query(
-      `SELECT r.*, bm25(memory_fts, 0, 5.0, 1.0, 2.0) AS rank
+    const rows = this.db
+      .query(
+        `SELECT r.*, bm25(memory_fts, 0, 5.0, 1.0, 2.0) AS rank
        FROM memory_fts JOIN memory_records r ON r.id = memory_fts.id
        WHERE memory_fts MATCH ?${where.clauses.length ? ` AND ${where.clauses.join(" AND ")}` : ""}
        ORDER BY rank, r.updated_at DESC LIMIT ? OFFSET ?`,
-    ).all(terms, ...where.params, limit + 1, offset) as Array<RecordRow & { rank: number }>;
+      )
+      .all(terms, ...where.params, limit + 1, offset) as Array<
+      RecordRow & { rank: number }
+    >;
     const more = rows.length > limit;
     const items = rows.slice(0, limit).map((row) => {
       const record = fromRow(row);
       if (!options.includeDetails) delete record.details;
       return record;
     });
-    return { items, nextCursor: more ? encodeCursor({ offset: offset + limit }) : undefined };
+    return {
+      items,
+      nextCursor: more ? encodeCursor({ offset: offset + limit }) : undefined,
+    };
   }
 
   /** Cheap lexical candidates for a write-time merge/no-op decision. */
@@ -327,32 +400,49 @@ export class MemoryStore {
     const query = [input.summary, ...(input.tags ?? [])].join(" ");
     const terms = ftsQuery(query, true);
     if (!terms) return [];
-    const fingerprint = memoryFingerprint(validateSummary(input.summary), cleanDetails(input.details));
-    const rows = this.db.query(
-      `SELECT r.*, bm25(memory_fts, 0, 5.0, 1.0, 2.0) AS rank
+    const fingerprint = memoryFingerprint(
+      validateSummary(input.summary),
+      cleanDetails(input.details),
+    );
+    const rows = this.db
+      .query(
+        `SELECT r.*, bm25(memory_fts, 0, 5.0, 1.0, 2.0) AS rank
        FROM memory_fts JOIN memory_records r ON r.id = memory_fts.id
        WHERE memory_fts MATCH ? AND r.scope_key = ? AND r.state = 'active' AND r.fingerprint != ?
        ORDER BY rank, r.updated_at DESC LIMIT ?`,
-    ).all(terms, input.scopeKey, fingerprint, Math.min(Math.max(limit, 1), 20)) as Array<RecordRow & { rank: number }>;
-    return rows.map((row) => ({ record: fromRow(row), score: Math.max(-Number(row.rank), 0) }));
+      )
+      .all(
+        terms,
+        input.scopeKey,
+        fingerprint,
+        Math.min(Math.max(limit, 1), 20),
+      ) as Array<RecordRow & { rank: number }>;
+    return rows.map((row) => ({
+      record: fromRow(row),
+      score: Math.max(-Number(row.rank), 0),
+    }));
   }
 
   markRetrieved(ids: string[], now = new Date()): number {
     const unique = uniqueStrings(ids);
     if (!unique.length) return 0;
     const placeholders = unique.map(() => "?").join(",");
-    const tx = this.db.transaction(() => this.db.run(
-      `UPDATE memory_records SET retrieval_count = retrieval_count + 1, last_retrieved_at = ?
+    const tx = this.db.transaction(
+      () =>
+        this.db.run(
+          `UPDATE memory_records SET retrieval_count = retrieval_count + 1, last_retrieved_at = ?
        WHERE id IN (${placeholders})`,
-      [now.toISOString(), ...unique],
-    ).changes);
+          [now.toISOString(), ...unique],
+        ).changes,
+    );
     return tx.immediate();
   }
 
   /** Small aggregate used by Settings and migration verification. */
   stats(): MemoryStats {
-    const rows = this.db.query(
-      `SELECT scope_key,
+    const rows = this.db
+      .query(
+        `SELECT scope_key,
               count(*) AS total,
               sum(CASE WHEN state = 'active' THEN 1 ELSE 0 END) AS active,
               sum(CASE WHEN state = 'active' AND tier = 'pinned' THEN 1 ELSE 0 END) AS pinned,
@@ -360,7 +450,8 @@ export class MemoryStore {
               sum(CASE WHEN state = 'active' AND tier = 'pinned' THEN length(summary) ELSE 0 END)
                 AS ambient_summary_chars
        FROM memory_records GROUP BY scope_key ORDER BY scope_key`,
-    ).all() as Array<{
+      )
+      .all() as Array<{
       scope_key: string;
       total: number;
       active: number;
@@ -376,20 +467,31 @@ export class MemoryStore {
       review: Number(row.review),
       ambientSummaryChars: Number(row.ambient_summary_chars),
     }));
-    return scopes.reduce<MemoryStats>((all, scope) => ({
-      total: all.total + scope.total,
-      active: all.active + scope.active,
-      pinned: all.pinned + scope.pinned,
-      review: all.review + scope.review,
-      ambientSummaryChars: all.ambientSummaryChars + scope.ambientSummaryChars,
-      scopes: all.scopes,
-    }), { total: 0, active: 0, pinned: 0, review: 0, ambientSummaryChars: 0, scopes });
+    return scopes.reduce<MemoryStats>(
+      (all, scope) => ({
+        total: all.total + scope.total,
+        active: all.active + scope.active,
+        pinned: all.pinned + scope.pinned,
+        review: all.review + scope.review,
+        ambientSummaryChars:
+          all.ambientSummaryChars + scope.ambientSummaryChars,
+        scopes: all.scopes,
+      }),
+      {
+        total: 0,
+        active: 0,
+        pinned: 0,
+        review: 0,
+        ambientSummaryChars: 0,
+        scopes,
+      },
+    );
   }
 
   metadata(key: string): string | null {
-    const row = this.db.query("SELECT value FROM memory_meta WHERE key = ?").get(key) as
-      | { value: string }
-      | null;
+    const row = this.db
+      .query("SELECT value FROM memory_meta WHERE key = ?")
+      .get(key) as { value: string } | null;
     return row?.value ?? null;
   }
 
@@ -411,20 +513,27 @@ export class MemoryStore {
     rawJson?: string,
     now = new Date(),
   ): { record: MemoryRecord; imported: boolean } {
-    const previous = this.db.query(
-      `SELECT r.* FROM memory_legacy_imports i JOIN memory_records r ON r.id = i.memory_id
+    const previous = this.db
+      .query(
+        `SELECT r.* FROM memory_legacy_imports i JOIN memory_records r ON r.id = i.memory_id
        WHERE i.source_key = ? AND i.legacy_id = ?`,
-    ).get(sourceKey, legacyId) as RecordRow | null;
+      )
+      .get(sourceKey, legacyId) as RecordRow | null;
     if (previous) {
-      const currentRaw = this.db.query(
-        `SELECT raw_json, source_present, record_owned FROM memory_legacy_imports
+      const currentRaw = this.db
+        .query(
+          `SELECT raw_json, source_present, record_owned FROM memory_legacy_imports
          WHERE source_key = ? AND legacy_id = ?`,
-      ).get(sourceKey, legacyId) as {
+        )
+        .get(sourceKey, legacyId) as {
         raw_json: string | null;
         source_present: number;
         record_owned: number;
       } | null;
-      if ((!rawJson || currentRaw?.raw_json === rawJson) && currentRaw?.source_present === 1) {
+      if (
+        (!rawJson || currentRaw?.raw_json === rawJson) &&
+        currentRaw?.source_present === 1
+      ) {
         return { record: fromRow(previous), imported: false };
       }
       if (currentRaw?.record_owned === 0) {
@@ -438,9 +547,16 @@ export class MemoryStore {
         }
         const prepared = prepareCreate(input, now);
         const tx = this.db.transaction(() => {
-          const duplicate = this.findDuplicate(prepared.scopeKey, prepared.fingerprint);
-          const target = duplicate ?? this.insertPreparedUnsafe({ ...prepared, state, supersededBy });
-          const recordOwned = duplicate ? Number(duplicate.tags.includes("legacy-import")) : 1;
+          const duplicate = this.findDuplicate(
+            prepared.scopeKey,
+            prepared.fingerprint,
+          );
+          const target =
+            duplicate ??
+            this.insertPreparedUnsafe({ ...prepared, state, supersededBy });
+          const recordOwned = duplicate
+            ? Number(duplicate.tags.includes("legacy-import"))
+            : 1;
           this.db.run(
             `UPDATE memory_legacy_imports SET memory_id = ?, raw_json = ?, source_present = 1,
              record_owned = ? WHERE source_key = ? AND legacy_id = ?`,
@@ -452,19 +568,41 @@ export class MemoryStore {
       }
       const prepared = prepareCreate(input, now);
       const tx = this.db.transaction(() => {
-        this.throwIfDuplicate(prepared.scopeKey, prepared.fingerprint, previous.id);
+        this.throwIfDuplicate(
+          prepared.scopeKey,
+          prepared.fingerprint,
+          previous.id,
+        );
         this.db.run(
           `UPDATE memory_records SET scope_key = ?, summary = ?, details = ?, kind = ?, tier = ?,
            state = ?, source_json = ?, created_at = ?, updated_at = ?, last_confirmed_at = ?,
            expires_at = ?, supersedes_json = ?, superseded_by = ?, fingerprint = ?, tags_json = ?
            WHERE id = ?`,
-          [prepared.scopeKey, prepared.summary, prepared.details ?? null, prepared.kind, prepared.tier,
-            state, JSON.stringify(prepared.source), prepared.createdAt, prepared.updatedAt,
-            prepared.lastConfirmedAt ?? null, prepared.expiresAt ?? null,
-            JSON.stringify(prepared.supersedes), supersededBy ?? null, prepared.fingerprint,
-            JSON.stringify(prepared.tags), previous.id],
+          [
+            prepared.scopeKey,
+            prepared.summary,
+            prepared.details ?? null,
+            prepared.kind,
+            prepared.tier,
+            state,
+            JSON.stringify(prepared.source),
+            prepared.createdAt,
+            prepared.updatedAt,
+            prepared.lastConfirmedAt ?? null,
+            prepared.expiresAt ?? null,
+            JSON.stringify(prepared.supersedes),
+            supersededBy ?? null,
+            prepared.fingerprint,
+            JSON.stringify(prepared.tags),
+            previous.id,
+          ],
         );
-        this.syncFts(previous.id, prepared.summary, prepared.details, prepared.tags);
+        this.syncFts(
+          previous.id,
+          prepared.summary,
+          prepared.details,
+          prepared.tags,
+        );
         this.db.run(
           `UPDATE memory_legacy_imports SET raw_json = ?, source_present = 1
            WHERE source_key = ? AND legacy_id = ?`,
@@ -477,26 +615,43 @@ export class MemoryStore {
 
     const prepared = prepareCreate(input, now);
     const tx = this.db.transaction(() => {
-      const mapped = this.db.query(
-        "SELECT memory_id FROM memory_legacy_imports WHERE source_key = ? AND legacy_id = ?",
-      ).get(sourceKey, legacyId) as { memory_id: string } | null;
-      if (mapped) return { record: this.require(mapped.memory_id), imported: false };
+      const mapped = this.db
+        .query(
+          "SELECT memory_id FROM memory_legacy_imports WHERE source_key = ? AND legacy_id = ?",
+        )
+        .get(sourceKey, legacyId) as { memory_id: string } | null;
+      if (mapped)
+        return { record: this.require(mapped.memory_id), imported: false };
 
       let record: MemoryRecord;
       let recordOwned: number;
-      const duplicate = this.findDuplicate(prepared.scopeKey, prepared.fingerprint);
+      const duplicate = this.findDuplicate(
+        prepared.scopeKey,
+        prepared.fingerprint,
+      );
       if (duplicate) {
         record = duplicate;
         recordOwned = 0;
       } else {
-        record = this.insertPreparedUnsafe({ ...prepared, state, supersededBy });
+        record = this.insertPreparedUnsafe({
+          ...prepared,
+          state,
+          supersededBy,
+        });
         recordOwned = 1;
       }
       this.db.run(
         `INSERT INTO memory_legacy_imports
          (source_key, legacy_id, memory_id, imported_at, raw_json, record_owned)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [sourceKey, legacyId, record.id, now.toISOString(), rawJson ?? null, recordOwned],
+        [
+          sourceKey,
+          legacyId,
+          record.id,
+          now.toISOString(),
+          rawJson ?? null,
+          recordOwned,
+        ],
       );
       return { record, imported: true };
     });
@@ -504,19 +659,29 @@ export class MemoryStore {
   }
 
   legacyMapping(sourceKey: string, legacyId: string): string | null {
-    const row = this.db.query(
-      "SELECT memory_id FROM memory_legacy_imports WHERE source_key = ? AND legacy_id = ?",
-    ).get(sourceKey, legacyId) as { memory_id: string } | null;
+    const row = this.db
+      .query(
+        "SELECT memory_id FROM memory_legacy_imports WHERE source_key = ? AND legacy_id = ?",
+      )
+      .get(sourceKey, legacyId) as { memory_id: string } | null;
     return row?.memory_id ?? null;
   }
 
   /** Mark mappings removed from a successfully-read legacy source as absent.
    * The alias and raw payload remain available for rollback diagnostics. */
-  reconcileLegacySource(sourceKey: string, presentLegacyIds: Set<string>, now = new Date()): number {
-    const mappings = this.db.query(
-      "SELECT legacy_id, memory_id FROM memory_legacy_imports WHERE source_key = ?",
-    ).all(sourceKey) as Array<{ legacy_id: string; memory_id: string }>;
-    const removed = mappings.filter((mapping) => !presentLegacyIds.has(mapping.legacy_id));
+  reconcileLegacySource(
+    sourceKey: string,
+    presentLegacyIds: Set<string>,
+    now = new Date(),
+  ): number {
+    const mappings = this.db
+      .query(
+        "SELECT legacy_id, memory_id FROM memory_legacy_imports WHERE source_key = ?",
+      )
+      .all(sourceKey) as Array<{ legacy_id: string; memory_id: string }>;
+    const removed = mappings.filter(
+      (mapping) => !presentLegacyIds.has(mapping.legacy_id),
+    );
     if (removed.length === 0) return 0;
     const tx = this.db.transaction(() => {
       for (const mapping of removed) {
@@ -524,12 +689,16 @@ export class MemoryStore {
           "UPDATE memory_legacy_imports SET source_present = 0 WHERE source_key = ? AND legacy_id = ?",
           [sourceKey, mapping.legacy_id],
         );
-        const stillPresent = this.db.query(
-          "SELECT 1 FROM memory_legacy_imports WHERE memory_id = ? AND source_present = 1 LIMIT 1",
-        ).get(mapping.memory_id);
-        const importOwned = this.db.query(
-          "SELECT 1 FROM memory_legacy_imports WHERE memory_id = ? AND record_owned = 1 LIMIT 1",
-        ).get(mapping.memory_id);
+        const stillPresent = this.db
+          .query(
+            "SELECT 1 FROM memory_legacy_imports WHERE memory_id = ? AND source_present = 1 LIMIT 1",
+          )
+          .get(mapping.memory_id);
+        const importOwned = this.db
+          .query(
+            "SELECT 1 FROM memory_legacy_imports WHERE memory_id = ? AND record_owned = 1 LIMIT 1",
+          )
+          .get(mapping.memory_id);
         if (!stillPresent && importOwned) {
           this.db.run(
             "UPDATE memory_records SET state = 'archived', updated_at = ? WHERE id = ?",
@@ -543,11 +712,13 @@ export class MemoryStore {
   }
 
   legacyRaw(legacyId: string): string | null {
-    const row = this.db.query(
-      `SELECT raw_json FROM memory_legacy_imports
+    const row = this.db
+      .query(
+        `SELECT raw_json FROM memory_legacy_imports
        WHERE legacy_id = ? AND raw_json IS NOT NULL
        ORDER BY imported_at DESC LIMIT 1`,
-    ).get(legacyId) as { raw_json: string } | null;
+      )
+      .get(legacyId) as { raw_json: string } | null;
     return row?.raw_json ?? null;
   }
 
@@ -578,13 +749,24 @@ export class MemoryStore {
     return record;
   }
 
-  private setLifecycleState(id: string, state: MemoryState, now: Date): MemoryRecord {
+  private setLifecycleState(
+    id: string,
+    state: MemoryState,
+    now: Date,
+  ): MemoryRecord {
     const record = this.require(id);
-    if (state === "archived" && record.state !== "active" && record.state !== "expired") {
+    if (
+      state === "archived" &&
+      record.state !== "active" &&
+      record.state !== "expired"
+    ) {
       throw new Error("Only active or expired memories can be archived.");
     }
     const tx = this.db.transaction(() => {
-      this.db.run("UPDATE memory_records SET state = ?, updated_at = ? WHERE id = ?", [state, now.toISOString(), record.id]);
+      this.db.run(
+        "UPDATE memory_records SET state = ?, updated_at = ? WHERE id = ?",
+        [state, now.toISOString(), record.id],
+      );
     });
     tx.immediate();
     return this.require(record.id);
@@ -607,36 +789,75 @@ export class MemoryStore {
         last_confirmed_at, expires_at, supersedes_json, superseded_by, fingerprint, tags_json,
         retrieval_count, last_retrieved_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [record.id, record.scopeKey, record.summary, record.details ?? null, record.kind, record.tier,
-        record.state, JSON.stringify(record.source), record.createdAt, record.updatedAt,
-        record.lastConfirmedAt ?? null, record.expiresAt ?? null, JSON.stringify(record.supersedes),
-        record.supersededBy ?? null, record.fingerprint, JSON.stringify(record.tags),
-        record.retrievalCount, record.lastRetrievedAt ?? null],
+      [
+        record.id,
+        record.scopeKey,
+        record.summary,
+        record.details ?? null,
+        record.kind,
+        record.tier,
+        record.state,
+        JSON.stringify(record.source),
+        record.createdAt,
+        record.updatedAt,
+        record.lastConfirmedAt ?? null,
+        record.expiresAt ?? null,
+        JSON.stringify(record.supersedes),
+        record.supersededBy ?? null,
+        record.fingerprint,
+        JSON.stringify(record.tags),
+        record.retrievalCount,
+        record.lastRetrievedAt ?? null,
+      ],
     );
     this.syncFts(record.id, record.summary, record.details, record.tags);
     return record;
   }
 
-  private syncFts(id: string, summary: string, details: string | undefined, tags: string[]): void {
+  private syncFts(
+    id: string,
+    summary: string,
+    details: string | undefined,
+    tags: string[],
+  ): void {
     this.db.run("DELETE FROM memory_fts WHERE id = ?", [id]);
-    this.db.run("INSERT INTO memory_fts(id, summary, details, tags) VALUES (?, ?, ?, ?)", [
-      id, summary, details ?? "", tags.join(" "),
-    ]);
+    this.db.run(
+      "INSERT INTO memory_fts(id, summary, details, tags) VALUES (?, ?, ?, ?)",
+      [id, summary, details ?? "", tags.join(" ")],
+    );
   }
 
-  private findDuplicate(scopeKey: string, fingerprint: string, exceptId?: string): MemoryRecord | null {
-    const row = this.db.query(
-      `SELECT * FROM memory_records WHERE scope_key = ? AND fingerprint = ?${exceptId ? " AND id != ?" : ""}`,
-    ).get(...(exceptId ? [scopeKey, fingerprint, exceptId] : [scopeKey, fingerprint])) as RecordRow | null;
+  private findDuplicate(
+    scopeKey: string,
+    fingerprint: string,
+    exceptId?: string,
+  ): MemoryRecord | null {
+    const row = this.db
+      .query(
+        `SELECT * FROM memory_records WHERE scope_key = ? AND fingerprint = ?${exceptId ? " AND id != ?" : ""}`,
+      )
+      .get(
+        ...(exceptId
+          ? [scopeKey, fingerprint, exceptId]
+          : [scopeKey, fingerprint]),
+      ) as RecordRow | null;
     return row ? fromRow(row) : null;
   }
 
-  private throwIfDuplicate(scopeKey: string, fingerprint: string, exceptId?: string): void {
+  private throwIfDuplicate(
+    scopeKey: string,
+    fingerprint: string,
+    exceptId?: string,
+  ): void {
     const duplicate = this.findDuplicate(scopeKey, fingerprint, exceptId);
     if (duplicate) throw new DuplicateMemoryError(scopeKey, duplicate.id);
   }
 
-  private rethrowDuplicate(error: unknown, scopeKey: string, fingerprint: string): never {
+  private rethrowDuplicate(
+    error: unknown,
+    scopeKey: string,
+    fingerprint: string,
+  ): never {
     if (error instanceof DuplicateMemoryError) throw error;
     const duplicate = this.findDuplicate(scopeKey, fingerprint);
     if (duplicate) throw new DuplicateMemoryError(scopeKey, duplicate.id);
@@ -649,11 +870,15 @@ function prepareCreate(input: CreateMemoryInput, now: Date): MemoryRecord {
   if (!scopeKey) throw new Error("scopeKey is required.");
   const summary = validateSummary(input.summary);
   const details = cleanDetails(input.details);
-  const createdAt = validateDate(input.createdAt ?? now.toISOString(), "createdAt");
+  const createdAt = validateDate(
+    input.createdAt ?? now.toISOString(),
+    "createdAt",
+  );
   const expiresAt = validateOptionalDate(input.expiresAt);
   const kind = validateEnum(input.kind, MEMORY_KINDS, "kind");
   validateKindExpiry(kind, expiresAt);
-  const state: MemoryState = expiresAt && Date.parse(expiresAt) <= now.getTime() ? "expired" : "active";
+  const state: MemoryState =
+    expiresAt && Date.parse(expiresAt) <= now.getTime() ? "expired" : "active";
   return {
     id: input.id?.trim() || randomUUID(),
     scopeKey,
@@ -664,7 +889,10 @@ function prepareCreate(input: CreateMemoryInput, now: Date): MemoryRecord {
     state,
     source: validateSource(input.source),
     createdAt,
-    updatedAt: validateDate(input.updatedAt ?? input.createdAt ?? now.toISOString(), "updatedAt"),
+    updatedAt: validateDate(
+      input.updatedAt ?? input.createdAt ?? now.toISOString(),
+      "updatedAt",
+    ),
     lastConfirmedAt: validateOptionalDate(input.lastConfirmedAt),
     expiresAt,
     supersedes: uniqueStrings(input.supersedes ?? []),
@@ -680,14 +908,21 @@ export function memoryFingerprint(summary: string, details?: string): string {
 }
 
 function normalizeForFingerprint(value: string): string {
-  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("en-US");
 }
 
 function validateSummary(summary: string): string {
   const clean = summary.trim().replace(/\s+/g, " ");
   const length = Array.from(clean).length;
   if (!length) throw new Error("summary is required.");
-  if (length > SUMMARY_MAX_CHARS) throw new Error(`summary must be ${SUMMARY_MAX_CHARS} characters or fewer.`);
+  if (length > SUMMARY_MAX_CHARS)
+    throw new Error(
+      `summary must be ${SUMMARY_MAX_CHARS} characters or fewer.`,
+    );
   const sentences = clean
     .split(/[.!?]+(?:\s+|$)/)
     .filter((part) => part.trim()).length;
@@ -715,35 +950,62 @@ function validateSource(source: MemorySource): MemorySource {
   const type = validateEnum(source.type, MEMORY_SOURCE_TYPES, "source.type");
   return {
     type,
-    ...(cleanOptional(source.sessionId) ? { sessionId: cleanOptional(source.sessionId) } : {}),
-    ...(cleanOptional(source.turnId) ? { turnId: cleanOptional(source.turnId) } : {}),
-    ...(cleanOptional(source.repoPath) ? { repoPath: cleanOptional(source.repoPath) } : {}),
-    ...(cleanOptional(source.actor) ? { actor: cleanOptional(source.actor)?.slice(0, 200) } : {}),
-    ...(cleanOptional(source.channelId) ? { channelId: cleanOptional(source.channelId)?.slice(0, 200) } : {}),
+    ...(cleanOptional(source.sessionId)
+      ? { sessionId: cleanOptional(source.sessionId) }
+      : {}),
+    ...(cleanOptional(source.turnId)
+      ? { turnId: cleanOptional(source.turnId) }
+      : {}),
+    ...(cleanOptional(source.repoPath)
+      ? { repoPath: cleanOptional(source.repoPath) }
+      : {}),
+    ...(cleanOptional(source.actor)
+      ? { actor: cleanOptional(source.actor)?.slice(0, 200) }
+      : {}),
+    ...(cleanOptional(source.channelId)
+      ? { channelId: cleanOptional(source.channelId)?.slice(0, 200) }
+      : {}),
   };
 }
 
-function validateEnum<T extends string>(value: T, values: readonly T[], label: string): T {
-  if (!values.includes(value)) throw new Error(`Invalid ${label}: ${String(value)}.`);
+function validateEnum<T extends string>(
+  value: T,
+  values: readonly T[],
+  label: string,
+): T {
+  if (!values.includes(value))
+    throw new Error(`Invalid ${label}: ${String(value)}.`);
   return value;
 }
 
 function validateDate(value: string, label: string): string {
-  if (!Number.isFinite(Date.parse(value))) throw new Error(`${label} must be a valid ISO date.`);
+  if (!Number.isFinite(Date.parse(value)))
+    throw new Error(`${label} must be a valid ISO date.`);
   return new Date(value).toISOString();
 }
 
-function validateOptionalDate(value: string | null | undefined): string | undefined {
-  return value == null || value === "" ? undefined : validateDate(value, "date");
+function validateOptionalDate(
+  value: string | null | undefined,
+): string | undefined {
+  return value == null || value === ""
+    ? undefined
+    : validateDate(value, "date");
 }
 
-function validateKindExpiry(kind: MemoryKind, expiresAt: string | undefined): void {
-  if (kind === "status" && !expiresAt) throw new Error("status memories require expiresAt.");
+function validateKindExpiry(
+  kind: MemoryKind,
+  expiresAt: string | undefined,
+): void {
+  if (kind === "status" && !expiresAt)
+    throw new Error("status memories require expiresAt.");
 }
 
 function normalizeTags(tags: string[]): string[] {
-  if (tags.length > TAG_MAX_COUNT) throw new Error(`tags must contain ${TAG_MAX_COUNT} items or fewer.`);
-  const normalized = uniqueStrings(tags.map((tag) => tag.trim().toLocaleLowerCase("en-US")).filter(Boolean));
+  if (tags.length > TAG_MAX_COUNT)
+    throw new Error(`tags must contain ${TAG_MAX_COUNT} items or fewer.`);
+  const normalized = uniqueStrings(
+    tags.map((tag) => tag.trim().toLocaleLowerCase("en-US")).filter(Boolean),
+  );
   if (normalized.some((tag) => Array.from(tag).length > TAG_MAX_CHARS)) {
     throw new Error(`tags must be ${TAG_MAX_CHARS} characters or fewer.`);
   }
@@ -777,7 +1039,10 @@ function fromRow(row: RecordRow): MemoryRecord {
   };
 }
 
-function buildFilterSql(filters: MemoryFilters, alias?: string): { clauses: string[]; params: Array<string | number> } {
+function buildFilterSql(
+  filters: MemoryFilters,
+  alias?: string,
+): { clauses: string[]; params: Array<string | number> } {
   const prefix = alias ? `${alias}.` : "";
   const clauses: string[] = [];
   const params: Array<string | number> = [];
@@ -791,11 +1056,15 @@ function buildFilterSql(filters: MemoryFilters, alias?: string): { clauses: stri
   addIn("tier", filters.tiers);
   addIn("state", filters.states ?? ["active"]);
   if (filters.confirmed !== undefined) {
-    clauses.push(`${prefix}last_confirmed_at IS ${filters.confirmed ? "NOT " : ""}NULL`);
+    clauses.push(
+      `${prefix}last_confirmed_at IS ${filters.confirmed ? "NOT " : ""}NULL`,
+    );
   }
   if (filters.tags?.length) {
     for (const tag of normalizeTags(filters.tags)) {
-      clauses.push(`EXISTS (SELECT 1 FROM json_each(${prefix}tags_json) WHERE value = ?)`);
+      clauses.push(
+        `EXISTS (SELECT 1 FROM json_each(${prefix}tags_json) WHERE value = ?)`,
+      );
       params.push(tag);
     }
   }
@@ -819,8 +1088,12 @@ function decodeCursor(value?: string): unknown {
   }
 }
 
-function decodeListCursor(value?: string): { createdAt: string; id: string } | undefined {
-  const decoded = decodeCursor(value) as { createdAt?: unknown; id?: unknown } | undefined;
+function decodeListCursor(
+  value?: string,
+): { createdAt: string; id: string } | undefined {
+  const decoded = decodeCursor(value) as
+    | { createdAt?: unknown; id?: unknown }
+    | undefined;
   if (!decoded) return undefined;
   if (typeof decoded.createdAt !== "string" || typeof decoded.id !== "string") {
     throw new Error("Invalid memory list cursor.");

@@ -1,293 +1,4 @@
-
-import * as stylex from "@stylexjs/stylex";
-import { mergeStylexClassName } from "../ui/cn";
-import { type as typography } from "../styles/typography.stylex";
-
-const sx = stylex.create({
-	Container: {
-		"containerType": "inline-size"
-	},
-	relative: {
-		"position": "relative"
-	},
-	flex: {
-		"display": "flex"
-	},
-	minH0: {
-		"minHeight": "0"
-	},
-	minW320px: {
-		"minWidth": "320px"
-	},
-	shrink0: {
-		"flexShrink": "0"
-	},
-	flexCol: {
-		"flexDirection": "column"
-	},
-	borderL: {
-		"borderLeftStyle": "var(--tw-border-style)",
-		"borderLeftWidth": "1px"
-	},
-	borderDivider: {
-		"borderColor": "var(--divider)"
-	},
-	bgPanelSurface: {
-		"backgroundColor": "var(--panel-surface)"
-	},
-	BgPanelVarPanelPlate: {
-		"--bg-panel": "var(--panel-plate)"
-	},
-	max920pxFixed: {
-		"@media not all and (min-width: 920px)": {
-			"position": "fixed"
-		}
-	},
-	max920pxTopVarHeaderH: {
-		"@media not all and (min-width: 920px)": {
-			"top": "var(--header-h)"
-		}
-	},
-	max920pxRight0: {
-		"@media not all and (min-width: 920px)": {
-			"right": "0"
-		}
-	},
-	max920pxBottom0: {
-		"@media not all and (min-width: 920px)": {
-			"bottom": "0"
-		}
-	},
-	max920pxZ30: {
-		"@media not all and (min-width: 920px)": {
-			"zIndex": "30"
-		}
-	},
-	max920pxMaxWNone: {
-		"@media not all and (min-width: 920px)": {
-			"maxWidth": "none"
-		}
-	},
-	max920pxMinW0: {
-		"@media not all and (min-width: 920px)": {
-			"minWidth": "0"
-		}
-	},
-	absolute: {
-		"position": "absolute"
-	},
-	top0: {
-		"top": "0"
-	},
-	left3px: {
-		"left": "-3px"
-	},
-	z6: {
-		"zIndex": "6"
-	},
-	hFull: {
-		"height": "100%"
-	},
-	w7px: {
-		"width": "7px"
-	},
-	cursorColResize: {
-		"cursor": "col-resize"
-	},
-	phoneHidden: {
-		"@media (max-width: 720px)": {
-			"display": "none"
-		}
-	},
-	afterAbsolute: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"position": "absolute"
-		}
-	},
-	afterInsetY0: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"insetBlock": "0"
-		}
-	},
-	afterLeft3px: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"left": "3px"
-		}
-	},
-	afterW05: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"width": "2px"
-		}
-	},
-	afterBgTransparent: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"backgroundColor": "transparent"
-		}
-	},
-	afterTransitionBackgroundColor: {
-		"::after": {
-			"content": "var(--tw-content)",
-			"transitionProperty": "background-color",
-			"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-			"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-		}
-	},
-	afterContent: {
-		"::after": {
-			"--tw-content": "\"\"",
-			"content": "var(--tw-content)"
-		}
-	},
-	mx3: {
-		"marginInline": "12px"
-	},
-	mt3: {
-		"marginTop": "12px"
-	},
-	overflowHidden: {
-		"overflow": "hidden"
-	},
-	roundedLg: {
-		"borderRadius": "calc(14px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	pt2: {
-		"paddingTop": "8px"
-	},
-	flex1: {
-		"flex": "1"
-	},
-	overflowYAuto: {
-		"overflowY": "auto"
-	},
-	hVarDesktopHeaderH: {
-		"height": "var(--desktop-header-h)"
-	},
-	itemsCenter: {
-		"alignItems": "center"
-	},
-	gap1: {
-		"gap": "4px"
-	},
-	borderB: {
-		"borderBottomStyle": "var(--tw-border-style)",
-		"borderBottomWidth": "1px"
-	},
-	px2: {
-		"paddingInline": "8px"
-	},
-	focusRing: {
-		":focusVisible": {
-			"outline": "2px solid var(--accent-ink)",
-			"outlineOffset": "2px"
-		},
-		"@media (forced-colors: active)": {
-			":focusVisible": {
-				"outlineColor": "highlight"
-			}
-		}
-	},
-	minW0: {
-		"minWidth": "0"
-	},
-	gap15: {
-		"gap": "6px"
-	},
-	roundedControl: {
-		"borderRadius": "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	py1: {
-		"paddingBlock": "4px"
-	},
-	textDim: {
-		"color": "var(--text-dim)"
-	},
-	transitionColors: {
-		"transitionProperty": "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	hoverBgHover: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--hover)"
-			}
-		}
-	},
-	hoverTextFg: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text)"
-			}
-		}
-	},
-	Max380pxFlex1: {
-		"flex": "1"
-	},
-	Max380pxJustifyCenter: {
-		"justifyContent": "center"
-	},
-	Max380pxPx1: {
-		"paddingInline": "4px"
-	},
-	hidden: {
-		"display": "none"
-	},
-	max920pxInsetVarHeaderH000: {
-		"@media not all and (min-width: 920px)": {
-			"inset": "var(--header-h) 0 0 0"
-		}
-	},
-	max920pxZ25: {
-		"@media not all and (min-width: 920px)": {
-			"zIndex": "25"
-		}
-	},
-	max920pxBlock: {
-		"@media not all and (min-width: 920px)": {
-			"display": "block"
-		}
-	},
-	phoneInset0: {
-		"@media (max-width: 720px)": {
-			"inset": "0"
-		}
-	},
-	phoneZ45: {
-		"@media (max-width: 720px)": {
-			"zIndex": "45"
-		}
-	},
-
-	wVarPanelW32: {
-		"width": "var(--panel-w,32%)"
-	},
-	maxWMax480pxCalc100vw620px: {
-		"maxWidth": "max(480px,100vw - 620px)"
-	},
-	max920pxWMin480px94vw: {
-		"@media not all and (min-width: 920px)": {
-			"width": "min(480px,94vw)"
-		}
-	},
-	max920pxBgRgba000045: {
-		"@media not all and (min-width: 920px)": {
-			"backgroundColor": "color-mix(in srgb, var(--color-black) 45%, transparent)"
-		}
-	},
-	phoneBgRgba00005: {
-		"@media (max-width: 720px)": {
-			"backgroundColor": "color-mix(in srgb, var(--color-black) 50%, transparent)"
-		}
-	},
-});
-
+import { utilityClassName } from "../ui/cn";
 /**
  * The session's right-hand workspace panel, as finished utility classes — what
  * used to be the `panel-*` family in legacy.css.
@@ -356,14 +67,22 @@ const sx = stylex.create({
  * decoration.
  */
 export const PANEL_SHELL =
-	mergeStylexClassName("viewer-panel", sx.wVarPanelW32, sx.Container, sx.relative, sx.flex, sx.minH0, sx.minW320px, sx.shrink0, sx.flexCol) + " " +
-	mergeStylexClassName("", sx.maxWMax480pxCalc100vw620px, sx.borderL, sx.borderDivider, sx.bgPanelSurface, sx.BgPanelVarPanelPlate) +
-	// From 920px down it stops being a column in the layout and becomes an
-	// overlay over the session, anchored under the top bar (--header-h is 0 on
-	// desktop, the bar's height on a phone) with PANEL_OVERLAY dimming behind it.
-	" " + mergeStylexClassName("", sx.max920pxFixed, sx.max920pxTopVarHeaderH, sx.max920pxRight0, sx.max920pxBottom0) + " " +
-	mergeStylexClassName("", sx.max920pxWMin480px94vw, sx.max920pxZ30, sx.max920pxMaxWNone, sx.max920pxMinW0) + " " +
-	"max-[920px]:shadow-[-12px_0_32px_rgba(0,0,0,0.5)]";
+  utilityClassName(
+    "viewer-panel @container relative flex min-h-0 w-[var(--panel-w,32%)] min-w-[320px] shrink-0 flex-col ",
+  ) +
+  utilityClassName(
+    "max-w-[max(480px,calc(100vw-620px))] border-l border-divider bg-panel-surface [--bg-panel:var(--panel-plate)] ",
+  ) +
+  // From 920px down it stops being a column in the layout and becomes an
+  // overlay over the session, anchored under the top bar (--header-h is 0 on
+  // desktop, the bar's height on a phone) with PANEL_OVERLAY dimming behind it.
+  utilityClassName(
+    "max-[920px]:fixed max-[920px]:top-[var(--header-h)] max-[920px]:right-0 max-[920px]:bottom-0 ",
+  ) +
+  utilityClassName(
+    "max-[920px]:z-30 max-[920px]:w-[min(480px,94vw)] max-[920px]:max-w-none max-[920px]:min-w-0 ",
+  ) +
+  "max-[920px]:shadow-[-12px_0_32px_rgba(0,0,0,0.5)]";
 
 /**
  * Left-edge drag handle — the mirror of the sidebar's. The hairline it paints
@@ -378,11 +97,15 @@ export const PANEL_SHELL =
  * (0,3,0 over 0,2,0); this makes the two states mutually exclusive instead.
  */
 export const PANEL_RESIZE =
-	mergeStylexClassName("", sx.absolute, sx.top0, sx.left3px, sx.z6, sx.hFull, sx.w7px, sx.cursorColResize, sx.phoneHidden) + " " +
-	mergeStylexClassName("", sx.afterAbsolute, sx.afterInsetY0, sx.afterLeft3px, sx.afterW05, sx.afterBgTransparent) + " " +
-	mergeStylexClassName("", sx.afterTransitionBackgroundColor, sx.afterContent) + " " +
-	"[body:not(.resizing-panel)_&]:hover:after:bg-line-strong " +
-	"[body.resizing-panel_&]:after:bg-faint";
+  utilityClassName(
+    "absolute top-0 left-[-3px] z-[6] h-full w-[7px] cursor-col-resize phone:hidden ",
+  ) +
+  utilityClassName(
+    "after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:bg-transparent ",
+  ) +
+  utilityClassName("after:transition-[background-color] after:content-[''] ") +
+  "[body:not(.resizing-panel)_&]:hover:after:bg-line-strong " +
+  "[body.resizing-panel_&]:after:bg-faint";
 
 /**
  * The PR strip's plate at the top of the panel.
@@ -407,13 +130,13 @@ export const PANEL_RESIZE =
  * plate, not a plate followed by loose rows.
  */
 export const PANEL_PR_PLATE =
-	// `panel-pr-plate` is a hook, not styling: PANEL_INFO_TOP below reads it to
-	// tell a column that opens under this plate from one that opens alone.
-	"panel-pr-plate " +
-	// `empty:hidden` because the strip renders nothing on a session with no pull
-	// request to report (see PrStatusBar): the plate is a wrapper, so without it
-	// the column would still pay this margin for a row that isn't there.
-	mergeStylexClassName("empty:hidden", sx.mx3, sx.mt3, sx.overflowHidden, sx.roundedLg);
+  // `panel-pr-plate` is a hook, not styling: PANEL_INFO_TOP below reads it to
+  // tell a column that opens under this plate from one that opens alone.
+  "panel-pr-plate " +
+  // `empty:hidden` because the strip renders nothing on a session with no pull
+  // request to report (see PrStatusBar): the plate is a wrapper, so without it
+  // the column would still pay this margin for a row that isn't there.
+  utilityClassName("mx-3 mt-3 overflow-hidden rounded-lg empty:hidden");
 
 /**
  * The info column's own top padding, on top of WorkspaceInfo's 12px.
@@ -425,24 +148,31 @@ export const PANEL_PR_PLATE =
  * more air above it than a plate does, so the column opens lower when it stands
  * alone and keeps the matched 12px when it doesn't.
  */
-export const PANEL_INFO_TOP = mergeStylexClassName("[.panel-pr-plate:not(:empty)~*_&]:pt-0", sx.pt2);
+export const PANEL_INFO_TOP = utilityClassName(
+  "pt-2 [.panel-pr-plate:not(:empty)~*_&]:pt-0",
+);
 
 /** The panel's scrolling content. */
-export const PANEL_BODY = mergeStylexClassName("", sx.minH0, sx.flex1, sx.overflowYAuto);
+export const PANEL_BODY = utilityClassName("min-h-0 flex-1 overflow-y-auto");
 
 /**
  * The panel's standing tab strip: the places this workspace can open, on one
  * line above their content. It sits outside PANEL_BODY so it stays put while
  * the selected page scrolls, and its bottom rule separates chrome from page.
  */
-export const PANEL_TABS =
-	mergeStylexClassName("", sx.flex, sx.hVarDesktopHeaderH, sx.shrink0, sx.itemsCenter, sx.gap1, sx.borderB, sx.borderDivider, sx.px2);
+export const PANEL_TABS = utilityClassName(
+  "flex h-[var(--desktop-header-h)] shrink-0 items-center gap-1 border-b border-divider px-2",
+);
 
 /** One tab: an icon, a word, and whatever that destination wants to report. */
 export const PANEL_TAB =
-	mergeStylexClassName("", sx.focusRing, sx.flex, sx.minW0, sx.itemsCenter, sx.gap15, sx.roundedControl, sx.px2, sx.py1) + " " +
-	mergeStylexClassName("", typography.label, sx.textDim, sx.transitionColors, sx.hoverBgHover, sx.hoverTextFg) + " " +
-	mergeStylexClassName("", sx.Max380pxFlex1, sx.Max380pxJustifyCenter, sx.Max380pxPx1);
+  utilityClassName(
+    "focus-ring flex min-w-0 items-center gap-1.5 rounded-control px-2 py-1 ",
+  ) +
+  utilityClassName(
+    "text-label text-dim transition-colors hover:bg-hover hover:text-fg ",
+  ) +
+  "@max-[380px]:flex-1 @max-[380px]:justify-center @max-[380px]:px-1";
 
 /**
  * The scrim behind the panel once it stops being a column and starts being an
@@ -450,7 +180,9 @@ export const PANEL_TAB =
  * layout and dims nothing.
  */
 export const PANEL_OVERLAY =
-	mergeStylexClassName("", sx.hidden) + " " +
-	mergeStylexClassName("", sx.max920pxFixed, sx.max920pxInsetVarHeaderH000, sx.max920pxZ25) + " " +
-	mergeStylexClassName("", sx.max920pxBgRgba000045, sx.max920pxBlock) + " " +
-	mergeStylexClassName("", sx.phoneBgRgba00005, sx.phoneInset0, sx.phoneZ45);
+  utilityClassName("hidden ") +
+  utilityClassName(
+    "max-[920px]:fixed max-[920px]:inset-[var(--header-h)_0_0_0] max-[920px]:z-[25] ",
+  ) +
+  utilityClassName("max-[920px]:block max-[920px]:bg-[rgba(0,0,0,0.45)] ") +
+  utilityClassName("phone:inset-0 phone:z-[45] phone:bg-[rgba(0,0,0,0.5)]");

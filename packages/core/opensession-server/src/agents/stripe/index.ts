@@ -21,14 +21,18 @@ export class StripeAgent implements AgentModule {
   name = "stripe";
 
   getRoutes(): Map<string, (req: Request, url: URL) => Promise<Response>> {
-    const routes = new Map<string, (req: Request, url: URL) => Promise<Response>>();
+    const routes = new Map<
+      string,
+      (req: Request, url: URL) => Promise<Response>
+    >();
 
     routes.set("POST /stripe/webhook", async (req) => {
       let body: string;
       try {
         body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
       } catch (error) {
-        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
+        if (error instanceof RequestBodyTooLargeError)
+          return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
         throw error;
       }
       const signature = req.headers.get("stripe-signature") || "";
@@ -48,7 +52,7 @@ export class StripeAgent implements AgentModule {
 
       // Fire-and-forget: ack Stripe immediately, run the automation async.
       void handleStripeEvent(event).catch((e) =>
-        console.error("[stripe] Error handling event:", e)
+        console.error("[stripe] Error handling event:", e),
       );
 
       return Response.json({ ok: true });
@@ -67,7 +71,9 @@ export class StripeAgent implements AgentModule {
 
   health(): Record<string, unknown> {
     return {
-      status: STRIPE_WEBHOOK_SECRET ? "operational" : "missing STRIPE_WEBHOOK_SECRET",
+      status: STRIPE_WEBHOOK_SECRET
+        ? "operational"
+        : "missing STRIPE_WEBHOOK_SECRET",
     };
   }
 }

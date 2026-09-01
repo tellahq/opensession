@@ -17,41 +17,41 @@ import { personLabel, type WorktreeRow } from "./pr-rows";
  * record rather than a kind of work, so the feed does not render one.
  */
 export interface FeedOwner {
-	/** User-picker key, for a teammate. Null for an automation or agent. */
-	person: string | null;
-	/** What to call them: a teammate's name, or the automation's own. */
-	label: string;
+  /** User-picker key, for a teammate. Null for an automation or agent. */
+  person: string | null;
+  /** What to call them: a teammate's name, or the automation's own. */
+  label: string;
 }
 
 export interface FeedRow {
-	key: string;
-	kind: "pr" | "commit";
-	title: string;
-	repo: string;
-	person: string | null;
-	/** Null only for work shipped before commits carried a name. */
-	owner: FeedOwner | null;
-	url?: string;
-	/** What to call it in the list: "#128" for a PR, a short sha for a commit. */
-	ref?: string;
-	additions?: number;
-	deletions?: number;
-	shippedAt: string;
-	/**
-	 * The session behind it, when there is one to open.
-	 *
-	 * An id rather than the session itself, because opening one only ever needs
-	 * its id, and holding the object made the row depend on the session still
-	 * being in the live list. Almost none of them are: a session is archived
-	 * when its work is done, which for a shipped commit is the normal case and
-	 * usually happened the same day. Every such row quietly left for the web
-	 * host instead, which is the one place the session is not.
-	 */
-	sessionId?: string;
+  key: string;
+  kind: "pr" | "commit";
+  title: string;
+  repo: string;
+  person: string | null;
+  /** Null only for work shipped before commits carried a name. */
+  owner: FeedOwner | null;
+  url?: string;
+  /** What to call it in the list: "#128" for a PR, a short sha for a commit. */
+  ref?: string;
+  additions?: number;
+  deletions?: number;
+  shippedAt: string;
+  /**
+   * The session behind it, when there is one to open.
+   *
+   * An id rather than the session itself, because opening one only ever needs
+   * its id, and holding the object made the row depend on the session still
+   * being in the live list. Almost none of them are: a session is archived
+   * when its work is done, which for a shipped commit is the normal case and
+   * usually happened the same day. Every such row quietly left for the web
+   * host instead, which is the one place the session is not.
+   */
+  sessionId?: string;
 }
 
 export function shortSha(sha: string): string {
-	return sha.slice(0, 7);
+  return sha.slice(0, 7);
 }
 
 /**
@@ -68,17 +68,17 @@ export function shortSha(sha: string): string {
  * before commits carried a name still reads.
  */
 export function feedOwner(
-	person: string | null,
-	author?: string | null,
-	isTeammate?: (key: string) => boolean,
+  person: string | null,
+  author?: string | null,
+  isTeammate?: (key: string) => boolean,
 ): FeedOwner | null {
-	if (person) {
-		const label = personLabel(person);
-		if (!isTeammate || isTeammate(person)) return { person, label };
-		return { person: null, label };
-	}
-	const label = (author || "").trim();
-	return label ? { person: null, label } : null;
+  if (person) {
+    const label = personLabel(person);
+    if (!isTeammate || isTeammate(person)) return { person, label };
+    return { person: null, label };
+  }
+  const label = (author || "").trim();
+  return label ? { person: null, label } : null;
 }
 
 /**
@@ -89,41 +89,41 @@ export function feedOwner(
  * lookup can only lose archived sessions.
  */
 export function buildFeedRows(
-	prRows: WorktreeRow[],
-	commits: RecentCommit[],
-	isTeammate?: (key: string) => boolean,
+  prRows: WorktreeRow[],
+  commits: RecentCommit[],
+  isTeammate?: (key: string) => boolean,
 ): FeedRow[] {
-	const rows: FeedRow[] = [
-		...prRows.map((row) => ({
-			key: row.key,
-			kind: "pr" as const,
-			title: row.title,
-			repo: row.repo,
-			person: row.person,
-			owner: feedOwner(row.person, row.author, isTeammate),
-			url: row.url,
-			...(row.number ? { ref: `#${row.number}` } : {}),
-			additions: row.additions,
-			deletions: row.deletions,
-			shippedAt: row.updatedAt,
-			sessionId: row.sessionId,
-		})),
-		...commits.map((commit) => ({
-			key: `${commit.repo}:${commit.sha}`,
-			kind: "commit" as const,
-			title: commit.title,
-			repo: commit.repo,
-			person: commit.person,
-			owner: feedOwner(commit.person, commit.author, isTeammate),
-			url: commit.url,
-			ref: shortSha(commit.sha),
-			additions: commit.additions,
-			deletions: commit.deletions,
-			shippedAt: commit.committedAt,
-			sessionId: commit.sessionId,
-		})),
-	];
-	return rows.sort(
-		(a, b) => new Date(b.shippedAt).getTime() - new Date(a.shippedAt).getTime(),
-	);
+  const rows: FeedRow[] = [
+    ...prRows.map((row) => ({
+      key: row.key,
+      kind: "pr" as const,
+      title: row.title,
+      repo: row.repo,
+      person: row.person,
+      owner: feedOwner(row.person, row.author, isTeammate),
+      url: row.url,
+      ...(row.number ? { ref: `#${row.number}` } : {}),
+      additions: row.additions,
+      deletions: row.deletions,
+      shippedAt: row.updatedAt,
+      sessionId: row.sessionId,
+    })),
+    ...commits.map((commit) => ({
+      key: `${commit.repo}:${commit.sha}`,
+      kind: "commit" as const,
+      title: commit.title,
+      repo: commit.repo,
+      person: commit.person,
+      owner: feedOwner(commit.person, commit.author, isTeammate),
+      url: commit.url,
+      ref: shortSha(commit.sha),
+      additions: commit.additions,
+      deletions: commit.deletions,
+      shippedAt: commit.committedAt,
+      sessionId: commit.sessionId,
+    })),
+  ];
+  return rows.sort(
+    (a, b) => new Date(b.shippedAt).getTime() - new Date(a.shippedAt).getTime(),
+  );
 }

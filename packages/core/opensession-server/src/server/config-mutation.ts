@@ -16,8 +16,9 @@ import { chmodSync, copyFileSync, existsSync, readFileSync } from "fs";
 import { configPath, configuredRepos } from "./config";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
-const mutationState: { chain: Promise<unknown> } = ((globalThis as any)
-  .__localRepoMutationState ??= { chain: Promise.resolve() });
+const mutationState: { chain: Promise<unknown> } = ((
+  globalThis as any
+).__localRepoMutationState ??= { chain: Promise.resolve() });
 
 /** Serialize a config/env mutation behind every other pending one. */
 export function withConfigMutationLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -97,7 +98,11 @@ export function reposForMutation(
   resolvedRepos = configuredRepos(),
 ): Record<string, unknown> {
   let repos: Record<string, unknown>;
-  if (config.repos && typeof config.repos === "object" && !Array.isArray(config.repos)) {
+  if (
+    config.repos &&
+    typeof config.repos === "object" &&
+    !Array.isArray(config.repos)
+  ) {
     repos = config.repos as Record<string, unknown>;
   } else {
     repos = Object.fromEntries(

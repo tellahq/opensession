@@ -25,12 +25,6 @@
     "contextMenus",
     "sidePanel"
   ],
-  "optional_host_permissions": [
-    "https://*/*",
-    "http://*/*"
-  ],
-  "host_permissions": [
-    "http://localhost/*",
-    "http://127.0.0.1/*"
-  ]
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"]
 }

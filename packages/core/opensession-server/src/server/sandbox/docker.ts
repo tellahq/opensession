@@ -109,15 +109,34 @@
  * wire-ups need a real restart (see CLAUDE.md "Hot reload & restarts").
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+} from "fs";
 import { dirname, resolve as resolvePath } from "path";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
-import { stateDir, } from "../paths";
-import { journalSet, journalClear, journalClearIfLineage, journalRecordAbnormalCompletion, type ActiveRunRecord } from "../run-journal";
+import { stateDir } from "../paths";
+import {
+  journalSet,
+  journalClear,
+  journalClearIfLineage,
+  journalRecordAbnormalCompletion,
+  type ActiveRunRecord,
+} from "../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
 import { recoveryKind, restartContinuationPrompt } from "../agent-runner";
 import { modelSupportsSteer, providerFor } from "../models";
-import { hostRunBusy, hostSteer, hostInterruptSteer, hostCancel } from "../host-registry";
+import {
+  hostRunBusy,
+  hostSteer,
+  hostInterruptSteer,
+  hostCancel,
+} from "../host-registry";
 import { registerRunToken, unregisterRunToken } from "../run-rpc";
 import { writeJsonAtomic } from "../shared/atomic-write";
 import {
@@ -127,17 +146,30 @@ import {
   type HandleCallbacks,
   type HostLauncher,
 } from "../host-client";
-import { registerRunWsHost, unregisterRunWsHost, runWsConnector } from "../run-ws";
+import {
+  registerRunWsHost,
+  unregisterRunWsHost,
+  runWsConnector,
+} from "../run-ws";
 import { getTranscriptPath } from "../sessions";
 import { listCodexAccounts } from "../codex-accounts";
-import { dropSandboxPreviewRoutes, externalPreviewCommandDirs } from "../preview";
+import {
+  dropSandboxPreviewRoutes,
+  externalPreviewCommandDirs,
+} from "../preview";
 import { configuredPaths } from "../config";
 import { codeStorageConfig } from "../config";
 import { authedRemoteUrl } from "../codestorage/auth";
 import { parseCsRemote } from "../codestorage/remote";
 import { redactUrl } from "../shared/redact";
 import { createWorkloadIdentityEnv } from "../workload-identity";
-import { REPOS, getRepo, repoForPath, worktreePathFor, type Repo } from "../worktree";
+import {
+  REPOS,
+  getRepo,
+  repoForPath,
+  worktreePathFor,
+  type Repo,
+} from "../worktree";
 import { LocalProvider } from "./local";
 import {
   DEFAULT_SANDBOX_PREVIEW_PORTS,
@@ -283,7 +315,10 @@ function sessionRunsDir(sessionId: string): string {
 }
 
 /** Run `docker <args>` (argv array — nothing is shell-interpolated). */
-async function docker(args: string[], opts?: { timeoutMs?: number }): Promise<ExecResult> {
+async function docker(
+  args: string[],
+  opts?: { timeoutMs?: number },
+): Promise<ExecResult> {
   const proc = Bun.spawn(["docker", ...args], {
     stdout: "pipe",
     stderr: "pipe",
@@ -318,7 +353,10 @@ export function dockerContainerStatus(name: string): Promise<SandboxStatus> {
  */
 export function rawDockerExec(container: string, cwd: string) {
   return (cmd: string[], opts?: ExecOpts): Promise<ExecResult> => {
-    const envArgs = Object.entries(opts?.env || {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
+    const envArgs = Object.entries(opts?.env || {}).flatMap(([k, v]) => [
+      "-e",
+      `${k}=${v}`,
+    ]);
     return docker(["exec", "-w", cwd, ...envArgs, container, ...cmd]);
   };
 }
@@ -326,10 +364,13 @@ export function rawDockerExec(container: string, cwd: string) {
 async function ensureStarted(name: string): Promise<void> {
   const st = await containerStatus(name);
   if (st === "running") return;
-  if (st === "gone") throw new Error(`sandbox container ${name} does not exist`);
+  if (st === "gone")
+    throw new Error(`sandbox container ${name} does not exist`);
   const r = await docker(["start", name]);
   if (r.exitCode !== 0) {
-    throw new Error(`docker start ${name} failed: ${r.stderr.trim().slice(0, 300)}`);
+    throw new Error(
+      `docker start ${name} failed: ${r.stderr.trim().slice(0, 300)}`,
+    );
   }
 }
 
@@ -347,7 +388,13 @@ async function listSnapshotTags(repo: string): Promise<string[]> {
 /** `<repo>:latest` when the sandbox has a snapshot image, else null. */
 async function latestSnapshotImage(sandboxId: string): Promise<string | null> {
   const repo = snapshotRepoForSandbox(sandboxId);
-  const r = await docker(["image", "inspect", "-f", "{{.Id}}", `${repo}:latest`]);
+  const r = await docker([
+    "image",
+    "inspect",
+    "-f",
+    "{{.Id}}",
+    `${repo}:latest`,
+  ]);
   return r.exitCode === 0 ? `${repo}:latest` : null;
 }
 
@@ -363,7 +410,9 @@ async function latestSnapshotImage(sandboxId: string): Promise<string | null> {
  * global caches) — engine state and workspaces live on volumes/bind mounts and
  * are NOT in the image (see header).
  */
-export async function snapshotSandboxImage(sandboxId: string): Promise<string | null> {
+export async function snapshotSandboxImage(
+  sandboxId: string,
+): Promise<string | null> {
   const state = readState(sandboxId);
   if (!state) return null;
   if (hostRunBusy(state.sessionId)) {
@@ -376,17 +425,23 @@ export async function snapshotSandboxImage(sandboxId: string): Promise<string | 
   const r = await docker(
     [
       "commit",
-      "-c", `LABEL opensession.snapshot="1"`,
-      "-c", `LABEL opensession.session="${state.sessionId}"`,
-      "-c", `LABEL opensession.snapshotAt="${new Date().toISOString()}"`,
-      "-m", `opensession sandbox snapshot of ${sandboxId}`,
+      "-c",
+      `LABEL opensession.snapshot="1"`,
+      "-c",
+      `LABEL opensession.session="${state.sessionId}"`,
+      "-c",
+      `LABEL opensession.snapshotAt="${new Date().toISOString()}"`,
+      "-m",
+      `opensession sandbox snapshot of ${sandboxId}`,
       sandboxId,
       `${repo}:${tag}`,
     ],
     { timeoutMs: 300_000 },
   );
   if (r.exitCode !== 0) {
-    throw new Error(`docker commit ${sandboxId} → ${repo}:${tag} failed: ${r.stderr.trim().slice(0, 300)}`);
+    throw new Error(
+      `docker commit ${sandboxId} → ${repo}:${tag} failed: ${r.stderr.trim().slice(0, 300)}`,
+    );
   }
   await docker(["tag", `${repo}:${tag}`, `${repo}:latest`]);
   // Strict maxPerSession: `t<millis>` tags sort lexicographically = by time
@@ -425,20 +480,36 @@ async function removeSnapshotImages(sandboxId: string): Promise<void> {
  */
 async function sweepOrphanSnapshots(): Promise<void> {
   const g = globalThis as { __sandboxSnapOrphanSweepAt?: number };
-  if (g.__sandboxSnapOrphanSweepAt && Date.now() - g.__sandboxSnapOrphanSweepAt < 60 * 60_000) {
+  if (
+    g.__sandboxSnapOrphanSweepAt &&
+    Date.now() - g.__sandboxSnapOrphanSweepAt < 60 * 60_000
+  ) {
     return;
   }
   g.__sandboxSnapOrphanSweepAt = Date.now();
   const r = await docker([
-    "images", "--filter", `reference=${SNAPSHOT_PREFIX}*`, "--format", "{{.Repository}}",
+    "images",
+    "--filter",
+    `reference=${SNAPSHOT_PREFIX}*`,
+    "--format",
+    "{{.Repository}}",
   ]);
   if (r.exitCode !== 0) return;
-  for (const repo of new Set(r.stdout.split("\n").map((s) => s.trim()).filter(Boolean))) {
+  for (const repo of new Set(
+    r.stdout
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  )) {
     try {
       const tags = await listSnapshotTags(repo);
       if (!tags.length) continue;
       const lbl = await docker([
-        "image", "inspect", "-f", `{{index .Config.Labels "opensession.session"}}`, `${repo}:${tags[0]}`,
+        "image",
+        "inspect",
+        "-f",
+        `{{index .Config.Labels "opensession.session"}}`,
+        `${repo}:${tags[0]}`,
       ]);
       const sessionId = lbl.exitCode === 0 ? lbl.stdout.trim() : "";
       if (!sessionId) continue; // unknown provenance — keep
@@ -446,7 +517,9 @@ async function sweepOrphanSnapshots(): Promise<void> {
       if (readState(container)) continue; // still tracked → destroy() cleans
       if ((await containerStatus(container)) !== "gone") continue;
       if (existsSync(`${OPENSESSION_SESSIONS_DIR}/${sessionId}.json`)) continue; // session alive — keep
-      console.log(`[sandbox] removing orphaned snapshot images ${repo} (session ${sessionId} deleted, sandbox gone)`);
+      console.log(
+        `[sandbox] removing orphaned snapshot images ${repo} (session ${sessionId} deleted, sandbox gone)`,
+      );
       await removeSnapshotImages(container);
     } catch (e) {
       console.warn(`[sandbox] orphan snapshot sweep failed for ${repo}:`, e);
@@ -476,7 +549,10 @@ async function gitCommonDir(cwd: string): Promise<string> {
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
-  if (code !== 0) throw new Error(`git rev-parse --git-common-dir failed in ${cwd}: ${err.trim()}`);
+  if (code !== 0)
+    throw new Error(
+      `git rev-parse --git-common-dir failed in ${cwd}: ${err.trim()}`,
+    );
   return resolvePath(cwd, out.trim());
 }
 
@@ -489,17 +565,22 @@ function isMainCheckout(cwd: string): boolean {
 /** Host-side resolution of a repo's origin URL — the clone source for
  *  volume-mode workspaces. */
 async function repoOriginUrl(repoDir: string): Promise<string> {
-  const proc = Bun.spawn(["git", "-C", repoDir, "remote", "get-url", "origin"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const proc = Bun.spawn(
+    ["git", "-C", repoDir, "remote", "get-url", "origin"],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
   if (code !== 0 || !out.trim()) {
-    throw new Error(`cannot resolve origin URL for ${repoDir}: ${err.trim() || "no origin"}`);
+    throw new Error(
+      `cannot resolve origin URL for ${repoDir}: ${err.trim() || "no origin"}`,
+    );
   }
   return out.trim();
 }
@@ -520,11 +601,15 @@ async function repoOriginUrl(repoDir: string): Promise<string> {
  * A missing source is simply omitted: the engine then reports its own clear
  * config error in-container. Exported for the sandbox engine-config tests.
  */
-export function engineConfigMounts(home = HOME): Array<[src: string, dest: string]> {
+export function engineConfigMounts(
+  home = HOME,
+): Array<[src: string, dest: string]> {
   const out: Array<[string, string]> = [];
   const providerSrc =
-    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG || stateDir("model-providers.json");
-  if (existsSync(providerSrc)) out.push([providerSrc, `${home}/.opensession-model-providers.json`]);
+    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG ||
+    stateDir("model-providers.json");
+  if (existsSync(providerSrc))
+    out.push([providerSrc, `${home}/.opensession-model-providers.json`]);
   const piSrc = process.env.OPENSESSION_PI_CONFIG || stateDir("pi.json");
   if (existsSync(piSrc)) out.push([piSrc, `${home}/.opensession-pi.json`]);
   return out;
@@ -575,7 +660,9 @@ async function createContainer(
     if (commonGit === `${cwd}/.git`) {
       // Standalone checkout (not a linked worktree) — only ever legitimate for
       // scratch/test repos; main checkouts were already refused in ensure().
-      console.warn(`[sandbox] ${name}: ${cwd} is a standalone checkout (no separate common .git)`);
+      console.warn(
+        `[sandbox] ${name}: ${cwd} is a standalone checkout (no separate common .git)`,
+      );
     }
     workspaceMounts.push(
       ...vol(cwd, cwd),
@@ -595,7 +682,10 @@ async function createContainer(
           workspaceMounts.push(...vol(attCommon, attCommon));
         }
       } catch (e) {
-        console.warn(`[sandbox] ${name}: could not resolve common .git for attached ${dir}:`, e);
+        console.warn(
+          `[sandbox] ${name}: could not resolve common .git for attached ${dir}:`,
+          e,
+        );
       }
     }
   }
@@ -637,23 +727,30 @@ async function createContainer(
     const rpcSock = rpcSocketPath(OPENSESSION_SESSIONS_DIR);
     try {
       if (statSync(rpcSock).isSocket()) mounts.push(...vol(rpcSock, rpcSock));
-      else console.warn(`[sandbox] ${rpcSock} exists but is not a socket — opensession-* proxies disabled`);
+      else
+        console.warn(
+          `[sandbox] ${rpcSock} exists but is not a socket — opensession-* proxies disabled`,
+        );
     } catch {
-      console.warn(`[sandbox] ${rpcSock} missing — opensession-* proxies will be unavailable in ${name}`);
+      console.warn(
+        `[sandbox] ${rpcSock} missing — opensession-* proxies will be unavailable in ${name}`,
+      );
     }
   }
 
   // Read-only trust mounts (interactive parity — see header).
   const roIfExists = (p: string, label: string) => {
     if (existsSync(p)) mounts.push(...vol(p, p, true));
-    else console.warn(`[sandbox] ${label} (${p}) missing — skipping mount for ${name}`);
+    else
+      console.warn(
+        `[sandbox] ${label} (${p}) missing — skipping mount for ${name}`,
+      );
   };
   roIfExists(`${HOME}/.ssh`, "ssh keys");
   roIfExists(`${HOME}/.gitconfig`, "gitconfig");
   roIfExists(`${HOME}/.config/gh`, "gh config");
   roIfExists(
-    process.env.OPENSESSION_MCP_CONFIG ||
-      configuredPaths().mcpConfig,
+    process.env.OPENSESSION_MCP_CONFIG || configuredPaths().mcpConfig,
     "mcp-config.json",
   );
   roIfExists(
@@ -675,11 +772,13 @@ async function createContainer(
   // instead of corrupting the host family).
   roIfExists(stateDir("codex-accounts.json"), "codex account pool");
   for (const acct of listCodexAccounts()) {
-    if (acct.kind === "home") roIfExists(`${acct.value}/auth.json`, `codex auth (${acct.name})`);
+    if (acct.kind === "home")
+      roIfExists(`${acct.value}/auth.json`, `codex auth (${acct.name})`);
   }
   // Engine config files (see engineConfigMounts): the pi bridge config
   // and the pi engine gate, ro at their legacy in-container names.
-  for (const [src, dest] of engineConfigMounts()) mounts.push(...vol(src, dest, true));
+  for (const [src, dest] of engineConfigMounts())
+    mounts.push(...vol(src, dest, true));
   // External preview commands at identical paths, read-only. Repo-owned
   // lifecycle scripts already arrive with the workspace.
   for (const dir of externalPreviewCommandDirs()) {
@@ -691,24 +790,33 @@ async function createContainer(
   // nothing is exposed off-host). Create-time only, hence the pre-published
   // DEFAULT range: a dev server started later still lands on a routable port
   // (startSandboxPreview allocates from this set).
-  const portArgs = (cfg.previewPorts?.length ? cfg.previewPorts : DEFAULT_SANDBOX_PREVIEW_PORTS)
-    .flatMap((p) => ["-p", `127.0.0.1::${p}`]);
+  const portArgs = (
+    cfg.previewPorts?.length ? cfg.previewPorts : DEFAULT_SANDBOX_PREVIEW_PORTS
+  ).flatMap((p) => ["-p", `127.0.0.1::${p}`]);
 
   const r = await docker([
     "create",
-    "--name", name,
-    "--label", "opensession.sandbox=1",
-    "--label", `opensession.session=${sessionId}`,
+    "--name",
+    name,
+    "--label",
+    "opensession.sandbox=1",
+    "--label",
+    `opensession.session=${sessionId}`,
     "--init",
-    "--restart", "no",
-    "--cpus", String(cpus),
-    "--memory", memory,
+    "--restart",
+    "no",
+    "--cpus",
+    String(cpus),
+    "--memory",
+    memory,
     ...portArgs,
     ...mounts,
     image,
   ]);
   if (r.exitCode !== 0) {
-    throw new Error(`docker create ${name} failed: ${r.stderr.trim().slice(0, 500)}`);
+    throw new Error(
+      `docker create ${name} failed: ${r.stderr.trim().slice(0, 500)}`,
+    );
   }
 }
 
@@ -727,9 +835,19 @@ async function setupVolumeWorkspace(
 ): Promise<void> {
   // A fresh named volume's mountpoint is root-owned (the path doesn't exist
   // in the image, so there's no ownership to copy) — chown before cloning.
-  const own = await docker(["exec", "-u", "0", name, "chown", "1000:1000", assertSafePath(cwd)]);
+  const own = await docker([
+    "exec",
+    "-u",
+    "0",
+    name,
+    "chown",
+    "1000:1000",
+    assertSafePath(cwd),
+  ]);
   if (own.exitCode !== 0) {
-    throw new Error(`sandbox ${name}: chown of workspace volume failed: ${own.stderr.trim().slice(0, 300)}`);
+    throw new Error(
+      `sandbox ${name}: chown of workspace volume failed: ${own.stderr.trim().slice(0, 300)}`,
+    );
   }
   const cloned = await docker(["exec", name, "test", "-d", `${cwd}/.git`]);
   if (cloned.exitCode !== 0) {
@@ -737,25 +855,59 @@ async function setupVolumeWorkspace(
     // Redact credentials before logging — https origins can carry a token in
     // the userinfo part (https://x-access-token:ghp_…@github.com/…), and git
     // echoes remote URLs (post-insteadOf, so authed for cs repos) into stderr.
-    console.log(`[sandbox] ${name}: cloning ${redactUrl(originUrl)} into workspace volume at ${cwd}`);
+    console.log(
+      `[sandbox] ${name}: cloning ${redactUrl(originUrl)} into workspace volume at ${cwd}`,
+    );
     const clone = await docker(
       ["exec", name, "git", "clone", "--", originUrl, cwd],
       { timeoutMs: 600_000 },
     );
     if (clone.exitCode !== 0) {
-      throw new Error(`sandbox ${name}: in-container clone failed: ${redactUrl(clone.stderr.trim()).slice(0, 500)}`);
+      throw new Error(
+        `sandbox ${name}: in-container clone failed: ${redactUrl(clone.stderr.trim()).slice(0, 500)}`,
+      );
     }
   }
-  const cur = await docker(["exec", "-w", assertSafePath(cwd), name, "git", "branch", "--show-current"]);
+  const cur = await docker([
+    "exec",
+    "-w",
+    assertSafePath(cwd),
+    name,
+    "git",
+    "branch",
+    "--show-current",
+  ]);
   if (cur.exitCode === 0 && cur.stdout.trim() === branch) return;
   const hasRemote = await docker([
-    "exec", "-w", cwd, name,
-    "git", "rev-parse", "--verify", "--quiet", `origin/${branch}`,
+    "exec",
+    "-w",
+    cwd,
+    name,
+    "git",
+    "rev-parse",
+    "--verify",
+    "--quiet",
+    `origin/${branch}`,
   ]);
-  const startPoint = hasRemote.exitCode === 0 ? `origin/${branch}` : `origin/${repo.defaultBranch}`;
-  const co = await docker(["exec", "-w", cwd, name, "git", "checkout", "-B", branch, startPoint]);
+  const startPoint =
+    hasRemote.exitCode === 0
+      ? `origin/${branch}`
+      : `origin/${repo.defaultBranch}`;
+  const co = await docker([
+    "exec",
+    "-w",
+    cwd,
+    name,
+    "git",
+    "checkout",
+    "-B",
+    branch,
+    startPoint,
+  ]);
   if (co.exitCode !== 0) {
-    throw new Error(`sandbox ${name}: checkout -B ${branch} ${startPoint} failed: ${co.stderr.trim().slice(0, 300)}`);
+    throw new Error(
+      `sandbox ${name}: checkout -B ${branch} ${startPoint} failed: ${co.stderr.trim().slice(0, 300)}`,
+    );
   }
 }
 
@@ -838,18 +990,28 @@ async function setupContainer(name: string, cwd: string): Promise<void> {
   // shadows the image's seeded file (docker's copy-up covers the very first
   // mount, but not a volume that was created empty out-of-band).
   const seed = await docker([
-    "exec", name, "sh", "-c",
+    "exec",
+    name,
+    "sh",
+    "-c",
     `test -s ${HOME}/.claude/settings.json || printf '{}' > ${HOME}/.claude/settings.json`,
   ]);
   if (seed.exitCode !== 0) {
-    throw new Error(`sandbox ${name}: seeding ~/.claude failed: ${seed.stderr.trim().slice(0, 300)}`);
+    throw new Error(
+      `sandbox ${name}: seeding ~/.claude failed: ${seed.stderr.trim().slice(0, 300)}`,
+    );
   }
   // Re-own the docker-created mount-target parents (see containerStateDirFixups).
   // Only the dirs themselves, never -R: their CONTENTS are bind mounts owned by
   // the host. Idempotent, and works with images from before the state rename.
   const fixups = containerStateDirFixups().map((d) => assertSafePath(d));
   const own = await docker([
-    "exec", "-u", "0", name, "sh", "-c",
+    "exec",
+    "-u",
+    "0",
+    name,
+    "sh",
+    "-c",
     `mkdir -p ${fixups.join(" ")} && chown 1000:1000 ${fixups.join(" ")}`,
   ]);
   if (own.exitCode !== 0) {
@@ -859,7 +1021,15 @@ async function setupContainer(name: string, cwd: string): Promise<void> {
   }
   // Trap (b) from the plan: verify the worktree actually works inside — the
   // .git pointer file must resolve through the mounted common dir.
-  const git = await docker(["exec", "-w", assertSafePath(cwd), name, "git", "status", "--porcelain"]);
+  const git = await docker([
+    "exec",
+    "-w",
+    assertSafePath(cwd),
+    name,
+    "git",
+    "status",
+    "--porcelain",
+  ]);
   if (git.exitCode !== 0) {
     throw new Error(
       `sandbox ${name}: git status failed inside the container (worktree/.git mounts broken?): ${git.stderr.trim().slice(0, 300)}`,
@@ -893,10 +1063,14 @@ async function runWorkspaceSetup(
   const probe = await docker(["exec", name, "test", "-f", script]);
   if (probe.exitCode !== 0) return true; // no hook — settled
   if (bootMode === "snapshot-restore") {
-    console.log(`[sandbox] ${name}: skipping ${script} (snapshot restore carries its effects)`);
+    console.log(
+      `[sandbox] ${name}: skipping ${script} (snapshot restore carries its effects)`,
+    );
     return true;
   }
-  const log = assertSafePath(`${sessionRunsDir(sessionId)}/workspace-setup.log`);
+  const log = assertSafePath(
+    `${sessionRunsDir(sessionId)}/workspace-setup.log`,
+  );
   const identityEnv = createWorkloadIdentityEnv({
     sandboxId: name,
     provider: "docker",
@@ -905,15 +1079,25 @@ async function runWorkspaceSetup(
     repoId: repo.id,
     trustProfile,
   });
-  const identityArgs = Object.entries(identityEnv).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
-  console.log(`[sandbox] ${name}: running workspace setup hook ${script} (log: ${log})`);
+  const identityArgs = Object.entries(identityEnv).flatMap(([key, value]) => [
+    "-e",
+    `${key}=${value}`,
+  ]);
+  console.log(
+    `[sandbox] ${name}: running workspace setup hook ${script} (log: ${log})`,
+  );
   const r = await docker(
     [
-      "exec", "-w", assertSafePath(cwd),
-      "-e", `OPENSESSION_BOOT_MODE=${bootMode}`,
+      "exec",
+      "-w",
+      assertSafePath(cwd),
+      "-e",
+      `OPENSESSION_BOOT_MODE=${bootMode}`,
       ...identityArgs,
       name,
-      "sh", "-c", `bash ${assertSafePath(script)} >> ${log} 2>&1`,
+      "sh",
+      "-c",
+      `bash ${assertSafePath(script)} >> ${log} 2>&1`,
     ],
     { timeoutMs: SETUP_TIMEOUT_MS },
   );
@@ -927,14 +1111,24 @@ async function runWorkspaceSetup(
 
 // ── The docker HostLauncher: `docker exec` instead of systemd-run ─────────────
 
-function makeDockerLauncher(container: string, sessionId: string): HostLauncher {
+function makeDockerLauncher(
+  container: string,
+  sessionId: string,
+): HostLauncher {
   return {
     async alive(dir, meta: RunHostMeta | null) {
       if (!meta?.pid) return false;
-      const r = await docker(["exec", container, "kill", "-0", String(meta.pid)]);
+      const r = await docker([
+        "exec",
+        container,
+        "kill",
+        "-0",
+        String(meta.pid),
+      ]);
       return r.exitCode === 0;
     },
-    newRunDir: (hostId) => `${sessionRunsDir(sessionId)}/${sanitizeName(hostId)}`,
+    newRunDir: (hostId) =>
+      `${sessionRunsDir(sessionId)}/${sanitizeName(hostId)}`,
     // WS-transport runs (spec.wsToken present) attach through the run-ws
     // dial-back instead of the run dir's unix socket. Socket runs return
     // undefined = HostHandle's default unix connector.
@@ -975,12 +1169,15 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
         );
       }
       const args = [
-        "exec", "-d",
+        "exec",
+        "-d",
         // New env names primary; deprecated aliases ride along so an
         // un-migrated in-container build keeps working.
         ...env(`OPENSESSION_RUN_JOURNAL=${dir}/journal.json`),
         ...env(`OPENSESSION_RUN_JOURNAL=${dir}/journal.json`),
-        ...Object.entries(workloadIdentityEnv).flatMap(([key, value]) => env(`${key}=${value}`)),
+        ...Object.entries(workloadIdentityEnv).flatMap(([key, value]) =>
+          env(`${key}=${value}`),
+        ),
         ...env("NODE_ENV=production"),
         ...(process.env.OPENSESSION_MODEL
           ? env(`OPENSESSION_MODEL=${process.env.OPENSESSION_MODEL}`)
@@ -990,7 +1187,8 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
           : []),
         ...wsEnv,
         container,
-        "sh", "-c",
+        "sh",
+        "-c",
         `exec bun run ${assertSafePath(HOST_ENTRY)} ${specPath} >> ${logPath} 2>&1`,
       ];
       onDispatching?.();
@@ -1009,7 +1207,9 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
       );
       return {
         started: !!meta?.pid || !!journal,
-        ...(meta?.engineSessionId ? { engineSessionId: meta.engineSessionId } : {}),
+        ...(meta?.engineSessionId
+          ? { engineSessionId: meta.engineSessionId }
+          : {}),
         ...(meta?.done ? { done: meta.done } : {}),
       };
     },
@@ -1048,6 +1248,7 @@ function recordForSpec(spec: RunHostSpec, sandboxId: string): ActiveRunRecord {
     mcpServers: spec.mcpServers,
     user: spec.user,
     deniedTools: spec.deniedTools,
+    publicationPolicy: spec.publicationPolicy,
     confirmTools: spec.confirmTools,
     aws: spec.aws,
     model: spec.model,
@@ -1087,7 +1288,11 @@ async function* withRunJournal(
   let sourceCompleted = false;
   try {
     for await (const ev of events) {
-      if (ev.type === "init" && ev.sessionId && ev.sessionId !== record.claudeSessionId) {
+      if (
+        ev.type === "init" &&
+        ev.sessionId &&
+        ev.sessionId !== record.claudeSessionId
+      ) {
         record.claudeSessionId = ev.sessionId;
         await journalSet(record);
       }
@@ -1129,9 +1334,12 @@ function schedulePostRunSnapshot(sandboxId: string): void {
     pending.delete(sandboxId);
     snapshotSandboxImage(sandboxId)
       .then((img) => {
-        if (img) console.log(`[sandbox] post-run snapshot of ${sandboxId} → ${img}`);
+        if (img)
+          console.log(`[sandbox] post-run snapshot of ${sandboxId} → ${img}`);
       })
-      .catch((e) => console.warn(`[sandbox] post-run snapshot of ${sandboxId} failed:`, e));
+      .catch((e) =>
+        console.warn(`[sandbox] post-run snapshot of ${sandboxId} failed:`, e),
+      );
   }, 8_000);
 }
 
@@ -1172,7 +1380,10 @@ function makeDockerSandbox(
      * launch failure, so callers with a fallback (maybeLaunchSandboxedRun →
      * host run) can catch it before committing the turn to the sandbox.
      */
-    async launchRunEager(spec: RunHostSpec, cb?: RunHandleCallbacks): Promise<RunHandle> {
+    async launchRunEager(
+      spec: RunHostSpec,
+      cb?: RunHandleCallbacks,
+    ): Promise<RunHandle> {
       const dir = launcher.newRunDir(spec.hostId);
       const callbacks: HandleCallbacks = {
         onAskUser: cb?.onAskUser,
@@ -1194,7 +1405,9 @@ function makeDockerSandbox(
       // (2026-07-09: launches ran in-sandbox while opensession never attached).
       const t0 = Date.now();
       const mark = (step: string) =>
-        console.log(`[sandbox] launch ${spec.hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`);
+        console.log(
+          `[sandbox] launch ${spec.hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`,
+        );
       try {
         // Construct (and register) the control BEFORE dispatch so exact-token
         // Stop reaches the launching host: cancelAgentRunTokenAndWait sees
@@ -1227,7 +1440,9 @@ function makeDockerSandbox(
           handle?.abandon();
           unregisterRunToken(spec.rpcToken);
           if (spec.wsToken) unregisterRunWsHost(spec.hostId);
-          try { rmSync(dir, { recursive: true, force: true }); } catch {}
+          try {
+            rmSync(dir, { recursive: true, force: true });
+          } catch {}
           throw error;
         }
         // The launch call may have reached Docker. Keep spec, token, route,
@@ -1311,7 +1526,9 @@ function makeDockerSandbox(
  *  directly to exercise the real snapshot-then-stop ordering. `onlySandboxId`
  *  scopes the sweep to one sandbox (verify must never snapshot/stop the live
  *  server's sandboxes with its scratch config) and skips the orphan sweep. */
-export async function sweepIdleSandboxes(onlySandboxId?: string): Promise<void> {
+export async function sweepIdleSandboxes(
+  onlySandboxId?: string,
+): Promise<void> {
   const cfg = sandboxConfig();
   const idleMs = (cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000;
   let states: string[] = [];
@@ -1339,15 +1556,25 @@ export async function sweepIdleSandboxes(onlySandboxId?: string): Promise<void> 
       if (snaps.enabled && snaps.onIdle) {
         try {
           const img = await snapshotSandboxImage(state.sandboxId);
-          if (img) console.log(`[sandbox] snapshotted ${state.sandboxId} → ${img} before idle-stop`);
+          if (img)
+            console.log(
+              `[sandbox] snapshotted ${state.sandboxId} → ${img} before idle-stop`,
+            );
         } catch (e) {
-          console.warn(`[sandbox] idle snapshot of ${state.sandboxId} failed (stopping anyway):`, e);
+          console.warn(
+            `[sandbox] idle snapshot of ${state.sandboxId} failed (stopping anyway):`,
+            e,
+          );
         }
         // A run may have started during the (slow) commit — don't stop it now.
         if (hostRunBusy(state.sessionId)) continue;
       }
-      console.log(`[sandbox] stopping idle container ${state.sandboxId} (idle > ${idleMs / 60_000}m)`);
-      await docker(["stop", "-t", "10", state.sandboxId], { timeoutMs: 60_000 });
+      console.log(
+        `[sandbox] stopping idle container ${state.sandboxId} (idle > ${idleMs / 60_000}m)`,
+      );
+      await docker(["stop", "-t", "10", state.sandboxId], {
+        timeoutMs: 60_000,
+      });
     } catch (e) {
       console.warn(`[sandbox] idle sweep failed for ${state.sandboxId}:`, e);
     }
@@ -1387,12 +1614,16 @@ const localResolver = new LocalProvider();
  * for ensure, get/recreate, and destroy, parked on globalThis so `bun --hot`
  * reloads do not fork the chains.
  */
-function withLifecycleLock<T>(sandboxId: string, fn: () => Promise<T>): Promise<T> {
+function withLifecycleLock<T>(
+  sandboxId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
   const g = globalThis as unknown as {
     __sandboxLifecycleChains?: Map<string, Promise<unknown>>;
     __sandboxEnsureChains?: Map<string, Promise<unknown>>;
   };
-  const chains = (g.__sandboxLifecycleChains ??= g.__sandboxEnsureChains ?? new Map());
+  const chains = (g.__sandboxLifecycleChains ??=
+    g.__sandboxEnsureChains ?? new Map());
   delete g.__sandboxEnsureChains;
   const prev = chains.get(sandboxId) ?? Promise.resolve();
   const run = prev.then(fn, fn);
@@ -1423,7 +1654,9 @@ export class DockerProvider implements SandboxProvider {
    * the host in Phase 1 — the container only ever sees the finished dir).
    */
   ensure(spec: SandboxSessionSpec): Promise<Sandbox> {
-    return withLifecycleLock(containerNameFor(spec.sessionId), () => this.ensureInner(spec));
+    return withLifecycleLock(containerNameFor(spec.sessionId), () =>
+      this.ensureInner(spec),
+    );
   }
 
   private async ensureInner(spec: SandboxSessionSpec): Promise<Sandbox> {
@@ -1439,15 +1672,25 @@ export class DockerProvider implements SandboxProvider {
     const repo = getRepo(spec.repo || existing?.repoId);
     const branch = spec.branch || existing?.branch;
     const canonical =
-      spec.cwd || (branch ? worktreePathFor(branch, repo.id, { isolated: true }) : undefined);
+      spec.cwd ||
+      (branch
+        ? worktreePathFor(branch, repo.id, { isolated: true })
+        : undefined);
     const wantVolume = existing?.workspace
       ? existing.workspace === "volume"
       : sandboxConfig().workspace === "volume";
     let workspace: "bind" | "volume";
     let cwd: string;
-    if (wantVolume && canonical && !existsSync(canonical) && spec.mode !== "ask") {
+    if (
+      wantVolume &&
+      canonical &&
+      !existsSync(canonical) &&
+      spec.mode !== "ask"
+    ) {
       if (!branch) {
-        throw new Error("volume-mode sandbox needs a branch to clone/check out");
+        throw new Error(
+          "volume-mode sandbox needs a branch to clone/check out",
+        );
       }
       workspace = "volume";
       cwd = canonical;
@@ -1467,7 +1710,9 @@ export class DockerProvider implements SandboxProvider {
         `refusing to sandbox ${cwd}: it is a shared main checkout — docker sandboxes only run isolated worktrees`,
       );
     }
-    const attachedDirs = [...new Set(spec.attachedDirs || existing?.attachedDirs || [])]
+    const attachedDirs = [
+      ...new Set(spec.attachedDirs || existing?.attachedDirs || []),
+    ]
       .filter((d) => existsSync(d))
       .sort();
     if (workspace === "volume" && attachedDirs.length) {
@@ -1497,7 +1742,9 @@ export class DockerProvider implements SandboxProvider {
       // transport flipped, or the attached-repo set changed — the old
       // container's mounts are stale. Recreate it; the named volumes (engine
       // state AND a volume-mode workspace) survive `docker rm`.
-      console.warn(`[sandbox] ${name}: mounts changed (${existing.cwd} → ${cwd}, transport ${existing.transport || "socket"} → ${transport}); recreating container`);
+      console.warn(
+        `[sandbox] ${name}: mounts changed (${existing.cwd} → ${cwd}, transport ${existing.transport || "socket"} → ${transport}); recreating container`,
+      );
       await docker(["rm", "-f", name]);
       status = "gone";
     }
@@ -1515,7 +1762,9 @@ export class DockerProvider implements SandboxProvider {
         if (snapImage) {
           image = snapImage;
           restoredFromSnapshot = true;
-          console.log(`[sandbox] ${name}: creating container from snapshot ${snapImage}`);
+          console.log(
+            `[sandbox] ${name}: creating container from snapshot ${snapImage}`,
+          );
         }
       }
       bootMode = restoredFromSnapshot ? "snapshot-restore" : "fresh";
@@ -1550,9 +1799,19 @@ export class DockerProvider implements SandboxProvider {
           { timeoutMs: 120_000 },
         );
         if (f.exitCode !== 0) {
-          console.warn(`[sandbox] ${name}: quick-sync git fetch failed (continuing): ${redactUrl(f.stderr.trim()).slice(0, 200)}`);
+          console.warn(
+            `[sandbox] ${name}: quick-sync git fetch failed (continuing): ${redactUrl(f.stderr.trim()).slice(0, 200)}`,
+          );
         } else {
-          await docker(["exec", "-w", cwd, name, "git", "status", "--porcelain"]);
+          await docker([
+            "exec",
+            "-w",
+            cwd,
+            name,
+            "git",
+            "status",
+            "--porcelain",
+          ]);
         }
       }
     }
@@ -1560,13 +1819,26 @@ export class DockerProvider implements SandboxProvider {
     // Container (re)start: clear a stale .tunnels.env — its URLs described the
     // previous boot's preview; startSandboxPreview rewrites it fresh.
     if (!wasRunning) {
-      await docker(["exec", name, "sh", "-c", `rm -f ${assertSafePath(cwd)}/.tunnels.env`]);
+      await docker([
+        "exec",
+        name,
+        "sh",
+        "-c",
+        `rm -f ${assertSafePath(cwd)}/.tunnels.env`,
+      ]);
     }
     // One-shot `.agents/setup` lifecycle hook (skipped on snapshot
     // restore; never retried once settled — see runWorkspaceSetup).
     let setupRan = existing?.setupRan === true;
     if (!setupRan) {
-      setupRan = await runWorkspaceSetup(name, spec.sessionId, cwd, bootMode, repo, spec.trustProfile);
+      setupRan = await runWorkspaceSetup(
+        name,
+        spec.sessionId,
+        cwd,
+        bootMode,
+        repo,
+        spec.trustProfile,
+      );
     }
     writeState({
       sandboxId: name,
@@ -1583,7 +1855,14 @@ export class DockerProvider implements SandboxProvider {
       ...(branch ? { branch } : {}),
       ...(attachedDirs.length ? { attachedDirs } : {}),
     });
-    return makeDockerSandbox(name, spec.sessionId, cwd, workspace, transport, bootMode);
+    return makeDockerSandbox(
+      name,
+      spec.sessionId,
+      cwd,
+      workspace,
+      transport,
+      bootMode,
+    );
   }
 
   /**
@@ -1616,12 +1895,24 @@ export class DockerProvider implements SandboxProvider {
     }
     if (!state) {
       // Container exists but state was lost — recover what we can from labels.
-      const r = await docker(["inspect", "-f", "{{index .Config.Labels \"opensession.session\"}}", sandboxId]);
+      const r = await docker([
+        "inspect",
+        "-f",
+        '{{index .Config.Labels "opensession.session"}}',
+        sandboxId,
+      ]);
       const sessionId = r.exitCode === 0 ? r.stdout.trim() : "";
       if (!sessionId) return null;
-      const runs = await docker(["inspect", "-f", "{{range .Mounts}}{{.Source}}\n{{end}}", sandboxId]);
+      const runs = await docker([
+        "inspect",
+        "-f",
+        "{{range .Mounts}}{{.Source}}\n{{end}}",
+        sandboxId,
+      ]);
       // cwd is unknowable without state; refuse rather than guess.
-      console.warn(`[sandbox] ${sandboxId} has no state file — exec-only reattach (mounts: ${runs.stdout.split("\n")[0] || "?"})`);
+      console.warn(
+        `[sandbox] ${sandboxId} has no state file — exec-only reattach (mounts: ${runs.stdout.split("\n")[0] || "?"})`,
+      );
       return null;
     }
     return makeDockerSandbox(
@@ -1646,8 +1937,12 @@ export class DockerProvider implements SandboxProvider {
   private async destroyInner(sandboxId: string): Promise<void> {
     await docker(["rm", "-f", sandboxId]);
     await docker([
-      "volume", "rm", "-f",
-      `${sandboxId}-claude`, `${sandboxId}-codex`, `${sandboxId}-ws`,
+      "volume",
+      "rm",
+      "-f",
+      `${sandboxId}-claude`,
+      `${sandboxId}-codex`,
+      `${sandboxId}-ws`,
     ]);
     await removeSnapshotImages(sandboxId);
     // Release the sandbox's https-port allocations + their Caddy routes.
@@ -1658,7 +1953,10 @@ export class DockerProvider implements SandboxProvider {
     } catch {}
     if (state) {
       try {
-        rmSync(sessionRunsDir(state.sessionId), { recursive: true, force: true });
+        rmSync(sessionRunsDir(state.sessionId), {
+          recursive: true,
+          force: true,
+        });
       } catch {}
     }
   }
@@ -1703,7 +2001,9 @@ export async function resumeDockerSandboxRun(
   const privateJournal = readJsonSafe<Record<string, ActiveRunRecord>>(
     `${oldDir}/${HOST_JOURNAL_NAME}`,
   );
-  const privateRun = privateJournal ? Object.values(privateJournal)[0] : undefined;
+  const privateRun = privateJournal
+    ? Object.values(privateJournal)[0]
+    : undefined;
   if (oldSpec) {
     if (meta?.done) {
       // Ended while opensession was down: hand the terminal event to the normal
@@ -1727,15 +2027,23 @@ export async function resumeDockerSandboxRun(
         yield done;
       })();
     }
-    if ((await containerStatus(run.sandboxId)) === "running" && (await launcher.alive(oldDir, meta))) {
+    if (
+      (await containerStatus(run.sandboxId)) === "running" &&
+      (await launcher.alive(oldDir, meta))
+    ) {
       if (oldSpec.rpcToken) {
-        registerRunToken(oldSpec.rpcToken, { sessionId: oldSpec.osSessionId, user: oldSpec.user });
+        registerRunToken(oldSpec.rpcToken, {
+          sessionId: oldSpec.osSessionId,
+          user: oldSpec.user,
+        });
       }
       // WS-transport run: re-register the dial-back token so the still-alive
       // host's reconnect loop can get back in (it's been retrying since the
       // restart dropped the route).
       if (oldSpec.wsToken) registerRunWsHost(oldSpec.hostId, oldSpec.wsToken);
-      console.log(`[sandbox] reattaching to live run ${run.runKey} in ${run.sandboxId}`);
+      console.log(
+        `[sandbox] reattaching to live run ${run.runKey} in ${run.sandboxId}`,
+      );
       const handle = new HostHandle(oldDir, oldSpec, cb, launcher, run.runKey);
       try {
         await handle.connectWithWait(15_000);
@@ -1747,7 +2055,10 @@ export async function resumeDockerSandboxRun(
         handle.abandon();
         throw e;
       }
-      return withRunJournal(handle.events(), { ...run, startedAt: run.startedAt });
+      return withRunJournal(handle.events(), {
+        ...run,
+        startedAt: run.startedAt,
+      });
     }
   }
 
@@ -1769,58 +2080,69 @@ export async function resumeDockerSandboxRun(
     ? restartContinuationPrompt(run.prompt)
     : run.prompt;
   if (!prompt) return null;
-  const rpcToken = oldSpec?.proxyMcpServers?.length ? crypto.randomUUID() : undefined;
-  if (rpcToken) registerRunToken(rpcToken, { sessionId: run.osSessionId, user: run.user });
+  const rpcToken = oldSpec?.proxyMcpServers?.length
+    ? crypto.randomUUID()
+    : undefined;
+  if (rpcToken)
+    registerRunToken(rpcToken, { sessionId: run.osSessionId, user: run.user });
   const hostId = `rh-${Bun.randomUUIDv7()}`;
-  const spec: RunHostSpec = recovery.kind === "replay"
-    ? {
-        ...(oldSpec as RunHostSpec),
-        hostId,
-        rpcToken,
-        ...((oldSpec as RunHostSpec).wsToken ? { wsToken: crypto.randomUUID() } : {}),
-        journalKind: recoveryKind(run.kind, "resume"),
-        firstJournaledAt: run.firstJournaledAt,
-        resumeAttempts: run.resumeAttempts,
-        lastResumeAt: run.lastResumeAt,
-      }
-    : {
-    hostId,
-    osSessionId: run.osSessionId,
-    prompt,
-    promptEntryId: effectiveEngineSessionId ? undefined : run.promptEntryId,
-    engineSessionId: effectiveEngineSessionId,
-    cwd: run.cwd,
-    mode: run.mode,
-    model: run.model,
-    selectedModel: run.selectedModel ?? run.model,
-    transientFallback: run.transientFallback,
-    mcpServers: run.mcpServers,
-    proxyMcpServers: oldSpec?.proxyMcpServers,
-    rpcToken,
-    reposNote: oldSpec?.reposNote,
-    deniedTools: run.deniedTools,
-    confirmTools: run.confirmTools,
-    aws: run.aws,
-    author: oldSpec?.author,
-    user: run.user,
-    fallbackModel: run.fallbackModel,
-    effort: run.effort,
-    fastMode: run.fastMode,
-    accountId: run.accountId,
-    accountStrict: run.accountStrict,
-    usageCredits: run.usageCredits,
-    trustProfile: oldSpec?.trustProfile ?? run.trustProfile,
-    journalKind: recoveryKind(run.kind, "resume"),
-    firstJournaledAt: run.firstJournaledAt,
-    resumeAttempts: run.resumeAttempts,
-    lastResumeAt: run.lastResumeAt,
-  };
-  console.log(`[sandbox] relaunching interrupted run ${run.runKey} in ${run.sandboxId} as ${spec.hostId}`);
+  const spec: RunHostSpec =
+    recovery.kind === "replay"
+      ? {
+          ...(oldSpec as RunHostSpec),
+          hostId,
+          rpcToken,
+          ...((oldSpec as RunHostSpec).wsToken
+            ? { wsToken: crypto.randomUUID() }
+            : {}),
+          journalKind: recoveryKind(run.kind, "resume"),
+          firstJournaledAt: run.firstJournaledAt,
+          resumeAttempts: run.resumeAttempts,
+          lastResumeAt: run.lastResumeAt,
+        }
+      : {
+          hostId,
+          osSessionId: run.osSessionId,
+          prompt,
+          promptEntryId: effectiveEngineSessionId
+            ? undefined
+            : run.promptEntryId,
+          engineSessionId: effectiveEngineSessionId,
+          cwd: run.cwd,
+          mode: run.mode,
+          model: run.model,
+          selectedModel: run.selectedModel ?? run.model,
+          transientFallback: run.transientFallback,
+          mcpServers: run.mcpServers,
+          proxyMcpServers: oldSpec?.proxyMcpServers,
+          rpcToken,
+          reposNote: oldSpec?.reposNote,
+          deniedTools: run.deniedTools,
+          confirmTools: run.confirmTools,
+          aws: run.aws,
+          author: oldSpec?.author,
+          user: run.user,
+          fallbackModel: run.fallbackModel,
+          effort: run.effort,
+          fastMode: run.fastMode,
+          accountId: run.accountId,
+          accountStrict: run.accountStrict,
+          usageCredits: run.usageCredits,
+          trustProfile: oldSpec?.trustProfile ?? run.trustProfile,
+          journalKind: recoveryKind(run.kind, "resume"),
+          firstJournaledAt: run.firstJournaledAt,
+          resumeAttempts: run.resumeAttempts,
+          lastResumeAt: run.lastResumeAt,
+        };
+  console.log(
+    `[sandbox] relaunching interrupted run ${run.runKey} in ${run.sandboxId} as ${spec.hostId}`,
+  );
   const replacement = sandbox.launchRunEager
     ? await sandbox.launchRunEager(spec, { onAskUser: cb.onAskUser })
     : sandbox.launchRun(spec, { onAskUser: cb.onAskUser });
   try {
-    if (oldDir && existsSync(oldDir)) rmSync(oldDir, { recursive: true, force: true });
+    if (oldDir && existsSync(oldDir))
+      rmSync(oldDir, { recursive: true, force: true });
   } catch {}
   return replacement.events();
 }

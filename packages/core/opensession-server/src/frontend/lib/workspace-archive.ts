@@ -18,35 +18,35 @@
  */
 
 import {
-	hasWorkspaceGroup,
-	inWorkspaceGroup,
-	type WorkspaceGroup,
+  hasWorkspaceGroup,
+  inWorkspaceGroup,
+  type WorkspaceGroup,
 } from "@tellahq/opensession-protocol/workspace-group";
 import type { UnifiedSession } from "./types";
 
 export interface WorkspaceArchiveInput extends WorkspaceGroup {
-	/** Every session the client holds, live plus anything archived here. */
-	sessions: readonly UnifiedSession[];
-	/** Rows from the workspace-scoped archived fetch, if it has landed. */
-	fetched?: readonly UnifiedSession[];
-	/** The open session keeps a live tab even when archived, so it never lists. */
-	excludeId?: string | null;
+  /** Every session the client holds, live plus anything archived here. */
+  sessions: readonly UnifiedSession[];
+  /** Rows from the workspace-scoped archived fetch, if it has landed. */
+  fetched?: readonly UnifiedSession[];
+  /** The open session keeps a live tab even when archived, so it never lists. */
+  excludeId?: string | null;
 }
 
 /** This workspace's archived sessions, newest activity first. */
 export function workspaceArchivedSessions(
-	input: WorkspaceArchiveInput,
+  input: WorkspaceArchiveInput,
 ): UnifiedSession[] {
-	const { sessions, fetched, excludeId, workspaceId, worktreeDir } = input;
-	const group: WorkspaceGroup = { workspaceId, worktreeDir };
-	if (!hasWorkspaceGroup(group)) return [];
-	const wanted = (s: UnifiedSession) =>
-		s.id !== excludeId && inWorkspaceGroup(s, group);
-	const known = new Map(sessions.map((s) => [s.id, s] as const));
-	const rows = sessions.filter((s) => s.archived && wanted(s));
-	for (const s of fetched ?? [])
-		if (!known.has(s.id) && wanted(s)) rows.push(s);
-	return rows.sort((a, b) =>
-		(b.lastActivity || "").localeCompare(a.lastActivity || ""),
-	);
+  const { sessions, fetched, excludeId, workspaceId, worktreeDir } = input;
+  const group: WorkspaceGroup = { workspaceId, worktreeDir };
+  if (!hasWorkspaceGroup(group)) return [];
+  const wanted = (s: UnifiedSession) =>
+    s.id !== excludeId && inWorkspaceGroup(s, group);
+  const known = new Map(sessions.map((s) => [s.id, s] as const));
+  const rows = sessions.filter((s) => s.archived && wanted(s));
+  for (const s of fetched ?? [])
+    if (!known.has(s.id) && wanted(s)) rows.push(s);
+  return rows.sort((a, b) =>
+    (b.lastActivity || "").localeCompare(a.lastActivity || ""),
+  );
 }

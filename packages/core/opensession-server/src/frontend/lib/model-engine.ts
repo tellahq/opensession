@@ -9,7 +9,8 @@ export interface EngineOption {
 }
 
 const PRESET_HEADS = ["dial/", "orchestrator/", "workspace-preset/"];
-const isPresetId = (id: string) => PRESET_HEADS.some((head) => id.startsWith(head));
+const isPresetId = (id: string) =>
+  PRESET_HEADS.some((head) => id.startsWith(head));
 
 export function modelEngine(_id: string): EngineId {
   return "pi";
@@ -31,8 +32,10 @@ export function isAnthropicModel(
   id: string,
   accountProvider?: string | null,
 ): boolean {
-  return modelVendor(id) === "anthropic" ||
-    (modelVendor(id) === null && accountProvider === "claude");
+  return (
+    modelVendor(id) === "anthropic" ||
+    (modelVendor(id) === null && accountProvider === "claude")
+  );
 }
 
 export function engineModelId(_engine: EngineId, id: string): string | null {
@@ -40,7 +43,8 @@ export function engineModelId(_engine: EngineId, id: string): string | null {
   if (id.startsWith("pi/")) return id;
   if (isPresetId(id)) return `pi/${id}`;
   if (id.startsWith("claude-")) return `pi/anthropic/${id}`;
-  if (id.startsWith("gpt-") || id.startsWith("codex-")) return `pi/openai/${id}`;
+  if (id.startsWith("gpt-") || id.startsWith("codex-"))
+    return `pi/openai/${id}`;
   return id.includes("/") ? `pi/${id}` : null;
 }
 

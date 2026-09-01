@@ -11,11 +11,11 @@ export const HISTORY_PAGE_ENTRIES = 500;
 export const HISTORY_REVEAL_MAX_ENTRIES = 2_000;
 
 export interface HistoryRevealPage {
-	entries: TranscriptEntry[];
-	truncated: boolean;
-	loaded: number;
-	cursor: number | null;
-	previousCursor: number | null;
+  entries: TranscriptEntry[];
+  truncated: boolean;
+  loaded: number;
+  cursor: number | null;
+  previousCursor: number | null;
 }
 
 /**
@@ -24,18 +24,20 @@ export interface HistoryRevealPage {
  * turn and makes the newly loaded history visible at the top of the timeline.
  */
 export function historyPageHasVisibleBoundary(
-	entries: TranscriptEntry[],
+  entries: TranscriptEntry[],
 ): boolean {
-	return entries.some((entry) => entry.type === "user" || entry.type === "system");
+  return entries.some(
+    (entry) => entry.type === "user" || entry.type === "system",
+  );
 }
 
 export function shouldContinueHistoryReveal(page: HistoryRevealPage): boolean {
-	return (
-		page.truncated &&
-		page.entries.length > 0 &&
-		!historyPageHasVisibleBoundary(page.entries) &&
-		page.loaded < HISTORY_REVEAL_MAX_ENTRIES &&
-		page.cursor !== null &&
-		page.cursor !== page.previousCursor
-	);
+  return (
+    page.truncated &&
+    page.entries.length > 0 &&
+    !historyPageHasVisibleBoundary(page.entries) &&
+    page.loaded < HISTORY_REVEAL_MAX_ENTRIES &&
+    page.cursor !== null &&
+    page.cursor !== page.previousCursor
+  );
 }

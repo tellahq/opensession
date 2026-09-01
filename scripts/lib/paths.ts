@@ -59,6 +59,27 @@ export const USER_UNIT_PATH = join(
 /** System-scope unit: the operator path (`service install --system`). */
 export const SERVICE_PATH = `/etc/systemd/system/${SERVICE_NAME}.service`;
 export const STAGED_UNIT_PATH = join(OPENSESSION_HOME, "opensession.service");
+export const INGRESS_SERVICE_NAME = "opensession-ingress";
+export const INGRESS_SERVICE_PATH = `/etc/systemd/system/${INGRESS_SERVICE_NAME}.service`;
+export const STAGED_INGRESS_UNIT_PATH = join(
+  OPENSESSION_HOME,
+  `${INGRESS_SERVICE_NAME}.service`,
+);
+export const USER_INGRESS_UNIT_PATH = join(
+  process.env.XDG_CONFIG_HOME || join(HOME, ".config"),
+  "systemd",
+  "user",
+  `${INGRESS_SERVICE_NAME}.service`,
+);
+export const SOCKET_NAME = "opensession.socket";
+export const SOCKET_PATH = `/etc/systemd/system/${SOCKET_NAME}`;
+export const STAGED_SOCKET_PATH = join(OPENSESSION_HOME, SOCKET_NAME);
+export const USER_SOCKET_PATH = join(
+  process.env.XDG_CONFIG_HOME || join(HOME, ".config"),
+  "systemd",
+  "user",
+  SOCKET_NAME,
+);
 export const EXECUTOR_SERVICE_NAME = "opensession-executor";
 export const EXECUTOR_SERVICE_PATH = `/etc/systemd/system/${EXECUTOR_SERVICE_NAME}.service`;
 export const STAGED_EXECUTOR_UNIT_PATH = join(
@@ -72,7 +93,8 @@ export const STAGED_SESSION_KERNEL_UNIT_PATH = join(
   OPENSESSION_HOME,
   "opensession-session-kernel.service",
 );
-export const SESSION_KERNEL_TOKEN_PATH = "/etc/opensession/session-kernel-token";
+export const SESSION_KERNEL_TOKEN_PATH =
+  "/etc/opensession/session-kernel-token";
 export const USER_SESSION_KERNEL_TOKEN_PATH = join(
   OPENSESSION_HOME,
   "session-kernel-token",

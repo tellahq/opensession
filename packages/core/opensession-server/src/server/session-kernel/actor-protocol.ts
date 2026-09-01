@@ -5,7 +5,7 @@ import type {
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 33;
+export const SESSION_KERNEL_ACTOR_VERSION = 36;
 export const SESSION_KERNEL_TRANSPORT_VERSION = 1;
 // A transcript mutation can carry one accepted 50 MiB legacy/base64 image
 // (about 67 MiB on the JSON wire) before the actor splits it into blob storage.
@@ -19,12 +19,34 @@ export type KernelActorAsyncRequest =
   | { t: "stats"; rpcId: string }
   | { t: "maintain"; rpcId: string }
   | {
-      t: "runtime_work";
+      t: "runtime_work" | "runtime_catalog_work";
       rpcId: string;
       now: number;
       timerKinds: string[];
       effectKinds: string[];
       limit: number;
+      additionalOutboxGroups?: Array<{
+        effectKinds: string[];
+        limit: number;
+      }>;
+      activeOutbox?: Array<{ id: number; sessionId: string }>;
+      activeOutboxRecheckAt?: number;
+    }
+  | {
+      t: "runtime_session_work";
+      rpcId: string;
+      sessionId: string;
+      candidateCount: number;
+      now: number;
+      timerKinds: string[];
+      effectKinds: string[];
+      limit: number;
+      additionalOutboxGroups?: Array<{
+        effectKinds: string[];
+        limit: number;
+      }>;
+      activeOutbox?: Array<{ id: number; sessionId: string }>;
+      activeOutboxRecheckAt?: number;
     };
 
 export type KernelActorAsyncResponse =
@@ -37,12 +59,25 @@ export type KernelActorAsyncResponse =
       stats: ReturnType<import("./store").SessionKernelStoreApi["stats"]>;
     }
   | {
-      t: "runtime_work_result";
+      t: "runtime_work_result" | "runtime_session_work_result";
       rpcId: string;
       timers: DurableTimer[];
       outbox: DurableOutboxItem[];
     }
-  | { t: "error"; rpcId: string; error: string; retryable?: boolean };
+  | {
+      t: "runtime_catalog_work_result";
+      rpcId: string;
+      sessionIds: string[];
+      timers: DurableTimer[];
+      outbox: DurableOutboxItem[];
+    }
+  | {
+      t: "error";
+      rpcId: string;
+      error: string;
+      retryable?: boolean;
+      fatal?: boolean;
+    };
 
 /** Gateway-worker-only async call. The transport wraps this in a service call;
  * it never crosses the independently supervised service boundary directly. */
@@ -75,7 +110,8 @@ export type KernelActorServiceResponse = KernelActorResponse & {
 };
 
 export type KernelActorClientRequest =
-  KernelActorAsyncRequest | KernelActorClientCallRequest;
+  | KernelActorAsyncRequest
+  | KernelActorClientCallRequest;
 
 export type KernelActorClientResponse = KernelActorResponse;
 

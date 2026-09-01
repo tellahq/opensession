@@ -27,23 +27,23 @@ import type { UnifiedSession } from "./types";
 
 /** A session archived here, held until an index fetch settles it. */
 export interface LocalArchiveOverride {
-	session: UnifiedSession;
-	/** When the change was made locally; a later fetch settles it. */
-	at: number;
+  session: UnifiedSession;
+  /** When the change was made locally; a later fetch settles it. */
+  at: number;
 }
 
 export interface SessionSlices {
-	/** The polled live list (`?archived=exclude`). */
-	live: UnifiedSession[];
-	/** When the live list last came back, settled or 304. */
-	liveAt: number;
-	/** The archived index, or null before the first one lands. */
-	archivedIndex: UnifiedSession[] | null;
-	/** When the archived index last came back, settled or 304. */
-	archivedIndexAt: number;
-	locallyArchived: ReadonlyMap<string, LocalArchiveOverride>;
-	/** Sessions unarchived here → when, so a later live poll settles them. */
-	locallyUnarchived: ReadonlyMap<string, number>;
+  /** The polled live list (`?archived=exclude`). */
+  live: UnifiedSession[];
+  /** When the live list last came back, settled or 304. */
+  liveAt: number;
+  /** The archived index, or null before the first one lands. */
+  archivedIndex: UnifiedSession[] | null;
+  /** When the archived index last came back, settled or 304. */
+  archivedIndexAt: number;
+  locallyArchived: ReadonlyMap<string, LocalArchiveOverride>;
+  /** Sessions unarchived here → when, so a later live poll settles them. */
+  locallyUnarchived: ReadonlyMap<string, number>;
 }
 
 /**
@@ -54,29 +54,29 @@ export interface SessionSlices {
  * changed nothing.
  */
 export function mergeSessionSlices(
-	slices: Pick<
-		SessionSlices,
-		"live" | "archivedIndex" | "locallyArchived" | "locallyUnarchived"
-	>,
+  slices: Pick<
+    SessionSlices,
+    "live" | "archivedIndex" | "locallyArchived" | "locallyUnarchived"
+  >,
 ): UnifiedSession[] {
-	const { live, archivedIndex, locallyArchived, locallyUnarchived } = slices;
-	if (!archivedIndex?.length && locallyArchived.size === 0) return live;
-	const seen = new Set(live.map((s) => s.id));
-	const merged = [...live];
-	for (const session of archivedIndex ?? []) {
-		// A session unarchived here is still in the index until the next
-		// rebuild; showing it would put the row back in Archived a beat after
-		// the person took it out.
-		if (seen.has(session.id) || locallyUnarchived.has(session.id)) continue;
-		seen.add(session.id);
-		merged.push(session);
-	}
-	for (const [id, override] of locallyArchived) {
-		if (seen.has(id)) continue;
-		seen.add(id);
-		merged.push(override.session);
-	}
-	return merged;
+  const { live, archivedIndex, locallyArchived, locallyUnarchived } = slices;
+  if (!archivedIndex?.length && locallyArchived.size === 0) return live;
+  const seen = new Set(live.map((s) => s.id));
+  const merged = [...live];
+  for (const session of archivedIndex ?? []) {
+    // A session unarchived here is still in the index until the next
+    // rebuild; showing it would put the row back in Archived a beat after
+    // the person took it out.
+    if (seen.has(session.id) || locallyUnarchived.has(session.id)) continue;
+    seen.add(session.id);
+    merged.push(session);
+  }
+  for (const [id, override] of locallyArchived) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    merged.push(override.session);
+  }
+  return merged;
 }
 
 /**
@@ -88,21 +88,21 @@ export function mergeSessionSlices(
  * would be inventing state.
  */
 export function settledOverrides(slices: SessionSlices): {
-	archived: string[];
-	unarchived: string[];
+  archived: string[];
+  unarchived: string[];
 } {
-	const archived: string[] = [];
-	const indexed = slices.archivedIndex
-		? new Set(slices.archivedIndex.map((s) => s.id))
-		: null;
-	for (const [id, override] of slices.locallyArchived) {
-		if (indexed && (indexed.has(id) || slices.archivedIndexAt > override.at))
-			archived.push(id);
-	}
-	const liveIds = new Set(slices.live.map((s) => s.id));
-	const unarchived: string[] = [];
-	for (const [id, at] of slices.locallyUnarchived) {
-		if (liveIds.has(id) || slices.liveAt > at) unarchived.push(id);
-	}
-	return { archived, unarchived };
+  const archived: string[] = [];
+  const indexed = slices.archivedIndex
+    ? new Set(slices.archivedIndex.map((s) => s.id))
+    : null;
+  for (const [id, override] of slices.locallyArchived) {
+    if (indexed && (indexed.has(id) || slices.archivedIndexAt > override.at))
+      archived.push(id);
+  }
+  const liveIds = new Set(slices.live.map((s) => s.id));
+  const unarchived: string[] = [];
+  for (const [id, at] of slices.locallyUnarchived) {
+    if (liveIds.has(id) || slices.liveAt > at) unarchived.push(id);
+  }
+  return { archived, unarchived };
 }

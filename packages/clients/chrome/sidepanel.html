@@ -1,90 +1,131 @@
 <!doctype html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <title>OS</title>
-  <link rel="stylesheet" href="sidepanel.css" />
-</head>
-<body>
-  <header>
-    <img src="icons/icon.png" alt="" class="logo" />
-    <select id="account-picker" title="Organization" aria-label="Organization"></select>
-    <nav>
-      <button id="tab-new" class="tab active">New</button>
-      <button id="tab-sessions" class="tab">Sessions</button>
-    </nav>
-    <button id="btn-settings" class="icon-btn" title="Settings">&#9881;</button>
-  </header>
+  <head>
+    <meta charset="utf-8" />
+    <title>OS</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icons/icon.png" alt="" class="logo" />
+      <select
+        id="account-picker"
+        title="Organization"
+        aria-label="Organization"
+      ></select>
+      <nav>
+        <button id="tab-new" class="tab active">New</button>
+        <button id="tab-sessions" class="tab">Sessions</button>
+      </nav>
+      <button id="btn-settings" class="icon-btn" title="Settings">
+        &#9881;
+      </button>
+    </header>
 
-  <!-- Composer -->
-  <section id="view-new" class="view">
-    <div id="ctx-chips"></div>
-    <div class="capture-row">
-      <button id="btn-shot" class="cap-btn" title="Attach a screenshot of the visible tab">&#128247; Screenshot</button>
-      <button id="btn-pick" class="cap-btn" title="Click an element on the page to capture its DOM + React context">&#8982; Pick element</button>
-    </div>
-    <textarea id="prompt" placeholder="What should the session do?&#10;&#10;Captured context (page, screenshot, element) is attached automatically."></textarea>
-    <div class="opts-row">
-      <select id="sel-repo" title="Repository"></select>
-      <select id="sel-mode" title="Mode">
-        <option value="ask">Ask</option>
-        <option value="code">Code</option>
-      </select>
-    </div>
-    <div class="opts-row">
-      <select id="sel-model" title="Model"></select>
-    </div>
-    <button id="btn-start" class="primary">Start session</button>
-    <div id="new-status" class="status"></div>
-  </section>
-
-  <!-- Sessions list -->
-  <section id="view-sessions" class="view" hidden>
-    <div id="sessions-list"></div>
-  </section>
-
-  <!-- Session detail -->
-  <section id="view-detail" class="view" hidden>
-    <div class="detail-head">
-      <button id="btn-back" class="icon-btn" title="Back">&#8592;</button>
-      <div id="detail-title" class="detail-title"></div>
-      <a id="detail-open" class="icon-btn" title="Open in OS" target="_blank">&#8599;</a>
-    </div>
-    <div id="detail-status" class="status"></div>
-    <div id="transcript"></div>
-    <div class="followup">
-      <textarea id="followup-text" rows="2" placeholder="Send a follow-up…"></textarea>
-      <button id="btn-send" class="primary">Send</button>
-    </div>
-  </section>
-
-  <!-- Settings -->
-  <section id="view-settings" class="view" hidden>
-    <h2>Settings</h2>
-    <label>Organization
-      <input id="in-account-label" type="text" placeholder="Organization name" />
-    </label>
-    <div class="account-actions">
-      <button id="btn-add-account" class="cap-btn">Add organization</button>
-      <button id="btn-remove-account" class="cap-btn danger">Remove</button>
-    </div>
-    <label>Server
-      <input id="in-server" type="text" placeholder="https://sessions.example.com" />
-    </label>
-    <div id="auth-box">
-      <div id="auth-state" class="status"></div>
-      <button id="btn-signin" class="primary">Sign in with GitHub</button>
-      <div id="device-flow" hidden>
-        <p>Enter this code on GitHub:</p>
-        <div id="device-code" class="device-code"></div>
-        <button id="btn-open-verify" class="cap-btn">Open github.com/login/device</button>
-        <div id="device-status" class="status">Waiting for authorization…</div>
+    <!-- Composer -->
+    <section id="view-new" class="view">
+      <div id="ctx-chips"></div>
+      <div class="capture-row">
+        <button
+          id="btn-shot"
+          class="cap-btn"
+          title="Attach a screenshot of the visible tab"
+        >
+          &#128247; Screenshot
+        </button>
+        <button
+          id="btn-pick"
+          class="cap-btn"
+          title="Click an element on the page to capture its DOM + React context"
+        >
+          &#8982; Pick element
+        </button>
       </div>
-      <button id="btn-signout" class="cap-btn" hidden>Sign out</button>
-    </div>
-    <p class="fineprint">Connects to your team's Open Session server.</p>
-  </section>
+      <textarea
+        id="prompt"
+        placeholder="What should the session do?&#10;&#10;Captured context (page, screenshot, element) is attached automatically."
+      ></textarea>
+      <div class="opts-row">
+        <select id="sel-repo" title="Repository"></select>
+        <select id="sel-mode" title="Mode">
+          <option value="ask">Ask</option>
+          <option value="code">Code</option>
+        </select>
+      </div>
+      <div class="opts-row">
+        <select id="sel-model" title="Model"></select>
+      </div>
+      <button id="btn-start" class="primary">Start session</button>
+      <div id="new-status" class="status"></div>
+    </section>
 
-  <script src="sidepanel.js"></script>
-</body>
+    <!-- Sessions list -->
+    <section id="view-sessions" class="view" hidden>
+      <div id="sessions-list"></div>
+    </section>
+
+    <!-- Session detail -->
+    <section id="view-detail" class="view" hidden>
+      <div class="detail-head">
+        <button id="btn-back" class="icon-btn" title="Back">&#8592;</button>
+        <div id="detail-title" class="detail-title"></div>
+        <a id="detail-open" class="icon-btn" title="Open in OS" target="_blank"
+          >&#8599;</a
+        >
+      </div>
+      <div id="detail-status" class="status"></div>
+      <div id="transcript"></div>
+      <div class="followup">
+        <textarea
+          id="followup-text"
+          rows="2"
+          placeholder="Send a follow-up…"
+        ></textarea>
+        <button id="btn-send" class="primary">Send</button>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="view-settings" class="view" hidden>
+      <h2>Settings</h2>
+      <label
+        >Organization
+        <input
+          id="in-account-label"
+          type="text"
+          placeholder="Organization name"
+        />
+      </label>
+      <div class="account-actions">
+        <button id="btn-add-account" class="cap-btn">Add organization</button>
+        <button id="btn-remove-account" class="cap-btn danger">Remove</button>
+      </div>
+      <label
+        >Server
+        <input
+          id="in-server"
+          type="text"
+          placeholder="https://sessions.example.com"
+        />
+      </label>
+      <div id="auth-box">
+        <div id="auth-state" class="status"></div>
+        <button id="btn-signin" class="primary">Sign in with GitHub</button>
+        <div id="device-flow" hidden>
+          <p>Enter this code on GitHub:</p>
+          <div id="device-code" class="device-code"></div>
+          <button id="btn-open-verify" class="cap-btn">
+            Open github.com/login/device
+          </button>
+          <div id="device-status" class="status">
+            Waiting for authorization…
+          </div>
+        </div>
+        <button id="btn-signout" class="cap-btn" hidden>Sign out</button>
+      </div>
+      <p class="fineprint">Connects to your team's Open Session server.</p>
+    </section>
+
+    <script src="sidepanel.js"></script>
+  </body>
 </html>

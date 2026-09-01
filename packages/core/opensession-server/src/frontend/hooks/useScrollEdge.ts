@@ -34,43 +34,43 @@ import { useEffect } from "react";
  *   container beneath it
  */
 export function useScrollEdge(bar: HTMLElement | null, selector: string): void {
-	useEffect(() => {
-		const root = bar?.parentElement;
-		if (!bar || !root) return;
+  useEffect(() => {
+    const root = bar?.parentElement;
+    if (!bar || !root) return;
 
-		let frame = 0;
-		let scroller: HTMLElement | null = null;
+    let frame = 0;
+    let scroller: HTMLElement | null = null;
 
-		const update = () => {
-			frame = 0;
-			const next = root.querySelector<HTMLElement>(selector);
-			if (next !== scroller) {
-				scroller?.removeEventListener("scroll", schedule);
-				scroller = next;
-				scroller?.addEventListener("scroll", schedule, { passive: true });
-			}
-			// Not `> 0`: scrollTop is fractional at fractional zoom, and a Mac
-			// rubber-band overscroll drives it negative at the top. A pane with
-			// nothing to scroll reports 0 and keeps the line off.
-			bar.toggleAttribute("data-scrolled", (scroller?.scrollTop ?? 0) > 1);
-		};
-		const schedule = () => {
-			if (!frame) frame = requestAnimationFrame(update);
-		};
+    const update = () => {
+      frame = 0;
+      const next = root.querySelector<HTMLElement>(selector);
+      if (next !== scroller) {
+        scroller?.removeEventListener("scroll", schedule);
+        scroller = next;
+        scroller?.addEventListener("scroll", schedule, { passive: true });
+      }
+      // Not `> 0`: scrollTop is fractional at fractional zoom, and a Mac
+      // rubber-band overscroll drives it negative at the top. A pane with
+      // nothing to scroll reports 0 and keeps the line off.
+      bar.toggleAttribute("data-scrolled", (scroller?.scrollTop ?? 0) > 1);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
 
-		update();
-		window.addEventListener("resize", schedule);
-		// Route changes, tab switches and streaming appends all arrive as
-		// mutations; the rAF above collapses a burst of them into one lookup.
-		const mutations = new MutationObserver(schedule);
-		mutations.observe(root, { childList: true, subtree: true });
+    update();
+    window.addEventListener("resize", schedule);
+    // Route changes, tab switches and streaming appends all arrive as
+    // mutations; the rAF above collapses a burst of them into one lookup.
+    const mutations = new MutationObserver(schedule);
+    mutations.observe(root, { childList: true, subtree: true });
 
-		return () => {
-			mutations.disconnect();
-			window.removeEventListener("resize", schedule);
-			scroller?.removeEventListener("scroll", schedule);
-			if (frame) cancelAnimationFrame(frame);
-			bar.removeAttribute("data-scrolled");
-		};
-	}, [bar, selector]);
+    return () => {
+      mutations.disconnect();
+      window.removeEventListener("resize", schedule);
+      scroller?.removeEventListener("scroll", schedule);
+      if (frame) cancelAnimationFrame(frame);
+      bar.removeAttribute("data-scrolled");
+    };
+  }, [bar, selector]);
 }

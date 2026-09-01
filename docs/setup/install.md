@@ -272,11 +272,11 @@ registers itself as a repo.
 `opensession onboard` asks for the bind address and port, your public base
 URL, your first repository, and which integrations to turn on. It writes:
 
-| File | What |
-| --- | --- |
-| `~/.opensession/config.json` | instance config, mode `0600` |
-| `~/.opensession.env` | secrets and feature flags, mode `0600` |
-| `~/.opensession/pi.json` | Pi engine config, created as `{"enabled": true}` only when absent ([engines.md](engines.md)) |
+| File                         | What                                                                                         |
+| ---------------------------- | -------------------------------------------------------------------------------------------- |
+| `~/.opensession/config.json` | instance config, mode `0600`                                                                 |
+| `~/.opensession.env`         | secrets and feature flags, mode `0600`                                                       |
+| `~/.opensession/pi.json`     | Pi engine config, created as `{"enabled": true}` only when absent ([engines.md](engines.md)) |
 
 If you accept service installation, Linux also gets the user units
 `~/.config/systemd/user/opensession.service` and
@@ -349,48 +349,48 @@ credentials its setup page marks as required. Common operator-facing variables:
 
 **Core server**
 
-| Var | Default | Purpose |
-| --- | --- | --- |
-| `HOST` | `127.0.0.1` | bind address for the main server. Keep loopback behind an identity-gated private tunnel, or bind to a Tailscale IP; never use a public wildcard without authentication (see the [trust model](README.md#trust-model-read-this)) |
-| `PORT` | `3850` | private app server (UI + API at the server root) |
-| `OPENSESSION_UI_BASE` | `http://127.0.0.1:<port>` | private app base used in session links |
-| `OPENSESSION_INGRESS_BASE` | unset | public origin for webhooks, remote Sandbox callbacks and workload identity |
-| `OPENSESSION_CONFIG` | `~/.opensession/config.json` | config-file path override |
-| `SHUTDOWN_DRAIN_MS` | `10000` | graceful-shutdown drain window for in-flight runs; unfinished work resumes from the journal |
-| `OPENSESSION_STATE_DIR` | unset | isolated root for instance state; required with `OPENSESSION_DEV=1` unless `OPENSESSION_SESSIONS_DIR` is set |
-| `OPENSESSION_SESSIONS_DIR` | `~/.opensession/sessions` | session store override |
-| `OPENSESSION_WORKTREES_DIR` | `~/.opensession/worktrees` | where session worktrees are created |
-| `OPENSESSION_DEV` | unset | `1` = HMR frontend plus a safe dev boot that skips integrations, public ingress, schedulers, resume, and other live side effects; refuses live state without an isolation override |
-| `OPENSESSION_AGENTATION` | unset | `1` = enable the Agentation visual feedback overlay on desktop, non-touch clients |
+| Var                         | Default                      | Purpose                                                                                                                                                                                                                         |
+| --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HOST`                      | `127.0.0.1`                  | bind address for the main server. Keep loopback behind an identity-gated private tunnel, or bind to a Tailscale IP; never use a public wildcard without authentication (see the [trust model](README.md#trust-model-read-this)) |
+| `PORT`                      | `3850`                       | private app server (UI + API at the server root)                                                                                                                                                                                |
+| `OPENSESSION_UI_BASE`       | `http://127.0.0.1:<port>`    | private app base used in session links                                                                                                                                                                                          |
+| `OPENSESSION_INGRESS_BASE`  | unset                        | public origin for webhooks, remote Sandbox callbacks and workload identity                                                                                                                                                      |
+| `OPENSESSION_CONFIG`        | `~/.opensession/config.json` | config-file path override                                                                                                                                                                                                       |
+| `SHUTDOWN_DRAIN_MS`         | `10000`                      | graceful-shutdown drain window for in-flight runs; unfinished work resumes from the journal                                                                                                                                     |
+| `OPENSESSION_STATE_DIR`     | unset                        | isolated root for instance state; required with `OPENSESSION_DEV=1` unless `OPENSESSION_SESSIONS_DIR` is set                                                                                                                    |
+| `OPENSESSION_SESSIONS_DIR`  | `~/.opensession/sessions`    | session store override                                                                                                                                                                                                          |
+| `OPENSESSION_WORKTREES_DIR` | `~/.opensession/worktrees`   | where session worktrees are created                                                                                                                                                                                             |
+| `OPENSESSION_DEV`           | unset                        | `1` = HMR frontend plus a safe dev boot that skips integrations, public ingress, schedulers, resume, and other live side effects; refuses live state without an isolation override                                              |
+| `OPENSESSION_AGENTATION`    | unset                        | `1` = enable the Agentation visual feedback overlay on desktop, non-touch clients                                                                                                                                               |
 
 **Engines and models** (details: [engines.md](engines.md))
 
-| Var | Default | Purpose |
-| --- | --- | --- |
-| `OPENSESSION_CLAUDE_BIN` | `claude` found on `PATH` | Claude Code CLI the Anthropic bridge spawns |
-| `OPENSESSION_CLAUDE_ACCOUNTS_PATH` | `~/.opensession/claude-accounts.json` | Claude account store override |
-| `OPENSESSION_PI_CONFIG` | `~/.opensession/pi.json` | Pi engine config path override (primarily a test/verification seam) |
-| `OPENSESSION_MODEL_PROVIDERS_CONFIG` | `~/.opensession/model-providers.json` | provider API-key config path override (primarily a test/verification seam) |
-| `OPENSESSION_MODEL` | `claude-fable-5` | default model, below the persisted UI override |
-| `OPENSESSION_FALLBACK_MODEL` | `claude-opus-5` | global fallback model; `none` disables |
-| `OPENSESSION_HAIKU_FALLBACK_MODEL` | `gpt-5.6-luna` | OpenAI fallback for exhausted Haiku runs and derived one-shots; `none` disables |
-| `OPENSESSION_MCP_CONFIG` | `<checkout>/mcp-config.json` | MCP config path override |
-| `SUGGEST_BRANCH_MODEL`, `DRAFT_AUTOMATION_MODEL` | `claude-haiku-4-5` | per-feature cheap-task models |
+| Var                                              | Default                               | Purpose                                                                         |
+| ------------------------------------------------ | ------------------------------------- | ------------------------------------------------------------------------------- |
+| `OPENSESSION_CLAUDE_BIN`                         | `claude` found on `PATH`              | Claude Code CLI the Anthropic bridge spawns                                     |
+| `OPENSESSION_CLAUDE_ACCOUNTS_PATH`               | `~/.opensession/claude-accounts.json` | Claude account store override                                                   |
+| `OPENSESSION_PI_CONFIG`                          | `~/.opensession/pi.json`              | Pi engine config path override (primarily a test/verification seam)             |
+| `OPENSESSION_MODEL_PROVIDERS_CONFIG`             | `~/.opensession/model-providers.json` | provider API-key config path override (primarily a test/verification seam)      |
+| `OPENSESSION_MODEL`                              | `claude-fable-5`                      | default model, below the persisted UI override                                  |
+| `OPENSESSION_FALLBACK_MODEL`                     | `claude-opus-5`                       | global fallback model; `none` disables                                          |
+| `OPENSESSION_HAIKU_FALLBACK_MODEL`               | `gpt-5.6-luna`                        | OpenAI fallback for exhausted Haiku runs and derived one-shots; `none` disables |
+| `OPENSESSION_MCP_CONFIG`                         | `<checkout>/mcp-config.json`          | MCP config path override                                                        |
+| `SUGGEST_BRANCH_MODEL`, `DRAFT_AUTOMATION_MODEL` | `claude-haiku-4-5`                    | per-feature cheap-task models                                                   |
 
 **Integrations** — each has its own page with the full list:
 
-| Feature | Vars | Page |
-| --- | --- | --- |
-| Slack | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` or `SLACK_SIGNING_SECRET`, `ALLOWED_SLACK_USER_ID`, `WORKTREE_HOOK_SECRET`, `SLACK_MENTION_INTENT_MODEL`, `SCHEDULE_WHEN_MODEL` | [slack.md](slack.md) |
-| GitHub | App: `OPENSESSION_GITHUB_CLIENT_ID`, `OPENSESSION_GITHUB_CLIENT_SECRET`, `OPENSESSION_GITHUB_APP_SLUG`, `OPENSESSION_GITHUB_APP_KEY`; webhook: `GITHUB_WEBHOOK_SECRET` | [github.md](github.md) |
-| Linear | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET`, `LINEAR_WEBHOOK_SECRET`, `LINEAR_API_KEY` | [linear.md](linear.md) |
-| Plain | `PLAIN_API_KEY`, `PLAIN_WEBHOOK_SECRET`, `PLAIN_*_MODEL` ×2 | [plain.md](plain.md) |
-| Stripe | `STRIPE_WEBHOOK_SECRET` | [integrations-misc.md](integrations-misc.md#stripe) |
-| Grafana | `GRAFANA_URL`, `GRAFANA_SERVICE_ACCOUNT_TOKEN`, `LOKI_DATASOURCE_UID` | [integrations-misc.md](integrations-misc.md#grafana-poller) |
-| Voice | `OPENAI_API_KEY`, `GROQ_API_KEY`, `WHISPER_CLI`, `WHISPER_MODEL` | [integrations-misc.md](integrations-misc.md#voice--transcription) |
-| Sandboxes | `E2B_API_KEY`, `OPENSESSION_SANDBOX_CONFIG` (experimental conformance only; supported workspace connections use Settings) | [self-hosting-sandboxes](../self-hosting-sandboxes.md) |
-| AWS runs (off by default) | `AGENT_AWS_CREDS`, `AGENT_AWS_REGION`, `AGENT_AWS_MINT_USER` | [integrations-misc.md](integrations-misc.md#aws-creds-for-runs-agent_aws_region) |
-| Previews | `PREVIEW_HOST` | Caddy-fronted live previews (`packages/core/opensession-server/src/server/preview.ts`) |
+| Feature                   | Vars                                                                                                                                                                   | Page                                                                                   |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Slack                     | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` or `SLACK_SIGNING_SECRET`, `ALLOWED_SLACK_USER_ID`, `WORKTREE_HOOK_SECRET`, `SLACK_MENTION_INTENT_MODEL`, `SCHEDULE_WHEN_MODEL`   | [slack.md](slack.md)                                                                   |
+| GitHub                    | App: `OPENSESSION_GITHUB_CLIENT_ID`, `OPENSESSION_GITHUB_CLIENT_SECRET`, `OPENSESSION_GITHUB_APP_SLUG`, `OPENSESSION_GITHUB_APP_KEY`; webhook: `GITHUB_WEBHOOK_SECRET` | [github.md](github.md)                                                                 |
+| Linear                    | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET`, `LINEAR_WEBHOOK_SECRET`, `LINEAR_API_KEY`                                                                                  | [linear.md](linear.md)                                                                 |
+| Plain                     | `PLAIN_API_KEY`, `PLAIN_WEBHOOK_SECRET`, `PLAIN_*_MODEL` ×2                                                                                                            | [plain.md](plain.md)                                                                   |
+| Stripe                    | `STRIPE_WEBHOOK_SECRET`                                                                                                                                                | [integrations-misc.md](integrations-misc.md#stripe)                                    |
+| Grafana                   | `GRAFANA_URL`, `GRAFANA_SERVICE_ACCOUNT_TOKEN`, `LOKI_DATASOURCE_UID`                                                                                                  | [integrations-misc.md](integrations-misc.md#grafana-poller)                            |
+| Voice                     | `OPENAI_API_KEY`, `GROQ_API_KEY`, `WHISPER_CLI`, `WHISPER_MODEL`                                                                                                       | [integrations-misc.md](integrations-misc.md#voice--transcription)                      |
+| Sandboxes                 | `E2B_API_KEY`, `OPENSESSION_SANDBOX_CONFIG` (experimental conformance only; supported workspace connections use Settings)                                              | [self-hosting-sandboxes](../self-hosting-sandboxes.md)                                 |
+| AWS runs (off by default) | `AGENT_AWS_CREDS`, `AGENT_AWS_REGION`, `AGENT_AWS_MINT_USER`                                                                                                           | [integrations-misc.md](integrations-misc.md#aws-creds-for-runs-agent_aws_region)       |
+| Previews                  | `PREVIEW_HOST`                                                                                                                                                         | Caddy-fronted live previews (`packages/core/opensession-server/src/server/preview.ts`) |
 
 **Feature flags** — `ENABLE_SLACK_AGENT`, `ENABLE_LINEAR_AGENT`,
 `ENABLE_PLAIN_AGENT`, `ENABLE_GITHUB_AGENT`, `ENABLE_STRIPE_AGENT`,

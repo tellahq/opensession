@@ -1,0 +1,9 @@
+[Unit]
+Description=Open Session agent workloads
+
+[Slice]
+# Run hosts contain engines, shells, compilers, tests, MCP subprocesses, and
+# their descendants. They may consume idle host capacity, but yield promptly to
+# the control plane when both groups are busy.
+CPUWeight=100
+IOWeight=100

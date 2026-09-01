@@ -43,7 +43,9 @@ export function readCreatePlan(
   const plan = readCreatePlanForRecovery(sessionId);
   if (!plan) return undefined;
   if (plan.identity !== identity) {
-    throw new Error(`Create request id for ${sessionId} was reused with another payload`);
+    throw new Error(
+      `Create request id for ${sessionId} was reused with another payload`,
+    );
   }
   return plan;
 }

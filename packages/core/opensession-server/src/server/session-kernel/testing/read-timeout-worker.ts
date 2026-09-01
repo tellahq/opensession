@@ -14,7 +14,8 @@ self.addEventListener("message", (event: MessageEvent<Record<string, any>>) => {
     request.t === "call" &&
     request.request?.t === "store" &&
     request.request.method === "askEntries"
-  ) return;
+  )
+    return;
   self.postMessage({
     t: "error",
     rpcId: request.rpcId,

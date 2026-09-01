@@ -38,7 +38,8 @@ export type SlackEventInboxEnqueueResult = "enqueued" | "pending" | "processed";
 function eventId(event: any): string {
   const channel = typeof event?.channel === "string" ? event.channel : "";
   const ts = typeof event?.ts === "string" ? event.ts : "";
-  if (!channel || !ts) throw new Error("Slack session event is missing channel or ts");
+  if (!channel || !ts)
+    throw new Error("Slack session event is missing channel or ts");
   return `${channel}-${ts}`;
 }
 
@@ -137,10 +138,13 @@ export class SlackEventInbox {
           (record.kind !== "direct_message" && record.kind !== "mention") ||
           !record.event ||
           typeof record.receivedAt !== "string"
-        ) continue;
+        )
+          continue;
         this.records.set(record.id, {
           ...record,
-          attempts: Number.isFinite(record.attempts) ? Number(record.attempts) : 0,
+          attempts: Number.isFinite(record.attempts)
+            ? Number(record.attempts)
+            : 0,
         } as SlackEventInboxRecord);
       }
     } catch (error) {
@@ -186,7 +190,10 @@ export class SlackEventInbox {
       try {
         this.persist();
       } catch (persistError) {
-        console.error("[slack] Failed to persist event inbox failure:", persistError);
+        console.error(
+          "[slack] Failed to persist event inbox failure:",
+          persistError,
+        );
       }
       console.error(
         `[slack] Event inbox attempt ${record.attempts} failed for ${record.id}:`,

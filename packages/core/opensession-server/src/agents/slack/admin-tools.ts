@@ -104,10 +104,11 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
       "Save a fact, preference, or standing instruction to this channel's memory so you recall it in future threads. In a public channel this is shared workspace-wide; in a private channel or DM it stays local. Use when the user says 'remember…' or states a durable preference.",
       { text: z.string().describe("The fact or instruction to remember.") },
       async (args: { text: string }) => {
-        if (!args.text?.trim()) return text("Nothing to remember (empty text).");
+        if (!args.text?.trim())
+          return text("Nothing to remember (empty text).");
         const e = await addMemory(memCtx, args.text, ctx.createdBy);
         return text(`Got it — remembered (id \`${e.id}\`).`);
-      }
+      },
     ),
     tool(
       "list_memory",
@@ -123,17 +124,17 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           parts.push(
             (v.localIsWorkspace ? "*Workspace memory:*" : "*This channel:*") +
               "\n" +
-              v.local.map(fmtEntry).join("\n")
+              v.local.map(fmtEntry).join("\n"),
           );
         }
         if (v.shared.length) {
           parts.push(
             "*Workspace memory (shared, read-only here):*\n" +
-              v.shared.map(fmtEntry).join("\n")
+              v.shared.map(fmtEntry).join("\n"),
           );
         }
         return text(parts.join("\n\n"));
-      }
+      },
     ),
     tool(
       "forget",
@@ -142,7 +143,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
       async (args: { id: string }) => {
         const r = await forgetMemory(memCtx, args.id);
         return text(r.ok ? `Forgot: "${r.removed.text}".` : r.error);
-      }
+      },
     ),
   ];
 
@@ -174,7 +175,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             return `• *${a.name}* [\`${a.id}\`]: ${trig}, ${a.mode}${repo}, ${a.enabled ? "enabled" : "disabled"}${next}${last}`;
           });
           return text(lines.join("\n"));
-        }
+        },
       ),
       tool(
         "create_automation",
@@ -188,58 +189,62 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .string()
             .optional()
             .describe(
-              "5-field UTC cron, e.g. '0 16 * * 1-5' = 9am PT weekdays. Omit for manual/webhook only. Note: server is UTC."
+              "5-field UTC cron, e.g. '0 16 * * 1-5' = 9am PT weekdays. Omit for manual/webhook only. Note: server is UTC.",
             ),
           mode: z
             .enum(["ask", "code"])
             .optional()
-            .describe("'ask' = read-only (default), 'code' = worktree + can open PRs."),
+            .describe(
+              "'ask' = read-only (default), 'code' = worktree + can open PRs.",
+            ),
           repo: z.string().optional().describe(repoParamHelp()),
           mcpServers: z
             .array(z.string())
             .optional()
-            .describe("Optional allowlist of MCP server names this run may use."),
+            .describe(
+              "Optional allowlist of MCP server names this run may use.",
+            ),
           model: z
             .string()
             .optional()
             .describe(
-              "Optional model id — a tier ('claude-opus-5', 'gpt-5.6-sol') or an engine-prefixed id ('pi/anthropic/claude-opus-5')."
+              "Optional model id — a tier ('claude-opus-5', 'gpt-5.6-sol') or an engine-prefixed id ('pi/anthropic/claude-opus-5').",
             ),
           accountId: z
             .string()
             .optional()
             .describe(
-              "Optional claude-accounts id to pin runs to one subscription. By default a hard pin (cost cap: exhaustion falls to the fallback model, never the shared pool)."
+              "Optional claude-accounts id to pin runs to one subscription. By default a hard pin (cost cap: exhaustion falls to the fallback model, never the shared pool).",
             ),
           accountStrict: z
             .boolean()
             .optional()
             .describe(
-              "false = soft pin: prefer the pinned account but fall back to the shared pool when it's exhausted. Default true (hard pin)."
+              "false = soft pin: prefer the pinned account but fall back to the shared pool when it's exhausted. Default true (hard pin).",
             ),
           usageCredits: z
             .boolean()
             .optional()
             .describe(
-              "Allow runs to spend usage-credits past subscription limits (needs extra usage enabled on the account). Default false."
+              "Allow runs to spend usage-credits past subscription limits (needs extra usage enabled on the account). Default false.",
             ),
           prReviewer: z
             .string()
             .optional()
             .describe(
-              "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list. Without one the PR reaches nobody's review queue. The target must be a collaborator on the repo."
+              "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list. Without one the PR reaches nobody's review queue. The target must be a collaborator on the repo.",
             ),
           owner: z
             .string()
             .optional()
             .describe(
-              "Who is accountable for what this automation does. It appears in their sidebar under Automations. Omit to leave it unowned."
+              "Who is accountable for what this automation does. It appears in their sidebar under Automations. Omit to leave it unowned.",
             ),
           workspaceId: z
             .string()
             .optional()
             .describe(
-              "Optional workspace id to file this automation under. Its runs stay in the Automations section either way."
+              "Optional workspace id to file this automation under. Its runs stay in the Automations section either way.",
             ),
         },
         async (args: {
@@ -279,12 +284,16 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           const runsIn = res.repo || defaultRepoId();
           return text(
             `Created automation *${res.name}* [\`${res.id}\`]` +
-              (res.schedule ? ` on cron \`${res.schedule}\` (UTC)` : " (manual/webhook)") +
+              (res.schedule
+                ? ` on cron \`${res.schedule}\` (UTC)`
+                : " (manual/webhook)") +
               `, mode ${res.mode}` +
-              (runsIn ? `, repo ${runsIn}${res.repo ? "" : " (instance default)"}` : "") +
-              "."
+              (runsIn
+                ? `, repo ${runsIn}${res.repo ? "" : " (instance default)"}`
+                : "") +
+              ".",
           );
-        }
+        },
       ),
       tool(
         "update_automation",
@@ -293,28 +302,37 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           id: z.string(),
           name: z.string().optional(),
           prompt: z.string().optional(),
-          schedule: z.string().optional().describe("5-field UTC cron; '' clears it."),
+          schedule: z
+            .string()
+            .optional()
+            .describe("5-field UTC cron; '' clears it."),
           mode: z.enum(["ask", "code"]).optional(),
           enabled: z.boolean().optional(),
           repo: z
             .string()
             .optional()
-            .describe(`${repoParamHelp()} '' resets it to the instance default.`),
+            .describe(
+              `${repoParamHelp()} '' resets it to the instance default.`,
+            ),
           mcpServers: z.array(z.string()).optional(),
           model: z
             .string()
             .optional()
             .describe(
-              "Model id — a tier ('claude-opus-5', 'gpt-5.6-sol') or an engine-prefixed id ('pi/anthropic/claude-opus-5'); '' resets to the default."
+              "Model id — a tier ('claude-opus-5', 'gpt-5.6-sol') or an engine-prefixed id ('pi/anthropic/claude-opus-5'); '' resets to the default.",
             ),
           accountId: z
             .string()
             .optional()
-            .describe("Pin runs to this claude-accounts id; '' clears the pin."),
+            .describe(
+              "Pin runs to this claude-accounts id; '' clears the pin.",
+            ),
           accountStrict: z
             .boolean()
             .optional()
-            .describe("false = soft pin (pool fallback when exhausted); true = hard pin (cost cap)."),
+            .describe(
+              "false = soft pin (pool fallback when exhausted); true = hard pin (cost cap).",
+            ),
           usageCredits: z
             .boolean()
             .optional()
@@ -323,18 +341,20 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .string()
             .optional()
             .describe(
-              "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list; '' clears it."
+              "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list; '' clears it.",
             ),
           owner: z
             .string()
             .optional()
             .describe(
-              "Who is accountable for what this automation does. It appears in their sidebar under Automations; '' leaves it unowned."
+              "Who is accountable for what this automation does. It appears in their sidebar under Automations; '' leaves it unowned.",
             ),
           workspaceId: z
             .string()
             .optional()
-            .describe("Workspace id to file this automation under; '' clears it."),
+            .describe(
+              "Workspace id to file this automation under; '' clears it.",
+            ),
         },
         async (args: {
           id: string;
@@ -359,10 +379,12 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           const runsIn = res.repo || defaultRepoId();
           return text(
             `Updated *${res.name}* [\`${res.id}\`]: ${res.enabled ? "enabled" : "disabled"}, ${res.mode}` +
-              (runsIn ? `, repo ${runsIn}${res.repo ? "" : " (instance default)"}` : "") +
-              (res.schedule ? `, cron \`${res.schedule}\`` : "")
+              (runsIn
+                ? `, repo ${runsIn}${res.repo ? "" : " (instance default)"}`
+                : "") +
+              (res.schedule ? `, cron \`${res.schedule}\`` : ""),
           );
-        }
+        },
       ),
       tool(
         "delete_automation",
@@ -374,9 +396,9 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           return text(
             ok
               ? `Deleted automation ${a ? `*${a.name}* ` : ""}[\`${args.id}\`].`
-              : `No automation with id \`${args.id}\`.`
+              : `No automation with id \`${args.id}\`.`,
           );
-        }
+        },
       ),
       tool(
         "run_automation",
@@ -387,10 +409,10 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           if (!a) return text(`No automation with id \`${args.id}\`.`);
           // Fire-and-forget; the run reports into the Open Session session list.
           void runAutomation(a, undefined, { trigger: "manual" }).catch((e) =>
-            console.error("[admin] run_automation failed:", e)
+            console.error("[admin] run_automation failed:", e),
           );
           return text(`Triggered *${a.name}* [\`${a.id}\`] — running now.`);
-        }
+        },
       ),
       tool(
         "schedule_once",
@@ -398,24 +420,37 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
         {
           when: z
             .string()
-            .describe("When to fire, in natural language — e.g. 'next Tuesday 9am', 'in a week', 'tomorrow at 14:00', 'in 3 hours'. Pass the user's wording; it's resolved to an exact UTC instant."),
+            .describe(
+              "When to fire, in natural language — e.g. 'next Tuesday 9am', 'in a week', 'tomorrow at 14:00', 'in 3 hours'. Pass the user's wording; it's resolved to an exact UTC instant.",
+            ),
           prompt: z
             .string()
-            .describe("What to do when it fires, addressed to yourself (e.g. 'Remind Alice to review the Q3 deck' or 'DM Bob the latest report')."),
-          name: z.string().optional().describe("Short label; defaults to a snippet of the prompt."),
+            .describe(
+              "What to do when it fires, addressed to yourself (e.g. 'Remind Alice to review the Q3 deck' or 'DM Bob the latest report').",
+            ),
+          name: z
+            .string()
+            .optional()
+            .describe("Short label; defaults to a snippet of the prompt."),
           mode: z
             .enum(["ask", "code"])
             .optional()
-            .describe("'ask' = read-only (default), 'code' = worktree + can open PRs."),
+            .describe(
+              "'ask' = read-only (default), 'code' = worktree + can open PRs.",
+            ),
           repo: z.string().optional().describe(repoParamHelp()),
           mcpServers: z
             .array(z.string())
             .optional()
-            .describe("Optional allowlist of MCP servers the run may use. Omit for the full toolset."),
+            .describe(
+              "Optional allowlist of MCP servers the run may use. Omit for the full toolset.",
+            ),
           replyInThread: z
             .boolean()
             .optional()
-            .describe("Post the reminder/result back into the originating Slack thread (default true when in a Slack thread)."),
+            .describe(
+              "Post the reminder/result back into the originating Slack thread (default true when in a Slack thread).",
+            ),
         },
         async (args: {
           when: string;
@@ -426,17 +461,19 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           mcpServers?: string[];
           replyInThread?: boolean;
         }) => {
-          if (!args.prompt?.trim()) return text("Nothing to schedule (empty prompt).");
+          if (!args.prompt?.trim())
+            return text("Nothing to schedule (empty prompt).");
           const iso = await parseWhen(args.when);
           if (!iso) {
             return text(
-              `Couldn't read "${args.when}" as a future time. Try something like "next Tuesday 9am", "in a week", or "tomorrow at 14:00".`
+              `Couldn't read "${args.when}" as a future time. Try something like "next Tuesday 9am", "in a week", or "tomorrow at 14:00".`,
             );
           }
 
           // Post back into "this" Slack thread by default — only possible when we
           // actually have one (Slack runs carry channel+threadTs; Open Session doesn't).
-          const inSlackThread = !!ctx.threadTs && !!ctx.channel && ctx.channel !== "opensession";
+          const inSlackThread =
+            !!ctx.threadTs && !!ctx.channel && ctx.channel !== "opensession";
           const replyInThread = args.replyInThread !== false && inSlackThread;
 
           let prompt = args.prompt.trim();
@@ -447,11 +484,14 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
               `\`${ctx.channel}\`, \`thread_ts\` \`${ctx.threadTs}\`, and the reminder as \`text\`. ` +
               `Open with "⏰ ", say it's you, ${personaName()}, and keep it concise.`;
             // Make sure the run can reach Slack even if the caller restricted servers.
-            if (mcpServers) mcpServers = Array.from(new Set([...mcpServers, "slack"]));
+            if (mcpServers)
+              mcpServers = Array.from(new Set([...mcpServers, "slack"]));
           }
 
           const res = createAutomation({
-            name: args.name?.trim() || `Reminder: ${args.prompt.trim().slice(0, 48)}`,
+            name:
+              args.name?.trim() ||
+              `Reminder: ${args.prompt.trim().slice(0, 48)}`,
             prompt,
             schedule: "",
             runOnceAt: iso,
@@ -464,9 +504,9 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           return text(
             `Scheduled *${res.name}* [\`${res.id}\`] for ${iso} (UTC)` +
               (replyInThread ? ", posting back to this thread" : "") +
-              ". It runs once, then cleans itself up. Cancel with delete_automation."
+              ". It runs once, then cleans itself up. Cancel with delete_automation.",
           );
-        }
+        },
       ),
       // ---------------------------------------------------------------------
       // MCP connections
@@ -491,7 +531,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             return `• *${n}* — ${where}${restricted}`;
           });
           return text(lines.join("\n"));
-        }
+        },
       ),
       tool(
         "add_mcp_server",
@@ -502,14 +542,17 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe("Unique short name (alphanumeric, dashes/underscores)."),
           transport: z.enum(["http", "stdio"]),
           url: z.string().optional().describe("Required for http transport."),
-          command: z.string().optional().describe("Required for stdio transport."),
+          command: z
+            .string()
+            .optional()
+            .describe("Required for stdio transport."),
           args: z.array(z.string()).optional(),
           env: z.record(z.string(), z.string()).optional(),
           allowedUsers: z
             .array(z.string())
             .optional()
             .describe(
-              "Optional per-user allowlist — only these people's sessions get this server's tools. Names/first-names/emails/GitHub logins/Slack ids all resolve. Omit for a server available to everyone."
+              "Optional per-user allowlist — only these people's sessions get this server's tools. Names/first-names/emails/GitHub logins/Slack ids all resolve. Omit for a server available to everyone.",
             ),
         },
         async (args: {
@@ -527,9 +570,9 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             ? ` Restricted to ${args.allowedUsers.join(", ")}.`
             : "";
           return text(
-            `Added MCP server *${args.name}* (${args.transport}). It'll be available on the next message.${restricted}`
+            `Added MCP server *${args.name}* (${args.transport}). It'll be available on the next message.${restricted}`,
           );
-        }
+        },
       ),
       tool(
         "set_mcp_allowed_users",
@@ -539,7 +582,9 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           allowedUsers: z
             .array(z.string())
             .optional()
-            .describe("People allowed to use it. Empty/omitted = available to everyone."),
+            .describe(
+              "People allowed to use it. Empty/omitted = available to everyone.",
+            ),
         },
         async (args: { name: string; allowedUsers?: string[] }) => {
           const res = setMcpAllowedUsers(args.name, args.allowedUsers);
@@ -547,9 +592,9 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           return text(
             res.allowedUsers?.length
               ? `*${args.name}* is now restricted to ${res.allowedUsers.join(", ")}. Applies on the next message.`
-              : `*${args.name}* is now available to everyone. Applies on the next message.`
+              : `*${args.name}* is now available to everyone. Applies on the next message.`,
           );
-        }
+        },
       ),
       tool(
         "remove_mcp_server",
@@ -559,8 +604,8 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           const res = removeMcpServer(args.name);
           if ("error" in res) return text(`Couldn't remove it: ${res.error}`);
           return text(`Removed MCP server *${args.name}*.`);
-        }
-      )
+        },
+      ),
     );
   }
 

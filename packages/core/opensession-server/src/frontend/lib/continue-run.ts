@@ -12,4 +12,4 @@
  * Kept short because it lands in the transcript as your own message.
  */
 export const CONTINUE_AFTER_FAILURE_PROMPT =
-	"Continue where you left off and finish the task. If the work was already done, post the final summary.";
+  "Continue where you left off and finish the task. If the work was already done, post the final summary.";

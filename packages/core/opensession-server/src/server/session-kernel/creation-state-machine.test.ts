@@ -35,11 +35,7 @@ describe("creation state reducer", () => {
   });
 
   test("every nonterminal phase can fail without inventing recovery", () => {
-    for (const state of [
-      "planned",
-      "preparing",
-      "opening_dispatched",
-    ] as const)
+    for (const state of ["planned", "preparing", "opening_dispatched"] as const)
       expect(CREATION_STATE_TRANSITIONS[state].failed).toBe("failed");
     expect(nextCreationState("failed", "preparation_started")).toBeUndefined();
   });

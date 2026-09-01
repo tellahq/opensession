@@ -10,8 +10,8 @@
 
 import { useEffect, useState } from "react";
 import {
-	fetchAutomationOverview,
-	type AutomationOverview,
+  fetchAutomationOverview,
+  type AutomationOverview,
 } from "./api/automations";
 
 export type AutomationOverviewByName = Map<string, AutomationOverview>;
@@ -19,22 +19,22 @@ export type AutomationOverviewByName = Map<string, AutomationOverview>;
 const EMPTY: AutomationOverviewByName = new Map();
 
 export function useAutomationOverview(
-	refreshKey: string,
+  refreshKey: string,
 ): AutomationOverviewByName {
-	const [byName, setByName] = useState<AutomationOverviewByName>(EMPTY);
-	useEffect(() => {
-		let live = true;
-		fetchAutomationOverview()
-			.then((list) => {
-				if (!live) return;
-				setByName(new Map(list.map((a) => [a.name, a])));
-			})
-			// A sidebar that can't reach this endpoint keeps the band it had
-			// before the audience existed: every automation, no gist.
-			.catch(() => {});
-		return () => {
-			live = false;
-		};
-	}, [refreshKey]);
-	return byName;
+  const [byName, setByName] = useState<AutomationOverviewByName>(EMPTY);
+  useEffect(() => {
+    let live = true;
+    fetchAutomationOverview()
+      .then((list) => {
+        if (!live) return;
+        setByName(new Map(list.map((a) => [a.name, a])));
+      })
+      // A sidebar that can't reach this endpoint keeps the band it had
+      // before the audience existed: every automation, no gist.
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [refreshKey]);
+  return byName;
 }

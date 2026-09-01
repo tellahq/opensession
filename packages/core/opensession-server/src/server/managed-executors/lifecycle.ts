@@ -2,7 +2,12 @@ import type { ExecutorLifecycle, ExecutorRecord } from "./state";
 
 export type ExecutorDesiredState = "awake" | "sleeping" | "destroyed";
 export type ExecutorLifecycleEffect =
-  "none" | "wake" | "pause" | "destroy" | "wait" | "repair";
+  | "none"
+  | "wake"
+  | "pause"
+  | "destroy"
+  | "wait"
+  | "repair";
 
 /** Pure projection for a SessionKernel desired-state effect planner. */
 export function desiredLifecycleEffect(

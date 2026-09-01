@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "..");
-const dropInPath = resolve(import.meta.dir, "systemd/caddy.service.d/opensession.conf");
+const dropInPath = resolve(
+  import.meta.dir,
+  "systemd/caddy.service.d/opensession.conf",
+);
 
 describe("Caddy systemd deployment", () => {
   test("waits for Tailscale and retries a failed tailnet-IP bind", async () => {
@@ -15,9 +18,15 @@ describe("Caddy systemd deployment", () => {
   });
 
   test("the host deploy installs the drop-in", async () => {
-    const deployScript = await Bun.file(resolve(repoRoot, "deploy/deploy.sh")).text();
+    const deployScript = await Bun.file(
+      resolve(repoRoot, "deploy/deploy.sh"),
+    ).text();
 
-    expect(deployScript).toContain("deploy/systemd/caddy.service.d/opensession.conf");
-    expect(deployScript).toContain("/etc/systemd/system/caddy.service.d/opensession.conf");
+    expect(deployScript).toContain(
+      "deploy/systemd/caddy.service.d/opensession.conf",
+    );
+    expect(deployScript).toContain(
+      "/etc/systemd/system/caddy.service.d/opensession.conf",
+    );
   });
 });

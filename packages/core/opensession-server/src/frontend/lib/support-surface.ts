@@ -28,18 +28,20 @@ export const PLAIN_ID = "plain";
 
 export type SupportSurface = "sidebar" | "page" | "off";
 
-export const SUPPORT_SURFACE_OPTIONS: { value: SupportSurface; label: string }[] =
-	[
-		{ value: "sidebar", label: "In the sidebar" },
-		{ value: "page", label: "As a tool" },
-		{ value: "off", label: "Off" },
-	];
+export const SUPPORT_SURFACE_OPTIONS: {
+  value: SupportSurface;
+  label: string;
+}[] = [
+  { value: "sidebar", label: "In the sidebar" },
+  { value: "page", label: "As a tool" },
+  { value: "off", label: "Off" },
+];
 
 /** The two places it can live, without the off state. For surfaces that show
  *  on/off some other way — a tick on the row it sits in — where a third
  *  "Off" row would be the same switch twice. */
 export const SUPPORT_PLACEMENT_OPTIONS = SUPPORT_SURFACE_OPTIONS.filter(
-	(option) => option.value !== "off",
+  (option) => option.value !== "off",
 );
 
 /** Where Support goes when switched back on. Nothing records the placement it
@@ -54,24 +56,24 @@ export const DEFAULT_SUPPORT_PLACEMENT: SupportSurface = "page";
  * default tool, while the band is the alternate placement someone can choose.
  */
 export function supportSurfaceOf(
-	toolShown: boolean,
-	bandShown: boolean,
+  toolShown: boolean,
+  bandShown: boolean,
 ): SupportSurface {
-	if (toolShown) return "page";
-	if (bandShown) return "sidebar";
-	return "off";
+  if (toolShown) return "page";
+  if (bandShown) return "sidebar";
+  return "off";
 }
 
 /** Does the Support TOOL render? The derived choice ensures the band and tool
  *  never both render, whatever the two underlying lists say. */
 export function supportToolShown(
-	toolShown: boolean,
-	bandShown: boolean,
+  toolShown: boolean,
+  bandShown: boolean,
 ): boolean {
-	return supportSurfaceOf(toolShown, bandShown) === "page";
+  return supportSurfaceOf(toolShown, bandShown) === "page";
 }
 
 export function setSupportSurface(surface: SupportSurface) {
-	setSidebarToolVisible(PLAIN_ID, surface === "page");
-	setSidebarFeedVisible(PLAIN_ID, surface === "sidebar");
+  setSidebarToolVisible(PLAIN_ID, surface === "page");
+  setSidebarFeedVisible(PLAIN_ID, surface === "sidebar");
 }

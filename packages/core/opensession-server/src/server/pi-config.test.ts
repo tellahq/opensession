@@ -35,7 +35,10 @@ function withConfigFile(raw?: unknown): string {
 describe("normalizePiConfig", () => {
   it("normalizes anything that isn't a JSON object to the disabled config", () => {
     for (const raw of [null, undefined, 42, "yes", [], true]) {
-      expect(normalizePiConfig(raw)).toEqual({ enabled: false, pickerModels: [] });
+      expect(normalizePiConfig(raw)).toEqual({
+        enabled: false,
+        pickerModels: [],
+      });
     }
   });
 
@@ -59,13 +62,15 @@ describe("normalizePiConfig", () => {
           42,
           null,
         ],
-      }).pickerModels
+      }).pickerModels,
     ).toEqual(["pi/anthropic/claude-opus-5"]);
   });
 
   it("tolerates a missing or malformed pickerModels field", () => {
     expect(normalizePiConfig({ enabled: true }).pickerModels).toEqual([]);
-    expect(normalizePiConfig({ enabled: true, pickerModels: "pi/a/b" }).pickerModels).toEqual([]);
+    expect(
+      normalizePiConfig({ enabled: true, pickerModels: "pi/a/b" }).pickerModels,
+    ).toEqual([]);
   });
 
   it("ignores the retired bridgeAccounts field (pi picks from the pool)", () => {
@@ -74,16 +79,28 @@ describe("normalizePiConfig", () => {
     expect(cfg).toEqual({ enabled: true, pickerModels: [] });
   });
 
-  it("keeps anthropicTransport only as the literal non-default \"bridge\"", () => {
+  it('keeps anthropicTransport only as the literal non-default "bridge"', () => {
     // Absent = the "inprocess" default; only the exact rollback value
     // survives normalization (present-implies-non-default).
-    expect(normalizePiConfig({ enabled: true }).anthropicTransport).toBeUndefined();
     expect(
-      normalizePiConfig({ enabled: true, anthropicTransport: "bridge" }).anthropicTransport
+      normalizePiConfig({ enabled: true }).anthropicTransport,
+    ).toBeUndefined();
+    expect(
+      normalizePiConfig({ enabled: true, anthropicTransport: "bridge" })
+        .anthropicTransport,
     ).toBe("bridge");
-    for (const junk of ["inprocess", "Bridge", "loopback", 42, null, true, {}]) {
+    for (const junk of [
+      "inprocess",
+      "Bridge",
+      "loopback",
+      42,
+      null,
+      true,
+      {},
+    ]) {
       expect(
-        normalizePiConfig({ enabled: true, anthropicTransport: junk }).anthropicTransport
+        normalizePiConfig({ enabled: true, anthropicTransport: junk })
+          .anthropicTransport,
       ).toBeUndefined();
     }
   });
@@ -137,7 +154,10 @@ describe("readPiEngineConfig", () => {
     // An edit applies on the next call — no restart, no cache.
     writeFileSync(
       join(dir, "pi.json"),
-      JSON.stringify({ enabled: false, pickerModels: ["pi/anthropic/claude-opus-5"] })
+      JSON.stringify({
+        enabled: false,
+        pickerModels: ["pi/anthropic/claude-opus-5"],
+      }),
     );
     expect(piEngineEnabled()).toBe(false);
     expect(piPickerModels()).toEqual([]);
@@ -145,7 +165,9 @@ describe("readPiEngineConfig", () => {
   });
 
   it("hides picker models while disabled — models absent, ids still normalized", () => {
-    const dir = withConfigFile({ pickerModels: ["pi/anthropic/claude-opus-5"] });
+    const dir = withConfigFile({
+      pickerModels: ["pi/anthropic/claude-opus-5"],
+    });
     expect(readPiEngineConfig()).toEqual({
       enabled: false,
       pickerModels: ["pi/anthropic/claude-opus-5"],
@@ -154,32 +176,31 @@ describe("readPiEngineConfig", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("resolves piAnthropicTransport to \"inprocess\" unless the file says \"bridge\"", () => {
+  it('resolves piAnthropicTransport to "inprocess" unless the file says "bridge"', () => {
     // Missing file → default.
     const dir = withConfigFile();
     expect(piAnthropicTransport()).toBe("inprocess");
     // Explicit rollback value.
     writeFileSync(
       join(dir, "pi.json"),
-      JSON.stringify({ enabled: true, anthropicTransport: "bridge" })
+      JSON.stringify({ enabled: true, anthropicTransport: "bridge" }),
     );
     expect(piAnthropicTransport()).toBe("bridge");
     // Junk values fall back to the default.
     writeFileSync(
       join(dir, "pi.json"),
-      JSON.stringify({ enabled: true, anthropicTransport: "meridian" })
+      JSON.stringify({ enabled: true, anthropicTransport: "meridian" }),
     );
     expect(piAnthropicTransport()).toBe("inprocess");
     // The transport is read independently of the enabled gate (the runner
     // checks enabled first) — a disabled config keeps its explicit choice.
     writeFileSync(
       join(dir, "pi.json"),
-      JSON.stringify({ enabled: false, anthropicTransport: "bridge" })
+      JSON.stringify({ enabled: false, anthropicTransport: "bridge" }),
     );
     expect(piAnthropicTransport()).toBe("bridge");
     rmSync(dir, { recursive: true, force: true });
   });
-
 });
 
 describe("write path", () => {
@@ -228,7 +249,12 @@ describe("write path", () => {
       "pi/openai/gpt-5.2-codex",
     ]);
     // Malformed ids throw instead of writing something the reader drops.
-    for (const bad of ["pi/anthropic", "anthropic/claude-opus-5", "xai/grok-4", ""]) {
+    for (const bad of [
+      "pi/anthropic",
+      "anthropic/claude-opus-5",
+      "xai/grok-4",
+      "",
+    ]) {
       expect(() => addPiPickerModel(bad)).toThrow(/Invalid pi model id/);
     }
     expect(rawFile().pickerModels).toEqual([
@@ -246,7 +272,9 @@ describe("write path", () => {
     expect(removePiPickerModel("pi/anthropic/claude-opus-5")).toEqual([
       "pi/openai/gpt-5.2-codex",
     ]);
-    expect(removePiPickerModel("pi/never/was-there")).toEqual(["pi/openai/gpt-5.2-codex"]);
+    expect(removePiPickerModel("pi/never/was-there")).toEqual([
+      "pi/openai/gpt-5.2-codex",
+    ]);
     expect(piPickerModels()).toEqual(["pi/openai/gpt-5.2-codex"]);
     rmSync(dir, { recursive: true, force: true });
   });

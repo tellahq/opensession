@@ -130,7 +130,9 @@ export function shareOrCopyLink(
 export function copyToClipboard(text: string, onDone?: () => void): void {
   const done = onDone || (() => {});
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+    navigator.clipboard
+      .writeText(text)
+      .then(done, () => fallbackCopy(text, done));
   } else {
     fallbackCopy(text, done);
   }

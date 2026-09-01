@@ -11,12 +11,12 @@ linked docs go deeper on each part.
 
 ## The core model
 
-| Concept | What it is | Relationship |
-| --- | --- | --- |
-| **Project** | a source of work — a git repository, or a feed like Plain | 1 instance has many projects |
-| **Workspace** | a container grouping the sessions about one piece of work | a project has many; scratch workspaces have none |
-| **Session** | one conversation with an agent, with its own transcript | a workspace has many; specialized sessions may have none |
-| **Turn** | one prompt → one agent response, with its tool calls | 1 session has many turns |
+| Concept       | What it is                                                | Relationship                                             |
+| ------------- | --------------------------------------------------------- | -------------------------------------------------------- |
+| **Project**   | a source of work — a git repository, or a feed like Plain | 1 instance has many projects                             |
+| **Workspace** | a container grouping the sessions about one piece of work | a project has many; scratch workspaces have none         |
+| **Session**   | one conversation with an agent, with its own transcript   | a workspace has many; specialized sessions may have none |
+| **Turn**      | one prompt → one agent response, with its tool calls      | 1 session has many turns                                 |
 
 That is the usual hierarchy you navigate: the sidebar is a list of projects,
 each holding workspaces, each holding sessions. Repo-less scratch workspaces sit
@@ -24,21 +24,21 @@ alongside the projects instead. Interactive sessions normally use
 `/workspace/<workspaceId>/session/<sessionId>`. Specialized automation and goal
 sessions may be workspace-less and use `/session/<sessionId>`.
 
-Alongside it sits a second, independent axis — *where* a session's work happens:
+Alongside it sits a second, independent axis — _where_ a session's work happens:
 
-| Concept | What it is |
-| --- | --- |
-| **Worktree** | the git working directory a code session edits in |
-| **Sandbox** | an optional provider-backed environment used instead of the host |
-| **Runner** | a trusted persistent machine attached for specialized work |
+| Concept      | What it is                                                       |
+| ------------ | ---------------------------------------------------------------- |
+| **Worktree** | the git working directory a code session edits in                |
+| **Sandbox**  | an optional provider-backed environment used instead of the host |
+| **Runner**   | a trusted persistent machine attached for specialized work       |
 
-And a third — *what starts or coordinates work when you are not there*:
+And a third — _what starts or coordinates work when you are not there_:
 
-| Concept | Trigger | Memory across runs |
-| --- | --- | --- |
-| **Automation** | a cron schedule or an external event | none — every run is a fresh session |
-| **Goal** | its own self-set wake time | yes — wakes resume one session over days |
-| **Workflow** | a script fanning out agents and tool calls | successful calls replay when a workflow is resumed |
+| Concept        | Trigger                                    | Memory across runs                                 |
+| -------------- | ------------------------------------------ | -------------------------------------------------- |
+| **Automation** | a cron schedule or an external event       | none — every run is a fresh session                |
+| **Goal**       | its own self-set wake time                 | yes — wakes resume one session over days           |
+| **Workflow**   | a script fanning out agents and tool calls | successful calls replay when a workflow is resumed |
 
 ## Projects
 
@@ -59,8 +59,8 @@ and reused forever after.
 
 The same nouns hang off both. A Plain ticket and a `myapp` branch are both
 workspaces, both hold sessions, both show up in your lanes. What differs is that a
-repository project's workspaces are *created* by you working, while a feed
-project's workspaces are *adopted* as items arrive.
+repository project's workspaces are _created_ by you working, while a feed
+project's workspaces are _adopted_ as items arrive.
 
 > **Repository ≠ project.** A repository is one kind of project, not a synonym
 > for one. If a doc or a menu says "project", it means the band — which may or
@@ -160,7 +160,7 @@ than one.
 
 You prompt; the agent takes a turn. While a turn is running, anything you send
 is either delivered as a steer or queued behind it and delivered as the next
-turn — nothing is dropped. A session can also ask *you* something mid-turn and park
+turn — nothing is dropped. A session can also ask _you_ something mid-turn and park
 until answered, which is what puts it in the "needs input" lane.
 
 Sessions can spawn other sessions. An orchestrator delegates focused work to workers

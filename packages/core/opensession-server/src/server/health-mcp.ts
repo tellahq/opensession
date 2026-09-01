@@ -29,42 +29,49 @@ import { systemStats } from "./system-stats";
  *  map /api/health returns. An agent that throws is reported as such rather
  *  than taking the whole read down with it. */
 function agentHealth(): Record<string, unknown> {
-	const health: Record<string, unknown> = {};
-	for (const a of getAgents()) {
-		try {
-			health[a.name] = a.health();
-		} catch (e) {
-			health[a.name] = { status: "error", error: String((e as Error)?.message || e) };
-		}
-	}
-	return health;
+  const health: Record<string, unknown> = {};
+  for (const a of getAgents()) {
+    try {
+      health[a.name] = a.health();
+    } catch (e) {
+      health[a.name] = {
+        status: "error",
+        error: String((e as Error)?.message || e),
+      };
+    }
+  }
+  return health;
 }
 
 export function createHealthMcpServer() {
-	const tools = [
-		tool(
-			"read_host_metrics",
-			"Read this instance's health: disk usage on /, memory and swap, load averages against core count, counts of the process fleets that have leaked before (detached run hosts, MCP proxies, headless Chrome, dev stacks, git operations), cgroup memory accounting, and each agent's status. Returns the same fields as the health endpoint. Use it for a health check instead of trying to fetch the server over HTTP, which is refused for loopback addresses.",
-			{},
-			async () => ({
-				content: [
-					{
-						type: "text" as const,
-						text: JSON.stringify(
-							{
-								ok: true,
-								uptimeSeconds: Math.round(process.uptime()),
-								activeRuns: activeAgentRunCount(),
-								agents: agentHealth(),
-								system: systemStats(),
-							},
-							null,
-							2,
-						),
-					},
-				],
-			}),
-		),
-	];
-	return createSdkMcpServer({ name: "opensession-health", version: "1.0.0", tools });
+  const tools = [
+    tool(
+      "read_host_metrics",
+      "Read this instance's health: disk usage on /, memory and swap, load averages against core count, counts of the process fleets that have leaked before (detached run hosts, MCP proxies, headless Chrome, dev stacks, git operations), cgroup memory accounting, and each agent's status. Returns the same fields as the health endpoint. Use it for a health check instead of trying to fetch the server over HTTP, which is refused for loopback addresses.",
+      {},
+      async () => ({
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              {
+                ok: true,
+                uptimeSeconds: Math.round(process.uptime()),
+                activeRuns: activeAgentRunCount(),
+                agents: agentHealth(),
+                system: systemStats(),
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      }),
+    ),
+  ];
+  return createSdkMcpServer({
+    name: "opensession-health",
+    version: "1.0.0",
+    tools,
+  });
 }

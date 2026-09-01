@@ -15,7 +15,11 @@
 
 import type { AgentModule } from "../../agents/types";
 import { configuredIntegration } from "../config";
-import { INTEGRATIONS, type IntegrationContext, type IntegrationSpec } from "./registry";
+import {
+  INTEGRATIONS,
+  type IntegrationContext,
+  type IntegrationSpec,
+} from "./registry";
 
 /**
  * Env flag wins over config when set; otherwise config decides.
@@ -27,7 +31,9 @@ import { INTEGRATIONS, type IntegrationContext, type IntegrationSpec } from "./r
  */
 export function isEnabled(spec: IntegrationSpec): boolean {
   const env = process.env[spec.enableFlag];
-  return env == null ? configuredIntegration(spec.id).enabled === true : env === "true";
+  return env == null
+    ? configuredIntegration(spec.id).enabled === true
+    : env === "true";
 }
 
 /** Which integrations would load right now, without importing anything. */
@@ -39,7 +45,9 @@ export function activeIntegrations(): IntegrationSpec[] {
   });
 }
 
-export async function loadIntegrations(ctx: IntegrationContext): Promise<AgentModule[]> {
+export async function loadIntegrations(
+  ctx: IntegrationContext,
+): Promise<AgentModule[]> {
   const agents: AgentModule[] = [];
 
   for (const spec of activeIntegrations()) {

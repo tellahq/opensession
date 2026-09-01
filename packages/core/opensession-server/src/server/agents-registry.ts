@@ -9,9 +9,9 @@ import type { AgentModule } from "../agents/types";
 const g = globalThis as any;
 
 export function getAgents(): AgentModule[] {
-	return (g.__agents as AgentModule[] | undefined) ?? [];
+  return (g.__agents as AgentModule[] | undefined) ?? [];
 }
 
 export function setAgents(agents: AgentModule[]): void {
-	g.__agents = agents;
+  g.__agents = agents;
 }

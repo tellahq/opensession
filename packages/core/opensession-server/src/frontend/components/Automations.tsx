@@ -1,5 +1,7 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { BASE_PATH } from "../lib/base";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useEffectEvent, useState } from "react";
 import {
   fetchAutomations,
   createAutomationApi,
@@ -15,6 +17,10 @@ import {
   relativeTime,
   type ModelOption,
   type ProviderAccountOption,
+  type Automation,
+  type AutomationInput,
+  type AutomationRun,
+  type AutomationOutput,
   type AutomationTemplate,
   type AutomationDraft,
 } from "../lib/api";
@@ -32,10 +38,15 @@ import {
   IconPlug,
   IconPlus,
 } from "./icons";
-import { AGENT_NAME, WEBHOOK_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
+import {
+  AGENT_NAME,
+  WEBHOOK_BASE_URL,
+  docTitle,
+  DEFAULT_DOC_TITLE,
+} from "../lib/brand";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+import { cn } from "../ui/cn";
 import { Input, Select, Textarea } from "../ui/input";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
@@ -43,612 +54,454 @@ import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { WorkingPill } from "../ui/status";
 import { Switch } from "../ui/switch";
 import { formatDuration } from "../lib/time";
+import { errorMessage } from "../lib/error-message";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
-import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	relative: {
-			position: "relative"
-	},
-	flex: {
-			display: "flex"
-	},
-	minH0: {
-			minHeight: "0"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	flex1: {
-			flex: "1"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	flexCol: {
-			flexDirection: "column"
-	},
-	borderT: {
-			borderTopStyle: "solid",
-			borderTopWidth: "1px"
-	},
-	borderLine: {
-			borderColor: "var(--border)"
-	},
-	absolute: {
-			position: "absolute"
-	},
-	inset0: {
-			inset: "0"
-	},
-	roundedSm: {
-			borderRadius: "calc(4px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	outlineNone: {
-			outlineStyle: "none"
-	},
-	srOnly: {
-			clipPath: "inset(50%)",
-			whiteSpace: "nowrap",
-			borderWidth: "0",
-			width: "1px",
-			height: "1px",
-			margin: "-1px",
-			padding: "0",
-			position: "absolute",
-			overflow: "hidden"
-	},
-	truncate: {
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap",
-			overflow: "hidden"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-	leading5: {
-			lineHeight: "20px"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	pointerEventsNone: {
-			pointerEvents: "none"
-	},
-	flexAuto: {
-			flex: "auto"
-	},
-	borderL: {
-			borderLeftStyle: "solid",
-			borderLeftWidth: "1px"
-	},
-	bgPanel: {
-			backgroundColor: "var(--bg-panel)"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap25: {
-			gap: "10px"
-	},
-	borderB: {
-			borderBottomStyle: "solid",
-			borderBottomWidth: "1px"
-	},
-	borderDivider: {
-			borderColor: "var(--divider)"
-	},
-	px4: {
-			paddingInline: "16px"
-	},
-	py3: {
-			paddingBlock: "12px"
-	},
-	My1: {
-			marginBlock: "-4px"
-	},
-	Ml05: {
-			marginLeft: "-2px"
-	},
-	hidden: {
-			display: "none"
-	},
-	gap175: {
-			gap: "7px"
-	},
-	px15: {
-			paddingInline: "6px"
-	},
-	py1: {
-			paddingBlock: "4px"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	mlAuto: {
-			marginLeft: "auto"
-	},
-	gap15: {
-			gap: "6px"
-	},
-	size7: {
-			width: "28px",
-			height: "28px"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	roundedMd: {
-			borderRadius: "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	gap35: {
-			gap: "14px"
-	},
-	overflowYAuto: {
-			overflowY: "auto"
-	},
-	px5: {
-			paddingInline: "20px"
-	},
-	pt45: {
-			paddingTop: "18px"
-	},
-	pb10: {
-			paddingBottom: "40px"
-	},
-	bgSurface: {
-			backgroundColor: "var(--bg)"
-	},
-	roundedPanel: {
-			borderRadius: "calc(var(--radius) * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	px35: {
-			paddingInline: "14px"
-	},
-	leadingRelaxed: {
-			lineHeight: "var(--leading-relaxed)"
-	},
-	whitespacePreWrap: {
-			whiteSpace: "pre-wrap"
-	},
-	grid: {
-			display: "grid"
-	},
-	gridColsMaxContent1fr: {
-			gridTemplateColumns: "max-content 1fr"
-	},
-	itemsBaseline: {
-			alignItems: "baseline"
-	},
-	gapX5: {
-			columnGap: "20px"
-	},
-	gapY2: {
-			rowGap: "8px"
-	},
-	textGreen: {
-			color: "var(--green)"
-	},
-	textRed: {
-			color: "var(--red)"
-	},
-	leading17: {
-			lineHeight: "1.7"
-	},
-	whitespaceNowrap: {
-			whiteSpace: "nowrap"
-	},
-	pbPx: {
-			paddingBottom: "1px"
-	},
-	leadingNone: {
-			lineHeight: "1"
-	},
-	mt25: {
-			marginTop: "10px"
-	},
-	pt2: {
-			paddingTop: "8px"
-	},
-	gap1: {
-			gap: "4px"
-	},
-	gap2: {
-			gap: "8px"
-	},
-	textYellow: {
-			color: "var(--yellow)"
-	},
-	wFull: {
-			width: "100%"
-	},
-	cursorPointer: {
-			cursor: "pointer"
-	},
-	itemsStart: {
-			alignItems: "flex-start"
-	},
-	gap3: {
-			gap: "12px"
-	},
-	roundedRow: {
-			borderRadius: "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	px25: {
-			paddingInline: "10px"
-	},
-	py225: {
-			paddingBlock: "9px"
-	},
-	textLeft: {
-			textAlign: "left"
-	},
-	transitionColors: {
-			transitionProperty: "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
-			transitionTimingFunction: "var(--tw-ease,var(--ease))",
-			transitionDuration: "var(--tw-duration,var(--dur-micro))"
-	},
-	size5: {
-			width: "20px",
-			height: "20px"
-	},
-	maxWNone: {
-			maxWidth: "none"
-	},
-	scale115: {
-			scale: "1.15"
-	},
-	gap075: {
-			gap: "3px"
-	},
-	leadingNormal: {
-			lineHeight: "var(--leading-normal)"
-	},
-	mt05: {
-			marginTop: "2px"
-	},
-	justifyEnd: {
-			justifyContent: "flex-end"
-	},
-	Mx25: {
-			marginInline: "-10px"
-	},
-	overscrollContain: {
-			overscrollBehavior: "contain"
-	},
-	underline: {
-			textDecorationLine: "underline"
-	},
-	overflowHidden: {
-			overflow: "hidden"
-	},
-	px3: {
-			paddingInline: "12px"
-	},
-	py2: {
-			paddingBlock: "8px"
-	},
-	bgTransparent: {
-			backgroundColor: "transparent"
-	},
-	border0: {
-			borderStyle: "solid",
-			borderWidth: "0"
-	},
-	maxH180px: {
-			maxHeight: "180px"
-	},
-	py15: {
-			paddingBlock: "6px"
-	},
-	ml2: {
-			marginLeft: "8px"
-	},
-	minH10: {
-			minHeight: "40px"
-	},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	borderDashed: {
-			borderStyle: "dashed"
-	},
-	p3: {
-			padding: "12px"
-	},
-	mb2: {
-			marginBottom: "8px"
-	},
-	maxW150px: {
-			maxWidth: "150px"
-	},
-	mt2: {
-			marginTop: "8px"
-	},
-	flexWrap: {
-			flexWrap: "wrap"
-	},
-	gapY1: {
-			rowGap: "4px"
-	},
-	mt1: {
-			marginTop: "4px"
-	},
-	w110px: {
-			width: "110px"
-	},
-	gridCols2: {
-			gridTemplateColumns: "repeat(2,minmax(0,1fr))"
-	},
-	leadingSnug: {
-			lineHeight: "var(--leading-snug)"
-	},
-	py25: {
-			paddingBlock: "10px"
-	},
-	ml15: {
-			marginLeft: "6px"
-	},
-	justifyBetween: {
-			justifyContent: "space-between"
-	},
-	fontNormal: {
-			fontWeight: "var(--font-weight-normal)"
-	},
-	mrAuto: {
-			marginRight: "auto"
-	},
-
-	flex00340px: {
-		"flex": "0 0 340px"
-	},
-	borderR: {
-		"borderRightStyle": "var(--tw-border-style)",
-		"borderRightWidth": "1px"
-	},
-	pt4: {
-		"paddingTop": "16px"
-	},
-	max900pxHidden: {
-		"@media not all and (min-width: 900px)": {
-			"display": "none"
-		}
-	},
-	px6: {
-		"paddingInline": "24px"
-	},
-	pt7: {
-		"paddingTop": "28px"
-	},
-	pb15: {
-		"paddingBottom": "60px"
-	},
-	max560pxPx4: {
-		"@media not all and (min-width: 560px)": {
-			"paddingInline": "16px"
-		}
-	},
-	max560pxPt5: {
-		"@media not all and (min-width: 560px)": {
-			"paddingTop": "20px"
-		}
-	},
-	max560pxPb12: {
-		"@media not all and (min-width: 560px)": {
-			"paddingBottom": "48px"
-		}
-	},
-	mxAuto: {
-		"marginInline": "auto"
-	},
-	maxW860px: {
-		"maxWidth": "860px"
-	},
-	max560pxMb5: {
-		"@media not all and (min-width: 560px)": {
-			"marginBottom": "20px"
-		}
-	},
-	max560pxFlexCol: {
-		"@media not all and (min-width: 560px)": {
-			"flexDirection": "column"
-		}
-	},
-	max560pxItemsStart: {
-		"@media not all and (min-width: 560px)": {
-			"alignItems": "flex-start"
-		}
-	},
-	max560pxGap35: {
-		"@media not all and (min-width: 560px)": {
-			"gap": "14px"
-		}
-	},
-	textBase: {
-		"fontSize": "var(--type-body)",
-		"lineHeight": "var(--tw-leading,var(--text-base--line-height))"
-	},
-	py275: {
-		"paddingBlock": "11px"
-	},
-	max560pxGap25: {
-		"@media not all and (min-width: 560px)": {
-			"gap": "10px"
-		}
-	},
-	max560pxPx1: {
-		"@media not all and (min-width: 560px)": {
-			"paddingInline": "4px"
-		}
-	},
-	max560pxPy3: {
-		"@media not all and (min-width: 560px)": {
-			"paddingBlock": "12px"
-		}
-	},
-	bgActive: {
-		"backgroundColor": "var(--bg-active)"
-	},
-	hoverBgHover: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--hover)"
-			}
-		}
-	},
-	opacity55: {
-		"opacity": ".55"
-	},
-	selfStart: {
-		"alignSelf": "flex-start"
-	},
-	max560pxHidden: {
-		"@media not all and (min-width: 560px)": {
-			"display": "none"
-		}
-	},
-	w21: {
-		"width": "84px"
-	},
-	textRight: {
-		"textAlign": "right"
-	},
-	hoverBgRedSoft: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--red-soft)"
-			}
-		}
-	},
-	hoverTextRed: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--red)"
-			}
-		}
-	},
-	itemsEnd: {
-		"alignItems": "flex-end"
-	},
-
-	mb35: {
-		"marginBottom": "14px"
-	},
-
-	focusVisibleRing2: {
-		":focusVisible": {
-			"--tw-ring-shadow": "var(--tw-ring-inset,) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor)",
-			"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
-		}
-	},
-	focusVisibleRingInset: {
-		":focusVisible": {
-			"--tw-ring-inset": "inset"
-		}
-	},
-	focusVisibleRingAccent50: {
-		":focusVisible": {
-			"--tw-ring-color": "var(--accent)"
-		},
-		"@supports (color: color-mix(in lab, red, red))": {
-			":focusVisible": {
-				"--tw-ring-color": "color-mix(in oklab, var(--accent) 50%, transparent)"
-			}
-		}
-	},
-	max560pxMaxW92px: {
-		"@media not all and (min-width: 560px)": {
-			"maxWidth": "92px"
-		}
-	},
-	max560pxOverflowHidden: {
-		"@media not all and (min-width: 560px)": {
-			"overflow": "hidden"
-		}
-	},
-	max560pxTextEllipsis: {
-		"@media not all and (min-width: 560px)": {
-			"textOverflow": "ellipsis"
-		}
-	},
-	max900pxBorderL0: {
-		"@media not all and (min-width: 900px)": {
-			"borderLeftStyle": "var(--tw-border-style)",
-			"borderLeftWidth": "0"
-		}
-	},
-	max900pxInlineFlex: {
-		"@media not all and (min-width: 900px)": {
-			"display": "inline-flex"
-		}
-	},
-	hoverTextFg: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text)"
-			}
-		}
-	},
-	mb15: {
-		"marginBottom": "6px"
-	},
-	px175: {
-		"paddingInline": "7px"
-	},
-	pyPx: {
-		"paddingBlock": "1px"
-	},
-	textLink: {
-		"color": "var(--link)"
-	},
-	noUnderline: {
-		"textDecorationLine": "none"
-	},
-	hoverUnderline: {
-		"@media (hover: hover)": {
-			":hover": {
-				"textDecorationLine": "underline"
-			}
-		}
-	},
-	phoneMaxHNone: {
-		"@media (max-width: 720px)": {
-			"maxHeight": "none"
-		}
-	},
-	desktopMaxH32dvh: {
-		"@media (min-width: 721px)": {
-			"maxHeight": "32dvh"
-		}
-	},
-	placeholderTextFaint: {
-		"::placeholder": {
-			"color": "var(--text-faint)"
-		}
-	},
-	phoneFlexCol: {
-		"@media (max-width: 720px)": {
-			"flexDirection": "column"
-		}
-	},
-	phoneGridCols1: {
-		"@media (max-width: 720px)": {
-			"gridTemplateColumns": "repeat(1,minmax(0,1fr))"
-		}
-	},
+  relative: {
+    position: "relative",
+  },
+  flex: {
+    display: "flex",
+  },
+  minH0: {
+    minHeight: "0",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  borderT: {
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+  },
+  borderLine: {
+    borderColor: "var(--border)",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  inset0: {
+    inset: "0",
+  },
+  roundedSm: {
+    borderRadius: "calc(4px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  outlineNone: {
+    outlineStyle: "none",
+  },
+  focusVisibleRingInset: {
+    ":focus-visible": {},
+  },
+  focusVisibleRingAccent50: {
+    ":focus-visible": {},
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  leading5: {
+    lineHeight: "calc(4px * 5)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  pointerEventsNone: {
+    pointerEvents: "none",
+  },
+  max560pxMaxW92px: {
+    "@media (max-width: 559px)": {
+      maxWidth: "92px",
+    },
+  },
+  max560pxOverflowHidden: {
+    "@media (max-width: 559px)": {
+      overflow: "hidden",
+    },
+  },
+  max560pxTextEllipsis: {
+    "@media (max-width: 559px)": {
+      textOverflow: "ellipsis",
+    },
+  },
+  flexAuto: {
+    flex: "auto",
+  },
+  borderL: {
+    borderLeftStyle: "solid",
+    borderLeftWidth: "1px",
+  },
+  bgPanel: {
+    backgroundColor: "var(--bg-panel)",
+  },
+  max900pxBorderL0: {
+    "@media (max-width: 899px)": {
+      borderLeftStyle: "solid",
+      borderLeftWidth: "0px",
+    },
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  borderB: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+  },
+  borderDivider: {
+    borderColor: "var(--divider)",
+  },
+  px4: {
+    paddingInline: "calc(4px * 4)",
+  },
+  py3: {
+    paddingBlock: "calc(4px * 3)",
+  },
+  My1: {
+    marginBlock: "calc(4px * -1)",
+  },
+  Ml05: {
+    marginLeft: "calc(4px * -0.5)",
+  },
+  hidden: {
+    display: "none",
+  },
+  gap175: {
+    gap: "calc(4px * 1.75)",
+  },
+  px15: {
+    paddingInline: "calc(4px * 1.5)",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  max900pxInlineFlex: {
+    "@media (max-width: 899px)": {
+      display: "inline-flex",
+    },
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  mlAuto: {
+    marginLeft: "auto",
+  },
+  gap15: {
+    gap: "calc(4px * 1.5)",
+  },
+  hoverBgRedSoft: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--red-soft)",
+      },
+    },
+  },
+  hoverTextRed: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--red)",
+      },
+    },
+  },
+  size7: {
+    width: "calc(4px * 7)",
+    height: "calc(4px * 7)",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  hoverBgHover: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "var(--hover)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  max900pxHidden: {
+    "@media (max-width: 899px)": {
+      display: "none",
+    },
+  },
+  gap35: {
+    gap: "calc(4px * 3.5)",
+  },
+  overflowYAuto: {
+    overflowY: "auto",
+  },
+  px5: {
+    paddingInline: "calc(4px * 5)",
+  },
+  pt45: {
+    paddingTop: "calc(4px * 4.5)",
+  },
+  pb10: {
+    paddingBottom: "calc(4px * 10)",
+  },
+  bgSurface: {
+    backgroundColor: "var(--bg)",
+  },
+  roundedPanel: {
+    borderRadius: "calc(var(--radius) * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px35: {
+    paddingInline: "calc(4px * 3.5)",
+  },
+  leadingRelaxed: {
+    lineHeight: "var(--leading-relaxed)",
+  },
+  whitespacePreWrap: {
+    whiteSpace: "pre-wrap",
+  },
+  grid: {
+    display: "grid",
+  },
+  gridColsMaxContent1fr: {
+    gridTemplateColumns: "max-content 1fr",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  gapX5: {
+    columnGap: "calc(4px * 5)",
+  },
+  gapY2: {
+    rowGap: "calc(4px * 2)",
+  },
+  textGreen: {
+    color: "var(--green)",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
+  leading17: {
+    lineHeight: "1.7",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  pbPx: {
+    paddingBottom: "1px",
+  },
+  leadingNone: {
+    lineHeight: "1",
+  },
+  mt25: {
+    marginTop: "calc(4px * 2.5)",
+  },
+  pt2: {
+    paddingTop: "calc(4px * 2)",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  textYellow: {
+    color: "var(--yellow)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gap3: {
+    gap: "calc(4px * 3)",
+  },
+  roundedRow: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  px25: {
+    paddingInline: "calc(4px * 2.5)",
+  },
+  py225: {
+    paddingBlock: "calc(4px * 2.25)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  maxWNone: {
+    maxWidth: "none",
+  },
+  scale115: {
+    scale: "1.15",
+  },
+  gap075: {
+    gap: "calc(4px * 0.75)",
+  },
+  leadingNormal: {
+    lineHeight: "var(--leading-normal)",
+  },
+  mt05: {
+    marginTop: "calc(4px * 0.5)",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  Mx25: {
+    marginInline: "calc(4px * -2.5)",
+  },
+  overscrollContain: {
+    overscrollBehavior: "contain",
+  },
+  phoneMaxHNone: {
+    "@media (max-width: 720px)": {
+      maxHeight: "none",
+    },
+  },
+  desktopMaxH32dvh: {
+    "@media (min-width: 721px)": {
+      maxHeight: "32dvh",
+    },
+  },
+  underline: {
+    textDecorationLine: "underline",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  px3: {
+    paddingInline: "calc(4px * 3)",
+  },
+  py2: {
+    paddingBlock: "calc(4px * 2)",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  placeholderTextFaint: {
+    "::placeholder": {
+      color: "var(--text-faint)",
+    },
+  },
+  maxH180px: {
+    maxHeight: "180px",
+  },
+  py15: {
+    paddingBlock: "calc(4px * 1.5)",
+  },
+  ml2: {
+    marginLeft: "calc(4px * 2)",
+  },
+  minH10: {
+    minHeight: "calc(4px * 10)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderDashed: {
+    borderStyle: "dashed",
+  },
+  p3: {
+    padding: "calc(4px * 3)",
+  },
+  mb2: {
+    marginBottom: "calc(4px * 2)",
+  },
+  maxW150px: {
+    maxWidth: "150px",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  gapY1: {
+    rowGap: "4px",
+  },
+  mt1: {
+    marginTop: "4px",
+  },
+  w110px: {
+    width: "110px",
+  },
+  gridCols2: {
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  },
+  phoneGridCols1: {
+    "@media (max-width: 720px)": {
+      gridTemplateColumns: "repeat(1, minmax(0, 1fr))",
+    },
+  },
+  leadingSnug: {
+    lineHeight: "var(--leading-snug)",
+  },
+  py25: {
+    paddingBlock: "calc(4px * 2.5)",
+  },
+  ml15: {
+    marginLeft: "calc(4px * 1.5)",
+  },
+  mrAuto: {
+    marginRight: "auto",
+  },
 });
 
 /* The old .automation-form family, as utilities. Two of its rules reached in
@@ -661,96 +514,26 @@ const FORM_FIELDS =
 /** The form's own layout, with no chrome of its own: whatever hosts it (the
  *  detail drawer, the create dialog) already provides the surface, the padding
  *  and the heading. */
-const FORM_INLINE = [mergeStylexClassName("", sx.flex, sx.flexCol, sx.gap35), FORM_FIELDS].filter(Boolean).join(" ");
+const FORM_INLINE = utilityClassName(`flex flex-col gap-3.5 ${FORM_FIELDS}`);
 /** .automation-form label */
-const FIELD_LABEL = mergeStylexClassName("", sx.flex, sx.flex1, sx.flexCol, sx.gap15, typography.label, sx.fontMedium, sx.textDim);
+const FIELD_LABEL = utilityClassName(
+  "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim",
+);
 
 /** .automation-form-actions */
-const FORM_ACTIONS = mergeStylexClassName("", sx.flex, sx.justifyEnd, sx.gap25);
+const FORM_ACTIONS = utilityClassName("flex justify-end gap-2.5");
 /** .automation-form-row */
-const FORM_ROW = mergeStylexClassName("", sx.flex, sx.gap35, sx.phoneFlexCol);
+const FORM_ROW = utilityClassName("flex gap-3.5 phone:flex-col");
 /** .automations-drawer-section-label */
-const SECTION_LABEL = mergeStylexClassName("", sx.mb15, typography.label, sx.fontSemibold, sx.textFaint);
+const SECTION_LABEL = utilityClassName(
+  "mb-1.5 text-label font-semibold text-faint",
+);
 /** .automation-session-link */
-const LINK = mergeStylexClassName("", sx.cursorPointer, sx.textLink, sx.noUnderline, sx.hoverUnderline);
+const LINK = utilityClassName(
+  "cursor-pointer text-link no-underline hover:underline",
+);
 /** .automation-cron — the cron/event chip in the Configuration grid. */
-const CHIP = mergeStylexClassName("", sx.roundedSm, sx.bgActive, sx.px175, sx.pyPx, typography.meta);
-
-interface AutomationRun {
-  at: string;
-  sessionId: string;
-  trigger: "cron" | "webhook" | "manual" | "event";
-  status: "running" | "ok" | "error";
-  error?: string;
-  durationMs?: number;
-}
-
-type AutomationInput = {
-  id: string;
-  label?: string;
-  window?: {
-    mode?: "since_last_success" | "rolling";
-    minutes?: number;
-    overlapMinutes?: number;
-  };
-  reduce?: { model?: string; instructions?: string; maxOutputChars?: number };
-  source:
-    | {
-        type: "slack_channel";
-        channel: string;
-        includeThreads?: boolean;
-        includeBots?: boolean;
-        limit?: number;
-      }
-    | { type: "reports"; automationId: string; limit?: number };
-};
-
-type AutomationOutput =
-  | { id: string; type: "report"; enabled?: boolean; publish?: "always" | "on_findings" }
-  | {
-      id: string;
-      type: "slack";
-      enabled?: boolean;
-      channel: string;
-      minUrgency?: "low" | "medium" | "high" | "critical";
-      minConfidence?: "low" | "medium" | "high";
-    };
-
-interface Automation {
-  id: string;
-  name: string;
-  prompt: string;
-  schedule: string;
-  mode: "ask" | "code";
-  enabled: boolean;
-  createdBy: string;
-  createdAt: string;
-  webhookSecret?: string;
-  webhookEnabled?: boolean;
-  eventKey?: string;
-  mcpServers?: string[];
-  slackWatch?: { channel: string };
-  inputs?: AutomationInput[];
-  outputs?: AutomationOutput[];
-  /** Who is accountable for it; absent means nobody has taken it. */
-  owner?: string;
-  /** Workspace it files under. */
-  workspaceId?: string;
-  model?: string;
-  fallbackModel?: string;
-  accountId?: string;
-  accountStrict?: boolean;
-  usageCredits?: boolean;
-  sandbox?: boolean;
-  lastRunAt?: string;
-  lastRunSessionId?: string;
-  lastRunStatus?: "running" | "ok" | "error";
-  lastRunError?: string;
-  lastTrigger?: "cron" | "webhook" | "manual" | "event";
-  nextRunAt: string | null;
-  isRunning?: boolean;
-  runs?: AutomationRun[];
-}
+const CHIP = utilityClassName("rounded-sm bg-active px-1.75 py-px text-meta");
 
 interface Props {
   onOpenSession: (sessionId: string) => void;
@@ -777,19 +560,28 @@ const PRESETS: Array<{ label: string; cron: string }> = [
 
 const EVENT_OPTIONS: Array<{ key: string; label: string }> = [
   { key: "plain:thread_created", label: "Plain · new support ticket created" },
-  { key: "stripe:charge.dispute.created", label: "Stripe · dispute (chargeback) created" },
+  {
+    key: "stripe:charge.dispute.created",
+    label: "Stripe · dispute (chargeback) created",
+  },
   { key: "github:pr_merged", label: "GitHub · PR merged" },
 ];
 
 /** Claude and Codex accounts for provider-aware automation pins. */
-function useProviderAccounts(): ProviderAccountOption[] {
+function useProviderAccounts() {
   const [accounts, setAccounts] = useState<ProviderAccountOption[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
-    fetchProviderAccounts()
+    fetchProviderAccounts({
+      onPoolError: (cause) =>
+        setLoadError(errorMessage(cause, "Could not load provider accounts")),
+    })
       .then(setAccounts)
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setLoadError(errorMessage(cause, "Could not load provider accounts")),
+      );
   }, []);
-  return accounts;
+  return { accounts, loadError, setLoadError };
 }
 
 export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
@@ -799,13 +591,20 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   );
   const toggleRequest = React.useRef(0);
   const [defaultModel, setDefaultModel] = useState("");
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const providerAccounts = useProviderAccounts();
+  const {
+    accounts: providerAccounts,
+    loadError: providerAccountsError,
+    setLoadError: setProviderAccountsError,
+  } = useProviderAccounts();
 
   useEffect(() => {
     fetchModels()
       .then((m) => setDefaultModel(m.default))
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setModelLoadError(errorMessage(cause, "Could not load models")),
+      );
   }, []);
   // The modal is create-only; editing happens inline in the detail drawer.
   const [showModal, setShowModal] = useState(false);
@@ -815,42 +614,40 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   // Leaving/changing the selection always drops back to the read view.
   useEffect(() => setEditMode(false), [selectedId]);
 
-  // Stable identity: only refs and setters are captured, so the polling
-  // effect can list `load` without ever refiring from re-renders.
-  const load = useCallback(async () => {
-    await (async () => {
-const next = (await fetchAutomations()) as Automation[];
+  const load = async () => {
+    try {
+      const next = await fetchAutomations();
       setAutomations(
-        next.map((automation) =>
-          pendingToggles.current.has(automation.id)
-            ? {
-                ...automation,
-                enabled: pendingToggles.current.get(automation.id)!.enabled,
-              }
-            : automation,
-        ),
+        next.map((automation) => {
+          const pending = pendingToggles.current.get(automation.id);
+          return pending
+            ? { ...automation, enabled: pending.enabled }
+            : automation;
+        }),
       );
       setLoading(false);
-})().catch(async () => {
-
-});
-  }, []);
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not load automations"));
+      setLoading(false);
+    }
+  };
+  const loadForEffect = useEffectEvent(() => load());
 
   useEffect(() => {
     document.title = docTitle("Automations");
-    load();
-    const id = setInterval(load, 10000);
+    void loadForEffect();
+    const id = setInterval(() => void loadForEffect(), 10000);
     return () => {
       clearInterval(id);
       document.title = DEFAULT_DOC_TITLE;
     };
-  }, [load]);
+  }, []);
 
   // The routed selection — matched by id, or by name for sidebar deep-links.
-  const sel = (selectedId
-        ? automations.find((a) => a.id === selectedId || a.name === selectedId) ||
-          null
-        : null);
+  const sel = selectedId
+    ? automations.find((a) => a.id === selectedId || a.name === selectedId) ||
+      null
+    : null;
 
   // Escape backs out one layer: inline edit → read view → closed. (The create
   // modal handles its own Escape — don't close both from one keypress.)
@@ -860,7 +657,13 @@ const next = (await fetchAutomations()) as Automation[];
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      )
+        return;
       if (editMode) setEditMode(false);
       else onSelect("");
     };
@@ -879,16 +682,17 @@ const next = (await fetchAutomations()) as Automation[];
       ),
     );
 
-    await (async () => {
-await updateAutomationApi(a.id, { enabled });
+    try {
+      await updateAutomationApi(a.id, { enabled });
       // A second click may have superseded this request. Only the latest intent
       // gets to reconcile the optimistic state with the server response.
       if (pendingToggles.current.get(a.id)?.request !== request) return;
       await load();
-      if (pendingToggles.current.get(a.id)?.request === request)
+      if (pendingToggles.current.get(a.id)?.request === request) {
         pendingToggles.current.delete(a.id);
-})().catch(async (e: any) => {
-if (pendingToggles.current.get(a.id)?.request !== request) return;
+      }
+    } catch (cause: unknown) {
+      if (pendingToggles.current.get(a.id)?.request !== request) return;
       pendingToggles.current.delete(a.id);
       setAutomations((current) =>
         current.map((automation) =>
@@ -897,191 +701,337 @@ if (pendingToggles.current.get(a.id)?.request !== request) return;
             : automation,
         ),
       );
-      setError(e.message);
-});
+      setError(errorMessage(cause, "Could not update automation"));
+    }
   }
 
-  async function handleDelete(a: Automation) {
-    if (!confirm(`Delete automation "${a.name}"?`)) return;
-    await (async () => {
-await deleteAutomationApi(a.id);
-      if (sel?.id === a.id) onSelect("");
-      load();
-})().catch(async (e: any) => {
-setError(e.message);
-});
+  async function handleDelete(automation: Automation) {
+    if (!confirm(`Delete automation "${automation.name}"?`)) return;
+    try {
+      await deleteAutomationApi(automation.id);
+      if (sel?.id === automation.id) onSelect("");
+      void load();
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not delete automation"));
+    }
   }
 
-  async function handleRunNow(a: Automation) {
-    await (async () => {
-await runAutomationApi(a.id);
+  async function handleRunNow(automation: Automation) {
+    try {
+      await runAutomationApi(automation.id);
       setTimeout(load, 800);
-})().catch(async (e: any) => {
-setError(e.message);
-});
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not run automation"));
+    }
   }
 
   async function handleRetrigger(sessionId: string) {
-    await (async () => {
-await retriggerAutomationApi(sessionId);
+    try {
+      await retriggerAutomationApi(sessionId);
       setTimeout(load, 800);
-})().catch(async (e: any) => {
-setError(e.message);
-});
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not retrigger automation"));
+    }
   }
 
   return (
     <div {...stylex.props(sx.relative, sx.flex, sx.minH0, sx.minW0, sx.flex1)}>
-    {/* Drawer open: the list compresses to a narrow rail (Reviews-style), and
+      {/* Drawer open: the list compresses to a narrow rail (Reviews-style), and
         on phones it steps aside entirely — Back returns to it. */}
-    <div
-      className={cn(
-        mergeStylexClassName("", sx.minW0, sx.overflowYAuto),
-        sel
-          ? mergeStylexClassName("", sx.flex00340px, sx.borderR, sx.borderLine, sx.px35, sx.pt4, sx.pb10, sx.max900pxHidden)
-          : mergeStylexClassName("", sx.flex1, sx.px6, sx.pt7, sx.pb15, sx.max560pxPx4, sx.max560pxPt5, sx.max560pxPb12),
-      )}
-    >
-    <div className={cn(mergeStylexClassName("", sx.mxAuto), !sel && mergeStylexClassName("", sx.maxW860px))}>
-      <PageHeader
-        className={[mergeStylexClassName("", sx.max560pxMb5, sx.max560pxFlexCol, sx.max560pxItemsStart, sx.max560pxGap35), sel ? mergeStylexClassName("", sx.mb35, sx.itemsCenter) : ""].filter(Boolean).join(" ")}
+      <div
+        className={cn(
+          utilityClassName("min-w-0 overflow-y-auto"),
+          sel
+            ? utilityClassName(
+                "flex-[0_0_340px] border-r border-line px-3.5 pt-4 pb-10 max-[900px]:hidden",
+              )
+            : utilityClassName(
+                "flex-1 px-6 pt-7 pb-15 max-[560px]:px-4 max-[560px]:pt-5 max-[560px]:pb-12",
+              ),
+        )}
       >
-        <div>
-          <PageTitle className={sel ? mergeStylexClassName("", sx.textBase) : undefined}>Automations</PageTitle>
-          <PageDescription className={sel ? mergeStylexClassName("", sx.hidden) : undefined}>
-            Scheduled {AGENT_NAME} sessions. Cron runs in UTC (server time).
-          </PageDescription>
-        </div>
-        <Button
-					variant="primary"
-					size="lg"
-					icon={<IconPlus size={20} />}
-					className={mergeStylexOverrideClassName("", sx.fontMedium, typography.controlLabel)}
-					onClick={() => setShowModal(true)}
-				>
-					New automation
-				</Button>
-      </PageHeader>
-
-      {error && (
-        <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
-      )}
-
-      {loading ? (
-        <LoadingState>Loading…</LoadingState>
-      ) : automations.length === 0 && !showModal ? (
-        <EmptyState title="No automations yet.">
-          Schedule recurring work: daily PR-review sweeps, dependency checks, weekly
-          changelog drafts, flaky-test hunts…
-        </EmptyState>
-      ) : (
-        <div {...stylex.props(sx.flex, sx.flexCol, sx.borderT, sx.borderLine)}>
-          {automations.map((a) => {
-            const running = a.isRunning || a.lastRunStatus === "running";
-            return (
-              <div
-                key={a.id}
-                className={cn(
-                  mergeStylexClassName("", sx.relative, sx.flex, sx.wFull, sx.minW0, sx.itemsCenter, sx.gap3, sx.borderB, sx.borderLine, sx.px25, sx.py275, sx.textLeft, typography.itemTitle, sx.textFg),
-                  mergeStylexClassName("", sx.max560pxGap25, sx.max560pxPx1, sx.max560pxPy3),
-                  sel?.id === a.id ? mergeStylexClassName("", sx.bgActive) : mergeStylexClassName("", sx.hoverBgHover),
-                )}
+        <div
+          className={cn(
+            utilityClassName("mx-auto"),
+            !sel && utilityClassName("max-w-[860px]"),
+          )}
+        >
+          <PageHeader
+            className={utilityClassName(
+              `max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5 ${sel ? "mb-3.5 items-center" : ""}`,
+            )}
+          >
+            <div>
+              <PageTitle
+                className={sel ? utilityClassName("text-base") : undefined}
               >
-                {/* Two controls in one row: opening the automation, and
+                Automations
+              </PageTitle>
+              <PageDescription
+                className={sel ? utilityClassName("hidden") : undefined}
+              >
+                Scheduled {AGENT_NAME} sessions. Cron runs in UTC (server time).
+              </PageDescription>
+            </div>
+            <Button
+              variant="primary"
+              size="lg"
+              icon={<IconPlus size={20} />}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.fontMedium,
+                typography.controlLabel,
+              )}
+              onClick={() => setShowModal(true)}
+            >
+              New automation
+            </Button>
+          </PageHeader>
+
+          {error && (
+            <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
+          )}
+          {modelLoadError && (
+            <InlineAlert onDismiss={() => setModelLoadError(null)}>
+              {modelLoadError}
+            </InlineAlert>
+          )}
+          {providerAccountsError && (
+            <InlineAlert onDismiss={() => setProviderAccountsError(null)}>
+              {providerAccountsError}
+            </InlineAlert>
+          )}
+
+          {loading ? (
+            <LoadingState>Loading…</LoadingState>
+          ) : automations.length === 0 && !showModal ? (
+            <EmptyState title="No automations yet.">
+              Schedule recurring work: daily PR-review sweeps, dependency
+              checks, weekly changelog drafts, flaky-test hunts…
+            </EmptyState>
+          ) : (
+            <div
+              {...stylex.props(sx.flex, sx.flexCol, sx.borderT, sx.borderLine)}
+            >
+              {automations.map((a) => {
+                const running = a.isRunning || a.lastRunStatus === "running";
+                return (
+                  <div
+                    key={a.id}
+                    className={cn(
+                      utilityClassName(
+                        "relative flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-item-title text-fg",
+                      ),
+                      utilityClassName(
+                        "max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3",
+                      ),
+                      sel?.id === a.id
+                        ? utilityClassName("bg-active")
+                        : utilityClassName("hover:bg-hover"),
+                    )}
+                  >
+                    {/* Two controls in one row: opening the automation, and
                     turning it on. So the row can't be a button around the
                     switch. The open target is a button stretched under the
                     content instead, which keeps the whole row clickable and
                     keyboard-reachable without nesting one inside the other.
                     Content above it is inert unless it has its own tooltip. */}
-                <button {...mergeStylexProps("", sx.focusVisibleRing2, sx.focusVisibleRingInset, sx.focusVisibleRingAccent50, sx.absolute, sx.inset0, sx.roundedSm, sx.outlineNone)}
-                  onClick={() => onSelect(a.id)}
-                >
-                  <span {...stylex.props(sx.srOnly)}>Open {a.name}</span>
-                </button>
-                <TriggerIcon automation={a} />
-                <span
-                  className={cn(
-                    mergeStylexClassName("", sx.pointerEventsNone, sx.relative, sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.gap075),
-                    !a.enabled && mergeStylexClassName("", sx.opacity55),
-                  )}
-                >
-                  <span {...stylex.props(sx.truncate, sx.fontSemibold, sx.leading5, typography.itemTitle)}>{a.name}</span>
-                  <span {...stylex.props(sx.truncate, sx.textFaint, typography.meta)}>{triggerSummary(a)}</span>
-                </span>
-                {running ? (
-                  <WorkingPill {...mergeStylexProps("", sx.max560pxMaxW92px, sx.max560pxOverflowHidden, sx.max560pxTextEllipsis, sx.pointerEventsNone, sx.relative)} />
-                ) : a.lastRunStatus === "ok" || a.lastRunStatus === "error" ? (
-                  // Its own click target rather than an inert glyph: keeping
-                  // pointer events is what keeps the tooltip, and the click
-                  // does what the row does.
-                  <span
-                    className={cn(
-                      mergeStylexClassName("[&_svg]:size-3.5", sx.relative, sx.flex, sx.size5, sx.shrink0, sx.selfStart, sx.cursorPointer, sx.itemsCenter, sx.justifyCenter),
-                      a.lastRunStatus === "ok" ? mergeStylexClassName("", sx.textGreen) : mergeStylexClassName("", sx.textRed),
-                    )}
-                    onClick={() => onSelect(a.id)}
-                    title={
-                      a.lastRunStatus === "ok"
-                        ? `Last run ok${a.lastRunAt ? ` · ${relativeTime(a.lastRunAt)}` : ""}`
-                        : a.lastRunError || "Last run failed"
-                    }
-                  >
-                    <CheckStatusIcon kind={a.lastRunStatus === "ok" ? "success" : "failure"} />
-                  </span>
-                ) : null}
-                {/* The graph and the next-run column are the first things to
+                    <button
+                      {...mergeStylexProps(
+                        "focus-visible:ring-2",
+                        sx.absolute,
+                        sx.inset0,
+                        sx.roundedSm,
+                        sx.outlineNone,
+                        sx.focusVisibleRingInset,
+                        sx.focusVisibleRingAccent50,
+                      )}
+                      onClick={() => onSelect(a.id)}
+                    >
+                      <span {...stylex.props(sx.srOnly)}>Open {a.name}</span>
+                    </button>
+                    <TriggerIcon automation={a} />
+                    <span
+                      className={cn(
+                        utilityClassName(
+                          "pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.75",
+                        ),
+                        !a.enabled && utilityClassName("opacity-55"),
+                      )}
+                    >
+                      <span
+                        {...stylex.props(
+                          sx.truncate,
+                          sx.fontSemibold,
+                          sx.leading5,
+                          typography.itemTitle,
+                        )}
+                      >
+                        {a.name}
+                      </span>
+                      <span
+                        {...stylex.props(
+                          sx.truncate,
+                          sx.textFaint,
+                          typography.meta,
+                        )}
+                      >
+                        {triggerSummary(a)}
+                      </span>
+                    </span>
+                    {running ? (
+                      <WorkingPill
+                        className={mergeStylexOverrideClassName(
+                          "",
+                          sx.pointerEventsNone,
+                          sx.relative,
+                          sx.max560pxMaxW92px,
+                          sx.max560pxOverflowHidden,
+                          sx.max560pxTextEllipsis,
+                        )}
+                      />
+                    ) : a.lastRunStatus === "ok" ||
+                      a.lastRunStatus === "error" ? (
+                      // Its own click target rather than an inert glyph: keeping
+                      // pointer events is what keeps the tooltip, and the click
+                      // does what the row does.
+                      <span
+                        className={cn(
+                          utilityClassName(
+                            "relative flex size-5 shrink-0 self-start cursor-pointer items-center justify-center [&_svg]:size-3.5",
+                          ),
+                          a.lastRunStatus === "ok"
+                            ? utilityClassName("text-green")
+                            : utilityClassName("text-red"),
+                        )}
+                        onClick={() => onSelect(a.id)}
+                        title={
+                          a.lastRunStatus === "ok"
+                            ? `Last run ok${a.lastRunAt ? ` · ${relativeTime(a.lastRunAt)}` : ""}`
+                            : a.lastRunError || "Last run failed"
+                        }
+                      >
+                        <CheckStatusIcon
+                          kind={
+                            a.lastRunStatus === "ok" ? "success" : "failure"
+                          }
+                        />
+                      </span>
+                    ) : null}
+                    {/* The graph and the next-run column are the first things to
                     go when width is scarce: the drawer's rail and phones. */}
-                <span
-                  className={cn(
-                    mergeStylexClassName("", sx.relative, sx.shrink0, sx.cursorPointer),
-                    sel ? mergeStylexClassName("", sx.hidden) : mergeStylexClassName("", sx.flex, sx.max560pxHidden),
-                  )}
-                  onClick={() => onSelect(a.id)}
-                >
-                  {(a.runs?.length ?? 0) > 0 && <TriggerGraph runs={a.runs!} compact />}
-                </span>
-                <span
-                  className={cn(
-                    mergeStylexClassName("", sx.pointerEventsNone, sx.relative, sx.w21, sx.shrink0, sx.textRight, typography.meta, sx.textFaint),
-                    sel ? mergeStylexClassName("", sx.hidden) : mergeStylexClassName("", sx.max560pxHidden),
-                  )}
-                >
-                  {/* No "off" here any more: it used to be the only state a
+                    <span
+                      className={cn(
+                        utilityClassName("relative shrink-0 cursor-pointer"),
+                        sel
+                          ? utilityClassName("hidden")
+                          : utilityClassName("flex max-[560px]:hidden"),
+                      )}
+                      onClick={() => onSelect(a.id)}
+                    >
+                      {(a.runs?.length ?? 0) > 0 && (
+                        <TriggerGraph runs={a.runs!} compact />
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        utilityClassName(
+                          "pointer-events-none relative w-21 shrink-0 text-right text-meta text-faint",
+                        ),
+                        sel
+                          ? utilityClassName("hidden")
+                          : utilityClassName("max-[560px]:hidden"),
+                      )}
+                    >
+                      {/* No "off" here any more: it used to be the only state a
                       row carried at this end, and now it sits beside a switch
                       that already says it. */}
-                  {a.enabled && a.nextRunAt ? `next ${formatNext(a.nextRunAt)}` : ""}
-                </span>
-                {/* Last in the row: the switch is the one thing you act on
+                      {a.enabled && a.nextRunAt
+                        ? `next ${formatNext(a.nextRunAt)}`
+                        : ""}
+                    </span>
+                    {/* Last in the row: the switch is the one thing you act on
                     here, so it sits on the edge, in a column of its own. */}
-                <Switch
-                  size="sm"
-                  className={mergeStylexOverrideClassName("", sx.relative)}
-                  checked={a.enabled}
-                  onCheckedChange={(enabled) => handleToggle(a, enabled)}
-                  aria-label={`${a.name} · ${a.enabled ? "on" : "off"}`}
-                />
-              </div>
-            );
-          })}
+                    <Switch
+                      size="sm"
+                      className={mergeStylexOverrideClassName("", sx.relative)}
+                      checked={a.enabled}
+                      onCheckedChange={(enabled) => handleToggle(a, enabled)}
+                      aria-label={`${a.name} · ${a.enabled ? "on" : "off"}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      )}
-    </div>
-    </div>
+      </div>
 
       {sel && (
-        <aside {...mergeStylexProps("", sx.max900pxBorderL0, sx.flex, sx.minH0, sx.minW0, sx.flexAuto, sx.flexCol, sx.borderL, sx.borderLine, sx.bgPanel)}>
-          <div {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap25, sx.borderB, sx.borderDivider, sx.px4, sx.py3)}>
+        <aside
+          {...stylex.props(
+            sx.flex,
+            sx.minH0,
+            sx.minW0,
+            sx.flexAuto,
+            sx.flexCol,
+            sx.borderL,
+            sx.borderLine,
+            sx.bgPanel,
+            sx.max900pxBorderL0,
+          )}
+        >
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.gap25,
+              sx.borderB,
+              sx.borderDivider,
+              sx.px4,
+              sx.py3,
+            )}
+          >
             {/* Phones get Back instead of Close: there the drawer is the page. */}
-            <button {...mergeStylexProps("", sx.max900pxInlineFlex, sx.My1, sx.Ml05, sx.hidden, sx.shrink0, sx.itemsCenter, sx.gap175, sx.px15, sx.py1, sx.fontMedium, sx.textFg, typography.itemTitle)}
+            <button
+              {...stylex.props(
+                sx.My1,
+                sx.Ml05,
+                sx.hidden,
+                sx.shrink0,
+                sx.itemsCenter,
+                sx.gap175,
+                sx.px15,
+                sx.py1,
+                sx.fontMedium,
+                sx.textFg,
+                sx.max900pxInlineFlex,
+                typography.itemTitle,
+              )}
               onClick={() => onSelect("")}
               title="Back to automations"
             >
-              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" {...stylex.props(sx.textDim)} aria-hidden>
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                {...stylex.props(sx.textDim)}
+                aria-hidden
+              >
                 <path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 1 1 1.06 1.06L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06Z" />
               </svg>
               Automations
             </button>
-            <span {...stylex.props(sx.minW0, sx.truncate, sx.fontSemibold, typography.label)}>
+            <span
+              {...stylex.props(
+                sx.minW0,
+                sx.truncate,
+                sx.fontSemibold,
+                typography.label,
+              )}
+            >
               {editMode ? `Edit ${sel.name}` : sel.name}
             </span>
             {!editMode && (
@@ -1094,29 +1044,67 @@ setError(e.message);
                 >
                   Run now
                 </Button>
-                <Button size="sm" variant="soft" onClick={() => setEditMode(true)}>
+                <Button
+                  size="sm"
+                  variant="soft"
+                  onClick={() => setEditMode(true)}
+                >
                   Edit
                 </Button>
                 <Button
                   size="sm"
                   variant="soft"
-                  className={mergeStylexOverrideClassName("", sx.hoverBgRedSoft, sx.hoverTextRed)}
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.hoverBgRedSoft,
+                    sx.hoverTextRed,
+                  )}
                   onClick={() => handleDelete(sel)}
                 >
                   Delete
                 </Button>
               </div>
             )}
-            <button {...mergeStylexProps("", sx.hoverBgHover, sx.hoverTextFg, sx.max900pxHidden, sx.flex, sx.size7, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedMd, sx.textDim)}
+            <button
+              {...stylex.props(
+                sx.flex,
+                sx.size7,
+                sx.shrink0,
+                sx.itemsCenter,
+                sx.justifyCenter,
+                sx.roundedMd,
+                sx.textDim,
+                sx.hoverBgHover,
+                sx.hoverTextFg,
+                sx.max900pxHidden,
+              )}
               onClick={() => onSelect("")}
               title="Close"
             >
-              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                aria-hidden
+              >
                 <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.749.749 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.749.749 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
               </svg>
             </button>
           </div>
-          <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol, sx.gap35, sx.overflowYAuto, sx.px5, sx.pt45, sx.pb10)}>
+          <div
+            {...stylex.props(
+              sx.flex,
+              sx.minH0,
+              sx.flex1,
+              sx.flexCol,
+              sx.gap35,
+              sx.overflowYAuto,
+              sx.px5,
+              sx.pt45,
+              sx.pb10,
+            )}
+          >
             {editMode ? (
               <div className={FORM_INLINE}>
                 <AutomationForm
@@ -1147,7 +1135,14 @@ setError(e.message);
                     <WorkingPill />
                   )}
                   {sel.enabled && sel.nextRunAt && (
-                    <span {...stylex.props(sx.textFaint, sx.mlAuto, sx.shrink0, typography.label)}>
+                    <span
+                      {...stylex.props(
+                        sx.textFaint,
+                        sx.mlAuto,
+                        sx.shrink0,
+                        typography.label,
+                      )}
+                    >
                       next run {formatNext(sel.nextRunAt)}
                     </span>
                   )}
@@ -1155,20 +1150,42 @@ setError(e.message);
 
                 <div>
                   <div className={SECTION_LABEL}>Instructions</div>
-                  <div {...stylex.props(sx.bgSurface, sx.roundedPanel, sx.px35, sx.py3, sx.leadingRelaxed, sx.textDim, sx.whitespacePreWrap, typography.label)}>
+                  <div
+                    {...stylex.props(
+                      sx.bgSurface,
+                      sx.roundedPanel,
+                      sx.px35,
+                      sx.py3,
+                      sx.leadingRelaxed,
+                      sx.textDim,
+                      sx.whitespacePreWrap,
+                      typography.label,
+                    )}
+                  >
                     {sel.prompt}
                   </div>
                 </div>
 
                 <div>
                   <div className={SECTION_LABEL}>Configuration</div>
-                  <div {...stylex.props(sx.grid, sx.gridColsMaxContent1fr, sx.itemsBaseline, sx.gapX5, sx.gapY2, typography.label)}>
+                  <div
+                    {...stylex.props(
+                      sx.grid,
+                      sx.gridColsMaxContent1fr,
+                      sx.itemsBaseline,
+                      sx.gapX5,
+                      sx.gapY2,
+                      typography.label,
+                    )}
+                  >
                     <DetailKey>Trigger</DetailKey>
                     <span {...stylex.props(sx.textDim, sx.minW0)}>
                       {sel.slackWatch?.channel ? (
                         <>
                           watches{" "}
-                          <span className={[CHIP, mergeStylexClassName("", sx.textYellow)].filter(Boolean).join(" ")}>
+                          <span
+                            className={utilityClassName(`${CHIP} text-yellow`)}
+                          >
                             #{sel.slackWatch.channel}
                           </span>{" "}
                           · one run per top-level message
@@ -1186,28 +1203,27 @@ setError(e.message);
                           )}
                           {sel.schedule && sel.eventKey && " · "}
                           {sel.eventKey && <>on {eventLabel(sel.eventKey)}</>}
-                          {!sel.schedule && !sel.eventKey &&
-                            (sel.webhookEnabled === false ? "manual only" : "webhook / manual only")}
+                          {!sel.schedule &&
+                            !sel.eventKey &&
+                            (sel.webhookEnabled === false
+                              ? "manual only"
+                              : "webhook / manual only")}
                         </>
                       )}
                     </span>
 
                     <DetailKey>Mode</DetailKey>
                     <span {...stylex.props(sx.textDim)}>
-                      {sel.mode === "ask"
-                        ? sel.sandbox
-                          ? "Ask · isolated MicroVM workspace"
-                          : "Ask · read-only on the main checkout"
-                        : sel.sandbox
-                          ? "Code · isolated MicroVM workspace, can open PRs"
+                      {sel.sandbox
+                        ? "Unavailable legacy sandbox configuration"
+                        : sel.mode === "ask"
+                          ? "Ask · read-only on the main checkout"
                           : "Code · isolated worktree, can open PRs"}
                     </span>
 
                     <DetailKey>Environment</DetailKey>
                     <span {...stylex.props(sx.textDim)}>
-                      {sel.sandbox
-                        ? "MicroVM · pinned credentials and restricted egress"
-                        : "Host worktree"}
+                      {sel.sandbox ? "Unavailable" : "Host worktree"}
                     </span>
 
                     <DetailKey>Model</DetailKey>
@@ -1218,7 +1234,8 @@ setError(e.message);
                           {...stylex.props(sx.textFaint)}
                           title="Used only when every account for the primary model has hit its usage limit"
                         >
-                          {" "}· falls back to {sel.fallbackModel}
+                          {" "}
+                          · falls back to {sel.fallbackModel}
                         </span>
                       )}
                     </span>
@@ -1228,7 +1245,9 @@ setError(e.message);
                         <DetailKey>Account</DetailKey>
                         <span {...stylex.props(sx.textDim)}>
                           {providerAccountLabel(
-                            providerAccounts.find((x) => x.id === sel.accountId) ?? {
+                            providerAccounts.find(
+                              (x) => x.id === sel.accountId,
+                            ) ?? {
                               name: "pinned account",
                             },
                           )}
@@ -1236,7 +1255,9 @@ setError(e.message);
                             {sel.accountStrict === false
                               ? " · preferred, falls back to the shared pool"
                               : " · hard pin (cost cap)"}
-                            {sel.usageCredits ? " · paid usage-credits allowed" : ""}
+                            {sel.usageCredits
+                              ? " · paid usage-credits allowed"
+                              : ""}
                           </span>
                         </span>
                       </>
@@ -1255,14 +1276,17 @@ setError(e.message);
                       <>
                         <DetailKey>Inputs</DetailKey>
                         <span {...stylex.props(sx.textDim, sx.minW0)}>
-                          {sel.inputs.map((input) =>
-                            input.label ||
-                            (input.source.type === "slack_channel"
-                              ? `Slack ${input.source.channel}`
-                              : input.source.automationId === "self"
-                                ? "previous reports"
-                                : `reports ${input.source.automationId}`),
-                          ).join(", ")}
+                          {sel.inputs
+                            .map(
+                              (input) =>
+                                input.label ||
+                                (input.source.type === "slack_channel"
+                                  ? `Slack ${input.source.channel}`
+                                  : input.source.automationId === "self"
+                                    ? "previous reports"
+                                    : `reports ${input.source.automationId}`),
+                            )
+                            .join(", ")}
                         </span>
                       </>
                     ) : null}
@@ -1271,11 +1295,13 @@ setError(e.message);
                       <>
                         <DetailKey>Outputs</DetailKey>
                         <span {...stylex.props(sx.textDim, sx.minW0)}>
-                          {sel.outputs.map((output) => {
-                            if (output.type === "report")
-                              return `Reports · ${output.publish || "always"}`;
-                            return `Slack ${output.channel} · ${output.enabled === false ? "disabled" : `${output.minUrgency || "high"}/${output.minConfidence || "high"}`}`;
-                          }).join(", ")}
+                          {sel.outputs
+                            .map((output) => {
+                              if (output.type === "report")
+                                return `Reports · ${output.publish || "always"}`;
+                              return `Slack ${output.channel} · ${output.enabled === false ? "disabled" : `${output.minUrgency || "high"}/${output.minConfidence || "high"}`}`;
+                            })
+                            .join(", ")}
                         </span>
                       </>
                     ) : null}
@@ -1291,11 +1317,14 @@ setError(e.message);
                     <span {...stylex.props(sx.textDim)}>
                       by {sel.createdBy}
                       {sel.createdAt &&
-                        ` · ${new Date(sel.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}`}
+                        ` · ${new Date(sel.createdAt).toLocaleDateString(
+                          undefined,
+                          {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          },
+                        )}`}
                     </span>
                   </div>
                 </div>
@@ -1306,9 +1335,17 @@ setError(e.message);
                     <div {...stylex.props(sx.textDim, typography.supporting)}>
                       last run {relativeTime(sel.lastRunAt)}
                       {sel.lastTrigger ? ` via ${sel.lastTrigger}` : ""}
-                      {sel.lastRunStatus === "ok" && <span {...stylex.props(sx.textGreen)}> ✓</span>}
+                      {sel.lastRunStatus === "ok" && (
+                        <span {...stylex.props(sx.textGreen)}> ✓</span>
+                      )}
                       {sel.lastRunStatus === "error" && (
-                        <span {...stylex.props(sx.textRed)} title={sel.lastRunError}> ✗</span>
+                        <span
+                          {...stylex.props(sx.textRed)}
+                          title={sel.lastRunError}
+                        >
+                          {" "}
+                          ✗
+                        </span>
                       )}
                       {sel.lastRunSessionId && (
                         <>
@@ -1327,12 +1364,18 @@ setError(e.message);
                       )}
                     </div>
                   ) : (
-                    <div {...stylex.props(sx.textFaint, typography.supporting)}>No runs yet.</div>
+                    <div {...stylex.props(sx.textFaint, typography.supporting)}>
+                      No runs yet.
+                    </div>
                   )}
                   {(sel.runs?.length ?? 0) > 0 && (
                     <>
                       <TriggerGraph runs={sel.runs!} />
-                      <RunLedger runs={sel.runs!} onOpenSession={onOpenSession} onRetrigger={handleRetrigger} />
+                      <RunLedger
+                        runs={sel.runs!}
+                        onOpenSession={onOpenSession}
+                        onRetrigger={handleRetrigger}
+                      />
                     </>
                   )}
                 </div>
@@ -1376,11 +1419,13 @@ function TriggerIcon({ automation }: { automation: Automation }) {
   return (
     <span
       className={cn(
-        mergeStylexClassName("", sx.pointerEventsNone, sx.relative, sx.flex, sx.size5, sx.shrink0, sx.selfStart, sx.itemsCenter, sx.justifyCenter, sx.textFaint),
-        !automation.enabled && mergeStylexClassName("", sx.opacity55),
+        utilityClassName(
+          "pointer-events-none relative flex size-5 shrink-0 self-start items-center justify-center text-faint",
+        ),
+        !automation.enabled && utilityClassName("opacity-55"),
       )}
     >
-      <Icon size={20} className={cn(mergeStylexClassName("", sx.maxWNone), scale)} />
+      <Icon size={20} className={cn(utilityClassName("max-w-none"), scale)} />
     </span>
   );
 }
@@ -1409,7 +1454,16 @@ function eventLabel(key: string): string {
 /** Left column of the drawer's Configuration grid. */
 function DetailKey({ children }: { children: React.ReactNode }) {
   return (
-    <span {...stylex.props(sx.textFaint, sx.leading17, sx.whitespaceNowrap, typography.label)}>{children}</span>
+    <span
+      {...stylex.props(
+        sx.textFaint,
+        sx.leading17,
+        sx.whitespaceNowrap,
+        typography.label,
+      )}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -1422,18 +1476,28 @@ const PLOT_H = 26;
 /** Runs-per-day bar strip for the last 30 days. Status is state, so it uses
  *  the reserved status tokens (green/yellow/red); per-bar tooltips carry the
  *  counts in text and the expanded run ledger is the table view. */
-function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: boolean }) {
+function TriggerGraph({
+  runs,
+  compact,
+}: {
+  runs: AutomationRun[];
+  compact?: boolean;
+}) {
   const buckets = (() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const out = Array.from({ length: GRAPH_DAYS }, (_, i) => {
-      const date = new Date(today.getTime() - (GRAPH_DAYS - 1 - i) * 86_400_000);
+      const date = new Date(
+        today.getTime() - (GRAPH_DAYS - 1 - i) * 86_400_000,
+      );
       return { date, ok: 0, error: 0, running: 0 };
     });
     for (const r of runs) {
       const d = new Date(r.at);
       d.setHours(0, 0, 0, 0);
-      const idx = Math.round((d.getTime() - out[0].date.getTime()) / 86_400_000);
+      const idx = Math.round(
+        (d.getTime() - out[0].date.getTime()) / 86_400_000,
+      );
       if (idx >= 0 && idx < out.length) out[idx][r.status]++;
     }
     return out;
@@ -1444,7 +1508,11 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
   if (total === 0) return null;
 
   return (
-    <div className={[mergeStylexClassName("", sx.flex, sx.itemsEnd, sx.gap2), compact ? "" : mergeStylexClassName("", sx.mt2)].filter(Boolean).join(" ")}>
+    <div
+      className={utilityClassName(
+        `flex items-end gap-2 ${compact ? "" : "mt-2"}`,
+      )}
+    >
       <svg
         width={GRAPH_DAYS * SLOT - 2}
         height={PLOT_H + 1}
@@ -1453,19 +1521,41 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
         {...stylex.props(sx.shrink0)}
       >
         {/* baseline */}
-        <rect x={0} y={PLOT_H} width={GRAPH_DAYS * SLOT - 2} height={1} fill="var(--border)" />
+        <rect
+          x={0}
+          y={PLOT_H}
+          width={GRAPH_DAYS * SLOT - 2}
+          height={1}
+          fill="var(--border)"
+        />
         {buckets.map((b, i) => {
           const count = b.ok + b.error + b.running;
-          const label = b.date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+          const label = b.date.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          });
           if (count === 0) {
             return (
-              <rect key={i} x={i * SLOT} y={PLOT_H - 2} width={SLOT - 2} height={2} rx={1} fill="var(--border)">
+              <rect
+                key={i}
+                x={i * SLOT}
+                y={PLOT_H - 2}
+                width={SLOT - 2}
+                height={2}
+                rx={1}
+                fill="var(--border)"
+              >
                 <title>{`${label} · no runs`}</title>
               </rect>
             );
           }
           const h = Math.max(4, Math.round((count / max) * PLOT_H));
-          const fill = b.error > 0 ? "var(--red)" : b.running > 0 ? "var(--yellow)" : "var(--green)";
+          const fill =
+            b.error > 0
+              ? "var(--red)"
+              : b.running > 0
+                ? "var(--yellow)"
+                : "var(--green)";
           const parts = [
             b.ok ? `${b.ok} ok` : "",
             b.error ? `${b.error} failed` : "",
@@ -1475,14 +1565,29 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
           // capsule, so a tall bar still shows a straight side to read a
           // height off. Short ones pill anyway: ry clamps to half the height.
           return (
-            <rect key={i} x={i * SLOT} y={PLOT_H - h} width={SLOT - 2} height={h} rx={3} fill={fill}>
+            <rect
+              key={i}
+              x={i * SLOT}
+              y={PLOT_H - h}
+              width={SLOT - 2}
+              height={h}
+              rx={3}
+              fill={fill}
+            >
               <title>{`${label} · ${count} run${count === 1 ? "" : "s"} (${parts.join(", ")})`}</title>
             </rect>
           );
         })}
       </svg>
       {!compact && (
-        <span {...stylex.props(sx.pbPx, sx.leadingNone, sx.textFaint, typography.meta)}>
+        <span
+          {...stylex.props(
+            sx.pbPx,
+            sx.leadingNone,
+            sx.textFaint,
+            typography.meta,
+          )}
+        >
           {total} run{total === 1 ? "" : "s"} · last {GRAPH_DAYS}d
         </span>
       )}
@@ -1501,22 +1606,51 @@ function RunLedger({
   onRetrigger: (sessionId: string) => void;
 }) {
   return (
-    <div {...stylex.props(sx.mt25, sx.borderT, sx.borderLine, sx.pt2, sx.flex, sx.flexCol, sx.gap1)}>
+    <div
+      {...stylex.props(
+        sx.mt25,
+        sx.borderT,
+        sx.borderLine,
+        sx.pt2,
+        sx.flex,
+        sx.flexCol,
+        sx.gap1,
+      )}
+    >
       {runs.map((r) => (
-        <div key={r.sessionId + r.at} {...stylex.props(sx.flex, sx.itemsBaseline, sx.gap2, sx.textDim, sx.minW0, typography.label)}>
+        <div
+          key={r.sessionId + r.at}
+          {...stylex.props(
+            sx.flex,
+            sx.itemsBaseline,
+            sx.gap2,
+            sx.textDim,
+            sx.minW0,
+            typography.label,
+          )}
+        >
           {r.status === "running" ? (
             <span {...stylex.props(sx.textYellow, sx.shrink0)}>●</span>
           ) : r.status === "ok" ? (
             <span {...stylex.props(sx.textGreen, sx.shrink0)}>✓</span>
           ) : (
-            <span {...stylex.props(sx.textRed, sx.shrink0)} title={r.error}>✗</span>
+            <span {...stylex.props(sx.textRed, sx.shrink0)} title={r.error}>
+              ✗
+            </span>
           )}
-          <span {...stylex.props(sx.shrink0)} title={new Date(r.at).toLocaleString()}>
+          <span
+            {...stylex.props(sx.shrink0)}
+            title={new Date(r.at).toLocaleString()}
+          >
             {relativeTime(r.at)}
           </span>
-          <span {...stylex.props(sx.textFaint, sx.shrink0)}>via {r.trigger}</span>
+          <span {...stylex.props(sx.textFaint, sx.shrink0)}>
+            via {r.trigger}
+          </span>
           {r.durationMs != null && (
-            <span {...stylex.props(sx.textFaint, sx.shrink0)}>{formatDuration(r.durationMs)}</span>
+            <span {...stylex.props(sx.textFaint, sx.shrink0)}>
+              {formatDuration(r.durationMs)}
+            </span>
           )}
           {r.error && (
             <span {...stylex.props(sx.textRed, sx.truncate)} title={r.error}>
@@ -1524,7 +1658,7 @@ function RunLedger({
             </span>
           )}
           <a
-            className={cn(LINK, mergeStylexClassName("", sx.mlAuto, sx.shrink0))}
+            className={cn(LINK, utilityClassName("ml-auto shrink-0"))}
             href={`${BASE_PATH}/session/${r.sessionId}`}
             onClick={(e) => {
               e.preventDefault();
@@ -1535,7 +1669,7 @@ function RunLedger({
           </a>
           {r.status !== "running" && (
             <button
-              className={cn(LINK, mergeStylexClassName("", sx.shrink0, typography.label))}
+              className={cn(LINK, utilityClassName("shrink-0 text-label"))}
               title={
                 r.trigger === "event" || r.trigger === "webhook"
                   ? "Start a fresh run replaying this run's triggering event"
@@ -1559,7 +1693,16 @@ function WebhookUrl({ id, secret }: { id: string; secret: string }) {
 
   return (
     <span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.minW0)}>
-      <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.textDim, typography.meta)} title={url}>
+      <span
+        {...stylex.props(
+          sx.minW0,
+          sx.flex1,
+          sx.truncate,
+          sx.textDim,
+          typography.meta,
+        )}
+        title={url}
+      >
         POST {url.replace(secret, secret.slice(0, 6) + "…")}
       </span>
       <Button
@@ -1624,7 +1767,7 @@ function CreateAutomationModal({
       }}
     >
       <Modal.Content
-        widthClassName={mergeStylexClassName("", sharedClassStyles.maxW40rem)}
+        widthClassName={utilityClassName("max-w-[40rem]")}
         initialFocus={step === "type" ? describeRef : undefined}
       >
         {step === "type" ? (
@@ -1638,7 +1781,9 @@ function CreateAutomationModal({
         ) : (
           <>
             <Modal.Header
-              title={step === "watch" ? "Watch a Slack channel" : "New automation"}
+              title={
+                step === "watch" ? "Watch a Slack channel" : "New automation"
+              }
               description={
                 step === "watch"
                   ? `${AGENT_NAME} triages every new message in the channel.`
@@ -1682,18 +1827,68 @@ function ChooserRow({
 }) {
   return (
     <button
-      type="button" {...mergeStylexProps("", sx.hoverBgHover, sx.flex, sx.wFull, sx.cursorPointer, sx.itemsStart, sx.gap3, sx.roundedRow, sx.px25, sx.py225, sx.textLeft, sx.transitionColors)}
+      type="button"
+      {...stylex.props(
+        sx.flex,
+        sx.wFull,
+        sx.cursorPointer,
+        sx.itemsStart,
+        sx.gap3,
+        sx.roundedRow,
+        sx.px25,
+        sx.py225,
+        sx.textLeft,
+        sx.transitionColors,
+        sx.hoverBgHover,
+      )}
       onClick={onClick}
     >
       {/* Normalize the drawn height, not the SVG box, the way the list rows do. */}
-      <span {...stylex.props(sx.flex, sx.size5, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textFaint)}>
-        <Icon size={20} className={mergeStylexOverrideClassName("", sx.maxWNone, sx.scale115)} />
+      <span
+        {...stylex.props(
+          sx.flex,
+          sx.size5,
+          sx.shrink0,
+          sx.itemsCenter,
+          sx.justifyCenter,
+          sx.textFaint,
+        )}
+      >
+        <Icon
+          size={20}
+          className={mergeStylexOverrideClassName("", sx.maxWNone, sx.scale115)}
+        />
       </span>
-      <span {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.gap075)}>
-        <span {...stylex.props(sx.fontSemibold, sx.leading5, sx.textFg, typography.itemTitle)}>{title}</span>
-        <span {...stylex.props(sx.leadingNormal, sx.textFaint, typography.supporting)}>{description}</span>
+      <span
+        {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.gap075)}
+      >
+        <span
+          {...stylex.props(
+            sx.fontSemibold,
+            sx.leading5,
+            sx.textFg,
+            typography.itemTitle,
+          )}
+        >
+          {title}
+        </span>
+        <span
+          {...stylex.props(
+            sx.leadingNormal,
+            sx.textFaint,
+            typography.supporting,
+          )}
+        >
+          {description}
+        </span>
       </span>
-      {meta && <span {...stylex.props(sx.mt05, sx.shrink0, sx.textFaint, typography.meta)}>{meta}</span>}
+      {meta && (
+        <span
+          {...stylex.props(sx.mt05, sx.shrink0, sx.textFaint, typography.meta)}
+        >
+          {meta}
+        </span>
+      )}
     </button>
   );
 }
@@ -1704,27 +1899,39 @@ function TypeChooser({
   onPick,
 }: {
   describeRef: React.RefObject<HTMLTextAreaElement | null>;
-  onPick: (prefill: AutomationDraft | null, step: Exclude<Step, "type">) => void;
+  onPick: (
+    prefill: AutomationDraft | null,
+    step: Exclude<Step, "type">,
+  ) => void;
 }) {
   const [templates, setTemplates] = useState<AutomationTemplate[]>([]);
+  const [templateLoadError, setTemplateLoadError] = useState<string | null>(
+    null,
+  );
   const [description, setDescription] = useState("");
   const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchAutomationTemplates().then(setTemplates).catch(() => {});
+    fetchAutomationTemplates()
+      .then(setTemplates)
+      .catch((cause: unknown) =>
+        setTemplateLoadError(
+          errorMessage(cause, "Could not load automation templates"),
+        ),
+      );
   }, []);
 
   async function handleDraft() {
     if (description.trim().length < 10 || drafting) return;
     setDrafting(true);
     setError(null);
-    await (async () => {
-onPick(await draftAutomationApi(description), "classic");
-})().catch(async (e: any) => {
-setError(e.message);
+    try {
+      onPick(await draftAutomationApi(description), "classic");
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not draft automation"));
       setDrafting(false);
-});
+    }
   }
 
   return (
@@ -1746,7 +1953,14 @@ setError(e.message);
           aria-label="Describe the automation"
           placeholder="Every weekday morning, check Sentry for new errors and rank them by impact"
         />
-        {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+        {error && (
+          <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
+        )}
+        {templateLoadError && (
+          <InlineAlert onDismiss={() => setTemplateLoadError(null)}>
+            {templateLoadError}
+          </InlineAlert>
+        )}
         <div {...stylex.props(sx.flex, sx.justifyEnd)}>
           <Button
             variant="primary"
@@ -1761,7 +1975,9 @@ setError(e.message);
       {/* Outdented by the rows' own padding, so each group's label shares an x
           with the rows under it (see src/frontend/AGENTS.md). */}
       <div {...stylex.props(sx.Mx25)}>
-        <div className={cn(SECTION_LABEL, mergeStylexClassName("", sx.px25))}>Start from scratch</div>
+        <div className={cn(SECTION_LABEL, utilityClassName("px-2.5"))}>
+          Start from scratch
+        </div>
         <ChooserRow
           icon={IconClock}
           title="Schedule, event or webhook"
@@ -1778,10 +1994,20 @@ setError(e.message);
 
       {templates.length > 0 && (
         <div {...stylex.props(sx.Mx25, sx.flex, sx.minH0, sx.flexCol)}>
-          <div className={cn(SECTION_LABEL, mergeStylexClassName("", sx.px25))}>Templates</div>
+          <div className={cn(SECTION_LABEL, utilityClassName("px-2.5"))}>
+            Templates
+          </div>
           {/* The gallery scrolls inside the dialog rather than growing it, so
               the describe field and the two blank starts stay on screen. */}
-          <div {...mergeStylexProps("", sx.phoneMaxHNone, sx.desktopMaxH32dvh, sx.minH0, sx.overflowYAuto, sx.overscrollContain)}>
+          <div
+            {...stylex.props(
+              sx.minH0,
+              sx.overflowYAuto,
+              sx.overscrollContain,
+              sx.phoneMaxHNone,
+              sx.desktopMaxH32dvh,
+            )}
+          >
             {templates.map((t) => (
               <ChooserRow
                 key={t.id}
@@ -1810,17 +2036,25 @@ function McpPicker({
   value: string[] | undefined;
   onChange: (v: string[] | undefined) => void;
 }) {
-  const [servers, setServers] = useState<Array<{ name: string; status: string }>>([]);
+  const [servers, setServers] = useState<
+    Array<{ name: string; status: string }>
+  >([]);
   const [search, setSearch] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchConnections()
       .then((c) =>
         setServers(
-          (c.mcpServers || []).map((s: any) => ({ name: s.name, status: s.status })),
+          (c.mcpServers || []).map((server) => ({
+            name: server.name,
+            status: server.status,
+          })),
         ),
       )
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setLoadError(errorMessage(cause, "Could not load MCP servers")),
+      );
   }, []);
 
   const all = value === undefined;
@@ -1845,34 +2079,81 @@ function McpPicker({
   return (
     <div {...stylex.props(sx.flex, sx.flexCol, sx.gap15)}>
       <div {...stylex.props(sx.flex, sx.itemsBaseline, sx.gap2)}>
-        <span {...stylex.props(sx.textFg, sx.fontMedium, typography.label)}>MCPs</span>
+        <span {...stylex.props(sx.textFg, sx.fontMedium, typography.label)}>
+          MCPs
+        </span>
         <span {...stylex.props(sx.textDim, typography.label)}>
           Select which connectors this automation's runs can use
         </span>
         <a
-          {...stylex.props(sx.textDim, sx.underline, sx.mlAuto, sx.shrink0, typography.label)}
+          {...stylex.props(
+            sx.textDim,
+            sx.underline,
+            sx.mlAuto,
+            sx.shrink0,
+            typography.label,
+          )}
           href={`${BASE_PATH}/settings`}
         >
           Manage MCPs
         </a>
       </div>
+      {loadError && (
+        <InlineAlert onDismiss={() => setLoadError(null)}>
+          {loadError}
+        </InlineAlert>
+      )}
       <div {...stylex.props(sx.bgSurface, sx.roundedPanel, sx.overflowHidden)}>
-        <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.borderB, sx.borderDivider, sx.px3, sx.py2)}>
+        <div
+          {...stylex.props(
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.borderB,
+            sx.borderDivider,
+            sx.px3,
+            sx.py2,
+          )}
+        >
           {/* Chrome-less on purpose: the picker's own panel is the surface, so
               a second well inside it would read as a box in a box. */}
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search MCPs…" {...mergeStylexProps("", sx.placeholderTextFaint, sx.flex1, sx.bgTransparent, sx.border0, sx.outlineNone, sx.textFg, typography.label)}
+            placeholder="Search MCPs…"
+            {...stylex.props(
+              sx.flex1,
+              sx.bgTransparent,
+              sx.border0,
+              sx.outlineNone,
+              sx.textFg,
+              sx.placeholderTextFaint,
+              typography.label,
+            )}
             style={{ border: "none", padding: 0, background: "transparent" }}
           />
           <span {...stylex.props(sx.textFaint, sx.shrink0, typography.meta)}>
             {all ? "all connectors" : `${selected.length} selected`}
           </span>
         </div>
-        <label {...mergeStylexProps("", sx.hoverBgHover, sx.flex, sx.itemsCenter, sx.gap25, sx.borderB, sx.borderLine, sx.px3, sx.py2, sx.cursorPointer, typography.label)}
+        <label
+          {...stylex.props(
+            sx.flex,
+            sx.itemsCenter,
+            sx.gap25,
+            sx.borderB,
+            sx.borderLine,
+            sx.px3,
+            sx.py2,
+            sx.cursorPointer,
+            sx.hoverBgHover,
+            typography.label,
+          )}
         >
-          <Checkbox checked={all} onCheckedChange={() => onChange(all ? [] : undefined)} />
+          <Checkbox
+            checked={all}
+            onCheckedChange={() => onChange(all ? [] : undefined)}
+          />
           <span {...stylex.props(sx.textFg)}>All connectors</span>
           <span {...stylex.props(sx.textFaint, typography.meta)}>
             every configured server (pre-least-privilege default)
@@ -1881,7 +2162,17 @@ function McpPicker({
         <div {...stylex.props(sx.maxH180px, sx.overflowYAuto)}>
           {shown.map((s) => (
             <label
-              key={s.name} {...mergeStylexProps("", sx.hoverBgHover, sx.flex, sx.itemsCenter, sx.gap25, sx.px3, sx.py15, sx.cursorPointer, typography.label)}
+              key={s.name}
+              {...stylex.props(
+                sx.flex,
+                sx.itemsCenter,
+                sx.gap25,
+                sx.px3,
+                sx.py15,
+                sx.cursorPointer,
+                sx.hoverBgHover,
+                typography.label,
+              )}
             >
               <Checkbox
                 checked={all || selected.includes(s.name)}
@@ -1889,12 +2180,18 @@ function McpPicker({
               />
               <span {...stylex.props(sx.textFg)}>{s.name}</span>
               {s.status !== "connected" && s.status !== "ready" && (
-                <span {...stylex.props(sx.textYellow, typography.meta)}>{s.status}</span>
+                <span {...stylex.props(sx.textYellow, typography.meta)}>
+                  {s.status}
+                </span>
               )}
             </label>
           ))}
           {shown.length === 0 && (
-            <div {...stylex.props(sx.px3, sx.py2, sx.textFaint, typography.label)}>No connectors match.</div>
+            <div
+              {...stylex.props(sx.px3, sx.py2, sx.textFaint, typography.label)}
+            >
+              No connectors match.
+            </div>
           )}
         </div>
       </div>
@@ -1935,12 +2232,16 @@ function DataFlowEditor({
   const updateInput = (index: number, value: AutomationInput) =>
     onInputsChange(inputs.map((input, at) => (at === index ? value : input)));
   const updateOutput = (index: number, value: AutomationOutput) =>
-    onOutputsChange(outputs.map((output, at) => (at === index ? value : output)));
+    onOutputsChange(
+      outputs.map((output, at) => (at === index ? value : output)),
+    );
 
   return (
     <div {...stylex.props(sx.flex, sx.flexCol, sx.gap25)}>
       <div>
-        <span {...stylex.props(sx.fontMedium, sx.textFg, typography.label)}>Data flow</span>
+        <span {...stylex.props(sx.fontMedium, sx.textFg, typography.label)}>
+          Data flow
+        </span>
         <span {...stylex.props(sx.ml2, sx.textDim, typography.label)}>
           Gather and flatten inputs before each run, then publish the result
         </span>
@@ -1948,8 +2249,12 @@ function DataFlowEditor({
 
       <div {...stylex.props(sx.flex, sx.flexCol, sx.gap2)}>
         <div {...stylex.props(sx.flex, sx.minH10, sx.itemsCenter, sx.gap2)}>
-          <span {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}>Inputs</span>
-          <span {...stylex.props(sx.textFaint, typography.supporting)}>Each source is bounded and treated as untrusted data</span>
+          <span {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}>
+            Inputs
+          </span>
+          <span {...stylex.props(sx.textFaint, typography.supporting)}>
+            Each source is bounded and treated as untrusted data
+          </span>
           <div {...stylex.props(sx.mlAuto, sx.flex, sx.gap15)}>
             <Button
               size="sm"
@@ -1957,9 +2262,16 @@ function DataFlowEditor({
                 onInputsChange([
                   ...inputs,
                   {
-                    id: uniqueFlowId("slack", inputs.map((input) => input.id)),
+                    id: uniqueFlowId(
+                      "slack",
+                      inputs.map((input) => input.id),
+                    ),
                     label: "Slack channel",
-                    window: { mode: "since_last_success", minutes: 120, overlapMinutes: 10 },
+                    window: {
+                      mode: "since_last_success",
+                      minutes: 120,
+                      overlapMinutes: 10,
+                    },
                     reduce: { model: "claude-haiku-4-5", maxOutputChars: 8000 },
                     source: {
                       type: "slack_channel",
@@ -1980,7 +2292,10 @@ function DataFlowEditor({
                 onInputsChange([
                   ...inputs,
                   {
-                    id: uniqueFlowId("reports", inputs.map((input) => input.id)),
+                    id: uniqueFlowId(
+                      "reports",
+                      inputs.map((input) => input.id),
+                    ),
                     label: "Previous reports",
                     source: { type: "reports", automationId: "self", limit: 3 },
                   },
@@ -1993,30 +2308,64 @@ function DataFlowEditor({
         </div>
 
         {inputs.length === 0 ? (
-          <div {...stylex.props(sx.roundedPanel, sx.border, sx.borderDashed, sx.borderLine, sx.px3, sx.py3, sx.textFaint, typography.label)}>
-            No collected inputs. The run receives only its instructions and trigger context.
+          <div
+            {...stylex.props(
+              sx.roundedPanel,
+              sx.border,
+              sx.borderDashed,
+              sx.borderLine,
+              sx.px3,
+              sx.py3,
+              sx.textFaint,
+              typography.label,
+            )}
+          >
+            No collected inputs. The run receives only its instructions and
+            trigger context.
           </div>
         ) : (
           inputs.map((input, index) => {
-            const slack = input.source.type === "slack_channel" ? input.source : null;
-            const reports = input.source.type === "reports" ? input.source : null;
+            const slack =
+              input.source.type === "slack_channel" ? input.source : null;
+            const reports =
+              input.source.type === "reports" ? input.source : null;
             return (
-              <div key={input.id} {...stylex.props(sx.roundedPanel, sx.bgSurface, sx.p3)}>
-                <div {...stylex.props(sx.mb2, sx.flex, sx.minH10, sx.itemsCenter, sx.gap2)}>
+              <div
+                key={input.id}
+                {...stylex.props(sx.roundedPanel, sx.bgSurface, sx.p3)}
+              >
+                <div
+                  {...stylex.props(
+                    sx.mb2,
+                    sx.flex,
+                    sx.minH10,
+                    sx.itemsCenter,
+                    sx.gap2,
+                  )}
+                >
                   <Select
                     className={mergeStylexOverrideClassName("", sx.maxW150px)}
                     value={input.source.type}
                     onChange={(e) => {
-                      const source = e.target.value === "slack_channel"
-                        ? {
-                            type: "slack_channel" as const,
-                            channel: "",
-                            includeThreads: true,
-                            includeBots: false,
-                            limit: 200,
-                          }
-                        : { type: "reports" as const, automationId: "self", limit: 3 };
-                      updateInput(index, { id: input.id, label: input.label, source });
+                      const source =
+                        e.target.value === "slack_channel"
+                          ? {
+                              type: "slack_channel" as const,
+                              channel: "",
+                              includeThreads: true,
+                              includeBots: false,
+                              limit: 200,
+                            }
+                          : {
+                              type: "reports" as const,
+                              automationId: "self",
+                              limit: 3,
+                            };
+                      updateInput(index, {
+                        id: input.id,
+                        label: input.label,
+                        source,
+                      });
                     }}
                   >
                     <option value="slack_channel">Slack channel</option>
@@ -2024,12 +2373,22 @@ function DataFlowEditor({
                   </Select>
                   <Input
                     value={input.label || ""}
-                    onChange={(e) => updateInput(index, { ...input, label: e.target.value })}
+                    onChange={(e) =>
+                      updateInput(index, { ...input, label: e.target.value })
+                    }
                     placeholder="Label"
                   />
                   <Button
-                    size="sm" {...mergeStylexProps("", sx.hoverTextRed, sx.shrink0, sx.textDim)}
-                    onClick={() => onInputsChange(inputs.filter((_, at) => at !== index))}
+                    size="sm"
+                    className={mergeStylexOverrideClassName(
+                      "",
+                      sx.shrink0,
+                      sx.textDim,
+                      sx.hoverTextRed,
+                    )}
+                    onClick={() =>
+                      onInputsChange(inputs.filter((_, at) => at !== index))
+                    }
                   >
                     Remove
                   </Button>
@@ -2041,11 +2400,15 @@ function DataFlowEditor({
                       <label className={FIELD_LABEL}>
                         Channel ID
                         <Input
+                          className="mono-input"
                           value={slack.channel}
                           onChange={(e) =>
                             updateInput(index, {
                               ...input,
-                              source: { ...slack, channel: e.target.value.toUpperCase() },
+                              source: {
+                                ...slack,
+                                channel: e.target.value.toUpperCase(),
+                              },
                             })
                           }
                           placeholder="C0123456789"
@@ -2061,7 +2424,10 @@ function DataFlowEditor({
                           onChange={(e) =>
                             updateInput(index, {
                               ...input,
-                              window: { ...input.window, minutes: Number(e.target.value) },
+                              window: {
+                                ...input.window,
+                                minutes: Number(e.target.value),
+                              },
                             })
                           }
                         />
@@ -2073,15 +2439,35 @@ function DataFlowEditor({
                           onChange={(e) =>
                             updateInput(index, {
                               ...input,
-                              reduce: { ...input.reduce, model: e.target.value },
+                              reduce: {
+                                ...input.reduce,
+                                model: e.target.value,
+                              },
                             })
                           }
                           placeholder="Default Haiku"
                         />
                       </label>
                     </div>
-                    <div {...stylex.props(sx.mt2, sx.flex, sx.flexWrap, sx.gapX5, sx.gapY1, sx.textDim, typography.label)}>
-                      <label {...stylex.props(sx.flex, sx.minH10, sx.itemsCenter, sx.gap2)}>
+                    <div
+                      {...stylex.props(
+                        sx.mt2,
+                        sx.flex,
+                        sx.flexWrap,
+                        sx.gapX5,
+                        sx.gapY1,
+                        sx.textDim,
+                        typography.label,
+                      )}
+                    >
+                      <label
+                        {...stylex.props(
+                          sx.flex,
+                          sx.minH10,
+                          sx.itemsCenter,
+                          sx.gap2,
+                        )}
+                      >
                         <Checkbox
                           checked={slack.includeThreads !== false}
                           onCheckedChange={(checked) =>
@@ -2093,7 +2479,14 @@ function DataFlowEditor({
                         />
                         Include thread replies
                       </label>
-                      <label {...stylex.props(sx.flex, sx.minH10, sx.itemsCenter, sx.gap2)}>
+                      <label
+                        {...stylex.props(
+                          sx.flex,
+                          sx.minH10,
+                          sx.itemsCenter,
+                          sx.gap2,
+                        )}
+                      >
                         <Checkbox
                           checked={slack.includeBots === true}
                           onCheckedChange={(checked) =>
@@ -2114,11 +2507,15 @@ function DataFlowEditor({
                     <label className={FIELD_LABEL}>
                       Automation ID
                       <Input
+                        className="mono-input"
                         value={reports.automationId}
                         onChange={(e) =>
                           updateInput(index, {
                             ...input,
-                            source: { ...reports, automationId: e.target.value },
+                            source: {
+                              ...reports,
+                              automationId: e.target.value,
+                            },
                           })
                         }
                         placeholder="self"
@@ -2134,7 +2531,10 @@ function DataFlowEditor({
                         onChange={(e) =>
                           updateInput(index, {
                             ...input,
-                            source: { ...reports, limit: Number(e.target.value) },
+                            source: {
+                              ...reports,
+                              limit: Number(e.target.value),
+                            },
                           })
                         }
                       />
@@ -2149,8 +2549,12 @@ function DataFlowEditor({
 
       <div {...stylex.props(sx.mt1, sx.flex, sx.flexCol, sx.gap2)}>
         <div {...stylex.props(sx.flex, sx.minH10, sx.itemsCenter, sx.gap2)}>
-          <span {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}>Outputs</span>
-          <span {...stylex.props(sx.textFaint, typography.supporting)}>Reports are durable; Slack delivery is optional</span>
+          <span {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}>
+            Outputs
+          </span>
+          <span {...stylex.props(sx.textFaint, typography.supporting)}>
+            Reports are durable; Slack delivery is optional
+          </span>
           <div {...stylex.props(sx.mlAuto, sx.flex, sx.gap15)}>
             {!outputs.some((output) => output.type === "report") && (
               <Button
@@ -2159,7 +2563,10 @@ function DataFlowEditor({
                   onOutputsChange([
                     ...outputs,
                     {
-                      id: uniqueFlowId("report", outputs.map((output) => output.id)),
+                      id: uniqueFlowId(
+                        "report",
+                        outputs.map((output) => output.id),
+                      ),
                       type: "report",
                       enabled: true,
                       publish: "always",
@@ -2176,7 +2583,10 @@ function DataFlowEditor({
                 onOutputsChange([
                   ...outputs,
                   {
-                    id: uniqueFlowId("slack", outputs.map((output) => output.id)),
+                    id: uniqueFlowId(
+                      "slack",
+                      outputs.map((output) => output.id),
+                    ),
                     type: "slack",
                     enabled: false,
                     channel: "",
@@ -2192,14 +2602,39 @@ function DataFlowEditor({
         </div>
 
         {outputs.length === 0 ? (
-          <div {...stylex.props(sx.roundedPanel, sx.border, sx.borderDashed, sx.borderLine, sx.px3, sx.py3, sx.textFaint, typography.label)}>
-            No required output. The run behaves like a normal automation session.
+          <div
+            {...stylex.props(
+              sx.roundedPanel,
+              sx.border,
+              sx.borderDashed,
+              sx.borderLine,
+              sx.px3,
+              sx.py3,
+              sx.textFaint,
+              typography.label,
+            )}
+          >
+            No required output. The run behaves like a normal automation
+            session.
           </div>
         ) : (
           outputs.map((output, index) => (
-            <div key={output.id} {...stylex.props(sx.roundedPanel, sx.bgSurface, sx.p3)}>
-              <div {...stylex.props(sx.flex, sx.minH10, sx.itemsCenter, sx.gap2)}>
-                <span {...stylex.props(sx.w110px, sx.shrink0, sx.fontMedium, sx.textFg, typography.label)}>
+            <div
+              key={output.id}
+              {...stylex.props(sx.roundedPanel, sx.bgSurface, sx.p3)}
+            >
+              <div
+                {...stylex.props(sx.flex, sx.minH10, sx.itemsCenter, sx.gap2)}
+              >
+                <span
+                  {...stylex.props(
+                    sx.w110px,
+                    sx.shrink0,
+                    sx.fontMedium,
+                    sx.textFg,
+                    typography.label,
+                  )}
+                >
                   {output.type === "report" ? "Report" : "Slack"}
                 </span>
                 {output.type === "report" ? (
@@ -2218,13 +2653,27 @@ function DataFlowEditor({
                 ) : (
                   <>
                     <Input
+                      className="mono-input"
                       value={output.channel}
                       onChange={(e) =>
-                        updateOutput(index, { ...output, channel: e.target.value.toUpperCase() })
+                        updateOutput(index, {
+                          ...output,
+                          channel: e.target.value.toUpperCase(),
+                        })
                       }
                       placeholder="C0123456789"
                     />
-                    <label {...stylex.props(sx.flex, sx.minH10, sx.shrink0, sx.itemsCenter, sx.gap2, sx.textDim, typography.label)}>
+                    <label
+                      {...stylex.props(
+                        sx.flex,
+                        sx.minH10,
+                        sx.shrink0,
+                        sx.itemsCenter,
+                        sx.gap2,
+                        sx.textDim,
+                        typography.label,
+                      )}
+                    >
                       <Checkbox
                         checked={output.enabled !== false}
                         onCheckedChange={(checked) =>
@@ -2236,14 +2685,30 @@ function DataFlowEditor({
                   </>
                 )}
                 <Button
-                  size="sm" {...mergeStylexProps("", sx.hoverTextRed, sx.shrink0, sx.textDim)}
-                  onClick={() => onOutputsChange(outputs.filter((_, at) => at !== index))}
+                  size="sm"
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.shrink0,
+                    sx.textDim,
+                    sx.hoverTextRed,
+                  )}
+                  onClick={() =>
+                    onOutputsChange(outputs.filter((_, at) => at !== index))
+                  }
                 >
                   Remove
                 </Button>
               </div>
               {output.type === "slack" && (
-                <div {...mergeStylexProps("", sx.phoneGridCols1, sx.mt2, sx.grid, sx.gridCols2, sx.gap3)}>
+                <div
+                  {...stylex.props(
+                    sx.mt2,
+                    sx.grid,
+                    sx.gridCols2,
+                    sx.gap3,
+                    sx.phoneGridCols1,
+                  )}
+                >
                   <label className={FIELD_LABEL}>
                     Minimum urgency
                     <Select
@@ -2272,7 +2737,10 @@ function DataFlowEditor({
                       onChange={(e) =>
                         updateOutput(index, {
                           ...output,
-                          minConfidence: e.target.value as "low" | "medium" | "high",
+                          minConfidence: e.target.value as
+                            | "low"
+                            | "medium"
+                            | "high",
                         })
                       }
                     >
@@ -2309,17 +2777,31 @@ function AutomationForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const startSchedule = initial ? initial.schedule : (prefill?.schedule ?? PRESETS[2].cron);
-  const matchesPreset = PRESETS.some((p) => p.cron === startSchedule && p.cron !== CUSTOM);
+  const startSchedule = initial
+    ? initial.schedule
+    : (prefill?.schedule ?? PRESETS[2].cron);
+  const matchesPreset = PRESETS.some(
+    (p) => p.cron === startSchedule && p.cron !== CUSTOM,
+  );
   const initialPreset = matchesPreset ? startSchedule : CUSTOM;
 
   const [name, setName] = useState(initial?.name || prefill?.name || "");
-  const [prompt, setPrompt] = useState(initial?.prompt || prefill?.prompt || "");
+  const [prompt, setPrompt] = useState(
+    initial?.prompt || prefill?.prompt || "",
+  );
   const [preset, setPreset] = useState(initialPreset);
-  const [customCron, setCustomCron] = useState(!matchesPreset ? startSchedule : "");
-  const [mode, setMode] = useState<"ask" | "code">(initial?.mode || prefill?.mode || "ask");
-  const [eventKey, setEventKey] = useState(initial?.eventKey || prefill?.eventKey || "");
-  const [watchChannel, setWatchChannel] = useState(initial?.slackWatch?.channel || "");
+  const [customCron, setCustomCron] = useState(
+    !matchesPreset ? startSchedule : "",
+  );
+  const [mode, setMode] = useState<"ask" | "code">(
+    initial?.mode || prefill?.mode || "ask",
+  );
+  const [eventKey, setEventKey] = useState(
+    initial?.eventKey || prefill?.eventKey || "",
+  );
+  const [watchChannel, setWatchChannel] = useState(
+    initial?.slackWatch?.channel || "",
+  );
   const [webhookEnabled, setWebhookEnabled] = useState(
     initial ? initial.webhookEnabled !== false : false,
   );
@@ -2330,7 +2812,9 @@ function AutomationForm({
     initial?.outputs ? structuredClone(initial.outputs) : [],
   );
   const [mcpServers, setMcpServers] = useState<string[] | undefined>(
-    initial ? initial.mcpServers : (prefill?.mcpServers ?? (kind === "watch" ? ["slack"] : undefined)),
+    initial
+      ? initial.mcpServers
+      : (prefill?.mcpServers ?? (kind === "watch" ? ["slack"] : undefined)),
   );
   // Who is accountable for what this automation does to the codebase. Empty
   // means nobody has taken it, which is what every automation written before
@@ -2340,14 +2824,26 @@ function AutomationForm({
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [model, setModel] = useState(initial?.model || "");
-  const [fallbackModel, setFallbackModel] = useState(initial?.fallbackModel || "");
+  const [fallbackModel, setFallbackModel] = useState(
+    initial?.fallbackModel || "",
+  );
   const [accountId, setAccountId] = useState(initial?.accountId || "");
-  const [accountStrict, setAccountStrict] = useState(initial?.accountStrict !== false);
+  const [accountStrict, setAccountStrict] = useState(
+    initial?.accountStrict !== false,
+  );
   const [usageCredits, setUsageCredits] = useState(!!initial?.usageCredits);
-  const [sandbox, setSandbox] = useState(!!initial?.sandbox);
+  const sandbox = false;
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
-  const providerAccounts = useProviderAccounts();
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(
+    null,
+  );
+  const {
+    accounts: providerAccounts,
+    loadError: providerAccountsError,
+    setLoadError: setProviderAccountsError,
+  } = useProviderAccounts();
 
   useEffect(() => {
     fetchModels()
@@ -2355,16 +2851,21 @@ function AutomationForm({
         setModels(m.models);
         setDefaultModel(m.default);
       })
-      .catch(() => {});
-    // Only to name the workspace an automation files under; a failure leaves
-    // the picker on "No workspace" rather than blocking the form.
-    fetchWorkspaces()
-      .then(setWorkspaces)
-      .catch(() => {});
+      .catch((cause: unknown) =>
+        setModelLoadError(errorMessage(cause, "Could not load models")),
+      );
+    fetchWorkspaces({
+      onError: (cause) =>
+        setWorkspaceLoadError(errorMessage(cause, "Could not load workspaces")),
+    }).then(setWorkspaces);
   }, []);
   const effectiveModel = model || defaultModel;
-  const accountProvider = models.find((item) => item.id === effectiveModel)?.accountProvider;
-  const eligibleAccounts = providerAccounts.filter((account) => account.provider === accountProvider);
+  const accountProvider = models.find(
+    (item) => item.id === effectiveModel,
+  )?.accountProvider;
+  const eligibleAccounts = providerAccounts.filter(
+    (account) => account.provider === accountProvider,
+  );
   useEffect(() => {
     const account = providerAccounts.find((item) => item.id === accountId);
     if (account && account.provider !== accountProvider) setAccountId("");
@@ -2373,15 +2874,21 @@ function AutomationForm({
   const [error, setError] = useState<string | null>(null);
 
   const isWatch = kind === "watch";
-  const schedule = isWatch ? "" : preset === CUSTOM ? customCron.trim() : preset;
-  const scheduleValid = isWatch || preset !== CUSTOM || customCron.trim().length > 0;
-  const watchValid = !isWatch || /^[CG][A-Z0-9]{6,}$/i.test(watchChannel.trim());
+  const schedule = isWatch
+    ? ""
+    : preset === CUSTOM
+      ? customCron.trim()
+      : preset;
+  const scheduleValid =
+    isWatch || preset !== CUSTOM || customCron.trim().length > 0;
+  const watchValid =
+    !isWatch || /^[CG][A-Z0-9]{6,}$/i.test(watchChannel.trim());
 
   async function handleSave() {
     setSaving(true);
     setError(null);
-    await (async () => {
-const slackWatch = isWatch
+    try {
+      const slackWatch = isWatch
         ? { channel: watchChannel.trim().toUpperCase() }
         : initial?.slackWatch
           ? { channel: "" } // editing a watch automation into a classic one clears it
@@ -2431,10 +2938,10 @@ const slackWatch = isWatch
         });
       }
       onSaved();
-})().catch(async (e: any) => {
-setError(e.message);
+    } catch (cause: unknown) {
+      setError(errorMessage(cause, "Could not save automation"));
       setSaving(false);
-});
+    }
   }
 
   return (
@@ -2444,7 +2951,9 @@ setError(e.message);
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={isWatch ? "Support channel triage" : "Daily PR review sweep"}
+          placeholder={
+            isWatch ? "Support channel triage" : "Daily PR review sweep"
+          }
         />
       </label>
 
@@ -2456,7 +2965,14 @@ setError(e.message);
             onChange={(e) => setOwner(e.target.value)}
             placeholder={getCurrentUser() || "Kent"}
           />
-          <span {...stylex.props(sx.mt1, sx.leadingSnug, sx.textFaint, typography.supporting)}>
+          <span
+            {...stylex.props(
+              sx.mt1,
+              sx.leadingSnug,
+              sx.textFaint,
+              typography.supporting,
+            )}
+          >
             Who reviews what it does. It appears in their sidebar.
           </span>
         </label>
@@ -2473,7 +2989,14 @@ setError(e.message);
               </option>
             ))}
           </Select>
-          <span {...stylex.props(sx.mt1, sx.leadingSnug, sx.textFaint, typography.supporting)}>
+          <span
+            {...stylex.props(
+              sx.mt1,
+              sx.leadingSnug,
+              sx.textFaint,
+              typography.supporting,
+            )}
+          >
             Files the automation under a workspace. Its runs stay in the
             Automations section.
           </span>
@@ -2487,25 +3010,49 @@ setError(e.message);
             value={watchChannel}
             onChange={(e) => setWatchChannel(e.target.value)}
             placeholder="C0123456789 (channel id)"
+            className="mono-input"
           />
-          <span {...stylex.props(sx.mt1, sx.leadingSnug, sx.textFaint, typography.supporting)}>
-            Invite @{AGENT_NAME} to the channel first. The bot only receives messages
-            for channels it's a member of. One run per top-level message; thread
-            replies don't re-trigger. Channel id is in the channel's “About” tab.
+          <span
+            {...stylex.props(
+              sx.mt1,
+              sx.leadingSnug,
+              sx.textFaint,
+              typography.supporting,
+            )}
+          >
+            Invite @{AGENT_NAME} to the channel first. The bot only receives
+            messages for channels it's a member of. One run per top-level
+            message; thread replies don't re-trigger. Channel id is in the
+            channel's “About” tab.
           </span>
         </label>
       ) : (
         <div {...stylex.props(sx.flex, sx.flexCol, sx.gap15)}>
           <div>
-            <span {...stylex.props(sx.textFg, sx.fontMedium, typography.label)}>Triggers</span>
+            <span {...stylex.props(sx.textFg, sx.fontMedium, typography.label)}>
+              Triggers
+            </span>
             <span {...stylex.props(sx.textDim, sx.ml2, typography.label)}>
               Run the automation when any of these conditions are met
             </span>
           </div>
-          <div {...stylex.props(sx.bgSurface, sx.roundedPanel, sx.px3, sx.py25, sx.flex, sx.flexCol, sx.gap25)}>
+          <div
+            {...stylex.props(
+              sx.bgSurface,
+              sx.roundedPanel,
+              sx.px3,
+              sx.py25,
+              sx.flex,
+              sx.flexCol,
+              sx.gap25,
+            )}
+          >
             <label className={FIELD_LABEL}>
               Schedule
-              <Select value={preset} onChange={(e) => setPreset(e.target.value)}>
+              <Select
+                value={preset}
+                onChange={(e) => setPreset(e.target.value)}
+              >
                 {PRESETS.map((p) => (
                   <option key={p.label} value={p.cron}>
                     {p.label}
@@ -2520,12 +3067,16 @@ setError(e.message);
                   value={customCron}
                   onChange={(e) => setCustomCron(e.target.value)}
                   placeholder="0 16 * * 1-5"
-                      />
+                  className="mono-input"
+                />
               </label>
             )}
             <label className={FIELD_LABEL}>
               Internal event
-              <Select value={eventKey} onChange={(e) => setEventKey(e.target.value)}>
+              <Select
+                value={eventKey}
+                onChange={(e) => setEventKey(e.target.value)}
+              >
                 <option value="">None</option>
                 {EVENT_OPTIONS.map((o) => (
                   <option key={o.key} value={o.key}>
@@ -2535,13 +3086,28 @@ setError(e.message);
               </Select>
             </label>
             <div {...stylex.props(sx.textFaint, typography.supporting)}>
-              Schedules and events can be combined. Manual “Run now” is always available.
+              Schedules and events can be combined. Manual “Run now” is always
+              available.
             </div>
-            <label {...stylex.props(sx.flex, sx.minH10, sx.itemsCenter, sx.gap25, sx.textDim, typography.label)}>
-              <Checkbox checked={webhookEnabled} onCheckedChange={setWebhookEnabled} />
+            <label
+              {...stylex.props(
+                sx.flex,
+                sx.minH10,
+                sx.itemsCenter,
+                sx.gap25,
+                sx.textDim,
+                typography.label,
+              )}
+            >
+              <Checkbox
+                checked={webhookEnabled}
+                onCheckedChange={setWebhookEnabled}
+              />
               <span>
                 Accept webhook triggers
-                <span {...stylex.props(sx.ml15, sx.textFaint)}>Creates a secret external POST URL</span>
+                <span {...stylex.props(sx.ml15, sx.textFaint)}>
+                  Creates a secret external POST URL
+                </span>
               </span>
             </label>
           </div>
@@ -2549,7 +3115,8 @@ setError(e.message);
       )}
 
       <label className={FIELD_LABEL}>
-        Instructions: what {AGENT_NAME} does {isWatch ? "with each message" : "when triggers activate"}
+        Instructions: what {AGENT_NAME} does{" "}
+        {isWatch ? "with each message" : "when triggers activate"}
         <Textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -2587,37 +3154,21 @@ setError(e.message);
         <div className={FORM_ROW}>
           <label className={FIELD_LABEL}>
             Mode
-            <Select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
+            <Select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as "ask" | "code")}
+            >
               <option value="ask">Ask · read-only on main</option>
               <option value="code">Code · fresh worktree per run</option>
             </Select>
           </label>
 
-          <label {...stylex.props(sx.flex, sx.minH10, sx.flex1, sx.itemsCenter, sx.justifyBetween, sx.gap3, sx.fontMedium, sx.textDim, typography.label)}>
-            <span {...stylex.props(sx.flex, sx.flexCol, sx.gap1)}>
-              <span>Run in a MicroVM</span>
-              <span {...stylex.props(sx.fontNormal, sx.textFaint)}>
-                Pinned credentials, explicit MCP access, restricted network
-              </span>
-            </span>
-            <Switch
-              checked={sandbox}
-              onCheckedChange={(checked) => {
-                setSandbox(checked);
-                if (checked) {
-                  setAccountStrict(true);
-                  setFallbackModel("");
-                  setMcpServers((current) => current ?? []);
-                }
-              }}
-              aria-label="Run this automation in a MicroVM"
-            />
-          </label>
-
           <label className={FIELD_LABEL}>
             Model
             <Select value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="">Default{defaultModel ? ` · ${defaultModel}` : ""}</option>
+              <option value="">
+                Default{defaultModel ? ` · ${defaultModel}` : ""}
+              </option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
@@ -2644,9 +3195,15 @@ setError(e.message);
             </Select>
           </label>
 
-          <label className={FIELD_LABEL} title="Pin runs to one account from the selected model's provider pool.">
+          <label
+            className={FIELD_LABEL}
+            title="Pin runs to one account from the selected model's provider pool."
+          >
             Provider account
-            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <Select
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+            >
               <option value="">Auto · shared pool rotation</option>
               {eligibleAccounts.map((x) => (
                 <option key={x.id} value={x.id}>
@@ -2658,33 +3215,64 @@ setError(e.message);
           </label>
 
           {accountId && (
-            <label className={FIELD_LABEL} title="Out of usage, runs switch to the fallback model rather than the shared pool, so this account's limits cap the cost. Prefer it rotates into the pool instead.">
+            <label
+              className={FIELD_LABEL}
+              title="Out of usage, runs switch to the fallback model rather than the shared pool, so this account's limits cap the cost. Prefer it rotates into the pool instead."
+            >
               When the pinned account is out of usage
               <Select
                 value={accountStrict ? "strict" : "pool"}
                 onChange={(e) => setAccountStrict(e.target.value === "strict")}
                 disabled={sandbox}
               >
-                <option value="strict">This account only · fall back by model (cost cap)</option>
-                <option value="pool">Prefer it · fall back to the shared pool</option>
+                <option value="strict">
+                  This account only · fall back by model (cost cap)
+                </option>
+                <option value="pool">
+                  Prefer it · fall back to the shared pool
+                </option>
               </Select>
             </label>
           )}
 
-          <label className={FIELD_LABEL} title="Pay-as-you-go spend past the subscription's included limits. Only applies to accounts with extra usage enabled at claude.ai, bounded by their monthly credit cap.">
+          <label
+            className={FIELD_LABEL}
+            title="Pay-as-you-go spend past the subscription's included limits. Only applies to accounts with extra usage enabled at claude.ai, bounded by their monthly credit cap."
+          >
             Usage credits
             <Select
               value={usageCredits ? "allow" : "never"}
               onChange={(e) => setUsageCredits(e.target.value === "allow")}
             >
-              <option value="never">Never · stop or fall back at the limit</option>
-              <option value="allow">Allowed · keep going on paid credits</option>
+              <option value="never">
+                Never · stop or fall back at the limit
+              </option>
+              <option value="allow">
+                Allowed · keep going on paid credits
+              </option>
             </Select>
           </label>
         </div>
       )}
 
-      {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+      {error && (
+        <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
+      )}
+      {modelLoadError && (
+        <InlineAlert onDismiss={() => setModelLoadError(null)}>
+          {modelLoadError}
+        </InlineAlert>
+      )}
+      {workspaceLoadError && (
+        <InlineAlert onDismiss={() => setWorkspaceLoadError(null)}>
+          {workspaceLoadError}
+        </InlineAlert>
+      )}
+      {providerAccountsError && (
+        <InlineAlert onDismiss={() => setProviderAccountsError(null)}>
+          {providerAccountsError}
+        </InlineAlert>
+      )}
 
       <div className={FORM_ACTIONS}>
         {onBack && (

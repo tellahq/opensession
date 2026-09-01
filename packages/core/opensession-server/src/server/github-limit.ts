@@ -45,16 +45,23 @@ const state: GhLimitState = ((globalThis as any).__osGhLimitStateV2 ||= (() => {
 
 function persistBackoff(): void {
   try {
-    writeFileAtomic(PERSIST_PATH, JSON.stringify({ resources: state.backoffUntil }) + "\n");
+    writeFileAtomic(
+      PERSIST_PATH,
+      JSON.stringify({ resources: state.backoffUntil }) + "\n",
+    );
   } catch {}
 }
 
 /** Defaults to GraphQL for existing gh-pr callers. REST callers must opt in. */
-export function ghRateLimited(resource: GithubRateResource = "graphql"): boolean {
+export function ghRateLimited(
+  resource: GithubRateResource = "graphql",
+): boolean {
   return Date.now() < state.backoffUntil[resource];
 }
 
-export function ghBackoffUntil(resource: GithubRateResource = "graphql"): number {
+export function ghBackoffUntil(
+  resource: GithubRateResource = "graphql",
+): number {
   return ghRateLimited(resource) ? state.backoffUntil[resource] : 0;
 }
 
@@ -104,7 +111,7 @@ export function noteGhRateLimited(
           },
           signal: AbortSignal.timeout(10_000),
         });
-        const data = await response.json().catch(() => null) as any;
+        const data = (await response.json().catch(() => null)) as any;
         const key = resource === "rest" ? "core" : "graphql";
         const reset = Number(data?.resources?.[key]?.reset) * 1000;
         if (response.ok && reset > Date.now()) {

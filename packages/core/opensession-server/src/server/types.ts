@@ -56,6 +56,8 @@ export interface SessionSafetyState {
 
 export interface UnifiedSession {
   id: string;
+  /** Source chat copied into this session before its first turn. */
+  duplicatedFromSessionId?: string;
   /** Historical marker retained while old session files age out. */
   local?: boolean;
   claudeSessionId: string | null;
@@ -182,6 +184,8 @@ export interface UnifiedSession {
   /** Slack messages a teammate sent from this session. */
   slackShares?: SessionSlackShare[];
   automation?: string;
+  /** Immutable trust provenance for workflow-spawned automation descendants. */
+  automationDescendantPolicy?: AutomationDescendantPolicy;
   /** Total live runs in this automation. Present on the bounded sidebar list. */
   automationRunCount?: number;
   /** Stable automation id for linking back to its settings. Older sessions may
@@ -190,7 +194,7 @@ export interface UnifiedSession {
   archived?: boolean;
   /** Why this session is archived — powers the "Auto-archived" filter. */
   archivedReason?: "manual" | "idle" | "auto" | "plain";
-	/**
+  /**
    * This row is a SUMMARY, not the whole session — it came from the archived
    * index (`GET /api/sessions?archived=only&slim=1`), which carries what the
    * Archived surfaces render and drops the rest. Anything that reads beyond
@@ -207,6 +211,8 @@ export interface UnifiedSession {
   model?: string;
   /** Workspace model-preset instructions captured when this session was created. */
   presetNote?: string;
+  /** Sticky pstack engineering mode, enabled with /pstack <task>. */
+  pstackMode?: boolean;
   /** Pi reasoning variant for runs in this session; unset = model default. */
   effort?: string;
   /** Use OpenAI's priority service tier for ChatGPT OAuth Codex runs. */
@@ -238,7 +244,12 @@ export interface UnifiedSession {
   lastEngineModel?: string;
   /** /model switches, newest last — rendered as dividers in the conversation.
    *  `from` is the model in effect before the switch (for a "X → Y" divider). */
-  modelHistory?: Array<{ model: string; from?: string; at: string; by?: string }>;
+  modelHistory?: Array<{
+    model: string;
+    from?: string;
+    at: string;
+    by?: string;
+  }>;
   /** Cumulative token/cost accounting for this session's runs. */
   usage?: SessionUsage;
   goal?: string;
@@ -278,7 +289,12 @@ export interface UnifiedSession {
     at: string;
     accepted?: { by: string; at: string };
   };
-  loop?: { prompt: string; intervalMinutes: number; lastRunAt?: string; setBy?: string };
+  loop?: {
+    prompt: string;
+    intervalMinutes: number;
+    lastRunAt?: string;
+    setBy?: string;
+  };
   // Other IDs that resolve to this session. The same Claude session can be
   // tracked by multiple files (e.g. a Slack run writes both <branch>.json and
   // <channel>-<threadTs>.json) and external deep links may use any of them.
@@ -303,10 +319,15 @@ export interface UnifiedSession {
     provider: string;
     sandboxId?: string;
     workspace?: "bind" | "volume";
-		/** Provider-neutral compute lifecycle. The transcript and queue stay live
-		 * while this moves between states. */
-		lifecycle?: "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
-		lastLifecycleError?: string;
+    /** Provider-neutral compute lifecycle. The transcript and queue stay live
+     * while this moves between states. */
+    lifecycle?:
+      | "preparing"
+      | "awake"
+      | "sleeping"
+      | "waking"
+      | "needs_attention";
+    lastLifecycleError?: string;
   };
   /** Persistent, explicitly trusted machine selected for this session. Unlike
    * a Sandbox, a Runner is not an isolation boundary. */
@@ -495,8 +516,22 @@ export interface SessionSlackShare {
   announcementKey?: string;
 }
 
+export interface AutomationDescendantPolicy {
+  automationId: string;
+  automationName: string;
+  /** Immutable launch-time scope. Empty stays empty on every later turn. */
+  mcpServers: string[];
+  repo: string;
+  publicationRepo: string;
+  baseBranch: string;
+  allowedRunners: string[];
+  publication: "branch-pr-only";
+}
+
 export interface NativeSessionFile {
   id: string;
+  /** Source chat copied into this session before its first turn. */
+  duplicatedFromSessionId?: string;
   claudeSessionId: string;
   branch: string;
   worktreeDir: string;
@@ -504,8 +539,8 @@ export interface NativeSessionFile {
   attachedRepos?: AttachedRepo[];
   /** PRs manually linked to this session (beyond branch/attached-repo ones). */
   linkedPrs?: LinkedPr[];
-	/** Root-relative route the session opens by default, set through
-	 * opensession-portals. Unset = open the app root. */
+  /** Root-relative route the session opens by default, set through
+   * opensession-portals. Unset = open the app root. */
   previewPath?: string;
   /** Agent-published demo walkthrough (opensession-walkthrough). */
   walkthrough?: SessionWalkthrough;
@@ -556,6 +591,8 @@ export interface NativeSessionFile {
   parentNotifiedAt?: string;
   automation?: string; // name of the automation that created this session
   automationId?: string; // id of that automation — lets a Slack thread reply "retrigger" re-fire it
+  /** Immutable trust provenance for workflow-spawned automation descendants. */
+  automationDescendantPolicy?: AutomationDescendantPolicy;
   /** The triggering event payload of the automation run that created this
    *  session (truncated like the prompt embed). A "retrigger" replays the
    *  automation with this exact payload. */
@@ -567,8 +604,9 @@ export interface NativeSessionFile {
   /** Original selection displaced by an automatic usage fallback. `null` means
    *  the session inherited the instance default; retried on the next prompt. */
   autoFallbackModel?: string | null;
-	/** Workspace model-preset instructions captured when this session was created. */
-	presetNote?: string;
+  /** Workspace model-preset instructions captured when this session was created. */
+  presetNote?: string;
+  pstackMode?: boolean; // sticky pstack engineering mode, toggled with /pstack or /poteto-mode
   effort?: string; // Pi reasoning variant for this session's runs; unset = model default
   fastMode?: boolean; // OpenAI priority service tier for ChatGPT OAuth Codex runs
   accountId?: string; // pinned Claude/Codex provider account; unset = auto pool
@@ -579,15 +617,28 @@ export interface NativeSessionFile {
    *  the incoming engine a transcript bridge so context carries over. */
   lastEngineProvider?: "claude" | "codex" | "pi";
   lastEngineModel?: string; // model that last drove a run (family-switch detection)
-  modelHistory?: Array<{ model: string; from?: string; at: string; by?: string }>;
+  modelHistory?: Array<{
+    model: string;
+    from?: string;
+    at: string;
+    by?: string;
+  }>;
   usage?: SessionUsage; // cumulative token/cost accounting for this session's runs
+  /** Most recent run folded into usage. Internal recovery idempotency marker;
+   *  omitted from UnifiedSession and every client payload. */
+  usageRunId?: string;
   archived?: boolean;
   archivedAt?: string;
   archivedReason?: "manual" | "idle" | "auto" | "plain";
   goal?: string; // pinned goal, appended to every prompt until cleared
   goalId?: string; // Goal record this session is driven by (src/server/goals.ts)
   lastRunError?: { message: string; at: string }; // last run died on a terminal error; cleared on the next clean run
-  loop?: { prompt: string; intervalMinutes: number; lastRunAt?: string; setBy?: string };
+  loop?: {
+    prompt: string;
+    intervalMinutes: number;
+    lastRunAt?: string;
+    setBy?: string;
+  };
   /** Slack threads this session posted to (see UnifiedSession.slackThreads). */
   slackThreads?: Array<{ channel: string; threadTs: string }>;
   mcpServers?: string[]; // External MCP servers to load for this session; empty = none (minimal context)
@@ -601,8 +652,13 @@ export interface NativeSessionFile {
     provider: string;
     sandboxId?: string;
     workspace?: "bind" | "volume";
-		lifecycle?: "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
-		lastLifecycleError?: string;
+    lifecycle?:
+      | "preparing"
+      | "awake"
+      | "sleeping"
+      | "waking"
+      | "needs_attention";
+    lastLifecycleError?: string;
   };
   runner?: {
     id: string;

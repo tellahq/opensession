@@ -55,7 +55,10 @@ async function repoDbId(ghRepo: string, token: string): Promise<number | null> {
   if (hit !== undefined) return hit;
   try {
     const res = await fetch(`https://api.github.com/repos/${ghRepo}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+      },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return null;
@@ -124,13 +127,18 @@ export async function uploadUserAttachment(
       return null;
     }
     const url = (await res.json())?.url;
-    if (typeof url !== "string" || !url.startsWith("https://github.com/user-attachments/")) {
+    if (
+      typeof url !== "string" ||
+      !url.startsWith("https://github.com/user-attachments/")
+    ) {
       return null;
     }
     uploadCache.set(cacheKey, url);
     return url;
   } catch (e: any) {
-    console.warn(`[gh-attachments] upload of ${name} to ${ghRepo} failed: ${e?.message || e}`);
+    console.warn(
+      `[gh-attachments] upload of ${name} to ${ghRepo} failed: ${e?.message || e}`,
+    );
     return null;
   }
 }
@@ -152,14 +160,23 @@ export interface ResolvedAttachment {
  * that plays. Exported for tests.
  */
 export function parseAttachmentRender(html: string): ResolvedAttachment | null {
-  const video = /<video[^>]*\bsrc="(https:\/\/private-user-images\.githubusercontent\.com\/[^"]+)"/i.exec(html);
+  const video =
+    /<video[^>]*\bsrc="(https:\/\/private-user-images\.githubusercontent\.com\/[^"]+)"/i.exec(
+      html,
+    );
   if (video) return { url: video[1].replace(/&amp;/g, "&"), kind: "video" };
-  const img = /<img[^>]*\bsrc="(https:\/\/private-user-images\.githubusercontent\.com\/[^"]+)"/i.exec(html);
+  const img =
+    /<img[^>]*\bsrc="(https:\/\/private-user-images\.githubusercontent\.com\/[^"]+)"/i.exec(
+      html,
+    );
   if (img) return { url: img[1].replace(/&amp;/g, "&"), kind: "image" };
   return null;
 }
 
-const resolveCache = new Map<string, { resolved: ResolvedAttachment; expires: number }>();
+const resolveCache = new Map<
+  string,
+  { resolved: ResolvedAttachment; expires: number }
+>();
 
 /**
  * Resolve one attachment id to a fresh signed URL, authorized via `ghRepo`
@@ -179,7 +196,10 @@ export async function resolveUserAttachment(
   try {
     const res = await fetch("https://api.github.com/markdown", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+      },
       body: JSON.stringify({
         text: `![a](${url})\n\n${url}`,
         mode: "gfm",

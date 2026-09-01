@@ -26,11 +26,10 @@ describe("executor client", () => {
     const root = mkdtempSync(join(tmpdir(), "executor-client-missing-"));
     roots.push(root);
     await expect(
-      launchHostViaExecutor(
-        "rh-019d2a5f-4ac8-7000-8000-123456789abc",
-        root,
-        { socketPath: join(root, "missing.sock"), token: TOKEN },
-      ),
+      launchHostViaExecutor("rh-019d2a5f-4ac8-7000-8000-123456789abc", root, {
+        socketPath: join(root, "missing.sock"),
+        token: TOKEN,
+      }),
     ).rejects.toThrow("executor socket is unavailable");
   });
 
@@ -75,7 +74,11 @@ describe("executor client", () => {
       now: () => "2026-08-18T00:00:00.000Z",
     });
     listeners.push(
-      await startExecutorServer({ sessionsDir: root, coordinator, token: TOKEN }),
+      await startExecutorServer({
+        sessionsDir: root,
+        coordinator,
+        token: TOKEN,
+      }),
     );
 
     expect(
@@ -109,7 +112,11 @@ describe("executor client", () => {
       now: () => "2026-08-18T00:00:00.000Z",
     });
     listeners.push(
-      await startExecutorServer({ sessionsDir: root, coordinator, token: TOKEN }),
+      await startExecutorServer({
+        sessionsDir: root,
+        coordinator,
+        token: TOKEN,
+      }),
     );
     await expect(
       launchHostViaExecutor(hostId, dir, {

@@ -52,10 +52,16 @@ export async function importLegacyMemoryDirectory(
     errors: [],
   };
   const digest = createHash("sha256");
-  const relations: Array<{ sourceKey: string; legacyId: string; entry: LegacyEntry }> = [];
+  const relations: Array<{
+    sourceKey: string;
+    legacyId: string;
+    entry: LegacyEntry;
+  }> = [];
   let names: string[];
   try {
-    names = (await readdir(directory)).filter((name) => name.endsWith(".json")).sort();
+    names = (await readdir(directory))
+      .filter((name) => name.endsWith(".json"))
+      .sort();
   } catch (error: any) {
     if (error?.code === "ENOENT") return finish(result, digest);
     result.errors.push({ file: directory, error: errorMessage(error) });
@@ -92,7 +98,10 @@ export async function importLegacyMemoryDirectory(
       }
       const legacyId = entry.id?.trim() || `row-${index}`;
       if (seenLegacyIds.has(legacyId)) {
-        result.errors.push({ file: `${file}:${legacyId}`, error: "Duplicate legacy memory id." });
+        result.errors.push({
+          file: `${file}:${legacyId}`,
+          error: "Duplicate legacy memory id.",
+        });
         sourceCanReconcile = false;
         continue;
       }
@@ -126,11 +135,15 @@ export async function importLegacyMemoryDirectory(
         if (imported.imported) result.imported += 1;
         else result.alreadyImported += 1;
       } catch (error) {
-        result.errors.push({ file: `${file}:${legacyId}`, error: errorMessage(error) });
+        result.errors.push({
+          file: `${file}:${legacyId}`,
+          error: errorMessage(error),
+        });
         sourceCanReconcile = false;
       }
     }
-    if (sourceCanReconcile) store.reconcileLegacySource(sourceKey, seenLegacyIds);
+    if (sourceCanReconcile)
+      store.reconcileLegacySource(sourceKey, seenLegacyIds);
   }
   for (const relation of relations) {
     const memoryId = store.legacyMapping(relation.sourceKey, relation.legacyId);
@@ -139,7 +152,8 @@ export async function importLegacyMemoryDirectory(
       .map((id) => store.legacyMapping(relation.sourceKey, id))
       .filter((id): id is string => !!id);
     const supersededBy = relation.entry.supersededBy
-      ? store.legacyMapping(relation.sourceKey, relation.entry.supersededBy) ?? undefined
+      ? (store.legacyMapping(relation.sourceKey, relation.entry.supersededBy) ??
+        undefined)
       : undefined;
     store.setLegacyRelations(memoryId, supersedes, supersededBy);
   }
@@ -149,22 +163,30 @@ export async function importLegacyMemoryDirectory(
 export function legacySummary(text: string): string {
   const compact = text.trim().replace(/\s+/g, " ");
   const sentenceEnds = [...compact.matchAll(/[.!?]+(?:\s+|$)/g)];
-  const bounded = sentenceEnds.length > 2
-    ? compact.slice(0, sentenceEnds[1].index! + sentenceEnds[1][0].trimEnd().length)
-    : compact;
+  const bounded =
+    sentenceEnds.length > 2
+      ? compact.slice(
+          0,
+          sentenceEnds[1].index! + sentenceEnds[1][0].trimEnd().length,
+        )
+      : compact;
   const chars = Array.from(bounded);
   if (chars.length <= 400) return bounded;
   return `${chars.slice(0, 399).join("").trimEnd()}…`;
 }
 
 function legacySourceType(scopeKey: string): "slack" | "agent-verified" {
-  return scopeKey === "workspace" || scopeKey.startsWith("channel-") || scopeKey.startsWith("user-")
+  return scopeKey === "workspace" ||
+    scopeKey.startsWith("channel-") ||
+    scopeKey.startsWith("user-")
     ? "slack"
     : "agent-verified";
 }
 
 function validDateOrUndefined(value?: string): string | undefined {
-  return value && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : undefined;
+  return value && Number.isFinite(Date.parse(value))
+    ? new Date(value).toISOString()
+    : undefined;
 }
 
 function errorMessage(error: unknown): string {
@@ -175,7 +197,9 @@ function finish(
   result: LegacyImportResult,
   digest: ReturnType<typeof createHash>,
 ): LegacyImportResult {
-  result.complete = result.errors.length === 0 && result.mapped === result.discovered - result.skipped;
+  result.complete =
+    result.errors.length === 0 &&
+    result.mapped === result.discovered - result.skipped;
   result.sourceDigest = digest.digest("hex");
   return result;
 }

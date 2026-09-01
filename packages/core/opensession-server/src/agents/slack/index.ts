@@ -5,17 +5,17 @@
  * Implements the AgentModule interface for the opensession webhook server.
  */
 
-import { configuredIntegration, defaultRepo, personaName } from "../../server/config";
 import {
-  githubConfiguredCredential,
-} from "../../server/github-app";
+  configuredIntegration,
+  defaultRepo,
+  personaName,
+} from "../../server/config";
+import { githubConfiguredCredential } from "../../server/github-app";
 import { mkdirSync, existsSync, unlinkSync } from "fs";
 import { timingSafeEqual } from "crypto";
 import type { AgentModule } from "../types";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
-import {
-  verifySlackSignature,
-} from "../../server/shared/signature";
+import { verifySlackSignature } from "../../server/shared/signature";
 import {
   MAX_WEBHOOK_BODY_BYTES,
   RequestBodyTooLargeError,
@@ -47,11 +47,12 @@ import {
   inviteBotToChannel,
   getWorktreeDirForChannel,
 } from "./worktree-channels";
-import { interruptQueuesForRestart, loadQueueFromDisk, sessionQueues } from "./queue";
 import {
-  enqueueMessage,
-  getOrCreateQueue,
+  interruptQueuesForRestart,
+  loadQueueFromDisk,
+  sessionQueues,
 } from "./queue";
+import { enqueueMessage, getOrCreateQueue } from "./queue";
 import { cancelSession } from "./cancel";
 import { cancelAgentRun } from "../../server/agent-runner";
 import { worktreePathFor } from "../../server/worktree";
@@ -92,21 +93,22 @@ import {
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
 
-const slackEventInbox = new SlackEventInbox(
-  `${SESSION_DIR}/event-inbox.json`,
-  {
-    handleDirectMessage: handleMessageEvent,
-    handleMention: handleMentionEvent,
-    isProcessed: isEventProcessed,
-    markProcessed: markEventProcessed,
-  },
-);
+const slackEventInbox = new SlackEventInbox(`${SESSION_DIR}/event-inbox.json`, {
+  handleDirectMessage: handleMessageEvent,
+  handleMention: handleMentionEvent,
+  isProcessed: isEventProcessed,
+  markProcessed: markEventProcessed,
+});
 
-async function readWebhookBody(req: Request, maxBytes = MAX_WEBHOOK_BODY_BYTES): Promise<string | Response> {
+async function readWebhookBody(
+  req: Request,
+  maxBytes = MAX_WEBHOOK_BODY_BYTES,
+): Promise<string | Response> {
   try {
     return await readRequestTextWithinLimit(req, maxBytes);
   } catch (error) {
-    if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(maxBytes);
+    if (error instanceof RequestBodyTooLargeError)
+      return webhookBodyTooLargeResponse(maxBytes);
     throw error;
   }
 }
@@ -272,7 +274,11 @@ export async function dispatchSlackInteractive(payload: any): Promise<void> {
         const askId = haOther[1];
         const ask = getHumanAsk(askId);
         if (ask && isHumanAskAwaiting(askId) && payload.trigger_id) {
-          const r = await openHumanAskModal(payload.trigger_id, askId, ask.question);
+          const r = await openHumanAskModal(
+            payload.trigger_id,
+            askId,
+            ask.question,
+          );
           if (!r?.ok) console.error("[slack] human-ask modal open failed:", r);
         }
         return;
@@ -288,7 +294,7 @@ export async function dispatchSlackInteractive(payload: any): Promise<void> {
             const modalResult = await openSlackModal(
               triggerId,
               questionId,
-              pending.questionText
+              pending.questionText,
             );
             if (!modalResult?.ok) {
               console.error("[slack] Failed to open modal:", modalResult);
@@ -338,9 +344,12 @@ export async function dispatchSlackInteractive(payload: any): Promise<void> {
     // under the bks id, so cancelAgentRun reaches it). `investigate-stop:`
     // is the current prefix; `export-stop:`/`upload-stop:` are kept for any
     // cards posted before the generic poller landed.
-    const stopPrefix = ["investigate-stop:", "export-stop:", "upload-stop:", "pr-stop:"].find((p) =>
-      actionId.startsWith(p)
-    );
+    const stopPrefix = [
+      "investigate-stop:",
+      "export-stop:",
+      "upload-stop:",
+      "pr-stop:",
+    ].find((p) => actionId.startsWith(p));
     if (stopPrefix) {
       const bksId = actionId.slice(stopPrefix.length);
       const didCancel = await cancelAgentRun(bksId);
@@ -350,7 +359,7 @@ export async function dispatchSlackInteractive(payload: any): Promise<void> {
       if (msgTs && msgChannel) {
         const label = didCancel ? "Stopped" : "Nothing to stop";
         const keptBlocks = (payload.message?.blocks || []).filter(
-          (b: any) => b.type !== "actions"
+          (b: any) => b.type !== "actions",
         );
         keptBlocks.push({
           type: "context",
@@ -399,7 +408,7 @@ export async function dispatchSlackInteractive(payload: any): Promise<void> {
       const msgTs = payload.message?.ts;
       if (msgTs) {
         const updatedBlocks = (payload.message?.blocks || []).filter(
-          (b: any) => b.type !== "actions"
+          (b: any) => b.type !== "actions",
         );
         updatedBlocks.push({
           type: "context",
@@ -414,7 +423,7 @@ export async function dispatchSlackInteractive(payload: any): Promise<void> {
           msgChannel,
           msgTs,
           "Addressing PR review feedback...",
-          updatedBlocks
+          updatedBlocks,
         );
       }
 
@@ -458,7 +467,7 @@ Please address this feedback:
       const msgTs = payload.message?.ts;
       if (msgTs && msgChannel) {
         const updatedBlocks = (payload.message?.blocks || []).filter(
-          (b: any) => b.type !== "actions"
+          (b: any) => b.type !== "actions",
         );
         updatedBlocks.push({
           type: "context",
@@ -473,7 +482,7 @@ Please address this feedback:
           msgChannel,
           msgTs,
           "PR review feedback dismissed",
-          updatedBlocks
+          updatedBlocks,
         );
       }
       return;
@@ -492,7 +501,8 @@ Please address this feedback:
       const askId = haModal[1];
       const answer: string =
         payload.view?.state?.values?.answer_block?.answer_input?.value || "";
-      if (answer.trim()) setImmediate(() => resolveHumanAsk(askId, answer.trim()));
+      if (answer.trim())
+        setImmediate(() => resolveHumanAsk(askId, answer.trim()));
       return;
     }
 
@@ -519,15 +529,15 @@ Please address this feedback:
   }
 }
 
-
 /** Slack owns GitHub intake only when the independently gated GitHub agent
  * is off. Route registration and the outbound forwarder lifecycle must use the
  * same decision or a loopback-only Slack install exposes a route nobody feeds. */
 export function slackOwnsGithubWebhookIntake(): boolean {
   const flag = process.env.ENABLE_GITHUB_AGENT;
-  const enabled = flag == null
-    ? configuredIntegration("github").enabled === true
-    : flag === "true";
+  const enabled =
+    flag == null
+      ? configuredIntegration("github").enabled === true
+      : flag === "true";
   return !enabled;
 }
 
@@ -557,7 +567,7 @@ export class SlackAgent implements AgentModule {
       const retryNum = req.headers.get("x-slack-retry-num");
       if (retryNum) {
         console.log(
-          `[slack] Slack retry #${retryNum} (reason: ${req.headers.get("x-slack-retry-reason")}) — routing through dedup`
+          `[slack] Slack retry #${retryNum} (reason: ${req.headers.get("x-slack-retry-reason")}) — routing through dedup`,
         );
       }
 
@@ -587,7 +597,10 @@ export class SlackAgent implements AgentModule {
         await dispatchSlackEvent(payload);
       } catch (error) {
         console.error("[slack] Failed to persist or dispatch event:", error);
-        return Response.json({ error: "Slack event intake failed" }, { status: 503 });
+        return Response.json(
+          { error: "Slack event intake failed" },
+          { status: 503 },
+        );
       }
 
       return Response.json({ ok: true });
@@ -624,7 +637,9 @@ export class SlackAgent implements AgentModule {
     // ----- POST /worktree/create-channel -----
     routes.set("POST /worktree/create-channel", async (req) => {
       if (!verifyWorktreeSecret(req)) {
-        console.error("[slack] Rejected /worktree/create-channel: bad or missing x-worktree-secret");
+        console.error(
+          "[slack] Rejected /worktree/create-channel: bad or missing x-worktree-secret",
+        );
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
       try {
@@ -633,10 +648,7 @@ export class SlackAgent implements AgentModule {
         const body = JSON.parse(rawBody) as { branch: string };
         const { branch } = body;
         if (!branch) {
-          return Response.json(
-            { error: "branch required" },
-            { status: 400 }
-          );
+          return Response.json({ error: "branch required" }, { status: 400 });
         }
 
         // Check if channel already exists for this branch
@@ -650,18 +662,18 @@ export class SlackAgent implements AgentModule {
 
         const channelName = branchToChannelName(branch);
         console.log(
-          `[slack] Creating Slack channel: #${channelName} for branch: ${branch}`
+          `[slack] Creating Slack channel: #${channelName} for branch: ${branch}`,
         );
 
         const result = await createSlackChannel(channelName);
         if (!result.ok || !result.channelId) {
           console.error(
             `[slack] Failed to create channel #${channelName}:`,
-            result.error
+            result.error,
           );
           return Response.json(
             { ok: false, error: result.error },
-            { status: 500 }
+            { status: 500 },
           );
         }
 
@@ -675,17 +687,20 @@ export class SlackAgent implements AgentModule {
         const ghCompareUrl = `https://github.com/${GITHUB_REPO}/compare/main...${encodeURIComponent(branch)}`;
         await setChannelTopic(
           channelId,
-          `${ghCompareUrl} | Mention @${personaName()} to interact`
+          `${ghCompareUrl} | Mention @${personaName()} to interact`,
         );
 
         // Post intro message
-        const authResp = await fetchWithTimeout("https://slack.com/api/auth.test", {
-          headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
-        });
+        const authResp = await fetchWithTimeout(
+          "https://slack.com/api/auth.test",
+          {
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
+          },
+        );
         const botId = ((await authResp.json()) as any).user_id;
         await sendSlackMessage(
           channelId,
-          `\ud83d\udc4b This channel is linked to worktree \`${branch}\`.\n\nMention <@${botId}> to interact with Claude working in this worktree.\n\nWorking directory: \`${worktreeDir}\``
+          `\ud83d\udc4b This channel is linked to worktree \`${branch}\`.\n\nMention <@${botId}> to interact with Claude working in this worktree.\n\nWorking directory: \`${worktreeDir}\``,
         );
 
         // Save mapping
@@ -694,7 +709,7 @@ export class SlackAgent implements AgentModule {
         await saveWorktreeChannels();
 
         console.log(
-          `[slack] Created and linked #${channelName} (${channelId}) -> ${branch}`
+          `[slack] Created and linked #${channelName} (${channelId}) -> ${branch}`,
         );
 
         // Auto-invite relevant GitHub users (async, don't block response)
@@ -705,17 +720,16 @@ export class SlackAgent implements AgentModule {
         return Response.json({ ok: true, channelId, channelName });
       } catch (e: any) {
         console.error("[slack] Error in /worktree/create-channel:", e);
-        return Response.json(
-          { ok: false, error: e.message },
-          { status: 500 }
-        );
+        return Response.json({ ok: false, error: e.message }, { status: 500 });
       }
     });
 
     // ----- POST /worktree/archive-channel -----
     routes.set("POST /worktree/archive-channel", async (req) => {
       if (!verifyWorktreeSecret(req)) {
-        console.error("[slack] Rejected /worktree/archive-channel: bad or missing x-worktree-secret");
+        console.error(
+          "[slack] Rejected /worktree/archive-channel: bad or missing x-worktree-secret",
+        );
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
       try {
@@ -724,10 +738,7 @@ export class SlackAgent implements AgentModule {
         const body = JSON.parse(rawBody) as { branch: string };
         const { branch } = body;
         if (!branch) {
-          return Response.json(
-            { error: "branch required" },
-            { status: 400 }
-          );
+          return Response.json({ error: "branch required" }, { status: 400 });
         }
 
         const channelId = branchToChannel.get(branch);
@@ -739,13 +750,13 @@ export class SlackAgent implements AgentModule {
         }
 
         console.log(
-          `[slack] Archiving Slack channel for branch: ${branch} (${channelId})`
+          `[slack] Archiving Slack channel for branch: ${branch} (${channelId})`,
         );
 
         // Post farewell message
         await sendSlackMessage(
           channelId,
-          `\ud83d\uddc2\ufe0f Worktree \`${branch}\` is being deleted. Archiving this channel.`
+          `\ud83d\uddc2\ufe0f Worktree \`${branch}\` is being deleted. Archiving this channel.`,
         );
 
         // Archive the channel
@@ -767,16 +778,13 @@ export class SlackAgent implements AgentModule {
         }
 
         console.log(
-          `[slack] Archived channel and cleaned up for branch: ${branch}`
+          `[slack] Archived channel and cleaned up for branch: ${branch}`,
         );
 
         return Response.json({ ok: true });
       } catch (e: any) {
         console.error("[slack] Error in /worktree/archive-channel:", e);
-        return Response.json(
-          { ok: false, error: e.message },
-          { status: 500 }
-        );
+        return Response.json({ ok: false, error: e.message }, { status: 500 });
       }
     });
 
@@ -796,15 +804,18 @@ export class SlackAgent implements AgentModule {
 
     // Fetch team ID and bot user ID for streaming APIs
     try {
-      const authResp = await fetchWithTimeout("https://slack.com/api/auth.test", {
-        headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
-      });
+      const authResp = await fetchWithTimeout(
+        "https://slack.com/api/auth.test",
+        {
+          headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
+        },
+      );
       const authData = (await authResp.json()) as any;
       if (authData.ok) {
         setSlackTeamId(authData.team_id);
         setSlackBotUserId(authData.user_id);
         console.log(
-          `[slack] Slack team: ${authData.team} (${authData.team_id}), bot: ${authData.user_id}`
+          `[slack] Slack team: ${authData.team} (${authData.team_id}), bot: ${authData.user_id}`,
         );
       } else {
         console.warn("[slack] auth.test failed:", authData.error);
@@ -830,7 +841,9 @@ export class SlackAgent implements AgentModule {
     // queue head on disk and let startup continue it against the saved engine
     // session; handlers render the existing card as "Restarting".
     const interrupted = interruptQueuesForRestart();
-    console.log(`[slack] Agent shut down (${interrupted} run(s) preserved for restart)`);
+    console.log(
+      `[slack] Agent shut down (${interrupted} run(s) preserved for restart)`,
+    );
   }
 
   health(): Record<string, unknown> {

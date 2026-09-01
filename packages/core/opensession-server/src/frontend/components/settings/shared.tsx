@@ -1,10 +1,10 @@
 import type * as React from "react";
 import {
-	SettingRow as SettingsRow,
-	SettingRowControl,
-	SettingRowDescription,
-	SettingRowText,
-	SettingRowTitle,
+  SettingRow as SettingsRow,
+  SettingRowControl,
+  SettingRowDescription,
+  SettingRowText,
+  SettingRowTitle,
 } from "../../ui/settings";
 
 // ── Reusable controls ──────────────────────────────────────────────────────
@@ -20,21 +20,21 @@ import {
 export { OptionSelect as Select } from "../../ui/select";
 
 export function SettingRow({
-	title,
-	desc,
-	control,
+  title,
+  desc,
+  control,
 }: {
-	title: string;
-	desc?: React.ReactNode;
-	control: React.ReactNode;
+  title: React.ReactNode;
+  desc?: React.ReactNode;
+  control: React.ReactNode;
 }) {
-	return (
-		<SettingsRow>
-			<SettingRowText>
-				<SettingRowTitle>{title}</SettingRowTitle>
-				{desc != null && <SettingRowDescription>{desc}</SettingRowDescription>}
-			</SettingRowText>
-			<SettingRowControl>{control}</SettingRowControl>
-		</SettingsRow>
-	);
+  return (
+    <SettingsRow>
+      <SettingRowText>
+        <SettingRowTitle>{title}</SettingRowTitle>
+        {desc != null && <SettingRowDescription>{desc}</SettingRowDescription>}
+      </SettingRowText>
+      <SettingRowControl>{control}</SettingRowControl>
+    </SettingsRow>
+  );
 }

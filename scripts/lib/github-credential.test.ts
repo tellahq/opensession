@@ -27,7 +27,11 @@ describe("GitHub credential helper", () => {
 
   test("ignores writes and non-GitHub hosts", () => {
     process.env.GH_TOKEN = "ghu_run_scoped";
-    expect(githubCredentialResponse("store", "protocol=https\nhost=github.com\n\n")).toBe("");
-    expect(githubCredentialResponse("get", "protocol=https\nhost=example.com\n\n")).toBe("");
+    expect(
+      githubCredentialResponse("store", "protocol=https\nhost=github.com\n\n"),
+    ).toBe("");
+    expect(
+      githubCredentialResponse("get", "protocol=https\nhost=example.com\n\n"),
+    ).toBe("");
   });
 });

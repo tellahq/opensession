@@ -72,7 +72,12 @@ interface HealthState {
 function readState(): HealthState {
   try {
     const parsed = JSON.parse(readFileSync(STATE_PATH, "utf-8"));
-    return { alerts: parsed?.alerts && typeof parsed.alerts === "object" ? parsed.alerts : {} };
+    return {
+      alerts:
+        parsed?.alerts && typeof parsed.alerts === "object"
+          ? parsed.alerts
+          : {},
+    };
   } catch {
     return { alerts: {} };
   }
@@ -87,7 +92,9 @@ function jwtExpMs(jwt: string): number | null {
   try {
     const payload = jwt.split(".")[1];
     if (!payload) return null;
-    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
+    const claims = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf-8"),
+    );
     return typeof claims.exp === "number" ? claims.exp * 1000 : null;
   } catch {
     return null;
@@ -96,7 +103,9 @@ function jwtExpMs(jwt: string): number | null {
 
 function days(ms: number): string {
   const d = ms / (24 * 60 * 60 * 1000);
-  return d >= 2 ? `${Math.floor(d)} days` : `${Math.max(1, Math.round(ms / (60 * 60 * 1000)))}h`;
+  return d >= 2
+    ? `${Math.floor(d)} days`
+    : `${Math.max(1, Math.round(ms / (60 * 60 * 1000)))}h`;
 }
 
 function claudeIssues(): Issue[] {
@@ -104,7 +113,9 @@ function claudeIssues(): Issue[] {
   for (const a of listAccountsPublic()) {
     const who = a.owner || FALLBACK_TEAMMATE;
     const identity = a.email?.trim() || a.name;
-    const label = a.owner ? `your personal Claude sub "${identity}"` : `pool Claude account "${identity}"`;
+    const label = a.owner
+      ? `your personal Claude sub "${identity}"`
+      : `pool Claude account "${identity}"`;
     const err = a.usage?.error || "";
     const relogin = a.credentialsPath?.includes(".opensession-claude-oauth")
       ? `Reconnect usage in Settings → Providers → account menu → "Connect usage".`
@@ -141,7 +152,9 @@ function claudeIssues(): Issue[] {
     // Look-ahead: a refresh token near expiry means a forced re-login soon.
     if (a.credentialsPath && existsSync(a.credentialsPath)) {
       try {
-        const creds = JSON.parse(readFileSync(a.credentialsPath, "utf-8"))?.claudeAiOauth;
+        const creds = JSON.parse(
+          readFileSync(a.credentialsPath, "utf-8"),
+        )?.claudeAiOauth;
         const refreshExp = Number(creds?.refreshTokenExpiresAt) || 0;
         if (refreshExp > 0) {
           const left = refreshExp - Date.now();
@@ -185,7 +198,8 @@ function codexIssues(): Issue[] {
     }
     let access: string | undefined;
     try {
-      access = JSON.parse(readFileSync(authPath, "utf-8"))?.tokens?.access_token;
+      access = JSON.parse(readFileSync(authPath, "utf-8"))?.tokens
+        ?.access_token;
     } catch {
       issues.push({
         key: `codex:${a.id}:auth-unreadable`,
@@ -215,8 +229,12 @@ function codexIssues(): Issue[] {
   return issues;
 }
 
-async function dmTeammate(teammateRef: string, message: string): Promise<boolean> {
-  const teammate = resolveTeammate(teammateRef) ?? resolveTeammate(FALLBACK_TEAMMATE);
+async function dmTeammate(
+  teammateRef: string,
+  message: string,
+): Promise<boolean> {
+  const teammate =
+    resolveTeammate(teammateRef) ?? resolveTeammate(FALLBACK_TEAMMATE);
   if (!teammate) return false;
   const channel = await openDirectMessage(teammate.slackId);
   if (!channel) return false;
@@ -263,7 +281,7 @@ export async function sweepAccountHealth(): Promise<Issue[]> {
   // Repair before detecting: refresh idle codex accounts' ChatGPT tokens so
   // an expiry that a refresh can fix never becomes an alert.
   await refreshIdleCodexTokens().catch((e) =>
-    console.warn("[account-health] codex token refresh failed:", e)
+    console.warn("[account-health] codex token refresh failed:", e),
   );
   const issues = [
     ...detectAccountIssues(),
@@ -286,8 +304,12 @@ export async function sweepAccountHealth(): Promise<Issue[]> {
       notify: issue.notify,
       delivered: sent,
     });
-    if (sent) state.alerts[issue.key] = { lastSentAt: new Date(now).toISOString() };
-    else console.warn(`[account-health] failed to DM ${issue.notify} about ${issue.key}`);
+    if (sent)
+      state.alerts[issue.key] = { lastSentAt: new Date(now).toISOString() };
+    else
+      console.warn(
+        `[account-health] failed to DM ${issue.notify} about ${issue.key}`,
+      );
   }
   writeState(state);
   return issues;
@@ -299,10 +321,16 @@ let sweepTimer: ReturnType<typeof setInterval> | null = null;
 export function startAccountHealthMonitor(): void {
   if (sweepTimer) return;
   setTimeout(() => {
-    void sweepAccountHealth().catch((e) => console.error("[account-health] sweep failed:", e));
+    void sweepAccountHealth().catch((e) =>
+      console.error("[account-health] sweep failed:", e),
+    );
   }, FIRST_SWEEP_DELAY_MS);
   sweepTimer = setInterval(() => {
-    void sweepAccountHealth().catch((e) => console.error("[account-health] sweep failed:", e));
+    void sweepAccountHealth().catch((e) =>
+      console.error("[account-health] sweep failed:", e),
+    );
   }, SWEEP_INTERVAL_MS);
-  console.log(`[account-health] monitor started (hourly sweep, first in ${FIRST_SWEEP_DELAY_MS / 60000}m)`);
+  console.log(
+    `[account-health] monitor started (hourly sweep, first in ${FIRST_SWEEP_DELAY_MS / 60000}m)`,
+  );
 }

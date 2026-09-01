@@ -6,7 +6,10 @@ import {
   memoryImportDirs,
   memoryImportIsDirty,
 } from "../../agents/slack/memory";
-import { importLegacyMemoryDirectory, type LegacyImportResult } from "./legacy-import";
+import {
+  importLegacyMemoryDirectory,
+  type LegacyImportResult,
+} from "./legacy-import";
 import { MemoryStore } from "./store";
 
 export type MemoryRolloutMode = "legacy" | "shadow" | "v2";
@@ -31,7 +34,10 @@ export function memoryRolloutMode(): MemoryRolloutMode {
 }
 
 export function memoryDatabasePath(): string {
-  return process.env.OPENSESSION_MEMORY_DB || `${stateDir("memory")}/memory-v2.sqlite`;
+  return (
+    process.env.OPENSESSION_MEMORY_DB ||
+    `${stateDir("memory")}/memory-v2.sqlite`
+  );
 }
 
 /** Lazily acquire the database. Importing this module has no live effects. */
@@ -59,7 +65,9 @@ export async function ensureMemoryV2Ready(): Promise<{
   runtime.migration ??= (async () => {
     const sealed = store.metadata(LEGACY_MIGRATION_SEAL);
     if (sealed) {
-      const parsed = JSON.parse(sealed) as LegacyImportResult & { migrationVersion?: number };
+      const parsed = JSON.parse(sealed) as LegacyImportResult & {
+        migrationVersion?: number;
+      };
       if (
         parsed.migrationVersion === LEGACY_MIGRATION_VERSION &&
         !memoryImportIsDirty(sourceDirs)
@@ -73,28 +81,36 @@ export async function ensureMemoryV2Ready(): Promise<{
       results.push(await importLegacyMemoryDirectory(store, directory));
     }
     const digest = createHash("sha256");
-    const result = results.reduce<LegacyImportResult>((all, item, index) => {
-      digest.update(sourceDirs[index] || "").update("\0").update(item.sourceDigest).update("\0");
-      all.files += item.files;
-      all.discovered += item.discovered;
-      all.imported += item.imported;
-      all.alreadyImported += item.alreadyImported;
-      all.mapped += item.mapped;
-      all.skipped += item.skipped;
-      all.errors.push(...item.errors);
-      return all;
-    }, {
-      files: 0,
-      discovered: 0,
-      imported: 0,
-      alreadyImported: 0,
-      mapped: 0,
-      skipped: 0,
-      complete: false,
-      sourceDigest: "",
-      errors: [],
-    });
-    result.complete = result.errors.length === 0 &&
+    const result = results.reduce<LegacyImportResult>(
+      (all, item, index) => {
+        digest
+          .update(sourceDirs[index] || "")
+          .update("\0")
+          .update(item.sourceDigest)
+          .update("\0");
+        all.files += item.files;
+        all.discovered += item.discovered;
+        all.imported += item.imported;
+        all.alreadyImported += item.alreadyImported;
+        all.mapped += item.mapped;
+        all.skipped += item.skipped;
+        all.errors.push(...item.errors);
+        return all;
+      },
+      {
+        files: 0,
+        discovered: 0,
+        imported: 0,
+        alreadyImported: 0,
+        mapped: 0,
+        skipped: 0,
+        complete: false,
+        sourceDigest: "",
+        errors: [],
+      },
+    );
+    result.complete =
+      result.errors.length === 0 &&
       result.mapped === result.discovered - result.skipped;
     result.sourceDigest = digest.digest("hex");
 
@@ -104,13 +120,16 @@ export async function ensureMemoryV2Ready(): Promise<{
           `Memory v2 migration is incomplete: ${result.mapped}/${result.discovered - result.skipped} valid rows mapped, ${result.errors.length} errors.`,
         );
       }
-      store.setMetadata(LEGACY_MIGRATION_SEAL, JSON.stringify({
-        ...result,
-        errors: [],
-        migrationVersion: LEGACY_MIGRATION_VERSION,
-        sourceDirs,
-        sealedAt: new Date().toISOString(),
-      }));
+      store.setMetadata(
+        LEGACY_MIGRATION_SEAL,
+        JSON.stringify({
+          ...result,
+          errors: [],
+          migrationVersion: LEGACY_MIGRATION_VERSION,
+          sourceDirs,
+          sealedAt: new Date().toISOString(),
+        }),
+      );
     }
 
     if (result.complete) clearMemoryImportDirty(sourceDirs);

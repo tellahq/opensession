@@ -15,10 +15,9 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
-import { sandboxConfig } from "./config";
 import {
-  bootstrapSignature,
   remoteWarmWorkspaceDir,
+  runnerToolchainSignature,
   shellQuoteWord,
   type RemoteDriver,
 } from "./adapters/bootstrap";
@@ -73,17 +72,26 @@ export async function sealRemoteRepoTemplate(
   repo: { id: string },
 ): Promise<string> {
   const warmDir = remoteWarmWorkspaceDir(repo.id);
-  const origin = await driver.exec("git remote get-url origin", { cwd: warmDir });
-  if (origin.exitCode !== 0 || /https?:\/\/[^/\s]+@/i.test(origin.stdout)) {
-    throw new Error(`refusing to snapshot ${repo.id}: clone authority was not scrubbed`);
-  }
-  const dirty = await driver.exec("git status --porcelain --untracked-files=no", {
+  const origin = await driver.exec("git remote get-url origin", {
     cwd: warmDir,
   });
+  if (origin.exitCode !== 0 || /https?:\/\/[^/\s]+@/i.test(origin.stdout)) {
+    throw new Error(
+      `refusing to snapshot ${repo.id}: clone authority was not scrubbed`,
+    );
+  }
+  const dirty = await driver.exec(
+    "git status --porcelain --untracked-files=no",
+    {
+      cwd: warmDir,
+    },
+  );
   if (dirty.exitCode !== 0 || dirty.stdout.trim()) {
     throw new Error(
       `refusing to snapshot ${repo.id}: setup changed tracked project files` +
-        (dirty.stdout.trim() ? ` (${dirty.stdout.trim().split("\\n").slice(0, 5).join(", ")})` : ""),
+        (dirty.stdout.trim()
+          ? ` (${dirty.stdout.trim().split("\\n").slice(0, 5).join(", ")})`
+          : ""),
     );
   }
   const sensitive = await driver.exec(
@@ -119,7 +127,9 @@ export async function sealRemoteRepoTemplate(
     `mkdir -p ${shellQuoteWord(path.slice(0, path.lastIndexOf("/")))} && printf %s ${shellQuoteWord(proof)} > ${shellQuoteWord(path)}`,
   );
   if (written.exitCode !== 0) {
-    throw new Error(`could not seal ${provider} repo template: ${written.stderr.trim()}`);
+    throw new Error(
+      `could not seal ${provider} repo template: ${written.stderr.trim()}`,
+    );
   }
   return nonce;
 }
@@ -145,7 +155,9 @@ export async function validateRemoteRepoTemplate(
   try {
     parsed = JSON.parse(proof.stdout);
   } catch {
-    throw new Error(`restored ${provider} template has a malformed seal for ${repo.id}`);
+    throw new Error(
+      `restored ${provider} template has a malformed seal for ${repo.id}`,
+    );
   }
   if (
     parsed.provider !== provider ||
@@ -154,56 +166,143 @@ export async function validateRemoteRepoTemplate(
     parsed.projectSignature !== projectPreparationSignature(repo.id) ||
     !parsed.nonce
   ) {
-    throw new Error(`restored ${provider} template seal does not match ${repo.id}`);
+    throw new Error(
+      `restored ${provider} template seal does not match ${repo.id}`,
+    );
   }
   const warm = await driver.exec(
     `test -d ${shellQuoteWord(remoteWarmWorkspaceDir(repo.id))}/.git && git remote get-url origin`,
     { cwd: remoteWarmWorkspaceDir(repo.id) },
   );
   if (warm.exitCode !== 0 || /https?:\/\/[^/\s]+@/i.test(warm.stdout)) {
-    throw new Error(`restored ${provider} template is missing or retained clone authority`);
+    throw new Error(
+      `restored ${provider} template is missing or retained clone authority`,
+    );
   }
   return parsed.nonce;
 }
 
 function clean(value: string): string {
-  return value.replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  return value
+    .replace(/[^A-Za-z0-9_.-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 }
 
-const PROJECT_PREPARATION_INPUTS = [
+const DEFAULT_PREPARATION_INPUTS = [
   ".agents/setup",
   ".agents/sandbox-environment.json",
   "bun.lock",
 ] as const;
 
-/** Hash only committed files whose bytes affect the reusable prepared
- * filesystem. Shared project images are built from repository commits, never
- * from an operator's dirty worktree. Reading working-tree bytes here made an
+/** Repos declare EXTRA preparation inputs in their committed
+ * `.agents/sandbox-environment.json` under `preparationInputs`: repo-relative
+ * files or directories (extra lockfiles, patch dirs, toolchain pins) whose
+ * committed content should rotate the prepared template. The declaration
+ * lives in the repo so each project owns its own invalidation surface.
+ * Exported for tests. */
+export function parsePreparationInputs(raw: unknown): string[] {
+  const list = (raw as { preparationInputs?: unknown } | null)
+    ?.preparationInputs;
+  if (!Array.isArray(list)) return [];
+  const out: string[] = [];
+  for (const entry of list) {
+    if (typeof entry !== "string") continue;
+    const path = entry.replace(/\/+$/, "");
+    if (
+      !path ||
+      path.length > 200 ||
+      path.startsWith("/") ||
+      path.startsWith("-")
+    )
+      continue;
+    if (/[\0\n:\\]/.test(path)) continue;
+    if (
+      path.split("/").some((seg) => seg === "" || seg === "." || seg === "..")
+    )
+      continue;
+    if (!out.includes(path)) out.push(path);
+    if (out.length >= 32) break;
+  }
+  return out;
+}
+
+/** The declared extras from the repo's committed environment file (never the
+ * working tree when HEAD exists — same rule as the hashing below). Exported
+ * for tests. */
+export function declaredPreparationInputs(
+  repoDir: string,
+  hasHead: boolean,
+): string[] {
+  try {
+    const raw = hasHead
+      ? (() => {
+          const shown = spawnSync(
+            "git",
+            ["-C", repoDir, "show", "HEAD:.agents/sandbox-environment.json"],
+            { encoding: "utf-8", maxBuffer: 1024 * 1024 },
+          );
+          return shown.status === 0 ? shown.stdout : "";
+        })()
+      : readFileSync(
+          join(repoDir, ".agents/sandbox-environment.json"),
+          "utf-8",
+        );
+    if (!raw) return [];
+    return parsePreparationInputs(JSON.parse(raw)).filter(
+      (p) => !(DEFAULT_PREPARATION_INPUTS as readonly string[]).includes(p),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Committed git object id (blob or tree — directories work too) for one
+ * preparation input, so content addressing is git's own. */
+function committedInputId(
+  repoDir: string,
+  relative: string,
+  hasHead: boolean,
+): string {
+  if (hasHead) {
+    const r = spawnSync(
+      "git",
+      ["-C", repoDir, "rev-parse", "--verify", "--quiet", `HEAD:${relative}`],
+      { encoding: "utf-8" },
+    );
+    const oid = r.status === 0 ? r.stdout.trim() : "";
+    return oid || "<absent>";
+  }
+  try {
+    return createHash("sha256")
+      .update(readFileSync(join(repoDir, relative)))
+      .digest("hex");
+  } catch {
+    return "<absent>";
+  }
+}
+
+/** Hash only committed content whose bytes affect the reusable prepared
+ * filesystem: the defaults above plus whatever the repo itself declares.
+ * Shared project images are built from repository commits, never from an
+ * operator's dirty worktree. Reading working-tree bytes here made an
  * unrelated local bun.lock edit invalidate every provider artifact. */
 export function projectPreparationSignature(repoId: string): string {
   const repo = configuredRepos()[repoId];
   const hash = createHash("sha256");
-  hash.update(`project-preparation-v2\0${repoId}\0`);
+  hash.update(`project-preparation-v3\0${repoId}\0`);
   if (!repo) return hash.update("<unregistered>").digest("hex");
-  const hasHead = spawnSync("git", ["-C", repo.repo, "rev-parse", "--verify", "HEAD"], {
-    stdio: "ignore",
-  }).status === 0;
-  for (const relative of PROJECT_PREPARATION_INPUTS) {
+  const hasHead =
+    spawnSync("git", ["-C", repo.repo, "rev-parse", "--verify", "HEAD"], {
+      stdio: "ignore",
+    }).status === 0;
+  const inputs = [
+    ...DEFAULT_PREPARATION_INPUTS,
+    ...declaredPreparationInputs(repo.repo, hasHead),
+  ];
+  for (const relative of inputs) {
     hash.update(`${relative}\0`);
-    if (hasHead) {
-      const committed = spawnSync("git", ["-C", repo.repo, "show", `HEAD:${relative}`], {
-        encoding: "buffer",
-        maxBuffer: 32 * 1024 * 1024,
-      });
-      if (committed.status === 0 && committed.stdout) hash.update(committed.stdout);
-      else hash.update("<absent>");
-    } else {
-      try {
-        hash.update(readFileSync(join(repo.repo, relative)));
-      } catch {
-        hash.update("<absent>");
-      }
-    }
+    hash.update(committedInputId(repo.repo, relative, hasHead));
     hash.update("\0");
   }
   return hash.digest("hex");
@@ -219,26 +318,30 @@ function file(provider: RemoteTemplateProvider, repoId: string): string {
 
 /** Includes every create-time input whose change makes an artifact unsafe to
  * reuse. Source freshness is handled by adoption's fetch; dependency/setup
- * freshness is handled separately by projectPreparationSignature. */
+ * freshness is handled separately by projectPreparationSignature; a runner
+ * commit pin bump is deliberately NOT here — adoption's bootstrap reconciles
+ * the pin inside the restored filesystem (see runnerToolchainSignature), so
+ * templates survive ordinary deploys instead of rebuilding on every one. */
 export function remoteRepoTemplateSignature(
   provider: RemoteTemplateProvider,
 ): string {
-  const cfg = sandboxConfig();
   const settings = getSandboxConnection(provider)?.settings || {};
   const shape =
     provider === "daytona"
       ? { baseSnapshot: settings.snapshot || "default" }
       : provider === "box"
         ? { machineProfile: settings.profile || "default" }
-      : {
-          image: settings.image || "daytonaio/sandbox:0.8.0",
-          cpu: settings.cpu || null,
-          memory: settings.memoryMb || null,
-          region: settings.region || null,
-          cloud: settings.cloud || null,
-        };
+        : {
+            image: settings.image || "daytonaio/sandbox:0.8.0",
+            cpu: settings.cpu || null,
+            memory: settings.memoryMb || null,
+            region: settings.region || null,
+            cloud: settings.cloud || null,
+          };
   return createHash("sha256")
-    .update(`repo-template-v2|${bootstrapSignature()}|${JSON.stringify(shape)}`)
+    .update(
+      `repo-template-v3|${runnerToolchainSignature()}|${JSON.stringify(shape)}`,
+    )
     .digest("hex");
 }
 
@@ -248,7 +351,9 @@ export function remoteRepoTemplateName(
   repoId: string,
 ): string {
   const suffix = createHash("sha256")
-    .update(`${remoteRepoTemplateSignature(provider)}|${projectPreparationSignature(repoId)}`)
+    .update(
+      `${remoteRepoTemplateSignature(provider)}|${projectPreparationSignature(repoId)}`,
+    )
     .digest("hex")
     .slice(0, 16);
   return `opensession-${clean(repoId).slice(0, 36)}-${suffix}`;
@@ -269,7 +374,8 @@ export function readRemoteRepoTemplate(
       entry.repoId !== repoId ||
       !entry.artifactId ||
       entry.signature !== remoteRepoTemplateSignature(provider) ||
-      (entry.projectSignature != null && entry.projectSignature !== projectSignature)
+      (entry.projectSignature != null &&
+        entry.projectSignature !== projectSignature)
     ) {
       try {
         unlinkSync(path);

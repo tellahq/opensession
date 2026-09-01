@@ -15,10 +15,7 @@ import {
   validateTranscriptAppendReceiptRow,
   type TranscriptAppendReceiptRow,
 } from "../transcript-store";
-import {
-  SessionKernelStore,
-  sessionKernelSessionDbPath,
-} from "./store";
+import { SessionKernelStore, sessionKernelSessionDbPath } from "./store";
 import { assertTranscriptActorResponse } from "./transcript-protocol";
 
 const TABLES = [
@@ -28,7 +25,8 @@ const TABLES = [
   },
   {
     name: "transcript_outline",
-    columns: "session_id, seq, uuid, change_seq, ts, render_role, content_length, review_pr_number",
+    columns:
+      "session_id, seq, uuid, change_seq, ts, render_role, content_length, review_pr_number",
   },
   {
     name: "transcript_blobs",
@@ -36,15 +34,17 @@ const TABLES = [
   },
   {
     name: "transcript_sessions",
-    columns: "session_id, next_seq, next_change_seq, reset_change_seq, last_ts, imported_at, import_src, import_watermark",
+    columns:
+      "session_id, next_seq, next_change_seq, reset_change_seq, last_ts, imported_at, import_src, import_watermark",
   },
   {
     name: "transcript_append_receipts",
-    columns: "session_id, append_id, request_digest, fence_json, result_json, created_at",
+    columns:
+      "session_id, append_id, request_digest, fence_json, result_json, created_at",
   },
 ] as const;
 
-type TableName = typeof TABLES[number]["name"];
+type TableName = (typeof TABLES)[number]["name"];
 type TableTotals = Record<TableName, number>;
 
 export interface TranscriptMigrationResult {
@@ -64,7 +64,11 @@ function emptyTotals(): TableTotals {
   return Object.fromEntries(TABLES.map(({ name }) => [name, 0])) as TableTotals;
 }
 
-function sessionTotals(db: Database, schema: "main" | "source", sessionId: string): TableTotals {
+function sessionTotals(
+  db: Database,
+  schema: "main" | "source",
+  sessionId: string,
+): TableTotals {
   const totals = emptyTotals();
   for (const { name } of TABLES)
     totals[name] = scalar(
@@ -78,10 +82,12 @@ function sessionTotals(db: Database, schema: "main" | "source", sessionId: strin
 function sourceInventory(db: Database): Map<string, TableTotals> {
   const inventory = new Map<string, TableTotals>();
   for (const { name } of TABLES) {
-    const rows = db.query(`
+    const rows = db
+      .query(`
       SELECT session_id, COUNT(*) AS value
       FROM ${name} GROUP BY session_id
-    `).all() as Array<{ session_id: string; value: number }>;
+    `)
+      .all() as Array<{ session_id: string; value: number }>;
     for (const row of rows) {
       const totals = inventory.get(row.session_id) ?? emptyTotals();
       totals[name] = Number(row.value);
@@ -104,11 +110,13 @@ function verifySourceCoherence(
   sessionId: string,
   totals = sessionTotals(db, "source", sessionId),
 ): void {
-  const metadata = db.query(`
+  const metadata = db
+    .query(`
     SELECT next_seq, next_change_seq, reset_change_seq, last_ts, imported_at,
       import_src, import_watermark
     FROM source.transcript_sessions WHERE session_id = ?
-  `).all(sessionId) as Array<{
+  `)
+    .all(sessionId) as Array<{
     next_seq: number;
     next_change_seq: number;
     reset_change_seq: number;
@@ -119,15 +127,19 @@ function verifySourceCoherence(
   }>;
   if (metadata.length === 0 && totalsAreEmpty(totals)) return;
   if (metadata.length !== 1)
-    throw new Error(`${sessionId} has ${metadata.length} transcript metadata rows`);
+    throw new Error(
+      `${sessionId} has ${metadata.length} transcript metadata rows`,
+    );
 
-  const dense = db.query(`
+  const dense = db
+    .query(`
     SELECT COUNT(*) AS count, COUNT(DISTINCT seq) AS distinct_seq,
       COUNT(DISTINCT change_seq) AS distinct_change_seq,
       MIN(seq) AS min_seq, MAX(seq) AS max_seq,
       MIN(change_seq) AS min_change_seq, MAX(change_seq) AS max_change_seq
     FROM source.transcript_events WHERE session_id = ?
-  `).get(sessionId) as {
+  `)
+    .get(sessionId) as {
     count: number;
     distinct_seq: number;
     distinct_change_seq: number;
@@ -138,44 +150,55 @@ function verifySourceCoherence(
   };
   const row = metadata[0]!;
   const expectedSeq = (dense.max_seq ?? 0) + 1;
-  const expectedChange = Math.max(dense.max_change_seq ?? 0, row.reset_change_seq) + 1;
+  const expectedChange =
+    Math.max(dense.max_change_seq ?? 0, row.reset_change_seq) + 1;
   if (
     dense.distinct_seq !== dense.count ||
     dense.distinct_change_seq !== dense.count ||
-    (dense.count > 0 && (
-      dense.min_seq! < 1 ||
-      dense.min_change_seq! < 1 ||
-      dense.max_change_seq! >= row.next_change_seq
-    )) ||
+    (dense.count > 0 &&
+      (dense.min_seq! < 1 ||
+        dense.min_change_seq! < 1 ||
+        dense.max_change_seq! >= row.next_change_seq)) ||
     row.next_seq !== expectedSeq ||
     row.next_change_seq !== expectedChange ||
     row.reset_change_seq < 0 ||
     row.reset_change_seq >= row.next_change_seq
-  ) throw new Error(`${sessionId} transcript sequence metadata is incoherent`);
+  )
+    throw new Error(`${sessionId} transcript sequence metadata is incoherent`);
   if (
     (row.imported_at === null) !== (row.import_src === null) ||
     (row.imported_at === null && row.import_watermark !== null) ||
-    (row.imported_at !== null && (!Number.isSafeInteger(row.imported_at) || row.imported_at < 0)) ||
-    (row.last_ts !== null && (!Number.isSafeInteger(row.last_ts) || row.last_ts < 0)) ||
+    (row.imported_at !== null &&
+      (!Number.isSafeInteger(row.imported_at) || row.imported_at < 0)) ||
+    (row.last_ts !== null &&
+      (!Number.isSafeInteger(row.last_ts) || row.last_ts < 0)) ||
     (row.import_watermark !== null &&
       (!Number.isSafeInteger(row.import_watermark) || row.import_watermark < 0))
-  ) throw new Error(`${sessionId} transcript import metadata is incoherent`);
+  )
+    throw new Error(`${sessionId} transcript import metadata is incoherent`);
 
   // The outline was introduced as a lazy projection: an old session may have
   // no rows (or only the pages a client has visited) and the actor store will
   // finish that backfill on demand. Existing rows still must map exactly to a
   // canonical event; orphaned or mismatched projection evidence fails closed.
-  const outlineMismatch = scalar(db, `
+  const outlineMismatch = scalar(
+    db,
+    `
     SELECT COUNT(*) AS value FROM (
       SELECT seq, uuid FROM source.transcript_outline WHERE session_id = ?
       EXCEPT
       SELECT seq, uuid FROM source.transcript_events WHERE session_id = ?
     )
-  `, sessionId, sessionId);
+  `,
+    sessionId,
+    sessionId,
+  );
   if (outlineMismatch !== 0)
     throw new Error(`${sessionId} transcript outline is incoherent`);
 
-  const blobMismatch = scalar(db, `
+  const blobMismatch = scalar(
+    db,
+    `
     SELECT COUNT(*) AS value
     FROM source.transcript_blobs blob
     LEFT JOIN source.transcript_events event
@@ -183,8 +206,12 @@ function verifySourceCoherence(
      AND event.session_id = blob.session_id
      AND event.uuid = blob.uuid
     WHERE blob.session_id = ? AND event.seq IS NULL
-  `, sessionId);
-  const danglingBlobs = scalar(db, `
+  `,
+    sessionId,
+  );
+  const danglingBlobs = scalar(
+    db,
+    `
     SELECT COUNT(*) AS value
     FROM source.transcript_events event
     LEFT JOIN source.transcript_blobs blob
@@ -192,25 +219,33 @@ function verifySourceCoherence(
      AND blob.session_id = event.session_id
      AND blob.uuid = event.uuid
     WHERE event.session_id = ? AND event.full_ref IS NOT NULL AND blob.id IS NULL
-  `, sessionId);
+  `,
+    sessionId,
+  );
   if (blobMismatch !== 0 || danglingBlobs !== 0)
     throw new Error(`${sessionId} transcript blob references are incoherent`);
-  const blobs = db.query(`
+  const blobs = db
+    .query(`
     SELECT data FROM source.transcript_blobs WHERE session_id = ? ORDER BY id
-  `).all(sessionId) as Array<{ data: string }>;
+  `)
+    .all(sessionId) as Array<{ data: string }>;
   for (const blob of blobs) {
     try {
       assertTranscriptActorResponse(JSON.parse(blob.data));
     } catch {
-      throw new Error(`${sessionId} transcript blob exceeds the actor read contract`);
+      throw new Error(
+        `${sessionId} transcript blob exceeds the actor read contract`,
+      );
     }
   }
 
-  const receipts = db.query(`
+  const receipts = db
+    .query(`
     SELECT session_id, append_id, request_digest, fence_json, result_json, created_at
     FROM source.transcript_append_receipts WHERE session_id = ?
     ORDER BY append_id
-  `).all(sessionId) as TranscriptAppendReceiptRow[];
+  `)
+    .all(sessionId) as TranscriptAppendReceiptRow[];
   for (const receipt of receipts) validateTranscriptAppendReceiptRow(receipt);
 }
 
@@ -221,14 +256,18 @@ function verifySession(
 ): void {
   const actualReceipt = receiptFor(db, sessionId, "main");
   if (actualReceipt !== expectedReceipt)
-    throw new Error(`${sessionId} target transcript digest differs from source`);
+    throw new Error(
+      `${sessionId} target transcript digest differs from source`,
+    );
 }
 
 function verifyEmptyTarget(db: Database, sessionId: string): void {
   for (const { name } of TABLES) {
     const count = scalar(db, `SELECT COUNT(*) AS value FROM main.${name}`);
     if (count !== 0)
-      throw new Error(`Session ${sessionId} empty transcript target contains ${name}`);
+      throw new Error(
+        `Session ${sessionId} empty transcript target contains ${name}`,
+      );
   }
   const foreignReceipts = scalar(
     db,
@@ -237,7 +276,9 @@ function verifyEmptyTarget(db: Database, sessionId: string): void {
     sessionId,
   );
   if (foreignReceipts !== 0)
-    throw new Error(`Session ${sessionId} empty transcript target has foreign receipts`);
+    throw new Error(
+      `Session ${sessionId} empty transcript target has foreign receipts`,
+    );
 }
 
 function receiptFor(
@@ -249,10 +290,12 @@ function receiptFor(
   digest.update("opensession.actor-transcript-migration.v2\0");
   digest.update(sessionId);
   for (const table of TABLES) {
-    const rows = db.query(
-      `SELECT ${table.columns} FROM ${schema}.${table.name}
+    const rows = db
+      .query(
+        `SELECT ${table.columns} FROM ${schema}.${table.name}
        WHERE session_id = ? ORDER BY ${table.columns}`,
-    ).iterate(sessionId);
+      )
+      .iterate(sessionId);
     digest.update("[");
     let first = true;
     for (const row of rows) {
@@ -271,12 +314,18 @@ function readonlySourceSnapshot(
 ): { source: Database; snapshotPath: string; close: () => void } {
   let snapshotDir = "";
   try {
-    snapshotDir = mkdtempSync(join(dirname(centralPath), ".transcript-source-"));
+    snapshotDir = mkdtempSync(
+      join(dirname(centralPath), ".transcript-source-"),
+    );
     const snapshotPath = join(snapshotDir, "transcripts.db");
     if (statSync(sourceTranscriptPath).size <= 512 * 1024 * 1024) {
       const original = new Database(sourceTranscriptPath, { readonly: true });
       try {
-        writeFileSync(snapshotPath, original.serialize(), { mode: 0o400 });
+        // Serialized WAL databases may still require SQLite to create private
+        // -shm/-wal companions on macOS even for a readonly connection. The
+        // snapshot directory is mode 0700 and has no writers, so keep the file
+        // owner-writable rather than making the VFS fail with SQLITE_CANTOPEN.
+        writeFileSync(snapshotPath, original.serialize(), { mode: 0o600 });
       } finally {
         original.close();
       }
@@ -285,23 +334,30 @@ function readonlySourceSnapshot(
       // cannot represent production transcript databases above Bun's buffer
       // limit. SQLite streams large snapshots in a short-lived process so its
       // VACUUM VFS state cannot affect later actor WAL opens in this process.
-      const vacuum = Bun.spawnSync([
-        process.execPath,
-        "-e",
-        `import { Database } from "bun:sqlite";
+      const vacuum = Bun.spawnSync(
+        [
+          process.execPath,
+          "-e",
+          `import { Database } from "bun:sqlite";
          const source = new Database(process.argv[1], { readonly: true });
          source.run("VACUUM INTO ?", [process.argv[2]]);
          source.close();`,
-        sourceTranscriptPath,
-        snapshotPath,
-      ], { stdout: "pipe", stderr: "pipe" });
+          sourceTranscriptPath,
+          snapshotPath,
+        ],
+        { stdout: "pipe", stderr: "pipe" },
+      );
       if (vacuum.exitCode !== 0)
         throw new Error(
           `Could not snapshot transcript source: ${vacuum.stderr.toString().trim()}`,
         );
-      chmodSync(snapshotPath, 0o400);
+      chmodSync(snapshotPath, 0o600);
     }
-    const source = new Database(snapshotPath, { readonly: true });
+    // Open the private copy read-write so SQLite's WAL VFS can initialize its
+    // companion files on macOS, then enforce query-only semantics at SQL level.
+    // No source path or actor target is writable through this handle.
+    const source = new Database(snapshotPath);
+    source.exec("PRAGMA query_only = ON");
     return {
       source,
       snapshotPath,
@@ -321,7 +377,9 @@ function createActorDatabaseTemplate(snapshotPath: string): string {
   new SessionKernelStore(templatePath).close();
   new TranscriptStore(templatePath).close();
   const template = new Database(templatePath);
-  template.exec("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode = DELETE;");
+  template.exec(
+    "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode = DELETE;",
+  );
   template.close();
   return templatePath;
 }
@@ -359,7 +417,8 @@ export function rollbackActorTranscriptsOffline(options: {
     central.close();
     throw error;
   }
-  const isolatedRoot = options.isolatedRoot ??
+  const isolatedRoot =
+    options.isolatedRoot ??
     `${dirname(options.centralPath)}/session-kernel-sessions`;
   try {
     const sessionIds: string[] = [];
@@ -374,21 +433,26 @@ export function rollbackActorTranscriptsOffline(options: {
       const placement = central.sessionPlacement(sessionId)!;
       const target = new Database(
         sessionKernelSessionDbPath(sessionId, isolatedRoot),
-        { readonly: true },
       );
+      target.exec("PRAGMA query_only = ON");
       try {
         target.run("ATTACH DATABASE ? AS source", [snapshot.snapshotPath]);
         verifySourceCoherence(target, sessionId);
         const expectedReceipt = receiptFor(target, sessionId);
         verifySession(target, sessionId, expectedReceipt);
-        const targetReceipt = target.query(
-          `SELECT receipt FROM session_kernel_transcript_migrations
+        const targetReceipt = target
+          .query(
+            `SELECT receipt FROM session_kernel_transcript_migrations
            WHERE session_id = ?`,
-        ).get(sessionId) as { receipt: string } | null;
+          )
+          .get(sessionId) as { receipt: string } | null;
         if (
           placement.transcriptMigrationReceipt !== expectedReceipt ||
           targetReceipt?.receipt !== expectedReceipt
-        ) throw new Error(`Session ${sessionId} rollback transcript receipt mismatch`);
+        )
+          throw new Error(
+            `Session ${sessionId} rollback transcript receipt mismatch`,
+          );
         target.exec("DETACH DATABASE source");
       } finally {
         target.close();
@@ -430,7 +494,8 @@ export function migrateActorTranscriptsOffline(options: {
     throw error;
   }
   const source = snapshot.source;
-  const isolatedRoot = options.isolatedRoot ??
+  const isolatedRoot =
+    options.isolatedRoot ??
     `${dirname(options.centralPath)}/session-kernel-sessions`;
   const result: TranscriptMigrationResult = {
     dryRun: options.dryRun === true,
@@ -461,8 +526,10 @@ export function migrateActorTranscriptsOffline(options: {
     if (!options.dryRun) {
       const transcriptOnly: string[] = [];
       for (const sessionId of sessionIds) {
-        if (!central.sessionPlacement(sessionId) &&
-            !central.hasSessionDurableState(sessionId))
+        if (
+          !central.sessionPlacement(sessionId) &&
+          !central.hasSessionDurableState(sessionId)
+        )
           transcriptOnly.push(sessionId);
       }
       central.claimIsolatedSessionsForTranscriptMigration(transcriptOnly);
@@ -476,6 +543,7 @@ export function migrateActorTranscriptsOffline(options: {
         if (!auditDb) {
           auditDb = new Database(":memory:");
           auditDb.run("ATTACH DATABASE ? AS source", [snapshot.snapshotPath]);
+          auditDb.exec("PRAGMA query_only = ON");
           options.afterSourceAttached?.(auditDb);
         }
         verifySourceCoherence(auditDb, sessionId);
@@ -490,22 +558,30 @@ export function migrateActorTranscriptsOffline(options: {
       if (!placement && central.hasSessionDurableState(sessionId)) {
         const targetPath = sessionKernelSessionDbPath(sessionId, isolatedRoot);
         if (!central.migrateLegacySession(sessionId, targetPath))
-          throw new Error(`Could not migrate legacy kernel placement for ${sessionId}`);
+          throw new Error(
+            `Could not migrate legacy kernel placement for ${sessionId}`,
+          );
         result.migratedLegacyKernel++;
         placement = central.sessionPlacement(sessionId);
       }
       if (!placement)
-        throw new Error(`Transcript session ${sessionId} has no migration placement`);
+        throw new Error(
+          `Transcript session ${sessionId} has no migration placement`,
+        );
       if (placement.placement !== "isolated")
-        throw new Error(`Transcript session ${sessionId} has invalid kernel placement`);
+        throw new Error(
+          `Transcript session ${sessionId} has invalid kernel placement`,
+        );
 
       const targetPath = sessionKernelSessionDbPath(sessionId, isolatedRoot);
       initializeActorTarget(targetPath, actorTemplatePath!);
       const target = new Database(targetPath);
       try {
         target.run("ATTACH DATABASE ? AS source", [snapshot.snapshotPath]);
+        target.exec("PRAGMA query_only = ON");
         options.afterSourceAttached?.(target);
         verifySourceCoherence(target, sessionId, totals);
+        target.exec("PRAGMA query_only = OFF");
         target.exec(`
           CREATE TABLE IF NOT EXISTS session_kernel_transcript_migrations (
             session_id TEXT PRIMARY KEY,
@@ -514,17 +590,24 @@ export function migrateActorTranscriptsOffline(options: {
           );
         `);
         const receipt = receiptFor(target, sessionId);
-        const existing = target.query(
-          "SELECT receipt FROM session_kernel_transcript_migrations WHERE session_id = ?",
-        ).get(sessionId) as { receipt: string } | null;
+        const existing = target
+          .query(
+            "SELECT receipt FROM session_kernel_transcript_migrations WHERE session_id = ?",
+          )
+          .get(sessionId) as { receipt: string } | null;
         if (existing && existing.receipt !== receipt)
-          throw new Error(`Session ${sessionId} target migration receipt conflict`);
+          throw new Error(
+            `Session ${sessionId} target migration receipt conflict`,
+          );
         if (totalsAreEmpty(totals)) verifyEmptyTarget(target, sessionId);
 
         if (!existing) {
           const copy = target.transaction(() => {
             for (const table of TABLES) {
-              target.run(`DELETE FROM main.${table.name} WHERE session_id = ?`, [sessionId]);
+              target.run(
+                `DELETE FROM main.${table.name} WHERE session_id = ?`,
+                [sessionId],
+              );
               target.run(
                 `INSERT INTO main.${table.name} (${table.columns})
                  SELECT ${table.columns} FROM source.${table.name} WHERE session_id = ?`,
@@ -571,10 +654,12 @@ export function migrateActorTranscriptsOffline(options: {
     if (options.dryRun) return result;
     for (const { sessionId } of verified) options.beforePublish?.(sessionId);
     central.publishActorTranscriptAuthorities(verified);
-    result.sessions = verified.map(({ sessionId, migrationReceipt: receipt }) => ({
-      sessionId,
-      receipt,
-    }));
+    result.sessions = verified.map(
+      ({ sessionId, migrationReceipt: receipt }) => ({
+        sessionId,
+        receipt,
+      }),
+    );
     return result;
   } finally {
     auditDb?.close();

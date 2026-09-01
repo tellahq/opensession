@@ -10,39 +10,41 @@ const KEY = "opensession-workspace-last-sessions";
 const MAX_ENTRIES = 200;
 
 function read(): Record<string, string> {
-	try {
-		const value: unknown = JSON.parse(localStorage.getItem(KEY) || "{}");
-		if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-		return Object.fromEntries(
-			Object.entries(value).filter(
-				(entry): entry is [string, string] => typeof entry[1] === "string",
-			),
-		);
-	} catch {
-		return {};
-	}
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(KEY) || "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(
+      Object.entries(value).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    );
+  } catch {
+    return {};
+  }
 }
 
 /** `undefined` means no session has been opened in this workspace on this device. */
-export function getWorkspaceLastSession(workspaceId: string): string | undefined {
-	return read()[workspaceId];
+export function getWorkspaceLastSession(
+  workspaceId: string,
+): string | undefined {
+  return read()[workspaceId];
 }
 
 export function saveWorkspaceLastSession(
-	workspaceId: string,
-	sessionId: string,
+  workspaceId: string,
+  sessionId: string,
 ): void {
-	if (!workspaceId || !sessionId) return;
-	const map = read();
-	if (map[workspaceId] === sessionId) return;
-	delete map[workspaceId];
-	map[workspaceId] = sessionId;
-	const ids = Object.keys(map);
-	for (const stale of ids.slice(0, Math.max(0, ids.length - MAX_ENTRIES)))
-		delete map[stale];
-	try {
-		localStorage.setItem(KEY, JSON.stringify(map));
-	} catch {
-		/* private mode / quota: landing just falls back to the default pick */
-	}
+  if (!workspaceId || !sessionId) return;
+  const map = read();
+  if (map[workspaceId] === sessionId) return;
+  delete map[workspaceId];
+  map[workspaceId] = sessionId;
+  const ids = Object.keys(map);
+  for (const stale of ids.slice(0, Math.max(0, ids.length - MAX_ENTRIES)))
+    delete map[stale];
+  try {
+    localStorage.setItem(KEY, JSON.stringify(map));
+  } catch {
+    /* private mode / quota: landing just falls back to the default pick */
+  }
 }

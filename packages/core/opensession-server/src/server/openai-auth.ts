@@ -13,7 +13,9 @@ function jwtExpMs(jwt: string): number | null {
   try {
     const payload = jwt.split(".")[1];
     if (!payload) return null;
-    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
+    const claims = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf-8"),
+    );
     return typeof claims.exp === "number" ? claims.exp * 1000 : null;
   } catch {
     return null;
@@ -36,7 +38,9 @@ export function pickOpenaiAccount(
 ): CodexAccount | { error: string } {
   const all = listCodexAccounts();
   if (!all.length) {
-    return { error: "no ChatGPT subscription or API-key accounts are configured" };
+    return {
+      error: "no ChatGPT subscription or API-key accounts are configured",
+    };
   }
   const allowedOwner = (account: CodexAccount) =>
     !account.owner || (!!user && userMatchesAny(user, [account.owner]));
@@ -50,7 +54,9 @@ export function pickOpenaiAccount(
     }
     if (strict) {
       const name = getCodexAccountById(pinnedId)?.name || pinnedId;
-      return { error: `pinned account ${name} is not currently usable (hard pin — not falling back to the pool)` };
+      return {
+        error: `pinned account ${name} is not currently usable (hard pin — not falling back to the pool)`,
+      };
     }
   }
   if (ids?.length) {
@@ -62,7 +68,9 @@ export function pickOpenaiAccount(
         return account;
       }
     }
-    return { error: `no designated ChatGPT account is usable (${ids.join(", ")})` };
+    return {
+      error: `no designated ChatGPT account is usable (${ids.join(", ")})`,
+    };
   }
   const picked = pickCodexAccount(
     exclude ? new Set(exclude) : undefined,
@@ -98,7 +106,9 @@ export function buildSeededOpenaiAuth(
     ? openaiSeedAuthPath(seedRoot, account.id)
     : `${account.value}/auth.json`;
   if (!existsSync(srcPath)) {
-    return { error: `ChatGPT account "${account.name}" has no auth.json at ${srcPath}` };
+    return {
+      error: `ChatGPT account "${account.name}" has no auth.json at ${srcPath}`,
+    };
   }
   let src: any;
   try {
@@ -119,7 +129,9 @@ export function buildSeededOpenaiAuth(
       ? src.openai.expires
       : jwtExpMs(access);
   if (expires !== null && expires <= Date.now()) {
-    return { error: `ChatGPT account "${account.name}" has an expired access token` };
+    return {
+      error: `ChatGPT account "${account.name}" has an expired access token`,
+    };
   }
   return {
     seeded: {
@@ -155,14 +167,21 @@ export function enableOpenaiFastMode<TModel>(agent: {
   agent.onPayload = async (payload, model) => {
     const transformed = await baseOnPayload?.(payload, model);
     const finalPayload = transformed ?? payload;
-    if (!finalPayload || typeof finalPayload !== "object" || Array.isArray(finalPayload)) {
+    if (
+      !finalPayload ||
+      typeof finalPayload !== "object" ||
+      Array.isArray(finalPayload)
+    ) {
       return finalPayload;
     }
     return { ...finalPayload, service_tier: "priority" };
   };
 }
 
-export function openaiSeedAuthPath(seedRoot: string, accountId: string): string {
+export function openaiSeedAuthPath(
+  seedRoot: string,
+  accountId: string,
+): string {
   return `${seedRoot}/${accountId}/auth.json`;
 }
 
@@ -199,7 +218,8 @@ export function buildOpenaiRemoteSeedUpload(
       id: account.id,
       name: account.name,
       kind: account.kind,
-      value: account.kind === "api_key" ? account.value : "opensession-remote-seed",
+      value:
+        account.kind === "api_key" ? account.value : "opensession-remote-seed",
       ...(account.owner ? { owner: account.owner } : {}),
       createdAt: account.createdAt,
     };
@@ -213,7 +233,10 @@ export function buildOpenaiRemoteSeedUpload(
       continue;
     }
     selected.push(projected);
-    seeds.push({ accountId: account.id, content: JSON.stringify(built.seeded) });
+    seeds.push({
+      accountId: account.id,
+      content: JSON.stringify(built.seeded),
+    });
   }
   return { accounts: selected, seeds, skipped };
 }

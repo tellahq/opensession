@@ -58,13 +58,17 @@ interface TermEntry {
 const g = globalThis as any;
 /** ws → termId → live shell. (New globalThis key since the multi-tab change:
  *  the old __opensessionTerminals map was flat ws → entry.) */
-const terms: Map<unknown, Map<string, TermEntry>> = (g.__opensessionTerminalsById ??=
-  new Map());
+const terms: Map<
+  unknown,
+  Map<string, TermEntry>
+> = (g.__opensessionTerminalsById ??= new Map());
 /** In-flight async starts (ws → termId → generation token): a stop or
  *  re-start that lands while a sandbox target is still resolving cancels the
  *  stale one. */
-const pendingStarts: Map<unknown, Map<string, object>> = (g.__opensessionTermPendingById ??=
-  new Map());
+const pendingStarts: Map<
+  unknown,
+  Map<string, object>
+> = (g.__opensessionTermPendingById ??= new Map());
 
 /** Bound accidental PTY pile-up per client (each shell tab is one PTY). */
 const MAX_TERMINALS_PER_SOCKET = 8;
@@ -97,12 +101,12 @@ function deletePending(ws: unknown, termId: string): void {
 
 /** The slice of UnifiedSession / the session file the terminal target needs. */
 export interface TerminalSessionInfo {
-	id?: string;
-	repo?: string | null;
-	createdBy?: string | null;
-	worktreeDir?: string | null;
-	sandbox?: { provider?: string; sandboxId?: string; workspace?: string };
-	runner?: { id: string; workspacePath: string };
+  id?: string;
+  repo?: string | null;
+  createdBy?: string | null;
+  worktreeDir?: string | null;
+  sandbox?: { provider?: string; sandboxId?: string; workspace?: string };
+  runner?: { id: string; workspacePath: string };
 }
 
 export interface TerminalOpts {
@@ -111,7 +115,13 @@ export interface TerminalOpts {
   send: (msg: object) => void;
 }
 
-type TermTargetKind = "host" | "docker" | "daytona" | "box" | "microvm" | "runner";
+type TermTargetKind =
+  | "host"
+  | "docker"
+  | "daytona"
+  | "box"
+  | "microvm"
+  | "runner";
 
 /** A shell realized as a host process wrapped in a Bun PTY (host, docker, or
  * an SSH transport such as Box). */
@@ -161,14 +171,18 @@ function clampRows(rows: number | undefined): number {
  */
 async function sharedSshAgentEnv(): Promise<Record<string, string>> {
   if (process.env.SSH_AUTH_SOCK) return {}; // service already has one — inherit
-  const cur: { sock: string; pid: number } | undefined = g.__opensessionTermSshAgent;
+  const cur: { sock: string; pid: number } | undefined =
+    g.__opensessionTermSshAgent;
   if (cur && existsSync(cur.sock)) {
     try {
       process.kill(cur.pid, 0);
       return { SSH_AUTH_SOCK: cur.sock, SSH_AGENT_PID: String(cur.pid) };
     } catch {}
   }
-  const proc = Bun.spawn(["ssh-agent", "-s"], { stdout: "pipe", stderr: "ignore" });
+  const proc = Bun.spawn(["ssh-agent", "-s"], {
+    stdout: "pipe",
+    stderr: "ignore",
+  });
   const out = await new Response(proc.stdout).text();
   await proc.exited;
   const sock = out.match(/SSH_AUTH_SOCK=([^;\s]+)/)?.[1];
@@ -178,11 +192,23 @@ async function sharedSshAgentEnv(): Promise<Record<string, string>> {
   return { SSH_AUTH_SOCK: sock, SSH_AGENT_PID: String(pid) };
 }
 
-function hostShellTarget(session: TerminalSessionInfo | null | undefined, notice?: string): SpawnTarget {
+function hostShellTarget(
+  session: TerminalSessionInfo | null | undefined,
+  notice?: string,
+): SpawnTarget {
   const shell = process.env.SHELL || "/bin/zsh";
   const cwd =
-    session?.worktreeDir && existsSync(session.worktreeDir) ? session.worktreeDir : HOME;
-  return { kind: "spawn", argv: [shell, "-il"], cwd, target: "host", displayCwd: cwd, notice };
+    session?.worktreeDir && existsSync(session.worktreeDir)
+      ? session.worktreeDir
+      : HOME;
+  return {
+    kind: "spawn",
+    argv: [shell, "-il"],
+    cwd,
+    target: "host",
+    displayCwd: cwd,
+    notice,
+  };
 }
 
 /**
@@ -194,35 +220,62 @@ function hostShellTarget(session: TerminalSessionInfo | null | undefined, notice
 async function resolveTarget(
   session: TerminalSessionInfo | null | undefined,
 ): Promise<TermTarget> {
-	if (session?.runner && session.id && session.repo) {
-		const runner = session.runner;
-		const { openRunnerTerminal, registerRunnerTerminalHandler, resizeRunnerTerminal, stopRunnerTerminal, writeRunnerTerminal } = await import("./runner-ws");
-		return {
-			kind: "remote",
-			target: "runner",
-			displayCwd: runner.workspacePath,
-			connect: async (io) => {
-				const opened = await openRunnerTerminal({ runnerId: runner.id, sessionId: session.id!, repo: session.repo!, workspacePath: runner.workspacePath, user: session.createdBy || undefined, cols: io.cols, rows: io.rows });
-				const detach = registerRunnerTerminalHandler((runnerId, message) => {
-					if (runnerId !== runner.id || message.id !== opened.terminalId) return;
-					if (message.t === "terminal_data" && typeof message.data === "string") io.onData(Buffer.from(message.data, "base64"));
-					else if (message.t === "terminal_exit") io.onExit(typeof message.code === "number" ? message.code : 0);
-				});
-				return {
-					write: (data) => writeRunnerTerminal(runner.id, opened.terminalId, Buffer.from(data).toString("base64")),
-					resize: (cols, rows) => resizeRunnerTerminal(runner.id, opened.terminalId, cols, rows),
-					close: async () => { detach(); stopRunnerTerminal(runner.id, opened.terminalId); },
-				};
-			},
-		};
-	}
+  if (session?.runner && session.id && session.repo) {
+    const runner = session.runner;
+    const {
+      openRunnerTerminal,
+      registerRunnerTerminalHandler,
+      resizeRunnerTerminal,
+      stopRunnerTerminal,
+      writeRunnerTerminal,
+    } = await import("./runner-ws");
+    return {
+      kind: "remote",
+      target: "runner",
+      displayCwd: runner.workspacePath,
+      connect: async (io) => {
+        const opened = await openRunnerTerminal({
+          runnerId: runner.id,
+          sessionId: session.id!,
+          repo: session.repo!,
+          workspacePath: runner.workspacePath,
+          user: session.createdBy || undefined,
+          cols: io.cols,
+          rows: io.rows,
+        });
+        const detach = registerRunnerTerminalHandler((runnerId, message) => {
+          if (runnerId !== runner.id || message.id !== opened.terminalId)
+            return;
+          if (message.t === "terminal_data" && typeof message.data === "string")
+            io.onData(Buffer.from(message.data, "base64"));
+          else if (message.t === "terminal_exit")
+            io.onExit(typeof message.code === "number" ? message.code : 0);
+        });
+        return {
+          write: (data) =>
+            writeRunnerTerminal(
+              runner.id,
+              opened.terminalId,
+              Buffer.from(data).toString("base64"),
+            ),
+          resize: (cols, rows) =>
+            resizeRunnerTerminal(runner.id, opened.terminalId, cols, rows),
+          close: async () => {
+            detach();
+            stopRunnerTerminal(runner.id, opened.terminalId);
+          },
+        };
+      },
+    };
+  }
   const sb = session?.sandbox;
   if (!sb?.sandboxId || !sb.provider || sb.provider === "local") {
     return hostShellTarget(session);
   }
   const cwd = session?.worktreeDir || HOME;
   try {
-    const { sandboxesEnabled, sandboxProviderConfigured } = await import("./sandbox/config");
+    const { sandboxesEnabled, sandboxProviderConfigured } =
+      await import("./sandbox/config");
     if (!sandboxesEnabled()) return hostShellTarget(session); // kill-switch
 
     if (sb.provider === "docker" && sandboxProviderConfigured("docker")) {
@@ -246,11 +299,16 @@ async function resolveTarget(
       return {
         kind: "spawn",
         argv: [
-          "docker", "exec", "-it",
-          "-e", "TERM=xterm-256color",
-          "-w", cwd,
+          "docker",
+          "exec",
+          "-it",
+          "-e",
+          "TERM=xterm-256color",
+          "-w",
+          cwd,
           sb.sandboxId,
-          "bash", "-il",
+          "bash",
+          "-il",
         ],
         target: "docker",
         displayCwd: cwd,
@@ -293,17 +351,6 @@ async function resolveTarget(
         ],
       };
     }
-
-    if (sb.provider === "microvm" && sandboxProviderConfigured("microvm")) {
-      const { microvmPtySession } = await import("./sandbox/adapters/microvm");
-      const sandboxId = sb.sandboxId;
-      return {
-        kind: "remote",
-        target: "microvm",
-        displayCwd: cwd,
-        connect: (io) => microvmPtySession(sandboxId, cwd, io),
-      };
-    }
   } catch (e: any) {
     return hostShellTarget(
       session,
@@ -315,7 +362,7 @@ async function resolveTarget(
 
 /**
  * Session-aware terminal start (the term_start WS handler's entry): resolves
- * the target (host / docker / Daytona / Box / MicroVM) and connects the shell
+ * the target (host / Docker / Daytona / Box) and connects the shell
  * for one (socket, termId) pair. Async because sandbox resolution can take
  * seconds (container wake, remote PTY connect) — a term_stop or another
  * term_start for the same termId racing in cancels it.
@@ -350,7 +397,8 @@ export async function startSessionTerminal(
     try {
       opts.send({
         type: "term_notice",
-        message: "still connecting to the sandbox shell… (sandbox may be waking up)",
+        message:
+          "still connecting to the sandbox shell… (sandbox may be waking up)",
       });
     } catch {}
   }, 8_000);
@@ -366,7 +414,10 @@ export async function startSessionTerminal(
       } catch (e: any) {
         if (target.target === "runner") {
           deletePending(ws, termId);
-          opts.send({ type: "term_notice", message: `Runner terminal unavailable (${String(e?.message || e).slice(0, 160)})` });
+          opts.send({
+            type: "term_notice",
+            message: `Runner terminal unavailable (${String(e?.message || e).slice(0, 160)})`,
+          });
           opts.send({ type: "term_exit", code: 1 });
           return;
         }
@@ -441,11 +492,20 @@ async function connectRemote(
   }
   deletePending(ws, termId);
   setTerm(ws, termId, entry);
-  opts.send({ type: "term_ready", target: target.target, cwd: target.displayCwd });
+  opts.send({
+    type: "term_ready",
+    target: target.target,
+    cwd: target.displayCwd,
+  });
   if (target.notice) opts.send({ type: "term_notice", message: target.notice });
 }
 
-function spawnPty(ws: unknown, termId: string, target: SpawnTarget, opts: TerminalOpts): void {
+function spawnPty(
+  ws: unknown,
+  termId: string,
+  target: SpawnTarget,
+  opts: TerminalOpts,
+): void {
   const proc = Bun.spawn(target.argv, {
     cwd: target.cwd,
     env: { ...process.env, TERM: "xterm-256color", ...target.env },
@@ -493,11 +553,19 @@ function spawnPty(ws: unknown, termId: string, target: SpawnTarget, opts: Termin
   });
 
   setTerm(ws, termId, entry);
-  opts.send({ type: "term_ready", target: target.target, cwd: target.displayCwd });
+  opts.send({
+    type: "term_ready",
+    target: target.target,
+    cwd: target.displayCwd,
+  });
   if (target.notice) opts.send({ type: "term_notice", message: target.notice });
 }
 
-export function writeTerminal(ws: unknown, termId: string, dataB64: string): void {
+export function writeTerminal(
+  ws: unknown,
+  termId: string,
+  dataB64: string,
+): void {
   const t = terms.get(ws)?.get(termId);
   if (!t) return;
   try {
@@ -505,7 +573,12 @@ export function writeTerminal(ws: unknown, termId: string, dataB64: string): voi
   } catch {}
 }
 
-export function resizeTerminal(ws: unknown, termId: string, cols: number, rows: number): void {
+export function resizeTerminal(
+  ws: unknown,
+  termId: string,
+  cols: number,
+  rows: number,
+): void {
   const t = terms.get(ws)?.get(termId);
   if (!t || !cols || !rows) return;
   try {

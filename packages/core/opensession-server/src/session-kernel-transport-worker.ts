@@ -28,7 +28,10 @@ function sessionKernelToken(): Promise<string> {
 
 class RetryableTransportError extends Error {
   readonly retryable = true;
-  constructor(message: string, readonly incarnationChanged = false) {
+  constructor(
+    message: string,
+    readonly incarnationChanged = false,
+  ) {
     super(message);
     this.name = "RetryableTransportError";
   }
@@ -56,7 +59,10 @@ async function exchange(
     const token = await sessionKernelToken();
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
       body,
       signal: AbortSignal.timeout(8_000),
     });
@@ -75,12 +81,18 @@ async function exchange(
     try {
       result = JSON.parse(text) as KernelActorServiceResponse;
     } catch {
-      throw new RetryableTransportError("Session kernel service returned malformed JSON");
+      throw new RetryableTransportError(
+        "Session kernel service returned malformed JSON",
+      );
     }
     if (!result || result.rpcId !== request.rpcId)
-      throw new RetryableTransportError("Session kernel service returned an invalid response");
+      throw new RetryableTransportError(
+        "Session kernel service returned an invalid response",
+      );
     if (!result.serviceEpoch)
-      throw new RetryableTransportError("Session kernel service omitted its incarnation fence");
+      throw new RetryableTransportError(
+        "Session kernel service omitted its incarnation fence",
+      );
     if (epoch && result.serviceEpoch !== epoch)
       throw new RetryableTransportError(
         "Session kernel service returned a stale incarnation response",
@@ -89,7 +101,10 @@ async function exchange(
     return result;
   } catch (error) {
     if (error instanceof RetryableTransportError) throw error;
-    if (error instanceof Error && /credential|request is too large/i.test(error.message))
+    if (
+      error instanceof Error &&
+      /credential|request is too large/i.test(error.message)
+    )
       throw error;
     throw new RetryableTransportError(
       `Session kernel service request failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -109,9 +124,13 @@ async function ensureHandshake(): Promise<void> {
       undefined,
     );
     if (result.t !== "ready" || !result.serviceEpoch)
-      throw new RetryableTransportError("Session kernel service omitted its incarnation fence");
+      throw new RetryableTransportError(
+        "Session kernel service omitted its incarnation fence",
+      );
     serviceEpoch = result.serviceEpoch;
-  })().finally(() => { handshakePromise = undefined; });
+  })().finally(() => {
+    handshakePromise = undefined;
+  });
   return handshakePromise;
 }
 
@@ -121,7 +140,9 @@ async function rpc(
   if (request.t === "hello") {
     const result = await exchange(request, undefined);
     if (result.t !== "ready" || !result.serviceEpoch)
-      throw new RetryableTransportError("Session kernel service omitted its incarnation fence");
+      throw new RetryableTransportError(
+        "Session kernel service omitted its incarnation fence",
+      );
     serviceEpoch = result.serviceEpoch;
     return result;
   }
@@ -143,9 +164,7 @@ async function rpc(
 const ASYNC_DEFAULT_OUTPUT_BYTES = 8 * 1024 * 1024;
 const ASYNC_MAX_OUTPUT_BYTES = 128 * 1024 * 1024;
 
-self.onmessage = (
-  event: MessageEvent<KernelActorClientRequest>,
-) => {
+self.onmessage = (event: MessageEvent<KernelActorClientRequest>) => {
   const request = event.data;
   if (request.t === "store" || request.t === "reduce") {
     // Every gateway call carries an rpcId and settles asynchronously.
@@ -172,9 +191,10 @@ self.onmessage = (
             } satisfies KernelActorAsyncResponse);
             return;
           }
-          const retryableRead = request.t === "reduce"
-            ? isReadReducer(request.command)
-            : READ_METHODS.has(request.method);
+          const retryableRead =
+            request.t === "reduce"
+              ? isReadReducer(request.command)
+              : READ_METHODS.has(request.method);
           if (
             retryableRead &&
             response.status === 2 &&

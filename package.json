@@ -2,41 +2,40 @@
   "name": "opensession",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "bun@1.4.0",
   "description": "Open Session — self-hosted agent session dashboard: run, watch, and steer AI coding sessions from the web UI, Slack, and native clients",
+  "homepage": "https://opensession.com",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tellahq/opensession.git"
   },
-  "homepage": "https://opensession.com",
-  "workspaces": [
-    "packages/clients/website",
-    "packages/core/opensession-server",
-    "packages/core/protocol"
-  ],
   "bin": {
     "opensession": "scripts/cli.ts"
   },
+  "workspaces": [
+    "packages/clients/website",
+    "packages/core/opensession-server",
+    "packages/core/protocol",
+    "packages/integrations/apple-mobile"
+  ],
   "scripts": {
     "app:dev": "bun scripts/app-dev.ts",
     "bench:memory": "bun scripts/memory-bench.ts",
+    "check": "bun run format:check && bun run typecheck && bun run lint && scripts/test-unit-isolated.sh && bun run test:snapshots",
     "dev": "bun --hot packages/core/opensession-server/opensession.ts",
+    "format": "oxfmt",
+    "format:check": "bun scripts/check-format.ts",
     "opensession": "bun scripts/cli.ts",
     "setup": "bun scripts/cli.ts onboard",
     "start": "bun packages/core/opensession-server/opensession.ts",
     "test": "bun test packages/core/opensession-server/src scripts",
-    "test:snapshots": "OPENSESSION_SNAPSHOT_STRICT=1 bun test packages/core/opensession-server/src/server/zz-snapshot-runs.test.ts",
+    "test:snapshots": "OPENSESSION_EXECUTOR=0 OPENSESSION_TEST_IN_PROCESS_RUNS=1 OPENSESSION_SNAPSHOT_STRICT=1 bun test packages/core/opensession-server/src/server/zz-snapshot-runs.test.ts",
+    "test:transcript-scroll": "bun packages/core/opensession-server/src/frontend/tools/transcript-scroll-regression.ts",
     "lint": "bun run check:compiler && oxlint packages/core/opensession-server/src/frontend",
     "check:compiler": "bun scripts/check-react-compiler.ts",
     "typecheck": "tsc --noEmit",
     "website:build": "bun --cwd packages/clients/website build",
     "website:dev": "bun --cwd packages/clients/website dev"
-  },
-  "patchedDependencies": {
-    "@base-ui/react@1.6.0": "patches/@base-ui%2Freact@1.6.0.patch",
-    "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
-    "@stylexjs/stylex@0.19.0": "patches/@stylexjs%2Fstylex@0.19.0.patch"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.104",
@@ -88,6 +87,14 @@
     "@types/web-push": "^3.6.4",
     "agentation": "^3.0.2",
     "oxc-transform-react": "^0.147.0",
-    "oxlint": "^1.80.0"
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0",
+    "tailwindcss": "^4.3.2"
+  },
+  "packageManager": "bun@1.4.0",
+  "patchedDependencies": {
+    "@base-ui/react@1.6.0": "patches/@base-ui%2Freact@1.6.0.patch",
+    "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
+    "@stylexjs/stylex@0.19.0": "patches/@stylexjs%2Fstylex@0.19.0.patch"
   }
 }

@@ -1,24 +1,24 @@
 import { expect, test } from "bun:test";
 import {
-	registerTranscriptVirtualNavigation,
-	scrollToVirtualTranscriptEntry,
+  registerTranscriptVirtualNavigation,
+  scrollToVirtualTranscriptEntry,
 } from "./transcript-virtual-navigation";
 
 test("virtual transcript navigation is scoped to one scroll container", () => {
-	const first = {} as HTMLElement;
-	const second = {} as HTMLElement;
-	const seen: string[] = [];
-	const unregister = registerTranscriptVirtualNavigation(first, {
-		scrollToEntry(entryId) {
-			seen.push(entryId);
-			return true;
-		},
-	});
+  const first = {} as HTMLElement;
+  const second = {} as HTMLElement;
+  const seen: string[] = [];
+  const unregister = registerTranscriptVirtualNavigation(first, {
+    scrollToEntry(entryId) {
+      seen.push(entryId);
+      return true;
+    },
+  });
 
-	expect(scrollToVirtualTranscriptEntry(first, "message-1")).toBe(true);
-	expect(scrollToVirtualTranscriptEntry(second, "message-1")).toBe(false);
-	expect(seen).toEqual(["message-1"]);
+  expect(scrollToVirtualTranscriptEntry(first, "message-1")).toBe(true);
+  expect(scrollToVirtualTranscriptEntry(second, "message-1")).toBe(false);
+  expect(seen).toEqual(["message-1"]);
 
-	unregister();
-	expect(scrollToVirtualTranscriptEntry(first, "message-2")).toBe(false);
+  unregister();
+  expect(scrollToVirtualTranscriptEntry(first, "message-2")).toBe(false);
 });

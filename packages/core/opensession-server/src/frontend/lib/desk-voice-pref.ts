@@ -5,12 +5,12 @@
 import { makeUserPref } from "./user-pref";
 
 const pref = makeUserPref<boolean>({
-	localKey: "opensession-desk-voice",
-	prefKey: "desk-voice",
-	changeEvent: "opensession-desk-voice-changed",
-	defaultValue: false,
-	decode: (v) => (v === "on" ? true : v === "off" ? false : null),
-	encode: (on) => (on ? "on" : "off"),
+  localKey: "opensession-desk-voice",
+  prefKey: "desk-voice",
+  changeEvent: "opensession-desk-voice-changed",
+  defaultValue: false,
+  decode: (v) => (v === "on" ? true : v === "off" ? false : null),
+  encode: (on) => (on ? "on" : "off"),
 });
 
 export const getDeskVoicePref = pref.get;

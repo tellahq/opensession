@@ -15,31 +15,31 @@ const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/title-overrides.json`;
 let cache: Record<string, string> | null = null;
 
 function load(): Record<string, string> {
-	if (cache) return cache;
-	try {
-		cache = existsSync(REGISTRY_PATH)
-			? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
-			: {};
-	} catch {
-		cache = {};
-	}
-	return cache!;
+  if (cache) return cache;
+  try {
+    cache = existsSync(REGISTRY_PATH)
+      ? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
+      : {};
+  } catch {
+    cache = {};
+  }
+  return cache!;
 }
 
 function save(registry: Record<string, string>): void {
-	cache = registry;
-	writeJsonAtomic(REGISTRY_PATH, registry);
+  cache = registry;
+  writeJsonAtomic(REGISTRY_PATH, registry);
 }
 
 export function getTitleOverride(id: string): string | undefined {
-	return load()[id];
+  return load()[id];
 }
 
 /** Set (non-empty) or clear (empty/null) the manual title for a session id. */
 export function setTitleOverride(id: string, title: string | null): void {
-	const registry = { ...load() };
-	const trimmed = title?.trim();
-	if (trimmed) registry[id] = trimmed;
-	else delete registry[id];
-	save(registry);
+  const registry = { ...load() };
+  const trimmed = title?.trim();
+  if (trimmed) registry[id] = trimmed;
+  else delete registry[id];
+  save(registry);
 }

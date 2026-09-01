@@ -4,44 +4,62 @@
  * query strings (they can embed tokens) or env values.
  */
 import { homeDir } from "./paths";
-import { existsSync, readFileSync, copyFileSync, watchFile } from "fs";
+import {
+  existsSync,
+  readFileSync,
+  copyFileSync,
+  unwatchFile,
+  watchFile,
+} from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { configuredPaths } from "./config";
-import { mcpOauthStatus, mcpSharedGrantHeader, mcpUserGrantHeader, mcpUserGrantToken, oauthPresetFor } from "./mcp-oauth";
+import {
+  mcpOauthStatus,
+  mcpSharedGrantHeader,
+  mcpUserGrantHeader,
+  mcpUserGrantToken,
+  oauthPresetFor,
+  supportsManualToken,
+} from "./mcp-oauth";
 
 const HOME = homeDir();
-// mcp-config.json location. OPENSESSION_MCP_CONFIG env → config
-// `paths.mcpConfig` → this repo's checkout — unchanged when neither is set.
-const CONFIG_PATH = configuredPaths().mcpConfig;
 
-// Cache the parsed MCP config with file-watcher invalidation
+// Cache the parsed MCP config with file-watcher invalidation. Resolve the path
+// per access so a live config reload cannot retain the watcher or cached value
+// for a previously configured path.
 let cachedMcpConfig: { mcpServers: Record<string, any> } | null = null;
-let cacheWatcherSetUp = false;
+let cachedMcpConfigPath: string | null = null;
+let watchedMcpConfigPath: string | null = null;
 
-function setupCacheWatcher() {
-  if (cacheWatcherSetUp) return;
-  cacheWatcherSetUp = true;
+function setupCacheWatcher(configPath: string) {
+  if (watchedMcpConfigPath === configPath) return;
+  if (watchedMcpConfigPath) unwatchFile(watchedMcpConfigPath);
+  watchedMcpConfigPath = configPath;
   try {
-    watchFile(CONFIG_PATH, () => {
+    watchFile(configPath, () => {
       cachedMcpConfig = null;
       console.log("[mcp-cache] config changed, invalidating cache");
     });
   } catch (e) {
+    watchedMcpConfigPath = null;
     console.warn("[mcp-cache] failed to set up file watcher:", e);
   }
 }
 
 export function readMcpConfig(): { mcpServers: Record<string, any> } {
-  if (!cacheWatcherSetUp) setupCacheWatcher();
-  if (cachedMcpConfig) return cachedMcpConfig;
+  const configPath = configuredPaths().mcpConfig;
+  setupCacheWatcher(configPath);
+  if (cachedMcpConfig && cachedMcpConfigPath === configPath)
+    return cachedMcpConfig;
 
   try {
-    cachedMcpConfig = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as {
+    cachedMcpConfig = JSON.parse(readFileSync(configPath, "utf-8")) as {
       mcpServers: Record<string, any>;
     };
   } catch {
     cachedMcpConfig = { mcpServers: {} };
   }
+  cachedMcpConfigPath = configPath;
   return cachedMcpConfig;
 }
 
@@ -65,14 +83,22 @@ export function withDynamicCredentials(
   const linear = servers.linear;
   if (linear?.url?.includes("mcp.linear.app")) {
     try {
-      const tokens = JSON.parse(readFileSync(LINEAR_AGENT_TOKENS_PATH, "utf-8"));
+      const tokens = JSON.parse(
+        readFileSync(LINEAR_AGENT_TOKENS_PATH, "utf-8"),
+      );
       const t: any = Object.values(tokens)[0];
-      if (t?.accessToken && (!t.expiresAt || t.expiresAt > Date.now() + 60_000)) {
+      if (
+        t?.accessToken &&
+        (!t.expiresAt || t.expiresAt > Date.now() + 60_000)
+      ) {
         out = {
           ...out,
           linear: {
             ...linear,
-            headers: { ...linear.headers, Authorization: `Bearer ${t.accessToken}` },
+            headers: {
+              ...linear.headers,
+              Authorization: `Bearer ${t.accessToken}`,
+            },
           },
         };
       }
@@ -112,9 +138,8 @@ export function withDynamicCredentials(
         (u): u is string => !!u,
       );
       const header =
-        candidates
-          .map((u) => mcpUserGrantHeader(name, u))
-          .find((h) => !!h) ?? mcpSharedGrantHeader(name);
+        candidates.map((u) => mcpUserGrantHeader(name, u)).find((h) => !!h) ??
+        mcpSharedGrantHeader(name);
       if (!header) continue;
       out = {
         ...out,
@@ -128,11 +153,14 @@ export function withDynamicCredentials(
 }
 
 function writeMcpConfig(config: { mcpServers: Record<string, any> }): void {
+  const configPath = configuredPaths().mcpConfig;
   // Keep one backup so a bad edit is always recoverable
   try {
-    copyFileSync(CONFIG_PATH, `${CONFIG_PATH}.bak`);
+    copyFileSync(configPath, `${configPath}.bak`);
   } catch {}
-  writeFileAtomic(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
+  writeFileAtomic(configPath, JSON.stringify(config, null, 2) + "\n");
+  cachedMcpConfig = config;
+  cachedMcpConfigPath = configPath;
   cache = null;
 }
 
@@ -157,15 +185,39 @@ export interface AddMcpInput {
 function cleanAllowedUsers(users?: string[]): string[] | undefined {
   if (!Array.isArray(users)) return undefined;
   const out = Array.from(
-    new Set(users.map((u) => (u || "").trim()).filter(Boolean))
+    new Set(users.map((u) => (u || "").trim()).filter(Boolean)),
   );
   return out.length ? out : undefined;
 }
 
-export function addMcpServer(input: AddMcpInput): { ok: true } | { error: string } {
+/** Credentialed first-party release tools must never become fleet-wide. */
+export function requiresAllowedUsers(name: string): boolean {
+  return name.trim().toLowerCase() === "apple-release";
+}
+
+export function hasValidRequiredAllowedUsers(
+  value: unknown,
+): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((user) => typeof user === "string" && Boolean(user.trim()))
+  );
+}
+
+export function addMcpServer(
+  input: AddMcpInput,
+): { ok: true } | { error: string } {
   const name = (input.name || "").trim();
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(name)) {
     return { error: "Name must be alphanumeric (dashes/underscores allowed)" };
+  }
+
+  const allowedUsers = cleanAllowedUsers(input.allowedUsers);
+  if (requiresAllowedUsers(name) && !allowedUsers) {
+    return {
+      error: 'Server "apple-release" requires at least one allowed user',
+    };
   }
 
   const config = readMcpConfig();
@@ -195,7 +247,6 @@ export function addMcpServer(input: AddMcpInput): { ok: true } | { error: string
     if (Object.keys(env).length > 0) entry.env = env;
   }
 
-  const allowedUsers = cleanAllowedUsers(input.allowedUsers);
   if (allowedUsers) entry.allowedUsers = allowedUsers;
 
   config.mcpServers[name] = entry;
@@ -218,18 +269,23 @@ export function addMcpServer(input: AddMcpInput): { ok: true } | { error: string
 export function addMcpServerEntry(
   name: string,
   entry: Record<string, unknown>,
-  opts: { allowedUsers?: string[] } = {}
+  opts: { allowedUsers?: string[] } = {},
 ): { ok: true } | { error: string } {
   const clean = (name || "").trim();
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(clean)) {
     return { error: "Name must be alphanumeric (dashes/underscores allowed)" };
+  }
+  const allowedUsers = cleanAllowedUsers(opts.allowedUsers);
+  if (requiresAllowedUsers(clean) && !allowedUsers) {
+    return {
+      error: 'Server "apple-release" requires at least one allowed user',
+    };
   }
   const config = readMcpConfig();
   if (config.mcpServers[clean]) {
     return { error: `Server "${clean}" already exists, remove it first` };
   }
   const { allowedUsers: _ignored, ...rest } = entry;
-  const allowedUsers = cleanAllowedUsers(opts.allowedUsers);
   config.mcpServers[clean] = allowedUsers ? { ...rest, allowedUsers } : rest;
   writeMcpConfig(config);
   return { ok: true };
@@ -242,19 +298,50 @@ export function addMcpServerEntry(
  */
 export function setMcpAllowedUsers(
   name: string,
-  allowedUsers?: string[]
+  allowedUsers?: string[],
 ): { ok: true; allowedUsers?: string[] } | { error: string } {
   const config = readMcpConfig();
   const entry = config.mcpServers[name];
   if (!entry) return { error: `Server "${name}" not found` };
   const cleaned = cleanAllowedUsers(allowedUsers);
+  if (requiresAllowedUsers(name) && !cleaned) {
+    return {
+      error: 'Server "apple-release" requires at least one allowed user',
+    };
+  }
   if (cleaned) entry.allowedUsers = cleaned;
   else delete entry.allowedUsers;
   writeMcpConfig(config);
   return { ok: true, allowedUsers: cleaned };
 }
 
-export function removeMcpServer(name: string): { ok: true } | { error: string } {
+export function replaceMcpServerEntries(
+  updates: Record<string, Record<string, unknown> | undefined>,
+): { ok: true } | { error: string } {
+  const config = readMcpConfig();
+  for (const [name, entry] of Object.entries(updates)) {
+    const allowedUsers = cleanAllowedUsers(
+      Array.isArray(entry?.allowedUsers)
+        ? (entry.allowedUsers as string[])
+        : undefined,
+    );
+    if (entry && requiresAllowedUsers(name) && !allowedUsers) {
+      return {
+        error: `Server "${name}" requires at least one allowed user`,
+      };
+    }
+  }
+  for (const [name, entry] of Object.entries(updates)) {
+    if (entry) config.mcpServers[name] = entry;
+    else delete config.mcpServers[name];
+  }
+  writeMcpConfig(config);
+  return { ok: true };
+}
+
+export function removeMcpServer(
+  name: string,
+): { ok: true } | { error: string } {
   const config = readMcpConfig();
   if (!config.mcpServers[name]) return { error: `Server "${name}" not found` };
   delete config.mcpServers[name];
@@ -267,7 +354,13 @@ export interface McpConnection {
   transport: "http" | "stdio";
   target: string; // sanitized: origin+path for http, command for stdio
   envKeys: string[];
-  status: "connected" | "ready" | "needs-env" | "needs-auth" | "unreachable" | "missing";
+  status:
+    | "connected"
+    | "ready"
+    | "needs-env"
+    | "needs-auth"
+    | "unreachable"
+    | "missing";
   detail?: string;
   /** Per-user allowlist, if this server is restricted (empty/absent = everyone). */
   allowedUsers?: string[];
@@ -286,7 +379,7 @@ export async function getConnections(force = false): Promise<McpConnection[]> {
       const allowedUsers = cleanAllowedUsers(cfg?.allowedUsers);
       if (allowedUsers) conn.allowedUsers = allowedUsers;
       return conn;
-    })
+    }),
   );
 
   cache = { data: results, ts: Date.now() };
@@ -308,7 +401,10 @@ async function checkServer(name: string, cfg: any): Promise<McpConnection> {
       const timer = setTimeout(() => controller.abort(), 4000);
       // Any HTTP response (incl. 401/405) means the endpoint is up;
       // MCP servers typically reject bare GETs but still answer.
-      const res = await fetch(cfg.url, { method: "GET", signal: controller.signal });
+      const res = await fetch(cfg.url, {
+        method: "GET",
+        signal: controller.signal,
+      });
       clearTimeout(timer);
       // Reachable, but an OAuth-protected server with no grant and no static
       // Authorization header isn't usable yet — surface "Sign in required"
@@ -319,6 +415,16 @@ async function checkServer(name: string, cfg: any): Promise<McpConnection> {
         try {
           const st = mcpOauthStatus(name);
           if (!st.shared && st.users.length === 0) {
+            if (supportsManualToken(name)) {
+              return {
+                name,
+                transport: "http",
+                target,
+                envKeys: Object.keys(cfg.env || {}),
+                status: "needs-auth",
+                detail: "API token required. Connect from this card's menu",
+              };
+            }
             const pr = await fetch(
               `${new URL(cfg.url).origin}/.well-known/oauth-protected-resource`,
               { signal: AbortSignal.timeout(3000) },
@@ -330,7 +436,8 @@ async function checkServer(name: string, cfg: any): Promise<McpConnection> {
                 target,
                 envKeys: Object.keys(cfg.env || {}),
                 status: "needs-auth",
-                detail: "OAuth sign-in required — Connect from this card's menu",
+                detail:
+                  "OAuth sign-in required — Connect from this card's menu",
               };
             }
           }
@@ -351,7 +458,10 @@ async function checkServer(name: string, cfg: any): Promise<McpConnection> {
         target,
         envKeys: Object.keys(cfg.env || {}),
         status: "unreachable",
-        detail: e.name === "AbortError" ? "timeout" : (e.message || "fetch failed").slice(0, 80),
+        detail:
+          e.name === "AbortError"
+            ? "timeout"
+            : (e.message || "fetch failed").slice(0, 80),
       };
     }
   }
@@ -367,7 +477,14 @@ async function checkServer(name: string, cfg: any): Promise<McpConnection> {
   const pathsToCheck = [command, ...args].filter((p) => p.startsWith("/"));
   const missing = pathsToCheck.find((p) => !existsSync(p));
   if (missing) {
-    return { name, transport: "stdio", target, envKeys, status: "missing", detail: `not found: ${missing}` };
+    return {
+      name,
+      transport: "stdio",
+      target,
+      envKeys,
+      status: "missing",
+      detail: `not found: ${missing}`,
+    };
   }
 
   const missingEnv = envKeys.filter((k) => {
@@ -378,7 +495,10 @@ async function checkServer(name: string, cfg: any): Promise<McpConnection> {
   });
   if (missingEnv.length > 0) {
     return {
-      name, transport: "stdio", target, envKeys,
+      name,
+      transport: "stdio",
+      target,
+      envKeys,
       status: "needs-env",
       detail: `missing: ${missingEnv.join(", ")}`,
     };

@@ -1,6 +1,139 @@
+import Foundation
 import SwiftUI
-#if os(iOS)
 
+/// One directory-backed owner whose recent work appears in the compact Team
+/// section. `allSessions` is retained for parity with the web grouping even
+/// though native deliberately renders only the active window.
+struct TeamActivityGroup: Identifiable, Equatable {
+    let key: String
+    let label: String
+    let activeSessions: [Session]
+    let allSessions: [Session]
+
+    var id: String { key }
+}
+
+/// Pure grouping for the Team section. This is independent of every workspace
+/// lens: it starts from the complete live payload, admits only directory
+/// members, excludes the signed-in person, and files ownerless automation runs
+/// under Agent.
+enum TeamActivity {
+    static let recentInterval: TimeInterval = 15 * 60
+    static let agentKey = "agent"
+    static let agentLabel = "Agent"
+
+    struct Member: Equatable {
+        let name: String
+        let aliases: [String]
+
+        init(name: String, aliases: [String] = []) {
+            self.name = name
+            self.aliases = aliases.isEmpty ? [name] : aliases
+        }
+    }
+
+    static func isRecentlyActive(_ session: Session, now: Date) -> Bool {
+        if session.isRunning == true { return true }
+        guard session.ran == true, let activity = session.lastActivityDate else { return false }
+        return activity >= now.addingTimeInterval(-recentInterval)
+    }
+
+    static func groups(
+        sessions: [Session],
+        members: [Member],
+        currentUser: String,
+        automationOwners: [String: String] = [:],
+        now: Date = Date()
+    ) -> [TeamActivityGroup] {
+        let current = member(matching: currentUser, in: members)
+        var order: [String] = []
+        var grouped: [String: (label: String, active: [Session], all: [Session])] = [:]
+
+        for session in sessions where session.archived != true && session.desk != true {
+            let owner: Member?
+            let key: String
+            let label: String
+            if session.isAutomation {
+                let configuredOwner = session.automation?.name
+                    .flatMap { automationOwners[$0] }?.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
+                if let configuredOwner, !configuredOwner.isEmpty,
+                   let resolved = member(matching: configuredOwner, in: members) {
+                    owner = resolved
+                    key = memberKey(resolved)
+                    label = resolved.name
+                } else {
+                    owner = nil
+                    key = agentKey
+                    label = agentLabel
+                }
+            } else {
+                guard let startedBy = session.startedBy,
+                      let resolved = member(matching: startedBy, in: members)
+                else { continue }
+                owner = resolved
+                key = memberKey(resolved)
+                label = resolved.name
+            }
+
+            if let owner, isCurrent(owner, currentUser: currentUser, resolved: current) {
+                continue
+            }
+            if grouped[key] == nil {
+                order.append(key)
+                grouped[key] = (label, [], [])
+            }
+            var group = grouped[key]!
+            group.all.append(session)
+            if isRecentlyActive(session, now: now) {
+                group.active.append(session)
+            }
+            grouped[key] = group
+        }
+
+        return order.compactMap { key in
+            guard let group = grouped[key], !group.active.isEmpty else { return nil }
+            return TeamActivityGroup(
+                key: key,
+                label: group.label,
+                activeSessions: group.active,
+                allSessions: group.all
+            )
+        }
+    }
+
+    private static func member(matching value: String, in members: [Member]) -> Member? {
+        let needle = normalized(value)
+        guard !needle.isEmpty else { return nil }
+        return members.first { member in
+            member.aliases.contains { normalized($0) == needle }
+                || normalized(member.name) == needle
+                || SidebarPersonLens.nameMatches(member.name, key: value)
+        }
+    }
+
+    private static func isCurrent(
+        _ member: Member, currentUser: String, resolved current: Member?
+    ) -> Bool {
+        if let current, memberKey(member) == memberKey(current) { return true }
+        let currentKey = normalized(currentUser)
+        return !currentKey.isEmpty && member.aliases.contains { alias in
+            normalized(alias) == currentKey
+                || SidebarPersonLens.nameMatches(alias, key: currentUser)
+        }
+    }
+
+    private static func memberKey(_ member: Member) -> String {
+        normalized(member.name).split(separator: " ").first.map(String.init) ?? normalized(member.name)
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
+#if os(iOS)
 /// Whose work you are looking at, and who is around to have made it.
 ///
 /// Two shapes for one choice, because the web draws it in two places and the

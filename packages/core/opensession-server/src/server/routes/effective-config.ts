@@ -16,31 +16,31 @@ import { buildSessionEffectiveConfig } from "../effective-config";
 import { findSessionAsync } from "../session-cache";
 
 export async function handleEffectiveConfigRoutes(
-	ctx: RouteContext,
+  ctx: RouteContext,
 ): Promise<Response | undefined> {
-	const { req, url, path } = ctx;
-	const match = path.match(/^\/api\/sessions\/([^/]+)\/effective-config$/);
-	if (!match || req.method !== "GET") return undefined;
+  const { req, url, path } = ctx;
+  const match = path.match(/^\/api\/sessions\/([^/]+)\/effective-config$/);
+  if (!match || req.method !== "GET") return undefined;
 
-	const sessionId = decodeURIComponent(match[1]!);
-	const session = await findSessionAsync(sessionId);
-	if (!session)
-		return Response.json({ error: "session not found" }, { status: 404 });
+  const sessionId = decodeURIComponent(match[1]!);
+  const session = await findSessionAsync(sessionId);
+  if (!session)
+    return Response.json({ error: "session not found" }, { status: 404 });
 
-	// Who the next turn would be attributed to: the signed-in caller, or an
-	// explicit ?user= for asking "what would this look like for them" (the
-	// allowedUsers gate and the shared-server key both key off it).
-	const user = requestUser(ctx, url.searchParams.get("user")) || undefined;
-	const verbose = url.searchParams.get("verbose") === "1";
-	try {
-		return Response.json(
-			await buildSessionEffectiveConfig(session, { user, verbose }),
-		);
-	} catch (error) {
-		console.error("[effective-config] failed:", error);
-		return Response.json(
-			{ error: error instanceof Error ? error.message : String(error) },
-			{ status: 500 },
-		);
-	}
+  // Who the next turn would be attributed to: the signed-in caller, or an
+  // explicit ?user= for asking "what would this look like for them" (the
+  // allowedUsers gate and the shared-server key both key off it).
+  const user = requestUser(ctx, url.searchParams.get("user")) || undefined;
+  const verbose = url.searchParams.get("verbose") === "1";
+  try {
+    return Response.json(
+      await buildSessionEffectiveConfig(session, { user, verbose }),
+    );
+  } catch (error) {
+    console.error("[effective-config] failed:", error);
+    return Response.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
+    );
+  }
 }

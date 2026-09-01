@@ -1,9 +1,10 @@
+import { utilityClassName } from "../ui/cn";
 import React, {
-	useEffect,
-	useEffectEvent,
-	useLayoutEffect,
-	useRef,
-	useState,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
 } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
@@ -11,7 +12,7 @@ import { transcribeClip } from "../lib/api";
 import { IconArrowUp, IconCheck, IconMic, IconPlus, IconX } from "./icons";
 import { Tooltip } from "../ui/tooltip";
 import { PRODUCT_NAME } from "../lib/brand";
-import { cn, mergeStylexProps, mergeStylexClassName } from "../ui/cn";
+import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
 import { paletteIconBtn } from "../lib/palette-classes";
 import { composerSend, composerSendDefault } from "../lib/composer-classes";
@@ -29,279 +30,153 @@ import {
   startBrowserDictation,
   type BrowserDictation,
 } from "../lib/browser-dictation";
+import { errorMessage } from "../lib/error-message";
 import * as stylex from "@stylexjs/stylex";
 import { type as typography } from "../styles/typography.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	flex: {
-			display: "flex"
-	},
-	h10: {
-			height: "40px"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	flex1: {
-			flex: "1"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	gap2: {
-			gap: "8px"
-	},
-	srOnly: {
-			clipPath: "inset(50%)",
-			whiteSpace: "nowrap",
-			borderWidth: "0",
-			width: "1px",
-			height: "1px",
-			margin: "-1px",
-			padding: "0",
-			position: "absolute",
-			overflow: "hidden"
-	},
-	inlineFlex: {
-			display: "inline-flex"
-	},
-	relative: {
-			position: "relative"
-	},
-	mx4: {
-			marginInline: "16px"
-	},
-	hFull: {
-			height: "100%"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	gap1: {
-			gap: "4px"
-	},
-	overflowHidden: {
-			overflow: "hidden"
-	},
-	z1: {
-			zIndex: "1"
-	},
-	block: {
-			display: "block"
-	},
-	truncate: {
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap",
-			overflow: "hidden"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	Absolute: {
-			position: "absolute!important"
-	},
-	inset0: {
-			inset: "0"
-	},
-	gap25: {
-			gap: "10px"
-	},
-	px1: {
-			paddingInline: "4px"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	absolute: {
-			position: "absolute"
-	},
-	bottomCalc1008px: {
-			bottom: "calc(100% + 8px)"
-	},
-	right0: {
-			right: "0"
-	},
-	z7: {
-			zIndex: "7"
-	},
-	whitespaceNowrap: {
-			whiteSpace: "nowrap"
-	},
-	roundedControl: {
-			borderRadius: "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	bgRedSoft: {
-			backgroundColor: "var(--red-soft)"
-	},
-	px11px: {
-			paddingInline: "11px"
-	},
-	py7px: {
-			paddingBlock: "7px"
-	},
-	textRed: {
-			color: "var(--red)"
-	},
-
-	transitionOpacity: {
-		"transitionProperty": "opacity",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	opacity15: {
-		"opacity": ".15"
-	},
-
-	hoverTextAccent: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--accent-ink)"
-			}
-		}
-	},
-
-	pointerEventsAuto: {
-		"pointerEvents": "auto"
-	},
-	z6: {
-		"zIndex": "6"
-	},
-	itemsEnd: {
-		"alignItems": "flex-end"
-	},
-	gap15: {
-		"gap": "6px"
-	},
-	bgVarComposerSurface: {
-		"backgroundColor": "var(--composer-surface)"
-	},
-	px35: {
-		"paddingInline": "14px"
-	},
-	pb25: {
-		"paddingBottom": "10px"
-	},
-	phonePx3: {
-		"@media (max-width: 720px)": {
-			"paddingInline": "12px"
-		}
-	},
-	phonePb9px: {
-		"@media (max-width: 720px)": {
-			"paddingBottom": "9px"
-		}
-	},
-	roundedVarComposerRadius: {
-		"borderRadius": "var(--composer-radius)"
-	,
-		cornerShape: "var(--cs)"},
-	phoneGap15: {
-		"@media (max-width: 720px)": {
-			"gap": "6px"
-		}
-	},
-	size10: {
-		"width": "40px",
-		"height": "40px"
-	},
-	cursorPointer: {
-		"cursor": "pointer"
-	},
-	roundedMd: {
-		"borderRadius": "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	borderNone: {
-		"--tw-border-style": "none",
-		"borderStyle": "none"
-	},
-	bgTransparent: {
-		"backgroundColor": "transparent"
-	},
-	transitionColors: {
-		"transitionProperty": "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	hoverBgHover: {
-		"@media (hover: hover)": {
-			":hover": {
-				"backgroundColor": "var(--hover)"
-			}
-		}
-	},
-	hoverTextFg: {
-		"@media (hover: hover)": {
-			":hover": {
-				"color": "var(--text)"
-			}
-		}
-	},
-	disabledCursorDefault: {
-		":disabled": {
-			"cursor": "default"
-		}
-	},
-	disabledOpacity35: {
-		":disabled": {
-			"opacity": ".35"
-		}
-	},
-	phoneMx18px: {
-		"@media (max-width: 720px)": {
-			"marginInline": "18px"
-		}
-	},
-	h05: {
-		"height": "2px"
-	},
-	w3px: {
-		"width": "3px"
-	},
-	roundedFull: {
-		"borderRadius": "3.40282e38px"
-	,
-		cornerShape: "round"},
-	bgDim: {
-		"backgroundColor": "var(--text-dim)"
-	},
-	transitionHeight: {
-		"transitionProperty": "height",
-		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
-		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
-	},
-	duration90ms: {
-		"--tw-duration": "90ms",
-		"transitionDuration": "90ms"
-	},
-	easeLinear: {
-		"--tw-ease": "linear",
-		"transitionTimingFunction": "linear"
-	},
-	bgFaint: {
-		"backgroundColor": "var(--text-faint)"
-	},
-	borderColorMixInSrgbVarRed40Transparent: {
-		"borderColor": "var(--red)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"borderColor": "color-mix(in srgb,var(--red) 40%,transparent)"
-		}
-	},
+  flex: {
+    display: "flex",
+  },
+  h10: {
+    height: "calc(4px * 10)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  flex1: {
+    flex: "1",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  phoneGap15: {
+    "@media (max-width: 720px)": {
+      gap: "calc(4px * 1.5)",
+    },
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  inlineFlex: {
+    display: "inline-flex",
+  },
+  relative: {
+    position: "relative",
+  },
+  mx4: {
+    marginInline: "calc(4px * 4)",
+  },
+  hFull: {
+    height: "100%",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  phoneMx18px: {
+    "@media (max-width: 720px)": {
+      marginInline: "18px",
+    },
+  },
+  z1: {
+    zIndex: "1",
+  },
+  block: {
+    display: "block",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  Absolute: {
+    position: "absolute !important",
+  },
+  inset0: {
+    inset: "0",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  bottomCalc1008px: {
+    bottom: "calc(100% + 8px)",
+  },
+  right0: {
+    right: "0",
+  },
+  z7: {
+    zIndex: "7",
+  },
+  whitespaceNowrap: {
+    whiteSpace: "nowrap",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderColorMixInSrgbVarRed40Transparent: {
+    borderColor: "color-mix(in srgb,var(--red) 40%,transparent)",
+  },
+  bgRedSoft: {
+    backgroundColor: "var(--red-soft)",
+  },
+  px11px: {
+    paddingInline: "11px",
+  },
+  py7px: {
+    paddingBlock: "7px",
+  },
+  textRed: {
+    color: "var(--red)",
+  },
 });
 
-type Phase = "idle" | "requesting" | "recording" | "cancelling" | "transcribing";
+type Phase =
+  | "idle"
+  | "requesting"
+  | "recording"
+  | "cancelling"
+  | "transcribing";
 
 /** Dictation is capped. This is a session input, not a memo recorder. */
 const MAX_SECONDS = 120;
@@ -321,24 +196,29 @@ const BAR_GAP = 4;
    dictation was about to append to. It carries the host surface's own fill so
    the waveform reads as drawn straight onto the container, not onto a second
    raised slab inside it. */
-const OVERLAY =
-	mergeStylexClassName("", sx.pointerEventsAuto, sx.absolute, sx.inset0, sx.z6, sx.flex, sx.itemsEnd, sx.gap15, sx.bgVarComposerSurface, sx.px35, sx.pb25, sx.phonePx3, sx.phonePb9px);
+const OVERLAY = utilityClassName(
+  "pointer-events-auto absolute inset-0 z-[6] flex items-end gap-1.5 bg-[var(--composer-surface)] px-3.5 pb-2.5 phone:px-3 phone:pb-[9px]",
+);
 /** Default corner. A host whose container is rounded differently passes its
  *  own (the new-session card is `rounded-2xl`). */
-const OVERLAY_RADIUS = mergeStylexClassName("", sx.roundedVarComposerRadius);
+const OVERLAY_RADIUS = utilityClassName("rounded-[var(--composer-radius)]");
 
 /* Waveform bars. Colour lives on the variant, never alongside a second colour
    utility on the same element. Two of those don't compose, the sheet's order
    decides the winner. Bars without a sample yet are a 2px baseline dot; live
    ones get their height inline from the level meter. */
-const WAVE_BAR_IDLE = mergeStylexClassName("", sx.h05, sx.w3px, sx.shrink0, sx.roundedFull, sx.bgFaint);
-const WAVE_BAR_LIVE =
-	mergeStylexClassName("", sx.h05, sx.w3px, sx.shrink0, sx.roundedFull, sx.bgDim, sx.transitionHeight, sx.duration90ms, sx.easeLinear);
+const WAVE_BAR_IDLE = utilityClassName(
+  "h-0.5 w-[3px] shrink-0 rounded-full bg-faint",
+);
+const WAVE_BAR_LIVE = utilityClassName(
+  "h-0.5 w-[3px] shrink-0 rounded-full bg-dim transition-[height] duration-[90ms] ease-linear",
+);
 
 /* Hosts can match cancel to the control it replaces. This fallback keeps the
    standalone VoiceInput target at the same 40px size as its idle mic. */
-const GLYPH_CANCEL =
-	mergeStylexClassName("", sx.inlineFlex, sx.size10, sx.shrink0, sx.cursorPointer, sx.itemsCenter, sx.justifyCenter, sx.roundedMd, sx.borderNone, sx.bgTransparent, sx.textDim, sx.transitionColors, sx.hoverBgHover, sx.hoverTextFg, sx.disabledCursorDefault, sx.disabledOpacity35);
+const GLYPH_CANCEL = utilityClassName(
+  "inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-35",
+);
 
 /** Each period fades in after the one before it, then all three clear together.
  *  Their spans stay in layout while transparent so the label never shifts. */
@@ -353,29 +233,29 @@ const TRANSCRIBING_DOT_MOTION = {
  *  overlay's surface itself is not animated: it covers the field on the first
  *  frame, so text cannot remain visible while the controls settle in. */
 const ROW_MOTION = {
-	initial: { filter: "blur(4px)" },
-	animate: { filter: "blur(0px)" },
-	transition: { type: "tween", duration: duration.base, ease },
+  initial: { filter: "blur(4px)" },
+  animate: { filter: "blur(0px)" },
+  transition: { type: "tween", duration: duration.base, ease },
 } as const;
 const GLYPH_MORPH = {
-	type: "spring",
-	duration: duration.large,
-	bounce: 0,
+  type: "spring",
+  duration: duration.large,
+  bounce: 0,
 } as const;
 const MIC_OUT = {
-	initial: { opacity: 1, filter: "blur(0px)", scale: 1 },
-	animate: { opacity: 0, filter: "blur(4px)", scale: 0.25 },
-	transition: GLYPH_MORPH,
+  initial: { opacity: 1, filter: "blur(0px)", scale: 1 },
+  animate: { opacity: 0, filter: "blur(4px)", scale: 0.25 },
+  transition: GLYPH_MORPH,
 } as const;
 const CHECK_IN = {
-	initial: { opacity: 0, filter: "blur(4px)", scale: 0.25 },
-	animate: { opacity: 1, filter: "blur(0px)", scale: 1 },
-	transition: GLYPH_MORPH,
+  initial: { opacity: 0, filter: "blur(4px)", scale: 0.25 },
+  animate: { opacity: 1, filter: "blur(0px)", scale: 1 },
+  transition: GLYPH_MORPH,
 } as const;
 const PLUS_TO_CANCEL = {
-	initial: { rotate: 0 },
-	animate: { rotate: 45 },
-	transition: GLYPH_MORPH,
+  initial: { rotate: 0 },
+  animate: { rotate: 45 },
+  transition: GLYPH_MORPH,
 } as const;
 
 /**
@@ -557,9 +437,9 @@ export function VoiceInput({
         restoreFocus = true;
       }
     })()
-      .catch((error: any) => {
+      .catch((error) => {
         if (request !== requestRef.current) return;
-        setError(error?.message || "Transcription failed");
+        setError(errorMessage(error, "Transcription failed"));
         restoreFocus = true;
       })
       .finally(() => {
@@ -576,7 +456,10 @@ export function VoiceInput({
     setError(null);
     // getUserMedia only exists in secure contexts. Over plain http (the
     // :3850 hostname) the mic simply isn't there.
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
       setError(`Mic needs HTTPS. Open ${PRODUCT_NAME} at its ts.net URL.`);
       return;
     }
@@ -619,7 +502,10 @@ export function VoiceInput({
       ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) =>
         MediaRecorder.isTypeSupported?.(m),
       ) || "";
-    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    const rec = new MediaRecorder(
+      stream,
+      mime ? { mimeType: mime } : undefined,
+    );
     recRef.current = rec;
     chunksRef.current = [];
     acceptRef.current = false;
@@ -642,7 +528,7 @@ export function VoiceInput({
     // Live level meter for the waveform is progressive enhancement. Recording
     // works fine without it.
     await (async () => {
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
       const ctx: AudioContext = new Ctx();
       audioCtxRef.current = ctx;
       const analyser = ctx.createAnalyser();
@@ -679,12 +565,9 @@ export function VoiceInput({
     // Browser speech recognition streams partial text while the clip is still
     // being recorded. The audio blob remains the accuracy-preserving fallback
     // when the browser service is absent or fails.
-    speechRef.current = startBrowserDictation(
-      (text) => {
-        if (request === requestRef.current) setLiveTranscript(text);
-      },
-      stream,
-    );
+    speechRef.current = startBrowserDictation((text) => {
+      if (request === requestRef.current) setLiveTranscript(text);
+    }, stream);
     setPhase("recording");
   };
 
@@ -751,11 +634,7 @@ export function VoiceInput({
     return () => window.removeEventListener("keydown", startFromShortcut);
   }, [disabled, editTargetRef, phase, shortcutActive]);
   const stopOnSend = useEffectEvent(function onKeyDown(event: KeyboardEvent) {
-    if (
-      event.defaultPrevented ||
-      event.repeat ||
-      !isSendCombo(event, sendKey)
-    )
+    if (event.defaultPrevented || event.repeat || !isSendCombo(event, sendKey))
       return;
     event.preventDefault();
     stop(true, true);
@@ -779,7 +658,9 @@ export function VoiceInput({
       (child): child is HTMLElement =>
         child instanceof HTMLElement && child !== target,
     );
-    const previous = siblings.map((element) => [element, element.inert] as const);
+    const previous = siblings.map(
+      (element) => [element, element.inert] as const,
+    );
     for (const [element] of previous) element.inert = true;
     return () => {
       for (const [element, inert] of previous) element.inert = inert;
@@ -798,9 +679,20 @@ export function VoiceInput({
       className={cn(OVERLAY, overlayClassName || OVERLAY_RADIUS)}
       style={overlayStyle}
     >
-      {phase === "recording" || phase === "requesting" || phase === "cancelling" ? (
+      {phase === "recording" ||
+      phase === "requesting" ||
+      phase === "cancelling" ? (
         <motion.div
-          key="recording" {...mergeStylexProps("", sx.phoneGap15, sx.flex, sx.h10, sx.minW0, sx.flex1, sx.itemsCenter, sx.gap2)}
+          key="recording"
+          {...stylex.props(
+            sx.flex,
+            sx.h10,
+            sx.minW0,
+            sx.flex1,
+            sx.itemsCenter,
+            sx.gap2,
+            sx.phoneGap15,
+          )}
           {...ROW_MOTION}
         >
           <span {...stylex.props(sx.srOnly)} role="status" aria-live="polite">
@@ -837,13 +729,28 @@ export function VoiceInput({
           {/* Full-width track: baseline dots on the quiet/older left, live
               bars accumulating on the right by the accept buttons. */}
           <div
-            ref={waveformRef} {...mergeStylexProps("", sx.phoneMx18px, sx.relative, sx.mx4, sx.flex, sx.hFull, sx.minW0, sx.flex1, sx.itemsCenter, sx.justifyCenter, sx.gap1, sx.overflowHidden)}
+            ref={waveformRef}
+            {...stylex.props(
+              sx.relative,
+              sx.mx4,
+              sx.flex,
+              sx.hFull,
+              sx.minW0,
+              sx.flex1,
+              sx.itemsCenter,
+              sx.justifyCenter,
+              sx.gap1,
+              sx.overflowHidden,
+              sx.phoneMx18px,
+            )}
             aria-hidden="true"
           >
             <div
               className={cn(
-                mergeStylexClassName("", sx.absolute, sx.inset0, sx.flex, sx.itemsCenter, sx.justifyCenter, sx.gap1, sx.transitionOpacity),
-                liveTranscript && mergeStylexClassName("", sx.opacity15),
+                utilityClassName(
+                  "absolute inset-0 flex items-center justify-center gap-1 transition-opacity",
+                ),
+                liveTranscript && utilityClassName("opacity-15"),
               )}
             >
               {Array.from({ length: barCount }, (_, i) => {
@@ -859,7 +766,17 @@ export function VoiceInput({
               })}
             </div>
             {liveTranscript && (
-              <span {...stylex.props(sx.relative, sx.z1, sx.block, sx.minW0, sx.truncate, sx.textFg, typography.label)}>
+              <span
+                {...stylex.props(
+                  sx.relative,
+                  sx.z1,
+                  sx.block,
+                  sx.minW0,
+                  sx.truncate,
+                  sx.textFg,
+                  typography.label,
+                )}
+              >
                 {liveTranscript}
               </span>
             )}
@@ -867,7 +784,10 @@ export function VoiceInput({
           <Tooltip label="Keep it. The text lands in the draft to edit.">
             <button
               type="button"
-              className={cn(className, mergeStylexClassName("", sx.hoverTextAccent, sx.textFg))}
+              className={cn(
+                className,
+                utilityClassName("text-fg hover:text-accent"),
+              )}
               onClick={() => stop(true)}
               disabled={phase === "requesting" || phase === "cancelling"}
               aria-label="Stop and transcribe"
@@ -875,7 +795,13 @@ export function VoiceInput({
               {/* Start with the mic at the checkmark's resting position,
                   then blur the two glyphs through one another. */}
               <motion.span
-                {...stylex.props(sx.Absolute, sx.inset0, sx.inlineFlex, sx.itemsCenter, sx.justifyCenter)}
+                {...stylex.props(
+                  sx.Absolute,
+                  sx.inset0,
+                  sx.inlineFlex,
+                  sx.itemsCenter,
+                  sx.justifyCenter,
+                )}
                 {...MIC_OUT}
                 aria-hidden="true"
               >
@@ -907,7 +833,15 @@ export function VoiceInput({
       ) : (
         <motion.div
           key="transcribing"
-          {...stylex.props(sx.flex, sx.h10, sx.minW0, sx.flex1, sx.itemsCenter, sx.gap25, sx.px1)}
+          {...stylex.props(
+            sx.flex,
+            sx.h10,
+            sx.minW0,
+            sx.flex1,
+            sx.itemsCenter,
+            sx.gap25,
+            sx.px1,
+          )}
           role="status"
           aria-live="polite"
           {...ROW_MOTION}
@@ -915,14 +849,24 @@ export function VoiceInput({
           <span {...stylex.props(sx.srOnly)}>Transcribing</span>
           {liveTranscript ? (
             <span
-              {...stylex.props(sx.minW0, sx.truncate, sx.textFg, typography.label)}
+              {...stylex.props(
+                sx.minW0,
+                sx.truncate,
+                sx.textFg,
+                typography.label,
+              )}
               aria-hidden="true"
             >
               {liveTranscript}
             </span>
           ) : (
             <span
-              {...stylex.props(sx.shrink0, sx.fontMedium, sx.textDim, typography.label)}
+              {...stylex.props(
+                sx.shrink0,
+                sx.fontMedium,
+                sx.textDim,
+                typography.label,
+              )}
               aria-hidden="true"
             >
               Transcribing
@@ -963,12 +907,30 @@ export function VoiceInput({
       </Tooltip>
       {error && phase === "idle" && (
         <div
-          role="alert" {...mergeStylexProps("", sx.borderColorMixInSrgbVarRed40Transparent, sx.absolute, sx.bottomCalc1008px, sx.right0, sx.z7, sx.whitespaceNowrap, sx.roundedControl, sx.border, sx.bgRedSoft, sx.px11px, sx.py7px, sx.fontMedium, sx.textRed, typography.supporting)}
+          role="alert"
+          {...stylex.props(
+            sx.absolute,
+            sx.bottomCalc1008px,
+            sx.right0,
+            sx.z7,
+            sx.whitespaceNowrap,
+            sx.roundedControl,
+            sx.border,
+            sx.borderColorMixInSrgbVarRed40Transparent,
+            sx.bgRedSoft,
+            sx.px11px,
+            sx.py7px,
+            sx.fontMedium,
+            sx.textRed,
+            typography.supporting,
+          )}
         >
           {error}
         </div>
       )}
-      {overlayTarget && overlay ? createPortal(overlay, overlayTarget) : overlay}
+      {overlayTarget && overlay
+        ? createPortal(overlay, overlayTarget)
+        : overlay}
     </>
   );
 }

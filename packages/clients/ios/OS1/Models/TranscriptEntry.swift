@@ -76,6 +76,15 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     var toolName: String?
     var toolInput: JSONValue?
     var toolUseId: String?
+    /// Stable outbox identities whose accepted messages formed this user turn.
+    /// One engine turn can batch several separately sent messages.
+    var sourceMessageIds: [String]?
+    /// Content-free marker separating a completed response from a later
+    /// system-triggered turn. It affects grouping but never renders a row.
+    var turnBoundary: Bool?
+    /// Provider-supplied reasoning summary. Optional so transcripts from older
+    /// servers keep decoding; only `true` changes presentation.
+    var isReasoning: Bool?
     var isError: Bool?
     var model: String?
     var agentId: String?

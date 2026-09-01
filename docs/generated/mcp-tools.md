@@ -40,7 +40,7 @@ touches an in-process tool:
 
 | Server | Tools | Runs | Condition |
 | --- | --- | --- | --- |
-| [`opensession-sessions`](#opensession-sessions) | 14 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
+| [`opensession-sessions`](#opensession-sessions) | 15 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
 | [`opensession-admin`](#opensession-admin) | 13 | interactive, Slack loop | – |
 | [`opensession-runners`](#opensession-runners) | 5 | interactive | – |
 | [`opensession-goals`](#opensession-goals) | 8 | interactive | – |
@@ -51,12 +51,12 @@ touches an in-process tool:
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
 | [`opensession-repos`](#opensession-repos) | 4 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
-| [`opensession-web`](#opensession-web) | 3 | interactive | Needs a session id. |
-| [`opensession-portals`](#opensession-portals) | 6 | interactive | Needs a session id. |
+| [`opensession-web`](#opensession-web) | 3 | interactive, goal wake | Needs a session id. |
+| [`opensession-portals`](#opensession-portals) | 7 | interactive | Needs a session id. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
-| [`opensession-workflows`](#opensession-workflows) | 5 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
+| [`opensession-workflows`](#opensession-workflows) | 8 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
 | [`opensession-assets`](#opensession-assets) | 4 | interactive | Needs a session id. Works in read-only Ask mode — assets land outside the checkout. |
 | [`opensession-todos`](#opensession-todos) | 5 | interactive | Needs a session id. |
 | [`opensession-papercuts`](#opensession-papercuts) | 2 | interactive, automation | Dropped when the session's repo opted out (Settings → Papercuts). |
@@ -68,7 +68,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-27 servers, 113 tools.
+27 servers, 118 tools.
 
 ## opensession-sessions
 
@@ -134,11 +134,17 @@ Copy one file from this session to another session and notify that agent. The so
 
 Cancel a session's in-flight run and drop any queued messages. Only works for runs this server owns (web UI / Slack / automation sessions) — external CLI/tmux sessions are observe-only.
 
+### `reparent_session`
+
+`mcp__opensession-sessions__reparent_session` · input: `id` (string, required), `parentSessionId` (string | null, required)
+
+Change a native Open Session session's parent/orchestrator link, or detach it by passing null. This changes child/report routing only: it does not move the session to another workspace or worktree, and it does not rewrite prompts already in the transcript. Cycles and unknown session ids are rejected. If the child needs new instructions, send them separately with send_to_session.
+
 ### `create_session`
 
-`mcp__opensession-sessions__create_session` · input: `prompt` (string, required), `repo` (string), `mode` ("ask" | "code"), `branch` (string), `model` (string), `mcpServers` (string[]), `parentSessionId` (string), `reportBack` (boolean), `standalone` (boolean), `sandbox` (boolean | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm"), `accountId` (string), `forkFrom` (object)
+`mcp__opensession-sessions__create_session` · input: `prompt` (string, required), `repo` (string), `mode` ("ask" | "code"), `branch` (string), `model` (string), `mcpServers` (string[]), `parentSessionId` (string), `reportBack` (boolean), `standalone` (boolean), `isolatedWorktree` (boolean), `sandbox` (boolean | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm"), `accountId` (string), `forkFrom` (object)
 
-Spin up a visible Open Session session and start it on a prompt. Use this as the sub-session primitive: workers can delegate focused tasks and report back to this parent session. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A worker targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. `branch` is only used when there is nothing to share — a standalone worker, or a worker targeting a repo the parent does not carry — and is generated from the prompt when omitted. Repo defaults to the parent session's repo (example when standalone); pass another registered repo id to override. For workers that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures. When called from a session, the worker defaults to the same workspace and is instructed to report back here; set standalone true or reportBack false to opt out. When a HUMAN asks for "a new session" ("create a new session for X", "spin one up on Y"), this tool is what they mean — a detached session that appears in their sidebar and outlives the current run — never an in-process subagent or task agent; reply with the new session's URL.
+Spin up a visible Open Session session and start it on a prompt. Use this as the sub-session primitive: workers can delegate focused tasks and report back to this parent session. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A worker targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. Pass isolatedWorktree true to instead give the worker its own worktree and branch (child/report-back linkage is kept) — use it when fanning work out across separate workspaces. `branch` is only used when there is nothing to share — a standalone worker, or a worker targeting a repo the parent does not carry — and is generated from the prompt when omitted. Repo defaults to the parent session's repo (example when standalone); pass another registered repo id to override. For workers that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures. When called from a session, the worker defaults to the same workspace and is instructed to report back here; set standalone true or reportBack false to opt out. When a HUMAN asks for "a new session" ("create a new session for X", "spin one up on Y"), this tool is what they mean — a detached session that appears in their sidebar and outlives the current run — never an in-process subagent or task agent; reply with the new session's URL.
 
 ### `migrate_session_engine`
 
@@ -148,9 +154,9 @@ Migrate an existing session onto the Pi engine by flipping its model to a pi/* i
 
 ### `spawn_task`
 
-`mcp__opensession-sessions__spawn_task` · input: `prompt` (string, required), `repo` (string), `branch` (string), `model` (string), `mode` ("ask" | "code" | "scratch"), `sandbox` (boolean | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm")
+`mcp__opensession-sessions__spawn_task` · input: `prompt` (string, required), `repo` (string), `branch` (string), `isolatedWorktree` (boolean), `model` (string), `mode` ("ask" | "code" | "scratch"), `sandbox` (boolean | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm")
 
-Delegate a self-contained task to a child session and return IMMEDIATELY with {taskId, url} — the lightweight alternative to create_session + send_to_session choreography when you just want work done and a handle to poll. The child is created through the same code path as create_session (it shares this session's worktree in code mode when repos match, inherits your user, is linked as a child, and is told to report back here); poll it with task_status and stop it with cancel_task. Mode defaults to 'code' (pass a branch unless the child can share this session's code worktree); use 'ask' for read-only investigation. Loop guard: spawned children may delegate one further level, then spawn_task refuses (depth ≥ 2). Not available from automation sessions.
+Delegate a self-contained task to a child session and return IMMEDIATELY with {taskId, url} — the lightweight alternative to create_session + send_to_session choreography when you just want work done and a handle to poll. The child is created through the same code path as create_session (it shares this session's worktree in code mode when repos match, inherits your user, is linked as a child, and is told to report back here); poll it with task_status and stop it with cancel_task. Mode defaults to 'code' (pass a branch, or isolatedWorktree true for a generated one, unless the child can share this session's code worktree); use 'ask' for read-only investigation. Loop guard: spawned children may delegate one further level, then spawn_task refuses (depth ≥ 2). Not available from automation sessions.
 
 ### `task_status`
 
@@ -166,7 +172,7 @@ Cancel a spawned task's in-flight run (drops queued messages too). Only runs thi
 
 ### Variant · selfImprove automation (isAdmin: false, automationSelf: true)
 
-Built for: automation. 5 tools, without `wait_for`, `wait_status`, `cancel_wait`, `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `create_session`, `migrate_session_engine`.
+Built for: automation. 5 tools, without `wait_for`, `wait_status`, `cancel_wait`, `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
 
 ## opensession-admin
 
@@ -383,7 +389,7 @@ Promote frontend-only releases without restart, or standard-deploy other source 
 
 `mcp__opensession-self-deploy__deploy_self` · input: `sha` (string), `confirm` (boolean, required)
 
-Deploy THIS Open Session instance to an immutable git release. Deployment may be autonomous and is shared across sessions. Concurrent standard deploy requests queue and coalesce to the newest fast-forward target; requests already covered by that release become successful no-ops. A strictly frontend-only diff is bundled in the prepared target release, atomically promoted, and announced to clients without restarting any service. Any server, protocol, dependency, or other runtime change automatically uses the standard health-gated gateway/kernel/executor restart path. /api/rebuild-frontend only rebuilds the already pinned source and is not a promotion path. This tool DOES NOT install changed root-owned artifacts. If the target changes the live deploy controllers, opensession*.service, credential installers, the fixed run-host helper/installer, or root-deploy-managed systemd units/drop-ins, use the documented full root deploy instead. Diverged targets are refused; the shared WIP checkout is only a git object source and is never changed.
+Deploy THIS Open Session instance to an immutable git release. Deployment may be autonomous and is shared across sessions. Concurrent standard deploy requests queue and coalesce to the newest fast-forward target; requests already covered by that release become successful no-ops. A strictly frontend-only diff is bundled in the prepared target release, atomically promoted, and announced to clients without restarting any service. A strictly gateway-only source diff uses the single-active preload handoff; protocol peers, dependencies, and other runtime changes use the coordinated health-gated gateway/kernel/executor restart path. /api/rebuild-frontend only rebuilds the already pinned source and is not a promotion path. This tool DOES NOT install changed root-owned artifacts. If the target changes the live deploy controllers, opensession*.service, credential installers, the fixed run-host helper/installer, or root-deploy-managed systemd units/drop-ins, use the documented full root deploy instead. Diverged targets are refused; the shared WIP checkout is only a git object source and is never changed.
 
 ### `deploy_status`
 
@@ -580,8 +586,8 @@ Permanently delete one memory. Prefer archive_memory because deletion cannot be 
 Read a URL as text, search what was fetched, clone a GitHub repo. No web search.
 
 - **Source** `packages/core/opensession-server/src/server/web-mcp.ts`
-- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
-- **Runs** interactive
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`, `packages/core/opensession-server/src/server/goal-runner.ts`
+- **Runs** interactive, goal wake
 - **Condition** Needs a session id.
 
 ### `fetch_url`
@@ -640,6 +646,12 @@ Stop one supervised Portal in this session. It never affects services in another
 `mcp__opensession-portals__restart_portal` · input: `name` (string, required)
 
 Restart one supervised Portal using its registered command and port. Repository-declared Portals are refreshed from their trusted recipe before restart.
+
+### `set_editor_preview_path`
+
+`mcp__opensession-portals__set_editor_preview_path` · input: `path` (string, required), `exclusiveKey` (string, required), `durationSeconds` (number, required), `clipCount` (integer, required), `transcriptWordCount` (integer, required), `leaseMinutes` (integer)
+
+Set and exclusively reserve the staging route for an editor feature. Call this only after verifying the staging record is at least 60 seconds long, has multiple clips, and has a ready non-empty transcript.
 
 ### `set_portal_path`
 
@@ -708,11 +720,17 @@ Deterministic agent fan-out from a model-authored script.
 - **Condition** Automation runs get it ONLY with the human-set `workflows` flag.
 - **Note** An automation's build passes its own mcpAllowlist + AUTOMATION_DENIED_TOOLS, so a script's mcp.* calls cannot widen the run's least-privilege surface. Same tools either way.
 
+### `workflow_capabilities`
+
+`mcp__opensession-workflows__workflow_capabilities` · input: none
+
+List the current workflow agent models, defaults, and runtime limits. Call this only when choosing models or sizing a workflow; load the workflow-authoring skill for the full API and examples.
+
 ### `run_workflow`
 
 `mcp__opensession-workflows__run_workflow` · input: `script` (string, required), `args_json` (string), `budget_tokens` (number), `repo` (string)
 
-Run a dynamic workflow: a JS script YOU author that fans out many lightweight read/analyze agents deterministically and combines their results — map-reduce over a codebase, N-way file audits, comparative research. Progress streams live to this session's Agents panel; poll workflow_status for the outcome. Script shape — plain JavaScript (NOT TypeScript), no imports; the API below is injected as globals. A meta export is required, then the async body follows (top-level await AND top-level return are allowed): export const meta = { name: "route-audit", // required, short slug description: "Audit every route for auth checks", // optional phases: [{ title: "List" }, { title: "Audit" }], // optional, pre-seeds the progress UI }; Injected globals: - agent(prompt, opts?) → Promise — run one focused agent (ask mode: reads files / runs read-only commands in this session's worktree; its final message is the return value). Resolves to the final text; with opts.schema (a JSON Schema) resolves to the parsed, validated object instead; resolves to null when the agent errored — filter with .filter(Boolean). opts: { label, phase, schema, model, effort, write }. - parallel([...thunks]) → Promise — run zero-arg thunks concurrently and wait for all; a thrown thunk becomes null, never rejects the batch. E.g. await parallel(files.map(f => () => agent("Audit " + f))) - pipeline(items, ...stages) → Promise — per-item stage chain with NO barrier between stages (item B can run stage 1 while item A is in stage 2). Each stage gets (prevResult, originalItem, index); a throwing stage drops that item to null and skips its remaining stages. - mcp.<server>.<tool>(args) → Promise — call an MCP tool DIRECTLY from the script (no model turn: one round trip). Resolves to the tool's structured result, or its text auto-parsed as JSON when it parses. REJECTS on failure (unlike agent(), which resolves null) — try/catch it, or let parallel() degrade the throw to null. Also: mcp.call(server, tool, args) (same thing, dynamic names), mcp.servers() → string[], mcp.tools(server) → [{name, description, inputSchema}]. - phase(title) — set the current progress group for subsequent agent calls. - log(message) — narrator line in the progress feed. - args — your args_json, parsed, verbatim. - budget — { total, spent(), remaining() } in output tokens. AGENT OR TOOL? An agent() is a model turn — use it when the work needs judgement (reading code, summarizing, ranking, deciding). An mcp.* call is a function call — use it whenever you just need DATA from a connected server. Don't spend an agent on "query Prometheus for X" or "fetch that Linear issue": call the tool, filter the rows in the script, and spend agents only on the parts that need thinking. Tool names and argument shapes are the same ones in your own tool list; mcp.servers() / mcp.tools(server) enumerate them at runtime. The surface is exactly what YOUR runs may use (per-user restrictions apply, confirm-gated servers like stripe are never reachable from a script). MODEL: agents default to pi/anthropic/claude-opus-5; pass opts.model to pick another available model per agent. EFFORT: pass opts.effort to set one agent's reasoning level. The values are low, medium, high, xhigh and max; each model offers its own ladder, and unset means that model's default. Spend it where judgement lives (a verifier, a ranker, a synthesis step); mechanical extraction and classification do not need it. A level the chosen model does not offer is ignored rather than an error. Rules: - Date.now(), argless new Date(), and Math.random() THROW inside scripts (they break resume replay determinism) — pass timestamps/seeds via args. - Agents start fresh with ZERO context from this session — make every prompt self-contained (paths, constraints, what to return). - Agents are read-only by default (ask mode). Pass opts.write to let one edit code (see below). - Limits: 8 agents run concurrently (extras queue), 200 agent() calls per run lifetime, 15min per agent, 60min per workflow. mcp.* is cheaper and its own lane: 16 concurrent, 2000 per run, 60s per call. - Both agent() and mcp.* calls are journaled, so resume_workflow REPLAYS them instead of re-firing — a resumed script won't create the same Linear issue twice. Example (no opts.model set → agents run on the default): export const meta = { name: "route-audit", phases: [{ title: "List" }, { title: "Audit" }, { title: "Rank" }] }; phase("List"); const files = await agent( "List every .ts file in packages/core/opensession-server/src/server/routes of this repo. Reply with ONLY the basenames.", { schema: { type: "array", items: { type: "string" } } }, ); if (!files) return "listing failed"; phase("Audit"); const findings = await pipeline( files, (f) => agent("Read packages/core/opensession-server/src/server/routes/" + f + " and report missing auth/validation checks. Reply 'none' if clean.", { label: f }), (prev, f) => (prev && prev !== "none" ? f + ": " + prev : null), ); log(findings.filter(Boolean).length + " files with findings"); phase("Rank"); const real = findings.filter(Boolean); if (!real.length) return "all clean"; return await agent( "Rank these route-audit findings by real-world severity and drop the false positives:\n" + real.join("\n"), { label: "rank findings" }, ); Example of mixing tools and agents (data by tool, judgement by agent): export const meta = { name: "alert-triage" }; const alerts = await mcp.grafana.list_alert_groups({ state: "new" }); const issues = await mcp.linear.list_issues({ team: "ENG", state: "started" }); // Reduce HERE — every row dropped in the script is a model turn not spent. const unclaimed = alerts.filter((a) => !issues.some((i) => i.title.includes(a.title))); log(unclaimed.length + " unclaimed of " + alerts.length); return await parallel( unclaimed.map((a) => () => agent("Assess this alert and say who should own it: " + JSON.stringify(a), { label: a.id })), );
+Run a model-authored plain-JavaScript workflow for deterministic agent fan-out, direct MCP calls, and durable child sessions. Use it for broad, repetitive work that benefits from parallelism. Progress streams to the Agents panel and workflow_status. The script must export meta with a short name, then may use top-level await and return. Minimal shape: export const meta = { name: "audit", phases: [{ title: "Inspect" }] }; phase("Inspect"); return await parallel([() => agent("Inspect path A", { label: "A" })]); Before authoring or revising a non-trivial workflow, load the workflow-authoring skill (or invoke /workflow-authoring) for the complete API, determinism rules, durable-session patterns, and examples. Call workflow_capabilities for the current model ids, defaults, and runtime limits. Agents start with no conversation context and are read-only unless explicitly given write access. Completed agent, MCP, and session calls are journaled for resume/recovery.
 
 ### `workflow_status`
 
@@ -730,13 +748,25 @@ List this session's workflow runs, newest first — one line each with run id, n
 
 `mcp__opensession-workflows__cancel_workflow` · input: `run_id` (string, required)
 
-Cancel a running workflow: aborts in-flight agents, terminates the script, marks the run cancelled.
+Cancel a running workflow: aborts in-flight agents, terminates the script, marks the run cancelled, and applies its configured active-child cancellation policy.
+
+### `pause_workflow`
+
+`mcp__opensession-workflows__pause_workflow` · input: `run_id` (string, required)
+
+Pause a running workflow. Active agents stop cleanly and restart in place when the workflow resumes; completed journal entries are preserved.
+
+### `control_workflow_agent`
+
+`mcp__opensession-workflows__control_workflow_agent` · input: `run_id` (string, required), `seq` (integer, required), `action` ("skip" | "retry", required)
+
+Skip or retry one pending/running workflow agent without cancelling its siblings. Retry is available only while the agent is running.
 
 ### `resume_workflow`
 
 `mcp__opensession-workflows__resume_workflow` · input: `run_id` (string, required), `script` (string), `args_json` (string), `repo` (string)
 
-Re-launch a done/error/interrupted/cancelled workflow run as a NEW run that replays completed agent() calls from the old run's journal (identical prompt+opts resolve instantly as cached) and only re-executes what changed or never finished. Optionally pass a fixed script — unchanged calls still replay from the journal.
+Resume a paused workflow in place, or re-launch a done/error/interrupted/cancelled workflow as a NEW run that replays completed agent(), mcp.* and session API calls from the old run's journal. Existing child sessions are re-adopted, never duplicated. Optionally pass a fixed script.
 
 ## opensession-assets
 

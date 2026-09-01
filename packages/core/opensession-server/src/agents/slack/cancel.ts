@@ -9,15 +9,7 @@ import { pendingAnswers, CANCELLED_ANSWER } from "./state";
 import { sessionQueues } from "./queue";
 
 // Whole-message-after-trim, case-insensitive. `/` prefix is optional.
-const STOP_TERMS = [
-  "stop",
-  "cancel",
-  "abort",
-  "halt",
-  "kill",
-  "wait",
-  "pause",
-];
+const STOP_TERMS = ["stop", "cancel", "abort", "halt", "kill", "wait", "pause"];
 
 const STOP_RE = new RegExp(`^/?(?:${STOP_TERMS.join("|")})$`, "i");
 

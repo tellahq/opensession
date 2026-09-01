@@ -2,6 +2,7 @@
 
 import { existsSync, unlinkSync, writeFileSync } from "fs";
 import { sessionsDir } from "../server/paths";
+import { runtimeGeneration } from "../server/runtime-generation";
 import { readExecutorCredential } from "./auth";
 import { ExecutorCoordinator } from "./coordinator";
 import { verifyRunHostHelper } from "./host-unit";
@@ -20,7 +21,17 @@ export async function runExecutor(): Promise<void> {
     token,
   });
   const readyFile = process.env.OPENSESSION_EXECUTOR_READY_FILE;
-  if (readyFile) writeFileSync(readyFile, `${process.pid}\n`, { mode: 0o600 });
+  if (readyFile) {
+    writeFileSync(
+      readyFile,
+      `${JSON.stringify({
+        pid: process.pid,
+        generation: runtimeGeneration(),
+        component: "executor",
+      })}\n`,
+      { mode: 0o600 },
+    );
+  }
   console.log("[executor] listening");
 
   let stopping = false;

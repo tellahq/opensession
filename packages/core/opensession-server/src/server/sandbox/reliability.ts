@@ -24,7 +24,10 @@ function errorValues(error: unknown): unknown[] {
   let current = error;
   for (let depth = 0; current && depth < 4; depth++) {
     values.push(current);
-    current = typeof current === "object" ? (current as { cause?: unknown }).cause : undefined;
+    current =
+      typeof current === "object"
+        ? (current as { cause?: unknown }).cause
+        : undefined;
   }
   return values;
 }
@@ -45,8 +48,16 @@ export function isTransientSandboxStartError(error: unknown): boolean {
   if (PERMANENT_MESSAGE.test(message)) return false;
   for (const value of values) {
     if (!value || typeof value !== "object") continue;
-    const candidate = value as { code?: unknown; status?: unknown; statusCode?: unknown };
-    if (typeof candidate.code === "string" && TRANSIENT_CODES.has(candidate.code)) return true;
+    const candidate = value as {
+      code?: unknown;
+      status?: unknown;
+      statusCode?: unknown;
+    };
+    if (
+      typeof candidate.code === "string" &&
+      TRANSIENT_CODES.has(candidate.code)
+    )
+      return true;
     const status = Number(candidate.status ?? candidate.statusCode);
     // A blind sub-second retry cannot help a 429 and can consume another
     // provider start from a daily quota. Providers may expose a future

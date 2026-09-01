@@ -12,9 +12,9 @@
  * Spread onto the field itself. On a wrapper it does nothing.
  */
 export const noAutofill = {
-	autoComplete: "off",
-	"data-1p-ignore": "",
-	"data-lpignore": "true",
-	"data-bwignore": "true",
-	"data-form-type": "other",
+  autoComplete: "off",
+  "data-1p-ignore": "",
+  "data-lpignore": "true",
+  "data-bwignore": "true",
+  "data-form-type": "other",
 } as const;

@@ -9,11 +9,11 @@ import {
 } from "../ingress-settings";
 import { audit } from "../audit";
 import { readEnvFileValues } from "../env-file-edit";
+import { githubAppConfigured, updateGithubAppWebhook } from "../github-app";
 import {
-  githubAppConfigured,
-  updateGithubAppWebhook,
-} from "../github-app";
-import { requireWorkspaceAdmin, workspaceAdminAuthorized } from "../workspace-auth";
+  requireWorkspaceAdmin,
+  workspaceAdminAuthorized,
+} from "../workspace-auth";
 import type { IngressExposure } from "../config";
 import { refreshIndexHtml } from "../frontend-build";
 import type { RouteContext } from "./context";
@@ -27,7 +27,9 @@ function errorResponse(error: unknown): Response {
 
 type GithubWebhookSync = { updated: true } | { updated: false; error: string };
 
-async function syncGithubWebhook(publicBaseUrl: string): Promise<GithubWebhookSync | undefined> {
+async function syncGithubWebhook(
+  publicBaseUrl: string,
+): Promise<GithubWebhookSync | undefined> {
   if (!githubAppConfigured()) return undefined;
   const secret =
     readEnvFileValues().GITHUB_WEBHOOK_SECRET ||
@@ -42,7 +44,9 @@ async function syncGithubWebhook(publicBaseUrl: string): Promise<GithubWebhookSy
     return { updated: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[public-ingress] GitHub webhook update failed: ${message.slice(0, 200)}`);
+    console.warn(
+      `[public-ingress] GitHub webhook update failed: ${message.slice(0, 200)}`,
+    );
     return { updated: false, error: message };
   }
 }
@@ -55,28 +59,41 @@ async function changedIngressResponse(): Promise<Record<string, unknown>> {
   return { ...settings, ...(githubWebhook ? { githubWebhook } : {}) };
 }
 
-export async function handleIngressRoutes(ctx: RouteContext): Promise<Response | undefined> {
+export async function handleIngressRoutes(
+  ctx: RouteContext,
+): Promise<Response | undefined> {
   const { path, req } = ctx;
   if (path === "/api/ingress" && req.method === "GET") {
-    return Response.json(await publicIngressStatus(workspaceAdminAuthorized(ctx)));
+    return Response.json(
+      await publicIngressStatus(workspaceAdminAuthorized(ctx)),
+    );
   }
   if (path === "/api/ingress/app/setup" && req.method === "POST") {
     const forbidden = requireWorkspaceAdmin(ctx);
     if (forbidden) return forbidden;
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = (await req.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
     try {
-      const provider = body?.provider === "cloudflare" || body?.provider === "vercel"
-        ? body.provider
-        : null;
+      const provider =
+        body?.provider === "cloudflare" || body?.provider === "vercel"
+          ? body.provider
+          : null;
       if (!provider) throw new Error("Choose Cloudflare DNS or Vercel DNS");
       const appBaseUrl = await setupPrivateAppDomain({
         domain: String(body?.domain || ""),
         provider,
         email: typeof body?.email === "string" ? body.email : undefined,
-        apiToken: typeof body?.apiToken === "string" ? body.apiToken : undefined,
+        apiToken:
+          typeof body?.apiToken === "string" ? body.apiToken : undefined,
         teamId: typeof body?.teamId === "string" ? body.teamId : undefined,
       });
-      audit({ kind: "ingress_private_app_managed", publicBaseUrl: appBaseUrl, dnsProvider: provider });
+      audit({
+        kind: "ingress_private_app_managed",
+        publicBaseUrl: appBaseUrl,
+        dnsProvider: provider,
+      });
       refreshIndexHtml("private app domain changed");
       return Response.json({
         ...(await publicIngressStatus(true, { appBaseUrl })),
@@ -98,7 +115,10 @@ export async function handleIngressRoutes(ctx: RouteContext): Promise<Response |
   if (path === "/api/ingress/app" && req.method === "POST") {
     const forbidden = requireWorkspaceAdmin(ctx);
     if (forbidden) return forbidden;
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = (await req.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
     try {
       const appBaseUrl = await savePrivateAppOrigin(String(body?.domain || ""));
       audit({ kind: "ingress_private_app_update", publicBaseUrl: appBaseUrl });
@@ -114,14 +134,19 @@ export async function handleIngressRoutes(ctx: RouteContext): Promise<Response |
   if (path === "/api/ingress" && req.method === "PUT") {
     const forbidden = requireWorkspaceAdmin(ctx);
     if (forbidden) return forbidden;
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = (await req.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
     if (!body) return errorResponse("Expected a JSON body");
     try {
       await savePublicIngress({
         publicBaseUrl: String(body.publicBaseUrl || ""),
         exposure: String(body.exposure || "") as IngressExposure,
         cloudflareTunnelId:
-          typeof body.cloudflareTunnelId === "string" ? body.cloudflareTunnelId : undefined,
+          typeof body.cloudflareTunnelId === "string"
+            ? body.cloudflareTunnelId
+            : undefined,
       });
       refreshIndexHtml("public ingress changed");
       return Response.json(await changedIngressResponse());
@@ -132,7 +157,10 @@ export async function handleIngressRoutes(ctx: RouteContext): Promise<Response |
   if (path === "/api/ingress/cloudflare" && req.method === "POST") {
     const forbidden = requireWorkspaceAdmin(ctx);
     if (forbidden) return forbidden;
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = (await req.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
     try {
       await configureCloudflareTunnel({
         publicBaseUrl: String(body?.publicBaseUrl || ""),
@@ -148,7 +176,10 @@ export async function handleIngressRoutes(ctx: RouteContext): Promise<Response |
   if (path === "/api/ingress/custom" && req.method === "POST") {
     const forbidden = requireWorkspaceAdmin(ctx);
     if (forbidden) return forbidden;
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = (await req.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
     try {
       await installManagedCaddy(
         String(body?.publicBaseUrl || ""),

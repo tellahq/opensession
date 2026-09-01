@@ -47,7 +47,11 @@ function dayFile(date: string): string {
 export function logPapercut(entry: Omit<PapercutEntry, "ts">): PapercutEntry {
   const message = (entry.message || "").trim().slice(0, MAX_MESSAGE_CHARS);
   if (!message) throw new Error("papercut message is empty");
-  const full: PapercutEntry = { ...entry, message, ts: new Date().toISOString() };
+  const full: PapercutEntry = {
+    ...entry,
+    message,
+    ts: new Date().toISOString(),
+  };
   mkdirSync(PAPERCUTS_DIR, { recursive: true });
   appendFileSync(dayFile(full.ts.slice(0, 10)), JSON.stringify(full) + "\n");
   // Mirror into the audit log so buildAuditDigest (and through it the nightly
@@ -74,7 +78,9 @@ export function listPapercuts(opts?: {
   const limit = Math.min(1000, Math.max(1, opts?.limit || 200));
   const out: PapercutEntry[] = [];
   for (let i = 0; i < days && out.length < limit; i++) {
-    const date = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+    const date = new Date(Date.now() - i * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
     const path = dayFile(date);
     if (!existsSync(path)) continue;
     const dayEntries: PapercutEntry[] = [];
@@ -114,7 +120,10 @@ export function papercutsEnabledForRepo(repoId: string | undefined): boolean {
 }
 
 /** Every registered repo with its effective toggle (for the Settings panel). */
-export function papercutsRepoConfigs(): Array<{ repoId: string; enabled: boolean }> {
+export function papercutsRepoConfigs(): Array<{
+  repoId: string;
+  enabled: boolean;
+}> {
   return Object.values(REPOS).map((p) => ({
     repoId: p.id,
     enabled: papercutsEnabledForRepo(p.id),

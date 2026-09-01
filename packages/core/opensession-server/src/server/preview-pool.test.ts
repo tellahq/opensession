@@ -32,13 +32,16 @@ describe("default branch preview-pool rebuild", () => {
       refills++;
     };
 
-    await expect(rebuildInvalidatedPreviewPool("microvm", rebuild, refill)).resolves.toBe(true);
-    await expect(rebuildInvalidatedPreviewPool("daytona", rebuild, refill)).resolves.toBe(true);
+    await expect(
+      rebuildInvalidatedPreviewPool("microvm", rebuild, refill),
+    ).resolves.toBe(true);
+    await expect(
+      rebuildInvalidatedPreviewPool("daytona", rebuild, refill),
+    ).resolves.toBe(true);
     expect(rebuilds).toBe(1);
     expect(refills).toBe(2);
   });
 });
-
 
 describe("preview pool GitHub credential cutover", () => {
   test("does not bake an expiring App token into restartable container commands", async () => {
@@ -46,10 +49,7 @@ describe("preview pool GitHub credential cutover", () => {
     const previous = process.env.OPENSESSION_CONFIG;
     try {
       const config = join(dir, "config.json");
-      writeFileSync(
-        config,
-        JSON.stringify({ integrations: { github: {} } }),
-      );
+      writeFileSync(config, JSON.stringify({ integrations: { github: {} } }));
       process.env.OPENSESSION_CONFIG = config;
       expect(
         await cloneUrlFor(

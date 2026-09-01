@@ -46,7 +46,7 @@ Two things worth knowing:
 
 The MCP config is watched. Changes invalidate its parsed cache, and the next use
 reloads it, so adding or changing a server does not require a service restart.
-Changing the *enforcement* code does.
+Changing the _enforcement_ code does.
 
 Open Session's own tools are different: the `opensession-*` servers run
 in-process and are handed to runs by code in

@@ -5,12 +5,12 @@
 import { makeUserPref } from "./user-pref";
 
 const pref = makeUserPref<boolean>({
-	localKey: "opensession-vim-mode",
-	prefKey: "composer-vim",
-	changeEvent: "opensession-vim-mode-changed",
-	defaultValue: false,
-	decode: (v) => (v === "on" ? true : v === "off" ? false : null),
-	encode: (on) => (on ? "on" : "off"),
+  localKey: "opensession-vim-mode",
+  prefKey: "composer-vim",
+  changeEvent: "opensession-vim-mode-changed",
+  defaultValue: false,
+  decode: (v) => (v === "on" ? true : v === "off" ? false : null),
+  encode: (on) => (on ? "on" : "off"),
 });
 
 export const getVimModePref = pref.get;

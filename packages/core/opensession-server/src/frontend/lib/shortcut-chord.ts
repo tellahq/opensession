@@ -24,22 +24,22 @@ const MODIFIER_ORDER = ["mod", "ctrl", "alt", "shift"] as const;
 
 /** Keys that are only ever a modifier: they can't be the end of a chord. */
 const MODIFIER_KEYS = new Set([
-	"Control",
-	"Shift",
-	"Alt",
-	"Meta",
-	"CapsLock",
-	"OS",
-	"AltGraph",
-	"Fn",
-	"FnLock",
+  "Control",
+  "Shift",
+  "Alt",
+  "Meta",
+  "CapsLock",
+  "OS",
+  "AltGraph",
+  "Fn",
+  "FnLock",
 ]);
 
 /** Printable ASCII: the range where `e.key` is the character that got typed. */
 function isAsciiPrintable(key: string): boolean {
-	if (key.length !== 1) return false;
-	const c = key.charCodeAt(0);
-	return c >= 0x20 && c < 0x7f;
+  if (key.length !== 1) return false;
+  const c = key.charCodeAt(0);
+  return c >= 0x20 && c < 0x7f;
 }
 
 /**
@@ -57,19 +57,19 @@ function isAsciiPrintable(key: string): boolean {
  * key rather than its QWERTY position.
  */
 export function eventKeyToken(e: KeyboardEvent): string | null {
-	const key = e.key;
-	if (!key || MODIFIER_KEYS.has(key)) return null;
-	const code = e.code || "";
-	const printable = isAsciiPrintable(key);
-	if (/^Key[A-Z]$/.test(code) && (e.altKey || !printable)) {
-		return code.slice(3).toLowerCase();
-	}
-	// Shift+digit types punctuation (`!` for `1`), so the code carries the digit.
-	if (/^Digit[0-9]$/.test(code) && (e.altKey || e.shiftKey || !printable)) {
-		return code.slice(5);
-	}
-	if (key === " " || code === "Space") return "space";
-	return key.toLowerCase();
+  const key = e.key;
+  if (!key || MODIFIER_KEYS.has(key)) return null;
+  const code = e.code || "";
+  const printable = isAsciiPrintable(key);
+  if (/^Key[A-Z]$/.test(code) && (e.altKey || !printable)) {
+    return code.slice(3).toLowerCase();
+  }
+  // Shift+digit types punctuation (`!` for `1`), so the code carries the digit.
+  if (/^Digit[0-9]$/.test(code) && (e.altKey || e.shiftKey || !printable)) {
+    return code.slice(5);
+  }
+  if (key === " " || code === "Space") return "space";
+  return key.toLowerCase();
 }
 
 /**
@@ -77,16 +77,16 @@ export function eventKeyToken(e: KeyboardEvent): string | null {
  * own (a bare modifier press, or a composition in progress).
  */
 export function eventChord(e: KeyboardEvent, apple: boolean): Chord | null {
-	if (e.isComposing) return null;
-	const key = eventKeyToken(e);
-	if (!key) return null;
-	const parts: string[] = [];
-	if (apple ? e.metaKey : e.ctrlKey) parts.push("mod");
-	if (apple && e.ctrlKey) parts.push("ctrl");
-	if (e.altKey) parts.push("alt");
-	if (e.shiftKey) parts.push("shift");
-	parts.push(key);
-	return parts.join("+");
+  if (e.isComposing) return null;
+  const key = eventKeyToken(e);
+  if (!key) return null;
+  const parts: string[] = [];
+  if (apple ? e.metaKey : e.ctrlKey) parts.push("mod");
+  if (apple && e.ctrlKey) parts.push("ctrl");
+  if (e.altKey) parts.push("alt");
+  if (e.shiftKey) parts.push("shift");
+  parts.push(key);
+  return parts.join("+");
 }
 
 /**
@@ -96,45 +96,45 @@ export function eventChord(e: KeyboardEvent, apple: boolean): Chord | null {
  * one naming a modifier twice over.
  */
 export function normalizeChord(raw: string, apple: boolean): Chord | null {
-	if (typeof raw !== "string") return null;
-	const tokens = raw
-		.toLowerCase()
-		.split("+")
-		.map((t) => t.trim())
-		.filter(Boolean);
-	if (tokens.length === 0) return null;
-	const mods = new Set<string>();
-	let key: string | null = null;
-	for (const token of tokens) {
-		if (token === "mod" || token === "meta" || token === "cmd") {
-			mods.add("mod");
-		} else if (token === "ctrl" || token === "control") {
-			mods.add(apple ? "ctrl" : "mod");
-		} else if (token === "alt" || token === "option" || token === "opt") {
-			mods.add("alt");
-		} else if (token === "shift") {
-			mods.add("shift");
-		} else {
-			if (key) return null; // two non-modifier keys is not a chord
-			key = token;
-		}
-	}
-	if (!key) return null;
-	const parts = MODIFIER_ORDER.filter((m) => mods.has(m)) as string[];
-	parts.push(key);
-	return parts.join("+");
+  if (typeof raw !== "string") return null;
+  const tokens = raw
+    .toLowerCase()
+    .split("+")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  if (tokens.length === 0) return null;
+  const mods = new Set<string>();
+  let key: string | null = null;
+  for (const token of tokens) {
+    if (token === "mod" || token === "meta" || token === "cmd") {
+      mods.add("mod");
+    } else if (token === "ctrl" || token === "control") {
+      mods.add(apple ? "ctrl" : "mod");
+    } else if (token === "alt" || token === "option" || token === "opt") {
+      mods.add("alt");
+    } else if (token === "shift") {
+      mods.add("shift");
+    } else {
+      if (key) return null; // two non-modifier keys is not a chord
+      key = token;
+    }
+  }
+  if (!key) return null;
+  const parts = MODIFIER_ORDER.filter((m) => mods.has(m)) as string[];
+  parts.push(key);
+  return parts.join("+");
 }
 
 /** The modifier tokens a chord carries. */
 export function chordModifiers(chord: Chord): string[] {
-	const parts = chord.split("+");
-	return parts.slice(0, -1);
+  const parts = chord.split("+");
+  return parts.slice(0, -1);
 }
 
 /** The non-modifier token a chord ends on. */
 export function chordKey(chord: Chord): string {
-	const parts = chord.split("+");
-	return parts[parts.length - 1] ?? "";
+  const parts = chord.split("+");
+  return parts[parts.length - 1] ?? "";
 }
 
 /**
@@ -144,56 +144,56 @@ export function chordKey(chord: Chord): string {
  * keys and the navigation keys stand alone, since nothing types them.
  */
 export function isBindableChord(chord: Chord): boolean {
-	const key = chordKey(chord);
-	if (!key) return false;
-	const mods = chordModifiers(chord);
-	const hasRealModifier =
-		mods.includes("mod") || mods.includes("ctrl") || mods.includes("alt");
-	if (hasRealModifier) return true;
-	return /^f([1-9]|1[0-9]|2[0-4])$/.test(key);
+  const key = chordKey(chord);
+  if (!key) return false;
+  const mods = chordModifiers(chord);
+  const hasRealModifier =
+    mods.includes("mod") || mods.includes("ctrl") || mods.includes("alt");
+  if (hasRealModifier) return true;
+  return /^f([1-9]|1[0-9]|2[0-4])$/.test(key);
 }
 
 /** Keys whose glyph differs from their token. */
 const KEY_GLYPHS: Record<string, string> = {
-	arrowup: "↑",
-	arrowdown: "↓",
-	arrowleft: "←",
-	arrowright: "→",
-	enter: "↵",
-	escape: "Esc",
-	backspace: "⌫",
-	delete: "⌦",
-	tab: "⇥",
-	space: "Space",
-	pageup: "PgUp",
-	pagedown: "PgDn",
-	home: "Home",
-	end: "End",
-	",": ",",
-	".": ".",
-	"/": "/",
-	"\\": "\\",
-	"[": "[",
-	"]": "]",
-	"'": "'",
-	";": ";",
-	"`": "`",
-	"-": "-",
-	"=": "=",
+  arrowup: "↑",
+  arrowdown: "↓",
+  arrowleft: "←",
+  arrowright: "→",
+  enter: "↵",
+  escape: "Esc",
+  backspace: "⌫",
+  delete: "⌦",
+  tab: "⇥",
+  space: "Space",
+  pageup: "PgUp",
+  pagedown: "PgDn",
+  home: "Home",
+  end: "End",
+  ",": ",",
+  ".": ".",
+  "/": "/",
+  "\\": "\\",
+  "[": "[",
+  "]": "]",
+  "'": "'",
+  ";": ";",
+  "`": "`",
+  "-": "-",
+  "=": "=",
 };
 
 const APPLE_MODIFIER_GLYPHS: Record<string, string> = {
-	mod: "⌘",
-	ctrl: "⌃",
-	alt: "⌥",
-	shift: "⇧",
+  mod: "⌘",
+  ctrl: "⌃",
+  alt: "⌥",
+  shift: "⇧",
 };
 
 const PC_MODIFIER_GLYPHS: Record<string, string> = {
-	mod: "Ctrl",
-	ctrl: "Ctrl",
-	alt: "Alt",
-	shift: "Shift",
+  mod: "Ctrl",
+  ctrl: "Ctrl",
+  alt: "Alt",
+  shift: "Shift",
 };
 
 /**
@@ -201,21 +201,21 @@ const PC_MODIFIER_GLYPHS: Record<string, string> = {
  * Apple, `["Ctrl", "Shift", "A"]` elsewhere.
  */
 export function chordGlyphs(chord: Chord, apple: boolean): string[] {
-	const modGlyphs = apple ? APPLE_MODIFIER_GLYPHS : PC_MODIFIER_GLYPHS;
-	const out = chordModifiers(chord).map((m) => modGlyphs[m] ?? m);
-	const key = chordKey(chord);
-	out.push(
-		KEY_GLYPHS[key] ??
-			(key.length === 1
-				? key.toUpperCase()
-				: /^f\d+$/.test(key)
-					? key.toUpperCase()
-					: key.charAt(0).toUpperCase() + key.slice(1)),
-	);
-	return out;
+  const modGlyphs = apple ? APPLE_MODIFIER_GLYPHS : PC_MODIFIER_GLYPHS;
+  const out = chordModifiers(chord).map((m) => modGlyphs[m] ?? m);
+  const key = chordKey(chord);
+  out.push(
+    KEY_GLYPHS[key] ??
+      (key.length === 1
+        ? key.toUpperCase()
+        : /^f\d+$/.test(key)
+          ? key.toUpperCase()
+          : key.charAt(0).toUpperCase() + key.slice(1)),
+  );
+  return out;
 }
 
 /** A chord as one flat label, for search text and accessible names. */
 export function chordLabel(chord: Chord, apple: boolean): string {
-	return chordGlyphs(chord, apple).join(apple ? "" : "+");
+  return chordGlyphs(chord, apple).join(apple ? "" : "+");
 }

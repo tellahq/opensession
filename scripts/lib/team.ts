@@ -11,7 +11,18 @@
 
 import { readConfig, writeConfig } from "./config-edit";
 import { CONFIG_PATH } from "./paths";
-import { ask, bold, canPrompt, dim, fail, heading, info, ok, warn, wrote } from "./ui";
+import {
+  ask,
+  bold,
+  canPrompt,
+  dim,
+  fail,
+  heading,
+  info,
+  ok,
+  warn,
+  wrote,
+} from "./ui";
 
 type Member = {
   name: string;
@@ -35,12 +46,22 @@ async function list(): Promise<number> {
   heading("Team");
   const team = roster(config);
   if (!team.length) {
-    info(dim("nobody yet — attribution, pickers and sign-in are all no-ops until"));
-    info(dim(`someone is on the roster. Add yourself: ${bold("opensession team add")}`));
+    info(
+      dim("nobody yet — attribution, pickers and sign-in are all no-ops until"),
+    );
+    info(
+      dim(
+        `someone is on the roster. Add yourself: ${bold("opensession team add")}`,
+      ),
+    );
     return 0;
   }
   for (const m of team) {
-    const details = [m.email, m.github && `gh:${m.github}`, m.slackId && `slack:${m.slackId}`]
+    const details = [
+      m.email,
+      m.github && `gh:${m.github}`,
+      m.slackId && `slack:${m.slackId}`,
+    ]
       .filter(Boolean)
       .join("  ");
     ok(m.name, details || undefined);
@@ -69,7 +90,10 @@ async function add(nameArg?: string): Promise<number> {
   const team = roster(config);
   const clash = team.find((m) => m.name.toLowerCase() === name.toLowerCase());
   if (clash) {
-    warn(`'${clash.name}' is already on the roster`, "edit them in config.json");
+    warn(
+      `'${clash.name}' is already on the roster`,
+      "edit them in config.json",
+    );
     return 1;
   }
 
@@ -80,7 +104,10 @@ async function add(nameArg?: string): Promise<number> {
   if (github) member.github = github;
   const slackId = ask("Slack member id (e.g. U0123456789)", "");
   if (slackId) member.slackId = slackId;
-  const alias = ask("Short alias (picker name, e.g. their first name)", "").toLowerCase();
+  const alias = ask(
+    "Short alias (picker name, e.g. their first name)",
+    "",
+  ).toLowerCase();
   if (alias && alias !== name.toLowerCase()) member.aliases = [alias];
 
   team.push(member);
@@ -90,8 +117,14 @@ async function add(nameArg?: string): Promise<number> {
 
   // Sign-in only works once the GitHub App side exists; say so at the moment
   // someone sets a login expecting it to.
-  const github_ = (config.integrations ?? {}).github as Record<string, unknown> | undefined;
-  if (member.github && !github_?.oauthClientId && !process.env.OPENSESSION_GITHUB_CLIENT_ID) {
+  const github_ = (config.integrations ?? {}).github as
+    | Record<string, unknown>
+    | undefined;
+  if (
+    member.github &&
+    !github_?.oauthClientId &&
+    !process.env.OPENSESSION_GITHUB_CLIENT_ID
+  ) {
     info(
       dim(
         `\n  A GitHub login unlocks web sign-in and PRs authored as ${name} once\n` +
@@ -122,7 +155,10 @@ async function remove(nameArg?: string): Promise<number> {
       m.aliases?.includes(needle),
   );
   if (index < 0) {
-    fail(`nobody called '${nameArg}' on the roster`, "`opensession team` to list");
+    fail(
+      `nobody called '${nameArg}' on the roster`,
+      "`opensession team` to list",
+    );
     return 1;
   }
   const [gone] = team.splice(index, 1);
@@ -136,6 +172,9 @@ export async function team(args: string[]): Promise<number> {
   if (!sub) return await list();
   if (sub === "add") return await add(rest.join(" ") || undefined);
   if (sub === "remove") return await remove(rest.join(" ") || undefined);
-  fail(`unknown subcommand '${sub}'`, "usage: opensession team [add [name] | remove <name>]");
+  fail(
+    `unknown subcommand '${sub}'`,
+    "usage: opensession team [add [name] | remove <name>]",
+  );
   return 1;
 }

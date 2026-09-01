@@ -9,19 +9,19 @@
 // RepoTile) so lib-level formatters like pr-refs.ts can reach it without a
 // component import.
 const REPO_DISPLAY: Record<string, { label: string; letter: string }> = {
-	opensession: { label: "opensession", letter: "O" },
-	// `backstage` is the pre-rename repo id. Sessions started before the rename
-	// — and any older server — still send it, so it keeps reading `opensession`
-	// with the same `O` glyph instead of a literal "backstage" with a `B` tile.
-	backstage: { label: "opensession", letter: "O" },
+  opensession: { label: "opensession", letter: "O" },
+  // `backstage` is the pre-rename repo id. Sessions started before the rename
+  // — and any older server — still send it, so it keeps reading `opensession`
+  // with the same `O` glyph instead of a literal "backstage" with a `B` tile.
+  backstage: { label: "opensession", letter: "O" },
 };
 
 /** The name a repo shows in the UI (its id, except for the renamed ones). */
 export function repoLabel(id: string): string {
-	return REPO_DISPLAY[id]?.label ?? id;
+  return REPO_DISPLAY[id]?.label ?? id;
 }
 
 /** The glyph a repo's fallback letter tile shows. */
 export function repoLetter(id: string): string {
-	return REPO_DISPLAY[id]?.letter ?? (id[0] || "?").toUpperCase();
+  return REPO_DISPLAY[id]?.letter ?? (id[0] || "?").toUpperCase();
 }

@@ -65,15 +65,19 @@ function writableScope(
   }
   if (kind === "repo") {
     const scope = repo
-      ? scopes.find((candidate) => candidate.kind === "repo" && candidate.label === repo)
+      ? scopes.find(
+          (candidate) => candidate.kind === "repo" && candidate.label === repo,
+        )
       : scopes.find((candidate) => candidate.kind === "repo");
     if (scope) return scope;
     return repo
       ? `This session does not span repo "${repo}".`
       : "This session has no repo scope. Use user or team memory.";
   }
-  return scopes.find((candidate) => candidate.kind === kind) ||
-    "This session has no user scope. Use repo memory.";
+  return (
+    scopes.find((candidate) => candidate.kind === kind) ||
+    "This session has no user scope. Use repo memory."
+  );
 }
 
 function visibleScopeKeys(ctx: MemoryToolContext): string[] {
@@ -92,7 +96,8 @@ function canRead(ctx: MemoryToolContext, record: MemoryRecord): boolean {
 }
 
 function overlap(left: string, right: string): number {
-  const tokens = (value: string) => new Set(value.toLowerCase().match(/[a-z0-9_.\/-]{3,}/g) || []);
+  const tokens = (value: string) =>
+    new Set(value.toLowerCase().match(/[a-z0-9_.\/-]{3,}/g) || []);
   const a = tokens(left);
   const b = tokens(right);
   if (!a.size || !b.size) return 0;
@@ -128,7 +133,8 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
       },
       async (args) => {
         const input = parse(StoreMemoryInputSchema, args);
-        if (typeof input === "string") return text(`Memory not stored: ${input}.`);
+        if (typeof input === "string")
+          return text(`Memory not stored: ${input}.`);
         if (storesThisRun >= 1) {
           return text(
             "This run already stored one memory candidate. Return any additional durable facts " +
@@ -145,11 +151,16 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
             details: input.details,
             tags: input.tags,
           })
-          .filter((candidate) => overlap(candidate.record.summary, input.summary) >= 0.6);
+          .filter(
+            (candidate) =>
+              overlap(candidate.record.summary, input.summary) >= 0.6,
+          );
         if (related.length && !input.supersedes?.length) {
           return text(
             "A closely related memory already exists. Update or supersede it instead of appending:\n" +
-              related.map((candidate) => `- ${compactRecord(candidate.record)}`).join("\n"),
+              related
+                .map((candidate) => `- ${compactRecord(candidate.record)}`)
+                .join("\n"),
           );
         }
         const create = {
@@ -167,7 +178,9 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
           : store.create(create);
         storesThisRun += 1;
         invalidateMemorySnapshot(ctx.sessionId);
-        return text(`Stored ${compactRecord(entry)}. Supporting details remain retrieval-only.`);
+        return text(
+          `Stored ${compactRecord(entry)}. Supporting details remain retrieval-only.`,
+        );
       },
     ),
     tool(
@@ -177,13 +190,17 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
         query: z.string().trim().min(1).max(500),
         kind: MemoryKindSchema.optional(),
         scope: MemoryScopeKindSchema.optional(),
-        state: z.enum(["active", "archived", "expired", "superseded"]).optional(),
+        state: z
+          .enum(["active", "archived", "expired", "superseded"])
+          .optional(),
         cursor: z.string().optional(),
         limit: z.number().int().min(1).max(50).optional(),
       },
       async (args) => {
         const { store } = await ensureMemoryV2Ready();
-        const allowed = scopesFor(ctx).filter((scope) => !args.scope || scope.kind === args.scope);
+        const allowed = scopesFor(ctx).filter(
+          (scope) => !args.scope || scope.kind === args.scope,
+        );
         const page = store.search(args.query, {
           scopeKeys: allowed.map((scope) => scope.key),
           kinds: args.kind ? [args.kind] : undefined,
@@ -192,11 +209,16 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
           limit: args.limit ?? 10,
           includeDetails: false,
         });
-        if (!page.items.length) return text(`No memory matches "${args.query}".`);
-        return text([
-          ...page.items.map((record) => `- ${compactRecord(record)}`),
-          page.nextCursor ? `Next cursor: ${page.nextCursor}` : "",
-        ].filter(Boolean).join("\n"));
+        if (!page.items.length)
+          return text(`No memory matches "${args.query}".`);
+        return text(
+          [
+            ...page.items.map((record) => `- ${compactRecord(record)}`),
+            page.nextCursor ? `Next cursor: ${page.nextCursor}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
       },
     ),
     tool(
@@ -205,7 +227,8 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
       { ids: MemoryReadInputSchema.shape.ids },
       async (args) => {
         const parsed = parse(MemoryReadInputSchema, args);
-        if (typeof parsed === "string") return text(`Cannot read memory: ${parsed}.`);
+        if (typeof parsed === "string")
+          return text(`Cannot read memory: ${parsed}.`);
         const { store } = await ensureMemoryV2Ready();
         const lines: string[] = [];
         let bytes = 0;
@@ -227,7 +250,10 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
           lines.push(line);
           bytes += cost;
         }
-        if (omitted) lines.push(`${omitted} requested ${omitted === 1 ? "record was" : "records were"} omitted to keep this result under 16 KB.`);
+        if (omitted)
+          lines.push(
+            `${omitted} requested ${omitted === 1 ? "record was" : "records were"} omitted to keep this result under 16 KB.`,
+          );
         return text(lines.join("\n\n"));
       },
     ),
@@ -245,28 +271,54 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
       },
       async (args) => {
         const input = parse(MemoryListInputSchema, args);
-        if (typeof input === "string") return text(`Cannot list memory: ${input}.`);
+        if (typeof input === "string")
+          return text(`Cannot list memory: ${input}.`);
         const { store } = await ensureMemoryV2Ready();
-        const allowed = scopesFor(ctx).filter((scope) => !input.scope || scope.kind === input.scope);
+        const allowed = scopesFor(ctx).filter(
+          (scope) => !input.scope || scope.kind === input.scope,
+        );
         const filters = {
           scopeKeys: allowed.map((scope) => scope.key),
           kinds: input.kind ? [input.kind] : undefined,
-          states: input.state === "all"
-            ? (["active", "archived", "expired", "superseded"] as MemoryState[])
-            : input.state ? [input.state] : undefined,
-          confirmed: input.review === "confirmed"
-            ? true
-            : input.review === "needs_review" ? false : undefined,
+          states:
+            input.state === "all"
+              ? ([
+                  "active",
+                  "archived",
+                  "expired",
+                  "superseded",
+                ] as MemoryState[])
+              : input.state
+                ? [input.state]
+                : undefined,
+          confirmed:
+            input.review === "confirmed"
+              ? true
+              : input.review === "needs_review"
+                ? false
+                : undefined,
         };
         const page = input.query
-          ? store.search(input.query, { ...filters, cursor: input.cursor, limit: input.limit ?? 20, includeDetails: false })
-          : store.list(filters, { cursor: input.cursor, limit: input.limit ?? 20 });
+          ? store.search(input.query, {
+              ...filters,
+              cursor: input.cursor,
+              limit: input.limit ?? 20,
+              includeDetails: false,
+            })
+          : store.list(filters, {
+              cursor: input.cursor,
+              limit: input.limit ?? 20,
+            });
         const items = page.items;
         if (!items.length) return text("No memories match these filters.");
-        return text([
-          ...items.map((record) => `- ${compactRecord(record)}`),
-          page.nextCursor ? `Next cursor: ${page.nextCursor}` : "",
-        ].filter(Boolean).join("\n"));
+        return text(
+          [
+            ...items.map((record) => `- ${compactRecord(record)}`),
+            page.nextCursor ? `Next cursor: ${page.nextCursor}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
       },
     ),
     tool(
@@ -282,11 +334,16 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
       },
       async (args) => {
         const input = parse(MemoryUpdateInputSchema, args);
-        if (typeof input === "string") return text(`Memory not updated: ${input}.`);
+        if (typeof input === "string")
+          return text(`Memory not updated: ${input}.`);
         const { store } = await ensureMemoryV2Ready();
         const current = store.get(input.id);
-        if (!current || !canRead(ctx, current)) return text(`Memory [${input.id}] was not found in this session's scopes.`);
-        if (current.scopeKey === "workspace" && !ctx.allowTeamWrites) return text("Team memory can only be changed from Memory settings.");
+        if (!current || !canRead(ctx, current))
+          return text(
+            `Memory [${input.id}] was not found in this session's scopes.`,
+          );
+        if (current.scopeKey === "workspace" && !ctx.allowTeamWrites)
+          return text("Team memory can only be changed from Memory settings.");
         const entry = store.update(input.id, {
           summary: input.summary,
           kind: input.kind,
@@ -325,17 +382,30 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
               missing.push(id);
               continue;
             }
-            if (action === "archive" && current.state !== "active" && current.state !== "expired") {
+            if (
+              action === "archive" &&
+              current.state !== "active" &&
+              current.state !== "expired"
+            ) {
               missing.push(id);
               continue;
             }
             changed.push(store[action](id));
           }
           invalidateMemorySnapshot(ctx.sessionId);
-          return text([
-            ...changed.map((record) => `${action === "confirm" ? "Confirmed" : action === "archive" ? "Archived" : "Restored"} [${record.id}].`),
-            missing.length ? `Not found or not writable: ${missing.join(", ")}.` : "",
-          ].filter(Boolean).join("\n") || "Nothing changed.");
+          return text(
+            [
+              ...changed.map(
+                (record) =>
+                  `${action === "confirm" ? "Confirmed" : action === "archive" ? "Archived" : "Restored"} [${record.id}].`,
+              ),
+              missing.length
+                ? `Not found or not writable: ${missing.join(", ")}.`
+                : "",
+            ]
+              .filter(Boolean)
+              .join("\n") || "Nothing changed.",
+          );
         },
       ),
     ),
@@ -346,9 +416,14 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
       async (args) => {
         const { store } = await ensureMemoryV2Ready();
         const current = store.get(args.id);
-        if (!current || !canRead(ctx, current)) return text(`Memory [${args.id}] was not found in this session's scopes.`);
-        if (current.scopeKey === "workspace" && !ctx.allowTeamWrites) return text("Team memory can only be deleted from Memory settings.");
-        if (current.state !== "archived") return text("Archive this memory before deleting it permanently.");
+        if (!current || !canRead(ctx, current))
+          return text(
+            `Memory [${args.id}] was not found in this session's scopes.`,
+          );
+        if (current.scopeKey === "workspace" && !ctx.allowTeamWrites)
+          return text("Team memory can only be deleted from Memory settings.");
+        if (current.state !== "archived")
+          return text("Archive this memory before deleting it permanently.");
         store.delete(args.id);
         invalidateMemorySnapshot(ctx.sessionId);
         return text(`Permanently deleted [${args.id}].`);
@@ -356,7 +431,11 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
     ),
   ];
 
-  return createSdkMcpServer({ name: "opensession-memory", version: "2.0.0", tools });
+  return createSdkMcpServer({
+    name: "opensession-memory",
+    version: "2.0.0",
+    tools,
+  });
 }
 
 function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
@@ -374,32 +453,57 @@ function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
       async (args) => {
         const kind = args.scope || "repo";
         const scopes = currentScopes();
-        const target = kind === "repo"
-          ? args.repo
-            ? scopes.find((scope) => scope.kind === "repo" && scope.label === args.repo)
-            : scopes.find((scope) => scope.kind === "repo")
-          : scopes.find((scope) => scope.kind === kind);
-        if (!target) return text("That memory scope is not available in this session.");
+        const target =
+          kind === "repo"
+            ? args.repo
+              ? scopes.find(
+                  (scope) => scope.kind === "repo" && scope.label === args.repo,
+                )
+              : scopes.find((scope) => scope.kind === "repo")
+            : scopes.find((scope) => scope.kind === kind);
+        if (!target)
+          return text("That memory scope is not available in this session.");
         if (target.kind === "team" && !ctx.allowTeamWrites) {
-          return text("Team memory affects every teammate. Add it from Memory settings.");
+          return text(
+            "Team memory affects every teammate. Add it from Memory settings.",
+          );
         }
-        const entry = await addSessionMemory(target, args.text, ctx.user || "session", {
-          supersedes: args.supersedes,
-          scopes,
-        });
+        const entry = await addSessionMemory(
+          target,
+          args.text,
+          ctx.user || "session",
+          {
+            supersedes: args.supersedes,
+            scopes,
+          },
+        );
         invalidateMemorySnapshot(ctx.sessionId);
-        return text(`Remembered [${entry.id}] in ${target.kind}: ${entry.text}`);
+        return text(
+          `Remembered [${entry.id}] in ${target.kind}: ${entry.text}`,
+        );
       },
     ),
     tool(
       "search_memory",
       "Search the legacy memory visible to this session.",
-      { query: z.string().trim().min(1), limit: z.number().int().min(1).max(50).optional() },
+      {
+        query: z.string().trim().min(1),
+        limit: z.number().int().min(1).max(50).optional(),
+      },
       async (args) => {
-        const hits = await searchSessionMemory(currentScopes(), args.query, { limit: args.limit });
-        return text(hits.length
-          ? hits.map((hit) => `- [${hit.entry.id}] (${hit.scope.kind}) ${hit.entry.text}`).join("\n")
-          : "No matching memory.");
+        const hits = await searchSessionMemory(currentScopes(), args.query, {
+          limit: args.limit,
+        });
+        return text(
+          hits.length
+            ? hits
+                .map(
+                  (hit) =>
+                    `- [${hit.entry.id}] (${hit.scope.kind}) ${hit.entry.text}`,
+                )
+                .join("\n")
+            : "No matching memory.",
+        );
       },
     ),
     tool(
@@ -408,11 +512,20 @@ function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
       { limit: z.number().int().min(1).max(50).optional() },
       async (args) => {
         const entries = (await listSessionMemory(currentScopes()))
-          .flatMap(({ scope, entries }) => entries.map((entry) => ({ scope, entry })))
+          .flatMap(({ scope, entries }) =>
+            entries.map((entry) => ({ scope, entry })),
+          )
           .slice(0, args.limit ?? 20);
-        return text(entries.length
-          ? entries.map(({ scope, entry }) => `- [${entry.id}] (${scope.kind}) ${entry.text}`).join("\n")
-          : "No memory in this session's scopes.");
+        return text(
+          entries.length
+            ? entries
+                .map(
+                  ({ scope, entry }) =>
+                    `- [${entry.id}] (${scope.kind}) ${entry.text}`,
+                )
+                .join("\n")
+            : "No memory in this session's scopes.",
+        );
       },
     ),
     tool(
@@ -420,7 +533,9 @@ function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
       "Archive obsolete legacy memories without deleting them.",
       { ids: z.array(z.string()).min(1).max(50) },
       async (args) => {
-        const writableScopes = currentScopes().filter((scope) => ctx.allowTeamWrites || scope.kind !== "team");
+        const writableScopes = currentScopes().filter(
+          (scope) => ctx.allowTeamWrites || scope.kind !== "team",
+        );
         const result = await archiveMemories(writableScopes, args.ids);
         invalidateMemorySnapshot(ctx.sessionId);
         return text(`Archived ${result.archived.length} memories.`);
@@ -431,17 +546,25 @@ function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
       "Permanently remove one legacy memory.",
       { id: z.string().trim().min(1) },
       async (args) => {
-        const writableScopes = currentScopes().filter((scope) => ctx.allowTeamWrites || scope.kind !== "team");
+        const writableScopes = currentScopes().filter(
+          (scope) => ctx.allowTeamWrites || scope.kind !== "team",
+        );
         const result = await forgetSessionMemory(writableScopes, args.id);
         invalidateMemorySnapshot(ctx.sessionId);
         return text(result.ok ? `Forgot [${args.id}].` : result.error);
       },
     ),
   ];
-  return createSdkMcpServer({ name: "opensession-memory", version: "1.0.0", tools });
+  return createSdkMcpServer({
+    name: "opensession-memory",
+    version: "1.0.0",
+    tools,
+  });
 }
 
 /** Legacy prompt seam retained until all run paths switch to prompt-aware v2 retrieval. */
-export async function renderMemoryNoteFor(ctx: MemoryToolContext): Promise<string> {
+export async function renderMemoryNoteFor(
+  ctx: MemoryToolContext,
+): Promise<string> {
   return renderSessionMemoryNote(scopesFor(ctx), { tools: true });
 }

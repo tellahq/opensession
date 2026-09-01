@@ -128,7 +128,8 @@ export async function startDemo(): Promise<void> {
     loadPrDetailsSnapshot();
     // The Review page's Files-changed tab renders GitHub's patch, which no
     // amount of local git can stand in for — pin the synthetic one.
-    const { demoPrDiff, DEMO_BRANCH, DEMO_GH_REPO } = await import("./fixtures");
+    const { demoPrDiff, DEMO_BRANCH, DEMO_GH_REPO } =
+      await import("./fixtures");
     seedPrDiff(DEMO_GH_REPO, DEMO_BRANCH, demoPrDiff(Date.now(), DEMO_GH_REPO));
   } catch (e) {
     console.error("[demo] PR cache reseed failed:", e);

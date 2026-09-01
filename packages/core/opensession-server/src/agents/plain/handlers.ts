@@ -11,7 +11,11 @@ import {
   createLinearIssue,
   plain,
 } from "./api";
-import { buildMentionPrompt, buildWorkPrompt, buildRefundExecutionPrompt } from "./prompts";
+import {
+  buildMentionPrompt,
+  buildWorkPrompt,
+  buildRefundExecutionPrompt,
+} from "./prompts";
 import { getDefaultModel, toPiModel } from "../../server/models";
 import { runAgent } from "../../server/agent-runner";
 import { STRIPE_CONFIRM_TOOLS } from "../../server/runner-shared";
@@ -119,9 +123,11 @@ async function runWorkTurn(
   // Money-moving Stripe tools (refunds/cancellations) are denied unless this is
   // the approved "@<bot> go ahead" execution path. Closes the gap where any
   // mention note ran with every tool — including Stripe writes — allowed.
-  allowMoneyTools: boolean = false
+  allowMoneyTools: boolean = false,
 ): Promise<{ result: string; sessionId: string }> {
-  console.log(`[plain] Running agent in ${cwd}${resumeSessionId ? ` (resuming ${resumeSessionId})` : ""}${allowMoneyTools ? " [money tools UNLOCKED]" : ""}`);
+  console.log(
+    `[plain] Running agent in ${cwd}${resumeSessionId ? ` (resuming ${resumeSessionId})` : ""}${allowMoneyTools ? " [money tools UNLOCKED]" : ""}`,
+  );
 
   let result = "";
   let sessionId = resumeSessionId || "";
@@ -149,7 +155,10 @@ async function runWorkTurn(
       deniedTools: allowMoneyTools
         ? undefined
         : Object.fromEntries(
-            Object.keys(STRIPE_CONFIRM_TOOLS).map((name) => [name, MONEY_TOOLS_DENY_MSG])
+            Object.keys(STRIPE_CONFIRM_TOOLS).map((name) => [
+              name,
+              MONEY_TOOLS_DENY_MSG,
+            ]),
           ),
     })) {
       if (event.type === "init") {
@@ -191,9 +200,11 @@ async function handleAgentMention(
   threadId: string,
   customerId: string,
   noteText: string,
-  thread: any
+  thread: any,
 ): Promise<void> {
-  console.log(`[plain] Processing ${PLAIN_MENTION} mention in thread ${threadId}`);
+  console.log(
+    `[plain] Processing ${PLAIN_MENTION} mention in thread ${threadId}`,
+  );
 
   const request = noteText.replace(PLAIN_MENTION_RE, "").trim();
 
@@ -209,20 +220,32 @@ async function handleAgentMention(
     pendingConfirmations.delete(threadId);
 
     if (pending.type === "customer_reply") {
-      const sent = await sendCustomerReply(threadId, customerId, pending.draftText);
+      const sent = await sendCustomerReply(
+        threadId,
+        customerId,
+        pending.draftText,
+      );
       if (sent.ok) {
         try {
           await plain.snoozeThread({
             threadId,
             statusDetail: SnoozeStatusDetail.WaitingForCustomer,
           });
-          await postNote(threadId, customerId, "✓ Reply sent to customer. Thread set to Waiting for Customer.");
+          await postNote(
+            threadId,
+            customerId,
+            "✓ Reply sent to customer. Thread set to Waiting for Customer.",
+          );
         } catch (e) {
           console.error("Error setting thread status:", e);
           await postNote(threadId, customerId, "✓ Reply sent to customer.");
         }
       } else {
-        await postNote(threadId, customerId, "✗ Failed to send reply to customer.");
+        await postNote(
+          threadId,
+          customerId,
+          "✗ Failed to send reply to customer.",
+        );
       }
       return;
     }
@@ -235,17 +258,21 @@ async function handleAgentMention(
   // Stripe money tools, and only to execute the EXACT proposed action.
   const refundVerdict = await classifyRefundApproval(request, threadContext);
   if (refundVerdict.approve) {
-    console.log(`[plain] Refund go-ahead on thread ${threadId}: ${refundVerdict.reason}`);
+    console.log(
+      `[plain] Refund go-ahead on thread ${threadId}: ${refundVerdict.reason}`,
+    );
     try {
       const { result } = await runWorkTurn(
         buildRefundExecutionPrompt(request, threadContext),
         DEFAULT_REPO_DIR,
         undefined,
-        /*allowMoneyTools*/ true
+        /*allowMoneyTools*/ true,
       );
       // If it produced a customer draft, route it through the existing
       // "@<bot> yes - to send" confirmation; otherwise post its note as-is.
-      const draftMatch = result.match(/DRAFT REPLY:\s*([\s\S]*?)(?:$|(?=\n##|\n---))/i);
+      const draftMatch = result.match(
+        /DRAFT REPLY:\s*([\s\S]*?)(?:$|(?=\n##|\n---))/i,
+      );
       if (draftMatch) {
         const draft = cleanDraftText(draftMatch[1]);
         const summary = result.slice(0, draftMatch.index).trim();
@@ -261,14 +288,18 @@ async function handleAgentMention(
           threadId,
           customerId,
           `**Draft reply for customer:**\n\n${draft}\n\n---\n\n${PLAIN_MENTION} yes - to send this reply`,
-          `**Draft reply for customer:**\n\n${draft}\n\n---\n\n*${PLAIN_MENTION} yes* - to send this reply`
+          `**Draft reply for customer:**\n\n${draft}\n\n---\n\n*${PLAIN_MENTION} yes* - to send this reply`,
         );
       } else {
         await postNote(threadId, customerId, result);
       }
     } catch (e) {
       console.error("[plain] Error executing approved refund:", e);
-      await postNote(threadId, customerId, `Error executing the approved refund: ${e}. No money was moved if Stripe wasn't reached — please verify in Stripe.`);
+      await postNote(
+        threadId,
+        customerId,
+        `Error executing the approved refund: ${e}. No money was moved if Stripe wasn't reached — please verify in Stripe.`,
+      );
     }
     return;
   }
@@ -278,11 +309,15 @@ async function handleAgentMention(
   try {
     const { result } = await runWorkTurn(prompt);
 
-    console.log(`[plain] Claude response (first 500 chars): ${result.substring(0, 500)}`);
+    console.log(
+      `[plain] Claude response (first 500 chars): ${result.substring(0, 500)}`,
+    );
 
     // Draft reply
     if (result.includes("DRAFT REPLY:")) {
-      const draftMatch = result.match(/DRAFT REPLY:\s*([\s\S]*?)(?:$|(?=\n##|\n---))/i);
+      const draftMatch = result.match(
+        /DRAFT REPLY:\s*([\s\S]*?)(?:$|(?=\n##|\n---))/i,
+      );
       if (draftMatch) {
         const draft = cleanDraftText(draftMatch[1]);
         if (!draft) {
@@ -300,7 +335,7 @@ async function handleAgentMention(
           threadId,
           customerId,
           `**Draft reply for customer:**\n\n${draft}\n\n---\n\n${PLAIN_MENTION} yes - to send this reply`,
-          `**Draft reply for customer:**\n\n${draft}\n\n---\n\n*${PLAIN_MENTION} yes* - to send this reply`
+          `**Draft reply for customer:**\n\n${draft}\n\n---\n\n*${PLAIN_MENTION} yes* - to send this reply`,
         );
         return;
       }
@@ -308,14 +343,16 @@ async function handleAgentMention(
 
     // Code work
     if (result.includes("CODE WORK NEEDED:")) {
-      const codeMatch = result.match(/CODE WORK NEEDED:\s*([\s\S]*?)(?:$|(?=\n\n[A-Z]))/i);
+      const codeMatch = result.match(
+        /CODE WORK NEEDED:\s*([\s\S]*?)(?:$|(?=\n\n[A-Z]))/i,
+      );
       if (codeMatch) {
         const codeDescription = codeMatch[1].trim();
         await postNote(
           threadId,
           customerId,
           `**Code work suggested:**\n\n${codeDescription}\n\n---\n\n${PLAIN_MENTION} start worktree - to begin working on this`,
-          `**Code work suggested:**\n\n${codeDescription}\n\n---\n\n*${PLAIN_MENTION} start worktree* - to begin working on this`
+          `**Code work suggested:**\n\n${codeDescription}\n\n---\n\n*${PLAIN_MENTION} start worktree* - to begin working on this`,
         );
         return;
       }
@@ -323,7 +360,9 @@ async function handleAgentMention(
 
     // Linear issue
     if (result.includes("LINEAR ISSUE:")) {
-      const issueMatch = result.match(/LINEAR ISSUE:\s*([\s\S]*?)(?:$|(?=\n\n[A-Z]))/i);
+      const issueMatch = result.match(
+        /LINEAR ISSUE:\s*([\s\S]*?)(?:$|(?=\n\n[A-Z]))/i,
+      );
       if (issueMatch) {
         const issueText = issueMatch[1].trim();
         const titleMatch = issueText.match(/Title:\s*(.+?)(?:\n|$)/i);
@@ -339,10 +378,14 @@ async function handleAgentMention(
               threadId,
               customerId,
               `Created Linear issue: ${issue.identifier}\n${issue.url}`,
-              `Created Linear issue: [${issue.identifier}](${issue.url})`
+              `Created Linear issue: [${issue.identifier}](${issue.url})`,
             );
           } else {
-            await postNote(threadId, customerId, `Failed to create Linear issue. Check Linear auth (OAuth token store / LINEAR_API_KEY) in the opensession logs.`);
+            await postNote(
+              threadId,
+              customerId,
+              `Failed to create Linear issue. Check Linear auth (OAuth token store / LINEAR_API_KEY) in the opensession logs.`,
+            );
           }
           return;
         }
@@ -357,11 +400,16 @@ async function handleAgentMention(
       try {
         const issue = await createLinearIssue(
           title,
-          `Work from Plain support thread.\n\nThread: ${threadId}\nCustomer: ${thread.customer.fullName || thread.customer.email?.email || "Unknown"}`
+          `Work from Plain support thread.\n\nThread: ${threadId}\nCustomer: ${thread.customer.fullName || thread.customer.email?.email || "Unknown"}`,
         );
 
         if (issue) {
-          const worktreeDir = await createWorktree(branchName, issue.identifier, title, result);
+          const worktreeDir = await createWorktree(
+            branchName,
+            issue.identifier,
+            title,
+            result,
+          );
 
           const session: ActiveSession = {
             threadId,
@@ -378,10 +426,14 @@ async function handleAgentMention(
             threadId,
             customerId,
             `Started worktree for code work.\n\nBranch: ${branchName}\nLinear: ${issue.identifier} (${issue.url})\nDirectory: ${worktreeDir}\n\n${PLAIN_MENTION} work on <description> - to have me work on something in this worktree`,
-            `Started worktree for code work.\n\n- **Branch:** \`${branchName}\`\n- **Linear:** [${issue.identifier}](${issue.url})\n- **Directory:** \`${worktreeDir}\`\n\n*${PLAIN_MENTION} work on \\<description\\>* - to have me work on something in this worktree`
+            `Started worktree for code work.\n\n- **Branch:** \`${branchName}\`\n- **Linear:** [${issue.identifier}](${issue.url})\n- **Directory:** \`${worktreeDir}\`\n\n*${PLAIN_MENTION} work on \\<description\\>* - to have me work on something in this worktree`,
           );
         } else {
-          await postNote(threadId, customerId, "Failed to create Linear issue for worktree. Check Linear auth (OAuth token store / LINEAR_API_KEY) in the opensession logs.");
+          await postNote(
+            threadId,
+            customerId,
+            "Failed to create Linear issue for worktree. Check Linear auth (OAuth token store / LINEAR_API_KEY) in the opensession logs.",
+          );
         }
       } catch (e) {
         console.error("Error creating worktree:", e);
@@ -395,19 +447,31 @@ async function handleAgentMention(
       const session = activeSessions.get(threadId);
       if (session) {
         const workDescription = request.replace(/^work on\s*/i, "").trim();
-        await postNote(threadId, customerId, `Starting work: ${workDescription}\n\nI'll post updates as I make progress.`);
+        await postNote(
+          threadId,
+          customerId,
+          `Starting work: ${workDescription}\n\nI'll post updates as I make progress.`,
+        );
 
         const workPrompt = buildWorkPrompt(workDescription, threadContext);
-        const { result: workResult, sessionId } = await runWorkTurn(workPrompt, session.worktreeDir, session.claudeSessionId || undefined);
+        const { result: workResult, sessionId } = await runWorkTurn(
+          workPrompt,
+          session.worktreeDir,
+          session.claudeSessionId || undefined,
+        );
         session.claudeSessionId = sessionId;
 
         await postNote(
           threadId,
           customerId,
-          `Completed work.\n\n${workResult.substring(0, 1500)}${workResult.length > 1500 ? "..." : ""}`
+          `Completed work.\n\n${workResult.substring(0, 1500)}${workResult.length > 1500 ? "..." : ""}`,
         );
       } else {
-        await postNote(threadId, customerId, `No active worktree for this thread. Use '${PLAIN_MENTION} start worktree' first.`);
+        await postNote(
+          threadId,
+          customerId,
+          `No active worktree for this thread. Use '${PLAIN_MENTION} start worktree' first.`,
+        );
       }
       return;
     }
@@ -423,7 +487,7 @@ async function handleAgentMention(
 export async function processAgentMention(
   threadId: string,
   noteId: string,
-  noteText: string
+  noteText: string,
 ): Promise<void> {
   const triggerId = `note-${noteId}`;
   if (processedMessages.has(triggerId)) {
@@ -456,11 +520,14 @@ function firstMessageActorType(thread: any): string | null {
     .map((e: any) => e?.node)
     .filter(
       (n: any) =>
-        n?.entry?.__typename === "EmailEntry" || n?.entry?.__typename === "ChatEntry"
+        n?.entry?.__typename === "EmailEntry" ||
+        n?.entry?.__typename === "ChatEntry",
     );
   if (messages.length === 0) return null;
   messages.sort((a: any, b: any) =>
-    String(a.timestamp?.iso8601 || "").localeCompare(String(b.timestamp?.iso8601 || ""))
+    String(a.timestamp?.iso8601 || "").localeCompare(
+      String(b.timestamp?.iso8601 || ""),
+    ),
   );
   return messages[0].actor?.__typename || null;
 }
@@ -480,14 +547,17 @@ function threadEntryCount(thread: any): number {
  * automation's default (Fable). Everything else — including router errors —
  * fails open and fires the event on the default model as before.
  */
-async function gateAndFireThreadCreated(payload: PlainWebhookPayload): Promise<void> {
+async function gateAndFireThreadCreated(
+  payload: PlainWebhookPayload,
+): Promise<void> {
   const thread = payload.payload.thread;
 
-  const { fireAutomationsForEvent, listAutomations } = await import("../../server/automations");
+  const { fireAutomationsForEvent, listAutomations } =
+    await import("../../server/automations");
 
   // No subscriber, no run to protect — skip the classifier call too
   const hasSubscriber = listAutomations().some(
-    (a) => a.enabled && a.eventKey === "plain:thread_created"
+    (a) => a.enabled && a.eventKey === "plain:thread_created",
   );
   if (!hasSubscriber) return;
 
@@ -532,7 +602,7 @@ async function gateAndFireThreadCreated(payload: PlainWebhookPayload): Promise<v
       ? "no customer message — outbound / close-the-loop thread"
       : `opened by an outbound ${firstActor === "UserActor" ? "teammate" : "bot"} message`;
     console.log(
-      `[plain] Skipping auto-triage for thread ${thread.id} — ${why}, not a customer ticket`
+      `[plain] Skipping auto-triage for thread ${thread.id} — ${why}, not a customer ticket`,
     );
     return;
   }
@@ -545,17 +615,20 @@ async function gateAndFireThreadCreated(payload: PlainWebhookPayload): Promise<v
     `Preview: ${thread.previewText || "(none)"}`;
   if (full) ticketContent = formatThreadContext(full, true);
 
-  const { classifyTicketRoute, getRouterConfig } = await import("./ticket-router");
+  const { classifyTicketRoute, getRouterConfig } =
+    await import("./ticket-router");
   const verdict = await classifyTicketRoute(ticketContent);
 
   if (verdict?.route === "spam") {
-    console.log(`[plain] Skipping auto-triage for thread ${thread.id} — spam: ${verdict.reason}`);
+    console.log(
+      `[plain] Skipping auto-triage for thread ${thread.id} — spam: ${verdict.reason}`,
+    );
     if (thread.customer?.id) {
       await postNote(
         thread.id,
         thread.customer.id,
         `Auto-triage skipped — this ticket looks like spam.\n\nReason: ${verdict.reason}\n\nIf this is a real ticket, mention ${PLAIN_MENTION} or run the triage automation manually from ${productName()}.`,
-        `**Auto-triage skipped — this ticket looks like spam.**\n\nReason: ${verdict.reason}\n\n*If this is a real ticket, mention ${PLAIN_MENTION} or run the triage automation manually from ${productName()}.*`
+        `**Auto-triage skipped — this ticket looks like spam.**\n\nReason: ${verdict.reason}\n\n*If this is a real ticket, mention ${PLAIN_MENTION} or run the triage automation manually from ${productName()}.*`,
       );
     }
     return;
@@ -567,7 +640,7 @@ async function gateAndFireThreadCreated(payload: PlainWebhookPayload): Promise<v
     verdict?.route === "basic" ? getRouterConfig().basicModel : undefined;
   if (modelOverride) {
     console.log(
-      `[plain] Routing thread ${thread.id} to ${modelOverride} — basic: ${verdict!.reason}`
+      `[plain] Routing thread ${thread.id} to ${modelOverride} — basic: ${verdict!.reason}`,
     );
   }
 
@@ -585,9 +658,9 @@ async function gateAndFireThreadCreated(payload: PlainWebhookPayload): Promise<v
         },
       },
       null,
-      2
+      2,
     ),
-    modelOverride ? { modelOverride } : undefined
+    modelOverride ? { modelOverride } : undefined,
   );
 }
 
@@ -603,12 +676,13 @@ async function gateAndFireThreadCreated(payload: PlainWebhookPayload): Promise<v
 async function deliverNoteToLinkedSession(
   threadId: string,
   noteId: string,
-  noteText: string
+  noteText: string,
 ): Promise<boolean> {
   const triggerId = `note-${noteId}`;
   if (processedMessages.has(triggerId)) return true;
   try {
-    const { tryGetSessionControl } = await import("../../server/session-control");
+    const { tryGetSessionControl } =
+      await import("../../server/session-control");
     const { getCachedSessions } = await import("../../server/session-cache");
     const control = tryGetSessionControl();
     if (!control) return false;
@@ -616,7 +690,8 @@ async function deliverNoteToLinkedSession(
       .filter((s) => s.plainThreadId === threadId && !s.archived)
       .sort(
         (a, b) =>
-          new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+          new Date(b.lastActivity).getTime() -
+          new Date(a.lastActivity).getTime(),
       )[0];
     if (!session) return false;
 
@@ -633,22 +708,27 @@ async function deliverNoteToLinkedSession(
     );
     if (result.status === "error") {
       console.error(
-        `[plain] Note delivery to session ${session.id} failed: ${result.message}`
+        `[plain] Note delivery to session ${session.id} failed: ${result.message}`,
       );
       processedMessages.delete(triggerId);
       return false;
     }
     console.log(
-      `[plain] Note on thread ${threadId} → session ${session.id} (${result.status})`
+      `[plain] Note on thread ${threadId} → session ${session.id} (${result.status})`,
     );
     return true;
   } catch (e) {
-    console.error(`[plain] Note→session delivery failed for thread ${threadId}:`, e);
+    console.error(
+      `[plain] Note→session delivery failed for thread ${threadId}:`,
+      e,
+    );
     return false;
   }
 }
 
-export async function handleWebhook(payload: PlainWebhookPayload): Promise<Response> {
+export async function handleWebhook(
+  payload: PlainWebhookPayload,
+): Promise<Response> {
   const eventType = payload.type;
   console.log(`[plain] Webhook received: ${eventType}`);
 
@@ -663,15 +743,22 @@ export async function handleWebhook(payload: PlainWebhookPayload): Promise<Respo
   // Runs async — the webhook response doesn't wait for the classifier.
   if (eventType === "thread.thread_created") {
     void gateAndFireThreadCreated(payload).catch((e) =>
-      console.error("[plain] thread_created gate failed:", e)
+      console.error("[plain] thread_created gate failed:", e),
     );
   }
 
   // Archive triage sessions when their ticket is done
-  if (eventType === "thread.thread_status_transitioned" && thread.status === "DONE") {
-    const { archiveSessionsForThread } = await import("../../server/plain-archive");
+  if (
+    eventType === "thread.thread_status_transitioned" &&
+    thread.status === "DONE"
+  ) {
+    const { archiveSessionsForThread } =
+      await import("../../server/plain-archive");
     const n = await archiveSessionsForThread(thread.id);
-    if (n > 0) console.log(`[plain] Archived ${n} session(s) for done thread ${thread.id}`);
+    if (n > 0)
+      console.log(
+        `[plain] Archived ${n} session(s) for done thread ${thread.id}`,
+      );
   }
 
   // Internal notes that explicitly mention the persona: a thread with a live
@@ -691,14 +778,20 @@ export async function handleWebhook(payload: PlainWebhookPayload): Promise<Respo
     // machine user's own notes (feedback loops) or customer/system actors.
     const actorType = note.createdBy?.actorType;
     if (actorType !== "user") {
-      console.log(`[plain] Ignoring ${PLAIN_MENTION} mention from non-user actor: ${actorType}`);
+      console.log(
+        `[plain] Ignoring ${PLAIN_MENTION} mention from non-user actor: ${actorType}`,
+      );
       return Response.json({ ok: true });
     }
 
-    const delivered = await deliverNoteToLinkedSession(thread.id, note.id, noteText);
+    const delivered = await deliverNoteToLinkedSession(
+      thread.id,
+      note.id,
+      noteText,
+    );
     if (!delivered) {
       processAgentMention(thread.id, note.id, noteText).catch((e) =>
-        console.error(`[plain] Error processing ${PLAIN_MENTION} mention:`, e)
+        console.error(`[plain] Error processing ${PLAIN_MENTION} mention:`, e),
       );
     }
 

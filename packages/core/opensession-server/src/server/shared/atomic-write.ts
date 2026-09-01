@@ -8,11 +8,22 @@
  * sessions, automations, goals…). Append-only JSONL logs (audit, ledgers)
  * don't need it — a torn line there loses one record, not the file.
  */
-import { closeSync, mkdirSync, openSync, renameSync, rmSync, writeFileSync } from "fs";
+import {
+  closeSync,
+  mkdirSync,
+  openSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { dirname } from "path";
 import { randomUUID } from "crypto";
 
-export function writeFileAtomic(path: string, data: string, mode?: number): void {
+export function writeFileAtomic(
+  path: string,
+  data: string,
+  mode?: number,
+): void {
   const tmp = `${path}.tmp.${process.pid}.${randomUUID()}`;
   mkdirSync(dirname(path), { recursive: true });
   const fd = openSync(tmp, "wx", mode);
@@ -31,6 +42,15 @@ export function writeFileAtomic(path: string, data: string, mode?: number): void
   }
 }
 
-export function writeJsonAtomic(path: string, value: unknown, pretty = true, mode?: number): void {
-  writeFileAtomic(path, JSON.stringify(value, null, pretty ? 2 : undefined), mode);
+export function writeJsonAtomic(
+  path: string,
+  value: unknown,
+  pretty = true,
+  mode?: number,
+): void {
+  writeFileAtomic(
+    path,
+    JSON.stringify(value, null, pretty ? 2 : undefined),
+    mode,
+  );
 }

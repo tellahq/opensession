@@ -8,7 +8,11 @@
  */
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
-import { invalidateSessionsCache, recordRunOutcome, updateSessionFile } from "../../server/session-cache";
+import {
+  invalidateSessionsCache,
+  recordRunOutcome,
+  updateSessionFile,
+} from "../../server/session-cache";
 import {
   cancelAgentRun,
   runAgent,
@@ -23,10 +27,17 @@ import {
   type ActiveRunRecord,
 } from "../../server/run-journal";
 import { listAutomations } from "../../server/automations";
-import { automaticFallbackModel, providerFor, modelLabel } from "../../server/models";
+import {
+  automaticFallbackModel,
+  providerFor,
+  modelLabel,
+} from "../../server/models";
 import { engineSessionPatch } from "../../server/sessions";
 import { STRIPE_CONFIRM_TOOLS } from "../../server/runner-shared";
-import { gitIdentityFor, type GitIdentity } from "../../server/shared/user-mappings";
+import {
+  gitIdentityFor,
+  type GitIdentity,
+} from "../../server/shared/user-mappings";
 import { resolvePrWorkspace } from "../../server/workspace-resolve";
 import { repoForPath } from "../../server/worktree";
 import { PR_EVENT_KEY, prKey, repoForFullName } from "./constants";
@@ -85,7 +96,12 @@ export function githubFlowMcpServers(): string[] {
  * so the sidebar's PR clicks and these headless runs can never mint diverging
  * workspaces for the same PR. Best-effort: never block a run on this.
  */
-async function workspaceIdForPr(prNumber: number, branch: string, title: string, repoId: string | null): Promise<string | null> {
+async function workspaceIdForPr(
+  prNumber: number,
+  branch: string,
+  title: string,
+  repoId: string | null,
+): Promise<string | null> {
   if (!repoId) return null;
   try {
     // opts.title is per-kind ("Review · PR #123 <PR title>"). The folder groups
@@ -114,13 +130,16 @@ export type GithubRunKind =
   | "followup";
 
 /** Stable, deterministic opensession session id per PR + behavior (one resumable session each). */
-export function bksIdFor(prNumber: number, kind: GithubRunKind, ghRepo?: string): string {
+export function bksIdFor(
+  prNumber: number,
+  kind: GithubRunKind,
+  ghRepo?: string,
+): string {
   return `bks-ghpr-${prKey(prNumber, ghRepo)}-${kind}`;
 }
 
 const UI_BASE =
-  process.env.OPENSESSION_UI_BASE ||
-  configuredServer().publicBaseUrl;
+  process.env.OPENSESSION_UI_BASE || configuredServer().publicBaseUrl;
 
 /** Open Session UI link to any session id (also used for handoff "open session" links). */
 export function uiSessionUrl(sessionId: string): string {
@@ -128,7 +147,11 @@ export function uiSessionUrl(sessionId: string): string {
 }
 
 /** Open Session UI link to a run's session, for "open to monitor" links in PR comments. */
-export function sessionUrl(prNumber: number, kind: GithubRunKind, ghRepo?: string): string {
+export function sessionUrl(
+  prNumber: number,
+  kind: GithubRunKind,
+  ghRepo?: string,
+): string {
   return uiSessionUrl(bksIdFor(prNumber, kind, ghRepo));
 }
 
@@ -225,7 +248,9 @@ export const SUMMARY_SENTINEL = "===OPENSESSION-SUMMARY===";
 export function finalSummary(text: string): string {
   if (!text) return "";
   const idx = text.lastIndexOf(SUMMARY_SENTINEL);
-  return idx === -1 ? text.trim() : text.slice(idx + SUMMARY_SENTINEL.length).trim();
+  return idx === -1
+    ? text.trim()
+    : text.slice(idx + SUMMARY_SENTINEL.length).trim();
 }
 
 function readSessionFile(bksId: string): NativeSessionFile | null {
@@ -239,7 +264,7 @@ function readSessionFile(bksId: string): NativeSessionFile | null {
 
 function readEngineSessionId(
   file: NativeSessionFile | null,
-  model?: string
+  model?: string,
 ): string {
   if (!file) return "";
   const provider = providerFor(model || file.model);
@@ -317,7 +342,8 @@ async function discardGithubRunRecord(
   }
   if (events) {
     void cancelAgentRun(bksId, run.claudeSessionId, run.runKey);
-    for await (const _event of events) {}
+    for await (const _event of events) {
+    }
   }
   journalClearIfLineage(run);
 }
@@ -336,7 +362,9 @@ export async function discardRecoverableGithubRun(
 }
 
 /** Run one headless turn for a PR behavior; returns the agent's accumulated text. */
-export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResult> {
+export async function runGithubAgent(
+  opts: GithubRunOpts,
+): Promise<GithubRunResult> {
   const bksId = bksIdFor(opts.prNumber, opts.kind, opts.ghRepo);
   const startedAt = new Date();
 
@@ -349,21 +377,32 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
     runGhRepo ||= repo.ghRepo;
   } catch {}
   if (opts.mode === "code" && opts.detached) {
-    throw new Error("GitHub code runs cannot be detached with an ephemeral credential");
+    throw new Error(
+      "GitHub code runs cannot be detached with an ephemeral credential",
+    );
   }
   const githubEnv =
-    opts.mode === "code" ? await githubServiceCredentialEnv(runGhRepo) : undefined;
-  const workspaceId = await workspaceIdForPr(opts.prNumber, opts.branch, opts.title, repoId);
+    opts.mode === "code"
+      ? await githubServiceCredentialEnv(runGhRepo)
+      : undefined;
+  const workspaceId = await workspaceIdForPr(
+    opts.prNumber,
+    opts.branch,
+    opts.title,
+    repoId,
+  );
 
   const existingSessionFile = readSessionFile(bksId);
   // Engine sessions are scoped to their directory; a session started under a
   // different cwd (e.g. a review from before reviews got per-PR worktrees)
   // won't resolve there — start fresh rather than resuming across cwds.
   const cwdMatches =
-    !existingSessionFile?.worktreeDir || existingSessionFile.worktreeDir === opts.cwd;
-  const resumeFrom = opts.resume && cwdMatches
-    ? readEngineSessionId(existingSessionFile, opts.model)
-    : "";
+    !existingSessionFile?.worktreeDir ||
+    existingSessionFile.worktreeDir === opts.cwd;
+  const resumeFrom =
+    opts.resume && cwdMatches
+      ? readEngineSessionId(existingSessionFile, opts.model)
+      : "";
 
   let effectiveModel = opts.model || existingSessionFile?.model;
   let selectedModel = effectiveModel;

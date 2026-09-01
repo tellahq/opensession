@@ -7,10 +7,26 @@
 import { personaName } from "../../server/config";
 import { getPrDetails } from "../../server/pr-info";
 import { createWorktreeForPrBranch } from "../../server/worktree";
-import { claimLock, releaseLock, readPrState, updatePrState, clearActiveRun } from "./state";
-import { announceGithubRun, runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
+import {
+  claimLock,
+  releaseLock,
+  readPrState,
+  updatePrState,
+  clearActiveRun,
+} from "./state";
+import {
+  announceGithubRun,
+  runGithubAgent,
+  authorForLogin,
+  finalSummary,
+  sessionUrl,
+} from "./run";
 import { buildAdversarialPrompt } from "./prompts";
-import { postOrEditComment, removeLabel, ADVERSARIAL_MARKER } from "./github-rest";
+import {
+  postOrEditComment,
+  removeLabel,
+  ADVERSARIAL_MARKER,
+} from "./github-rest";
 import { LABEL_ADVERSARIAL, labelAliases, repoForFullName } from "./constants";
 import type { PrRef } from "./review";
 
@@ -21,21 +37,28 @@ export async function runAdversarial(
   steer?: string,
 ): Promise<void> {
   if (!claimLock("code", pr.number, pr.ghRepo)) {
-    console.log(`[github] a code action is already running for PR #${pr.number}, skipping adversarial`);
+    console.log(
+      `[github] a code action is already running for PR #${pr.number}, skipping adversarial`,
+    );
     return;
   }
   const author = authorForLogin(requestedBy);
   try {
     const details = await getPrDetails(pr.headRef, pr.ghRepo || undefined);
     if (!details) {
-      console.warn(`[github] no PR details for ${pr.headRef}; skipping adversarial`);
+      console.warn(
+        `[github] no PR details for ${pr.headRef}; skipping adversarial`,
+      );
       return;
     }
     if (details.state !== "OPEN") return;
 
     const startedAt = new Date().toISOString();
     const link = `[📺 open session](${sessionUrl(pr.number, "adversarial", pr.ghRepo)})`;
-    const title = `Adversarial · PR #${pr.number} ${details.title}`.slice(0, 100);
+    const title = `Adversarial · PR #${pr.number} ${details.title}`.slice(
+      0,
+      100,
+    );
     const bksId = await announceGithubRun({
       prNumber: pr.number,
       ghRepo: pr.ghRepo,
@@ -47,7 +70,10 @@ export async function runAdversarial(
     onSessionCreated?.(bksId);
 
     const prior = readPrState(pr.number, pr.ghRepo);
-    const reuseId = prior?.activeRun?.kind === "adversarial" ? prior.activeRun.progressCommentId : undefined;
+    const reuseId =
+      prior?.activeRun?.kind === "adversarial"
+        ? prior.activeRun.progressCommentId
+        : undefined;
     const progressId = await postOrEditComment(
       pr.number,
       reuseId,
@@ -58,7 +84,13 @@ export async function runAdversarial(
       pr.number,
       details.headRefName,
       (s) => {
-        s.activeRun = { kind: "adversarial", requestedBy, startedAt, progressCommentId: progressId ?? undefined, steer };
+        s.activeRun = {
+          kind: "adversarial",
+          requestedBy,
+          startedAt,
+          progressCommentId: progressId ?? undefined,
+          steer,
+        };
       },
       pr.ghRepo,
     );

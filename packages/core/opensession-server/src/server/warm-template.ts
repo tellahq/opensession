@@ -91,7 +91,9 @@ export function warmTemplateConfig(repoId: string): WarmTemplateRepoConfig {
   const raw = readWarmConfigRaw()[repoId];
   const explicitRoutes =
     Array.isArray(raw?.warmRoutes) && raw.warmRoutes.length
-      ? raw.warmRoutes.filter((r: unknown): r is string => typeof r === "string")
+      ? raw.warmRoutes.filter(
+          (r: unknown): r is string => typeof r === "string",
+        )
       : null;
   return {
     enabled: raw?.enabled === true,
@@ -99,7 +101,8 @@ export function warmTemplateConfig(repoId: string): WarmTemplateRepoConfig {
       typeof raw?.intervalHours === "number" && raw.intervalHours >= 1
         ? Math.floor(raw.intervalHours)
         : WARM_DEFAULTS.intervalHours,
-    warmRoutes: explicitRoutes || repoWarmRoutes(repoId) || WARM_DEFAULTS.warmRoutes,
+    warmRoutes:
+      explicitRoutes || repoWarmRoutes(repoId) || WARM_DEFAULTS.warmRoutes,
   };
 }
 
@@ -113,7 +116,9 @@ function repoWarmRoutes(repoId: string): string[] | null {
     if (!existsSync(f)) return null;
     const routes = JSON.parse(readFileSync(f, "utf-8"))?.warmRoutes;
     if (Array.isArray(routes)) {
-      const out = routes.filter((r: unknown): r is string => typeof r === "string");
+      const out = routes.filter(
+        (r: unknown): r is string => typeof r === "string",
+      );
       if (out.length) return out;
     }
   } catch {}
@@ -125,7 +130,9 @@ function readWarmConfigRaw(): Record<string, any> {
     const f = configFile();
     if (!existsSync(f)) return {};
     const parsed = JSON.parse(readFileSync(f, "utf-8"));
-    return parsed?.repos && typeof parsed.repos === "object" ? parsed.repos : {};
+    return parsed?.repos && typeof parsed.repos === "object"
+      ? parsed.repos
+      : {};
   } catch {
     return {};
   }
@@ -133,7 +140,9 @@ function readWarmConfigRaw(): Record<string, any> {
 
 export function setWarmTemplateConfig(
   repoId: string,
-  patch: Partial<Pick<WarmTemplateRepoConfig, "enabled" | "intervalHours" | "warmRoutes">>,
+  patch: Partial<
+    Pick<WarmTemplateRepoConfig, "enabled" | "intervalHours" | "warmRoutes">
+  >,
 ): WarmTemplateRepoConfig {
   mkdirSync(warmDir(), { recursive: true });
   const repos = readWarmConfigRaw();
@@ -202,7 +211,8 @@ const g = globalThis as unknown as {
   __warmTemplateSweepTimer?: ReturnType<typeof setInterval>;
   __warmSpareReplenishing?: Map<string, Promise<void>>;
 };
-const refreshing: Map<string, Promise<void>> = (g.__warmTemplateRefreshing ??= new Map());
+const refreshing: Map<string, Promise<void>> = (g.__warmTemplateRefreshing ??=
+  new Map());
 // Worktrees with a seed in flight (one seed per worktree — see seedWorktree…).
 const seeding: Set<string> = (g.__warmTemplateSeeding ??= new Set());
 
@@ -288,30 +298,44 @@ export type TemplateStatus =
   | { kind: "absent" };
 
 export function templateStatus(repoId: string): TemplateStatus {
-  if (refreshing.has(repoId) || refreshLockHeld(repoId)) return { kind: "refreshing" };
+  if (refreshing.has(repoId) || refreshLockHeld(repoId))
+    return { kind: "refreshing" };
   return templateWarmth(repoId);
 }
 
 /** templateStatus minus the refresh guards, for doRefresh: it holds both of
  *  them itself and still needs to know whether the tree is already warm. */
-function templateWarmth(repoId: string): Exclude<TemplateStatus, { kind: "refreshing" }> {
+function templateWarmth(
+  repoId: string,
+): Exclude<TemplateStatus, { kind: "refreshing" }> {
   const state = warmTemplateState(repoId);
   if (!state) return { kind: "absent" };
   if (!state.ok || !state.sha) {
-    return { kind: "stale", reason: state.lastError || "last refresh did not complete" };
+    return {
+      kind: "stale",
+      reason: state.lastError || "last refresh did not complete",
+    };
   }
-  if (!existsSync(state.dir)) return { kind: "stale", reason: "template worktree missing" };
+  if (!existsSync(state.dir))
+    return { kind: "stale", reason: "template worktree missing" };
   const mf = manifestFile(repoId);
   if (!existsSync(mf)) return { kind: "stale", reason: "no manifest" };
   let entries: string[];
   try {
     entries = seedableManifest(readFileSync(mf, "utf-8").split("\n"));
   } catch (e) {
-    return { kind: "stale", reason: `manifest unreadable: ${String((e as any)?.message || e)}` };
+    return {
+      kind: "stale",
+      reason: `manifest unreadable: ${String((e as any)?.message || e)}`,
+    };
   }
-  if (!entries.length) return { kind: "stale", reason: "manifest lists no dep trees" };
-  const missing = entries.find((e) => !existsSync(join(state.dir, e.replace(/\/$/, ""))));
-  if (missing) return { kind: "stale", reason: `dep tree ${missing} missing on disk` };
+  if (!entries.length)
+    return { kind: "stale", reason: "manifest lists no dep trees" };
+  const missing = entries.find(
+    (e) => !existsSync(join(state.dir, e.replace(/\/$/, ""))),
+  );
+  if (missing)
+    return { kind: "stale", reason: `dep tree ${missing} missing on disk` };
   return { kind: "warm", dir: state.dir, sha: state.sha, entries };
 }
 
@@ -322,7 +346,10 @@ function templateWarmth(repoId: string): Exclude<TemplateStatus, { kind: "refres
  * run). `force` rebuilds even when origin's sha hasn't moved — the scheduled
  * sweep passes false so an unchanged main is a cheap fetch + no-op.
  */
-export function refreshWarmTemplate(repoId: string, opts?: { force?: boolean }): Promise<void> {
+export function refreshWarmTemplate(
+  repoId: string,
+  opts?: { force?: boolean },
+): Promise<void> {
   const inflight = refreshing.get(repoId);
   if (inflight) return inflight;
   const run = doRefresh(repoId, opts?.force === true).finally(() => {
@@ -363,14 +390,19 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
 
   try {
     mkdirSync(warmDir(), { recursive: true });
-    writeFileSync(refreshLockFile(repoId), `${process.pid} ${new Date().toISOString()}\n`);
+    writeFileSync(
+      refreshLockFile(repoId),
+      `${process.pid} ${new Date().toISOString()}\n`,
+    );
     // Lazy import: worktree.ts imports back into this module's consumers —
     // keep the static graph acyclic.
     const { withGitLock, installWorktreeDeps } = await import("./worktree");
 
     // 1. Ensure the detached template worktree exists.
     if (!existsSync(dir)) {
-      console.log(`[warm-template] ${repoId}: creating template worktree at ${dir}`);
+      console.log(
+        `[warm-template] ${repoId}: creating template worktree at ${dir}`,
+      );
       await withGitLock(async () => {
         await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
         if (existsSync(dir)) return;
@@ -383,26 +415,38 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
     //    refresh was good.
     await $`git -C ${dir} fetch origin ${repo.defaultBranch} --quiet`.nothrow();
     const sha = (
-      await $`git -C ${dir} rev-parse --short origin/${repo.defaultBranch}`.nothrow().text()
+      await $`git -C ${dir} rev-parse --short origin/${repo.defaultBranch}`
+        .nothrow()
+        .text()
     ).trim();
-    if (!sha) return void (await fail(`can't resolve origin/${repo.defaultBranch}`));
+    if (!sha)
+      return void (await fail(`can't resolve origin/${repo.defaultBranch}`));
     const current = templateWarmth(repoId); // not templateStatus: we hold both guards
     if (!force && current.kind === "warm" && current.sha === sha) {
       return; // already warm at this sha
     }
-    console.log(`[warm-template] ${repoId}: refreshing template to ${sha} (${dir})`);
+    console.log(
+      `[warm-template] ${repoId}: refreshing template to ${sha} (${dir})`,
+    );
 
     // Step logging + watchdog: a wedged subprocess await must FAIL the
     // refresh, not hang it forever (seen live 2026-07-21: an in-server
     // install await never settled while the same commands finished instantly
     // by hand). A timed-out step's work keeps running detached; fail() +
     // the finally below clear the lock so seeding/spares move on.
-    const step = async <T>(name: string, ms: number, run: () => Promise<T>): Promise<T> => {
+    const step = async <T>(
+      name: string,
+      ms: number,
+      run: () => Promise<T>,
+    ): Promise<T> => {
       console.log(`[warm-template] ${repoId}: ${name}…`);
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(
-          () => reject(new Error(`${name} timed out after ${Math.round(ms / 1000)}s`)),
+          () =>
+            reject(
+              new Error(`${name} timed out after ${Math.round(ms / 1000)}s`),
+            ),
           ms,
         );
       });
@@ -418,7 +462,9 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
     //    rebuild below is incremental. This is our dedicated detached
     //    worktree; the shared-checkout no-reset rule doesn't apply here.
     await step("reset", 2 * 60_000, () =>
-      $`git -C ${dir} reset --hard origin/${repo.defaultBranch}`.quiet().then(() => {}),
+      $`git -C ${dir} reset --hard origin/${repo.defaultBranch}`
+        .quiet()
+        .then(() => {}),
     );
 
     // 4. Deps + env seeding (same helper the session worktrees use). This is
@@ -434,7 +480,8 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
       $`git -C ${dir} ls-files -o -i --exclude-standard --directory`.text(),
     );
     const manifest = seedableManifest(raw.split("\n"));
-    if (!manifest.length) return void (await fail("refresh produced no node_modules to seed"));
+    if (!manifest.length)
+      return void (await fail("refresh produced no node_modules to seed"));
     writeFileSync(manifestFile(repoId), manifest.join("\n") + "\n");
 
     writeState({
@@ -471,7 +518,10 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
  * link farm. Best-effort: any failure logs and the worktree just installs
  * cold like today. Returns true when seeding actually ran.
  */
-export async function seedWorktreeFromWarmTemplate(repo: Repo, wtPath: string): Promise<boolean> {
+export async function seedWorktreeFromWarmTemplate(
+  repo: Repo,
+  wtPath: string,
+): Promise<boolean> {
   try {
     const cfg = warmTemplateConfig(repo.id);
     if (!cfg.enabled) return false;
@@ -525,7 +575,11 @@ export async function seedWorktreeFromWarmTemplate(repo: Repo, wtPath: string): 
         if (inflight) {
           await Promise.race([inflight, Bun.sleep(60_000)]);
         }
-        for (let waited = 0; refreshLockHeld(repo.id) && waited < 90_000; waited += 5000) {
+        for (
+          let waited = 0;
+          refreshLockHeld(repo.id) && waited < 90_000;
+          waited += 5000
+        ) {
           await Bun.sleep(5000);
         }
         status = templateStatus(repo.id);
@@ -564,7 +618,10 @@ export async function seedWorktreeFromWarmTemplate(repo: Repo, wtPath: string): 
       seeding.delete(wtPath);
     }
   } catch (e) {
-    console.warn(`[warm-template] seeding ${wtPath} failed (worktree installs cold):`, e);
+    console.warn(
+      `[warm-template] seeding ${wtPath} failed (worktree installs cold):`,
+      e,
+    );
     return false;
   }
 }
@@ -623,7 +680,8 @@ function claimSpare(repo: Repo): string | null {
   return null;
 }
 
-const replenishing: Map<string, Promise<void>> = (g.__warmSpareReplenishing ??= new Map());
+const replenishing: Map<string, Promise<void>> = (g.__warmSpareReplenishing ??=
+  new Map());
 
 /** Top the spare pool back up to SPARE_TARGET (serialized per repo). */
 function replenishSpares(repo: Repo): Promise<void> {
@@ -647,7 +705,8 @@ async function doReplenish(repo: Repo): Promise<void> {
     if (!n.startsWith(".building-") && !n.includes(".claimed-")) continue;
     const p = join(dir, n);
     try {
-      if (Date.now() - statSync(p).mtimeMs > 3_600_000) rmSync(p, { recursive: true, force: true });
+      if (Date.now() - statSync(p).mtimeMs > 3_600_000)
+        rmSync(p, { recursive: true, force: true });
     } catch {}
   }
   for (;;) {
@@ -668,7 +727,10 @@ async function doReplenish(repo: Repo): Promise<void> {
     }
     if (listSpares(repo).length >= SPARE_TARGET) return;
     const entries = status.entries.map((e) => e.replace(/\/$/, ""));
-    const building = join(dir, `.building-${Math.random().toString(36).slice(2, 8)}`);
+    const building = join(
+      dir,
+      `.building-${Math.random().toString(36).slice(2, 8)}`,
+    );
     const buildStarted = Date.now();
     try {
       mkdirSync(building, { recursive: true });
@@ -681,10 +743,16 @@ async function doReplenish(repo: Repo): Promise<void> {
         mkdirSync(dirname(dst), { recursive: true });
         await $`cp -al ${src} ${dst}`.quiet();
       }
-      writeFileSync(join(building, SPARE_PATHS_FILE), entries.join("\n") + "\n");
+      writeFileSync(
+        join(building, SPARE_PATHS_FILE),
+        entries.join("\n") + "\n",
+      );
       renameSync(
         building,
-        join(dir, `spare-${status.sha}-${Math.random().toString(36).slice(2, 8)}`),
+        join(
+          dir,
+          `spare-${status.sha}-${Math.random().toString(36).slice(2, 8)}`,
+        ),
       );
       console.log(
         `[warm-template] built ${repo.id} dep spare (${entries.length} trees) in ${Math.round((Date.now() - buildStarted) / 1000)}s`,
@@ -721,7 +789,10 @@ async function sweepWarmTemplates(): Promise<void> {
     if (due) {
       // Serialized: one template rebuild at a time.
       await refreshWarmTemplate(repo.id).catch((e) =>
-        console.warn(`[warm-template] scheduled refresh of ${repo.id} failed:`, e),
+        console.warn(
+          `[warm-template] scheduled refresh of ${repo.id} failed:`,
+          e,
+        ),
       );
     }
     // Keep the spare pool topped up (cheap no-op when full) — this is also
@@ -738,12 +809,13 @@ async function sweepWarmTemplates(): Promise<void> {
 export function ensureWarmTemplateScheduler(): void {
   if (g.__warmTemplateSweepTimer) return;
   const t = setInterval(() => {
-    sweepWarmTemplates().catch((e) => console.warn("[warm-template] sweep failed:", e));
+    sweepWarmTemplates().catch((e) =>
+      console.warn("[warm-template] sweep failed:", e),
+    );
   }, SWEEP_INTERVAL_MS);
   (t as { unref?: () => void }).unref?.();
   g.__warmTemplateSweepTimer = t;
 }
-
 
 // ── Status (Settings API) ────────────────────────────────────────────────────
 

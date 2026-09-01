@@ -35,7 +35,19 @@ describe("transcript persistence", () => {
   test("builders round-trip through the shared parser", () => {
     const lines = [
       transcriptLineUser("hello", "u1", "2026-01-01T00:00:00.000Z"),
-      transcriptLineAssistantText("hi", "a1", "2026-01-01T00:00:01.000Z", "pi/anthropic/claude-fable-5"),
+      transcriptLineAssistantText(
+        "hi",
+        "a1",
+        "2026-01-01T00:00:01.000Z",
+        "pi/anthropic/claude-fable-5",
+      ),
+      transcriptLineAssistantText(
+        "**Checking the repository**",
+        "r1",
+        "2026-01-01T00:00:02.000Z",
+        "gpt-5.6-sol",
+        true,
+      ),
       transcriptLineToolUse("tool-1", "read", { path: "README.md" }),
       transcriptLineToolResult("tool-1", "contents"),
       transcriptLineRunnerNotice("retrying"),
@@ -45,10 +57,16 @@ describe("transcript persistence", () => {
     expect(entries.map((entry) => entry.type)).toEqual([
       "user",
       "assistant",
+      "assistant",
       "tool_use",
       "tool_result",
       "system",
       "system",
     ]);
+    expect(entries[2]).toMatchObject({
+      type: "assistant",
+      content: "**Checking the repository**",
+      isReasoning: true,
+    });
   });
 });

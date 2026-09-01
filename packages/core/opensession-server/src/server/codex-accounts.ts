@@ -116,7 +116,8 @@ try {
     const parsed = JSON.parse(readFileSync(STATE_PATH, "utf-8"));
     const now = Date.now();
     for (const [k, until] of Object.entries(parsed?.exhaustedUntil || {})) {
-      if (typeof until === "number" && until > now) exhaustedUntil.set(k, until);
+      if (typeof until === "number" && until > now)
+        exhaustedUntil.set(k, until);
     }
   }
 } catch {}
@@ -171,7 +172,9 @@ function emailFromAuthPath(path: string): string | undefined {
     if (typeof token !== "string") return undefined;
     const payload = token.split(".")[1];
     if (!payload) return undefined;
-    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
+    const claims = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf-8"),
+    );
     return typeof claims?.email === "string" && claims.email.trim()
       ? claims.email.trim()
       : undefined;
@@ -218,7 +221,10 @@ function toPublic(a: CodexAccount): CodexAccountPublic {
     owner: a.owner,
     mode: a.owner ? "personal" : "shared",
     createdAt: a.createdAt,
-    exhaustedUntil: until !== undefined && until > Date.now() ? new Date(until).toISOString() : null,
+    exhaustedUntil:
+      until !== undefined && until > Date.now()
+        ? new Date(until).toISOString()
+        : null,
     usable: !isExhausted(a.id),
     usage: a.kind === "home" ? codexUsageFor(a.id) : null,
   };
@@ -234,7 +240,7 @@ export function getCodexAccountById(id: string): CodexAccount | undefined {
 
 export function getUsableCodexAccountById(
   id: string,
-  model?: string
+  model?: string,
 ): CodexAccount | undefined {
   const account = getCodexAccountById(id);
   return account && !isExhausted(account.id, model) ? account : undefined;
@@ -248,13 +254,15 @@ export function addCodexAccount(
   name = "",
   kind: "api_key" | "home",
   value: string,
-  owner?: string
+  owner?: string,
 ): CodexAccountPublic | { error: string } {
   const trimmedValue = value.trim();
   if (!trimmedValue) return { error: "Value is required" };
 
   if (kind === "api_key" && !/^sk-/.test(trimmedValue)) {
-    return { error: "API key doesn't look like an OpenAI key (expected sk-…)." };
+    return {
+      error: "API key doesn't look like an OpenAI key (expected sk-…).",
+    };
   }
   if (kind === "home") {
     if (!existsSync(`${trimmedValue}/auth.json`)) {
@@ -267,8 +275,9 @@ export function addCodexAccount(
   }
 
   const trimmedName =
-    (kind === "home" ? emailFromAuthPath(`${trimmedValue}/auth.json`) : undefined) ||
-    name.trim();
+    (kind === "home"
+      ? emailFromAuthPath(`${trimmedValue}/auth.json`)
+      : undefined) || name.trim();
   if (!trimmedName) {
     return {
       error:
@@ -313,7 +322,7 @@ export function removeCodexAccount(id: string): boolean {
 /** Set or clear (empty/undefined) an account's personal owner. */
 export function setCodexAccountOwner(
   id: string,
-  owner: string | undefined
+  owner: string | undefined,
 ): CodexAccountPublic | null {
   const accounts = readStore();
   const idx = accounts.findIndex((a) => a.id === id);
@@ -344,13 +353,17 @@ export function pickCodexAccount(
   model?: string,
   sessionKey?: string,
   out?: { reason?: string },
-  user?: string
+  user?: string,
 ): CodexAccount | undefined {
-  const usable = readStore().filter((a) => !exclude?.has(a.id) && !isExhausted(a.id, model));
+  const usable = readStore().filter(
+    (a) => !exclude?.has(a.id) && !isExhausted(a.id, model),
+  );
   const personal = user
     ? usable.filter((a) => a.owner && userMatchesAny(user, [a.owner]))
     : [];
-  const candidates = personal.length ? personal : usable.filter((a) => !a.owner);
+  const candidates = personal.length
+    ? personal
+    : usable.filter((a) => !a.owner);
   if (candidates.length === 0) return undefined;
   let picked: CodexAccount;
   if (sessionKey) {
@@ -410,7 +423,7 @@ function uuidv7Ms(id: string): number | null {
  * day ± 1 to be safe around midnight.
  */
 export function findCodexRollout(
-  threadId: string
+  threadId: string,
 ): { path: string; account?: CodexAccount } | null {
   const ms = uuidv7Ms(threadId);
   if (!ms) return null;
@@ -418,7 +431,7 @@ export function findCodexRollout(
   for (const delta of [0, -1, 1]) {
     const d = new Date(ms + delta * 86_400_000);
     days.push(
-      `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCDate()).padStart(2, "0")}`
+      `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCDate()).padStart(2, "0")}`,
     );
   }
   for (const { home, account } of codexHomes()) {
@@ -427,7 +440,8 @@ export function findCodexRollout(
       if (!existsSync(dir)) continue;
       try {
         for (const f of readdirSync(dir)) {
-          if (f.endsWith(`-${threadId}.jsonl`)) return { path: `${dir}/${f}`, account };
+          if (f.endsWith(`-${threadId}.jsonl`))
+            return { path: `${dir}/${f}`, account };
         }
       } catch {}
     }
@@ -442,7 +456,7 @@ export function markCodexExhausted(id: string, model?: string): void {
   exhaustedUntil.set(exhaustionKey(id, model), until);
   persistExhausted();
   console.warn(
-    `[codex-accounts] ${account?.name || id}${model ? ` (${model})` : ""} marked exhausted until ${new Date(until).toISOString()}`
+    `[codex-accounts] ${account?.name || id}${model ? ` (${model})` : ""} marked exhausted until ${new Date(until).toISOString()}`,
   );
 }
 
@@ -462,7 +476,7 @@ export function markCodexWedged(id: string): boolean {
   exhaustedUntil.set(exhaustionKey(id), until);
   persistExhausted();
   console.warn(
-    `[codex-accounts] ${account?.name || id} sidelined until ${new Date(until).toISOString()} after a bridge wedge`
+    `[codex-accounts] ${account?.name || id} sidelined until ${new Date(until).toISOString()} after a bridge wedge`,
   );
   return true;
 }

@@ -16,8 +16,19 @@ import { ClampedBody, EntryImages, EntryVideos } from "./MessageBubble";
 import { IconChevronDown, IconStack } from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";
-import { msgBody } from "../lib/msg-classes";
-import { formatDuration } from "../lib/time";
+import { TextShimmer } from "../ui/text-shimmer";
+import { Tooltip } from "../ui/tooltip";
+import {
+  msgBody,
+  msgReasoningBody,
+  msgReasoningShimmer,
+  msgReasoningTitle,
+} from "../lib/msg-classes";
+import {
+  isLegacyReasoningHeading,
+  reasoningDisplay,
+} from "../lib/reasoning-display";
+import { formatDuration, fullTime } from "../lib/time";
 import {
   getTurnActivityPrefs,
   onTurnActivityChanged,
@@ -34,209 +45,290 @@ import { type as typography } from "../styles/typography.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	mxAuto: {
-			marginInline: "auto"
-	},
-	mb3: {
-			marginBottom: "calc(4px * 3)"
-	},
-	wFull: {
-			width: "100%"
-	},
-	maxWVarSessionCol: {
-			maxWidth: "var(--session-col)"
-	},
-	Mx2: {
-			marginInline: "calc(4px * -2)"
-	},
-	flex: {
-			display: "flex"
-	},
-	wCalc10016px: {
-			width: "calc(100% + 16px)"
-	},
-	minW0: {
-			minWidth: "0"
-	},
-	cursorPointer: {
-			cursor: "pointer"
-	},
-	itemsBaseline: {
-			alignItems: "baseline"
-	},
-	gap2: {
-			gap: "calc(4px * 2)"
-	},
-	roundedControl: {
-			borderRadius: "calc(12px * var(--rf))",
-
-		cornerShape: "var(--cs)",},
-	border0: {
-			borderStyle: "solid",
-			borderWidth: "0px"
-	},
-	bgTransparent: {
-			backgroundColor: "transparent"
-	},
-	py1: {
-			paddingBlock: "4px"
-	},
-	pl1: {
-			paddingLeft: "4px"
-	},
-	pr3: {
-			paddingRight: "calc(4px * 3)"
-	},
-	textLeft: {
-			textAlign: "left"
-	},
-	fontSans: {
-			fontFamily: "var(--sans)"
-	},
-	leading5: {
-			lineHeight: "calc(4px * 5)"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	transitionColors: {
-			transitionProperty: "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
-			transitionTimingFunction: "var(--tw-ease, var(--ease))",
-			transitionDuration: "var(--tw-duration, var(--dur-micro))"
-	},
-	block: {
-			display: "block"
-	},
-	flexShrink0: {
-			flexShrink: "0"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	truncate: {
-			overflow: "hidden",
-			textOverflow: "ellipsis",
-			whiteSpace: "nowrap"
-	},
-	leading4: {
-			lineHeight: "calc(4px * 4)"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	absolute: {
-			position: "absolute"
-	},
-	insetY0: {
-			insetBlock: "0"
-	},
-	Left2: {
-			left: "calc(4px * -2)"
-	},
-	w4: {
-			width: "calc(4px * 4)"
-	},
-	p0: {
-			padding: "0"
-	},
-	MlPx: {
-			marginLeft: "-1px"
-	},
-	pl7px: {
-			paddingLeft: "7px"
-	},
-	pr1: {
-			paddingRight: "4px"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	px1: {
-			paddingInline: "4px"
-	},
-	py3px: {
-			paddingBlock: "3px"
-	},
-	relative: {
-			position: "relative"
-	},
-	grid: {
-			display: "grid"
-	},
-	size22px: {
-			width: "22px",
-			height: "22px"
-	},
-	placeItemsCenter: {
-			placeItems: "center"
-	},
-	left12: {
-			left: "calc(1 / 2 * 100%)"
-	},
-	top12: {
-			top: "calc(1 / 2 * 100%)"
-	},
-	TranslateX12: {
-			translate: "calc(calc(1 / 2 * 100%) * -1) 0"
-	},
-	TranslateY12: {
-			translate: "0 calc(calc(1 / 2 * 100%) * -1)"
-	},
-	flex1: {
-			flex: "1"
-	},
-	size11px: {
-			width: "11px",
-			height: "11px"
-	},
-	animateSpin: {
-			animation: "var(--animate-spin)"
-	},
-	roundedFull: {
-			borderRadius: "calc(infinity * 1px)",
-
-		cornerShape: "round",},
-	border: {
-			borderStyle: "solid",
-			borderWidth: "1px"
-	},
-	borderBLineStrong: {
-			borderBottomColor: "var(--border-strong)"
-	},
-	borderLLineStrong: {
-			borderLeftColor: "var(--border-strong)"
-	},
-	borderRLineStrong: {
-			borderRightColor: "var(--border-strong)"
-	},
-	borderTDim: {
-			borderTopColor: "var(--text-dim)"
-	},
-	ml3: {
-			marginLeft: "calc(4px * 3)"
-	},
-	my2: {
-			marginBlock: "calc(4px * 2)"
-	},
+  mxAuto: {
+    marginInline: "auto",
+  },
+  mb3: {
+    marginBottom: "calc(4px * 3)",
+  },
+  wFull: {
+    width: "100%",
+  },
+  maxWVarSessionCol: {
+    maxWidth: "var(--session-col)",
+  },
+  Mx2: {
+    marginInline: "calc(4px * -2)",
+  },
+  flex: {
+    display: "flex",
+  },
+  wCalc10016px: {
+    width: "calc(100% + 16px)",
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  cursorPointer: {
+    cursor: "pointer",
+  },
+  itemsBaseline: {
+    alignItems: "baseline",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  roundedControl: {
+    borderRadius: "calc(12px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  border0: {
+    borderStyle: "solid",
+    borderWidth: "0px",
+  },
+  bgTransparent: {
+    backgroundColor: "transparent",
+  },
+  py1: {
+    paddingBlock: "4px",
+  },
+  pl1: {
+    paddingLeft: "4px",
+  },
+  pr3: {
+    paddingRight: "calc(4px * 3)",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  fontSans: {
+    fontFamily: "var(--sans)",
+  },
+  leading5: {
+    lineHeight: "calc(4px * 5)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  transitionColors: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
+  },
+  hoverBgHover40: {
+    "@media (hover: hover)": {
+      ":hover": {
+        backgroundColor: "color-mix(in oklab, var(--hover) 40%, transparent)",
+      },
+    },
+  },
+  hoverTextFg: {
+    "@media (hover: hover)": {
+      ":hover": {
+        color: "var(--text)",
+      },
+    },
+  },
+  block: {
+    display: "block",
+  },
+  flexShrink0: {
+    flexShrink: "0",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  leading4: {
+    lineHeight: "calc(4px * 4)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  absolute: {
+    position: "absolute",
+  },
+  insetY0: {
+    insetBlock: "0",
+  },
+  Left2: {
+    left: "calc(4px * -2)",
+  },
+  w4: {
+    width: "calc(4px * 4)",
+  },
+  p0: {
+    padding: "0",
+  },
+  afterAbsolute: {
+    "::after": {
+      content: '""',
+      position: "absolute",
+    },
+  },
+  afterInsetY0: {
+    "::after": {
+      content: '""',
+      insetBlock: "0",
+    },
+  },
+  afterLeft12: {
+    "::after": {
+      content: '""',
+      left: "calc(1 / 2 * 100%)",
+    },
+  },
+  afterBorderL: {
+    "::after": {
+      content: '""',
+      borderLeftStyle: "solid",
+      borderLeftWidth: "1px",
+    },
+  },
+  afterBorderTransparent: {
+    "::after": {
+      content: '""',
+      borderColor: "transparent",
+    },
+  },
+  afterTransitionColors: {
+    "::after": {
+      content: '""',
+      transitionProperty:
+        "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+      transitionTimingFunction: "var(--tw-ease, var(--ease))",
+      transitionDuration: "var(--tw-duration, var(--dur-micro))",
+    },
+  },
+  hoverAfterBorderLineStrong: {
+    "@media (hover: hover)": {
+      "::after": {
+        content: '""',
+        borderColor: "var(--border-strong)",
+      },
+    },
+  },
+  focusVisibleAfterBorderLineStrong: {
+    "::after": {
+      content: '""',
+      borderColor: "var(--border-strong)",
+    },
+  },
+  MlPx: {
+    marginLeft: "-1px",
+  },
+  desktopMl0: {
+    "@media (min-width: 721px)": {
+      marginLeft: "0",
+    },
+  },
+  pl7px: {
+    paddingLeft: "7px",
+  },
+  pr1: {
+    paddingRight: "4px",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  px1: {
+    paddingInline: "4px",
+  },
+  py3px: {
+    paddingBlock: "3px",
+  },
+  phoneMinH10: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 10)",
+    },
+  },
+  relative: {
+    position: "relative",
+  },
+  grid: {
+    display: "grid",
+  },
+  size22px: {
+    width: "22px",
+    height: "22px",
+  },
+  placeItemsCenter: {
+    placeItems: "center",
+  },
+  left12: {
+    left: "calc(1 / 2 * 100%)",
+  },
+  top12: {
+    top: "calc(1 / 2 * 100%)",
+  },
+  TranslateX12: {
+    translate: "calc(calc(1 / 2 * 100%) * -1) 0",
+  },
+  TranslateY12: {
+    translate: "0 calc(calc(1 / 2 * 100%) * -1)",
+  },
+  flex1: {
+    flex: "1",
+  },
+  size11px: {
+    width: "11px",
+    height: "11px",
+  },
+  animateSpin: {
+    animation: "var(--animate-spin)",
+  },
+  roundedFull: {
+    borderRadius: "calc(infinity * 1px)",
+    cornerShape: "round",
+  },
+  border: {
+    borderStyle: "solid",
+    borderWidth: "1px",
+  },
+  borderBLineStrong: {
+    borderBottomColor: "var(--border-strong)",
+  },
+  borderLLineStrong: {
+    borderLeftColor: "var(--border-strong)",
+  },
+  borderRLineStrong: {
+    borderRightColor: "var(--border-strong)",
+  },
+  borderTDim: {
+    borderTopColor: "var(--text-dim)",
+  },
+  ml3: {
+    marginLeft: "calc(4px * 3)",
+  },
+  my2: {
+    marginBlock: "calc(4px * 2)",
+  },
 });
 
 interface Props {
-  /** The folded part of one assistant turn: tool_use + intermediate assistant
-   * text entries, in order (the turn's final answer renders outside, as a
-   * normal bubble). */
+  /** One turn's tool calls, provider reasoning, and intermediate narration.
+   * The final assistant output is never passed here. */
   items: TranscriptEntry[];
   toolResults: Map<string, TranscriptEntry>;
   live: boolean; // this is the active block of a running stream
+  /** A model message exists in this turn, so "Expand while running" has
+   * distinct output and tool rows to reveal instead of repeating one count. */
+  expandWhileRunning?: boolean;
   onOpenSubagent?: (agentId: string, label: string) => void;
   /** Lets wire-clamped intermediate notes fetch their full content. */
   sessionId?: string;
 }
 
 /**
- * One assistant turn's work, folded into a single calm line — "Worked · 12m 4s
- * · 51 steps" — closed by default so the session reads as question → answer.
- * Expanding shows the full flat run: intermediate assistant notes interleaved
- * with the tool calls and a compact change summary.
+ * One turn's work, folded into a single calm line — "Worked · 12m 4s · 51
+ * steps" — closed by default so the session reads as question → answer. It
+ * stays open while working, showing intermediate narration and reasoning beside
+ * the tools they describe. The final assistant output never enters this fold.
  *
  * The collapsed line carries what a folded turn can't otherwise say: duration,
  * step count, and the ±lines it moved when the turn wrote files. Line changes
@@ -259,38 +351,43 @@ export const TurnBlock = function TurnBlock({
   items,
   toolResults,
   live,
+  expandWhileRunning = false,
   onOpenSubagent,
   sessionId,
 }: Props) {
   const pathRoots = useToolPathRoots();
   const tools = items.filter((it) => it.type === "tool_use");
   const messages = items.filter((it) => it.type === "assistant");
+  const lastMessage = messages[messages.length - 1];
+  const activeReasoning =
+    live && lastMessage && reasoningEntry(lastMessage)
+      ? lastMessage
+      : undefined;
   const hasNarration = messages.length > 0;
 
   // Default fold state follows the two preferences (Settings → Preferences),
   // except that routine tool-only work stays one calm summary row. Opening a
   // tool-only turn by default produced the same count twice: "Working 57
-  // steps" followed by "57 steps". Once the agent writes a real update there
-  // are distinct rows worth showing, so "Expand while running" opens them as
-  // before. "Always open" and a person's manual choice still win in either
-  // state. Failures stay one click away, and explicitly surfaced media
+  // steps" followed by "57 steps". "Always open" and a person's manual choice
+  // still win. Failures stay one click away, and explicitly surfaced media
   // outlives the fold on its own (featuredTurnMedia).
   const [pref, setPref] = useState(getTurnActivityPrefs);
   useEffect(
     () => onTurnActivityChanged(() => setPref(getTurnActivityPrefs())),
-    []
+    [],
   );
   const defaultExpanded =
-    pref.work === "open" || (pref.work === "running" && live && hasNarration);
+    pref.work === "open" ||
+    (pref.work === "running" && live && expandWhileRunning);
   const [rememberedExpanded] = useState(() =>
     transcriptDisclosureLedger.read(
       "turn",
       sessionId,
-      items.map((item) => item.id)
-    )
+      items.map((item) => item.id),
+    ),
   );
   const [expanded, setExpanded] = useState(
-    rememberedExpanded ?? defaultExpanded
+    rememberedExpanded ?? defaultExpanded,
   );
   // `tools` owns the nested grouped-call disclosures. Open renders each call
   // in place; folded keeps routine runs behind their compact step rows.
@@ -311,18 +408,19 @@ export const TurnBlock = function TurnBlock({
       "turn",
       sessionId,
       items.map((item) => item.id),
-      next
+      next,
     );
     setExpanded(next);
   }
 
-  const duration = blockDuration(items, toolResults);
+  const timing = blockTiming(items, toolResults);
+  const duration = timing.duration;
   const lastTool = tools[tools.length - 1];
 
   // Memoized against the house rule: a live turn re-renders on every stream
   // event, and this walks every step it has taken so far (collectTouchedFiles
   // skips non-tool entries itself, so `items` and `tools` give the same set).
-  const editedFiles = (collectTouchedFiles(items));
+  const editedFiles = collectTouchedFiles(items);
   // Presentation stats cover code-writing tools that do not expose their input
   // as a plain Edit or Write call. Keep the parsed files for the hover card,
   // but let the server-derived aggregate own the summary's total.
@@ -342,21 +440,30 @@ export const TurnBlock = function TurnBlock({
         : "";
   // One run of faint meta rather than three separately-shrinking ones, so the
   // line collapses by dropping characters off its tail instead of overflowing.
-  const metaLabel = [!live && duration, countsLabel].filter(Boolean).join(" · ");
+  const metaLabel = [!live && duration, countsLabel]
+    .filter(Boolean)
+    .join(" · ");
 
-  // Interleave: consecutive tool calls share one timeline rail; intermediate
-  // assistant messages break the rail into segments.
+  // Interleave tools, intermediate narration, and provider reasoning. Adjacent
+  // reasoning summaries are status revisions rather than separate moments:
+  // keep their latest heading while retaining prose and media. Narration stays
+  // as ordinary readable output inside the work rail.
   const sections: Array<
     | { kind: "tools"; items: TranscriptEntry[] }
-    | { kind: "msg"; entry: TranscriptEntry }
+    | { kind: "reasoning"; items: TranscriptEntry[] }
+    | { kind: "narration"; entry: TranscriptEntry }
   > = [];
-  for (const it of items) {
-    if (it.type === "tool_use") {
+  for (const entry of items) {
+    if (entry.type === "tool_use") {
       const last = sections[sections.length - 1];
-      if (last?.kind === "tools") last.items.push(it);
-      else sections.push({ kind: "tools", items: [it] });
+      if (last?.kind === "tools") last.items.push(entry);
+      else sections.push({ kind: "tools", items: [entry] });
+    } else if (reasoningEntry(entry)) {
+      const last = sections[sections.length - 1];
+      if (last?.kind === "reasoning") last.items.push(entry);
+      else sections.push({ kind: "reasoning", items: [entry] });
     } else {
-      sections.push({ kind: "msg", entry: it });
+      sections.push({ kind: "narration", entry });
     }
   }
   // Survives the fold: a marked screenshot is the answer to "show me", so
@@ -390,23 +497,60 @@ export const TurnBlock = function TurnBlock({
         // asymmetric padding moves the disclosure line into that overhang so
         // the open rail sits near the transcript edge instead of floating
         // inside the work column.
-        {...mergeStylexProps("hover:bg-hover/40 hover:text-fg", sx.Mx2, sx.flex, sx.wCalc10016px, sx.minW0, sx.cursorPointer, sx.itemsBaseline, sx.gap2, sx.roundedControl, sx.border0, sx.bgTransparent, sx.py1, sx.pl1, sx.pr3, sx.textLeft, sx.fontSans, sx.leading5, sx.textDim, sx.transitionColors, typography.itemTitle)}
+        {...stylex.props(
+          sx.Mx2,
+          sx.flex,
+          sx.wCalc10016px,
+          sx.minW0,
+          sx.cursorPointer,
+          sx.itemsBaseline,
+          sx.gap2,
+          sx.roundedControl,
+          sx.border0,
+          sx.bgTransparent,
+          sx.py1,
+          sx.pl1,
+          sx.pr3,
+          sx.textLeft,
+          sx.fontSans,
+          sx.leading5,
+          sx.textDim,
+          sx.transitionColors,
+          sx.hoverBgHover40,
+          sx.hoverTextFg,
+          typography.itemTitle,
+        )}
       >
         <span
           className={cn(
-            utilityClassName("grid size-5 flex-shrink-0 self-center place-items-center leading-none text-faint transition-transform duration-150"),
-            !expanded && utilityClassName("-rotate-90")
+            utilityClassName(
+              "grid size-5 flex-shrink-0 self-center place-items-center leading-none text-faint transition-transform duration-150",
+            ),
+            !expanded && utilityClassName("-rotate-90"),
           )}
         >
-          <IconChevronDown size={20} className={mergeStylexOverrideClassName("", sx.block)} />
+          <IconChevronDown
+            size={20}
+            className={mergeStylexOverrideClassName("", sx.block)}
+          />
         </span>
         <span {...stylex.props(sx.flexShrink0, sx.fontMedium)}>
           {live ? "Working" : "Worked"}
         </span>
         {metaLabel && (
-          <span {...stylex.props(sx.minW0, sx.truncate, sx.leading4, sx.textFaint, typography.label)}>
-            {metaLabel}
-          </span>
+          <Tooltip label={!live ? fullTime(timing.completedAt) : ""}>
+            <span
+              {...stylex.props(
+                sx.minW0,
+                sx.truncate,
+                sx.leading4,
+                sx.textFaint,
+                typography.label,
+              )}
+            >
+              {metaLabel}
+            </span>
+          </Tooltip>
         )}
         {/* Hovering the counts opens what they count: the lines this turn
             wrote, per file, without unfolding it. */}
@@ -418,18 +562,28 @@ export const TurnBlock = function TurnBlock({
           />
         )}
         {toolOnlyAggregate?.mediaLabel && (
-          <span {...stylex.props(sx.flexShrink0, sx.textFaint, typography.meta)}>
+          <span
+            {...stylex.props(sx.flexShrink0, sx.textFaint, typography.meta)}
+          >
             {toolOnlyAggregate.mediaLabel}
           </span>
         )}
         {live && !expanded && hasNarration && lastTool && (
-          <span {...stylex.props(sx.minW0, sx.truncate, sx.leading4, sx.textFaint, typography.label)}>
+          <span
+            {...stylex.props(
+              sx.minW0,
+              sx.truncate,
+              sx.leading4,
+              sx.textFaint,
+              typography.label,
+            )}
+          >
             {toolDisplayName(lastTool.toolName)}:{" "}
             {toolSummary(
               lastTool.toolName || "Tool",
               lastTool.toolInput,
               lastTool.content,
-              pathRoots
+              pathRoots,
             )}
           </span>
         )}
@@ -447,18 +601,47 @@ export const TurnBlock = function TurnBlock({
             // the seam; the rail says "still inside the work" from any
             // scroll position). The 5px puts the hairline under the chevron's
             // center after the disclosure line's 8px left shift.
-            utilityClassName("relative mb-2 ml-[5px] border-l border-line pl-2.5")
+            utilityClassName(
+              "relative mb-2 ml-[5px] border-l border-line pl-2.5",
+            ),
           )}
         >
           <button
             type="button"
             aria-label={`Collapse ${live ? "Working" : "Worked"}`}
             onClick={() => rememberExpansion(false)}
-            {...mergeStylexProps("after:absolute after:inset-y-0 after:left-1/2 after:border-l after:border-transparent after:transition-colors hover:after:border-line-strong focus-visible:after:border-line-strong", sx.absolute, sx.insetY0, sx.Left2, sx.w4, sx.cursorPointer, sx.border0, sx.bgTransparent, sx.p0)}
+            {...stylex.props(
+              sx.absolute,
+              sx.insetY0,
+              sx.Left2,
+              sx.w4,
+              sx.cursorPointer,
+              sx.border0,
+              sx.bgTransparent,
+              sx.p0,
+              sx.afterAbsolute,
+              sx.afterInsetY0,
+              sx.afterLeft12,
+              sx.afterBorderL,
+              sx.afterBorderTransparent,
+              sx.afterTransitionColors,
+              sx.hoverAfterBorderLineStrong,
+              sx.focusVisibleAfterBorderLineStrong,
+            )}
           />
           {sections.map((sec) =>
-            sec.kind === "msg" ? (
-              <TurnMessage
+            sec.kind === "reasoning" ? (
+              <ReasoningMessage
+                key={sec.items[0].id}
+                entries={sec.items}
+                active={
+                  activeReasoning !== undefined &&
+                  sec.items.includes(activeReasoning)
+                }
+                sessionId={sessionId}
+              />
+            ) : sec.kind === "narration" ? (
+              <NarrationMessage
                 key={sec.entry.id}
                 entry={sec.entry}
                 sessionId={sessionId}
@@ -468,27 +651,29 @@ export const TurnBlock = function TurnBlock({
               // the 1px optical correction for the icon's inset glyph.
               <div
                 key={sec.items[0].id}
-                {...mergeStylexProps("desktop:ml-0", sx.MlPx)}
+                {...stylex.props(sx.MlPx, sx.desktopMl0)}
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
-                {/* The outer Working row is already the tool-only run's
+                {/* The outer Working row is already a tool-only run's
                     summary. If someone opens it, reveal the calls directly
-                    instead of inserting a second, identical disclosure. */}
+                    instead of inserting a second, identical disclosure. A
+                    narrated turn still lets the Tool calls preference fold
+                    routine calls between its updates. */}
                 <ToolSection
                   items={sec.items}
                   toolResults={toolResults}
                   live={live}
-                  expandAll={!hasNarration || pref.tools === "open"}
+                  expandAll={pref.tools === "open" || !hasNarration}
                   sessionId={sessionId}
                   onOpenSubagent={onOpenSubagent}
                 />
               </div>
-            )
+            ),
           )}
         </div>
       </Fold>
 
-      {/* Aligned with the fold's own rows (see TurnMessage on the 7px). */}
+      {/* Explicitly surfaced media survives the work fold. */}
       {(featured.images.length > 0 || featured.videos.length > 0) && (
         <div {...stylex.props(sx.pl7px, sx.pr1)}>
           <EntryImages images={featured.images} sessionId={sessionId} />
@@ -575,7 +760,7 @@ export function ToolSection(props: ToolSectionProps) {
           />
         ))}
       </React.Fragment>
-    )
+    ),
   );
 }
 
@@ -594,27 +779,21 @@ function ToolRunBlock({
       transcriptDisclosureLedger.read(
         "tool-run",
         sessionId,
-        items.map((item) => item.id)
-      ) ?? false
+        items.map((item) => item.id),
+      ) ?? false,
   );
   function rememberExpansion(next: boolean) {
     transcriptDisclosureLedger.write(
       "tool-run",
       sessionId,
       items.map((item) => item.id),
-      next
+      next,
     );
     setExpanded(next);
   }
 
-  const {
-    label,
-    pending,
-    additions,
-    deletions,
-    statusLabel,
-    mediaLabel,
-  } = toolRunAggregate(items, toolResults, live);
+  const { label, pending, additions, deletions, statusLabel, mediaLabel } =
+    toolRunAggregate(items, toolResults, live);
 
   return (
     <div data-tool-run="true" data-eid={`${items[items.length - 1].id}#run`}>
@@ -624,25 +803,68 @@ function ToolRunBlock({
         aria-label={`${expanded ? "Hide" : "Show"} ${items.length} grouped steps: ${label}${statusLabel ? `. ${statusLabel}` : ""}`}
         title={`${items.length} grouped steps`}
         onClick={() => rememberExpansion(!expanded)}
-        {...mergeStylexProps("group hover:bg-hover/40 phone:min-h-10", sx.flex, sx.wFull, sx.minW0, sx.cursorPointer, sx.itemsCenter, sx.gap2, sx.roundedControl, sx.border0, sx.bgTransparent, sx.px1, sx.py3px, sx.textLeft, sx.fontSans, sx.transitionColors)}
+        {...mergeStylexProps(
+          "group",
+          sx.flex,
+          sx.wFull,
+          sx.minW0,
+          sx.cursorPointer,
+          sx.itemsCenter,
+          sx.gap2,
+          sx.roundedControl,
+          sx.border0,
+          sx.bgTransparent,
+          sx.px1,
+          sx.py3px,
+          sx.textLeft,
+          sx.fontSans,
+          sx.transitionColors,
+          sx.hoverBgHover40,
+          sx.phoneMinH10,
+        )}
       >
         {/* Open, the row is a heading for the steps under it, so it keeps the
             chevron rather than a stack of what is already on screen. Closed,
             the stack stands in until a hover offers the chevron. */}
-        <span {...stylex.props(sx.relative, sx.grid, sx.size22px, sx.flexShrink0, sx.placeItemsCenter, sx.textFaint)}>
+        <span
+          {...stylex.props(
+            sx.relative,
+            sx.grid,
+            sx.size22px,
+            sx.flexShrink0,
+            sx.placeItemsCenter,
+            sx.textFaint,
+          )}
+        >
           <span
             className={cn(
-              utilityClassName("absolute inset-0 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0"),
-              expanded && utilityClassName("opacity-0")
+              utilityClassName(
+                "absolute inset-0 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0",
+              ),
+              expanded && utilityClassName("opacity-0"),
             )}
           >
-            <IconStack size={18} className={mergeStylexOverrideClassName("", sx.absolute, sx.left12, sx.top12, sx.TranslateX12, sx.TranslateY12)} />
+            <IconStack
+              size={18}
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.absolute,
+                sx.left12,
+                sx.top12,
+                sx.TranslateX12,
+                sx.TranslateY12,
+              )}
+            />
           </span>
           <IconChevronDown
             size={20}
             className={cn(
-              utilityClassName("absolute block transition-[opacity,transform] duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"),
-              expanded ? utilityClassName("opacity-100") : utilityClassName("-rotate-90 opacity-0")
+              utilityClassName(
+                "absolute block transition-[opacity,transform] duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
+              ),
+              expanded
+                ? utilityClassName("opacity-100")
+                : utilityClassName("-rotate-90 opacity-0"),
             )}
           />
         </span>
@@ -650,7 +872,18 @@ function ToolRunBlock({
             and one click puts every step back with its own glyph, so naming
             them here only asks to be read. The names stay in the aria-label,
             where the count alone would tell a screen reader nothing. */}
-        <span {...mergeStylexProps("group-hover:text-fg", sx.flexShrink0, sx.truncate, sx.fontMedium, sx.leading5, sx.textDim, sx.transitionColors, typography.itemTitle)} >
+        <span
+          {...mergeStylexProps(
+            "group-hover:text-fg",
+            sx.flexShrink0,
+            sx.truncate,
+            sx.fontMedium,
+            sx.leading5,
+            sx.textDim,
+            sx.transitionColors,
+            typography.itemTitle,
+          )}
+        >
           {items.length} step{items.length === 1 ? "" : "s"}
         </span>
         {/* What the count can't say: a run that edited files moved lines, in
@@ -660,10 +893,26 @@ function ToolRunBlock({
         )}
         <span {...stylex.props(sx.minW0, sx.flex1)} />
         {mediaLabel && (
-          <span {...stylex.props(sx.flexShrink0, sx.textFaint, typography.meta)}>{mediaLabel}</span>
+          <span
+            {...stylex.props(sx.flexShrink0, sx.textFaint, typography.meta)}
+          >
+            {mediaLabel}
+          </span>
         )}
         {pending > 0 && (
-          <span {...stylex.props(sx.size11px, sx.flexShrink0, sx.animateSpin, sx.roundedFull, sx.border, sx.borderBLineStrong, sx.borderLLineStrong, sx.borderRLineStrong, sx.borderTDim)} />
+          <span
+            {...stylex.props(
+              sx.size11px,
+              sx.flexShrink0,
+              sx.animateSpin,
+              sx.roundedFull,
+              sx.border,
+              sx.borderBLineStrong,
+              sx.borderLLineStrong,
+              sx.borderRLineStrong,
+              sx.borderTDim,
+            )}
+          />
         )}
       </button>
       <Fold open={expanded}>
@@ -677,9 +926,7 @@ function ToolRunBlock({
                 entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
               }
               pending={
-                live &&
-                !!entry.toolUseId &&
-                !toolResults.has(entry.toolUseId)
+                live && !!entry.toolUseId && !toolResults.has(entry.toolUseId)
               }
               onOpenSubagent={onOpenSubagent}
             />
@@ -692,17 +939,20 @@ function ToolRunBlock({
 
 function isCompactTool(
   entry: TranscriptEntry,
-  result: TranscriptEntry | undefined
+  result: TranscriptEntry | undefined,
 ): boolean {
   const name = entry.toolName || "Tool";
-  if (!COMPACT_TOOL_FAMILIES.has(toolFamily(name))) return false;
+  const routine =
+    canonicalToolName(name) === "ListAgents" ||
+    COMPACT_TOOL_FAMILIES.has(toolFamily(name));
+  if (!routine) return false;
   if (assetToolPath(name, entry.toolInput)) return false;
   return !result?.featuredMedia?.length;
 }
 
 /** The run's tools in call order, each with how often it ran. */
 function groupedTools(
-  items: TranscriptEntry[]
+  items: TranscriptEntry[],
 ): Array<{ name: string; count: number }> {
   const counts = new Map<string, number>();
   for (const entry of items) {
@@ -759,7 +1009,7 @@ const aggregateByRun = new WeakMap<
 function toolRunAggregate(
   items: TranscriptEntry[],
   toolResults: Map<string, TranscriptEntry>,
-  live: boolean
+  live: boolean,
 ): ToolRunAggregate {
   const key = items[items.length - 1];
   const hit = key ? aggregateByRun.get(key) : undefined;
@@ -767,7 +1017,7 @@ function toolRunAggregate(
     return hit.value;
 
   const results = items.map((entry) =>
-    entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
+    entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined,
   );
   let pending = 0;
   let images = 0;
@@ -797,7 +1047,9 @@ function toolRunAggregate(
     statusLabel: [
       mediaCount > 0 ? `${mediaCount} media` : "",
       pending > 0 ? "running" : "",
-    ].filter(Boolean).join(", "),
+    ]
+      .filter(Boolean)
+      .join(", "),
     mediaLabel:
       mediaCount === 0
         ? ""
@@ -807,7 +1059,8 @@ function toolRunAggregate(
             ? `${videos} video${videos === 1 ? "" : "s"}`
             : `${mediaCount} media`,
   };
-  if (key) aggregateByRun.set(key, { items: items.slice(), results, live, value });
+  if (key)
+    aggregateByRun.set(key, { items: items.slice(), results, live, value });
   return value;
 }
 
@@ -817,7 +1070,7 @@ function sameRunInputs(
     results: Array<TranscriptEntry | undefined>;
   },
   items: TranscriptEntry[],
-  toolResults: Map<string, TranscriptEntry>
+  toolResults: Map<string, TranscriptEntry>,
 ): boolean {
   if (cached.items.length !== items.length) return false;
   for (let i = 0; i < items.length; i++) {
@@ -830,8 +1083,13 @@ function sameRunInputs(
   return true;
 }
 
-/** Intermediate reasoning stays readable while the turn itself provides the fold. */
-function TurnMessage({
+function reasoningEntry(entry: TranscriptEntry): boolean {
+  return Boolean(entry.isReasoning || isLegacyReasoningHeading(entry.content));
+}
+
+/** Ordinary intermediate output inside the work rail. It keeps answer styling
+ * so grouping changes placement only, never the meaning or readability. */
+function NarrationMessage({
   entry,
   sessionId,
 }: {
@@ -840,13 +1098,9 @@ function TurnMessage({
 }) {
   return (
     <div
-      // 7px, not the row's 4px: the fold header and the tool rows both pad by
-      // 4 and then draw a glyph inset ~5px into its own box, so text padded to
-      // 4 starts left of every other line in the turn. 7 sits just inside the
-      // chevron's ink — the glyph's own side bearing makes a true 9 read as an
-      // indent rather than an alignment.
-      {...stylex.props(sx.mxAuto, sx.my2, sx.wFull, sx.maxWVarSessionCol, sx.pr1, sx.pl7px)}
+      {...stylex.props(sx.my2, sx.px1)}
       data-eid={entry.id}
+      data-narration=""
     >
       <ClampedBody
         className={cn(msgBody, utilityClassName("markdown text-fg"))}
@@ -855,6 +1109,63 @@ function TurnMessage({
         sessionId={sessionId}
       />
       <EntryImages images={entry.images} sessionId={sessionId} />
+      <EntryVideos videos={entry.videos} />
+    </div>
+  );
+}
+
+/** One visible reasoning step inside the work rail. Adjacent provider events
+ * revise its heading instead of producing a ladder of near-identical traces. */
+function ReasoningMessage({
+  entries,
+  active,
+  sessionId,
+}: {
+  entries: TranscriptEntry[];
+  active: boolean;
+  sessionId?: string;
+}) {
+  const displays = entries.map((entry) => reasoningDisplay(entry.content));
+  const batchedTitle =
+    displays.findLast((display) => display.title)?.title ?? "";
+  const title = batchedTitle.split("\n").at(-1) ?? "";
+  const last = entries[entries.length - 1];
+  return (
+    <div {...stylex.props(sx.my2, sx.px1)} data-eid={last.id} data-reasoning="">
+      {title ? (
+        active ? (
+          <TextShimmer className={cn(msgReasoningTitle, msgReasoningShimmer)}>
+            {title}
+          </TextShimmer>
+        ) : (
+          <div className={msgReasoningTitle}>{title}</div>
+        )
+      ) : active ? (
+        // Some providers expose prose thinking rather than a short status
+        // heading. Keep that prose readable and shimmer a stable activity label.
+        <TextShimmer className={cn(msgReasoningTitle, msgReasoningShimmer)}>
+          Thinking
+        </TextShimmer>
+      ) : null}
+      {entries.map((entry, index) => {
+        const body = displays[index].body;
+        return body ? (
+          <ClampedBody
+            key={entry.id}
+            className={cn(msgReasoningBody, "markdown")}
+            content={body}
+            entry={entry}
+            sessionId={sessionId}
+          />
+        ) : null;
+      })}
+      {entries.map((entry) => (
+        <EntryImages
+          key={`${entry.id}:images`}
+          images={entry.images}
+          sessionId={sessionId}
+        />
+      ))}
     </div>
   );
 }
@@ -875,13 +1186,15 @@ function TurnMessage({
  */
 function featuredTurnMedia(
   items: TranscriptEntry[],
-  toolResults: Map<string, TranscriptEntry>
+  toolResults: Map<string, TranscriptEntry>,
 ): { images: string[]; videos: string[] } {
   const images: string[] = [];
   const videos: string[] = [];
   const seen = new Set<string>();
   for (const entry of items) {
-    const result = entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined;
+    const result = entry.toolUseId
+      ? toolResults.get(entry.toolUseId)
+      : undefined;
     if (!result?.featuredMedia?.length) continue;
     // Take the srcs off images[]/videos[] rather than off featuredMedia, so
     // what renders is always something the entry can resolve — bounded entries
@@ -904,6 +1217,7 @@ function featuredTurnMedia(
 
 function turnBlockPropsEqual(prev: Props, next: Props): boolean {
   if (prev.live !== next.live) return false;
+  if (prev.expandWhileRunning !== next.expandWhileRunning) return false;
   if (prev.onOpenSubagent !== next.onOpenSubagent) return false;
   if (prev.sessionId !== next.sessionId) return false;
   if (prev.items.length !== next.items.length) return false;
@@ -916,16 +1230,17 @@ function turnBlockPropsEqual(prev: Props, next: Props): boolean {
   return true;
 }
 
-function blockDuration(
+function blockTiming(
   items: TranscriptEntry[],
-  toolResults: Map<string, TranscriptEntry>
-): string | null {
-  if (items.length === 0) return null;
+  toolResults: Map<string, TranscriptEntry>,
+): { duration: string | null; completedAt: string } {
+  if (items.length === 0) return { duration: null, completedAt: "" };
   const first = new Date(items[0].timestamp).getTime();
   const lastItem = items[items.length - 1];
   const lastResult = lastItem.toolUseId
     ? toolResults.get(lastItem.toolUseId)
     : undefined;
-  const last = new Date((lastResult || lastItem).timestamp).getTime();
-  return formatDuration(last - first);
+  const completedAt = (lastResult || lastItem).timestamp;
+  const last = new Date(completedAt).getTime();
+  return { duration: formatDuration(last - first), completedAt };
 }

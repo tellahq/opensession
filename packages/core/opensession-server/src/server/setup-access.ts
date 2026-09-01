@@ -1,9 +1,6 @@
 import { networkInterfaces } from "os";
 import { configuredServer, getConfig } from "./config";
-import {
-  isBlockedAddress,
-  isTailnetIpv4,
-} from "./shared/network-address";
+import { isBlockedAddress, isTailnetIpv4 } from "./shared/network-address";
 
 export { isTailnetIpv4 } from "./shared/network-address";
 
@@ -12,14 +9,17 @@ const MAX_ORIGIN_LENGTH = 2048;
 function normalizeOrigin(value: string, label: string): URL {
   const trimmed = value.trim();
   if (!trimmed) throw new Error(`${label} is required`);
-  if (trimmed.length > MAX_ORIGIN_LENGTH) throw new Error(`${label} is too long`);
+  if (trimmed.length > MAX_ORIGIN_LENGTH)
+    throw new Error(`${label} is too long`);
   if (/[\r\n\0]/.test(trimmed)) throw new Error(`${label} must be one line`);
 
   let url: URL;
   try {
     url = new URL(trimmed);
   } catch {
-    throw new Error(`${label} must be a full URL, such as https://os.example.com`);
+    throw new Error(
+      `${label} must be a full URL, such as https://os.example.com`,
+    );
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error(`${label} must use http or https`);
@@ -27,7 +27,8 @@ function normalizeOrigin(value: string, label: string): URL {
   if (url.protocol === "https:" && url.port) {
     throw new Error(`${label} must use the default HTTPS port 443`);
   }
-  if (url.username || url.password) throw new Error(`${label} cannot include credentials`);
+  if (url.username || url.password)
+    throw new Error(`${label} cannot include credentials`);
   if (url.pathname !== "/" || url.search || url.hash) {
     throw new Error(`${label} must not include a path, query, or fragment`);
   }
@@ -44,7 +45,11 @@ export function normalizeAppOrigin(value: string): string {
  * address. Hostnames that resolve privately are still caught by the setup
  * guide's external verification, but the obvious unsafe inputs fail here. */
 export function isObviouslyPrivateWebhookHost(value: string): boolean {
-  const host = value.toLowerCase().replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "");
+  const host = value
+    .toLowerCase()
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .replace(/\.$/, "");
   if (
     host === "localhost" ||
     host.endsWith(".localhost") ||
@@ -70,12 +75,19 @@ export function normalizeWebhookOrigin(
 ): string {
   if (!value.trim()) return "";
   const url = normalizeOrigin(value, "Webhook address");
-  if (url.protocol !== "https:") throw new Error("Webhook address must use https");
+  if (url.protocol !== "https:")
+    throw new Error("Webhook address must use https");
   if (isObviouslyPrivateWebhookHost(url.hostname)) {
-    throw new Error("Webhook address must be reachable from the public internet");
+    throw new Error(
+      "Webhook address must be reachable from the public internet",
+    );
   }
-  if (url.hostname.toLowerCase() === new URL(appOrigin).hostname.toLowerCase()) {
-    throw new Error("Webhook address must use a different hostname from the private app");
+  if (
+    url.hostname.toLowerCase() === new URL(appOrigin).hostname.toLowerCase()
+  ) {
+    throw new Error(
+      "Webhook address must use a different hostname from the private app",
+    );
   }
   return url.origin;
 }

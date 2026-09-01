@@ -49,7 +49,10 @@ export class AskOwnedMap<V> {
     else durableProjection.set(sessionId, durable);
     return this.mergeRuntimeFields(sessionId, durable);
   }
-  private mergeRuntimeFields(sessionId: string, durable: unknown): V | undefined {
+  private mergeRuntimeFields(
+    sessionId: string,
+    durable: unknown,
+  ): V | undefined {
     if (durable === undefined) return undefined;
     return immutableCopy({
       ...(durable as Record<string, unknown>),
@@ -77,10 +80,14 @@ export class AskOwnedMap<V> {
     return this.list()[Symbol.iterator]();
   }
   keys(): MapIterator<string> {
-    return this.list().map(([key]) => key)[Symbol.iterator]();
+    return this.list()
+      .map(([key]) => key)
+      [Symbol.iterator]();
   }
   values(): MapIterator<V> {
-    return this.list().map(([, value]) => value)[Symbol.iterator]();
+    return this.list()
+      .map(([, value]) => value)
+      [Symbol.iterator]();
   }
   forEach(
     callbackfn: (value: V, key: string, map: AskOwnedMap<V>) => void,

@@ -41,12 +41,19 @@ Uncommitted checkout edits never become live, including frontend edits.
   `git fetch origin --prune` and checking
   `git rev-list --left-right --count HEAD...origin/main`. Do not start or
   continue edits from a stale or diverged `main`.
-- **Do not commit until your branch includes the latest `origin/main`.**
-  Immediately before every `git commit`, run `git fetch origin --prune`. Then
-  run `git merge-base --is-ancestor origin/main HEAD`. If it fails, do not
-  commit: rebase the local commits onto `origin/main` and resolve every conflict
-  first. Fetch again immediately before pushing; if the remote moved after your
-  commit, rebase that commit onto the new `origin/main` before pushing.
+- **Do not commit until `bun run check` passes in the checkout.** Run it after
+  finishing the change and before the final fetch and commit. It checks
+  formatting, type-checking, lint, isolated unit tests, and strict transcript
+  snapshots. If it fails, do not commit. Platform installer jobs remain CI-only,
+  so installer or service-definition changes also need their documented
+  platform-specific verification.
+- **Do not commit until your branch includes the latest `origin/main`.** After
+  the checkout gate passes, immediately before every `git commit`, run
+  `git fetch origin --prune`. Then run
+  `git merge-base --is-ancestor origin/main HEAD`. If it fails, do not commit:
+  rebase the local commits onto `origin/main` and resolve every conflict first.
+  Fetch again immediately before pushing; if the remote moved after your commit,
+  rebase that commit onto the new `origin/main` before pushing.
 - Keep one session responsible for synchronizing the shared checkout at a time.
   Preserve every staged, unstaged, and untracked change while rebasing. Never
   use `git stash`, autostash, `git pull --rebase --autostash`, reset, clean,
@@ -82,7 +89,7 @@ Uncommitted checkout edits never become live, including frontend edits.
   restart train.
 - Use the full root deploy, `sudo deploy/deploy.sh <sha>`, instead when a change
   affects live deployment machinery or an artifact that script installs:
-  `deploy/{deploy,self-deploy,release-checkout}.sh`, the three
+  `deploy/{deploy,self-deploy,release-checkout}.sh`, the four
   `opensession*.service` templates, credential installers, the fixed run-host
   helper/installer, or root-deploy-managed systemd units and drop-ins. The full
   deploy refreshes those privileged artifacts before switching the same

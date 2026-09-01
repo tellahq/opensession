@@ -15,9 +15,18 @@
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { INTEGRATIONS } from "../../packages/core/opensession-server/src/server/integrations/registry";
-import { piConfigPath as engineConfigPath, setPiEnabled } from "../../packages/core/opensession-server/src/server/pi-config";
+import {
+  piConfigPath as engineConfigPath,
+  setPiEnabled,
+} from "../../packages/core/opensession-server/src/server/pi-config";
 import { backup, tailnetIp } from "./config-edit";
-import { CONFIG_PATH, ENV_PATH, HOME, OPENSESSION_HOME, REPO_ROOT } from "./paths";
+import {
+  CONFIG_PATH,
+  ENV_PATH,
+  HOME,
+  OPENSESSION_HOME,
+  REPO_ROOT,
+} from "./paths";
 
 /** Where a release install keeps its first, throwaway repo. */
 const SCRATCH_REPO = join(OPENSESSION_HOME, "scratch");
@@ -31,8 +40,12 @@ function ensureScratchRepo(): void {
   if (existsSync(join(SCRATCH_REPO, ".git"))) return;
   mkdirSync(SCRATCH_REPO, { recursive: true });
   const git = (...args: string[]) => {
-    const r = Bun.spawnSync(["git", "-C", SCRATCH_REPO, ...args], { stdout: "pipe", stderr: "pipe" });
-    if (r.exitCode !== 0) throw new Error(`git ${args[0]} failed: ${r.stderr.toString().trim()}`);
+    const r = Bun.spawnSync(["git", "-C", SCRATCH_REPO, ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (r.exitCode !== 0)
+      throw new Error(`git ${args[0]} failed: ${r.stderr.toString().trim()}`);
   };
   git("init", "-q", "-b", "main");
   git("config", "user.email", "opensession@localhost");
@@ -47,7 +60,19 @@ function ensureScratchRepo(): void {
 }
 import { installRecipe, listRecipes } from "./recipes";
 import * as service from "./service";
-import { ask, askYesNo, bold, canPrompt, dim, heading, info, ok, warn, wrote, yellow } from "./ui";
+import {
+  ask,
+  askYesNo,
+  bold,
+  canPrompt,
+  dim,
+  heading,
+  info,
+  ok,
+  warn,
+  wrote,
+  yellow,
+} from "./ui";
 
 export type OnboardOptions = {
   force?: boolean;
@@ -119,7 +144,10 @@ function collect(orgFlag?: string, quiet = false): Answers {
   const tailnet = canPrompt() ? tailnetIp() : undefined;
   const host = tailnet
     ? ask(`Bind address (${tailnet} is this box's tailnet address)`, tailnet)
-    : ask("Bind address (a Tailscale IP shares it with your team)", "127.0.0.1");
+    : ask(
+        "Bind address (a Tailscale IP shares it with your team)",
+        "127.0.0.1",
+      );
   const port = Number(ask("Port", "3850")) || 3850;
   const publicBaseUrl = ask(
     "Public base URL",
@@ -128,7 +156,11 @@ function collect(orgFlag?: string, quiet = false): Answers {
 
   if (!quiet) {
     heading("Your first repository");
-    info(dim("Sessions run in git worktrees cut from the repos you register here."));
+    info(
+      dim(
+        "Sessions run in git worktrees cut from the repos you register here.",
+      ),
+    );
   }
   // A source checkout can be its own first repo. A release install has no
   // .git under REPO_ROOT, so offer a scratch repo instead: a real git repo
@@ -139,13 +171,20 @@ function collect(orgFlag?: string, quiet = false): Answers {
   if (repoPath === SCRATCH_REPO) ensureScratchRepo();
   const repoId = ask(
     "Repo id",
-    repoPath === REPO_ROOT ? "opensession" : repoPath === SCRATCH_REPO ? "scratch" : repoPath.split("/").pop() || "app",
+    repoPath === REPO_ROOT
+      ? "opensession"
+      : repoPath === SCRATCH_REPO
+        ? "scratch"
+        : repoPath.split("/").pop() || "app",
   );
   const repoBranch = ask("Default branch", "main");
   // Same default the server falls back to when `paths.worktreesDir` is unset
   // (config.ts) and the one the docs quote — offering ~/worktrees here meant a
   // wizard-written config silently disagreed with both.
-  const worktreesDir = ask("Worktrees directory", join(OPENSESSION_HOME, "worktrees"));
+  const worktreesDir = ask(
+    "Worktrees directory",
+    join(OPENSESSION_HOME, "worktrees"),
+  );
 
   if (!quiet) {
     heading("Integrations");
@@ -161,7 +200,8 @@ function collect(orgFlag?: string, quiet = false): Answers {
     // `always` modules self-gate and ignore their flag entirely — asking about
     // them offers a choice that does nothing.
     for (const integration of INTEGRATIONS.filter((i) => !i.always)) {
-      if (askYesNo(`Enable ${integration.label}?`, false)) enabled.push(integration.id);
+      if (askYesNo(`Enable ${integration.label}?`, false))
+        enabled.push(integration.id);
     }
   }
 
@@ -188,10 +228,13 @@ function collect(orgFlag?: string, quiet = false): Answers {
  */
 function detectGhRepo(dir: string): string | undefined {
   try {
-    const { stdout, exitCode } = Bun.spawnSync(["git", "-C", dir, "remote", "get-url", "origin"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const { stdout, exitCode } = Bun.spawnSync(
+      ["git", "-C", dir, "remote", "get-url", "origin"],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     if (exitCode !== 0) return undefined;
     return stdout
       .toString()
@@ -248,7 +291,12 @@ export function buildConfig(a: Answers): Record<string, unknown> {
         // The self checkout carries the product's name; anything else is
         // labelled by what it is, so a scratch repo does not show up in the UI
         // as "Open Session".
-        label: a.repoId === "scratch" ? "Scratch" : a.repoPath === REPO_ROOT ? a.productName : a.repoId,
+        label:
+          a.repoId === "scratch"
+            ? "Scratch"
+            : a.repoPath === REPO_ROOT
+              ? a.productName
+              : a.repoId,
         repo: a.repoPath,
         wtPrefix: a.repoId,
         defaultBranch: a.repoBranch,
@@ -315,7 +363,8 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   if (existsSync(CONFIG_PATH) && !opts.force) {
     if (opts.defaults) {
       ok("configuration already exists", CONFIG_PATH);
-      if (opts.org) info(dim("--org ignored because this box is already configured."));
+      if (opts.org)
+        info(dim("--org ignored because this box is already configured."));
       info(dim("Use `opensession onboard --force` to replace it."));
       return 1;
     }
@@ -337,10 +386,14 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
       ),
     );
     if (!canPrompt()) {
-      info(`Re-run with ${bold("--force")} to overwrite it (the old file is backed up first).`);
+      info(
+        `Re-run with ${bold("--force")} to overwrite it (the old file is backed up first).`,
+      );
       return 1;
     }
-    if (!askYesNo("Overwrite it? The current file is backed up first.", false)) {
+    if (
+      !askYesNo("Overwrite it? The current file is backed up first.", false)
+    ) {
       info(dim("Left untouched. Nothing written."));
       return 0;
     }
@@ -383,7 +436,11 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   const recommended = listRecipes().filter((r) => r.recommended);
   if (recommended.length && canPrompt()) {
     heading("Suggested automations");
-    info(dim("Off by default; you enable them in the UI once you have looked at them."));
+    info(
+      dim(
+        "Off by default; you enable them in the UI once you have looked at them.",
+      ),
+    );
     for (const recipe of recommended) {
       info(dim(`  ${recipe.description}`));
       if (askYesNo(`Add ${recipe.label}?`, false)) {
@@ -458,7 +515,10 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
     // rather than printing an address that 404s for the next thirty seconds.
     const healthy = await service.waitHealthy(answers.publicBaseUrl);
     if (healthy) info(`1. ${bold(`open ${answers.publicBaseUrl}`)}`);
-    else info(`1. ${bold(`open ${answers.publicBaseUrl}`)}   ${dim("(still starting; `opensession logs` if it does not come up)")}`);
+    else
+      info(
+        `1. ${bold(`open ${answers.publicBaseUrl}`)}   ${dim("(still starting; `opensession logs` if it does not come up)")}`,
+      );
     info(`2. ${bold("opensession doctor")}     check everything is wired up`);
   } else {
     info(`1. ${bold("opensession start")}      start the server`);
@@ -469,12 +529,22 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   // every session fails its first turn. Name the subscription path first —
   // it's what the default model uses — with the API-key route as the alternative.
   info(`3. ${bold("add model capacity")}     Workspace → Usage: paste a`);
-  info(`   ${dim("`claude setup-token` token, or sign in to ChatGPT by device code.")}`);
-  info(`   ${dim("Using API keys instead? Add one under Workspace → Models.")}`);
-  info(`4. ${bold("create a session")}       a completed turn is the real proof`);
-  info(`5. ${bold("opensession team add")}   put yourself on the roster (attribution, sign-in)`);
+  info(
+    `   ${dim("`claude setup-token` token, or sign in to ChatGPT by device code.")}`,
+  );
+  info(
+    `   ${dim("Using API keys instead? Add one under Workspace → Models.")}`,
+  );
+  info(
+    `4. ${bold("create a session")}       a completed turn is the real proof`,
+  );
+  info(
+    `5. ${bold("opensession team add")}   put yourself on the roster (attribution, sign-in)`,
+  );
   if (answers.enabled.length) {
-    info(`6. ${dim(`add credentials for ${answers.enabled.join(", ")} in ${ENV_PATH}`)}`);
+    info(
+      `6. ${dim(`add credentials for ${answers.enabled.join(", ")} in ${ENV_PATH}`)}`,
+    );
   }
 
   console.log(

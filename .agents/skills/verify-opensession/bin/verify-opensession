@@ -1,0 +1,285 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+COMMAND="${1:-}"
+RUN_ID="${2:-${RUN_ID:-}}"
+
+usage() {
+  cat >&2 <<'EOF'
+usage: verify-opensession launch <run-id>
+       verify-opensession doctor <run-id>
+       verify-opensession browser <run-id> <browser command> [flags]
+       verify-opensession api <run-id> <path>
+       verify-opensession cleanup <run-id>
+EOF
+  exit 2
+}
+
+[ -n "$COMMAND" ] || usage
+[ -n "$RUN_ID" ] || usage
+case "$RUN_ID" in
+  *[!a-zA-Z0-9_-]*)
+    echo "run id may contain only letters, digits, underscores, and hyphens" >&2
+    exit 2
+    ;;
+esac
+
+RUN_DIR="/tmp/opensession-verify-$RUN_ID"
+RUN_FILE="$RUN_DIR/run.env"
+EVIDENCE_DIR="$ROOT/artifacts/verification/opensession/$RUN_ID"
+
+load_run() {
+  [ -f "$RUN_FILE" ] || {
+    echo "no verification run named $RUN_ID at $RUN_DIR" >&2
+    exit 1
+  }
+  # The launcher writes every value and the run id is restricted above.
+  # shellcheck disable=SC1090
+  source "$RUN_FILE"
+}
+
+stop_run() {
+  if [ -f "$RUN_FILE" ]; then
+    # shellcheck disable=SC1090
+    source "$RUN_FILE"
+    if [ -n "${CDP_UNIT:-}" ]; then
+      XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" systemctl --user stop "$CDP_UNIT" >/dev/null 2>&1 || true
+    fi
+    for pid in "${SERVER_PID:-}" "${KERNEL_PID:-}"; do
+      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+        for _ in $(seq 1 30); do
+          kill -0 "$pid" 2>/dev/null || break
+          sleep 0.1
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+          kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+        fi
+      fi
+    done
+  fi
+  rm -rf "$RUN_DIR"
+}
+
+pick_port() {
+  local start candidate
+  start=$((4100 + (RANDOM % 1600)))
+  for offset in $(seq 0 1599); do
+    candidate=$((4100 + ((start - 4100 + offset) % 1600)))
+    if ! ss -Hltn "sport = :$candidate" | grep -q .; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  echo "no free verification port between 4100 and 5699" >&2
+  return 1
+}
+
+case "$COMMAND" in
+  launch)
+    if [ -e "$RUN_DIR" ]; then
+      echo "$RUN_DIR already exists; run cleanup first" >&2
+      exit 1
+    fi
+    mkdir -p "$RUN_DIR/state" "$EVIDENCE_DIR"
+    PORT="$(pick_port)"
+    KERNEL_PORT="$(pick_port)"
+    while [ "$KERNEL_PORT" = "$PORT" ]; do KERNEL_PORT="$(pick_port)"; done
+    APP_URL="http://127.0.0.1:$PORT"
+    KERNEL_URL="http://127.0.0.1:$KERNEL_PORT"
+    START_HEAD="$(git -C "$ROOT" rev-parse HEAD)"
+    SERVER_LOG="$RUN_DIR/server.log"
+    KERNEL_LOG="$RUN_DIR/session-kernel.log"
+    KERNEL_TOKEN="$(bun -e 'process.stdout.write(crypto.randomUUID() + crypto.randomUUID())')"
+
+    cd "$ROOT"
+    setsid env -i \
+      PATH="$PATH" \
+      HOME="$HOME" \
+      USER="${USER:-}" \
+      LANG="${LANG:-C.UTF-8}" \
+      OPENSESSION_STATE_DIR="$RUN_DIR/state" \
+      OPENSESSION_SESSION_KERNEL_PORT="$KERNEL_PORT" \
+      OPENSESSION_SESSION_KERNEL_TOKEN="$KERNEL_TOKEN" \
+      OPENSESSION_SESSION_KERNEL_WORKERS=2 \
+      NODE_ENV=development \
+      bun run packages/core/opensession-server/src/session-kernel-service.ts >"$KERNEL_LOG" 2>&1 &
+    KERNEL_PID=$!
+
+    cat >"$RUN_FILE" <<EOF
+RUN_ID=$RUN_ID
+RUN_DIR=$RUN_DIR
+STATE_DIR=$RUN_DIR/state
+EVIDENCE_DIR=$EVIDENCE_DIR
+APP_URL=$APP_URL
+PORT=$PORT
+KERNEL_URL=$KERNEL_URL
+KERNEL_PORT=$KERNEL_PORT
+KERNEL_PID=$KERNEL_PID
+KERNEL_LOG=$KERNEL_LOG
+SERVER_LOG=$SERVER_LOG
+START_HEAD=$START_HEAD
+EOF
+    trap 'stop_run' ERR
+
+    kernel_ready=""
+    for _ in $(seq 1 300); do
+      if ! kill -0 "$KERNEL_PID" 2>/dev/null; then
+        echo "Session kernel exited during launch" >&2
+        tail -n 80 "$KERNEL_LOG" >&2 || true
+        exit 1
+      fi
+      kernel_ready="$(curl -fsS "$KERNEL_URL/ready" 2>/dev/null || true)"
+      [ -n "$kernel_ready" ] && break
+      sleep 0.1
+    done
+    if [ -z "$kernel_ready" ]; then
+      echo "Session kernel did not become ready at $KERNEL_URL" >&2
+      tail -n 80 "$KERNEL_LOG" >&2 || true
+      exit 1
+    fi
+
+    setsid env -i \
+      PATH="$PATH" \
+      HOME="$HOME" \
+      USER="${USER:-}" \
+      LANG="${LANG:-C.UTF-8}" \
+      PORT="$PORT" \
+      HOST=127.0.0.1 \
+      OPENSESSION_DEV=1 \
+      OPENSESSION_DEMO=1 \
+      OPENSESSION_STATE_DIR="$RUN_DIR/state" \
+      OPENSESSION_DEPLOY_STATE="$RUN_DIR/state/deploy" \
+      OPENSESSION_GATEWAY_LEASE="$RUN_DIR/state/gateway-active.lock" \
+      OPENSESSION_GATEWAY_LEASE_WAIT_SECS=1 \
+      OPENSESSION_SESSION_KERNEL_URL="$KERNEL_URL" \
+      OPENSESSION_SESSION_KERNEL_TOKEN="$KERNEL_TOKEN" \
+      OPENSESSION_ENV_FILE=/dev/null \
+      OPENSESSION_EXECUTOR=0 \
+      NODE_ENV=development \
+      OPENSESSION_UI_BASE="$APP_URL" \
+      OPENSESSION_GITHUB_AUTH_STORE="$RUN_DIR/state/github-auth.json" \
+      OPENSESSION_WEB_SESSIONS_STORE="$RUN_DIR/state/web-sessions.json" \
+      OPENSESSION_KEYCHAIN_STORE="$RUN_DIR/state/keychain.json" \
+      OPENSESSION_SEARCH_DB="$RUN_DIR/state/search.db" \
+      ENABLE_SLACK_AGENT=false \
+      ENABLE_LINEAR_AGENT=false \
+      ENABLE_PLAIN_AGENT=false \
+      ENABLE_STRIPE_AGENT=false \
+      ENABLE_GITHUB_AGENT=false \
+      ENABLE_GRAFANA_POLLER=false \
+      bun run packages/core/opensession-server/opensession.ts >"$SERVER_LOG" 2>&1 &
+    SERVER_PID=$!
+    printf 'SERVER_PID=%s\n' "$SERVER_PID" >>"$RUN_FILE"
+
+    ready=""
+    for _ in $(seq 1 900); do
+      if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        echo "Open Session exited during launch" >&2
+        tail -n 80 "$SERVER_LOG" >&2 || true
+        stop_run
+        exit 1
+      fi
+      ready="$(curl -fsS "$APP_URL/api/health?brief=1" 2>/dev/null || true)"
+      [ -n "$ready" ] && break
+      sleep 0.1
+    done
+    if [ -z "$ready" ]; then
+      echo "Open Session did not become healthy at $APP_URL" >&2
+      tail -n 80 "$SERVER_LOG" >&2 || true
+      stop_run
+      exit 1
+    fi
+    BOOT_ID="$(jq -r '.bootId // empty' <<<"$ready")"
+    FRONTEND_VERSION="$(jq -r '.frontendVersion // empty' <<<"$ready")"
+    printf 'BOOT_ID=%s\nFRONTEND_VERSION=%s\n' "$BOOT_ID" "$FRONTEND_VERSION" >>"$RUN_FILE"
+
+    cdp="$(bun scripts/cdp-browser.ts start --owner "verify-$RUN_ID" --state "$RUN_DIR/cdp-worker.json")"
+    CDP_PORT="$(jq -r '.port' <<<"$cdp")"
+    CDP_UNIT="$(jq -r '.unit' <<<"$cdp")"
+    printf 'CDP_PORT=%s\nCDP_UNIT=%s\n' "$CDP_PORT" "$CDP_UNIT" >>"$RUN_FILE"
+
+    echo "RUN_ID=$RUN_ID"
+    echo "APP_URL=$APP_URL"
+    echo "STATE_DIR=$RUN_DIR/state"
+    echo "EVIDENCE_DIR=$EVIDENCE_DIR"
+    trap - ERR
+    ;;
+
+  doctor)
+    load_run
+    errors=0
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+      echo "FAIL server pid $SERVER_PID is not running" >&2
+      errors=$((errors + 1))
+    fi
+    if ! kill -0 "$KERNEL_PID" 2>/dev/null; then
+      echo "FAIL session kernel pid $KERNEL_PID is not running" >&2
+      errors=$((errors + 1))
+    fi
+    if [ "$(git -C "$ROOT" rev-parse HEAD)" != "$START_HEAD" ]; then
+      echo "FAIL checkout HEAD changed after launch; clean up and relaunch" >&2
+      errors=$((errors + 1))
+    fi
+    if ! tr '\0' '\n' <"/proc/$SERVER_PID/environ" 2>/dev/null | grep -Fxq "OPENSESSION_STATE_DIR=$STATE_DIR"; then
+      echo "FAIL server process does not carry the disposable state directory" >&2
+      errors=$((errors + 1))
+    fi
+    if ! ss -Hlntp "sport = :$PORT" 2>/dev/null | grep -q "pid=$SERVER_PID"; then
+      echo "FAIL port $PORT is not owned by server pid $SERVER_PID" >&2
+      errors=$((errors + 1))
+    fi
+    if ! ss -Hlntp "sport = :$KERNEL_PORT" 2>/dev/null | grep -q "pid=$KERNEL_PID"; then
+      echo "FAIL port $KERNEL_PORT is not owned by session kernel pid $KERNEL_PID" >&2
+      errors=$((errors + 1))
+    fi
+    health="$(curl -fsS "$APP_URL/api/health?brief=1" 2>/dev/null || true)"
+    if [ "$(jq -r '.bootId // empty' <<<"$health")" != "$BOOT_ID" ]; then
+      echo "FAIL health probe returned a different boot id" >&2
+      errors=$((errors + 1))
+    fi
+    auth="$(curl -fsS "$APP_URL/api/auth/status" 2>/dev/null || true)"
+    if ! jq -e '.admin == true and ((.required == false) or (.authenticated == true))' >/dev/null 2>&1 <<<"$auth"; then
+      echo "FAIL browser authentication is unusable or lacks demo admin access" >&2
+      errors=$((errors + 1))
+    fi
+    if ! curl -fsS "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null 2>&1; then
+      echo "FAIL verification browser is unavailable" >&2
+      errors=$((errors + 1))
+    fi
+    if [ "$errors" -ne 0 ]; then
+      exit 1
+    fi
+    echo "OK Open Session $START_HEAD"
+    echo "OK $APP_URL boot=$BOOT_ID frontend=$FRONTEND_VERSION"
+    echo "OK isolated state $STATE_DIR"
+    echo "OK session kernel $KERNEL_URL"
+    echo "OK browser CDP port $CDP_PORT"
+    ;;
+
+  browser)
+    load_run
+    shift 2
+    exec bun "$ROOT/.agents/skills/verify-opensession/bin/browser.mjs" "$RUN_DIR" "$@"
+    ;;
+
+  api)
+    load_run
+    path="${3:-}"
+    [ -n "$path" ] || usage
+    curl -fsS "$APP_URL$path"
+    ;;
+
+  cleanup)
+    load_run
+    proof="$EVIDENCE_DIR"
+    stop_run
+    echo "removed $RUN_DIR"
+    echo "kept evidence at $proof"
+    ;;
+
+  *)
+    usage
+    ;;
+esac

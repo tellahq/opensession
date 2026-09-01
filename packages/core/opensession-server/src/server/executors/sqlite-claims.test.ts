@@ -26,7 +26,10 @@ describe("SqliteRunnerExecutorClaims", () => {
   test("creates fresh v2 state transactionally and atomically keeps one instance", () => {
     const dbPath = path();
     const claims = new SqliteRunnerExecutorClaims(dbPath);
-    const inspection = new Database(dbPath, { readonly: true });
+    // macOS SQLite may need to initialize private WAL companions even for an
+    // inspection handle. Open normally, then enforce read-only SQL semantics.
+    const inspection = new Database(dbPath);
+    inspection.exec("PRAGMA query_only = ON");
     expect(
       inspection
         .query<{ user_version: number }, []>("PRAGMA user_version")

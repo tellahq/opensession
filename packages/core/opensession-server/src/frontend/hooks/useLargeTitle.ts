@@ -50,83 +50,83 @@ export const LARGE_TITLE_SELECTOR = "[data-large-title]";
  *   inside `bar.parentElement`
  */
 export function useLargeTitleHandoff(
-	bar: HTMLElement | null,
-	name: string,
+  bar: HTMLElement | null,
+  name: string,
 ): boolean {
-	// A bar with no page heading under it owns the title, so this is also the
-	// right answer for every route that never had one.
-	const [handedOver, setHandedOver] = useState(true);
+  // A bar with no page heading under it owns the title, so this is also the
+  // right answer for every route that never had one.
+  const [handedOver, setHandedOver] = useState(true);
 
-	useEffect(() => {
-		const root = bar?.parentElement;
-		if (!bar || !root) {
-			setHandedOver(true);
-			return;
-		}
+  useEffect(() => {
+    const root = bar?.parentElement;
+    if (!bar || !root) {
+      setHandedOver(true);
+      return;
+    }
 
-		let frame = 0;
-		let observer: IntersectionObserver | null = null;
-		let watched: Element | null = null;
+    let frame = 0;
+    let observer: IntersectionObserver | null = null;
+    let watched: Element | null = null;
 
-		const wanted = name.trim();
-		const attach = (remeasure = false) => {
-			frame = 0;
-			const next = wanted
-				? ([...root.querySelectorAll(LARGE_TITLE_SELECTOR)].find(
-						(heading) => heading.textContent?.trim() === wanted,
-					) ?? null)
-				: null;
-			// A streaming transcript mutates this subtree many times a second, so
-			// the common case has to cost one lookup and stop. Two things rebuild
-			// the observer: a heading that has actually changed, and a resize,
-			// which moves the edge the margin below is measured from.
-			if (next === watched && !remeasure) return;
-			observer?.disconnect();
-			watched = next;
-			if (!next) {
-				observer = null;
-				setHandedOver(true);
-				return;
-			}
-			const edge = bar.getBoundingClientRect().bottom;
-			setHandedOver(next.getBoundingClientRect().bottom <= edge);
-			observer = new IntersectionObserver(
-				(entries) => {
-					for (const entry of entries)
-						if (entry.target === watched) setHandedOver(!entry.isIntersecting);
-				},
-				{ rootMargin: `${-Math.max(0, Math.round(edge))}px 0px 0px 0px` },
-			);
-			observer.observe(next);
-		};
-		// Sticky, so a mutation arriving in the same frame as a resize cannot
-		// swallow the remeasure the resize asked for.
-		let pending = false;
-		const schedule = (remeasure = false) => {
-			pending = pending || remeasure;
-			if (!frame)
-				frame = requestAnimationFrame(() => {
-					const remeasureNow = pending;
-					pending = false;
-					attach(remeasureNow);
-				});
-		};
-		const onResize = () => schedule(true);
+    const wanted = name.trim();
+    const attach = (remeasure = false) => {
+      frame = 0;
+      const next = wanted
+        ? ([...root.querySelectorAll(LARGE_TITLE_SELECTOR)].find(
+            (heading) => heading.textContent?.trim() === wanted,
+          ) ?? null)
+        : null;
+      // A streaming transcript mutates this subtree many times a second, so
+      // the common case has to cost one lookup and stop. Two things rebuild
+      // the observer: a heading that has actually changed, and a resize,
+      // which moves the edge the margin below is measured from.
+      if (next === watched && !remeasure) return;
+      observer?.disconnect();
+      watched = next;
+      if (!next) {
+        observer = null;
+        setHandedOver(true);
+        return;
+      }
+      const edge = bar.getBoundingClientRect().bottom;
+      setHandedOver(next.getBoundingClientRect().bottom <= edge);
+      observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries)
+            if (entry.target === watched) setHandedOver(!entry.isIntersecting);
+        },
+        { rootMargin: `${-Math.max(0, Math.round(edge))}px 0px 0px 0px` },
+      );
+      observer.observe(next);
+    };
+    // Sticky, so a mutation arriving in the same frame as a resize cannot
+    // swallow the remeasure the resize asked for.
+    let pending = false;
+    const schedule = (remeasure = false) => {
+      pending = pending || remeasure;
+      if (!frame)
+        frame = requestAnimationFrame(() => {
+          const remeasureNow = pending;
+          pending = false;
+          attach(remeasureNow);
+        });
+    };
+    const onResize = () => schedule(true);
 
-		attach(true);
-		window.addEventListener("resize", onResize);
-		// Route changes and late-loading page bodies both arrive as mutations;
-		// the rAF collapses a burst of them into one lookup.
-		const mutations = new MutationObserver(() => schedule());
-		mutations.observe(root, { childList: true, subtree: true });
+    attach(true);
+    window.addEventListener("resize", onResize);
+    // Route changes and late-loading page bodies both arrive as mutations;
+    // the rAF collapses a burst of them into one lookup.
+    const mutations = new MutationObserver(() => schedule());
+    mutations.observe(root, { childList: true, subtree: true });
 
-		return () => {
-			mutations.disconnect();
-			window.removeEventListener("resize", onResize);
-			observer?.disconnect();
-			if (frame) cancelAnimationFrame(frame);
-		};
-	}, [bar, name]);
+    return () => {
+      mutations.disconnect();
+      window.removeEventListener("resize", onResize);
+      observer?.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [bar, name]);
 
-	return handedOver;
+  return handedOver;
 }

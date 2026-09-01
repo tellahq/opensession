@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { storeAppendUserLineEarly, transcriptLineUser } from "./transcript-persistence";
+import {
+  storeAppendUserLineEarly,
+  transcriptLineUser,
+} from "./transcript-persistence";
 import { setTranscriptForwarder } from "./transcript-forward";
 
 afterEach(() => setTranscriptForwarder(undefined));
@@ -17,8 +20,6 @@ describe("detached transcript forwarding", () => {
     const line = transcriptLineUser("hello", "prompt-1");
     await storeAppendUserLineEarly("os-session", line);
 
-    expect(batches).toEqual([
-      { engineSessionId: "os-session", lines: [line] },
-    ]);
+    expect(batches).toEqual([{ engineSessionId: "os-session", lines: [line] }]);
   });
 });

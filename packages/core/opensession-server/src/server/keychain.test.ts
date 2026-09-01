@@ -6,7 +6,10 @@ import { join } from "node:path";
 // Point the store at a throwaway path BEFORE importing the module — the real
 // ~/.opensession-keychain.json holds registered credentials, and a suite that
 // truncated it would destroy them.
-const STORE = join(mkdtempSync(join(tmpdir(), "keychain-test-")), "keychain.json");
+const STORE = join(
+  mkdtempSync(join(tmpdir(), "keychain-test-")),
+  "keychain.json",
+);
 process.env.OPENSESSION_KEYCHAIN_STORE = STORE;
 
 function resetKeychain(): void {
@@ -45,18 +48,29 @@ describe("credentials", () => {
     expect(meta.service).toBe("vercel");
     expect(meta.host).toBe("api.vercel.com");
     expect(JSON.stringify(meta)).not.toContain("sk-live-secret");
-    expect(JSON.stringify(kc.listCredentials())).not.toContain("sk-live-secret");
-    expect(JSON.stringify(kc.findCredential("vercel"))).not.toContain("sk-live-secret");
+    expect(JSON.stringify(kc.listCredentials())).not.toContain(
+      "sk-live-secret",
+    );
+    expect(JSON.stringify(kc.findCredential("vercel"))).not.toContain(
+      "sk-live-secret",
+    );
   });
 
   test("normalizes host and service, rejects malformed input", () => {
-    const meta = cred({ service: "  Vercel  ", host: "https://api.vercel.com/v1?x=1" });
+    const meta = cred({
+      service: "  Vercel  ",
+      host: "https://api.vercel.com/v1?x=1",
+    });
     expect(meta.service).toBe("vercel");
     expect(meta.host).toBe("api.vercel.com");
     expect(() => cred({ service: "has space" })).toThrow(/slug/);
-    expect(() => cred({ service: "ahrefs", host: "api.ahrefs.com:8443" })).toThrow(/host/);
+    expect(() =>
+      cred({ service: "ahrefs", host: "api.ahrefs.com:8443" }),
+    ).toThrow(/host/);
     expect(() => cred({ service: "ahrefs", secret: "   " })).toThrow(/secret/);
-    expect(() => cred({ service: "ahrefs", allowedPathPrefixes: ["v1/x"] })).toThrow(/start with/);
+    expect(() =>
+      cred({ service: "ahrefs", allowedPathPrefixes: ["v1/x"] }),
+    ).toThrow(/start with/);
   });
 
   test("service slugs are unique", () => {
@@ -94,7 +108,10 @@ describe("owner answers", () => {
   });
 
   test("free text approves only on an explicit yes, keeping the requested mode", () => {
-    expect(kc.parseOwnerAnswer("yes go ahead", "once")).toEqual({ approve: true, mode: "once" });
+    expect(kc.parseOwnerAnswer("yes go ahead", "once")).toEqual({
+      approve: true,
+      mode: "once",
+    });
     expect(kc.parseOwnerAnswer("ok, standing is fine", "once")).toEqual({
       approve: true,
       mode: "standing",
@@ -117,25 +134,27 @@ describe("broker", () => {
 
   test("injects Authorization: Bearer by default and honors a custom header", () => {
     expect(
-      kc.brokerHeaders({ secret: "s3cr3t" } as Parameters<typeof kc.brokerHeaders>[0])
+      kc.brokerHeaders({ secret: "s3cr3t" } as Parameters<
+        typeof kc.brokerHeaders
+      >[0]),
     ).toEqual({ Authorization: "Bearer s3cr3t" });
     expect(
       kc.brokerHeaders({
         secret: "s3cr3t",
         injection: { header: "X-Api-Key" },
-      } as Parameters<typeof kc.brokerHeaders>[0])
+      } as Parameters<typeof kc.brokerHeaders>[0]),
     ).toEqual({ "X-Api-Key": "s3cr3t" });
     expect(
       kc.brokerHeaders({
         secret: "s3cr3t",
         injection: { header: "Authorization", scheme: "token" },
-      } as Parameters<typeof kc.brokerHeaders>[0])
+      } as Parameters<typeof kc.brokerHeaders>[0]),
     ).toEqual({ Authorization: "token s3cr3t" });
   });
 
   test("scrubs a secret the upstream echoed back", () => {
     expect(kc.scrubSecret('{"key":"s3cr3t","ok":true}', "s3cr3t")).toBe(
-      '{"key":"[redacted]","ok":true}'
+      '{"key":"[redacted]","ok":true}',
     );
     expect(kc.scrubSecret("nothing here", "s3cr3t")).toBe("nothing here");
     expect(kc.scrubSecret("body", "")).toBe("body");
@@ -151,7 +170,9 @@ describe("grant lifecycle", () => {
   });
 
   test("revoking an unknown grant reports it rather than throwing", () => {
-    expect(kc.revokeGrant("kg-missing", "Alex")).toEqual({ error: "no such grant" });
+    expect(kc.revokeGrant("kg-missing", "Alex")).toEqual({
+      error: "no such grant",
+    });
   });
 
   test("requesting an unknown credential names what exists", () => {
@@ -189,7 +210,9 @@ describe("grant enforcement", () => {
     });
     const first = kc.consumeGrantForBroker(gr.id, "GET", "/v1/deployments");
     expect(first).toHaveProperty("credential");
-    expect((first as { credential: { secret: string } }).credential.secret).toBe("sk-live-secret");
+    expect(
+      (first as { credential: { secret: string } }).credential.secret,
+    ).toBe("sk-live-secret");
     const second = kc.consumeGrantForBroker(gr.id, "GET", "/v1/deployments");
     expect(second).toMatchObject({ status: 403 });
     expect((second as { error: string }).error).toContain("used");
@@ -203,10 +226,16 @@ describe("grant enforcement", () => {
       requestedBy: "Grant",
       mode: "standing",
     });
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toHaveProperty("credential");
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toHaveProperty("credential");
+    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toHaveProperty(
+      "credential",
+    );
+    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toHaveProperty(
+      "credential",
+    );
     expect(kc.revokeGrant(gr.id, "Alex")).toEqual({ ok: true });
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
+    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({
+      status: 403,
+    });
   });
 
   test("an expired grant is refused and settles to expired", () => {
@@ -218,12 +247,17 @@ describe("grant enforcement", () => {
       mode: "standing",
       expiresAt: new Date(Date.now() - 1000).toISOString(),
     });
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
+    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({
+      status: 403,
+    });
     expect(kc.listGrants({ sessionId: "bks-1" })[0]!.status).toBe("expired");
   });
 
   test("the credential's method and path limits bound every grant", () => {
-    const meta = cred({ allowedMethods: ["GET"], allowedPathPrefixes: ["/v1/deployments"] });
+    const meta = cred({
+      allowedMethods: ["GET"],
+      allowedPathPrefixes: ["/v1/deployments"],
+    });
     const grant = () =>
       kc.__mintGrantForTest({
         credentialId: meta.id,
@@ -232,13 +266,17 @@ describe("grant enforcement", () => {
         mode: "standing",
       });
     const gr = grant();
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/deployments/abc")).toHaveProperty(
-      "credential"
-    );
-    expect(kc.consumeGrantForBroker(gr.id, "DELETE", "/v1/deployments/abc")).toMatchObject({
+    expect(
+      kc.consumeGrantForBroker(gr.id, "GET", "/v1/deployments/abc"),
+    ).toHaveProperty("credential");
+    expect(
+      kc.consumeGrantForBroker(gr.id, "DELETE", "/v1/deployments/abc"),
+    ).toMatchObject({
       status: 403,
     });
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/teams")).toMatchObject({ status: 403 });
+    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/teams")).toMatchObject({
+      status: 403,
+    });
   });
 
   test("deleting the credential kills its live grants", () => {
@@ -250,7 +288,9 @@ describe("grant enforcement", () => {
       mode: "standing",
     });
     kc.deleteCredential(meta.id, "Alex");
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
+    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({
+      status: 403,
+    });
   });
 
   test("either side may revoke, nobody else", () => {
@@ -280,7 +320,10 @@ describe("grant enforcement", () => {
 
 describe("grant instructions", () => {
   test("name the broker URL, the limits and the single-use rule", () => {
-    const meta = cred({ allowedMethods: ["GET"], allowedPathPrefixes: ["/v1/deployments"] });
+    const meta = cred({
+      allowedMethods: ["GET"],
+      allowedPathPrefixes: ["/v1/deployments"],
+    });
     const text = kc.grantInstructions(
       {
         id: "kg-abc",
@@ -294,7 +337,7 @@ describe("grant instructions", () => {
         createdAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
       },
-      meta
+      meta,
     );
     expect(text).toContain("kg-abc");
     expect(text).toContain("api.vercel.com");

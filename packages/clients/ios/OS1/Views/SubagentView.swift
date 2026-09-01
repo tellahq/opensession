@@ -87,7 +87,8 @@ struct SubagentView: View {
                         worktreeDir: worktreeDir,
                         foldState: { folds.fold(for: $0, preference: turnActivity) },
                         expansionState: { folds.expansion(id: $0, defaultExpanded: $1) },
-                        activity: turnActivity
+                        activity: turnActivity,
+                        isActiveReasoning: isRunning && block.id == blocks.last?.id
                     )
                     .id(block.id)
                 }

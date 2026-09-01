@@ -8,6 +8,8 @@ Description=Open Session executor launcher
 After=network.target
 
 [Service]
+# Launch admission and host control must remain responsive under build load.
+Slice=opensession-control.slice
 Environment="PATH=/home/ubuntu/.cargo/bin:/home/ubuntu/.bun/bin:/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Type=simple
 User=ubuntu

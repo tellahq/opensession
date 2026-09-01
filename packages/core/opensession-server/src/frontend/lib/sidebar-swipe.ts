@@ -4,10 +4,11 @@
 // a sidebar row, plus the focus rules those chords apply: whether a focused
 // text field keeps the key for itself is per chord, not one blanket rule.
 
-const EDITABLE = "input, textarea, select, [contenteditable='true'], [contenteditable='']";
+const EDITABLE =
+  "input, textarea, select, [contenteditable='true'], [contenteditable='']";
 
 function editableAncestor(target: EventTarget | null): HTMLElement | null {
-	return (target as HTMLElement | null)?.closest<HTMLElement>(EDITABLE) ?? null;
+  return (target as HTMLElement | null)?.closest<HTMLElement>(EDITABLE) ?? null;
 }
 
 /** True when an editable element owns focus and should keep the archive
@@ -15,9 +16,11 @@ function editableAncestor(target: EventTarget | null): HTMLElement | null {
  * every session open, which left the advertised ⌘E dead almost all the time,
  * and the chord types nothing, so firing there only costs the browser's niche
  * find-selection default. Rename fields, search boxes, etc. keep the guard. */
-export function editableSwallowsArchiveChord(target: EventTarget | null): boolean {
-	const editable = editableAncestor(target);
-	return !!editable && !editable.classList.contains("composer-textarea");
+export function editableSwallowsArchiveChord(
+  target: EventTarget | null,
+): boolean {
+  const editable = editableAncestor(target);
+  return !!editable && !editable.classList.contains("composer-textarea");
 }
 
 /** True when an editable element owns focus and the chord is one the field
@@ -32,10 +35,10 @@ export function editableSwallowsArchiveChord(target: EventTarget | null): boolea
  * unconditionally would leave ⌘↑/⌘↓ dead in the place people press it from.
  * The moment there is text to move through, the caret wins. */
 export function editableOwnsCaretChord(target: EventTarget | null): boolean {
-	const editable = editableAncestor(target);
-	if (!editable) return false;
-	if (!editable.classList.contains("composer-textarea")) return true;
-	return ((editable as HTMLTextAreaElement).value ?? "").length > 0;
+  const editable = editableAncestor(target);
+  if (!editable) return false;
+  if (!editable.classList.contains("composer-textarea")) return true;
+  return ((editable as HTMLTextAreaElement).value ?? "").length > 0;
 }
 
 // Long-press (touch) tuning for the mobile action sheet.
@@ -51,22 +54,25 @@ export type SwipeAction = "archive" | "star";
 export type SwipeState = { key: string; offset: number; action?: SwipeAction };
 
 export function swipeActionForOffset(offset: number): SwipeAction | null {
-	return offset < 0 ? "archive" : offset > 0 ? "star" : null;
+  return offset < 0 ? "archive" : offset > 0 ? "star" : null;
 }
 
 export function clampSwipe(dx: number, rowWidth: number): number {
-	const limit = Math.max(SWIPE_REVEAL_PX, rowWidth);
-	return Math.max(-limit, Math.min(limit, dx));
+  const limit = Math.max(SWIPE_REVEAL_PX, rowWidth);
+  return Math.max(-limit, Math.min(limit, dx));
 }
 
 export function fullSwipeThreshold(rowWidth: number): number {
-	const usableWidth = Math.max(SWIPE_REVEAL_PX, rowWidth - 28);
-	return Math.min(
-		Math.max(SWIPE_REVEAL_PX * 1.8, rowWidth * SWIPE_FULL_RATIO),
-		usableWidth,
-	);
+  const usableWidth = Math.max(SWIPE_REVEAL_PX, rowWidth - 28);
+  return Math.min(
+    Math.max(SWIPE_REVEAL_PX * 1.8, rowWidth * SWIPE_FULL_RATIO),
+    usableWidth,
+  );
 }
 
-export function swipeCommitOffset(action: SwipeAction, rowWidth: number): number {
-	return action === "archive" ? -rowWidth : rowWidth;
+export function swipeCommitOffset(
+  action: SwipeAction,
+  rowWidth: number,
+): number {
+  return action === "archive" ? -rowWidth : rowWidth;
 }

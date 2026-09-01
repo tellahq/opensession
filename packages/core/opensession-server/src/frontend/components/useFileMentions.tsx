@@ -1,20 +1,29 @@
+import { mergeStylexProps } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { repoLabel } from "../lib/repo-label";
 import React, {
-	useEffect,
-	useEffectEvent,
-	useId,
-	useLayoutEffect,
-	useRef,
-	useState,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
 } from "react";
 import { createPortal } from "react-dom";
 import type { FileMention } from "../lib/api";
 import { UserAvatar } from "./UserAvatar";
-import { cn, mergeStylexProps, mergeStylexClassName } from "../ui/cn";
+import { cn } from "../ui/cn";
 import { FLOATING_OVERLAY_LAYER } from "../ui/popup-classes";
 import { IconTile } from "./BrandTile";
 import { displayName as brandDisplayName } from "../brand-logos";
-import { IconBolt, IconFile, IconFolder, IconMessage, IconPlug, IconStack } from "./icons";
+import {
+  IconBolt,
+  IconFile,
+  IconFolder,
+  IconMessage,
+  IconPlug,
+  IconStack,
+} from "./icons";
 import { peopleMentionMatches, usePeople } from "../lib/people";
 import { useCurrentUser } from "./UserPicker";
 import {
@@ -32,137 +41,71 @@ import { type as typography } from "../styles/typography.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	flex: {
-			display: "flex"
-	},
-	size5: {
-			width: "20px",
-			height: "20px"
-	},
-	shrink0: {
-			flexShrink: "0"
-	},
-	itemsCenter: {
-			alignItems: "center"
-	},
-	justifyCenter: {
-			justifyContent: "center"
-	},
-	text17px: {
-			fontSize: "17px"
-	},
-	leadingNone: {
-			lineHeight: "1"
-	},
-	roundedMd: {
-			borderRadius: "calc(7px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgActive: {
-			backgroundColor: "var(--bg-active)"
-	},
-	textDim: {
-			color: "var(--text-dim)"
-	},
-	px5px: {
-			paddingInline: "5px"
-	},
-	pyPx: {
-			paddingBlock: "1px"
-	},
-	fontSemibold: {
-			fontWeight: "var(--font-weight-semibold)"
-	},
-	textAccent: {
-			color: "var(--accent-ink)"
-	},
-	textFaint: {
-			color: "var(--text-faint)"
-	},
-	fontMedium: {
-			fontWeight: "var(--font-weight-medium)"
-	},
-	textFg: {
-			color: "var(--text)"
-	},
-	overflowHidden: {
-			overflow: "hidden"
-	},
-	textEllipsis: {
-			textOverflow: "ellipsis"
-	},
-	textLeft: {
-			textAlign: "left"
-	},
-	DirectionRtl: {
-			direction: "rtl"
-	},
-
-	fixed: {
-		"position": "fixed"
-	},
-	overflowYAuto: {
-		"overflowY": "auto"
-	},
-	roundedXl: {
-		"borderRadius": "calc(18px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	bgPopupGlass: {
-		"backgroundColor": "var(--popup-glass)"
-	},
-	BackdropFilterVarPopupBlur: {
-		"WebkitBackdropFilter": "var(--popup-blur)",
-		"backdropFilter": "var(--popup-blur)"
-	},
-	SmoothRingColorVarPopupRing: {
-		"--smooth-ring-color": "var(--popup-ring)"
-	},
-	p1: {
-		"padding": "4px"
-	},
-	px25: {
-		"paddingInline": "10px"
-	},
-	pb1: {
-		"paddingBottom": "4px"
-	},
-	pt1: {
-		"paddingTop": "4px"
-	},
-	pt2: {
-		"paddingTop": "8px"
-	},
-	cursorPointer: {
-		"cursor": "pointer"
-	},
-	gap25: {
-		"gap": "10px"
-	},
-	roundedControl: {
-		"borderRadius": "calc(12px * var(--rf))"
-	,
-		cornerShape: "var(--cs)"},
-	py2: {
-		"paddingBlock": "8px"
-	},
-	leading13: {
-		"--tw-leading": "1.3",
-		"lineHeight": "1.3"
-	},
-	whitespaceNowrap: {
-		"whiteSpace": "nowrap"
-	},
-	bgPressed: {
-		"backgroundColor": "var(--hover-strong)"
-	},
-
-	bgColorMixInSrgbVarAccent14Transparent: {
-		"backgroundColor": "var(--accent)",
-		"@supports (color: color-mix(in lab, red, red))": {
-			"backgroundColor": "color-mix(in srgb,var(--accent) 14%,transparent)"
-		}
-	},
+  flex: {
+    display: "flex",
+  },
+  size5: {
+    width: "calc(4px * 5)",
+    height: "calc(4px * 5)",
+  },
+  shrink0: {
+    flexShrink: "0",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  justifyCenter: {
+    justifyContent: "center",
+  },
+  text17px: {
+    fontSize: "17px",
+  },
+  leadingNone: {
+    lineHeight: "1",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  bgActive: {
+    backgroundColor: "var(--bg-active)",
+  },
+  textDim: {
+    color: "var(--text-dim)",
+  },
+  bgColorMixInSrgbVarAccent14Transparent: {
+    backgroundColor: "color-mix(in srgb,var(--accent) 14%,transparent)",
+  },
+  px5px: {
+    paddingInline: "5px",
+  },
+  pyPx: {
+    paddingBlock: "1px",
+  },
+  fontSemibold: {
+    fontWeight: "var(--font-weight-semibold)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFg: {
+    color: "var(--text)",
+  },
+  overflowHidden: {
+    overflow: "hidden",
+  },
+  textEllipsis: {
+    textOverflow: "ellipsis",
+  },
+  textLeft: {
+    textAlign: "left",
+  },
+  DirectionRtl: {
+    direction: "rtl",
+  },
 });
 
 /**
@@ -177,7 +120,10 @@ interface TriggerContext {
   kind: "file" | "skill" | "emoji";
 }
 
-function mentionContextAt(value: string, caret: number): { start: number; query: string } | null {
+function mentionContextAt(
+  value: string,
+  caret: number,
+): { start: number; query: string } | null {
   // Walk back from the caret to the "@", bailing on whitespace.
   let i = caret - 1;
   while (i >= 0) {
@@ -201,14 +147,20 @@ function mentionContextAt(value: string, caret: number): { start: number; query:
  * is still inside that first token — so typing a path like `src/foo` mid-text
  * never opens it.
  */
-function slashContextAt(value: string, caret: number): { start: number; query: string } | null {
+function slashContextAt(
+  value: string,
+  caret: number,
+): { start: number; query: string } | null {
   if (value[0] !== "/" || caret < 1) return null;
   const query = value.slice(1, caret);
   if (/\s/.test(query)) return null;
   return { start: 0, query };
 }
 
-function sameTrigger(a: TriggerContext | null, b: TriggerContext | null): boolean {
+function sameTrigger(
+  a: TriggerContext | null,
+  b: TriggerContext | null,
+): boolean {
   if (!a || !b) return a === b;
   return a.start === b.start && a.query === b.query && a.kind === b.kind;
 }
@@ -277,9 +229,22 @@ interface FileMentions {
  * popup node plus handlers to wire into a host textarea. Used by both the session
  * Composer and the New-session prompt field so they behave identically.
  */
-export function useFileMentions({ value, onChange, textareaRef, mentionFetch, paletteFetch, skillsFetch, actions = [] }: Options): FileMentions {
+export function useFileMentions({
+  value,
+  onChange,
+  textareaRef,
+  mentionFetch,
+  paletteFetch,
+  skillsFetch,
+  actions = [],
+}: Options): FileMentions {
   const [mention, setMention] = useState<TriggerContext | null>(null);
   const [suggestions, setSuggestions] = useState<MentionSuggestion[]>([]);
+  // The trigger that produced the rows currently on screen. Skill lookup is
+  // asynchronous, so a narrowed query briefly keeps the previous rows rather
+  // than unmounting and remounting the whole popup. Selection stays disabled
+  // until the new query's rows arrive.
+  const suggestionsFor = useRef<TriggerContext | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const popupId = useId();
   const people = usePeople();
@@ -332,6 +297,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
   // make each of those a real state change, so a host as large as the
   // new-session palette re-rendered three extra times per character typed.
   function clearSuggestions() {
+    suggestionsFor.current = null;
     setSuggestions((prev) => (prev.length ? NO_SUGGESTIONS : prev));
   }
 
@@ -340,7 +306,8 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
     if (!el) return;
     const caret = el.selectionStart ?? el.value.length;
     const slash = skillsFetch ? slashContextAt(el.value, caret) : null;
-    const at = !slash && mentionFetch ? mentionContextAt(el.value, caret) : null;
+    const at =
+      !slash && mentionFetch ? mentionContextAt(el.value, caret) : null;
     // ":cr" opens the emoji picker. It needs no fetcher, so it stays available
     // in every host the hook is wired into, including ones with no repository
     // search behind them.
@@ -385,32 +352,47 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
     }
     const seq = ++fetchSeq.current;
     if (mention.kind === "emoji") {
+      suggestionsFor.current = mention;
       setSuggestions(emojiMentionSuggestions(mention.query));
       setActiveIdx(0);
       return;
     }
-    const local = mention.kind === "file"
-      ? mergeMentionSuggestions(
-          peopleMentionMatches(mention.query, people, currentUser),
-          actionMentionSuggestions(mention.query, actionsRef.current),
-        )
-      : [];
-    // Never let Enter select rows belonging to the previous query. The local
-    // directory rows are safe immediately; fetched rows merge underneath.
-    setSuggestions(local);
+    const local =
+      mention.kind === "file"
+        ? mergeMentionSuggestions(
+            peopleMentionMatches(mention.query, people, currentUser),
+            actionMentionSuggestions(mention.query, actionsRef.current),
+          )
+        : [];
     setActiveIdx(0);
     if (mention.kind === "skill") {
+      // Keep a skill menu mounted while its next local lookup resolves. Clearing
+      // it here made every typed character flash the popup off and back on.
+      // suggestionsFor keeps stale rows inert during that short handoff.
+      if (suggestionsFor.current?.kind !== "skill") clearSuggestions();
       const fetcher = skillsFetchRef.current;
       if (!fetcher) return;
-      void fetcher(mention.query).then((items) => {
-        if (seq === fetchSeq.current) setSuggestions(items);
-      }).catch(() => {});
+      void fetcher(mention.query)
+        .then((items) => {
+          if (seq !== fetchSeq.current) return;
+          suggestionsFor.current = mention;
+          setActiveIdx(0);
+          setSuggestions(items);
+        })
+        .catch(() => {
+          if (seq === fetchSeq.current) clearSuggestions();
+        });
       return;
     }
+    // Local people/actions already belong to this query, so Enter can use them
+    // immediately while the fetched rows merge underneath.
+    suggestionsFor.current = mention;
+    setSuggestions(local);
     let paletteItems: FileMention[] = [];
     let fileItems: FileMention[] = [];
     const publish = () => {
       if (seq !== fetchSeq.current) return;
+      suggestionsFor.current = mention;
       setSuggestions(mergeMentionSuggestions(local, paletteItems, fileItems));
     };
     const paletteFetcher = paletteFetchRef.current;
@@ -439,10 +421,9 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
   const open = !!mention && suggestions.length > 0;
 
   // The popup renders in a portal with fixed viewport coordinates so an
-  // overflow:hidden ancestor cannot clip it. Inline triggers anchor to the
-  // character that opened them: the command palette belongs beside the `@`,
-  // and emoji suggestions belong beside their shortcode. Slash commands still
-  // align to the field because `/` only opens at its first character.
+  // overflow:hidden ancestor cannot clip it. Every inline trigger anchors to
+  // its character. Slash commands start at the field's left edge, but still
+  // belong under the slash itself rather than under a tall textarea.
   useLayoutEffect(() => {
     if (!open) {
       setPos(null);
@@ -453,19 +434,28 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
       if (!el) return;
       const rect = el.getBoundingClientRect();
       const POPUP_MAX = 420;
-      const caret =
-        mention?.kind === "emoji" || mention?.kind === "file"
-          ? caretPoint(textareaRef.current, mention.start)
-          : null;
+      const field = textareaRef.current;
+      const caret = mention ? caretPoint(field, mention.start) : null;
       if (caret) {
         const GUTTER = window.matchMedia(PHONE_QUERY).matches ? 16 : 8;
+        const fieldRect = field?.getBoundingClientRect();
         const width =
           mention?.kind === "emoji"
             ? 240
-            : Math.min(520, rect.width, window.innerWidth - GUTTER * 2);
+            : Math.min(
+                520,
+                mention?.kind === "skill" && fieldRect
+                  ? fieldRect.width
+                  : rect.width,
+                window.innerWidth - GUTTER * 2,
+              );
+        const targetLeft =
+          mention?.kind === "skill" && fieldRect
+            ? fieldRect.left
+            : caret.left - 8;
         const left = Math.max(
           GUTTER,
-          Math.min(caret.left - 8, window.innerWidth - width - GUTTER),
+          Math.min(targetLeft, window.innerWidth - width - GUTTER),
         );
         const spaceAbove = caret.top;
         const spaceBelow = window.innerHeight - caret.bottom;
@@ -509,7 +499,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };
-  }, [open, suggestions.length, mention?.kind, mention?.start, value, textareaRef]);
+  }, [open, suggestions.length, mention, value, textareaRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -519,7 +509,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
   }, [activeIdx, open]);
 
   function applySuggestion(item: MentionSuggestion) {
-    if (!mention) return;
+    if (!mention || !sameTrigger(suggestionsFor.current, mention)) return;
     const el = textareaRef.current;
     const caret = el?.selectionStart ?? value.length;
     const before = value.slice(0, mention.start);
@@ -527,16 +517,18 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
     if (item.action) {
       setMention(null);
       setSuggestions([]);
-      pendingCaret.current = onChange(before + after, before.length, before.length) ?? before.length;
+      pendingCaret.current =
+        onChange(before + after, before.length, before.length) ?? before.length;
       queueMicrotask(item.action);
       return;
     }
     // An emoji row replaces the whole ":shortcode" with the character, so the
     // sent text carries the emoji itself rather than a code the reader has to
     // decode. No trailing space: emoji usually end a sentence.
-    const insert = mention.kind === "emoji"
-      ? item.insert
-      : `${mention.kind === "skill" ? "/" : "@"}${item.insert} `;
+    const insert =
+      mention.kind === "emoji"
+        ? item.insert
+        : `${mention.kind === "skill" ? "/" : "@"}${item.insert} `;
     const next = before + insert + after;
     const nextCaret = before.length + insert.length;
     setMention(null);
@@ -589,121 +581,256 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
   }
 
   const groups = groupMentionSuggestions(suggestions);
-  const popup = open && pos ? createPortal(
-    <div
-      ref={popupRef}
-      className={cn(
-        mergeStylexClassName("smooth-shadow-ring-md", sx.fixed, sx.overflowYAuto, sx.roundedXl, sx.bgPopupGlass, sx.BackdropFilterVarPopupBlur, sx.SmoothRingColorVarPopupRing, sx.p1),
-        FLOATING_OVERLAY_LAYER,
-      )}
-      id={popupId}
-      role="listbox"
-      style={pos}
-    >
-      {groups.map((group, groupIndex) => (
-        <div key={group.category} role="group" aria-label={group.category}>
-          <div className={cn(
-            mergeStylexClassName("", sx.px25, sx.pb1, typography.meta, sx.fontMedium, sx.textFaint),
-            groupIndex === 0 ? mergeStylexClassName("", sx.pt1) : mergeStylexClassName("", sx.pt2),
-          )}>
-            {group.category}
-          </div>
-          {group.items.map(({ item, index: i }) => {
-            const isWorkspace = item.kind === "workspace";
-            const isSession = item.kind === "session";
-            const isSkill = item.kind === "skill";
-            const isDir = item.kind === "dir";
-            const isPerson = item.kind === "person";
-            const isTool = item.kind === "tool";
-            const isAction = item.kind === "action";
-            const isEmoji = item.kind === "emoji";
-            const path = item.display;
-            const slash = isWorkspace || isSession || isSkill || isPerson || isTool || isAction || isEmoji
-              ? -1
-              : path.lastIndexOf("/");
-            const dir = slash >= 0 ? path.slice(0, slash + 1) : "";
-            const base = slash >= 0 ? path.slice(slash + 1) : path;
-            const label = isTool
-              ? brandDisplayName(base)
-              : isSkill
-                ? `/${base}`
-                : isDir
-                  ? `${base}/`
-                  : base;
-            return (
+  const popup =
+    open && pos
+      ? createPortal(
+          <div
+            ref={popupRef}
+            className={cn(
+              utilityClassName(
+                "fixed overflow-y-auto rounded-xl bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md",
+              ),
+              FLOATING_OVERLAY_LAYER,
+            )}
+            id={popupId}
+            role="listbox"
+            style={pos}
+          >
+            {groups.map((group, groupIndex) => (
               <div
-                key={`${item.kind || "file"}:${item.insert}`}
-                role="option"
-                id={`${popupId}-option-${i}`}
-                aria-selected={i === activeIdx}
-                data-mention-index={i}
-                className={cn(
-                  mergeStylexClassName("", sx.flex, sx.cursorPointer, sx.itemsCenter, sx.gap25, sx.overflowHidden, sx.roundedControl, sx.px25, sx.py2, typography.label, sx.leading13, sx.whitespaceNowrap),
-                  i === activeIdx && mergeStylexClassName("", sx.bgPressed),
-                )}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  applySuggestion(item);
-                }}
-                onMouseEnter={() => setActiveIdx(i)}
+                key={group.category}
+                role="group"
+                aria-label={group.category}
               >
-                {isEmoji ? (
-                  <span {...stylex.props(sx.flex, sx.size5, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.text17px, sx.leadingNone)}>
-                    {item.display}
-                  </span>
-                ) : isPerson ? (
-                  <UserAvatar name={item.display} size={20} />
-                ) : isTool ? (
-                  <IconTile name={item.insert} size={20} />
-                ) : isWorkspace ? (
-                  <span {...stylex.props(sx.flex, sx.size5, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedMd, sx.bgActive, sx.textDim)}>
-                    <IconStack size={14} />
-                  </span>
-                ) : isSession ? (
-                  <span {...stylex.props(sx.flex, sx.size5, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedMd, sx.bgActive, sx.textDim)}>
-                    <IconMessage size={14} />
-                  </span>
-                ) : isAction ? (
-                  <span {...stylex.props(sx.flex, sx.size5, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textDim)}>
-                    {item.icon || <IconPlug size={16} />}
-                  </span>
-                ) : item.repo ? (
-                  <span {...mergeStylexProps("", sx.bgColorMixInSrgbVarAccent14Transparent, sx.shrink0, sx.roundedMd, sx.px5px, sx.pyPx, sx.fontSemibold, sx.textAccent, typography.meta)}>
-                    {repoLabel(item.repo)}
-                  </span>
-                ) : (
-                  <span {...stylex.props(sx.flex, sx.size5, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textFaint)}>
-                    {isSkill ? <IconBolt size={16} /> : isDir ? <IconFolder size={16} /> : <IconFile size={16} />}
-                  </span>
-                )}
-                {!isEmoji && <span {...stylex.props(sx.shrink0, sx.fontMedium, sx.textFg)}>{label}</span>}
-                {isEmoji ? (
-                  <span {...stylex.props(sx.overflowHidden, sx.textEllipsis, sx.fontMedium, sx.textFg)}>
-                    {item.sub}
-                  </span>
-                ) : isTool ? (
-                  <span {...stylex.props(sx.overflowHidden, sx.textEllipsis, sx.textFaint, typography.meta)}>
-                    @{item.insert}
-                  </span>
-                ) : isWorkspace || isSession || isSkill || isPerson || isAction ? (
-                  item.sub && (
-                    <span {...stylex.props(sx.overflowHidden, sx.textEllipsis, sx.textFaint, typography.meta)}>
-                      {item.sub}
-                    </span>
-                  )
-                ) : dir ? (
-                  <span {...stylex.props(sx.overflowHidden, sx.textEllipsis, sx.textLeft, sx.textFaint, sx.DirectionRtl, typography.meta)}>
-                    {dir}
-                  </span>
-                ) : null}
+                <div
+                  className={cn(
+                    utilityClassName(
+                      "px-2.5 pb-1 text-meta font-medium text-faint",
+                    ),
+                    groupIndex === 0
+                      ? utilityClassName("pt-1")
+                      : utilityClassName("pt-2"),
+                  )}
+                >
+                  {group.category}
+                </div>
+                {group.items.map(({ item, index: i }) => {
+                  const isWorkspace = item.kind === "workspace";
+                  const isSession = item.kind === "session";
+                  const isSkill = item.kind === "skill";
+                  const isDir = item.kind === "dir";
+                  const isPerson = item.kind === "person";
+                  const isTool = item.kind === "tool";
+                  const isAction = item.kind === "action";
+                  const isEmoji = item.kind === "emoji";
+                  const path = item.display;
+                  const slash =
+                    isWorkspace ||
+                    isSession ||
+                    isSkill ||
+                    isPerson ||
+                    isTool ||
+                    isAction ||
+                    isEmoji
+                      ? -1
+                      : path.lastIndexOf("/");
+                  const dir = slash >= 0 ? path.slice(0, slash + 1) : "";
+                  const base = slash >= 0 ? path.slice(slash + 1) : path;
+                  const label = isTool
+                    ? brandDisplayName(base)
+                    : isSkill
+                      ? `/${base}`
+                      : isDir
+                        ? `${base}/`
+                        : base;
+                  return (
+                    <div
+                      key={`${item.kind || "file"}:${item.insert}`}
+                      role="option"
+                      id={`${popupId}-option-${i}`}
+                      aria-selected={i === activeIdx}
+                      data-mention-index={i}
+                      className={cn(
+                        utilityClassName(
+                          "flex cursor-pointer items-center gap-2.5 overflow-hidden rounded-control px-2.5 py-2 text-label leading-[1.3] whitespace-nowrap",
+                        ),
+                        i === activeIdx && utilityClassName("bg-pressed"),
+                      )}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        applySuggestion(item);
+                      }}
+                      onMouseEnter={() => setActiveIdx(i)}
+                    >
+                      {isEmoji ? (
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.size5,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.text17px,
+                            sx.leadingNone,
+                          )}
+                        >
+                          {item.display}
+                        </span>
+                      ) : isPerson ? (
+                        <UserAvatar name={item.display} size={20} />
+                      ) : isTool ? (
+                        <IconTile name={item.insert} size={20} />
+                      ) : isWorkspace ? (
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.size5,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.roundedMd,
+                            sx.bgActive,
+                            sx.textDim,
+                          )}
+                        >
+                          <IconStack size={14} />
+                        </span>
+                      ) : isSession ? (
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.size5,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.roundedMd,
+                            sx.bgActive,
+                            sx.textDim,
+                          )}
+                        >
+                          <IconMessage size={14} />
+                        </span>
+                      ) : isAction ? (
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.size5,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.textDim,
+                          )}
+                        >
+                          {item.icon || <IconPlug size={16} />}
+                        </span>
+                      ) : item.repo ? (
+                        <span
+                          {...mergeStylexProps(
+                            "text-accent",
+                            sx.shrink0,
+                            sx.roundedMd,
+                            sx.bgColorMixInSrgbVarAccent14Transparent,
+                            sx.px5px,
+                            sx.pyPx,
+                            sx.fontSemibold,
+                            typography.meta,
+                          )}
+                        >
+                          {repoLabel(item.repo)}
+                        </span>
+                      ) : (
+                        <span
+                          {...stylex.props(
+                            sx.flex,
+                            sx.size5,
+                            sx.shrink0,
+                            sx.itemsCenter,
+                            sx.justifyCenter,
+                            sx.textFaint,
+                          )}
+                        >
+                          {isSkill ? (
+                            <IconBolt size={16} />
+                          ) : isDir ? (
+                            <IconFolder size={16} />
+                          ) : (
+                            <IconFile size={16} />
+                          )}
+                        </span>
+                      )}
+                      {!isEmoji && (
+                        <span
+                          {...stylex.props(
+                            sx.shrink0,
+                            sx.fontMedium,
+                            sx.textFg,
+                          )}
+                        >
+                          {label}
+                        </span>
+                      )}
+                      {isEmoji ? (
+                        <span
+                          {...stylex.props(
+                            sx.overflowHidden,
+                            sx.textEllipsis,
+                            sx.fontMedium,
+                            sx.textFg,
+                          )}
+                        >
+                          {item.sub}
+                        </span>
+                      ) : isTool ? (
+                        <span
+                          {...stylex.props(
+                            sx.overflowHidden,
+                            sx.textEllipsis,
+                            sx.textFaint,
+                            typography.meta,
+                          )}
+                        >
+                          @{item.insert}
+                        </span>
+                      ) : isWorkspace ||
+                        isSession ||
+                        isSkill ||
+                        isPerson ||
+                        isAction ? (
+                        item.sub && (
+                          <span
+                            {...stylex.props(
+                              sx.overflowHidden,
+                              sx.textEllipsis,
+                              sx.textFaint,
+                              typography.meta,
+                            )}
+                          >
+                            {item.sub}
+                          </span>
+                        )
+                      ) : dir ? (
+                        <span
+                          {...stylex.props(
+                            sx.overflowHidden,
+                            sx.textEllipsis,
+                            sx.textLeft,
+                            sx.textFaint,
+                            sx.DirectionRtl,
+                            typography.meta,
+                          )}
+                        >
+                          {dir}
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-      ))}
-    </div>,
-    document.body,
-  ) : null;
+            ))}
+          </div>,
+          document.body,
+        )
+      : null;
 
   const inputProps: FileMentions["inputProps"] = {
     role: "combobox",

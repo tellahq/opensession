@@ -14,43 +14,43 @@ import { fetchLanes, saveLanesApi } from "./api";
 import { makeUserMap } from "./user-map";
 
 export type Lane =
-	| "needsinput"
-	| "inprogress"
-	| "review"
-	| "merged"
-	| "pending"
-	/** Claimed into your sidebar with no forced lane — it follows its live
+  | "needsinput"
+  | "inprogress"
+  | "review"
+  | "merged"
+  | "pending"
+  /** Claimed into your sidebar with no forced lane — it follows its live
 	    state (In progress while running, Backlog once idle). */
-	| "mine";
+  | "mine";
 
 const CHANGE_EVENT = "opensession-lanes-changed";
 
 const store = makeUserMap<Lane>({
-	changeEvent: CHANGE_EVENT,
-	fetchMap: (user) => fetchLanes(user) as Promise<Record<string, Lane>>,
-	saveDelta: (user, delta) => saveLanesApi(user, delta),
+  changeEvent: CHANGE_EVENT,
+  fetchMap: (user) => fetchLanes(user) as Promise<Record<string, Lane>>,
+  saveDelta: (user, delta) => saveLanesApi(user, delta),
 });
 
 export function getLanes(): Record<string, Lane> {
-	return store.get();
+  return store.get();
 }
 
 /** Your personal lane for a session id, or undefined. */
 export function getLane(id: string): Lane | undefined {
-	return store.get()[id];
+  return store.get()[id];
 }
 
 /** Set (a lane) or clear (null) your personal lane for a session id. */
 export function setLane(id: string, lane: Lane | null): void {
-	store.update((lanes) => {
-		if (lane) return { ...lanes, [id]: lane };
-		if (!(id in lanes)) return null;
-		const next = { ...lanes };
-		delete next[id];
-		return next;
-	});
+  store.update((lanes) => {
+    if (lane) return { ...lanes, [id]: lane };
+    if (!(id in lanes)) return null;
+    const next = { ...lanes };
+    delete next[id];
+    return next;
+  });
 }
 
 export function onLanesChanged(handler: () => void): () => void {
-	return store.onChanged(handler);
+  return store.onChanged(handler);
 }

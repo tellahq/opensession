@@ -39,7 +39,10 @@ import type { ExecOpts, ExecResult } from "./provider";
  * strategies (e.g. git-diff reads untracked-file contents with fs when the
  * workspace is host-visible, via exec when it only exists in the sandbox).
  */
-export type WorkspaceExec = ((cmd: string[], opts?: ExecOpts) => Promise<ExecResult>) & {
+export type WorkspaceExec = ((
+  cmd: string[],
+  opts?: ExecOpts,
+) => Promise<ExecResult>) & {
   /** Commands run inside a sandbox container (docker exec). */
   readonly sandboxed: boolean;
   /** The workspace exists ONLY inside the sandbox (volume mode / remote
@@ -50,10 +53,10 @@ export type WorkspaceExec = ((cmd: string[], opts?: ExecOpts) => Promise<ExecRes
 /** The minimal session shape the routing decision needs (UnifiedSession and
  *  NativeSessionFile both satisfy it). */
 export interface WorkspaceExecSession {
-	id?: string;
-	createdBy?: string | null;
-	sandbox?: { provider?: string; sandboxId?: string; workspace?: string };
-	runner?: { id: string; workspacePath: string };
+  id?: string;
+  createdBy?: string | null;
+  sandbox?: { provider?: string; sandboxId?: string; workspace?: string };
+  runner?: { id: string; workspacePath: string };
   worktreeDir?: string | null;
   repo?: string;
 }
@@ -94,7 +97,7 @@ export function hostWorkspaceExec(dir: string): WorkspaceExec {
 export function hasRemoteWorkspace(
   session: WorkspaceExecSession | null | undefined,
 ): boolean {
-	return session?.sandbox?.workspace === "volume" || !!session?.runner;
+  return session?.sandbox?.workspace === "volume" || !!session?.runner;
 }
 
 /**
@@ -108,30 +111,49 @@ export async function workspaceExecFor(
   session: WorkspaceExecSession | null | undefined,
   dir?: string,
 ): Promise<WorkspaceExec> {
-	const cwd = dir || session?.worktreeDir || "";
-	const host = hostWorkspaceExec(cwd);
-	if (session?.runner && session.repo && cwd === session.runner.workspacePath) {
-		try {
-			const { execRunnerWorkspace } = await import("../runner-ws");
-			const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
-			return Object.assign(
-				async (cmd: string[], opts?: ExecOpts) => {
-					if (opts?.env && Object.keys(opts.env).length) {
-						return { exitCode: 1, stdout: "", stderr: "Runner workspace commands cannot inject environment variables" };
-					}
-					const result = await execRunnerWorkspace(session.runner!.id, {
-						sessionId: session.id || "", repo: session.repo!, user: session.createdBy || undefined,
-						workspacePath: cwd, command: cmd.map(quote).join(" "),
-					});
-					return { exitCode: result.code, stdout: result.stdout, stderr: result.stderr };
-				},
-				{ sandboxed: false, remote: true } as const,
-			);
-		} catch {
-			return Object.assign(async () => ({ exitCode: 1, stdout: "", stderr: "Runner workspace is unavailable" }), { sandboxed: false, remote: true } as const);
-		}
-	}
-	const sb = session?.sandbox;
+  const cwd = dir || session?.worktreeDir || "";
+  const host = hostWorkspaceExec(cwd);
+  if (session?.runner && session.repo && cwd === session.runner.workspacePath) {
+    try {
+      const { execRunnerWorkspace } = await import("../runner-ws");
+      const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
+      return Object.assign(
+        async (cmd: string[], opts?: ExecOpts) => {
+          if (opts?.env && Object.keys(opts.env).length) {
+            return {
+              exitCode: 1,
+              stdout: "",
+              stderr:
+                "Runner workspace commands cannot inject environment variables",
+            };
+          }
+          const result = await execRunnerWorkspace(session.runner!.id, {
+            sessionId: session.id || "",
+            repo: session.repo!,
+            user: session.createdBy || undefined,
+            workspacePath: cwd,
+            command: cmd.map(quote).join(" "),
+          });
+          return {
+            exitCode: result.code,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          };
+        },
+        { sandboxed: false, remote: true } as const,
+      );
+    } catch {
+      return Object.assign(
+        async () => ({
+          exitCode: 1,
+          stdout: "",
+          stderr: "Runner workspace is unavailable",
+        }),
+        { sandboxed: false, remote: true } as const,
+      );
+    }
+  }
+  const sb = session?.sandbox;
   if (!cwd || !sb?.provider || !sb.sandboxId) return host;
   const unavailableRemote = Object.assign(
     async (): Promise<ExecResult> => ({
@@ -150,10 +172,15 @@ export async function workspaceExecFor(
       const { getSandboxProvider } = await import("./index");
       const provider = getSandboxProvider(sb.provider);
       let sandbox = await provider.get(sb.sandboxId);
-      if (sandbox && (await sandbox.status()) === "stopped" && provider.resume) {
+      if (
+        sandbox &&
+        (await sandbox.status()) === "stopped" &&
+        provider.resume
+      ) {
         sandbox = await provider.resume(sb.sandboxId);
       }
-      if (!sandbox || (await sandbox.status()) !== "running") return unavailableRemote;
+      if (!sandbox || (await sandbox.status()) !== "running")
+        return unavailableRemote;
       return Object.assign(
         (cmd: string[], opts?: ExecOpts) => sandbox.exec(cmd, opts),
         { sandboxed: true, remote: true } as const,
@@ -165,10 +192,10 @@ export async function workspaceExecFor(
     if (!sandboxProviderConfigured("docker")) return host;
     if ((await dockerContainerStatus(sb.sandboxId)) !== "running") return host;
     const exec = rawDockerExec(sb.sandboxId, cwd);
-    return Object.assign(
-      (cmd: string[], opts?: ExecOpts) => exec(cmd, opts),
-      { sandboxed: true, remote: sb.workspace === "volume" } as const,
-    );
+    return Object.assign((cmd: string[], opts?: ExecOpts) => exec(cmd, opts), {
+      sandboxed: true,
+      remote: sb.workspace === "volume",
+    } as const);
   } catch {
     return sb.workspace === "volume" ? unavailableRemote : host;
   }

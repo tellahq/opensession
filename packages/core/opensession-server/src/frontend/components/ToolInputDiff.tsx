@@ -6,19 +6,20 @@ import { type as typography } from "../styles/typography.stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	maxH80: {
-			maxHeight: "calc(4px * 80)"
-	},
-	overflowAuto: {
-			overflow: "auto"
-	},
-	roundedMd: {
-			borderRadius: "calc(7px * var(--rf))",
+  maxH80: {
+    maxHeight: "calc(4px * 80)",
+  },
+  overflowAuto: {
+    overflow: "auto",
+  },
+  roundedMd: {
+    borderRadius: "calc(7px * var(--rf))",
 
-		cornerShape: "var(--cs)",},
-	bgCodeWell: {
-			backgroundColor: "var(--code-well)"
-	},
+    cornerShape: "var(--cs)",
+  },
+  bgCodeWell: {
+    backgroundColor: "var(--code-well)",
+  },
 });
 
 /**
@@ -38,7 +39,15 @@ export function ToolInputDiff({ patch }: { patch: string }) {
 
   if (!file) return null;
   return (
-    <div {...stylex.props(sx.maxH80, sx.overflowAuto, sx.roundedMd, sx.bgCodeWell, typography.label)}>
+    <div
+      {...stylex.props(
+        sx.maxH80,
+        sx.overflowAuto,
+        sx.roundedMd,
+        sx.bgCodeWell,
+        typography.label,
+      )}
+    >
       <FileDiff
         key={theme}
         fileDiff={file}

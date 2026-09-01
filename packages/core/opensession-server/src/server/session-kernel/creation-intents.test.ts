@@ -11,10 +11,7 @@ import {
   settleCreationCancelled,
   settleCreationFailed,
 } from "./creation-intents";
-import {
-  SessionKernelStore,
-  type CreationEventDecision,
-} from "./store";
+import { SessionKernelStore, type CreationEventDecision } from "./store";
 
 function harness(sessionId: string) {
   const store = new SessionKernelStore(":memory:");
@@ -22,9 +19,8 @@ function harness(sessionId: string) {
     store,
     kernel: {
       creationState: () => store.creationState(sessionId),
-      applyCreationEvent: (
-        input: Omit<CreationEventDecision, "sessionId">,
-      ) => store.applyCreationEvent({ ...input, sessionId }),
+      applyCreationEvent: (input: Omit<CreationEventDecision, "sessionId">) =>
+        store.applyCreationEvent({ ...input, sessionId }),
     },
   };
 }
@@ -112,12 +108,14 @@ describe("creation lifecycle intents", () => {
       );
       expect(failed.state).toBe("failed");
       expect(
-        (await settleCreationFailed(
-          "create-failed-lifecycle",
-          "request-failed",
-          "duplicate",
-          kernel,
-        )).state,
+        (
+          await settleCreationFailed(
+            "create-failed-lifecycle",
+            "request-failed",
+            "duplicate",
+            kernel,
+          )
+        ).state,
       ).toBe("failed");
     } finally {
       store.close();
@@ -143,25 +141,29 @@ describe("creation attachment intents", () => {
         pollMs: 5,
       });
       await Bun.sleep(5);
-      expect(store.pendingOutbox()).toMatchObject([{
-        kind: "creation_attachment_stage",
-        effectKey: "attachment:attachment-one",
-        payload: {
-          creationIdentity: attachment.identity,
-          creationGeneration: 1,
-          attachmentId: "attachment-one",
-          name: "brief.pdf",
-          sourceRef: "uploads:staged%2Fbrief.pdf",
-          digest: "sha256:brief",
-          mode: "reconcile_or_stage",
+      expect(store.pendingOutbox()).toMatchObject([
+        {
+          kind: "creation_attachment_stage",
+          effectKey: "attachment:attachment-one",
+          payload: {
+            creationIdentity: attachment.identity,
+            creationGeneration: 1,
+            attachmentId: "attachment-one",
+            name: "brief.pdf",
+            sourceRef: "uploads:staged%2Fbrief.pdf",
+            digest: "sha256:brief",
+            mode: "reconcile_or_stage",
+          },
         },
-      }]);
-      expect(store.applyCreationEvent({
-        sessionId: attachment.sessionId,
-        identity: attachment.identity,
-        event: "preparation_started",
-        effectId: "attachment:attachment-one",
-      }).accepted).toBe(true);
+      ]);
+      expect(
+        store.applyCreationEvent({
+          sessionId: attachment.sessionId,
+          identity: attachment.identity,
+          event: "preparation_started",
+          effectId: "attachment:attachment-one",
+        }).accepted,
+      ).toBe(true);
       expect((await pending).completedEffectIds).toContain(
         "attachment:attachment-one",
       );
@@ -368,12 +370,14 @@ describe("creation opening intents", () => {
         effectId: `opening:${raced.openingPromptEntryId}`,
       });
       expect(
-        (await settleCreationCancelled(
-          raced.sessionId,
-          raced.identity,
-          kernel,
-          `opening:${raced.openingPromptEntryId}`,
-        )).state,
+        (
+          await settleCreationCancelled(
+            raced.sessionId,
+            raced.identity,
+            kernel,
+            `opening:${raced.openingPromptEntryId}`,
+          )
+        ).state,
       ).toBe("ready");
     } finally {
       store.close();
@@ -393,12 +397,14 @@ describe("creation opening intents", () => {
         failedHarness.kernel,
       );
       expect(
-        (await settleCreationCancelled(
-          failed.sessionId,
-          failed.identity,
-          failedHarness.kernel,
-          `opening:${failed.openingPromptEntryId}`,
-        )).state,
+        (
+          await settleCreationCancelled(
+            failed.sessionId,
+            failed.identity,
+            failedHarness.kernel,
+            `opening:${failed.openingPromptEntryId}`,
+          )
+        ).state,
       ).toBe("failed");
     } finally {
       failedHarness.store.close();
@@ -502,7 +508,11 @@ describe("creation workspace intents", () => {
       });
       const [settled] = store.pendingOutbox();
       store.ackOutbox(settled.id);
-      await requestCreationWorkspace(input, { kernel, timeoutMs: 20, pollMs: 1 });
+      await requestCreationWorkspace(input, {
+        kernel,
+        timeoutMs: 20,
+        pollMs: 1,
+      });
       expect(store.pendingOutbox()).toHaveLength(0);
     } finally {
       store.close();
@@ -565,17 +575,21 @@ describe("creation branch intents", () => {
   test("leaves timed-out branch work durable and does not re-emit it", async () => {
     const { store, kernel } = harness(branchInput.sessionId);
     try {
-      await expect(requestCreationBranch(branchInput, {
-        kernel,
-        timeoutMs: 5,
-        pollMs: 1,
-      })).rejects.toThrow("remains durably pending");
+      await expect(
+        requestCreationBranch(branchInput, {
+          kernel,
+          timeoutMs: 5,
+          pollMs: 1,
+        }),
+      ).rejects.toThrow("remains durably pending");
       expect(store.pendingOutbox()).toHaveLength(1);
-      await expect(requestCreationBranch(branchInput, {
-        kernel,
-        timeoutMs: 5,
-        pollMs: 1,
-      })).rejects.toThrow("remains durably pending");
+      await expect(
+        requestCreationBranch(branchInput, {
+          kernel,
+          timeoutMs: 5,
+          pollMs: 1,
+        }),
+      ).rejects.toThrow("remains durably pending");
       expect(store.pendingOutbox()).toHaveLength(1);
     } finally {
       store.close();

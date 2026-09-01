@@ -26,8 +26,16 @@ export function isLikelyPromptCacheMiss(
   userTurns: number,
   providerId: string,
 ): boolean {
-  if (providerId !== "anthropic" || userTurns < 2 || usage.contextTokens < 10_000) return false;
-  return usage.cacheReadTokens < 1_024 && usage.cacheReadTokens / usage.contextTokens < 0.05;
+  if (
+    providerId !== "anthropic" ||
+    userTurns < 2 ||
+    usage.contextTokens < 10_000
+  )
+    return false;
+  return (
+    usage.cacheReadTokens < 1_024 &&
+    usage.cacheReadTokens / usage.contextTokens < 0.05
+  );
 }
 
 /** Prompt size + cache reuse of one completed model step, for the rebuild
@@ -151,10 +159,11 @@ export interface StreamEvent {
   /** Effective model for the run (set on init/done). */
   model?: string;
   /**
-   * Cumulative token/cost accounting for the run. Set on the terminal `done`
-   * (authoritative) and on every `usage_snapshot` (live mid-run figures —
-   * always run-cumulative, so consumers fold a snapshot onto the pre-run base
-   * rather than onto the previous snapshot).
+   * Cumulative token/cost accounting for the run. Set on terminal `done` or
+   * `error` events when the provider completed billable work (authoritative),
+   * and on every `usage_snapshot` (live mid-run figures — always
+   * run-cumulative, so consumers fold a snapshot onto the pre-run base rather
+   * than onto the previous snapshot).
    */
   usage?: TurnUsage;
   /** This completed Anthropic turn unexpectedly reused almost none of its prompt. */
@@ -181,7 +190,8 @@ export function shouldPersistModelSwitch(
   return (
     event.type === "model_switch" &&
     event.temporaryFallback !== true &&
-    (event.switchReason === undefined || event.switchReason === "out of credits")
+    (event.switchReason === undefined ||
+      event.switchReason === "out of credits")
   );
 }
 

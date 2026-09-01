@@ -24,30 +24,30 @@ export type Hides = Record<string, string>;
 
 /** Keep only string-key entries whose value parses as a date. */
 function clean(input: unknown): Hides {
-	const out: Hides = {};
-	if (input && typeof input === "object") {
-		for (const [key, at] of Object.entries(input as Record<string, unknown>)) {
-			if (
-				typeof key === "string" &&
-				key.length > 0 &&
-				key.length <= 128 &&
-				typeof at === "string" &&
-				!Number.isNaN(Date.parse(at))
-			) {
-				out[key] = at;
-			}
-		}
-	}
-	return out;
+  const out: Hides = {};
+  if (input && typeof input === "object") {
+    for (const [key, at] of Object.entries(input as Record<string, unknown>)) {
+      if (
+        typeof key === "string" &&
+        key.length > 0 &&
+        key.length <= 128 &&
+        typeof at === "string" &&
+        !Number.isNaN(Date.parse(at))
+      ) {
+        out[key] = at;
+      }
+    }
+  }
+  return out;
 }
 
 const store = userStore<Hides>({ name: "hides", field: "hides", clean });
 
 export function getHides(user: string): Hides {
-	return store.get(user);
+  return store.get(user);
 }
 
 /** Replace a user's hides (validated). Returns the stored map. */
 export function setHides(user: string, hides: unknown): Hides {
-	return store.set(user, hides);
+  return store.set(user, hides);
 }

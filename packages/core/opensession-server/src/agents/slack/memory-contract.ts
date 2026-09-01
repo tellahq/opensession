@@ -20,7 +20,8 @@ export type MemoryScopeKind = z.infer<typeof MemoryScopeKindSchema>;
 function sentenceCount(value: string): number {
   const normalized = value.trim();
   if (!normalized) return 0;
-  return normalized.split(/[.!?]+(?:\s+|$)/).filter((part) => part.trim()).length;
+  return normalized.split(/[.!?]+(?:\s+|$)/).filter((part) => part.trim())
+    .length;
 }
 
 export const MemorySummarySchema = z
@@ -31,7 +32,10 @@ export const MemorySummarySchema = z
     MEMORY_SUMMARY_MAX_CHARS,
     `summary must be ${MEMORY_SUMMARY_MAX_CHARS} characters or fewer`,
   )
-  .refine((value) => sentenceCount(value) <= 2, "summary must be one or two sentences");
+  .refine(
+    (value) => sentenceCount(value) <= 2,
+    "summary must be one or two sentences",
+  );
 
 const IsoDateSchema = z
   .string()
@@ -44,13 +48,17 @@ export const StoreMemoryInputSchema = z
       "One atomic, durable fact. Put supporting evidence in details.",
     ),
     kind: MemoryKindSchema.describe("What sort of durable knowledge this is."),
-    scope: MemoryScopeKindSchema.describe("Where future sessions should retrieve it."),
+    scope: MemoryScopeKindSchema.describe(
+      "Where future sessions should retrieve it.",
+    ),
     repo: z
       .string()
       .trim()
       .min(1)
       .optional()
-      .describe("Repo id for a repo-scoped memory. Defaults to the primary repo."),
+      .describe(
+        "Repo id for a repo-scoped memory. Defaults to the primary repo.",
+      ),
     details: z
       .string()
       .trim()
@@ -61,7 +69,9 @@ export const StoreMemoryInputSchema = z
       .array(z.string().trim().min(1).max(80))
       .max(12)
       .optional()
-      .describe("Searchable identifiers such as symbols, paths, flags, or product areas."),
+      .describe(
+        "Searchable identifiers such as symbols, paths, flags, or product areas.",
+      ),
     expiresAt: IsoDateSchema.optional().describe(
       "When a temporary status stops being current. Required for status memories.",
     ),
@@ -94,7 +104,10 @@ export const MemoryListInputSchema = z.object({
   scope: MemoryScopeKindSchema.optional(),
   state: z.enum(["active", "archived", "expired", "all"]).optional(),
   review: z.enum(["needs_review", "confirmed", "all"]).optional(),
-  cursor: z.string().optional().describe("Opaque cursor from the previous page."),
+  cursor: z
+    .string()
+    .optional()
+    .describe("Opaque cursor from the previous page."),
   limit: z.number().int().min(1).max(MEMORY_PAGE_MAX).optional(),
 });
 
@@ -136,11 +149,16 @@ export const MemoryIdsInputSchema = z.object({
 
 export const ForgetMemoryInputSchema = z.object({
   id: z.string().trim().min(1),
-  confirm: z.literal(true).describe("Must be true. Archive instead when recovery is useful."),
+  confirm: z
+    .literal(true)
+    .describe("Must be true. Archive instead when recovery is useful."),
 });
 
 export function memoryContractError(error: z.ZodError): string {
   return error.issues
-    .map((issue) => `${issue.path.length ? `${issue.path.join(".")}: ` : ""}${issue.message}`)
+    .map(
+      (issue) =>
+        `${issue.path.length ? `${issue.path.join(".")}: ` : ""}${issue.message}`,
+    )
     .join("; ");
 }

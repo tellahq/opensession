@@ -1,7 +1,10 @@
 /** Workspace sandbox connections, defaults, qualification and environments. */
 
 import { requestUser, type RouteContext } from "./context";
-import { requireWorkspaceAdmin, workspaceAdminAuthorized } from "../workspace-auth";
+import {
+  requireWorkspaceAdmin,
+  workspaceAdminAuthorized,
+} from "../workspace-auth";
 import { sandboxCapabilityStatus } from "../sandbox/config";
 import { sandboxIngressStatus } from "../sandbox/caddy-ingress";
 import {
@@ -24,8 +27,8 @@ import {
 } from "../sandbox/operations";
 import { qualifySandboxConnection } from "../sandbox/qualification";
 import {
-	listSandboxEnvironments,
-	scheduleSandboxEnvironment,
+  listSandboxEnvironments,
+  scheduleSandboxEnvironment,
 } from "../sandbox/environments";
 import type { SandboxMachineSettings } from "../sandbox/prewarm";
 
@@ -41,14 +44,15 @@ async function connectionPayload(ctx: Pick<RouteContext, "authUser">) {
     canManage: workspaceAdminAuthorized(ctx),
     connections: safeSandboxConnections(),
     operations: listSandboxOperations(),
-		ingress: await sandboxIngressStatus(),
+    ingress: await sandboxIngressStatus(),
   };
 }
 
-function qualificationOperation(provider: Parameters<typeof qualifySandboxConnection>[0]) {
-  return startSandboxOperation(
-    { kind: "qualification", provider },
-    (update) => qualifySandboxConnection(provider, update),
+function qualificationOperation(
+  provider: Parameters<typeof qualifySandboxConnection>[0],
+) {
+  return startSandboxOperation({ kind: "qualification", provider }, (update) =>
+    qualifySandboxConnection(provider, update),
   );
 }
 
@@ -61,7 +65,7 @@ export async function handleSandboxesRoutes(
     const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
     return Response.json({
       ...sandboxCapabilityStatus(),
-			...(await connectionPayload(ctx)),
+      ...(await connectionPayload(ctx)),
       defaults: sandboxDefaultsStatus(user),
     });
   }
@@ -70,35 +74,42 @@ export async function handleSandboxesRoutes(
     return Response.json(await connectionPayload(ctx));
   }
 
-	if (path === "/api/sandbox/environments" && req.method === "GET") {
-		return Response.json({ environments: await listSandboxEnvironments() });
-	}
+  if (path === "/api/sandbox/environments" && req.method === "GET") {
+    return Response.json({ environments: await listSandboxEnvironments() });
+  }
 
-	const environmentMatch = path.match(
-		/^\/api\/sandbox\/environments\/([^/]+)\/([^/]+)\/rebuild$/,
-	);
-	if (environmentMatch && req.method === "POST") {
-		const forbidden = requireWorkspaceAdmin(ctx);
-		if (forbidden) return forbidden;
-		const repo = decodeURIComponent(environmentMatch[1]!);
-		const provider = decodeURIComponent(environmentMatch[2]!);
-		if (!isWorkspaceSandboxProvider(provider)) {
-			return errorResponse(`Unknown workspace sandbox provider "${provider}"`, 404);
-		}
-		const body = (await req.json().catch(() => ({}))) as {
-			settings?: SandboxMachineSettings;
-		};
-		const operation = scheduleSandboxEnvironment(repo, provider, {
-			rebuild: true,
-			user: requestUser(ctx) || "workspace-admin",
-			settings: body.settings,
-		});
-		return Response.json({ operation }, { status: 202 });
-	}
+  const environmentMatch = path.match(
+    /^\/api\/sandbox\/environments\/([^/]+)\/([^/]+)\/rebuild$/,
+  );
+  if (environmentMatch && req.method === "POST") {
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
+    const repo = decodeURIComponent(environmentMatch[1]!);
+    const provider = decodeURIComponent(environmentMatch[2]!);
+    if (!isWorkspaceSandboxProvider(provider)) {
+      return errorResponse(
+        `Unknown workspace sandbox provider "${provider}"`,
+        404,
+      );
+    }
+    const body = (await req.json().catch(() => ({}))) as {
+      settings?: SandboxMachineSettings;
+    };
+    const operation = scheduleSandboxEnvironment(repo, provider, {
+      rebuild: true,
+      user: requestUser(ctx) || "workspace-admin",
+      settings: body.settings,
+    });
+    return Response.json({ operation }, { status: 202 });
+  }
 
   if (path === "/api/sandbox/defaults" && req.method === "PUT") {
     const body = await req.json().catch(() => null);
-    if (!body || typeof body.scope !== "string" || typeof body.value !== "string") {
+    if (
+      !body ||
+      typeof body.scope !== "string" ||
+      typeof body.value !== "string"
+    ) {
       return errorResponse("scope and value are required");
     }
     const user = requestUser(ctx, body.user) || "Anonymous";
@@ -125,13 +136,19 @@ export async function handleSandboxesRoutes(
     const provider = decodeURIComponent(match[1]!);
     const action = match[2];
     if (!isWorkspaceSandboxProvider(provider)) {
-      return errorResponse(`Unknown workspace sandbox provider "${provider}"`, 404);
+      return errorResponse(
+        `Unknown workspace sandbox provider "${provider}"`,
+        404,
+      );
     }
     const forbidden = requireWorkspaceAdmin(ctx);
     if (forbidden) return forbidden;
 
     if (action === "connect" && req.method === "POST") {
-      const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+      const body = (await req.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
       try {
         connectSandboxProvider(provider, {
           secret:
@@ -149,14 +166,20 @@ export async function handleSandboxesRoutes(
               : undefined,
         });
         const operation = qualificationOperation(provider);
-        return Response.json({ ...(await connectionPayload(ctx)), operation }, { status: 202 });
+        return Response.json(
+          { ...(await connectionPayload(ctx)), operation },
+          { status: 202 },
+        );
       } catch (error) {
         return errorResponse(error);
       }
     }
 
     if (!action && req.method === "PATCH") {
-      const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+      const body = (await req.json().catch(() => null)) as Record<
+        string,
+        unknown
+      > | null;
       if (!body) return errorResponse("expected a JSON body");
       try {
         updateSandboxConnection(provider, {
@@ -173,13 +196,19 @@ export async function handleSandboxesRoutes(
     }
 
     if ((action === "test" || action === "repair") && req.method === "POST") {
-      if (!getSandboxConnection(provider)) return errorResponse(`${provider} is not connected`, 404);
+      if (!getSandboxConnection(provider))
+        return errorResponse(`${provider} is not connected`, 404);
       const operation = qualificationOperation(provider);
-      return Response.json({ ...(await connectionPayload(ctx)), operation }, { status: 202 });
+      return Response.json(
+        { ...(await connectionPayload(ctx)), operation },
+        { status: 202 },
+      );
     }
 
     if (!action && req.method === "DELETE") {
-      const body = (await req.json().catch(() => ({}))) as { confirm?: boolean };
+      const body = (await req.json().catch(() => ({}))) as {
+        confirm?: boolean;
+      };
       if (body.confirm !== true) {
         return errorResponse("Disconnect confirmation is required");
       }

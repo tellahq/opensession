@@ -7,7 +7,7 @@ import {
   claimShippedChangeAnnouncement,
   selectShippedVisualChange,
   settleShippedChangeAnnouncement,
-	shippedChangeAnnouncementKey,
+  shippedChangeAnnouncementKey,
   shippedChangeOneLiner,
   normalizeShippedChangeMessage,
   validWalkthroughScreenshot,
@@ -17,7 +17,8 @@ import {
 const scratch: string[] = [];
 
 afterEach(() => {
-  for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of scratch.splice(0))
+    rmSync(dir, { recursive: true, force: true });
 });
 
 function session(
@@ -57,26 +58,32 @@ describe("shipped visual change selection", () => {
     expect(selectShippedVisualChange(missing, () => false)).toBeNull();
   });
 
-	test("falls back to a featured transcript screenshot", () => {
-		const root = mkdtempSync(join(tmpdir(), "shipped-featured-selection-"));
-		scratch.push(root);
-		const image = join(root, "after.png");
-		writeFileSync(image, "png");
+  test("falls back to a featured transcript screenshot", () => {
+    const root = mkdtempSync(join(tmpdir(), "shipped-featured-selection-"));
+    scratch.push(root);
+    const image = join(root, "after.png");
+    writeFileSync(image, "png");
 
-		expect(selectShippedVisualChange(session("featured", "2026-08-12T10:00:00Z", []), () => false, [image])).toEqual({
-			sessionId: "featured",
-			screenshots: [image],
-			summary: "Why featured matters.",
-		});
-	});
+    expect(
+      selectShippedVisualChange(
+        session("featured", "2026-08-12T10:00:00Z", []),
+        () => false,
+        [image],
+      ),
+    ).toEqual({
+      sessionId: "featured",
+      screenshots: [image],
+      summary: "Why featured matters.",
+    });
+  });
 
-	test("keeps an explicitly empty attachment list empty", () => {
-		const visual = session("removed", "2026-08-12T10:00:00Z", [
-			{ after: "/tmp/removed.png" },
-		]);
+  test("keeps an explicitly empty attachment list empty", () => {
+    const visual = session("removed", "2026-08-12T10:00:00Z", [
+      { after: "/tmp/removed.png" },
+    ]);
 
-		expect(selectShippedVisualChange(visual, () => true, [])).toBeNull();
-	});
+    expect(selectShippedVisualChange(visual, () => true, [])).toBeNull();
+  });
 
   test("accepts only bounded images inside the session walkthrough directory", () => {
     const root = mkdtempSync(join(tmpdir(), "shipped-change-assets-"));
@@ -89,38 +96,47 @@ describe("shipped visual change selection", () => {
     writeFileSync(outside, "png");
 
     expect(validWalkthroughScreenshot(inside, "safe-session", root)).toBe(true);
-    expect(validWalkthroughScreenshot(outside, "safe-session", root)).toBe(false);
+    expect(validWalkthroughScreenshot(outside, "safe-session", root)).toBe(
+      false,
+    );
   });
 
-	test("accepts bounded featured screenshots from temporary storage", () => {
-		const root = mkdtempSync(join(tmpdir(), "shipped-featured-"));
-		scratch.push(root);
-		const image = join(root, "after.png");
-		writeFileSync(image, "png");
-		expect(validFeaturedScreenshot(image)).toBe(true);
-	});
+  test("accepts bounded featured screenshots from temporary storage", () => {
+    const root = mkdtempSync(join(tmpdir(), "shipped-featured-"));
+    scratch.push(root);
+    const image = join(root, "after.png");
+    writeFileSync(image, "png");
+    expect(validFeaturedScreenshot(image)).toBe(true);
+  });
 });
 
 describe("shipped change copy", () => {
-	test("accepts an editable short message", () => {
-		expect(normalizeShippedChangeMessage("  We updated the toggle style in Tella.  ")).toBe(
-			"We updated the toggle style in Tella.",
-		);
-		expect(() => normalizeShippedChangeMessage("x".repeat(501))).toThrow(
-			"500 characters or fewer",
-		);
-	});
+  test("accepts an editable short message", () => {
+    expect(
+      normalizeShippedChangeMessage(
+        "  We updated the toggle style in Tella.  ",
+      ),
+    ).toBe("We updated the toggle style in Tella.");
+    expect(() => normalizeShippedChangeMessage("x".repeat(501))).toThrow(
+      "500 characters or fewer",
+    );
+  });
 
   test("uses the first prose paragraph and strips markdown", () => {
     expect(
       shippedChangeOneLiner(
         "## What changed\n\n**Tabs** now stay visible through [navigation](https://example.com).\nThey are easier to find.\n\nVerified on mobile.",
       ),
-    ).toBe("Tabs now stay visible through navigation. They are easier to find.");
+    ).toBe(
+      "Tabs now stay visible through navigation. They are easier to find.",
+    );
   });
 
   test("truncates long copy on a word boundary", () => {
-    const result = shippedChangeOneLiner("A visual improvement that makes the editor easier to scan.", 34);
+    const result = shippedChangeOneLiner(
+      "A visual improvement that makes the editor easier to scan.",
+      34,
+    );
     expect(result).toBe("A visual improvement that makes…");
     expect(result.length).toBeLessThanOrEqual(34);
   });
@@ -131,11 +147,26 @@ describe("shipped change copy", () => {
 });
 
 describe("shipped change announcement receipts", () => {
-	test("deduplicates identical posts but permits a changed attachment set", () => {
-		const original = shippedChangeAnnouncementKey("tellahq/example", 12, "C1", "Shipped", ["a.png"]);
-		expect(shippedChangeAnnouncementKey("tellahq/example", 12, "C1", "Shipped", ["a.png"])).toBe(original);
-		expect(shippedChangeAnnouncementKey("tellahq/example", 12, "C1", "Shipped", ["a.png", "b.png"])).not.toBe(original);
-	});
+  test("deduplicates identical posts but permits a changed attachment set", () => {
+    const original = shippedChangeAnnouncementKey(
+      "tellahq/example",
+      12,
+      "C1",
+      "Shipped",
+      ["a.png"],
+    );
+    expect(
+      shippedChangeAnnouncementKey("tellahq/example", 12, "C1", "Shipped", [
+        "a.png",
+      ]),
+    ).toBe(original);
+    expect(
+      shippedChangeAnnouncementKey("tellahq/example", 12, "C1", "Shipped", [
+        "a.png",
+        "b.png",
+      ]),
+    ).not.toBe(original);
+  });
 
   test("deduplicates a sent merge and releases failed claims", () => {
     const root = mkdtempSync(join(tmpdir(), "shipped-change-state-"));
@@ -150,7 +181,15 @@ describe("shipped change announcement receipts", () => {
 
     const retryKey = "tellahq/example#13@def";
     const failed = claimShippedChangeAnnouncement(retryKey, statePath, 3_000)!;
-    settleShippedChangeAnnouncement(retryKey, failed, false, undefined, statePath);
-    expect(claimShippedChangeAnnouncement(retryKey, statePath, 3_001)).toBeString();
+    settleShippedChangeAnnouncement(
+      retryKey,
+      failed,
+      false,
+      undefined,
+      statePath,
+    );
+    expect(
+      claimShippedChangeAnnouncement(retryKey, statePath, 3_001),
+    ).toBeString();
   });
 });

@@ -21,9 +21,10 @@ export const WORKSPACE_SANDBOX_PROVIDERS = [
   "daytona",
   "box",
   "modal",
-  "microvm",
 ] as const;
-export type WorkspaceSandboxProvider = (typeof WORKSPACE_SANDBOX_PROVIDERS)[number];
+export type WorkspaceSandboxProvider =
+  | (typeof WORKSPACE_SANDBOX_PROVIDERS)[number]
+  | "microvm";
 
 export type SandboxQualificationStatus = "checking" | "ready" | "failed";
 
@@ -62,7 +63,10 @@ export interface SandboxConnection {
   updatedAt: string;
 }
 
-export interface SafeSandboxConnection extends Omit<SandboxConnection, "credentialRef"> {
+export interface SafeSandboxConnection extends Omit<
+  SandboxConnection,
+  "credentialRef"
+> {
   hasCredentials: boolean;
   state:
     | "not_configured"
@@ -95,7 +99,9 @@ function writeRaw(raw: RawSandboxConfig): void {
   writeJsonAtomic(configPath(), raw);
 }
 
-export function isWorkspaceSandboxProvider(value: unknown): value is WorkspaceSandboxProvider {
+export function isWorkspaceSandboxProvider(
+  value: unknown,
+): value is WorkspaceSandboxProvider {
   return (
     typeof value === "string" &&
     (WORKSPACE_SANDBOX_PROVIDERS as readonly string[]).includes(value)
@@ -113,7 +119,10 @@ function number(value: unknown): number | undefined {
 }
 
 function settings(value: unknown): SandboxConnectionSettings {
-  const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const raw =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
   return {
     ...(string(raw.region) ? { region: string(raw.region) } : {}),
     ...(number(raw.cpu) ? { cpu: number(raw.cpu) } : {}),
@@ -124,7 +133,9 @@ function settings(value: unknown): SandboxConnectionSettings {
     ...(string(raw.profile) ? { profile: string(raw.profile) } : {}),
     ...(string(raw.app) ? { app: string(raw.app) } : {}),
     ...(string(raw.image) ? { image: string(raw.image) } : {}),
-    ...(string(raw.environment) ? { environment: string(raw.environment) } : {}),
+    ...(string(raw.environment)
+      ? { environment: string(raw.environment) }
+      : {}),
     ...(string(raw.endpoint) ? { endpoint: string(raw.endpoint) } : {}),
     ...(string(raw.cloud) ? { cloud: string(raw.cloud) } : {}),
     ...(typeof raw.publicPreviews === "boolean"
@@ -133,11 +144,18 @@ function settings(value: unknown): SandboxConnectionSettings {
   };
 }
 
-function qualification(value: unknown): SandboxConnectionQualification | undefined {
-  const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+function qualification(
+  value: unknown,
+): SandboxConnectionQualification | undefined {
+  const raw =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : null;
   if (
     !raw ||
-    (raw.status !== "checking" && raw.status !== "ready" && raw.status !== "failed") ||
+    (raw.status !== "checking" &&
+      raw.status !== "ready" &&
+      raw.status !== "failed") ||
     !string(raw.adapterSignature)
   ) {
     return undefined;
@@ -146,7 +164,9 @@ function qualification(value: unknown): SandboxConnectionQualification | undefin
     status: raw.status,
     adapterSignature: string(raw.adapterSignature)!,
     ...(string(raw.checkedAt) ? { checkedAt: string(raw.checkedAt) } : {}),
-    ...(string(raw.failureCode) ? { failureCode: string(raw.failureCode) } : {}),
+    ...(string(raw.failureCode)
+      ? { failureCode: string(raw.failureCode) }
+      : {}),
     ...(string(raw.failureSummary)
       ? { failureSummary: string(raw.failureSummary) }
       : {}),
@@ -154,15 +174,21 @@ function qualification(value: unknown): SandboxConnectionQualification | undefin
 }
 
 function parseConnection(value: unknown): SandboxConnection | undefined {
-  const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  const raw =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : null;
   const provider = raw?.provider;
-  if (!raw || !string(raw.id) || !isWorkspaceSandboxProvider(provider)) return undefined;
+  if (!raw || !string(raw.id) || !isWorkspaceSandboxProvider(provider))
+    return undefined;
   const now = new Date(0).toISOString();
   return {
     id: string(raw.id)!,
     provider,
     enabled: raw.enabled !== false,
-    ...(string(raw.credentialRef) ? { credentialRef: string(raw.credentialRef) } : {}),
+    ...(string(raw.credentialRef)
+      ? { credentialRef: string(raw.credentialRef) }
+      : {}),
     settings: settings(raw.settings),
     ...(qualification(raw.qualification)
       ? { qualification: qualification(raw.qualification) }
@@ -190,10 +216,14 @@ export function listStoredSandboxConnections(): SandboxConnection[] {
 export function getSandboxConnection(
   provider: WorkspaceSandboxProvider,
 ): SandboxConnection | undefined {
-  return listStoredSandboxConnections().find((connection) => connection.provider === provider);
+  return listStoredSandboxConnections().find(
+    (connection) => connection.provider === provider,
+  );
 }
 
-export function sandboxAdapterSignature(provider: WorkspaceSandboxProvider): string {
+export function sandboxAdapterSignature(
+  provider: WorkspaceSandboxProvider,
+): string {
   const version = provider === "box" ? "connection-v4" : "connection-v1";
   return `${provider}:${version}`;
 }
@@ -228,7 +258,7 @@ export function safeSandboxConnections(): SafeSandboxConnection[] {
     }
     const hasCredentials = connection.credentialRef
       ? workspaceSecretExists(connection.credentialRef)
-      : provider === "docker" || provider === "microvm";
+      : provider === "docker";
     const signatureCurrent = sandboxAdapterSignatureCurrent(
       provider,
       connection.qualification?.adapterSignature,
@@ -237,7 +267,9 @@ export function safeSandboxConnections(): SafeSandboxConnection[] {
       ? "disabled"
       : connection.qualification?.status === "checking"
         ? "checking"
-        : connection.qualification?.status === "ready" && hasCredentials && signatureCurrent
+        : connection.qualification?.status === "ready" &&
+            hasCredentials &&
+            signatureCurrent
           ? "ready"
           : "needs_attention";
     const { credentialRef: _credentialRef, ...safe } = connection;
@@ -277,7 +309,9 @@ export function connectSandboxProvider(
       );
     }
     if (!credentialRef) {
-      throw new Error(`${provider === "box" ? "Box" : "Daytona"} API key is required`);
+      throw new Error(
+        `${provider === "box" ? "Box" : "Daytona"} API key is required`,
+      );
     }
   } else if (provider === "modal") {
     const tokenId = input.tokenId;
@@ -288,11 +322,15 @@ export function connectSandboxProvider(
       }
       credentialRef = putWorkspaceSecret(
         "sandbox.modal",
-        JSON.stringify({ tokenId: tokenId.trim(), tokenSecret: tokenSecret.trim() }),
+        JSON.stringify({
+          tokenId: tokenId.trim(),
+          tokenSecret: tokenSecret.trim(),
+        }),
         credentialRef,
       );
     }
-    if (!credentialRef) throw new Error("Modal token ID and token secret are required");
+    if (!credentialRef)
+      throw new Error("Modal token ID and token secret are required");
   }
   const now = new Date().toISOString();
   const connection: SandboxConnection = {
@@ -315,7 +353,11 @@ export function connectSandboxProvider(
   all.push(connection);
   raw.connections = all;
   writeRaw(raw);
-  audit({ kind: "sandbox_connection_connected", provider, connection_id: connection.id });
+  audit({
+    kind: "sandbox_connection_connected",
+    provider,
+    connection_id: connection.id,
+  });
   return connection;
 }
 
@@ -339,7 +381,9 @@ export function updateSandboxConnection(
   raw.connections = all;
   writeRaw(raw);
   audit({
-    kind: next.enabled ? "sandbox_connection_updated" : "sandbox_connection_disabled",
+    kind: next.enabled
+      ? "sandbox_connection_updated"
+      : "sandbox_connection_disabled",
     provider,
     connection_id: next.id,
   });
@@ -364,7 +408,9 @@ export function setSandboxConnectionQualification(
   return next;
 }
 
-export function disconnectSandboxProvider(provider: WorkspaceSandboxProvider): boolean {
+export function disconnectSandboxProvider(
+  provider: WorkspaceSandboxProvider,
+): boolean {
   const connection = getSandboxConnection(provider);
   if (!connection) return false;
   const raw = readRaw();
@@ -381,12 +427,24 @@ export function disconnectSandboxProvider(provider: WorkspaceSandboxProvider): b
   return true;
 }
 
-export function sandboxConnectionReady(provider: WorkspaceSandboxProvider): boolean {
+export function sandboxConnectionReady(
+  provider: WorkspaceSandboxProvider,
+): boolean {
   const connection = getSandboxConnection(provider);
-  if (!connection?.enabled || connection.qualification?.status !== "ready") return false;
-  if (!sandboxAdapterSignatureCurrent(provider, connection.qualification.adapterSignature)) return false;
+  if (!connection?.enabled || connection.qualification?.status !== "ready")
+    return false;
+  if (
+    !sandboxAdapterSignatureCurrent(
+      provider,
+      connection.qualification.adapterSignature,
+    )
+  )
+    return false;
   if (provider === "daytona" || provider === "box" || provider === "modal") {
-    return Boolean(connection.credentialRef && workspaceSecretExists(connection.credentialRef));
+    return Boolean(
+      connection.credentialRef &&
+      workspaceSecretExists(connection.credentialRef),
+    );
   }
   return true;
 }
@@ -403,7 +461,10 @@ export function sandboxProviderCredential(
   if (provider === "daytona" || provider === "box") return { apiKey: raw };
   try {
     const parsed = JSON.parse(raw);
-    if (typeof parsed.tokenId === "string" && typeof parsed.tokenSecret === "string") {
+    if (
+      typeof parsed.tokenId === "string" &&
+      typeof parsed.tokenSecret === "string"
+    ) {
       return { tokenId: parsed.tokenId, tokenSecret: parsed.tokenSecret };
     }
   } catch {}

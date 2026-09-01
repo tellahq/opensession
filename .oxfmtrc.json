@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": [
+    ".agents/skills/**",
+    "docs/generated/**",
+    "packages/clients/ios/Resources/mermaid/mermaid.min.js",
+    "packages/core/opensession-server/src/server/testing/snapshots/**",
+    "test/simple-mode/goss.yaml",
+    "test/simple-mode/goss.uninstalled.yaml"
+  ],
+  "printWidth": 80
+}

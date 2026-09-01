@@ -12,11 +12,17 @@ export interface TranscriptWatchStore {
   readChangesSince(
     sessionId: string,
     sinceChangeSeq: number,
-    limit?: number
+    limit?: number,
   ): TranscriptPage | Promise<TranscriptPage>;
-  readTail(sessionId: string, limit?: number): TranscriptPage | Promise<TranscriptPage>;
+  readTail(
+    sessionId: string,
+    limit?: number,
+  ): TranscriptPage | Promise<TranscriptPage>;
   /** Optional: a store without it falls back to the flat entry tail. */
-  readTailWindow?(sessionId: string, opts: TailWindowOpts): TranscriptPage | Promise<TranscriptPage>;
+  readTailWindow?(
+    sessionId: string,
+    opts: TailWindowOpts,
+  ): TranscriptPage | Promise<TranscriptPage>;
 }
 
 export interface TranscriptWatchSocket {
@@ -29,7 +35,7 @@ export interface StartTranscriptWatchOptions {
   socket: TranscriptWatchSocket;
   subscribe: (
     sessionId: string,
-    wake: (event: TranscriptBusEvent) => void
+    wake: (event: TranscriptBusEvent) => void,
   ) => () => void;
   isCurrent: () => boolean;
   sinceChangeSeq?: number;
@@ -46,7 +52,7 @@ export interface StartTranscriptWatchOptions {
   clampSnapshot?: (entries: SeqEntry[]) => SeqEntry[];
   formatAppend?: (
     frame: Record<string, unknown>,
-    event?: TranscriptBusEvent
+    event?: TranscriptBusEvent,
   ) => Record<string, unknown>;
   /** An authoritative reset sent a replacement snapshot. */
   afterResetSnapshot?: () => void;
@@ -85,7 +91,7 @@ const SNAPSHOT_MAX_ESTIMATED_BYTES = 850_000;
  * SQLite by changeSeq. This makes delayed/duplicated notifications harmless.
  */
 export async function startTranscriptWatch(
-  options: StartTranscriptWatchOptions
+  options: StartTranscriptWatchOptions,
 ): Promise<TranscriptWatchHandle> {
   const {
     sessionId,
@@ -158,9 +164,16 @@ export async function startTranscriptWatch(
         }
         let wakeEvent = event;
         for (;;) {
-          const page = await store.readChangesSince(sessionId, cursor, RESUME_LIMIT);
+          const page = await store.readChangesSince(
+            sessionId,
+            cursor,
+            RESUME_LIMIT,
+          );
           if (!page.entries.length) break;
-          cursor = Math.max(cursor, ...page.entries.map((entry) => entry.changeSeq));
+          cursor = Math.max(
+            cursor,
+            ...page.entries.map((entry) => entry.changeSeq),
+          );
           const append = {
             type: "transcript_append",
             sessionId,
@@ -176,7 +189,7 @@ export async function startTranscriptWatch(
             wakeEvent.entries.every(
               (entry, index) =>
                 entry.id === page.entries[index]?.id &&
-                entry.changeSeq === page.entries[index]?.changeSeq
+                entry.changeSeq === page.entries[index]?.changeSeq,
             )
               ? wakeEvent
               : undefined;
@@ -192,7 +205,9 @@ export async function startTranscriptWatch(
 
   // Subscribe before observing any cursor or snapshot. A commit at every
   // possible handshake boundary either appears in the read or sets pending.
-  const unsubscribeBus = subscribe(sessionId, (event) => { void flush(event); });
+  const unsubscribeBus = subscribe(sessionId, (event) => {
+    void flush(event);
+  });
   try {
     const requested =
       typeof options.sinceChangeSeq === "number" &&
@@ -200,37 +215,41 @@ export async function startTranscriptWatch(
       options.sinceChangeSeq >= 0
         ? Math.floor(options.sinceChangeSeq)
         : undefined;
-    const lastChangeSeq = await store.getLastChangeSeq(sessionId);
-    const lastResetChangeSeq = await store.getLastResetChangeSeq(sessionId);
     let resumed = false;
-    if (
-      requested !== undefined &&
-      requested >= lastResetChangeSeq &&
-      requested <= lastChangeSeq
-    ) {
-      const changes = await store.readChangesSince(
-        sessionId,
-        requested,
-        RESUME_LIMIT + 1
-      );
-      if (changes.entries.length <= RESUME_LIMIT) {
-        cursor = requested;
-        if (changes.entries.length) {
-          cursor = Math.max(
-            cursor,
-            ...changes.entries.map((entry) => entry.changeSeq)
-          );
-          send({
-            type: "transcript_append",
-            sessionId,
-            entries: prepareEntries(changes.entries),
-            firstSeq: changes.firstSeq,
-            lastSeq: changes.lastSeq,
-            lastChangeSeq: cursor,
-            v2: true,
-          });
+    if (requested !== undefined) {
+      // A fresh conversation has no resume cursor. Do not put two actor RPCs
+      // in front of its snapshot only to discover that fact: sendSnapshot
+      // captures the one baseline it needs. Under actor-mailbox pressure these
+      // redundant round trips were a visible part of conversation-open delay.
+      const [lastChangeSeq, lastResetChangeSeq] = await Promise.all([
+        store.getLastChangeSeq(sessionId),
+        store.getLastResetChangeSeq(sessionId),
+      ]);
+      if (requested >= lastResetChangeSeq && requested <= lastChangeSeq) {
+        const changes = await store.readChangesSince(
+          sessionId,
+          requested,
+          RESUME_LIMIT + 1,
+        );
+        if (changes.entries.length <= RESUME_LIMIT) {
+          cursor = requested;
+          if (changes.entries.length) {
+            cursor = Math.max(
+              cursor,
+              ...changes.entries.map((entry) => entry.changeSeq),
+            );
+            send({
+              type: "transcript_append",
+              sessionId,
+              entries: prepareEntries(changes.entries),
+              firstSeq: changes.firstSeq,
+              lastSeq: changes.lastSeq,
+              lastChangeSeq: cursor,
+              v2: true,
+            });
+          }
+          resumed = true;
         }
-        resumed = true;
       }
     }
 

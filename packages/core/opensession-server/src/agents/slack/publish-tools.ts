@@ -39,17 +39,17 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
         dir: z
           .string()
           .describe(
-            "Directory to publish, absolute or relative to the session's worktree. Its contents become the app root."
+            "Directory to publish, absolute or relative to the session's worktree. Its contents become the app root.",
           ),
         entrypoint: z
           .string()
           .describe(
-            'Shell command that starts the server, run from the app root, e.g. "bun server.ts" or "node index.js". It must bind $PORT.'
+            'Shell command that starts the server, run from the app root, e.g. "bun server.ts" or "node index.js". It must bind $PORT.',
           ),
         name: z
           .string()
           .describe(
-            "Stable handle → the link becomes /d/<name>/. Lowercase letters, digits and hyphens. Reuse the same name to ship a new version of an existing app."
+            "Stable handle → the link becomes /d/<name>/. Lowercase letters, digits and hyphens. Reuse the same name to ship a new version of an existing app.",
           ),
         description: z
           .string()
@@ -58,11 +58,15 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
         env: z
           .record(z.string(), z.string())
           .optional()
-          .describe("Environment variables baked into this version. Never put a real secret here."),
+          .describe(
+            "Environment variables baked into this version. Never put a real secret here.",
+          ),
         renameFrom: z
           .string()
           .optional()
-          .describe("Rename the app currently called this to `name` instead of creating a new one."),
+          .describe(
+            "Rename the app currently called this to `name` instead of creating a new one.",
+          ),
       },
       async (args: {
         dir: string;
@@ -81,7 +85,7 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
         // onto a team-visible URL.
         if (worktree && !dir.startsWith(resolve(worktree))) {
           return text(
-            `Refused: ${dir} is outside this session's worktree (${worktree}). Publish a directory you built inside the session.`
+            `Refused: ${dir} is outside this session's worktree (${worktree}). Publish a directory you built inside the session.`,
           );
         }
         try {
@@ -98,12 +102,12 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
           return text(
             `Published **${r.deploy.name}** v${r.version} → ${r.url}\n` +
               `State: ${r.deploy.state}. Durable data path: $DATA_DIR (everything else resets on relaunch).\n` +
-              `Check it responds before telling anyone it's ready — if the app fails to bind $PORT it will crash-loop and the link will 503.`
+              `Check it responds before telling anyone it's ready — if the app fails to bind $PORT it will crash-loop and the link will 503.`,
           );
         } catch (e: any) {
           return text(`Publish failed: ${e?.message || String(e)}`);
         }
-      }
+      },
     ),
     tool(
       "list_apps",
@@ -119,27 +123,32 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
                 `- **${d.name}** (v${d.currentVersion}, ${d.state}) — ${deployUrl(d.name)}` +
                 (d.description ? ` — ${d.description}` : "") +
                 ` — owner ${d.owner}` +
-                (d.lastError ? `\n  last error: ${d.lastError}` : "")
+                (d.lastError ? `\n  last error: ${d.lastError}` : ""),
             )
-            .join("\n")
+            .join("\n"),
         );
-      }
+      },
     ),
     tool(
       "rollback_app",
       "Flip a published app back to an earlier version, e.g. when the version you just shipped is broken. list_apps shows the current version; the last 10 versions are retained.",
       {
         name: z.string().describe("The app's handle."),
-        version: z.number().int().describe("Version number to make live again."),
+        version: z
+          .number()
+          .int()
+          .describe("Version number to make live again."),
       },
       async (args: { name: string; version: number }) => {
         try {
           const d = rollbackDeploy(args.name, args.version);
-          return text(`Rolled ${d.name} back to v${d.currentVersion} (${d.state}).`);
+          return text(
+            `Rolled ${d.name} back to v${d.currentVersion} (${d.state}).`,
+          );
         } catch (e: any) {
           return text(`Rollback failed: ${e?.message || String(e)}`);
         }
-      }
+      },
     ),
     tool(
       "stop_app",
@@ -151,8 +160,10 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
         const d = getDeploy(args.name);
         if (!d) return text(`No app named "${args.name}".`);
         await stopDeploy(d.id);
-        return text(`Stopped ${d.name}. Its link now returns 503 until someone starts it again.`);
-      }
+        return text(
+          `Stopped ${d.name}. Its link now returns 503 until someone starts it again.`,
+        );
+      },
     ),
   ];
 

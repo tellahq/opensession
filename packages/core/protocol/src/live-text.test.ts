@@ -7,7 +7,10 @@ describe("LiveTextBuffer with block ids", () => {
     buffer.append("The main constraint ", "prt_1");
     buffer.append("is decisive. ", "prt_1");
     // The durable entry lands while the block is still being written.
-    buffer.land("The main constraint is decisive. It cannot host agents.", "prt_1");
+    buffer.land(
+      "The main constraint is decisive. It cannot host agents.",
+      "prt_1",
+    );
     expect(buffer.text).toBe("");
     // The frames still in flight for it are the entry's own text.
     buffer.append("It cannot host agents.", "prt_1");
@@ -26,7 +29,10 @@ describe("LiveTextBuffer with block ids", () => {
     // The wire strips media markers and clamps giant entries, so the durable
     // text is not always the streamed text character for character. The id is.
     const buffer = new LiveTextBuffer();
-    buffer.append("Here is the clip.\nOPENSESSION_VIDEO: /tmp/a.mp4\n", "prt_1");
+    buffer.append(
+      "Here is the clip.\nOPENSESSION_VIDEO: /tmp/a.mp4\n",
+      "prt_1",
+    );
     buffer.land("Here is the clip.", "prt_1");
     expect(buffer.text).toBe("");
   });

@@ -6,11 +6,7 @@
  */
 
 import { processMessage } from "./handlers";
-import {
-  sendSlackMessage,
-  removeReaction,
-  MESSAGES,
-} from "./slack-api";
+import { sendSlackMessage, removeReaction, MESSAGES } from "./slack-api";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import type { SlackFileRef } from "./slack-api";
 
@@ -149,7 +145,7 @@ export function enqueueMessage(sessionKey: string, msg: QueuedMessage): void {
   // Dedup: don't enqueue the same Slack message twice (by messageTs)
   if (sq.queue.some((m) => m.messageTs === msg.messageTs)) {
     console.log(
-      `[slack] Skipping duplicate message ${msg.messageTs} for ${sessionKey}`
+      `[slack] Skipping duplicate message ${msg.messageTs} for ${sessionKey}`,
     );
     return;
   }
@@ -159,12 +155,12 @@ export function enqueueMessage(sessionKey: string, msg: QueuedMessage): void {
   msg.promptEntryId ??= crypto.randomUUID();
   sq.queue.push(msg);
   console.log(
-    `[slack] Enqueued message for ${sessionKey} (queue length: ${sq.queue.length})`
+    `[slack] Enqueued message for ${sessionKey} (queue length: ${sq.queue.length})`,
   );
 
   // Persist to disk
   saveQueueToDisk().catch((e) =>
-    console.warn("[slack] Failed to save queue:", e)
+    console.warn("[slack] Failed to save queue:", e),
   );
 
   if (!sq.processing) {
@@ -190,9 +186,16 @@ export async function processQueue(sessionKey: string): Promise<void> {
       // Guard the error report itself — if THIS send throws, processQueue
       // aborts and the whole queue stalls until the next inbound message.
       try {
-        await sendSlackMessage(msg.channel, `${MESSAGES.error} ${e}`, msg.threadTs);
+        await sendSlackMessage(
+          msg.channel,
+          `${MESSAGES.error} ${e}`,
+          msg.threadTs,
+        );
       } catch (e2) {
-        console.error(`[slack] Failed to report processing error for ${sessionKey}:`, e2);
+        console.error(
+          `[slack] Failed to report processing error for ${sessionKey}:`,
+          e2,
+        );
       }
     }
     // A restart aborts the local streamer/runner but deliberately leaves this
@@ -202,9 +205,11 @@ export async function processQueue(sessionKey: string): Promise<void> {
       sq.processing = false;
       sq.abortController = null;
       await saveQueueToDisk().catch((e) =>
-        console.warn("[slack] Failed to save restart-interrupted queue:", e)
+        console.warn("[slack] Failed to save restart-interrupted queue:", e),
       );
-      console.log(`[slack] Preserved interrupted message for ${sessionKey} across restart`);
+      console.log(
+        `[slack] Preserved interrupted message for ${sessionKey} across restart`,
+      );
       return;
     }
     // Remove the message we just processed BY IDENTITY, not a blind shift().
@@ -215,7 +220,7 @@ export async function processQueue(sessionKey: string): Promise<void> {
     const doneIdx = sq.queue.findIndex((m) => m.messageTs === msg.messageTs);
     if (doneIdx !== -1) sq.queue.splice(doneIdx, 1);
     await saveQueueToDisk().catch((e) =>
-      console.warn("[slack] Failed to save queue:", e)
+      console.warn("[slack] Failed to save queue:", e),
     );
     // Remove eyes reaction after processing each message
     await removeReaction(msg.channel, msg.messageTs, "eyes").catch(() => {});
@@ -225,6 +230,6 @@ export async function processQueue(sessionKey: string): Promise<void> {
   sq.abortController = null;
   // Clean up empty queue from disk
   saveQueueToDisk().catch((e) =>
-    console.warn("[slack] Failed to save queue:", e)
+    console.warn("[slack] Failed to save queue:", e),
   );
 }

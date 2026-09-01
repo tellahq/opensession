@@ -84,14 +84,27 @@ export const INTEGRATIONS: IntegrationSpec[] = [
     doc: "docs/setup/plain.md",
     enableFlag: "ENABLE_PLAIN_AGENT",
     env: [
-      { name: "PLAIN_API_KEY", required: true, description: "API key for thread reads/writes" },
-      { name: "PLAIN_WEBHOOK_SECRET", description: "verifies inbound webhook signatures" },
+      {
+        name: "PLAIN_API_KEY",
+        required: true,
+        description: "API key for thread reads/writes",
+      },
+      {
+        name: "PLAIN_WEBHOOK_SECRET",
+        description: "verifies inbound webhook signatures",
+      },
     ],
     links: [
       // Plain's settings URLs are workspace-scoped after login; this lands on
       // the right page or the login that leads there.
-      { label: "Plain → Settings → Machine users", url: "https://app.plain.com/settings/machine-users" },
-      { label: "API key guide", url: "https://www.plain.com/docs/graphql/authentication" },
+      {
+        label: "Plain → Settings → Machine users",
+        url: "https://app.plain.com/settings/machine-users",
+      },
+      {
+        label: "API key guide",
+        url: "https://www.plain.com/docs/graphql/authentication",
+      },
     ],
     load: async () => {
       const { PlainAgent } = await import("../../agents/plain/index");
@@ -104,8 +117,15 @@ export const INTEGRATIONS: IntegrationSpec[] = [
     doc: "docs/setup/linear.md",
     enableFlag: "ENABLE_LINEAR_AGENT",
     env: [
-      { name: "LINEAR_API_KEY", required: true, description: "API key for issue reads/writes" },
-      { name: "LINEAR_WEBHOOK_SECRET", description: "verifies inbound webhook signatures" },
+      {
+        name: "LINEAR_API_KEY",
+        required: true,
+        description: "API key for issue reads/writes",
+      },
+      {
+        name: "LINEAR_WEBHOOK_SECRET",
+        description: "verifies inbound webhook signatures",
+      },
       { name: "LINEAR_CLIENT_ID", description: "OAuth app client id" },
       { name: "LINEAR_CLIENT_SECRET", description: "OAuth app client secret" },
     ],
@@ -127,7 +147,12 @@ export const INTEGRATIONS: IntegrationSpec[] = [
     doc: "docs/setup/slack.md",
     enableFlag: "ENABLE_SLACK_AGENT",
     env: [
-      { name: "SLACK_BOT_TOKEN", example: "xoxb-", required: true, description: "bot user token" },
+      {
+        name: "SLACK_BOT_TOKEN",
+        example: "xoxb-",
+        required: true,
+        description: "bot user token",
+      },
       {
         name: "SLACK_APP_TOKEN",
         example: "xapp-",
@@ -138,8 +163,14 @@ export const INTEGRATIONS: IntegrationSpec[] = [
         requiredWhen: (present) => !present("SLACK_APP_TOKEN"),
         description: "signing secret for HTTP event requests",
       },
-      { name: "ALLOWED_SLACK_USER_ID", description: "restricts admin tools to one user" },
-      { name: "WORKTREE_HOOK_SECRET", description: "shared secret for worktree hooks" },
+      {
+        name: "ALLOWED_SLACK_USER_ID",
+        description: "restricts admin tools to one user",
+      },
+      {
+        name: "WORKTREE_HOOK_SECRET",
+        description: "shared secret for worktree hooks",
+      },
     ],
     links: [{ label: "Create Slack app", url: "https://api.slack.com/apps" }],
     load: async () => {
@@ -160,8 +191,14 @@ export const INTEGRATIONS: IntegrationSpec[] = [
       },
     ],
     links: [
-      { label: "Webhook endpoints", url: "https://dashboard.stripe.com/webhooks" },
-      { label: "API keys (restricted)", url: "https://dashboard.stripe.com/apikeys" },
+      {
+        label: "Webhook endpoints",
+        url: "https://dashboard.stripe.com/webhooks",
+      },
+      {
+        label: "API keys (restricted)",
+        url: "https://dashboard.stripe.com/apikeys",
+      },
     ],
     // Without the signing secret every webhook fails verification, so there is
     // no point exposing the route at all.
@@ -186,8 +223,11 @@ export const INTEGRATIONS: IntegrationSpec[] = [
       { name: "LOKI_DATASOURCE_UID", description: "Loki datasource to query" },
     ],
     load: async (ctx) => {
-      const { GrafanaPollerAgent } = await import("../../agents/grafana-poller/index");
-      return new GrafanaPollerAgent({ onSessionInvalidate: ctx.onSessionInvalidate });
+      const { GrafanaPollerAgent } =
+        await import("../../agents/grafana-poller/index");
+      return new GrafanaPollerAgent({
+        onSessionInvalidate: ctx.onSessionInvalidate,
+      });
     },
   },
   {
@@ -196,8 +236,14 @@ export const INTEGRATIONS: IntegrationSpec[] = [
     doc: "docs/setup/github.md",
     enableFlag: "ENABLE_GITHUB_AGENT",
     env: [
-      { name: "GITHUB_WEBHOOK_SECRET", description: "verifies inbound webhook signatures" },
-      { name: "GITHUB_MENTION_HANDLES", description: "additional handles that trigger the PR agent" },
+      {
+        name: "GITHUB_WEBHOOK_SECRET",
+        description: "verifies inbound webhook signatures",
+      },
+      {
+        name: "GITHUB_MENTION_HANDLES",
+        description: "additional handles that trigger the PR agent",
+      },
     ],
     load: async (ctx) => {
       const { GithubAgent } = await import("../../agents/github/index");
@@ -218,7 +264,8 @@ export const INTEGRATIONS: IntegrationSpec[] = [
     // minting, REST client) activates on config presence alone.
     requires: () => codeStorageConfig() !== null,
     load: async () => {
-      const { CodeStorageIntegration } = await import("../codestorage/integration");
+      const { CodeStorageIntegration } =
+        await import("../codestorage/integration");
       return new CodeStorageIntegration();
     },
   },

@@ -4,31 +4,28 @@ import { cn } from "../ui/cn";
 import { markTileShadow } from "../lib/mark-tile";
 import { repoLetter } from "../lib/repo-label";
 import {
-	hasRepoIcon,
-	hasRoundRepoIcon,
-	REPO_TILE_INK,
-	repoColor,
-	repoIconFill,
-	repoIconRevision,
+  hasRepoIcon,
+  hasRoundRepoIcon,
+  REPO_TILE_INK,
+  repoColor,
+  repoIconFill,
+  repoIconRevision,
 } from "../lib/repo-colors";
 import * as stylex from "@stylexjs/stylex";
 
 /* Converted from Tailwind utilities; names mirror the original class tokens. */
 const sx = stylex.create({
-	sizeFull: {
-			width: "100%",
-			height: "100%"
-	},
-	objectCover: {
-			objectFit: "cover"
-	},
-	BorderRadiusInherit: {
-			borderRadius: "inherit",
-
-		cornerShape: "var(--cs)",},
-	translateYPx: {
-			translate: "0 1px"
-	},
+  sizeFull: {
+    width: "100%",
+    height: "100%",
+  },
+  objectCover: {
+    objectFit: "cover",
+  },
+  BorderRadiusInherit: {
+    borderRadius: "inherit",
+    cornerShape: "var(--cs)",
+  },
 });
 
 // The display-name map lives in lib/repo-label and the tile colors in
@@ -74,76 +71,94 @@ const ICON_VERSION = 6;
 // out of the metadata line and into the title pill's own leading slot, and the
 // rule that held it there had been matching nothing since.
 const TILE =
-	// Settings applies body leading to every descendant, which makes the fallback
-	// letter's line box taller than the tile and leaves its cap height visibly
-	// high. A direct-child rule wins that page-level override, then flex centers
-	// the tight line box without an extra baseline offset.
-	utilityClassName("repo-tile inline-flex size-[18px] shrink-0 items-center justify-center overflow-hidden rounded-sm text-meta font-bold [&>span]:!leading-none");
+  // Settings applies body leading to every descendant, which makes the fallback
+  // letter's line box taller than the tile and leaves its cap height visibly
+  // high. A direct-child rule wins that page-level override, then flex centers
+  // the tight line box without an extra baseline offset.
+  utilityClassName(
+    "repo-tile inline-flex size-[18px] shrink-0 items-center justify-center overflow-hidden rounded-sm text-meta font-bold [&>span]:!leading-none",
+  );
 
 export function RepoTile({
-	name,
-	size,
-	round,
-	glow = false,
-	className,
+  name,
+  size,
+  round,
+  glow = false,
+  className,
 }: {
-	name: string;
-	size?: number;
-	round?: boolean;
-	glow?: boolean;
-	className?: string;
+  name: string;
+  size?: number;
+  round?: boolean;
+  glow?: boolean;
+  className?: string;
 }) {
-	// Failure is tracked per name AND icon revision, so a tile retries the img
-	// both when it switches repo and when this repo's art changes — a repo
-	// given an icon from Settings had already 404'd, and without the revision
-	// in the key it would keep painting its letter until a reload.
-	const [failedFor, setFailedFor] = React.useState<string | null>(null);
-	const rev = repoIconRevision(name);
-	const attempt = `${name}:${rev ?? 0}`;
-	const usingIcon = hasRepoIcon(name) && failedFor !== attempt;
-	const circular = Boolean(round || (usingIcon && hasRoundRepoIcon(name)));
-	const style: React.CSSProperties = {};
-	if (size) {
-		style.width = size;
-		style.height = size;
-		style.fontSize = Math.round(size * 0.6);
-		style.borderRadius = circular ? "50%" : Math.max(3, Math.round(size * 0.28));
-	} else if (circular) {
-		style.borderRadius = "50%";
-	}
-	// The tile's ink, on BOTH variants. legacy.css put `color: #fff` on
-	// `.repo-tile` itself, which the image variant inherited too — so it stays
-	// on both, from the same module as the fill (the two are chosen together,
-	// see REPO_TILE_INK) rather than as a raw colour in a utility.
-	style.color = REPO_TILE_INK;
-	if (glow) style.boxShadow = markTileShadow(repoColor(name));
-	if (usingIcon) {
-		return (
-			<span className={cn(TILE, circular && "rounded-full", className)} style={style}>
-				{/* The image fills the tile. The parent clips it to the same squircle
+  // Failure is tracked per name AND icon revision, so a tile retries the img
+  // both when it switches repo and when this repo's art changes — a repo
+  // given an icon from Settings had already 404'd, and without the revision
+  // in the key it would keep painting its letter until a reload.
+  const [failedFor, setFailedFor] = React.useState<string | null>(null);
+  const rev = repoIconRevision(name);
+  const attempt = `${name}:${rev ?? 0}`;
+  const usingIcon = hasRepoIcon(name) && failedFor !== attempt;
+  const circular = Boolean(round || (usingIcon && hasRoundRepoIcon(name)));
+  const style: React.CSSProperties = {};
+  if (size) {
+    style.width = size;
+    style.height = size;
+    style.fontSize = Math.round(size * 0.6);
+    style.borderRadius = circular
+      ? "50%"
+      : Math.max(3, Math.round(size * 0.28));
+  } else if (circular) {
+    style.borderRadius = "50%";
+  }
+  // The tile's ink, on BOTH variants. legacy.css put `color: #fff` on
+  // `.repo-tile` itself, which the image variant inherited too — so it stays
+  // on both, from the same module as the fill (the two are chosen together,
+  // see REPO_TILE_INK) rather than as a raw colour in a utility.
+  style.color = REPO_TILE_INK;
+  if (glow) style.boxShadow = markTileShadow(repoColor(name));
+  if (usingIcon) {
+    return (
+      <span
+        className={cn(
+          TILE,
+          circular && utilityClassName("rounded-full"),
+          className,
+        )}
+        style={style}
+      >
+        {/* The image fills the tile. The parent clips it to the same squircle
 				    (or source-matched circle) as its border, so transparent or square
 				    artwork cannot sit inside a smaller-looking inner box. No inset on
 				    purpose: the route crops every icon to its artwork and adds no
 				    margin back (png-trim.ts), so its ink reaches the same frame as a
 				    letter tile. `border-radius: inherit` keeps the non-squircle browser
 				    fallback aligned with that clipping edge. */}
-				<img
-					src={`/repo-icon/${encodeURIComponent(name)}.png?v=${ICON_VERSION}${
-						rev ? `&r=${rev}` : ""
-					}`}
-					alt=""
-					loading="lazy"
-					{...stylex.props(sx.sizeFull, sx.objectCover, sx.BorderRadiusInherit)}
-					onError={() => setFailedFor(attempt)}
-				/>
-			</span>
-		);
-	}
-	style.background = repoIconFill(repoColor(name));
-	const letter = repoLetter(name);
-	return (
-		<span className={cn(TILE, circular && "rounded-full", className)} style={style}>
-			<span>{letter}</span>
-		</span>
-	);
+        <img
+          src={`/repo-icon/${encodeURIComponent(name)}.png?v=${ICON_VERSION}${
+            rev ? `&r=${rev}` : ""
+          }`}
+          alt=""
+          loading="lazy"
+          {...stylex.props(sx.sizeFull, sx.objectCover, sx.BorderRadiusInherit)}
+          onError={() => setFailedFor(attempt)}
+        />
+      </span>
+    );
+  }
+  style.background = repoIconFill(repoColor(name));
+  const letter = repoLetter(name);
+  return (
+    <span
+      className={cn(
+        TILE,
+        circular && utilityClassName("rounded-full"),
+        className,
+      )}
+      style={style}
+    >
+      <span>{letter}</span>
+    </span>
+  );
 }

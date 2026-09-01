@@ -77,7 +77,8 @@ const tables = deriveIdentityTables(identity.team, identity.slackNames);
 export const GITHUB_TO_SLACK: Record<string, string> = tables.githubToSlack;
 
 /** Linear email → GitHub username (for PR reviewer assignment) */
-export const LINEAR_EMAIL_TO_GITHUB: Record<string, string> = tables.linearEmailToGithub;
+export const LINEAR_EMAIL_TO_GITHUB: Record<string, string> =
+  tables.linearEmailToGithub;
 
 /** Slack user ID → full display name (single source of truth) */
 export const SLACK_ID_TO_NAME: Record<string, string> = tables.slackIdToName;
@@ -94,7 +95,9 @@ export function slackIdToFirstName(id: string): string | null {
  * table as commit attribution so a name / alias / GitHub login / raw U-id
  * all land on the same person. Returns null for unknown references.
  */
-export function resolveTeammate(ref?: string | null): { slackId: string; name: string } | null {
+export function resolveTeammate(
+  ref?: string | null,
+): { slackId: string; name: string } | null {
   if (!ref) return null;
   const key = ref.trim().replace(/^@/, "");
   if (!key) return null;
@@ -109,7 +112,10 @@ export function resolveTeammate(ref?: string | null): { slackId: string; name: s
   if (id) {
     const member = TEAM_GIT_IDENTITY.find((p) => p.name === id.name);
     if (member?.slackId) {
-      return { slackId: member.slackId, name: SLACK_ID_TO_NAME[member.slackId] || member.name };
+      return {
+        slackId: member.slackId,
+        name: SLACK_ID_TO_NAME[member.slackId] || member.name,
+      };
     }
   }
   return null;
@@ -133,7 +139,10 @@ export function githubLoginToPersonKeyFromTeam(
   const lower = login.toLowerCase();
   const member = team.find((m) => m.github?.toLowerCase() === lower);
   if (!member) return null;
-  return member.aliases?.[0]?.toLowerCase() || member.name.split(" ")[0].toLowerCase();
+  return (
+    member.aliases?.[0]?.toLowerCase() ||
+    member.name.split(" ")[0].toLowerCase()
+  );
 }
 
 export function githubLoginToPersonKey(login?: string | null): string | null {
@@ -150,7 +159,9 @@ export function isTrustedGithubLogin(login?: string | null): boolean {
   if (!login) return false;
   const normalized = login.trim().replace(/^@/, "").toLowerCase();
   if (!normalized) return false;
-  return identity.team.some((member) => member.github?.trim().toLowerCase() === normalized);
+  return identity.team.some(
+    (member) => member.github?.trim().toLowerCase() === normalized,
+  );
 }
 
 /**
@@ -188,7 +199,10 @@ export function personKeyForGitAuthor(
   const id = gitIdentityFor(email) ?? gitIdentityFor(name);
   const member = id ? identity.team.find((m) => m.name === id.name) : undefined;
   if (!member) return null;
-  return member.aliases?.[0]?.toLowerCase() || member.name.split(" ")[0].toLowerCase();
+  return (
+    member.aliases?.[0]?.toLowerCase() ||
+    member.name.split(" ")[0].toLowerCase()
+  );
 }
 
 /** Resolve a web-picker person key to the canonical first name used by push
@@ -209,7 +223,9 @@ export function personKeyToDisplayName(
   return member?.name.split(" ")[0] || null;
 }
 
-export function linearEmailToGithubUsername(email: string | null): string | null {
+export function linearEmailToGithubUsername(
+  email: string | null,
+): string | null {
   if (!email) return null;
   return LINEAR_EMAIL_TO_GITHUB[email] || null;
 }
@@ -248,7 +264,10 @@ const TEAM_GIT_IDENTITY: TeamGitIdentityEntry[] = tables.teamGitIdentity;
 export function gitIdentityFor(user?: string | null): GitIdentity | null {
   if (!user) return null;
   // Drop a trailing parenthetical like " (loop)" the queue/loop paths append.
-  const key = user.trim().replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const key = user
+    .trim()
+    .replace(/\s*\([^)]*\)\s*$/, "")
+    .trim();
   if (!key || key.toLowerCase() === "anonymous") return null;
 
   const found = ((): (typeof TEAM_GIT_IDENTITY)[number] | undefined => {
@@ -257,12 +276,16 @@ export function gitIdentityFor(user?: string | null): GitIdentity | null {
       const bySlack = TEAM_GIT_IDENTITY.find((p) => p.slackId === key);
       if (bySlack) return bySlack;
       const name = SLACK_ID_TO_NAME[key]?.toLowerCase();
-      return name ? TEAM_GIT_IDENTITY.find((p) => p.name.toLowerCase() === name) : undefined;
+      return name
+        ? TEAM_GIT_IDENTITY.find((p) => p.name.toLowerCase() === name)
+        : undefined;
     }
     // Email — match the git email directly, or map a Linear account email → github.
     if (key.includes("@")) {
       const lower = key.toLowerCase();
-      const byEmail = TEAM_GIT_IDENTITY.find((p) => p.email.toLowerCase() === lower);
+      const byEmail = TEAM_GIT_IDENTITY.find(
+        (p) => p.email.toLowerCase() === lower,
+      );
       if (byEmail) return byEmail;
       const gh = LINEAR_EMAIL_TO_GITHUB[lower];
       return gh ? TEAM_GIT_IDENTITY.find((p) => p.github === gh) : undefined;
@@ -275,7 +298,7 @@ export function gitIdentityFor(user?: string | null): GitIdentity | null {
         p.github?.toLowerCase() === lower ||
         p.name.toLowerCase() === lower ||
         p.aliases.includes(lower) ||
-        p.name.toLowerCase().split(" ")[0] === lower
+        p.name.toLowerCase().split(" ")[0] === lower,
     );
   })();
 
@@ -303,7 +326,11 @@ export function commitAuthorFor(
   user?: string | null,
   sessionOwner?: string | null,
 ): GitIdentity | null {
-  return gitIdentityFor(user) ?? gitIdentityFor(sessionOwner) ?? labelIdentity(sessionOwner);
+  return (
+    gitIdentityFor(user) ??
+    gitIdentityFor(sessionOwner) ??
+    labelIdentity(sessionOwner)
+  );
 }
 
 /**
@@ -317,8 +344,15 @@ export function commitAuthorFor(
  * when nobody was named at all.
  */
 export function labelIdentity(label?: string | null): GitIdentity | null {
-  const name = (label || "").trim().replace(/\s*\(automation\)\s*$/i, "").trim();
-  if (!name || ["anonymous", "assistant", "unknown"].includes(name.toLowerCase())) return null;
+  const name = (label || "")
+    .trim()
+    .replace(/\s*\(automation\)\s*$/i, "")
+    .trim();
+  if (
+    !name ||
+    ["anonymous", "assistant", "unknown"].includes(name.toLowerCase())
+  )
+    return null;
   return { name, email: "" };
 }
 
@@ -342,7 +376,7 @@ export function timezoneForUser(ref?: string | null): string {
 
 export function userMatchesAny(
   user: string | null | undefined,
-  allowed: string[]
+  allowed: string[],
 ): boolean {
   if (!allowed?.length) return true; // no restriction
   if (!user) return false;
@@ -400,9 +434,18 @@ function applyDerivedTables(next: DerivedIdentityTables): void {
  * Never write an empty GIT_AUTHOR_EMAIL: git takes it literally and writes a
  * commit with no address rather than falling back.
  */
-export function gitIdentityEnv(author?: GitIdentity | null): Record<string, string> {
+export function gitIdentityEnv(
+  author?: GitIdentity | null,
+): Record<string, string> {
   if (!author?.name) return {};
-  const named = { GIT_AUTHOR_NAME: author.name, GIT_COMMITTER_NAME: author.name };
+  const named = {
+    GIT_AUTHOR_NAME: author.name,
+    GIT_COMMITTER_NAME: author.name,
+  };
   if (!author.email) return named;
-  return { ...named, GIT_AUTHOR_EMAIL: author.email, GIT_COMMITTER_EMAIL: author.email };
+  return {
+    ...named,
+    GIT_AUTHOR_EMAIL: author.email,
+    GIT_COMMITTER_EMAIL: author.email,
+  };
 }

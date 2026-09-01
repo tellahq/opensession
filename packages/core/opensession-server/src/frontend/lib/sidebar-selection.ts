@@ -6,16 +6,16 @@
  * bridges the pointer/keyboard interaction until that render commits.
  */
 export function previewSidebarSelection(
-	root: HTMLElement | null,
-	row: HTMLButtonElement,
+  root: HTMLElement | null,
+  row: HTMLButtonElement,
 ): void {
-	if (!root || row.hasAttribute("data-selected")) return;
-	for (const selected of root.querySelectorAll<HTMLButtonElement>(
-		"button[data-sidebar-row][data-selected]",
-	)) {
-		selected.removeAttribute("data-selected");
-		selected.classList.remove("bg-selected");
-	}
-	row.setAttribute("data-selected", "");
-	row.classList.add("bg-selected");
+  if (!root || row.hasAttribute("data-selected")) return;
+  for (const selected of root.querySelectorAll<HTMLButtonElement>(
+    "button[data-sidebar-row][data-selected]",
+  )) {
+    selected.removeAttribute("data-selected");
+    selected.classList.remove("bg-selected");
+  }
+  row.setAttribute("data-selected", "");
+  row.classList.add("bg-selected");
 }

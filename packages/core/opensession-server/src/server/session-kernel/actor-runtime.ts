@@ -49,19 +49,27 @@ export function startSessionKernelActor(): Promise<void> {
   if (runtime.starting) return runtime.starting;
   runtime.starting = (async () => {
     await waitForSessionKernelService();
-    const worker = new Worker(sessionKernelTransportWorkerUrl(), { type: "module" });
+    const worker = new Worker(sessionKernelTransportWorkerUrl(), {
+      type: "module",
+    });
     const client = new SessionKernelActorClient(worker, (error) => {
       if (runtime.client !== client) return;
       runtime.client = undefined;
       installSessionKernelActor(undefined);
       setServiceReadiness("recovering", error);
-      console.error("[session-kernel] actor transport failed; reconnecting:", error);
+      console.error(
+        "[session-kernel] actor transport failed; reconnecting:",
+        error,
+      );
       setTimeout(() => {
         void startSessionKernelActor()
           .then(() => setServiceReadiness("ready"))
           .catch((reconnectError) => {
             setServiceReadiness("recovering", reconnectError);
-            console.error("[session-kernel] reconnect failed; retrying on next probe:", reconnectError);
+            console.error(
+              "[session-kernel] reconnect failed; retrying on next probe:",
+              reconnectError,
+            );
           });
       }, 250).unref?.();
     });

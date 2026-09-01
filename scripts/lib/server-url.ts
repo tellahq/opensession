@@ -38,7 +38,9 @@ export function resolveServerUrl(
   const server = (config?.server ?? {}) as ServerConfig;
   const host = text(env.HOST) || text(server.host) || "127.0.0.1";
   const port = Number(text(env.PORT) || server.port) || 3850;
-  const connectHost = /^(0\.0\.0\.0|::|\[::\])$/.test(host) ? "127.0.0.1" : host;
+  const connectHost = /^(0\.0\.0\.0|::|\[::\])$/.test(host)
+    ? "127.0.0.1"
+    : host;
   const publicUrl =
     text(env.OPENSESSION_UI_BASE) ||
     text(server.publicBaseUrl) ||
@@ -51,7 +53,11 @@ export async function configuredServerUrl(): Promise<string> {
   const config = await readConfig().catch(() => undefined);
   let env: Record<string, string> = {};
   if (existsSync(ENV_PATH)) {
-    env = envFileValues(await Bun.file(ENV_PATH).text().catch(() => ""));
+    env = envFileValues(
+      await Bun.file(ENV_PATH)
+        .text()
+        .catch(() => ""),
+    );
   }
   return resolveServerUrl(config, env);
 }

@@ -107,7 +107,11 @@ interface ExecutorMessageBase {
 }
 
 export type ExecutorCapability =
-  "fs" | "process" | "terminal" | "service" | "portal";
+  | "fs"
+  | "process"
+  | "terminal"
+  | "service"
+  | "portal";
 
 /** Public incarnation metadata. Authentication happens before this frame is accepted. */
 export interface ExecutorConnectionIdentity {
@@ -482,7 +486,11 @@ export function decodeExecutorOperation(
 }
 
 export type ExecutorReceiptState =
-  "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
 
 export interface ExecutorReceipt {
   receiptId: string;
@@ -1059,7 +1067,12 @@ export function decodeExecutorHello(
 
 /** @deprecated Transitional local run-host launch state. */
 export type ExecutorLaunchState =
-  "starting" | "started" | "stopped" | "failed" | "uncertain" | "unknown";
+  | "starting"
+  | "started"
+  | "stopped"
+  | "failed"
+  | "uncertain"
+  | "unknown";
 
 /** @deprecated Transitional local run-host launch status. */
 export interface ExecutorHostStatus {

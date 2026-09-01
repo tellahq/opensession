@@ -10,7 +10,8 @@ import { $ } from "bun";
 import { copySeedEnvFiles, reseedEnv, SEED_ENV_FILES } from "./preview-pool";
 import { configuredRepos } from "./config";
 
-const describeLive = process.env.SEED_TEST_LIVE === "1" ? describe : describe.skip;
+const describeLive =
+  process.env.SEED_TEST_LIVE === "1" ? describe : describe.skip;
 
 /** Matches preview-pool's in-container workspace. */
 const WORKSPACE = "/home/ubuntu/preview-workspace";
@@ -32,13 +33,33 @@ const sh = async (cmd: string[]): Promise<string> =>
 async function ensureImage(): Promise<void> {
   const df = `FROM backstage-runner:latest\nRUN mkdir -p ${WORKSPACE}/$(dirname ${ENV_REL})\n`;
   await Bun.write("/tmp/os-seedtest.Dockerfile", df);
-  await sh(["docker", "build", "-q", "-t", IMAGE, "-f", "/tmp/os-seedtest.Dockerfile", "/tmp"]);
+  await sh([
+    "docker",
+    "build",
+    "-q",
+    "-t",
+    IMAGE,
+    "-f",
+    "/tmp/os-seedtest.Dockerfile",
+    "/tmp",
+  ]);
 }
 
 const BOOT_READS_ENV = `grep -m1 '^FLAGS=' ${WORKSPACE}/${ENV_REL} || echo NO-ENV-AT-BOOT`;
 
 async function createContainer(name: string): Promise<void> {
-  await sh(["docker", "create", "--name", name, "-w", WORKSPACE, IMAGE, "bash", "-c", BOOT_READS_ENV]);
+  await sh([
+    "docker",
+    "create",
+    "--name",
+    name,
+    "-w",
+    WORKSPACE,
+    IMAGE,
+    "bash",
+    "-c",
+    BOOT_READS_ENV,
+  ]);
 }
 
 async function startAndReadBootLog(name: string): Promise<string> {
@@ -77,11 +98,29 @@ describeLive("preview-pool seeding (live containers)", () => {
     const name = `os-seedtest-${Math.random().toString(36).slice(2, 8)}`;
     try {
       await ensureImage();
-      await sh(["docker", "run", "-d", "--name", name, "-w", WORKSPACE, IMAGE, "sleep", "300"]);
-      await sh(["docker", "exec", name, "bash", "-c",
-        `printf 'FLAGS="stale-rotated-key"\\n' > ${WORKSPACE}/${ENV_REL}`]);
-      expect(await sh(["docker", "exec", name, "cat", `${WORKSPACE}/${ENV_REL}`]))
-        .toContain("stale-rotated-key");
+      await sh([
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        name,
+        "-w",
+        WORKSPACE,
+        IMAGE,
+        "sleep",
+        "300",
+      ]);
+      await sh([
+        "docker",
+        "exec",
+        name,
+        "bash",
+        "-c",
+        `printf 'FLAGS="stale-rotated-key"\\n' > ${WORKSPACE}/${ENV_REL}`,
+      ]);
+      expect(
+        await sh(["docker", "exec", name, "cat", `${WORKSPACE}/${ENV_REL}`]),
+      ).toContain("stale-rotated-key");
 
       await reseedEnv({
         name,
@@ -92,13 +131,27 @@ describeLive("preview-pool seeding (live containers)", () => {
         createdAt: new Date().toISOString(),
       });
 
-      const after = await sh(["docker", "exec", name, "grep", "-m1", "^FLAGS=", `${WORKSPACE}/${ENV_REL}`]);
+      const after = await sh([
+        "docker",
+        "exec",
+        name,
+        "grep",
+        "-m1",
+        "^FLAGS=",
+        `${WORKSPACE}/${ENV_REL}`,
+      ]);
       expect(after).toContain("FLAGS=");
       expect(after).not.toContain("stale-rotated-key");
       // tella-fusion's pool config sets devAuthBypass, so the strip rule must
       // follow config rather than always firing.
-      const devAuth = await sh(["docker", "exec", name, "bash", "-c",
-        `grep -c '^DEV_AUTH_USER_ID' ${WORKSPACE}/${ENV_REL} || true`]);
+      const devAuth = await sh([
+        "docker",
+        "exec",
+        name,
+        "bash",
+        "-c",
+        `grep -c '^DEV_AUTH_USER_ID' ${WORKSPACE}/${ENV_REL} || true`,
+      ]);
       expect(devAuth).toBe("1");
     } finally {
       await sh(["docker", "rm", "-f", name]);

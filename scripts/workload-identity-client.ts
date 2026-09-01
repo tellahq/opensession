@@ -37,14 +37,19 @@ if (
   fail(usage);
 }
 const parsedTtl = rawTtl === undefined ? undefined : Number(rawTtl);
-if (parsedTtl !== undefined && (!Number.isInteger(parsedTtl) || parsedTtl < 60 || parsedTtl > 3600)) {
+if (
+  parsedTtl !== undefined &&
+  (!Number.isInteger(parsedTtl) || parsedTtl < 60 || parsedTtl > 3600)
+) {
   fail("--ttl-seconds must be an integer between 60 and 3600");
 }
 const ttlSeconds: number | undefined = parsedTtl;
 const endpoint = process.env.OPENSESSION_WORKLOAD_IDENTITY_URL;
 const exchangeToken = process.env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN;
 if (!endpoint || !exchangeToken) {
-  fail("this command is available only inside an OpenSession-managed sandbox command");
+  fail(
+    "this command is available only inside an OpenSession-managed sandbox command",
+  );
 }
 const endpointUrl = endpoint;
 const exchangeCredential = exchangeToken;
@@ -56,10 +61,14 @@ async function mintToken(): Promise<string> {
       authorization: `Bearer ${exchangeCredential}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify({ audience, ...(ttlSeconds === undefined ? {} : { ttl_seconds: ttlSeconds }) }),
+    body: JSON.stringify({
+      audience,
+      ...(ttlSeconds === undefined ? {} : { ttl_seconds: ttlSeconds }),
+    }),
   });
   const text = await response.text();
-  if (!response.ok) throw new Error(`${response.status} ${text || response.statusText}`);
+  if (!response.ok)
+    throw new Error(`${response.status} ${text || response.statusText}`);
   return text.trim();
 }
 
@@ -80,7 +89,8 @@ if (!refreshFile) {
     fail(error instanceof Error ? error.message : String(error));
   }
 } else {
-  const refreshEveryMs = Math.max(15, Math.floor((ttlSeconds ?? 600) / 2)) * 1_000;
+  const refreshEveryMs =
+    Math.max(15, Math.floor((ttlSeconds ?? 600) / 2)) * 1_000;
   let stopping = false;
   let wake: (() => void) | undefined;
   const wait = (milliseconds: number) =>
@@ -107,7 +117,9 @@ if (!refreshFile) {
       await writeTokenFile(await mintToken());
       await wait(refreshEveryMs);
     } catch (error) {
-      console.error(`opensession sandbox id-token: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(
+        `opensession sandbox id-token: ${error instanceof Error ? error.message : String(error)}`,
+      );
       await wait(15_000);
     }
   }

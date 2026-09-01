@@ -190,6 +190,10 @@ struct SyntaxHighlightedCodeText: View {
     var fallbackColor = OS1VisualStyle.codeWellText
     var gutter = false
     var requireGutter = false
+    /// Optional diff-style marker kept outside the highlighted source, so a
+    /// whole-file Write retains both its additions gutter and file language.
+    var linePrefix: String?
+    var linePrefixColor = OS1VisualStyle.codeWellGutter
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var highlighted: AttributedString?
@@ -253,19 +257,26 @@ struct SyntaxHighlightedCodeText: View {
     /// simply starts under its own number.
     private var numbered: AttributedString {
         let body = highlighted ?? fallback
-        guard let split else { return body }
-        let labels = split.labels.components(separatedBy: "\n")
+        guard split != nil || linePrefix != nil else { return body }
+        let labels = split?.labels.components(separatedBy: "\n") ?? []
         let characters = body.characters
         var output = AttributedString()
         var lineIndex = 0
         var lineStart = characters.startIndex
 
         func appendLine(_ range: Range<AttributedString.Index>) {
-            var label = AttributedString(
-                (lineIndex < labels.count ? labels[lineIndex] : "") + "  "
-            )
-            label.foregroundColor = OS1VisualStyle.codeWellGutter
-            output.append(label)
+            if split != nil {
+                var label = AttributedString(
+                    (lineIndex < labels.count ? labels[lineIndex] : "") + "  "
+                )
+                label.foregroundColor = OS1VisualStyle.codeWellGutter
+                output.append(label)
+            }
+            if let linePrefix {
+                var prefix = AttributedString(linePrefix)
+                prefix.foregroundColor = linePrefixColor
+                output.append(prefix)
+            }
             output.append(AttributedString(body[range]))
         }
 

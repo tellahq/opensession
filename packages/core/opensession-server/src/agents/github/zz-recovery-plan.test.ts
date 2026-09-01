@@ -50,8 +50,19 @@ describe("planRecovery picks exactly one run per PR", () => {
         autoFix: { active: true, iterations: 0, startedAt: fresh },
         pendingAutoFix: { requestedBy: "soutar", receivedAt: fresh },
         activeRun: { kind: "review", requestedBy: "someone", startedAt: fresh },
-        activeMention: { author: "someone", body: "hi", kind: "issue", startedAt: fresh },
-        pendingMention: { kind: "issue", commentId: 7, body: "hi", author: "someone", receivedAt: fresh },
+        activeMention: {
+          author: "someone",
+          body: "hi",
+          kind: "issue",
+          startedAt: fresh,
+        },
+        pendingMention: {
+          kind: "issue",
+          commentId: 7,
+          body: "hi",
+          author: "someone",
+          receivedAt: fresh,
+        },
       }),
       NOW,
     );
@@ -84,8 +95,18 @@ describe("planRecovery picks exactly one run per PR", () => {
     const plan = planRecovery(
       state({
         autoFix: { active: true, iterations: 3, startedAt: ancient },
-        activeRun: { kind: "simplify", requestedBy: "someone", startedAt: ancient },
-        pendingMention: { kind: "issue", commentId: 7, body: "hi", author: "someone", receivedAt: ancient },
+        activeRun: {
+          kind: "simplify",
+          requestedBy: "someone",
+          startedAt: ancient,
+        },
+        pendingMention: {
+          kind: "issue",
+          commentId: 7,
+          body: "hi",
+          author: "someone",
+          receivedAt: ancient,
+        },
       }),
       NOW,
     );
@@ -95,7 +116,13 @@ describe("planRecovery picks exactly one run per PR", () => {
 
   test("an undated marker is stale, not live", () => {
     const plan = planRecovery(
-      state({ activeRun: { kind: "adversarial", requestedBy: "someone", startedAt: "" } }),
+      state({
+        activeRun: {
+          kind: "adversarial",
+          requestedBy: "someone",
+          startedAt: "",
+        },
+      }),
       NOW,
     );
     expect(plan.fire).toBeUndefined();

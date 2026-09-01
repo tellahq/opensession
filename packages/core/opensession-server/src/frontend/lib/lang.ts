@@ -54,6 +54,7 @@ export function langForGrep(input: unknown): string | null {
     const ext = glob.match(/\.(\w+)$/)?.[1]?.toLowerCase();
     if (ext && LANG_BY_EXT[ext]) return LANG_BY_EXT[ext];
   }
-  if (typeof inp.type === "string" && LANG_BY_EXT[inp.type]) return LANG_BY_EXT[inp.type];
+  if (typeof inp.type === "string" && LANG_BY_EXT[inp.type])
+    return LANG_BY_EXT[inp.type];
   return null;
 }

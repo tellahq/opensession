@@ -25,7 +25,9 @@ export type TranscriptForwarder = (
 
 const g = globalThis as { __osTranscriptForwarder?: TranscriptForwarder };
 
-export function setTranscriptForwarder(fn: TranscriptForwarder | undefined): void {
+export function setTranscriptForwarder(
+  fn: TranscriptForwarder | undefined,
+): void {
   g.__osTranscriptForwarder = fn;
 }
 

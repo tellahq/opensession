@@ -8,12 +8,12 @@
 import { makeUserPref } from "./user-pref";
 
 const pref = makeUserPref<boolean>({
-	localKey: "opensession-next-chat-button",
-	prefKey: "next-chat-button",
-	changeEvent: "opensession-next-chat-button-changed",
-	defaultValue: true,
-	decode: (v) => (v === "on" ? true : v === "off" ? false : null),
-	encode: (on) => (on ? "on" : "off"),
+  localKey: "opensession-next-chat-button",
+  prefKey: "next-chat-button",
+  changeEvent: "opensession-next-chat-button-changed",
+  defaultValue: true,
+  decode: (v) => (v === "on" ? true : v === "off" ? false : null),
+  encode: (on) => (on ? "on" : "off"),
 });
 
 export const getNextChatButtonPref = pref.get;

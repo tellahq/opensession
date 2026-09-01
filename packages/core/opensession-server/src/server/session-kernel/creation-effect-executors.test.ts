@@ -183,17 +183,19 @@ describe("creation workspace effect executor", () => {
       creates += 1;
       return createWorkspace(input);
     };
-    await expect(executeCreationWorkspacePrepare(item(), {
-      getWorkspace,
-      createWorkspace: create,
-      result: () => {
-        results += 1;
-        return { accepted: true, to: "preparing" };
-      },
-      afterDestinationAccepted: () => {
-        throw new Error("injected crash after destination acceptance");
-      },
-    })).rejects.toThrow("injected crash after destination acceptance");
+    await expect(
+      executeCreationWorkspacePrepare(item(), {
+        getWorkspace,
+        createWorkspace: create,
+        result: () => {
+          results += 1;
+          return { accepted: true, to: "preparing" };
+        },
+        afterDestinationAccepted: () => {
+          throw new Error("injected crash after destination acceptance");
+        },
+      }),
+    ).rejects.toThrow("injected crash after destination acceptance");
     expect(getWorkspace("ws-create-one")).toMatchObject({
       key: "session-create:create-one",
       branch: "feature/create-one",
@@ -249,13 +251,15 @@ describe("creation workspace effect executor", () => {
       repo: "opensession",
       branch: "feature/create-one",
     });
-    await expect(executeCreationWorkspacePrepare(item(), {
-      getWorkspace,
-      createWorkspace,
-      result: () => {
-        throw new Error("result must not be sent");
-      },
-    })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+    await expect(
+      executeCreationWorkspacePrepare(item(), {
+        getWorkspace,
+        createWorkspace,
+        result: () => {
+          throw new Error("result must not be sent");
+        },
+      }),
+    ).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
   });
 });
 
@@ -290,17 +294,19 @@ describe("creation branch effect executor", () => {
       worktrees.push({ branch, path: "/worktrees/create-one" });
       return "/worktrees/create-one";
     }) as typeof createWorktree;
-    await expect(executeCreationBranchPrepare(branchItem(), {
-      listWorktrees: list,
-      createWorktree: create,
-      result: () => {
-        results += 1;
-        return { accepted: true, to: "preparing" };
-      },
-      afterDestinationAccepted: () => {
-        throw new Error("injected crash after branch acceptance");
-      },
-    })).rejects.toThrow("injected crash after branch acceptance");
+    await expect(
+      executeCreationBranchPrepare(branchItem(), {
+        listWorktrees: list,
+        createWorktree: create,
+        result: () => {
+          results += 1;
+          return { accepted: true, to: "preparing" };
+        },
+        afterDestinationAccepted: () => {
+          throw new Error("injected crash after branch acceptance");
+        },
+      }),
+    ).rejects.toThrow("injected crash after branch acceptance");
     await executeCreationBranchPrepare(branchItem(), {
       listWorktrees: list,
       createWorktree: create,
@@ -384,30 +390,34 @@ describe("creation branch effect executor", () => {
   });
 
   test("fails indeterminate on an unregistered destination after a crash", async () => {
-    await expect(executeCreationBranchPrepare(branchItem(), {
-      listWorktrees: (async () => []) as typeof listWorktrees,
-      destinationExists: () => true,
-      createWorktree: (async () => {
-        throw new Error("must not overwrite an ambiguous destination");
-      }) as typeof createWorktree,
-      result: () => {
-        throw new Error("must not result");
-      },
-    })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+    await expect(
+      executeCreationBranchPrepare(branchItem(), {
+        listWorktrees: (async () => []) as typeof listWorktrees,
+        destinationExists: () => true,
+        createWorktree: (async () => {
+          throw new Error("must not overwrite an ambiguous destination");
+        }) as typeof createWorktree,
+        result: () => {
+          throw new Error("must not result");
+        },
+      }),
+    ).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
   });
 
   test("fails closed when branch and worktree identity disagree", async () => {
-    await expect(executeCreationBranchPrepare(branchItem(), {
-      listWorktrees: (async () => [
-        { branch: "feature/create-one", path: "/worktrees/other" },
-      ]) as typeof listWorktrees,
-      createWorktree: (async () => {
-        throw new Error("must not create");
-      }) as typeof createWorktree,
-      result: () => {
-        throw new Error("must not result");
-      },
-    })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+    await expect(
+      executeCreationBranchPrepare(branchItem(), {
+        listWorktrees: (async () => [
+          { branch: "feature/create-one", path: "/worktrees/other" },
+        ]) as typeof listWorktrees,
+        createWorktree: (async () => {
+          throw new Error("must not create");
+        }) as typeof createWorktree,
+        result: () => {
+          throw new Error("must not result");
+        },
+      }),
+    ).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
   });
 });
 
@@ -426,16 +436,18 @@ describe("creation sandbox effect executor", () => {
       });
       return { id: "sandbox-one", provider: "modal" as const };
     };
-    await expect(executeCreationSandboxPrepare(sandboxItem(), {
-      ensure,
-      result: () => {
-        results += 1;
-        return { accepted: true, to: "preparing" };
-      },
-      afterDestinationAccepted: () => {
-        throw new Error("injected crash after sandbox acceptance");
-      },
-    })).rejects.toThrow("injected crash after sandbox acceptance");
+    await expect(
+      executeCreationSandboxPrepare(sandboxItem(), {
+        ensure,
+        result: () => {
+          results += 1;
+          return { accepted: true, to: "preparing" };
+        },
+        afterDestinationAccepted: () => {
+          throw new Error("injected crash after sandbox acceptance");
+        },
+      }),
+    ).rejects.toThrow("injected crash after sandbox acceptance");
     await executeCreationSandboxPrepare(sandboxItem(), {
       ensure,
       result: (_effect, sandboxId) => {
@@ -451,21 +463,25 @@ describe("creation sandbox effect executor", () => {
   test("rejects sandbox key or provider crossover before actor result", async () => {
     const crossed = sandboxItem();
     crossed.payload.sandboxKey = "another-session";
-    await expect(executeCreationSandboxPrepare(crossed, {
-      ensure: async () => {
-        throw new Error("must not ensure");
-      },
-      result: () => {
-        throw new Error("must not result");
-      },
-    })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+    await expect(
+      executeCreationSandboxPrepare(crossed, {
+        ensure: async () => {
+          throw new Error("must not ensure");
+        },
+        result: () => {
+          throw new Error("must not result");
+        },
+      }),
+    ).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
 
-    await expect(executeCreationSandboxPrepare(sandboxItem(), {
-      ensure: async () => ({ id: "sandbox-one", provider: "docker" }),
-      result: () => {
-        throw new Error("must not result");
-      },
-    })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+    await expect(
+      executeCreationSandboxPrepare(sandboxItem(), {
+        ensure: async () => ({ id: "sandbox-one", provider: "docker" }),
+        result: () => {
+          throw new Error("must not result");
+        },
+      }),
+    ).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
   });
 });
 
@@ -481,7 +497,10 @@ describe("creation attachment effect executor", () => {
           name: "brief.pdf",
           digest: "sha256:brief",
         });
-        return { name: "brief.pdf", path: "/uploads/session-one/attachment-one-brief.pdf" };
+        return {
+          name: "brief.pdf",
+          path: "/uploads/session-one/attachment-one-brief.pdf",
+        };
       },
       result: () => {
         results += 1;
@@ -554,17 +573,19 @@ describe("creation credential effect executor", () => {
 
   test("rejects identity crossover before reporting a result", async () => {
     let resultCalls = 0;
-    await expect(executeCreationCredentialResolve(credentialItem(), {
-      resolveCredential: async () => ({
-        kind: "service",
-        principal: "service",
-        env: { SECRET: "hidden" },
+    await expect(
+      executeCreationCredentialResolve(credentialItem(), {
+        resolveCredential: async () => ({
+          kind: "service",
+          principal: "service",
+          env: { SECRET: "hidden" },
+        }),
+        result: () => {
+          resultCalls += 1;
+          return { accepted: true, to: "preparing" };
+        },
       }),
-      result: () => {
-        resultCalls += 1;
-        return { accepted: true, to: "preparing" };
-      },
-    })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+    ).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
     expect(resultCalls).toBe(0);
   });
 });

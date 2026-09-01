@@ -23,21 +23,26 @@ import { cn } from "./cn";
  * transition to ~0ms.
  */
 export function Fold({
-	open,
-	className,
-	panelClassName,
-	children,
+  open,
+  className,
+  panelClassName,
+  children,
 }: {
-	open: boolean;
-	className?: string;
-	panelClassName?: string;
-	children: React.ReactNode;
+  open: boolean;
+  className?: string;
+  panelClassName?: string;
+  children: React.ReactNode;
 }) {
-	return (
-		<Collapsible.Root open={open} className={cn(utilityClassName("min-w-0"), className)}>
-			<Collapsible.Panel className={cn(collapsiblePanelClasses, panelClassName)}>
-				{children}
-			</Collapsible.Panel>
-		</Collapsible.Root>
-	);
+  return (
+    <Collapsible.Root
+      open={open}
+      className={cn(utilityClassName("min-w-0"), className)}
+    >
+      <Collapsible.Panel
+        className={cn(collapsiblePanelClasses, panelClassName)}
+      >
+        {children}
+      </Collapsible.Panel>
+    </Collapsible.Root>
+  );
 }

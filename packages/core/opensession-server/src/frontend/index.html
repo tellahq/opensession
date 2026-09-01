@@ -1,269 +1,397 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#222222" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <!-- The label under the icon once iOS installs this to the Home Screen. It is
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#222222" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <!-- The label under the icon once iOS installs this to the Home Screen. It is
        the short mark, not the full name: iOS truncates at about 12 characters,
        and the app's own label is OS on every other client too. The manifest's
        short_name (routes/static-assets.ts) follows branding.productMark; this
        file is built, so it carries the default. -->
-  <meta name="apple-mobile-web-app-title" content="OS" />
-  <link rel="icon" type="image/png" href="/mac-app-icon.png?v=7" />
-  <title>Open Session</title>
-  <!-- OpenGraph / Twitter link-preview image — the new Open Session mark, same asset as
+    <meta name="apple-mobile-web-app-title" content="OS" />
+    <link rel="icon" type="image/png" href="/mac-app-icon.png?v=7" />
+    <title>Open Session</title>
+    <!-- OpenGraph / Twitter link-preview image — the new Open Session mark, same asset as
        the favicon, splash and mobile header. Root-relative so it resolves at
        the bare domain root and under the /backstage & /opensession prefixes. -->
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="Open Session" />
-  <meta property="og:image" content="/mac-app-icon.png?v=7" />
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Open Session" />
-  <meta name="twitter:image" content="/mac-app-icon.png?v=7" />
-  <!-- Replaced by the production builder. Dev/source builds keep generic defaults. -->
-  <script>window.__OPENSESSION_INSTANCE__ = window.__OPENSESSION_INSTANCE__ || {};</script>
-  <script>
-    // Pre-paint appearance: set light/dark and the accent before first paint,
-    // so there's no flash of the fallback palette. Mirrors lib/theme.ts and
-    // lib/accent-theme.ts — keep both keys and valid accent values in sync.
-    (function () {
-      try {
-        var p = localStorage.getItem("opensession-theme");
-        var eff = (p === "light" || p === "dark") ? p
-          : (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
-        var h = document.documentElement;
-        h.setAttribute("data-theme", eff);
-        var accent = localStorage.getItem("opensession-accent");
-        // Accents whose colour was retired; keep in sync with RETIRED_THEMES in
-        // lib/accent-theme.ts, which is what runs once the bundle is up.
-        var retired = { gold: "lime", purple: "coral", pink: "coral", brown: "orange", teal: "sky" };
-        if (retired[accent]) {
-          accent = retired[accent];
-          localStorage.setItem("opensession-accent", accent);
-        }
-        var accents = ["sky", "indigo", "coral", "orange", "lime", "green", "mono"];
-        h.setAttribute("data-accent", accents.indexOf(accent) >= 0 ? accent : "sky");
-        h.style.colorScheme = eff;
-        var m = document.querySelector('meta[name="theme-color"]');
-        // --bg-raised (sidebar + WCO titlebar surface): the desktop PWA paints
-        // the window-controls caption band with theme-color, so match the
-        // titlebar. Keep in sync with lib/theme.ts applyTheme().
-        if (m) m.setAttribute("content", eff === "light" ? "#f6f6f6" : "#222222");
-      } catch (e) {}
-    })();
-  </script>
-  <script>
-    // Injected at runtime so the bundler doesn't try to resolve these as build
-    // assets — they're served by the Open Session server, not bundled. The
-    // prefix follows the URL this page was served under (/opensession/ primary,
-    // /backstage/ legacy alias, or "" at a bare domain root)
-    // so each install's PWA identity — manifest, start_url, icons — stays
-    // self-consistent per prefix. Mirrors lib/base.ts detectBasePath().
-    (function () {
-      var p = location.pathname;
-      var prefix = p.indexOf("/backstage") === 0 ? "/backstage"
-        : p.indexOf("/opensession") === 0 ? "/opensession" : "";
-      var add = function (rel, href) {
-        var l = document.createElement("link");
-        l.rel = rel; l.href = href;
-        document.head.appendChild(l);
-      };
-      add("apple-touch-icon", prefix + "/apple-touch-icon.png?v=5");
-      add("manifest", prefix + "/manifest.webmanifest");
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Open Session" />
+    <meta property="og:image" content="/mac-app-icon.png?v=7" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Open Session" />
+    <meta name="twitter:image" content="/mac-app-icon.png?v=7" />
+    <!-- Replaced by the production builder. Dev/source builds keep generic defaults. -->
+    <script>
+      window.__OPENSESSION_INSTANCE__ = window.__OPENSESSION_INSTANCE__ || {};
+    </script>
+    <script>
+      // Pre-paint appearance: set light/dark and the accent before first paint,
+      // so there's no flash of the fallback palette. Mirrors lib/theme.ts and
+      // lib/accent-theme.ts — keep both keys and valid accent values in sync.
+      (function () {
+        try {
+          var p = localStorage.getItem("opensession-theme");
+          var eff =
+            p === "light" || p === "dark"
+              ? p
+              : window.matchMedia("(prefers-color-scheme: light)").matches
+                ? "light"
+                : "dark";
+          var h = document.documentElement;
+          h.setAttribute("data-theme", eff);
+          var accent = localStorage.getItem("opensession-accent");
+          // Accents whose colour was retired; keep in sync with RETIRED_THEMES in
+          // lib/accent-theme.ts, which is what runs once the bundle is up.
+          var retired = {
+            gold: "lime",
+            purple: "coral",
+            pink: "coral",
+            brown: "orange",
+            teal: "sky",
+          };
+          if (retired[accent]) {
+            accent = retired[accent];
+            localStorage.setItem("opensession-accent", accent);
+          }
+          var accents = [
+            "sky",
+            "indigo",
+            "coral",
+            "orange",
+            "lime",
+            "green",
+            "mono",
+          ];
+          h.setAttribute(
+            "data-accent",
+            accents.indexOf(accent) >= 0 ? accent : "sky",
+          );
+          h.style.colorScheme = eff;
+          var m = document.querySelector('meta[name="theme-color"]');
+          // --bg-raised (sidebar + WCO titlebar surface): the desktop PWA paints
+          // the window-controls caption band with theme-color, so match the
+          // titlebar. Keep in sync with lib/theme.ts applyTheme().
+          if (m)
+            m.setAttribute("content", eff === "light" ? "#f6f6f6" : "#222222");
+        } catch (e) {}
+      })();
+    </script>
+    <script>
+      // Injected at runtime so the bundler doesn't try to resolve these as build
+      // assets — they're served by the Open Session server, not bundled. The
+      // prefix follows the URL this page was served under (/opensession/ primary,
+      // /backstage/ legacy alias, or "" at a bare domain root)
+      // so each install's PWA identity — manifest, start_url, icons — stays
+      // self-consistent per prefix. Mirrors lib/base.ts detectBasePath().
+      (function () {
+        var p = location.pathname;
+        var prefix =
+          p.indexOf("/backstage") === 0
+            ? "/backstage"
+            : p.indexOf("/opensession") === 0
+              ? "/opensession"
+              : "";
+        var add = function (rel, href) {
+          var l = document.createElement("link");
+          l.rel = rel;
+          l.href = href;
+          document.head.appendChild(l);
+        };
+        add("apple-touch-icon", prefix + "/apple-touch-icon.png?v=5");
+        add("manifest", prefix + "/manifest.webmanifest");
 
+        // Tailwind utilities. The production builder appends its own hashed
+        // tailwind-<hash>.css just before the head close tag — AFTER this script runs,
+        // so the check waits for the parsed document. No such link means Bun's
+        // HMR dev server is serving this page (OPENSESSION_DEV=1), and Bun can't
+        // compile Tailwind: pull the sheet the server compiles for dev instead.
+        // Without it a dev/demo instance renders with no utilities at all.
+        document.addEventListener("DOMContentLoaded", function () {
+          if (
+            !document.querySelector('link[rel="stylesheet"][href*="tailwind-"]')
+          )
+            add("stylesheet", prefix + "/tailwind.css");
+        });
 
-      // The desktop workspace shell follows the host OS's window language.
-      // Mobile stays edge-to-edge, but setting this before first paint avoids a
-      // radius jump in browsers and the desktop shell.
-      var platform = (navigator.userAgentData && navigator.userAgentData.platform)
-        || navigator.platform || "";
-      document.documentElement.dataset.platform = /win/i.test(platform)
-        ? "windows" : /mac/i.test(platform) ? "mac" : "linux";
+        // The desktop workspace shell follows the host OS's window language.
+        // Mobile stays edge-to-edge, but setting this before first paint avoids a
+        // radius jump in browsers and the desktop shell.
+        var platform =
+          (navigator.userAgentData && navigator.userAgentData.platform) ||
+          navigator.platform ||
+          "";
+        document.documentElement.dataset.platform = /win/i.test(platform)
+          ? "windows"
+          : /mac/i.test(platform)
+            ? "mac"
+            : "linux";
 
-      // iOS 26 can expose a standalone viewport shorter than the physical
-      // screen by exactly the status-bar inset. Viewport units inherit that
-      // bad height. Forcing the document-flow roots to screen.height makes
-      // WebKit recalculate the standalone window to the full device surface.
-      var iphoneStandalone = /iPhone|iPod/.test(navigator.userAgent)
-        && (matchMedia("(display-mode: standalone)").matches
-          || navigator.standalone === true);
-      if (iphoneStandalone) {
-        // The correction only works if WebKit answers it by re-laying the
-        // standalone window out. When it keeps the short window, the roots
-        // stand taller than what you can see, and everything anchored to the
-        // bottom of the app (the composer) falls below the fold with no way
-        // to scroll it back. Measure the result and hand the height back when
-        // that happens: a letterboxed strip is better than a cut-off composer.
-        var standaloneFillTaken = true;
-        var setRootHeight = function (value) {
-          document.documentElement.style.height = value;
-          if (document.body) document.body.style.height = value;
-        };
-        var keyboardOpen = function () {
-          return !!document.body && document.body.classList.contains("kb-open");
-        };
-        var verifyStandaloneScreen = function (height) {
-          // An open keyboard shrinks the window on purpose, so it can neither
-          // confirm nor disprove the correction.
-          if (!standaloneFillTaken || keyboardOpen()) return;
-          if (window.innerHeight >= height - 1) return;
-          standaloneFillTaken = false;
-          setRootHeight("");
-        };
-        var fillStandaloneScreen = function () {
-          var height = window.screen.height;
-          if (!height || !standaloneFillTaken || keyboardOpen()) return;
-          setRootHeight(height + "px");
-          setTimeout(function () { verifyStandaloneScreen(height); }, 300);
-        };
-        var resyncStandaloneScreen = function () {
+        // iOS 26 can expose a standalone viewport shorter than the physical
+        // screen by exactly the status-bar inset. Viewport units inherit that
+        // bad height. Forcing the document-flow roots to screen.height makes
+        // WebKit recalculate the standalone window to the full device surface.
+        var iphoneStandalone =
+          /iPhone|iPod/.test(navigator.userAgent) &&
+          (matchMedia("(display-mode: standalone)").matches ||
+            navigator.standalone === true);
+        if (iphoneStandalone) {
+          // The correction only works if WebKit answers it by re-laying the
+          // standalone window out. When it keeps the short window, the roots
+          // stand taller than what you can see, and everything anchored to the
+          // bottom of the app (the composer) falls below the fold with no way
+          // to scroll it back. Measure the result and hand the height back when
+          // that happens: a letterboxed strip is better than a cut-off composer.
+          var standaloneFillTaken = true;
+          var setRootHeight = function (value) {
+            document.documentElement.style.height = value;
+            if (document.body) document.body.style.height = value;
+          };
+          var keyboardOpen = function () {
+            return (
+              !!document.body && document.body.classList.contains("kb-open")
+            );
+          };
+          var verifyStandaloneScreen = function (height) {
+            // An open keyboard shrinks the window on purpose, so it can neither
+            // confirm nor disprove the correction.
+            if (!standaloneFillTaken || keyboardOpen()) return;
+            if (window.innerHeight >= height - 1) return;
+            standaloneFillTaken = false;
+            setRootHeight("");
+          };
+          var fillStandaloneScreen = function () {
+            var height = window.screen.height;
+            if (!height || !standaloneFillTaken || keyboardOpen()) return;
+            setRootHeight(height + "px");
+            setTimeout(function () {
+              verifyStandaloneScreen(height);
+            }, 300);
+          };
+          var resyncStandaloneScreen = function () {
+            fillStandaloneScreen();
+            requestAnimationFrame(fillStandaloneScreen);
+            setTimeout(fillStandaloneScreen, 250);
+          };
           fillStandaloneScreen();
-          requestAnimationFrame(fillStandaloneScreen);
-          setTimeout(fillStandaloneScreen, 250);
+          document.addEventListener("DOMContentLoaded", fillStandaloneScreen, {
+            once: true,
+          });
+          window.addEventListener("resize", fillStandaloneScreen);
+          window.addEventListener("orientationchange", resyncStandaloneScreen);
+        }
+
+        // The Electron shell owns a hidden native titlebar even when Chromium
+        // temporarily stops reporting Window Controls Overlay geometry. Keep a
+        // separate capability class so its drag regions do not depend on that
+        // transient browser API.
+        if (window.os1 && window.os1.desktop === true)
+          document.documentElement.classList.add("desktop-shell");
+
+        // Only updated desktop-shell builds provide a native visual-effect
+        // backdrop. The capability check keeps the remotely served UI opaque in
+        // older shells, which expose `desktop` but still use an opaque window.
+        if (window.os1 && window.os1.materialBackdrop === true)
+          document.documentElement.classList.add("material-backdrop");
+
+        // Window Controls Overlay detection → `html.wco` (drives the titlebar
+        // band + drag region in base.css). JS instead of the display-mode
+        // media query because Electron (the Open Session desktop shell) exposes the WCO
+        // geometry while display-mode stays "browser". Re-evaluated on change so
+        // fullscreen (controls auto-hide) drops the band, matching PWA behavior.
+        var wcoMq = matchMedia("(display-mode: window-controls-overlay)");
+        var updWco = function () {
+          var wco = navigator.windowControlsOverlay;
+          document.documentElement.classList.toggle(
+            "wco",
+            wcoMq.matches || !!(wco && wco.visible),
+          );
         };
-        fillStandaloneScreen();
-        document.addEventListener("DOMContentLoaded", fillStandaloneScreen, { once: true });
-        window.addEventListener("resize", fillStandaloneScreen);
-        window.addEventListener("orientationchange", resyncStandaloneScreen);
+        updWco();
+        wcoMq.addEventListener("change", updWco);
+        if (navigator.windowControlsOverlay)
+          navigator.windowControlsOverlay.addEventListener(
+            "geometrychange",
+            updWco,
+          );
+
+        // iOS launch images: one PNG per device, matched by an exact media query
+        // (logical width/height + pixel ratio + orientation). Generated by
+        // scripts/gen-splash.py. Without these, the standalone PWA launches black.
+        // [ptWidth, ptHeight, ratio, pxWidth, pxHeight]
+        var splashes = [
+          [320, 568, 2, 640, 1136],
+          [375, 667, 2, 750, 1334],
+          [414, 896, 2, 828, 1792],
+          [375, 812, 3, 1125, 2436],
+          [390, 844, 3, 1170, 2532],
+          [393, 852, 3, 1179, 2556],
+          [402, 874, 3, 1206, 2622],
+          [414, 736, 3, 1242, 2208],
+          [414, 896, 3, 1242, 2688],
+          [428, 926, 3, 1284, 2778],
+          [430, 932, 3, 1290, 2796],
+          [440, 956, 3, 1320, 2868],
+        ];
+        splashes.forEach(function (s) {
+          var l = document.createElement("link");
+          l.rel = "apple-touch-startup-image";
+          l.media =
+            "screen and (device-width: " +
+            s[0] +
+            "px) and (device-height: " +
+            s[1] +
+            "px) and (-webkit-device-pixel-ratio: " +
+            s[2] +
+            ") and (orientation: portrait)";
+          l.href =
+            prefix + "/splash/apple-splash-" + s[3] + "-" + s[4] + ".png?v=2";
+          document.head.appendChild(l);
+        });
+      })();
+    </script>
+    <style>
+      body {
+        background: #1b1b1b;
+        color: #ececec;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+      html[data-theme="light"] body {
+        background: #ffffff;
+        color: #1c1a18;
+      }
+      html[data-theme="light"] #splash {
+        background: radial-gradient(
+          120% 90% at 50% 35%,
+          #ffffff 0%,
+          #f3f1ee 70%
+        );
       }
 
-      // The Electron shell owns a hidden native titlebar even when Chromium
-      // temporarily stops reporting Window Controls Overlay geometry. Keep a
-      // separate capability class so its drag regions do not depend on that
-      // transient browser API.
-      if (window.os1 && window.os1.desktop === true)
-        document.documentElement.classList.add("desktop-shell");
-
-      // Only updated desktop-shell builds provide a native visual-effect
-      // backdrop. The capability check keeps the remotely served UI opaque in
-      // older shells, which expose `desktop` but still use an opaque window.
-      if (window.os1 && window.os1.materialBackdrop === true)
-        document.documentElement.classList.add("material-backdrop");
-
-      // Window Controls Overlay detection → `html.wco` (drives the titlebar
-      // band + drag region in base.css). JS instead of the display-mode
-      // media query because Electron (the Open Session desktop shell) exposes the WCO
-      // geometry while display-mode stays "browser". Re-evaluated on change so
-      // fullscreen (controls auto-hide) drops the band, matching PWA behavior.
-      var wcoMq = matchMedia("(display-mode: window-controls-overlay)");
-      var updWco = function () {
-        var wco = navigator.windowControlsOverlay;
-        document.documentElement.classList.toggle(
-          "wco", wcoMq.matches || !!(wco && wco.visible));
-      };
-      updWco();
-      wcoMq.addEventListener("change", updWco);
-      if (navigator.windowControlsOverlay)
-        navigator.windowControlsOverlay.addEventListener("geometrychange", updWco);
-
-      // iOS launch images: one PNG per device, matched by an exact media query
-      // (logical width/height + pixel ratio + orientation). Generated by
-      // scripts/gen-splash.py. Without these, the standalone PWA launches black.
-      // [ptWidth, ptHeight, ratio, pxWidth, pxHeight]
-      var splashes = [
-        [320, 568, 2, 640, 1136],
-        [375, 667, 2, 750, 1334],
-        [414, 896, 2, 828, 1792],
-        [375, 812, 3, 1125, 2436],
-        [390, 844, 3, 1170, 2532],
-        [393, 852, 3, 1179, 2556],
-        [402, 874, 3, 1206, 2622],
-        [414, 736, 3, 1242, 2208],
-        [414, 896, 3, 1242, 2688],
-        [428, 926, 3, 1284, 2778],
-        [430, 932, 3, 1290, 2796],
-        [440, 956, 3, 1320, 2868]
-      ];
-      splashes.forEach(function (s) {
-        var l = document.createElement("link");
-        l.rel = "apple-touch-startup-image";
-        l.media = "screen and (device-width: " + s[0] + "px) and (device-height: " + s[1] +
-          "px) and (-webkit-device-pixel-ratio: " + s[2] + ") and (orientation: portrait)";
-        l.href = prefix + "/splash/apple-splash-" + s[3] + "-" + s[4] + ".png?v=2";
-        document.head.appendChild(l);
-      });
-    })();
-  </script>
-  <style>
-    body { background: #1b1b1b; color: #ececec; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-    html[data-theme="light"] body { background: #ffffff; color: #1c1a18; }
-    html[data-theme="light"] #splash { background: radial-gradient(120% 90% at 50% 35%, #ffffff 0%, #f3f1ee 70%); }
-
-    /* Splash screen — painted instantly from the HTML shell (before the JS
+      /* Splash screen — painted instantly from the HTML shell (before the JS
        bundle parses) so the PWA launch shows branding, not a blank dark frame.
        React removes #splash once it mounts (see App.tsx). */
-    #splash {
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 18px;
-      background: radial-gradient(120% 90% at 50% 35%, #262626 0%, #1b1b1b 70%);
-      opacity: 1;
-      transition: opacity 0.35s ease;
-    }
-    #splash.splash-hide { opacity: 0; pointer-events: none; }
-    .splash-logo {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 76px;
-      height: 76px;
-      animation: splash-pulse 1.6s ease-in-out infinite;
-    }
-    .splash-logo img {
-      display: block;
-      width: 76px;
-      height: 76px;
-    }
-    /* ui/page-loader wears this same wave for regions inside the app that have
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: radial-gradient(
+          120% 90% at 50% 35%,
+          #262626 0%,
+          #1b1b1b 70%
+        );
+        opacity: 1;
+        transition: opacity 0.35s ease;
+      }
+      #splash.splash-hide {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .splash-logo {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 76px;
+        height: 76px;
+        animation: splash-pulse 1.6s ease-in-out infinite;
+      }
+      .splash-logo img {
+        display: block;
+        width: 76px;
+        height: 76px;
+      }
+      /* ui/page-loader wears this same wave for regions inside the app that have
        not arrived yet. The shell cannot import the bundle's CSS, so it keeps
        its own copy; the bars are sized against the 76px logo here and against a
        label there, but the CADENCE is the shared part — 1s, 0.6→1, 0.15s
        apart. Change one and change the other, or the app opens at one rate and
        loads at another. */
-    .splash-bars {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      height: 14px;
-    }
-    .splash-bars span {
-      width: 4px;
-      border-radius: 2px;
-      background: currentColor;
-      animation: splash-bar 1s ease-in-out infinite;
-    }
-    .splash-bars span:nth-child(1) { height: 6px;  opacity: 0.4; animation-delay: 0s; }
-    .splash-bars span:nth-child(2) { height: 10px; opacity: 0.7; animation-delay: 0.15s; }
-    .splash-bars span:nth-child(3) { height: 14px; opacity: 1;   animation-delay: 0.3s; }
-    .splash-bars span:nth-child(4) { height: 10px; opacity: 0.7; animation-delay: 0.45s; }
-    .splash-bars span:nth-child(5) { height: 6px;  opacity: 0.4; animation-delay: 0.6s; }
-    @keyframes splash-pulse {
-      0%, 100% { transform: scale(1); }
-      50%      { transform: scale(1.04); }
-    }
-    @keyframes splash-bar {
-      0%, 100% { transform: scaleY(0.6); }
-      50%      { transform: scaleY(1); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .splash-logo, .splash-bars span { animation: none; }
-    }
-  </style>
-</head>
-<body>
-  <div id="splash">
-    <span class="splash-logo"><img src="/mac-app-icon.png?v=7" alt="" /></span>
-    <span class="splash-bars"><span></span><span></span><span></span><span></span><span></span></span>
-  </div>
-  <div id="root"></div>
-  <script type="module" src="./App.tsx"></script>
-</body>
+      .splash-bars {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        height: 14px;
+      }
+      .splash-bars span {
+        width: 4px;
+        border-radius: 2px;
+        background: currentColor;
+        animation: splash-bar 1s ease-in-out infinite;
+      }
+      .splash-bars span:nth-child(1) {
+        height: 6px;
+        opacity: 0.4;
+        animation-delay: 0s;
+      }
+      .splash-bars span:nth-child(2) {
+        height: 10px;
+        opacity: 0.7;
+        animation-delay: 0.15s;
+      }
+      .splash-bars span:nth-child(3) {
+        height: 14px;
+        opacity: 1;
+        animation-delay: 0.3s;
+      }
+      .splash-bars span:nth-child(4) {
+        height: 10px;
+        opacity: 0.7;
+        animation-delay: 0.45s;
+      }
+      .splash-bars span:nth-child(5) {
+        height: 6px;
+        opacity: 0.4;
+        animation-delay: 0.6s;
+      }
+      @keyframes splash-pulse {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.04);
+        }
+      }
+      @keyframes splash-bar {
+        0%,
+        100% {
+          transform: scaleY(0.6);
+        }
+        50% {
+          transform: scaleY(1);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .splash-logo,
+        .splash-bars span {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="splash">
+      <span class="splash-logo"
+        ><img src="/mac-app-icon.png?v=7" alt=""
+      /></span>
+      <span class="splash-bars"
+        ><span></span><span></span><span></span><span></span><span></span
+      ></span>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="./App.tsx"></script>
+  </body>
 </html>

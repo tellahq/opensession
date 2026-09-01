@@ -16,7 +16,9 @@ import fs from "node:fs";
 
 const [name, outPath] = process.argv.slice(2);
 if (!name || !outPath) {
-  console.error("usage: fetch-provisioning-profile.mjs <profile name> <output path>");
+  console.error(
+    "usage: fetch-provisioning-profile.mjs <profile name> <output path>",
+  );
   process.exit(2);
 }
 
@@ -41,7 +43,12 @@ function base64url(input) {
 function token() {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "ES256", kid: keyId, typ: "JWT" };
-  const payload = { iss: issuer, iat: now, exp: now + 600, aud: "appstoreconnect-v1" };
+  const payload = {
+    iss: issuer,
+    iat: now,
+    exp: now + 600,
+    aud: "appstoreconnect-v1",
+  };
   const signingInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
   const signature = crypto.sign("SHA256", Buffer.from(signingInput), {
     key: privateKey,
@@ -54,16 +61,22 @@ const url = new URL("https://api.appstoreconnect.apple.com/v1/profiles");
 url.searchParams.set("filter[name]", name);
 url.searchParams.set("limit", "1");
 
-const response = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } });
+const response = await fetch(url, {
+  headers: { Authorization: `Bearer ${token()}` },
+});
 if (!response.ok) {
-  console.error(`::error::App Store Connect returned ${response.status}: ${await response.text()}`);
+  console.error(
+    `::error::App Store Connect returned ${response.status}: ${await response.text()}`,
+  );
   process.exit(1);
 }
 
 const { data } = await response.json();
 const profile = data?.[0];
 if (!profile) {
-  console.error(`::error::No provisioning profile named "${name}" in App Store Connect`);
+  console.error(
+    `::error::No provisioning profile named "${name}" in App Store Connect`,
+  );
   process.exit(1);
 }
 
@@ -71,7 +84,9 @@ const { profileState, expirationDate, profileContent } = profile.attributes;
 // A profile that expired silently would fail much later, inside codesign,
 // with an error that says nothing about why.
 if (profileState !== "ACTIVE" || new Date(expirationDate) <= new Date()) {
-  console.error(`::error::Profile "${name}" is ${profileState}, expires ${expirationDate}`);
+  console.error(
+    `::error::Profile "${name}" is ${profileState}, expires ${expirationDate}`,
+  );
   process.exit(1);
 }
 

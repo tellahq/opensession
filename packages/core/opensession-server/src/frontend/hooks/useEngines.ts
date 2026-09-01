@@ -16,22 +16,22 @@ const EMPTY: EngineCatalog = { engines: [], modelEngines: {} };
  * hides the Engine row — the same state as a single-engine instance.
  */
 export function useEngines(): EngineCatalog {
-	const [catalog, setCatalog] = useState<EngineCatalog>(EMPTY);
-	useEffect(() => {
-		let live = true;
-		fetchEngines()
-			.then((value) => {
-				if (live) setCatalog(value);
-			})
-			.catch(() => {});
-		return () => {
-			live = false;
-		};
-	}, []);
-	return catalog;
+  const [catalog, setCatalog] = useState<EngineCatalog>(EMPTY);
+  useEffect(() => {
+    let live = true;
+    fetchEngines()
+      .then((value) => {
+        if (live) setCatalog(value);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  return catalog;
 }
 
 /** Just the engines a model can actually be routed to right now. */
 export function useAvailableEngines(): EngineCatalog["engines"] {
-	return useEngines().engines.filter((e) => e.available);
+  return useEngines().engines.filter((e) => e.available);
 }

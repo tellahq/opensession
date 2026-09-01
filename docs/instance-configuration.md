@@ -51,12 +51,12 @@ macOS setting and leaves the iOS default at localhost.
 Every client also lets the user change the server at runtime, so a wrong default
 is an inconvenience rather than a dead end:
 
-| Client | Where the user changes it | Build-time default |
-| --- | --- | --- |
-| Chrome extension | the Server field in the side panel | `packages/clients/chrome/deployment.json` |
-| Electron shell | asked on first launch, then app menu → Organizations → Edit current server… | `packages/clients/mac/package.json` → `opensession.defaultServer` |
-| Swift app (iOS/macOS) | Settings → Server | `OS1DefaultServerURL` in `packages/clients/ios/project.yml` |
-| Web UI / PWA | n/a — served by the server itself | n/a |
+| Client                | Where the user changes it                                                   | Build-time default                                                |
+| --------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Chrome extension      | the Server field in the side panel                                          | `packages/clients/chrome/deployment.json`                         |
+| Electron shell        | asked on first launch, then app menu → Organizations → Edit current server… | `packages/clients/mac/package.json` → `opensession.defaultServer` |
+| Swift app (iOS/macOS) | Settings → Server                                                           | `OS1DefaultServerURL` in `packages/clients/ios/project.yml`       |
+| Web UI / PWA          | n/a — served by the server itself                                           | n/a                                                               |
 
 Packaging configuration:
 

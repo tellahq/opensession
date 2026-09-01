@@ -78,10 +78,42 @@ run_release() {
 }
 
 executor_ready() {
-  local ready_pid main_pid
-  ready_pid="$(cat /run/opensession-executor/ready 2>/dev/null || true)"
+  local ready main_pid generation
+  ready="$(cat /run/opensession-executor/ready 2>/dev/null || true)"
   main_pid="$(systemctl show -p MainPID --value opensession-executor.service 2>/dev/null || true)"
-  [ -n "$ready_pid" ] && [ "$ready_pid" = "$main_pid" ]
+  generation="$(cat "$CURRENT_LINK/.opensession-release" 2>/dev/null || true)"
+  [ -n "$main_pid" ] \
+    && printf '%s' "$ready" | grep -Fq "\"pid\":$main_pid" \
+    && printf '%s' "$ready" | grep -Fq "\"generation\":\"$generation\""
+}
+
+service_generation() {
+  local service="$1" pid
+  pid="$(systemctl show -p MainPID --value "$service" 2>/dev/null || true)"
+  [ -n "$pid" ] && [ "$pid" != "0" ] || return 1
+  cat "/proc/$pid/cwd/.opensession-release" 2>/dev/null
+}
+
+supervisor_generation() {
+  service_generation opensession.service
+}
+
+ingress_generation() {
+  service_generation opensession-ingress.service
+}
+
+drain_gateway_for_supervisor_restart() {
+  [ -S /run/opensession-gateway/control.sock ] || return 1
+  "$SERVICE_BUN" \
+    "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+    drain-supervisor
+}
+
+session_kernel_ready() {
+  local generation body
+  generation="$(cat "$CURRENT_LINK/.opensession-release" 2>/dev/null || true)"
+  body="$(curl -fs --max-time 2 http://127.0.0.1:3849/ready 2>/dev/null || true)"
+  [ -n "$generation" ] && printf '%s' "$body" | grep -Fq "\"generation\":\"$generation\""
 }
 
 run_as_service_user mkdir -p "$DEPLOY_STATE"
@@ -95,7 +127,27 @@ fi
 echo "[deploy] fetching ${TARGET_SHA}; the WIP checkout will not be changed"
 run_as_service_user git -C "$SOURCE_DIR" fetch --prune origin
 TARGET_COMMIT="$(run_as_service_user git -C "$SOURCE_DIR" rev-parse "${TARGET_SHA}^{commit}")"
+REMOTE_HEAD="$(run_as_service_user git -C "$SOURCE_DIR" rev-parse 'origin/main^{commit}')"
 PREVIOUS_HEAD="$(run_release current-sha 2>/dev/null || true)"
+if [ -n "$PREVIOUS_HEAD" ] && [ "${OPENSESSION_ROOT_DEPLOY_OVERRIDE:-0}" != "1" ]; then
+  if [ "$TARGET_COMMIT" = "$PREVIOUS_HEAD" ]; then
+    echo "[deploy] ERROR: ${TARGET_COMMIT:0:10} is already current; refusing a duplicate root rollout" >&2
+    exit 1
+  fi
+  if [ "$TARGET_COMMIT" != "$REMOTE_HEAD" ]; then
+    echo "[deploy] ERROR: root deploy target ${TARGET_COMMIT:0:10} is not latest origin/main ${REMOTE_HEAD:0:10}" >&2
+    echo "[deploy] Use deploy_self for ordinary releases. Set OPENSESSION_ROOT_DEPLOY_OVERRIDE=1 only for explicit recovery." >&2
+    exit 1
+  fi
+  ROOT_IMPACT="$(run_as_service_user git -C "$SOURCE_DIR" diff --no-renames --name-only "$PREVIOUS_HEAD" "$TARGET_COMMIT" -- \
+    | grep -E '^(deploy/(deploy|self-deploy|release-checkout|install-executor-credential|install-session-kernel-credential|install-run-host-helper|install-resource-control)\.sh|deploy/opensession-run-host|deploy/systemd/|packages/core/opensession-server/src/server/(gateway-ingress|gateway-routing|gateway-tcp-proxy|stable-frontend)\.ts|opensession(\.socket|-ingress\.service|-executor\.service|-session-kernel\.service|\.service)$)' \
+    || true)"
+  if [ -z "$ROOT_IMPACT" ]; then
+    echo "[deploy] ERROR: ${TARGET_COMMIT:0:10} changes no root-owned deployment artifacts" >&2
+    echo "[deploy] Refusing a disruptive root rollout; use deploy_self so frontend and component impact classification applies." >&2
+    exit 1
+  fi
+fi
 if [ -n "$PREVIOUS_HEAD" ] && [ "$TARGET_COMMIT" != "$PREVIOUS_HEAD" ] \
   && ! run_as_service_user git -C "$SOURCE_DIR" merge-base --is-ancestor "$PREVIOUS_HEAD" "$TARGET_COMMIT"; then
   if [ "${OPENSESSION_DEPLOY_ALLOW_DIVERGED:-0}" != "1" ]; then
@@ -105,10 +157,36 @@ if [ -n "$PREVIOUS_HEAD" ] && [ "$TARGET_COMMIT" != "$PREVIOUS_HEAD" ] \
   fi
   echo "[deploy] WARNING: operator override permits history change ${PREVIOUS_HEAD:0:10} -> ${TARGET_COMMIT:0:10}"
 fi
-RELEASE_DIR="$(run_release prepare "$TARGET_COMMIT")"
+RELEASE_DIR="$(run_release prepare-frontend "$TARGET_COMMIT")"
 # From here on, every source artifact comes from the exact prepared commit.
 # SOURCE_DIR remains only the git object source and the place agents do WIP.
 REPO_DIR="$RELEASE_DIR"
+CANARY_DIR="$DEPLOY_STATE/results"
+CANARY_FILE="$CANARY_DIR/$(date -u +%Y%m%dT%H%M%SZ)-root-canary-${TARGET_COMMIT:0:10}.json"
+install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0700 "$CANARY_DIR"
+setsid runuser -u "$SERVICE_USER" -- \
+  "$SERVICE_BUN" "$REPO_DIR/scripts/deploy-canary.ts" \
+  "${HEALTH_URL%/ready}/live" "$CANARY_FILE" &
+CANARY_PID=$!
+stop_canary() {
+  if [ -n "${CANARY_PID:-}" ]; then
+    kill -TERM -- "-$CANARY_PID" 2>/dev/null || true
+    wait "$CANARY_PID" 2>/dev/null || true
+    CANARY_PID=""
+    if [ -s "$CANARY_FILE" ]; then
+      echo "[deploy] canary: $(tr '\n' ' ' < "$CANARY_FILE")"
+    fi
+  fi
+}
+start_canary() {
+  [ -z "${CANARY_PID:-}" ] || return 0
+  setsid runuser -u "$SERVICE_USER" -- \
+    "$SERVICE_BUN" "$REPO_DIR/scripts/deploy-canary.ts" \
+    "${HEALTH_URL%/ready}/live" "$CANARY_FILE" &
+  CANARY_PID=$!
+}
+trap stop_canary EXIT
+
 if [ -z "$PREVIOUS_HEAD" ]; then
   # Bootstrap the stable path before installing helpers that validate it. No
   # running service points here yet, so this is not the lifecycle cut-over.
@@ -121,12 +199,35 @@ if [ -f "$REPO_DIR/deploy/git-hooks/post-checkout" ]; then
   run_as_service_user install -m 755 "$REPO_DIR/deploy/git-hooks/post-checkout" "$SOURCE_DIR/.git/hooks/post-checkout"
 fi
 
-# A release is one gateway + kernel + executor version. Even a source-only
-# change switches all three together; detached run-host scopes keep the old
-# worktree inode until they finish.
+# Install the cgroup hierarchy before rendering services or launching hosts
+# that reference it. Existing hosts continue in their current cgroups; new
+# hosts enter the workload slice without interrupting active turns.
+"$REPO_DIR/deploy/install-resource-control.sh"
+
+# A privileged rollout refreshes all runtime generations. Ordinary releases use
+# self-deploy's generated component impact and avoid this broad compatibility
+# path entirely.
 RESTART_EXECUTOR=1
 RESTART_KERNEL=1
 RESTART_GATEWAY=1
+RESTART_INGRESS=0
+
+# The ingress deliberately keeps its original immutable cwd through ordinary
+# runtime rollouts. A privileged rollout must still replace it when its own
+# source closure changed. Compare against the release the live process actually
+# loaded, not PREVIOUS_HEAD: a root deploy interrupted after pointer cut-over
+# can be resumed with current already naming the target.
+INGRESS_GENERATION="$(ingress_generation || true)"
+if [ -z "$INGRESS_GENERATION" ] \
+  || ! run_as_service_user git -C "$SOURCE_DIR" cat-file -e "${INGRESS_GENERATION}^{commit}" 2>/dev/null \
+  || ! run_as_service_user git -C "$SOURCE_DIR" diff --quiet \
+    "$INGRESS_GENERATION" "$TARGET_COMMIT" -- \
+    packages/core/opensession-server/src/server/gateway-ingress.ts \
+    packages/core/opensession-server/src/server/gateway-routing.ts \
+    packages/core/opensession-server/src/server/gateway-tcp-proxy.ts \
+    packages/core/opensession-server/src/server/stable-frontend.ts; then
+  RESTART_INGRESS=1
+fi
 
 # Render every service against the stable current pointer, never the WIP tree
 # or a versioned release path. The pointer changes atomically at cut-over.
@@ -140,6 +241,34 @@ if ! cmp -s "$GATEWAY_UNIT_RENDERED" /etc/systemd/system/opensession.service; th
   GATEWAY_UNIT_NEEDS_SYNC=1
   RESTART_GATEWAY=1
 fi
+
+INGRESS_UNIT_RENDERED="$(mktemp)"
+awk -v workdir="$CURRENT_LINK" -v user="$SERVICE_USER" -v home="$SERVICE_HOME_DIR" -v bun="$SERVICE_BUN" '
+  /^WorkingDirectory=/ { print "WorkingDirectory=" workdir; next }
+  /^User=/ { print "User=" user; next }
+  /^Environment="HOME=/ { print "Environment=\"HOME=" home "\""; next }
+  /^ExecStart=/ { print "ExecStart=" bun " run packages/core/opensession-server/src/server/gateway-ingress.ts"; next }
+  { print }
+' "$REPO_DIR/opensession-ingress.service" > "$INGRESS_UNIT_RENDERED"
+INGRESS_UNIT_PATH="/etc/systemd/system/opensession-ingress.service"
+if ! cmp -s "$INGRESS_UNIT_RENDERED" "$INGRESS_UNIT_PATH"; then
+  install -o root -g root -m 0644 "$INGRESS_UNIT_RENDERED" "$INGRESS_UNIT_PATH"
+  RESTART_INGRESS=1
+fi
+rm -f "$INGRESS_UNIT_RENDERED"
+
+# Install the socket unit before cut-over. On the bootstrap release it can only
+# be started after the legacy supervisor releases port 3850; afterwards PID 1
+# retains this listener across every service restart.
+SOCKET_UNIT_SOURCE="$REPO_DIR/opensession.socket"
+SOCKET_UNIT_PATH="/etc/systemd/system/opensession.socket"
+if ! cmp -s "$SOCKET_UNIT_SOURCE" "$SOCKET_UNIT_PATH"; then
+  install -o root -g root -m 0644 "$SOCKET_UNIT_SOURCE" "$SOCKET_UNIT_PATH"
+  RESTART_INGRESS=1
+fi
+systemctl daemon-reload
+SOCKET_ACTIVE=0
+if systemctl is-active --quiet opensession.socket; then SOCKET_ACTIVE=1; fi
 
 EXECUTOR_TOKEN_PATH="/etc/opensession/executor-token"
 "$REPO_DIR/deploy/install-executor-credential.sh" "$EXECUTOR_TOKEN_PATH"
@@ -322,6 +451,28 @@ rollback_release() {
   systemctl stop opensession.service || true
   systemctl stop opensession-session-kernel.service || true
   run_release switch "$PREVIOUS_HEAD"
+  if [ ! -f "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-ingress.ts" ]; then
+    echo "[deploy] previous release predates dedicated ingress; restoring supervisor socket ownership"
+    systemctl disable --now opensession-ingress.service || true
+    systemctl stop opensession.socket || true
+    awk -v workdir="$CURRENT_LINK" '
+      /^WorkingDirectory=/ { print "WorkingDirectory=" workdir; next }
+      { print }
+    ' "$CURRENT_LINK/opensession.service" > /etc/systemd/system/opensession.service
+    install -o root -g root -m 0644 \
+      "$CURRENT_LINK/opensession.socket" /etc/systemd/system/opensession.socket
+    systemctl daemon-reload
+    systemctl enable --now opensession.socket
+  elif ! grep -q "inheritedGatewaySocketFd" \
+    "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" 2>/dev/null; then
+    echo "[deploy] previous supervisor predates socket activation; restoring its direct-bind unit"
+    systemctl disable --now opensession.socket || true
+    awk -v workdir="$CURRENT_LINK" '
+      /^WorkingDirectory=/ { print "WorkingDirectory=" workdir; next }
+      { print }
+    ' "$CURRENT_LINK/opensession.service" > /etc/systemd/system/opensession.service
+    systemctl daemon-reload
+  fi
   systemctl restart opensession-executor.service
   systemctl restart opensession-session-kernel.service
   systemctl restart opensession.service
@@ -368,9 +519,32 @@ if [ "$TARGET_SCHEMA" -gt "$SCHEMA_FLOOR" ]; then
   mv "$DEPLOY_STATE/minimum-kernel-schema.tmp" "$DEPLOY_STATE/minimum-kernel-schema"
 fi
 
+GATEWAY_COORDINATED=0
 if [ "$RESTART_KERNEL" = "1" ]; then
-  echo "[deploy] stopping gateway before replacing its actor protocol peer"
-  systemctl stop opensession.service
+  echo "[deploy] preparing gateway before replacing its actor protocol peer"
+  if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "0" ] \
+    && [ "$SOCKET_ACTIVE" = "1" ] \
+    && [ -S /run/opensession-gateway/control.sock ] \
+    && "$SERVICE_BUN" \
+      "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+      prepare-coordinated "$RELEASE_DIR" "$TARGET_COMMIT"; then
+    GATEWAY_COORDINATED=1
+  else
+    if ! drain_gateway_for_supervisor_restart; then
+      echo "[deploy] installed supervisor lacks fast service drain; using compatibility stop"
+    fi
+    # An HTTP canary against the systemd socket would immediately activate a
+    # replacement gateway while protocol peers are intentionally offline.
+    # Pause it for this rare compatibility path; PID 1 still retains the
+    # listener and real clients queue until the selected release starts.
+    stop_canary
+    systemctl stop opensession.service
+  fi
+  if [ "$SOCKET_ACTIVE" = "0" ]; then
+    echo "[deploy] activating the persistent gateway socket"
+    systemctl enable --now opensession.socket
+    SOCKET_ACTIVE=1
+  fi
   systemctl stop opensession-session-kernel.service
   echo "[deploy] migrating legacy session-kernel rows offline"
   run_as_service_user env \
@@ -413,13 +587,13 @@ elif ! systemctl is-active --quiet opensession-session-kernel.service; then
 fi
 for _ in $(seq 1 30); do
   if systemctl is-active --quiet opensession-session-kernel.service \
-    && curl -fs --max-time 2 http://127.0.0.1:3849/ready >/dev/null 2>&1; then
+    && session_kernel_ready; then
     break
   fi
   sleep 1
 done
 if ! systemctl is-active --quiet opensession-session-kernel.service \
-  || ! curl -fs --max-time 2 http://127.0.0.1:3849/ready >/dev/null 2>&1; then
+  || ! session_kernel_ready; then
   echo "[deploy] ERROR: session kernel actor service did not become healthy" >&2
   rollback_release || true
   exit 1
@@ -431,6 +605,28 @@ if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "1" ]; then
   systemctl daemon-reload
 fi
 rm -f "$GATEWAY_UNIT_RENDERED"
+
+# One-time listener migration: older releases handed the systemd descriptor to
+# the gateway supervisor itself. Transfer it to the tiny ingress only after the
+# old gateway is parked and target peers are ready. Future gateway/supervisor
+# replacements leave both this process and port 3850 untouched.
+if [ "$RESTART_INGRESS" = "1" ]; then
+  echo "[deploy] promoting dedicated stable ingress"
+  if [ "$GATEWAY_COORDINATED" = "1" ]; then
+    "$SERVICE_BUN" \
+      "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+      activate-coordinated
+    "$SERVICE_BUN" \
+      "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+      commit-coordinated
+    GATEWAY_COORDINATED=0
+  fi
+  systemctl stop opensession.service || true
+  stop_canary
+  systemctl restart opensession.socket
+  systemctl enable --now opensession-ingress.service
+  start_canary
+fi
 
 # Host safety fuses: the coordinator gets its own ceiling, while detached
 # engine/preview scopes share a bounded user slice. The per-scope limits are
@@ -475,12 +671,47 @@ if systemctl cat caddy.service >/dev/null 2>&1 \
   fi
 fi
 
-systemctl restart opensession.service
+# The target supervisor is normally socket-activated while peers restart. Keep
+# it when both unit and supervisor code already match; replacing it again only
+# resets accepted proxy connections. Changed supervisor code or units get one
+# fast drain before systemd transfers the inherited listener.
+if [ "$GATEWAY_COORDINATED" = "1" ]; then
+  "$SERVICE_BUN" \
+    "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+    activate-coordinated
+fi
+if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "1" ] \
+  || [ "$(supervisor_generation || true)" != "$TARGET_COMMIT" ]; then
+  if [ "$GATEWAY_COORDINATED" = "1" ]; then
+    "$SERVICE_BUN" \
+      "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+      commit-coordinated
+    GATEWAY_COORDINATED=0
+  fi
+  if systemctl is-active --quiet opensession.service; then
+    drain_gateway_for_supervisor_restart
+  fi
+  systemctl restart opensession.service
+  start_canary
+  # The replacement reconciles the durable transaction journal against the
+  # selected generation; the old in-memory transaction no longer exists.
+  GATEWAY_COORDINATED=0
+elif ! systemctl is-active --quiet opensession.service; then
+  systemctl start opensession.service
+  start_canary
+else
+  echo "[deploy] target supervisor already active; retaining accepted connections"
+fi
 
 # Post-restart health gate — fail the deploy if it doesn't come back.
 for _ in $(seq 1 30); do
   sleep 2
   if curl -fs --max-time 4 "$HEALTH_URL" >/dev/null 2>&1; then
+    if [ "$GATEWAY_COORDINATED" = "1" ]; then
+      "$SERVICE_BUN" \
+        "$CURRENT_LINK/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
+        commit-coordinated
+    fi
     echo "[deploy] healthy after restart"
     exit 0
   fi

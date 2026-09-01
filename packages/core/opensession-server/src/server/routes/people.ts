@@ -6,17 +6,18 @@
 import type { RouteContext } from "./context";
 
 export async function handlePeopleRoutes(
-	ctx: RouteContext,
+  ctx: RouteContext,
 ): Promise<Response | undefined> {
-	const { req, path } = ctx;
+  const { req, path } = ctx;
 
-	if (path === "/api/people" && req.method === "GET") {
-		const { reviewTeamDirectory, teamDirectory } = await import("../../server/people");
-		return Response.json({
-			people: teamDirectory(),
-			reviewTeams: reviewTeamDirectory(),
-		});
-	}
+  if (path === "/api/people" && req.method === "GET") {
+    const { reviewTeamDirectory, teamDirectory } =
+      await import("../../server/people");
+    return Response.json({
+      people: teamDirectory(),
+      reviewTeams: reviewTeamDirectory(),
+    });
+  }
 
-	return undefined;
+  return undefined;
 }

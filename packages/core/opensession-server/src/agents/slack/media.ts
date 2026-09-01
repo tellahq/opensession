@@ -15,7 +15,10 @@
 
 import { statSync } from "fs";
 import { basename } from "path";
-import { extractMediaMarkers, stripMediaMarkers } from "../../server/transcript-media";
+import {
+  extractMediaMarkers,
+  stripMediaMarkers,
+} from "../../server/transcript-media";
 import { MAX_SLACK_UPLOAD_BYTES } from "./slack-api";
 
 export interface SlackMedia {
@@ -62,7 +65,10 @@ export function splitSlackMedia(text: string): SlackMediaSplit {
     if (seen.has(marker.path)) continue;
     seen.add(marker.path);
     if (media.length >= MAX_FILES) {
-      skipped.push({ path: marker.path, reason: `over ${MAX_FILES} files in one reply` });
+      skipped.push({
+        path: marker.path,
+        reason: `over ${MAX_FILES} files in one reply`,
+      });
       continue;
     }
     let size: number;

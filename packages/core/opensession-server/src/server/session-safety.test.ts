@@ -28,8 +28,12 @@ describe("public session safety state", () => {
   });
 
   test("turns actor command kinds into readable operations", () => {
-    expect(safetyOperationLabel("delivery:ack_dispatch")).toBe("delivering a message");
-    expect(safetyOperationLabel("run_state:reattaching")).toBe("recovering the active run");
+    expect(safetyOperationLabel("delivery:ack_dispatch")).toBe(
+      "delivering a message",
+    );
+    expect(safetyOperationLabel("run_state:reattaching")).toBe(
+      "recovering the active run",
+    );
   });
 
   test("automatically releases only proven actor-restart command fences", async () => {
@@ -71,13 +75,15 @@ describe("public session safety state", () => {
     expect(automaticallyRecoverableSessionSafety(unreconciled)).toBe(false);
 
     const attempted: string[] = [];
-    expect(await reconcileAutomaticallyRecoverableSessionSafety(
-      [contradiction, recoverable, delivery, committedOutbox, unreconciled],
-      async (sessionId) => {
-        attempted.push(sessionId);
-        return true;
-      },
-    )).toEqual([
+    expect(
+      await reconcileAutomaticallyRecoverableSessionSafety(
+        [contradiction, recoverable, delivery, committedOutbox, unreconciled],
+        async (sessionId) => {
+          attempted.push(sessionId);
+          return true;
+        },
+      ),
+    ).toEqual([
       "recoverable-session",
       "delivery-session",
       "committed-outbox-session",

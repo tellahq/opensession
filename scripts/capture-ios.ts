@@ -137,7 +137,9 @@ const DEVICE_NAME = `os1cap-${TAG}`;
 const REMOTE_SHOT = `${TREE}/shot.png`;
 
 const SERVER =
-  flag("server") || process.env.OPENSESSION_PUBLIC_URL || "https://os.tella.dev";
+  flag("server") ||
+  process.env.OPENSESSION_PUBLIC_URL ||
+  "https://os.tella.dev";
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 const step = (message: string) => console.error(`[capture-ios] ${message}`);
@@ -234,7 +236,9 @@ const facts = Object.fromEntries(
   preflight.out.split("\n").map((line) => line.split("=") as [string, string]),
 );
 if (facts.xcodegen !== "yes")
-  throw new Error(`${NODE} has no xcodegen on PATH — the Xcode project is generated`);
+  throw new Error(
+    `${NODE} has no xcodegen on PATH — the Xcode project is generated`,
+  );
 const freeGB = Number(facts.freeGB);
 step(
   `Xcode ${(facts.xcode || "").replace("Xcode ", "")} · ${freeGB}GB free · ` +
@@ -313,7 +317,9 @@ if (SESSION) {
     `${SERVER}/api/sessions/${encodeURIComponent(SESSION)}`,
     { headers: { Authorization: `Bearer ${token}` } },
   ).catch(() => null);
-  const session = probe?.ok ? ((await probe.json()) as { archived?: boolean }) : null;
+  const session = probe?.ok
+    ? ((await probe.json()) as { archived?: boolean })
+    : null;
   if (!session) step(`warning: session ${SESSION} not found on ${SERVER}`);
   else if (session.archived)
     step(
@@ -331,7 +337,9 @@ if (has("rebuild")) {
 }
 
 if (!existsSync(`${SOURCE}/project.yml`))
-  throw new Error(`--source must be an os1-ios directory (no project.yml in ${SOURCE})`);
+  throw new Error(
+    `--source must be an os1-ios directory (no project.yml in ${SOURCE})`,
+  );
 
 step(`syncing ${SOURCE} to ${NODE}:${TREE}`);
 // Spotlight indexing abandoned build trees has pinned this box at >100% CPU
@@ -361,7 +369,10 @@ if ((await rsync.exited) !== 0) throw new Error("rsync to the Mac node failed");
 // as "cannot find type X in scope" in files you never touched, or as a
 // false-green build that silently omitted your new file.
 step("xcodegen generate");
-await nodeOrThrow(`cd ${TREE}/os1-ios && xcodegen generate --quiet`, "xcodegen");
+await nodeOrThrow(
+  `cd ${TREE}/os1-ios && xcodegen generate --quiet`,
+  "xcodegen",
+);
 
 /** Launch env, shell-quoted. Native launches read these directly; simulator
  *  launches take the same names under simctl's SIMCTL_CHILD_ prefix. */
@@ -400,7 +411,9 @@ try {
       "simctl create",
     );
     if (!/^[0-9A-Fa-f-]{36}$/.test(udid))
-      throw new Error(`could not resolve a simulator udid (got: ${udid.slice(0, 120)})`);
+      throw new Error(
+        `could not resolve a simulator udid (got: ${udid.slice(0, 120)})`,
+      );
 
     cleanup = async () => {
       // A booted device is the single biggest load source on this box — six of
@@ -408,12 +421,17 @@ try {
       // Always shut ours down; it stays registered so the next run reuses it.
       if (!has("keep-device")) {
         step("shutting the simulator down");
-        await node(`xcrun simctl shutdown ${udid} 2>/dev/null || true`, { quiet: true });
-      }
-      if (has("clean"))
-        await node(`rm -rf ${TREE}; xcrun simctl delete ${udid} 2>/dev/null || true`, {
+        await node(`xcrun simctl shutdown ${udid} 2>/dev/null || true`, {
           quiet: true,
         });
+      }
+      if (has("clean"))
+        await node(
+          `rm -rf ${TREE}; xcrun simctl delete ${udid} 2>/dev/null || true`,
+          {
+            quiet: true,
+          },
+        );
     };
 
     await build("OS1", `-destination "platform=iOS Simulator,id=${udid}"`);
@@ -440,7 +458,10 @@ try {
   } else {
     // CODE_SIGNING_ALLOWED=NO: a Mac-target errSecInternalComponent CodeSign
     // failure over SSH is the box's locked keychain, not a code error.
-    await build("OS1Mac", `-destination "platform=macOS" CODE_SIGNING_ALLOWED=NO`);
+    await build(
+      "OS1Mac",
+      `-destination "platform=macOS" CODE_SIGNING_ALLOWED=NO`,
+    );
 
     cleanup = async () => {
       await node(`pkill -f '${TREE}/dd/Build/Products' 2>/dev/null || true`, {

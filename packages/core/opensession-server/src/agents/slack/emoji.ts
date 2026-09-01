@@ -14,22 +14,22 @@ import { slackApiGet } from "./slack-api";
 let standardMap: Map<string, string> | null = null;
 
 function unifiedToChar(unified: string): string {
-	return String.fromCodePoint(
-		...unified.split("-").map((h) => parseInt(h, 16)),
-	);
+  return String.fromCodePoint(
+    ...unified.split("-").map((h) => parseInt(h, 16)),
+  );
 }
 
 /** Slack short name → unicode character ("thumbsup" → 👍). */
 export function standardEmoji(name: string): string | undefined {
-	if (!standardMap) {
-		standardMap = new Map();
-		for (const e of emojiData as any[]) {
-			for (const n of e.short_names || []) {
-				standardMap.set(n, unifiedToChar(e.unified));
-			}
-		}
-	}
-	return standardMap.get(name);
+  if (!standardMap) {
+    standardMap = new Map();
+    for (const e of emojiData as any[]) {
+      for (const n of e.short_names || []) {
+        standardMap.set(n, unifiedToChar(e.unified));
+      }
+    }
+  }
+  return standardMap.get(name);
 }
 
 const CUSTOM_TTL_MS = 60 * 60 * 1000;
@@ -41,37 +41,37 @@ let customCache: { at: number; map: Map<string, string> } | null = null;
  * (e.g. a token without emoji:read) — rendering degrades to the :code:.
  */
 export async function customEmojiMap(
-	token?: string,
+  token?: string,
 ): Promise<Map<string, string>> {
-	if (customCache && Date.now() - customCache.at < CUSTOM_TTL_MS) {
-		return customCache.map;
-	}
-	const map = new Map<string, string>();
-	try {
-		const data = await slackApiGet("emoji.list", {}, token);
-		if (data?.ok && data.emoji) {
-			const raw: Record<string, string> = data.emoji;
-			const resolve = (name: string, depth = 0): string | undefined => {
-				const v = raw[name];
-				if (!v) return undefined;
-				if (v.startsWith("alias:")) {
-					if (depth > 3) return undefined;
-					const target = v.slice("alias:".length);
-					// Alias to a standard emoji has no image; the caller falls
-					// back to standardEmoji for those.
-					return resolve(target, depth + 1);
-				}
-				return v;
-			};
-			for (const name of Object.keys(raw)) {
-				const url = resolve(name);
-				if (url) map.set(name, url);
-			}
-		}
-	} catch {}
-	// Cache failures too — a scope-less token should not retry every message.
-	customCache = { at: Date.now(), map };
-	return map;
+  if (customCache && Date.now() - customCache.at < CUSTOM_TTL_MS) {
+    return customCache.map;
+  }
+  const map = new Map<string, string>();
+  try {
+    const data = await slackApiGet("emoji.list", {}, token);
+    if (data?.ok && data.emoji) {
+      const raw: Record<string, string> = data.emoji;
+      const resolve = (name: string, depth = 0): string | undefined => {
+        const v = raw[name];
+        if (!v) return undefined;
+        if (v.startsWith("alias:")) {
+          if (depth > 3) return undefined;
+          const target = v.slice("alias:".length);
+          // Alias to a standard emoji has no image; the caller falls
+          // back to standardEmoji for those.
+          return resolve(target, depth + 1);
+        }
+        return v;
+      };
+      for (const name of Object.keys(raw)) {
+        const url = resolve(name);
+        if (url) map.set(name, url);
+      }
+    }
+  } catch {}
+  // Cache failures too — a scope-less token should not retry every message.
+  customCache = { at: Date.now(), map };
+  return map;
 }
 
 const EMOJI_CODE_RE = /:([a-z0-9_+\-']+):/g;
@@ -83,32 +83,30 @@ const EMOJI_CODE_RE = /:([a-z0-9_+\-']+):/g;
  * "alias:tada") resolve through standardEmoji by name when no URL exists.
  */
 export function emojifySlackText(
-	text: string,
-	custom: Map<string, string>,
+  text: string,
+  custom: Map<string, string>,
 ): string {
-	return text.replace(EMOJI_CODE_RE, (whole, name: string) => {
-		const std = standardEmoji(name);
-		if (std) return std;
-		const url = custom.get(name);
-		if (url) return `![:${name}:](${url})`;
-		return whole;
-	});
+  return text.replace(EMOJI_CODE_RE, (whole, name: string) => {
+    const std = standardEmoji(name);
+    if (std) return std;
+    const url = custom.get(name);
+    if (url) return `![:${name}:](${url})`;
+    return whole;
+  });
 }
 
 /** A reaction's display form: unicode char, image URL, or neither (raw name). */
 export function reactionDisplay(
-	name: string,
-	custom: Map<string, string>,
+  name: string,
+  custom: Map<string, string>,
 ): { emoji?: string; url?: string } {
-	// Reaction names can carry a skin tone ("thumbsup::skin-tone-2").
-	const [base, ...mods] = name.split("::");
-	const baseChar = standardEmoji(base);
-	if (baseChar) {
-		const modChars = mods
-			.map((m) => standardEmoji(m) || "")
-			.join("");
-		return { emoji: baseChar + modChars };
-	}
-	const url = custom.get(base);
-	return url ? { url } : {};
+  // Reaction names can carry a skin tone ("thumbsup::skin-tone-2").
+  const [base, ...mods] = name.split("::");
+  const baseChar = standardEmoji(base);
+  if (baseChar) {
+    const modChars = mods.map((m) => standardEmoji(m) || "").join("");
+    return { emoji: baseChar + modChars };
+  }
+  const url = custom.get(base);
+  return url ? { url } : {};
 }

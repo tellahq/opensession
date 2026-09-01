@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import React from "react";
 import { BRANDS, brandKey, brandLogo } from "../brand-logos";
 import { markTileClass, markTileShadow } from "../lib/mark-tile";
@@ -23,7 +24,7 @@ export function IconTile({ name, size = 34 }: { name: string; size?: number }) {
       // in the app carries and nothing more. It paints through
       // `background-image`, so the fill below has to be `backgroundColor`: the
       // `background` shorthand would blank it.
-      className={`${markTileClass(size)} plate-sheen`}
+      className={utilityClassName(`${markTileClass(size)} plate-sheen`)}
       style={{
         width: size,
         height: size,

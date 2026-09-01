@@ -47,39 +47,53 @@ afterEach(() => {
     if (saved[k] === undefined) delete process.env[k];
     else process.env[k] = saved[k];
   }
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0))
+    rmSync(dir, { recursive: true, force: true });
 });
 
 describe("config loader", () => {
   test("supports one canonical public ingress origin", () => {
-    withConfig(JSON.stringify({
-      server: { publicBaseUrl: "https://ui.example.test" },
-      ingress: { publicBaseUrl: "https://ingress.example.test", exposure: "custom" },
-    }));
+    withConfig(
+      JSON.stringify({
+        server: { publicBaseUrl: "https://ui.example.test" },
+        ingress: {
+          publicBaseUrl: "https://ingress.example.test",
+          exposure: "custom",
+        },
+      }),
+    );
     delete process.env.OPENSESSION_UI_BASE;
     delete process.env.OPENSESSION_INGRESS_BASE;
 
     expect(configuredServer().publicBaseUrl).toBe("https://ui.example.test");
-    expect(configuredServer().webhookBaseUrl).toBe("https://ingress.example.test");
+    expect(configuredServer().webhookBaseUrl).toBe(
+      "https://ingress.example.test",
+    );
 
     process.env.OPENSESSION_INGRESS_BASE = "https://env-ingress.example.test";
-    expect(configuredServer().webhookBaseUrl).toBe("https://env-ingress.example.test");
+    expect(configuredServer().webhookBaseUrl).toBe(
+      "https://env-ingress.example.test",
+    );
   });
 
   test("keeps an unconfigured ingress distinct while setup remains portable", () => {
-    withConfig(JSON.stringify({ server: { publicBaseUrl: "https://ui.example.test" } }));
+    withConfig(
+      JSON.stringify({ server: { publicBaseUrl: "https://ui.example.test" } }),
+    );
     delete process.env.OPENSESSION_UI_BASE;
     delete process.env.OPENSESSION_INGRESS_BASE;
 
     expect(configuredServer().webhookBaseUrl).toBe("https://ui.example.test");
   });
 
-	test("defaults preview portals to the public UI hostname", () => {
-		withConfig(JSON.stringify({ server: { publicBaseUrl: "https://os.example.test" } }));
-		delete process.env.OPENSESSION_UI_BASE;
-		delete process.env.PREVIEW_HOST;
-		expect(configuredServer().previewHost).toBe("os.example.test");
-	});
+  test("defaults preview portals to the public UI hostname", () => {
+    withConfig(
+      JSON.stringify({ server: { publicBaseUrl: "https://os.example.test" } }),
+    );
+    delete process.env.OPENSESSION_UI_BASE;
+    delete process.env.PREVIEW_HOST;
+    expect(configuredServer().previewHost).toBe("os.example.test");
+  });
 
   test("no file → portable self-repo defaults", () => {
     withConfig(null); // path exists as a dir entry that was never written
@@ -102,19 +116,20 @@ describe("config loader", () => {
 
     const paths = configuredPaths();
     expect(paths.claudeBin).toBe(Bun.which("claude") || "claude");
-    expect(paths.worktreesDir).toBe(`${process.env.HOME}/.opensession/worktrees`);
+    expect(paths.worktreesDir).toBe(
+      `${process.env.HOME}/.opensession/worktrees`,
+    );
 
     const identity = configuredIdentity();
-		expect(identity).toEqual({
-			team: [],
-			reviewTeams: [],
-			slackNames: {},
-			defaultTimezone: "UTC",
-		});
+    expect(identity).toEqual({
+      team: [],
+      reviewTeams: [],
+      slackNames: {},
+      defaultTimezone: "UTC",
+    });
 
     expect(configuredServer().caddyAdmin).toBe("http://localhost:2019");
   });
-
 
   test("repos section is authoritative and applies id-derived defaults", () => {
     withConfig(
@@ -170,7 +185,9 @@ describe("config loader", () => {
   });
 
   test("repo entry without a checkout path is ignored", () => {
-    withConfig(JSON.stringify({ repos: { phantom: { ghRepo: "acme/phantom" } } }));
+    withConfig(
+      JSON.stringify({ repos: { phantom: { ghRepo: "acme/phantom" } } }),
+    );
     expect(configuredRepos()["phantom"]).toBeUndefined();
   });
 
@@ -190,7 +207,10 @@ describe("config loader", () => {
   test("env vars beat config.json per key", () => {
     withConfig(
       JSON.stringify({
-        paths: { worktreesDir: "/from-config/worktrees", claudeBin: "/from-config/claude" },
+        paths: {
+          worktreesDir: "/from-config/worktrees",
+          claudeBin: "/from-config/claude",
+        },
         repos: { app: { repo: "/from-config/app" } },
       }),
     );
@@ -237,7 +257,12 @@ describe("config loader", () => {
     withConfig(JSON.stringify({ branding: { productName: "OpenSession" } }));
     expect(productMark()).toBe("OpenSession");
     // Empty/whitespace strings are treated as unset, not honored.
-    withConfig(JSON.stringify({ persona: { name: "  " }, branding: { productName: "" } }));
+    withConfig(
+      JSON.stringify({
+        persona: { name: "  " },
+        branding: { productName: "" },
+      }),
+    );
     expect(personaName()).toBe("Assistant");
     expect(productName()).toBe("Open Session");
   });
@@ -254,40 +279,52 @@ describe("config loader", () => {
     withConfig(
       JSON.stringify({
         identity: {
-			team: [
-            { name: "Ada Lovelace", email: "ada@acme.dev", github: "ada", slackId: "U111", aliases: ["ada"] },
+          team: [
+            {
+              name: "Ada Lovelace",
+              email: "ada@acme.dev",
+              github: "ada",
+              slackId: "U111",
+              aliases: ["ada"],
+            },
             { notAName: true }, // invalid — dropped
-			],
-			reviewTeams: [
-				{
-					name: "Platform reviewers",
-					github: "acme/platform-reviewers",
-					members: ["Ada", "Grace"],
-				},
-				{ name: "Invalid", github: "not-a-team", members: ["Ada"] },
-			],
-			slackNames: { U222: "Bot", U333: 42 }, // non-string values dropped
+          ],
+          reviewTeams: [
+            {
+              name: "Platform reviewers",
+              github: "acme/platform-reviewers",
+              members: ["Ada", "Grace"],
+            },
+            { name: "Invalid", github: "not-a-team", members: ["Ada"] },
+          ],
+          slackNames: { U222: "Bot", U333: 42 }, // non-string values dropped
         },
       }),
     );
     const identity = configuredIdentity();
-		expect(identity.team).toEqual([
-      { name: "Ada Lovelace", email: "ada@acme.dev", github: "ada", slackId: "U111", aliases: ["ada"] },
-	]);
-	expect(identity.reviewTeams).toEqual([
-		{
-			name: "Platform reviewers",
-			github: "acme/platform-reviewers",
-			members: ["Ada", "Grace"],
-		},
-	]);
-	expect(reviewTeamDirectory()).toEqual([
-		{
-			name: "Platform reviewers",
-			github: "acme/platform-reviewers",
-			members: ["Ada"],
-		},
-	]);
+    expect(identity.team).toEqual([
+      {
+        name: "Ada Lovelace",
+        email: "ada@acme.dev",
+        github: "ada",
+        slackId: "U111",
+        aliases: ["ada"],
+      },
+    ]);
+    expect(identity.reviewTeams).toEqual([
+      {
+        name: "Platform reviewers",
+        github: "acme/platform-reviewers",
+        members: ["Ada", "Grace"],
+      },
+    ]);
+    expect(reviewTeamDirectory()).toEqual([
+      {
+        name: "Platform reviewers",
+        github: "acme/platform-reviewers",
+        members: ["Ada"],
+      },
+    ]);
     expect(identity.slackNames).toEqual({ U222: "Bot" });
   });
 
@@ -312,7 +349,9 @@ describe("config loader", () => {
     updateIdentityConfig({ personaName: "", productName: "" });
     expect(personaName()).toBe("Assistant");
     expect(productName()).toBe("Open Session");
-    expect(JSON.parse(readFileSync(configPath(), "utf-8")).branding).toBeUndefined();
+    expect(
+      JSON.parse(readFileSync(configPath(), "utf-8")).branding,
+    ).toBeUndefined();
   });
 
   test("updateIdentityConfig: creates a missing file, refuses a corrupt one", () => {

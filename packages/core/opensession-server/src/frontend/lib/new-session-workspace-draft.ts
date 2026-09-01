@@ -6,22 +6,22 @@ import { clearDraft, workspaceDraftKey } from "./drafts";
 let parkedWorkspaceId: string | null = null;
 
 export function getParkedNewSessionWorkspaceId(): string | null {
-	return parkedWorkspaceId;
+  return parkedWorkspaceId;
 }
 
 export function rememberParkedNewSessionWorkspace(id: string): void {
-	parkedWorkspaceId = id;
+  parkedWorkspaceId = id;
 }
 
 export function forgetParkedNewSessionWorkspace(id: string): void {
-	// Async draft parking can overlap a newer park. Only release the workspace
-	// this operation actually consumed or found missing.
-	if (parkedWorkspaceId === id) parkedWorkspaceId = null;
+  // Async draft parking can overlap a newer park. Only release the workspace
+  // this operation actually consumed or found missing.
+  if (parkedWorkspaceId === id) parkedWorkspaceId = null;
 }
 
 export function consumeNewSessionWorkspaceDraft(id: string): void {
-	const draftKey = workspaceDraftKey(id);
-	dropStagingAttachments(draftKey);
-	clearDraft(draftKey);
-	forgetParkedNewSessionWorkspace(id);
+  const draftKey = workspaceDraftKey(id);
+  dropStagingAttachments(draftKey);
+  clearDraft(draftKey);
+  forgetParkedNewSessionWorkspace(id);
 }

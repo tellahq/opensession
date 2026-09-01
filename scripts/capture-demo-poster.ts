@@ -60,8 +60,20 @@ const PHONE_HEIGHT = Math.round((PHONE_WIDTH * 852) / 393);
 const PHONE_STATUS_H = Math.round((54 * PHONE_WIDTH) / 393);
 
 const SHOTS = [
-  { name: "demo-poster", width: APP_WIDTH, height: APP_HEIGHT, mobile: false, dpr: 2 },
-  { name: "demo-phone", width: PHONE_WIDTH, height: PHONE_HEIGHT, mobile: true, dpr: 2 },
+  {
+    name: "demo-poster",
+    width: APP_WIDTH,
+    height: APP_HEIGHT,
+    mobile: false,
+    dpr: 2,
+  },
+  {
+    name: "demo-phone",
+    width: PHONE_WIDTH,
+    height: PHONE_HEIGHT,
+    mobile: true,
+    dpr: 2,
+  },
 ] as const;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -70,13 +82,18 @@ async function connect(port: number, targetId: string) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/devtools/page/${targetId}`);
   await new Promise((resolve) => (ws.onopen = () => resolve(null)));
   let id = 0;
-  const pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>();
+  const pending = new Map<
+    number,
+    { resolve: (v: any) => void; reject: (e: any) => void }
+  >();
   ws.onmessage = (event) => {
     const msg = JSON.parse(String(event.data));
     const p = msg.id && pending.get(msg.id);
     if (!p) return;
     pending.delete(msg.id);
-    msg.error ? p.reject(new Error(JSON.stringify(msg.error))) : p.resolve(msg.result);
+    msg.error
+      ? p.reject(new Error(JSON.stringify(msg.error)))
+      : p.resolve(msg.result);
   };
   const send = (method: string, params: unknown = {}) =>
     new Promise<any>((resolve, reject) => {
@@ -103,7 +120,11 @@ const nextServer = Bun.spawn(
 );
 const base = `http://127.0.0.1:${port}`;
 const deadline = Date.now() + 20_000;
-while (!(await fetch(`${base}/product-demo.html`).then((response) => response.ok).catch(() => false))) {
+while (
+  !(await fetch(`${base}/product-demo.html`)
+    .then((response) => response.ok)
+    .catch(() => false))
+) {
   if (Date.now() > deadline) throw new Error("Next.js website did not start");
   await sleep(100);
 }
@@ -112,72 +133,79 @@ const scratch = mkdtempSync(join(tmpdir(), "demo-poster-"));
 const lease = await acquireCdpBrowser();
 try {
   for (const shot of SHOTS)
-  for (const theme of ["light", "dark"] as const) {
-    const created = await fetch(
-      `http://127.0.0.1:${lease.port}/json/new?about:blank`,
-      { method: "PUT" },
-    ).then((r) => r.json());
-    const t = await connect(lease.port, created.id);
-    try {
-      await t.send("Page.enable");
-      await t.send("Emulation.setEmulatedMedia", {
-        features: [{ name: "prefers-color-scheme", value: theme }],
-      });
-      if (shot.mobile)
-        await t.send("Emulation.setSafeAreaInsetsOverride", {
-          insets: { top: PHONE_STATUS_H },
+    for (const theme of ["light", "dark"] as const) {
+      const created = await fetch(
+        `http://127.0.0.1:${lease.port}/json/new?about:blank`,
+        { method: "PUT" },
+      ).then((r) => r.json());
+      const t = await connect(lease.port, created.id);
+      try {
+        await t.send("Page.enable");
+        await t.send("Emulation.setEmulatedMedia", {
+          features: [{ name: "prefers-color-scheme", value: theme }],
         });
-      await t.send("Emulation.setDeviceMetricsOverride", {
-        width: shot.width,
-        height: shot.height,
-        deviceScaleFactor: shot.dpr,
-        mobile: shot.mobile,
-      });
-      await t.send("Page.navigate", { url: `${base}/product-demo.html` });
+        if (shot.mobile)
+          await t.send("Emulation.setSafeAreaInsetsOverride", {
+            insets: { top: PHONE_STATUS_H },
+          });
+        await t.send("Emulation.setDeviceMetricsOverride", {
+          width: shot.width,
+          height: shot.height,
+          deviceScaleFactor: shot.dpr,
+          mobile: shot.mobile,
+        });
+        await t.send("Page.navigate", { url: `${base}/product-demo.html` });
 
-      // The composer is the last thing the demo paints, so it standing in the
-      // window is the signal that there is a product to photograph.
-      const deadline = Date.now() + 40_000;
-      for (;;) {
-        const { result } = await t.send("Runtime.evaluate", {
-          expression: `!!document.querySelector('.composer-textarea, [class*="composer"] textarea')`,
-          returnByValue: true,
-        });
-        if (result.value) break;
-        if (Date.now() > deadline) throw new Error("the demo never finished painting");
-        await sleep(250);
+        // The composer is the last thing the demo paints, so it standing in the
+        // window is the signal that there is a product to photograph.
+        const deadline = Date.now() + 40_000;
+        for (;;) {
+          const { result } = await t.send("Runtime.evaluate", {
+            expression: `!!document.querySelector('.composer-textarea, [class*="composer"] textarea')`,
+            returnByValue: true,
+          });
+          if (result.value) break;
+          if (Date.now() > deadline)
+            throw new Error("the demo never finished painting");
+          await sleep(250);
+        }
+        // The phone shows the list rather than the session: the window beside it
+        // is already the transcript, and a pair that says the same paragraph
+        // twice reads as one screenshot pasted at two sizes. The whole product
+        // in a pocket is the claim worth making.
+        if (shot.mobile) {
+          await t.send("Runtime.evaluate", {
+            expression: `document.querySelector('[aria-label="Back to sidebar"]')?.click()`,
+          });
+          await sleep(1200);
+        }
+        await sleep(1500);
+        await t.send("Page.bringToFront");
+        const frame = await t.send("Page.captureScreenshot", { format: "png" });
+        const png = join(scratch, `${shot.name}-${theme}.png`);
+        writeFileSync(png, Buffer.from(frame.data, "base64"));
+        const out = join(
+          ROOT,
+          "packages",
+          "clients",
+          "website",
+          `${shot.name}${theme === "dark" ? "-dark" : ""}.webp`,
+        );
+        const convert = Bun.spawnSync([
+          "python3",
+          "-c",
+          `from PIL import Image; Image.open(${JSON.stringify(png)}).convert("RGB").save(${JSON.stringify(out)}, "WEBP", quality=82, method=6)`,
+        ]);
+        if (convert.exitCode !== 0) throw new Error(convert.stderr.toString());
+        const size = Bun.file(out).size / 1024;
+        console.log(
+          `${shot.name} ${theme}: ${out} (${size.toFixed(0)} KB, ${shot.width}x${shot.height} at ${shot.dpr}x)`,
+        );
+      } finally {
+        t.close();
+        await closeCdpTarget(lease.port, created.id);
       }
-      // The phone shows the list rather than the session: the window beside it
-      // is already the transcript, and a pair that says the same paragraph
-      // twice reads as one screenshot pasted at two sizes. The whole product
-      // in a pocket is the claim worth making.
-      if (shot.mobile) {
-        await t.send("Runtime.evaluate", {
-          expression: `document.querySelector('[aria-label="Back to sidebar"]')?.click()`,
-        });
-        await sleep(1200);
-      }
-      await sleep(1500);
-      await t.send("Page.bringToFront");
-      const frame = await t.send("Page.captureScreenshot", { format: "png" });
-      const png = join(scratch, `${shot.name}-${theme}.png`);
-      writeFileSync(png, Buffer.from(frame.data, "base64"));
-      const out = join(ROOT, "packages", "clients", "website", `${shot.name}${theme === "dark" ? "-dark" : ""}.webp`);
-      const convert = Bun.spawnSync([
-        "python3",
-        "-c",
-        `from PIL import Image; Image.open(${JSON.stringify(png)}).convert("RGB").save(${JSON.stringify(out)}, "WEBP", quality=82, method=6)`,
-      ]);
-      if (convert.exitCode !== 0) throw new Error(convert.stderr.toString());
-      const size = Bun.file(out).size / 1024;
-      console.log(
-        `${shot.name} ${theme}: ${out} (${size.toFixed(0)} KB, ${shot.width}x${shot.height} at ${shot.dpr}x)`,
-      );
-    } finally {
-      t.close();
-      await closeCdpTarget(lease.port, created.id);
     }
-  }
 } finally {
   await releaseCdpBrowser(lease);
   nextServer.kill();

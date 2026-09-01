@@ -9,7 +9,8 @@ import {
 const originalKillSwitch = process.env.OPENSESSION_OC_STREAM_TEXT;
 
 afterEach(() => {
-  if (originalKillSwitch === undefined) delete process.env.OPENSESSION_OC_STREAM_TEXT;
+  if (originalKillSwitch === undefined)
+    delete process.env.OPENSESSION_OC_STREAM_TEXT;
   else process.env.OPENSESSION_OC_STREAM_TEXT = originalKillSwitch;
 });
 
@@ -106,27 +107,31 @@ describe("safeFlushLength", () => {
 
   test("cuts at the end of a sentence, not mid-word", () => {
     expect(flushed("The main constraint is decisive. It canno")).toBe(
-      "The main constraint is decisive. "
+      "The main constraint is decisive. ",
     );
   });
 
   test("holds a sentence whose code span has not closed", () => {
-    expect(flushed("The main constraint is decisive: `celld actors coordinate. So")).toBe("");
     expect(
-      flushed("The main constraint is decisive: `celld` actors coordinate. So")
+      flushed("The main constraint is decisive: `celld actors coordinate. So"),
+    ).toBe("");
+    expect(
+      flushed("The main constraint is decisive: `celld` actors coordinate. So"),
     ).toBe("The main constraint is decisive: `celld` actors coordinate. ");
   });
 
   test("holds a half-written link until its destination closes", () => {
     expect(flushed("See [the writeup. Next")).toBe("");
     expect(flushed("See [the writeup](https://x.test). Next")).toBe(
-      "See [the writeup](https://x.test). "
+      "See [the writeup](https://x.test). ",
     );
   });
 
   test("holds a half-written bold run", () => {
     expect(flushed("This is **important. And")).toBe("");
-    expect(flushed("This is **important**. And")).toBe("This is **important**. ");
+    expect(flushed("This is **important**. And")).toBe(
+      "This is **important**. ",
+    );
   });
 
   test("does not cut after an abbreviation", () => {
@@ -143,9 +148,11 @@ describe("safeFlushLength", () => {
     expect(flushed("```ts\nconst a = 1;\n")).toBe("```ts\nconst a = 1;\n");
     // A backtick inside the fence is code, not an open span.
     expect(flushed("```ts\nconst a = `x`;\nconst b = 2;\n")).toBe(
-      "```ts\nconst a = `x`;\nconst b = 2;\n"
+      "```ts\nconst a = `x`;\nconst b = 2;\n",
     );
-    expect(flushed("```ts\nconst a = 1;\n```\nAfter")).toBe("```ts\nconst a = 1;\n```\n");
+    expect(flushed("```ts\nconst a = 1;\n```\nAfter")).toBe(
+      "```ts\nconst a = 1;\n```\n",
+    );
   });
 
   test("a sentence inside a fence is not a boundary", () => {
@@ -154,12 +161,14 @@ describe("safeFlushLength", () => {
 
   test("underscores are not emphasis", () => {
     expect(flushed("Call safe_flush_length here. Then")).toBe(
-      "Call safe_flush_length here. "
+      "Call safe_flush_length here. ",
     );
   });
 
   test("an escaped backtick does not open a span", () => {
-    expect(flushed("A \\` literal backtick. Then")).toBe("A \\` literal backtick. ");
+    expect(flushed("A \\` literal backtick. Then")).toBe(
+      "A \\` literal backtick. ",
+    );
   });
 });
 
@@ -168,7 +177,7 @@ describe("BlockFlusher", () => {
     const flusher = new BlockFlusher();
     expect(flusher.push("p1", "One correction")).toBe("");
     expect(flusher.push("p1", " to what I said. And then")).toBe(
-      "One correction to what I said. "
+      "One correction to what I said. ",
     );
     expect(flusher.push("p1", " some more.")).toBe("");
     expect(flusher.push("p1", " Done. ")).toBe("And then some more. Done. ");
@@ -177,7 +186,12 @@ describe("BlockFlusher", () => {
   test("what it holds plus the part's tail is the whole block", () => {
     const flusher = new BlockFlusher();
     const stream = new TextPartStream();
-    const deltas = ["A first line.", " Then a `span", "` that closes.", " Tail with no end"];
+    const deltas = [
+      "A first line.",
+      " Then a `span",
+      "` that closes.",
+      " Tail with no end",
+    ];
     let sent = "";
     for (const delta of deltas) {
       const piece = stream.advance("p1", flusher.push("p1", delta));
