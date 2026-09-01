@@ -66,7 +66,10 @@ async function sources() {
   const bindings = await Bun.file(
     new URL("../lib/session-viewer-bindings.ts", import.meta.url),
   ).text();
-  return { viewer, app, bindings };
+  const send = await Bun.file(
+    new URL("../lib/session-viewer-send.ts", import.meta.url),
+  ).text();
+  return { viewer, app, bindings, send };
 }
 
 function interfaceBody(sourceText: string, name: string) {
@@ -126,14 +129,14 @@ test("SessionViewer navigation comes from NavigationContext", async () => {
 });
 
 test("duplicate session stays available at the current tip inside a workspace", async () => {
-  const { viewer } = await sources();
+  const { viewer, send } = await sources();
   expect(viewer).toContain("                  {forkAction}");
   expect(viewer).toContain('<span className="grow">Duplicate session</span>');
   expect(viewer).not.toContain("{!workspaceScopedMenu && forkAction}");
   expect(viewer).toContain("                handleFork();");
   expect(viewer).toContain("void navigation.duplicateSession();");
   expect(viewer).not.toContain("const lastAssistantId = entries.findLast(");
-  expect(viewer).toContain("? { messageId: forkFrom.messageId }");
+  expect(send).toContain("? { messageId: draft.forkFrom.messageId }");
 });
 
 test("App passes only SessionViewer navigation availability", async () => {

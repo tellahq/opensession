@@ -20,6 +20,8 @@ test("SessionViewer decomposition files stay below the source line limit", async
     "hooks/useSessionModelWorkflowController.ts",
     "hooks/useSessionRuntimeController.ts",
     "hooks/useTranscriptHistoryController.ts",
+    "hooks/useSessionViewerActionsController.ts",
+    "lib/session-viewer-actions.ts",
     "lib/transcript-history-controller.ts",
     "components/session/SessionPreviewSurface.tsx",
     "components/session-viewer/shell-timing.ts",
@@ -61,4 +63,51 @@ test("the session subscription has one bounded grouped options contract", async 
     ).toBeLessThanOrEqual(15);
   }
   expect(subscription).not.toMatch(/\buse(?:Memo|Callback)\(/);
+});
+
+test("SessionViewer delegates bounded action state without moving memo wrappers", async () => {
+  const [viewer, controller, actions] = await Promise.all([
+    source("components/SessionViewer.tsx"),
+    source("hooks/useSessionViewerActionsController.ts"),
+    source("lib/session-viewer-actions.ts"),
+  ]);
+  const controllerGroups = [
+    "ShippedShareIdentity",
+    "HeaderLayoutIdentity",
+    "OverflowIdentity",
+    "ArchiveShortcutIdentity",
+    "ArchiveShortcutActions",
+  ];
+  const actionGroups = [
+    "ShippedIdentity",
+    "ShippedSetters",
+    "ShippedShareInput",
+    "ComposerSetters",
+    "ShareSessionContext",
+    "SharePaneContext",
+    "BranchActionState",
+    "ArchiveCallbacks",
+    "ArchiveSetters",
+  ];
+
+  for (const hook of [
+    "useShippedShareState",
+    "useSessionHeaderLayout",
+    "useSessionOverflowState",
+    "useSessionArchiveShortcut",
+  ]) {
+    expect(viewer.match(new RegExp(`${hook}\\(`, "g")), hook).toHaveLength(1);
+  }
+  for (const group of controllerGroups) {
+    expect(interfaceMemberCount(controller, group), group).toBeLessThanOrEqual(
+      15,
+    );
+  }
+  for (const group of actionGroups) {
+    expect(interfaceMemberCount(actions, group), group).toBeLessThanOrEqual(15);
+  }
+  expect(controller).not.toMatch(/\buse(?:Memo|Callback)\(/);
+  expect(actions).not.toMatch(/\buse[A-Z]\w*\(/);
+  expect(viewer).not.toContain("async function archiveSessionAction");
+  expect(viewer).not.toContain("async function shareShippedChangeAction");
 });

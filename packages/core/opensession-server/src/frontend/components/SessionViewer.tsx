@@ -22,18 +22,12 @@ import {
 } from "../lib/session-performance";
 import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { withQuotes, type Quote } from "../lib/quotes";
-import {
-  absoluteLink,
-  sessionPath,
-  workspacePanePath,
-} from "../lib/share-link";
 import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import type {
   UnifiedSession,
-  GitStatusInfo,
   SessionNote,
   SessionSlackShare,
   TranscriptEntry,
@@ -66,15 +60,11 @@ import { ShellPanel } from "./TerminalPanel";
 import { getCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import {
-  deleteSessionApi,
-  archiveSessionApi,
   fetchFileMentions,
   fetchMentionSuggestions,
   fetchSkillMentions,
   fetchSessionNotesApi,
   postSessionNoteApi,
-  fetchGitStatus,
-  moveSessionToBranchApi,
   portalActionApi,
   type WorkspaceMediaItem,
 } from "../lib/api";
@@ -85,30 +75,44 @@ import type { PrFocus } from "../lib/pr-focus";
 import { reviewLoopResult } from "../lib/review-loop";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
 import { repairPausedSession } from "../lib/api/session-safety";
-import { ApiError } from "../lib/api/request";
 import { safetyContinuationPrompt } from "../lib/session-safety";
-import {
-  cancelSlackComposer,
-  fetchSlackChannels,
-  openSlackComposer,
-  reconnectSlack,
-  sendSlackComposer,
-  shareShippedChange,
-  undoShippedChange,
-  undoSlackComposer,
-} from "../lib/api/shipped-changes";
+import { fetchSlackChannels } from "../lib/api/shipped-changes";
 import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
-import {
-  dismissSlackShare,
-  isSlackShareDismissed,
-  onSlackShareDismissChanged,
-  slackShareDismissKey,
-} from "../lib/slack-share-dismiss";
+import { dismissSlackShare } from "../lib/slack-share-dismiss";
 import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { useNavigation } from "../hooks/useNavigation";
 import { useSessionSocket } from "../hooks/useSessionSocket";
 import { useSessionRuntime } from "../hooks/useSessionRuntime";
+import {
+  useComposerQueueState,
+  useComposerReset,
+  useImageRegionComposer,
+  usePendingPromptReconciliation,
+  useSessionAttachmentDrop,
+  useSessionComposerDraft,
+  useSessionPromptOutbox,
+} from "../hooks/useSessionComposerController";
+import {
+  useSessionArchiveShortcut,
+  useSessionHeaderLayout,
+  useSessionOverflowState,
+  useShippedShareState,
+} from "../hooks/useSessionViewerActionsController";
+import {
+  archiveSessionAction,
+  cancelComposedSlackMessageAction,
+  deleteSessionAction,
+  moveAndCreatePrAction,
+  moveSessionToBranchAction,
+  openSlackComposerAction,
+  reconnectShippedSlackAction,
+  sendComposedSlackMessageAction,
+  shareSessionAction,
+  shareShippedChangeAction,
+  undoComposedSlackMessageAction,
+  undoShippedChangeAction,
+} from "../lib/session-viewer-actions";
 import { useSessionViewerSubscription } from "../hooks/useSessionViewerSubscription";
 import { useSessionModelWorkflowController } from "../hooks/useSessionModelWorkflowController";
 import {
@@ -264,9 +268,9 @@ import {
 } from "./icons";
 import { KeepInSidebarIcon } from "./sidebar/KeepInSidebarMark";
 import { Button } from "../ui/button";
+import { useConfirm } from "../ui/confirm";
 import { SessionQueue } from "./SessionQueue";
 import { deriveSessionQueue, type QueueReceipt } from "../lib/session-queue";
-import { useConfirm } from "../ui/confirm";
 import {
   TopBar,
   TopBarAction,
@@ -296,7 +300,6 @@ import {
   WS_SUMMARY_ROOM_W,
   workspaceSummaryShift,
 } from "../lib/workspace-summary-open";
-import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
 import { TURN_SPACER } from "../lib/app-shell-classes";
@@ -369,6 +372,13 @@ import {
 } from "../lib/session-viewer-derive";
 import { SessionShellTiming } from "./session-viewer/shell-timing";
 import { runningAgentCount } from "./session-viewer/runtime-controller";
+import {
+  commitSessionQueueReorder,
+  discardSessionOutboxItem,
+  reorderSessionQueue,
+  sendSessionMessage,
+  takeSessionQueueItem,
+} from "../lib/session-viewer-send";
 
 export function SessionViewer({
   session,
@@ -549,60 +559,31 @@ export function SessionViewer({
     setShippedSlackReconnectRequired(false);
     setShippedShare(null);
   }, [session.id, mergedPr?.number]);
-  // Closing the card is a decision about this PR, not a fold, so it sticks
-  // across reloads and devices (lib/slack-share-dismiss). The next merged PR
-  // in the same session gets its own card, and "Send to Slack…" in the
-  // composer menu still opens a composer, so closing loses nothing.
-  const shareDismissKey = mergedPr?.number
-    ? slackShareDismissKey(session.id, mergedPr.number)
-    : "";
-  const [shareDismissed, setShareDismissed] = useState(() =>
-    isSlackShareDismissed(shareDismissKey),
-  );
+  // Shipped-share hooks stay at the first moved hook position so the existing
+  // SessionViewer hook order remains unchanged.
+  const shippedShareState = useShippedShareState({
+    sessionId: session.id,
+    mergedPrNumber: mergedPr?.number,
+  });
+  const { dismissKey: shareDismissKey, dismissed: shareDismissed } =
+    shippedShareState;
   const isSessionFocused = useEffectEvent(() => focused);
-  useEffect(() => {
-    const sync = () =>
-      setShareDismissed(isSlackShareDismissed(shareDismissKey));
-    sync();
-    return onSlackShareDismissChanged(sync);
-  }, [shareDismissKey]);
   const dismissShippedChangeShare = useCallback(
     () => dismissSlackShare(shareDismissKey),
     [shareDismissKey],
   );
   const sendShippedChangeToSlack = useCallback(
     async (message: string, channel: string, screenshots: string[]) => {
-      if (!mergedPr) return;
-      setShippedChangeStatus("sharing");
-      try {
-        const result = await shareShippedChange(session.id, {
-          repo: mergedPr.repo,
-          branch: mergedPr.branch,
-          message,
-          channel,
-          screenshots,
-        });
-        setShippedChangeStatus("idle");
-        setShippedSlackReconnectRequired(false);
-        if (result.share) setShippedShare(result.share);
-        else toast("This post was already sent");
-      } catch (error) {
-        setShippedChangeStatus("idle");
-        if (
-          error instanceof ApiError &&
-          error.status === 403 &&
-          /Reconnect Slack/.test(error.message)
-        ) {
-          setShippedSlackReconnectRequired(true);
-          toast("Reconnect Slack to add image access");
-        } else {
-          toast(
-            error instanceof Error
-              ? error.message
-              : "Couldn't share the shipped update",
-          );
-        }
-      }
+      await shareShippedChangeAction({
+        identity: { sessionId: session.id, mergedPr },
+        setters: {
+          setStatus: setShippedChangeStatus,
+          setReconnectRequired: setShippedSlackReconnectRequired,
+          setShare: setShippedShare,
+        },
+        input: { message, channel, screenshots },
+        toast,
+      });
     },
     [mergedPr, session.id],
   );
@@ -611,30 +592,20 @@ export function SessionViewer({
   // a teammate's post fails here rather than silently doing nothing.
   const undoShippedChangeShare = useCallback(
     async (at: string) => {
-      try {
-        await undoShippedChange(session.id, at);
-        setShippedShare(null);
-        toast("Removed from Slack");
-      } catch (error) {
-        toast(
-          error instanceof Error
-            ? error.message
-            : "Couldn't undo the Slack message",
-        );
-      }
+      await undoShippedChangeAction({
+        sessionId: session.id,
+        at,
+        setShare: setShippedShare,
+        toast,
+      });
     },
     [session.id],
   );
   const reconnectShippedSlack = useCallback(async () => {
-    try {
-      await reconnectSlack();
-      setShippedSlackReconnectRequired(false);
-      toast("Approve image access in Slack, then send again");
-    } catch (error) {
-      toast(
-        error instanceof Error ? error.message : "Couldn't reconnect Slack",
-      );
-    }
+    await reconnectShippedSlackAction({
+      setReconnectRequired: setShippedSlackReconnectRequired,
+      toast,
+    });
   }, []);
   const promotedPr =
     prPresentation.primary?.source !== "primary"
@@ -854,41 +825,22 @@ export function SessionViewer({
     send,
     transcriptViewStore,
   });
-  // The composer draft lives INSIDE Composer (uncontrolled mode) so keystrokes
-  // don't re-render this whole component; the text arrives via handleSend.
-  // Same fix as the CommentableDiff draft-text gotcha.
-  // Text + attachments persist in the draft store (keyed per session) so
-  // switching to another session/workspace — which remounts this component —
-  // doesn't lose typed work. Text rides Composer's `draftKey`; the staged
-  // images/files live here, seeded from and mirrored into the same draft.
-  const draftKey = `session:${session.id}`;
-  const [images, setImages] = useState<string[]>(
-    () => loadDraft(draftKey).images,
-  );
-  const [files, setFiles] = useState<FileAttachment[]>(
-    () => loadDraft(draftKey).files,
-  );
-  const uploads = useAttachmentUploads();
-  const uploadStaging = uploads.staging;
-  const dragDepthRef = useRef(0);
-  const fileDragPresentRef = useRef(false);
-  const cancelledFileDragRef = useRef(false);
-  const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const [fileDragActive, setFileDragActive] = useState(false);
-  useEffect(() => {
-    saveDraft(draftKey, { images, files });
-  }, [draftKey, images, files]);
-  // When set, the next send forks a new session from either the current tip or
-  // a specific earlier message instead of continuing this one.
-  const [forkFrom, setForkFrom] = useState<
-    { kind: "tip" } | { kind: "message"; messageId: string } | null
-  >(null);
-  useEffect(() => {
-    const messageId = takePendingSessionFork(session.id);
-    if (messageId) setForkFrom({ kind: "message", messageId });
-  }, [session.id]);
+  // Composer state stays at the first moved hook position so the existing
+  // SessionViewer hook order remains unchanged.
+  const composerDraft = useSessionComposerDraft({
+    identity: { sessionId: session.id },
+  });
+  const {
+    draftKey,
+    images,
+    setImages,
+    files,
+    setFiles,
+    uploads,
+    uploadStaging,
+  } = composerDraft.attachments;
+  const { forkFrom, setForkFrom } = composerDraft.fork;
+  const composerSettersRef = useRef({ setImages, setFiles, setForkFrom });
   const [
     {
       isStreaming,
@@ -972,23 +924,13 @@ export function SessionViewer({
   const setPreviewStatus = previewController.setStatus;
   const startDeclaredPortal = previewController.startDeclaredPortal;
   const livePortals = previewController.livePortals;
-  // Drag-to-reorder bookkeeping. onReorder fires continuously during a drag, so
-  // we only reorder locally then flush the final order to the server on drop —
-  // broadcasting mid-drag would swap the item references out from under Motion
-  // and drop the gesture. draggingQueueRef gates the incoming queue_update the
-  // same way, so an unrelated broadcast can't yank the list while dragging.
-  const draggingQueueRef = useRef(false);
-  const pendingReorderRef = useRef<QueueReceipt[] | null>(null);
-  // Delivery ownership stays server-side, but sent steering messages live in
-  // the conversation. These ids only give their bubbles a quiet pending
-  // treatment until the engine confirms it has read them.
-  // One-shot draft injection into the Composer (bump seq to apply) — how
-  // "edit queued message" puts the text back into the input.
-  const [composerPrefill, setComposerPrefill] = useState<{
-    seq: number;
-    text: string;
-    replace?: boolean;
-  } | null>(null);
+  const {
+    draggingQueueRef,
+    pendingReorderRef,
+    composerPrefill,
+    setComposerPrefill,
+  } = useComposerQueueState();
+  const setComposerPrefillRef = useRef(setComposerPrefill);
   // Quick-reply chips for the turn that just ended (components/ReplySuggestions).
   // Server-generated and server-cleared; a picked chip retires the row here.
   const [replySuggestions, setReplySuggestions] =
@@ -1017,139 +959,14 @@ export function SessionViewer({
       ),
     [],
   );
-  // Optimistic just-sent messages, shown instantly and reconciled once the real
-  // turn lands (transcript) or the server confirms it as queued (busy path).
-  // `busyMode` marks a send made while the run was busy: it renders inside the
-  // queue flap (as "Queueing…") instead of as a transcript bubble.
-  const [pending, setPending] = useState<OptimisticPendingPrompt[]>(() =>
-    initialPending
-      ? [
-          {
-            id: `pending-initial-${session.id}`,
-            transcriptAfterEntryId: null,
-            ...initialPending,
-          },
-        ]
-      : [],
-  );
-  // Read by the reconcile effect below, which must not re-run on every send.
-  const pendingRef = useRef(pending);
-  useLayoutEffect(() => {
-    pendingRef.current = pending;
-  }, [pending]);
-  // Pending ids the server has CONFIRMED (transcript entry or queue/steer
-  // receipt). Their durable outbox row is hidden, so one message can't render
-  // as a transcript bubble and a "Sending" flap row at the same time.
-  const [landedOutboxIds, setLandedOutboxIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [outboxItems, setOutboxItems] = useState<PromptOutboxItem[]>(() =>
-    promptOutbox.list(session.id),
-  );
-  useEffect(() => {
-    const stopObserving = promptOutbox.observeDelivery((item, result) => {
-      if (item.sessionId !== session.id) return;
-      const pendingId = `outbox-${item.clientId}`;
-      const deliveredPrompt: OptimisticPendingPrompt = {
-        id: pendingId,
-        content: item.content,
-        user: item.user || getCurrentUser(),
-        sentAt: item.createdAt,
-        transcriptAfterEntryId: item.transcriptAfterEntryId,
-        transcriptAfterSeq: item.transcriptAfterSeq,
-        ...(item.images?.length ? { images: item.images } : {}),
-      };
-      if (result.status === "started") {
-        // Placement guessed from local running state can lose a turn-end race.
-        // The server started a turn, so this is an optimistic transcript bubble,
-        // not a queued row.
-        setPending((current) => markPendingStarted(current, deliveredPrompt));
-        dispatchSessionRuntime({ type: "mark_running" });
-        return;
-      }
-      if (result.status === "queued" || result.status === "steered") {
-        // Queued messages stay above the composer. A steer is already sent, so
-        // it stays in the conversation while the engine catches up.
-        setPending((current) =>
-          markPendingBusy(
-            current,
-            deliveredPrompt,
-            result.status === "queued" ? "queue" : "steer",
-          ),
-        );
-        dispatchSessionRuntime({ type: "mark_running" });
-        return;
-      }
-      if (result.status !== "handled") return;
-      // Slash commands are consumed by Open Session, so no user transcript
-      // entry or queue echo will ever reconcile their optimistic row. The old
-      // WebSocket composer received an inline notice; preserve that feedback
-      // now that sends travel through the durable REST outbox.
-      setPending((current) =>
-        current.filter((entry) => entry.id !== pendingId),
-      );
-      const noticeId = `prompt-delivery-${result.deliveryId || item.clientId}`;
-      setEntries((current) =>
-        current.some((entry) => entry.id === noticeId)
-          ? current
-          : [
-              ...current,
-              {
-                id: noticeId,
-                type: "system",
-                content: result.message,
-                timestamp: new Date().toISOString(),
-              },
-            ],
-      );
-    });
-    const sync = () => {
-      const items = promptOutbox.list(session.id);
-      setOutboxItems(items);
-      // Forget claims the outbox no longer holds (delivered, discarded, or
-      // another session's), so the set can't grow for the life of the tab.
-      setLandedOutboxIds((prev) => {
-        if (prev.size === 0) return prev;
-        const live = new Set(items.map((i) => `outbox-${i.clientId}`));
-        const next = new Set([...prev].filter((id) => live.has(id)));
-        return next.size === prev.size ? prev : next;
-      });
-    };
-    sync();
-    const unsubscribe = promptOutbox.subscribe(sync);
-    void promptOutbox.flush();
-    return () => {
-      unsubscribe();
-      stopObserving();
-    };
-  }, [dispatchSessionRuntime, session.id, setEntries]);
-  useEffect(() => {
-    if (connected) void promptOutbox.flush();
-  }, [connected]);
-  useEffect(() => {
-    if (!initialPending) return;
-    const content = initialPending.content.trim();
-    setPending((prev) => {
-      if (prev.some((p) => p.id === `pending-initial-${session.id}`))
-        return prev;
-      if (
-        entries.some(
-          (e) =>
-            e.type === "user" && (!content || e.content.trim() === content),
-        )
-      ) {
-        return prev;
-      }
-      return [
-        ...prev,
-        {
-          id: `pending-initial-${session.id}`,
-          transcriptAfterEntryId: null,
-          ...initialPending,
-        },
-      ];
-    });
-  }, [entries, initialPending, session.id, setEntries]);
+  const composerOutbox = useSessionPromptOutbox({
+    identity: { sessionId: session.id, connected },
+    runtime: { dispatch: dispatchSessionRuntime, initialPending },
+    transcript: { entries, setEntries },
+  });
+  const { pending, setPending, pendingRef } = composerOutbox.pending;
+  const { outboxItems, landedOutboxIds, setLandedOutboxIds } =
+    composerOutbox.durable;
   const [slackComposer, setSlackComposer] = useState<{
     id: string;
     message: string;
@@ -1324,175 +1141,10 @@ export function SessionViewer({
   // from the composer's note mode.
   const [notes, setNotes] = useState<SessionNote[]>([]);
   const [noteMode, setNoteMode] = useState(false);
-  async function addSessionAttachments(picked: FileList | File[]) {
-    const selected = Array.from(picked);
-    const noteImageTypes = new Set([
-      "image/png",
-      "image/jpeg",
-      "image/gif",
-      "image/webp",
-    ]);
-    const disallowed = noteMode
-      ? selected.filter((file) => !noteImageTypes.has(file.type))
-      : [];
-    const accepted = noteMode
-      ? selected.filter((file) => noteImageTypes.has(file.type))
-      : selected;
-    const results = await uploads.upload(accepted, (file, signal) =>
-      attachToDraft(draftKey, [file], signal),
-    );
-    if (results.some((result) => result.applied)) {
-      const stored = loadDraft(draftKey);
-      setImages((current) =>
-        sameImages(current, stored.images) ? current : stored.images,
-      );
-      setFiles((current) =>
-        sameFiles(current, stored.files) ? current : stored.files,
-      );
-    }
-    const failures = [
-      ...results.flatMap((result) => result.rejected),
-      ...disallowed.map(
-        (file) => `${file.name} (notes accept PNG, JPEG, GIF, or WebP images)`,
-      ),
-    ];
-    if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
-  }
-
-  function resetFileDrag() {
-    dragDepthRef.current = 0;
-    setFileDragActive(false);
-  }
-  function finishFileDrag() {
-    if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
-    fileDragWatchdogRef.current = null;
-    resetFileDrag();
-    fileDragPresentRef.current = false;
-    cancelledFileDragRef.current = false;
-  }
-  function armFileDragWatchdog() {
-    if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
-    fileDragWatchdogRef.current = setTimeout(finishFileDrag, 500);
-  }
-  const dropAttachments = useEffectEvent((picked: FileList | File[]) =>
-    addSessionAttachments(picked),
-  );
-  useEffect(() => {
-    // Own external file drags at the window, not on the conversation node.
-    // Dialogs and sheets portal to document.body, so a node-scoped handler
-    // loses the drag as soon as it crosses their backdrop. Only the focused
-    // conversation subscribes, which also keeps split panes from attaching the
-    // same drop twice.
-    if (!focused || sessionHidden) {
-      finishFileDrag();
-      return;
-    }
-    function cancelFileDrag(event: KeyboardEvent) {
-      if (event.key !== "Escape" || !fileDragPresentRef.current) return;
-      event.preventDefault();
-      event.stopPropagation();
-      cancelledFileDragRef.current = true;
-      resetFileDrag();
-      armFileDragWatchdog();
-    }
-    function finishNativeDrag() {
-      finishFileDrag();
-    }
-    function handleFileDragEnter(event: DragEvent) {
-      if (!hasDraggedFiles(event.dataTransfer)) return;
-      if (foregroundFileComposerOpen()) {
-        finishFileDrag();
-        return;
-      }
-      event.preventDefault();
-      armFileDragWatchdog();
-      if (cancelledFileDragRef.current) return;
-      if (!fileDragPresentRef.current) {
-        fileDragPresentRef.current = true;
-        dragDepthRef.current = 0;
-      }
-      dragDepthRef.current += 1;
-      setFileDragActive(true);
-    }
-    function handleFileDragLeave(event: DragEvent) {
-      if (!hasDraggedFiles(event.dataTransfer)) return;
-      if (foregroundFileComposerOpen()) {
-        finishFileDrag();
-        return;
-      }
-      const next = event.relatedTarget;
-      const leftApp =
-        !(next instanceof Node) || !document.documentElement.contains(next);
-      if (cancelledFileDragRef.current) {
-        if (leftApp) finishFileDrag();
-        else resetFileDrag();
-        return;
-      }
-      // Escape during an external file drag is owned by the browser on some
-      // platforms. Its observable signal is a final leave with no drop effect.
-      if (event.dataTransfer?.dropEffect === "none") {
-        finishFileDrag();
-        return;
-      }
-      if (leftApp) {
-        finishFileDrag();
-        return;
-      }
-      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-      if (dragDepthRef.current === 0) setFileDragActive(false);
-    }
-    function handleFileDragOver(event: DragEvent) {
-      if (!hasDraggedFiles(event.dataTransfer)) return;
-      if (foregroundFileComposerOpen()) {
-        finishFileDrag();
-        return;
-      }
-      event.preventDefault();
-      armFileDragWatchdog();
-      if (cancelledFileDragRef.current) {
-        if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
-        return;
-      }
-      if (!fileDragPresentRef.current) {
-        fileDragPresentRef.current = true;
-        dragDepthRef.current = 1;
-        setFileDragActive(true);
-      }
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-    }
-    function handleFileDrop(event: DragEvent) {
-      if (!hasDraggedFiles(event.dataTransfer)) return;
-      if (foregroundFileComposerOpen()) {
-        finishFileDrag();
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      const cancelled = cancelledFileDragRef.current;
-      const dropped = event.dataTransfer?.files;
-      finishFileDrag();
-      if (!cancelled && dropped?.length) void dropAttachments(dropped);
-    }
-    // Capture before modal backdrops and the composer. Listen for keyup too:
-    // Chromium can consume keydown while it owns a native OS drag.
-    window.addEventListener("keydown", cancelFileDrag, true);
-    window.addEventListener("keyup", cancelFileDrag, true);
-    window.addEventListener("dragenter", handleFileDragEnter, true);
-    window.addEventListener("dragleave", handleFileDragLeave, true);
-    window.addEventListener("dragover", handleFileDragOver, true);
-    window.addEventListener("drop", handleFileDrop, true);
-    window.addEventListener("dragend", finishNativeDrag, true);
-    return () => {
-      finishFileDrag();
-      window.removeEventListener("keydown", cancelFileDrag, true);
-      window.removeEventListener("keyup", cancelFileDrag, true);
-      window.removeEventListener("dragenter", handleFileDragEnter, true);
-      window.removeEventListener("dragleave", handleFileDragLeave, true);
-      window.removeEventListener("dragover", handleFileDragOver, true);
-      window.removeEventListener("drop", handleFileDrop, true);
-      window.removeEventListener("dragend", finishNativeDrag, true);
-    };
-  }, [focused, sessionHidden, draftKey, noteMode]);
+  const { addSessionAttachments, fileDragActive } = useSessionAttachmentDrop({
+    identity: { focused, sessionHidden, noteMode },
+    draft: { draftKey, setImages, setFiles, uploads },
+  });
   useEffect(() => {
     setNotes([]);
     setNoteMode(false);
@@ -1960,20 +1612,15 @@ export function SessionViewer({
   // clear the composer and jump to the live edge. We skip the first run (and
   // session switches, which remount this with whatever the counter's at) and
   // only react to real bumps from the tab-bar +.
-  const [composerResetSeq, setComposerResetSeq] = useState(newSessionSeq);
-  useLayoutEffect(() => {
-    if (newSessionSeq === composerResetSeq) return;
-    // Clear storage before changing the Composer key. The layout update causes
-    // its replacement to initialize only after the stale draft is gone.
-    clearDraft(draftKey);
-    dropStagingAttachments(draftKey);
-    setImages([]);
-    setFiles([]);
-    setForkFrom(null);
-    setComposerResetSeq(newSessionSeq);
-    scrollToLatest("smooth");
-    composerRef.current?.focus();
-  }, [newSessionSeq, composerResetSeq, draftKey, scrollToLatest]);
+  const composerResetSeq = useComposerReset({
+    newSessionSeq,
+    draftKey,
+    setImages,
+    setFiles,
+    setForkFrom,
+    scrollToLatest,
+    composerRef,
+  });
 
   // Browser tab title follows the workspace, the same name the header shows.
   // The session's own title names a tab inside it, not the page.
@@ -2062,59 +1709,22 @@ export function SessionViewer({
     },
   });
 
-  // Drop optimistic bubbles once their real turn shows up. Each pending message
-  // is claimed (one-to-one) either by a transcript user entry recorded around or
-  // after we sent it, or by a server-confirmed queued entry (the busy path).
-  // A long-unmatched bubble is dropped so a dead send never sticks as "sending…".
-  useEffect(() => {
-    const { landed, expired } = reconcilePending(
-      pendingRef.current,
+  usePendingPromptReconciliation({
+    identity: {
+      sessionId: session.id,
+      sessionIsRunning: session.isRunning,
+      initialPending,
+    },
+    delivery: {
       entries,
-      [...queued, ...steered],
-      Date.now(),
-    );
-    if (landed.size === 0 && expired.size === 0) return;
-    setPending((prev) =>
-      prev.filter((p) => !landed.has(p.id) && !expired.has(p.id)),
-    );
-    // Only a CONFIRMED claim retires the durable outbox row below. An expired
-    // bubble is merely hidden: its prompt may still be in flight, and the
-    // outbox is localStorage-backed and shared across tabs, so anything that
-    // looks like a discard has to be earned by a real server confirmation.
-    if (landed.size > 0)
-      setLandedOutboxIds((prev) => {
-        const next = new Set(prev);
-        for (const id of landed) next.add(id);
-        return next;
-      });
-  }, [entries, queued, steered, setEntries]);
-
-  // Forget optimistic bubbles and live state when switching sessions. This
-  // component is retained between tabs, so carrying a busy flag from the prior
-  // session makes an idle prompt render as queued until the new watch handshake
-  // arrives. Reset in layout, before the next session can accept input, so an
-  // idle send paints directly in the transcript on its first frame.
-  const resetOptimisticState = useEffectEvent(() => {
-    setPending(
-      initialPending
-        ? [
-            {
-              id: `pending-initial-${session.id}`,
-              transcriptAfterEntryId: null,
-              ...initialPending,
-            },
-          ]
-        : [],
-    );
-    dispatchSessionRuntime({
-      type: "reset_live",
-      isRunning: session.isRunning,
-    });
-    liveTurnStore.clear();
+      queued,
+      steered,
+      pendingRef,
+      setPending,
+      setLandedOutboxIds,
+    },
+    runtime: { dispatch: dispatchSessionRuntime, liveTurnStore },
   });
-  useLayoutEffect(() => {
-    resetOptimisticState();
-  }, [session.id, liveTurnStore]);
 
   // Every session opens at the live edge. Do this in a layout effect so the
   // transcript never paints at scrollTop 0 before moving to the end.
@@ -2573,39 +2183,18 @@ export function SessionViewer({
   );
   const sendComposedSlackMessage = useCallback(
     async (message: string, channel: string, screenshots: string[]) => {
-      if (!slackComposer) return;
-      setSlackComposerStatus("sharing");
-      try {
-        const result = await sendSlackComposer(session.id, {
-          requestId: slackComposer.id,
-          message,
-          channel,
-          screenshots,
-        });
-        setSlackComposer(null);
-        setSlackComposerStatus("idle");
-        setSlackComposerSent({
-          channelName: result.channel.name,
-          permalink: result.permalink,
-          receiptKey: slackComposer.id,
-          channelId: result.channel.id,
-          ts: result.ts,
-        });
-      } catch (error) {
-        setSlackComposerStatus("idle");
-        if (
-          error instanceof ApiError &&
-          error.status === 403 &&
-          /Reconnect Slack/.test(error.message)
-        ) {
-          setSlackComposerReconnect(true);
-          toast("Reconnect Slack to add image access");
-        } else {
-          toast(
-            error instanceof Error ? error.message : "Couldn't send to Slack",
-          );
-        }
-      }
+      await sendComposedSlackMessageAction({
+        sessionId: session.id,
+        composer: slackComposer,
+        input: { message, channel, screenshots },
+        setters: {
+          setComposer: setSlackComposer,
+          setStatus: setSlackComposerStatus,
+          setReconnect: setSlackComposerReconnect,
+          setSent: setSlackComposerSent,
+        },
+        toast,
+      });
     },
     [session.id, slackComposer],
   );
@@ -2614,37 +2203,29 @@ export function SessionViewer({
   // message.
   const undoComposedSlackMessage = useCallback(
     async (sent: SlackSent) => {
-      if (!sent.channelId || !sent.ts) return;
-      try {
-        await undoSlackComposer(session.id, {
-          channel: sent.channelId,
-          ts: sent.ts,
-        });
-        setSlackComposerSent(null);
-        toast("Removed from Slack");
-      } catch (error) {
-        toast(
-          error instanceof Error
-            ? error.message
-            : "Couldn't undo the Slack message",
-        );
-      }
+      await undoComposedSlackMessageAction({
+        sessionId: session.id,
+        sent,
+        setSent: setSlackComposerSent,
+        toast,
+      });
     },
     [session.id],
   );
   const cancelComposedSlackMessage = useCallback(async () => {
-    if (!slackComposer) return;
-    try {
-      await cancelSlackComposer(session.id, slackComposer.id);
-      setSlackComposer(null);
-    } catch (error) {
-      toast(
-        error instanceof Error
-          ? error.message
-          : "Couldn't close the Slack composer",
-      );
-    }
+    await cancelComposedSlackMessageAction({
+      sessionId: session.id,
+      composer: slackComposer,
+      setComposer: setSlackComposer,
+      toast,
+    });
   }, [session.id, slackComposer]);
+  async function reconnectComposedSlack() {
+    await reconnectShippedSlackAction({
+      setReconnectRequired: setSlackComposerReconnect,
+      toast,
+    });
+  }
   // Exact engine-state forks use Claude's SDK forkSession. Other backends can
   // still fork as a new sibling with a transcript handoff.
   const canForkSession = session.source === "opensession" && !!session.ran;
@@ -2655,7 +2236,10 @@ export function SessionViewer({
         void navigation.duplicateSession();
         return;
       }
-      setForkFrom({ kind: "message", messageId });
+      composerSettersRef.current.setForkFrom({
+        kind: "message",
+        messageId,
+      });
     },
     [navigation],
   );
@@ -2855,208 +2439,49 @@ export function SessionViewer({
      *  not consume or inherit anything waiting in the main composer. */
     isolatedImages?: string[],
   ): boolean | Promise<boolean> {
-    const sendStartedAt = performance.now();
-    const typed = raw.trim();
-    const isolated = isolatedImages !== undefined;
-    // Quoted transcript selections lead a normal composer message. A region
-    // comment carries its own visual context and leaves the draft untouched.
-    const text = isolated ? typed : withQuotes(quote ? [quote] : [], typed);
-    const imgs = isolatedImages ?? images;
-    const fls = isolated ? [] : files;
-    if (!typed && imgs.length === 0 && fls.length === 0) return false;
-
-    // Note mode: post a team note on this session — never a prompt. The
-    // server broadcast echoes it back into `notes` for every viewer, so
-    // nothing is rendered optimistically here. Notes carry the quoted
-    // selection too (as "> " lines, the same shape a prompt sends).
-    if (!isolated && noteMode) {
-      if (!typed && imgs.length === 0) return false;
-      return postSessionNoteApi(session.id, text, getCurrentUser(), imgs).then(
-        () => {
-          dropStagingAttachments(draftKey);
-          setImages([]);
-          setQuote(null);
-          return true;
-        },
-        () => {
-          toast("Failed to add note");
-          return false;
-        },
-      );
-    }
-
-    const user = getCurrentUser();
-    // Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
-    const filePayload = fls.map((f) =>
-      f.path
-        ? { name: f.name, path: f.path }
-        : { name: f.name, dataUrl: f.dataUrl },
-    );
-
-    // Fork mode: branch a brand-new session from the current tip or selected
-    // message, keeping the real conversation history. App navigates into it on
-    // session_created.
-    if (!isolated && forkFrom) {
-      send({
-        type: "create_session",
-        branch: "",
-        prompt: text || "Continue from here.",
-        user,
-        forkFrom: {
-          sourceId: session.id,
-          ...(forkFrom.kind === "message"
-            ? { messageId: forkFrom.messageId }
-            : {}),
-        },
-        ...(imgs.length ? { images: imgs } : {}),
-        ...(fls.length ? { files: filePayload } : {}),
-      });
-      setForkFrom(null);
-      dropStagingAttachments(draftKey);
-      setImages([]);
-      setFiles([]);
-      setQuote(null);
-      return true;
-    }
-
-    if (noEngine) return false;
-    // Two follow-up behaviors while busy: plain send QUEUES (parked until
-    // the run FULLY finishes — including any auto-continue turns the server
-    // holds the queue behind), and the steer button / ⌘Ctrl+Enter STEERS
-    // (folds into the LIVE run at its next step boundary — busyMode:"steer",
-    // real in-band steering since 2026-07-12; the server falls back to the
-    // queue when nothing is steerable or files are attached). The turn keeps
-    // running on both paths: no abort, no lost work. Idle: just run it.
-    // Attachments ride along on every path — images fold into the run as
-    // content blocks; files route to the queue server-side.
-    const steerNow = isBusy && !!opts?.steer;
-    const optimisticTail = [...pendingRef.current]
-      .reverse()
-      .find((item) => item.busyMode !== "queue");
-    const transcriptTail = transcriptViewStore.getSnapshot().at(-1);
-    const transcriptAfterEntryId = optimisticTail
-      ? optimisticTail.id.startsWith("outbox-")
-        ? optimisticTail.id.slice("outbox-".length)
-        : optimisticTail.id
-      : (transcriptTail?.id ?? null);
-    const transcriptAfterSeq =
-      transcriptSeqRef.current?.sessionId === session.id
-        ? transcriptSeqRef.current.lastSeq
-        : undefined;
-    let outboxItem: PromptOutboxItem;
-    try {
-      outboxItem = promptOutbox.enqueue({
-        sessionId: session.id,
-        content: text,
-        user,
+    return sendSessionMessage(raw, opts, isolatedImages, {
+      identity: { session, noEngine, noteMode },
+      draft: {
+        draftKey,
+        images,
+        setImages,
+        files,
+        setFiles,
+        quote,
+        setQuote,
+        contextSessions,
+        setContextSessions,
+        forkFrom,
+        setForkFrom,
+      },
+      runtime: {
+        isBusy,
         effort,
         fastMode,
-        busyMode: isBusy ? (steerNow ? "steer" : "queue") : undefined,
-        transcriptAfterEntryId,
-        transcriptAfterSeq,
-        ...(imgs.length ? { images: imgs } : {}),
-        ...(fls.length ? { files: filePayload } : {}),
-        ...(!isolated && contextSessions.length ? { contextSessions } : {}),
-      });
-    } catch (error) {
-      toast(
-        error instanceof Error
-          ? error.message
-          : "Couldn't save this message for delivery.",
-      );
-      return false;
-    }
-    // Prompting in a session you'd hidden from your sidebar brings its row back
-    // — you're working in it again (see lib/hides.ts).
-    unhideForSession(session);
-    if (!isBusy || steerNow) {
-      if (!isBusy) {
-        dispatchSessionRuntime({ type: "mark_running" });
-        onRunningChange?.(session.id, true);
-      }
-      // Sent messages always enter the conversation immediately. A busy steer
-      // keeps its delivery mode only so the bubble can remain slightly muted
-      // until the engine reads it.
-      tailActionNeedsLayoutScrollRef.current = true;
-      setPending((p) => [
-        ...p,
-        {
-          id: `outbox-${outboxItem.clientId}`,
-          content: text,
-          user,
-          sentAt: outboxItem.createdAt,
-          transcriptAfterEntryId,
-          transcriptAfterSeq,
-          images: imgs.length ? imgs : undefined,
-          ...(steerNow ? { busyMode: "steer" as const } : {}),
-        },
-      ]);
-      requestAnimationFrame(() =>
-        measureSessionPerf("send_to_optimistic_paint_ms", sendStartedAt),
-      );
-    } else {
-      // Only deliberately queued messages live above the composer.
-      setPending((p) => [
-        ...p,
-        {
-          id: `outbox-${outboxItem.clientId}`,
-          content: text,
-          user,
-          sentAt: outboxItem.createdAt,
-          transcriptAfterEntryId,
-          transcriptAfterSeq,
-          images: imgs.length ? imgs : undefined,
-          busyMode: "queue" as const,
-        },
-      ]);
-    }
-    // Your own send always lands in view. relayout's glue only runs while
-    // `following`, so once the reader has scrolled up into history the
-    // optimistic bubble arrives below the fold with nothing moving — and a
-    // send is unambiguous intent to watch this turn. Instant, not smooth: the
-    // glue that follows sets scrollTop directly and would fight an animation.
-    cancelIndexAnchorHold();
-    scrollToLatest("auto");
-    if (!isolated) {
-      dropStagingAttachments(draftKey);
-      setImages([]);
-      setFiles([]);
-      setQuote(null);
-      setContextSessions([]);
-    }
-    measureSessionPerf("send_handler_ms", sendStartedAt);
-    return true;
+        pendingRef,
+        setPending,
+        dispatch: dispatchSessionRuntime,
+        onRunningChange,
+      },
+      transcript: {
+        viewStore: transcriptViewStore,
+        sequenceRef: transcriptSeqRef,
+        tailActionNeedsLayoutScrollRef,
+        cancelIndexAnchorHold,
+        scrollToLatest,
+      },
+      send,
+    });
   }
 
-  const imageRegionCommentRef = useRef<
-    (request: ImageRegionCommentRequest) => Promise<void>
-  >(async () => {});
-  useLayoutEffect(() => {
-    imageRegionCommentRef.current = async (request) => {
-      if (request.sessionId !== session.id)
-        throw new Error("That session changed");
-      const crop = await cropImageRegionFile(request.src, request.region);
-      const staged = await splitAttachments([crop]);
-      if (staged.images.length === 0)
-        throw new Error(
-          staged.rejected[0] || "Could not attach the selected image",
-        );
-      const sent = await handleSend(request.text, undefined, staged.images);
-      if (!sent) throw new Error("Could not send this comment");
-    };
+  useImageRegionComposer({
+    sessionId: session.id,
+    noEngine,
+    handleSend,
   });
-  useEffect(() => {
-    if (noEngine) return;
-    return registerImageRegionCommentHandler(session.id, (request) =>
-      imageRegionCommentRef.current(request),
-    );
-  }, [noEngine, session.id]);
 
   function discardOutbox(item: PromptOutboxItem) {
-    setPending((current) =>
-      current.filter((entry) => entry.id !== `outbox-${item.clientId}`),
-    );
-    promptOutbox.discard(item.clientId);
+    discardSessionOutboxItem(item, setPending);
   }
 
   function editOutboxInComposer(item: PromptOutboxItem) {
@@ -3073,22 +2498,11 @@ export function SessionViewer({
   }
 
   function editQueuedInComposer(q: QueueReceipt, steering = false) {
-    if (composerHasDraft()) {
-      toast("Send or clear your draft before editing a message");
-      return;
-    }
-    if (!q.id) return;
-    if (steering) {
-      dispatchSessionRuntime({
-        type: "set_steered_editing",
-        queueId: q.id,
-        editing: true,
-      });
-    }
-    send({
-      type: steering ? "take_steered_prompt" : "take_queued_prompt",
+    takeSessionQueueItem(q, steering, {
       sessionId: session.id,
-      queueId: q.id,
+      composerHasDraft,
+      dispatch: dispatchSessionRuntime,
+      send,
     });
   }
 
@@ -3100,14 +2514,14 @@ export function SessionViewer({
         toast("Send or clear your draft before editing a message");
         return;
       }
-      setImages(entry.images ?? []);
-      setFiles(
+      composerSettersRef.current.setImages(entry.images ?? []);
+      composerSettersRef.current.setFiles(
         (entry.files ?? []).map((file) => ({
           ...file,
           type: "application/octet-stream",
         })),
       );
-      setComposerPrefill((current) => ({
+      setComposerPrefillRef.current((current) => ({
         seq: (current?.seq ?? 0) + 1,
         text: entry.content,
         replace: true,
@@ -3117,21 +2531,16 @@ export function SessionViewer({
   );
 
   function handleQueueReorder(next: QueueReceipt[]) {
-    pendingReorderRef.current = next;
-    dispatchSessionRuntime({ type: "reorder_queue", queued: next });
+    reorderSessionQueue(next, pendingReorderRef, dispatchSessionRuntime);
   }
 
   function commitQueueReorder() {
-    draggingQueueRef.current = false;
-    const next = pendingReorderRef.current;
-    pendingReorderRef.current = null;
-    if (!next) return;
-    const order = next
-      .map((q) => q.id)
-      .filter((id): id is string => typeof id === "string");
-    if (order.length > 1) {
-      send({ type: "reorder_queued_prompt", sessionId: session.id, order });
-    }
+    commitSessionQueueReorder(
+      session.id,
+      draggingQueueRef,
+      pendingReorderRef,
+      send,
+    );
   }
 
   const {
@@ -3215,61 +2624,51 @@ export function SessionViewer({
   }
 
   function handleShareWorkspace() {
-    const path = session.workspaceId
-      ? `${BASE_PATH}/workspace/${encodeURIComponent(session.workspaceId)}`
-      : sessionPath(session);
-    shareLink(absoluteLink(path), {
-      toast: "Link copied",
-      title: workspaceName || session.title || undefined,
+    shareSessionAction({
+      context: {
+        session,
+        workspaceName,
+        workspaceScoped: Boolean(session.workspaceId),
+      },
+      pane: {
+        showReview,
+        showConversation,
+        showVideo,
+        subagentIds: [],
+      },
+      shareLink,
     });
   }
 
   function handleShare() {
-    // Share the workspace pane on screen rather than the session that happened
-    // to host it. Session and sub-agent links keep their existing canonical form.
-    const pane = showReview
-      ? "review"
-      : showConversation
-        ? "conversation"
-        : showVideo
-          ? "video"
-          : null;
-    const path =
-      pane && session.workspaceId
-        ? workspacePanePath(session.workspaceId, pane)
-        : sessionPath(
-            session,
-            subagentOpen ? subagentStack.map((s) => s.agentId) : [],
-          );
-    const link = absoluteLink(path);
-    // Phone: native share sheet. Desktop: copy, with the inline check on
-    // the button + a floating "Link copied" toast.
-    // The native sheet titles the link with the workspace, matching the header.
-    shareLink(link, {
-      toast: "Link copied",
-      title: workspaceName || session.title || undefined,
+    shareSessionAction({
+      context: { session, workspaceName, workspaceScoped: false },
+      pane: {
+        showReview,
+        showConversation,
+        showVideo,
+        subagentIds: subagentOpen
+          ? subagentStack.map((subagent) => subagent.agentId)
+          : [],
+      },
+      shareLink,
     });
   }
 
   async function handleOpenSlackComposer() {
-    setOverflowOpen(false);
-    try {
-      const request = await openSlackComposer(
-        session.id,
-        latestAssistantMessage,
-      );
-      setSlackComposer(request);
-      setSlackComposerStatus("idle");
-      setSlackComposerReconnect(false);
-      setSlackComposerSent(null);
-      requestAnimationFrame(() => scrollToLatest("smooth"));
-    } catch (error) {
-      toast(
-        error instanceof Error
-          ? error.message
-          : "Couldn't open the Slack composer",
-      );
-    }
+    await openSlackComposerAction({
+      sessionId: session.id,
+      latestAssistantMessage,
+      setters: {
+        setComposer: setSlackComposer,
+        setStatus: setSlackComposerStatus,
+        setReconnect: setSlackComposerReconnect,
+        setSent: setSlackComposerSent,
+      },
+      closeOverflow: () => setOverflowOpen(false),
+      scrollToLatest,
+      toast,
+    });
   }
 
   function commitRename() {
@@ -3342,63 +2741,20 @@ export function SessionViewer({
   const [archiving, setArchiving] = useState(false);
   const [deleteLabel, setDeleteLabel] = useState("");
 
-  // Responsive header: when the top bar gets narrow (small window, sidebar +
-  // workspace panel both open), the title truncates first (CSS), then the
-  // Share button collapses into the ⋯ menu so it never overlaps the title.
-  // (Pin stays inline beside Preview on desktop; Spin off lives in the ⋯ menu.) Measured on the
-  // header element itself so it tracks the real available width regardless
-  // of the surrounding chrome.
-  const headerRef = useRef<HTMLDivElement>(null);
-  const headerActionsRef = useRef<HTMLDivElement>(null);
-  const [reviewSessionActionTarget, setReviewSessionActionTarget] =
-    useState<HTMLDivElement | null>(null);
-  const desktopChangesRef = useRef<HTMLDivElement>(null);
-  const [headerW, setHeaderW] = useState(0);
-  // Whether the header's workspace-summary card is up. The transcript and
-  // composer shift out from under it while it is, and the header's own PR
-  // strip and preview globe stand down, so this lives here rather than inside
-  // the card. Seeded from the stored preference rather than starting shut: the
-  // card reports itself an effect later, and a frame of the strip it replaces
-  // is the thing this is here to prevent.
-  const [summaryOpen, setSummaryOpen] = useState(workspaceSummaryOpen);
-  useLayoutEffect(() => {
-    const el = headerRef.current;
-    if (!el) return;
-    // Once by hand, before the first paint: the observer's own opening callback
-    // lands after it, and this width decides whether the summary card has room
-    // to stand open. A frame late is a frame of a card lying across a narrow
-    // transcript. Content box, to match what the observer reports below.
-    const box = getComputedStyle(el);
-    setHeaderW(
-      el.clientWidth -
-        parseFloat(box.paddingLeft) -
-        parseFloat(box.paddingRight),
-    );
-    const ro = new ResizeObserver((entries) => {
-      for (const e of entries) setHeaderW(e.contentRect.width);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [topbarEl]);
-  // Collapse before the inline row can overrun: the title's non-shrinkable
-  // floor (source chip + Working pill) plus the inline actions (facepile,
-  // links, Share) needs ~740px, so below that Share moves into the ⋯ menu.
-  const compactHeader = headerW > 0 && headerW < 740;
-
-  // Phone layout (same 720px breakpoint as the CSS page-stack): the header
-  // actions portal into the top bar next to the centered title, and every
-  // secondary action folds into the ⋯ menu so the bar holds just ⋯ + Workspace.
-  const [isPhone, setIsPhone] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(max-width: 720px)").matches,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 720px)");
-    const onChange = () => setIsPhone(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
+  const headerLayout = useSessionHeaderLayout({
+    topbarEl,
+    workspaceSummaryOpen,
+  });
+  const {
+    headerRef,
+    headerActionsRef,
+    reviewSessionActionTarget,
+    setReviewSessionActionTarget,
+    desktopChangesRef,
+  } = headerLayout.elements;
+  const { headerW, compactHeader } = headerLayout.width;
+  const { summaryOpen, setSummaryOpen } = headerLayout.summary;
+  const { isPhone } = headerLayout.viewport;
   useEffect(() => {
     if (!activePanelOpen) {
       setPanelTerminalMounted(false);
@@ -3494,67 +2850,43 @@ export function SessionViewer({
 
   useEffect(() => {
     if (!composerPrefillExternal) return;
-    setComposerPrefill(composerPrefillExternal);
+    setComposerPrefillRef.current(composerPrefillExternal);
     onComposerPrefillConsumed?.(composerPrefillExternal.seq);
     if (!isPhone) composerRef.current?.focus();
   }, [composerPrefillExternal, onComposerPrefillConsumed, isPhone]);
 
   const [overflowOpen, setOverflowOpen] = useState(false);
-  const [overflowGit, setOverflowGit] = useState<{
-    sessionId: string;
-    status: GitStatusInfo | null;
-  } | null>(null);
-  const [branchActionBusy, setBranchActionBusy] = useState<
-    "move" | "create" | null
-  >(null);
-  const [branchConfirmOpen, setBranchConfirmOpen] = useState(false);
-  const [branchConfirmMode, setBranchConfirmMode] = useState<"move" | "create">(
-    "move",
-  );
-  const [mobileActionMenuEl, setMobileActionMenuEl] =
-    useState<HTMLDivElement | null>(null);
   const primaryPrNumber = prPresentation.primary?.number;
-  // PR actions are tucked into the overflow menu. Fetch once when the session
-  // branch changes so the menu does not open first and add its actions later.
-  useEffect(() => {
-    if (!hasRepoWork || primaryPrNumber) return;
-    let stale = false;
-    fetchGitStatus(session.id, session.repo || undefined)
-      .then((status) => {
-        if (!stale) setOverflowGit({ sessionId: session.id, status });
-      })
-      .catch(() => {
-        if (!stale) setOverflowGit({ sessionId: session.id, status: null });
-      });
-    return () => {
-      stale = true;
-    };
-  }, [hasRepoWork, primaryPrNumber, session.id, session.repo, session.branch]);
-  useEffect(() => {
-    setOverflowGit(null);
-    setBranchActionBusy(null);
-    setBranchConfirmOpen(false);
-    setBranchConfirmMode("move");
-  }, [session.id]);
+  const overflowState = useSessionOverflowState({
+    sessionId: session.id,
+    repo: session.repo || undefined,
+    branch: session.branch,
+    hasRepoWork,
+    primaryPrNumber,
+  });
+  const { mobileActionMenuEl, setMobileActionMenuEl } = overflowState.menu;
+  const { overflowGit } = overflowState.git;
+  const {
+    branchActionBusy,
+    setBranchActionBusy,
+    branchConfirmOpen,
+    setBranchConfirmOpen,
+    branchConfirmMode,
+    setBranchConfirmMode,
+  } = overflowState.branch;
 
   async function moveToBranchFromMenu() {
-    if (isBusy || branchActionBusy) return;
-    setBranchActionBusy("move");
-    try {
-      const result = await moveSessionToBranchApi(session.id);
-      setOverflowOpen(false);
-      setBranchConfirmOpen(false);
-      toast(
-        result.copiedFiles
-          ? `Moved to ${result.branch} · ${result.copiedFiles} file${result.copiedFiles === 1 ? "" : "s"} copied`
-          : `Moved to ${result.branch}`,
-      );
-    } catch (error) {
-      toast(
-        error instanceof Error ? error.message : "Could not move to a branch",
-      );
-    }
-    setBranchActionBusy(null);
+    await moveSessionToBranchAction({
+      sessionId: session.id,
+      isBusy,
+      state: {
+        busy: branchActionBusy,
+        setBusy: setBranchActionBusy,
+        closeOverflow: () => setOverflowOpen(false),
+        closeConfirm: () => setBranchConfirmOpen(false),
+      },
+      toast,
+    });
   }
 
   function requestCreatePr() {
@@ -3574,19 +2906,19 @@ export function SessionViewer({
   }
 
   async function moveAndCreatePr() {
-    if (!connected || isBusy || branchActionBusy) return;
-    setBranchActionBusy("create");
-    try {
-      const result = await moveSessionToBranchApi(session.id);
-      setBranchConfirmOpen(false);
-      requestCreatePr();
-      toast(`Moved to ${result.branch}. Creating PR…`);
-    } catch (error) {
-      toast(
-        error instanceof Error ? error.message : "Could not move to a branch",
-      );
-    }
-    setBranchActionBusy(null);
+    await moveAndCreatePrAction({
+      sessionId: session.id,
+      connected,
+      isBusy,
+      state: {
+        busy: branchActionBusy,
+        setBusy: setBranchActionBusy,
+        closeOverflow: () => setOverflowOpen(false),
+        closeConfirm: () => setBranchConfirmOpen(false),
+      },
+      requestCreatePr,
+      toast,
+    });
   }
   // Left-edge swipe on phones pops the topmost overlay before the page stack:
   // the info page registers as a higher-priority back-swipe layer, so the
@@ -3679,48 +3011,23 @@ export function SessionViewer({
   }, [pending, queued, session.id, session.title]);
 
   async function handleDelete(cleanWorktree: boolean) {
-    setDeleteLabel(
-      cleanWorktree ? "Deleting session and worktree…" : "Deleting session…",
-    );
-    setDeleting(true);
-    try {
-      await deleteSessionApi(session.id, cleanWorktree);
-      // Leave the overlay up through the navigation so it never flashes back to
-      // the (now-deleted) session view.
-      goBack();
-    } catch (error) {
-      alert(
-        `Delete failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-      setDeleting(false);
-      setShowDeleteConfirm(false);
-    }
+    await deleteSessionAction({
+      sessionId: session.id,
+      cleanWorktree,
+      setLabel: setDeleteLabel,
+      setDeleting,
+      setConfirmOpen: setShowDeleteConfirm,
+      goBack,
+    });
   }
 
-  // Archive is the reversible "I'm done with this" — unlike delete it keeps the
-  // session (and worktree) and just tucks it into the Archived view, so no
-  // confirm step. Unarchiving from here keeps the session selected as it moves
-  // back into the live sidebar.
   const handleArchive = useCallback(async () => {
-    const next = !session.archived;
-    setArchiving(true);
-    setOverflowOpen(false);
-    if (next && onArchive) {
-      onArchive();
-      return;
-    }
-    try {
-      const { stoppedRun } = await archiveSessionApi(session.id, next);
-      if (next) {
-        onArchived?.(stoppedRun);
-        goBack();
-      }
-    } catch (error) {
-      alert(
-        `${next ? "Archive" : "Unarchive"} failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-      setArchiving(false);
-    }
+    await archiveSessionAction({
+      sessionId: session.id,
+      archived: session.archived,
+      callbacks: { onArchive, onArchived, goBack },
+      setters: { setArchiving, setOverflowOpen },
+    });
   }, [
     onArchive,
     onArchived,
@@ -3731,39 +3038,10 @@ export function SessionViewer({
     setOverflowOpen,
   ]);
 
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (!focused) return;
-      if (e.defaultPrevented || blockingOverlayOpen()) {
-        return;
-      }
-      // Same composer exemption as the sidebar's archive chords: the
-      // composer autofocuses, so an unconditional editable-focus bail
-      // would leave ⌘E dead almost always. Other inputs keep the guard.
-      const target = e.target as HTMLElement | null;
-      const editable = target?.closest(
-        "input, textarea, select, [contenteditable='true'], [contenteditable='']",
-      );
-      if (editable && !editable.classList.contains("composer-textarea")) {
-        return;
-      }
-      if (matchesShortcut(e, "workspace-next-unread") && openNextChat) {
-        e.preventDefault();
-        openNextChat();
-        return;
-      }
-      // The sidebar handles live sessions when it can, because it knows which
-      // visible row comes next. Keep this listener as the route-level fallback:
-      // the viewer remains mounted even when the sidebar cannot handle the open
-      // session. `defaultPrevented` above ensures only one handler fires.
-      if (matchesShortcut(e, "session-archive") && !archiving) {
-        e.preventDefault();
-        void handleArchive();
-      }
-    }
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [focused, archiving, handleArchive, openNextChat, session.archived]);
+  useSessionArchiveShortcut({
+    identity: { focused, archiving, archived: session.archived },
+    actions: { archive: handleArchive, openNextChat },
+  });
 
   // The Assets pane is a top-strip view-tab too (App owns whether it's
   // foregrounded). If the last asset is deleted while its tab is up, close it
@@ -5447,11 +4725,7 @@ export function SessionViewer({
                       reconnectRequired={slackComposerReconnect}
                       loadChannels={() => fetchSlackChannels(session.id)}
                       onShare={sendComposedSlackMessage}
-                      onReconnectSlack={async () => {
-                        await reconnectSlack();
-                        setSlackComposerReconnect(false);
-                        toast("Approve image access in Slack, then send again");
-                      }}
+                      onReconnectSlack={reconnectComposedSlack}
                       onCancel={cancelComposedSlackMessage}
                     />
                   )}
