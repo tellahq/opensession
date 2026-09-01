@@ -169,6 +169,22 @@ describe("Portals MCP staging routes", () => {
     });
   });
 
+  test("rejects Tella editor routes through the generic setter", async () => {
+    const { calls, runtime, verificationCalls } = await harness();
+    const response = await runtime.callExact(
+      "opensession-portals_set_portal_path",
+      { path: "/video/vid_invented/edit?status=Subtitles" },
+      { toolCallId: "generic-editor" },
+    );
+
+    expect(verificationCalls).toEqual([]);
+    expect(calls).toEqual([]);
+    expect(response.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("set_editor_preview_path"),
+    });
+  });
+
   test("keeps ordinary web routes outside the exclusive editor flow", async () => {
     const { calls, runtime, verificationCalls } = await harness();
     const response = await runtime.callExact(

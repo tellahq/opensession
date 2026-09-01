@@ -141,6 +141,13 @@ async function startPortalForContext(
   return `${portal.name} is ready at ${service?.previewUrl ?? "its authenticated Portal URL"}.`;
 }
 
+function isTellaEditorPath(path: string): boolean {
+  const normalized = normalizePortalPath(path);
+  return normalized
+    ? /^\/video\/[^/?#]+\/edit(?:[/?#]|$)/.test(normalized)
+    : false;
+}
+
 export function createPortalsMcpServer(ctx: PortalsMcpContext) {
   return createSdkMcpServer({
     name: "opensession-portals",
@@ -452,6 +459,10 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
           const dir = workspace(ctx);
           if (dir instanceof Error) return result(dir.message);
           try {
+            if (isTellaEditorPath(path))
+              throw new Error(
+                "Tella editor routes require set_editor_preview_path with a verified fixture lease.",
+              );
             if (name) {
               const runner = ctx.runner();
               if (runner?.runner) {
