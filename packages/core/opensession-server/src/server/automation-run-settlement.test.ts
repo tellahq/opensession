@@ -177,6 +177,55 @@ describe("automation run settlement", () => {
     expect(inLoopSettle).toBeLessThan(streamDrained);
   });
 
+  test("a stream with no terminal event records error, not ok", () => {
+    // Parity with session-create.ts, which throws "Opening run ended without a
+    // terminal event" for exactly this shape, and with every journal wrapper,
+    // which records journalRecordAbnormalCompletion instead of clearing so
+    // boot recovery reports a failure. runAutomation used to fall through with
+    // an empty errorMsg: outputs delivered for a turn that produced nothing,
+    // ledger `ok`, session still unsettled — the same split-brain this module
+    // exists to remove.
+    const source = readFileSync(
+      resolve(import.meta.dir, "automations.ts"),
+      "utf8",
+    );
+    const drained = source.indexOf("errorMsg = declaredRunFailure(textTail)");
+    const abnormal = source.indexOf(
+      "if (!errorMsg && !sawTerminalEvent)",
+      drained,
+    );
+    expect(abnormal).toBeGreaterThan(drained);
+    expect(source).toContain('errorMsg = "Run ended without a terminal event"');
+    // The ledger verdict and the output delivery both read errorMsg, so the
+    // correction has to land before either of them.
+    for (const consumer of [
+      "await deliverAutomationOutputs({",
+      "settleRun(automation.id, bksId,",
+      "recordAutomationIntentTerminal(bksId,",
+    ]) {
+      expect(source.indexOf(consumer, drained)).toBeGreaterThan(abnormal);
+    }
+  });
+
+  test("an abnormal completion still keeps the session's safety fence", async () => {
+    const id = sid();
+    await hostedAutomationRunning(id);
+
+    // The ledger now records an error for this shape, but the run state must
+    // NOT be settled from here: nothing proved what the turn did, the journal
+    // still carries its terminalFailure, and boot recovery owns settling it.
+    await settleAutomationRunState(
+      id,
+      "Run ended without a terminal event",
+      false,
+      runKeyFor(id),
+      silent,
+    );
+
+    expect(getRunState(id)).toBe("running");
+    expect(isRunStateUnsettled(getRunState(id))).toBe(true);
+  });
+
   test("a usage-exhausted done becomes a failure before the run settles", () => {
     // Dying on usage limits with no account left reports as a `done` carrying
     // `usageLimitExhausted`, not an `error`. An automation with
