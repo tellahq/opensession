@@ -142,8 +142,8 @@ function SandboxDefaultRow({
       title="Default sandbox"
       desc={
         scope === "personal"
-          ? "Your environment for new sessions. A per-session choice still overrides it."
-          : "The environment new sessions use unless a person or session chooses another."
+          ? "Your environment for new sessions."
+          : "The environment for new sessions."
       }
       control={
         <div
@@ -184,8 +184,7 @@ export function WorkspaceSandboxDefaults({
         <SandboxDefaultRow scope="workspace" canManage={canManage} />
       </SettingCard>
       <SettingsHint>
-        None keeps sessions on this host. Only configured providers that passed
-        the live behavior and warm-restore matrices are offered.
+        None uses this host. Only tested providers appear here.
       </SettingsHint>
     </>
   );

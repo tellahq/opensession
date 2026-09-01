@@ -90,6 +90,18 @@ enum TranscriptScroll {
         return distanceFromBottom(geometry) <= tolerance
     }
 
+    /// Automatic history loading starts only after the gesture that exposed
+    /// the loader has ended. Starting it during that gesture lets the delayed
+    /// prepend restore fight the same drag or momentum for the scroll offset.
+    static func shouldRequestEarlierHistory(
+        demanded: Bool,
+        readerScrollActive: Bool,
+        canLoadEarlier: Bool,
+        loadingEarlier: Bool
+    ) -> Bool {
+        demanded && !readerScrollActive && canLoadEarlier && !loadingEarlier
+    }
+
     /// Whether a measured tail-height change should be followed immediately.
     /// A settling hold covers programmatic navigation whose intermediate
     /// geometry frame briefly falls outside the bottom tolerance.

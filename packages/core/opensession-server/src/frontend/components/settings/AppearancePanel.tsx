@@ -777,7 +777,7 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
         />
         <SettingRow
           title="Show sub-agents"
-          desc="Nest worker sessions under the selected workspace."
+          desc="Nest worker sessions under their workspace."
           control={
             <Switch
               aria-label="Show sub-agents"
@@ -892,7 +892,7 @@ export function SidebarItemsSection() {
         {sidebarFeeds.some((feed) => feed.id === PLAIN_ID) && (
           <SettingRow
             title="Support tickets"
-            desc="Choose where Plain tickets live: in a full workspace from the sidebar, or beside the queue without chat."
+            desc="Choose where tickets appear."
             control={
               <Select
                 label="Where support tickets live"
@@ -929,7 +929,7 @@ export function SidebarItemsSection() {
             <SettingRow
               key={feed.id}
               title={feed.title}
-              desc="Hidden sources stop refreshing until shown again."
+              desc="Hidden sources stop refreshing."
               control={
                 <Switch
                   aria-label={`Show ${feed.title} in sidebar`}
