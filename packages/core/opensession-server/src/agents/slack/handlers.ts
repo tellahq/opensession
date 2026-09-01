@@ -1101,13 +1101,13 @@ export async function processMessage(
           session.model = event.toModel;
           await persistSession(session);
         }
-        await sendSlackMessage(
-          channel,
-          durable
-            ? `:warning: \`${event.fromModel}\` is out of usage on all accounts — continuing on \`${event.toModel}\`.`
-            : `:warning: \`${event.fromModel}\` ${event.switchReason || "fell back"} — using \`${event.toModel}\` for this turn only.`,
-          threadTs,
-        ).catch(() => {});
+        if (!durable) {
+          await sendSlackMessage(
+            channel,
+            `:warning: \`${event.fromModel}\` ${event.switchReason || "fell back"} — using \`${event.toModel}\` for this turn only.`,
+            threadTs,
+          ).catch(() => {});
+        }
       }
 
       // Assistant prose -> the card's narration line (Linear-style). Chunks

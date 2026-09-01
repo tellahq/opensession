@@ -125,9 +125,10 @@ test("SessionViewer navigation comes from NavigationContext", async () => {
   expect(viewer).toContain("onOpenSession={openCurrentWorkspace}");
 });
 
-test("fork session stays available at the current tip inside a workspace", async () => {
+test("duplicate session stays available at the current tip inside a workspace", async () => {
   const { viewer } = await sources();
   expect(viewer).toContain("                  {forkAction}");
+  expect(viewer).toContain('<span className="grow">Duplicate session</span>');
   expect(viewer).not.toContain("{!workspaceScopedMenu && forkAction}");
   expect(viewer).toContain("                handleFork();");
   expect(viewer).not.toContain("const lastAssistantId = entries.findLast(");

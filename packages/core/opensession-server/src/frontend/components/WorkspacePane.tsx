@@ -834,8 +834,6 @@ export function WorkspacePane({
             onOpenChange={setReviewSummaryOpen}
             tabStripVisible={tabStripVisible}
             reviewMode
-            reviewPage={reviewPage}
-            onReviewPageChange={setReviewPage}
             hasRoom={reviewSummaryHasRoom}
           />
         )}

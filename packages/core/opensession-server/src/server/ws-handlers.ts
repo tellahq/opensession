@@ -1377,7 +1377,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 
           // Sending a new human turn makes archived work active again. Do this
           // only after validation and slash-command handling have accepted the turn.
-          unarchiveForHumanTurn(session);
+          await unarchiveForHumanTurn(session);
 
           // @People-mentions in a prompt ping the tagged teammates (roster
           // from the identity config, never the sender). Fires at send time
@@ -1543,7 +1543,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             );
             return;
           }
-          unarchiveForHumanTurn(session);
+          await unarchiveForHumanTurn(session);
           maybePersistEffort(session, msg.effort);
           maybePersistFastMode(session, msg.fastMode);
           await liftUserStop(sessionId);
