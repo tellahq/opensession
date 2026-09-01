@@ -21,6 +21,8 @@ test("SessionViewer decomposition files stay below the source line limit", async
     "hooks/useSessionRuntimeController.ts",
     "hooks/useTranscriptHistoryController.ts",
     "hooks/useTranscriptReaderController.ts",
+    "hooks/useSessionTranscriptContextController.ts",
+    "hooks/useSessionViewerKeyboardController.ts",
     "hooks/useSessionViewerActionsController.ts",
     "lib/session-viewer-actions.ts",
     "lib/transcript-history-controller.ts",
@@ -132,6 +134,46 @@ test("transcript reader lifecycle stays grouped and out of SessionViewer", async
   expect(viewer).not.toContain("const initiallyScrolledSessionRef = useRef");
   expect(reader).not.toMatch(/:\s*any\b/);
   expect(reader).not.toMatch(/\bas\s+(?:const|[A-Z]\w*)\b/);
+});
+
+test("transcript context and keyboard controllers stay bounded", async () => {
+  const [viewer, context, keyboard] = await Promise.all([
+    source("components/SessionViewer.tsx"),
+    source("hooks/useSessionTranscriptContextController.ts"),
+    source("hooks/useSessionViewerKeyboardController.ts"),
+  ]);
+
+  for (const [text, groups] of [
+    [
+      context,
+      [
+        "TranscriptContextIdentity",
+        "TranscriptContextDraft",
+        "TranscriptContextWorkspace",
+        "TranscriptContextNavigation",
+        "SessionTranscriptContextOptions",
+      ],
+    ],
+    [
+      keyboard,
+      [
+        "KeyboardIdentity",
+        "KeyboardModel",
+        "KeyboardTranscript",
+        "SessionViewerKeyboardOptions",
+      ],
+    ],
+  ] as const) {
+    for (const group of groups) {
+      expect(interfaceMemberCount(text, group), group).toBeLessThanOrEqual(15);
+    }
+  }
+  expect(viewer.match(/useSessionTranscriptContextController\(/g)).toHaveLength(
+    1,
+  );
+  expect(viewer.match(/useSessionViewerKeyboardController\(/g)).toHaveLength(1);
+  expect(viewer).not.toContain("const composerDraftRef = useRef");
+  expect(viewer).not.toContain("function onKeyDown(e: KeyboardEvent)");
 });
 
 test("the session subscription has one bounded grouped options contract", async () => {

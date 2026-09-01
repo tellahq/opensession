@@ -21,7 +21,7 @@ import {
   scheduleTranscriptDomNodeSample,
 } from "../lib/session-performance";
 import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
-import { withQuotes, type Quote } from "../lib/quotes";
+import { withQuotes } from "../lib/quotes";
 import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
@@ -114,6 +114,8 @@ import {
   undoShippedChangeAction,
 } from "../lib/session-viewer-actions";
 import { useSessionViewerSubscription } from "../hooks/useSessionViewerSubscription";
+import { useSessionViewerKeyboardController } from "../hooks/useSessionViewerKeyboardController";
+import { useSessionTranscriptContextController } from "../hooks/useSessionTranscriptContextController";
 import {
   useTranscriptReaderLayout,
   useTranscriptReaderLifecycle,
@@ -144,7 +146,7 @@ import {
   facepileAvatarStyle,
   otherViewers,
 } from "../lib/presence";
-import { personKey, prReviewCompletion } from "../lib/review-queue";
+import { personKey } from "../lib/review-queue";
 import { Composer } from "./Composer";
 import { TypingIndicator } from "./TypingIndicator";
 import { ComposerAgents } from "./ComposerAgents";
@@ -166,7 +168,6 @@ import {
   registerImageRegionCommentHandler,
   type ImageRegionCommentRequest,
 } from "../lib/image-region-comment-registry";
-import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import {
   attachToDraft,
   dropStagingAttachments,
@@ -189,7 +190,6 @@ import { RepoTile } from "./RepoTile";
 import { SandboxBadge } from "./SandboxBadge";
 import { ModelMenuRow } from "./ModelMenuRow";
 import {
-  EFFORTS,
   baseModelId,
   friendlyModelSlug,
   routedModelParts,
@@ -304,7 +304,6 @@ import {
   WS_SUMMARY_ROOM_W,
   workspaceSummaryShift,
 } from "../lib/workspace-summary-open";
-import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
 import { TURN_SPACER } from "../lib/app-shell-classes";
 import {
@@ -1323,86 +1322,11 @@ export function SessionViewer({
   const newSiblingKeys = useShortcutKeys("session-new-sibling");
   const transcriptDownKeys = useShortcutKeys("transcript-down");
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (!focused) return;
-      if (matchesShortcut(e, "composer-focus")) {
-        e.preventDefault();
-        composerRef.current?.focus();
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focused]);
-
-  // ⌘⌥↑/⌘⌥↓ step the reasoning effort through the current model's supported
-  // levels (up = more thinking), wrapping at the ends. Resolves the same
-  // effective effort as the ModelEffortSelect pill (stored value when the
-  // model offers it, else "high", else the model's first level), so the step
-  // always starts from what the pill displays. Fires with the composer
-  // focused too — the Alt modifier keeps it clear of plain ⌘↑/⌘↓ (workspace
-  // cycling in the Sidebar, and caret start/end moves in the textarea).
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (!focused) return;
-      if (e.defaultPrevented) return;
-      const dir = matchesShortcut(e, "effort-up")
-        ? 1
-        : matchesShortcut(e, "effort-down")
-          ? -1
-          : 0;
-      if (dir === 0) return;
-      const effectiveModel = model || defaultModel;
-      const supportedIds =
-        models.find((m) => m.id === effectiveModel)?.efforts ?? [];
-      const supported = EFFORTS.filter((ef) => supportedIds.includes(ef.id));
-      if (supported.length < 2) return;
-      const effective = supportedIds.includes(effort)
-        ? effort
-        : supportedIds.includes("high")
-          ? "high"
-          : supported[0].id;
-      const idx = supported.findIndex((ef) => ef.id === effective);
-      const next = supported[(idx + dir + supported.length) % supported.length];
-      if (!next) return;
-      e.preventDefault();
-      setEffort(next.id);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focused, models, defaultModel, model, effort, setEffort]);
-
-  // ⌃⇧↑/⌃⇧↓ page the transcript up/down — keyboard scrolling that works while
-  // the composer is focused. A programmatic scroll carries no reader gesture,
-  // so useSessionScroll won't re-engage auto-follow from it: a Down that would
-  // land at the live edge goes through scrollToLatest, which resumes following.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (!focused) return;
-      if (e.defaultPrevented) return;
-      const up = matchesShortcut(e, "transcript-up");
-      const down = matchesShortcut(e, "transcript-down");
-      if (!up && !down) return;
-      const el = messagesRef.current;
-      if (!el) return;
-      e.preventDefault();
-      const delta = Math.max(120, el.clientHeight * 0.8);
-      if (down) {
-        const remaining = el.scrollHeight - el.clientHeight - el.scrollTop;
-        if (remaining - delta < 48) {
-          scrollToLatest();
-          return;
-        }
-      }
-      if (up) leaveLatest();
-      el.scrollBy({
-        top: up ? -delta : delta,
-        behavior: "smooth",
-      });
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focused, messagesRef, scrollToLatest, leaveLatest]);
+  useSessionViewerKeyboardController({
+    identity: { focused, composerRef },
+    model: { models, defaultModel, model, effort, setEffort },
+    transcript: { messagesRef, scrollToLatest, leaveLatest },
+  });
 
   // A "new tab" while this session is open is a fresh session *in this session*:
   // clear the composer and jump to the live edge. We skip the first run (and
@@ -1747,154 +1671,27 @@ export function SessionViewer({
     toast("Session repaired");
   }, [dispatchSessionRuntime, onRunningChange, session.id]);
 
-  // Session and asset links navigate on a delegated click. markdown.ts renders
-  // them into dangerouslySetInnerHTML, where they cannot carry React handlers;
-  // data attributes identify which in-app surface should open.
-  const handleMessagesClick = useCallback(
-    (e: React.MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const assetEl = target.closest?.(
-        "[data-asset-path]",
-      ) as HTMLElement | null;
-      const assetPath = assetEl?.dataset.assetPath;
-      if (assetPath) {
-        // Modified clicks keep the anchor's raw-file fallback and native new-tab
-        // behaviour. A normal click stays in context, in the asset preview.
-        if (
-          (e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) &&
-          assetEl?.getAttribute("href")
-        )
-          return;
-        e.preventDefault();
-        openAssetFromTranscript(assetPath);
-        return;
-      }
-      const el = target.closest?.("[data-session-id]") as HTMLElement | null;
-      const id = el?.dataset.sessionId;
-      if (!id || !openSession) return;
-      // Modified clicks on href-carrying chips (markdown links to session
-      // URLs) keep native browser behavior (open in new tab, etc.).
-      if ((e.metaKey || e.ctrlKey || e.shiftKey) && el?.getAttribute("href"))
-        return;
-      e.preventDefault();
-      openSession(id);
-    },
-    [openSession, openAssetFromTranscript],
-  );
-
-  // The transcript passage explicitly attached to the next message. It stays
-  // highlighted until the message sends or the person removes it.
-  const [quote, setQuote] = useState<Quote | null>(null);
-  const clearQuote = useCallback(() => setQuote(null), []);
-  // Whether a draft is in the way of reopening a message in the composer, read
-  // through a ref. Every value it reads changes as you type or attach, and
-  // the transcript's onEditMessage has to keep one identity across all of
-  // that: the memoized TranscriptBlocks is what stands between a keystroke
-  // and a re-render of the whole conversation.
-  const composerDraftRef = useRef({
-    draftKey,
-    images,
-    files,
-    quote,
-    contextSessions,
-  });
-  useLayoutEffect(() => {
-    composerDraftRef.current = {
+  const transcriptContext = useSessionTranscriptContextController({
+    identity: { session, sessionHidden },
+    draft: {
       draftKey,
       images,
       files,
-      quote,
       contextSessions,
-    };
-  }, [draftKey, images, files, quote, contextSessions]);
-  const composerHasDraft = useCallback(() => {
-    const current = composerDraftRef.current;
-    const stored = loadDraft(current.draftKey);
-    return Boolean(
-      stored.text.trim() ||
-      stored.pastedTexts.length ||
-      current.images.length ||
-      current.files.length ||
-      current.quote ||
-      current.contextSessions.length,
-    );
-  }, []);
-  // Switching sessions drops staged selections: they quote THAT transcript.
-  useEffect(() => {
-    setQuote(null);
-  }, [session.id]);
-  // Full-width view tabs unmount the transcript and its visible highlight. Do
-  // not leave that context invisibly attached when the conversation returns.
-  useEffect(() => {
-    if (sessionHidden) setQuote(null);
-  }, [sessionHidden]);
-  const [showAllContextSessions, setShowAllContextSessions] = useState(false);
-  const contextSessionOptions = useMemo(() => {
-    // Whole workspace, archived sessions included — the common case is exactly a
-    // closed (archived-after-merge) sibling whose context the new session needs.
-    // workspaceSessions (the live tab strip) is the fallback when the session has no
-    // workspace id of its own.
-    const siblings = session.workspaceId
-      ? (allSessions || []).filter((c) => c.workspaceId === session.workspaceId)
-      : workspaceSessions || [];
-    return siblings
-      .filter(
-        (c) =>
-          c.id !== session.id &&
-          // Legacy hidden sessions are not valid workspace context options.
-          // Only sessions with something to hand over — a session that has
-          // actually run a turn. These are LIST rows, so `ran` is the only
-          // form of that answer they carry.
-          c.ran,
-      )
-      .sort((a, b) =>
-        (b.lastActivity || "").localeCompare(a.lastActivity || ""),
-      );
-  }, [allSessions, workspaceSessions, session.id, session.workspaceId]);
-  useEffect(() => {
-    setContextSessions([]);
-    setShowAllContextSessions(false);
-  }, [session.id]);
-
-  // Whose Desk this is. Every Desk is titled "Desk" and carries no repo, so
-  // the owner is the only thing that tells one apart from another — see the
-  // mobile title pill's leading slot.
-  const deskOwner = session.desk ? session.startedBy || "" : "";
-  // The review request is stored per session, but the sidebar's "Awaiting/Needs
-  // review" bands group by workspace — so a request set on a sibling session lit
-  // the band while the open session's Reviewer chip read empty. Surface the
-  // workspace's request in the chip: the open session's own if it has one, else a
-  // sibling's, carrying the owner id so clear/re-assign target the right session.
-  // GitHub reviews can complete an explicit request; GitHub's own requested
-  // reviewers ride alongside as `prReviewRequested`, since being added as a
-  // reviewer on the PR is the other way a review lands on you. It writes no
-  // Open Session request — only the picker does that — so the chip reads both.
-  const effectiveReview = (() => {
-    const owner = session.reviewRequest
-      ? session
-      : (workspaceSessions || []).find((c) => c.reviewRequest);
-    const request = owner?.reviewRequest ?? null;
-    const completion =
-      owner && request ? prReviewCompletion(request, owner) : null;
-    return {
-      req: request
-        ? completion
-          ? { ...request, accepted: completion }
-          : request
-        : null,
-      ownerId: owner?.id ?? session.id,
-      acceptedFromPr: !!completion,
-      // A workspace can span several PRs; a request on any of them is a
-      // request on the workspace, which is the unit the chip speaks for.
-      prReviewRequested: [
-        ...new Set(
-          (workspaceSessions?.length ? workspaceSessions : [session]).flatMap(
-            (c) => c.prReviewRequested || [],
-          ),
-        ),
-      ],
-    };
-  })();
+      setContextSessions,
+    },
+    workspace: { allSessions, workspaceSessions },
+    navigation: { openSession, openAsset: openAssetFromTranscript },
+  });
+  const { quote, setQuote, clearQuote } = transcriptContext.quote;
+  const { composerHasDraft } = transcriptContext.draft;
+  const {
+    showAllContextSessions,
+    setShowAllContextSessions,
+    contextSessionOptions,
+  } = transcriptContext.context;
+  const { handleMessagesClick } = transcriptContext.navigation;
+  const { deskOwner, effectiveReview } = transcriptContext.metadata;
 
   // Returns true when the message was consumed, so the (uncontrolled)
   // Composer knows to clear its draft; false keeps it for a retry.

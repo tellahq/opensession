@@ -81,7 +81,13 @@ async function sources() {
   const send = await Bun.file(
     new URL("../lib/session-viewer-send.ts", import.meta.url),
   ).text();
-  return { viewer, app, bindings, send };
+  const transcriptContext = await Bun.file(
+    new URL(
+      "../hooks/useSessionTranscriptContextController.ts",
+      import.meta.url,
+    ),
+  ).text();
+  return { viewer, app, bindings, send, transcriptContext };
 }
 
 function interfaceBody(sourceText: string, name: string) {
@@ -93,7 +99,7 @@ function interfaceBody(sourceText: string, name: string) {
 }
 
 test("SessionViewer navigation comes from NavigationContext", async () => {
-  const { viewer, bindings } = await sources();
+  const { viewer, bindings, transcriptContext } = await sources();
   const props = interfaceBody(bindings, "SessionViewerProps");
   const availability = interfaceBody(
     bindings,
@@ -130,7 +136,7 @@ test("SessionViewer navigation comes from NavigationContext", async () => {
   expect(viewer).toContain(
     "openReview && (prPresentation.primary || prPresentation.additional.length)",
   );
-  expect(viewer).toContain("if (!id || !openSession) return;");
+  expect(transcriptContext).toContain("if (!id || !openSession) return;");
   expect(viewer).toContain(
     "onOpenAsTab: openAssets ? promoteAssetToTab : undefined",
   );
