@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import {
   useCallback,
   useEffect,
@@ -120,6 +122,101 @@ import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
 import { RepoTile } from "../RepoTile";
 import { ModelMark } from "../ModelMark";
 import { IconPlus, IconRepo } from "../icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+  flex: {
+    display: "flex",
+  },
+  itemsCenter: {
+    alignItems: "center",
+  },
+  gap2: {
+    gap: "calc(4px * 2)",
+  },
+  flexCol: {
+    flexDirection: "column",
+  },
+  gap25: {
+    gap: "calc(4px * 2.5)",
+  },
+  h25: {
+    height: "calc(4px * 2.5)",
+  },
+  w72: {
+    width: "72%",
+  },
+  w88: {
+    width: "88%",
+  },
+  w46: {
+    width: "46%",
+  },
+  mt2: {
+    marginTop: "calc(4px * 2)",
+  },
+  h4: {
+    height: "calc(4px * 4)",
+  },
+  fontMedium: {
+    fontWeight: "var(--font-weight-medium)",
+  },
+  textFaint: {
+    color: "var(--text-faint)",
+  },
+  itemsStart: {
+    alignItems: "flex-start",
+  },
+  gap1: {
+    gap: "4px",
+  },
+  px05: {
+    paddingInline: "calc(4px * 0.5)",
+  },
+  mt0: {
+    marginTop: "0",
+  },
+  flexWrap: {
+    flexWrap: "wrap",
+  },
+  itemsEnd: {
+    alignItems: "flex-end",
+  },
+  justifyEnd: {
+    justifyContent: "flex-end",
+  },
+  gapX3: {
+    columnGap: "calc(4px * 3)",
+  },
+  gapY2: {
+    rowGap: "calc(4px * 2)",
+  },
+  phoneMinH11: {
+    "@media (max-width: 720px)": {
+      minHeight: "calc(4px * 11)",
+    },
+  },
+  phoneWFull: {
+    "@media (max-width: 720px)": {
+      width: "100%",
+    },
+  },
+  minW0: {
+    minWidth: "0",
+  },
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  phoneMaxWFull: {
+    "@media (max-width: 720px)": {
+      maxWidth: "100%",
+    },
+  },
+});
 
 // ── Desk voice ─────────────────────────────────────────────────────────────
 
@@ -185,7 +282,7 @@ function DeskVoiceApiKeyRow() {
           )
         }
         control={
-          <div className="flex items-center gap-2">
+          <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
             <Input
               type="password"
               autoComplete="off"
@@ -376,10 +473,23 @@ function PersonalPromptPanel() {
           // ten-row grey slab, which is the editor's box rather than its
           // contents and reads as a field you have been locked out of.
           <Skeleton label="Loading your prompt">
-            <SettingsSection className="flex flex-col gap-2.5">
-              <SkeletonBar className="h-2.5 w-[72%]" />
-              <SkeletonBar className="h-2.5 w-[88%]" />
-              <SkeletonBar className="h-2.5 w-[46%]" />
+            <SettingsSection
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.flex,
+                sx.flexCol,
+                sx.gap25,
+              )}
+            >
+              <SkeletonBar
+                className={mergeStylexOverrideClassName("", sx.h25, sx.w72)}
+              />
+              <SkeletonBar
+                className={mergeStylexOverrideClassName("", sx.h25, sx.w88)}
+              />
+              <SkeletonBar
+                className={mergeStylexOverrideClassName("", sx.h25, sx.w46)}
+              />
             </SettingsSection>
           </Skeleton>
         )}
@@ -401,7 +511,15 @@ function PersonalPromptPanel() {
           }}
           onBlur={() => void commit()}
         />
-        <div className="mt-2 h-4 text-label font-medium text-faint">
+        <div
+          {...stylex.props(
+            sx.mt2,
+            sx.h4,
+            sx.fontMedium,
+            sx.textFaint,
+            typography.label,
+          )}
+        >
           {status === "saving"
             ? "Saving…"
             : dirty
@@ -434,8 +552,12 @@ function BusyGestureSelect({
 }) {
   const label = `Follow-up behavior for ${glyph}`;
   return (
-    <span className="flex flex-col items-start gap-1">
-      <span className="px-0.5 text-meta font-medium text-faint">{glyph}</span>
+    <span {...stylex.props(sx.flex, sx.flexCol, sx.itemsStart, sx.gap1)}>
+      <span
+        {...stylex.props(sx.px05, sx.fontMedium, sx.textFaint, typography.meta)}
+      >
+        {glyph}
+      </span>
       <Select
         label={label}
         value={value}
@@ -562,7 +684,9 @@ export function PreferencesPanel() {
   return (
     <SettingsPanel>
       <SettingsHeader title="Preferences" />
-      <SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
+      <SettingsGroupLabel className={mergeStylexOverrideClassName("", sx.mt0)}>
+        Messages
+      </SettingsGroupLabel>
       <SettingCard>
         {/* These four choices become one starting state for every new session. */}
         <SettingGroup>
@@ -649,7 +773,16 @@ export function PreferencesPanel() {
             title="Follow-up while busy"
             desc="Queue waits until the run fully finishes; steer folds your message into the running turn without stopping it."
             control={
-              <div className="flex flex-wrap items-end justify-end gap-x-3 gap-y-2">
+              <div
+                {...stylex.props(
+                  sx.flex,
+                  sx.flexWrap,
+                  sx.itemsEnd,
+                  sx.justifyEnd,
+                  sx.gapX3,
+                  sx.gapY2,
+                )}
+              >
                 <BusyGestureSelect
                   gesture="enter"
                   glyph={sendKey === "enter" ? "↩" : MOD_ENTER_GLYPH}
@@ -709,7 +842,7 @@ export function PreferencesPanel() {
               size="sm"
               variant="ghost"
               icon={<IconPlus size={16} />}
-              className="phone:min-h-11"
+              className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
               onClick={() =>
                 setCheckoutOverrideDraft({
                   repo: "",
@@ -729,7 +862,9 @@ export function PreferencesPanel() {
         <SettingRow
           title="Default for all repositories"
           desc="Where new code sessions make changes."
-          controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
+          controlClassName={utilityClassName(
+            "phone:ml-0 phone:w-full phone:max-w-none phone:basis-full",
+          )}
           control={
             <Select
               label="Default code workspace"
@@ -739,7 +874,11 @@ export function PreferencesPanel() {
                 { value: "checkout", label: "Local checkout" },
                 { value: "worktree", label: "Separate worktree" },
               ]}
-              className="phone:min-h-11 phone:w-full"
+              className={mergeStylexOverrideClassName(
+                "",
+                sx.phoneMinH11,
+                sx.phoneWFull,
+              )}
               onChange={(value) => {
                 setSessionCheckoutDefault(value);
                 setCheckoutOverrideDraft((draft) =>
@@ -762,13 +901,17 @@ export function PreferencesPanel() {
             <SettingRow
               key={repo.id}
               title={
-                <span className="flex min-w-0 items-center gap-2">
+                <span
+                  {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}
+                >
                   <RepoTile name={repo.id} size={18} />
-                  <span className="truncate">{label}</span>
+                  <span {...stylex.props(sx.truncate)}>{label}</span>
                 </span>
               }
               desc="Overrides the default above."
-              controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
+              controlClassName={utilityClassName(
+                "phone:ml-0 phone:w-full phone:max-w-none phone:basis-full",
+              )}
               control={
                 <Select
                   label={`${label} code workspace`}
@@ -778,7 +921,11 @@ export function PreferencesPanel() {
                     { value: "checkout", label: "Local checkout" },
                     { value: "worktree", label: "Separate worktree" },
                   ]}
-                  className="phone:min-h-11 phone:w-full"
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.phoneMinH11,
+                    sx.phoneWFull,
+                  )}
                   onChange={(value) => setSessionCheckoutPref(repo.id, value)}
                 />
               }
@@ -789,9 +936,20 @@ export function PreferencesPanel() {
           <SettingRow
             title="New override"
             desc="Choose a repository and workspace."
-            controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
+            controlClassName={utilityClassName(
+              "phone:ml-0 phone:w-full phone:max-w-none phone:basis-full",
+            )}
             control={
-              <div className="flex flex-wrap items-center justify-end gap-2 phone:w-full">
+              <div
+                {...stylex.props(
+                  sx.flex,
+                  sx.flexWrap,
+                  sx.itemsCenter,
+                  sx.justifyEnd,
+                  sx.gap2,
+                  sx.phoneWFull,
+                )}
+              >
                 <Select
                   label="Repository to override"
                   value={checkoutOverrideDraft.repo}
@@ -807,7 +965,11 @@ export function PreferencesPanel() {
                       icon: <RepoTile name={repo.id} size={16} />,
                     })),
                   ]}
-                  className="phone:min-h-11 phone:max-w-full"
+                  className={mergeStylexOverrideClassName(
+                    "",
+                    sx.phoneMinH11,
+                    sx.phoneMaxWFull,
+                  )}
                   onChange={(repo) =>
                     setCheckoutOverrideDraft((draft) =>
                       draft ? { ...draft, repo } : draft,
@@ -826,7 +988,7 @@ export function PreferencesPanel() {
                       label: string;
                     }[]
                   ).filter((option) => option.value !== checkoutDefault)}
-                  className="phone:min-h-11"
+                  className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                   onChange={(mode) =>
                     setCheckoutOverrideDraft((draft) =>
                       draft ? { ...draft, mode } : draft,
@@ -835,7 +997,7 @@ export function PreferencesPanel() {
                 />
                 <Button
                   variant="soft"
-                  className="phone:min-h-11"
+                  className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                   disabled={!checkoutOverrideDraft.repo}
                   onClick={() => {
                     setSessionCheckoutPref(
@@ -849,7 +1011,7 @@ export function PreferencesPanel() {
                 </Button>
                 <Button
                   variant="ghost"
-                  className="phone:min-h-11"
+                  className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                   onClick={() => setCheckoutOverrideDraft(null)}
                 >
                   Cancel

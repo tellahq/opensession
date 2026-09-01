@@ -15,6 +15,21 @@ const sx = stylex.create({
   Bottom1: {
     bottom: "calc(4px * -1)",
   },
+  Bottom15: {
+    bottom: "calc(4px * -1.5)",
+  },
+  InsetXPx: {
+    insetInline: "-1px",
+  },
+  Left2: {
+    left: "calc(4px * -2)",
+  },
+  M1: {
+    margin: "calc(4px * -1)",
+  },
+  Mb1: {
+    marginBottom: "calc(4px * -1)",
+  },
   Mb25: {
     marginBottom: "calc(4px * -2.5)",
   },
@@ -23,6 +38,9 @@ const sx = stylex.create({
   },
   Mb35: {
     marginBottom: "calc(4px * -3.5)",
+  },
+  Mb4: {
+    marginBottom: "calc(4px * -4)",
   },
   MbPx: {
     marginBottom: "-1px",
@@ -45,11 +63,35 @@ const sx = stylex.create({
   MlPx: {
     marginLeft: "-1px",
   },
+  Mr05: {
+    marginRight: "calc(4px * -0.5)",
+  },
   Mr1: {
     marginRight: "calc(4px * -1)",
   },
+  Mr15: {
+    marginRight: "calc(4px * -1.5)",
+  },
+  Mr2: {
+    marginRight: "calc(4px * -2)",
+  },
   Mr3px: {
     marginRight: "calc(3px * -1)",
+  },
+  Mt05: {
+    marginTop: "calc(4px * -0.5)",
+  },
+  Mt1: {
+    marginTop: "calc(4px * -1)",
+  },
+  Mt15: {
+    marginTop: "calc(4px * -1.5)",
+  },
+  Mt2: {
+    marginTop: "calc(4px * -2)",
+  },
+  Mt25: {
+    marginTop: "calc(4px * -2.5)",
   },
   Mt6: {
     marginTop: "calc(4px * -6)",
@@ -57,11 +99,17 @@ const sx = stylex.create({
   Mt11px: {
     marginTop: "calc(11px * -1)",
   },
+  Mx1: {
+    marginInline: "calc(4px * -1)",
+  },
   Mx15: {
     marginInline: "calc(4px * -1.5)",
   },
   Mx2: {
     marginInline: "calc(4px * -2)",
+  },
+  Mx25: {
+    marginInline: "calc(4px * -2.5)",
   },
   Mx3: {
     marginInline: "calc(4px * -3)",
@@ -93,17 +141,29 @@ const sx = stylex.create({
   My5px: {
     marginBlock: "calc(5px * -1)",
   },
+  Order1: {
+    order: "calc(1 * -1)",
+  },
+  OutlineOffset1: {
+    outlineOffset: "calc(1px * -1)",
+  },
   Right05: {
     right: "calc(4px * -0.5)",
   },
   Right1: {
     right: "calc(4px * -1)",
   },
+  Right15: {
+    right: "calc(4px * -1.5)",
+  },
   Right2: {
     right: "calc(4px * -2)",
   },
   Rotate90: {
     rotate: "calc(90deg * -1)",
+  },
+  Top15: {
+    top: "calc(4px * -1.5)",
   },
   Top2: {
     top: "calc(4px * -2)",
@@ -698,6 +758,12 @@ const sx = stylex.create({
       width: "1px",
     },
   },
+  alignTextBottom: {
+    verticalAlign: "text-bottom",
+  },
+  alignTop: {
+    verticalAlign: "top",
+  },
   animateComposerAgentsPulse14sEaseInOutInfinite: {
     animation: "composer-agents-pulse 1.4s ease-in-out infinite",
   },
@@ -731,11 +797,17 @@ const sx = stylex.create({
   animateSpin: {
     animation: "var(--animate-spin)",
   },
+  appearanceNone: {
+    appearance: "none",
+  },
   aspectSquare: {
     aspectRatio: "1 / 1",
   },
   aspectVideo: {
     aspectRatio: "var(--aspect-video)",
+  },
+  basis0: {
+    flexBasis: "0",
   },
   basis130px: {
     flexBasis: "130px",
@@ -1199,6 +1271,9 @@ const sx = stylex.create({
   bgActive: {
     backgroundColor: "var(--bg-active)",
   },
+  bgAmber400: {
+    backgroundColor: "var(--color-amber-400)",
+  },
   bgBg: {
     backgroundColor: "var(--bg)",
   },
@@ -1241,11 +1316,20 @@ const sx = stylex.create({
   bgButton2: {
     backgroundColor: "var(--button-surface) !important",
   },
+  bgCenter: {
+    backgroundPosition: "center",
+  },
   bgCodeWell: {
     backgroundColor: "var(--code-well)",
   },
   bgControl: {
     backgroundColor: "var(--control-surface)",
+  },
+  bgCover: {
+    backgroundSize: "cover",
+  },
+  bgCurrent: {
+    backgroundColor: "currentcolor",
   },
   bgDim: {
     backgroundColor: "var(--text-dim)",
@@ -1283,6 +1367,9 @@ const sx = stylex.create({
   bgGreen: {
     backgroundColor: "var(--green)",
   },
+  bgGreen500: {
+    backgroundColor: "var(--color-green-500)",
+  },
   bgGreenSoft: {
     backgroundColor: "var(--green-soft)",
   },
@@ -1297,6 +1384,12 @@ const sx = stylex.create({
   },
   bgLineStrong: {
     backgroundColor: "var(--border-strong)",
+  },
+  bgOnAccent: {
+    backgroundColor: "var(--on-accent)",
+  },
+  bgOnAccentControl: {
+    backgroundColor: "var(--on-accent-control, var(--on-accent))",
   },
   bgPaletteGlass: {
     backgroundColor: "var(--palette-glass)",
@@ -1370,6 +1463,15 @@ const sx = stylex.create({
   block: {
     display: "block",
   },
+  block0: {
+    blockSize: "0",
+  },
+  block1: {
+    blockSize: "4px",
+  },
+  block2: {
+    blockSize: "calc(4px * 2)",
+  },
   border: {
     borderStyle: "solid",
     borderWidth: "1px",
@@ -1434,9 +1536,22 @@ const sx = stylex.create({
     borderBottomStyle: "solid",
     borderBottomWidth: "1px",
   },
+  borderB0: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: "0px",
+  },
   borderB2: {
     borderBottomStyle: "solid",
     borderBottomWidth: "2px",
+  },
+  borderBAccent: {
+    borderBottomColor: "var(--accent)",
+  },
+  borderBLineStrong: {
+    borderBottomColor: "var(--border-strong)",
+  },
+  borderBTransparent: {
+    borderBottomColor: "transparent",
   },
   borderBlue40: {
     borderColor: "color-mix(in oklab, var(--blue) 40%, transparent)",
@@ -1444,8 +1559,14 @@ const sx = stylex.create({
   borderCodeWellLine: {
     borderColor: "var(--code-well-line)",
   },
+  borderCollapse: {
+    borderCollapse: "collapse",
+  },
   borderCurrent25: {
     borderColor: "color-mix(in oklab, currentcolor 25%, transparent)",
+  },
+  borderDashed: {
+    borderStyle: "dashed",
   },
   borderDivider: {
     borderColor: "var(--divider)",
@@ -1463,12 +1584,19 @@ const sx = stylex.create({
     borderLeftStyle: "solid",
     borderLeftWidth: "1px",
   },
+  borderL2: {
+    borderLeftStyle: "solid",
+    borderLeftWidth: "2px",
+  },
   borderL3px: {
     borderLeftStyle: "solid",
     borderLeftWidth: "3px",
   },
   borderLAccent: {
     borderLeftColor: "var(--accent)",
+  },
+  borderLLineStrong: {
+    borderLeftColor: "var(--border-strong)",
   },
   borderLine: {
     borderColor: "var(--border)",
@@ -1492,11 +1620,20 @@ const sx = stylex.create({
     borderRightStyle: "solid",
     borderRightWidth: "1px",
   },
+  borderRLineStrong: {
+    borderRightColor: "var(--border-strong)",
+  },
   borderRaised: {
     borderColor: "var(--bg-raised)",
   },
+  borderRed: {
+    borderColor: "var(--red)",
+  },
   borderRed40: {
     borderColor: "color-mix(in oklab, var(--red) 40%, transparent)",
+  },
+  borderSolid: {
+    borderStyle: "solid",
   },
   borderT: {
     borderTopStyle: "solid",
@@ -1508,6 +1645,12 @@ const sx = stylex.create({
   borderTCurrent: {
     borderTopColor: "currentcolor",
   },
+  borderTDim: {
+    borderTopColor: "var(--text-dim)",
+  },
+  borderTGreen: {
+    borderTopColor: "var(--green)",
+  },
   borderTransparent: {
     borderColor: "transparent",
   },
@@ -1517,6 +1660,10 @@ const sx = stylex.create({
   borderX: {
     borderInlineStyle: "solid",
     borderInlineWidth: "1px",
+  },
+  borderX0: {
+    borderInlineStyle: "solid",
+    borderInlineWidth: "0px",
   },
   borderYellow40: {
     borderColor: "color-mix(in oklab, var(--yellow) 40%, transparent)",
@@ -1529,6 +1676,15 @@ const sx = stylex.create({
   },
   bottom2: {
     bottom: "calc(4px * 2)",
+  },
+  bottom3: {
+    bottom: "calc(4px * 3)",
+  },
+  bottom4: {
+    bottom: "calc(4px * 4)",
+  },
+  bottom5: {
+    bottom: "calc(4px * 5)",
   },
   bottom124px: {
     bottom: "124px",
@@ -1545,8 +1701,14 @@ const sx = stylex.create({
   bottomFull: {
     bottom: "100%",
   },
+  boxBorder: {
+    boxSizing: "border-box",
+  },
   breakAll: {
     wordBreak: "break-all",
+  },
+  breakInsideAvoid: {
+    breakInside: "avoid",
   },
   breakWords: {
     overflowWrap: "break-word",
@@ -1569,6 +1731,33 @@ const sx = stylex.create({
   colStart3: {
     gridColumnStart: "3",
   },
+  collapse: {
+    visibility: "collapse",
+  },
+  columns1: {
+    columns: "1",
+  },
+  container: {
+    width: "100%",
+    "@media (min-width: 40rem)": {
+      maxWidth: "40rem",
+    },
+    "@media (min-width: 48rem)": {
+      maxWidth: "48rem",
+    },
+    "@media (min-width: 64rem)": {
+      maxWidth: "64rem",
+    },
+    "@media (min-width: 80rem)": {
+      maxWidth: "80rem",
+    },
+    "@media (min-width: 96rem)": {
+      maxWidth: "96rem",
+    },
+  },
+  contentStart: {
+    alignContent: "flex-start",
+  },
   contents: {
     display: "contents",
   },
@@ -1578,8 +1767,14 @@ const sx = stylex.create({
   cursorColResize: {
     cursor: "col-resize",
   },
+  cursorCrosshair: {
+    cursor: "crosshair",
+  },
   cursorDefault: {
     cursor: "default",
+  },
+  cursorEwResize: {
+    cursor: "ew-resize",
   },
   cursorGrab: {
     cursor: "grab",
@@ -1590,8 +1785,20 @@ const sx = stylex.create({
   cursorHelp: {
     cursor: "help",
   },
+  cursorMove: {
+    cursor: "move",
+  },
+  cursorNeswResize: {
+    cursor: "nesw-resize",
+  },
   cursorNotAllowed: {
     cursor: "not-allowed",
+  },
+  cursorNsResize: {
+    cursor: "ns-resize",
+  },
+  cursorNwseResize: {
+    cursor: "nwse-resize",
   },
   cursorPointer: {
     cursor: "pointer",
@@ -1601,6 +1808,18 @@ const sx = stylex.create({
   },
   cursorZoomIn: {
     cursor: "zoom-in",
+  },
+  decorationDotted: {
+    textDecorationStyle: "dotted",
+  },
+  decorationLine: {
+    textDecorationColor: "var(--border)",
+  },
+  decorationLineStrong: {
+    textDecorationColor: "var(--border-strong)",
+  },
+  decorationTransparent: {
+    textDecorationColor: "transparent",
   },
   desktopMt11px: {
     "@media (min-width: 721px)": {
@@ -2343,6 +2562,9 @@ const sx = stylex.create({
   flexRowReverse: {
     flexDirection: "row-reverse",
   },
+  flexShrink: {
+    flexShrink: "1",
+  },
   flexShrink0: {
     flexShrink: "0",
   },
@@ -2517,6 +2739,12 @@ const sx = stylex.create({
   gap5: {
     gap: "calc(4px * 5)",
   },
+  gap6: {
+    gap: "calc(4px * 6)",
+  },
+  gap8: {
+    gap: "calc(4px * 8)",
+  },
   gap13px: {
     gap: "13px",
   },
@@ -2541,8 +2769,17 @@ const sx = stylex.create({
   gapX1: {
     columnGap: "4px",
   },
+  gapX15: {
+    columnGap: "calc(4px * 1.5)",
+  },
+  gapX12: {
+    columnGap: "calc(4px * 12)",
+  },
   gapX2: {
     columnGap: "calc(4px * 2)",
+  },
+  gapX25: {
+    columnGap: "calc(4px * 2.5)",
   },
   gapX3: {
     columnGap: "calc(4px * 3)",
@@ -2552,6 +2789,12 @@ const sx = stylex.create({
   },
   gapX4: {
     columnGap: "calc(4px * 4)",
+  },
+  gapX5: {
+    columnGap: "calc(4px * 5)",
+  },
+  gapY05: {
+    rowGap: "calc(4px * 0.5)",
   },
   gapY1: {
     rowGap: "4px",
@@ -2565,6 +2808,9 @@ const sx = stylex.create({
   gapY25: {
     rowGap: "calc(4px * 2.5)",
   },
+  gapY3: {
+    rowGap: "calc(4px * 3)",
+  },
   grid: {
     display: "grid",
   },
@@ -2574,8 +2820,17 @@ const sx = stylex.create({
   gridCols2: {
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   },
+  gridCols3: {
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  },
+  gridCols4: {
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  },
   gridCols6: {
     gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+  },
+  gridCols7: {
+    gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
   },
   gridCols0fr: {
     gridTemplateColumns: "0fr",
@@ -2604,11 +2859,17 @@ const sx = stylex.create({
   gridRows44pxMinmax01fr: {
     gridTemplateRows: "44px minmax(0,1fr)",
   },
+  grow: {
+    flexGrow: "1",
+  },
   h0: {
     height: "0",
   },
   h05: {
     height: "calc(4px * 0.5)",
+  },
+  h1: {
+    height: "4px",
   },
   h15: {
     height: "calc(4px * 1.5)",
@@ -2625,14 +2886,26 @@ const sx = stylex.create({
   h122: {
     height: "calc(4px * 12) !important",
   },
+  h14: {
+    height: "calc(4px * 14)",
+  },
+  h16: {
+    height: "calc(4px * 16)",
+  },
   h2: {
     height: "calc(4px * 2)",
   },
   h25: {
     height: "calc(4px * 2.5)",
   },
+  h20: {
+    height: "calc(4px * 20)",
+  },
   h3: {
     height: "calc(4px * 3)",
+  },
+  h35: {
+    height: "calc(4px * 3.5)",
   },
   h4: {
     height: "calc(4px * 4)",
@@ -2642,6 +2915,9 @@ const sx = stylex.create({
   },
   h6: {
     height: "calc(4px * 6)",
+  },
+  h60: {
+    height: "calc(4px * 60)",
   },
   h7: {
     height: "calc(4px * 7)",
@@ -2703,6 +2979,9 @@ const sx = stylex.create({
   hVarToastFrontmostHeight: {
     height: "var(--toast-frontmost-height)",
   },
+  hAuto: {
+    height: "auto",
+  },
   hDvh: {
     height: "100dvh",
   },
@@ -2711,6 +2990,9 @@ const sx = stylex.create({
   },
   hPx: {
     height: "1px",
+  },
+  hScreen: {
+    height: "100vh",
   },
   hidden: {
     display: "none",
@@ -3176,8 +3458,17 @@ const sx = stylex.create({
   inset0: {
     inset: "0",
   },
+  inset1: {
+    inset: "4px",
+  },
   insetX0: {
     insetInline: "0",
+  },
+  insetX4: {
+    insetInline: "calc(4px * 4)",
+  },
+  insetX5: {
+    insetInline: "calc(4px * 5)",
   },
   insetY0: {
     insetBlock: "0",
@@ -3226,6 +3517,9 @@ const sx = stylex.create({
   },
   justifySelfEnd: {
     justifySelf: "flex-end",
+  },
+  justifySelfStart: {
+    justifySelf: "flex-start",
   },
   justifyStart: {
     justifyContent: "flex-start",
@@ -3296,11 +3590,20 @@ const sx = stylex.create({
   left2: {
     left: "calc(4px * 2)",
   },
+  left25: {
+    left: "calc(4px * 2.5)",
+  },
   left3: {
     left: "calc(4px * 3)",
   },
   left35: {
     left: "calc(4px * 3.5)",
+  },
+  left4: {
+    left: "calc(4px * 4)",
+  },
+  left8: {
+    left: "calc(4px * 8)",
   },
   left3px: {
     left: "-3px",
@@ -3314,6 +3617,9 @@ const sx = stylex.create({
   leftCalc12pxEnvSafeAreaInsetLeft: {
     left: "calc(12px + env(safe-area-inset-left))",
   },
+  leftAuto: {
+    left: "auto",
+  },
   leftFull: {
     left: "100%",
   },
@@ -3322,11 +3628,23 @@ const sx = stylex.create({
       gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     },
   },
+  lineClamp1: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "1",
+  },
   lineClamp2: {
     overflow: "hidden",
     display: "-webkit-box",
     WebkitBoxOrient: "vertical",
     WebkitLineClamp: "2",
+  },
+  lineClamp3: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "3",
   },
   lineClamp4: {
     overflow: "hidden",
@@ -3334,17 +3652,29 @@ const sx = stylex.create({
     WebkitBoxOrient: "vertical",
     WebkitLineClamp: "4",
   },
+  lineClamp5: {
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: "5",
+  },
   lineThrough: {
     textDecorationLine: "line-through",
   },
   listNone: {
     listStyleType: "none",
   },
+  lowercase: {
+    textTransform: "lowercase",
+  },
   m0: {
     margin: "0",
   },
   m3: {
     margin: "calc(4px * 3)",
+  },
+  m4: {
+    margin: "calc(4px * 4)",
   },
   max560pxFlexCol: {
     "@media (max-width: 559px)": {
@@ -3522,6 +3852,27 @@ const sx = stylex.create({
       zIndex: "25",
     },
   },
+  maxH16: {
+    maxHeight: "calc(4px * 16)",
+  },
+  maxH28: {
+    maxHeight: "calc(4px * 28)",
+  },
+  maxH32: {
+    maxHeight: "calc(4px * 32)",
+  },
+  maxH48: {
+    maxHeight: "calc(4px * 48)",
+  },
+  maxH56: {
+    maxHeight: "calc(4px * 56)",
+  },
+  maxH60: {
+    maxHeight: "calc(4px * 60)",
+  },
+  maxH72: {
+    maxHeight: "calc(4px * 72)",
+  },
   maxH80: {
     maxHeight: "calc(4px * 80)",
   },
@@ -3589,16 +3940,26 @@ const sx = stylex.create({
       minHeight: "calc(4px * 10)",
     },
   },
-  maxSmMinW55: {
-    "@media (max-width: 39.999rem)": {
-      minWidth: "55%",
-    },
+  maxW24: {
+    maxWidth: "calc(4px * 24)",
+  },
+  maxW28: {
+    maxWidth: "calc(4px * 28)",
+  },
+  maxW2xl: {
+    maxWidth: "var(--container-2xl)",
   },
   maxW32: {
     maxWidth: "calc(4px * 32)",
   },
   maxW40: {
     maxWidth: "calc(4px * 40)",
+  },
+  maxW44: {
+    maxWidth: "calc(4px * 44)",
+  },
+  maxW52: {
+    maxWidth: "calc(4px * 52)",
   },
   maxW1120px: {
     maxWidth: "1120px",
@@ -3735,8 +4096,17 @@ const sx = stylex.create({
   maxWFull: {
     maxWidth: "100%",
   },
+  maxWMd: {
+    maxWidth: "var(--container-md)",
+  },
   maxWNone: {
     maxWidth: "none",
+  },
+  maxWSm: {
+    maxWidth: "var(--container-sm)",
+  },
+  maxWXs: {
+    maxWidth: "var(--container-xs)",
   },
   mb0: {
     marginBottom: "0",
@@ -3752,6 +4122,9 @@ const sx = stylex.create({
   },
   mb15: {
     marginBottom: "calc(4px * 1.5)",
+  },
+  mb11: {
+    marginBottom: "calc(4px * 11)",
   },
   mb2: {
     marginBottom: "calc(4px * 2)",
@@ -3777,6 +4150,12 @@ const sx = stylex.create({
   mb6: {
     marginBottom: "calc(4px * 6)",
   },
+  mb7: {
+    marginBottom: "calc(4px * 7)",
+  },
+  mb8: {
+    marginBottom: "calc(4px * 8)",
+  },
   mb875: {
     marginBottom: "calc(4px * 8.75)",
   },
@@ -3788,6 +4167,9 @@ const sx = stylex.create({
   },
   mbVarSidebarGroupGap: {
     marginBottom: "var(--sidebar-group-gap)",
+  },
+  mbAuto: {
+    marginBottom: "auto",
   },
   mdMl4: {
     "@media (min-width: 48rem)": {
@@ -3819,11 +4201,35 @@ const sx = stylex.create({
   minH122: {
     minHeight: "calc(4px * 12) !important",
   },
+  minH13: {
+    minHeight: "calc(4px * 13)",
+  },
+  minH14: {
+    minHeight: "calc(4px * 14)",
+  },
+  minH16: {
+    minHeight: "calc(4px * 16)",
+  },
   minH18: {
     minHeight: "calc(4px * 18)",
   },
+  minH4: {
+    minHeight: "calc(4px * 4)",
+  },
+  minH40: {
+    minHeight: "calc(4px * 40)",
+  },
+  minH48: {
+    minHeight: "calc(4px * 48)",
+  },
+  minH5: {
+    minHeight: "calc(4px * 5)",
+  },
   minH6: {
     minHeight: "calc(4px * 6)",
+  },
+  minH7: {
+    minHeight: "calc(4px * 7)",
   },
   minH8: {
     minHeight: "calc(4px * 8)",
@@ -3867,11 +4273,23 @@ const sx = stylex.create({
   minHVarSidebarCapH: {
     minHeight: "var(--sidebar-cap-h)",
   },
+  minHFull: {
+    minHeight: "100%",
+  },
   minW0: {
     minWidth: "0",
   },
   minW10: {
     minWidth: "calc(4px * 10)",
+  },
+  minW11: {
+    minWidth: "calc(4px * 11)",
+  },
+  minW28: {
+    minWidth: "calc(4px * 28)",
+  },
+  minW3: {
+    minWidth: "calc(4px * 3)",
   },
   minW4: {
     minWidth: "calc(4px * 4)",
@@ -3912,8 +4330,14 @@ const sx = stylex.create({
   minWVarAnchorWidth: {
     minWidth: "var(--anchor-width)",
   },
+  minWFull: {
+    minWidth: "100%",
+  },
   ml0: {
     marginLeft: "0",
+  },
+  ml05: {
+    marginLeft: "calc(4px * 0.5)",
   },
   ml1: {
     marginLeft: "4px",
@@ -3921,11 +4345,20 @@ const sx = stylex.create({
   ml15: {
     marginLeft: "calc(4px * 1.5)",
   },
+  ml10: {
+    marginLeft: "calc(4px * 10)",
+  },
+  ml2: {
+    marginLeft: "calc(4px * 2)",
+  },
   ml3: {
     marginLeft: "calc(4px * 3)",
   },
   ml4: {
     marginLeft: "calc(4px * 4)",
+  },
+  ml5: {
+    marginLeft: "calc(4px * 5)",
   },
   ml5px: {
     marginLeft: "5px",
@@ -4038,6 +4471,12 @@ const sx = stylex.create({
   mt15: {
     marginTop: "calc(4px * 1.5)",
   },
+  mt10: {
+    marginTop: "calc(4px * 10)",
+  },
+  mt11: {
+    marginTop: "calc(4px * 11)",
+  },
   mt2: {
     marginTop: "calc(4px * 2)",
   },
@@ -4047,8 +4486,20 @@ const sx = stylex.create({
   mt3: {
     marginTop: "calc(4px * 3)",
   },
+  mt35: {
+    marginTop: "calc(4px * 3.5)",
+  },
   mt4: {
     marginTop: "calc(4px * 4)",
+  },
+  mt5: {
+    marginTop: "calc(4px * 5)",
+  },
+  mt6: {
+    marginTop: "calc(4px * 6)",
+  },
+  mt8: {
+    marginTop: "calc(4px * 8)",
   },
   mt9: {
     marginTop: "calc(4px * 9)",
@@ -4077,6 +4528,9 @@ const sx = stylex.create({
   mx05: {
     marginInline: "calc(4px * 0.5)",
   },
+  mx1: {
+    marginInline: "4px",
+  },
   mx15: {
     marginInline: "calc(4px * 1.5)",
   },
@@ -4095,17 +4549,32 @@ const sx = stylex.create({
   mx4: {
     marginInline: "calc(4px * 4)",
   },
+  mx5: {
+    marginInline: "calc(4px * 5)",
+  },
   mxAuto: {
     marginInline: "auto",
   },
   mxPx: {
     marginInline: "1px",
   },
+  my0: {
+    marginBlock: "0",
+  },
   my1: {
     marginBlock: "4px",
   },
   my15: {
     marginBlock: "calc(4px * 1.5)",
+  },
+  my2: {
+    marginBlock: "calc(4px * 2)",
+  },
+  my4: {
+    marginBlock: "calc(4px * 4)",
+  },
+  my7: {
+    marginBlock: "calc(4px * 7)",
   },
   my1px: {
     marginBlock: "-1px",
@@ -4116,11 +4585,17 @@ const sx = stylex.create({
   noUnderline: {
     textDecorationLine: "none",
   },
+  notItalic: {
+    fontStyle: "normal",
+  },
   objectContain: {
     objectFit: "contain",
   },
   objectCover: {
     objectFit: "cover",
+  },
+  objectLeftTop: {
+    objectPosition: "left top",
   },
   objectTop: {
     objectPosition: "top",
@@ -4149,8 +4624,14 @@ const sx = stylex.create({
   opacity60: {
     opacity: "60%",
   },
+  opacity65: {
+    opacity: "65%",
+  },
   opacity70: {
     opacity: "70%",
+  },
+  opacity72: {
+    opacity: "72%",
   },
   opacity80: {
     opacity: "80%",
@@ -4202,6 +4683,9 @@ const sx = stylex.create({
   },
   outlineOffset1: {
     outlineOffset: "1px",
+  },
+  outlineOffset4: {
+    outlineOffset: "4px",
   },
   outlineTransparent: {
     outlineColor: "transparent",
@@ -4275,6 +4759,12 @@ const sx = stylex.create({
   p6: {
     padding: "calc(4px * 6)",
   },
+  p7: {
+    padding: "calc(4px * 7)",
+  },
+  p8: {
+    padding: "calc(4px * 8)",
+  },
   p3px: {
     padding: "3px",
   },
@@ -4329,8 +4819,14 @@ const sx = stylex.create({
   pb5: {
     paddingBottom: "calc(4px * 5)",
   },
+  pb6: {
+    paddingBottom: "calc(4px * 6)",
+  },
   pb7: {
     paddingBottom: "calc(4px * 7)",
+  },
+  pb8: {
+    paddingBottom: "calc(4px * 8)",
   },
   pb11px: {
     paddingBottom: "11px",
@@ -4371,6 +4867,9 @@ const sx = stylex.create({
   },
   pbMax24pxEnvSafeAreaInsetBottom0px: {
     paddingBottom: "max(24px, env(safe-area-inset-bottom,0px))",
+  },
+  pbPx: {
+    paddingBottom: "1px",
   },
   phoneOrder1: {
     "@media (max-width: 720px)": {
@@ -5883,14 +6382,23 @@ const sx = stylex.create({
   pl3: {
     paddingLeft: "calc(4px * 3)",
   },
+  pl35: {
+    paddingLeft: "calc(4px * 3.5)",
+  },
   pl4: {
     paddingLeft: "calc(4px * 4)",
   },
   pl5: {
     paddingLeft: "calc(4px * 5)",
   },
+  pl7: {
+    paddingLeft: "calc(4px * 7)",
+  },
   pl8: {
     paddingLeft: "calc(4px * 8)",
+  },
+  pl9: {
+    paddingLeft: "calc(4px * 9)",
   },
   pl19px: {
     paddingLeft: "19px",
@@ -5945,6 +6453,12 @@ const sx = stylex.create({
   },
   pr11: {
     paddingRight: "calc(4px * 11)",
+  },
+  pr14: {
+    paddingRight: "calc(4px * 14)",
+  },
+  pr16: {
+    paddingRight: "calc(4px * 16)",
   },
   pr2: {
     paddingRight: "calc(4px * 2)",
@@ -6009,6 +6523,9 @@ const sx = stylex.create({
   pt4: {
     paddingTop: "calc(4px * 4)",
   },
+  pt45: {
+    paddingTop: "calc(4px * 4.5)",
+  },
   pt5: {
     paddingTop: "calc(4px * 5)",
   },
@@ -6020,6 +6537,9 @@ const sx = stylex.create({
   },
   pt8: {
     paddingTop: "calc(4px * 8)",
+  },
+  pt9: {
+    paddingTop: "calc(4px * 9)",
   },
   pt11px: {
     paddingTop: "11px",
@@ -6063,6 +6583,9 @@ const sx = stylex.create({
   px10: {
     paddingInline: "calc(4px * 10)",
   },
+  px12: {
+    paddingInline: "calc(4px * 12)",
+  },
   px2: {
     paddingInline: "calc(4px * 2)",
   },
@@ -6087,8 +6610,14 @@ const sx = stylex.create({
   px6: {
     paddingInline: "calc(4px * 6)",
   },
+  px7: {
+    paddingInline: "calc(4px * 7)",
+  },
   px8: {
     paddingInline: "calc(4px * 8)",
+  },
+  px9: {
+    paddingInline: "calc(4px * 9)",
   },
   px11px: {
     paddingInline: "11px",
@@ -6141,6 +6670,9 @@ const sx = stylex.create({
   py10: {
     paddingBlock: "calc(4px * 10)",
   },
+  py12: {
+    paddingBlock: "calc(4px * 12)",
+  },
   py2: {
     paddingBlock: "calc(4px * 2)",
   },
@@ -6162,8 +6694,17 @@ const sx = stylex.create({
   py4: {
     paddingBlock: "calc(4px * 4)",
   },
+  py5: {
+    paddingBlock: "calc(4px * 5)",
+  },
   py6: {
     paddingBlock: "calc(4px * 6)",
+  },
+  py7: {
+    paddingBlock: "calc(4px * 7)",
+  },
+  py8: {
+    paddingBlock: "calc(4px * 8)",
   },
   py11px: {
     paddingBlock: "11px",
@@ -6204,6 +6745,9 @@ const sx = stylex.create({
   relative: {
     position: "relative",
   },
+  resize: {
+    resize: "both",
+  },
   resizeNone: {
     resize: "none",
   },
@@ -6230,6 +6774,9 @@ const sx = stylex.create({
   },
   right4: {
     right: "calc(4px * 4)",
+  },
+  right9: {
+    right: "calc(4px * 9)",
   },
   right3px: {
     right: "-3px",
@@ -6261,8 +6808,16 @@ const sx = stylex.create({
   rotate90: {
     rotate: "90deg",
   },
+  rounded: {
+    borderRadius: "var(--radius-xs)",
+    cornerShape: "var(--cs)",
+  },
   rounded2xl: {
     borderRadius: "calc(22px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  rounded3xl: {
+    borderRadius: "calc(26px * var(--rf))",
     cornerShape: "var(--cs)",
   },
   rounded3px: {
@@ -6342,6 +6897,11 @@ const sx = stylex.create({
     borderBottomLeftRadius: "calc(7px * var(--rf))",
     cornerShape: "var(--cs)",
   },
+  roundedLNone: {
+    borderTopLeftRadius: "0",
+    borderBottomLeftRadius: "0",
+    cornerShape: "var(--cs)",
+  },
   roundedLg: {
     borderRadius: "calc(14px * var(--rf))",
     cornerShape: "var(--cs)",
@@ -6419,6 +6979,15 @@ const sx = stylex.create({
     borderTopRightRadius: "var(--composer-radius)",
     cornerShape: "var(--cs)",
   },
+  roundedTMd: {
+    borderTopLeftRadius: "calc(7px * var(--rf))",
+    borderTopRightRadius: "calc(7px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
+  roundedTlLg: {
+    borderTopLeftRadius: "calc(14px * var(--rf))",
+    cornerShape: "var(--cs)",
+  },
   roundedXl: {
     borderRadius: "calc(18px * var(--rf))",
     cornerShape: "var(--cs)",
@@ -6430,8 +6999,14 @@ const sx = stylex.create({
   rowStart1: {
     gridRowStart: "1",
   },
+  rowStart2: {
+    gridRowStart: "2",
+  },
   scale100: {
     scale: "100% 100%",
+  },
+  scale110: {
+    scale: "110% 110%",
   },
   scale067: {
     scale: "0.67",
@@ -6475,6 +7050,10 @@ const sx = stylex.create({
   shrink100: {
     flexShrink: "100",
   },
+  size1: {
+    width: "4px",
+    height: "4px",
+  },
   size15: {
     width: "calc(4px * 1.5)",
     height: "calc(4px * 1.5)",
@@ -6486,6 +7065,10 @@ const sx = stylex.create({
   size11: {
     width: "calc(4px * 11)",
     height: "calc(4px * 11)",
+  },
+  size12: {
+    width: "calc(4px * 12)",
+    height: "calc(4px * 12)",
   },
   size14: {
     width: "calc(4px * 14)",
@@ -6502,6 +7085,10 @@ const sx = stylex.create({
   size25: {
     width: "calc(4px * 2.5)",
     height: "calc(4px * 2.5)",
+  },
+  size20: {
+    width: "calc(4px * 20)",
+    height: "calc(4px * 20)",
   },
   size3: {
     width: "calc(4px * 3)",
@@ -6598,6 +7185,10 @@ const sx = stylex.create({
       fontSize: "var(--type-label)",
     },
   },
+  smoothShadowLg: {
+    boxShadow:
+      "0 4px 12px -4px color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent), 0 18px 48px -14px color-mix(in srgb, var(--smooth-shadow-color) 11%, transparent)",
+  },
   smoothShadowMd: {
     boxShadow:
       "0 2px 6px -2px color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent), 0 10px 28px -8px color-mix(in srgb, var(--smooth-shadow-color) 10%, transparent)",
@@ -6614,6 +7205,10 @@ const sx = stylex.create({
     boxShadow:
       "0 1px 3px -1px color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent), 0 4px 10px -4px color-mix(in srgb, var(--smooth-shadow-color) 9%, transparent), 0 0 0 var(--smooth-ring-width, 1px) color-mix(in srgb, var(--smooth-ring-color) 80%, transparent)",
   },
+  smoothShadowRingSoft: {
+    boxShadow:
+      "0 3px 10px -3px color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent), 0 20px 56px -16px color-mix(in srgb, var(--smooth-shadow-color) 12%, transparent), 0 0 0 var(--smooth-ring-width, 1px) color-mix(in srgb, var(--smooth-ring-color) 35%, transparent)",
+  },
   smoothShadowSm: {
     boxShadow:
       "0 1px 3px -1px color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent), 0 4px 10px -4px color-mix(in srgb, var(--smooth-shadow-color) 9%, transparent)",
@@ -6626,8 +7221,25 @@ const sx = stylex.create({
     boxShadow:
       "0 1px 2px -1px color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent), 0 2px 5px -3px color-mix(in srgb, var(--smooth-shadow-color) 7%, transparent)",
   },
+  snapCenter: {
+    scrollSnapAlign: "center",
+  },
   snapStart: {
     scrollSnapAlign: "start",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    margin: "-1px",
+    overflow: "hidden",
+    clipPath: "inset(50%)",
+    whiteSpace: "nowrap",
+    borderWidth: "0",
+  },
+  static: {
+    position: "static",
   },
   sticky: {
     position: "sticky",
@@ -6635,8 +7247,21 @@ const sx = stylex.create({
   strokeAccent: {
     stroke: "var(--accent)",
   },
+  strokeLine: {
+    stroke: "var(--border)",
+  },
   strokeRed: {
     stroke: "var(--red)",
+  },
+  table: {
+    display: "table",
+  },
+  tableFixed: {
+    tableLayout: "fixed",
+  },
+  text4xl: {
+    fontSize: "var(--text-4xl)",
+    lineHeight: "var(--tw-leading, var(--text-4xl--line-height))",
   },
   text17130a: {
     color: "#17130a",
@@ -6677,6 +7302,9 @@ const sx = stylex.create({
   textInherit: {
     color: "inherit",
   },
+  textBalance: {
+    textWrap: "balance",
+  },
   textBase: {
     fontSize: "var(--type-body)",
     lineHeight: "var(--tw-leading, var(--text-base--line-height))",
@@ -6688,6 +7316,9 @@ const sx = stylex.create({
   textBg: {
     color: "var(--bg)",
   },
+  textBlack: {
+    color: "var(--color-black)",
+  },
   textBlue: {
     color: "var(--blue)",
   },
@@ -6696,6 +7327,9 @@ const sx = stylex.create({
   },
   textClip: {
     textOverflow: "clip",
+  },
+  textCodeWellInk: {
+    color: "var(--code-well-ink)",
   },
   textDim: {
     color: "var(--text-dim)",
@@ -6736,8 +7370,14 @@ const sx = stylex.create({
   textOnAccent: {
     color: "var(--on-accent)",
   },
+  textOnAccentControl: {
+    color: "var(--on-accent-control, var(--on-accent))",
+  },
   textPanel: {
     color: "var(--bg-panel)",
+  },
+  textPretty: {
+    textWrap: "pretty",
   },
   textPurple: {
     color: "var(--purple)",
@@ -6786,11 +7426,17 @@ const sx = stylex.create({
   top05: {
     top: "calc(4px * 0.5)",
   },
+  top1: {
+    top: "4px",
+  },
   top15: {
     top: "calc(4px * 1.5)",
   },
   top12: {
     top: "calc(1 / 2 * 100%)",
+  },
+  top16: {
+    top: "calc(4px * 16)",
   },
   top2: {
     top: "calc(4px * 2)",
@@ -6809,6 +7455,9 @@ const sx = stylex.create({
   },
   topCalcVarDesktopHeaderH8px: {
     top: "calc(var(--desktop-header-h) + 8px)",
+  },
+  topAuto: {
+    top: "auto",
   },
   topFull: {
     top: "100%",
@@ -6834,8 +7483,20 @@ const sx = stylex.create({
   trackingNormal: {
     letterSpacing: "var(--tracking-normal)",
   },
+  trackingWide: {
+    letterSpacing: "var(--tracking-wide)",
+  },
+  trackingWider: {
+    letterSpacing: "var(--tracking-wider)",
+  },
   transformTranslateXVarSwipeX0: {
     transform: "translateX(var(--swipe-x,0))",
+  },
+  transition: {
+    transitionProperty:
+      "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events",
+    transitionTimingFunction: "var(--tw-ease, var(--ease))",
+    transitionDuration: "var(--tw-duration, var(--dur-micro))",
   },
   transitionBackgroundColor: {
     transitionProperty: "background,color",
@@ -7085,6 +7746,9 @@ const sx = stylex.create({
   translateXFull: {
     translate: "100% 0",
   },
+  translateXPx: {
+    translate: "1px 0",
+  },
   translateY0: {
     translate: "0 0",
   },
@@ -7097,13 +7761,25 @@ const sx = stylex.create({
   translateYFull: {
     translate: "0 100%",
   },
+  translateYPx: {
+    translate: "0 1px",
+  },
   truncate: {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
+  underline: {
+    textDecorationLine: "underline",
+  },
+  underlineOffset2: {
+    textUnderlineOffset: "2px",
+  },
   visible: {
     visibility: "visible",
+  },
+  w0: {
+    width: "0",
   },
   w15: {
     width: "calc(4px * 1.5)",
@@ -7114,20 +7790,50 @@ const sx = stylex.create({
   w11: {
     width: "calc(4px * 11)",
   },
+  w14: {
+    width: "calc(4px * 14)",
+  },
+  w16: {
+    width: "calc(4px * 16)",
+  },
   w2: {
     width: "calc(4px * 2)",
+  },
+  w20: {
+    width: "calc(4px * 20)",
   },
   w21: {
     width: "calc(4px * 21)",
   },
+  w24: {
+    width: "calc(4px * 24)",
+  },
+  w28: {
+    width: "calc(4px * 28)",
+  },
   w3: {
     width: "calc(4px * 3)",
+  },
+  w35: {
+    width: "calc(4px * 3.5)",
+  },
+  w32: {
+    width: "calc(4px * 32)",
+  },
+  w4: {
+    width: "calc(4px * 4)",
   },
   w40: {
     width: "calc(4px * 40)",
   },
+  w44: {
+    width: "calc(4px * 44)",
+  },
   w5: {
     width: "calc(4px * 5)",
+  },
+  w52: {
+    width: "calc(4px * 52)",
   },
   w58: {
     width: "calc(4px * 58)",
@@ -7135,11 +7841,20 @@ const sx = stylex.create({
   w6: {
     width: "calc(4px * 6)",
   },
+  w60: {
+    width: "calc(4px * 60)",
+  },
+  w64: {
+    width: "calc(4px * 64)",
+  },
   w7: {
     width: "calc(4px * 7)",
   },
   w8: {
     width: "calc(4px * 8)",
+  },
+  w80: {
+    width: "calc(4px * 80)",
   },
   w9: {
     width: "calc(4px * 9)",
@@ -7165,7 +7880,7 @@ const sx = stylex.create({
   w30px: {
     width: "30px",
   },
-  w35: {
+  w352: {
     width: "35%",
   },
   w3px: {
@@ -7180,7 +7895,7 @@ const sx = stylex.create({
   w47: {
     width: "47%",
   },
-  w52: {
+  w522: {
     width: "52%",
   },
   w54px: {
@@ -7300,6 +8015,9 @@ const sx = stylex.create({
   wPx: {
     width: "1px",
   },
+  whitespaceNormal: {
+    whiteSpace: "normal",
+  },
   whitespaceNowrap: {
     whiteSpace: "nowrap",
   },
@@ -7324,8 +8042,17 @@ const sx = stylex.create({
   z10: {
     zIndex: "10",
   },
+  z1000: {
+    zIndex: "1000",
+  },
+  z2: {
+    zIndex: "2",
+  },
   z20: {
     zIndex: "20",
+  },
+  z3: {
+    zIndex: "3",
   },
   z30: {
     zIndex: "30",
@@ -7388,9 +8115,15 @@ export const utilityStyles = {
   "!my-0": sx.My0,
   "-bottom-0.5": sx.Bottom05,
   "-bottom-1": sx.Bottom1,
+  "-bottom-1.5": sx.Bottom15,
+  "-inset-x-px": sx.InsetXPx,
+  "-left-2": sx.Left2,
+  "-m-1": sx.M1,
+  "-mb-1": sx.Mb1,
   "-mb-2.5": sx.Mb25,
   "-mb-3": sx.Mb3,
   "-mb-3.5": sx.Mb35,
+  "-mb-4": sx.Mb4,
   "-mb-px": sx.MbPx,
   "-ml-0.5": sx.Ml05,
   "-ml-1": sx.Ml1,
@@ -7398,12 +8131,22 @@ export const utilityStyles = {
   "-ml-2": sx.Ml2,
   "-ml-[3px]": sx.Ml3px,
   "-ml-px": sx.MlPx,
+  "-mr-0.5": sx.Mr05,
   "-mr-1": sx.Mr1,
+  "-mr-1.5": sx.Mr15,
+  "-mr-2": sx.Mr2,
   "-mr-[3px]": sx.Mr3px,
+  "-mt-0.5": sx.Mt05,
+  "-mt-1": sx.Mt1,
+  "-mt-1.5": sx.Mt15,
+  "-mt-2": sx.Mt2,
+  "-mt-2.5": sx.Mt25,
   "-mt-6": sx.Mt6,
   "-mt-[11px]": sx.Mt11px,
+  "-mx-1": sx.Mx1,
   "-mx-1.5": sx.Mx15,
   "-mx-2": sx.Mx2,
+  "-mx-2.5": sx.Mx25,
   "-mx-3": sx.Mx3,
   "-mx-4": sx.Mx4,
   "-mx-6": sx.Mx6,
@@ -7414,10 +8157,14 @@ export const utilityStyles = {
   "-my-0.5": sx.My05,
   "-my-1": sx.My1,
   "-my-[5px]": sx.My5px,
+  "-order-1": sx.Order1,
+  "-outline-offset-1": sx.OutlineOffset1,
   "-right-0.5": sx.Right05,
   "-right-1": sx.Right1,
+  "-right-1.5": sx.Right15,
   "-right-2": sx.Right2,
   "-rotate-90": sx.Rotate90,
+  "-top-1.5": sx.Top15,
   "-top-2": sx.Top2,
   "-top-6": sx.Top6,
   "-translate-x-1/2": sx.TranslateX12,
@@ -7562,6 +8309,8 @@ export const utilityStyles = {
   "after:w-0.5": sx.afterW05,
   "after:w-[2px]": sx.afterW2px,
   "after:w-px": sx.afterWPx,
+  "align-text-bottom": sx.alignTextBottom,
+  "align-top": sx.alignTop,
   "animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]":
     sx.animateComposerAgentsPulse14sEaseInOutInfinite,
   "animate-[hovercard-in_var(--dur-micro)_var(--ease)]":
@@ -7580,8 +8329,10 @@ export const utilityStyles = {
   "animate-none": sx.animateNone,
   "animate-pulse": sx.animatePulse,
   "animate-spin": sx.animateSpin,
+  "appearance-none": sx.appearanceNone,
   "aspect-square": sx.aspectSquare,
   "aspect-video": sx.aspectVideo,
+  "basis-0": sx.basis0,
   "basis-[130px]": sx.basis130px,
   "before:-inset-2": sx.beforeInset2,
   "before:-inset-3": sx.beforeInset3,
@@ -7705,6 +8456,7 @@ export const utilityStyles = {
   "bg-accent": sx.bgAccent,
   "bg-accent-soft": sx.bgAccentSoft,
   "bg-active": sx.bgActive,
+  "bg-amber-400": sx.bgAmber400,
   "bg-bg": sx.bgBg,
   "bg-bg/65": sx.bgBg65,
   "bg-bg/85": sx.bgBg85,
@@ -7719,8 +8471,11 @@ export const utilityStyles = {
   "bg-blue-soft": sx.bgBlueSoft,
   "bg-button": sx.bgButton,
   "bg-button!": sx.bgButton2,
+  "bg-center": sx.bgCenter,
   "bg-code-well": sx.bgCodeWell,
   "bg-control": sx.bgControl,
+  "bg-cover": sx.bgCover,
+  "bg-current": sx.bgCurrent,
   "bg-dim": sx.bgDim,
   "bg-dim/35": sx.bgDim35,
   "bg-divider": sx.bgDivider,
@@ -7733,11 +8488,14 @@ export const utilityStyles = {
   "bg-fg/8": sx.bgFg8,
   "bg-fg/[0.03]": sx.bgFg003,
   "bg-green": sx.bgGreen,
+  "bg-green-500": sx.bgGreen500,
   "bg-green-soft": sx.bgGreenSoft,
   "bg-hover": sx.bgHover,
   "bg-hover/50": sx.bgHover50,
   "bg-line": sx.bgLine,
   "bg-line-strong": sx.bgLineStrong,
+  "bg-on-accent": sx.bgOnAccent,
+  "bg-on-accent-control": sx.bgOnAccentControl,
   "bg-palette-glass": sx.bgPaletteGlass,
   "bg-panel": sx.bgPanel,
   "bg-panel-surface": sx.bgPanelSurface,
@@ -7762,6 +8520,9 @@ export const utilityStyles = {
   "bg-yellow": sx.bgYellow,
   "bg-yellow-soft": sx.bgYellowSoft,
   block: sx.block,
+  "block-0": sx.block0,
+  "block-1": sx.block1,
+  "block-2": sx.block2,
   border: sx.border,
   "border-0": sx.border0,
   "border-2": sx.border2,
@@ -7791,17 +8552,25 @@ export const utilityStyles = {
   "border-accent": sx.borderAccent,
   "border-accent/40": sx.borderAccent40,
   "border-b": sx.borderB,
+  "border-b-0": sx.borderB0,
   "border-b-2": sx.borderB2,
+  "border-b-accent": sx.borderBAccent,
+  "border-b-line-strong": sx.borderBLineStrong,
+  "border-b-transparent": sx.borderBTransparent,
   "border-blue/40": sx.borderBlue40,
   "border-code-well-line": sx.borderCodeWellLine,
+  "border-collapse": sx.borderCollapse,
   "border-current/25": sx.borderCurrent25,
+  "border-dashed": sx.borderDashed,
   "border-divider": sx.borderDivider,
   "border-divider-soft": sx.borderDividerSoft,
   "border-green": sx.borderGreen,
   "border-green/40": sx.borderGreen40,
   "border-l": sx.borderL,
+  "border-l-2": sx.borderL2,
   "border-l-[3px]": sx.borderL3px,
   "border-l-accent": sx.borderLAccent,
+  "border-l-line-strong": sx.borderLLineStrong,
   "border-line": sx.borderLine,
   "border-line!": sx.borderLine2,
   "border-line-strong": sx.borderLineStrong,
@@ -7809,25 +8578,36 @@ export const utilityStyles = {
   "border-line/70": sx.borderLine70,
   "border-none": sx.borderNone,
   "border-r": sx.borderR,
+  "border-r-line-strong": sx.borderRLineStrong,
   "border-raised": sx.borderRaised,
+  "border-red": sx.borderRed,
   "border-red/40": sx.borderRed40,
+  "border-solid": sx.borderSolid,
   "border-t": sx.borderT,
   "border-t-accent": sx.borderTAccent,
   "border-t-current": sx.borderTCurrent,
+  "border-t-dim": sx.borderTDim,
+  "border-t-green": sx.borderTGreen,
   "border-transparent": sx.borderTransparent,
   "border-white": sx.borderWhite,
   "border-x": sx.borderX,
+  "border-x-0": sx.borderX0,
   "border-yellow/40": sx.borderYellow40,
   "bottom-0": sx.bottom0,
   "bottom-10": sx.bottom10,
   "bottom-2": sx.bottom2,
+  "bottom-3": sx.bottom3,
+  "bottom-4": sx.bottom4,
+  "bottom-5": sx.bottom5,
   "bottom-[124px]": sx.bottom124px,
   "bottom-[18px]": sx.bottom18px,
   "bottom-[calc(100%+6px)]": sx.bottomCalc1006px,
   "bottom-[calc(24px+var(--suggestions-under,0px))]":
     sx.bottomCalc24pxVarSuggestionsUnder0px,
   "bottom-full": sx.bottomFull,
+  "box-border": sx.boxBorder,
   "break-all": sx.breakAll,
+  "break-inside-avoid": sx.breakInsideAvoid,
   "break-words": sx.breakWords,
   capitalize: sx.capitalize,
   "caret-[var(--text)]": sx.caretVarText,
@@ -7835,17 +8615,31 @@ export const utilityStyles = {
   "col-start-1": sx.colStart1,
   "col-start-2": sx.colStart2,
   "col-start-3": sx.colStart3,
+  collapse: sx.collapse,
+  "columns-1": sx.columns1,
+  container: sx.container,
+  "content-start": sx.contentStart,
   contents: sx.contents,
   "cursor-[inherit]": sx.cursorInherit,
   "cursor-col-resize": sx.cursorColResize,
+  "cursor-crosshair": sx.cursorCrosshair,
   "cursor-default": sx.cursorDefault,
+  "cursor-ew-resize": sx.cursorEwResize,
   "cursor-grab": sx.cursorGrab,
   "cursor-grabbing": sx.cursorGrabbing,
   "cursor-help": sx.cursorHelp,
+  "cursor-move": sx.cursorMove,
+  "cursor-nesw-resize": sx.cursorNeswResize,
   "cursor-not-allowed": sx.cursorNotAllowed,
+  "cursor-ns-resize": sx.cursorNsResize,
+  "cursor-nwse-resize": sx.cursorNwseResize,
   "cursor-pointer": sx.cursorPointer,
   "cursor-text": sx.cursorText,
   "cursor-zoom-in": sx.cursorZoomIn,
+  "decoration-dotted": sx.decorationDotted,
+  "decoration-line": sx.decorationLine,
+  "decoration-line-strong": sx.decorationLineStrong,
+  "decoration-transparent": sx.decorationTransparent,
   "desktop:-mt-[11px]": sx.desktopMt11px,
   "desktop:[--sidebar-band-slot:0px]": sx.desktopSidebarBandSlot0px,
   "desktop:[--sidebar-nav-x:10px]": sx.desktopSidebarNavX10px,
@@ -8008,6 +8802,7 @@ export const utilityStyles = {
   "flex-nowrap": sx.flexNowrap,
   "flex-row": sx.flexRow,
   "flex-row-reverse": sx.flexRowReverse,
+  "flex-shrink": sx.flexShrink,
   "flex-shrink-0": sx.flexShrink0,
   "flex-wrap": sx.flexWrap,
   "focus-visible:after:border-line-strong":
@@ -8056,6 +8851,8 @@ export const utilityStyles = {
   "gap-3.5": sx.gap35,
   "gap-4": sx.gap4,
   "gap-5": sx.gap5,
+  "gap-6": sx.gap6,
+  "gap-8": sx.gap8,
   "gap-[13px]": sx.gap13px,
   "gap-[3px]": sx.gap3px,
   "gap-[5px]": sx.gap5px,
@@ -8064,18 +8861,27 @@ export const utilityStyles = {
   "gap-px": sx.gapPx,
   "gap-x-0.5": sx.gapX05,
   "gap-x-1": sx.gapX1,
+  "gap-x-1.5": sx.gapX15,
+  "gap-x-12": sx.gapX12,
   "gap-x-2": sx.gapX2,
+  "gap-x-2.5": sx.gapX25,
   "gap-x-3": sx.gapX3,
   "gap-x-3.5": sx.gapX35,
   "gap-x-4": sx.gapX4,
+  "gap-x-5": sx.gapX5,
+  "gap-y-0.5": sx.gapY05,
   "gap-y-1": sx.gapY1,
   "gap-y-1.5": sx.gapY15,
   "gap-y-2": sx.gapY2,
   "gap-y-2.5": sx.gapY25,
+  "gap-y-3": sx.gapY3,
   grid: sx.grid,
   "grid-cols-1": sx.gridCols1,
   "grid-cols-2": sx.gridCols2,
+  "grid-cols-3": sx.gridCols3,
+  "grid-cols-4": sx.gridCols4,
   "grid-cols-6": sx.gridCols6,
+  "grid-cols-7": sx.gridCols7,
   "grid-cols-[0fr]": sx.gridCols0fr,
   "grid-cols-[1fr]": sx.gridCols1fr,
   "grid-cols-[22px_24px_minmax(0,1fr)_130px_44px]":
@@ -8087,19 +8893,26 @@ export const utilityStyles = {
   "grid-cols-[minmax(0,1fr)_5.75rem]": sx.gridColsMinmax01fr575rem,
   "grid-cols-[minmax(0,1fr)_auto]": sx.gridColsMinmax01frAuto,
   "grid-rows-[44px_minmax(0,1fr)]": sx.gridRows44pxMinmax01fr,
+  grow: sx.grow,
   "h-0": sx.h0,
   "h-0.5": sx.h05,
+  "h-1": sx.h1,
   "h-1.5": sx.h15,
   "h-10": sx.h10,
   "h-11": sx.h11,
   "h-12": sx.h12,
   "h-12!": sx.h122,
+  "h-14": sx.h14,
+  "h-16": sx.h16,
   "h-2": sx.h2,
   "h-2.5": sx.h25,
+  "h-20": sx.h20,
   "h-3": sx.h3,
+  "h-3.5": sx.h35,
   "h-4": sx.h4,
   "h-5": sx.h5,
   "h-6": sx.h6,
+  "h-60": sx.h60,
   "h-7": sx.h7,
   "h-8": sx.h8,
   "h-9": sx.h9,
@@ -8120,9 +8933,11 @@ export const utilityStyles = {
   "h-[var(--header-h)]": sx.hVarHeaderH,
   "h-[var(--sidebar-cap-h)]": sx.hVarSidebarCapH,
   "h-[var(--toast-frontmost-height)]": sx.hVarToastFrontmostHeight,
+  "h-auto": sx.hAuto,
   "h-dvh": sx.hDvh,
   "h-full": sx.hFull,
   "h-px": sx.hPx,
+  "h-screen": sx.hScreen,
   hidden: sx.hidden,
   "hidden!": sx.hidden2,
   "hover:-translate-y-px": sx.hoverTranslateYPx,
@@ -8207,7 +9022,10 @@ export const utilityStyles = {
   "inline-flex": sx.inlineFlex,
   "inline-grid": sx.inlineGrid,
   "inset-0": sx.inset0,
+  "inset-1": sx.inset1,
   "inset-x-0": sx.insetX0,
+  "inset-x-4": sx.insetX4,
+  "inset-x-5": sx.insetX5,
   "inset-y-0": sx.insetY0,
   "inset-y-0.5": sx.insetY05,
   "inset-y-2": sx.insetY2,
@@ -8224,6 +9042,7 @@ export const utilityStyles = {
   "justify-end": sx.justifyEnd,
   "justify-self-center": sx.justifySelfCenter,
   "justify-self-end": sx.justifySelfEnd,
+  "justify-self-start": sx.justifySelfStart,
   "justify-start": sx.justifyStart,
   "leading-4": sx.leading4,
   "leading-4.5": sx.leading45,
@@ -8247,22 +9066,31 @@ export const utilityStyles = {
   "left-1/2": sx.left12,
   "left-14": sx.left14,
   "left-2": sx.left2,
+  "left-2.5": sx.left25,
   "left-3": sx.left3,
   "left-3.5": sx.left35,
+  "left-4": sx.left4,
+  "left-8": sx.left8,
   "left-[-3px]": sx.left3px,
   "left-[-9999px]": sx.left9999px,
   "left-[calc(-1*var(--composer-inset-left,17px))]":
     sx.leftCalc1VarComposerInsetLeft17px,
   "left-[calc(12px+env(safe-area-inset-left))]":
     sx.leftCalc12pxEnvSafeAreaInsetLeft,
+  "left-auto": sx.leftAuto,
   "left-full": sx.leftFull,
   "lg:grid-cols-2": sx.lgGridCols2,
+  "line-clamp-1": sx.lineClamp1,
   "line-clamp-2": sx.lineClamp2,
+  "line-clamp-3": sx.lineClamp3,
   "line-clamp-4": sx.lineClamp4,
+  "line-clamp-5": sx.lineClamp5,
   "line-through": sx.lineThrough,
   "list-none": sx.listNone,
+  lowercase: sx.lowercase,
   "m-0": sx.m0,
   "m-3": sx.m3,
+  "m-4": sx.m4,
   "max-[560px]:flex-col": sx.max560pxFlexCol,
   "max-[560px]:gap-1": sx.max560pxGap1,
   "max-[560px]:gap-2.5": sx.max560pxGap25,
@@ -8298,6 +9126,13 @@ export const utilityStyles = {
   "max-[920px]:w-[min(480px,94vw)]": sx.max920pxWMin480px94vw,
   "max-[920px]:z-30": sx.max920pxZ30,
   "max-[920px]:z-[25]": sx.max920pxZ25,
+  "max-h-16": sx.maxH16,
+  "max-h-28": sx.maxH28,
+  "max-h-32": sx.maxH32,
+  "max-h-48": sx.maxH48,
+  "max-h-56": sx.maxH56,
+  "max-h-60": sx.maxH60,
+  "max-h-72": sx.maxH72,
   "max-h-80": sx.maxH80,
   "max-h-96": sx.maxH96,
   "max-h-[320px]": sx.maxH320px,
@@ -8319,9 +9154,13 @@ export const utilityStyles = {
   "max-h-none": sx.maxHNone,
   "max-sm:grid-cols-1": sx.maxSmGridCols1,
   "max-sm:min-h-10": sx.maxSmMinH10,
-  "max-sm:min-w-[55%]": sx.maxSmMinW55,
+  "max-w-24": sx.maxW24,
+  "max-w-28": sx.maxW28,
+  "max-w-2xl": sx.maxW2xl,
   "max-w-32": sx.maxW32,
   "max-w-40": sx.maxW40,
+  "max-w-44": sx.maxW44,
+  "max-w-52": sx.maxW52,
   "max-w-[1120px]": sx.maxW1120px,
   "max-w-[1160px]": sx.maxW1160px,
   "max-w-[120px]": sx.maxW120px,
@@ -8367,12 +9206,16 @@ export const utilityStyles = {
   "max-w-[min(720px,90vw)]": sx.maxWMin720px90vw,
   "max-w-[var(--session-col)]": sx.maxWVarSessionCol,
   "max-w-full": sx.maxWFull,
+  "max-w-md": sx.maxWMd,
   "max-w-none": sx.maxWNone,
+  "max-w-sm": sx.maxWSm,
+  "max-w-xs": sx.maxWXs,
   "mb-0": sx.mb0,
   "mb-0.5": sx.mb05,
   "mb-1": sx.mb1,
   "mb-1.25": sx.mb125,
   "mb-1.5": sx.mb15,
+  "mb-11": sx.mb11,
   "mb-2": sx.mb2,
   "mb-20": sx.mb20,
   "mb-3": sx.mb3,
@@ -8381,10 +9224,13 @@ export const utilityStyles = {
   "mb-4.5": sx.mb45,
   "mb-5": sx.mb5,
   "mb-6": sx.mb6,
+  "mb-7": sx.mb7,
+  "mb-8": sx.mb8,
   "mb-8.75": sx.mb875,
   "mb-[18px]": sx.mb18px,
   "mb-[22px]": sx.mb22px,
   "mb-[var(--sidebar-group-gap)]": sx.mbVarSidebarGroupGap,
+  "mb-auto": sx.mbAuto,
   "md:ml-4": sx.mdMl4,
   "md:mr-2": sx.mdMr2,
   "md:opacity-0": sx.mdOpacity0,
@@ -8393,8 +9239,16 @@ export const utilityStyles = {
   "min-h-11": sx.minH11,
   "min-h-12": sx.minH12,
   "min-h-12!": sx.minH122,
+  "min-h-13": sx.minH13,
+  "min-h-14": sx.minH14,
+  "min-h-16": sx.minH16,
   "min-h-18": sx.minH18,
+  "min-h-4": sx.minH4,
+  "min-h-40": sx.minH40,
+  "min-h-48": sx.minH48,
+  "min-h-5": sx.minH5,
   "min-h-6": sx.minH6,
+  "min-h-7": sx.minH7,
   "min-h-8": sx.minH8,
   "min-h-9": sx.minH9,
   "min-h-[132px]": sx.minH132px,
@@ -8410,8 +9264,12 @@ export const utilityStyles = {
     sx.minHCalcEnvSafeAreaInsetTop0px52px,
   "min-h-[var(--desktop-header-h)]": sx.minHVarDesktopHeaderH,
   "min-h-[var(--sidebar-cap-h)]": sx.minHVarSidebarCapH,
+  "min-h-full": sx.minHFull,
   "min-w-0": sx.minW0,
   "min-w-10": sx.minW10,
+  "min-w-11": sx.minW11,
+  "min-w-28": sx.minW28,
+  "min-w-3": sx.minW3,
   "min-w-4": sx.minW4,
   "min-w-5": sx.minW5,
   "min-w-6": sx.minW6,
@@ -8425,11 +9283,16 @@ export const utilityStyles = {
   "min-w-[38px]": sx.minW38px,
   "min-w-[90px]": sx.minW90px,
   "min-w-[var(--anchor-width)]": sx.minWVarAnchorWidth,
+  "min-w-full": sx.minWFull,
   "ml-0": sx.ml0,
+  "ml-0.5": sx.ml05,
   "ml-1": sx.ml1,
   "ml-1.5": sx.ml15,
+  "ml-10": sx.ml10,
+  "ml-2": sx.ml2,
   "ml-3": sx.ml3,
   "ml-4": sx.ml4,
+  "ml-5": sx.ml5,
   "ml-[5px]": sx.ml5px,
   "ml-auto": sx.mlAuto,
   "motion-reduce:[animation-duration:0.7s]!":
@@ -8459,10 +9322,16 @@ export const utilityStyles = {
   "mt-0.5": sx.mt05,
   "mt-1": sx.mt1,
   "mt-1.5": sx.mt15,
+  "mt-10": sx.mt10,
+  "mt-11": sx.mt11,
   "mt-2": sx.mt2,
   "mt-2.5": sx.mt25,
   "mt-3": sx.mt3,
+  "mt-3.5": sx.mt35,
   "mt-4": sx.mt4,
+  "mt-5": sx.mt5,
+  "mt-6": sx.mt6,
+  "mt-8": sx.mt8,
   "mt-9": sx.mt9,
   "mt-[3px]": sx.mt3px,
   "mt-[5px]": sx.mt5px,
@@ -8472,21 +9341,29 @@ export const utilityStyles = {
   "mt-px": sx.mtPx,
   "mx-0": sx.mx0,
   "mx-0.5": sx.mx05,
+  "mx-1": sx.mx1,
   "mx-1.5": sx.mx15,
   "mx-2": sx.mx2,
   "mx-2.5": sx.mx25,
   "mx-3": sx.mx3,
   "mx-3.5": sx.mx35,
   "mx-4": sx.mx4,
+  "mx-5": sx.mx5,
   "mx-auto": sx.mxAuto,
   "mx-px": sx.mxPx,
+  "my-0": sx.my0,
   "my-1": sx.my1,
   "my-1.5": sx.my15,
+  "my-2": sx.my2,
+  "my-4": sx.my4,
+  "my-7": sx.my7,
   "my-[-1px]": sx.my1px,
   "my-[-2px]": sx.my2px,
   "no-underline": sx.noUnderline,
+  "not-italic": sx.notItalic,
   "object-contain": sx.objectContain,
   "object-cover": sx.objectCover,
+  "object-left-top": sx.objectLeftTop,
   "object-top": sx.objectTop,
   "opacity-0": sx.opacity0,
   "opacity-100": sx.opacity100,
@@ -8496,7 +9373,9 @@ export const utilityStyles = {
   "opacity-50": sx.opacity50,
   "opacity-55": sx.opacity55,
   "opacity-60": sx.opacity60,
+  "opacity-65": sx.opacity65,
   "opacity-70": sx.opacity70,
+  "opacity-72": sx.opacity72,
   "opacity-80": sx.opacity80,
   "opacity-85": sx.opacity85,
   "opacity-90": sx.opacity90,
@@ -8514,6 +9393,7 @@ export const utilityStyles = {
   "outline-divider": sx.outlineDivider,
   "outline-none": sx.outlineNone,
   "outline-offset-1": sx.outlineOffset1,
+  "outline-offset-4": sx.outlineOffset4,
   "outline-transparent": sx.outlineTransparent,
   "outline-white/85": sx.outlineWhite85,
   "overflow-auto": sx.overflowAuto,
@@ -8538,6 +9418,8 @@ export const utilityStyles = {
   "p-4": sx.p4,
   "p-5": sx.p5,
   "p-6": sx.p6,
+  "p-7": sx.p7,
+  "p-8": sx.p8,
   "p-[3px]": sx.p3px,
   "p-[5px]": sx.p5px,
   "p-[7px]": sx.p7px,
@@ -8556,7 +9438,9 @@ export const utilityStyles = {
   "pb-3.5": sx.pb35,
   "pb-4": sx.pb4,
   "pb-5": sx.pb5,
+  "pb-6": sx.pb6,
   "pb-7": sx.pb7,
+  "pb-8": sx.pb8,
   "pb-[11px]": sx.pb11px,
   "pb-[22px]": sx.pb22px,
   "pb-[26px]": sx.pb26px,
@@ -8575,6 +9459,7 @@ export const utilityStyles = {
     sx.pbMax16pxEnvSafeAreaInsetBottom0px,
   "pb-[max(24px,env(safe-area-inset-bottom,0px))]":
     sx.pbMax24pxEnvSafeAreaInsetBottom0px,
+  "pb-px": sx.pbPx,
   "phone:-order-1": sx.phoneOrder1,
   "phone:[--composer-inset-left:13px]": sx.phoneComposerInsetLeft13px,
   "phone:[--pane-header-h:var(--header-h)]": sx.phonePaneHeaderHVarHeaderH,
@@ -8893,9 +9778,12 @@ export const utilityStyles = {
   "pl-2": sx.pl2,
   "pl-2.5": sx.pl25,
   "pl-3": sx.pl3,
+  "pl-3.5": sx.pl35,
   "pl-4": sx.pl4,
   "pl-5": sx.pl5,
+  "pl-7": sx.pl7,
   "pl-8": sx.pl8,
+  "pl-9": sx.pl9,
   "pl-[19px]": sx.pl19px,
   "pl-[5px]": sx.pl5px,
   "pl-[6.5px]": sx.pl65px,
@@ -8914,6 +9802,8 @@ export const utilityStyles = {
   "pr-1.5": sx.pr15,
   "pr-10": sx.pr10,
   "pr-11": sx.pr11,
+  "pr-14": sx.pr14,
+  "pr-16": sx.pr16,
   "pr-2": sx.pr2,
   "pr-2.5": sx.pr25,
   "pr-3": sx.pr3,
@@ -8935,10 +9825,12 @@ export const utilityStyles = {
   "pt-3": sx.pt3,
   "pt-3.5": sx.pt35,
   "pt-4": sx.pt4,
+  "pt-4.5": sx.pt45,
   "pt-5": sx.pt5,
   "pt-6": sx.pt6,
   "pt-7": sx.pt7,
   "pt-8": sx.pt8,
+  "pt-9": sx.pt9,
   "pt-[11px]": sx.pt11px,
   "pt-[11vh]": sx.pt11vh,
   "pt-[9px]": sx.pt9px,
@@ -8953,6 +9845,7 @@ export const utilityStyles = {
   "px-1.5": sx.px15,
   "px-1.75": sx.px175,
   "px-10": sx.px10,
+  "px-12": sx.px12,
   "px-2": sx.px2,
   "px-2.5": sx.px25,
   "px-3": sx.px3,
@@ -8961,7 +9854,9 @@ export const utilityStyles = {
   "px-4": sx.px4,
   "px-5": sx.px5,
   "px-6": sx.px6,
+  "px-7": sx.px7,
   "px-8": sx.px8,
+  "px-9": sx.px9,
   "px-[11px]": sx.px11px,
   "px-[13px]": sx.px13px,
   "px-[16px]": sx.px16px,
@@ -8980,6 +9875,7 @@ export const utilityStyles = {
   "py-1.25": sx.py125,
   "py-1.5": sx.py15,
   "py-10": sx.py10,
+  "py-12": sx.py12,
   "py-2": sx.py2,
   "py-2.25": sx.py225,
   "py-2.5": sx.py25,
@@ -8987,7 +9883,10 @@ export const utilityStyles = {
   "py-3": sx.py3,
   "py-3.5": sx.py35,
   "py-4": sx.py4,
+  "py-5": sx.py5,
   "py-6": sx.py6,
+  "py-7": sx.py7,
+  "py-8": sx.py8,
   "py-[11px]": sx.py11px,
   "py-[13px]": sx.py13px,
   "py-[15px]": sx.py15px,
@@ -9001,6 +9900,7 @@ export const utilityStyles = {
   "py-[var(--sidebar-tool-pad)]": sx.pyVarSidebarToolPad,
   "py-px": sx.pyPx,
   relative: sx.relative,
+  resize: sx.resize,
   "resize-none": sx.resizeNone,
   "resize-y": sx.resizeY,
   "right-0": sx.right0,
@@ -9010,6 +9910,7 @@ export const utilityStyles = {
   "right-2": sx.right2,
   "right-3": sx.right3,
   "right-4": sx.right4,
+  "right-9": sx.right9,
   "right-[-3px]": sx.right3px,
   "right-[18px]": sx.right18px,
   "right-[5px]": sx.right5px,
@@ -9022,7 +9923,9 @@ export const utilityStyles = {
   "rotate-180": sx.rotate180,
   "rotate-45": sx.rotate45,
   "rotate-90": sx.rotate90,
+  rounded: sx.rounded,
   "rounded-2xl": sx.rounded2xl,
+  "rounded-3xl": sx.rounded3xl,
   "rounded-[3px]": sx.rounded3px,
   "rounded-[999px]": sx.rounded999px,
   "rounded-[calc(10px*var(--rf))]": sx.roundedCalc10pxVarRf,
@@ -9041,6 +9944,7 @@ export const utilityStyles = {
   "rounded-full": sx.roundedFull,
   "rounded-l-[calc(5px*var(--rf))]": sx.roundedLCalc5pxVarRf,
   "rounded-l-md": sx.roundedLMd,
+  "rounded-l-none": sx.roundedLNone,
   "rounded-lg": sx.roundedLg,
   "rounded-md": sx.roundedMd,
   "rounded-none": sx.roundedNone,
@@ -9059,10 +9963,14 @@ export const utilityStyles = {
   "rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))]":
     sx.roundedTCalcVarSheetRadius34pxVarRf,
   "rounded-t-[var(--composer-radius)]": sx.roundedTVarComposerRadius,
+  "rounded-t-md": sx.roundedTMd,
+  "rounded-tl-lg": sx.roundedTlLg,
   "rounded-xl": sx.roundedXl,
   "rounded-xs": sx.roundedXs,
   "row-start-1": sx.rowStart1,
+  "row-start-2": sx.rowStart2,
   "scale-100": sx.scale100,
+  "scale-110": sx.scale110,
   "scale-[0.67]": sx.scale067,
   "scale-[0.96]": sx.scale096,
   "scroll-mt-4": sx.scrollMt4,
@@ -9076,13 +9984,16 @@ export const utilityStyles = {
   shrink: sx.shrink,
   "shrink-0": sx.shrink0,
   "shrink-[100]": sx.shrink100,
+  "size-1": sx.size1,
   "size-1.5": sx.size15,
   "size-10": sx.size10,
   "size-11": sx.size11,
+  "size-12": sx.size12,
   "size-14": sx.size14,
   "size-16": sx.size16,
   "size-2": sx.size2,
   "size-2.5": sx.size25,
+  "size-20": sx.size20,
   "size-3": sx.size3,
   "size-3.5": sx.size35,
   "size-4": sx.size4,
@@ -9106,17 +10017,26 @@ export const utilityStyles = {
   "sm:grid-cols-2": sx.smGridCols2,
   "sm:px-4": sx.smPx4,
   "sm:text-control-label": sx.smTextControlLabel,
+  "smooth-shadow-lg": sx.smoothShadowLg,
   "smooth-shadow-md": sx.smoothShadowMd,
   "smooth-shadow-ring-lg": sx.smoothShadowRingLg,
   "smooth-shadow-ring-md": sx.smoothShadowRingMd,
   "smooth-shadow-ring-sm": sx.smoothShadowRingSm,
+  "smooth-shadow-ring-soft": sx.smoothShadowRingSoft,
   "smooth-shadow-sm": sx.smoothShadowSm,
   "smooth-shadow-soft": sx.smoothShadowSoft,
   "smooth-shadow-xs": sx.smoothShadowXs,
+  "snap-center": sx.snapCenter,
   "snap-start": sx.snapStart,
+  "sr-only": sx.srOnly,
+  static: sx.static,
   sticky: sx.sticky,
   "stroke-accent": sx.strokeAccent,
+  "stroke-line": sx.strokeLine,
   "stroke-red": sx.strokeRed,
+  table: sx.table,
+  "table-fixed": sx.tableFixed,
+  "text-4xl": sx.text4xl,
   "text-[#17130a]": sx.text17130a,
   "text-[#1f9e8a]": sx.text1f9e8a,
   "text-[#5eead4]": sx.text5eead4,
@@ -9132,12 +10052,15 @@ export const utilityStyles = {
   "text-[color:color-mix(in_srgb,var(--green)_72%,var(--text-dim))]":
     sx.textColorColorMixInSrgbVarGreen72VarTextDim,
   "text-[inherit]": sx.textInherit,
+  "text-balance": sx.textBalance,
   "text-base": sx.textBase,
   "text-base!": sx.textBase2,
   "text-bg": sx.textBg,
+  "text-black": sx.textBlack,
   "text-blue": sx.textBlue,
   "text-center": sx.textCenter,
   "text-clip": sx.textClip,
+  "text-code-well-ink": sx.textCodeWellInk,
   "text-dim": sx.textDim,
   "text-ellipsis": sx.textEllipsis,
   "text-faint": sx.textFaint,
@@ -9151,7 +10074,9 @@ export const utilityStyles = {
   "text-left": sx.textLeft,
   "text-link": sx.textLink,
   "text-on-accent": sx.textOnAccent,
+  "text-on-accent-control": sx.textOnAccentControl,
   "text-panel": sx.textPanel,
+  "text-pretty": sx.textPretty,
   "text-purple": sx.textPurple,
   "text-red": sx.textRed,
   "text-right": sx.textRight,
@@ -9167,8 +10092,10 @@ export const utilityStyles = {
   "text-yellow/60": sx.textYellow60,
   "top-0": sx.top0,
   "top-0.5": sx.top05,
+  "top-1": sx.top1,
   "top-1.5": sx.top15,
   "top-1/2": sx.top12,
+  "top-16": sx.top16,
   "top-2": sx.top2,
   "top-3": sx.top3,
   "top-[calc((var(--desktop-header-h)-35px)/2)]":
@@ -9177,6 +10104,7 @@ export const utilityStyles = {
     sx.topCalc12pxEnvSafeAreaInsetTop,
   "top-[calc(var(--desktop-header-h)+36px)]": sx.topCalcVarDesktopHeaderH36px,
   "top-[calc(var(--desktop-header-h)+8px)]": sx.topCalcVarDesktopHeaderH8px,
+  "top-auto": sx.topAuto,
   "top-full": sx.topFull,
   "touch-manipulation": sx.touchManipulation,
   "touch-none": sx.touchNone,
@@ -9185,7 +10113,10 @@ export const utilityStyles = {
   "tracking-[0.02em]": sx.tracking002em2,
   "tracking-[0px]": sx.tracking0px,
   "tracking-normal": sx.trackingNormal,
+  "tracking-wide": sx.trackingWide,
+  "tracking-wider": sx.trackingWider,
   "transform-[translateX(var(--swipe-x,0))]": sx.transformTranslateXVarSwipeX0,
+  transition: sx.transition,
   "transition-[background,color]": sx.transitionBackgroundColor,
   "transition-[background-color,border-color,color,filter,scale]":
     sx.transitionBackgroundColorBorderColorColorFilterScale,
@@ -9254,24 +10185,42 @@ export const utilityStyles = {
   "translate-x-[calc(-50%+var(--ws-summary-step,0px))]":
     sx.translateXCalc50VarWsSummaryStep0px,
   "translate-x-full": sx.translateXFull,
+  "translate-x-px": sx.translateXPx,
   "translate-y-0": sx.translateY0,
   "translate-y-1": sx.translateY1,
   "translate-y-3": sx.translateY3,
   "translate-y-full": sx.translateYFull,
+  "translate-y-px": sx.translateYPx,
   truncate: sx.truncate,
+  underline: sx.underline,
+  "underline-offset-2": sx.underlineOffset2,
   visible: sx.visible,
+  "w-0": sx.w0,
   "w-1.5": sx.w15,
   "w-10": sx.w10,
   "w-11": sx.w11,
+  "w-14": sx.w14,
+  "w-16": sx.w16,
   "w-2": sx.w2,
+  "w-20": sx.w20,
   "w-21": sx.w21,
+  "w-24": sx.w24,
+  "w-28": sx.w28,
   "w-3": sx.w3,
+  "w-3.5": sx.w35,
+  "w-32": sx.w32,
+  "w-4": sx.w4,
   "w-40": sx.w40,
+  "w-44": sx.w44,
   "w-5": sx.w5,
+  "w-52": sx.w52,
   "w-58": sx.w58,
   "w-6": sx.w6,
+  "w-60": sx.w60,
+  "w-64": sx.w64,
   "w-7": sx.w7,
   "w-8": sx.w8,
+  "w-80": sx.w80,
   "w-9": sx.w9,
   "w-[140px]": sx.w140px,
   "w-[200px]": sx.w200px,
@@ -9280,12 +10229,12 @@ export const utilityStyles = {
   "w-[26px]": sx.w26px,
   "w-[300px]": sx.w300px,
   "w-[30px]": sx.w30px,
-  "w-[35%]": sx.w35,
+  "w-[35%]": sx.w352,
   "w-[3px]": sx.w3px,
   "w-[41%]": sx.w41,
   "w-[46px]": sx.w46px,
   "w-[47%]": sx.w47,
-  "w-[52%]": sx.w52,
+  "w-[52%]": sx.w522,
   "w-[54px]": sx.w54px,
   "w-[58%]": sx.w582,
   "w-[62%]": sx.w62,
@@ -9326,6 +10275,7 @@ export const utilityStyles = {
   "w-full!": sx.wFull2,
   "w-max": sx.wMax,
   "w-px": sx.wPx,
+  "whitespace-normal": sx.whitespaceNormal,
   "whitespace-nowrap": sx.whitespaceNowrap,
   "whitespace-pre-line": sx.whitespacePreLine,
   "whitespace-pre-wrap": sx.whitespacePreWrap,
@@ -9334,7 +10284,10 @@ export const utilityStyles = {
   "z-0": sx.z0,
   "z-1": sx.z1,
   "z-10": sx.z10,
+  "z-1000": sx.z1000,
+  "z-2": sx.z2,
   "z-20": sx.z20,
+  "z-3": sx.z3,
   "z-30": sx.z30,
   "z-40": sx.z40,
   "z-500": sx.z500,
@@ -9355,11 +10308,13 @@ export const utilityStyles = {
   "z-[9500]": sx.z9500,
   "text-body": typography.body,
   "text-control-label": typography.controlLabel,
+  "text-dialog-title": typography.dialogTitle,
   "text-item-title": typography.itemTitle,
   "text-label": typography.label,
   "text-meta": typography.meta,
   "text-page-title": typography.pageTitle,
   "text-section-title": typography.sectionTitle,
+  "text-stat": typography.stat,
   "text-supporting": typography.supporting,
 } as const;
 export type UtilityClass = keyof typeof utilityStyles;

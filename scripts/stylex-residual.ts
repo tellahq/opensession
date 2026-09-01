@@ -319,7 +319,7 @@ const compatibilityStyles = new Set(
     ...readFileSync(
       join(FRONTEND, "styles/utility-compat.stylex.ts"),
       "utf8",
-    ).matchAll(/^\s*"([^"]+)": (?:sx|typography)\./gm),
+    ).matchAll(/^\s*"([^"]+)":\s*(?:sx|typography)\./gm),
   ].map((match) => match[1]),
 );
 const isPermittedResidual = (token: string) =>
