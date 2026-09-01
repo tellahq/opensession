@@ -50,9 +50,8 @@ describe("buildRunInstructions", () => {
     );
     expect(prompt).toContain("`tella-stage` `lease_editor_fixture`");
     expect(prompt).toContain("this Open Session id as `leaseKey`");
-    expect(prompt).toContain(
-      "Never construct a video id or report fixture evidence yourself",
-    );
+    expect(prompt).toContain("Pass only its `leaseId`");
+    expect(prompt).toContain("verifies the lease directly with Tella");
     expect(prompt.length).toBeLessThan(1_200);
   });
 });
