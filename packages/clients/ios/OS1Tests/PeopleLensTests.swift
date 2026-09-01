@@ -43,7 +43,11 @@ final class PeopleLensTests: XCTestCase {
         )[0]
         let kent = PeopleLens(
             names: ["kent", "kentdebruin"],
-            roster: [["kent", "kent de bruin", "kentdebruin"]],
+            roster: [
+                ["kent", "kent robinson", "kentrobinson"],
+                ["kent", "kent de bruin", "kentdebruin"]
+            ],
+            identityNames: ["kentdebruin"],
             claims: []
         )
 
@@ -56,7 +60,11 @@ final class PeopleLensTests: XCTestCase {
         )[0]
         let kent = PeopleLens(
             names: ["kent", "kentdebruin"],
-            roster: [["kent", "kent de bruin", "kentdebruin"]],
+            roster: [
+                ["kent", "kent robinson", "kentrobinson"],
+                ["kent", "kent de bruin", "kentdebruin"]
+            ],
+            identityNames: ["kentdebruin"],
             claims: []
         )
 

@@ -34,6 +34,9 @@ struct PeopleLens {
     /// Keeping the aliases grouped resolves one person's names without treating
     /// unrelated people who share a first-name prefix as the same person.
     let roster: [Set<String>]
+    /// Current-person aliases that are unique across the roster, normally the
+    /// verified GitHub login. A shared first name is deliberately excluded.
+    let identityNames: Set<String>
     /// Session ids you have claimed (`LaneStore`).
     let claims: Set<String>
     /// Session ids where a teammate tagged you (`MentionStore`).
@@ -42,11 +45,13 @@ struct PeopleLens {
     init(
         names: Set<String>,
         roster: [Set<String>] = [],
+        identityNames: Set<String> = [],
         claims: Set<String>,
         mentions: Set<String> = []
     ) {
         self.names = names
         self.roster = roster
+        self.identityNames = identityNames
         self.claims = claims
         self.mentions = mentions
     }
@@ -70,6 +75,7 @@ struct PeopleLens {
         return PeopleLens(
             names: names,
             roster: roster,
+            identityNames: login.isEmpty ? [] : [login.lowercased()],
             claims: LaneStore.shared.claims,
             mentions: MentionStore.shared.sessionIds
         )
@@ -84,9 +90,10 @@ struct PeopleLens {
         let myNames = Set(names.map(Self.normalized))
         if myNames.contains(key) { return true }
 
-        guard let person = roster.first(where: { !$0.isDisjoint(with: myNames) }) else {
-            return false
-        }
+        let uniqueNames = Set(identityNames.map(Self.normalized))
+        let lookupNames = uniqueNames.isEmpty ? myNames : uniqueNames
+        let matches = roster.filter { !$0.isDisjoint(with: lookupNames) }
+        guard matches.count == 1, let person = matches.first else { return false }
         return person.contains(key)
     }
 

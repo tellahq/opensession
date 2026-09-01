@@ -70,18 +70,11 @@ final class TeamDirectory {
         return fullNames[key] ?? name
     }
 
-    /// The directory boundary used by Team activity. Each member carries every
-    /// spelling the sessions payload can use, so a full name or GitHub login
-    /// resolves to the roster entry rather than becoming an invented person.
-    var activityMembers: [TeamActivity.Member] {
-        names.map { name in
-            let key = Self.key(name) ?? name.lowercased()
-            return TeamActivity.Member(
-                name: name,
-                aliases: [name, fullNames[key], githubLogins[key]].compactMap { $0 }
-            )
-        }
-    }
+    /// The directory boundary used by Team activity and ownership lenses.
+    /// Stored per server record rather than rebuilt from the first-name maps:
+    /// two teammates can share a first name, while their full names and GitHub
+    /// logins still identify separate people.
+    private(set) var activityMembers: [TeamActivity.Member] = []
 
     /// Fetch the roster unless it is already loaded or in flight. Failures
     /// retry after a cooldown instead of hammering a server that is down —
@@ -96,6 +89,7 @@ final class TeamDirectory {
             reviewTeams = []
             displayNames = [:]
             fullNames = [:]
+            activityMembers = []
             loading = false
             lastFailureAt = nil
         }
@@ -114,6 +108,12 @@ final class TeamDirectory {
         else { return }
         let people = roster.people ?? []
         names = people.map(\.name)
+        activityMembers = people.map { person in
+            TeamActivity.Member(
+                name: person.name,
+                aliases: [person.name, person.fullName, person.github].compactMap { $0 }
+            )
+        }
         reviewTeams = roster.reviewTeams ?? []
         for person in people {
             guard let key = Self.key(person.name) else { continue }
