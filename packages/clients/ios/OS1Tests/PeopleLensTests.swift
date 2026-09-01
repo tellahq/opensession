@@ -14,7 +14,7 @@ final class PeopleLensTests: XCTestCase {
     private func lens(claims: Set<String> = []) -> PeopleLens {
         PeopleLens(
             names: ["michiel westerbeek", "michiel", "happylinks"],
-            roster: ["michiel": "Michiel"],
+            roster: [["michiel", "michiel westerbeek", "happylinks"]],
             claims: claims
         )
     }
@@ -43,20 +43,20 @@ final class PeopleLensTests: XCTestCase {
         )[0]
         let kent = PeopleLens(
             names: ["kent", "kentdebruin"],
-            roster: ["kent": "Kent"],
+            roster: [["kent", "kent de bruin", "kentdebruin"]],
             claims: []
         )
 
         XCTAssertTrue(kent.isMine(session))
     }
 
-    func testSimilarNameOutsideRosterDoesNotMatchByPrefix() throws {
+    func testDifferentFullNameSharingFirstNameDoesNotMatch() throws {
         let session = try sessions(
-            #"[{"id":"os-1","startedBy":"Kentucky Jones"}]"#
+            #"[{"id":"os-1","startedBy":"Kent Robinson"}]"#
         )[0]
         let kent = PeopleLens(
             names: ["kent", "kentdebruin"],
-            roster: ["kent": "Kent"],
+            roster: [["kent", "kent de bruin", "kentdebruin"]],
             claims: []
         )
 

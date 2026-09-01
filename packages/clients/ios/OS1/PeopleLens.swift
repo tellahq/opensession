@@ -30,9 +30,10 @@ struct PeopleLens {
     /// Identity strings that count as you: display name, its first token
     /// (sessions store first names, e.g. "Jaap"), and the GitHub login.
     let names: Set<String>
-    /// First name → roster spelling, used to resolve full display names without
-    /// treating unrelated names that share a prefix as the same person.
-    let roster: [String: String]
+    /// Every roster member's exact display-name, full-name, and GitHub aliases.
+    /// Keeping the aliases grouped resolves one person's names without treating
+    /// unrelated people who share a first-name prefix as the same person.
+    let roster: [Set<String>]
     /// Session ids you have claimed (`LaneStore`).
     let claims: Set<String>
     /// Session ids where a teammate tagged you (`MentionStore`).
@@ -40,7 +41,7 @@ struct PeopleLens {
 
     init(
         names: Set<String>,
-        roster: [String: String] = [:],
+        roster: [Set<String>] = [],
         claims: Set<String>,
         mentions: Set<String> = []
     ) {
@@ -63,9 +64,12 @@ struct PeopleLens {
         }
         let login = config.githubLogin
         if !login.isEmpty { names.insert(login.lowercased()) }
+        let roster = TeamDirectory.shared.activityMembers.map { member in
+            Set(member.aliases.map(Self.normalized))
+        }
         return PeopleLens(
             names: names,
-            roster: TeamDirectory.shared.displayNames,
+            roster: roster,
             claims: LaneStore.shared.claims,
             mentions: MentionStore.shared.sessionIds
         )
@@ -76,13 +80,18 @@ struct PeopleLens {
         if claims.contains(session.id) { return true }
         guard !session.isAutomation, let startedBy = session.startedBy else { return false }
 
-        let key = startedBy.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if names.contains(key) { return true }
+        let key = Self.normalized(startedBy)
+        let myNames = Set(names.map(Self.normalized))
+        if myNames.contains(key) { return true }
 
-        guard let canonical = ArchivedOwners.canonical(startedBy, in: roster)?.lowercased() else {
+        guard let person = roster.first(where: { !$0.isDisjoint(with: myNames) }) else {
             return false
         }
-        return names.contains(canonical)
+        return person.contains(key)
+    }
+
+    private static func normalized(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     /// A sidebar row under the lens. A row is yours as soon as ONE of its
