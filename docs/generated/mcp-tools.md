@@ -649,9 +649,9 @@ Restart one supervised Portal using its registered command and port. Repository-
 
 ### `set_editor_preview_path`
 
-`mcp__opensession-portals__set_editor_preview_path` · input: `path` (string, required), `exclusiveKey` (string, required), `durationSeconds` (number, required), `clipCount` (integer, required), `transcriptWordCount` (integer, required), `leaseMinutes` (integer)
+`mcp__opensession-portals__set_editor_preview_path` · input: `path` (string, required), `videoId` (string, required), `fixtureLeaseId` (string, required), `fixtureExpiresAt` (string, required)
 
-Set and exclusively reserve the staging route for an editor feature. Call this only after verifying the staging record is at least 60 seconds long, has multiple clips, and has a ready non-empty transcript.
+Set and exclusively reserve the route returned by Tella's stage-only lease_editor_fixture tool. Self-reported fixture evidence and local video IDs are not accepted.
 
 ### `set_portal_path`
 
