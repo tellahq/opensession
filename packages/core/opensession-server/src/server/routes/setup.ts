@@ -627,14 +627,6 @@ export async function handleSetupRoutes(
           : typeof github.oauthClientId === "string"
             ? github.oauthClientId
             : "";
-      const effectiveOwner =
-        body.installationOwner !== undefined
-          ? String(body.installationOwner).trim()
-          : typeof github.installationOwner === "string"
-            ? github.installationOwner
-            : typeof github.appOrg === "string"
-              ? github.appOrg
-              : "";
       const effectiveSecret =
         body.oauthClientSecret !== undefined
           ? String(body.oauthClientSecret).trim()
@@ -643,14 +635,11 @@ export async function handleSetupRoutes(
             : "";
       if (
         (appSettingsChanging || body.userPrAuth === true) &&
-        (!effectiveClientId ||
-          !effectiveOwner ||
-          (!privateKey && !githubAppConfigured()))
+        (!effectiveClientId || (!privateKey && !githubAppConfigured()))
       ) {
         return Response.json(
           {
-            error:
-              "Client id, installation owner and private key are required for the GitHub App",
+            error: "Client id and private key are required for the GitHub App",
           },
           { status: 409 },
         );

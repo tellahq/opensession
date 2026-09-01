@@ -145,7 +145,7 @@ export async function getPrStack(
   const repo = splitRepo(ghRepo);
   if (!repo) return null;
   try {
-    credential = await resolveGithubCredential(credential);
+    credential = await resolveGithubCredential(credential, { repo: ghRepo });
   } catch {
     return null;
   }
@@ -387,6 +387,16 @@ export function unmergedLayersBelow(stack: PrStack): PrStackLayer[] {
   );
 }
 
+/** The registered GitHub repository a stack command's `cwd` belongs to, so
+ * its service token comes from that owner's installation. */
+async function repoForCwd(cwd: string): Promise<{ repo?: string }> {
+  const { repoForPathOrNull } = await import("./worktree");
+  const repo = repoForPathOrNull(cwd);
+  return repo?.host !== "codestorage" && repo?.ghRepo
+    ? { repo: repo.ghRepo }
+    : {};
+}
+
 /**
  * Link PRs into a stack on GitHub, bottom first. Takes PR *URLs* rather than
  * branch names on purpose: `gh stack link` pushes branch arguments and opens
@@ -400,7 +410,10 @@ export async function linkPrStack(
   cwd: string,
   credential: GithubCredential = serviceGithubCredential,
 ): Promise<{ ok: true } | { error: string }> {
-  credential = await resolveGithubCredential(credential, { write: true });
+  credential = await resolveGithubCredential(credential, {
+    write: true,
+    ...(await repoForCwd(cwd)),
+  });
   if (prUrls.length < 2)
     return { error: "A stack needs at least two pull requests" };
 
@@ -453,7 +466,10 @@ export async function mergePrStack(
   opts: { method?: "merge" | "squash" | "rebase" } = {},
   credential: GithubCredential = serviceGithubCredential,
 ): Promise<{ ok: true } | { error: string }> {
-  credential = await resolveGithubCredential(credential, { write: true });
+  credential = await resolveGithubCredential(credential, {
+    write: true,
+    ...(await repoForCwd(cwd)),
+  });
   const method = opts.method || "squash";
   return audited(
     {

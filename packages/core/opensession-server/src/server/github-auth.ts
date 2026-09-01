@@ -919,7 +919,7 @@ export const serviceGithubCredential: GithubCredential = {
  * Interactive user credentials pass through unchanged. */
 export async function resolveGithubCredential(
   credential: GithubCredential,
-  opts: { write?: boolean } = {},
+  opts: { write?: boolean; repo?: string } = {},
 ): Promise<GithubCredential> {
   if (credential.kind !== "service" || credential.env.GH_TOKEN)
     return credential;

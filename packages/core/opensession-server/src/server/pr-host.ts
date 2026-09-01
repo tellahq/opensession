@@ -169,7 +169,13 @@ export async function ghJson<T>(
   const started = Date.now();
   let ok = false;
   try {
-    const credential = await resolveGithubCredential(serviceGithubCredential);
+    // `--repo owner/name` selects the installation that serves the call.
+    const repoFlag = args.indexOf("--repo");
+    const repo = repoFlag >= 0 ? args[repoFlag + 1] : undefined;
+    const credential = await resolveGithubCredential(
+      serviceGithubCredential,
+      repo ? { repo } : {},
+    );
     const proc = Bun.spawn(["gh", ...args], {
       stdout: "pipe",
       stderr: "pipe",

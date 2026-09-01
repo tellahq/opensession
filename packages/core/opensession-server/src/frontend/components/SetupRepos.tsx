@@ -713,7 +713,7 @@ function LetterTile({ id, color }: { id: string; color?: string }) {
 }
 
 /** One account the workspace GitHub App is installed on. `selected` marks the
- * installation the configured owner pins, the one whose repos are listed. */
+ * optional default for calls that do not name a repository. */
 interface BrowseInstallation {
   login: string;
   type?: string;
@@ -727,22 +727,22 @@ interface BrowseResult {
   appInstallUrl?: string | null;
   /** The configured installation owner, when the App identity can answer. */
   installationOwner?: string | null;
-  /** Every account the App is installed on, so the picker can offer a switch
-   * when the App is installed beyond the pinned owner (repos alone cannot
-   * reveal that). Absent when the App identity cannot list them. */
+  /** Every account the App is installed on. Absent when the App identity
+   * cannot list them. */
   installations?: BrowseInstallation[];
+  /** Installations whose token or repository list could not be loaded. */
+  unavailableInstallations?: string[];
 }
 
-/** Explains an empty App installation instead of a bare "No repositories
+/** Explains an empty App installation set instead of a bare "No repositories
  * match.", which reads as a filter miss. */
 export function emptyAppInstallationMessage(browse: {
-  installationOwner?: string | null;
   installations?: BrowseInstallation[];
 }): string {
-  const owner = browse.installationOwner;
   if ((browse.installations?.length ?? 0) > 1) {
-    return `This installation${owner ? ` (${owner})` : ""} can’t see any repositories. Switch installations above, or grant the App repository access on GitHub.`;
+    return "These App installations can’t see any repositories yet. Grant the App repository access on GitHub, then reopen this window.";
   }
+  const owner = browse.installations?.[0]?.login;
   return `The App installation${owner ? ` for ${owner}` : ""} can’t see any repositories yet. Grant it repository access on GitHub, then reopen this window.`;
 }
 
@@ -1014,9 +1014,8 @@ function RemoteRepoPicker({
     if (active && (browse || browseFailed)) inputRef?.current?.focus();
   }, [active, browse, browseFailed, inputRef]);
 
-  /** Pin a different App installation and refetch the repo list it can see.
-   * PUT /api/setup/github applies live, so no restart stands between
-   * switching and browsing. */
+  /** Choose the default for GitHub calls that do not name a repository.
+   * Repository browsing and repository work still use every installation. */
   async function selectInstallation(login: string) {
     if (switching) return;
     setSwitching(true);
@@ -1071,19 +1070,22 @@ function RemoteRepoPicker({
       ) : browse && browse.source !== null ? (
         <>
           {browse.source === "app" && installations.length > 1 && (
-            <div className="mb-2 flex items-center gap-2">
+            <div className="mb-2 flex items-center gap-2 phone:flex-col phone:items-stretch">
               <span className="shrink-0 text-supporting text-dim">
-                Installation
+                Default installation
               </span>
               <OptionSelect
                 className="min-w-0 flex-1"
                 size="sm"
-                label="GitHub App installation"
+                label="Default GitHub App installation"
                 value={selectedInstallation}
-                options={installations.map((installation) => ({
-                  value: installation.login,
-                  label: installation.login,
-                }))}
+                options={[
+                  { value: "", label: "No default" },
+                  ...installations.map((installation) => ({
+                    value: installation.login,
+                    label: installation.login,
+                  })),
+                ]}
                 onChange={(login) => void selectInstallation(login)}
                 disabled={switching}
               />
@@ -1091,6 +1093,12 @@ function RemoteRepoPicker({
           )}
           {switchError && (
             <InlineAlert className="mb-2">{switchError}</InlineAlert>
+          )}
+          {(browse.unavailableInstallations?.length ?? 0) > 0 && (
+            <InlineAlert className="mb-2">
+              Couldn&rsquo;t load repositories from{" "}
+              {browse.unavailableInstallations?.join(", ")}.
+            </InlineAlert>
           )}
           <input
             ref={inputRef}
@@ -1125,11 +1133,10 @@ function RemoteRepoPicker({
             )}
           </div>
           <div className="mt-2 text-meta text-faint">
-            Browsing the
             {browse.source === "user"
-              ? " connected account"
-              : " GitHub App installation"}
-            . Only repos that credential can reach are listed.
+              ? "Browsing the connected account."
+              : `Browsing ${installations.length} GitHub App ${installations.length === 1 ? "installation" : "installations"}. Tokens are scoped by repository owner.`}{" "}
+            Only repositories that credential can reach are listed.
           </div>
         </>
       ) : (
@@ -1144,27 +1151,21 @@ function RemoteRepoPicker({
                   {installations
                     .map((installation) => installation.login)
                     .join(", ")}
-                  , but the configured installation owner
-                  {browse.installationOwner
-                    ? ` (${browse.installationOwner})`
-                    : ""}{" "}
-                  doesn&rsquo;t match any of them. Pick the installation to
-                  browse:
+                  , but none of those installations could load repositories.
                 </>
               ) : (
                 <>
                   The GitHub App installation isn&rsquo;t available yet. Check
-                  that Installation owner matches the account where the App is
-                  installed, then reopen this window.
+                  that the App is installed on at least one account, then reopen
+                  this window.
                 </>
               )
             ) : (
               <>
                 No GitHub credential yet, so the repo list can&rsquo;t be
                 browsed. Connect your GitHub account under Settings →
-                Connections, or configure the GitHub App client id, slug,
-                installation owner, and private key in the GitHub sign-in card
-                below.
+                Connections, or configure the GitHub App client id, slug, and
+                private key in the GitHub sign-in card below.
               </>
             )}{" "}
             You can still register a repo by name:
@@ -1177,7 +1178,7 @@ function RemoteRepoPicker({
                   disabled={switching}
                   onClick={() => void selectInstallation(installation.login)}
                 >
-                  {installation.login}
+                  Use {installation.login} as default
                 </Button>
               ))}
             </div>

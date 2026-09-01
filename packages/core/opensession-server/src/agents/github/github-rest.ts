@@ -16,6 +16,7 @@ import {
 } from "../../server/config";
 import {
   githubConfiguredCredential,
+  githubRepoFromApiPath,
   githubToken,
 } from "../../server/github-app";
 import {
@@ -76,7 +77,9 @@ export async function githubRequest<T = any>(
   path: string,
   body?: unknown,
 ): Promise<GithubResult<T>> {
-  const token = await githubToken({ write: true });
+  // A /repos/{owner}/{name} path mints against that owner's installation.
+  const repo = githubRepoFromApiPath(path);
+  const token = await githubToken({ write: true, ...(repo ? { repo } : {}) });
   if (!token)
     return {
       ok: false,
@@ -136,8 +139,12 @@ export async function githubRequest<T = any>(
 async function githubGraphQL<T = any>(
   query: string,
   variables?: Record<string, unknown>,
+  ghRepo?: string,
 ): Promise<T | null> {
-  const token = await githubToken({ write: true });
+  const token = await githubToken({
+    write: true,
+    ...(ghRepo ? { repo: ghRepo } : {}),
+  });
   if (!token) return null;
   if (ghRateLimited()) return null;
   const started = Date.now();
@@ -496,6 +503,7 @@ export async function listReviewThreads(
       name: ghRepo.split("/")[1],
       number: prNumber,
     },
+    ghRepo,
   );
   const nodes = data?.repository?.pullRequest?.reviewThreads?.nodes;
   if (!Array.isArray(nodes)) return [];
@@ -525,11 +533,17 @@ export async function listReviewThreads(
   });
 }
 
-/** Mark a single review thread resolved by its node id. */
-export async function resolveReviewThread(threadId: string): Promise<boolean> {
+/** Mark a single review thread resolved by its node id. `ghRepo` names the
+ * repository the thread lives in, so the mutation runs against that owner's
+ * installation. */
+export async function resolveReviewThread(
+  threadId: string,
+  ghRepo: string = GITHUB_REPO,
+): Promise<boolean> {
   const data = await githubGraphQL<any>(
     `mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread{ isResolved } } }`,
     { id: threadId },
+    ghRepo,
   );
   return !!data?.resolveReviewThread?.thread?.isResolved;
 }
@@ -569,7 +583,7 @@ export async function resolveAddressedThreads(
     const staleBot =
       alsoOutdatedBotThreads && t.isOutdated && isGithubBotLogin(t.rootAuthor);
     if (!threadWasFixed(t) && !staleBot) continue;
-    if (await resolveReviewThread(t.id)) resolved++;
+    if (await resolveReviewThread(t.id, ghRepo)) resolved++;
   }
   return resolved;
 }

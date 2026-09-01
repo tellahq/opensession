@@ -20,6 +20,7 @@ import {
   adoptExistingCheckout,
   githubCredentialHelperCommand,
   handleSetupRepoRoutes,
+  invalidateGithubRepoListCache,
   matchesCodeStorageCheckout,
   normalizeDefaultBranch,
   validGithubFullName,
@@ -167,14 +168,15 @@ describe("GET /api/setup/github/repos with several App installations", () => {
     else process.env.OPENSESSION_GITHUB_CLIENT_ID = originalClientId;
     __setGithubAppKeyPathForTest(undefined);
     const cache = globalThis as any;
-    cache.__ghAppTokenCacheRead = null;
-    cache.__ghAppTokenCacheWrite = null;
+    cache.__ghAppTokenCache = undefined;
+    cache.__ghAppTokenWarned = undefined;
     cache.__ghAppLastMintOk = undefined;
     cache.__ghAppLastMintIdentity = undefined;
     cache.__ghAppInstallationsCache = null;
+    invalidateGithubRepoListCache();
   });
 
-  function writeAppConfig(path: string, installationOwner: string): void {
+  function writeAppConfig(path: string, installationOwner?: string): void {
     writeFileSync(
       path,
       JSON.stringify({
@@ -182,7 +184,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
           github: {
             oauthClientId: "Iv-picker-test",
             appSlug: "open-session-picker-test",
-            installationOwner,
+            ...(installationOwner ? { installationOwner } : {}),
           },
         },
       }),
@@ -201,42 +203,46 @@ describe("GET /api/setup/github/repos with several App installations", () => {
     return response!.json();
   }
 
-  test("names every installation, marks the pinned one, and refetches after a switch", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "opensession-picker-installs-"));
-    tempDirs.push(dir);
+  function writeAppIdentity(dir: string, installationOwner?: string): string {
     const config = join(dir, "config.json");
     const keyPath = join(dir, "github-app.pem");
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
-    writeAppConfig(config, "solo-dev");
+    writeAppConfig(config, installationOwner);
     process.env.OPENSESSION_CONFIG = config;
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
     __setGithubAppKeyPathForTest(keyPath);
+    return config;
+  }
 
-    const installs = [
-      { id: 1, account: { login: "solo-dev", type: "User" } },
-      { id: 2, account: { login: "acme-org", type: "Organization" } },
-    ];
+  const installs = [
+    { id: 1, account: { login: "solo-dev", type: "User" } },
+    { id: 2, account: { login: "acme-org", type: "Organization" } },
+  ];
+
+  /** Two installations: solo-dev (1) sees nothing, acme-org (2) sees one
+   * repo. `broken` names installation ids whose mint is refused. */
+  function twoInstallationFetch(
+    listCalls: string[],
+    broken: number[] = [],
+  ): typeof fetch {
     const repoLists = new Map<number, string[]>([
       [1, []],
       [2, ["acme-org/app"]],
     ]);
-    const listCalls: string[] = [];
-    globalThis.fetch = (async (
-      input: string | URL | Request,
-      init?: RequestInit,
-    ) => {
+    return (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.startsWith("https://api.github.com/app/installations?"))
         return Response.json(installs);
-      if (url === "https://api.github.com/app/installations")
-        return Response.json(installs);
       const mint = url.match(/\/app\/installations\/(\d+)\/access_tokens$/);
-      if (mint)
+      if (mint) {
+        if (broken.includes(Number(mint[1])))
+          return Response.json({ message: "Not Found" }, { status: 404 });
         return Response.json({
           token: `ghs_install_${mint[1]}`,
           expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
         });
+      }
       if (url.startsWith("https://api.github.com/installation/repositories")) {
         const auth = String(
           (init?.headers as Record<string, string>).Authorization,
@@ -254,59 +260,106 @@ describe("GET /api/setup/github/repos with several App installations", () => {
       }
       throw new Error(`Unexpected request: ${url}`);
     }) as typeof fetch;
+  }
 
-    const pinnedToPersonal = await getRepos();
-    expect(pinnedToPersonal.source).toBe("app");
-    expect(pinnedToPersonal.repos).toEqual([]);
-    expect(pinnedToPersonal.installationOwner).toBe("solo-dev");
-    expect(pinnedToPersonal.installations).toEqual([
+  test("lists the union of every installation and marks the default owner", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-picker-installs-"));
+    tempDirs.push(dir);
+    writeAppIdentity(dir, "solo-dev");
+    const listCalls: string[] = [];
+    globalThis.fetch = twoInstallationFetch(listCalls);
+
+    const body = await getRepos();
+    expect(body.source).toBe("app");
+    // The default owner sees no repositories, yet the organization's repos
+    // are listed through its own installation, tagged with it.
+    expect(body.repos).toEqual([
+      {
+        fullName: "acme-org/app",
+        private: true,
+        defaultBranch: "main",
+        registered: false,
+        installation: "acme-org",
+      },
+    ]);
+    expect(body.installationOwner).toBe("solo-dev");
+    expect(body.installations).toEqual([
       { login: "solo-dev", type: "User", selected: true },
       { login: "acme-org", type: "Organization", selected: false },
     ]);
+    expect(listCalls).toEqual(["Bearer ghs_install_1", "Bearer ghs_install_2"]);
 
-    // Switching the pinned owner must not serve the previous installation's
-    // (empty) list from the 60s cache.
-    const switched = join(dir, "config-acme.json");
-    writeAppConfig(switched, "acme-org");
-    process.env.OPENSESSION_CONFIG = switched;
-    const pinnedToOrg = await getRepos();
-    expect(pinnedToOrg.installationOwner).toBe("acme-org");
-    expect(pinnedToOrg.repos.map((repo: any) => repo.fullName)).toEqual([
-      "acme-org/app",
-    ]);
-    expect(pinnedToOrg.installations.find((i: any) => i.selected)?.login).toBe(
+    // Switching the default owner changes the marker only: the list is the
+    // same union, served from the cache.
+    writeAppConfig(join(dir, "config-acme.json"), "acme-org");
+    process.env.OPENSESSION_CONFIG = join(dir, "config-acme.json");
+    const switched = await getRepos();
+    expect(switched.installationOwner).toBe("acme-org");
+    expect(switched.installations.find((i: any) => i.selected)?.login).toBe(
       "acme-org",
     );
-    expect(listCalls).toEqual(["Bearer ghs_install_1", "Bearer ghs_install_2"]);
+    expect(switched.repos.map((repo: any) => repo.fullName)).toEqual([
+      "acme-org/app",
+    ]);
+    expect(listCalls).toHaveLength(2);
   });
 
-  test("still names the installations when the pinned owner matches none", async () => {
+  test("skips an installation that cannot mint instead of hiding the rest", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-picker-broken-"));
+    tempDirs.push(dir);
+    writeAppIdentity(dir);
+    const listCalls: string[] = [];
+    globalThis.fetch = twoInstallationFetch(listCalls, [1]);
+
+    const body = await getRepos();
+    expect(body.source).toBe("app");
+    expect(body.installationOwner).toBeNull();
+    expect(body.repos.map((repo: any) => repo.fullName)).toEqual([
+      "acme-org/app",
+    ]);
+    expect(listCalls).toEqual(["Bearer ghs_install_2"]);
+    expect(body.unavailableInstallations).toEqual(["solo-dev"]);
+  });
+
+  test("still names the installations when no installation can mint", async () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-picker-orphan-"));
     tempDirs.push(dir);
-    const config = join(dir, "config.json");
-    const keyPath = join(dir, "github-app.pem");
-    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-    writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
-    writeAppConfig(config, "gone-org");
-    process.env.OPENSESSION_CONFIG = config;
-    delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
-    __setGithubAppKeyPathForTest(keyPath);
-    globalThis.fetch = (async (input: string | URL | Request) => {
-      const url = String(input);
-      if (url.startsWith("https://api.github.com/app/installations"))
-        return Response.json([
-          { id: 2, account: { login: "acme-org", type: "Organization" } },
-        ]);
-      throw new Error(`Unexpected request: ${url}`);
-    }) as typeof fetch;
+    writeAppIdentity(dir, "gone-org");
+    globalThis.fetch = twoInstallationFetch([], [1, 2]);
 
     const body = await getRepos();
     expect(body.source).toBeNull();
     expect(body.appConfigured).toBe(true);
     expect(body.installationOwner).toBe("gone-org");
     expect(body.installations).toEqual([
+      { login: "solo-dev", type: "User", selected: false },
       { login: "acme-org", type: "Organization", selected: false },
     ]);
+    expect(body.unavailableInstallations).toEqual(["solo-dev", "acme-org"]);
+  });
+
+  test("clones through the repository owner's installation", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-picker-clone-"));
+    tempDirs.push(dir);
+    writeAppIdentity(dir, "solo-dev");
+    globalThis.fetch = twoInstallationFetch([]);
+
+    // An owner the App is not installed on fails closed before any clone.
+    const url = new URL("http://localhost/api/setup/repos");
+    const response = await handleSetupRepoRoutes({
+      req: new Request(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName: "stranger/app" }),
+      }),
+      url,
+      path: url.pathname,
+      publicPrefix: "",
+    } as RouteContext);
+    expect(response?.status).toBe(409);
+    expect((await response?.json()).error).toContain(
+      "not installed for stranger",
+    );
   });
 });
 
