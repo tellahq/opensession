@@ -5608,6 +5608,14 @@ export function SessionViewer({
               onCancelRename={() => setRenameDraft(null)}
               canRename={Boolean(onRename)}
               menu={overflowMenu}
+              menuTrailing={
+                !isPhone && showReview ? (
+                  <div
+                    ref={setReviewSessionActionTarget}
+                    className="contents"
+                  />
+                ) : undefined
+              }
               isPhone={isPhone}
               openNewSession={openNewSession}
               tabStripVisible={tabStripVisible}
@@ -5619,12 +5627,6 @@ export function SessionViewer({
               headerActionsEl={headerActionsEl}
               actions={
                 <>
-                  {!isPhone && showReview && (
-                    <div
-                      ref={setReviewSessionActionTarget}
-                      className="contents"
-                    />
-                  )}
                   {!isPhone && secondaryActions(false)}
                   {!isPhone && keepInSidebarAction(false)}
                   {/* Whoever ELSE has the session open, right before Share. Your

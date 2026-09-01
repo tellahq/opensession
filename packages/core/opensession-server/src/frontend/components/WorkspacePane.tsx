@@ -738,6 +738,8 @@ export function WorkspacePane({
     </Menu.Root>
   );
 
+  const showWorkspaceNewSessionAction =
+    !tabStripVisible && onNewSession && !(tab === "review" && reviewTarget);
   const header = !isPhone && (
     <TopBar ref={headerRef} className={VIEWER_HEADER}>
       <TopBarLeading className={VIEWER_TITLE}>
@@ -790,42 +792,44 @@ export function WorkspacePane({
             {workspace.name}
           </OverflowFadeText>
         )}
-        {workspaceMenu}
-        {!tabStripVisible && onNewSession && (
-          <Tooltip label="New tab in this workspace">
-            <Button
-              variant="ghost"
-              size="md"
-              className="-ml-1 flex-none rounded-control"
-              onClick={(event) => {
-                const reduceMotion = window.matchMedia(
-                  "(prefers-reduced-motion: reduce)",
-                ).matches;
-                const rect =
-                  event.detail > 0 && !reduceMotion
-                    ? event.currentTarget.getBoundingClientRect()
-                    : null;
-                onNewSession(
-                  rect
-                    ? {
-                        left: rect.left,
-                        top: rect.top,
-                        width: rect.width,
-                        height: rect.height,
-                      }
-                    : undefined,
-                );
-              }}
-              aria-label="New tab"
-              icon={<IconPlus size={22} />}
-            />
-          </Tooltip>
-        )}
+        <div className="-ml-1 flex flex-none items-center gap-0.5">
+          {workspaceMenu}
+          {tab === "review" && reviewTarget && (
+            <div ref={setReviewSessionActionTarget} className="contents" />
+          )}
+          {showWorkspaceNewSessionAction && (
+            <Tooltip label="New tab in this workspace">
+              <Button
+                variant="ghost"
+                size="md"
+                className="flex-none rounded-control"
+                onClick={(event) => {
+                  const reduceMotion = window.matchMedia(
+                    "(prefers-reduced-motion: reduce)",
+                  ).matches;
+                  const rect =
+                    event.detail > 0 && !reduceMotion
+                      ? event.currentTarget.getBoundingClientRect()
+                      : null;
+                  onNewSession(
+                    rect
+                      ? {
+                          left: rect.left,
+                          top: rect.top,
+                          width: rect.width,
+                          height: rect.height,
+                        }
+                      : undefined,
+                  );
+                }}
+                aria-label="New tab"
+                icon={<IconPlus size={22} />}
+              />
+            </Tooltip>
+          )}
+        </div>
       </TopBarLeading>
       <TopBarActions ref={headerActionsRef} className={VIEWER_HEADER_ACTIONS}>
-        {tab === "review" && (
-          <div ref={setReviewSessionActionTarget} className="contents" />
-        )}
         {tab === "review" && presentationSession && !panelOpen && (
           <WorkspaceSummary
             session={presentationSession}

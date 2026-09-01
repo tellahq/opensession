@@ -25,5 +25,6 @@ test("session Review keeps PR navigation below workspace actions", () => {
   expect(panel).toContain("onPageChange={setReviewPage}");
   expect(panel).toContain("compactToolbar={summaryVisible}");
   expect(panel).toContain("sessionActionTarget={");
+  expect(source).toContain("menuTrailing={");
   expect(source).toContain("ref={setReviewSessionActionTarget}");
 });

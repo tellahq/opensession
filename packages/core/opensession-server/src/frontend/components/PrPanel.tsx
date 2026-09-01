@@ -70,6 +70,7 @@ import {
   IconGlobe,
   IconMessage,
   IconMessages,
+  IconPlus,
   IconPullRequest,
   IconSliders,
   IconUndo,
@@ -912,19 +913,34 @@ export function PrPanel({
     sessions && active
       ? prRelatedSessions(sessions, active.repo, active.branch, pr)
       : [];
+  const sessionActionLabel =
+    relatedSessions.length === 0
+      ? "Start session"
+      : relatedSessions.length === 1
+        ? "Open session"
+        : `Open ${relatedSessions.length} sessions`;
   const sessionActionButton = sessions ? (
-    <Button
-      variant="default"
-      size={sessionActionTarget === undefined ? "sm" : "md"}
-      icon={<IconMessages size={18} />}
-      onClick={() => setSessionsOpen(true)}
-    >
-      {relatedSessions.length === 0
-        ? "Start session"
-        : relatedSessions.length === 1
-          ? "Open session"
-          : `${relatedSessions.length} sessions`}
-    </Button>
+    sessionActionTarget === undefined ? (
+      <Button
+        variant="default"
+        size="sm"
+        icon={<IconMessages size={18} />}
+        onClick={() => setSessionsOpen(true)}
+      >
+        {sessionActionLabel}
+      </Button>
+    ) : (
+      <Tooltip label={sessionActionLabel}>
+        <Button
+          variant="ghost"
+          size="md"
+          className="flex-none rounded-control"
+          aria-label={sessionActionLabel}
+          icon={<IconPlus size={22} />}
+          onClick={() => setSessionsOpen(true)}
+        />
+      </Tooltip>
+    )
   ) : null;
 
   const files = pr?.files ?? NO_PR_FILES;

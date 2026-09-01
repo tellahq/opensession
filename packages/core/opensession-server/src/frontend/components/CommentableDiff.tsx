@@ -64,7 +64,7 @@ const FILE_ROW = "min-w-0 max-w-full";
 const FILE_HEADER =
   "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip rounded-md px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
 const FILE_BODY =
-  "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well";
+  "relative z-0 mx-2 mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well";
 // Sidebar Changes still pins filenames. Its canvas fill masks passing code;
 // the filename row draws its own edge only while pinned.
 const STICKY_FILE_HEADER =
@@ -74,8 +74,14 @@ const STICKY_FILE_HEADER_SURFACE =
 
 type DiffSurfaceStyle = React.CSSProperties & { "--diffs-bg": string };
 const DIFF_SURFACE_STYLE: Record<"light" | "dark", DiffSurfaceStyle> = {
-  light: { "--diffs-bg": "var(--code-well-light)" },
-  dark: { "--diffs-bg": "var(--code-well-dark)" },
+  light: {
+    "--diffs-bg": "var(--code-well-light)",
+    backgroundColor: "var(--code-well-light)",
+  },
+  dark: {
+    "--diffs-bg": "var(--code-well-dark)",
+    backgroundColor: "var(--code-well-dark)",
+  },
 };
 const FILE_TOGGLE =
   "focus-ring flex min-w-0 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";

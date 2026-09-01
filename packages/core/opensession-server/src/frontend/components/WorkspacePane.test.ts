@@ -186,13 +186,19 @@ test("sidebar Changes shares Review's code display options", () => {
   expect(commentableDiffSource).toContain("z-[6] bg-surface");
   expect(commentableDiffSource).toContain("rounded-md bg-surface");
   expect(commentableDiffSource).toContain(
-    "mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well",
+    "mx-2 mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well",
   );
   expect(commentableDiffSource).toContain(
-    'light: { "--diffs-bg": "var(--code-well-light)" }',
+    '"--diffs-bg": "var(--code-well-light)"',
   );
   expect(commentableDiffSource).toContain(
-    'dark: { "--diffs-bg": "var(--code-well-dark)" }',
+    'backgroundColor: "var(--code-well-light)"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"--diffs-bg": "var(--code-well-dark)"',
+  );
+  expect(commentableDiffSource).toContain(
+    'backgroundColor: "var(--code-well-dark)"',
   );
   expect(commentableDiffSource).toContain("style={DIFF_SURFACE_STYLE[theme]}");
   expect(baseCssSource).toContain("--code-well-light: #f6f8fa");
