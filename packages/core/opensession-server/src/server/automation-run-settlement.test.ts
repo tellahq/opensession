@@ -113,4 +113,35 @@ describe("automation run settlement", () => {
     expect(settleSession).toBeGreaterThan(terminalFlag);
     expect(settleLedger).toBeGreaterThan(settleSession);
   });
+
+  test("nothing that can reject runs between the terminal event and settlement", () => {
+    // The outer catch settles the LEDGER but cannot settle the session: the
+    // run-state variables are scoped to the try. So every fallible step of the
+    // completion tail — session persistence, output delivery, the ledger — has
+    // to come after settlement, or a rejection reinstates the owner-less
+    // running session this module exists to prevent.
+    const source = readFileSync(
+      resolve(import.meta.dir, "automations.ts"),
+      "utf8",
+    );
+    // Anchor past the event loop: `persistSession` is also called on `init`.
+    const streamDrained = source.indexOf(
+      "errorMsg = declaredRunFailure(textTail)",
+    );
+    expect(streamDrained).toBeGreaterThan(0);
+    const settleSession = source.indexOf(
+      "await settleAutomationRunState(bksId,",
+      streamDrained,
+    );
+    expect(settleSession).toBeGreaterThan(streamDrained);
+    for (const fallible of [
+      "await persistSession(engineSessionId);",
+      "await deliverAutomationOutputs({",
+      "settleRun(automation.id, bksId,",
+    ]) {
+      expect(source.indexOf(fallible, streamDrained)).toBeGreaterThan(
+        settleSession,
+      );
+    }
+  });
 });
