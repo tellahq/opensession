@@ -198,9 +198,10 @@ jobs:
             const text = kind === "launchd"
               ? `${renderPlist()}\n${renderLauncher()}`
               : await renderUnit();
-            if (!text.includes("opensession.ts") && !text.includes("opensession server")) {
-              throw new Error("no service command");
-            }
+            const command = kind === "launchd"
+              ? /exec \S*bun run packages\/core\/opensession-server\/opensession\.ts/m
+              : /^ExecStart=\S+ run packages\/core\/opensession-server\/src\/server\/gateway-supervisor\.ts$/m;
+            if (!command.test(text)) throw new Error("wrong service command");
             const user = text.match(/^User=(.*)$/m)?.[1];
             if (user === "unknown") throw new Error("User=unknown would fail 217/USER");
             console.log("service definition ok");
