@@ -87,7 +87,7 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
   expect(source).toContain("walkthrough={presentationSession?.walkthrough}");
 });
 
-test("reviews with and without a PR share the floating toolbar", () => {
+test("reviews with and without a PR share the review toolbar", () => {
   const reviewBar = prPanelSource.slice(
     prPanelSource.indexOf("const reviewBar"),
     prPanelSource.indexOf("const reviewBar") + 500,
@@ -107,13 +107,10 @@ test("reviews with and without a PR share the floating toolbar", () => {
   expect(reviewToolbarSource).toContain("desktop:rounded-lg");
   expect(reviewToolbarSource).toContain("desktop:smooth-shadow-ring-sm");
   expect(reviewToolbarSource).not.toContain("desktop:border");
-  expect(reviewBar).toContain("h-8");
-  expect(reviewBar).toContain("phone:h-11");
+  expect(reviewBar).toContain("h-11");
   expect(reviewBar).toContain("bg-surface");
-  expect(reviewBar).toContain("desktop:absolute");
-  expect(reviewBar).toContain("desktop:top-[calc(100%+8px)]");
-  expect(reviewBar).toContain("desktop:smooth-shadow-ring-sm");
-  expect(reviewBar).not.toContain("phone:shadow");
+  expect(reviewBar).toContain("desktop:hidden");
+  expect(reviewBar).not.toContain("desktop:absolute");
   expect(prPanelSource).toContain('["files", "Files",');
   expect(prPanelSource).toContain('label="Code view"');
   expect(prPanelSource).toContain(
@@ -206,20 +203,22 @@ test("CommentableDiff delegates pending-comment state behind one options prop", 
   expect(pendingCommentsSource).toContain("const annotationsByFile = new Map");
 });
 
-test("wide Review keeps its controls stable while page navigation moves", () => {
-  expect(source).toContain("reviewPage={reviewPage}");
-  expect(source).toContain("onReviewPageChange={setReviewPage}");
+test("wide Review keeps page navigation in the identity bar", () => {
+  expect(source).toContain("page={reviewPage}");
+  expect(source).not.toContain("onReviewPageChange={setReviewPage}");
   expect(source).toContain("compactToolbar={reviewSummaryVisible}");
-  expect(prPanelSource).toContain("const reviewBar = !compactToolbar");
+  expect(prPanelSource).toContain('label="Pull request pages"');
+  expect(prPanelSource).toContain('className="shrink-0 phone:hidden"');
+  expect(prPanelSource).toContain('className="flex h-11');
+  expect(prPanelSource).toContain("desktop:hidden");
   expect(prPanelSource).toContain("{phoneLayout && fileControls}");
   expect(prPanelSource).toContain(
     "{(compactToolbar || !phoneLayout) && fileControls}",
   );
-  expect(prFilesPageSource).toContain('"desktop:pt-12"');
-  expect(prOverviewPageSource).toContain('"desktop:pt-12"');
-  expect(summarySource).toContain('aria-label="Pull request pages"');
-  expect(summarySource).toContain('onReviewPageChange("overview")');
-  expect(summarySource).toContain('onReviewPageChange("files")');
+  expect(prFilesPageSource).not.toContain("desktop:pt-12");
+  expect(prOverviewPageSource).not.toContain("desktop:pt-12");
+  expect(summarySource).not.toContain('aria-label="Pull request pages"');
+  expect(summarySource).not.toContain("onReviewPageChange");
   expect(prPanelSource).toContain(
     'compactToolbar ? "overflow-x-hidden overflow-y-auto"',
   );

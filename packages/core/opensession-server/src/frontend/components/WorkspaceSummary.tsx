@@ -34,7 +34,6 @@ import { sessionHasConnectedPr } from "../lib/session-prs";
 import { getCurrentUser } from "./UserPicker";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { PrStatusBar } from "./PrStatusBar";
-import type { PrReviewPage } from "./PrPanel";
 import { reviewerStateMeta } from "./pr/PrRows";
 import { StagingLink } from "./StagingLink";
 import { UserAvatar } from "./UserAvatar";
@@ -196,9 +195,6 @@ interface Props {
   tabStripVisible?: boolean;
   /** Review starts with the card shut and opens it below its own toolbar. */
   reviewMode?: boolean;
-  /** Wide Review moves its page navigation into this standing summary. */
-  reviewPage?: PrReviewPage;
-  onReviewPageChange?: (page: PrReviewPage) => void;
   /** Keep a pinned card visible while its Changes side panel is open. */
   forceOpen?: boolean;
   /** Render the same quiet rows inside the phone Workspace page. */
@@ -544,8 +540,6 @@ export function WorkspaceSummaryBody({
   close,
   embedded = false,
   reviewMode = false,
-  reviewPage,
-  onReviewPageChange,
   liveMedia = NO_LIVE_MEDIA,
 }: Omit<Props, "anchor" | "onOpenChange" | "tabStripVisible"> & {
   close: () => void;
@@ -1176,51 +1170,6 @@ export function WorkspaceSummaryBody({
           </PrStatusBar>
         )}
       </div>
-
-      {reviewMode && reviewPage && onReviewPageChange && (
-        <div
-          className={embedded ? undefined : "mt-1"}
-          role="tablist"
-          aria-label="Pull request pages"
-        >
-          <button
-            className={WS_SUMMARY_ROW}
-            role="tab"
-            aria-selected={reviewPage === "overview"}
-            onClick={() => onReviewPageChange("overview")}
-          >
-            <span className={WS_SUMMARY_RAIL}>
-              <IconListCircles size={20} className={WS_SUMMARY_ICON} />
-            </span>
-            <span className={WS_SUMMARY_LABEL}>Overview</span>
-            {reviewPage === "overview" ? (
-              <span className={cn(WS_SUMMARY_STATE, "text-accent")}>
-                Viewing
-              </span>
-            ) : pr?.comments?.length ? (
-              <span className={WS_SUMMARY_COUNT}>{pr.comments.length}</span>
-            ) : null}
-          </button>
-          <button
-            className={WS_SUMMARY_ROW}
-            role="tab"
-            aria-selected={reviewPage === "files"}
-            onClick={() => onReviewPageChange("files")}
-          >
-            <span className={WS_SUMMARY_RAIL}>
-              <IconFile size={20} className={WS_SUMMARY_ICON} />
-            </span>
-            <span className={WS_SUMMARY_LABEL}>Files</span>
-            {reviewPage === "files" ? (
-              <span className={cn(WS_SUMMARY_STATE, "text-accent")}>
-                Viewing
-              </span>
-            ) : changedFiles > 0 ? (
-              <span className={WS_SUMMARY_COUNT}>{changedFiles}</span>
-            ) : null}
-          </button>
-        </div>
-      )}
 
       <div
         className={cn(

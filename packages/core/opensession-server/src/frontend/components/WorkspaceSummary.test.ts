@@ -87,6 +87,7 @@ test("popup review heading keeps a small gap after a lone PR band", () => {
   );
 });
 
-test("popup review tabs keep a small gap after the PR band", () => {
-  expect(summarySource).toContain('className={embedded ? undefined : "mt-1"}');
+test("pull request page navigation stays in the review toolbar", () => {
+  expect(summarySource).not.toContain('aria-label="Pull request pages"');
+  expect(summarySource).not.toContain("onReviewPageChange");
 });
