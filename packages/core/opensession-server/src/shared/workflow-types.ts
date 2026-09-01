@@ -82,7 +82,7 @@ export const WORKFLOW_LIMITS = {
   maxSessionDepth: 2,
   /** Aggregate completed token spend across child sessions. Provider account
    * quotas remain an additional hard boundary. */
-  maxSessionTokens: 2_000_000,
+  maxSessionTokens: 10_000_000,
   /** Aggregate provider-reported child-session cost. */
   maxSessionCostUsd: 100,
   /** Lifetime workflowState get/CAS calls. */
