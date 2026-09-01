@@ -119,7 +119,6 @@ import {
   shouldEmphasizeUnread,
 } from "../lib/sidebar-unread-session";
 import { mentionFor, onMentionsChanged } from "../lib/mentions";
-import { setPendingSessionFork } from "../lib/pending-session-fork";
 import { useTeamPresence } from "./TeamPresence";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { getWsTimePref, onWsTimeChanged } from "../lib/workspace-time";
@@ -4195,11 +4194,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                   setEditingWorkspaceId(workspace.id);
                 }}
                 onStartSessionRename={startSessionRename}
-                selectedSessionId={selectedId}
-                onDuplicateSession={(session) => {
-                  setPendingSessionFork(session.id);
-                  navigation.openSession(session.id);
-                }}
                 onToast={onToast}
                 onOpenReview={navigation.openSessionReview}
                 onHide={(row, hidden) =>

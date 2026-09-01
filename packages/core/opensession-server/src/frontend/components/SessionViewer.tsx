@@ -290,11 +290,7 @@ import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { onTranscriptDisclosure } from "../lib/transcript-disclosures";
-import {
-  onPendingSessionFork,
-  takePendingSessionFork,
-  type PendingSessionFork,
-} from "../lib/pending-session-fork";
+import { takePendingSessionFork } from "../lib/pending-session-fork";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged } from "../lib/lanes";
 import { ownedBy } from "../lib/sidebar-lanes";
@@ -1013,16 +1009,12 @@ export function SessionViewer({
   }, [draftKey, images, files]);
   // When set, the next send forks a new session from either the current tip or
   // a specific earlier message instead of continuing this one.
-  const [forkFrom, setForkFrom] = useState<PendingSessionFork | null>(null);
+  const [forkFrom, setForkFrom] = useState<
+    { kind: "tip" } | { kind: "message"; messageId: string } | null
+  >(null);
   useEffect(() => {
-    const applyPendingFork = () => {
-      const target = takePendingSessionFork(session.id);
-      if (target) setForkFrom(target);
-    };
-    applyPendingFork();
-    return onPendingSessionFork((sessionId) => {
-      if (sessionId === session.id) applyPendingFork();
-    });
+    const messageId = takePendingSessionFork(session.id);
+    if (messageId) setForkFrom({ kind: "message", messageId });
   }, [session.id]);
   const [
     {

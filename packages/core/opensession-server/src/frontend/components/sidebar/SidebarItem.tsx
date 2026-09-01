@@ -2,7 +2,6 @@ import { useIsPhone } from "../../hooks/useIsPhone";
 import { useShortcutKeys } from "../../hooks/useShortcutBindings";
 import { hasDraft } from "../../lib/drafts";
 import { markRead, markUnread } from "../../lib/reads";
-import { setPendingSessionFork } from "../../lib/pending-session-fork";
 import {
   SIDEBAR_HOVER_LAYER,
   SIDEBAR_RAIL,
@@ -64,7 +63,6 @@ import {
 import { OriginMark } from "./OriginMark";
 import {
   IconArchive,
-  IconCopy,
   IconInbox,
   IconMail,
   IconPencil,
@@ -176,11 +174,6 @@ export function SidebarItem({
   const waitingForInput = !!session.waitingForInput;
   const failed = runNeedsAttention(session);
   const canKeepInSidebar = !!onSetStatus && !mine && !isClaimed(session);
-  const canDuplicate = session.source === "opensession" && !!session.ran;
-  const duplicateSession = () => {
-    setPendingSessionFork(session.id);
-    onClick();
-  };
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   // Desktop right-click menu (mobile long-press opens the action sheet).
@@ -748,7 +741,6 @@ export function SidebarItem({
             setDraft(session.title);
             setEditing(true);
           }}
-          onDuplicate={canDuplicate ? duplicateSession : undefined}
           onArchive={onArchive}
           onSetStatus={onSetStatus}
           onClose={() => setSheetOpen(false)}
@@ -814,16 +806,6 @@ export function SidebarItem({
                 setEditing(true);
               },
             },
-            ...(canDuplicate
-              ? [
-                  {
-                    kind: "item",
-                    icon: <IconCopy size={20} />,
-                    label: "Duplicate session",
-                    onClick: duplicateSession,
-                  } as const,
-                ]
-              : []),
             ...(!canKeepInSidebar
               ? [
                   { kind: "sep" } as const,
@@ -850,7 +832,6 @@ function MobileActionSheet({
   session,
   mine,
   onRename,
-  onDuplicate,
   onArchive,
   onSetStatus,
   onClose,
@@ -859,7 +840,6 @@ function MobileActionSheet({
   /** Your own session — it's already in your lanes, so no claim action. */
   mine: boolean;
   onRename: () => void;
-  onDuplicate?: () => void;
   onArchive: () => void;
   /** Pin the session into a lane (see SidebarItem) — automation rows only. */
   onSetStatus?: (status: LaneChoice | null) => void;
@@ -913,17 +893,6 @@ function MobileActionSheet({
               </svg>
               Rename
             </SheetItem>
-            {onDuplicate && (
-              <SheetItem
-                onClick={() => {
-                  onDuplicate();
-                  dismiss();
-                }}
-              >
-                <IconCopy size={22} />
-                Duplicate session
-              </SheetItem>
-            )}
             {/* Claim this run into your own lanes, where it follows its live
 					    state — the phone twin of the row's right-click action. */}
             {onSetStatus && (!mine || isClaimed(session)) && (
