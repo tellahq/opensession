@@ -24,6 +24,7 @@ test("SessionViewer decomposition files stay below the source line limit", async
     "lib/session-viewer-actions.ts",
     "lib/transcript-history-controller.ts",
     "components/session/SessionPreviewSurface.tsx",
+    "components/session-viewer/SessionViewerMainRegion.tsx",
     "components/session-viewer/shell-timing.ts",
     "components/session-viewer/SessionViewerChrome.tsx",
     "components/session-viewer/SessionViewerAssetOverlay.tsx",
@@ -40,6 +41,53 @@ test("SessionViewer decomposition files stay below the source line limit", async
       `${path} has ${lineCount} physical lines`,
     ).toBeLessThanOrEqual(1_999);
   }
+});
+
+test("the main conversation region owns its complete bounded JSX contract", async () => {
+  const [viewer, region] = await Promise.all([
+    source("components/SessionViewer.tsx"),
+    source("components/session-viewer/SessionViewerMainRegion.tsx"),
+  ]);
+  const groups = [
+    "SurfaceRegion",
+    "PaneRegion",
+    "ReviewRegion",
+    "TranscriptState",
+    "TranscriptContent",
+    "TranscriptActions",
+    "TranscriptInteraction",
+    "SlackRegion",
+    "EmptyConversationRegion",
+    "ActionBandRegion",
+    "ComposerState",
+    "ComposerConfiguration",
+    "ComposerActions",
+    "ComposerMoreActions",
+    "LayoutRegion",
+    "TranscriptRegion",
+    "ComposerRegion",
+    "SessionViewerMainRegionProps",
+  ];
+
+  expect(viewer).toContain("<SessionViewerMainRegion");
+  for (const owner of [
+    "<ConversationLoading",
+    "<TranscriptView",
+    "<BusyInline",
+    "<AskCard",
+    "<ShippedChangeComposer",
+    "<ReplySuggestions",
+    "<Composer\n",
+    "<ShellPanel",
+  ]) {
+    expect(region, owner).toContain(owner);
+    expect(viewer, owner).not.toContain(owner);
+  }
+  for (const group of groups) {
+    expect(interfaceMemberCount(region, group), group).toBeLessThanOrEqual(15);
+  }
+  expect(region).not.toMatch(/\buse(?:Memo|Callback)\(/);
+  expect(region).not.toMatch(/\b(?:any|ts-ignore|ts-expect-error)\b/);
 });
 
 test("the session subscription has one bounded grouped options contract", async () => {
