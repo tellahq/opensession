@@ -33,6 +33,32 @@ final class PeopleLensTests: XCTestCase {
         XCTAssertEqual(list.map(lens().isMine), [true, true, false])
     }
 
+    func testFullStarterNameMatchesRosterFirstName() throws {
+        let session = try sessions(
+            #"[{"id":"os-1","startedBy":"Kent de Bruin"}]"#
+        )[0]
+        let lens = PeopleLens(
+            names: ["kent", "kentdebruin"],
+            roster: ["kent": "Kent"],
+            claims: []
+        )
+
+        XCTAssertTrue(lens.isMine(session))
+    }
+
+    func testCanonicalNameDoesNotUseArbitraryPrefixes() throws {
+        let session = try sessions(
+            #"[{"id":"os-1","startedBy":"Kentucky de Bruin"}]"#
+        )[0]
+        let lens = PeopleLens(
+            names: ["kent", "kentdebruin"],
+            roster: ["kent": "Kent", "kentucky": "Kentucky"],
+            claims: []
+        )
+
+        XCTAssertFalse(lens.isMine(session))
+    }
+
     func testAutomationRunIsNobodysUntilItIsClaimed() throws {
         let run = try sessions(
             #"[{"id":"os-1","startedBy":"Michiel (automation)","automation":"triage"}]"#

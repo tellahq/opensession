@@ -19,11 +19,13 @@ function setup() {
   const dir = mkdtempSync(join(tmpdir(), "transcript-watch-"));
   const store = new TranscriptStore(join(dir, "transcripts.db"));
   const frames: any[] = [];
+  const compression: boolean[] = [];
   const socket = {
     onSend: null as null | ((frame: any) => void),
-    send(payload: string) {
+    send(payload: string, compress = false) {
       const frame = JSON.parse(payload);
       frames.push(frame);
+      compression.push(compress);
       this.onSend?.(frame);
     },
   };
@@ -31,7 +33,7 @@ function setup() {
     store.close();
     rmSync(dir, { recursive: true, force: true });
   });
-  return { store, frames, socket };
+  return { store, frames, compression, socket };
 }
 
 function entry(id: string, content: string): TranscriptEntry {
@@ -278,6 +280,7 @@ describe("race-free transcript watch", () => {
       id: "e139",
       seq: 140,
     });
+    expect(state.compression).toEqual([true]);
     handle.unsubscribe();
     expect(state.frames).toHaveLength(1);
   });

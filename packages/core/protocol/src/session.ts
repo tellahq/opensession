@@ -489,6 +489,9 @@ export type SessionLiveEvent =
       safety?: SessionSafetyState;
     };
 
+export const RESTART_QUEUE_NOTICE_MESSAGE =
+  "The server is restarting. Your message is queued and will be delivered when it's back.";
+
 /**
  * Core server → client frames. sessionId on the session-scoped messages lets
  * viewers drop events meant for a different session (socket races,

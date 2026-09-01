@@ -18,6 +18,11 @@ import { EmptyState, InlineAlert, TranscriptSkeleton } from "../ui/state";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { getLiveTypingPref } from "../lib/live-typing-pref";
 import { randomUUID } from "../lib/random-uuid";
+import {
+  hasRestartQueueNotice,
+  restartQueueNoticeEntryId,
+  withoutRestartQueueNotice,
+} from "../lib/restart-queue-notice";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
 import { TranscriptViewStore } from "../lib/transcript-view-store";
 import {
@@ -2951,6 +2956,13 @@ export function SessionViewer({
           );
           break;
         }
+        case "hello":
+          // A restart-queue notice belongs to the old connection. The new
+          // server's handshake resolves it even though seq-mode transcript
+          // snapshots preserve other optimistic local entries.
+          if (hasRestartQueueNotice(transcriptViewStore.getSnapshot()))
+            setEntries(withoutRestartQueueNotice);
+          break;
         case "transcript_init": {
           // Weave persisted model switches into the conversation as dividers.
           const merged = withModelSwitches(msg.entries, session.modelHistory);
@@ -2991,9 +3003,14 @@ export function SessionViewer({
             }
           }
           if (v2) acceptInitTail(msg.entries, existingIndex);
-          if (v2 && existingIndex)
+          if (v2 && existingIndex) {
+            // The hello normally retires the old connection's restart notice.
+            // Also clear it here in case that handshake arrived before this
+            // session handler registered.
+            if (hasRestartQueueNotice(transcriptViewStore.getSnapshot()))
+              setEntries(withoutRestartQueueNotice);
             transcriptViewStore.merge(merged, true, true);
-          else transcriptViewStore.replace(merged, true, v2);
+          } else transcriptViewStore.replace(merged, true, v2);
           setHistoryTruncated(!!msg.truncated);
           backgroundHistoryRef.current = false;
           historyRevealRef.current = null;
@@ -3342,7 +3359,7 @@ export function SessionViewer({
           setEntries((prev) => [
             ...prev,
             {
-              id: randomUUID(),
+              id: restartQueueNoticeEntryId(msg.message) ?? randomUUID(),
               type: "system",
               content: msg.message,
               timestamp: new Date().toISOString(),

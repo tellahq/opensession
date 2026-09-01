@@ -2,6 +2,10 @@ import XCTest
 @testable import OS1
 
 final class SidebarFeedsTests: XCTestCase {
+    func testPlainFeedUsesTheSupportProductName() {
+        XCTAssertEqual(SidebarFeeds.supportTitle, "Support")
+    }
+
     func testHidingKeepsSourcesThisBuildDoesNotRender() {
         // The list is the account's, and the browser has bands the phone has
         // never heard of. Rewriting it must not quietly restore them.

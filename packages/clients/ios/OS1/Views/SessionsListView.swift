@@ -3218,7 +3218,7 @@ struct SessionsListView: View {
                     #else
                     RepoTile(name: "plain", size: plainRowTileSize)
                     #endif
-                    Text("Plain")
+                    Text(SidebarFeeds.supportTitle)
                         #if os(iOS)
                         .font(.callout.weight(.medium))
                         .foregroundStyle(OS1VisualStyle.textDim)
@@ -3241,8 +3241,8 @@ struct SessionsListView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(
                 urgentPlainTicketCount > 0
-                    ? "Open Plain, \(supportQueue.threads.count) tickets, \(urgentPlainTicketCount) urgent"
-                    : "Open Plain, \(supportQueue.threads.count) tickets"
+                    ? "Open \(SidebarFeeds.supportTitle), \(supportQueue.threads.count) tickets, \(urgentPlainTicketCount) urgent"
+                    : "Open \(SidebarFeeds.supportTitle), \(supportQueue.threads.count) tickets"
             )
             // The long press the web sidebar answers with a right-click on the
             // same band. One item, like that menu: this row leads somewhere
