@@ -176,14 +176,7 @@ function DeskVoiceApiKeyRow() {
       )}
       <SettingRow
         title={status?.configured ? "Replace key" : "OpenAI API key"}
-        desc={
-          error || (
-            <>
-              Stored on the server, used only for Desk voice calls. Any
-              signed-in user can start voice calls once set.
-            </>
-          )
-        }
+        desc={error || "Anyone signed in can start calls."}
         control={
           <div className="flex items-center gap-2">
             <Input
@@ -231,9 +224,8 @@ function DeskVoicePanel() {
         </SettingGroup>
       </SettingCard>
       <SettingsHint>
-        Talk to your Desk, the standing session you summon with ⌘J, instead of
-        typing. Voice mode adds a microphone button to the Desk overlay. The API
-        key is shared by everyone on this instance.
+        Adds a microphone to Desk, opened with ⌘J. The API key is shared across
+        this instance.
       </SettingsHint>
     </>
   );
@@ -284,10 +276,7 @@ function PersonalOutputStyleRow() {
   return (
     <SettingRow
       title="Output style"
-      desc={
-        error ||
-        "Concise leads with the result and skips preamble and narration without reducing the work."
-      }
+      desc={error || "Concise skips preamble without reducing the work."}
       control={
         <Select
           label="Output style"
@@ -393,7 +382,7 @@ function PersonalPromptPanel() {
       <SettingsSection>
         <Textarea
           rows={10}
-          placeholder='e.g. "Keep answers short. Prefer tables for comparisons. Always mention which files you touched."'
+          placeholder='e.g. "Keep answers short. Prefer tables."'
           value={prompt}
           onChange={(e) => {
             setPrompt(e.target.value);
@@ -412,9 +401,8 @@ function PersonalPromptPanel() {
         </div>
       </SettingsSection>
       <SettingsHint>
-        Added to the system prompt of every session you ({user}) start: tone,
-        preferences, how you like work reported. It follows you across devices
-        and is never given to automations. Leave it empty to turn it off.
+        Used in every session you start. Syncs across devices. Automations never
+        receive it.
       </SettingsHint>
     </>
   );
@@ -598,7 +586,7 @@ export function PreferencesPanel() {
 
           <SettingRow
             title="Default repository"
-            desc={repoOptionsError || "Where a new session starts."}
+            desc={repoOptionsError}
             control={
               <Select
                 label="Default repository"
@@ -630,8 +618,8 @@ export function PreferencesPanel() {
             title="Send messages with"
             desc={
               sendKey === "mod-enter"
-                ? "↵ makes a new line."
-                : "⇧↵ makes a new line. On a phone ↵ always makes one, so send with the button."
+                ? "↵ adds a new line."
+                : "⇧↵ adds a new line. On phones, use the send button."
             }
             control={
               <Select
@@ -647,7 +635,7 @@ export function PreferencesPanel() {
           />
           <SettingRow
             title="Follow-up while busy"
-            desc="Queue waits until the run fully finishes; steer folds your message into the running turn without stopping it."
+            desc="Queue waits for the run to finish. Steer adds the message to the current turn."
             control={
               <div className="flex flex-wrap items-end justify-end gap-x-3 gap-y-2">
                 <BusyGestureSelect
@@ -670,7 +658,7 @@ export function PreferencesPanel() {
         </SettingGroup>
         <SettingRow
           title="Quick replies"
-          desc="Suggest short follow-ups above the composer when a turn ends on a choice. Picking one fills the draft."
+          desc="Suggest follow-ups when a turn ends on a choice."
           control={
             <Switch
               aria-label="Quick replies"
@@ -681,7 +669,6 @@ export function PreferencesPanel() {
         />
         <SettingRow
           title="Next button"
-          desc="Show the Next button above the composer."
           control={
             <Switch
               aria-label="Next button"
@@ -692,7 +679,6 @@ export function PreferencesPanel() {
         />
         <SettingRow
           title="Vim mode"
-          desc="Modal editing in the composer. Esc for normal mode, i to type. Enter still sends."
           control={
             <Switch
               aria-label="Vim mode"
@@ -893,7 +879,7 @@ export function PreferencesPanel() {
         <SettingGroup>
           <SettingRow
             title="Steps"
-            desc="Choose whether steps stay closed, open when the agent writes updates, or remain open."
+            desc="Choose when steps open."
             control={
               <Select
                 label="Steps"
@@ -909,7 +895,6 @@ export function PreferencesPanel() {
           />
           <SettingRow
             title="Tool calls"
-            desc="Choose whether tool calls start open or stay folded into a single step."
             control={
               <Select
                 label="Tool calls"
@@ -925,7 +910,7 @@ export function PreferencesPanel() {
         </SettingGroup>
         <SettingRow
           title="Live typing"
-          desc="Type the reply out as the model writes it. Off, each part appears when it is finished."
+          desc="Show replies as the model writes them."
           control={
             <Switch
               aria-label="Live typing"

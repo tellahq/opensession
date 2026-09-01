@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { bootTransition } from "./restart-boot";
+import { bootTransition, resolvedRestartPhase } from "./restart-boot";
 
 describe("restart boot detection", () => {
   test("treats the first observed boot id as a baseline", () => {
@@ -14,5 +14,12 @@ describe("restart boot detection", () => {
   test("ignores missing and malformed identities", () => {
     expect(bootTransition("old-process", null)).toBe("invalid");
     expect(bootTransition("old-process", "")).toBe("invalid");
+  });
+
+  test("clears either recovery phase against the latest queued state", () => {
+    expect(resolvedRestartPhase("reconnecting")).toBe("ok");
+    expect(resolvedRestartPhase("restarting")).toBe("ok");
+    expect(resolvedRestartPhase("ok")).toBe("ok");
+    expect(resolvedRestartPhase("crashed")).toBe("crashed");
   });
 });

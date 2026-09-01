@@ -229,6 +229,21 @@ final class TranscriptScrollTests: XCTestCase {
         scrolledUp.visibleMaxY -= 400
         XCTAssertFalse(TranscriptScroll.isNearBottom(scrolledUp, tolerance: tolerance))
     }
+
+    func testAutomaticHistoryWaitsForTheGestureThatExposedTheLoader() {
+        XCTAssertFalse(TranscriptScroll.shouldRequestEarlierHistory(
+            demanded: true,
+            readerScrollActive: true,
+            canLoadEarlier: true,
+            loadingEarlier: false
+        ))
+        XCTAssertTrue(TranscriptScroll.shouldRequestEarlierHistory(
+            demanded: true,
+            readerScrollActive: false,
+            canLoadEarlier: true,
+            loadingEarlier: false
+        ))
+    }
 }
 
 /// Keeping the reader's place when a page of earlier history is prepended.

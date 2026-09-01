@@ -3,7 +3,11 @@ import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { dismissToast, toast } from "../ui/toast";
 import { fetchHealthStatus } from "../lib/health";
-import { bootTransition } from "../lib/restart-boot";
+import {
+  bootTransition,
+  resolvedRestartPhase,
+  type RestartPhase,
+} from "../lib/restart-boot";
 
 // Give foreground recovery enough time to probe and replace the stale PWA
 // socket before showing anything. Background time never counts toward this.
@@ -44,9 +48,7 @@ interface Props {
  *    answers again — that page state is suspect anyway.
  */
 export function RestartOverlay({ connected, addHandler }: Props) {
-  const [phase, setPhase] = useState<
-    "ok" | "reconnecting" | "restarting" | "crashed"
-  >("ok");
+  const [phase, setPhase] = useState<RestartPhase>("ok");
   const [backOnline, setBackOnline] = useState(false);
   // Who likely caused the restart: `by` on server_restarting, or `restartBy`
   // on the new server's hello.
@@ -71,7 +73,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       dismissToast(statusToast.current);
       statusToast.current = null;
     }
-    if (phaseRef.current === "restarting") setPhase("ok");
+    setPhase(resolvedRestartPhase);
   };
 
   // Adopt/compare a server-reported bootId. The first sighting is only a
