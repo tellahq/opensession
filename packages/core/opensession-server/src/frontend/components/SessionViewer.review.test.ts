@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test";
 
-const source = await Bun.file(
-  new URL("./SessionViewer.tsx", import.meta.url),
-).text();
+const source = await Promise.all([
+  Bun.file(
+    new URL("./session-viewer/SessionViewerChrome.tsx", import.meta.url),
+  ).text(),
+  Bun.file(new URL("./SessionViewer.tsx", import.meta.url)).text(),
+]).then((parts) => parts.join("\n"));
 
 test("session Review keeps PR navigation below workspace actions", () => {
   expect(source).toContain(

@@ -25,6 +25,7 @@ test("SessionViewer decomposition files stay below the source line limit", async
     "lib/transcript-history-controller.ts",
     "components/session/SessionPreviewSurface.tsx",
     "components/session-viewer/shell-timing.ts",
+    "components/session-viewer/SessionViewerChrome.tsx",
     "lib/session-viewer-constants.ts",
     "lib/session-viewer-derive.ts",
   ];
@@ -63,6 +64,40 @@ test("the session subscription has one bounded grouped options contract", async 
     ).toBeLessThanOrEqual(15);
   }
   expect(subscription).not.toMatch(/\buse(?:Memo|Callback)\(/);
+});
+
+test("SessionViewer delegates its complete header chrome through bounded consumer groups", async () => {
+  const [viewer, chrome] = await Promise.all([
+    source("components/SessionViewer.tsx"),
+    source("components/session-viewer/SessionViewerChrome.tsx"),
+  ]);
+  const groups = [
+    "ChromeOverflowGit",
+    "ChromePrTarget",
+    "ChromeEffectiveReview",
+    "ChromeIdentity",
+    "ChromeLayout",
+    "ChromeMenuState",
+    "ChromeSessionActions",
+    "ChromeWorkspaceActions",
+    "ChromeModel",
+    "ChromeInfoState",
+    "ChromeInfoActions",
+    "ChromeConversation",
+    "SessionViewerChromeProps",
+  ];
+
+  expect(viewer).toContain("<SessionViewerChrome");
+  expect(viewer).not.toContain("{!hideHeader &&");
+  expect(chrome).toContain("{!hideHeader &&");
+  expect(chrome).toContain("headerRepoEl &&");
+  expect(chrome).toContain("headerModelEl &&");
+  for (const group of groups) {
+    expect(interfaceMemberCount(chrome, group), group).toBeLessThanOrEqual(15);
+  }
+  expect(chrome).not.toMatch(/\buse(?:Memo|Callback)\(/);
+  expect(chrome).not.toMatch(/\b(?:any|as unknown|ts-ignore)\b/);
+  expect(chrome).not.toContain("...props");
 });
 
 test("SessionViewer delegates bounded action state without moving memo wrappers", async () => {

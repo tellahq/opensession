@@ -3,9 +3,12 @@ import { expect, test } from "bun:test";
 const panelSource = await Bun.file(
   new URL("./WorkflowPanel.tsx", import.meta.url),
 ).text();
-const viewerSource = await Bun.file(
-  new URL("./SessionViewer.tsx", import.meta.url),
-).text();
+const viewerSource = await Promise.all([
+  Bun.file(
+    new URL("./session-viewer/SessionViewerChrome.tsx", import.meta.url),
+  ).text(),
+  Bun.file(new URL("./SessionViewer.tsx", import.meta.url)).text(),
+]).then((parts) => parts.join("\n"));
 
 test("workflow session rows keep link styling and in-app navigation", () => {
   const rowStart = panelSource.indexOf("function NestedSessionRow(");
