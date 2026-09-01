@@ -19,9 +19,18 @@ import {
 import { createStableFrontendResponder } from "./stable-frontend";
 import { publishGatewayBackendPort } from "./gateway-routing";
 
-export const GATEWAY_CONTROL_SOCKET =
-  process.env.OPENSESSION_GATEWAY_CONTROL_SOCKET ||
-  "/run/opensession-gateway/control.sock";
+export function gatewayControlSocket(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  return (
+    env.OPENSESSION_GATEWAY_CONTROL_SOCKET ||
+    (env.XDG_RUNTIME_DIR
+      ? join(env.XDG_RUNTIME_DIR, "opensession-gateway/control.sock")
+      : "/run/opensession-gateway/control.sock")
+  );
+}
+
+export const GATEWAY_CONTROL_SOCKET = gatewayControlSocket();
 
 const PUBLIC_HOST = process.env.HOST || "127.0.0.1";
 const PUBLIC_PORT = Number(process.env.PORT || 3850);

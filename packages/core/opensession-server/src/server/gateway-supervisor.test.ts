@@ -11,6 +11,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   discoverRuntimePeerGenerations,
+  gatewayControlSocket,
   GatewaySupervisor,
   inheritedGatewaySocketFd,
   type ManagedGateway,
@@ -52,6 +53,21 @@ function controlledGateway(pid: number, releaseRoot: string, standby = false) {
 }
 
 describe("gateway supervisor", () => {
+  test("keeps user services inside their systemd runtime directory", () => {
+    expect(gatewayControlSocket({ XDG_RUNTIME_DIR: "/run/user/1001" })).toBe(
+      "/run/user/1001/opensession-gateway/control.sock",
+    );
+    expect(gatewayControlSocket({})).toBe(
+      "/run/opensession-gateway/control.sock",
+    );
+    expect(
+      gatewayControlSocket({
+        XDG_RUNTIME_DIR: "/run/user/1001",
+        OPENSESSION_GATEWAY_CONTROL_SOCKET: "/custom/control.sock",
+      }),
+    ).toBe("/custom/control.sock");
+  });
+
   test("accepts only systemd descriptors addressed to this supervisor", () => {
     expect(
       inheritedGatewaySocketFd({ LISTEN_PID: "42", LISTEN_FDS: "1" }, 42),
