@@ -27,8 +27,15 @@ test("the Committed section folds open to every PR or workspace commit", () => {
   expect(summarySource).toContain(
     "const [commitsOpen, setCommitsOpen] = useState(false)",
   );
-  expect(summarySource).toContain("aria-expanded={commitsOpen}");
   expect(summarySource).toContain(
+    "const commitCount = prCommits.length || commits.length",
+  );
+  expect(summarySource).toContain("aria-expanded={commitsOpen}");
+  expect(summarySource).toContain("{commitCount}</span>");
+  expect(summarySource).toContain("<IconChevronRight");
+  expect(summarySource).toContain('commitsOpen && "rotate-90"');
+  expect(summarySource).toContain("hover:bg-transparent hover:text-faint");
+  expect(summarySource).not.toContain(
     'title={commitsOpen ? "Hide commits" : "Show all commits"}',
   );
   expect(summarySource).toContain("prCommits.map(prCommittedRow)");

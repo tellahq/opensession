@@ -82,6 +82,7 @@ import {
 } from "../lib/workspace-summary-open";
 import {
   IconChevronDown,
+  IconChevronRight,
   IconClock,
   IconFile,
   IconGitCommit,
@@ -601,7 +602,8 @@ export function WorkspaceSummaryBody({
   const assets = assetsResource.data ?? [];
   const commits = overviewResource.data?.commits ?? [];
   const prCommits = pr?.commits ?? [];
-  const hasCommitDetails = prCommits.length > 0 || commits.length > 0;
+  const commitCount = prCommits.length || commits.length;
+  const hasCommitDetails = commitCount > 0;
   const media = (() => {
     const seen = new Set<string>();
     return [...liveMedia, ...(overviewResource.data?.media ?? [])].filter(
@@ -1463,18 +1465,20 @@ export function WorkspaceSummaryBody({
               size="sm"
               className={cn(
                 WS_SUMMARY_SECTION,
-                "group/committed w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left",
+                "w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left hover:bg-transparent hover:text-faint active:scale-100",
               )}
               onClick={() => setCommitsOpen((open) => !open)}
               aria-expanded={commitsOpen}
-              title={commitsOpen ? "Hide commits" : "Show all commits"}
             >
-              <span>Committed</span>
-              <IconChevronDown
+              <span className="flex items-baseline gap-1.5">
+                <span>Committed</span>
+                <span className="text-meta tabular-nums">{commitCount}</span>
+              </span>
+              <IconChevronRight
                 size={14}
                 className={cn(
                   "shrink-0 transition-transform motion-reduce:transition-none",
-                  commitsOpen && "rotate-180",
+                  commitsOpen && "rotate-90",
                 )}
               />
             </Button>
