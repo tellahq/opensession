@@ -56,6 +56,7 @@ import {
   transcriptLineUser,
 } from "./transcript-persistence";
 import { cacheMissNotice } from "@tellahq/opensession-protocol/notices";
+import { RESTART_QUEUE_NOTICE_MESSAGE } from "@tellahq/opensession-protocol/session";
 import { dropSandboxPreviewRoutes } from "./preview";
 import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
 import { takeVoiceHandoff } from "./desk-voice";
@@ -1373,8 +1374,7 @@ function notifyShutdownPark(sessionId: string): void {
   broadcastToSession(sessionId, {
     type: "notice",
     sessionId,
-    message:
-      "The server is restarting. Your message is queued and will be delivered when it's back.",
+    message: RESTART_QUEUE_NOTICE_MESSAGE,
   });
 }
 

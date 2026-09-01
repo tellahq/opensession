@@ -976,6 +976,65 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     setTurnPrefs(null);
   });
 
+  test("repairs fragmented reasoning inside open work", () => {
+    const fragmented = [
+      "The",
+      "rule",
+      "has",
+      "10",
+      "specificity",
+      "bridges",
+      "but",
+      "the",
+      "formatter",
+      "split",
+      "them",
+      "across",
+      "many",
+      "summary",
+      "parts",
+      ".",
+    ].join("\n\n");
+    const entries: TranscriptEntry[] = [
+      {
+        id: "prompt",
+        type: "user",
+        content: "Check it",
+        timestamp: "2026-08-28T05:30:00Z",
+      },
+      {
+        id: "reasoning",
+        type: "assistant",
+        content: fragmented,
+        isReasoning: true,
+        timestamp: "2026-08-28T05:30:01Z",
+      },
+      {
+        id: "tool",
+        type: "tool_use",
+        toolUseId: "tool-call",
+        toolName: "bash",
+        toolInput: { command: "git status" },
+        content: "Using bash",
+        timestamp: "2026-08-28T05:30:02Z",
+      },
+      {
+        id: "answer",
+        type: "assistant",
+        content: "Done.",
+        timestamp: "2026-08-28T05:30:03Z",
+      },
+    ];
+    setTurnPrefs("open", "folded");
+    const html = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+
+    expect(html).toContain(
+      "The rule has 10 specificity bridges but the formatter split them across many summary parts.",
+    );
+    expect(html).not.toContain("<br>");
+    setTurnPrefs(null);
+  });
+
   test("keeps reasoning quiet inside one work disclosure", () => {
     const entries: TranscriptEntry[] = [
       {

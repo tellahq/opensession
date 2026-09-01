@@ -46,7 +46,7 @@ import {
   msgTime,
 } from "../lib/msg-classes";
 import { cn } from "../ui/cn";
-import { reasoningDisplay } from "../lib/reasoning-display";
+import { reasoningBody, reasoningDisplay } from "../lib/reasoning-display";
 import { transcriptEnterClass } from "../lib/transcript-motion";
 
 // Only this much of a message is markdown-parsed eagerly. marked is
@@ -74,11 +74,14 @@ export function ClampedBody({
   className,
   entry,
   sessionId,
+  transformContent,
 }: {
   content: string;
   className: string;
   entry?: TranscriptEntry;
   sessionId?: string;
+  /** Display-only repair applied again after a clamped entry hydrates. */
+  transformContent?: (content: string) => string;
 }) {
   const wireClamped = !!entry?.contentClamped;
   const fullLength = entry?.contentLength ?? content.length;
@@ -96,7 +99,8 @@ export function ClampedBody({
     return nl > EAGER_MD_CHARS / 2 ? slice.slice(0, nl) : slice;
   })();
 
-  const shown = showAll ? (fetched ?? content) : head;
+  const rawShown = showAll ? (fetched ?? content) : head;
+  const shown = transformContent ? transformContent(rawShown) : rawShown;
   // Giant expanded payloads skip markdown entirely — see FULL_MD_CHARS.
   const asMarkdown = shown.length <= FULL_MD_CHARS;
   const repo = useMarkdownRepo();
@@ -739,6 +743,7 @@ export const MessageBubble = function MessageBubble({
             content={body}
             entry={e}
             sessionId={sessionId}
+            transformContent={reasoningBody}
           />
         )}
       </div>

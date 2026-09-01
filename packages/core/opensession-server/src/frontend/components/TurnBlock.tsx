@@ -24,6 +24,7 @@ import {
 } from "../lib/msg-classes";
 import {
   isLegacyReasoningHeading,
+  reasoningBody,
   reasoningDisplay,
 } from "../lib/reasoning-display";
 import { formatDuration, fullTime } from "../lib/time";
@@ -752,6 +753,7 @@ function ReasoningMessage({
             content={body}
             entry={entry}
             sessionId={sessionId}
+            transformContent={reasoningBody}
           />
         ) : null;
       })}

@@ -44,7 +44,6 @@ import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
 import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
 import { interactiveMcpServers } from "./interactive-mcp";
 import { runAgentHosted } from "./host-client";
-import { parseTranscriptAsync } from "./jsonl-parser";
 import {
   accountProviderForModel,
   interactiveFallbackModel,
@@ -117,7 +116,7 @@ import {
 } from "./session-repos";
 
 import { ownedWorktree } from "./session-workspace";
-import { engineSessionPatch } from "./sessions";
+import { engineSessionPatch, mergedSessionTranscriptAsync } from "./sessions";
 import { commitAuthorFor, userMatchesAny } from "./shared/user-mappings";
 import { envCapacity } from "./shared/env-capacity";
 import { sanitizeBranchSlug } from "./suggest-branch";
@@ -269,9 +268,7 @@ export function resolveForkContext(
 
 /** Opening-prompt context block handing a non-clonable fork its source transcript. */
 export async function forkHandoffContext(fork: ForkContext): Promise<string> {
-  const entries = fork.source.transcriptPath
-    ? await parseTranscriptAsync(fork.source.transcriptPath)
-    : [];
+  const entries = await mergedSessionTranscriptAsync(fork.source);
   return wrapContext(
     buildForkHandoffNote({
       sourceId: fork.source.id,

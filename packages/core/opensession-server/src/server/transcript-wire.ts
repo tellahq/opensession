@@ -1,15 +1,14 @@
-import { INIT_WIRE_CLAMP_BYTES } from "./jsonl-parser";
 import type { SeqEntry } from "./transcript-store";
 
-/**
- * Tool results open folded and hydrate from the full-entry endpoint when a
- * reader expands them. The opening frame therefore carries a compact preview;
- * messages keep the established 8 KB preview because they render in place.
- */
-export const INIT_TOOL_RESULT_CLAMP_BYTES = 512;
+/** The web renders at most 6,000 characters of a message before its expander,
+ * so sending more in an opening frame only consumes transfer and parse work. */
+export const INIT_MESSAGE_CLAMP_BYTES = 6_000;
+/** Tool results open folded and hydrate from the full-entry endpoint when a
+ * reader expands them. The opening frame only needs a compact preview. */
+export const INIT_TOOL_RESULT_CLAMP_BYTES = 256;
 /** Intermediate assistant notes live inside a closed work turn. Their full
- *  text loads through the existing entry endpoint only when requested. */
-export const INIT_COLLAPSED_MESSAGE_CLAMP_BYTES = 512;
+ * text loads through the existing entry endpoint only when requested. */
+export const INIT_COLLAPSED_MESSAGE_CLAMP_BYTES = 256;
 
 /**
  * Clamp an opening snapshot or history page without changing live appends.
@@ -50,14 +49,14 @@ export function v2SnapshotEntryWeight(
   const wireBudget =
     kind === "tool_result"
       ? INIT_TOOL_RESULT_CLAMP_BYTES + 512
-      : INIT_WIRE_CLAMP_BYTES;
+      : INIT_MESSAGE_CLAMP_BYTES;
   return Math.min(storedBytes, wireBudget);
 }
 
 function initClampBytes(entry: SeqEntry, foldedAssistant: boolean): number {
   if (entry.type === "tool_result") return INIT_TOOL_RESULT_CLAMP_BYTES;
   if (foldedAssistant) return INIT_COLLAPSED_MESSAGE_CLAMP_BYTES;
-  return INIT_WIRE_CLAMP_BYTES;
+  return INIT_MESSAGE_CLAMP_BYTES;
 }
 
 /** Assistant notes hidden by TranscriptBlocks' default work fold. */

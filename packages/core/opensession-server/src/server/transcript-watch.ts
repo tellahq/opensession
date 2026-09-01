@@ -26,7 +26,7 @@ export interface TranscriptWatchStore {
 }
 
 export interface TranscriptWatchSocket {
-  send(payload: string): void;
+  send(payload: string, compress?: boolean): void;
 }
 
 export interface StartTranscriptWatchOptions {
@@ -113,8 +113,8 @@ export async function startTranscriptWatch(
   let resetPending = false;
   let closed = false;
 
-  const send = (frame: Record<string, unknown>) => {
-    if (!closed && isCurrent()) socket.send(JSON.stringify(frame));
+  const send = (frame: Record<string, unknown>, compress = false) => {
+    if (!closed && isCurrent()) socket.send(JSON.stringify(frame), compress);
   };
 
   async function sendSnapshot(): Promise<void> {
@@ -132,18 +132,21 @@ export async function startTranscriptWatch(
           weigh: v2SnapshotEntryWeight,
         })
       : store.readTail(sessionId, SNAPSHOT_TAIL_ENTRIES));
-    send({
-      type: "transcript_init",
-      sessionId,
-      // Classify first, clamp second: the classifier strips plumbing out of
-      // `content`, so the clamp then measures the text a reader will see.
-      entries: clampSnapshot(prepareEntries(tail.entries)),
-      truncated: tail.firstSeq > 1,
-      firstSeq: tail.firstSeq,
-      lastSeq: tail.lastSeq,
-      lastChangeSeq: cursor,
-      v2: true,
-    });
+    send(
+      {
+        type: "transcript_init",
+        sessionId,
+        // Classify first, clamp second: the classifier strips plumbing out of
+        // `content`, so the clamp then measures the text a reader will see.
+        entries: clampSnapshot(prepareEntries(tail.entries)),
+        truncated: tail.firstSeq > 1,
+        firstSeq: tail.firstSeq,
+        lastSeq: tail.lastSeq,
+        lastChangeSeq: cursor,
+        v2: true,
+      },
+      true,
+    );
     if (initialized) options.afterResetSnapshot?.();
   }
 
