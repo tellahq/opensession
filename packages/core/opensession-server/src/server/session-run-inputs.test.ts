@@ -105,12 +105,12 @@ describe("resolveSessionRunInputs", () => {
     expect(inputs.sessionNote).toBe(true);
   });
 
-  test("falls back to the legacy starter when no verified login exists", async () => {
+  test("does not use the legacy starter as a grant identity", async () => {
     const inputs = await resolveSessionRunInputs(
       { ...plain, createdByLogin: undefined },
       { user: "Kent" },
     );
-    expect(inputs.mcpGrantUser).toBe("Michiel");
+    expect(inputs.mcpGrantUser).toBeUndefined();
   });
 
   test("a stamped allowlist rides through verbatim", async () => {
