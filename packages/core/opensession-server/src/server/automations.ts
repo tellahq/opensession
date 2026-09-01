@@ -29,12 +29,12 @@ import {
 } from "./runner-shared";
 import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
-import { runAgent } from "./agent-runner";
-import { activeRunRecords } from "./run-journal";
+import { isAgentLiveEngineBusy, runAgent } from "./agent-runner";
+import { activeRunRecords, hasActiveRunFor } from "./run-journal";
 import {
+  decideRunStateTransition,
   getRunState,
   isRunStateUnsettled,
-  transitionRunState,
 } from "./run-state";
 import { runAgentHosted } from "./host-client";
 import {
@@ -53,7 +53,7 @@ import {
   worktreeHeadBranch,
 } from "./worktree";
 import { engineSessionPatch } from "./sessions";
-import { updateSessionFile } from "./session-cache";
+import { recordRunOutcome, updateSessionFile } from "./session-cache";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { getWorkspace } from "./workspaces";
 import type { NativeSessionFile } from "./types";
@@ -1100,20 +1100,37 @@ function recordRunStart(id: string, run: AutomationRun): void {
  * ledger below recorded `last ok`, and send/cancel were refused as
  * quarantined.
  *
- * Only a terminal engine event settles. A stream that ended without one has
- * not proven what the run did, so it keeps the real safety fence rather than
- * being waved through as finished.
+ * `terminalProven` is the caller's evidence that this run is over: a terminal
+ * engine event on the streaming path, or a definitively failed launch with no
+ * journal record and no live engine left on the throw path. Without such
+ * evidence nothing settles, so a run whose fate is unknown keeps the real
+ * safety fence rather than being waved through as finished.
+ *
+ * Settling the FSM alone is not enough. The session APIs read `lastRunError`
+ * from `runErrors` and the session file, both written by `recordRunOutcome`,
+ * so a run that reaches `failed` without that projection cannot explain itself
+ * to any consumer. Project through the same choke point the other callers use.
  */
+type AutomationOutcomeProjector = (
+  sessionId: string,
+  errorMessage: string | null,
+  opts?: { runId?: string },
+) => Promise<void>;
+
 export async function settleAutomationRunState(
   sessionId: string,
   errorMessage: string | null,
-  sawTerminalEvent: boolean,
+  terminalProven: boolean,
   runKey?: string,
-  emit?: Parameters<typeof transitionRunState>[3],
+  deps?: {
+    emit?: Parameters<typeof decideRunStateTransition>[3];
+    /** Test seam. Production always projects through recordRunOutcome. */
+    project?: AutomationOutcomeProjector;
+  },
 ): Promise<void> {
-  if (!sawTerminalEvent) return;
+  if (!terminalProven) return;
   if (!isRunStateUnsettled(getRunState(sessionId))) return;
-  await transitionRunState(
+  const decision = await decideRunStateTransition(
     sessionId,
     errorMessage ? "run_failed" : "turn_end",
     {
@@ -1125,8 +1142,14 @@ export async function settleAutomationRunState(
       // retire the SUCCESSOR's turn.
       ...(runKey ? { run_key: runKey } : {}),
     },
-    emit,
+    deps?.emit,
   );
+  // A rejected decision means this run no longer owns the session. Projecting
+  // anyway would stamp our outcome onto whoever does.
+  if (!decision.accepted) return;
+  await (deps?.project ?? recordRunOutcome)(sessionId, errorMessage, {
+    ...(runKey ? { runId: runKey } : {}),
+  });
 }
 
 /** Settle the ledger entry for `sessionId` (matched by id, not position, so
@@ -1450,6 +1473,12 @@ export async function runAutomation(
   const stamp = startedAt.toISOString().slice(0, 16).replace("T", " ");
   automationPreparations.add(bksId);
   let sandboxRpcToken: string | undefined;
+  // One physical run id for whichever backend runs this turn. Every backend
+  // journals `run_registered` under it, so it becomes the session's
+  // `currentRunId` and lets the terminal settlement be fenced to this exact
+  // run rather than to whatever owns the session when it lands. Declared out
+  // here so the outer catch can settle a launch that threw before dispatch.
+  const automationRunKey = `rh-${randomUUIDv7()}`;
 
   try {
     const runtimeSandboxValidation = validateSandboxAutomation(automation);
@@ -1754,11 +1783,6 @@ export async function runAutomation(
         `[automations] "${automation.name}" completing accepted setup during shutdown`,
       );
     let events: AsyncGenerator<StreamEvent>;
-    // One physical run id for whichever backend runs this turn. Every backend
-    // journals `run_registered` under it, so it becomes the session's
-    // `currentRunId` and lets the terminal settlement below be fenced to this
-    // exact run rather than to whatever owns the session when it lands.
-    const automationRunKey = `rh-${randomUUIDv7()}`;
     if (sandbox) {
       sandboxRpcToken = crypto.randomUUID();
       registerRunToken(sandboxRpcToken, { sessionId: bksId });
@@ -1973,8 +1997,31 @@ export async function runAutomation(
       error: e.message || String(e),
       durationMs: Date.now() - startedAt.getTime(),
     });
-    // A thrown consumer after physical adoption is ambiguous. Keep the intent;
-    // boot reconciles its active journal or terminal receipt before replay.
+    // A throw is usually ambiguous — the host may still be executing, so the
+    // journal stays and boot recovery owns settling it. One shape is not
+    // ambiguous: spawnHostRun journals `run_registered` (session -> `running`)
+    // BEFORE launching, and on a definitively failed launch its catch proves
+    // absence, clears that journal, and rethrows. That leaves the session
+    // `running` with no journal record and no engine — an owner-less run the
+    // watchdog will quarantine, and the same stranding this change exists to
+    // prevent, reached without any terminal event.
+    //
+    // Require both negatives before settling: no journal record naming this
+    // session or run key, and no live engine. An ambiguous launch keeps its
+    // journal (host-client only clears when the error is not `ambiguousLaunch`),
+    // so it fails these checks and stays fenced.
+    if (
+      !hasActiveRunFor(bksId, automationRunKey) &&
+      !isAgentLiveEngineBusy(bksId, automationRunKey)
+    )
+      await settleAutomationRunState(
+        bksId,
+        e.message || String(e),
+        true,
+        automationRunKey,
+      );
+    // Keep the intent; boot reconciles its active journal or terminal receipt
+    // before replay.
   } finally {
     automationPreparations.delete(bksId);
     activeAutomationIntentSessions.delete(bksId);
