@@ -52,35 +52,51 @@ import { useConfirm } from "../ui/confirm";
 import { Popover } from "../ui/popover";
 import { useShortcutKeys } from "./useShortcutBindings";
 
-interface WorkspaceControllerOptions {
+interface WorkspaceControllerIdentity {
+  currentUser: string;
+  mePersonKey: string;
+  teamViewing: Array<{ user: string; sessionId: string }>;
+}
+
+interface WorkspaceControllerData {
   sessions: UnifiedSession[];
   workspaces: Workspace[];
   wsRows: WsRow[];
   wsRowOrder: WsRow[];
-  selectedId: string | null;
-  selectedWorkspaceId: string | null;
   reads: Record<string, string>;
   activeSnoozeKeys: Set<string>;
   snoozes: Record<string, string>;
-  currentUser: string;
-  teamViewing: Array<{ user: string; sessionId: string }>;
+  subagentsByWorkspaceId: ReadonlyMap<string, WorkspaceSubagent[]>;
+}
+
+interface WorkspaceControllerState {
+  selectedId: string | null;
+  selectedWorkspaceId: string | null;
   isPhone: boolean;
   showSubagents: boolean;
   groupsByRepo: boolean;
   runStartSeen: Map<string, number>;
   wsTimePref: "off" | "always" | "hover";
-  mePersonKey: string;
-  subagentsByWorkspaceId: ReadonlyMap<string, WorkspaceSubagent[]>;
+  workspaceDraft: string;
+  sessionDraft: string;
+  pins: string[];
+}
+
+interface WorkspaceControllerRefs {
   sidebarScrollRef: React.RefObject<HTMLDivElement | null>;
   ref: React.ForwardedRef<SidebarHandle>;
+}
+
+interface WorkspaceControllerNavigation {
   navigation: NavigationActions;
   openSidebarSession: (session: UnifiedSession) => void;
   openNextSidebarItem: (
     currentKey: string,
     current?: HTMLButtonElement | null,
   ) => () => boolean;
-  workspaceDraft: string;
-  sessionDraft: string;
+}
+
+interface WorkspaceControllerEditing {
   rowRenameEditing: (row: WsRow) => boolean;
   setWorkspaceDraft: React.Dispatch<React.SetStateAction<string>>;
   setSessionDraft: React.Dispatch<React.SetStateAction<string>>;
@@ -97,6 +113,9 @@ interface WorkspaceControllerOptions {
   commitWorkspaceRename: () => void;
   commitSessionRename: (session: UnifiedSession) => void;
   startSessionRename: (session: { id: string; title: string }) => void;
+}
+
+interface WorkspaceControllerRows {
   rowOwnsSelection: (row: WsRow) => boolean;
   wsRowRepo: (row: WsRow) => string;
   rowIsScratch: (row: WsRow) => boolean;
@@ -104,7 +123,9 @@ interface WorkspaceControllerOptions {
   workspacePinState: (row: WsRow) => { pinned: boolean; toggle: () => void };
   togglePinnedKeys: (keys: string[]) => void;
   togglePinKey: (key: string) => void;
-  pins: string[];
+}
+
+interface WorkspaceControllerActions {
   confirmDeleteDraft: (onConfirm: () => void) => void;
   onDeleteWorkspace: Props["onDeleteWorkspace"];
   onArchiveWorkspace: Props["onArchiveWorkspace"];
@@ -115,57 +136,73 @@ interface WorkspaceControllerOptions {
   confirm: ReturnType<typeof useConfirm>[0];
 }
 
+interface WorkspaceControllerOptions {
+  identity: WorkspaceControllerIdentity;
+  data: WorkspaceControllerData;
+  state: WorkspaceControllerState;
+  refs: WorkspaceControllerRefs;
+  navigation: WorkspaceControllerNavigation;
+  editing: WorkspaceControllerEditing;
+  rows: WorkspaceControllerRows;
+  actions: WorkspaceControllerActions;
+}
+
 export function useSidebarWorkspaceController({
-  sessions,
-  workspaces,
-  wsRows,
-  wsRowOrder,
-  selectedId,
-  selectedWorkspaceId,
-  reads,
-  activeSnoozeKeys,
-  snoozes,
-  currentUser,
-  teamViewing,
-  isPhone,
-  showSubagents,
-  groupsByRepo,
-  runStartSeen,
-  wsTimePref,
-  mePersonKey,
-  subagentsByWorkspaceId,
-  sidebarScrollRef,
-  ref,
-  navigation,
-  openSidebarSession,
-  openNextSidebarItem,
-  workspaceDraft,
-  sessionDraft,
-  rowRenameEditing,
-  setWorkspaceDraft,
-  setSessionDraft,
-  setEditingWorkspaceId,
-  setEditingSessionId,
-  setWorkspaceMenu,
-  commitWorkspaceRename,
-  commitSessionRename,
-  startSessionRename,
-  rowOwnsSelection,
-  wsRowRepo,
-  rowIsScratch,
-  rowShipsDirectlyToMain,
-  workspacePinState,
-  togglePinnedKeys,
-  togglePinKey,
-  pins,
-  confirmDeleteDraft,
-  onDeleteWorkspace,
-  onArchiveWorkspace,
-  onArchive,
-  onSetStatus,
-  onNextChatAvailableChange,
-  onToast,
-  confirm,
+  identity: { currentUser, mePersonKey, teamViewing },
+  data: {
+    sessions,
+    workspaces,
+    wsRows,
+    wsRowOrder,
+    reads,
+    activeSnoozeKeys,
+    snoozes,
+    subagentsByWorkspaceId,
+  },
+  state: {
+    selectedId,
+    selectedWorkspaceId,
+    isPhone,
+    showSubagents,
+    groupsByRepo,
+    runStartSeen,
+    wsTimePref,
+    workspaceDraft,
+    sessionDraft,
+    pins,
+  },
+  refs: { sidebarScrollRef, ref },
+  navigation: { navigation, openSidebarSession, openNextSidebarItem },
+  editing: {
+    rowRenameEditing,
+    setWorkspaceDraft,
+    setSessionDraft,
+    setEditingWorkspaceId,
+    setEditingSessionId,
+    setWorkspaceMenu,
+    commitWorkspaceRename,
+    commitSessionRename,
+    startSessionRename,
+  },
+  rows: {
+    rowOwnsSelection,
+    wsRowRepo,
+    rowIsScratch,
+    rowShipsDirectlyToMain,
+    workspacePinState,
+    togglePinnedKeys,
+    togglePinKey,
+  },
+  actions: {
+    confirmDeleteDraft,
+    onDeleteWorkspace,
+    onArchiveWorkspace,
+    onArchive,
+    onSetStatus,
+    onNextChatAvailableChange,
+    onToast,
+    confirm,
+  },
 }: WorkspaceControllerOptions) {
   // A draft workspace row (the composer sitting there prefilled, no session
   // yet) has nothing to archive: see mkRow's draft loop above, the only
@@ -311,9 +348,9 @@ export function useSidebarWorkspaceController({
   const archiveShortcutKeys = useShortcutKeys("session-archive");
 
   // ── Workspace hover card ────────────────────────────────────────────────
-  // The same card every sidebar row raises, driven by hand: workspace rows
-  // come out of a render function rather than a component, so one card serves
-  // the whole list (only one row can be dwelled on at a time) and the hovered
+  // The same card every WorkspaceRow raises, driven by the shared controller:
+  // one card serves the whole list (only one row can be dwelled on at a time),
+  // and the hovered row supplies its content and anchor. The hovered
   // row is its anchor. The card carries actions (Archive, PR link,
   // thumbnails), so leaving the row schedules the close with a short grace
   // period and entering the card cancels it — the pointer can travel the 8px
@@ -737,33 +774,39 @@ export function useSidebarWorkspaceController({
       <React.Fragment key={row.key}>
         <WorkspaceRow
           row={row}
-          inbox={inbox}
-          active={active}
-          editing={editingState}
-          currentUser={currentUser}
-          mePersonKey={mePersonKey}
-          teamViewing={teamViewing}
-          isPhone={isPhone}
-          isDraft={isDraftWsRow(row)}
-          hasSectionHeading={!rowIsScratch(row)}
-          groupsByRepo={groupsByRepo}
-          repoName={wsRowRepo(row)}
-          runStartSeenMs={runStartSeen.get(row.key) ?? null}
-          snoozed={rowIsSnoozed(row)}
-          snoozeIso={
-            activeSnoozeKeys.has(row.key) ? (snoozes[row.key] ?? null) : null
-          }
-          timePreference={wsTimePref}
-          shipsDirectlyToMain={rowShipsDirectlyToMain(row)}
+          presentation={{
+            inbox,
+            active,
+            isPhone,
+            isDraft: isDraftWsRow(row),
+            hasSectionHeading: !rowIsScratch(row),
+            groupsByRepo,
+            repoName: wsRowRepo(row),
+            runStartSeenMs: runStartSeen.get(row.key) ?? null,
+            snoozed: rowIsSnoozed(row),
+            snoozeIso: activeSnoozeKeys.has(row.key)
+              ? (snoozes[row.key] ?? null)
+              : null,
+            timePreference: wsTimePref,
+            shipsDirectlyToMain: rowShipsDirectlyToMain(row),
+            pinned: rowPin.pinned,
+          }}
+          context={{
+            editing: editingState,
+            currentUser,
+            mePersonKey,
+            teamViewing,
+          }}
           swipe={{
             offset: swipeOffset,
             action: swipeAction,
             dragging: wsDraggingKey === row.key,
             dragSide: wsDraggingKey === row.key ? wsDragSide : null,
           }}
-          pinned={rowPin.pinned}
-          pinShortcutKeys={pinShortcutKeys ?? undefined}
-          archiveShortcutKeys={archiveShortcutKeys ?? undefined}
+          shortcuts={{
+            pinShortcutKeys: pinShortcutKeys ?? undefined,
+            archiveShortcutKeys: archiveShortcutKeys ?? undefined,
+          }}
           events={{
             onActivate: (event) => {
               // Touch taps open from touchend (their ghost click is
@@ -822,27 +865,29 @@ export function useSidebarWorkspaceController({
               });
             },
           }}
-          onCloseSwipe={() => setWsSwipe(null)}
-          onTogglePin={rowPin.toggle}
-          onToggleSnooze={() => toggleWorkspaceSnooze(row)}
-          onArchive={(current) => archiveWorkspaceWithNext(row, current)}
-          onDeleteDraft={() => deleteDraftWsRow(row)}
-          onConfirmDeleteDraft={confirmDeleteDraft}
-          onOpenMention={(target) => {
-            if (wsLongPressed.current) return;
-            if (row.workspace)
-              navigation.openWorkspace(row.workspace.id, target);
-            else navigation.openSession(target);
+          actions={{
+            onCloseSwipe: () => setWsSwipe(null),
+            onTogglePin: rowPin.toggle,
+            onToggleSnooze: () => toggleWorkspaceSnooze(row),
+            onArchive: (current) => archiveWorkspaceWithNext(row, current),
+            onDeleteDraft: () => deleteDraftWsRow(row),
+            onConfirmDeleteDraft: confirmDeleteDraft,
+            onOpenMention: (target) => {
+              if (wsLongPressed.current) return;
+              if (row.workspace)
+                navigation.openWorkspace(row.workspace.id, target);
+              else navigation.openSession(target);
+            },
+            onStartWorkspaceRename: () => {
+              if (!row.workspace) return;
+              setWorkspaceDraft(row.workspace.name);
+              setEditingWorkspaceId(row.workspace.id);
+            },
+            onStartSessionRename: () => {
+              if (row.sessions[0]) startSessionRename(row.sessions[0]);
+            },
+            onKeepInSidebar: () => onSetStatus(row.sessions, "mine"),
           }}
-          onStartWorkspaceRename={() => {
-            if (!row.workspace) return;
-            setWorkspaceDraft(row.workspace.name);
-            setEditingWorkspaceId(row.workspace.id);
-          }}
-          onStartSessionRename={() => {
-            if (row.sessions[0]) startSessionRename(row.sessions[0]);
-          }}
-          onKeepInSidebar={() => onSetStatus(row.sessions, "mine")}
         />
         <SubagentRows
           items={subagents}
@@ -885,9 +930,9 @@ export function useSidebarWorkspaceController({
 
   const workspaceOverlays = (
     <>
-      {/* One card for the whole workspace list: the rows come out of a plain
-          render function, not a component, so they can't each own a popover.
-          The hovered row is the anchor instead — same shell, same card. */}
+      {/* One card for the whole workspace list: WorkspaceRow owns each row's
+          DOM, while this controller owns the one shared hover state and popover.
+          The hovered row is the anchor instead, with the same shell and card. */}
       <Popover.Root
         open={!!wsHover}
         onOpenChange={(open) => {

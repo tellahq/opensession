@@ -30,18 +30,21 @@ test("Sidebar navigation comes from NavigationContext", async () => {
   const automationBandSource = await Bun.file(
     new URL("./sidebar/AutomationsBand.tsx", import.meta.url),
   ).text();
-  const extractedNavigationSources = await Promise.all(
-    [
-      "../hooks/useSidebarWorkspaceController.tsx",
-      "../lib/sidebar-feed-renderers.tsx",
-      "../lib/sidebar-support-renderer.tsx",
-      "../lib/sidebar-tools-model.tsx",
-      "./sidebar/SidebarChrome.tsx",
-    ].map((path) => Bun.file(new URL(path, import.meta.url)).text()),
-  );
-  const navigationSource = [sidebarSource, ...extractedNavigationSources].join(
-    "\n",
-  );
+  const controllerSource = await Bun.file(
+    new URL("../hooks/useSidebarWorkspaceController.tsx", import.meta.url),
+  ).text();
+  const feedRendererSource = await Bun.file(
+    new URL("./sidebar/sidebar-feed-renderers.tsx", import.meta.url),
+  ).text();
+  const supportRendererSource = await Bun.file(
+    new URL("./sidebar/sidebar-support-renderer.tsx", import.meta.url),
+  ).text();
+  const toolsModelSource = await Bun.file(
+    new URL("./sidebar/sidebar-tools-model.tsx", import.meta.url),
+  ).text();
+  const chromeSource = await Bun.file(
+    new URL("./sidebar/SidebarChrome.tsx", import.meta.url),
+  ).text();
   const typesSource = await Bun.file(
     new URL("../lib/sidebar-types.ts", import.meta.url),
   ).text();
@@ -60,27 +63,27 @@ test("Sidebar navigation comes from NavigationContext", async () => {
   }
 
   expect(sidebarSource).toContain("const navigation = useNavigation();");
-  expect(navigationSource).toContain("navigation.openSession(session.id);");
-  expect(navigationSource).toContain(
+  expect(sidebarSource).toContain("navigation.openSession(session.id);");
+  expect(controllerSource).toContain(
     "navigation.openWorkspace(row.workspace.id, unreadSession.id);",
   );
-  expect(navigationSource).toContain(
+  expect(toolsModelSource).toContain(
     "onClick: () => navigation.openReports(),",
   );
-  expect(navigationSource).toContain(
+  expect(sidebarSource).toContain(
     "navigation.openReports({ automationId, reportId })",
   );
   expect(automationBandSource).toContain(
     "onOpenReport(overview.id, overview.latestReport.id);",
   );
-  expect(navigationSource).toContain(
-    "onOpen={() => navigation.openPrItem(item)}",
+  expect(sidebarSource).toContain("onOpen={() => navigation.openPrItem(item)}");
+  expect(supportRendererSource).toContain(
+    "onOpen={() => navigation.openTicket(t)}",
   );
-  expect(navigationSource).toContain("onOpen={() => navigation.openTicket(t)}");
-  expect(navigationSource).toContain(
+  expect(feedRendererSource).toContain(
     "onOpen={() => navigation.openFeedItem(feed, item)}",
   );
-  expect(navigationSource).toContain("onClick={navigation.openNewWorkspace}");
+  expect(chromeSource).toContain("onClick={navigation.openNewWorkspace}");
   expect(sidebarSource).toContain("onNewSession={navigation.openNewWorkspace}");
 });
 

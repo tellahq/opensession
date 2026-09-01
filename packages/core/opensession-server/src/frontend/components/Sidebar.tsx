@@ -56,7 +56,7 @@ import {
   workspaceRowIsFeedOnly,
 } from "../lib/sidebar-derived";
 import { filterSidebarFeedItems } from "../lib/sidebar-feed-filter";
-import { createSidebarFeedRenderers } from "../lib/sidebar-feed-renderers";
+import { createSidebarFeedRenderers } from "./sidebar/sidebar-feed-renderers";
 import {
   onSidebarFeedsChanged,
   readHiddenSidebarFeeds,
@@ -78,7 +78,7 @@ import { deriveSidebarInventory } from "../lib/sidebar-inventory";
 import { isClaimed } from "../lib/sidebar-lanes";
 import { nextRenderedSidebarItem } from "../lib/sidebar-next";
 import { rowsAtPlacement } from "../lib/sidebar-placement";
-import { createSupportRenderer } from "../lib/sidebar-support-renderer";
+import { createSupportRenderer } from "./sidebar/sidebar-support-renderer";
 import {
   getSidebarToolOrder,
   onSidebarToolsChanged,
@@ -87,7 +87,7 @@ import {
   setSidebarToolOrder,
   setSidebarToolVisible,
 } from "../lib/sidebar-tools";
-import { createSidebarToolsModel } from "../lib/sidebar-tools-model";
+import { createSidebarToolsModel } from "./sidebar/sidebar-tools-model";
 import {
   MINE_STATUS_META,
   type MineStatus,
@@ -97,7 +97,7 @@ import {
   type SidebarHandle,
   type WsRow,
 } from "../lib/sidebar-types";
-import { createWorkspaceGroupingRenderers } from "../lib/sidebar-workspace-renderers";
+import { createWorkspaceGroupingRenderers } from "./sidebar/sidebar-workspace-renderers";
 import {
   ASK_BAND,
   isAskWorkspace,
@@ -963,56 +963,61 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     toggleWorkspaceSnooze,
     workspaceOverlays,
   } = useSidebarWorkspaceController({
-    sessions,
-    workspaces,
-    wsRows,
-    wsRowOrder,
-    selectedId,
-    selectedWorkspaceId,
-    reads,
-    activeSnoozeKeys,
-    snoozes,
-    currentUser,
-    teamViewing,
-    isPhone,
-    showSubagents,
-    groupsByRepo,
-    runStartSeen,
-    wsTimePref,
-    mePersonKey,
-    subagentsByWorkspaceId,
-    sidebarScrollRef,
-    ref,
-    navigation,
-    openSidebarSession,
-    openNextSidebarItem,
-    workspaceDraft,
-    sessionDraft,
-    rowRenameEditing,
-    setWorkspaceDraft,
-    setSessionDraft,
-    setEditingWorkspaceId,
-    setEditingSessionId,
-    setWorkspaceMenu,
-    commitWorkspaceRename,
-    commitSessionRename,
-    startSessionRename,
-    rowOwnsSelection,
-    wsRowRepo,
-    rowIsScratch,
-    rowShipsDirectlyToMain,
-    workspacePinState,
-    togglePinnedKeys,
-    togglePinKey,
-    pins,
-    confirmDeleteDraft,
-    onDeleteWorkspace,
-    onArchiveWorkspace,
-    onArchive,
-    onSetStatus,
-    onNextChatAvailableChange,
-    onToast,
-    confirm,
+    identity: { currentUser, mePersonKey, teamViewing },
+    data: {
+      sessions,
+      workspaces,
+      wsRows,
+      wsRowOrder,
+      reads,
+      activeSnoozeKeys,
+      snoozes,
+      subagentsByWorkspaceId,
+    },
+    state: {
+      selectedId,
+      selectedWorkspaceId,
+      isPhone,
+      showSubagents,
+      groupsByRepo,
+      runStartSeen,
+      wsTimePref,
+      workspaceDraft,
+      sessionDraft,
+      pins,
+    },
+    refs: { sidebarScrollRef, ref },
+    navigation: { navigation, openSidebarSession, openNextSidebarItem },
+    editing: {
+      rowRenameEditing,
+      setWorkspaceDraft,
+      setSessionDraft,
+      setEditingWorkspaceId,
+      setEditingSessionId,
+      setWorkspaceMenu,
+      commitWorkspaceRename,
+      commitSessionRename,
+      startSessionRename,
+    },
+    rows: {
+      rowOwnsSelection,
+      wsRowRepo,
+      rowIsScratch,
+      rowShipsDirectlyToMain,
+      workspacePinState,
+      togglePinnedKeys,
+      togglePinKey,
+    },
+    actions: {
+      confirmDeleteDraft,
+      onDeleteWorkspace,
+      onArchiveWorkspace,
+      onArchive,
+      onSetStatus,
+      onNextChatAvailableChange,
+      onToast,
+      confirm,
+    },
   });
 
   const { renderSupportRow, supportThreadActive } = createSupportRenderer({
@@ -1325,30 +1330,35 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // scroll's first child and scrolls away with the list.
   const sidebarChrome = (
     <SidebarChrome
-      density={density}
-      connected={connected}
-      isPhone={isPhone}
-      borrowedLens={borrowedLens}
-      tools={visibleTools}
-      menuTools={sidebarMenuTools}
-      team={team}
-      filter={filter}
-      currentUser={currentUser}
-      personLensName={personLensName}
-      workspacesOpen={workspacesOpen}
-      repoInline={repoInline}
-      repos={repos}
-      filterOpen={filterOpen}
-      newSessionKeys={newSessionKeys}
-      navigation={navigation}
-      headRef={headRef}
-      titleRef={titleRef}
-      actionsRef={actionsRef}
-      probeRef={probeRef}
-      setFilterButton={setFilterButton}
-      setFilterOpen={setFilterOpen}
-      onToggleWorkspaces={() => toggleBand("workspaces")}
-      onSetToolVisible={setToolVisible}
+      state={{
+        density,
+        connected,
+        isPhone,
+        borrowedLens,
+        workspacesOpen,
+        repoInline,
+        filterOpen,
+        newSessionKeys,
+      }}
+      tools={{
+        tools: visibleTools,
+        menuTools: sidebarMenuTools,
+        team,
+        onSetToolVisible: setToolVisible,
+      }}
+      identity={{ filter, currentUser, personLensName, repos }}
+      refs={{
+        headRef,
+        titleRef,
+        actionsRef,
+        probeRef,
+        setFilterButton,
+      }}
+      actions={{
+        navigation,
+        setFilterOpen,
+        onToggleWorkspaces: () => toggleBand("workspaces"),
+      }}
     />
   );
 

@@ -1,10 +1,10 @@
 import React from "react";
-import { RepoTile } from "../components/RepoTile";
-import { IconChevronDown } from "../components/icons";
-import { FeedFilterMenu, FeedRow } from "../components/sidebar/FeedRows";
-import { cn } from "../ui/cn";
-import { ContextMenu } from "../ui/menu";
-import type { NavigationActions } from "./navigation";
+import { RepoTile } from "../RepoTile";
+import { IconChevronDown } from "../icons";
+import { FeedFilterMenu, FeedRow } from "./FeedRows";
+import { cn } from "../../ui/cn";
+import { ContextMenu } from "../../ui/menu";
+import type { NavigationActions } from "../../lib/navigation";
 import {
   SIDEBAR_ATTN_COUNT,
   SIDEBAR_GROUP_CHEVRON,
@@ -23,18 +23,18 @@ import {
   SIDEBAR_STICKY_LANE,
   SIDEBAR_STICKY_LANE_NESTED,
   SIDEBAR_STUCK_BACKING,
-} from "./sidebar-classes";
-import { setSidebarFeedVisible } from "./sidebar-feeds";
-import type { FeedFilterValues } from "./sidebar-filter";
-import { dget, SUPPORT_PRIORITY_GROUPS } from "./sidebar-filter";
-import type { Props } from "./sidebar-types";
+} from "../../lib/sidebar-classes";
+import { setSidebarFeedVisible } from "../../lib/sidebar-feeds";
+import type { FeedFilterValues } from "../../lib/sidebar-filter";
+import { dget, SUPPORT_PRIORITY_GROUPS } from "../../lib/sidebar-filter";
+import type { Props } from "../../lib/sidebar-types";
 import type {
   FeedDescriptor,
   FeedItem,
   SupportThread,
   UnifiedSession,
   Workspace,
-} from "./types";
+} from "../../lib/types";
 
 interface FeedRenderersOptions {
   feedFilters: Record<string, FeedFilterValues>;

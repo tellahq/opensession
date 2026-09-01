@@ -1,8 +1,8 @@
 import React from "react";
-import { IconChevronDown } from "../components/icons";
-import { cn } from "../ui/cn";
-import type { ReviewQueueItem } from "./review-queue";
-import { activityBandFor, type ActivityBand } from "./sidebar-activity";
+import { IconChevronDown } from "../icons";
+import { cn } from "../../ui/cn";
+import type { ReviewQueueItem } from "../../lib/review-queue";
+import { activityBandFor, type ActivityBand } from "../../lib/sidebar-activity";
 import {
   SIDEBAR_GROUP,
   SIDEBAR_GROUP_CHEVRON,
@@ -19,10 +19,14 @@ import {
   SIDEBAR_STICKY_LANE,
   SIDEBAR_STICKY_LANE_NESTED,
   SIDEBAR_STUCK_BACKING,
-} from "./sidebar-classes";
-import type { GroupBy } from "./sidebar-filter";
-import { sortInboxByCreation } from "./sidebar-inbox";
-import { MINE_STATUS_META, type MineStatus, type WsRow } from "./sidebar-types";
+} from "../../lib/sidebar-classes";
+import type { GroupBy } from "../../lib/sidebar-filter";
+import { sortInboxByCreation } from "../../lib/sidebar-inbox";
+import {
+  MINE_STATUS_META,
+  type MineStatus,
+  type WsRow,
+} from "../../lib/sidebar-types";
 
 interface WorkspaceGroupingOptions {
   groupBy: GroupBy;

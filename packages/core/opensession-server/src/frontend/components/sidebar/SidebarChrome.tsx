@@ -35,23 +35,34 @@ import { RepoFilterChip } from "./Filters";
 import type { SidebarToolsNavItem } from "./SidebarToolsNav";
 import { SidebarToolsNav } from "./SidebarToolsNav";
 
-interface SidebarChromeProps {
+interface SidebarChromeState {
   density: string;
   connected: boolean;
   isPhone: boolean;
   borrowedLens: boolean;
+  workspacesOpen: boolean;
+  repoInline: boolean;
+  filterOpen: boolean;
+  newSessionKeys: string[] | null;
+}
+
+interface SidebarChromeTools {
   tools: SidebarToolsNavItem[];
   menuTools: React.ComponentProps<typeof SidebarToolsNav>["menuTools"];
   team: ReturnType<typeof useTeamPresence>;
+  onSetToolVisible: React.ComponentProps<
+    typeof SidebarToolsNav
+  >["onSetToolVisible"];
+}
+
+interface SidebarChromeIdentity {
   filter: ReturnType<typeof useSidebarFilter>;
   currentUser: string;
   personLensName: string;
-  workspacesOpen: boolean;
-  repoInline: boolean;
   repos: string[];
-  filterOpen: boolean;
-  newSessionKeys: string[] | null;
-  navigation: NavigationActions;
+}
+
+interface SidebarChromeRefs {
   headRef: React.RefObject<HTMLDivElement | null>;
   titleRef: React.RefObject<HTMLElement | null>;
   actionsRef: React.RefObject<HTMLDivElement | null>;
@@ -59,38 +70,42 @@ interface SidebarChromeProps {
   setFilterButton: React.Dispatch<
     React.SetStateAction<HTMLButtonElement | null>
   >;
+}
+
+interface SidebarChromeActions {
+  navigation: NavigationActions;
   setFilterOpen: React.Dispatch<React.SetStateAction<boolean>>;
   onToggleWorkspaces: () => void;
-  onSetToolVisible: React.ComponentProps<
-    typeof SidebarToolsNav
-  >["onSetToolVisible"];
+}
+
+interface SidebarChromeProps {
+  state: SidebarChromeState;
+  tools: SidebarChromeTools;
+  identity: SidebarChromeIdentity;
+  refs: SidebarChromeRefs;
+  actions: SidebarChromeActions;
 }
 
 export function SidebarChrome({
-  density,
-  connected,
-  isPhone,
-  borrowedLens,
-  tools: visibleTools,
-  menuTools: sidebarMenuTools,
-  team,
-  filter,
-  currentUser,
-  personLensName,
-  workspacesOpen,
-  repoInline,
-  repos,
-  filterOpen,
-  newSessionKeys,
-  navigation,
-  headRef,
-  titleRef,
-  actionsRef,
-  probeRef,
-  setFilterButton,
-  setFilterOpen,
-  onToggleWorkspaces,
-  onSetToolVisible: setToolVisible,
+  state: {
+    density,
+    connected,
+    isPhone,
+    borrowedLens,
+    workspacesOpen,
+    repoInline,
+    filterOpen,
+    newSessionKeys,
+  },
+  tools: {
+    tools: visibleTools,
+    menuTools: sidebarMenuTools,
+    team,
+    onSetToolVisible: setToolVisible,
+  },
+  identity: { filter, currentUser, personLensName, repos },
+  refs: { headRef, titleRef, actionsRef, probeRef, setFilterButton },
+  actions: { navigation, setFilterOpen, onToggleWorkspaces },
 }: SidebarChromeProps) {
   return (
     <div

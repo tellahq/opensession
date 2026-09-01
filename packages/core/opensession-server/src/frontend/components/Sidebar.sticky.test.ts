@@ -11,7 +11,7 @@ const source = await Bun.file(
   new URL("../hooks/useSidebarStickyHeadings.ts", import.meta.url),
 ).text();
 const workspaceRenderersSource = await Bun.file(
-  new URL("../lib/sidebar-workspace-renderers.tsx", import.meta.url),
+  new URL("./sidebar/sidebar-workspace-renderers.tsx", import.meta.url),
 ).text();
 const projectBandsSource = await Bun.file(
   new URL("./sidebar/ProjectBands.tsx", import.meta.url),

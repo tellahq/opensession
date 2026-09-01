@@ -1,4 +1,4 @@
-import { RepoTile } from "../components/RepoTile";
+import { RepoTile } from "../RepoTile";
 import {
   IconArchive,
   IconChart,
@@ -9,10 +9,10 @@ import {
   IconMail,
   IconPullRequest,
   IconStack,
-} from "../components/icons";
-import type { SidebarToolsNavItem } from "../components/sidebar/SidebarToolsNav";
-import { cn } from "../ui/cn";
-import type { NavigationActions } from "./navigation";
+} from "../icons";
+import type { SidebarToolsNavItem } from "./SidebarToolsNav";
+import { cn } from "../../ui/cn";
+import type { NavigationActions } from "../../lib/navigation";
 import {
   SIDEBAR_GROUP_HEADER,
   SIDEBAR_GROUP_HEADER_INSET,
@@ -21,15 +21,15 @@ import {
   SIDEBAR_HOVER_LAYER,
   SIDEBAR_RAIL,
   SIDEBAR_REPO_TILE,
-} from "./sidebar-classes";
+} from "../../lib/sidebar-classes";
 import {
   mergeSidebarToolOrder,
   SIDEBAR_TOOL_LABELS,
   toolFitsViewport,
   type SidebarToolId,
-} from "./sidebar-tools";
-import { PLAIN_ID, supportSurfaceOf } from "./support-surface";
-import type { FeedDescriptor } from "./types";
+} from "../../lib/sidebar-tools";
+import { PLAIN_ID, supportSurfaceOf } from "../../lib/support-surface";
+import type { FeedDescriptor } from "../../lib/types";
 
 interface SidebarToolsModelOptions {
   navigation: NavigationActions;

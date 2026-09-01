@@ -1,14 +1,14 @@
 import React from "react";
-import { SupportRow } from "../components/sidebar/FeedRows";
-import { fetchFeedItems, setPlainThreadStatusApi } from "./api";
-import type { NavigationActions } from "./navigation";
-import type { Props } from "./sidebar-types";
+import { SupportRow } from "./FeedRows";
+import { fetchFeedItems, setPlainThreadStatusApi } from "../../lib/api";
+import type { NavigationActions } from "../../lib/navigation";
+import type { Props } from "../../lib/sidebar-types";
 import type {
   FeedItem,
   SupportThread,
   UnifiedSession,
   Workspace,
-} from "./types";
+} from "../../lib/types";
 
 interface SupportRendererOptions {
   currentUser: string;

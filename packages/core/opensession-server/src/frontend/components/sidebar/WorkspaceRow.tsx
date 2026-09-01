@@ -80,14 +80,9 @@ interface WorkspaceRowEvents {
   onContextMenu: React.MouseEventHandler<HTMLButtonElement>;
 }
 
-interface WorkspaceRowProps {
-  row: WsRow;
+interface WorkspaceRowPresentation {
   inbox: boolean;
   active: boolean;
-  editing: WorkspaceRowEditing;
-  currentUser: string;
-  mePersonKey: string;
-  teamViewing: Array<{ user: string; sessionId: string }>;
   isPhone: boolean;
   isDraft: boolean;
   hasSectionHeading: boolean;
@@ -98,11 +93,22 @@ interface WorkspaceRowProps {
   snoozeIso: string | null;
   timePreference: WsTimePref;
   shipsDirectlyToMain: boolean;
-  swipe: WorkspaceRowSwipe;
   pinned: boolean;
+}
+
+interface WorkspaceRowContext {
+  editing: WorkspaceRowEditing;
+  currentUser: string;
+  mePersonKey: string;
+  teamViewing: Array<{ user: string; sessionId: string }>;
+}
+
+interface WorkspaceRowShortcuts {
   pinShortcutKeys?: string[];
   archiveShortcutKeys?: string[];
-  events: WorkspaceRowEvents;
+}
+
+interface WorkspaceRowActions {
   onCloseSwipe: () => void;
   onTogglePin: () => void;
   onToggleSnooze: () => void;
@@ -115,39 +121,49 @@ interface WorkspaceRowProps {
   onKeepInSidebar: () => void;
 }
 
+interface WorkspaceRowProps {
+  row: WsRow;
+  presentation: WorkspaceRowPresentation;
+  context: WorkspaceRowContext;
+  swipe: WorkspaceRowSwipe;
+  shortcuts: WorkspaceRowShortcuts;
+  events: WorkspaceRowEvents;
+  actions: WorkspaceRowActions;
+}
+
 export function WorkspaceRow({
   row,
-  inbox,
-  active,
-  editing,
-  currentUser,
-  mePersonKey,
-  teamViewing,
-  isPhone,
-  isDraft,
-  hasSectionHeading,
-  groupsByRepo,
-  repoName,
-  runStartSeenMs,
-  snoozed,
-  snoozeIso,
-  timePreference,
-  shipsDirectlyToMain,
+  presentation: {
+    inbox,
+    active,
+    isPhone,
+    isDraft,
+    hasSectionHeading,
+    groupsByRepo,
+    repoName,
+    runStartSeenMs,
+    snoozed,
+    snoozeIso,
+    timePreference,
+    shipsDirectlyToMain,
+    pinned,
+  },
+  context: { editing, currentUser, mePersonKey, teamViewing },
   swipe,
-  pinned,
-  pinShortcutKeys,
-  archiveShortcutKeys,
+  shortcuts: { pinShortcutKeys, archiveShortcutKeys },
   events,
-  onCloseSwipe,
-  onTogglePin,
-  onToggleSnooze,
-  onArchive,
-  onDeleteDraft,
-  onConfirmDeleteDraft,
-  onOpenMention,
-  onStartWorkspaceRename,
-  onStartSessionRename,
-  onKeepInSidebar,
+  actions: {
+    onCloseSwipe,
+    onTogglePin,
+    onToggleSnooze,
+    onArchive,
+    onDeleteDraft,
+    onConfirmDeleteDraft,
+    onOpenMention,
+    onStartWorkspaceRename,
+    onStartSessionRename,
+    onKeepInSidebar,
+  },
 }: WorkspaceRowProps) {
   const hasQuestion = row.sessions.some((session) => session.waitingForInput);
   const failed = !hasQuestion && !!workspaceRunNeedingAttention(row.sessions);
