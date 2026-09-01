@@ -21,11 +21,13 @@ function invocation(sourceText: string, component: string, from = 0) {
 }
 
 test("SessionViewer receives its socket capabilities from context", async () => {
-  const [viewer, app, bindings] = await Promise.all([
+  const [viewer, pane, appContent, bindings] = await Promise.all([
     source("./SessionViewer.tsx"),
-    source("../App.tsx"),
+    source("./AppSessionPane.tsx"),
+    source("../AppContent.tsx"),
     source("../lib/session-viewer-bindings.ts"),
   ]);
+  const app = `${pane}\n${appContent}`;
   const props = interfaceBody(bindings, "SessionViewerProps");
   const lifecycle = interfaceBody(bindings, "SessionViewerLifecycleBinding");
   expect(props).not.toContain("send:");
@@ -58,7 +60,7 @@ test("SessionViewer receives its socket capabilities from context", async () => 
   expect(app).toContain("socket={sessionSocket}");
   expect(app).toContain("<SessionPaneProviders");
   expect(app).toContain(
-    "const sessionSocket = pendingSocket\n      ? socket.sessionSocketIgnoringMessages\n      : socket.sessionSocket;",
+    "const sessionSocket = pendingSocket\n    ? socket.sessionSocketIgnoringMessages\n    : socket.sessionSocket;",
   );
   expect(app).toMatch(/renderSessionPane\(\s*session,\s*socket,/);
   expect(app).toMatch(/renderSessionPane\(\s*currentSession,\s*mainSocket,/);

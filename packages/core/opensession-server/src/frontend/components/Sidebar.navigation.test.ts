@@ -70,12 +70,10 @@ test("Sidebar navigation comes from NavigationContext", async () => {
 
 test("App does not pass navigation callbacks to Sidebar", async () => {
   const appSource = await Bun.file(
-    new URL("../App.tsx", import.meta.url),
+    new URL("./AppSidebar.tsx", import.meta.url),
   ).text();
-  const sidebarStart = appSource.indexOf(
-    "<Sidebar\n                    ref={sidebarRef}",
-  );
-  const sidebarEnd = appSource.indexOf("\n                  />", sidebarStart);
+  const sidebarStart = appSource.indexOf("<Sidebar\n");
+  const sidebarEnd = appSource.indexOf("\n        />", sidebarStart);
   expect(sidebarStart).toBeGreaterThanOrEqual(0);
   expect(sidebarEnd).toBeGreaterThan(sidebarStart);
   const sidebarInvocation = appSource.slice(sidebarStart, sidebarEnd);

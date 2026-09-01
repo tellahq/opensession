@@ -9,7 +9,10 @@ import {
   sidebarSessionsQuery,
 } from "./useSessions";
 
-const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const appSource = await Promise.all([
+  Bun.file(new URL("../AppContent.tsx", import.meta.url)).text(),
+  Bun.file(new URL("../components/AppSidebar.tsx", import.meta.url)).text(),
+]).then((sources) => sources.join("\n"));
 const hookSource = await Bun.file(
   new URL("useSessions.ts", import.meta.url),
 ).text();

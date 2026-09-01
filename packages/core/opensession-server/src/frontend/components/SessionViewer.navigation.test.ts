@@ -62,7 +62,10 @@ async function sources() {
   const viewer = await Bun.file(
     new URL("./SessionViewer.tsx", import.meta.url),
   ).text();
-  const app = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+  const app = await Promise.all([
+    Bun.file(new URL("../AppContent.tsx", import.meta.url)).text(),
+    Bun.file(new URL("./AppSessionPane.tsx", import.meta.url)).text(),
+  ]).then((sources) => sources.join("\n"));
   const bindings = await Bun.file(
     new URL("../lib/session-viewer-bindings.ts", import.meta.url),
   ).text();
@@ -139,7 +142,7 @@ test("duplicate session stays available at the current tip inside a workspace", 
 test("App passes only SessionViewer navigation availability", async () => {
   const { app } = await sources();
   const viewerStart = app.indexOf("<SessionViewer\n");
-  const viewerEnd = app.indexOf("\n        />", viewerStart);
+  const viewerEnd = app.indexOf("\n      />", viewerStart);
   expect(viewerStart).toBeGreaterThanOrEqual(0);
   expect(viewerEnd).toBeGreaterThan(viewerStart);
   const viewerInvocation = app.slice(viewerStart, viewerEnd);

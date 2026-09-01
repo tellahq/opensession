@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 
-const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const appSource = await Promise.all([
+  Bun.file(new URL("../AppContent.tsx", import.meta.url)).text(),
+  Bun.file(new URL("useAppGlobalHotkeys.ts", import.meta.url)).text(),
+  Bun.file(new URL("useSessionTabs.tsx", import.meta.url)).text(),
+  Bun.file(new URL("useNewSessionCreateStart.ts", import.meta.url)).text(),
+]).then((sources) => sources.join("\n"));
 const hookSource = await Bun.file(
   new URL("./useNewSessionPalette.ts", import.meta.url),
 ).text();

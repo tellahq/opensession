@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 
 test("every new-session palette opener primes the phone keyboard", async () => {
-  const app = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+  const app = await Bun.file(
+    new URL("../AppContent.tsx", import.meta.url),
+  ).text();
   const hook = await Bun.file(
     new URL("../hooks/useNewSessionPalette.ts", import.meta.url),
   ).text();

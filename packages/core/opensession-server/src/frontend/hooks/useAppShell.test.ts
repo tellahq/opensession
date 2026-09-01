@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const appSource = await Bun.file(
+  new URL("../AppContent.tsx", import.meta.url),
+).text();
 const hookSource = await Bun.file(
   new URL("useAppShell.ts", import.meta.url),
 ).text();

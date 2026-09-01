@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const appSource = await Promise.all([
+  Bun.file(new URL("useSessionTabs.tsx", import.meta.url)).text(),
+  Bun.file(new URL("../components/AppSessionPane.tsx", import.meta.url)).text(),
+  Bun.file(new URL("../lib/app-command-actions.tsx", import.meta.url)).text(),
+]).then((sources) => sources.join("\n"));
 const hookSource = await Bun.file(
   new URL("useArchiveUndo.ts", import.meta.url),
 ).text();

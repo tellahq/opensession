@@ -162,7 +162,9 @@ test("immediate create consumes the sent draft before opening the session", asyn
 });
 
 test("a failed immediate create restores the submitted composer payload", async () => {
-  const source = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+  const source = await Bun.file(
+    new URL("../AppContent.tsx", import.meta.url),
+  ).text();
   const errorStart = source.indexOf('if (msg.type === "error")');
   const errorEnd = source.indexOf(
     'if (msg.type === "pins_changed")',
