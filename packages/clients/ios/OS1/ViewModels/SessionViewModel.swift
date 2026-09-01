@@ -2125,6 +2125,9 @@ final class SessionViewModel {
     /// scroll pin follows its count — grouping alone would hold that count
     /// steady while a live turn grows, and new output would stop following.
     private(set) var displayBlocks: [TranscriptBlock] = []
+    @ObservationIgnored private var thinkingMessages = ThinkingMessages(
+        UserDefaults.standard.string(forKey: ThinkingMessages.storageKey)
+    )
     /// The current person's visible prompts, prepared beside the transcript
     /// blocks so a pointer moving over the rail never scans the conversation.
     private(set) var sentMessageAnchors: [SentMessageAnchor] = []
@@ -2164,6 +2167,12 @@ final class SessionViewModel {
 
     func expansionState(id: String, defaultExpanded: Bool = false) -> TurnFoldState {
         folds.expansion(id: id, defaultExpanded: defaultExpanded)
+    }
+
+    func setThinkingMessages(_ value: ThinkingMessages) {
+        guard value != thinkingMessages else { return }
+        thinkingMessages = value
+        rebuildDisplayItems()
     }
 
     /// Which block currently renders `entryId`. A history page can regroup an
@@ -2213,7 +2222,8 @@ final class SessionViewModel {
             worktreeDir: session.worktreeDir,
             walkthrough: session.walkthrough,
             notes: sessionNotes,
-            reviewResult: ReviewLoopResult(session: session)
+            reviewResult: ReviewLoopResult(session: session),
+            thinkingMessages: thinkingMessages
         )
         // What the transcript may link: the files this session's own tools
         // touched. Registering the set here — rather than fetching the diff —

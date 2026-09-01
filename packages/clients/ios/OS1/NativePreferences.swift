@@ -162,6 +162,13 @@ enum NativePreferences {
             resetMissing: changedIdentity,
             in: defaults
         )
+        set(
+            prefs[ThinkingMessages.prefKey].flatMap(ThinkingMessages.init(rawValue:))?.rawValue,
+            default: ThinkingMessages.standard.rawValue,
+            key: ThinkingMessages.storageKey,
+            resetMissing: true,
+            in: defaults
+        )
         setBool(
             replySuggestionsEnabled(prefs["reply-suggestions"]),
             default: true,

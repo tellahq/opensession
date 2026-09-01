@@ -52,6 +52,13 @@ import {
   visibleTranscriptHydrationDemand,
 } from "./session-viewer/transcript-hydration";
 import { isLegacyReasoningHeading } from "../lib/reasoning-display";
+import {
+  getThinkingMessagesPref,
+  onThinkingMessagesChanged,
+  thinkingMessageIsVisible,
+  thinkingMessageVisibility,
+  type ThinkingMessageVisibility,
+} from "../lib/thinking-messages-pref";
 
 type RenderBlock =
   | { kind: "entry"; entry: TranscriptEntry; reasoning?: boolean }
@@ -126,6 +133,9 @@ interface Props {
   virtualize?: boolean;
   /** Stable outer range identity for the one work turn rendered inside it. */
   turnMountScope?: string;
+  /** Resolved once against the full loaded payload, then shared with indexed
+   * range renderers so "Latest" means one row across the whole transcript. */
+  thinkingVisibility?: ThinkingMessageVisibility;
 }
 
 type ReviewBlockRole =
@@ -299,8 +309,21 @@ export const TranscriptBlocks = function TranscriptBlocks(props: Props) {
   const entries = props.optimisticEntries?.length
     ? mergeOptimisticTranscriptEntries(props.entries, props.optimisticEntries)
     : props.entries;
-  const renderedProps =
-    entries === props.entries ? props : { ...props, entries };
+  const [thinkingMessages, setThinkingMessages] = React.useState(
+    getThinkingMessagesPref,
+  );
+  useEffect(
+    () =>
+      onThinkingMessagesChanged(() =>
+        setThinkingMessages(getThinkingMessagesPref()),
+      ),
+    [],
+  );
+  const renderedProps: Props = {
+    ...props,
+    entries,
+    thinkingVisibility: thinkingMessageVisibility(entries, thinkingMessages),
+  };
   return (
     <>
       {props.sessionId && <SessionContextMessage sessionId={props.sessionId} />}
@@ -336,6 +359,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   scrollElement,
   shouldMaintainEnd,
   onLayout,
+  thinkingVisibility,
 }: Props) {
   // Top level only (nested per-range instances pass virtualize={false} and are
   // suppressed): without an outline every block renders real content, so the
@@ -352,7 +376,11 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   const pendingDeliveryEntryIds = new Set(pendingDeliveryIds ?? []);
   const renderedEntries = normalizeLegacyVoiceToolEntries(entries)
     .map(classifyEntry)
-    .filter((entry) => entry.turnBoundary || !isRenderlessUserEntry(entry));
+    .filter(
+      (entry) =>
+        thinkingMessageIsVisible(entry, thinkingVisibility) &&
+        (entry.turnBoundary || !isRenderlessUserEntry(entry)),
+    );
   const shareAfterEntryIds = new Set<string>();
   if (slackShare) {
     for (let i = 0; i < renderedEntries.length; i++) {
@@ -801,6 +829,12 @@ function IndexedTranscriptBlocks(props: Props) {
   const renderedTimeline = timeline
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => {
+      if (
+        item.kind === "entry" &&
+        !thinkingMessageIsVisible(item.entry, props.thinkingVisibility)
+      ) {
+        return false;
+      }
       const itemRanges = indexedItemRanges(item);
       return (
         itemRanges.length === 0 ||

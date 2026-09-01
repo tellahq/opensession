@@ -97,7 +97,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   for an edit, the command for a shell call, file content for a write.
   Routine calls fold into one `N steps` run, and consecutive edits to the same
   file into one row — the path once, the summed ±lines, and a `×3` count —
-  both opening to the individual calls.
+  both opening to the individual calls. The shared Thinking messages preference
+  shows none, all, or only the newest provider reasoning row, with Latest as the
+  default.
   Transcript videos stream inline on both platforms. Tool-result screenshots
   and recordings marked as featured stay visible when their work fold closes,
   while incidental media remains inside the producing tool row.
