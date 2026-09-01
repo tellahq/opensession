@@ -12,7 +12,11 @@ final class PeopleLensTests: XCTestCase {
     }
 
     private func lens(claims: Set<String> = []) -> PeopleLens {
-        PeopleLens(names: ["michiel westerbeek", "michiel", "happylinks"], claims: claims)
+        PeopleLens(
+            names: ["michiel westerbeek", "michiel", "happylinks"],
+            roster: ["michiel": "Michiel"],
+            claims: claims
+        )
     }
 
     private func rows(_ list: [Session]) -> [SidebarWorkspace] {
@@ -31,6 +35,32 @@ final class PeopleLensTests: XCTestCase {
         )
 
         XCTAssertEqual(list.map(lens().isMine), [true, true, false])
+    }
+
+    func testFullStarterNameMatchesCurrentPersonsShortNameThroughRoster() throws {
+        let session = try sessions(
+            #"[{"id":"os-1","startedBy":"Kent de Bruin"}]"#
+        )[0]
+        let kent = PeopleLens(
+            names: ["kent", "kentdebruin"],
+            roster: ["kent": "Kent"],
+            claims: []
+        )
+
+        XCTAssertTrue(kent.isMine(session))
+    }
+
+    func testSimilarNameOutsideRosterDoesNotMatchByPrefix() throws {
+        let session = try sessions(
+            #"[{"id":"os-1","startedBy":"Kentucky Jones"}]"#
+        )[0]
+        let kent = PeopleLens(
+            names: ["kent", "kentdebruin"],
+            roster: ["kent": "Kent"],
+            claims: []
+        )
+
+        XCTAssertFalse(kent.isMine(session))
     }
 
     func testAutomationRunIsNobodysUntilItIsClaimed() throws {

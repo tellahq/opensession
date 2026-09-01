@@ -30,10 +30,25 @@ struct PeopleLens {
     /// Identity strings that count as you: display name, its first token
     /// (sessions store first names, e.g. "Jaap"), and the GitHub login.
     let names: Set<String>
+    /// First name → roster spelling, used to resolve full display names without
+    /// treating unrelated names that share a prefix as the same person.
+    let roster: [String: String]
     /// Session ids you have claimed (`LaneStore`).
     let claims: Set<String>
     /// Session ids where a teammate tagged you (`MentionStore`).
-    var mentions: Set<String> = []
+    var mentions: Set<String>
+
+    init(
+        names: Set<String>,
+        roster: [String: String] = [:],
+        claims: Set<String>,
+        mentions: Set<String> = []
+    ) {
+        self.names = names
+        self.roster = roster
+        self.claims = claims
+        self.mentions = mentions
+    }
 
     @MainActor
     static func current() -> PeopleLens {
@@ -50,6 +65,7 @@ struct PeopleLens {
         if !login.isEmpty { names.insert(login.lowercased()) }
         return PeopleLens(
             names: names,
+            roster: TeamDirectory.shared.displayNames,
             claims: LaneStore.shared.claims,
             mentions: MentionStore.shared.sessionIds
         )
@@ -58,10 +74,15 @@ struct PeopleLens {
     /// A single session under the lens: yours to start with, or claimed.
     func isMine(_ session: Session) -> Bool {
         if claims.contains(session.id) { return true }
-        guard !session.isAutomation, let startedBy = session.startedBy?.lowercased() else {
+        guard !session.isAutomation, let startedBy = session.startedBy else { return false }
+
+        let key = startedBy.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if names.contains(key) { return true }
+
+        guard let canonical = ArchivedOwners.canonical(startedBy, in: roster)?.lowercased() else {
             return false
         }
-        return names.contains(startedBy)
+        return names.contains(canonical)
     }
 
     /// A sidebar row under the lens. A row is yours as soon as ONE of its
