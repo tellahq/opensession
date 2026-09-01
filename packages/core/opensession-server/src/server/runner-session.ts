@@ -182,9 +182,7 @@ export async function maybeLaunchRunnerRun(
     aws: !runInputs.isAutomationSession,
     author: commitAuthorFor(opts.user, session.startedBy),
     user: runUser,
-    mcpGrantUser: runInputs.isAutomationSession
-      ? undefined
-      : session.startedBy || undefined,
+    mcpGrantUser: runInputs.mcpGrantUser,
     fallbackModel: interactiveFallbackModel(session.model),
     journalKind: runInputs.isAutomationSession ? "automation" : "prompt",
     trustProfile: runInputs.isAutomationSession ? "automation" : "interactive",

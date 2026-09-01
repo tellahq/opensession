@@ -137,6 +137,23 @@ describe("Portals MCP staging routes", () => {
     });
   });
 
+  test("rejects a non-editor route that merely contains the video ID", async () => {
+    const { calls, runtime } = await harness(async () =>
+      fixture({ editorPath: "/settings/vid_fixture" }),
+    );
+    const response = await runtime.callExact(
+      "opensession-portals_set_editor_preview_path",
+      { fixtureLeaseId: "epfl_fixturelease" },
+      { toolCallId: "route-shape" },
+    );
+
+    expect(calls).toEqual([]);
+    expect(response.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("does not match"),
+    });
+  });
+
   test("rejects an expired Tella lease", async () => {
     const { calls, runtime } = await harness(async () =>
       fixture({ expiresAt: new Date(Date.now() - 60_000).toISOString() }),
