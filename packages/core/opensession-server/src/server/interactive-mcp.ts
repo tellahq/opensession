@@ -152,12 +152,18 @@ function papercutsServerFor(
 export function editorFixtureGrantUser(
   session:
     | {
+        createdByLogin?: string | null;
         createdBy?: string | null;
         startedBy?: string | null;
       }
     | undefined,
 ): string | undefined {
-  return session?.createdBy || session?.startedBy || undefined;
+  return (
+    session?.createdByLogin ||
+    session?.createdBy ||
+    session?.startedBy ||
+    undefined
+  );
 }
 
 export function interactiveMcpServers(
