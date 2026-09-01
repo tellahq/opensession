@@ -31,6 +31,21 @@ final class PreferenceHydrationTests: XCTestCase {
         )
     }
 
+    func testSessionCheckoutMapUsesTheAllRepositoriesDefault() {
+        let raw = """
+        {"*":"worktree","app":"checkout"}
+        """
+
+        XCTAssertEqual(
+            NativePreferences.sessionCheckoutMode(for: "app", in: raw),
+            "checkout"
+        )
+        XCTAssertEqual(
+            NativePreferences.sessionCheckoutMode(for: "docs", in: raw),
+            "worktree"
+        )
+    }
+
     func testMalformedSessionCheckoutMapSafelyUsesDefault() {
         for raw in [nil, "not json", "[]", "null"] as [String?] {
             XCTAssertEqual(
@@ -51,6 +66,14 @@ final class PreferenceHydrationTests: XCTestCase {
         XCTAssertEqual(
             NativePreferences.settingSessionCheckout("default", for: "docs", in: raw),
             "{\"app\":\"checkout\"}"
+        )
+        XCTAssertEqual(
+            NativePreferences.settingSessionCheckout(
+                "worktree",
+                for: "docs",
+                in: "{\"*\":\"worktree\"}"
+            ),
+            "{\"*\":\"worktree\"}"
         )
     }
 

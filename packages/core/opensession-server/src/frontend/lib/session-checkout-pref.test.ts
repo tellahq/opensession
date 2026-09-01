@@ -38,26 +38,39 @@ beforeAll(async () => {
 
 beforeEach(() => store.clear());
 
-describe("per-repository new-session checkout preferences", () => {
-  test("uses each repository's default until the person chooses otherwise", () => {
+describe("new-session checkout preferences", () => {
+  test("uses repository defaults until the person chooses otherwise", () => {
+    expect(pref.sessionCheckoutDefault(pref.getSessionCheckoutPrefs())).toBe(
+      "default",
+    );
     expect(pref.getSessionCheckoutPref("app")).toBe("default");
     expect(pref.getSessionCheckoutPref("docs")).toBe("default");
   });
 
-  test("stores independent choices for repository ids with punctuation", () => {
-    pref.setSessionCheckoutPref("app", "worktree");
+  test("applies one default to every repository", () => {
+    pref.setSessionCheckoutDefault("worktree");
+
+    expect(pref.getSessionCheckoutPrefs()).toEqual({ "*": "worktree" });
+    expect(pref.getSessionCheckoutPref("app")).toBe("worktree");
+    expect(pref.getSessionCheckoutPref("docs")).toBe("worktree");
+  });
+
+  test("stores independent overrides for repository ids with punctuation", () => {
+    pref.setSessionCheckoutDefault("worktree");
+    pref.setSessionCheckoutPref("app", "checkout");
     pref.setSessionCheckoutPref("compiler:legacy", "checkout");
 
     expect(pref.getSessionCheckoutPrefs()).toEqual({
-      app: "worktree",
+      "*": "worktree",
+      app: "checkout",
       "compiler:legacy": "checkout",
     });
-    expect(pref.getSessionCheckoutPref("app")).toBe("worktree");
+    expect(pref.getSessionCheckoutPref("app")).toBe("checkout");
     expect(pref.getSessionCheckoutPref("compiler:legacy")).toBe("checkout");
-    expect(pref.getSessionCheckoutPref("docs")).toBe("default");
+    expect(pref.getSessionCheckoutPref("docs")).toBe("worktree");
   });
 
-  test("resetting one repository preserves the others and announces the change", () => {
+  test("resetting one override preserves the others and announces the change", () => {
     pref.setSessionCheckoutPref("app", "worktree");
     pref.setSessionCheckoutPref("docs", "checkout");
     let changed = 0;
@@ -69,11 +82,25 @@ describe("per-repository new-session checkout preferences", () => {
     expect(changed).toBe(1);
   });
 
-  test("ignores malformed entries hydrated into the map", () => {
+  test("changing the default drops overrides that now match it", () => {
+    pref.setSessionCheckoutPref("app", "worktree");
+    pref.setSessionCheckoutPref("docs", "checkout");
+    pref.setSessionCheckoutDefault("worktree");
+
+    expect(pref.getSessionCheckoutPrefs()).toEqual({
+      "*": "worktree",
+      docs: "checkout",
+    });
+  });
+
+  test("keeps valid choices from the older per-repository map", () => {
     store.set(
       "opensession-session-checkouts",
       JSON.stringify({ app: "worktree", docs: "sometimes", empty: null }),
     );
+
     expect(pref.getSessionCheckoutPrefs()).toEqual({ app: "worktree" });
+    expect(pref.getSessionCheckoutPref("app")).toBe("worktree");
+    expect(pref.getSessionCheckoutPref("docs")).toBe("default");
   });
 });
