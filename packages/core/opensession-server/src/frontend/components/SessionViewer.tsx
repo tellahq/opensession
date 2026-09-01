@@ -61,9 +61,9 @@ import {
   getNextChatButtonPref,
   onNextChatButtonChanged,
 } from "../lib/next-chat-pref";
-import { SubagentPane, type SubagentRef } from "./SubagentPane";
+import { SubagentPane } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
-import { getCurrentUser, useCurrentUser } from "./UserPicker";
+import { getCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import {
   deleteSessionApi,
@@ -71,22 +71,13 @@ import {
   fetchFileMentions,
   fetchMentionSuggestions,
   fetchSkillMentions,
-  fetchSessionSubagents,
-  promoteSessionApi,
   fetchSessionNotesApi,
   postSessionNoteApi,
-  fetchPr,
   fetchGitStatus,
-  fetchPreview,
   moveSessionToBranchApi,
   portalActionApi,
-  startPortalRecipeApi,
   type WorkspaceMediaItem,
-  type SessionSubagentSnapshot,
-  type PreviewPortalRecipe,
-  type PreviewStatus,
 } from "../lib/api";
-import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
 import { refChipText, refLabel, refTone, worstPrRef } from "../lib/pr-refs";
 import { prPhoneChipClass } from "../lib/pr-tone-classes";
@@ -120,6 +111,10 @@ import { useSessionSocket } from "../hooks/useSessionSocket";
 import { useSessionRuntime } from "../hooks/useSessionRuntime";
 import { useSessionViewerSubscription } from "../hooks/useSessionViewerSubscription";
 import { useSessionModelWorkflowController } from "../hooks/useSessionModelWorkflowController";
+import {
+  useSessionPreviewStatusEffect,
+  useSessionRuntimeController,
+} from "../hooks/useSessionRuntimeController";
 import {
   dedupeViewers,
   facepileAvatarStyle,
@@ -156,11 +151,7 @@ import {
 } from "../lib/attachments";
 import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import { foregroundFileComposerOpen, hasDraggedFiles } from "../lib/file-drag";
-import {
-  isHiddenForSession,
-  onHidesChanged,
-  unhideForSession,
-} from "../lib/hides";
+import { unhideForSession } from "../lib/hides";
 import {
   markPendingBusy,
   markPendingStarted,
@@ -168,7 +159,6 @@ import {
   type OptimisticPendingPrompt,
 } from "../lib/pending-reconcile";
 import { promptOutbox, type PromptOutboxItem } from "../lib/prompt-outbox";
-import { withPreviewPath } from "../lib/preview-url";
 import { DiffPanel, useSessionDiff } from "./DiffPanel";
 import { RepoBar } from "./RepoBar";
 import { RepoTile } from "./RepoTile";
@@ -223,7 +213,6 @@ import { SessionReportsPanel, useSessionReports } from "./SessionReportsPanel";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { PortalsPage } from "./PortalsPanel";
-import { portalTargetFor } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
 import { WorkspaceSummary, WorkspaceSummaryBody } from "./WorkspaceSummary";
 import { SpinOffMenu } from "./SpinOffMenu";
@@ -279,16 +268,12 @@ import { toast } from "../ui/toast";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { onTranscriptDisclosure } from "../lib/transcript-disclosures";
 import { takePendingSessionFork } from "../lib/pending-session-fork";
-import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
-import { getLane, onLanesChanged } from "../lib/lanes";
-import { ownedBy } from "../lib/sidebar-lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
 import {
   useShortcutKeys,
   useShortcutLabel,
 } from "../hooks/useShortcutBindings";
 import { useSidePanel } from "../hooks/useSidePanel";
-import { sessionHasWorkspace } from "../lib/session-workspace";
 import {
   workspaceSummaryOpen,
   WS_SUMMARY_ROOM_W,
@@ -347,82 +332,27 @@ import {
 } from "../lib/app-header-classes";
 import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 
-// Stable identity for "no sub-agent open", so the default prop doesn't hand
-// the memoized transcript a fresh array on every render.
-const NO_SUBAGENTS: SubagentRef[] = [];
-const NO_WORKFLOW_RUNS: WorkflowRunSnapshot[] = [];
+import {
+  NO_SUBAGENTS,
+  NO_WORKFLOW_RUNS,
+  EMPTY_SUGGESTIONS,
+  NO_REVIEW_REPOS,
+  HIDDEN_REOPEN_MS,
+  RESUME_GROWTH_WINDOW_MS,
+  LEGACY_OPEN_SETTLE_MAX_MS,
+  INDEXED_OPEN_SETTLE_MAX_MS,
+  JUMP_PAGE_ENTRIES,
+  JUMP_MAX_ENTRIES,
+  EMPTY_TRANSCRIPT_ENTRIES,
+} from "../lib/session-viewer-constants";
+import {
+  reviewReposFromKey,
+  discoveredPrsFromKey,
+  toolPathRootsFromKey,
+} from "../lib/session-viewer-derive";
+import { SessionShellTiming } from "./session-viewer/shell-timing";
+import { runningAgentCount } from "./session-viewer/runtime-controller";
 
-class SessionShellTiming {
-  private recorded = false;
-  constructor(private readonly startedAt: number) {}
-  record() {
-    if (this.recorded) return;
-    this.recorded = true;
-    measureSessionPerf("shell_to_transcript_ms", this.startedAt);
-  }
-}
-
-function reviewReposFromKey(key: string) {
-  return key.split("\u0000").map((repo, index) => ({
-    repo,
-    primary: index === 0,
-  }));
-}
-
-function discoveredPrsFromKey(key: string) {
-  if (!key) return [];
-  return key.split("\u0001").map((encoded) => {
-    const [repo, branch, number, url, title] = encoded.split("\u0000");
-    return {
-      repo,
-      branch,
-      number: number ? Number(number) : undefined,
-      url: url || undefined,
-      title: title || undefined,
-    };
-  });
-}
-
-function toolPathRootsFromKey(key: string) {
-  const [primaryDir = "", ...attached] = key.split("\u0001");
-  return [
-    { dir: primaryDir },
-    ...attached.map((encoded) => {
-      const [dir, label] = encoded.split("\u0000");
-      return { dir, label };
-    }),
-  ].filter((root) => Boolean(root.dir));
-}
-// Same reason: the empty row is set on every stream_start, and a fresh array
-// each time would re-render the composer block for nothing.
-const EMPTY_SUGGESTIONS: ReplySuggestion[] = [];
-// And again for the Review tab's repo list, which a promoted PR replaces with
-// an empty one: PrPanel memoizes its targets on this array.
-const NO_REVIEW_REPOS: Array<{ repo: string; primary: boolean }> = [];
-// Hidden for at least this long, returning to the tab is a "reopen" — jump to
-// the live edge even if nothing new arrived. Shorter absences (glancing at a
-// notification) keep the reader's place unless the transcript grew meanwhile.
-const HIDDEN_REOPEN_MS = 30_000;
-// After becoming visible again, keep watching this long for growth that lands
-// late: on the iOS PWA the WebSocket only reconnects after visibility, so what
-// streamed while backgrounded arrives moments after the visibilitychange.
-const RESUME_GROWTH_WINDOW_MS = 8_000;
-// Positive settlement normally lifts the opening curtain first. These deadlines
-// are fail-safes: legacy transcripts have no structural outline callback, while
-// an indexed transcript must never stay invisible if its index or visible-range
-// callback is delayed or lost. Indexed opens get longer to avoid exposing the
-// bounded tail just before the complete outline lands on a busy phone.
-const LEGACY_OPEN_SETTLE_MAX_MS = 350;
-const INDEXED_OPEN_SETTLE_MAX_MS = 2_500;
-// "Jump to the start of the session" walks the backlog a page at a time rather
-// than asking for it in one frame: a multi-thousand-entry transcript would be a
-// tens-of-MB payload and one giant reconciliation. Fat pages keep the number of
-// round trips (and whole-transcript re-renders) in single digits; the ceiling
-// stops a runaway walk on a session nobody should be rendering whole — when it
-// trips, the pill stays put so the reader can keep going deliberately.
-const JUMP_PAGE_ENTRIES = HISTORY_PAGE_ENTRIES;
-const JUMP_MAX_ENTRIES = 4_000;
-const EMPTY_TRANSCRIPT_ENTRIES: TranscriptEntry[] = [];
 export function SessionViewer({
   session,
   composer: {
@@ -1026,32 +956,67 @@ export function SessionViewer({
   useEffect(() => {
     dispatchSessionRuntime({ type: "sync_safety", safety: session.safety });
   }, [dispatchSessionRuntime, session.id, session.safety]);
-  // Bumped on git pushes and matching GitHub webhook events so every mounted PR
-  // surface revalidates immediately.
-  const [gitRefreshTick, setGitRefreshTick] = useState(0);
-  const sessionPrTargetsRef = useRef<Set<string>>(new Set());
-  useLayoutEffect(() => {
-    sessionPrTargetsRef.current = new Set([
-      `${session.repo || "repository"}\0${session.branch}`,
-      ...(session.attachedRepos || []).map(
-        (repo) => `${repo.repo}\0${repo.branch}`,
-      ),
-      ...(session.prs || []).map((ref) => `${ref.repo}\0${ref.branch}`),
-    ]);
-  }, [session.repo, session.branch, session.attachedRepos, session.prs]);
-  const [viewers, setViewers] = useState<string[]>([]);
-  const [typingUsers, setTypingUsers] = useState<string[]>([]);
-  // The create run is still preparing this session's worktree (new workspaces
-  // announce the session before the slow git work). While true the conversation
-  // shows creation progress, and the opening message holds above the composer.
-  // Flipped off by the workspace_status event, kept in sync with
-  // the sessions poll otherwise.
-  const [workspacePreparing, setWorkspacePreparing] = useState(
-    !!session.workspacePreparing,
-  );
-  useEffect(() => {
-    setWorkspacePreparing(!!session.workspacePreparing);
-  }, [session.workspacePreparing]);
+  const runtimeController = useSessionRuntimeController({
+    identity: {
+      session,
+      focused,
+      optimisticEmpty,
+      workspaceSessions,
+      onSetStatus,
+    },
+    run: {
+      isRunningLive,
+      isStreaming,
+      safety,
+      entries,
+      loading,
+      liveTurnStore,
+      forkFrom,
+    },
+    staging: {
+      phonePr,
+      show: showStaging,
+      onClose: onCloseStaging,
+    },
+    socket: { send },
+  });
+  const agentsController = runtimeController.agents;
+  const presenceController = runtimeController.presence;
+  const runController = runtimeController.run;
+  const stagingController = runtimeController.staging;
+  const previewController = runtimeController.preview;
+  const subagents = agentsController.subagents;
+  const currentUser = agentsController.currentUser;
+  const pinned = agentsController.pinned;
+  const canKeepInSidebar = agentsController.canKeepInSidebar;
+  const keepInSidebar = agentsController.keepInSidebar;
+  const promoting = agentsController.promoting;
+  const isAsk = agentsController.isAsk;
+  const hasWorkspace = agentsController.hasWorkspace;
+  const hasRepoWork = agentsController.hasRepoWork;
+  const handlePromote = agentsController.handlePromote;
+  const gitRefreshTick = presenceController.gitRefreshTick;
+  const setGitRefreshTick = presenceController.setGitRefreshTick;
+  const sessionPrTargetsRef = presenceController.sessionPrTargetsRef;
+  const viewers = presenceController.viewers;
+  const setViewers = presenceController.setViewers;
+  const typingUsers = presenceController.typingUsers;
+  const setTypingUsers = presenceController.setTypingUsers;
+  const workspacePreparing = presenceController.workspacePreparing;
+  const setWorkspacePreparing = presenceController.setWorkspacePreparing;
+  const isBusy = runController.isBusy;
+  const busySince = runController.busySince;
+  const stopRequestedAt = runController.stopRequestedAt;
+  const setStopRequestedAt = runController.setStopRequestedAt;
+  const stopRequest = runController.stopRequest;
+  const waitingForWorkspace = runController.waitingForWorkspace;
+  const settingUpWorkspace = runController.settingUpWorkspace;
+  const staging = stagingController.deployment;
+  const stagingUrl = stagingController.url;
+  const previewStatus = previewController.status;
+  const setPreviewStatus = previewController.setStatus;
+  const startDeclaredPortal = previewController.startDeclaredPortal;
+  const livePortals = previewController.livePortals;
   // Drag-to-reorder bookkeeping. onReorder fires continuously during a drag, so
   // we only reorder locally then flush the final order to the server on drop —
   // broadcasting mid-drag would swap the item references out from under Motion
@@ -1247,7 +1212,6 @@ export function SessionViewer({
   // Inline rename of the header title (double-click), mirroring the tab strip.
   // `null` = not editing; a string = the working draft.
   const [renameDraft, setRenameDraft] = useState<string | null>(null);
-  const [pinned, setPinned] = useState(() => isPinned(session.id));
   // Main session-area view: the transcript+composer vs. the full-width PR review
   // that takes over the whole session column. Which one shows is now owned by App
   // (the top tab strip's Review view-tab) and passed in as `showReview`; the
@@ -1989,102 +1953,8 @@ export function SessionViewer({
   } = modelController;
   const { workflowRuns, workflowsLoaded, workflowAction, setWorkflowRuns } =
     workflowController;
+  const runningAgents = runningAgentCount(workflowRuns, subagents);
 
-  // Sub-agents the session spawned directly (pi task-tool children /
-  // SDK Task agents) — shown in the Agents tab next to workflow runs. Seeded
-  // here; the polling effect below (after isBusy exists) keeps them live.
-  const [subagents, setSubagents] = useState<SessionSubagentSnapshot[]>([]);
-  useEffect(() => setSubagents([]), [session.id]);
-
-  // Keep the pin star in sync with the store (changes can come from the tab bar
-  // or the Home screen) and reset when switching sessions.
-  const currentUser = useCurrentUser();
-  useEffect(() => setPinned(isPinned(session.id)), [session.id]);
-  useEffect(
-    () => onPinsChanged(() => setPinned(isPinned(session.id))),
-    [session.id],
-  );
-
-  // Claimed into your own sidebar lanes (lib/lanes.ts) — the whole workspace,
-  // since that's the unit the sidebar row claims. Lanes live in a module cache
-  // like pins, so mirror it into state and re-read on every change.
-  const claimSessions = workspaceSessions?.length
-    ? workspaceSessions
-    : [session];
-  const claimIds = claimSessions.map((c) => c.id).join(",");
-  const claimedGlobally = claimSessions.some((c) => !!c.manualStatus);
-  const [claimedLane, setClaimedLane] = useState(false);
-  useEffect(() => {
-    const read = () =>
-      setClaimedLane(claimIds.split(",").some((id) => !!getLane(id)));
-    read();
-    return onLanesChanged(read);
-  }, [claimIds]);
-  const claimed = claimedLane || claimedGlobally;
-  const hiddenFromSidebar = useSyncExternalStore(
-    onHidesChanged,
-    () => isHiddenForSession(session),
-    () => false,
-  );
-  // A linked session can be open without belonging to your sidebar: teammate
-  // work, automation runs and agent-spawned probes all stay out until claimed.
-  // A session you started (or a workspace with one) already renders in your
-  // sidebar bands without a lane claim, so it must not offer Add to sidebar.
-  const naturallyInSidebar = claimSessions.some(
-    (c) => !c.spawnedBy && !c.automation && ownedBy(c, currentUser),
-  );
-  const canKeepInSidebar =
-    !session.archived &&
-    !!onSetStatus &&
-    (hiddenFromSidebar || (!claimed && !naturallyInSidebar));
-  function keepInSidebar() {
-    unhideForSession(session);
-    if (!claimed && !naturallyInSidebar) onSetStatus?.(claimSessions, "mine");
-  }
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (
-        !focused ||
-        e.defaultPrevented ||
-        !matchesShortcut(e, "session-pin") ||
-        blockingOverlayOpen()
-      ) {
-        return;
-      }
-      e.preventDefault();
-      togglePin(session.id);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focused, session.id]);
-
-  // Switching modes is immediate in the interface. The only slow part is the
-  // workspace setup behind it, so code affordances appear now and show their
-  // own setup state until the server has cut the branch.
-  const [promoting, setPromoting] = useState(false);
-  const [promotionReady, setPromotionReady] = useState(false);
-  const codeMode = session.mode === "code" || promoting || promotionReady;
-  const isAsk = session.mode === "ask" && !codeMode;
-  const hasWorkspace = sessionHasWorkspace(session) || codeMode;
-  // Everything that only makes sense against a repo: the diff, the Changes
-  // tab, the PR strip, the repo switch/attach bar. A repo-less session still
-  // has a workspace (terminal, agents, assets run in its scratch dir), so
-  // these ride their own flag rather than `hasWorkspace`. Promotion gives a
-  // repo-less Ask session the selected/default repo on the server.
-  const hasRepoWork = hasWorkspace && (!session.repoLess || codeMode);
-  async function handlePromote(onDone?: () => void) {
-    if (promoting) return;
-    setPromoting(true);
-    onDone?.();
-    try {
-      await promoteSessionApi(session.id);
-      setPromotionReady(true);
-      setPromoting(false);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not switch to code mode");
-      setPromoting(false);
-    }
-  }
   // A linked Plain thread gets a read-only conversation sidebar (+ jump-to-Plain),
   // available even for ask-mode sessions that have no code workspace.
   const hasPlain = Boolean(session.plainThreadId);
@@ -2107,38 +1977,6 @@ export function SessionViewer({
       workflowRuns.length > 0 ||
       subagents.length > 0 ||
       sessionReports.length > 0);
-  const isBusy = !safety && (isRunningLive || isStreaming);
-  // Sub-agent list: fetch on open, then re-poll while the session runs so
-  // live task-tool spawns appear/settle. Keyed on isBusy too: a run starting
-  // after mount restarts the poll loop, and the flip back to idle lands one
-  // final fetch that settles statuses.
-  useEffect(() => {
-    let stale = false;
-    let timer: number | undefined;
-    const load = async () => {
-      try {
-        const d = await fetchSessionSubagents(session.id);
-        if (stale) return;
-        // Keep the previous array when nothing changed: downstream memos
-        // (and the LiveSubagents context feeding every ToolCallBlock)
-        // only re-render on real updates, not on every 4s poll tick.
-        setSubagents((prev) =>
-          JSON.stringify(prev) === JSON.stringify(d.subagents)
-            ? prev
-            : d.subagents,
-        );
-        if (d.sessionRunning) timer = window.setTimeout(load, 4000);
-      } catch {
-        // Transient (auth refresh, reload) — the next poll or session
-        // switch retries.
-      }
-    };
-    load();
-    return () => {
-      stale = true;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, [session.id, isBusy]);
   // Task rows learn their child session id from this map while the call is
   // still running (the result text that normally carries it doesn't exist
   // yet), enabling the mid-run "Watch ↗" drill-in.
@@ -2148,18 +1986,6 @@ export function SessionViewer({
       if (s.toolUseId) m.set(s.toolUseId, { id: s.id, status: s.status });
     return m;
   }, [subagents]);
-  // Derived, not the raw flag: transcript content or streaming text means the
-  // opening run already started, so the worktree is done — this guards against
-  // a stale sessions poll re-asserting the flag after the workspace_status
-  // event already cleared it.
-  const waitingForWorkspace =
-    promoting ||
-    (workspacePreparing && entries.length === 0 && !liveTurnStore.hasText());
-  // A sibling session already owns a ready workspace, so its optimistic shell
-  // can show the blank conversation and composer immediately. A genuinely new
-  // workspace keeps the setup state until its worktree is ready.
-  const settingUpWorkspace = waitingForWorkspace && !optimisticEmpty;
-
   // Live worktree diff, handed to the Changes page as `diff=` so opening it
   // reads the poll the panel already runs rather than starting a second one.
   // Parked unless a workspace surface is open on a code session: the panel
@@ -2171,63 +1997,6 @@ export function SessionViewer({
       !pendingCreation && hasRepoWork && (activePanelOpen || infoPageOpen),
     isRunning: isBusy,
   });
-
-  // Anchor for the agent-working elapsed timer. A run that starts
-  // while we're watching anchors to now; opening a session mid-run anchors to
-  // the server's journaled run start (runStartedAt — survives switches and
-  // refreshes), falling back to the turn's user prompt in the transcript, so
-  // the timer shows the run's real age, not time-since-I-opened-the-tab. The
-  // ref tracks which case we're in: it stays true until we've observed the
-  // session idle.
-  const [busySince, setBusySince] = useState<number | null>(null);
-  // When the Stop was asked for, so the click can be acknowledged locally at
-  // once. The server's isRunning:false only lands after the aborted turn
-  // actually unwinds — an abort signal is observed at the next await, so a
-  // long bash command, an MCP call or a retrying model request holds it for
-  // seconds — and until then this row went on counting up as if the click had
-  // never happened. 18% of stops in the audit log are a second stop on the
-  // same session within a minute (median 1.9s apart): people clicking again
-  // because the first click showed them nothing.
-  const [stopRequestedAt, setStopRequestedAt] = useState<number | null>(null);
-  const anchorFromTranscript = useRef(session.isRunning);
-  useEffect(() => {
-    anchorFromTranscript.current = true;
-    setBusySince(null);
-    setStopRequestedAt(null);
-  }, [session.id]);
-  useEffect(() => {
-    if (!isBusy) {
-      anchorFromTranscript.current = false;
-      setBusySince(null);
-      setStopRequestedAt(null);
-      return;
-    }
-    // The journaled run start is authoritative whenever we have it — for a
-    // run that starts while watching it's ~now anyway (App stamps it on the
-    // status flip), and mid-run it's the real start even when a stale
-    // isRunning=false at mount already flipped the anchor ref.
-    if (session.runStartedAt) {
-      const t = Date.parse(session.runStartedAt);
-      if (Number.isFinite(t)) {
-        setBusySince((prev) => prev ?? t);
-        return;
-      }
-    }
-    // Mid-run open: wait for the transcript so we can find the turn's prompt.
-    if (anchorFromTranscript.current && loading) return;
-    setBusySince((prev) => {
-      if (prev != null) return prev;
-      if (anchorFromTranscript.current) {
-        for (let i = entries.length - 1; i >= 0; i--) {
-          if (entries[i].type !== "user") continue;
-          const t = new Date(entries[i].timestamp).getTime();
-          if (Number.isFinite(t)) return t;
-          break;
-        }
-      }
-      return Date.now();
-    });
-  }, [isBusy, loading, entries, session.runStartedAt]);
 
   // Ctrl+R focuses the session composer directly.
   const archiveShortcutLabel = useShortcutLabel("session-archive");
@@ -2352,62 +2121,76 @@ export function SessionViewer({
   // digest of each. One-shot: cleared once a send consumes them.
   const [contextSessions, setContextSessions] = useState<string[]>([]);
 
-  useSessionViewerSubscription(
-    connected,
-    transcriptCursorRef,
-    transcriptSeqRef,
-    transcriptReadySessionRef,
-    session,
-    addHandler,
-    setWorkflowRuns,
-    existingIndexForInit,
-    setIndexMode,
-    acceptInitTail,
-    transcriptViewStore,
-    setHistoryTruncated,
-    backgroundHistoryRef,
-    historyRevealRef,
-    loadingHistoryRef,
-    setLoadingHistory,
-    setLoading,
-    historyWalkRef,
-    setLoadingAllHistory,
-    finishHistoryWalk,
-    shellTiming,
-    historyStartRef,
-    replaceIndex,
-    messagesRef,
-    followingLive,
-    acceptRange,
-    JUMP_MAX_ENTRIES,
-    requestHistoryPage,
-    scrollToLatest,
-    projectAppend,
-    liveTurnStore,
-    setViewers,
-    setTypingUsers,
-    dispatchSessionRuntime,
-    draggingQueueRef,
-    draftKey,
-    setImages,
-    setFiles,
-    setContextSessions,
-    setComposerPrefill,
-    setReplySuggestions,
-    EMPTY_SUGGESTIONS,
-    setSlackComposer,
-    setSlackComposerStatus,
-    setSlackComposerReconnect,
-    setSlackComposerSent,
-    onRunningChange,
-    setGitRefreshTick,
-    sessionPrTargetsRef,
-    setWorkspacePreparing,
-    setStopRequestedAt,
-    setEntries,
-    setAccountId,
-    send,
-  );
+  useSessionViewerSubscription({
+    connection: {
+      connected,
+      session,
+      addHandler,
+      send,
+      onRunningChange,
+    },
+    transcript: {
+      cursorRef: transcriptCursorRef,
+      sequenceRef: transcriptSeqRef,
+      readySessionRef: transcriptReadySessionRef,
+      viewStore: transcriptViewStore,
+      setEntries,
+      setLoading,
+      setHistoryTruncated,
+      liveTurnStore,
+    },
+    index: {
+      existingForInit: existingIndexForInit,
+      setMode: setIndexMode,
+      acceptInitTail,
+      replace: replaceIndex,
+      messagesRef,
+      followingLive,
+      acceptRange,
+      projectAppend,
+    },
+    history: {
+      backgroundRef: backgroundHistoryRef,
+      revealRef: historyRevealRef,
+      loadingRef: loadingHistoryRef,
+      setLoading: setLoadingHistory,
+      walkRef: historyWalkRef,
+      setLoadingAll: setLoadingAllHistory,
+      finishWalk: finishHistoryWalk,
+      shellTiming,
+      startRef: historyStartRef,
+      jumpMaxEntries: JUMP_MAX_ENTRIES,
+      requestPage: requestHistoryPage,
+      scrollToLatest,
+    },
+    runtime: {
+      setWorkflowRuns,
+      setViewers,
+      setTypingUsers,
+      dispatch: dispatchSessionRuntime,
+      setGitRefreshTick,
+      prTargetsRef: sessionPrTargetsRef,
+      setWorkspacePreparing,
+      setStopRequestedAt,
+      setAccountId,
+    },
+    composer: {
+      draggingQueueRef,
+      draftKey,
+      setImages,
+      setFiles,
+      setContextSessions,
+      setPrefill: setComposerPrefill,
+      setReplySuggestions,
+      emptySuggestions: EMPTY_SUGGESTIONS,
+    },
+    slack: {
+      setComposer: setSlackComposer,
+      setStatus: setSlackComposerStatus,
+      setReconnect: setSlackComposerReconnect,
+      setSent: setSlackComposerSent,
+    },
+  });
 
   // Drop optimistic bubbles once their real turn shows up. Each pending message
   // is claimed (one-to-one) either by a transcript user entry recorded around or
@@ -3735,7 +3518,9 @@ export function SessionViewer({
   function handleAccountChange(next: string) {
     if (next === (accountId || "")) return;
     setAccountId(next);
-    const target = next ? accounts.find((a) => a.id === next) : null;
+    const target = next
+      ? accounts.find((account) => account.id === next)
+      : null;
     if (target?.kind === "api_key") setFastMode(false);
     send({
       type: "prompt",
@@ -4189,211 +3974,21 @@ export function SessionViewer({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [focused, archiving, handleArchive, openNextChat, session.archived]);
 
-  // Preview environment for the ⌘O chord — mirrors StagingLink's poll (same
-  // relevance gate; the server caches PR details for 30s, so the duplicate
-  // fetch stays cheap). Kept here because StagingLink mounts per layout
-  // variant, so a window listener inside it would register multiple times.
-  const stagingRelevant = phonePr
-    ? (phonePr.state ??
-        (phonePr.source === "primary" ? session.prState : undefined)) === "OPEN"
-    : !!session.prUrl && session.prState === "OPEN";
-  const [staging, setStaging] = useState<{
-    url: string;
-    status: string;
-    embeddable?: boolean;
-  } | null>(null);
-  // True once the PR fetch has resolved at least once for this session — lets us
-  // tell "staging genuinely absent" from "not loaded yet" (the fetch starts null
-  // and fills in async), so the Preview environment view-tab auto-closes only on the former
-  // rather than flicker-closing during load.
-  const [stagingSettled, setStagingSettled] = useState(false);
-  useEffect(() => {
-    setStagingSettled(false);
-    if (!stagingRelevant) {
-      setStaging(null);
-      setStagingSettled(true);
-      return;
-    }
-    let alive = true;
-    const load = () =>
-      fetchPr(session.id, phonePr?.repo, phonePr?.branch)
-        .then((pr) => {
-          if (alive) {
-            setStaging(pr?.staging ?? null);
-            setStagingSettled(true);
-          }
-        })
-        .catch(() => {});
-    load();
-    const stop = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
-    return () => {
-      alive = false;
-      stop();
-    };
-  }, [
-    session.id,
-    stagingRelevant,
-    gitRefreshTick,
-    phonePr?.repo,
-    phonePr?.branch,
-  ]);
-  const stagingUrl = staging
-    ? withPreviewPath(staging.url, session.previewPath)
-    : null;
-  // The Preview environment pane is a top-strip view-tab now (App owns whether it's
-  // foregrounded). If the deploy vanishes while its tab is open+active — PR
-  // merged/closed, so `stagingRelevant` drops and the fetch settles with no
-  // staging — close the tab rather than leave it pointing at nothing.
-  useEffect(() => {
-    if (showStaging && stagingSettled && !stagingUrl) onCloseStaging?.();
-  }, [showStaging, stagingSettled, stagingUrl, onCloseStaging]);
   // The Assets pane is a top-strip view-tab too (App owns whether it's
   // foregrounded). If the last asset is deleted while its tab is up, close it
   // rather than leave an empty pane pointing at nothing.
   useEffect(() => {
     if (showAssets && assetFiles.length === 0) onCloseAssets?.();
   }, [showAssets, assetFiles.length, onCloseAssets]);
-  const [previewStatus, setPreviewStatus] = useState<PreviewStatus | null>(
-    null,
-  );
-  useEffect(() => setPreviewStatus(null), [session.id]);
-  async function startDeclaredPortal(recipe: PreviewPortalRecipe) {
-    if (!recipe.command) {
-      if (!recipe.skill) throw new Error("This Portal has no start command.");
-      send({
-        type: "prompt",
-        sessionId: session.id,
-        user: getCurrentUser(),
-        content: `Use the $${recipe.skill} skill to start the “${recipe.name}” Portal, then verify it is ready.`,
-      });
-      return;
-    }
-    setPreviewStatus(await startPortalRecipeApi(session.id, recipe.id));
-  }
-  // Services with a route we can open: what the panel's tab strip reports
-  // beside Portals, so the count is the openable ones rather than every port
-  // the repository declares.
-  const livePortals = (previewStatus?.services ?? []).filter((service) =>
-    portalTargetFor(session.id, service),
-  ).length;
-  // Same reading beside Agents: how many are working right now. A finished
-  // run stays on its page rather than keeping a number on the bar.
-  const runningAgents =
-    workflowRuns.reduce(
-      (n, run) => n + run.agents.filter((a) => a.status === "running").length,
-      0,
-    ) + subagents.filter((s) => s.status === "running").length;
-  // The header preview control used to keep this status warm. Now that the
-  // launcher lives in the overflow menu. Keep status warm while Preview or the
-  // portal browser is up, and while the workspace panel is open. Its bottom
-  // bar counts live portals and its portals page lists them. Status requests
-  // also renew the authenticated Caddy routes for remote sandbox services.
-  useEffect(() => {
-    if (
-      (!showPreviewTab && !showPortal && !activePanelOpen && !infoPageOpen) ||
-      !session.worktreeDir
-    )
-      return;
-    let alive = true;
-    const load = () =>
-      fetchPreview(session.id)
-        .then((status) => {
-          if (alive) setPreviewStatus(status);
-        })
-        .catch(() => {});
-    load();
-    const stop = pollWhileVisible(load, 3000);
-    return () => {
-      alive = false;
-      stop();
-    };
-  }, [
+
+  useSessionPreviewStatusEffect(previewController, {
     showPreviewTab,
     showPortal,
     activePanelOpen,
     infoPageOpen,
-    session.id,
-    session.worktreeDir,
-  ]);
-
-  // ⌘O opens the PR's preview environment (the Vercel preview StagingLink's globe
-  // points at); ⌘G opens its GitHub PR. Chords without a target (no staging
-  // deploy / no PR) fall through to the browser.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (!focused) return;
-      const openPr = matchesShortcut(e, "open-pr");
-      const openPreview = matchesShortcut(e, "open-preview");
-      if (
-        e.defaultPrevented ||
-        (!openPr && !openPreview) ||
-        blockingOverlayOpen()
-      ) {
-        return;
-      }
-      // Same composer exemption as the archive chords above: the composer
-      // autofocuses, so an unconditional editable-focus bail would leave
-      // these dead almost always. Other inputs keep the guard.
-      const target = e.target as HTMLElement | null;
-      const editable = target?.closest(
-        "input, textarea, select, [contenteditable='true'], [contenteditable='']",
-      );
-      if (editable && !editable.classList.contains("composer-textarea")) {
-        return;
-      }
-      if (openPr) {
-        // Primary branch's PR, falling back to the first attached/linked
-        // repo PR on multi-repo sessions.
-        const prUrl = session.prUrl ?? session.prs?.find((p) => p.url)?.url;
-        if (!prUrl) return;
-        e.preventDefault();
-        window.open(prUrl, "_blank", "noopener");
-      } else if (openPreview && staging) {
-        e.preventDefault();
-        // Match the globe's click semantics: before the first deploy goes
-        // Ready the branch alias 404s, so swallow the chord with the same
-        // explanatory toast instead of opening a dead link. (A rebuild
-        // after a push keeps status Ready and stays openable — the alias
-        // serves the previous deploy until the new one lands.)
-        if (staging.status !== "Ready") {
-          toast(
-            `Preview environment is ${staging.status.toLowerCase()}. The link goes live once the first deploy finishes.`,
-          );
-          return;
-        }
-        window.open(
-          withPreviewPath(staging.url, session.previewPath),
-          "_blank",
-          "noopener",
-        );
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focused, session.prUrl, session.prs, session.previewPath, staging]);
-
-  // ⌘. asks to stop the running turn from anywhere in the session. Escape
-  // asks the same question, but only with the composer focused — which is
-  // exactly where you are not when you have been reading the transcript.
-  //
-  // Both land on the composer's own confirmation. The dialog, and the rule
-  // that it goes away when the turn finishes on its own rather than stopping
-  // the next one, live there; this only asks for it, through a counter, so
-  // there is no second copy of any of that here. (The stop BUTTON stays
-  // immediate: pressing it is already deliberate.)
-  const [stopRequest, setStopRequest] = useState(0);
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (!focused || e.defaultPrevented) return;
-      if (!matchesShortcut(e, "run-stop")) return;
-      // Nothing running: leave the chord alone rather than swallowing it.
-      if (!isBusy || forkFrom) return;
-      e.preventDefault();
-      setStopRequest((n) => n + 1);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focused, isBusy, forkFrom]);
+    sessionId: session.id,
+    worktreeDir: session.worktreeDir,
+  });
 
   /* Quick replies for the turn that just ended. Off while a run is live (they
 	   answer a finished turn), while an ask card is up (that card already offers

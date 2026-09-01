@@ -1,11 +1,5 @@
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
-import {
-  useEffect,
-  useEffectEvent,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { withModelSwitches } from "../components/session-viewer/model-switches";
 import { switchDividerText } from "../components/session-viewer/model-labels";
@@ -21,7 +15,6 @@ import {
   withoutRestartQueueNotice,
 } from "../lib/restart-queue-notice";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
-import type { QueueReceipt } from "../lib/session-queue";
 import type { SessionRuntimeAction } from "../lib/session-runtime";
 import { shouldContinueHistoryReveal } from "../lib/transcript-history";
 import type { TranscriptViewStore } from "../lib/transcript-view-store";
@@ -72,71 +65,155 @@ type SetEntries = (
     | ((previous: TranscriptEntry[]) => TranscriptEntry[]),
 ) => void;
 
-// Hidden for at least this long, returning to the tab is a "reopen" — jump to
-// the live edge even if nothing new arrived. Shorter absences (glancing at a
-// notification) keep the reader's place unless the transcript grew meanwhile.
-const HIDDEN_REOPEN_MS = 30_000;
-// After becoming visible again, keep watching this long for growth that lands
-// late: on the iOS PWA the WebSocket only reconnects after visibility, so what
-// streamed while backgrounded arrives moments after the visibilitychange.
-const RESUME_GROWTH_WINDOW_MS = 8_000;
+interface SubscriptionConnection {
+  connected: boolean;
+  session: UnifiedSession;
+  addHandler: SessionSocketAddHandler;
+  send: SessionSocketSend;
+  onRunningChange: ((id: string, isRunning: boolean) => void) | undefined;
+}
 
-export function useSessionViewerSubscription(
-  connected: boolean,
-  transcriptCursorRef: RefObject<TranscriptCursor | null>,
-  transcriptSeqRef: RefObject<TranscriptSequence | null>,
-  transcriptReadySessionRef: RefObject<string | null>,
-  session: UnifiedSession,
-  addHandler: SessionSocketAddHandler,
-  setWorkflowRuns: Setter<WorkflowRunSnapshot[]>,
-  existingIndexForInit: TranscriptController["existingIndexForInit"],
-  setIndexMode: TranscriptController["setIndexMode"],
-  acceptInitTail: TranscriptController["acceptInitTail"],
-  transcriptViewStore: TranscriptViewStore,
-  setHistoryTruncated: Setter<boolean>,
-  backgroundHistoryRef: RefObject<boolean>,
-  historyRevealRef: RefObject<HistoryWalk | null>,
-  loadingHistoryRef: RefObject<boolean>,
-  setLoadingHistory: Setter<boolean>,
-  setLoading: Setter<boolean>,
-  historyWalkRef: RefObject<HistoryWalk | null>,
-  setLoadingAllHistory: Setter<boolean>,
-  finishHistoryWalk: () => void,
-  shellTiming: { record: () => void },
-  historyStartRef: RefObject<number | null>,
-  replaceIndex: TranscriptController["replaceIndex"],
-  messagesRef: RefObject<HTMLDivElement | null>,
-  followingLive: RefObject<boolean>,
-  acceptRange: TranscriptController["acceptRange"],
-  jumpMaxEntries: number,
-  requestHistoryPage: (whole?: boolean) => void,
-  scrollToLatest: (behavior?: ScrollBehavior) => void,
-  projectAppend: TranscriptController["projectAppend"],
-  liveTurnStore: LiveTurnStore,
-  setViewers: Setter<string[]>,
-  setTypingUsers: Setter<string[]>,
-  dispatchSessionRuntime: Dispatch<SessionRuntimeAction>,
-  draggingQueueRef: RefObject<boolean>,
-  draftKey: string,
-  setImages: Setter<string[]>,
-  setFiles: Setter<FileAttachment[]>,
-  setContextSessions: Setter<string[]>,
-  setComposerPrefill: Setter<ComposerPrefill | null>,
-  setReplySuggestions: Setter<ReplySuggestion[]>,
-  emptySuggestions: ReplySuggestion[],
-  setSlackComposer: Setter<SlackComposerRequest>,
-  setSlackComposerStatus: Setter<"idle" | "sharing">,
-  setSlackComposerReconnect: Setter<boolean>,
-  setSlackComposerSent: Setter<SlackSent | null>,
-  onRunningChange: ((id: string, isRunning: boolean) => void) | undefined,
-  setGitRefreshTick: Setter<number>,
-  sessionPrTargetsRef: RefObject<Set<string>>,
-  setWorkspacePreparing: Setter<boolean>,
-  setStopRequestedAt: Setter<number | null>,
-  setEntries: SetEntries,
-  setAccountId: Setter<string>,
-  send: SessionSocketSend,
-) {
+interface SubscriptionTranscript {
+  cursorRef: RefObject<TranscriptCursor | null>;
+  sequenceRef: RefObject<TranscriptSequence | null>;
+  readySessionRef: RefObject<string | null>;
+  viewStore: TranscriptViewStore;
+  setEntries: SetEntries;
+  setLoading: Setter<boolean>;
+  setHistoryTruncated: Setter<boolean>;
+  liveTurnStore: LiveTurnStore;
+}
+
+interface SubscriptionIndex {
+  existingForInit: TranscriptController["existingIndexForInit"];
+  setMode: TranscriptController["setIndexMode"];
+  acceptInitTail: TranscriptController["acceptInitTail"];
+  replace: TranscriptController["replaceIndex"];
+  messagesRef: RefObject<HTMLDivElement | null>;
+  followingLive: RefObject<boolean>;
+  acceptRange: TranscriptController["acceptRange"];
+  projectAppend: TranscriptController["projectAppend"];
+}
+
+interface SubscriptionHistory {
+  backgroundRef: RefObject<boolean>;
+  revealRef: RefObject<HistoryWalk | null>;
+  loadingRef: RefObject<boolean>;
+  setLoading: Setter<boolean>;
+  walkRef: RefObject<HistoryWalk | null>;
+  setLoadingAll: Setter<boolean>;
+  finishWalk: () => void;
+  shellTiming: { record: () => void };
+  startRef: RefObject<number | null>;
+  jumpMaxEntries: number;
+  requestPage: (whole?: boolean) => void;
+  scrollToLatest: (behavior?: ScrollBehavior) => void;
+}
+
+interface SubscriptionRuntime {
+  setWorkflowRuns: Setter<WorkflowRunSnapshot[]>;
+  setViewers: Setter<string[]>;
+  setTypingUsers: Setter<string[]>;
+  dispatch: Dispatch<SessionRuntimeAction>;
+  setGitRefreshTick: Setter<number>;
+  prTargetsRef: RefObject<Set<string>>;
+  setWorkspacePreparing: Setter<boolean>;
+  setStopRequestedAt: Setter<number | null>;
+  setAccountId: Setter<string>;
+}
+
+interface SubscriptionComposer {
+  draggingQueueRef: RefObject<boolean>;
+  draftKey: string;
+  setImages: Setter<string[]>;
+  setFiles: Setter<FileAttachment[]>;
+  setContextSessions: Setter<string[]>;
+  setPrefill: Setter<ComposerPrefill | null>;
+  setReplySuggestions: Setter<ReplySuggestion[]>;
+  emptySuggestions: ReplySuggestion[];
+}
+
+interface SubscriptionSlack {
+  setComposer: Setter<SlackComposerRequest>;
+  setStatus: Setter<"idle" | "sharing">;
+  setReconnect: Setter<boolean>;
+  setSent: Setter<SlackSent | null>;
+}
+
+export interface SessionViewerSubscriptionOptions {
+  connection: SubscriptionConnection;
+  transcript: SubscriptionTranscript;
+  index: SubscriptionIndex;
+  history: SubscriptionHistory;
+  runtime: SubscriptionRuntime;
+  composer: SubscriptionComposer;
+  slack: SubscriptionSlack;
+}
+
+export function useSessionViewerSubscription({
+  connection: { connected, session, addHandler, send, onRunningChange },
+  transcript: {
+    cursorRef: transcriptCursorRef,
+    sequenceRef: transcriptSeqRef,
+    readySessionRef: transcriptReadySessionRef,
+    viewStore: transcriptViewStore,
+    setEntries,
+    setLoading,
+    setHistoryTruncated,
+    liveTurnStore,
+  },
+  index: {
+    existingForInit: existingIndexForInit,
+    setMode: setIndexMode,
+    acceptInitTail,
+    replace: replaceIndex,
+    messagesRef,
+    followingLive,
+    acceptRange,
+    projectAppend,
+  },
+  history: {
+    backgroundRef: backgroundHistoryRef,
+    revealRef: historyRevealRef,
+    loadingRef: loadingHistoryRef,
+    setLoading: setLoadingHistory,
+    walkRef: historyWalkRef,
+    setLoadingAll: setLoadingAllHistory,
+    finishWalk: finishHistoryWalk,
+    shellTiming,
+    startRef: historyStartRef,
+    jumpMaxEntries,
+    requestPage: requestHistoryPage,
+    scrollToLatest,
+  },
+  runtime: {
+    setWorkflowRuns,
+    setViewers,
+    setTypingUsers,
+    dispatch: dispatchSessionRuntime,
+    setGitRefreshTick,
+    prTargetsRef: sessionPrTargetsRef,
+    setWorkspacePreparing,
+    setStopRequestedAt,
+    setAccountId,
+  },
+  composer: {
+    draggingQueueRef,
+    draftKey,
+    setImages,
+    setFiles,
+    setContextSessions,
+    setPrefill: setComposerPrefill,
+    setReplySuggestions,
+    emptySuggestions,
+  },
+  slack: {
+    setComposer: setSlackComposer,
+    setStatus: setSlackComposerStatus,
+    setReconnect: setSlackComposerReconnect,
+    setSent: setSlackComposerSent,
+  },
+}: SessionViewerSubscriptionOptions) {
   // Subscribe to WebSocket messages
   const subscribeToSession = useEffectEvent(() => {
     if (!connected) return;
@@ -417,26 +494,30 @@ export function useSessionViewerSubscription(
             toast(msg.message || "That queued message could not be edited");
             break;
           }
-          const item = msg.item as QueueReceipt;
+          const item = msg.item;
           const existing = loadDraft(draftKey);
           setImages((current) => [...current, ...(item.images ?? [])]);
           const restoredFiles = Array.isArray(item.files)
             ? item.files.flatMap((file) => {
-                if (!file || typeof file !== "object") return [];
-                const value = file as Record<string, unknown>;
-                if (typeof value.name !== "string") return [];
+                if (
+                  !file ||
+                  typeof file !== "object" ||
+                  !("name" in file) ||
+                  typeof file.name !== "string"
+                )
+                  return [];
                 return [
                   {
-                    name: value.name,
+                    name: file.name,
                     type:
-                      typeof value.type === "string"
-                        ? value.type
+                      "type" in file && typeof file.type === "string"
+                        ? file.type
                         : "application/octet-stream",
-                    ...(typeof value.path === "string"
-                      ? { path: value.path }
+                    ...("path" in file && typeof file.path === "string"
+                      ? { path: file.path }
                       : {}),
-                    ...(typeof value.dataUrl === "string"
-                      ? { dataUrl: value.dataUrl }
+                    ...("dataUrl" in file && typeof file.dataUrl === "string"
+                      ? { dataUrl: file.dataUrl }
                       : {}),
                   },
                 ];
