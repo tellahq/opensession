@@ -10,10 +10,16 @@
 import { requestUser, type RouteContext } from "./context";
 import { defaultRepo, personaName } from "../config";
 import { hostRepoId, prHostFor } from "../pr-host";
+import { footerPrsFor, getPrsByRepo, prsBySessionRef } from "../pr-cache";
 import { cachedPrDetailsForSession, reconcilePrDetails } from "../pr-info";
 import { getPrStack, linkPrStack, mergePrStack } from "../pr-stack";
 import { findSessionAsync, invalidateSessionsCache } from "../session-cache";
 import { getSessionControl } from "../session-control";
+import { indexedWorkspaceMemberSessions } from "../session-list-store";
+import {
+  enrichSessionPrRefs,
+  projectWorkspacePrRefs,
+} from "../session-pr-target";
 import { resolvePrTarget } from "../session-repos";
 import {
   getOpenPrs,
@@ -86,6 +92,25 @@ async function loadPrCodeFlow(
   if (!details || !diff || (!diff.patch && !diff.skippedFiles)) return null;
   const { prCodeFlow } = await import("../code-flow");
   return prCodeFlow(repo, details, diff);
+}
+
+async function findPrSessionAsync(sessionId: string) {
+  const stored = await findSessionAsync(sessionId);
+  if (!stored) return stored;
+  const prsByRepo = getPrsByRepo();
+  const prsBySession = prsBySessionRef(prsByRepo);
+  const enrich = (session: NonNullable<typeof stored>) =>
+    enrichSessionPrRefs(session, {
+      defaultRepoId: defaultRepo().id,
+      prsByRepo,
+      footerMatches: footerPrsFor(prsBySession, session),
+    });
+  const session = enrich(stored);
+  if (!session.workspaceId) return session;
+  return projectWorkspacePrRefs(
+    session,
+    indexedWorkspaceMemberSessions(session.workspaceId).map(enrich),
+  );
 }
 
 async function codeFlowApiResponse(
@@ -251,7 +276,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const target = resolvePrTarget(
@@ -310,7 +335,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-diff$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const target = resolvePrTarget(
@@ -333,7 +358,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-code-flow$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const target = resolvePrTarget(
@@ -357,7 +382,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-diff-groups$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const target = resolvePrTarget(
@@ -434,7 +459,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/review-guide$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const target = resolvePrTarget(
@@ -668,7 +693,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-comment$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -710,7 +735,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-review$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -775,7 +800,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-merge$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -822,7 +847,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-stack$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const stackedOn = session.stackedOn;
@@ -895,7 +920,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-stack-merge$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -981,7 +1006,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-close$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -1014,7 +1039,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-action$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 

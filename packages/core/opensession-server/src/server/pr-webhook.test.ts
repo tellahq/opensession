@@ -33,6 +33,7 @@ describe("review request webhook sync", () => {
           },
         },
         "Kent",
+        () => "kentdebruin",
       ),
     ).toBe(false);
     expect(

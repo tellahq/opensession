@@ -17,12 +17,12 @@ import {
   tryGetSessionControl,
 } from "../session-control";
 import type { PrInfo } from "../pr-cache";
+import { mergeFooterPrRefs } from "../session-pr-target";
 import type { UnifiedSession } from "../types";
 import {
   archivedScope,
   archivedIndexRow,
   handleSessionsRoutes,
-  mergeFooterPrRefs,
   nativeCreateRepoOptions,
   sessionListRow,
   sessionRan,

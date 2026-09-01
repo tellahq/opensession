@@ -144,10 +144,21 @@ jobs:
         # (Azure metadata) with no role attached; without the override the
         # installer would rightly refuse the user service on such a box.
         run: |
+          set +e
           OPENSESSION_REPO="file://$GITHUB_WORKSPACE" \
           OPENSESSION_HOME="$HOME/.opensession" \
           OPENSESSION_ALLOW_IMDS=1 \
             bash install.sh --yes --no-engine
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            "$HOME/.opensession/bin/opensession" logs -n 200 || true
+            if [ "$RUNNER_OS" = "Linux" ]; then
+              systemctl --user status opensession.service --no-pager || true
+              journalctl --user -u opensession.service -n 200 --no-pager || true
+            fi
+            exit "$status"
+          fi
 
       - name: Put the command and bun on PATH for later steps
         # Steps do not share a shell and do not source profiles, so the

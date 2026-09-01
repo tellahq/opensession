@@ -12,14 +12,26 @@ const apiSource = await Bun.file(
 
 test("workspace surfaces keep committed and uncommitted work separate", () => {
   expect(apiSource).toContain("commits?: WorkspaceCommit[]");
-  expect(summarySource).toContain("(diffIsCommitted || hasCommitDetails)");
-  expect(summarySource).toContain(">Committed</div>");
+  expect(summarySource).toContain("{hasCommitDetails && (");
+  expect(summarySource).toContain("<span>Committed</span>");
   expect(summarySource).toContain(">Uncommitted</div>");
   expect(summarySource).toContain("commits.map(committedRow)");
   expect(infoSource).toContain("commits.map((commit)");
   expect(infoSource).toContain(
     "<CommitRow key={commit.sha} commit={commit} />",
   );
+});
+
+test("Changes expands to files with hover diff previews", () => {
+  expect(summarySource).toContain(">Changes</div>");
+  expect(summarySource).toContain(
+    "onClick={() => setChangesOpen((open) => !open)}",
+  );
+  expect(summarySource).toContain("changeFiles.map(fileChangeRow)");
+  expect(summarySource).toContain("openOnHover={Boolean(file.meta)}");
+  expect(summarySource).toContain("<FileDiff");
+  expect(summarySource).toContain("useSessionPrDiffResource(");
+  expect(summarySource).not.toContain("files committed");
 });
 
 test("the Committed section folds open to every PR or workspace commit", () => {
@@ -91,6 +103,27 @@ test("popup review heading keeps a small gap after a lone PR band", () => {
   expect(summarySource).toContain('"[&>.ws-summary-band:last-child]:mb-0"');
   expect(summarySource).toContain(
     '"[.ws-summary-pr-group:has(>.ws-summary-band:last-child)+.ws-summary-review-group_&]:mt-1"',
+  );
+});
+
+test("a stale automated review offers an inline re-review action", () => {
+  expect(summarySource).toContain(
+    'const canRerunOsReview = pr?.state === "OPEN" && Boolean(osReview?.stale)',
+  );
+  expect(summarySource).toContain("async function rerunOsReview()");
+  expect(summarySource).toContain('session.id,\n        "review",');
+  expect(summarySource).toContain("{ ...pr, reviewActive: true }");
+  expect(summarySource).toContain("New commits");
+  expect(summarySource).toContain("Re-review");
+});
+
+test("the review label opens the review with an adjacent arrow", () => {
+  expect(summarySource).toContain('aria-label="Open review"');
+  expect(summarySource).toContain("group-hover/review:translate-x-0.5");
+  expect(summarySource).toContain("[font-size:inherit] [font-weight:inherit]");
+  expect(summarySource).not.toContain("w-[calc(100%+16px)]");
+  expect(summarySource).not.toContain(
+    ">\n              Open\n            </Button>",
   );
 });
 

@@ -1133,6 +1133,7 @@ struct SessionView: View {
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
+        .onAppear { requestEarlier() }
     }
 
     private func requestEarlier() {

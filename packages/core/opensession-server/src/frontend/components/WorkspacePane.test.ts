@@ -187,26 +187,33 @@ test("sidebar Changes shares Review's code display options", () => {
   expect(commentableDiffSource).toContain("rounded-md bg-surface");
   expect(commentableDiffSource).toContain(': "mx-2 w-auto bg-transparent"');
   expect(commentableDiffSource).toContain(
-    "mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well",
+    "mt-1.5 max-w-full overflow-clip rounded-lg",
   );
+  expect(commentableDiffSource).not.toContain("rounded-lg bg-code-well");
   expect(commentableDiffSource).toContain(
     '!stickyFileHeaders && "mx-2 mt-0.5"',
   );
   expect(commentableDiffSource).toContain(
-    '"--diffs-bg": "var(--code-well-light)"',
+    'stickyFileHeaders ? "gap-2.5" : "gap-4"',
   );
   expect(commentableDiffSource).toContain(
-    'backgroundColor: "var(--code-well-light)"',
+    'stickyFileHeaders ? "gap-[7px]" : "gap-4"',
   );
   expect(commentableDiffSource).toContain(
-    '"--diffs-bg": "var(--code-well-dark)"',
+    '"--diffs-bg": "var(--review-code-light)"',
   );
   expect(commentableDiffSource).toContain(
-    'backgroundColor: "var(--code-well-dark)"',
+    'backgroundColor: "var(--review-code-light)"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"--diffs-bg": "var(--review-code-dark)"',
+  );
+  expect(commentableDiffSource).toContain(
+    'backgroundColor: "var(--review-code-dark)"',
   );
   expect(commentableDiffSource).toContain("style={DIFF_SURFACE_STYLE[theme]}");
-  expect(baseCssSource).toContain("--code-well-light: #f6f8fa");
-  expect(baseCssSource).toContain("--code-well-dark: #0d0f13");
+  expect(baseCssSource).toContain("--review-code-light: #ffffff");
+  expect(baseCssSource).toContain("--review-code-dark: #1c1c1c");
   expect(commentableDiffSource).not.toContain("border border-line bg-bg");
   expect(commentableDiffSource).not.toContain("data-[stuck]:overflow-visible");
   expect(commentableDiffSource).not.toContain("-inset-x-px");

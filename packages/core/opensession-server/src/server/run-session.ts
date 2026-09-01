@@ -30,7 +30,6 @@ import { syncAgentSessionEngine } from "./agent-session-sync";
 import { cancelAgentWait } from "./agent-waits";
 import { runAgentHosted } from "./host-client";
 import { getRunState, transitionRunState } from "./run-state";
-import { getAutomation } from "./automations";
 import { resolveSessionRunInputs } from "./session-run-inputs";
 import { defaultRepo } from "./config";
 import { isDevInstance } from "./dev-mode";
@@ -57,6 +56,7 @@ import {
   transcriptLineUser,
 } from "./transcript-persistence";
 import { cacheMissNotice } from "@tellahq/opensession-protocol/notices";
+import { RESTART_QUEUE_NOTICE_MESSAGE } from "@tellahq/opensession-protocol/session";
 import { dropSandboxPreviewRoutes } from "./preview";
 import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
 import { takeVoiceHandoff } from "./desk-voice";
@@ -1374,8 +1374,7 @@ function notifyShutdownPark(sessionId: string): void {
   broadcastToSession(sessionId, {
     type: "notice",
     sessionId,
-    message:
-      "The server is restarting. Your message is queued and will be delivered when it's back.",
+    message: RESTART_QUEUE_NOTICE_MESSAGE,
   });
 }
 
@@ -2937,8 +2936,8 @@ async function runSessionPromptInner(
   // unavailable; it never absorbs an engine into the gateway's control-plane
   // cgroup. Automation-owned sessions ride it too, with the automation's
   // scoping intact: proxy names come from the same fail-closed automation
-  // set the run-rpc fallback builder serves, the repos note and MCP grant
-  // identity are withheld, and the automation's prReviewer rides the spec.
+  // set the run-rpc fallback builder serves, while the repos note and MCP
+  // grant identity are withheld.
   const hostedRun =
     !runnerRun && !sandboxRun && routedEngine === "pi"
       ? runAgentHosted({
@@ -2986,13 +2985,6 @@ async function runSessionPromptInner(
           effort: session.effort,
           fastMode: session.fastMode,
           accountId: session.accountId,
-          // A human steering an automation-owned session still opens PRs
-          // under that automation's policy (parity with the in-process
-          // call below).
-          prReviewer:
-            isAutomationSession && session.automationId
-              ? getAutomation(session.automationId)?.prReviewer
-              : undefined,
           trustProfile: isAutomationSession ? "automation" : "interactive",
           journalKind: "prompt",
           onAskUser: makeAskHandler(sessionId),
@@ -3088,13 +3080,6 @@ async function runSessionPromptInner(
       reposNote: isAutomationSession
         ? undefined
         : await buildSessionNote(session, user),
-      // A human steering an automation-owned session still opens PRs under
-      // that automation's policy — keep its reviewer so a resumed turn's PR
-      // surfaces the same way the unattended run's would have.
-      prReviewer:
-        isAutomationSession && session.automationId
-          ? getAutomation(session.automationId)?.prReviewer
-          : undefined,
       deniedTools,
       publicationPolicy: session.automationDescendantPolicy
         ? {

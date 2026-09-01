@@ -52,6 +52,11 @@ import {
   type WsTimePref,
 } from "../../lib/workspace-time";
 import {
+  getSidebarSubagentsPref,
+  onSidebarSubagentsChanged,
+  setSidebarSubagentsPref,
+} from "../../lib/sidebar-subagents-pref";
+import {
   PLAIN_ID,
   SUPPORT_SURFACE_OPTIONS,
   setSupportSurface,
@@ -330,6 +335,14 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
   );
   const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
   useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
+  const [showSubagents, setShowSubagents] = useState(getSidebarSubagentsPref);
+  useEffect(
+    () =>
+      onSidebarSubagentsChanged(() =>
+        setShowSubagents(getSidebarSubagentsPref()),
+      ),
+    [],
+  );
 
   return (
     <>
@@ -414,6 +427,17 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
               onCheckedChange={(shown) =>
                 setFilter({ autoCreated: shown ? "show" : "hide" })
               }
+            />
+          }
+        />
+        <SettingRow
+          title="Show sub-agents"
+          desc="Nest worker sessions under the selected workspace."
+          control={
+            <Switch
+              aria-label="Show sub-agents"
+              checked={showSubagents}
+              onCheckedChange={setSidebarSubagentsPref}
             />
           }
         />

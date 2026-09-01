@@ -22,6 +22,8 @@ enum SidebarFeeds {
     /// sources the account can show is a different question, and the server
     /// answers it (`/api/feeds`, see `sources(known:hidden:)`).
     static let plain = "plain"
+    /// Product-facing name for the support queue. `plain` remains its wire id.
+    static let supportTitle = "Support"
 
     /// A source this instance offers, as `/api/feeds` describes it. A tolerant
     /// subset of the server's `FeedDescriptor`: the rest of that shape names

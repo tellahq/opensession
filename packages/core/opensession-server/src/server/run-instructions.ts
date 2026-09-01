@@ -155,7 +155,7 @@ export function buildRunInstructions(input: {
     );
     if (input.prReviewer) {
       parts.push(
-        `Request \`${input.prReviewer}\` on every PR. If that fails, mention it in the final response.`,
+        `For a PR this unattended automation creates, request \`${input.prReviewer}\` as reviewer. Never add this automatic reviewer to an existing PR or a human-steered PR. If the request fails, mention it in the final response.`,
       );
     }
   }

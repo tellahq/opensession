@@ -1182,7 +1182,7 @@ describe("local-tool path containment", () => {
     expect(() => assertContainedPiPath("/sys/kernel", realWs)).toThrow(
       /not accessible/,
     );
-    expect(() => assertContainedPiPath("/dev/stdin", realWs)).toThrow(
+    expect(() => assertContainedPiPath("/dev/null", realWs)).toThrow(
       /not accessible/,
     );
     expect(() =>

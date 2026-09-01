@@ -64,8 +64,7 @@ const DIFF_DEL = "font-semibold text-red";
 const FILE_ROW = "min-w-0 max-w-full";
 const FILE_HEADER =
   "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip rounded-md px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
-const FILE_BODY =
-  "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well";
+const FILE_BODY = "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg";
 // Sidebar Changes still pins filenames. Its canvas fill masks passing code;
 // the filename row draws its own edge only while pinned.
 const STICKY_FILE_HEADER =
@@ -76,12 +75,12 @@ const STICKY_FILE_HEADER_SURFACE =
 type DiffSurfaceStyle = React.CSSProperties & { "--diffs-bg": string };
 const DIFF_SURFACE_STYLE: Record<"light" | "dark", DiffSurfaceStyle> = {
   light: {
-    "--diffs-bg": "var(--code-well-light)",
-    backgroundColor: "var(--code-well-light)",
+    "--diffs-bg": "var(--review-code-light)",
+    backgroundColor: "var(--review-code-light)",
   },
   dark: {
-    "--diffs-bg": "var(--code-well-dark)",
-    backgroundColor: "var(--code-well-dark)",
+    "--diffs-bg": "var(--review-code-dark)",
+    backgroundColor: "var(--review-code-dark)",
   },
 };
 const FILE_TOGGLE =
@@ -903,7 +902,10 @@ export function CommentableDiff({ patch, options }: Props) {
           </div>
         </div>
         {(isOpen || resolved.length > 0) && (
-          <div className={cn(FILE_BODY, !stickyFileHeaders && "mx-2 mt-0.5")}>
+          <div
+            className={cn(FILE_BODY, !stickyFileHeaders && "mx-2 mt-0.5")}
+            style={DIFF_SURFACE_STYLE[theme]}
+          >
             {isOpen &&
               (imageSrcs && IMAGE_EXT.test(file.name) ? (
                 <ImageDiffRow file={file} srcs={imageSrcs(file)} />
@@ -987,7 +989,10 @@ export function CommentableDiff({ patch, options }: Props) {
   );
 
   return (
-    <div ref={setStickyRoot} className="flex flex-col gap-2.5">
+    <div
+      ref={setStickyRoot}
+      className={cn("flex flex-col", stickyFileHeaders ? "gap-2.5" : "gap-4")}
+    >
       {confirmation && (
         <div className="rounded-md bg-green-soft px-3 py-1.5 text-label font-semibold text-green">
           {confirmation}
@@ -1054,7 +1059,12 @@ export function CommentableDiff({ patch, options }: Props) {
                   )}
                 </button>
                 {!collapsed && (
-                  <div className="flex flex-col gap-[7px] border-l border-line pl-3">
+                  <div
+                    className={cn(
+                      "flex flex-col border-l border-line pl-3",
+                      stickyFileHeaders ? "gap-[7px]" : "gap-4",
+                    )}
+                  >
                     {group.indices.map((index) =>
                       renderFile(files[index], index),
                     )}

@@ -46,6 +46,16 @@ describe("sanitizeHtmlFragment allowed markup", () => {
     expect(html).toContain("</picture>");
   });
 
+  it("keeps the relative timestamp in Vercel deployment tables", () => {
+    expect(
+      sanitizeHtmlFragment(
+        '<relative-time datetime="2026-09-01T09:52:50.595Z">Sep 1, 2026 9:52am UTC</relative-time>',
+      ),
+    ).toBe(
+      '<relative-time datetime="2026-09-01T09:52:50.595Z">Sep 1, 2026 9:52am UTC</relative-time>',
+    );
+  });
+
   it("drops a srcset with an unsafe candidate", () => {
     expect(
       sanitizeHtmlFragment(
@@ -71,6 +81,9 @@ describe("sanitizeHtmlFragment untrusted markup", () => {
     ).toBe('&lt;iframe src="https://evil.test"&gt;&lt;/iframe&gt;');
     // A stray closing tag can't tear its way out of the container either.
     expect(sanitizeHtmlFragment("</section>")).toBe("&lt;/section&gt;");
+    expect(sanitizeHtmlFragment("<unsafe-widget>x</unsafe-widget>")).toBe(
+      "&lt;unsafe-widget&gt;x&lt;/unsafe-widget&gt;",
+    );
   });
 
   it("drops every attribute that is not allowed for the tag", () => {

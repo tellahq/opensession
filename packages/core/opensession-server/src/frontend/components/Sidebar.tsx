@@ -64,6 +64,10 @@ import {
 } from "../lib/sidebar-classes";
 import { mobileFilterBtn } from "../lib/app-header-classes";
 import {
+  getSidebarSubagentsPref,
+  onSidebarSubagentsChanged,
+} from "../lib/sidebar-subagents-pref";
+import {
   ASK_BAND,
   isAskWorkspace,
   isScratchWorkspace,
@@ -392,6 +396,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   const [hiddenTools, setHiddenTools] = useState(readHiddenSidebarTools);
   const [toolOrder, setToolOrderState] = useState(getSidebarToolOrder);
   const [hiddenFeeds, setHiddenFeeds] = useState(readHiddenSidebarFeeds);
+  const [showSubagents, setShowSubagents] = useState(getSidebarSubagentsPref);
   const {
     sidebarScrollRef,
     savedRepoOrder,
@@ -436,6 +441,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   );
   useEffect(
     () => onSidebarFeedsChanged(() => setHiddenFeeds(readHiddenSidebarFeeds())),
+    [],
+  );
+  useEffect(
+    () =>
+      onSidebarSubagentsChanged(() =>
+        setShowSubagents(getSidebarSubagentsPref()),
+      ),
     [],
   );
   // CSS has no interoperable :stuck selector. Track the shared sidebar
@@ -2288,13 +2300,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     // have no project, and they sit above the bands rather than in one), so
     // their rows carry a full status mark instead of the plain dot.
     const noSectionHeading = rowIsScratch(row);
-    const subagents = includeSubagents
-      ? subagentsForSelectedWorkspace(
-          subagentsByWorkspaceId,
-          row.workspace?.id,
-          selectedWorkspaceId,
-        )
-      : [];
+    const subagents =
+      includeSubagents && showSubagents
+        ? subagentsForSelectedWorkspace(
+            subagentsByWorkspaceId,
+            row.workspace?.id,
+            selectedWorkspaceId,
+          )
+        : [];
     const workspaceRow = (
       <div
         key={row.key}

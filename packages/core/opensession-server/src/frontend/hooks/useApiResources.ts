@@ -4,6 +4,7 @@ import {
   fetchDiff,
   fetchGitStatus,
   fetchPr,
+  fetchPrDiff,
   fetchSessionAssets,
   type SessionAssetFile,
   type WorkspaceOverview,
@@ -12,6 +13,7 @@ import { apiResourceSWRConfig, apiSWRKey } from "../lib/api-swr";
 import type {
   GitStatusInfo,
   PrDetails,
+  PrDiffResponse,
   SessionDiffResponse,
 } from "../lib/types";
 import {
@@ -52,6 +54,23 @@ export function useSessionPrResource(
   const resource = useSWR<PrDetails | null>(
     enabled ? apiSWRKey.sessionPr(sessionId, repo, branch) : null,
     () => fetchPr(sessionId, repo, branch),
+    apiResourceSWRConfig(refreshInterval, compare),
+  );
+  useRevisionRevalidation(revision, resource.mutate);
+  return resource;
+}
+
+/** The full PR patch is loaded only by surfaces that need to render its files. */
+export function useSessionPrDiffResource(
+  sessionId: string,
+  repo?: string,
+  branch?: string,
+  options: ApiResourceOptions<PrDiffResponse | null> = {},
+): SWRResponse<PrDiffResponse | null> {
+  const { enabled = true, refreshInterval = 0, revision, compare } = options;
+  const resource = useSWR<PrDiffResponse | null>(
+    enabled ? apiSWRKey.sessionPrDiff(sessionId, repo, branch) : null,
+    () => fetchPrDiff(sessionId, repo, branch),
     apiResourceSWRConfig(refreshInterval, compare),
   );
   useRevisionRevalidation(revision, resource.mutate);

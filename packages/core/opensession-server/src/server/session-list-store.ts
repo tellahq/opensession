@@ -238,6 +238,18 @@ export class SessionListStore {
     return decodeRows(rows);
   }
 
+  /** Every materialized member of one known workspace, live or archived. */
+  listWorkspaceMembers(workspaceId: string): UnifiedSession[] {
+    const rows = this.db
+      .query(`
+        SELECT payload FROM session_list
+        WHERE workspace_id = ?
+        ORDER BY last_activity_ms DESC
+      `)
+      .all(workspaceId) as StoredRow[];
+    return decodeRows(rows);
+  }
+
   listWorkspace(
     workspaceId: string,
     worktreeDir?: string | null,
@@ -362,6 +374,12 @@ export function indexedSidebarSessions(
   return store.hasCoverage("exclude")
     ? store.listSidebar(selectedSessionId)
     : null;
+}
+
+export function indexedWorkspaceMemberSessions(
+  workspaceId: string,
+): UnifiedSession[] {
+  return sessionListStore().listWorkspaceMembers(workspaceId);
 }
 
 export function indexedWorkspaceSessions(

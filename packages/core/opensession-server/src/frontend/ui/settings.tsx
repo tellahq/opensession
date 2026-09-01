@@ -266,10 +266,10 @@ export function SettingsSection({
 
 /**
  * One setting: its label and description on the left, its control on the
- * right. On a narrow screen the control drops to its own line instead of
- * squeezing the label into a two-word column — `flex-wrap` plus the text's
- * min width is what decides that, and the control's `ml-auto` keeps it
- * right-aligned once it lands there.
+ * right. On a phone, text keeps at least 45% of the row and controls cap at
+ * 50%, leaving room for the gap. Compact controls stay beside the text while
+ * wider controls truncate or wrap within their side instead of taking a new
+ * row.
  *
  * Rows are centered, which is right while the text is a title and one line of
  * description. A row that grows past that (an account with usage bars) should
@@ -298,7 +298,7 @@ export function SettingRowText({
 }: React.ComponentPropsWithoutRef<"div">) {
   return (
     <div
-      className={cn("min-w-0 flex-1 max-sm:min-w-[55%]", className)}
+      className={cn("min-w-0 flex-1 phone:min-w-[45%]", className)}
       {...props}
     />
   );
@@ -337,7 +337,15 @@ export function SettingRowControl({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  return <div className={cn("ml-auto shrink-0", className)} {...props} />;
+  return (
+    <div
+      className={cn(
+        "ml-auto shrink-0 phone:max-w-[50%] phone:[&>*]:max-w-full",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 /**

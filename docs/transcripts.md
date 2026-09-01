@@ -111,11 +111,13 @@ non-`plain-` sessions whose store is current and whose running process is owned
 by Open Session:
 
 - **Initial snapshot:** `transcript_init` has a floor of the latest 132 entries.
-  It extends backward until it includes four user/assistant messages and, when
+  It extends backward until it includes 100 user/assistant messages and, when
   tool work is present, at least one user boundary. Extension stops at 1,400
-  rows or an estimated 850,000 wire bytes. Ordinary opening content is clamped
-  to 8,192 characters; folded tool results and intermediate assistant notes
-  get 512-character previews.
+  rows or an estimated 850,000 uncompressed wire bytes. Ordinary opening
+  content is clamped to the 6,000 characters the web client can render eagerly;
+  folded tool results and intermediate assistant notes get 256-character
+  previews. Large transcript frames use WebSocket per-message deflate when the
+  client negotiates it, with a shared server compressor to bound memory.
 - **Index:** web clients advertising `supportsTranscriptIndex` receive a
   complete content-free `transcript_index` after the snapshot. It gives the
   virtualizer the full scroll range without downloading every message.

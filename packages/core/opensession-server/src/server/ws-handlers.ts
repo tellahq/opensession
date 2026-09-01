@@ -321,6 +321,13 @@ function classifyV2Entries(entries: SeqEntry[]): SeqEntry[] {
   return prepareEntriesForWire(entries) as SeqEntry[];
 }
 
+function sendTranscriptFrame(
+  ws: { send(payload: string, compress?: boolean): unknown },
+  frame: Record<string, unknown>,
+): void {
+  ws.send(JSON.stringify(frame), true);
+}
+
 async function sendTranscriptIndex(
   ws: any,
   sessionId: string,
@@ -328,13 +335,11 @@ async function sendTranscriptIndex(
 ): Promise<void> {
   const index = await transcript.readTranscriptIndex(sessionId);
   if (!isCurrent()) return;
-  ws.send(
-    JSON.stringify({
-      type: "transcript_index",
-      sessionId,
-      ...index,
-    }),
-  );
+  sendTranscriptFrame(ws, {
+    type: "transcript_index",
+    sessionId,
+    ...index,
+  });
 }
 
 /**
@@ -542,6 +547,10 @@ const kernelDispatchResults = new Map<string, unknown>();
 const kernelDispatchErrors = new Map<string, Error>();
 
 export const websocketHandlers: WebSocketHandler<WSClientData> = {
+  // One shared compressor keeps connection memory bounded. Only large
+  // transcript frames opt into compression at send sites; small live frames
+  // stay uncompressed to avoid spending CPU for negligible wire savings.
+  perMessageDeflate: { compress: "shared", decompress: "shared" },
   // Default is 16 MB — too small for a base64'd attachment near MAX_UPLOAD_BYTES,
   // which would otherwise drop the frame (close 1009) before staging. See above.
   maxPayloadLength: WS_MAX_PAYLOAD_BYTES,
@@ -1059,20 +1068,18 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               startOffset = 0;
             }
           }
-          ws.send(
-            JSON.stringify({
-              type: "transcript_init",
-              sessionId,
-              entries: entriesForWire(entries, INIT_WIRE_CLAMP_BYTES),
-              truncated,
-              startOffset,
-              // Resume cursor (see the sinceOffset branch above): where this
-              // snapshot ends in the mirror file, and which file that was.
-              ...(session.transcriptPath
-                ? { endOffset, rev: transcriptRev(session.transcriptPath) }
-                : {}),
-            }),
-          );
+          sendTranscriptFrame(ws, {
+            type: "transcript_init",
+            sessionId,
+            entries: entriesForWire(entries, INIT_WIRE_CLAMP_BYTES),
+            truncated,
+            startOffset,
+            // Resume cursor (see the sinceOffset branch above): where this
+            // snapshot ends in the mirror file, and which file that was.
+            ...(session.transcriptPath
+              ? { endOffset, rev: transcriptRev(session.transcriptPath) }
+              : {}),
+          });
 
           // Start file watcher from where the tail parse left off — bytes
           // appended between the parse and the watch would otherwise be lost.
@@ -1139,20 +1146,18 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               afterSeq,
               TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
             );
-            ws.send(
-              JSON.stringify({
-                type: "transcript_range",
-                sessionId: msg.sessionId,
-                requestId: msg.requestId,
-                entries: clampV2InitEntries(classifyV2Entries(page.entries)),
-                firstSeq: page.firstSeq,
-                lastSeq: page.lastSeq,
-                coveredThroughSeq: page.coveredThroughSeq,
-                complete: page.complete,
-                epoch: await transcript.getLastResetChangeSeq(msg.sessionId),
-                lastChangeSeq: await transcript.getLastChangeSeq(msg.sessionId),
-              }),
-            );
+            sendTranscriptFrame(ws, {
+              type: "transcript_range",
+              sessionId: msg.sessionId,
+              requestId: msg.requestId,
+              entries: clampV2InitEntries(classifyV2Entries(page.entries)),
+              firstSeq: page.firstSeq,
+              lastSeq: page.lastSeq,
+              coveredThroughSeq: page.coveredThroughSeq,
+              complete: page.complete,
+              epoch: await transcript.getLastResetChangeSeq(msg.sessionId),
+              lastChangeSeq: await transcript.getLastChangeSeq(msg.sessionId),
+            });
           } catch (error) {
             console.warn(
               `[ws] transcript range failed for ${msg.sessionId}:`,
@@ -1179,25 +1184,23 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               // "Jump to the start" walks the entire backlog, so it asks for
               // fatter pages: fewer round trips, and — the real cost — fewer
               // whole-transcript reconciliations per entry recovered. Capped
-              // because each entry is only clamped to 8KB on the wire.
+              // because each visible entry can still carry 6KB on the wire.
               const page = await transcript.readBefore(
                 msg.sessionId,
                 Math.floor(msg.beforeSeq),
                 Math.min(Math.max(1, Math.floor(msg.limit ?? 40)), 200),
               );
-              ws.send(
-                JSON.stringify({
-                  type: "transcript_history",
-                  sessionId: msg.sessionId,
-                  // Backlog pages take the same init clamp as legacy history
-                  // pages (see clampV2InitEntries).
-                  entries: clampV2InitEntries(classifyV2Entries(page.entries)),
-                  firstSeq: page.firstSeq,
-                  lastSeq: page.lastSeq,
-                  truncated: page.firstSeq > 1,
-                  v2: true,
-                }),
-              );
+              sendTranscriptFrame(ws, {
+                type: "transcript_history",
+                sessionId: msg.sessionId,
+                // Backlog pages take the same init clamp as legacy history
+                // pages (see clampV2InitEntries).
+                entries: clampV2InitEntries(classifyV2Entries(page.entries)),
+                firstSeq: page.firstSeq,
+                lastSeq: page.lastSeq,
+                truncated: page.firstSeq > 1,
+                v2: true,
+              });
               break;
             } catch (e) {
               console.warn(
@@ -1210,16 +1213,14 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
           if (!session?.transcriptPath) {
             // Same no-mirror-file state as the watch fallback: serve the merged
             // cross-engine history rather than blanking the client's view.
-            ws.send(
-              JSON.stringify({
-                type: "transcript_init",
-                sessionId: msg.sessionId,
-                entries: session
-                  ? entriesForWire(await mergedSessionTranscriptAsync(session))
-                  : [],
-                truncated: false,
-              }),
-            );
+            sendTranscriptFrame(ws, {
+              type: "transcript_init",
+              sessionId: msg.sessionId,
+              entries: session
+                ? entriesForWire(await mergedSessionTranscriptAsync(session))
+                : [],
+              truncated: false,
+            });
             return;
           }
           const before =
@@ -1242,30 +1243,26 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               before > fileSize
             ) {
               if (fileSize === null) {
-                ws.send(
-                  JSON.stringify({
-                    type: "transcript_init",
-                    sessionId: msg.sessionId,
-                    entries: entriesForWire(
-                      await mergedSessionTranscriptAsync(session),
-                    ),
-                    truncated: false,
-                  }),
-                );
+                sendTranscriptFrame(ws, {
+                  type: "transcript_init",
+                  sessionId: msg.sessionId,
+                  entries: entriesForWire(
+                    await mergedSessionTranscriptAsync(session),
+                  ),
+                  truncated: false,
+                });
                 break;
               }
               const tail = parseTranscriptTail(session.transcriptPath);
-              ws.send(
-                JSON.stringify({
-                  type: "transcript_init",
-                  sessionId: msg.sessionId,
-                  entries: entriesForWire(tail.entries, INIT_WIRE_CLAMP_BYTES),
-                  truncated: tail.truncated,
-                  startOffset: tail.startOffset,
-                  endOffset: tail.endOffset,
-                  rev,
-                }),
-              );
+              sendTranscriptFrame(ws, {
+                type: "transcript_init",
+                sessionId: msg.sessionId,
+                entries: entriesForWire(tail.entries, INIT_WIRE_CLAMP_BYTES),
+                truncated: tail.truncated,
+                startOffset: tail.startOffset,
+                endOffset: tail.endOffset,
+                rev,
+              });
               break;
             }
             // ~40 entries per page; the 1MB soft window cap bounds the server
@@ -1280,26 +1277,22 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               40,
               1024 * 1024,
             );
-            ws.send(
-              JSON.stringify({
-                type: "transcript_history",
-                sessionId: msg.sessionId,
-                entries: entriesForWire(page.entries, INIT_WIRE_CLAMP_BYTES),
-                truncated: page.truncated,
-                startOffset: page.startOffset,
-              }),
-            );
+            sendTranscriptFrame(ws, {
+              type: "transcript_history",
+              sessionId: msg.sessionId,
+              entries: entriesForWire(page.entries, INIT_WIRE_CLAMP_BYTES),
+              truncated: page.truncated,
+              startOffset: page.startOffset,
+            });
             break;
           }
           const entries = await parseTranscriptAsync(session.transcriptPath);
-          ws.send(
-            JSON.stringify({
-              type: "transcript_init",
-              sessionId: msg.sessionId,
-              entries: entriesForWire(entries),
-              truncated: false,
-            }),
-          );
+          sendTranscriptFrame(ws, {
+            type: "transcript_init",
+            sessionId: msg.sessionId,
+            entries: entriesForWire(entries),
+            truncated: false,
+          });
           break;
         }
 

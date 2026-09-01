@@ -28,6 +28,24 @@ printf 'Running %d unit-test files in isolated processes (%d at a time)\n' \
 # A developer's service shell may carry runtime bypasses used by previews or
 # snapshot fixtures. Unit files that test the default executor and run-host
 # policy must not inherit those process-wide overrides.
+#
+# The required CI gate is sequential. Run it without xargs: GNU xargs collapses
+# any child status from 1 through 125 into exit 123, and has repeatedly hidden
+# the responsible filename behind an otherwise all-green Bun report.
+if [[ "$jobs" == "1" ]]; then
+  failed=0
+  while IFS= read -r -d '' test_file; do
+    if ! env \
+      -u OPENSESSION_EXECUTOR \
+      -u OPENSESSION_TEST_IN_PROCESS_RUNS \
+      bun test --no-orphans --reporter dots "$test_file"; then
+      echo "Unit test failed: $test_file" >&2
+      failed=1
+    fi
+  done < <(find_tests)
+  exit "$failed"
+fi
+
 find_tests | xargs -0 -n 1 -P "$jobs" env \
   -u OPENSESSION_EXECUTOR \
   -u OPENSESSION_TEST_IN_PROCESS_RUNS \

@@ -366,6 +366,10 @@
   --code-well-light: #f6f8fa;
   --code-well-dark: #0d0f13;
   --code-well: var(--code-well-dark);
+  /* Review code can pin the opposite scheme from the app. Keep both app-base
+     surfaces available so either pinned scheme matches its surrounding chrome. */
+  --review-code-light: #ffffff;
+  --review-code-dark: #1c1c1c;
   --code-well-line: rgba(255, 255, 255, 0.06);
   --code-well-ink: #b6bcc8;
   --code-well-gutter: #565d6b;

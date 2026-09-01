@@ -233,8 +233,9 @@ neither `GH_TOKEN` nor `GITHUB_TOKEN`. Only interactive trusted runs and the
 dedicated `github-*` code workflows receive a user or repository-scoped App
 credential. An ordinary automation therefore cannot push or open a GitHub PR.
 Its optional `prReviewer` value is validated, preserved across resume, and
-added to the run instructions, but it grants no GitHub authority. Do not rely
-on it to publish or surface automation work.
+added to unattended run instructions, but it grants no GitHub authority. The
+reviewer is not added to existing PRs or PRs created from human-steered turns.
+Do not rely on this setting to publish or surface automation work.
 
 For a PR created by an authorized path, request a GitHub login or `org/team`
 reviewer directly. The reviewer must be a repository collaborator; a requested
