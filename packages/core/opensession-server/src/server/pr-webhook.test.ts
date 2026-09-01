@@ -1,10 +1,25 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   reviewerRemovalClearsSessionRequest,
   sandboxEnvironmentInvalidationNeeded,
 } from "./pr-webhook";
+import { __setIdentitiesForTest } from "./shared/user-mappings";
 
 describe("review request webhook sync", () => {
+  let restoreIdentities: (() => void) | undefined;
+
+  beforeAll(() => {
+    restoreIdentities = __setIdentitiesForTest([
+      {
+        name: "Kent de Bruin",
+        email: "kent@example.test",
+        aliases: ["kent"],
+        github: "kentdebruin",
+      },
+    ]);
+  });
+  afterAll(() => restoreIdentities?.());
+
   test("clears a mirrored person request when GitHub removes it", () => {
     expect(
       reviewerRemovalClearsSessionRequest(
