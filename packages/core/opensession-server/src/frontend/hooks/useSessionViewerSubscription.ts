@@ -17,6 +17,11 @@ import {
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
 import type { SessionRuntimeAction } from "../lib/session-runtime";
 import { shouldContinueHistoryReveal } from "../lib/transcript-history";
+import type {
+  HistoryWalk,
+  TranscriptCursor,
+  TranscriptSequence,
+} from "../lib/transcript-history-controller";
 import type { TranscriptViewStore } from "../lib/transcript-view-store";
 import type {
   TranscriptEntry,
@@ -34,22 +39,6 @@ import type {
 import type { TranscriptController } from "./useTranscript";
 
 type Setter<T> = Dispatch<SetStateAction<T>>;
-type TranscriptCursor = {
-  sessionId: string;
-  rev: string;
-  offset: number;
-};
-type TranscriptSequence = {
-  sessionId: string;
-  lastSeq: number;
-  firstSeq: number | null;
-  lastChangeSeq: number;
-};
-type HistoryWalk = {
-  sessionId: string;
-  loaded: number;
-  cursor: number | null;
-};
 type ComposerPrefill = {
   seq: number;
   text: string;

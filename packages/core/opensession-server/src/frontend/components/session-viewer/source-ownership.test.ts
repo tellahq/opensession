@@ -19,6 +19,8 @@ test("SessionViewer decomposition files stay below the source line limit", async
     "hooks/useSessionViewerSubscription.ts",
     "hooks/useSessionModelWorkflowController.ts",
     "hooks/useSessionRuntimeController.ts",
+    "hooks/useTranscriptHistoryController.ts",
+    "lib/transcript-history-controller.ts",
     "components/session/SessionPreviewSurface.tsx",
     "components/session-viewer/shell-timing.ts",
     "lib/session-viewer-constants.ts",

@@ -1,18 +1,27 @@
 import { expect, test } from "bun:test";
 import { readFollowingLive } from "./transcript-anchor";
 
-const [viewer, subscriptionHook, transcriptView, transcriptHook, constants] =
-  await Promise.all([
-    Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text(),
-    Bun.file(
-      new URL("../../hooks/useSessionViewerSubscription.ts", import.meta.url),
-    ).text(),
-    Bun.file(new URL("../session/TranscriptView.tsx", import.meta.url)).text(),
-    Bun.file(new URL("../../hooks/useTranscript.ts", import.meta.url)).text(),
-    Bun.file(
-      new URL("../../lib/session-viewer-constants.ts", import.meta.url),
-    ).text(),
-  ]);
+const [
+  viewer,
+  subscriptionHook,
+  transcriptView,
+  transcriptHook,
+  constants,
+  historyController,
+] = await Promise.all([
+  Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text(),
+  Bun.file(
+    new URL("../../hooks/useSessionViewerSubscription.ts", import.meta.url),
+  ).text(),
+  Bun.file(new URL("../session/TranscriptView.tsx", import.meta.url)).text(),
+  Bun.file(new URL("../../hooks/useTranscript.ts", import.meta.url)).text(),
+  Bun.file(
+    new URL("../../lib/session-viewer-constants.ts", import.meta.url),
+  ).text(),
+  Bun.file(
+    new URL("../../hooks/useTranscriptHistoryController.ts", import.meta.url),
+  ).text(),
+]);
 
 test("fresh transcript ranges reaffirm a cached reader's live edge", () => {
   expect(transcriptHook).toContain("settledIndexRef.current = index");
@@ -105,6 +114,31 @@ test("answering an ask follows the response after the ask card disappears", () =
   expect(askCard).toContain("cancelIndexAnchorHold()");
   expect(askCard).toContain('scrollToLatest("auto")');
   expect(contentLayoutEffect).toContain("pending, ask, relayout");
+});
+
+test("SessionViewer delegates transcript history ownership without moving callback wrappers", () => {
+  const controllerCall = viewer.indexOf("useTranscriptHistoryController({");
+  const transcriptCall = viewer.indexOf("useTranscript({");
+  expect(controllerCall).toBeGreaterThanOrEqual(0);
+  expect(controllerCall).toBeLessThan(transcriptCall);
+  expect(viewer.match(/useTranscriptHistoryController\(/g)).toHaveLength(1);
+  expect(historyController).toContain(
+    "const transcriptReadySessionRef = useRef",
+  );
+  expect(historyController).toContain("const historyHoldRef = useRef");
+  expect(historyController).toContain("const hiddenSnapRef = useRef");
+  expect(historyController).toContain(
+    "const historyGestureUntilRef = useRef(0)",
+  );
+
+  const scrollCallback = viewer.match(
+    /const handleMessagesScroll = useCallback\([\s\S]*?\n  \]\);/,
+  )?.[0];
+  expect(scrollCallback).toContain("handleTranscriptHistoryScroll(");
+  expect(historyController).toContain("shouldConsumeHistoryGesture({");
+  expect(scrollCallback).toContain(
+    "followingLive,\n    loadEarlierHistory,\n    messagesRef,",
+  );
 });
 
 test("the stable callback reads current live-edge intent when it runs", () => {
