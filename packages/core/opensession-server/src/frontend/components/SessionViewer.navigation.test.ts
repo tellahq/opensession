@@ -131,8 +131,8 @@ test("duplicate session stays available at the current tip inside a workspace", 
   expect(viewer).toContain('<span className="grow">Duplicate session</span>');
   expect(viewer).not.toContain("{!workspaceScopedMenu && forkAction}");
   expect(viewer).toContain("                handleFork();");
+  expect(viewer).toContain("void navigation.duplicateSession();");
   expect(viewer).not.toContain("const lastAssistantId = entries.findLast(");
-  expect(viewer).toContain('{ kind: "tip" }');
   expect(viewer).toContain("? { messageId: forkFrom.messageId }");
 });
 

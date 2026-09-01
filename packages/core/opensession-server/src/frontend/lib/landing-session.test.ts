@@ -30,6 +30,11 @@ describe("sessionNeverRan", () => {
   test("false once the session has run a turn", () => {
     expect(sessionNeverRan(session({ ran: true }))).toBe(false);
   });
+  test("false when the tab contains a duplicated chat", () => {
+    expect(
+      sessionNeverRan(session({ duplicatedFromSessionId: "bks-source" })),
+    ).toBe(false);
+  });
   test("false while running or queued", () => {
     expect(sessionNeverRan(session({ isRunning: true }))).toBe(false);
     expect(sessionNeverRan(session({ queuedCount: 1 }))).toBe(false);

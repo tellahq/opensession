@@ -620,6 +620,7 @@ struct SessionsListView: View {
                     onSaveComposerDraft: { draft in
                         saveComposerDraft(draft, for: archivedSession.id)
                     },
+                    onForkCreated: openFork,
                     onRestoreArchivedSession: { archived in
                         let restored = await restoreArchived(archived)
                         openedArchivedSession = nil
@@ -649,6 +650,7 @@ struct SessionsListView: View {
                     onSaveComposerDraft: { draft in
                         saveComposerDraft(draft, for: session.id)
                     },
+                    onForkCreated: openFork,
                     onRestoreArchivedSession: { archived in
                         let restored = await restoreArchived(archived)
                         openedArchivedSession = nil
@@ -2181,6 +2183,7 @@ struct SessionsListView: View {
                     return nil
                 },
                 onNextChat: nextChatAction(after: session),
+                onForkCreated: openFork,
                 onRenameWorkspace: { name in
                     guard let workspace = workspace(containing: session) else { return }
                     viewModel.rename(workspace, to: name)
@@ -2205,6 +2208,23 @@ struct SessionsListView: View {
         }
     }
     #endif
+
+    @MainActor
+    private func openFork(_ id: String) async {
+        do {
+            let session = try await OS1API.session(id: id)
+            await viewModel.refresh()
+            #if os(iOS)
+            path.append(session)
+            #else
+            openedArchivedSession = nil
+            selectedSessionID = session.id
+            #endif
+        } catch {
+            createErrorTitle = "Couldn't open fork"
+            createError = error.localizedDescription
+        }
+    }
 
     /// A scoped history row is deliberately slim. Restore the whole session so
     /// selecting it immediately has its model, walkthrough and PR rather than

@@ -41,6 +41,7 @@ export function workspaceLandingReady(
  */
 export function sessionNeverRan(s: UnifiedSession): boolean {
   return (
+    !s.duplicatedFromSessionId &&
     !s.ran &&
     !s.isRunning &&
     !(s.queuedCount && s.queuedCount > 0) &&

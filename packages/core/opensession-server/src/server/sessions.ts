@@ -892,6 +892,7 @@ function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
   const archived = !!data.archived || isArchivedId(data.id);
   return {
     id: data.id,
+    duplicatedFromSessionId: data.duplicatedFromSessionId,
     claudeSessionId: data.claudeSessionId,
     source: "opensession",
     branch: data.branch || null,

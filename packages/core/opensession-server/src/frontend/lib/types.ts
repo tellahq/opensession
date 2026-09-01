@@ -345,6 +345,8 @@ export interface SessionSafetyState {
 
 export interface UnifiedSession {
   id: string;
+  /** Source chat copied into this session before its first turn. */
+  duplicatedFromSessionId?: string;
   /** Historical marker retained while old session files age out. */
   local?: boolean;
   /**

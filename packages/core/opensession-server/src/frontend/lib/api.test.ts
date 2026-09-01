@@ -221,4 +221,12 @@ test("new workspace tabs create an idle sibling session", async () => {
     mode: "share",
     clientSessionId,
   });
+
+  await newSessionApi("bks-source", "Kent", "share", clientSessionId, true);
+  expect(JSON.parse(String(init?.body))).toEqual({
+    user: "Kent",
+    mode: "share",
+    clientSessionId,
+    duplicate: true,
+  });
 });

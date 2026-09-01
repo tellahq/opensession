@@ -3605,9 +3605,16 @@ export function SessionViewer({
   // still fork as a new sibling with a transcript handoff.
   const canForkSession = session.source === "opensession" && !!session.ran;
 
-  const handleFork = useCallback((messageId?: string) => {
-    setForkFrom(messageId ? { kind: "message", messageId } : { kind: "tip" });
-  }, []);
+  const handleFork = useCallback(
+    (messageId?: string) => {
+      if (!messageId) {
+        void navigation.duplicateSession();
+        return;
+      }
+      setForkFrom({ kind: "message", messageId });
+    },
+    [navigation],
+  );
 
   // "Continue" under a failed run's notice. An ordinary prompt, so it steers,
   // notices and broadcasts like anything else a person sends — the failure

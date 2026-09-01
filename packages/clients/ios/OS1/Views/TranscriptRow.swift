@@ -28,6 +28,7 @@ struct TranscriptRow: View {
     var onDeleteUnsent: ((Outbox.Item) -> Void)?
     var onEditNote: ((SessionNote, String) async throws -> Void)?
     var onDeleteNote: ((SessionNote) async throws -> Void)?
+    var onForkMessage: ((TranscriptEntry) -> Void)?
     var failureContinuation: FailureContinuationAction? = nil
 
     var body: some View {
@@ -58,7 +59,8 @@ struct TranscriptRow: View {
                     outbox: outbox,
                     onEdit: onEditMessage,
                     onEditUnsent: onEditUnsent,
-                    onDeleteUnsent: onDeleteUnsent
+                    onDeleteUnsent: onDeleteUnsent,
+                    onFork: onForkMessage
                 )
             } else if entry.isAssistant, entry.isReasoning == true {
                 ReasoningSummaryRow(entry: entry, isActive: isActiveReasoning)
@@ -66,7 +68,8 @@ struct TranscriptRow: View {
                 AssistantMessage(
                     entry: entry,
                     sessionId: sessionId,
-                    state: expansionState("body-\(entry.id)", false)
+                    state: expansionState("body-\(entry.id)", false),
+                    onFork: onForkMessage
                 )
             } else {
                 // A system entry from a server too old to classify it.
@@ -331,6 +334,7 @@ struct UserBubble: View {
     var onEdit: ((TranscriptEntry) -> Void)?
     var onEditUnsent: ((Outbox.Item) -> Void)?
     var onDeleteUnsent: ((Outbox.Item) -> Void)?
+    var onFork: ((TranscriptEntry) -> Void)? = nil
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -421,6 +425,13 @@ struct UserBubble: View {
                                     onEdit(entry)
                                 } label: {
                                     Label("Edit and send again", systemImage: "square.and.pencil")
+                                }
+                            }
+                            if outboxItem == nil, let onFork {
+                                Button {
+                                    onFork(entry)
+                                } label: {
+                                    Label("Fork from here", systemImage: "arrow.triangle.branch")
                                 }
                             }
                             TimestampLabel(date: entry.timestampDate)
@@ -607,6 +618,7 @@ struct AssistantMessage: View {
     let entry: TranscriptEntry
     let sessionId: String
     let state: TurnFoldState
+    var onFork: ((TranscriptEntry) -> Void)? = nil
 
     /// Markdown parsing is superlinear, so only this much is parsed up front;
     /// the rest waits behind an explicit tap. Phones are the constrained end
@@ -651,6 +663,13 @@ struct AssistantMessage: View {
                 copyToPasteboard(fullText ?? entry.text)
             } label: {
                 Label("Copy message", systemImage: "doc.on.doc")
+            }
+            if let onFork {
+                Button {
+                    onFork(entry)
+                } label: {
+                    Label("Fork from here", systemImage: "arrow.triangle.branch")
+                }
             }
             TimestampLabel(date: entry.timestampDate)
             if let model = entry.model, !model.isEmpty {

@@ -368,6 +368,7 @@ export async function newSessionApi(
   user: string,
   mode?: "share" | "stack" | "ask",
   clientSessionId?: string,
+  duplicate = false,
 ): Promise<{ id: string; session: UnifiedSession | null }> {
   const body = await request<{ id: string; session?: UnifiedSession }>(
     `/sessions/${encodeURIComponent(sourceId)}/new-session`,
@@ -377,6 +378,7 @@ export async function newSessionApi(
         user,
         ...(mode ? { mode } : {}),
         ...(clientSessionId ? { clientSessionId } : {}),
+        ...(duplicate ? { duplicate: true } : {}),
       },
     },
   );

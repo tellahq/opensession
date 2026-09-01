@@ -134,7 +134,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   directly above the composer when the keyboard opens. The actions menu carries
   worktree details, the pull request panel, Add to sidebar when needed, rename,
   share, hide or restore, and archive, matching the sidebar row's long-press
-  menu. A bounded cache keeps
+  menu. Completed native sessions can also fork from the current transcript tip
+  or a message menu; the composer names the source and opens the new session
+  after creation. A bounded cache keeps
   recently visited conversations loaded while their
   off-screen sockets remain disconnected, so returning to a page does not show
   a loading screen. Fenced Markdown, expanded tool inputs and code assets use

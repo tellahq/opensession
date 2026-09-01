@@ -39,6 +39,7 @@ import {
   buildEngineSwitchHandoffNote,
 } from "./fork-handoff";
 import { getGitStatus, gitPush } from "./git-status";
+import { duplicateContextSessionIds } from "./session-duplicate";
 import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
 import { parseTranscriptAsync } from "./jsonl-parser";
 import {
@@ -2696,7 +2697,10 @@ async function runSessionPromptInner(
   // their prompts are untrusted text.
   const inlinedSessionIds = new Set<string>();
   if (!session.automation) {
-    const attachedIds = [...new Set(contextSessions ?? [])];
+    const attachedIds = duplicateContextSessionIds(
+      session,
+      contextSessions ?? [],
+    );
     const attachedSessions = attachedIds
       .filter((id) => id !== sessionId)
       .map((id) => findSession(id))
@@ -2712,11 +2716,9 @@ async function runSessionPromptInner(
         id: s.id,
         title: s.title,
         model: s.model,
-        // Async: an attached session's transcript can be multi-MB — the
-        // sync parse held the event loop for the whole read.
-        entries: s.transcriptPath
-          ? await parseTranscriptAsync(s.transcriptPath)
-          : [],
+        // Async: an attached session's transcript can be multi-MB. Read the
+        // actor-owned transcript first, with the legacy file fallback.
+        entries: await mergedSessionTranscriptAsync(s),
       });
     }
     for (const c of attachedDigests) inlinedSessionIds.add(c.id);

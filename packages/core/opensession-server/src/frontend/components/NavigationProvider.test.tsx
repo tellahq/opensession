@@ -35,6 +35,7 @@ function navigationFixture(openPrs: () => void): NavigationActions {
     openNewSessionInRepo() {},
     openDraft() {},
     async openNewSessionInWorkspace() {},
+    async duplicateSession() {},
     startNewChat() {},
     openPrefilledSession() {},
     openReview() {},

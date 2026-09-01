@@ -1001,6 +1001,7 @@ export async function handleSessionsRoutes(
       user?: unknown;
       workspaceId?: unknown;
       sandbox?: unknown;
+      forkFrom?: unknown;
       requestId?: unknown;
       clientId?: unknown;
     } | null;
@@ -1029,11 +1030,39 @@ export async function handleSessionsRoutes(
         : body?.mode === "scratch"
           ? ("scratch" as const)
           : ("ask" as const);
+    let forkFrom: { sourceId: string; messageId?: string } | undefined;
+    if (body?.forkFrom !== undefined) {
+      const candidate = body.forkFrom;
+      if (
+        !candidate ||
+        typeof candidate !== "object" ||
+        Array.isArray(candidate) ||
+        !("sourceId" in candidate) ||
+        typeof candidate.sourceId !== "string" ||
+        !candidate.sourceId.trim()
+      ) {
+        return Response.json({ error: "invalid forkFrom" }, { status: 400 });
+      }
+      const messageId =
+        "messageId" in candidate ? candidate.messageId : undefined;
+      if (
+        messageId !== undefined &&
+        (typeof messageId !== "string" || !messageId.trim())
+      ) {
+        return Response.json({ error: "invalid forkFrom" }, { status: 400 });
+      }
+      forkFrom = {
+        sourceId: candidate.sourceId.trim(),
+        ...(typeof messageId === "string"
+          ? { messageId: messageId.trim() }
+          : {}),
+      };
+    }
     let branch = typeof body?.branch === "string" ? body.branch.trim() : "";
     const joinsWorktree = !!(
       workspaceId && getWorkspace(workspaceId)?.worktreeDir
     );
-    if (mode === "code" && !branch && !joinsWorktree) {
+    if (!forkFrom && mode === "code" && !branch && !joinsWorktree) {
       const attachmentName =
         typeof (files?.[0] as { name?: unknown } | undefined)?.name === "string"
           ? String((files?.[0] as { name: string }).name)
@@ -1066,6 +1095,7 @@ export async function handleSessionsRoutes(
         mode,
         ...(mode === "code" && branch ? { branch } : {}),
         ...(workspaceId ? { workspaceId } : {}),
+        ...(forkFrom ? { forkFrom } : {}),
         ...nativeCreateRepoOptions(mode, body?.repo),
         ...(typeof body?.model === "string" && body.model
           ? { model: body.model }

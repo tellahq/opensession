@@ -576,6 +576,55 @@ describe("nativeCreateRepoOptions", () => {
   });
 });
 
+describe("native session fork create", () => {
+  const previousControl = tryGetSessionControl();
+  afterEach(() => registerSessionControl(previousControl as SessionControl));
+
+  async function create(forkFrom: unknown): Promise<CreateSessionOpts[]> {
+    const created: CreateSessionOpts[] = [];
+    registerSessionControl({
+      createSession: async (input: CreateSessionOpts) => {
+        created.push(input);
+        return { id: "os-fork", createdBy: "Ada", createdAt: "now" };
+      },
+    } as unknown as SessionControl);
+    const path = "/api/sessions";
+    const url = new URL(`http://localhost${path}`);
+    const response = await handleSessionsRoutes({
+      req: new Request(url, {
+        method: "POST",
+        body: JSON.stringify({
+          prompt: "Try another direction",
+          mode: "ask",
+          forkFrom,
+          user: "Ada",
+        }),
+      }),
+      url,
+      path,
+      publicPrefix: "",
+    });
+    expect(response?.status).toBe(200);
+    return created;
+  }
+
+  test("carries a tip fork payload", async () => {
+    const created = await create({ sourceId: "os-source" });
+    expect(created[0]?.forkFrom).toEqual({ sourceId: "os-source" });
+  });
+
+  test("carries a message fork payload", async () => {
+    const created = await create({
+      sourceId: "os-source",
+      messageId: "msg-42",
+    });
+    expect(created[0]?.forkFrom).toEqual({
+      sourceId: "os-source",
+      messageId: "msg-42",
+    });
+  });
+});
+
 describe("native session create attachments", () => {
   const previousControl = tryGetSessionControl();
   afterEach(() => registerSessionControl(previousControl as SessionControl));

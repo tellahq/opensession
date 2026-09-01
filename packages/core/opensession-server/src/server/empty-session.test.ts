@@ -25,6 +25,11 @@ describe("isReusableEmptySession", () => {
     expect(isReusableEmptySession(session({ isRunning: true }))).toBe(false);
     expect(
       isReusableEmptySession(
+        session({ duplicatedFromSessionId: "bks-source" }),
+      ),
+    ).toBe(false);
+    expect(
+      isReusableEmptySession(
         session({ lastActivity: "2026-08-21T12:00:01.000Z" }),
       ),
     ).toBe(false);

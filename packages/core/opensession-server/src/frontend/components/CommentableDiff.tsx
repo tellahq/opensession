@@ -52,6 +52,7 @@ import { errorMessage } from "../lib/error-message";
 import { useStickyEdges } from "../hooks/useStickyEdges";
 import { UserAvatar } from "./UserAvatar";
 import { ExtBadge, fileExt } from "./lang-marks";
+import { cn } from "../ui/cn";
 
 /* The +/− counts. DiffPanel's summary strip carries the same pair, and the two
    must read alike. */
@@ -64,7 +65,7 @@ const FILE_ROW = "min-w-0 max-w-full";
 const FILE_HEADER =
   "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip rounded-md px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
 const FILE_BODY =
-  "relative z-0 mx-2 mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well";
+  "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well";
 // Sidebar Changes still pins filenames. Its canvas fill masks passing code;
 // the filename row draws its own edge only while pinned.
 const STICKY_FILE_HEADER =
@@ -666,7 +667,12 @@ export function CommentableDiff({ patch, options }: Props) {
             // `diff-file-header` is a DOM hook, not styling — no rule reaches it
             // any more: PrPanel's Files card finds this row by that class to
             // scroll to and expand a file (`el.querySelector(".diff-file-header")`).
-            className={`${FILE_HEADER} ${stickyFileHeaders ? STICKY_FILE_HEADER_SURFACE : "bg-transparent"}`}
+            className={cn(
+              FILE_HEADER,
+              stickyFileHeaders
+                ? STICKY_FILE_HEADER_SURFACE
+                : "mx-2 w-auto bg-transparent",
+            )}
           >
             <button
               type="button"
@@ -897,7 +903,7 @@ export function CommentableDiff({ patch, options }: Props) {
           </div>
         </div>
         {(isOpen || resolved.length > 0) && (
-          <div className={FILE_BODY}>
+          <div className={cn(FILE_BODY, !stickyFileHeaders && "mx-2 mt-0.5")}>
             {isOpen &&
               (imageSrcs && IMAGE_EXT.test(file.name) ? (
                 <ImageDiffRow file={file} srcs={imageSrcs(file)} />
