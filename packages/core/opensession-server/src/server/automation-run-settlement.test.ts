@@ -29,6 +29,25 @@ const created: string[] = [];
 /** The physical run id whichever backend journals for this turn. */
 const runKeyFor = (id: string) => `rh-${id}`;
 
+/** Terminal outcome projections the settlement issued. Production routes these
+ *  to recordRunOutcome, which writes runErrors and the session file's
+ *  lastRunError — the only sources the session APIs read. */
+const projected: Array<{
+  sessionId: string;
+  errorMessage: string | null;
+  runId?: string;
+}> = [];
+const deps = {
+  emit: silent,
+  project: async (
+    sessionId: string,
+    errorMessage: string | null,
+    opts?: { runId?: string },
+  ) => {
+    projected.push({ sessionId, errorMessage, runId: opts?.runId });
+  },
+};
+
 /** Put the session where a journaled detached automation host leaves it. */
 async function hostedAutomationRunning(id: string): Promise<void> {
   created.push(id);
@@ -42,6 +61,7 @@ async function hostedAutomationRunning(id: string): Promise<void> {
 }
 
 afterEach(async () => {
+  projected.length = 0;
   for (const id of created.splice(0)) await clearRunState(id);
 });
 
@@ -55,7 +75,7 @@ describe("automation run settlement", () => {
     // quarantine precondition ("no live execution owner or recovery claim").
     expect(runStateRequiresLiveOwner(getRunState(id))).toBe(true);
 
-    await settleAutomationRunState(id, null, true, runKeyFor(id), silent);
+    await settleAutomationRunState(id, null, true, runKeyFor(id), deps);
 
     expect(getRunState(id)).toBe("idle");
     expect(isRunStateUnsettled(getRunState(id))).toBe(false);
@@ -71,7 +91,7 @@ describe("automation run settlement", () => {
       "RUN STATUS: failed",
       true,
       runKeyFor(id),
-      silent,
+      deps,
     );
 
     expect(getRunState(id)).toBe("failed");
@@ -84,7 +104,7 @@ describe("automation run settlement", () => {
 
     // Nothing proved what this run did, so it must stay owned and pausable.
     // Settling here would retire a fence that exists for unverified effects.
-    await settleAutomationRunState(id, null, false, runKeyFor(id), silent);
+    await settleAutomationRunState(id, null, false, runKeyFor(id), deps);
 
     expect(getRunState(id)).toBe("running");
     expect(isRunStateUnsettled(getRunState(id))).toBe(true);
@@ -107,27 +127,31 @@ describe("automation run settlement", () => {
     );
     expect(getRunState(id)).toBe("running");
 
-    await settleAutomationRunState(id, null, true, runKeyFor(id), silent);
+    await settleAutomationRunState(id, null, true, runKeyFor(id), deps);
 
     // The actor's stale-run fence rejected it, so the successor keeps its turn.
     expect(getRunState(id)).toBe("running");
 
     // The successor's own settlement still works.
-    await settleAutomationRunState(id, null, true, "rh-successor", silent);
+    await settleAutomationRunState(id, null, true, "rh-successor", deps);
     expect(getRunState(id)).toBe("idle");
   });
 
   test("settling an already-settled session emits no double teardown", async () => {
     const id = sid();
     await hostedAutomationRunning(id);
-    await settleAutomationRunState(id, null, true, runKeyFor(id), silent);
+    await settleAutomationRunState(id, null, true, runKeyFor(id), deps);
 
     const events: Record<string, unknown>[] = [];
-    await settleAutomationRunState(id, null, true, runKeyFor(id), (event) =>
-      events.push(event),
-    );
+    projected.length = 0;
+    await settleAutomationRunState(id, null, true, runKeyFor(id), {
+      ...deps,
+      emit: (event) => events.push(event),
+    });
 
     expect(events).toEqual([]);
+    // A no-op settlement must not re-project either.
+    expect(projected).toEqual([]);
     expect(getRunState(id)).toBe("idle");
   });
 
@@ -219,7 +243,7 @@ describe("automation run settlement", () => {
       "Run ended without a terminal event",
       false,
       runKeyFor(id),
-      silent,
+      deps,
     );
 
     expect(getRunState(id)).toBe("running");
@@ -273,11 +297,110 @@ describe("automation run settlement", () => {
       "Usage limit reached on every account",
       true,
       runKeyFor(id),
-      silent,
+      deps,
     );
 
     expect(getRunState(id)).toBe("failed");
     expect(isRunStateUnsettled(getRunState(id))).toBe(false);
+  });
+
+  test("a terminal failure is projected, not only moved in the FSM", async () => {
+    const id = sid();
+    await hostedAutomationRunning(id);
+
+    await settleAutomationRunState(
+      id,
+      "Usage limit reached on every account",
+      true,
+      runKeyFor(id),
+      deps,
+    );
+
+    // The session APIs read lastRunError from runErrors and the session file,
+    // both written by recordRunOutcome. Reaching `failed` without that
+    // projection leaves a run that cannot explain itself to any consumer.
+    expect(projected).toEqual([
+      {
+        sessionId: id,
+        errorMessage: "Usage limit reached on every account",
+        runId: runKeyFor(id),
+      },
+    ]);
+  });
+
+  test("a clean turn projects a null outcome, clearing any earlier failure", async () => {
+    const id = sid();
+    await hostedAutomationRunning(id);
+
+    await settleAutomationRunState(id, null, true, runKeyFor(id), deps);
+
+    expect(getRunState(id)).toBe("idle");
+    expect(projected).toEqual([
+      { sessionId: id, errorMessage: null, runId: runKeyFor(id) },
+    ]);
+  });
+
+  test("a stale settlement projects nothing onto the successor", async () => {
+    const id = sid();
+    await hostedAutomationRunning(id);
+    await transitionRunState(id, "cancel", { run_key: runKeyFor(id) }, silent);
+    await transitionRunState(id, "prompt", { run_key: "rh-successor" }, silent);
+    await transitionRunState(
+      id,
+      "run_registered",
+      { run_key: "rh-successor" },
+      silent,
+    );
+
+    await settleAutomationRunState(
+      id,
+      "late failure",
+      true,
+      runKeyFor(id),
+      deps,
+    );
+
+    // The actor rejected the transition, so the outcome must not be stamped
+    // onto whoever owns the session now.
+    expect(getRunState(id)).toBe("running");
+    expect(projected).toEqual([]);
+  });
+
+  test("a definitively failed launch settles from the outer catch", () => {
+    // spawnHostRun journals `run_registered` (session -> `running`) BEFORE
+    // launching. On a definitively failed launch its catch proves absence,
+    // clears that journal, and rethrows — leaving the session `running` with
+    // no journal record and no engine, which the watchdog quarantines. An
+    // ambiguous launch keeps its journal, so the two negative checks below
+    // leave it fenced.
+    const source = readFileSync(
+      resolve(import.meta.dir, "automations.ts"),
+      "utf8",
+    );
+    const catchStart = source.indexOf("} catch (e: any) {");
+    expect(catchStart).toBeGreaterThan(0);
+    const guard = source.indexOf(
+      "!hasActiveRunFor(bksId, automationRunKey)",
+      catchStart,
+    );
+    const liveness = source.indexOf(
+      "!isAgentLiveEngineBusy(bksId, automationRunKey)",
+      catchStart,
+    );
+    const settle = source.indexOf(
+      "await settleAutomationRunState(",
+      catchStart,
+    );
+    expect(guard).toBeGreaterThan(catchStart);
+    expect(liveness).toBeGreaterThan(guard);
+    expect(settle).toBeGreaterThan(liveness);
+    // The run key has to outlive the try block for the catch to fence on it.
+    const keyDecl = source.indexOf(
+      "const automationRunKey = `rh-${randomUUIDv7()}`",
+    );
+    const tryStart = source.indexOf("  try {", keyDecl);
+    expect(keyDecl).toBeGreaterThan(0);
+    expect(keyDecl).toBeLessThan(tryStart);
   });
 
   test("nothing that can reject runs between the terminal event and settlement", () => {
@@ -324,9 +447,10 @@ describe("automation run settlement", () => {
     // Sandboxed runs journal spec.hostId; both gateway paths journal startToken.
     expect(source).toContain("hostId: automationRunKey");
     expect(source.match(/startToken: automationRunKey/g)).toHaveLength(2);
-    // Both settlement call sites (in-loop and the post-loop safety net) fence.
+    // All three settlement call sites fence: in-loop, the post-loop safety
+    // net, and the outer catch's definitive-launch-failure branch.
     const settlements = source.match(/await settleAutomationRunState\(/g);
-    expect(settlements).toHaveLength(2);
-    expect(source.match(/^\s*automationRunKey,\n\s*\);$/gm)).toHaveLength(2);
+    expect(settlements).toHaveLength(3);
+    expect(source.match(/^\s*automationRunKey,\n\s*\);$/gm)).toHaveLength(3);
   });
 });
