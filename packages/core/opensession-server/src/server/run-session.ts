@@ -2623,14 +2623,30 @@ async function runSessionPromptInner(
         type: "notice",
         message: `This session's worktree was cleaned up — recreating it from branch ${session.branch}…`,
       });
+      let revived = false;
       try {
         cwd = await reviveWorktree(session.branch, repo.id);
+        revived = true;
       } catch (e) {
         broadcastToSession(sessionId, {
           type: "notice",
           message: `Couldn't recreate the worktree (${e}); running in the main checkout instead.`,
         });
         cwd = repo.repo;
+      }
+      // A branch rename changes reviveWorktree's path. Keep the owning row on
+      // the checkout we just created so activity protection and every later
+      // turn stop targeting the missing pre-rename path.
+      if (
+        revived &&
+        session.source === "opensession" &&
+        cwd !== session.worktreeDir
+      ) {
+        await updateSessionFile(session.id, (data) => ({
+          ...data,
+          worktreeDir: cwd,
+        }));
+        session.worktreeDir = cwd;
       }
     } else {
       broadcastToSession(sessionId, {

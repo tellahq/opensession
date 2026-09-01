@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { $ } from "bun";
 import type { Repo } from "./config";
 import {
+  activeSessionBranches,
   activeSessionWorktrees,
   bankWorkingState,
   idleSessionWorktrees,
@@ -23,6 +24,7 @@ function session(
   return {
     worktreeDir: dir,
     attachedRepos: [],
+    branch: null,
     lastActivity: "2026-07-31T00:00:00Z",
     isRunning: false,
     ...opts,
@@ -178,6 +180,50 @@ describe("activeSessionWorktrees", () => {
   it("never claims a worktree no session owns", () => {
     const active = activeSessionWorktrees([], ACTIVE_CUTOFF);
     expect(active.has("/worktrees/orphan")).toBe(false);
+  });
+});
+
+describe("activeSessionBranches", () => {
+  it("holds a revived branch when the recorded worktree path is stale", () => {
+    const active = activeSessionBranches(
+      [
+        session("/worktrees/original-name", {
+          repo: "tella-fusion",
+          branch: "renamed-branch",
+          lastActivity: "2026-08-08T11:00:00Z",
+        }),
+      ],
+      ACTIVE_CUTOFF,
+    );
+    expect(active.get("tella-fusion")?.has("renamed-branch")).toBe(true);
+  });
+
+  it("holds running attached branches and releases old inactive branches", () => {
+    const active = activeSessionBranches(
+      [
+        session("/worktrees/primary", {
+          repo: "primary",
+          branch: "old-primary",
+          attachedRepos: [
+            {
+              repo: "secondary",
+              branch: "live-attached",
+              dir: "/worktrees/attached-old-path",
+            },
+          ],
+          isRunning: true,
+        }),
+        session("/worktrees/quiet", {
+          repo: "primary",
+          branch: "quiet-branch",
+          lastActivity: "2026-08-08T02:00:00Z",
+        }),
+      ],
+      ACTIVE_CUTOFF,
+    );
+    expect(active.get("primary")?.has("old-primary")).toBe(true);
+    expect(active.get("secondary")?.has("live-attached")).toBe(true);
+    expect(active.get("primary")?.has("quiet-branch")).toBe(false);
   });
 });
 

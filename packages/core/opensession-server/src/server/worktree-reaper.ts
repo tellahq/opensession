@@ -72,7 +72,11 @@ import {
   sweepSessionScratch,
 } from "./session-scratch";
 import type { UnifiedSession } from "./types";
-import { canonicalPath, repoFromGitPointer } from "./worktree";
+import {
+  canonicalPath,
+  repoForPathOrNull,
+  repoFromGitPointer,
+} from "./worktree";
 
 const worktreesDir = () => configuredPaths().worktreesDir;
 
@@ -143,7 +147,13 @@ export interface ReapResult {
 
 export type WorktreeActivitySession = Pick<
   UnifiedSession,
-  "worktreeDir" | "attachedRepos" | "lastActivity" | "isRunning" | "automation"
+  | "worktreeDir"
+  | "attachedRepos"
+  | "lastActivity"
+  | "isRunning"
+  | "automation"
+  | "branch"
+  | "repo"
 >;
 
 /**
@@ -212,6 +222,46 @@ export function activeSessionWorktrees(
   const active = new Set<string>();
   for (const [dir, state] of worktreeActivity(sessions)) {
     if (state.protected || state.latestMs >= cutoffMs) active.add(dir);
+  }
+  return active;
+}
+
+/** Active branches grouped by repo. A revived worktree can move when an agent
+ *  renamed its branch before the old checkout was reaped: the persisted path
+ *  then points at the missing original while reviveWorktree creates the
+ *  branch-named replacement. Git permits only one checkout of a branch per
+ *  repo, so repo + branch remains an authoritative ownership fallback. */
+export function activeSessionBranches(
+  sessions: readonly WorktreeActivitySession[],
+  cutoffMs: number,
+): Map<string, Set<string>> {
+  const active = new Map<string, Set<string>>();
+  const add = (
+    repoId: string | undefined,
+    branch: string | null | undefined,
+  ) => {
+    if (!repoId || !branch) return;
+    const branches = active.get(repoId) ?? new Set<string>();
+    branches.add(branch);
+    active.set(repoId, branches);
+  };
+
+  for (const session of sessions) {
+    const lastActivityMs = Date.parse(session.lastActivity);
+    if (
+      Number.isFinite(lastActivityMs) &&
+      !session.isRunning &&
+      lastActivityMs < cutoffMs
+    )
+      continue;
+    const primaryRepo =
+      session.repo ||
+      (session.worktreeDir
+        ? repoForPathOrNull(session.worktreeDir)?.id
+        : undefined);
+    add(primaryRepo, session.branch);
+    for (const attached of session.attachedRepos ?? [])
+      add(attached.repo, attached.branch);
   }
   return active;
 }
@@ -471,9 +521,14 @@ export async function sweepWorktreeReaper(
     nowMs - IDLE_DAYS * DAY,
     nowMs - AUTOMATION_IDLE_HOURS * HOUR,
   );
+  const activeCutoffMs = nowMs - ACTIVE_HOURS * HOUR;
   const activeWorktrees = activeSessionWorktrees(
     opts.sessions ?? [],
-    nowMs - ACTIVE_HOURS * HOUR,
+    activeCutoffMs,
+  );
+  const activeBranches = activeSessionBranches(
+    opts.sessions ?? [],
+    activeCutoffMs,
   );
 
   const inUse = worktreesWithProcesses(root);
@@ -588,8 +643,13 @@ export async function sweepWorktreeReaper(
       reason = `session idle>${IDLE_DAYS}d (checkout parked; branch retained)`;
     if (!reason) continue;
 
-    // The work is done; the session using the checkout may not be.
-    if (activeWorktrees.has(canonicalPath(dir))) {
+    // The work is done; the session using the checkout may not be. Match the
+    // exact path first, then repo + branch for revived checkouts whose stored
+    // path still names the checkout that disappeared before branch revival.
+    if (
+      activeWorktrees.has(canonicalPath(dir)) ||
+      activeBranches.get(repo.id)?.has(branch)
+    ) {
       result.skipped.sessionActive++;
       console.log(
         `[worktree-reaper] SKIP ${e.name} (${reason}): session active <${ACTIVE_HOURS}h ago`,
