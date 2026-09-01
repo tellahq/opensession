@@ -18,11 +18,7 @@
  * code path changes, and generic `run_state` quarantine keeps its full
  * strength for every session that cannot produce the proof below.
  */
-import {
-  SessionKernelStore,
-  type DurableSessionQuarantine,
-  type DurableRunState,
-} from "./store";
+import { type DurableSessionQuarantine, type DurableRunState } from "./store";
 import { SessionKernelStoreHost } from "./store-host";
 import { nextRunState, type RunState } from "./run-state-machine";
 
@@ -190,31 +186,45 @@ export function repairSettledAutomationQuarantines(
   return result;
 }
 
-/** Read-only helper for operators inspecting a single session's evidence. */
+/**
+ * Read-only helper for operators inspecting a single session's evidence.
+ *
+ * Routes through the store host, exactly as the repair does. Opening the
+ * central database directly reads the wrong store for an actor-isolated
+ * session: its quarantine row and run state live in that session's own
+ * database, and the catalog holds only a sparse projection. A direct central
+ * read therefore reports a live fence as "session is not quarantined", and
+ * even when the catalog does carry the row it cannot recompute `repairable`
+ * from the isolated store's own evidence the way the host does.
+ */
 export function inspectAutomationQuarantine(
   centralPath: string,
   sessionId: string,
   inputs: AutomationQuarantineRepairInputs,
+  isolatedRoot?: string,
 ): AutomationQuarantineVerdict & { quarantined: boolean } {
-  const store = new SessionKernelStore(centralPath);
+  const host = new SessionKernelStoreHost(centralPath, isolatedRoot);
   try {
-    const quarantine = store.quarantinedSession(sessionId);
+    const quarantine = host.call("quarantinedSession", [sessionId]) as
+      | DurableSessionQuarantine
+      | undefined;
     if (!quarantine)
       return {
         quarantined: false,
         repairable: false,
         reason: "session is not quarantined",
       };
+    const runState = host.call("runState", [sessionId]) as DurableRunState;
     return {
       quarantined: true,
       ...settledAutomationQuarantineEvidence({
         quarantine,
-        runState: store.runState(sessionId).state,
+        runState: runState.state,
         ledgerStatus: inputs.ledgerStatus(sessionId),
         journalBusy: inputs.journalBusy(sessionId),
       }),
     };
   } finally {
-    store.close();
+    host.close();
   }
 }

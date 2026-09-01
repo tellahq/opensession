@@ -11,8 +11,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { SessionKernelStore } from "./store";
+import { SessionKernelStoreHost } from "./store-host";
 import {
   ORPHANED_RUN_QUARANTINE_REASON,
   inspectAutomationQuarantine,
@@ -55,6 +56,49 @@ function fixture(
   }
   store.close();
   return centralPath;
+}
+
+/**
+ * The same stranded session, placed in an actor-isolated store — which is how
+ * live sessions are placed. Its quarantine row and run state live in that
+ * session's own database, and the catalog holds only a sparse projection, so a
+ * reader that opens the central store directly sees neither.
+ *
+ * The fence is applied THROUGH the host, after isolation, because that is the
+ * production path: the wedge detector quarantines via the actor, and
+ * `SessionKernelStoreHost.quarantineSession` publishes the catalog projection
+ * as it writes the isolated row. Seeding the fence into the central store
+ * before migrating instead produces a shape the live instance never has.
+ */
+function isolatedFixture(sessionId: string): {
+  centralPath: string;
+  isolatedRoot: string;
+} {
+  const root = mkdtempSync(join(tmpdir(), "automation-quarantine-isolated-"));
+  roots.push(root);
+  const centralPath = join(root, "session-kernel.sqlite");
+  const isolatedRoot = join(root, "session-kernel-sessions");
+  const central = new SessionKernelStore(centralPath);
+  central.setRunState({
+    sessionId,
+    state: "running",
+    event: "run_registered",
+    currentRunId: `rh-${sessionId}`,
+  });
+  central.close();
+  const host = new SessionKernelStoreHost(centralPath, isolatedRoot);
+  try {
+    expect(host.migrateLegacySessions(10)).toBeGreaterThan(0);
+    expect(host.isIsolated(sessionId)).toBe(true);
+    host.call("quarantineSession", [
+      sessionId,
+      ORPHANED_RUN_QUARANTINE_REASON,
+      "run_state:running",
+    ]);
+  } finally {
+    host.close();
+  }
+  return { centralPath, isolatedRoot };
 }
 
 const ledger =
@@ -299,5 +343,110 @@ describe("offline repair", () => {
     } finally {
       store.close();
     }
+  });
+
+  test("inspection sees an actor-isolated quarantine", () => {
+    const { centralPath } = isolatedFixture("auto-done");
+
+    // Opening the central store directly is the bug: for an isolated session
+    // the quarantine row lives in that session's own database, so a direct
+    // central read reports a live fence as "not quarantined" and an operator
+    // concludes there is nothing to repair.
+    const direct = new SessionKernelStore(centralPath);
+    try {
+      expect(direct.quarantinedSession("auto-done")).toBeUndefined();
+    } finally {
+      direct.close();
+    }
+
+    const verdict = inspectAutomationQuarantine(centralPath, "auto-done", {
+      ledgerStatus: ledger({ "auto-done": "ok" }),
+      journalBusy: noJournal,
+    });
+
+    expect(verdict).toMatchObject({ quarantined: true, repairable: true });
+  });
+
+  test("inspection reads an isolated session's own run state", () => {
+    const { centralPath } = isolatedFixture("auto-still-running");
+
+    // The evidence reducer refuses without a terminal ledger verdict. Reaching
+    // that refusal at all proves the quarantine and run state were both read
+    // from the isolated store rather than missed entirely.
+    const verdict = inspectAutomationQuarantine(
+      centralPath,
+      "auto-still-running",
+      {
+        ledgerStatus: ledger({ "auto-still-running": "running" }),
+        journalBusy: noJournal,
+      },
+    );
+
+    expect(verdict).toMatchObject({
+      quarantined: true,
+      repairable: false,
+      reason: "automation ledger is still running",
+    });
+  });
+
+  test("inspection accepts an explicit isolated root", () => {
+    const { centralPath, isolatedRoot } = isolatedFixture("auto-done");
+
+    const verdict = inspectAutomationQuarantine(
+      centralPath,
+      "auto-done",
+      { ledgerStatus: ledger({ "auto-done": "ok" }), journalBusy: noJournal },
+      isolatedRoot,
+    );
+
+    expect(verdict).toMatchObject({ quarantined: true, repairable: true });
+  });
+
+  test("inspection still refuses an unknown session", () => {
+    const { centralPath } = isolatedFixture("auto-done");
+
+    // Fail closed: routing through the host must not turn "no such fence" into
+    // a repairable verdict.
+    expect(
+      inspectAutomationQuarantine(centralPath, "never-quarantined", {
+        ledgerStatus: ledger({ "never-quarantined": "ok" }),
+        journalBusy: noJournal,
+      }),
+    ).toMatchObject({
+      quarantined: false,
+      repairable: false,
+      reason: "session is not quarantined",
+    });
+  });
+
+  test("the repair job settles and releases an isolated session", () => {
+    const { centralPath, isolatedRoot } = isolatedFixture("auto-done");
+
+    // The scan reads the merged catalog through the host, so unlike inspection
+    // it was never blind. Pin it end to end anyway: this is the shape every
+    // live stranded session actually has, and a regression in the catalog
+    // routing would silently strand all of them.
+    const result = repairSettledAutomationQuarantines({
+      centralPath,
+      isolatedRoot,
+      ledgerStatus: ledger({ "auto-done": "ok" }),
+      journalBusy: noJournal,
+    });
+
+    expect(result.repaired).toEqual([
+      {
+        sessionId: "auto-done",
+        ledgerStatus: "ok",
+        from: "running",
+        to: "idle",
+        released: true,
+      },
+    ]);
+    expect(
+      inspectAutomationQuarantine(centralPath, "auto-done", {
+        ledgerStatus: ledger({ "auto-done": "ok" }),
+        journalBusy: noJournal,
+      }),
+    ).toMatchObject({ quarantined: false });
   });
 });
