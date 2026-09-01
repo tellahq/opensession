@@ -111,6 +111,54 @@ enum SlackAPI {
         return try JSONDecoder().decode(ShippedChangeResponse.self, from: data)
     }
 
+    static func updateComposer(
+        sessionId: String,
+        requestId: String,
+        channelId: String,
+        message: String,
+        screenshots: [String]
+    ) async throws {
+        guard let connection = ServerConfig.shared.connection else {
+            throw OS1API.APIError.notConfigured
+        }
+        let request = try composerDraftRequest(
+            connection: connection,
+            sessionId: sessionId,
+            requestId: requestId,
+            channelId: channelId,
+            message: message,
+            screenshots: screenshots
+        )
+        _ = try await response(for: request)
+    }
+
+    nonisolated static func composerDraftRequest(
+        connection: ServerConnection,
+        sessionId: String,
+        requestId: String,
+        channelId: String,
+        message: String,
+        screenshots: [String]
+    ) throws -> URLRequest {
+        let session = encodePath(sessionId)
+        guard let url = URL(
+            string: connection.baseURL.absoluteString
+                + "/api/sessions/\(session)/slack-composer"
+        ) else {
+            throw OS1API.APIError.badURL
+        }
+        var request = connection.authorizedRequest(url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "requestId": requestId,
+            "channel": channelId,
+            "message": message,
+            "screenshots": screenshots,
+        ])
+        return request
+    }
+
     static func sendComposer(
         sessionId: String,
         requestId: String,
@@ -150,7 +198,7 @@ enum SlackAPI {
         )
     }
 
-    private static func encodePath(_ value: String) -> String {
+    nonisolated private static func encodePath(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? value
     }
 
@@ -172,6 +220,10 @@ enum SlackAPI {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
+        return try await response(for: request)
+    }
+
+    private static func response(for request: URLRequest) async throws -> Data {
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse,
            !(200..<300).contains(http.statusCode) {
