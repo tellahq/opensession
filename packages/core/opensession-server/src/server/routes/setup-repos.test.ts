@@ -13,7 +13,9 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 import { pathToFileURL } from "url";
+import { generateKeyPairSync } from "node:crypto";
 import { createWorktree } from "../worktree";
+import { __setGithubAppKeyPathForTest } from "../github-app";
 import {
   adoptExistingCheckout,
   githubCredentialHelperCommand,
@@ -151,6 +153,160 @@ describe("App installation repository listing", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe("GET /api/setup/github/repos with several App installations", () => {
+  const originalFetch = globalThis.fetch;
+  const originalClientId = process.env.OPENSESSION_GITHUB_CLIENT_ID;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    if (originalClientId === undefined)
+      delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
+    else process.env.OPENSESSION_GITHUB_CLIENT_ID = originalClientId;
+    __setGithubAppKeyPathForTest(undefined);
+    const cache = globalThis as any;
+    cache.__ghAppTokenCacheRead = null;
+    cache.__ghAppTokenCacheWrite = null;
+    cache.__ghAppLastMintOk = undefined;
+    cache.__ghAppLastMintIdentity = undefined;
+    cache.__ghAppInstallationsCache = null;
+  });
+
+  function writeAppConfig(path: string, installationOwner: string): void {
+    writeFileSync(
+      path,
+      JSON.stringify({
+        integrations: {
+          github: {
+            oauthClientId: "Iv-picker-test",
+            appSlug: "open-session-picker-test",
+            installationOwner,
+          },
+        },
+      }),
+    );
+  }
+
+  async function getRepos(): Promise<any> {
+    const url = new URL("http://localhost/api/setup/github/repos");
+    const response = await handleSetupRepoRoutes({
+      req: new Request(url),
+      url,
+      path: url.pathname,
+      publicPrefix: "",
+    } as RouteContext);
+    expect(response?.status).toBe(200);
+    return response!.json();
+  }
+
+  test("names every installation, marks the pinned one, and refetches after a switch", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-picker-installs-"));
+    tempDirs.push(dir);
+    const config = join(dir, "config.json");
+    const keyPath = join(dir, "github-app.pem");
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
+    writeAppConfig(config, "solo-dev");
+    process.env.OPENSESSION_CONFIG = config;
+    delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
+    __setGithubAppKeyPathForTest(keyPath);
+
+    const installs = [
+      { id: 1, account: { login: "solo-dev", type: "User" } },
+      { id: 2, account: { login: "acme-org", type: "Organization" } },
+    ];
+    const repoLists = new Map<number, string[]>([
+      [1, []],
+      [2, ["acme-org/app"]],
+    ]);
+    const listCalls: string[] = [];
+    globalThis.fetch = (async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const url = String(input);
+      if (url.startsWith("https://api.github.com/app/installations?"))
+        return Response.json(installs);
+      if (url === "https://api.github.com/app/installations")
+        return Response.json(installs);
+      const mint = url.match(/\/app\/installations\/(\d+)\/access_tokens$/);
+      if (mint)
+        return Response.json({
+          token: `ghs_install_${mint[1]}`,
+          expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+        });
+      if (url.startsWith("https://api.github.com/installation/repositories")) {
+        const auth = String(
+          (init?.headers as Record<string, string>).Authorization,
+        );
+        listCalls.push(auth);
+        const id = Number(auth.replace(/^Bearer ghs_install_/, ""));
+        return Response.json({
+          repositories: (repoLists.get(id) ?? []).map((fullName) => ({
+            full_name: fullName,
+            private: true,
+            default_branch: "main",
+            pushed_at: "2026-08-24T00:00:00Z",
+          })),
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    const pinnedToPersonal = await getRepos();
+    expect(pinnedToPersonal.source).toBe("app");
+    expect(pinnedToPersonal.repos).toEqual([]);
+    expect(pinnedToPersonal.installationOwner).toBe("solo-dev");
+    expect(pinnedToPersonal.installations).toEqual([
+      { login: "solo-dev", type: "User", selected: true },
+      { login: "acme-org", type: "Organization", selected: false },
+    ]);
+
+    // Switching the pinned owner must not serve the previous installation's
+    // (empty) list from the 60s cache.
+    const switched = join(dir, "config-acme.json");
+    writeAppConfig(switched, "acme-org");
+    process.env.OPENSESSION_CONFIG = switched;
+    const pinnedToOrg = await getRepos();
+    expect(pinnedToOrg.installationOwner).toBe("acme-org");
+    expect(pinnedToOrg.repos.map((repo: any) => repo.fullName)).toEqual([
+      "acme-org/app",
+    ]);
+    expect(pinnedToOrg.installations.find((i: any) => i.selected)?.login).toBe(
+      "acme-org",
+    );
+    expect(listCalls).toEqual(["Bearer ghs_install_1", "Bearer ghs_install_2"]);
+  });
+
+  test("still names the installations when the pinned owner matches none", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-picker-orphan-"));
+    tempDirs.push(dir);
+    const config = join(dir, "config.json");
+    const keyPath = join(dir, "github-app.pem");
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
+    writeAppConfig(config, "gone-org");
+    process.env.OPENSESSION_CONFIG = config;
+    delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
+    __setGithubAppKeyPathForTest(keyPath);
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("https://api.github.com/app/installations"))
+        return Response.json([
+          { id: 2, account: { login: "acme-org", type: "Organization" } },
+        ]);
+      throw new Error(`Unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    const body = await getRepos();
+    expect(body.source).toBeNull();
+    expect(body.appConfigured).toBe(true);
+    expect(body.installationOwner).toBe("gone-org");
+    expect(body.installations).toEqual([
+      { login: "acme-org", type: "Organization", selected: false },
+    ]);
   });
 });
 

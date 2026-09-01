@@ -7,6 +7,7 @@ import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Switch } from "../ui/switch";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
+import { OptionSelect } from "../ui/select";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { Spinner } from "../ui/spinner";
 import {
@@ -711,11 +712,38 @@ function LetterTile({ id, color }: { id: string; color?: string }) {
   );
 }
 
+/** One account the workspace GitHub App is installed on. `selected` marks the
+ * installation the configured owner pins, the one whose repos are listed. */
+interface BrowseInstallation {
+  login: string;
+  type?: string;
+  selected?: boolean;
+}
+
 interface BrowseResult {
   source: "user" | "app" | null;
   repos: BrowseRepo[];
   appConfigured?: boolean;
   appInstallUrl?: string | null;
+  /** The configured installation owner, when the App identity can answer. */
+  installationOwner?: string | null;
+  /** Every account the App is installed on, so the picker can offer a switch
+   * when the App is installed beyond the pinned owner (repos alone cannot
+   * reveal that). Absent when the App identity cannot list them. */
+  installations?: BrowseInstallation[];
+}
+
+/** Explains an empty App installation instead of a bare "No repositories
+ * match.", which reads as a filter miss. */
+export function emptyAppInstallationMessage(browse: {
+  installationOwner?: string | null;
+  installations?: BrowseInstallation[];
+}): string {
+  const owner = browse.installationOwner;
+  if ((browse.installations?.length ?? 0) > 1) {
+    return `This installation${owner ? ` (${owner})` : ""} can’t see any repositories. Switch installations above, or grant the App repository access on GitHub.`;
+  }
+  return `The App installation${owner ? ` for ${owner}` : ""} can’t see any repositories yet. Grant it repository access on GitHub, then reopen this window.`;
 }
 
 /** GET /api/setup/codestorage/repos — `source: null` when the code.storage
@@ -942,6 +970,10 @@ function RemoteRepoPicker({
   const [filter, setFilter] = useState("");
   const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   const [manual, setManual] = useState("");
+  // Repinning the App installation (below) is a config write plus a refetch;
+  // both gate the switcher so a slow answer can't interleave two switches.
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -982,6 +1014,27 @@ function RemoteRepoPicker({
     if (active && (browse || browseFailed)) inputRef?.current?.focus();
   }, [active, browse, browseFailed, inputRef]);
 
+  /** Pin a different App installation and refetch the repo list it can see.
+   * PUT /api/setup/github applies live, so no restart stands between
+   * switching and browsing. */
+  async function selectInstallation(login: string) {
+    if (switching) return;
+    setSwitching(true);
+    setSwitchError(null);
+    try {
+      await setupRequest("/api/setup/github", {
+        method: "PUT",
+        json: { installationOwner: login },
+      });
+      const body = await setupRequest<BrowseResult>("/api/setup/github/repos");
+      setBrowse(body);
+      setBrowseFailed(false);
+    } catch (e) {
+      setSwitchError(errorMessage(e, "Couldn’t switch the installation."));
+    }
+    setSwitching(false);
+  }
+
   async function addRepo(fullName: string, source: RepoSource = "github") {
     const key = `${source}:${fullName}`;
     await registerRepo({
@@ -1003,6 +1056,11 @@ function RemoteRepoPicker({
   const totalListed =
     (browse?.source ? browse.repos.length : 0) +
     (csConfigured ? (csBrowse?.repos.length ?? 0) : 0);
+  const installations = browse?.installations ?? [];
+  const selectedInstallation =
+    installations.find((installation) => installation.selected)?.login ??
+    browse?.installationOwner ??
+    "";
 
   return (
     <>
@@ -1012,6 +1070,28 @@ function RemoteRepoPicker({
         </LoadingState>
       ) : browse && browse.source !== null ? (
         <>
+          {browse.source === "app" && installations.length > 1 && (
+            <div className="mb-2 flex items-center gap-2">
+              <span className="shrink-0 text-supporting text-dim">
+                Installation
+              </span>
+              <OptionSelect
+                className="min-w-0 flex-1"
+                size="sm"
+                label="GitHub App installation"
+                value={selectedInstallation}
+                options={installations.map((installation) => ({
+                  value: installation.login,
+                  label: installation.login,
+                }))}
+                onChange={(login) => void selectInstallation(login)}
+                disabled={switching}
+              />
+            </div>
+          )}
+          {switchError && (
+            <InlineAlert className="mb-2">{switchError}</InlineAlert>
+          )}
           <input
             ref={inputRef}
             className={settingsInputClass}
@@ -1029,7 +1109,9 @@ function RemoteRepoPicker({
           <div className="mt-2 max-h-[320px] overflow-y-auto">
             {filtered.length === 0 ? (
               <EmptyState placement="row" className="px-1">
-                No repositories match.
+                {browse.repos.length > 0 || browse.source !== "app"
+                  ? "No repositories match."
+                  : emptyAppInstallationMessage(browse)}
               </EmptyState>
             ) : (
               filtered.map((r) => (
@@ -1056,11 +1138,26 @@ function RemoteRepoPicker({
             {browseFailed ? (
               <>Couldn&rsquo;t load the GitHub repo list right now.</>
             ) : browse?.appConfigured ? (
-              <>
-                The GitHub App installation isn&rsquo;t available yet. Check
-                that Installation owner matches the account where the App is
-                installed, then reopen this window.
-              </>
+              installations.length > 0 ? (
+                <>
+                  The App is installed on{" "}
+                  {installations
+                    .map((installation) => installation.login)
+                    .join(", ")}
+                  , but the configured installation owner
+                  {browse.installationOwner
+                    ? ` (${browse.installationOwner})`
+                    : ""}{" "}
+                  doesn&rsquo;t match any of them. Pick the installation to
+                  browse:
+                </>
+              ) : (
+                <>
+                  The GitHub App installation isn&rsquo;t available yet. Check
+                  that Installation owner matches the account where the App is
+                  installed, then reopen this window.
+                </>
+              )
             ) : (
               <>
                 No GitHub credential yet, so the repo list can&rsquo;t be
@@ -1072,6 +1169,22 @@ function RemoteRepoPicker({
             )}{" "}
             You can still register a repo by name:
           </div>
+          {browse?.appConfigured && installations.length > 0 && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              {installations.map((installation) => (
+                <Button
+                  key={installation.login}
+                  disabled={switching}
+                  onClick={() => void selectInstallation(installation.login)}
+                >
+                  {installation.login}
+                </Button>
+              ))}
+            </div>
+          )}
+          {switchError && (
+            <InlineAlert className="mt-2">{switchError}</InlineAlert>
+          )}
           {browse?.appConfigured && browse.appInstallUrl && (
             <Button
               className="mt-2.5"

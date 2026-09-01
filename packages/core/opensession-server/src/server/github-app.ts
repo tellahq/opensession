@@ -57,6 +57,11 @@ const g = globalThis as {
   __ghAppTokenWarned?: boolean;
   __ghAppLastMintOk?: boolean;
   __ghAppLastMintIdentity?: string;
+  __ghAppInstallationsCache?: {
+    clientId: string;
+    at: number;
+    installations: GithubAppInstallationAccount[];
+  } | null;
 };
 
 // READ_PERMISSIONS / WRITE_PERMISSIONS are the canonical sets imported at the
@@ -245,6 +250,66 @@ export function githubConfiguredCredential(): boolean {
   const github = configuredIntegration("github");
   const owner = github.installationOwner || github.appOrg;
   return githubAppConfigured() && !!githubAppIdentity().slug && !!owner;
+}
+
+/** The account pinned as the App's installation selection, from config
+ * (installationOwner, with the setup-era appOrg as fallback). Empty when
+ * nothing is pinned yet. */
+export function configuredGithubInstallationOwner(): string {
+  const github = configuredIntegration("github");
+  return String(github.installationOwner || github.appOrg || "").trim();
+}
+
+export interface GithubAppInstallationAccount {
+  /** Account login, e.g. "my-organization". */
+  login: string;
+  /** GitHub account type: "User" or "Organization". */
+  type: string;
+}
+
+/** Every account the App is installed on, listed with the App JWT alone (no
+ * installation token involved, so this answers even when the pinned owner
+ * matches no installation). Null when the App identity or key is missing or
+ * GitHub cannot answer: "unknown", never "none". Briefly cached because the
+ * setup picker refetches each time it opens. */
+export async function listGithubAppInstallations(): Promise<
+  GithubAppInstallationAccount[] | null
+> {
+  const { clientId } = githubUserAuthSettings();
+  if (!clientId || !existsSync(keyPath())) return null;
+  const cached = g.__ghAppInstallationsCache;
+  if (
+    cached &&
+    cached.clientId === clientId &&
+    Date.now() - cached.at < 60_000
+  ) {
+    return cached.installations;
+  }
+  try {
+    const key = await Bun.file(keyPath()).text();
+    const res = await fetch(
+      "https://api.github.com/app/installations?per_page=100",
+      {
+        headers: {
+          Authorization: `Bearer ${appJwt(clientId, key)}`,
+          Accept: "application/vnd.github+json",
+        },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    const installs = (await res.json().catch(() => null)) as Array<{
+      account?: { login?: string; type?: string };
+    }> | null;
+    if (!res.ok || !Array.isArray(installs)) return null;
+    const installations = installs.flatMap((installation) => {
+      const login = installation.account?.login;
+      return login ? [{ login, type: installation.account?.type || "" }] : [];
+    });
+    g.__ghAppInstallationsCache = { clientId, at: Date.now(), installations };
+    return installations;
+  } catch {
+    return null;
+  }
 }
 
 /** Last observed App availability for synchronous health snapshots. Startup and
