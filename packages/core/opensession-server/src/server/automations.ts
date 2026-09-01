@@ -1126,16 +1126,18 @@ type AutomationOutcomeProjector = (
   },
 ) => Promise<void>;
 
+type AutomationRunSettlementDeps = {
+  emit?: Parameters<typeof decideRunStateTransition>[3];
+  /** Test seam. Production always projects through recordRunOutcome. */
+  project?: AutomationOutcomeProjector;
+};
+
 export async function settleAutomationRunState(
   sessionId: string,
   errorMessage: string | null,
   terminalProven: boolean,
   runKey?: string,
-  deps?: {
-    emit?: Parameters<typeof decideRunStateTransition>[3];
-    /** Test seam. Production always projects through recordRunOutcome. */
-    project?: AutomationOutcomeProjector;
-  },
+  deps?: AutomationRunSettlementDeps,
 ): Promise<void> {
   if (!terminalProven) return;
   if (!isRunStateUnsettled(getRunState(sessionId))) return;
@@ -1173,6 +1175,33 @@ export async function settleAutomationRunState(
         }
       : {}),
   });
+}
+
+type AutomationLaunchFailureDeps = AutomationRunSettlementDeps & {
+  hasActiveRun?: (sessionId: string, runKey: string) => boolean;
+  isLiveEngineBusy?: (sessionId: string, runKey: string) => boolean;
+};
+
+/**
+ * Record a failed launch only after retiring a run proven to have no journal or
+ * live engine owner. The ledger callback can write the automation file and is
+ * therefore deliberately last.
+ */
+export async function settleAutomationLaunchFailure(
+  sessionId: string,
+  runKey: string,
+  errorMessage: string,
+  settleLedger: () => void,
+  deps?: AutomationLaunchFailureDeps,
+): Promise<void> {
+  const hasJournalOwner = (deps?.hasActiveRun ?? hasActiveRunFor)(
+    sessionId,
+    runKey,
+  );
+  const isLiveOwner = deps?.isLiveEngineBusy ?? isAgentLiveEngineBusy;
+  if (!hasJournalOwner && !isLiveOwner(sessionId, runKey))
+    await settleAutomationRunState(sessionId, errorMessage, true, runKey, deps);
+  settleLedger();
 }
 
 /** Settle the ledger entry for `sessionId` (matched by id, not position, so
@@ -1759,6 +1788,13 @@ export async function runAutomation(
         };
       });
 
+    // A host can report a terminal event before `init`. Create the native
+    // session before any backend can journal or launch the run, so an immediate
+    // actor-outbox projection always has a durable destination. A failed write
+    // happens before `run_registered`, which avoids reopening the journal
+    // cleanup window that requires terminal settlement inside the event loop.
+    await persistSession("");
+
     console.log(
       `[automations] Running "${automation.name}" → ${bksId}${runModel ? ` (${runModel})` : ""}${options?.modelOverride ? " [routed]" : ""}`,
     );
@@ -2015,34 +2051,23 @@ export async function runAutomation(
     );
   } catch (e: any) {
     console.error(`[automations] "${automation.name}" failed:`, e);
-    settleRun(automation.id, bksId, {
-      status: "error",
-      error: e.message || String(e),
-      durationMs: Date.now() - startedAt.getTime(),
-    });
-    // A throw is usually ambiguous — the host may still be executing, so the
-    // journal stays and boot recovery owns settling it. One shape is not
-    // ambiguous: spawnHostRun journals `run_registered` (session -> `running`)
-    // BEFORE launching, and on a definitively failed launch its catch proves
-    // absence, clears that journal, and rethrows. That leaves the session
-    // `running` with no journal record and no engine — an owner-less run the
-    // watchdog will quarantine, and the same stranding this change exists to
-    // prevent, reached without any terminal event.
-    //
-    // Require both negatives before settling: no journal record naming this
-    // session or run key, and no live engine. An ambiguous launch keeps its
-    // journal (host-client only clears when the error is not `ambiguousLaunch`),
-    // so it fails these checks and stays fenced.
-    if (
-      !hasActiveRunFor(bksId, automationRunKey) &&
-      !isAgentLiveEngineBusy(bksId, automationRunKey)
-    )
-      await settleAutomationRunState(
-        bksId,
-        e.message || String(e),
-        true,
-        automationRunKey,
-      );
+    const errorMessage = e.message || String(e);
+    // A throw is usually ambiguous. The host may still be executing, so the
+    // journal stays and boot recovery owns settling it. A definitive launch
+    // failure has neither a journal record nor a live engine. Retire that
+    // proven-ownerless run before settleRun can fail while saving the ledger.
+    // An ambiguous launch keeps its journal and therefore stays fenced.
+    await settleAutomationLaunchFailure(
+      bksId,
+      automationRunKey,
+      errorMessage,
+      () =>
+        settleRun(automation.id, bksId, {
+          status: "error",
+          error: errorMessage,
+          durationMs: Date.now() - startedAt.getTime(),
+        }),
+    );
     // Keep the intent; boot reconciles its active journal or terminal receipt
     // before replay.
   } finally {

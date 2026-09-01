@@ -105,12 +105,15 @@ test("reviews with and without a PR share the floating toolbar", () => {
   expect(reviewToolbarSource).toContain("desktop:mb-2");
   expect(reviewToolbarSource).toContain("desktop:overflow-hidden");
   expect(reviewToolbarSource).toContain("desktop:rounded-lg");
-  expect(reviewToolbarSource).toContain("desktop:border desktop:border-line");
+  expect(reviewToolbarSource).toContain("desktop:smooth-shadow-ring-sm");
+  expect(reviewToolbarSource).not.toContain("desktop:border");
   expect(reviewBar).toContain("h-8");
   expect(reviewBar).toContain("phone:h-11");
   expect(reviewBar).toContain("bg-surface");
   expect(reviewBar).toContain("desktop:absolute");
   expect(reviewBar).toContain("desktop:top-[calc(100%+8px)]");
+  expect(reviewBar).toContain("desktop:smooth-shadow-ring-sm");
+  expect(reviewBar).not.toContain("phone:shadow");
   expect(prPanelSource).toContain('["files", "Files",');
   expect(prPanelSource).toContain('label="Code view"');
   expect(prPanelSource).toContain(
@@ -181,11 +184,14 @@ test("sidebar Changes shares Review's code display options", () => {
     "top-[calc(var(--review-file-header-top,0px)-1px)]",
   );
   expect(commentableDiffSource).toContain("z-[6] bg-surface");
-  expect(commentableDiffSource).toContain("rounded-t-lg bg-bg");
-  expect(commentableDiffSource).not.toContain('"isolate min-w-0 max-w-full');
+  expect(commentableDiffSource).toContain("rounded-md bg-surface");
+  expect(commentableDiffSource).toContain(
+    "mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well",
+  );
+  expect(commentableDiffSource).toContain('"--diffs-bg": "var(--code-well)"');
+  expect(commentableDiffSource).not.toContain("border border-line bg-bg");
   expect(commentableDiffSource).not.toContain("data-[stuck]:overflow-visible");
   expect(commentableDiffSource).not.toContain("-inset-x-px");
-  expect(commentableDiffSource).toContain("overflow-clip rounded-b-lg");
   expect(viewerSource).toContain("--diff-panel-top");
   expect(codeDisplaySource).toContain('label="Wrap lines"');
   expect(codeDisplaySource).toContain('value="split"');

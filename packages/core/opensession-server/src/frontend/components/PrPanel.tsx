@@ -1386,7 +1386,7 @@ export function PrPanel({
   );
 
   const reviewBar = !compactToolbar && (
-    <div className="flex h-8 shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden bg-surface [scrollbar-width:none] desktop:absolute desktop:left-2 desktop:top-[calc(100%+8px)] desktop:z-20 desktop:rounded-lg desktop:border desktop:border-line phone:h-11 phone:gap-2 phone:px-2 phone:shadow-[inset_0_-1px_0_var(--border)] [&::-webkit-scrollbar]:hidden">
+    <div className="flex h-8 shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden bg-surface [scrollbar-width:none] desktop:absolute desktop:left-2 desktop:top-[calc(100%+8px)] desktop:z-20 desktop:rounded-lg desktop:smooth-shadow-ring-sm phone:h-11 phone:gap-2 phone:px-2 [&::-webkit-scrollbar]:hidden">
       <div
         className="flex shrink-0 items-center gap-0.5 self-stretch"
         role="tablist"

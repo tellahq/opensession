@@ -4,8 +4,8 @@ import { WS_SUMMARY_REVIEW_BAR_CLEARANCE } from "../../lib/workspace-summary-cla
 /**
  * The floating review toolbar shared by branches with and without a pull
  * request. It stays edge to edge on phone and clears the standing workspace
- * summary on wide review canvases. The sticky outer surface masks code through
- * its inset.
+ * summary on wide review canvases. Only the rounded inner bar paints, so review
+ * content remains visible as it passes beneath the transparent sticky inset.
  */
 export function ReviewToolbar({
   children,
@@ -20,11 +20,9 @@ export function ReviewToolbar({
 
   return (
     <>
-      <div
-        className={`relative shrink-0 bg-surface desktop:pt-2.5 ${placement}`}
-      >
+      <div className={`relative shrink-0 desktop:pt-2.5 ${placement}`}>
         <div
-          className={`relative bg-surface desktop:rounded-lg desktop:border desktop:border-line ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
+          className={`relative bg-surface desktop:rounded-lg desktop:smooth-shadow-ring-sm ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
         >
           {children}
         </div>

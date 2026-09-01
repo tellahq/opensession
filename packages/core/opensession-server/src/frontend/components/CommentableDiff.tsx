@@ -58,26 +58,24 @@ import { ExtBadge, fileExt } from "./lang-marks";
 const DIFF_ADD = "font-semibold text-green";
 const DIFF_DEL = "font-semibold text-red";
 
-/* One collapsible file. The header is the hover group for the edit and discard
-   actions revealed inside editable worktree diffs. Do not isolate this stacking
-   context: the sticky header's z-index must clear ReviewToolbar's code mask,
-   while the body stays beneath it. */
-const FILE_ROW =
-  "min-w-0 max-w-full overflow-clip rounded-lg border border-line bg-bg";
+/* Each filename stays on the canvas while its code owns the quieter inset
+   well. Spacing and that fill separate files without nesting bordered cards. */
+const FILE_ROW = "min-w-0 max-w-full";
 const FILE_HEADER =
-  "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
-// Clip the scrolling diff at its own lower corners. The parent keeps sticky
-// headers working with `overflow-clip`, but a positioned body needs to own the
-// bottom radius so its painted code surface can never square off the file row.
-const FILE_BODY = "relative z-0 max-w-full overflow-clip rounded-b-lg";
-// The outer row owns the rounded frame. The square sticky layer masks code
-// below the header's curved corners with the surrounding surface, while the
-// inner surface draws the actual rounded top bar. Overlap the scroll edge by a
-// pixel so code cannot peek above either layer.
+  "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip rounded-md px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
+const FILE_BODY =
+  "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well";
+// Sidebar Changes still pins filenames. Its canvas fill masks passing code;
+// the filename row draws its own edge only while pinned.
 const STICKY_FILE_HEADER =
   "sticky top-[calc(var(--review-file-header-top,0px)-1px)] z-[6] bg-surface";
 const STICKY_FILE_HEADER_SURFACE =
-  "rounded-t-lg bg-bg group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
+  "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
+
+const DIFF_SURFACE_STYLE: React.CSSProperties & { "--diffs-bg": string } = {
+  "--diffs-bg": "var(--code-well)",
+  backgroundColor: "var(--code-well)",
+};
 const FILE_TOGGLE =
   "focus-ring flex min-w-0 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
 
@@ -1352,6 +1350,7 @@ const FileDiffRow = function FileDiffRow({
       lineAnnotations={annotations}
       selectedLines={selectedLines}
       renderAnnotation={renderAnnotation}
+      style={DIFF_SURFACE_STYLE}
       // Not the lever it looks like: the prop only decides whether to pass the
       // pool down from @pierre/diffs' WorkerPoolContext, and nothing in this
       // app mounts that provider, so highlighting is on the main thread either

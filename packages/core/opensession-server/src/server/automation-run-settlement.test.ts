@@ -12,16 +12,26 @@
  * were refused as quarantined.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "fs";
 import { resolve } from "path";
-import { settleAutomationRunState } from "./automations";
+import {
+  settleAutomationLaunchFailure,
+  settleAutomationRunState,
+} from "./automations";
 import {
   clearRunState,
   getRunState,
   isRunStateUnsettled,
   transitionRunState,
 } from "./run-state";
-import { runStateRequiresLiveOwner } from "./session-cache";
+import {
+  applyRunOutcomeProjection,
+  findSession,
+  runErrors,
+  runStateRequiresLiveOwner,
+  SESSIONS_DIR,
+  updateSessionFile,
+} from "./session-cache";
 import { sessionKernel } from "./session-kernel";
 
 const silent = () => {};
@@ -71,7 +81,12 @@ async function hostedAutomationRunning(id: string): Promise<void> {
 
 afterEach(async () => {
   projected.length = 0;
-  for (const id of created.splice(0)) await clearRunState(id);
+  for (const id of created.splice(0)) {
+    runErrors.delete(id);
+    const sessionPath = `${SESSIONS_DIR}/${id}.json`;
+    if (existsSync(sessionPath)) unlinkSync(sessionPath);
+    await clearRunState(id);
+  }
 });
 
 describe("automation run settlement", () => {
@@ -169,8 +184,17 @@ describe("automation run settlement", () => {
       resolve(import.meta.dir, "automations.ts"),
       "utf8",
     );
-    const terminalFlag = source.indexOf("sawTerminalEvent = true");
-    const settleSession = source.indexOf("await settleAutomationRunState(");
+    const runAutomation = source.indexOf(
+      "export async function runAutomation(",
+    );
+    const terminalFlag = source.indexOf(
+      "sawTerminalEvent = true",
+      runAutomation,
+    );
+    const settleSession = source.indexOf(
+      "await settleAutomationRunState(",
+      terminalFlag,
+    );
     const settleLedger = source.indexOf(
       "settleRun(automation.id, bksId,",
       settleSession,
@@ -394,41 +418,133 @@ describe("automation run settlement", () => {
     expect(projected).toEqual([]);
   });
 
-  test("a definitively failed launch settles from the outer catch", () => {
-    // spawnHostRun journals `run_registered` (session -> `running`) BEFORE
-    // launching. On a definitively failed launch its catch proves absence,
-    // clears that journal, and rethrows — leaving the session `running` with
-    // no journal record and no engine, which the watchdog quarantines. An
-    // ambiguous launch keeps its journal, so the two negative checks below
-    // leave it fenced.
+  test("a failed ledger save cannot strand a proven-ownerless launch", async () => {
+    const id = sid();
+    await hostedAutomationRunning(id);
+
+    const failure = settleAutomationLaunchFailure(
+      id,
+      runKeyFor(id),
+      "spawn failed",
+      () => {
+        // settleRun calls saveAutomation synchronously. Reproduce that write
+        // failing after launch absence has been proved.
+        throw new Error("saveAutomation failed");
+      },
+      {
+        hasActiveRun: () => false,
+        isLiveEngineBusy: () => false,
+        ...deps,
+      },
+    );
+
+    await expect(failure).rejects.toThrow("saveAutomation failed");
+    expect(getRunState(id)).toBe("failed");
+    expect(isRunStateUnsettled(getRunState(id))).toBe(false);
+    expect(projected).toHaveLength(1);
+  });
+
+  test("an ambiguous launch remains fenced", async () => {
+    const id = sid();
+    await hostedAutomationRunning(id);
+    let ledgerSettled = false;
+
+    await settleAutomationLaunchFailure(
+      id,
+      runKeyFor(id),
+      "launch response lost",
+      () => {
+        ledgerSettled = true;
+      },
+      {
+        hasActiveRun: () => true,
+        isLiveEngineBusy: () => false,
+        ...deps,
+      },
+    );
+
+    expect(ledgerSettled).toBe(true);
+    expect(getRunState(id)).toBe("running");
+    expect(projected).toEqual([]);
+  });
+
+  test("the native session is durable before any backend can launch", () => {
     const source = readFileSync(
       resolve(import.meta.dir, "automations.ts"),
       "utf8",
     );
-    const catchStart = source.indexOf("} catch (e: any) {");
-    expect(catchStart).toBeGreaterThan(0);
-    const guard = source.indexOf(
-      "!hasActiveRunFor(bksId, automationRunKey)",
-      catchStart,
+    const persistDefinition = source.indexOf("const persistSession = (");
+    const prelaunchPersist = source.indexOf(
+      'await persistSession("");',
+      persistDefinition,
     );
-    const liveness = source.indexOf(
-      "!isAgentLiveEngineBusy(bksId, automationRunKey)",
-      catchStart,
+    const backendDispatch = source.indexOf(
+      "let events: AsyncGenerator<StreamEvent>;",
+      prelaunchPersist,
     );
-    const settle = source.indexOf(
-      "await settleAutomationRunState(",
-      catchStart,
+    const loopStart = source.indexOf(
+      "for await (const event of events) {",
+      backendDispatch,
     );
-    expect(guard).toBeGreaterThan(catchStart);
-    expect(liveness).toBeGreaterThan(guard);
-    expect(settle).toBeGreaterThan(liveness);
-    // The run key has to outlive the try block for the catch to fence on it.
-    const keyDecl = source.indexOf(
-      "const automationRunKey = `rh-${randomUUIDv7()}`",
+
+    expect(persistDefinition).toBeGreaterThan(0);
+    expect(prelaunchPersist).toBeGreaterThan(persistDefinition);
+    expect(backendDispatch).toBeGreaterThan(prelaunchPersist);
+    expect(loopStart).toBeGreaterThan(backendDispatch);
+  });
+
+  test("a terminal event before init persists its error before immediate projection", async () => {
+    const id = sid();
+    created.push(id);
+    mkdirSync(SESSIONS_DIR, { recursive: true });
+    const sessionPath = `${SESSIONS_DIR}/${id}.json`;
+    expect(existsSync(sessionPath)).toBe(false);
+
+    // runAutomation creates this native file before dispatching the backend.
+    // Only then can the host journal run_registered and emit a terminal event.
+    await updateSessionFile(id, () => ({
+      id,
+      claudeSessionId: "",
+      branch: "main",
+      worktreeDir: "/tmp",
+      createdBy: "Regression automation (automation)",
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString(),
+    }));
+    await transitionRunState(
+      id,
+      "run_registered",
+      { run_key: runKeyFor(id), kind: "automation" },
+      silent,
     );
-    const tryStart = source.indexOf("  try {", keyDecl);
-    expect(keyDecl).toBeGreaterThan(0);
-    expect(keyDecl).toBeLessThan(tryStart);
+
+    await settleAutomationRunState(
+      id,
+      "failed before init",
+      true,
+      runKeyFor(id),
+      {
+        emit: silent,
+        // Execute the actor-outbox destination before returning to the event
+        // loop, which reproduces the race where init never created a file.
+        project: (sessionId, errorMessage, opts) =>
+          applyRunOutcomeProjection(
+            sessionId,
+            errorMessage,
+            { ...opts, noticePersisted: true },
+            true,
+          ),
+      },
+    );
+
+    expect(getRunState(id)).toBe("failed");
+    const written = JSON.parse(readFileSync(sessionPath, "utf8"));
+    expect(written.lastRunError?.message).toBe("failed before init");
+
+    // Restart drops the process-local map. The session API must still recover
+    // the error from the native file.
+    runErrors.delete(id);
+    expect(findSession(id)?.lastRunError?.message).toBe("failed before init");
   });
 
   test("nothing that can reject runs between the terminal event and settlement", () => {
@@ -475,10 +591,11 @@ describe("automation run settlement", () => {
     // Sandboxed runs journal spec.hostId; both gateway paths journal startToken.
     expect(source).toContain("hostId: automationRunKey");
     expect(source.match(/startToken: automationRunKey/g)).toHaveLength(2);
-    // All three settlement call sites fence: in-loop, the post-loop safety
-    // net, and the outer catch's definitive-launch-failure branch.
-    const settlements = source.match(/await settleAutomationRunState\(/g);
-    expect(settlements).toHaveLength(3);
-    expect(source.match(/^\s*automationRunKey,\n\s*\);$/gm)).toHaveLength(3);
+    // All three paths carry the same key: terminal event, post-loop safety
+    // net, and definitive launch failure.
+    expect(source).toContain("await settleAutomationLaunchFailure(");
+    expect(
+      source.match(/^\s*automationRunKey,\n/gm)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(3);
   });
 });

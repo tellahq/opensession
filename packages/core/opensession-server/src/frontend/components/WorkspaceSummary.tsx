@@ -7,9 +7,11 @@ import {
 } from "react";
 import {
   cancelPrReviewApi,
+  fetchCommit,
   setSessionReviewerApi,
   sessionAssetPreviewUrl,
   triggerPrActionApi,
+  type CommitDetails,
   type WorkspaceCommit,
   type WorkspaceMediaItem,
 } from "../lib/api";
@@ -233,6 +235,15 @@ interface Props {
  * already on, so the latest state wins per login before any of this.
  */
 const REVIEWERS_SHOWN = 4;
+
+type OpenCommitDetails =
+  | { sha: string; status: "loading" }
+  | { sha: string; status: "ready"; details: CommitDetails }
+  | { sha: string; status: "unavailable" };
+
+type CommitRowTarget =
+  | { kind: "workspace"; commit: WorkspaceCommit }
+  | { kind: "pr"; commit: PrCommit };
 
 type ReviewLine = {
   key: string;
@@ -620,6 +631,7 @@ export function WorkspaceSummaryBody({
   const [prompted, setPrompted] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const [commitsOpen, setCommitsOpen] = useState(false);
+  const [openCommit, setOpenCommit] = useState<OpenCommitDetails | null>(null);
   const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
@@ -890,64 +902,159 @@ export function WorkspaceSummaryBody({
     );
   }
 
-  function committedRow(commit: WorkspaceCommit) {
-    const content = (
-      <>
-        <span className={WS_SUMMARY_RAIL}>
-          <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
-        </span>
-        <span className={WS_SUMMARY_LABEL}>{commit.title}</span>
-        <span
-          className={cn(
-            WS_SUMMARY_STATE,
-            "flex items-baseline gap-2 text-dim tabular-nums",
+  function toggleCommitDetails(sha: string, repo?: string) {
+    if (openCommit?.sha === sha) {
+      setOpenCommit(null);
+      return;
+    }
+    setOpenCommit({ sha, status: "loading" });
+    fetchCommit(sha, repo)
+      .then((details) => {
+        setOpenCommit((current) => {
+          if (current?.sha !== sha) return current;
+          return details
+            ? { sha, status: "ready", details }
+            : { sha, status: "unavailable" };
+        });
+      })
+      .catch(() => {
+        setOpenCommit((current) =>
+          current?.sha === sha ? { sha, status: "unavailable" } : current,
+        );
+      });
+  }
+
+  function inlineCommitDetails(target: CommitRowTarget) {
+    const sha =
+      target.kind === "workspace" ? target.commit.sha : target.commit.oid;
+    if (openCommit?.sha !== sha) return null;
+    if (openCommit.status === "loading") {
+      return (
+        <div className="mr-4 mb-2 ml-12 text-meta text-faint" role="status">
+          Loading commit…
+        </div>
+      );
+    }
+
+    const details = openCommit.status === "ready" ? openCommit.details : null;
+    const title =
+      details?.title ||
+      (target.kind === "workspace"
+        ? target.commit.title
+        : target.commit.messageHeadline);
+    const body =
+      details?.body ||
+      (target.kind === "pr" ? target.commit.messageBody : undefined);
+    const author =
+      details?.author ||
+      (target.kind === "pr" ? target.commit.author : undefined);
+    const committedAt =
+      details?.committedAt ||
+      (target.kind === "workspace"
+        ? target.commit.committedAt
+        : target.commit.authoredDate);
+    const repo =
+      details?.repo ||
+      (target.kind === "workspace" ? target.commit.repo : session.repo);
+    const shortSha = details?.shortSha || sha.slice(0, 8);
+
+    return (
+      <div className="mr-4 mb-2 ml-12 min-w-0 text-meta text-dim">
+        <div className="mb-1 font-medium leading-relaxed text-fg">{title}</div>
+        {body && (
+          <div className="mb-1 line-clamp-3 whitespace-pre-wrap leading-relaxed">
+            {body}
+          </div>
+        )}
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <code className="text-faint">{shortSha}</code>
+          {author && <span>{author}</span>}
+          {repo && <span>{repo}</span>}
+          {committedAt && <span>{fullTime(committedAt)}</span>}
+          {details && (
+            <span className="inline-flex gap-1.5 tabular-nums">
+              <span>
+                {details.filesChanged} file
+                {details.filesChanged === 1 ? "" : "s"}
+              </span>
+              <span className="text-green">+{details.additions}</span>
+              <span className="text-red">−{details.deletions}</span>
+            </span>
           )}
-        >
-          <span>
-            {commit.filesChanged} file{commit.filesChanged === 1 ? "" : "s"}
-          </span>
-          <span className="text-green">+{commit.additions}</span>
-          <span className="text-red">−{commit.deletions}</span>
-        </span>
-      </>
+        </div>
+      </div>
     );
-    const title = `${commit.title} · ${commit.sha.slice(0, 8)}`;
-    return commit.url ? (
-      <a
-        key={commit.sha}
-        className={cn(WS_SUMMARY_ROW, "no-underline")}
-        href={commit.url}
-        target="_blank"
-        rel="noopener"
-        title={title}
-      >
-        {content}
-      </a>
-    ) : (
-      <div
-        key={commit.sha}
-        className={cn(WS_SUMMARY_ROW, "cursor-default")}
-        title={title}
-      >
-        {content}
+  }
+
+  function committedRow(commit: WorkspaceCommit) {
+    const expanded = openCommit?.sha === commit.sha;
+    return (
+      <div key={commit.sha} className="contents">
+        <Button
+          variant="ghost"
+          size="sm"
+          className={WS_SUMMARY_ROW}
+          onClick={() => toggleCommitDetails(commit.sha, commit.repo)}
+          aria-expanded={expanded}
+          title={expanded ? "Hide commit details" : "Show commit details"}
+        >
+          <span className={WS_SUMMARY_RAIL}>
+            <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+          </span>
+          <span className={WS_SUMMARY_LABEL}>{commit.title}</span>
+          <span
+            className={cn(
+              WS_SUMMARY_STATE,
+              "flex items-baseline gap-2 text-dim tabular-nums",
+            )}
+          >
+            <span>
+              {commit.filesChanged} file{commit.filesChanged === 1 ? "" : "s"}
+            </span>
+            <span className="text-green">+{commit.additions}</span>
+            <span className="text-red">−{commit.deletions}</span>
+          </span>
+          <IconChevronDown
+            size={14}
+            className={cn(
+              "shrink-0 text-faint transition-transform motion-reduce:transition-none",
+              expanded && "rotate-180",
+            )}
+          />
+        </Button>
+        {inlineCommitDetails({ kind: "workspace", commit })}
       </div>
     );
   }
 
   function prCommittedRow(commit: PrCommit) {
+    const expanded = openCommit?.sha === commit.oid;
     return (
-      <div
-        key={commit.oid}
-        className={cn(WS_SUMMARY_ROW, "cursor-default")}
-        title={`${commit.messageHeadline} · ${commit.oid.slice(0, 8)} · ${commit.author}`}
-      >
-        <span className={WS_SUMMARY_RAIL}>
-          <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
-        </span>
-        <span className={WS_SUMMARY_LABEL}>{commit.messageHeadline}</span>
-        <code className="shrink-0 text-meta text-faint">
-          {commit.oid.slice(0, 7)}
-        </code>
+      <div key={commit.oid} className="contents">
+        <Button
+          variant="ghost"
+          size="sm"
+          className={WS_SUMMARY_ROW}
+          onClick={() => toggleCommitDetails(commit.oid, session.repo)}
+          aria-expanded={expanded}
+          title={expanded ? "Hide commit details" : "Show commit details"}
+        >
+          <span className={WS_SUMMARY_RAIL}>
+            <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+          </span>
+          <span className={WS_SUMMARY_LABEL}>{commit.messageHeadline}</span>
+          <code className="shrink-0 text-meta text-faint">
+            {commit.oid.slice(0, 7)}
+          </code>
+          <IconChevronDown
+            size={14}
+            className={cn(
+              "shrink-0 text-faint transition-transform motion-reduce:transition-none",
+              expanded && "rotate-180",
+            )}
+          />
+        </Button>
+        {inlineCommitDetails({ kind: "pr", commit })}
       </div>
     );
   }

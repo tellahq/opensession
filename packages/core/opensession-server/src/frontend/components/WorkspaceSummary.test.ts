@@ -35,6 +35,14 @@ test("the Committed section folds open to every PR or workspace commit", () => {
   expect(summarySource).toContain("commits.map(committedRow)");
 });
 
+test("a commit opens its details inline instead of navigating to GitHub", () => {
+  expect(summarySource).toContain("function toggleCommitDetails(");
+  expect(summarySource).toContain("fetchCommit(sha, repo)");
+  expect(summarySource).toContain("function inlineCommitDetails(");
+  expect(summarySource).toContain('title={expanded ? "Hide commit details"');
+  expect(summarySource).not.toContain("href={commit.url}");
+});
+
 test("uncommitted work opens Changes without using the separate commit action", () => {
   expect(summarySource).toContain("function openUncommittedChanges()");
   expect(summarySource).toContain('onOpenPanelTab("changes")');
