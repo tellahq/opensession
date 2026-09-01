@@ -128,6 +128,9 @@ export interface CommitDetails extends RecentCommit {
   shortSha: string;
   body?: string;
   filesChanged: number;
+  /** Bounded unified patch, present only when a detail view asks for it. */
+  rawPatch?: string;
+  patchTruncated?: boolean;
   /** Whether it is on the repo's default branch, i.e. whether it shipped. */
   onDefaultBranch: boolean;
   /** That branch's name, so the card can say "on main". */
@@ -144,9 +147,11 @@ export interface CommitDetails extends RecentCommit {
 export async function fetchCommit(
   sha: string,
   repo?: string,
+  options?: { includeChanges?: boolean },
 ): Promise<CommitDetails | null> {
   const query = new URLSearchParams({ sha });
   if (repo) query.set("repo", repo);
+  if (options?.includeChanges) query.set("changes", "1");
   return (
     (await request<CommitDetails | null>(`/commit?${query}`, {
       label: "Failed to fetch commit",

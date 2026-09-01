@@ -561,6 +561,7 @@ export function WorkspaceSummaryBody({
   // Assets section, so the same folder is not drawn two ways in one window.
   const [assetView, setAssetView] = useAssetViewMode();
   const [changesOpen, setChangesOpen] = useState(false);
+  const [openCommit, setOpenCommit] = useState<OpenCommitDetails | null>(null);
   const diffTheme = useResolvedTheme();
   // `session` follows the session-list poll; the viewer's explicit value follows
   // the workspace_status socket event and wins when it is available.
@@ -618,7 +619,7 @@ export function WorkspaceSummaryBody({
     session.repo || undefined,
     undefined,
     {
-      enabled: changesOpen && Boolean(pr),
+      enabled: (changesOpen || Boolean(openCommit)) && Boolean(pr),
       revision: `${pr?.headRefOid || ""}\0${refreshTick || 0}`,
     },
   );
@@ -651,7 +652,6 @@ export function WorkspaceSummaryBody({
     ) ?? null;
   const [prompted, setPrompted] = useState(false);
   const [commitsOpen, setCommitsOpen] = useState(false);
-  const [openCommit, setOpenCommit] = useState<OpenCommitDetails | null>(null);
   const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
@@ -1043,7 +1043,7 @@ export function WorkspaceSummaryBody({
       return;
     }
     setOpenCommit({ sha, status: "loading" });
-    fetchCommit(sha, repo)
+    fetchCommit(sha, repo, { includeChanges: true })
       .then((details) => {
         setOpenCommit((current) => {
           if (current?.sha !== sha) return current;
@@ -1086,6 +1086,30 @@ export function WorkspaceSummaryBody({
       details?.repo ||
       (target.kind === "workspace" ? target.commit.repo : session.repo);
     const shortSha = details?.shortSha || sha.slice(0, 8);
+    const prPatchIsCurrent =
+      target.kind === "pr" &&
+      prCommits.length === 1 &&
+      (!pr?.headRefOid || prDiffResource.data?.headRefOid === pr.headRefOid);
+    const rawPatch =
+      details?.rawPatch ||
+      (prPatchIsCurrent ? prDiffResource.data?.patch : undefined);
+    const commitDiffs = (() => {
+      if (!rawPatch?.trim()) return [];
+      try {
+        return parsePatchFiles(rawPatch).flatMap(
+          (parsedPatch) => parsedPatch.files,
+        );
+      } catch {
+        return [];
+      }
+    })();
+    const commitDiffOptions = {
+      diffStyle: "unified" as const,
+      overflow: "scroll" as const,
+      enableLineSelection: false,
+      theme: diffTheme === "light" ? "pierre-light" : "pierre-dark",
+      themeType: diffTheme,
+    };
 
     return (
       <Popover.Popup
@@ -1095,7 +1119,7 @@ export function WorkspaceSummaryBody({
         side={embedded ? "top" : "left"}
         align="start"
         sideOffset={10}
-        className="flex max-h-[min(560px,70vh,var(--available-height))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden p-0"
+        className="flex max-h-[min(720px,82vh,var(--available-height))] w-[min(760px,calc(100vw-24px))] flex-col overflow-hidden p-0"
       >
         <div className="flex items-baseline justify-between gap-2.5 border-b border-divider bg-surface px-3 py-[9px]">
           <span className="text-label font-semibold text-fg">Commit</span>
@@ -1106,30 +1130,52 @@ export function WorkspaceSummaryBody({
             Loading commit…
           </div>
         ) : (
-          <div className="overflow-y-auto p-3 text-meta text-dim">
-            <div className="text-label font-semibold leading-relaxed text-fg">
-              {title}
+          <div className="overflow-y-auto">
+            <div className="p-3 text-meta text-dim">
+              <div className="text-label font-semibold leading-relaxed text-fg">
+                {title}
+              </div>
+              {body && (
+                <div className="mt-2 whitespace-pre-wrap leading-relaxed">
+                  {body}
+                </div>
+              )}
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                {author && <span>{author}</span>}
+                {repo && <span>{repo}</span>}
+                {committedAt && <span>{fullTime(committedAt)}</span>}
+                {details && (
+                  <span className="inline-flex gap-1.5 tabular-nums">
+                    <span>
+                      {details.filesChanged} file
+                      {details.filesChanged === 1 ? "" : "s"}
+                    </span>
+                    <span className="text-green">+{details.additions}</span>
+                    <span className="text-red">−{details.deletions}</span>
+                  </span>
+                )}
+              </div>
             </div>
-            {body && (
-              <div className="mt-2 whitespace-pre-wrap leading-relaxed">
-                {body}
+            {commitDiffs.length > 0 && (
+              <div className="border-t border-divider bg-code-well text-label">
+                <div className="px-3 py-2 text-meta font-semibold text-dim">
+                  Changes
+                </div>
+                {commitDiffs.map((file) => (
+                  <FileDiff
+                    key={`${diffTheme}:${file.prevName ?? ""}:${file.name}`}
+                    fileDiff={file}
+                    options={commitDiffOptions}
+                    disableWorkerPool
+                  />
+                ))}
               </div>
             )}
-            <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              {author && <span>{author}</span>}
-              {repo && <span>{repo}</span>}
-              {committedAt && <span>{fullTime(committedAt)}</span>}
-              {details && (
-                <span className="inline-flex gap-1.5 tabular-nums">
-                  <span>
-                    {details.filesChanged} file
-                    {details.filesChanged === 1 ? "" : "s"}
-                  </span>
-                  <span className="text-green">+{details.additions}</span>
-                  <span className="text-red">−{details.deletions}</span>
-                </span>
-              )}
-            </div>
+            {details?.patchTruncated && (
+              <div className="border-t border-divider bg-surface p-3 text-meta text-faint">
+                Some large changes aren’t shown.
+              </div>
+            )}
           </div>
         )}
       </Popover.Popup>

@@ -49,6 +49,13 @@ export interface CommitLookup {
   defaultBranch: string;
 }
 
+export interface CommitLookupWithChanges extends CommitLookup {
+  /** Bounded unified patch for this commit, read only when a caller asks for it. */
+  rawPatch: string;
+  /** The patch stopped at the last complete file before the response limit. */
+  patchTruncated?: boolean;
+}
+
 /** What may be looked up at all. Git's own floor is 4 characters, but a
  *  reference that short is ambiguous in any real repo and is far more likely to
  *  be a word than a commit. */
@@ -64,6 +71,7 @@ const RECORD = "\x1e";
 // and the shortstat line follows after.
 const FORMAT = `%H${FIELD}%h${FIELD}%an${FIELD}%ae${FIELD}%cI${FIELD}%s${FIELD}%b${RECORD}`;
 const BODY_MAX = 400;
+const PATCH_MAX = 600_000;
 
 /**
  * Parse one `git log -1 --shortstat --format=FORMAT` record. Exported for the
@@ -136,6 +144,28 @@ export async function readCommitAt(
   );
   if (out.exitCode !== 0) return null;
   return parseCommitRecord(out.stdout.toString(), repo);
+}
+
+export async function readCommitChangesAt(
+  repo: { repo: string },
+  sha: string,
+): Promise<Pick<CommitLookupWithChanges, "rawPatch" | "patchTruncated">> {
+  const output = await withGitSlot(() =>
+    $`git -C ${repo.repo} -c core.quotePath=false show --format= --no-color --no-ext-diff --no-textconv --find-renames --patch --end-of-options ${`${sha}^{commit}`} -- | head -c ${PATCH_MAX + 1}`
+      .quiet()
+      .nothrow(),
+  );
+  const bytes = output.stdout;
+  const patchTruncated = bytes.byteLength > PATCH_MAX;
+  let rawPatch = bytes.subarray(0, PATCH_MAX).toString("utf8");
+  if (patchTruncated) {
+    const boundary = rawPatch.lastIndexOf("\ndiff --git ");
+    rawPatch = boundary > 0 ? rawPatch.slice(0, boundary + 1) : "";
+  }
+  return {
+    rawPatch,
+    ...(patchTruncated ? { patchTruncated: true } : {}),
+  };
 }
 
 /** Whether the commit is on the branch the repo ships from. The remote's copy
@@ -225,6 +255,27 @@ export async function lookupCommit(
     });
   inFlight.set(key, request);
   return request;
+}
+
+/** Read the code in a commit only for detail views. Transcript hover lookups
+ * stay metadata-only, so moving across several shas cannot transfer several
+ * large patches. Cutting at a file boundary keeps @pierre/diffs from receiving
+ * a torn final file. */
+export async function lookupCommitWithChanges(
+  sha: string,
+  repoHint?: string,
+): Promise<CommitLookupWithChanges | null> {
+  const commit = await lookupCommit(sha, repoHint);
+  if (!commit) return null;
+  const repo = Object.values(configuredRepos()).find(
+    (candidate) => candidate.id === commit.repo && candidate.repo,
+  );
+  if (!repo) return { ...commit, rawPatch: "" };
+
+  return {
+    ...commit,
+    ...(await readCommitChangesAt(repo, commit.sha)),
+  };
 }
 
 async function resolve(

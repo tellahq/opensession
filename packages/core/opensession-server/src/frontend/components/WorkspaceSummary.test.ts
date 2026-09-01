@@ -54,10 +54,20 @@ test("the Committed section folds open to every PR or workspace commit", () => {
   expect(summarySource).toContain("commits.map(committedRow)");
 });
 
-test("a commit opens its details in a nested overlay instead of GitHub", () => {
+test("a commit opens its details and code changes in a nested overlay", () => {
   expect(summarySource).toContain("function setCommitDetailsOpen(");
-  expect(summarySource).toContain("fetchCommit(sha, repo)");
+  expect(summarySource).toContain(
+    "fetchCommit(sha, repo, { includeChanges: true })",
+  );
   expect(summarySource).toContain("function commitDetailsPopup(");
+  expect(summarySource).toContain(
+    "enabled: (changesOpen || Boolean(openCommit)) && Boolean(pr)",
+  );
+  expect(summarySource).toContain("prCommits.length === 1");
+  expect(summarySource).toContain("parsePatchFiles(rawPatch)");
+  expect(summarySource).toContain("commitDiffs.map((file)");
+  expect(summarySource).toContain("<FileDiff");
+  expect(summarySource).toContain("Some large changes aren’t shown.");
   expect(summarySource).toContain("exclusive={false}");
   expect(summarySource).toContain('side={embedded ? "top" : "left"}');
   expect(summarySource).not.toContain("href={commit.url}");

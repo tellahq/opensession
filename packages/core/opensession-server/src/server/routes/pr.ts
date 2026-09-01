@@ -257,12 +257,17 @@ export async function handlePrRoutes(
 
   // One commit by sha, for the transcript's commit references (the hover card
   // behind `4ed1ef09`). `?repo=` is where the sha was written and is searched
-  // first; the answer names the repo it was actually found in. Null when no
-  // checkout has it, which is what an unresolvable reference gets.
+  // first; the answer names the repo it was actually found in. Detail views ask
+  // for `?changes=1`; ordinary hover cards stay metadata-only.
   if (path === "/api/commit" && req.method === "GET") {
-    const { lookupCommit } = await import("../commit-lookup");
+    const { lookupCommit, lookupCommitWithChanges } =
+      await import("../commit-lookup");
+    const read =
+      url.searchParams.get("changes") === "1"
+        ? lookupCommitWithChanges
+        : lookupCommit;
     return Response.json(
-      await lookupCommit(
+      await read(
         url.searchParams.get("sha") || "",
         url.searchParams.get("repo") || undefined,
       ),
