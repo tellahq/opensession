@@ -20,6 +20,7 @@ test("SessionViewer decomposition files stay below the source line limit", async
     "hooks/useSessionModelWorkflowController.ts",
     "hooks/useSessionRuntimeController.ts",
     "hooks/useTranscriptHistoryController.ts",
+    "hooks/useTranscriptReaderController.ts",
     "hooks/useSessionViewerActionsController.ts",
     "lib/session-viewer-actions.ts",
     "lib/transcript-history-controller.ts",
@@ -88,6 +89,35 @@ test("the main conversation region owns its complete bounded JSX contract", asyn
   }
   expect(region).not.toMatch(/\buse(?:Memo|Callback)\(/);
   expect(region).not.toMatch(/\b(?:any|ts-ignore|ts-expect-error)\b/);
+});
+
+test("transcript reader lifecycle stays grouped and out of SessionViewer", async () => {
+  const [viewer, reader] = await Promise.all([
+    source("components/SessionViewer.tsx"),
+    source("hooks/useTranscriptReaderController.ts"),
+  ]);
+  const groups = [
+    "ReaderTranscriptState",
+    "ReaderIndexState",
+    "ReaderHistoryState",
+    "ReaderLayoutOptions",
+    "ReaderLifecycleIdentity",
+    "ReaderLifecycleTranscript",
+    "ReaderLifecycleHistory",
+    "ReaderLifecycleScroll",
+    "ReaderLifecycleRuntime",
+    "ReaderLifecycleIndex",
+    "ReaderLifecycleOptions",
+  ];
+
+  for (const group of groups) {
+    expect(interfaceMemberCount(reader, group), group).toBeLessThanOrEqual(15);
+  }
+  expect(viewer.match(/useTranscriptReaderLayout\(/g)).toHaveLength(1);
+  expect(viewer.match(/useTranscriptReaderLifecycle\(/g)).toHaveLength(1);
+  expect(viewer).not.toContain("const initiallyScrolledSessionRef = useRef");
+  expect(reader).not.toMatch(/:\s*any\b/);
+  expect(reader).not.toMatch(/\bas\s+(?:const|[A-Z]\w*)\b/);
 });
 
 test("the session subscription has one bounded grouped options contract", async () => {
