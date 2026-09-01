@@ -1912,6 +1912,21 @@ export async function runAutomation(
       }
     }
     if (!errorMsg) errorMsg = declaredRunFailure(textTail) || "";
+    // A stream that ended without any terminal event never proved the turn
+    // finished. session-create.ts throws "Opening run ended without a terminal
+    // event" for exactly this shape, and every journal wrapper records
+    // journalRecordAbnormalCompletion instead of clearing, so boot recovery
+    // reports it as a failure. runAutomation used to fall through with an
+    // empty errorMsg: it delivered outputs for a turn that produced nothing
+    // and recorded `ok` while the session stayed unsettled — the same
+    // ledger-ok/session-running split-brain this change exists to remove.
+    //
+    // The run state deliberately stays fenced (settleAutomationRunState
+    // refuses without a terminal event): the journal still carries this run's
+    // terminalFailure, and boot recovery owns settling it. Only the LEDGER
+    // verdict is corrected here, so the two sides agree.
+    if (!errorMsg && !sawTerminalEvent)
+      errorMsg = "Run ended without a terminal event";
 
     // Safety net for a stream that reported its terminal outcome in a shape
     // the loop could not settle on. Already-settled sessions return early, so
