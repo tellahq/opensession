@@ -85,6 +85,14 @@ jobs:
             fi
             sleep 1
           done
+          for attempt in {1..120}; do
+            curl -fsS http://127.0.0.1:9222/json/version >/dev/null && break
+            if [ "$attempt" -eq 120 ]; then
+              cat "$RUNNER_TEMP/transcript-motion-chrome.log"
+              exit 1
+            fi
+            sleep 1
+          done
           CDP_PORT=9222 OPENSESSION_URL=http://127.0.0.1:4899 \
             bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fuzz.ts \
               --seeds 24 --speed 8 --out "$RUNNER_TEMP/transcript-motion-report.json"
