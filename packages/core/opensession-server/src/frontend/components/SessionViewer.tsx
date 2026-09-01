@@ -116,6 +116,22 @@ import {
   useSessionRuntimeController,
 } from "../hooks/useSessionRuntimeController";
 import {
+  beginTranscriptHistoryLoad,
+  captureTranscriptVisibility,
+  handleTranscriptHistoryScroll,
+  listenForResumeCancellation,
+  listenForTranscriptVisibility,
+  loadAllTranscriptHistory,
+  loadEarlierTranscriptHistory,
+  resetTranscriptHistoryWalk,
+  resetTranscriptVisibility,
+  resumeTranscriptForEntryGrowth,
+  startTranscriptHistoryHold,
+  stopTranscriptHistoryHold,
+  subscribeToTranscriptStreamGrowth,
+  useTranscriptHistoryController,
+} from "../hooks/useTranscriptHistoryController";
+import {
   dedupeViewers,
   facepileAvatarStyle,
   otherViewers,
@@ -187,6 +203,7 @@ import {
   pickScrollAnchor,
   readFollowingLive,
 } from "./session-viewer/transcript-anchor";
+import { historyPageRequest } from "../lib/transcript-history-controller";
 import { useLivePlan } from "./session-viewer/use-live-plan";
 import {
   useTranscript,
@@ -785,75 +802,35 @@ export function SessionViewer({
     },
     [transcriptViewStore],
   );
-  // Initial scrolling must wait for this session's transcript_init. During a
-  // session switch, entries from the previous session remain rendered until the
-  // WebSocket response arrives and must not consume the new session's scroll.
-  const transcriptReadySessionRef = useRef<string | null>(
-    cachedTranscript ? session.id : null,
-  );
-  // Reconnect resume cursor: endOffset/rev of the last transcript frame the
-  // server sent (transcript_init/append). On a re-watch of the SAME session
-  // with entries still mounted, it rides the watch message as
-  // sinceOffset/sinceRev so the server replays only the gap from the mirror
-  // jsonl instead of replacing the whole tail.
-  const transcriptCursorRef = useRef<{
-    sessionId: string;
-    rev: string;
-    offset: number;
-  } | null>(cachedTranscript?.cursor ?? null);
-  // Transcript v2 seq mode (docs/transcripts.md): when init/append
-  // frames carry seq fields the server is serving from the owned store —
-  // resume watches with sinceSeq, page older history with beforeSeq, and
-  // ignore offset/rev cursors while in this mode. null = legacy mode (old
-  // server or ineligible session): behavior byte-identical to pre-v2.
-  // lastSeq tracks the newest seq seen (max — upsert republishes reuse old
-  // seqs); firstSeq the earliest loaded (the "load earlier" cursor).
-  const transcriptSeqRef = useRef<{
-    sessionId: string;
-    lastSeq: number;
-    firstSeq: number | null;
-    lastChangeSeq: number;
-  } | null>(cachedTranscript?.seq ?? null);
-  // Existing engine-backed sessions can load from the owned transcript store even
-  // when no mirror file exists. Fresh sessions never ran, so they still render
-  // the empty canvas without flashing a loader. `ran` and not the engine ids:
-  // this is the FIRST render, before the session's detail has hydrated, and
-  // the list row carries the answer where it no longer carries the ids.
-  const [loading, setLoading] = useState(!cachedTranscript && !!session.ran);
-  // Cached transcripts stay visible while the watch handshake catches them up.
-  // That background sync is intentionally silent: it does not block reading or
-  // sending, and a loader at the live edge looks like part of the conversation.
-  // The initial transcript is the tail only when the file is large; these drive
-  // the "load earlier history" affordance at the top of the conversation.
-  const [historyTruncated, setHistoryTruncated] = useState(
-    cachedTranscript?.historyTruncated ?? false,
-  );
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  // The whole-history actions walk backward a page at a time. The walk is
-  // driven from the transcript_history handler (each page schedules the next),
-  // so its state lives in a ref; `loaded` enforces the ceiling and
-  // `cursor` catches a backlog that stops receding (a transcript whose
-  // earliest surviving entry isn't seq 1 reports "truncated" forever).
-  const historyWalkRef = useRef<{
-    sessionId: string;
-    loaded: number;
-    cursor: number | null;
-  } | null>(null);
-  // An ordinary history load walks until it reaches a user/system boundary.
-  // A raw page can otherwise land wholly inside one collapsed work turn, which
-  // makes a successful load look like a no-op. This stays separate from the
-  // explicit whole-history walk and has its own small ceiling.
-  const historyRevealRef = useRef<{
-    sessionId: string;
-    loaded: number;
-    cursor: number | null;
-  } | null>(null);
-  // One extra page downloads after the initial view settles. It starts only
-  // while the reader is still at the live edge; an upward gesture adopts the
-  // in-flight request into historyRevealRef and gives it the normal scroll hold.
-  const backgroundHistoryRef = useRef(false);
-  const backgroundHistoryAttemptedRef = useRef(false);
-  const [loadingAllHistory, setLoadingAllHistory] = useState(false);
+  const transcriptHistory = useTranscriptHistoryController({
+    sessionId: session.id,
+    ran: session.ran,
+    cachedTranscript,
+  });
+  const transcriptHistoryRef = useRef(transcriptHistory);
+  const {
+    loading,
+    setLoading,
+    historyTruncated,
+    setHistoryTruncated,
+    loadingHistory,
+    setLoadingHistory,
+    loadingAllHistory,
+    setLoadingAllHistory,
+  } = transcriptHistory.state;
+  const {
+    transcriptReadySessionRef,
+    transcriptCursorRef,
+    transcriptSeqRef,
+    historyStartRef,
+  } = transcriptHistory.cursors;
+  const {
+    historyWalkRef,
+    historyRevealRef,
+    backgroundHistoryRef,
+    backgroundHistoryAttemptedRef,
+  } = transcriptHistory.walk;
+  const { loadingHistoryRef } = transcriptHistory.hold;
   const {
     index: transcriptIndex,
     indexState: transcriptIndexState,
@@ -877,28 +854,6 @@ export function SessionViewer({
     send,
     transcriptViewStore,
   });
-  // Byte offset the loaded history begins at — the "load earlier" pagination
-  // cursor (server: parseTranscriptTail/parseTranscriptWindow startOffset).
-  // null = unknown (old server) → load_history falls back to the full resend.
-  const historyStartRef = useRef<number | null>(
-    cachedTranscript?.historyStart ?? null,
-  );
-  // Scroll anchor for "Load earlier history":
-  // older entries prepend above the viewport, so keep the reader on the same
-  // content. See startHistoryHold below — a DOM-element anchor plus a short
-  // rAF hold, because a one-shot scrollTop restore breaks in three ways:
-  // bottom growth (streaming) skews scrollHeight math, prepended bubbles
-  // enter at their content-visibility estimate (80px) and re-size as they
-  // render, and Safari has no native scroll anchoring to compensate.
-  const historyHoldRef = useRef<{
-    node: HTMLElement;
-    top: number;
-    eid: string | null;
-    eidTop: number | null;
-    until: number;
-    raf: number;
-    fallback: { height: number; top: number } | null;
-  } | null>(null);
   // The composer draft lives INSIDE Composer (uncontrolled mode) so keystrokes
   // don't re-render this whole component; the text arrives via handleSend.
   // Same fix as the CommentableDiff draft-text gotcha.
@@ -1689,15 +1644,16 @@ export function SessionViewer({
   // the anchor is carried rather than recomputed, because this runs on every
   // streamed frame and pickScrollAnchor reads a rect per [data-eid] node.
   useEffect(() => {
-    if (transcriptReadySessionRef.current !== session.id) return;
+    const cursors = transcriptHistoryRef.current.cursors;
+    if (cursors.transcriptReadySessionRef.current !== session.id) return;
     const previous = cachedTranscriptView(session.id);
     const el = messagesRef.current;
     cacheTranscriptView(session.id, {
       entries,
-      cursor: transcriptCursorRef.current,
-      seq: transcriptSeqRef.current,
+      cursor: cursors.transcriptCursorRef.current,
+      seq: cursors.transcriptSeqRef.current,
       historyTruncated,
-      historyStart: historyStartRef.current,
+      historyStart: cursors.historyStartRef.current,
       index: transcriptIndex,
       indexEpoch: transcriptIndexEpochRef.current,
       scrollTop: el?.scrollTop ?? previous?.scrollTop ?? 0,
@@ -1764,18 +1720,14 @@ export function SessionViewer({
   // (rect relative to container + scrollTop) are scroll-invariant, so the
   // reader's own scrolling composes cleanly with the compensation.
   const stopHistoryHold = useCallback(() => {
-    const h = historyHoldRef.current;
-    if (!h) return;
-    cancelAnimationFrame(h.raf);
-    historyHoldRef.current = null;
-    const el = messagesRef.current;
-    if (el) el.style.overflowAnchor = "";
+    stopTranscriptHistoryHold(
+      transcriptHistoryRef.current.hold.historyHoldRef,
+      messagesRef,
+    );
   }, [messagesRef]);
-  // Ref mirror keeps rapid clicks from sending duplicate history requests
-  // before React re-renders with the disabled button.
-  const loadingHistoryRef = useRef(false);
   useEffect(() => {
-    loadingHistoryRef.current = loadingHistory;
+    transcriptHistoryRef.current.hold.loadingHistoryRef.current =
+      loadingHistory;
   }, [loadingHistory]);
   // One page request. `whole` is the whole-history variant: a fat page in seq
   // mode, and in legacy mode the deliberately cursor-less request the server
@@ -1784,35 +1736,25 @@ export function SessionViewer({
   // been its fallback.
   const requestHistoryPage = useCallback(
     (whole = false) => {
-      const seqState = transcriptSeqRef.current;
-      if (seqState?.sessionId === session.id) {
-        // Seq mode (transcript v2): page backwards from the earliest seq we
-        // hold. Without a usable cursor the server falls back to a full
-        // legacy resend, same as the legacy no-offset case below.
-        send({
-          type: "load_history",
+      // Seq mode (transcript v2): page backwards from the earliest seq we
+      // hold. Without a usable cursor the server falls back to a full
+      // legacy resend, same as the legacy no-offset case below.
+      send(
+        historyPageRequest({
           sessionId: session.id,
-          ...(seqState.firstSeq !== null && seqState.firstSeq > 1
-            ? { beforeSeq: seqState.firstSeq }
-            : {}),
-          limit: whole ? JUMP_PAGE_ENTRIES : HISTORY_PAGE_ENTRIES,
-        });
-        return;
-      }
-      const cursor = transcriptCursorRef.current;
-      send({
-        type: "load_history",
-        sessionId: session.id,
-        ...(!whole &&
-        historyStartRef.current !== null &&
-        historyStartRef.current > 0
-          ? {
-              beforeOffset: historyStartRef.current,
-              beforeRev:
-                cursor?.sessionId === session.id ? cursor.rev : undefined,
-            }
-          : {}),
-      });
+          whole,
+          sequence:
+            transcriptHistoryRef.current.cursors.transcriptSeqRef.current,
+          cursor:
+            transcriptHistoryRef.current.cursors.transcriptCursorRef.current,
+          historyStart:
+            transcriptHistoryRef.current.cursors.historyStartRef.current,
+          limits: {
+            page: HISTORY_PAGE_ENTRIES,
+            whole: JUMP_PAGE_ENTRIES,
+          },
+        }),
+      );
     },
     [send, session.id],
   );
@@ -1821,9 +1763,10 @@ export function SessionViewer({
   // across the gaps, which is what keeps the auto-load sentinel and a second
   // click from interleaving requests of their own.
   const finishHistoryWalk = useCallback(() => {
-    if (!historyWalkRef.current) return;
-    historyWalkRef.current = null;
-    setLoadingAllHistory(false);
+    const controller = transcriptHistoryRef.current;
+    if (!controller.walk.historyWalkRef.current) return;
+    controller.walk.historyWalkRef.current = null;
+    controller.state.setLoadingAllHistory(false);
     stopHistoryHold();
   }, [stopHistoryHold]);
 
@@ -1833,82 +1776,13 @@ export function SessionViewer({
       ms: number,
       fallback: { height: number; top: number } | null,
     ) => {
-      const el = messagesRef.current;
-      if (!el) return;
-      stopHistoryHold();
-      el.style.overflowAnchor = "none";
-      const contentTopOf = (n: HTMLElement, c: HTMLElement) =>
-        n.getBoundingClientRect().top -
-        c.getBoundingClientRect().top +
-        c.scrollTop;
-      // Two anchor layers: the tight node for frame-to-frame deltas, and its
-      // nearest [data-eid] ancestor as a *recovery identity* — when a prepend
-      // merges into the anchor's turn block the whole block remounts (its key
-      // is its first item id) and every DOM node dies, but the same entry
-      // re-renders under the same data-eid.
-      const idEl = (node.closest?.("[data-eid]") as HTMLElement | null) ?? null;
-      const hold = {
-        node,
-        top: contentTopOf(node, el),
-        eid: idEl?.dataset.eid ?? null,
-        eidTop: idEl ? contentTopOf(idEl, el) : null,
-        until: performance.now() + ms,
-        raf: 0,
-        fallback,
-      };
-      historyHoldRef.current = hold;
-      const tick = () => {
-        const h = historyHoldRef.current;
-        const c = messagesRef.current;
-        if (!h || h !== hold || !c) return;
-        if (performance.now() > h.until || readFollowingLive(followingLive)) {
-          stopHistoryHold();
-          return;
-        }
-        if (h.node.isConnected) {
-          const t = contentTopOf(h.node, c);
-          const d = t - h.top;
-          if (d !== 0) c.scrollTop += d;
-          h.top = t;
-          // Keep the recovery identity fresh: cheap ancestor walk, and the
-          // content offset re-measured so a later remount recovers to the
-          // reader's latest position, not the hold's starting one.
-          const id2 = h.node.closest?.("[data-eid]") as HTMLElement | null;
-          h.eid = id2?.dataset.eid ?? h.eid;
-          h.eidTop = id2 ? contentTopOf(id2, c) : h.eidTop;
-        } else {
-          // Anchor DOM died (block remount). Recover through the entry id:
-          // same content, new nodes — shift by how far it moved.
-          const revived =
-            h.eid && typeof CSS !== "undefined"
-              ? c.querySelector<HTMLElement>(
-                  `[data-eid="${CSS.escape(h.eid)}"]`,
-                )
-              : null;
-          if (revived && h.eidTop !== null) {
-            const d = contentTopOf(revived, c) - h.eidTop;
-            if (d !== 0) c.scrollTop += d;
-          } else if (h.fallback) {
-            // Last resort: height math. Skewed by content-visibility
-            // estimate resets, but better than staying at a raw offset.
-            c.scrollTop = c.scrollHeight - h.fallback.height + h.fallback.top;
-          }
-          h.fallback = null;
-          const next = revived ?? pickScrollAnchor(c);
-          if (!next) {
-            stopHistoryHold();
-            return;
-          }
-          const nid =
-            (next.closest?.("[data-eid]") as HTMLElement | null) ?? null;
-          h.node = next;
-          h.top = contentTopOf(next, c);
-          h.eid = nid?.dataset.eid ?? null;
-          h.eidTop = nid ? contentTopOf(nid, c) : null;
-        }
-        h.raf = requestAnimationFrame(tick);
-      };
-      hold.raf = requestAnimationFrame(tick);
+      startTranscriptHistoryHold(
+        transcriptHistoryRef.current.hold.historyHoldRef,
+        followingLive,
+        messagesRef,
+        stopHistoryHold,
+        { node, ms, fallback },
+      );
     },
     [messagesRef, stopHistoryHold, followingLive],
   );
@@ -1916,7 +1790,7 @@ export function SessionViewer({
   // fetches shouldn't burn the hold window, so extend it when a load lands.
   useEffect(() => {
     if (loadingHistory) return;
-    const h = historyHoldRef.current;
+    const h = transcriptHistoryRef.current.hold.historyHoldRef.current;
     if (h) h.until = Math.max(h.until, performance.now() + 2500);
   }, [loadingHistory]);
   useEffect(() => stopHistoryHold, [session.id, stopHistoryHold]);
@@ -1924,12 +1798,8 @@ export function SessionViewer({
   // session-guarded anyway) — without this the flag would outlive it and keep
   // the control stuck in its loading state.
   useEffect(() => {
-    return () => {
-      historyWalkRef.current = null;
-      historyRevealRef.current = null;
-      backgroundHistoryRef.current = false;
-      setLoadingAllHistory(false);
-    };
+    const controller = transcriptHistoryRef.current;
+    return () => resetTranscriptHistoryWalk(controller);
   }, [session.id]);
 
   // Per-session model/account/effort/goal state, plus the dynamic workflow
@@ -2256,7 +2126,8 @@ export function SessionViewer({
     const el = messagesRef.current;
     if (
       !el ||
-      transcriptReadySessionRef.current !== session.id ||
+      transcriptHistoryRef.current.cursors.transcriptReadySessionRef.current !==
+        session.id ||
       initiallyScrolledSessionRef.current === session.id ||
       entries.length === 0
     )
@@ -2328,100 +2199,53 @@ export function SessionViewer({
   // AFTER visibility (the PWA's WebSocket reconnects first, then backfills),
   // so a short watch window catches late arrivals. A real reader gesture
   // cancels the pending jump — their hands on the transcript always win.
-  const lastEntryIdRef = useRef<string | null>(null);
-  const streamLenRef = useRef(0);
   useLayoutEffect(() => {
-    lastEntryIdRef.current =
-      entries.length > 0 ? entries[entries.length - 1].id : null;
-    streamLenRef.current = liveTurnStore.textLength();
+    captureTranscriptVisibility(
+      transcriptHistoryRef.current.visibility,
+      entries,
+      liveTurnStore,
+    );
   }, [entries, liveTurnStore]);
-  const hiddenSnapRef = useRef<{
-    at: number;
-    lastEntryId: string | null;
-    streamLen: number;
-  } | null>(null);
-  const resumeWatchRef = useRef<{
-    until: number;
-    lastEntryId: string | null;
-    streamLen: number;
-  } | null>(null);
   useEffect(() => {
-    hiddenSnapRef.current = null;
-    resumeWatchRef.current = null;
+    resetTranscriptVisibility(transcriptHistoryRef.current.visibility);
   }, [session.id]);
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        hiddenSnapRef.current = {
-          at: Date.now(),
-          lastEntryId: lastEntryIdRef.current,
-          streamLen: streamLenRef.current,
-        };
-        resumeWatchRef.current = null;
-        return;
-      }
-      const snap = hiddenSnapRef.current;
-      hiddenSnapRef.current = null;
-      if (!snap) return;
-      const grew =
-        lastEntryIdRef.current !== snap.lastEntryId ||
-        streamLenRef.current > snap.streamLen;
-      if (grew || Date.now() - snap.at >= HIDDEN_REOPEN_MS) {
-        scrollToLatest("auto");
-      } else {
-        resumeWatchRef.current = {
-          until: performance.now() + RESUME_GROWTH_WINDOW_MS,
-          lastEntryId: snap.lastEntryId,
-          streamLen: snap.streamLen,
-        };
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [scrollToLatest]);
+  useEffect(
+    () =>
+      listenForTranscriptVisibility(
+        transcriptHistoryRef.current.visibility,
+        scrollToLatest,
+        {
+          reopenAfterMs: HIDDEN_REOPEN_MS,
+          growthWindowMs: RESUME_GROWTH_WINDOW_MS,
+        },
+      ),
+    [scrollToLatest],
+  );
   // The late-arrival half of the resume jump: growth landing inside the watch
   // window (WS backfill after a PWA resume) completes the jump to the edge.
   useEffect(() => {
-    const watch = resumeWatchRef.current;
-    if (!watch) return;
-    if (performance.now() > watch.until) {
-      resumeWatchRef.current = null;
-      return;
-    }
-    if (lastEntryIdRef.current !== watch.lastEntryId) {
-      resumeWatchRef.current = null;
-      scrollToLatest("auto");
-    }
+    resumeTranscriptForEntryGrowth(
+      transcriptHistoryRef.current.visibility,
+      scrollToLatest,
+    );
   }, [entries, scrollToLatest]);
   useEffect(
     () =>
-      liveTurnStore.subscribe(() => {
-        streamLenRef.current = liveTurnStore.textLength();
-        const watch = resumeWatchRef.current;
-        if (
-          watch &&
-          performance.now() <= watch.until &&
-          streamLenRef.current > watch.streamLen
-        ) {
-          resumeWatchRef.current = null;
-          scrollToLatest("auto");
-        }
-      }),
+      subscribeToTranscriptStreamGrowth(
+        transcriptHistoryRef.current.visibility,
+        liveTurnStore,
+        scrollToLatest,
+      ),
     [liveTurnStore, scrollToLatest],
   );
-  useEffect(() => {
-    const el = messagesRef.current;
-    if (!el) return;
-    const cancelResumeJump = () => {
-      resumeWatchRef.current = null;
-    };
-    el.addEventListener("touchstart", cancelResumeJump, { passive: true });
-    el.addEventListener("wheel", cancelResumeJump, { passive: true });
-    return () => {
-      el.removeEventListener("touchstart", cancelResumeJump);
-      el.removeEventListener("wheel", cancelResumeJump);
-    };
-  }, [messagesRef]);
+  useEffect(
+    () =>
+      listenForResumeCancellation(
+        transcriptHistoryRef.current.visibility,
+        messagesRef,
+      ),
+    [messagesRef],
+  );
 
   // After any content change: keep a following reader at the live edge, or maintain
   // the pinned-turn spacer for a turn streaming into the space below (principles 4–6).
@@ -2437,52 +2261,31 @@ export function SessionViewer({
   // content they're on while the page prepends above it.
   const beginHistoryLoad = useCallback(
     (holdMs = 8000) => {
-      leaveLatest();
-      const el = messagesRef.current;
-      if (el) {
-        // Anchor on the tightest element at the viewport top — it sits below
-        // everything the prepend inserts, so its content offset shifts by
-        // exactly the added height (what native scroll anchoring would pick).
-        const node = pickScrollAnchor(el);
-        if (node)
-          startHistoryHold(node, holdMs, {
-            height: el.scrollHeight,
-            top: el.scrollTop,
-          });
-      }
-      setLoadingHistory(true);
+      beginTranscriptHistoryLoad(
+        holdMs,
+        { messagesRef },
+        {
+          leaveLatest,
+          startHistoryHold,
+          setLoadingHistory:
+            transcriptHistoryRef.current.state.setLoadingHistory,
+        },
+      );
     },
     [leaveLatest, messagesRef, startHistoryHold],
   );
   const loadEarlierHistory = useCallback(() => {
-    if (transcriptIndexExpectedRef.current || !historyTruncated) return;
-    if (loadingHistoryRef.current) {
-      // The deferred page is already on the wire. Adopt it rather than making
-      // the first upward gesture look ignored, and let its response continue
-      // until a visible conversation boundary lands.
-      if (backgroundHistoryRef.current) {
-        backgroundHistoryRef.current = false;
-        if (transcriptSeqRef.current?.sessionId === session.id) {
-          historyRevealRef.current = {
-            sessionId: session.id,
-            loaded: 0,
-            cursor: null,
-          };
-        }
-        beginHistoryLoad();
-      }
-      return;
-    }
-    loadingHistoryRef.current = true;
-    if (transcriptSeqRef.current?.sessionId === session.id) {
-      historyRevealRef.current = {
-        sessionId: session.id,
-        loaded: 0,
-        cursor: null,
-      };
-    }
-    beginHistoryLoad();
-    requestHistoryPage();
+    loadEarlierTranscriptHistory(
+      session.id,
+      { historyTruncated, indexExpectedRef: transcriptIndexExpectedRef },
+      {
+        loadingRef: transcriptHistoryRef.current.hold.loadingHistoryRef,
+        backgroundRef: transcriptHistoryRef.current.walk.backgroundHistoryRef,
+        sequenceRef: transcriptHistoryRef.current.cursors.transcriptSeqRef,
+        revealRef: transcriptHistoryRef.current.walk.historyRevealRef,
+      },
+      { begin: beginHistoryLoad, requestPage: requestHistoryPage },
+    );
   }, [
     beginHistoryLoad,
     historyTruncated,
@@ -2491,23 +2294,22 @@ export function SessionViewer({
     transcriptIndexExpectedRef,
   ]);
   const loadAllHistory = useCallback(() => {
-    if (
-      transcriptIndexExpectedRef.current ||
-      !historyTruncated ||
-      loadingHistoryRef.current
-    )
-      return;
-    loadingHistoryRef.current = true;
-    historyRevealRef.current = null;
-    backgroundHistoryRef.current = false;
-    historyWalkRef.current = {
-      sessionId: session.id,
-      loaded: 0,
-      cursor: null,
-    };
-    setLoadingAllHistory(true);
-    beginHistoryLoad(60_000);
-    requestHistoryPage(true);
+    loadAllTranscriptHistory(
+      session.id,
+      { historyTruncated, indexExpectedRef: transcriptIndexExpectedRef },
+      {
+        loadingRef: transcriptHistoryRef.current.hold.loadingHistoryRef,
+        revealRef: transcriptHistoryRef.current.walk.historyRevealRef,
+        backgroundRef: transcriptHistoryRef.current.walk.backgroundHistoryRef,
+        walkRef: transcriptHistoryRef.current.walk.historyWalkRef,
+      },
+      {
+        setLoadingAllHistory:
+          transcriptHistoryRef.current.state.setLoadingAllHistory,
+        begin: beginHistoryLoad,
+        requestPage: requestHistoryPage,
+      },
+    );
   }, [
     beginHistoryLoad,
     historyTruncated,
@@ -2520,14 +2322,15 @@ export function SessionViewer({
   // browser has had time to paint it. This only runs at the live edge in seq
   // mode. A reader who starts moving first wins and uses the interactive path.
   useEffect(() => {
+    const controller = transcriptHistoryRef.current;
     if (
       loading ||
       transcriptIndexExpected ||
       !historyTruncated ||
       loadingHistory ||
       sessionHidden ||
-      backgroundHistoryAttemptedRef.current ||
-      transcriptSeqRef.current?.sessionId !== session.id
+      controller.walk.backgroundHistoryAttemptedRef.current ||
+      controller.cursors.transcriptSeqRef.current?.sessionId !== session.id
     )
       return;
     let attempts = 0;
@@ -2541,10 +2344,10 @@ export function SessionViewer({
         if (attempts < 12) timer = window.setTimeout(tryPrefetch, 500);
         return;
       }
-      backgroundHistoryAttemptedRef.current = true;
-      backgroundHistoryRef.current = true;
-      loadingHistoryRef.current = true;
-      setLoadingHistory(true);
+      controller.walk.backgroundHistoryAttemptedRef.current = true;
+      controller.walk.backgroundHistoryRef.current = true;
+      controller.hold.loadingHistoryRef.current = true;
+      controller.state.setLoadingHistory(true);
       requestHistoryPage();
     };
     timer = window.setTimeout(tryPrefetch, 1_500);
@@ -2563,41 +2366,21 @@ export function SessionViewer({
   // Auto-load is driven by upward reader intent, never by viewport geometry
   // alone. That keeps initial hydration and programmatic bottom settling from
   // fetching history while still preloading a page as the reader approaches it.
-  const historyGestureUntilRef = useRef(0);
-  const historyGestureConsumedRef = useRef(true);
-  const lastHistoryWheelAtRef = useRef(0);
-  const lastHistoryScrollTopRef = useRef(0);
   const handleMessagesScroll = useCallback(() => {
-    const el = messagesRef.current;
-    const previous = lastHistoryScrollTopRef.current;
-    const current = el?.scrollTop ?? previous;
-    lastHistoryScrollTopRef.current = current;
-    onScroll();
-    const cached = peekCachedTranscriptView(session.id);
-    // Only the cheap fields here: a scroll event must not walk the
-    // transcript. The anchor follows once the reader settles.
-    if (el && cached) {
-      cacheTranscriptView(session.id, {
-        ...cached,
-        scrollTop: current,
-        following: followingLive.current,
-      });
-      scheduleAnchorCapture();
-    }
-    if (el && current < previous - 1 && backgroundHistoryRef.current) {
-      loadEarlierHistory();
-    }
-    if (
-      el &&
-      current < previous - 1 &&
-      current <= 600 &&
-      !historyGestureConsumedRef.current &&
-      performance.now() <= historyGestureUntilRef.current
-    ) {
-      historyGestureConsumedRef.current = true;
-      historyGestureUntilRef.current = 0;
-      loadEarlierHistory();
-    }
+    handleTranscriptHistoryScroll(
+      { sessionId: session.id, messagesRef, followingLive },
+      {
+        lastScrollTopRef:
+          transcriptHistoryRef.current.gesture.lastHistoryScrollTopRef,
+        backgroundHistoryRef:
+          transcriptHistoryRef.current.walk.backgroundHistoryRef,
+        gestureConsumedRef:
+          transcriptHistoryRef.current.gesture.historyGestureConsumedRef,
+        gestureUntilRef:
+          transcriptHistoryRef.current.gesture.historyGestureUntilRef,
+      },
+      { onScroll, scheduleAnchorCapture, loadEarlierHistory },
+    );
   }, [
     followingLive,
     loadEarlierHistory,
@@ -2607,6 +2390,14 @@ export function SessionViewer({
     session.id,
   ]);
   useEffect(() => {
+    const controller = transcriptHistoryRef.current;
+    const {
+      historyGestureUntilRef,
+      historyGestureConsumedRef,
+      lastHistoryWheelAtRef,
+      lastHistoryScrollTopRef,
+    } = controller.gesture;
+    const { backgroundHistoryRef } = controller.walk;
     const el = messagesRef.current;
     if (!el || sessionHidden) return;
     historyGestureUntilRef.current = 0;
