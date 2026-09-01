@@ -1860,7 +1860,7 @@ export function sandboxRunSecuritySpec(
     user: opts.isAutomationSession ? undefined : opts.user,
     mcpGrantUser: opts.isAutomationSession
       ? undefined
-      : session.startedBy || undefined,
+      : session.createdByLogin || undefined,
     journalKind: opts.isAutomationSession ? "automation" : "prompt",
     trustProfile: opts.isAutomationSession ? "automation" : "interactive",
   };
@@ -3069,7 +3069,7 @@ async function runSessionPromptInner(
           // grants must not ride an automation-owned session's turns.
           mcpGrantUser: isAutomationSession
             ? undefined
-            : session.startedBy || undefined,
+            : session.createdByLogin || undefined,
           model: session.model,
           images,
           mcpServers: mcpServers ?? "all",

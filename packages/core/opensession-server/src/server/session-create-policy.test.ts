@@ -51,6 +51,7 @@ describe("automation descendant opening policy", () => {
       automation: true,
       mcpServers: [],
       user: undefined,
+      mcpGrantUser: undefined,
       aws: false,
       trustProfile: "automation",
       publicationPolicy: {
@@ -59,6 +60,32 @@ describe("automation descendant opening policy", () => {
         headBranch: "compat/layout",
       },
     });
+  });
+
+  test("interactive opening and sandbox runs use the verified creator login", () => {
+    expect(
+      openingCreateTrustPolicy({
+        automationDescendantPolicy: undefined,
+        branch: "preview",
+        runMcpServers: ["tella-stage"],
+        user: "Alex",
+        createdByLogin: "alex-two",
+      }).mcpGrantUser,
+    ).toBe("alex-two");
+    expect(
+      sandboxRunSecuritySpec(
+        {
+          id: "os-interactive",
+          startedBy: "Alex",
+          createdByLogin: "alex-two",
+        } as UnifiedSession,
+        {
+          isAutomationSession: false,
+          user: "Alex",
+          mcpServers: ["tella-stage"],
+        },
+      ).mcpGrantUser,
+    ).toBe("alex-two");
   });
 
   test("sandbox host spec preserves the complete descendant security boundary", () => {
