@@ -422,12 +422,17 @@ export interface ResolvedCreate {
 export function openingCreateTrustPolicy(
   spec: Pick<
     ResolvedCreate,
-    "automationDescendantPolicy" | "branch" | "runMcpServers" | "user"
+    | "automationDescendantPolicy"
+    | "branch"
+    | "runMcpServers"
+    | "user"
+    | "createdByLogin"
   >,
 ): {
   automation: boolean;
   mcpServers: McpScope;
   user: string | undefined;
+  mcpGrantUser: string | undefined;
   aws: boolean;
   trustProfile: "interactive" | "automation";
   publicationPolicy?: { repo: string; branch: string; headBranch: string };
@@ -437,6 +442,7 @@ export function openingCreateTrustPolicy(
     automation: !!policy,
     mcpServers: policy ? [] : (spec.runMcpServers as McpScope),
     user: policy ? undefined : spec.user,
+    mcpGrantUser: policy ? undefined : spec.createdByLogin,
     aws: !policy,
     trustProfile: policy ? "automation" : "interactive",
     ...(policy
@@ -1647,7 +1653,7 @@ export async function openCreatedSession(
               shouldCancel: () => isAgentSessionCancelled(bksId, startToken),
               cwd: spec.wtPath,
               mode: spec.mode,
-              mcpGrantUser: openingTrust.user,
+              mcpGrantUser: openingTrust.mcpGrantUser,
               model: spec.model,
               effort: spec.effort,
               fastMode: spec.fastMode,
