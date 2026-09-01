@@ -308,6 +308,7 @@ export function interactiveMcpServers(
                 key: options.exclusiveKey,
                 sessionId,
                 path: path || "/",
+                sourceLeaseId: options.sourceLeaseId,
                 ttlMinutes: options.leaseMinutes,
               });
               if (!claim.ok)
