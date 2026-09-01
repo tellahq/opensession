@@ -337,6 +337,34 @@ describe("model discovery", () => {
 });
 
 describe("Settings writes", () => {
+  test("reject invalid custom providers before writing", async () => {
+    const { mkdtempSync, readFileSync, writeFileSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    const { setModelProvider } = await import("./model-providers");
+    const dir = mkdtempSync(join(tmpdir(), "os-model-providers-"));
+    const path = join(dir, "model-providers.json");
+    const original = JSON.stringify({
+      providers: { gw: { apiKey: "stored", baseURL: "https://gw.test/v1" } },
+    });
+    writeFileSync(path, original);
+    const prev = process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
+    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = path;
+    try {
+      expect(() =>
+        setModelProvider("gw", {
+          api: "openai-completions",
+          baseURL: "",
+        }),
+      ).toThrow(/needs a base URL/);
+      expect(readFileSync(path, "utf-8")).toBe(original);
+    } finally {
+      if (prev === undefined)
+        delete process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
+      else process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = prev;
+    }
+  });
+
   test("preserve catalog, catalogFile and discovered rows", async () => {
     const { mkdtempSync, readFileSync, writeFileSync } = await import("fs");
     const { tmpdir } = await import("os");

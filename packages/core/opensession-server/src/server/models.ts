@@ -14,6 +14,7 @@ import {
   waferModelName,
   BRIDGE_PROVIDER_IDS,
   GLM_5_3_MODEL_ID,
+  type ModelProviderConfig,
 } from "./model-providers";
 import { stateDir } from "./paths";
 import { piEngineEnabled, piPickerModels } from "./pi-config";
@@ -81,7 +82,10 @@ const CLAUDE_EFFORTS: SessionEffort[] = [
 /** Pi variants exposed by the configured model. Keep this aligned with
  * `Pi models <provider> --verbose`; the selected value is sent verbatim
  * as the prompt's `variant`. */
-export function modelEfforts(model: string): SessionEffort[] {
+export function modelEfforts(
+  model: string,
+  providers: Record<string, ModelProviderConfig> = modelProviders(),
+): SessionEffort[] {
   // Every engine exposes the same variants as its Pi sibling: our
   // effort levels map 1:1 onto pi's ThinkingLevel (pi-runner.ts) and onto the
   // direct SDKs' reasoning levels.
@@ -116,7 +120,9 @@ export function modelEfforts(model: string): SessionEffort[] {
   }
   if (provider === "meta" && slug === "muse-spark-1.1") return OPENAI_EFFORTS;
   // An operator's catalog row names the levels its gateway accepts.
-  const configured = provider ? configuredCatalogModel(provider, slug) : null;
+  const configured = provider
+    ? configuredCatalogModel(provider, slug, providers)
+    : null;
   if (configured?.efforts?.length) return [...configured.efforts];
   return [];
 }
@@ -654,7 +660,10 @@ function prettifyModelSlug(slug: string): string {
 
 /** Friendly model label for a Pi model id. The engine is now an
  * implementation detail, so names stay model-first in every picker. */
-export function piModelLabel(id: string): string {
+export function piModelLabel(
+  id: string,
+  providers: Record<string, ModelProviderConfig> = modelProviders(),
+): string {
   const preset = modelPreset(id);
   if (preset) return preset.label;
   const canonical = canonicalProviderPickerModelId(
@@ -665,7 +674,7 @@ export function piModelLabel(id: string): string {
   const [, provider, ...rest] = canonical.split("/");
   const configured =
     provider && rest.length
-      ? configuredCatalogModel(provider, rest.join("/"))
+      ? configuredCatalogModel(provider, rest.join("/"), providers)
       : undefined;
   if (configured?.name) return configured.name;
   const native = KNOWN_MODELS.find((m) => m.provider !== "pi" && m.id === tail);
@@ -694,8 +703,11 @@ export function refreshPickerModels(): void {
     if (KNOWN_MODELS[i].provider === "pi") KNOWN_MODELS.splice(i, 1);
   }
   try {
+    // One config read per refresh: the per-model label lookup below would
+    // otherwise reparse the file (and every catalog file) once per entry.
+    const providers = modelProviders();
     const keyed = new Set(
-      Object.entries(modelProviders())
+      Object.entries(providers)
         .filter(([, provider]) => !!provider.apiKey)
         .map(([id]) => id),
     );
@@ -723,7 +735,7 @@ export function refreshPickerModels(): void {
       KNOWN_MODELS.push({
         id,
         provider: "pi",
-        label: piModelLabel(id),
+        label: piModelLabel(id, providers),
         aliases: [],
       });
     }

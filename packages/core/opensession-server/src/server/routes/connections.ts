@@ -580,6 +580,10 @@ export async function handleConnectionsRoutes(
     /^\/api\/settings\/model-providers\/([^/]+)\/discover$/,
   );
   if (discoverMatch && req.method === "POST") {
+    // Discovery sends the stored key to whatever base URL is configured, so
+    // it is a shared-configuration mutation and stays admin-only.
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
     const id = decodeURIComponent(discoverMatch[1]);
     if (!modelProviders()[id]) {
       return Response.json({ error: "Not found" }, { status: 404 });
@@ -604,6 +608,8 @@ export async function handleConnectionsRoutes(
     /^\/api\/settings\/model-providers\/([^/]+)$/,
   );
   if (modelProviderMatch && req.method === "PUT") {
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
     const id = decodeURIComponent(modelProviderMatch[1]);
     if (!PROVIDER_ID_RE.test(id)) {
       return Response.json(
@@ -656,13 +662,8 @@ export async function handleConnectionsRoutes(
         name,
         discoverModels,
       });
+      // setModelProvider validated the effective provider before writing.
       const savedProvider = modelProviders()[id];
-      if (savedProvider?.api && !savedProvider.baseURL) {
-        return Response.json(
-          { error: "A custom api needs a base URL" },
-          { status: 400 },
-        );
-      }
       const pickerModels = readModelProviderConfig()?.pickerModels || [];
       const providerModels =
         models ??
@@ -709,6 +710,8 @@ export async function handleConnectionsRoutes(
   }
 
   if (modelProviderMatch && req.method === "DELETE") {
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
     const id = decodeURIComponent(modelProviderMatch[1]);
     try {
       const removed = removeModelProvider(id);

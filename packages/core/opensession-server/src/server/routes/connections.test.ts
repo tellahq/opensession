@@ -27,6 +27,7 @@ import type { RouteContext } from "./context";
 
 const ENV_KEYS = [
   "OPENSESSION_CONFIG",
+  "OPENSESSION_MODEL_PROVIDERS_CONFIG",
   "OPENSESSION_GITHUB_CLIENT_ID",
   "OPENSESSION_GITHUB_APP_SLUG",
   "OPENSESSION_GITHUB_APP_KEY",
@@ -273,6 +274,38 @@ describe("Apple release connection authorization", () => {
     expect(setup?.status).toBe(200);
     expect(storedMcpServers(mcpConfig)["apple-build"]).toBeUndefined();
     expect(storedMcpServers(mcpConfig)["apple-release"]).toBeUndefined();
+  });
+});
+
+describe("Model provider authorization", () => {
+  test("rejects non-admin provider mutations and discovery", async () => {
+    enableRoleAwareConnections();
+    const providerConfig = join(dir, "model-providers.json");
+    const original = JSON.stringify({
+      providers: {
+        gateway: {
+          apiKey: "stored-secret",
+          baseURL: "https://gateway.test/v1",
+          api: "openai-completions",
+        },
+      },
+    });
+    writeFileSync(providerConfig, original);
+    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = providerConfig;
+
+    const requests = [
+      context("/api/settings/model-providers/gateway/discover", "POST", MEMBER),
+      context("/api/settings/model-providers/gateway", "PUT", MEMBER, {
+        baseURL: "https://attacker.test/v1",
+        discoverModels: true,
+      }),
+      context("/api/settings/model-providers/gateway", "DELETE", MEMBER),
+    ];
+    for (const request of requests) {
+      const response = await handleConnectionsRoutes(request);
+      expect(response?.status).toBe(403);
+    }
+    expect(readFileSync(providerConfig, "utf-8")).toBe(original);
   });
 });
 

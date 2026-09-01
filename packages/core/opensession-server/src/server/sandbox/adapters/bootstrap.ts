@@ -79,7 +79,10 @@ import { authedRemoteUrl } from "../../codestorage/auth";
 import { parseCsRemote } from "../../codestorage/remote";
 import { redactUrl } from "../../shared/redact";
 import { listCodexAccounts } from "../../codex-accounts";
-import { readModelProviderConfig } from "../../model-providers";
+import {
+  normalizeModelProviderConfig,
+  readModelProviderConfig,
+} from "../../model-providers";
 import { normalizePiConfig, readPiEngineConfig } from "../../pi-config";
 import {
   buildOpenaiRemoteSeedUpload,
@@ -389,6 +392,11 @@ export function projectRemoteModelProviderConfig(
     fallbackModel,
   );
   if (reachableSettingsProviders.size) {
+    // The normalized read merges `catalogFile` and `discovered` rows into one
+    // `catalog` per provider; the guest gets that merged table, never the
+    // host path.
+    const normalizedProviders =
+      normalizeModelProviderConfig(source)?.providers || {};
     for (const [id, value] of Object.entries(
       jsonRecord(source.providers) || {},
     )) {
@@ -402,15 +410,13 @@ export function projectRemoteModelProviderConfig(
       if (typeof provider.baseURL === "string" && provider.baseURL)
         projected.baseURL = provider.baseURL;
       // A custom OpenAI-compatible gateway needs its protocol and catalog in
-      // the guest too. `catalogFile` stays host-side (a host path), so the
-      // in-guest runner sees only the inline and discovered rows.
+      // the guest too.
       if (typeof provider.api === "string" && provider.api)
         projected.api = provider.api;
       if (typeof provider.name === "string" && provider.name)
         projected.name = provider.name;
-      if (jsonRecord(provider.catalog)) projected.catalog = provider.catalog;
-      if (jsonRecord(provider.discovered))
-        projected.discovered = provider.discovered;
+      const catalog = normalizedProviders[id]?.catalog;
+      if (catalog && Object.keys(catalog).length) projected.catalog = catalog;
       if (Object.keys(projected).length) settingsProviders[id] = projected;
     }
   }

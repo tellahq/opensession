@@ -618,12 +618,15 @@ export const FALLBACK_CONTEXT_WINDOW = 131_072;
 export const FALLBACK_MAX_TOKENS = 32_768;
 
 /** The configured catalog row for `pi/<provider>/<model>` (undefined when the
- *  operator pinned nothing and discovery recorded nothing). Read fresh. */
+ *  operator pinned nothing and discovery recorded nothing). Reads the config
+ *  fresh unless the caller passes a snapshot; loops over many models should
+ *  pass one, since each fresh read reparses every catalog file. */
 export function configuredCatalogModel(
   provider: string,
   model: string,
+  providers: Record<string, ModelProviderConfig> = modelProviders(),
 ): ProviderCatalogModel | undefined {
-  const catalog = modelProviders()[provider]?.catalog;
+  const catalog = providers[provider]?.catalog;
   if (!catalog) return undefined;
   return (
     catalog[model] ??
@@ -776,6 +779,11 @@ export function setModelProvider(
   if (cfg.discoverModels !== undefined) {
     if (cfg.discoverModels) next.discoverModels = true;
     else delete next.discoverModels;
+  }
+  // Validate the effective provider before anything touches disk: a custom
+  // protocol without a base URL can never run, so it must not be stored.
+  if (next.api && !next.baseURL) {
+    throw new Error(`Provider "${id}" declares an api and needs a base URL`);
   }
   providers[id] = next;
   raw.providers = providers;
