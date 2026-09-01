@@ -1,5 +1,3 @@
-import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
-import { utilityClassName } from "../ui/cn";
 import React, { startTransition, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { parsePatchFiles } from "@pierre/diffs";
@@ -55,320 +53,34 @@ import { useStickyEdges } from "../hooks/useStickyEdges";
 import { UserAvatar } from "./UserAvatar";
 import { ExtBadge, fileExt } from "./lang-marks";
 import { cn } from "../ui/cn";
-import * as stylex from "@stylexjs/stylex";
-import { type as typography } from "../styles/typography.stylex";
-
-/* Converted from Tailwind utilities; names mirror the original class tokens. */
-const sx = stylex.create({
-  flex: {
-    display: "flex",
-  },
-  itemsCenter: {
-    alignItems: "center",
-  },
-  justifyBetween: {
-    justifyContent: "space-between",
-  },
-  gap2: {
-    gap: "calc(4px * 2)",
-  },
-  textFaint: {
-    color: "var(--text-faint)",
-  },
-  cursorPointer: {
-    cursor: "pointer",
-  },
-  borderNone: {
-    borderStyle: "none",
-  },
-  bgTransparent: {
-    backgroundColor: "transparent",
-  },
-  px1: {
-    paddingInline: "4px",
-  },
-  py05: {
-    paddingBlock: "calc(4px * 0.5)",
-  },
-  hoverTextRed: {
-    "@media (hover: hover)": {
-      ":hover": {
-        color: "var(--red)",
-      },
-    },
-  },
-  leading145: {
-    lineHeight: "1.45",
-  },
-  whitespacePreWrap: {
-    whiteSpace: "pre-wrap",
-  },
-  textFg: {
-    color: "var(--text)",
-  },
-  OverflowWrapAnywhere: {
-    overflowWrap: "anywhere",
-  },
-  size5: {
-    width: "calc(4px * 5)",
-    height: "calc(4px * 5)",
-  },
-  shrink0: {
-    flexShrink: "0",
-  },
-  justifyCenter: {
-    justifyContent: "center",
-  },
-  textDim: {
-    color: "var(--text-dim)",
-  },
-  minW0: {
-    minWidth: "0",
-  },
-  overflowHidden: {
-    overflow: "hidden",
-  },
-  textEllipsis: {
-    textOverflow: "ellipsis",
-  },
-  whitespaceNowrap: {
-    whiteSpace: "nowrap",
-  },
-  fontSemibold: {
-    fontWeight: "var(--font-weight-semibold)",
-  },
-  inlineFlex: {
-    display: "inline-flex",
-  },
-  gap3px: {
-    gap: "3px",
-  },
-  fontSans: {
-    fontFamily: "var(--sans)",
-  },
-  beforeTextMeta: {
-    "::before": {
-      content: '""',
-      fontSize: "var(--type-meta)",
-      fontWeight: "var(--tw-font-weight, var(--font-weight-normal))",
-    },
-  },
-  beforeContent: {
-    "::before": {
-      content: "'💬'",
-    },
-  },
-  mlAuto: {
-    marginLeft: "auto",
-  },
-  gap15: {
-    gap: "calc(4px * 1.5)",
-  },
-  maxW260px: {
-    maxWidth: "260px",
-  },
-  textRed: {
-    color: "var(--red)",
-  },
-  minH0: {
-    minHeight: "0",
-  },
-  px25: {
-    paddingInline: "calc(4px * 2.5)",
-  },
-  py3px: {
-    paddingBlock: "3px",
-  },
-  textXs: {
-    fontSize: "var(--type-label)",
-    lineHeight: "var(--tw-leading, var(--text-xs--line-height))",
-  },
-  fontNormal: {
-    fontWeight: "var(--font-weight-normal)",
-  },
-  fontMedium: {
-    fontWeight: "var(--font-weight-medium)",
-  },
-  minW230px: {
-    minWidth: "230px",
-  },
-  flex1: {
-    flex: "1",
-  },
-  truncate: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  flexCol: {
-    flexDirection: "column",
-  },
-  borderT: {
-    borderTopStyle: "solid",
-    borderTopWidth: "1px",
-  },
-  borderDividerSoft: {
-    borderColor: "var(--divider-soft)",
-  },
-  bgRaised: {
-    backgroundColor: "var(--bg-raised)",
-  },
-  p2: {
-    padding: "calc(4px * 2)",
-  },
-  gap1: {
-    gap: "4px",
-  },
-  roundedMd: {
-    borderRadius: "calc(7px * var(--rf))",
-    cornerShape: "var(--cs)",
-  },
-  bgGreenSoft: {
-    backgroundColor: "var(--green-soft)",
-  },
-  px3: {
-    paddingInline: "calc(4px * 3)",
-  },
-  py15: {
-    paddingBlock: "calc(4px * 1.5)",
-  },
-  textGreen: {
-    color: "var(--green)",
-  },
-  Mb1: {
-    marginBottom: "calc(4px * -1)",
-  },
-  justifyEnd: {
-    justifyContent: "flex-end",
-  },
-  gap7px: {
-    gap: "7px",
-  },
-  wFull: {
-    width: "100%",
-  },
-  px3px: {
-    paddingInline: "3px",
-  },
-  py1: {
-    paddingBlock: "4px",
-  },
-  textLeft: {
-    textAlign: "left",
-  },
-  hoverTextFg: {
-    "@media (hover: hover)": {
-      ":hover": {
-        color: "var(--text)",
-      },
-    },
-  },
-  pb2: {
-    paddingBottom: "calc(4px * 2)",
-  },
-  textCenter: {
-    textAlign: "center",
-  },
-  border: {
-    borderStyle: "solid",
-    borderWidth: "1px",
-  },
-  bgBg: {
-    backgroundColor: "var(--bg)",
-  },
-  minH11: {
-    minHeight: "calc(4px * 11)",
-  },
-  border0: {
-    borderStyle: "solid",
-    borderWidth: "0px",
-  },
-  py2: {
-    paddingBlock: "calc(4px * 2)",
-  },
-  hoverBgHover: {
-    "@media (hover: hover)": {
-      ":hover": {
-        backgroundColor: "var(--hover)",
-      },
-    },
-  },
-  py3: {
-    paddingBlock: "calc(4px * 3)",
-  },
-  mb2: {
-    marginBottom: "calc(4px * 2)",
-  },
-  roundedSm: {
-    borderRadius: "calc(4px * var(--rf))",
-    cornerShape: "var(--cs)",
-  },
-  bgYellowSoft: {
-    backgroundColor: "var(--yellow-soft)",
-  },
-  px15: {
-    paddingInline: "calc(4px * 1.5)",
-  },
-  textYellow: {
-    color: "var(--yellow)",
-  },
-  leadingRelaxed: {
-    lineHeight: "var(--leading-relaxed)",
-  },
-  p3: {
-    padding: "calc(4px * 3)",
-  },
-  flexWrap: {
-    flexWrap: "wrap",
-  },
-  gap3: {
-    gap: "calc(4px * 3)",
-  },
-  mr1: {
-    marginRight: "4px",
-  },
-  py5px: {
-    paddingBlock: "5px",
-  },
-  px14px: {
-    paddingInline: "14px",
-  },
-  py6px: {
-    paddingBlock: "6px",
-  },
-});
 
 /* The +/− counts. DiffPanel's summary strip carries the same pair, and the two
    must read alike. */
-const DIFF_ADD = utilityClassName("font-semibold text-green");
-const DIFF_DEL = utilityClassName("font-semibold text-red");
+const DIFF_ADD = "font-semibold text-green";
+const DIFF_DEL = "font-semibold text-red";
 
 /* Each filename stays on the canvas while its code owns the quieter inset
    well. Spacing and that fill separate files without nesting bordered cards. */
-const FILE_ROW = utilityClassName("min-w-0 max-w-full");
-const FILE_HEADER = utilityClassName(
-  "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip rounded-md px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5",
-);
-const FILE_BODY = utilityClassName(
-  "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well",
-);
+const FILE_ROW = "min-w-0 max-w-full";
+const FILE_HEADER =
+  "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip rounded-md px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
+const FILE_BODY = "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg";
 // Sidebar Changes still pins filenames. Its canvas fill masks passing code;
 // the filename row draws its own edge only while pinned.
 const STICKY_FILE_HEADER =
   "sticky top-[calc(var(--review-file-header-top,0px)-1px)] z-[6] bg-surface";
-const STICKY_FILE_HEADER_SURFACE = utilityClassName(
-  "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]",
-);
+const STICKY_FILE_HEADER_SURFACE =
+  "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
 
 type DiffSurfaceStyle = React.CSSProperties & { "--diffs-bg": string };
 const DIFF_SURFACE_STYLE: Record<"light" | "dark", DiffSurfaceStyle> = {
   light: {
-    "--diffs-bg": "var(--code-well-light)",
-    backgroundColor: "var(--code-well-light)",
+    "--diffs-bg": "var(--review-code-light)",
+    backgroundColor: "var(--review-code-light)",
   },
   dark: {
-    "--diffs-bg": "var(--code-well-dark)",
-    backgroundColor: "var(--code-well-dark)",
+    "--diffs-bg": "var(--review-code-dark)",
+    backgroundColor: "var(--review-code-dark)",
   },
 };
 const FILE_TOGGLE =
@@ -393,24 +105,19 @@ const ROW_ACTION =
 
 /* The comment card and the pending-comment card share their surface. */
 const CARD = "mx-2 my-1.5 flex flex-col rounded-md bg-panel font-sans";
-const CARD_INPUT = utilityClassName(
-  "resize-y rounded-md border border-line-strong bg-raised px-2.5 py-2 font-sans text-label leading-[1.45] text-fg outline-none focus:border-accent",
-);
+const CARD_INPUT =
+  "resize-y rounded-md border border-line-strong bg-raised px-2.5 py-2 font-sans text-label leading-[1.45] text-fg outline-none focus:border-accent";
 
 /* The "Organizing files…" / "AI organized" note, left of the toolbar's actions. */
-const GROUPS_NOTE = utilityClassName(
-  "mr-auto flex items-center gap-[7px] text-label text-faint phone:hidden @max-[540px]:hidden",
-);
+const GROUPS_NOTE =
+  "mr-auto flex items-center gap-[7px] text-label text-faint phone:hidden @max-[540px]:hidden";
 
 /* A changed image, shown as the actual picture. Checkerboard backing so
    transparency reads as transparency rather than as white. */
-const IMAGE_CELL = utilityClassName(
-  "m-0 max-w-[min(480px,100%)] min-w-0 flex-[0_1_auto]",
-);
-const IMAGE = utilityClassName(
-  "block max-h-[360px] max-w-full rounded-md border border-line bg-[repeating-conic-gradient(rgba(128,128,128,0.18)_0%_25%,transparent_0%_50%)] bg-[length:16px_16px]",
-);
-const IMAGE_CAPTION = utilityClassName("mt-1 text-meta text-dim");
+const IMAGE_CELL = "m-0 max-w-[min(480px,100%)] min-w-0 flex-[0_1_auto]";
+const IMAGE =
+  "block max-h-[360px] max-w-full rounded-md border border-line bg-[repeating-conic-gradient(rgba(128,128,128,0.18)_0%_25%,transparent_0%_50%)] bg-[length:16px_16px]";
+const IMAGE_CAPTION = "mt-1 text-meta text-dim";
 
 let editModulePromise: Promise<typeof import("@pierre/diffs/edit")> | null =
   null;
@@ -818,30 +525,17 @@ export function CommentableDiff({ patch, options }: Props) {
         : `lines ${comment.startLine}–${comment.endLine}`;
     return (
       <div
-        className={utilityClassName(
-          `${CARD} gap-1.5 border border-l-[3px] border-line-strong border-l-accent px-2.5 py-[9px]`,
-        )}
+        className={`${CARD} gap-1.5 border border-l-[3px] border-line-strong border-l-accent px-2.5 py-[9px]`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          {...stylex.props(sx.flex, sx.itemsCenter, sx.justifyBetween, sx.gap2)}
-        >
-          <span {...stylex.props(sx.textFaint, typography.meta)}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-meta text-faint">
             {comment.path} · {lineLabel}
             {comment.side === "deletions" ? " (removed)" : ""}
           </span>
           {onRemovePending && (
             <button
-              {...stylex.props(
-                sx.cursorPointer,
-                sx.borderNone,
-                sx.bgTransparent,
-                sx.px1,
-                sx.py05,
-                sx.textFaint,
-                sx.hoverTextRed,
-                typography.meta,
-              )}
+              className="cursor-pointer border-none bg-transparent px-1 py-0.5 text-meta text-faint hover:text-red"
               onClick={() => onRemovePending(comment.id)}
               title="Remove this pending comment"
             >
@@ -849,15 +543,7 @@ export function CommentableDiff({ patch, options }: Props) {
             </button>
           )}
         </div>
-        <div
-          {...stylex.props(
-            sx.leading145,
-            sx.whitespacePreWrap,
-            sx.textFg,
-            sx.OverflowWrapAnywhere,
-            typography.label,
-          )}
-        >
+        <div className="text-label leading-[1.45] whitespace-pre-wrap text-fg [overflow-wrap:anywhere]">
           {comment.text}
         </div>
       </div>
@@ -984,7 +670,7 @@ export function CommentableDiff({ patch, options }: Props) {
               FILE_HEADER,
               stickyFileHeaders
                 ? STICKY_FILE_HEADER_SURFACE
-                : utilityClassName("mx-2 w-auto bg-transparent"),
+                : "mx-2 w-auto bg-transparent",
             )}
           >
             <button
@@ -998,58 +684,21 @@ export function CommentableDiff({ patch, options }: Props) {
             >
               <IconChevronRight
                 size={16}
-                className={utilityClassName(
-                  `shrink-0 text-faint transition-transform ${isOpen ? "rotate-90" : ""}`,
-                )}
+                className={`shrink-0 text-faint transition-transform ${isOpen ? "rotate-90" : ""}`}
               />
-              <span
-                {...stylex.props(
-                  sx.flex,
-                  sx.size5,
-                  sx.shrink0,
-                  sx.itemsCenter,
-                  sx.justifyCenter,
-                  sx.textDim,
-                )}
-              >
+              <span className="flex size-5 shrink-0 items-center justify-center text-dim">
                 {fileExt(base) ? (
                   <ExtBadge name={base} size={14} />
                 ) : (
                   <IconFile size={17} />
                 )}
               </span>
-              <span
-                {...stylex.props(
-                  sx.flex,
-                  sx.minW0,
-                  sx.itemsCenter,
-                  sx.gap2,
-                  sx.overflowHidden,
-                  typography.label,
-                )}
-              >
-                <span
-                  {...stylex.props(
-                    sx.shrink0,
-                    sx.overflowHidden,
-                    sx.textEllipsis,
-                    sx.whitespaceNowrap,
-                    sx.fontSemibold,
-                    sx.textFg,
-                  )}
-                >
+              <span className="flex min-w-0 items-center gap-2 overflow-hidden text-label">
+                <span className="shrink-0 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-fg">
                   {base}
                 </span>
                 {dir && (
-                  <span
-                    {...stylex.props(
-                      sx.minW0,
-                      sx.overflowHidden,
-                      sx.textEllipsis,
-                      sx.whitespaceNowrap,
-                      sx.textFaint,
-                    )}
-                  >
+                  <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-faint">
                     {dir}
                   </span>
                 )}
@@ -1059,9 +708,7 @@ export function CommentableDiff({ patch, options }: Props) {
               <Tooltip label="Edit file in place">
                 <button
                   type="button"
-                  className={utilityClassName(
-                    `${INLINE_ACTION} ${REVEAL} cursor-pointer p-[3px] text-faint hover:bg-hover hover:text-fg phone:pointer-events-auto phone:opacity-100`,
-                  )}
+                  className={`${INLINE_ACTION} ${REVEAL} cursor-pointer p-[3px] text-faint hover:bg-hover hover:text-fg phone:pointer-events-auto phone:opacity-100`}
                   aria-label="Edit this file in place"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1076,9 +723,7 @@ export function CommentableDiff({ patch, options }: Props) {
               <Button
                 variant="ghost"
                 size="sm"
-                className={utilityClassName(
-                  `phone:hidden ${copied === file.name ? "text-green" : "text-faint"}`,
-                )}
+                className={`phone:hidden ${copied === file.name ? "text-green" : "text-faint"}`}
                 aria-label={`Copy path ${file.name}`}
                 icon={
                   copied === file.name ? (
@@ -1091,58 +736,24 @@ export function CommentableDiff({ patch, options }: Props) {
               />
             </Tooltip>
             {pend.length > 0 && (
-              <span
-                {...stylex.props(
-                  sx.inlineFlex,
-                  sx.shrink0,
-                  sx.itemsCenter,
-                  sx.gap3px,
-                  sx.fontSans,
-                  sx.textFaint,
-                  sx.beforeTextMeta,
-                  sx.beforeContent,
-                  typography.meta,
-                )}
-              >
+              <span className="inline-flex shrink-0 items-center gap-[3px] font-sans text-meta text-faint before:text-meta before:content-['💬']">
                 {pend.length}
               </span>
             )}
             {isEditing && (
               <span
-                {...stylex.props(
-                  sx.mlAuto,
-                  sx.inlineFlex,
-                  sx.shrink0,
-                  sx.itemsCenter,
-                  sx.gap15,
-                )}
+                className="ml-auto inline-flex shrink-0 items-center gap-1.5"
                 onClick={(e) => e.stopPropagation()}
               >
                 {editError && (
-                  <span
-                    {...stylex.props(
-                      sx.maxW260px,
-                      sx.overflowHidden,
-                      sx.textEllipsis,
-                      sx.whitespaceNowrap,
-                      sx.textRed,
-                      typography.label,
-                    )}
-                  >
+                  <span className="max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap text-label text-red">
                     {editError}
                   </span>
                 )}
                 <Button
                   variant="soft"
                   size="sm"
-                  className={mergeStylexOverrideClassName(
-                    "",
-                    sx.minH0,
-                    sx.px25,
-                    sx.py3px,
-                    sx.textXs,
-                    sx.fontNormal,
-                  )}
+                  className="min-h-0 px-2.5 py-[3px] text-xs font-normal"
                   onClick={cancelEdit}
                   disabled={savingEdit}
                 >
@@ -1151,14 +762,7 @@ export function CommentableDiff({ patch, options }: Props) {
                 <Button
                   variant="primary"
                   size="sm"
-                  className={mergeStylexOverrideClassName(
-                    "shadow-none",
-                    sx.minH0,
-                    sx.px25,
-                    sx.py3px,
-                    sx.textXs,
-                    sx.fontMedium,
-                  )}
+                  className="min-h-0 px-2.5 py-[3px] text-xs font-medium shadow-none"
                   onClick={saveEdit}
                   disabled={savingEdit}
                 >
@@ -1179,15 +783,13 @@ export function CommentableDiff({ patch, options }: Props) {
                 <button
                   type="button"
                   data-discard
-                  className={utilityClassName(
-                    `${ROW_ACTION} right-2 p-0.5 ${
-                      discarding === file.name
-                        ? `${REVEALED} cursor-default text-faint`
-                        : armed === file.name
-                          ? `${REVEALED} cursor-pointer text-red`
-                          : `${REVEAL} cursor-pointer text-faint hover:bg-hover hover:text-red`
-                    }`,
-                  )}
+                  className={`${ROW_ACTION} right-2 p-0.5 ${
+                    discarding === file.name
+                      ? `${REVEALED} cursor-default text-faint`
+                      : armed === file.name
+                        ? `${REVEALED} cursor-pointer text-red`
+                        : `${REVEAL} cursor-pointer text-faint hover:bg-hover hover:text-red`
+                  }`}
                   disabled={discarding === file.name}
                   aria-label="Discard this file's changes (reset to base)"
                   onClick={(e) => {
@@ -1202,15 +804,13 @@ export function CommentableDiff({ patch, options }: Props) {
             {/* Change counts stay pinned right, before the review state and menu. */}
             {showFileStats && (
               <span
-                className={utilityClassName(
-                  `ml-auto flex shrink-0 gap-1.5 text-meta ${
-                    isEditing ? "hidden" : ""
-                  } ${
-                    onDiscard
-                      ? "group-hover:invisible [[data-discard]:focus-visible~&]:invisible"
-                      : ""
-                  } ${armed === file.name || discarding === file.name ? "invisible" : ""}`,
-                )}
+                className={`ml-auto flex shrink-0 gap-1.5 text-meta ${
+                  isEditing ? "hidden" : ""
+                } ${
+                  onDiscard
+                    ? "group-hover:invisible [[data-discard]:focus-visible~&]:invisible"
+                    : ""
+                } ${armed === file.name || discarding === file.name ? "invisible" : ""}`}
               >
                 {s.add > 0 && <span className={DIFF_ADD}>+{s.add}</span>}
                 {s.del > 0 && <span className={DIFF_DEL}>−{s.del}</span>}
@@ -1218,11 +818,9 @@ export function CommentableDiff({ patch, options }: Props) {
             )}
             {viewedEnabled && (
               <label
-                className={utilityClassName(
-                  `inline-flex shrink-0 cursor-pointer items-center gap-[5px] pl-1 font-sans text-label select-none ${
-                    isViewed ? "text-dim" : "text-faint"
-                  }`,
-                )}
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-[5px] pl-1 font-sans text-label select-none ${
+                  isViewed ? "text-dim" : "text-faint"
+                }`}
                 onClick={(e) => e.stopPropagation()}
               >
                 <Checkbox
@@ -1246,10 +844,7 @@ export function CommentableDiff({ patch, options }: Props) {
                     }
                   />
                 </Tooltip>
-                <Menu.Popup
-                  align="end"
-                  className={mergeStylexOverrideClassName("", sx.minW230px)}
-                >
+                <Menu.Popup align="end" className="min-w-[230px]">
                   {fileUrl && (
                     <>
                       <Menu.Item
@@ -1258,9 +853,7 @@ export function CommentableDiff({ patch, options }: Props) {
                         }
                       >
                         <IconArrowUpRight size={18} className={MENU_ICON} />
-                        <span
-                          {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}
-                        >
+                        <span className="min-w-0 flex-1 truncate">
                           Open file on {fileActions.providerName}
                         </span>
                       </Menu.Item>
@@ -1270,9 +863,7 @@ export function CommentableDiff({ patch, options }: Props) {
                         }
                       >
                         <IconLink size={18} className={MENU_ICON} />
-                        <span
-                          {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}
-                        >
+                        <span className="min-w-0 flex-1 truncate">
                           Copy link to file
                         </span>
                       </Menu.Item>
@@ -1283,7 +874,7 @@ export function CommentableDiff({ patch, options }: Props) {
                     onClick={() => copyMenuValue(file.name, "File path copied")}
                   >
                     <IconCopy size={18} className={MENU_ICON} />
-                    <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                    <span className="min-w-0 flex-1 truncate">
                       Copy full path
                     </span>
                   </Menu.Item>
@@ -1291,7 +882,7 @@ export function CommentableDiff({ patch, options }: Props) {
                     onClick={() => copyMenuValue(base, "Filename copied")}
                   >
                     <IconCopy size={18} className={MENU_ICON} />
-                    <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                    <span className="min-w-0 flex-1 truncate">
                       Copy filename
                     </span>
                   </Menu.Item>
@@ -1300,9 +891,7 @@ export function CommentableDiff({ patch, options }: Props) {
                     !IMAGE_EXT.test(file.name) && (
                       <Menu.Item onClick={() => void copyFileContents(file)}>
                         <IconCopy size={18} className={MENU_ICON} />
-                        <span
-                          {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}
-                        >
+                        <span className="min-w-0 flex-1 truncate">
                           Copy file contents
                         </span>
                       </Menu.Item>
@@ -1314,10 +903,8 @@ export function CommentableDiff({ patch, options }: Props) {
         </div>
         {(isOpen || resolved.length > 0) && (
           <div
-            className={cn(
-              FILE_BODY,
-              !stickyFileHeaders && utilityClassName("mx-2 mt-0.5"),
-            )}
+            className={cn(FILE_BODY, !stickyFileHeaders && "mx-2 mt-0.5")}
+            style={DIFF_SURFACE_STYLE[theme]}
           >
             {isOpen &&
               (imageSrcs && IMAGE_EXT.test(file.name) ? (
@@ -1341,17 +928,7 @@ export function CommentableDiff({ patch, options }: Props) {
                 />
               ))}
             {resolved.length > 0 && (
-              <div
-                {...stylex.props(
-                  sx.flex,
-                  sx.flexCol,
-                  sx.gap15,
-                  sx.borderT,
-                  sx.borderDividerSoft,
-                  sx.bgRaised,
-                  sx.p2,
-                )}
-              >
+              <div className="flex flex-col gap-1.5 border-t border-divider-soft bg-raised p-2">
                 {resolved.map((thread) => (
                   <ResolvedReviewThread
                     key={thread.id}
@@ -1372,29 +949,20 @@ export function CommentableDiff({ patch, options }: Props) {
     <>
       {showGroupsStatus && groupsLoading && (
         <span className={GROUPS_NOTE} role="status">
-          <Spinner className={mergeStylexOverrideClassName("", sx.textFaint)} />
+          <Spinner className="text-faint" />
           Organizing files…
         </span>
       )}
       {showGroupsStatus && !groupsLoading && groupedFiles && (
         <span
-          className={utilityClassName(
-            `${GROUPS_NOTE} before:size-[5px] before:rounded-full before:bg-accent before:content-['']`,
-          )}
+          className={`${GROUPS_NOTE} before:size-[5px] before:rounded-full before:bg-accent before:content-['']`}
         >
           AI organized
         </span>
       )}
       {viewedEnabled && showViewedProgress && (
         <span
-          {...mergeStylexProps(
-            "tabular-nums",
-            sx.flex,
-            sx.itemsCenter,
-            sx.gap1,
-            sx.textFaint,
-            typography.meta,
-          )}
+          className="flex items-center gap-1 text-meta text-faint tabular-nums"
           aria-label={`${viewedCount} of ${files.length} files viewed`}
         >
           <IconEye size={20} />
@@ -1409,7 +977,7 @@ export function CommentableDiff({ patch, options }: Props) {
             icon={
               <IconArrowUpToLine
                 size={20}
-                className={allOpen ? undefined : utilityClassName("rotate-180")}
+                className={allOpen ? undefined : "rotate-180"}
               />
             }
             aria-label={allOpen ? "Collapse all" : "Expand all"}
@@ -1423,32 +991,15 @@ export function CommentableDiff({ patch, options }: Props) {
   return (
     <div
       ref={setStickyRoot}
-      className={cn(
-        utilityClassName("flex flex-col"),
-        stickyFileHeaders
-          ? utilityClassName("gap-2.5")
-          : utilityClassName("gap-4"),
-      )}
+      className={cn("flex flex-col", stickyFileHeaders ? "gap-2.5" : "gap-4")}
     >
       {confirmation && (
-        <div
-          {...stylex.props(
-            sx.roundedMd,
-            sx.bgGreenSoft,
-            sx.px3,
-            sx.py15,
-            sx.fontSemibold,
-            sx.textGreen,
-            typography.label,
-          )}
-        >
+        <div className="rounded-md bg-green-soft px-3 py-1.5 text-label font-semibold text-green">
           {confirmation}
         </div>
       )}
       {controlsTarget === undefined ? (
-        <div {...stylex.props(sx.Mb1, sx.flex, sx.itemsCenter, sx.justifyEnd)}>
-          {controls}
-        </div>
+        <div className="-mb-1 flex items-center justify-end">{controls}</div>
       ) : controlsTarget ? (
         createPortal(controls, controlsTarget)
       ) : null}
@@ -1467,31 +1018,12 @@ export function CommentableDiff({ patch, options }: Props) {
               // Group headers are deliberately quieter than file rows: they
               // give scan structure without competing with filenames.
               <section
-                {...mergeStylexProps(
-                  "[section+&]:mt-1",
-                  sx.flex,
-                  sx.flexCol,
-                  sx.gap7px,
-                )}
+                className="flex flex-col gap-[7px] [section+&]:mt-1"
                 key={groupKey}
               >
                 <button
                   type="button"
-                  {...stylex.props(
-                    sx.flex,
-                    sx.wFull,
-                    sx.cursorPointer,
-                    sx.itemsCenter,
-                    sx.gap7px,
-                    sx.borderNone,
-                    sx.bgTransparent,
-                    sx.px3px,
-                    sx.py1,
-                    sx.textLeft,
-                    sx.fontSans,
-                    sx.textDim,
-                    sx.hoverTextFg,
-                  )}
+                  className="flex w-full cursor-pointer items-center gap-[7px] border-none bg-transparent px-[3px] py-1 text-left font-sans text-dim hover:text-fg"
                   data-diff-group-files={JSON.stringify(
                     group.indices.map((index) => files[index].name),
                   )}
@@ -1507,25 +1039,16 @@ export function CommentableDiff({ patch, options }: Props) {
                 >
                   <IconChevronRight
                     size={16}
-                    className={utilityClassName(
-                      `shrink-0 text-faint transition-transform ${collapsed ? "" : "rotate-90"}`,
-                    )}
+                    className={`shrink-0 text-faint transition-transform ${collapsed ? "" : "rotate-90"}`}
                   />
-                  <span {...stylex.props(sx.fontSemibold, typography.label)}>
+                  <span className="text-label font-semibold">
                     {group.title}
                   </span>
-                  <span {...stylex.props(sx.textFaint, typography.meta)}>
+                  <span className="text-meta text-faint">
                     {group.indices.length}
                   </span>
                   {showFileStats && (
-                    <span
-                      {...stylex.props(
-                        sx.mlAuto,
-                        sx.flex,
-                        sx.gap2,
-                        typography.meta,
-                      )}
-                    >
+                    <span className="ml-auto flex gap-2 text-meta">
                       {totals.add > 0 && (
                         <span className={DIFF_ADD}>+{totals.add}</span>
                       )}
@@ -1538,12 +1061,8 @@ export function CommentableDiff({ patch, options }: Props) {
                 {!collapsed && (
                   <div
                     className={cn(
-                      utilityClassName(
-                        "flex flex-col border-l border-line pl-3",
-                      ),
-                      stickyFileHeaders
-                        ? utilityClassName("gap-[7px]")
-                        : utilityClassName("gap-4"),
+                      "flex flex-col border-l border-line pl-3",
+                      stickyFileHeaders ? "gap-[7px]" : "gap-4",
                     )}
                   >
                     {group.indices.map((index) =>
@@ -1555,9 +1074,7 @@ export function CommentableDiff({ patch, options }: Props) {
             );
           })
         : files.map(renderFile)}
-      <div
-        {...stylex.props(sx.pb2, sx.textCenter, sx.textFaint, typography.meta)}
-      >
+      <div className="pb-2 text-center text-meta text-faint">
         {disabled
           ? disabledHint || "Commenting is unavailable right now."
           : reviewMode
@@ -1587,100 +1104,46 @@ function ResolvedReviewThread({
   const author = thread.rootAuthor || comments[0].login || "Unknown";
 
   return (
-    <article
-      {...stylex.props(
-        sx.overflowHidden,
-        sx.roundedMd,
-        sx.border,
-        sx.borderDividerSoft,
-        sx.bgBg,
-      )}
-    >
+    <article className="overflow-hidden rounded-md border border-divider-soft bg-bg">
       <button
         type="button"
-        {...mergeStylexProps(
-          "focus-ring",
-          sx.flex,
-          sx.minH11,
-          sx.wFull,
-          sx.cursorPointer,
-          sx.itemsCenter,
-          sx.gap2,
-          sx.border0,
-          sx.bgTransparent,
-          sx.px3,
-          sx.py2,
-          sx.textLeft,
-          sx.textDim,
-          sx.hoverBgHover,
-          typography.label,
-        )}
+        className="focus-ring flex min-h-11 w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-2 text-left text-label text-dim hover:bg-hover"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <IconCheckCircle
-          size={17}
-          className={mergeStylexOverrideClassName("", sx.shrink0, sx.textDim)}
-        />
-        <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+        <IconCheckCircle size={17} className="shrink-0 text-dim" />
+        <span className="min-w-0 flex-1 truncate">
           {count} resolved {count === 1 ? "comment" : "comments"} from {author}
         </span>
         <IconChevronRight
           size={16}
-          className={utilityClassName(
-            `shrink-0 text-faint transition-transform ${open ? "rotate-90" : ""}`,
-          )}
+          className={`shrink-0 text-faint transition-transform ${open ? "rotate-90" : ""}`}
         />
       </button>
       {open && (
-        <div {...stylex.props(sx.borderT, sx.borderDividerSoft)}>
+        <div className="border-t border-divider-soft">
           {comments.map((comment, index) => (
             <div
               key={`${thread.id}-${index}`}
-              {...mergeStylexProps(
-                "[&+&]:border-t [&+&]:border-divider-soft",
-                sx.px3,
-                sx.py3,
-              )}
+              className="px-3 py-3 [&+&]:border-t [&+&]:border-divider-soft"
             >
-              <div {...stylex.props(sx.mb2, sx.flex, sx.itemsCenter, sx.gap2)}>
+              <div className="mb-2 flex items-center gap-2">
                 <UserAvatar
                   name={comment.login || "Unknown"}
                   login={comment.login || null}
                   size={22}
                 />
-                <span
-                  {...stylex.props(
-                    sx.fontSemibold,
-                    sx.textFg,
-                    typography.label,
-                  )}
-                >
+                <span className="text-label font-semibold text-fg">
                   {comment.login || "Unknown"}
                 </span>
                 {index === 0 && thread.isOutdated && (
-                  <span
-                    {...stylex.props(
-                      sx.roundedSm,
-                      sx.bgYellowSoft,
-                      sx.px15,
-                      sx.py05,
-                      sx.fontMedium,
-                      sx.textYellow,
-                      typography.meta,
-                    )}
-                  >
+                  <span className="rounded-sm bg-yellow-soft px-1.5 py-0.5 text-meta font-medium text-yellow">
                     Outdated
                   </span>
                 )}
               </div>
               <div
-                {...mergeStylexProps(
-                  "markdown",
-                  sx.leadingRelaxed,
-                  sx.textDim,
-                  typography.label,
-                )}
+                className="markdown text-label leading-relaxed text-dim"
                 dangerouslySetInnerHTML={{
                   __html: renderPrCommentMarkdown(comment.body, { repo }),
                 }}
@@ -1711,23 +1174,23 @@ function ImageDiffRow({
   const showNew = !!srcs?.newSrc && file.type !== "deleted" && !newErr;
   if (!showOld && !showNew)
     return (
-      <div {...stylex.props(sx.p3, sx.textDim, typography.label)}>
+      <div className="p-3 text-label text-dim">
         Image not available to preview
       </div>
     );
   return (
-    <div {...stylex.props(sx.flex, sx.flexWrap, sx.gap3, sx.p3)}>
+    <div className="flex flex-wrap gap-3 p-3">
       {showOld && (
         <figure className={IMAGE_CELL}>
           <img
-            className={utilityClassName(`${IMAGE} opacity-80`)}
+            className={`${IMAGE} opacity-80`}
             src={srcs!.oldSrc}
             alt=""
             loading="lazy"
             onError={() => setOldErr(true)}
           />
           <figcaption className={IMAGE_CAPTION}>
-            <span {...stylex.props(sx.mr1, sx.textRed)}>−</span>
+            <span className="mr-1 text-red">−</span>
             {file.type === "deleted" ? "Deleted" : "Before"}
           </figcaption>
         </figure>
@@ -1742,7 +1205,7 @@ function ImageDiffRow({
             onError={() => setNewErr(true)}
           />
           <figcaption className={IMAGE_CAPTION}>
-            <span {...stylex.props(sx.mr1, sx.textGreen)}>+</span>
+            <span className="mr-1 text-green">+</span>
             {file.type === "new" ? "Added" : "After"}
           </figcaption>
         </figure>
@@ -1793,12 +1256,12 @@ const CommentForm = function CommentForm({
 
   return (
     <div
-      className={utilityClassName(`${CARD} gap-2 border border-accent p-2.5`)}
+      className={`${CARD} gap-2 border border-accent p-2.5`}
       onClick={(e) => e.stopPropagation()}
     >
-      <div {...stylex.props(sx.textFaint, typography.meta)}>{targetLabel}</div>
+      <div className="text-meta text-faint">{targetLabel}</div>
       {disabled ? (
-        <div {...stylex.props(sx.textFaint, typography.label)}>
+        <div className="text-label text-faint">
           {disabledHint || "Unavailable right now"}
         </div>
       ) : (
@@ -1821,21 +1284,12 @@ const CommentForm = function CommentForm({
               }
             }}
           />
-          {error && (
-            <div {...stylex.props(sx.textRed, typography.label)}>{error}</div>
-          )}
-          <div {...stylex.props(sx.flex, sx.justifyEnd, sx.gap2)}>
+          {error && <div className="text-label text-red">{error}</div>}
+          <div className="flex justify-end gap-2">
             <Button
               variant="soft"
               size="sm"
-              className={mergeStylexOverrideClassName(
-                "",
-                sx.minH0,
-                sx.px3,
-                sx.py5px,
-                sx.fontNormal,
-                typography.label,
-              )}
+              className="min-h-0 px-3 py-[5px] text-label font-normal"
               onClick={onCancel}
               disabled={sending}
             >
@@ -1844,14 +1298,7 @@ const CommentForm = function CommentForm({
             <Button
               variant="primary"
               size="sm"
-              className={mergeStylexOverrideClassName(
-                "shadow-none",
-                sx.minH0,
-                sx.px14px,
-                sx.py6px,
-                sx.fontMedium,
-                typography.supporting,
-              )}
+              className="min-h-0 px-[14px] py-[6px] text-supporting font-medium shadow-none"
               onClick={submit}
               disabled={sending || !text.trim()}
             >

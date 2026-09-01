@@ -10,12 +10,16 @@
 import { requestUser, type RouteContext } from "./context";
 import { defaultRepo, personaName } from "../config";
 import { hostRepoId, prHostFor } from "../pr-host";
+import { footerPrsFor, getPrsByRepo, prsBySessionRef } from "../pr-cache";
 import { cachedPrDetailsForSession, reconcilePrDetails } from "../pr-info";
 import { getPrStack, linkPrStack, mergePrStack } from "../pr-stack";
 import { findSessionAsync, invalidateSessionsCache } from "../session-cache";
 import { getSessionControl } from "../session-control";
 import { indexedWorkspaceMemberSessions } from "../session-list-store";
-import { projectWorkspacePrRefs } from "../session-pr-target";
+import {
+  enrichSessionPrRefs,
+  projectWorkspacePrRefs,
+} from "../session-pr-target";
 import { resolvePrTarget } from "../session-repos";
 import {
   getOpenPrs,
@@ -91,11 +95,21 @@ async function loadPrCodeFlow(
 }
 
 async function findPrSessionAsync(sessionId: string) {
-  const session = await findSessionAsync(sessionId);
-  if (!session?.workspaceId) return session;
+  const stored = await findSessionAsync(sessionId);
+  if (!stored) return stored;
+  const prsByRepo = getPrsByRepo();
+  const prsBySession = prsBySessionRef(prsByRepo);
+  const enrich = (session: NonNullable<typeof stored>) =>
+    enrichSessionPrRefs(session, {
+      defaultRepoId: defaultRepo().id,
+      prsByRepo,
+      footerMatches: footerPrsFor(prsBySession, session),
+    });
+  const session = enrich(stored);
+  if (!session.workspaceId) return session;
   return projectWorkspacePrRefs(
     session,
-    indexedWorkspaceMemberSessions(session.workspaceId),
+    indexedWorkspaceMemberSessions(session.workspaceId).map(enrich),
   );
 }
 

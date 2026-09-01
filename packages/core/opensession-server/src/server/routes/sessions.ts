@@ -49,12 +49,7 @@ import {
 } from "../queue-state";
 
 import { markPrReviewNotified } from "../pr-review-notifications";
-import {
-  footerPrsFor,
-  getPrsByRepo,
-  prsBySessionRef,
-  type PrInfo,
-} from "../pr-cache";
+import { footerPrsFor, getPrsByRepo, prsBySessionRef } from "../pr-cache";
 import {
   getReviewRequest,
   setReviewAccepted,
@@ -147,8 +142,9 @@ import {
   githubMutationCredential,
 } from "./github-credential";
 import { defaultRepo } from "../config";
-import type { SessionPrRef, UnifiedSession } from "../types";
+import type { UnifiedSession } from "../types";
 import {
+  enrichSessionPrRefs,
   projectWorkspacePrRefs,
   shareWorkspacePrRefs,
 } from "../session-pr-target";
@@ -443,48 +439,6 @@ type SessionEnrichmentContext = {
   workspaceNames: ReadonlyMap<string, string>;
 };
 
-type FooterPrMatch = { repo: string; branch: string; pr: PrInfo };
-
-/**
- * Restore PRs discovered from attribution footers on materialized list rows.
- *
- * Native session writes update one SQLite row from the durable session file,
- * which deliberately contains no derived PR fields. The list route therefore
- * has to reapply footer discovery just like the full session assembly does.
- */
-export function mergeFooterPrRefs(
-  session: UnifiedSession,
-  matches: readonly FooterPrMatch[],
-): SessionPrRef[] {
-  const refs = [...(session.prs || [])];
-  for (const { repo, branch, pr } of matches) {
-    const current = refs.findIndex(
-      (ref) => ref.repo === repo && ref.branch === branch,
-    );
-    const discovered: SessionPrRef = {
-      repo,
-      branch,
-      source: "discovered",
-      url: pr.url,
-      state: pr.state,
-      number: pr.number,
-      title: pr.title,
-      isDraft: pr.isDraft,
-      reviewDecision: pr.reviewDecision,
-      mergeable: pr.mergeable,
-      additions: pr.additions,
-      deletions: pr.deletions,
-      checks: pr.checks,
-    };
-    if (current < 0) refs.push(discovered);
-    else {
-      const existing = refs[current]!;
-      refs[current] = { ...discovered, source: existing.source };
-    }
-  }
-  return refs;
-}
-
 function sessionEnrichmentContext(): SessionEnrichmentContext {
   const prsByRepo = getPrsByRepo();
   return {
@@ -515,16 +469,17 @@ function enrichSession(
   const reviewRequest =
     getReviewRequest(s.id) ??
     s.aliasIds?.map((id) => getReviewRequest(id)).find(Boolean);
-  const currentPr = s.branch
-    ? context.prsByRepo.get(s.repo || context.defaultRepoId)?.get(s.branch)
-    : undefined;
-  const prs = mergeFooterPrRefs(s, footerPrsFor(context.prsBySession, s));
+  const prSession = enrichSessionPrRefs(s, {
+    defaultRepoId: context.defaultRepoId,
+    prsByRepo: context.prsByRepo,
+    footerMatches: footerPrsFor(context.prsBySession, s),
+  });
   const quarantine = signals?.quarantines.get(s.id);
   const safety = quarantine
     ? publicSessionSafety(quarantine, signals?.runtime.claimedJournalSessions)
     : undefined;
   return {
-    ...s,
+    ...prSession,
     ...(safety
       ? {
           isRunning: false,
@@ -537,26 +492,6 @@ function enrichSession(
     ...(titleOverride ? { title: titleOverride, titleOverridden: true } : {}),
     ...(manualStatus ? { manualStatus } : {}),
     ...(reviewRequest ? { reviewRequest } : {}),
-    ...(currentPr
-      ? {
-          prUrl: currentPr.url,
-          prState: currentPr.state,
-          prMergeable: currentPr.mergeable,
-          prNumber: currentPr.number,
-          prTitle: currentPr.title,
-          prIsDraft: currentPr.isDraft,
-          prAdditions: currentPr.additions,
-          prDeletions: currentPr.deletions,
-          prChangedFiles: currentPr.changedFiles,
-          prReviewDecision: currentPr.reviewDecision,
-          prReviewRequested: currentPr.reviewRequested,
-          prReviewedBy: currentPr.reviewedBy,
-          prAuthor: currentPr.author,
-          prUpdatedAt: currentPr.updatedAt,
-          prChecks: currentPr.checks,
-        }
-      : {}),
-    ...(prs.length ? { prs } : {}),
     repo: s.repo || context.defaultRepoId,
     // The name of the workspace this session is filed under. A sidebar row
     // names a workspace, never one of its tabs, and the workspace list is
@@ -1981,11 +1916,18 @@ export async function handleSessionsRoutes(
       if (!session)
         return Response.json({ error: "Session not found" }, { status: 404 });
       const signals = await sessionListRuntimeSignals();
-      const enriched = enrichSession(session, signals);
+      const context = sessionEnrichmentContext();
+      const enriched = enrichSession(session, signals, context);
       const detail = enriched.workspaceId
         ? projectWorkspacePrRefs(
             enriched,
-            indexedWorkspaceMemberSessions(enriched.workspaceId),
+            indexedWorkspaceMemberSessions(enriched.workspaceId).map((member) =>
+              enrichSessionPrRefs(member, {
+                defaultRepoId: context.defaultRepoId,
+                prsByRepo: context.prsByRepo,
+                footerMatches: footerPrsFor(context.prsBySession, member),
+              }),
+            ),
           )
         : enriched;
       return Response.json(detail, {

@@ -60,6 +60,7 @@ const ALLOWED: Record<string, readonly string[]> = {
   picture: [],
   pre: [],
   q: [],
+  "relative-time": ["datetime"],
   s: [],
   samp: [],
   small: [],
@@ -87,7 +88,7 @@ const VOID_TAGS = new Set(["br", "hr", "img", "source"]);
 const URL_ATTRS = new Set(["href", "src"]);
 
 const TAG =
-  /<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^\s/>"'=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'`=<>]*))?)*)\s*(\/?)>/g;
+  /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s/>"'=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'`=<>]*))?)*)\s*(\/?)>/g;
 
 const ATTR = /([^\s/>"'=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'`=<>]*)))?/g;
 

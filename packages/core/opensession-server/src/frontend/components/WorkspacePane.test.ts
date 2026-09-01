@@ -1,6 +1,4 @@
 import { expect, test } from "bun:test";
-// Collapse whitespace so source assertions survive the formatter's line wrapping.
-const norm = (text: string): string => text.replace(/\s+/g, " ");
 
 const source = await Bun.file(
   new URL("./WorkspacePane.tsx", import.meta.url),
@@ -103,18 +101,18 @@ test("reviews with and without a PR share the review toolbar", () => {
     /<ReviewToolbar\s+compact=\{compactToolbar\}\s*>\s*<div className=\{PR_NO_PR_BAR\}>/,
   );
   expect(reviewToolbarSource).not.toContain("maskStickyFileHeaders");
-  expect(reviewToolbarSource).toContain("sx.desktopPt25");
+  expect(reviewToolbarSource).toContain("desktop:pt-2.5");
   expect(reviewToolbarSource).not.toContain("desktop:mt-2.5");
   expect(reviewToolbarSource).not.toContain("sticky top-[52px]");
   expect(reviewToolbarSource).not.toContain("linear-gradient");
-  expect(reviewToolbarSource).toContain("sx.desktopMb2");
-  expect(reviewToolbarSource).toContain("sx.desktopOverflowHidden");
-  expect(reviewToolbarSource).toContain("sx.desktopRoundedLg");
+  expect(reviewToolbarSource).toContain("desktop:mb-2");
+  expect(reviewToolbarSource).toContain("desktop:overflow-hidden");
+  expect(reviewToolbarSource).toContain("desktop:rounded-lg");
   expect(reviewToolbarSource).toContain("desktop:smooth-shadow-ring-sm");
   expect(reviewToolbarSource).not.toContain("desktop:border");
-  expect(reviewBar).toContain("sx.h11");
-  expect(reviewBar).toContain("sx.bgSurface");
-  expect(reviewBar).toContain("sx.desktopHidden");
+  expect(reviewBar).toContain("h-11");
+  expect(reviewBar).toContain("bg-surface");
+  expect(reviewBar).toContain("desktop:hidden");
   expect(reviewBar).not.toContain("desktop:absolute");
   expect(prPanelSource).toContain('["files", "Files",');
   expect(prPanelSource).toContain('label="Code view"');
@@ -187,36 +185,35 @@ test("sidebar Changes shares Review's code display options", () => {
   );
   expect(commentableDiffSource).toContain("z-[6] bg-surface");
   expect(commentableDiffSource).toContain("rounded-md bg-surface");
+  expect(commentableDiffSource).toContain(': "mx-2 w-auto bg-transparent"');
   expect(commentableDiffSource).toContain(
-    ': utilityClassName("mx-2 w-auto bg-transparent")',
+    "mt-1.5 max-w-full overflow-clip rounded-lg",
   );
+  expect(commentableDiffSource).not.toContain("rounded-lg bg-code-well");
   expect(commentableDiffSource).toContain(
-    "mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well",
-  );
-  expect(commentableDiffSource).toMatch(
-    /!stickyFileHeaders\s*&&\s*utilityClassName\(\s*"mx-2 mt-0\.5"\s*\)/,
-  );
-  expect(commentableDiffSource).toMatch(
-    /stickyFileHeaders\s*\?\s*utilityClassName\(\s*"gap-2\.5"\s*\)\s*:\s*utilityClassName\(\s*"gap-4"\s*\)/,
-  );
-  expect(commentableDiffSource).toMatch(
-    /stickyFileHeaders\s*\?\s*utilityClassName\(\s*"gap-\[7px\]"\s*\)\s*:\s*utilityClassName\(\s*"gap-4"\s*\)/,
+    '!stickyFileHeaders && "mx-2 mt-0.5"',
   );
   expect(commentableDiffSource).toContain(
-    '"--diffs-bg": "var(--code-well-light)"',
+    'stickyFileHeaders ? "gap-2.5" : "gap-4"',
   );
   expect(commentableDiffSource).toContain(
-    'backgroundColor: "var(--code-well-light)"',
+    'stickyFileHeaders ? "gap-[7px]" : "gap-4"',
   );
   expect(commentableDiffSource).toContain(
-    '"--diffs-bg": "var(--code-well-dark)"',
+    '"--diffs-bg": "var(--review-code-light)"',
   );
   expect(commentableDiffSource).toContain(
-    'backgroundColor: "var(--code-well-dark)"',
+    'backgroundColor: "var(--review-code-light)"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"--diffs-bg": "var(--review-code-dark)"',
+  );
+  expect(commentableDiffSource).toContain(
+    'backgroundColor: "var(--review-code-dark)"',
   );
   expect(commentableDiffSource).toContain("style={DIFF_SURFACE_STYLE[theme]}");
-  expect(baseCssSource).toContain("--code-well-light: #f6f8fa");
-  expect(baseCssSource).toContain("--code-well-dark: #0d0f13");
+  expect(baseCssSource).toContain("--review-code-light: #ffffff");
+  expect(baseCssSource).toContain("--review-code-dark: #1c1c1c");
   expect(commentableDiffSource).not.toContain("border border-line bg-bg");
   expect(commentableDiffSource).not.toContain("data-[stuck]:overflow-visible");
   expect(commentableDiffSource).not.toContain("-inset-x-px");
@@ -239,13 +236,9 @@ test("wide Review keeps page navigation in the identity bar", () => {
   expect(source).not.toContain("onReviewPageChange={setReviewPage}");
   expect(source).toContain("compactToolbar={reviewSummaryVisible}");
   expect(prPanelSource).toContain('label="Pull request pages"');
-  expect(prPanelSource).toContain(
-    'className={mergeStylexOverrideClassName("", sx.shrink0, sx.phoneHidden)}',
-  );
-  expect(norm(prPanelSource)).toContain(
-    "className={utilityClassName( `flex h-11",
-  );
-  expect(prPanelSource).toContain("sx.desktopHidden");
+  expect(prPanelSource).toContain('className="shrink-0 phone:hidden"');
+  expect(prPanelSource).toContain('className="flex h-11');
+  expect(prPanelSource).toContain("desktop:hidden");
   expect(prPanelSource).toContain("{phoneLayout && fileControls}");
   expect(prPanelSource).toContain(
     "{(compactToolbar || !phoneLayout) && fileControls}",
@@ -257,9 +250,9 @@ test("wide Review keeps page navigation in the identity bar", () => {
   expect(prPanelSource).toContain(
     'compactToolbar ? "overflow-x-hidden overflow-y-auto"',
   );
-  expect(reviewToolbarSource).toMatch(/sx\.sticky,\s*sx\.top0/);
-  expect(reviewToolbarSource).toContain("sx.desktopMb0");
-  expect(reviewToolbarSource).toContain("sx.desktopPb2");
+  expect(reviewToolbarSource).toContain("sticky top-0");
+  expect(reviewToolbarSource).toContain("desktop:mb-0");
+  expect(reviewToolbarSource).toContain("desktop:pb-2");
   expect(reviewToolbarSource).not.toContain("-mb-2.5");
   expect(reviewToolbarSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
   expect(prFilesPageSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
@@ -293,11 +286,11 @@ test("Review data and pages keep their extracted ownership", () => {
 });
 
 test("Review loading and errors stay centered beside the summary", () => {
-  expect(prPanelSource).toMatch(
-    /const\s+reviewStateClass\s*=\s*utilityClassName\(\s*`flex-1\s*\$\{compactToolbar\s*\?\s*WS_SUMMARY_REVIEW_CANVAS_CLEARANCE\s*:\s*""\}`\s*,?\s*\)/,
+  expect(prPanelSource).toContain(
+    'const reviewStateClass = `flex-1 ${compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE : ""}`',
   );
-  expect(prPanelSource).toMatch(
-    /<LoadingState\s+className=\{utilityClassName\(\s*`\$\{reviewStateClass\}\s*-translate-y-5`\s*,?\s*\)\}\s*>/,
+  expect(prPanelSource).toContain(
+    "<LoadingState className={`${reviewStateClass} -translate-y-5`}>",
   );
   expect(prPanelSource).toContain('title="Couldn’t load pull request"');
   expect(prPanelSource).toContain(
@@ -315,7 +308,7 @@ test("a lone Review hides the tab strip, closes the toolbar gap, and keeps New t
 });
 
 test("the PR top bar leaves merge to the summary and actions menu", () => {
-  const headerStart = prPanelSource.indexOf('<TopBar\n          as="header"');
+  const headerStart = prPanelSource.indexOf('<TopBar as="header"');
   const menuStart = prPanelSource.indexOf("<Menu.Root>", headerStart);
   const menuEnd = prPanelSource.indexOf("</Menu.Root>", menuStart);
 

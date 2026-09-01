@@ -1183,6 +1183,16 @@ describe("renderPrCommentMarkdown bot markup", () => {
     expect(html).not.toContain("&lt;sup&gt;");
   });
 
+  it("renders Vercel's relative timestamp instead of showing its tags", () => {
+    const html = renderPrCommentMarkdown(
+      '| Updated |\n| :--- |\n| <relative-time datetime="2026-09-01T09:52:50.595Z">Sep 1, 2026 9:52am UTC</relative-time> |',
+    );
+    expect(html).toContain(
+      '<relative-time datetime="2026-09-01T09:52:50.595Z">Sep 1, 2026 9:52am UTC</relative-time>',
+    );
+    expect(html).not.toContain("&lt;relative-time");
+  });
+
   it("opens a hand-written link in a new tab", () => {
     expect(renderPrCommentMarkdown(table)).toContain(
       '<a href="https://vercel.com/tella/internal" target="_blank" rel="noopener noreferrer">',

@@ -14,14 +14,26 @@ const apiSource = await Bun.file(
 
 test("workspace surfaces keep committed and uncommitted work separate", () => {
   expect(apiSource).toContain("commits?: WorkspaceCommit[]");
-  expect(summarySource).toContain("(diffIsCommitted || hasCommitDetails)");
-  expect(summarySource).toContain(">Committed</div>");
+  expect(summarySource).toContain("{hasCommitDetails && (");
+  expect(summarySource).toContain("<span>Committed</span>");
   expect(summarySource).toContain(">Uncommitted</div>");
   expect(summarySource).toContain("commits.map(committedRow)");
   expect(infoSource).toContain("commits.map((commit)");
   expect(infoSource).toContain(
     "<CommitRow key={commit.sha} commit={commit} />",
   );
+});
+
+test("Changes expands to files with hover diff previews", () => {
+  expect(summarySource).toContain(">Changes</div>");
+  expect(summarySource).toContain(
+    "onClick={() => setChangesOpen((open) => !open)}",
+  );
+  expect(summarySource).toContain("changeFiles.map(fileChangeRow)");
+  expect(summarySource).toContain("openOnHover={Boolean(file.meta)}");
+  expect(summarySource).toContain("<FileDiff");
+  expect(summarySource).toContain("useSessionPrDiffResource(");
+  expect(summarySource).not.toContain("files committed");
 });
 
 test("the Committed section folds open to every PR or workspace commit", () => {

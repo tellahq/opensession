@@ -80,7 +80,10 @@ const RESUME_LIMIT = 199;
 // can still stop inside the same giant turn. Past either ceiling the snapshot
 // stays truncated and the reader pages with "Load all", exactly as before.
 const SNAPSHOT_TAIL_ENTRIES = 132;
-const SNAPSHOT_MIN_MESSAGES = 4;
+// Message-heavy transcripts already clear this through the 132-entry floor.
+// This larger target mainly extends tool-heavy tails, where folded work would
+// otherwise leave later hydration to grow the visible transcript after open.
+const SNAPSHOT_MIN_MESSAGES = 100;
 const SNAPSHOT_MIN_USER_MESSAGES_WITH_TOOL_WORK = 1;
 const SNAPSHOT_MAX_ENTRIES = 1400;
 const SNAPSHOT_MAX_ESTIMATED_BYTES = 850_000;
