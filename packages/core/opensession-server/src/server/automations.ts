@@ -1731,6 +1731,9 @@ export async function runAutomation(
     // Whether the engine reported a terminal outcome. Only that proves the
     // turn is over and lets settleAutomationRunState retire the session.
     let sawTerminalEvent = false;
+    // Settlement happens once, inside the event loop. The flag keeps the
+    // post-loop safety net from re-entering it.
+    let settledRunState = false;
     // Tail of the assistant's text: an automation whose prompt declares
     // failure (`RUN STATUS: failed — …` / `SCAN STATUS: failed — …` as the
     // final line) settles the ledger as error instead of "the turn finished
@@ -1875,24 +1878,43 @@ export async function runAutomation(
         sawTerminalEvent = true;
         errorMsg = event.content || "Unknown error";
       }
+      // Settle HERE, inside the loop, not after it. Asking the generator for
+      // its next item is what resumes the journal wrapper, and every wrapper
+      // (hostedEventsWithJournal and both sandbox wrappers) clears this run's
+      // recovery journal in its `finally` on normal source completion. A
+      // session-kernel restart in the window between that clear and a
+      // post-loop settlement would leave the session `running` with no journal
+      // record left to recover it — the exact stranding this change exists to
+      // prevent. Settling first means the journal still names this run for as
+      // long as the session is unsettled.
+      //
+      // The declared-failure tail is read here too: text chunks precede the
+      // terminal event, so it carries the same verdict the ledger will record.
+      if (sawTerminalEvent && !settledRunState) {
+        settledRunState = true;
+        await settleAutomationRunState(
+          bksId,
+          errorMsg || declaredRunFailure(textTail) || null,
+          true,
+          automationRunKey,
+        );
+      }
     }
     if (!errorMsg) errorMsg = declaredRunFailure(textTail) || "";
 
-    // First, before anything that can reject. The engine reported a terminal
-    // outcome and the host has already retired its journal, so the session is
-    // owner-less from here on. Everything below — session persistence, output
-    // delivery, the ledger — can fail into the outer catch, which settles the
-    // ledger but cannot settle the session (its state is scoped to this try).
-    // Settling after any of them would leave exactly the owner-less running
-    // session this function exists to prevent. The engine session id is
-    // already persisted from the `init` event, so nothing below is a
-    // precondition for reading this session back.
-    await settleAutomationRunState(
-      bksId,
-      errorMsg || null,
-      sawTerminalEvent,
-      automationRunKey,
-    );
+    // Safety net for a stream that reported its terminal outcome in a shape
+    // the loop could not settle on. Already-settled sessions return early, so
+    // this is a no-op on the normal path. It stays ahead of everything that
+    // can reject — session persistence, output delivery, the ledger — because
+    // the outer catch settles the LEDGER but cannot settle the session: the
+    // run-state locals are scoped to this try.
+    if (!settledRunState)
+      await settleAutomationRunState(
+        bksId,
+        errorMsg || null,
+        sawTerminalEvent,
+        automationRunKey,
+      );
 
     await persistSession(engineSessionId);
 

@@ -147,6 +147,36 @@ describe("automation run settlement", () => {
     expect(settleLedger).toBeGreaterThan(settleSession);
   });
 
+  test("settlement happens inside the loop, before the journal wrapper clears", () => {
+    // Requesting the generator's NEXT item is what resumes the journal
+    // wrapper, and every wrapper clears this run's recovery journal in its
+    // `finally` on normal source completion. Settling only after the loop
+    // leaves a window where the session is `running` with no journal record
+    // left to recover it. So the settlement must sit inside the loop body,
+    // between the terminal-event capture and the loop's closing brace.
+    const source = readFileSync(
+      resolve(import.meta.dir, "automations.ts"),
+      "utf8",
+    );
+    const loopStart = source.indexOf("for await (const event of events) {");
+    const streamDrained = source.indexOf(
+      "errorMsg = declaredRunFailure(textTail)",
+    );
+    const terminalCapture = source.indexOf(
+      'if (event.type === "error") {',
+      loopStart,
+    );
+    const inLoopSettle = source.indexOf(
+      "await settleAutomationRunState(",
+      loopStart,
+    );
+    expect(loopStart).toBeGreaterThan(0);
+    expect(terminalCapture).toBeGreaterThan(loopStart);
+    expect(inLoopSettle).toBeGreaterThan(terminalCapture);
+    // Still inside the loop: it precedes the post-loop drain line.
+    expect(inLoopSettle).toBeLessThan(streamDrained);
+  });
+
   test("nothing that can reject runs between the terminal event and settlement", () => {
     // The outer catch settles the LEDGER but cannot settle the session: the
     // run-state variables are scoped to the try. So every fallible step of the
@@ -181,7 +211,8 @@ describe("automation run settlement", () => {
   test("every automation backend journals the run id the settlement fences on", () => {
     // The fence only holds if the id passed to settlement is the same one the
     // backend journals as `run_registered` — that is what becomes the actor's
-    // `currentRunId`. All three dispatch paths must carry it.
+    // `currentRunId`. All three dispatch paths must carry it, and every
+    // settlement call site must pass it.
     const source = readFileSync(
       resolve(import.meta.dir, "automations.ts"),
       "utf8",
@@ -190,6 +221,9 @@ describe("automation run settlement", () => {
     // Sandboxed runs journal spec.hostId; both gateway paths journal startToken.
     expect(source).toContain("hostId: automationRunKey");
     expect(source.match(/startToken: automationRunKey/g)).toHaveLength(2);
-    expect(source).toContain("automationRunKey,\n    );");
+    // Both settlement call sites (in-loop and the post-loop safety net) fence.
+    const settlements = source.match(/await settleAutomationRunState\(/g);
+    expect(settlements).toHaveLength(2);
+    expect(source.match(/^\s*automationRunKey,\n\s*\);$/gm)).toHaveLength(2);
   });
 });
