@@ -423,7 +423,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
               throw new Error("Tella returned an empty editor staging route.");
             const pathname = new URL(normalized, "https://preview.invalid")
               .pathname;
-            if (!pathname.split("/").includes(fixture.videoId))
+            if (pathname !== `/video/${fixture.videoId}/edit`)
               throw new Error(
                 "Tella's leased video ID does not match its editor route.",
               );
