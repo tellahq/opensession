@@ -109,7 +109,7 @@ describe("buildSessionContextNote", () => {
 describe("buildEngineSwitchHandoffNote", () => {
   it("bridges the conversation when a fresh target engine takes over", () => {
     const note = buildEngineSwitchHandoffNote({
-      fromModel: "claude-fable-5",
+      fromModel: "claude-fable-5-1",
       fromProvider: "claude",
       toProvider: "codex",
       targetResuming: false,
@@ -122,7 +122,7 @@ describe("buildEngineSwitchHandoffNote", () => {
 
     expect(note).toContain("Engine handoff");
     expect(note).toContain(
-      "switched mid-conversation from claude-fable-5 (claude)",
+      "switched mid-conversation from claude-fable-5-1 (claude)",
     );
     expect(note).toContain("continuing the *same* session");
     expect(note).toContain("- User: Implement the parser.");

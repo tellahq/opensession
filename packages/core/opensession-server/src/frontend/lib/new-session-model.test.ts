@@ -3,10 +3,10 @@ import { preferredNewSessionModel } from "./new-session-model";
 
 const base = {
   models: [
-    { id: "pi/anthropic/claude-fable-5" },
+    { id: "pi/anthropic/claude-fable-5-1" },
     { id: "pi/workspace-preset/ws-1/opus-fable" },
   ],
-  default: "pi/anthropic/claude-fable-5",
+  default: "pi/anthropic/claude-fable-5-1",
   modelPref: "",
 };
 
@@ -18,9 +18,9 @@ describe("preferredNewSessionModel", () => {
     expect(
       preferredNewSessionModel({
         ...base,
-        modelPref: "pi/anthropic/claude-fable-5",
+        modelPref: "pi/anthropic/claude-fable-5-1",
       }),
-    ).toBe("pi/anthropic/claude-fable-5");
+    ).toBe("pi/anthropic/claude-fable-5-1");
   });
   test("retains a workspace preset default", () => {
     expect(

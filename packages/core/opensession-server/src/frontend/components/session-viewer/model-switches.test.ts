@@ -6,7 +6,7 @@ import { withModelSwitches } from "./model-switches";
 const history = (
   at: string,
 ): NonNullable<UnifiedSession["modelHistory"]>[number] => ({
-  model: "claude-fable-5",
+  model: "claude-fable-5-1",
   from: "gpt-5.6-sol",
   at,
   by: "auto-retry — checking the original selection again",
@@ -16,7 +16,7 @@ const liveSwitch = (timestamp: string): TranscriptEntry => ({
   id: "model-switch-live-1",
   type: "system",
   content: switchDividerText(
-    "claude-fable-5",
+    "claude-fable-5-1",
     "gpt-5.6-sol",
     "auto-retry — checking the original selection again",
   ),

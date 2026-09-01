@@ -42,7 +42,7 @@ export const DEMO_ASK_SESSION_ID = "bks-demo-ask";
 export const DEMO_ASK_ENGINE_SESSION_ID = "ses_demoask";
 export const DEMO_PR_NUMBER = 128;
 
-const MODEL_FABLE = "pi/anthropic/claude-fable-5";
+const MODEL_FABLE = "pi/anthropic/claude-fable-5-1";
 const MODEL_SONNET = "pi/anthropic/claude-sonnet-5";
 const MODEL_CODEX = "pi/openai/gpt-5.5-codex";
 

@@ -739,6 +739,9 @@ export async function handleSetupRoutes(
           delete github[field]; // empty string clears
         else github[field] = value;
       }
+      // installationId is a legacy selector that takes precedence during token
+      // minting. Changing the owner must clear it in the same config write.
+      if (body.installationOwner !== undefined) delete github.installationId;
       try {
         const { commitGithubAppKeyMutation } = await import("../github-app");
         await commitGithubAppKeyMutation(keyMutation, () =>

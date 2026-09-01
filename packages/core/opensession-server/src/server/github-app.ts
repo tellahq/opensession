@@ -60,7 +60,7 @@ const g = globalThis as {
   __ghAppInstallationsCache?: {
     clientId: string;
     at: number;
-    installations: GithubAppInstallationAccount[];
+    installations: GithubAppInstallation[];
   } | null;
 };
 
@@ -151,15 +151,8 @@ export async function githubAppInstallationToken(
           ? matchingWrite.installationOwner
           : undefined;
     if (!installationId) {
-      const res = await fetch("https://api.github.com/app/installations", {
-        headers,
-      });
-      const installs = (await res.json()) as Array<{
-        id: number;
-        account?: { login?: string };
-      }>;
-      if (!Array.isArray(installs) || !installs.length)
-        throw new Error("no installations");
+      const installs = await githubAppInstallations(clientId, headers);
+      if (!installs.length) throw new Error("no installations");
       // Prefer an explicit installation owner, then the org captured at setup
       // (appOrg) — the same precedence setup-team.ts uses. An org App installed
       // on more than one account must be selected explicitly.
@@ -260,11 +253,60 @@ export function configuredGithubInstallationOwner(): string {
   return String(github.installationOwner || github.appOrg || "").trim();
 }
 
+interface GithubAppInstallation {
+  id: number;
+  account?: { login?: string; type?: string };
+}
+
 export interface GithubAppInstallationAccount {
   /** Account login, e.g. "my-organization". */
   login: string;
   /** GitHub account type: "User" or "Organization". */
   type: string;
+}
+
+async function githubAppInstallations(
+  clientId: string,
+  headers: Record<string, string>,
+): Promise<GithubAppInstallation[]> {
+  const cached = g.__ghAppInstallationsCache;
+  if (
+    cached &&
+    cached.clientId === clientId &&
+    Date.now() - cached.at < 60_000
+  ) {
+    return cached.installations;
+  }
+
+  const installations: GithubAppInstallation[] = [];
+  let url: string | null =
+    "https://api.github.com/app/installations?per_page=100";
+  while (url) {
+    const res: Response = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(15_000),
+    });
+    const page = (await res.json().catch(() => null)) as unknown;
+    if (!res.ok || !Array.isArray(page)) {
+      throw new Error(`cannot list GitHub App installations (${res.status})`);
+    }
+    for (const installation of page) {
+      if (
+        installation &&
+        typeof installation === "object" &&
+        typeof installation.id === "number"
+      ) {
+        installations.push(installation as GithubAppInstallation);
+      }
+    }
+    const next: RegExpMatchArray | null | undefined = res.headers
+      .get("link")
+      ?.match(/<([^>]+)>;\s*rel="next"/i);
+    url = next?.[1] || null;
+  }
+
+  g.__ghAppInstallationsCache = { clientId, at: Date.now(), installations };
+  return installations;
 }
 
 /** Every account the App is installed on, listed with the App JWT alone (no
@@ -277,36 +319,16 @@ export async function listGithubAppInstallations(): Promise<
 > {
   const { clientId } = githubUserAuthSettings();
   if (!clientId || !existsSync(keyPath())) return null;
-  const cached = g.__ghAppInstallationsCache;
-  if (
-    cached &&
-    cached.clientId === clientId &&
-    Date.now() - cached.at < 60_000
-  ) {
-    return cached.installations;
-  }
   try {
     const key = await Bun.file(keyPath()).text();
-    const res = await fetch(
-      "https://api.github.com/app/installations?per_page=100",
-      {
-        headers: {
-          Authorization: `Bearer ${appJwt(clientId, key)}`,
-          Accept: "application/vnd.github+json",
-        },
-        signal: AbortSignal.timeout(15_000),
-      },
-    );
-    const installs = (await res.json().catch(() => null)) as Array<{
-      account?: { login?: string; type?: string };
-    }> | null;
-    if (!res.ok || !Array.isArray(installs)) return null;
-    const installations = installs.flatMap((installation) => {
+    const installations = await githubAppInstallations(clientId, {
+      Authorization: `Bearer ${appJwt(clientId, key)}`,
+      Accept: "application/vnd.github+json",
+    });
+    return installations.flatMap((installation) => {
       const login = installation.account?.login;
       return login ? [{ login, type: installation.account?.type || "" }] : [];
     });
-    g.__ghAppInstallationsCache = { clientId, at: Date.now(), installations };
-    return installations;
   } catch {
     return null;
   }

@@ -59,6 +59,7 @@ touches an in-process tool:
 | [`opensession-workflows`](#opensession-workflows) | 8 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
 | [`opensession-assets`](#opensession-assets) | 4 | interactive | Needs a session id. Works in read-only Ask mode — assets land outside the checkout. |
 | [`opensession-todos`](#opensession-todos) | 5 | interactive | Needs a session id. |
+| [`opensession-schedule`](#opensession-schedule) | 3 | interactive | Needs a session id. |
 | [`opensession-papercuts`](#opensession-papercuts) | 2 | interactive, automation | Dropped when the session's repo opted out (Settings → Papercuts). |
 | [`opensession-report`](#opensession-report) | 1 | automation | – |
 | [`opensession-turn`](#opensession-turn) | 2 | automation | – |
@@ -68,7 +69,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-27 servers, 118 tools.
+28 servers, 121 tools.
 
 ## opensession-sessions
 
@@ -840,6 +841,34 @@ Drop a todo — the user consciously decided NOT to do it. Only on the user's ex
 `mcp__opensession-todos__update_todo` · input: `id` (string, required), `text` (string), `note` (string), `due` (string), `remindAt` (string), `status` ("open" | "done" | "dropped")
 
 Edit a todo's text, note, or due date, or reopen a done/dropped one (status "open").
+
+## opensession-schedule
+
+Schedule a prompt for this session at a future time.
+
+- **Source** `packages/core/opensession-server/src/server/schedule-mcp.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
+- **Runs** interactive
+- **Condition** Needs a session id.
+- **Note** Delivery is a SessionKernel timer (scheduled-prompts.ts), so it survives restarts. Delivery times are described in the user's configured timezone.
+
+### `schedule_prompt`
+
+`mcp__opensession-schedule__schedule_prompt` · input: `at` (string, required), `prompt` (string, required)
+
+Schedule a prompt to be sent to THIS session at a future time, then end your turn. Use it to check back on something that takes a while (a release workflow, CI, a deploy, a long job) instead of polling or sleeping. The prompt arrives as a normal message in this conversation, so write it to your future self with everything needed to pick the work up: what to run, what "done" looks like, what to do on failure. Fires once; survives restarts. Do not use harness built-ins like CronCreate or ScheduleWakeup here; they do not exist in this session.
+
+### `list_scheduled_prompts`
+
+`mcp__opensession-schedule__list_scheduled_prompts` · input: none
+
+List prompts scheduled for this session, soonest first.
+
+### `cancel_scheduled_prompt`
+
+`mcp__opensession-schedule__cancel_scheduled_prompt` · input: `id` (string, required)
+
+Cancel a prompt scheduled for this session by id.
 
 ## opensession-papercuts
 

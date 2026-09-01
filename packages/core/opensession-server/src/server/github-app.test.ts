@@ -102,24 +102,31 @@ describe("App installation directory", () => {
       "opensession-github-installations-",
       "Iv-installations-test",
     );
-    let calls = 0;
+    const urls: string[] = [];
     globalThis.fetch = (async (
       input: string | URL | Request,
       init?: RequestInit,
     ) => {
-      calls++;
-      expect(String(input)).toBe(
-        "https://api.github.com/app/installations?per_page=100",
-      );
+      const url = String(input);
+      urls.push(url);
       expect(
         String((init?.headers as Record<string, string>).Authorization),
       ).toMatch(/^Bearer /);
-      return Response.json([
-        { id: 1, account: { login: "solo-dev", type: "User" } },
-        { id: 2, account: { login: "acme-org", type: "Organization" } },
-        // No account: dropped rather than listed as an empty login.
-        { id: 3 },
-      ]);
+      if (url.endsWith("page=2")) {
+        return Response.json([
+          { id: 2, account: { login: "acme-org", type: "Organization" } },
+          // No account: dropped rather than listed as an empty login.
+          { id: 3 },
+        ]);
+      }
+      return Response.json(
+        [{ id: 1, account: { login: "solo-dev", type: "User" } }],
+        {
+          headers: {
+            Link: '<https://api.github.com/app/installations?per_page=100&page=2>; rel="next"',
+          },
+        },
+      );
     }) as typeof fetch;
 
     const expected = [
@@ -129,7 +136,10 @@ describe("App installation directory", () => {
     expect(await listGithubAppInstallations()).toEqual(expected);
     // Briefly cached: the picker refetches on every open.
     expect(await listGithubAppInstallations()).toEqual(expected);
-    expect(calls).toBe(1);
+    expect(urls).toEqual([
+      "https://api.github.com/app/installations?per_page=100",
+      "https://api.github.com/app/installations?per_page=100&page=2",
+    ]);
   });
 
   test("answers null rather than none when GitHub cannot be reached", async () => {
@@ -196,8 +206,15 @@ describe("repository-scoped App installation identity", () => {
     globalThis.fetch = (async (input: string | URL | Request) => {
       const url = String(input);
       requests.push(url);
-      if (url.endsWith("/app/installations")) {
+      if (url.endsWith("page=2")) {
         return Response.json([{ id: 2, account: { login: "owner-b" } }]);
+      }
+      if (url.endsWith("/app/installations?per_page=100")) {
+        return Response.json([], {
+          headers: {
+            Link: '<https://api.github.com/app/installations?per_page=100&page=2>; rel="next"',
+          },
+        });
       }
       if (url.endsWith("/app/installations/2/access_tokens")) {
         return Response.json({
@@ -226,7 +243,8 @@ describe("repository-scoped App installation identity", () => {
     process.env.OPENSESSION_CONFIG = changedConfig;
     expect(githubAppCredentialHealth()).toBe("unchecked");
     expect(requests).toEqual([
-      "https://api.github.com/app/installations",
+      "https://api.github.com/app/installations?per_page=100",
+      "https://api.github.com/app/installations?per_page=100&page=2",
       "https://api.github.com/app/installations/2/access_tokens",
     ]);
   });

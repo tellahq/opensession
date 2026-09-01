@@ -86,7 +86,8 @@
  *    subprocess can never fall back to host ~/.claude credentials), cwd is
  *    the bridge's empty BRIDGE_CWD (every tool is a blocked passthrough, no
  *    worktree must ever be visible), and the SDK's own built-ins are
- *    disallowed (DISALLOWED_BUILTINS + the block-everything hook backstop).
+ *    removed (`tools: []` via SDK_BUILTIN_TOOLS, DISALLOWED_BUILTINS, and the
+ *    block-everything hook backstop).
  *
  * Known approximations (bridge parity, documented): `temperature`/`maxTokens`
  * /`timeoutMs` and pi's `reasoning` thinking level are ignored (the SDK does
@@ -118,6 +119,7 @@ import { stateDir } from "./paths";
 import { audit, summarizeText } from "./audit";
 import {
   DISALLOWED_BUILTINS,
+  SDK_BUILTIN_TOOLS,
   PASSTHROUGH_MCP,
   PASSTHROUGH_PREFIX,
   admitBridgeRequest,
@@ -1029,6 +1031,7 @@ async function* runSdkAttempt(
         settingSources: [],
         mcpServers: mcpServers as any,
         strictMcpConfig: true,
+        tools: SDK_BUILTIN_TOOLS,
         disallowedTools: DISALLOWED_BUILTINS,
         allowedTools: requestTools.map((t) => `${PASSTHROUGH_PREFIX}${t.name}`),
         pathToClaudeCodeExecutable: CLAUDE_CODE_BIN,

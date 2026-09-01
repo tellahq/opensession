@@ -54,6 +54,7 @@ import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createAuditMcpServer } from "./audit-mcp";
 import { createHealthMcpServer } from "./health-mcp";
 import { createRunnersMcpServer } from "./runners-mcp";
+import { createScheduleMcpServer } from "./schedule-mcp";
 import { createPortalsMcpServer } from "./portals-mcp";
 import { createSelfDeployMcpServer } from "./self-deploy";
 import { createWebMcpServer } from "./web-mcp";
@@ -383,6 +384,16 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     condition: "Needs a session id.",
     note: "Reminder times are described in the list owner's configured timezone.",
     build: () => createTodosMcpServer({ sessionId: SESSION_ID, user: USER }),
+  },
+  {
+    name: "opensession-schedule",
+    summary: INTERNAL_MCP_CAPABILITIES["opensession-schedule"].summary,
+    source: "packages/core/opensession-server/src/server/schedule-mcp.ts",
+    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
+    runClasses: ["interactive"],
+    condition: "Needs a session id.",
+    note: "Delivery is a SessionKernel timer (scheduled-prompts.ts), so it survives restarts. Delivery times are described in the user's configured timezone.",
+    build: () => createScheduleMcpServer({ sessionId: SESSION_ID, user: USER }),
   },
   {
     name: "opensession-papercuts",

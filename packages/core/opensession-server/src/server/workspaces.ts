@@ -80,7 +80,7 @@ export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
       id: "dial-ultra",
       label: "Dial · Ultra",
       group: "dial",
-      lead: { model: "pi/anthropic/claude-fable-5", effort: "high" },
+      lead: { model: "pi/anthropic/claude-fable-5-1", effort: "high" },
       supporting: [
         {
           model: "pi/openai/gpt-5.6-sol",
@@ -98,7 +98,7 @@ export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
       lead: { model: "pi/openai/gpt-5.6-sol", effort: "xhigh" },
       supporting: [
         {
-          model: "pi/anthropic/claude-fable-5",
+          model: "pi/anthropic/claude-fable-5-1",
           effort: "high",
           role: "Read-only oracle",
         },
@@ -142,7 +142,7 @@ export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
       lead: { model: "pi/anthropic/claude-opus-5", effort: "xhigh" },
       supporting: [
         {
-          model: "pi/anthropic/claude-fable-5",
+          model: "pi/anthropic/claude-fable-5-1",
           effort: "high",
           role: "Read-only oracle",
         },
@@ -154,15 +154,15 @@ export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
       id: "ultracode",
       label: "Ultracode",
       group: "custom",
-      lead: { model: "pi/anthropic/claude-fable-5", effort: "xhigh" },
+      lead: { model: "pi/anthropic/claude-fable-5-1", effort: "xhigh" },
       instructions:
-        "Plan a workflow for every substantive task instead of working through it turn by turn. Fan the work out with run_workflow, have a separate agent verify each finding, and read the result back with workflow_status. Route the judgement steps (verification, ranking, synthesis) to claude-fable-5 and leave mechanical extraction on the default worker model. Keep quick questions and single edits in the conversation.",
+        "Plan a workflow for every substantive task instead of working through it turn by turn. Fan the work out with run_workflow, have a separate agent verify each finding, and read the result back with workflow_status. Route the judgement steps (verification, ranking, synthesis) to claude-fable-5-1 and leave mechanical extraction on the default worker model. Keep quick questions and single edits in the conversation.",
     },
     {
       id: "orchestrator-fable",
-      label: "Orchestrator · Fable 5",
+      label: "Orchestrator · Fable 5.1",
       group: "orchestrator",
-      lead: { model: "pi/anthropic/claude-fable-5", effort: "high" },
+      lead: { model: "pi/anthropic/claude-fable-5-1", effort: "high" },
       supporting: [
         {
           model: "pi/anthropic/claude-sonnet-5",
@@ -182,7 +182,7 @@ export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
       id: "orchestrator-fable-sol",
       label: "Orchestrator · Fable + Sol",
       group: "orchestrator",
-      lead: { model: "pi/anthropic/claude-fable-5", effort: "high" },
+      lead: { model: "pi/anthropic/claude-fable-5-1", effort: "high" },
       supporting: [
         {
           model: "pi/openai/gpt-5.6-sol",

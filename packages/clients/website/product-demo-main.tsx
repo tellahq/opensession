@@ -50,7 +50,7 @@ const sessions: UnifiedSession[] = [
     mode: "code",
     repo: demoRepo,
     workspaceId: "project-presence",
-    model: "anthropic/claude-fable-5",
+    model: "anthropic/claude-fable-5-1",
     effort: "medium",
     ...(sessionsShot
       ? {
@@ -144,7 +144,7 @@ const sessions: UnifiedSession[] = [
     mode: "code",
     repo: demoRepo,
     workspaceId: "project-shortcuts",
-    model: "anthropic/claude-fable-5",
+    model: "anthropic/claude-fable-5-1",
     prUrl: "https://github.com/tellahq/opensession/pull/1842",
     prState: "OPEN",
     prNumber: 1842,
@@ -185,7 +185,7 @@ const sessions: UnifiedSession[] = [
     mode: "ask",
     repo: demoRepo,
     workspaceId: "project-release",
-    model: "anthropic/claude-fable-5",
+    model: "anthropic/claude-fable-5-1",
   },
   ...(
     [
@@ -492,7 +492,7 @@ const automations = [
     lastRunStatus: "ok",
     lastTrigger: "cron",
     nextRunAt: minutesAgo(-1_080),
-    model: "anthropic/claude-fable-5",
+    model: "anthropic/claude-fable-5-1",
     runs: [1, 2, 3, 4, 5, 7, 8].map((days) => ({
       at: minutesAgo(days * 1_440),
       sessionId: `demo-pr-review-${days}`,
@@ -541,7 +541,7 @@ const automations = [
     lastTrigger: "cron",
     nextRunAt: minutesAgo(-264),
     isRunning: true,
-    model: "anthropic/claude-fable-5",
+    model: "anthropic/claude-fable-5-1",
     runs: [1, 3, 4, 6, 7].map((days, index) => ({
       at: minutesAgo(days * 1_440),
       sessionId: `demo-security-${days}`,
@@ -592,7 +592,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
       content:
         "Three things need your attention:\n\n- **Review checkout recovery** is still running.\n- **Improve mobile navigation** is waiting for your input.\n- **Ship keyboard shortcuts** passed every check and is ready to review.\n\nI can follow up on any of these or start a new session for you.",
       timestamp: minutesAgo(7),
-      model: "anthropic/claude-fable-5",
+      model: "anthropic/claude-fable-5-1",
       seq: 2,
       changeSeq: 2,
     },
@@ -613,7 +613,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
       content:
         "I found the existing presence channel and workspace header. I’m wiring those together while a focused worker adds coverage.",
       timestamp: minutesAgo(37),
-      model: "anthropic/claude-fable-5",
+      model: "anthropic/claude-fable-5-1",
       seq: 2,
       changeSeq: 2,
     },
@@ -671,7 +671,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
       content:
         "A workspace is just the sessions inside it, so presence can fold up rather than get its own channel. I'll roll each session's viewers into the workspace row and de-duplicate whoever is in two at once.",
       timestamp: minutesAgo(33),
-      model: "anthropic/claude-fable-5",
+      model: "anthropic/claude-fable-5-1",
       seq: 7,
       changeSeq: 7,
     },
@@ -716,7 +716,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
       content:
         "Done. The face on top carries a 2px ring in the row's own colour, so the pile reads as a stack on every row state instead of a row of separate avatars.",
       timestamp: minutesAgo(26),
-      model: "anthropic/claude-fable-5",
+      model: "anthropic/claude-fable-5-1",
       seq: 11,
       changeSeq: 11,
     },
@@ -749,7 +749,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
       content:
         "Presence now appears in every shared workspace, and the pull request is up.\n\n- **Sidebar** rolls each session's viewers into the workspace row, deduplicated\n- **Faces overlap** with a ring in the row's colour, so a stack stays legible on hover and selection\n- **Tests** cover the roll-up and the self-suppression rule\n\nThe phone layout uses the same facepile, with a separate touch target so every teammate stays easy to open.\n\nPull request #1842 is ready for review.",
       timestamp: minutesAgo(4),
-      model: "anthropic/claude-fable-5",
+      model: "anthropic/claude-fable-5-1",
       seq: 14,
       changeSeq: 14,
     },
@@ -774,7 +774,7 @@ if (sessionsShot) {
         "I compared four treatments against the existing cut-audio state. Darker teal keeps the selection distinct without making removed audio look active.",
       images: ["/demo/audio-waveform-options.svg"],
       timestamp: minutesAgo(12),
-      model: "anthropic/claude-fable-5",
+      model: "anthropic/claude-fable-5-1",
       seq: 2,
       changeSeq: 2,
     },
@@ -784,7 +784,7 @@ if (sessionsShot) {
       content:
         "Shipped the darker teal treatment. All 49 checks pass, the automated review found no issues, and pull request #5750 is ready to merge.",
       timestamp: minutesAgo(4),
-      model: "anthropic/claude-fable-5",
+      model: "anthropic/claude-fable-5-1",
       seq: 3,
       changeSeq: 3,
     },
@@ -838,7 +838,7 @@ const responseFor = (url: URL, method: string): Response => {
     return json({
       sessionId: deskSessionId,
       clearedAt: null,
-      session: { model: "anthropic/claude-fable-5", effort: "low" },
+      session: { model: "anthropic/claude-fable-5-1", effort: "low" },
     });
   if (path === "/api/auth/status")
     return json({
@@ -882,12 +882,12 @@ const responseFor = (url: URL, method: string): Response => {
     });
   if (path === "/api/models")
     return json({
-      default: "anthropic/claude-fable-5",
+      default: "anthropic/claude-fable-5-1",
       models: [
         {
-          id: "anthropic/claude-fable-5",
+          id: "anthropic/claude-fable-5-1",
           provider: "pi",
-          label: "Claude Fable 5",
+          label: "Claude Fable 5.1",
           aliases: [],
           efforts: ["medium", "high"],
         },
@@ -1045,7 +1045,7 @@ const responseFor = (url: URL, method: string): Response => {
               label: "Review the implementation",
               status: "running",
               startedAt: Date.parse(minutesAgo(35)),
-              model: "anthropic/claude-fable-5",
+              model: "anthropic/claude-fable-5-1",
               source: "pi",
             },
           ]
@@ -1150,7 +1150,7 @@ class DemoWebSocket extends EventTarget {
         content:
           "This is a deterministic product preview, so the real coding agent is not contacted. In Open Session, this prompt would start a live run here.",
         timestamp,
-        model: "anthropic/claude-fable-5",
+        model: "anthropic/claude-fable-5-1",
       };
       this.emit({
         type: "transcript_append",

@@ -149,6 +149,8 @@ export const WORKFLOW_INPROCESS_EXCLUDED: Record<string, string> = {
     "a goal persists past the run and steers future turns",
   "opensession-walkthrough":
     "publishing a walkthrough is a deliberate act of the session, not of a fan-out",
+  "opensession-schedule":
+    "it authors a future turn in the session, and a fan-out has no turn to schedule into",
 };
 
 /**

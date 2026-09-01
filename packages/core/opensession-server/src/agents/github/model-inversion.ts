@@ -22,7 +22,7 @@ import type { PrRef } from "./review";
 
 /** The two pools we can invert between (see src/server/models.ts). */
 const OPENAI_REVIEWER = "pi/openai/gpt-5.6-sol";
-const ANTHROPIC_REVIEWER = "pi/anthropic/claude-fable-5";
+const ANTHROPIC_REVIEWER = "pi/anthropic/claude-fable-5-1";
 
 export type ModelFamily = "anthropic" | "openai";
 

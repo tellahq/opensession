@@ -86,7 +86,7 @@ test("counts failed Pi logical turns without multiplying attempt duration", () =
       direction: "out",
       session: "os-session-b",
       run_kind: "automation",
-      model: "pi/anthropic/claude-fable-5",
+      model: "pi/anthropic/claude-fable-5-1",
       ok: false,
       duration_ms: 900,
       error: "provider failed",
