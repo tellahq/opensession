@@ -1,105 +1,13 @@
-import { mergeStylexProps } from "../ui/cn";
-import { utilityClassName } from "../ui/cn";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { dismissToast, toast } from "../ui/toast";
 import { fetchHealthStatus } from "../lib/health";
-import { bootTransition } from "../lib/restart-boot";
-import * as stylex from "@stylexjs/stylex";
-import { type as typography } from "../styles/typography.stylex";
-
-/* Converted from Tailwind utilities; names mirror the original class tokens. */
-const sx = stylex.create({
-  fixed: {
-    position: "fixed",
-  },
-  inset0: {
-    inset: "0",
-  },
-  z10000: {
-    zIndex: "10000",
-  },
-  flex: {
-    display: "flex",
-  },
-  itemsCenter: {
-    alignItems: "center",
-  },
-  justifyCenter: {
-    justifyContent: "center",
-  },
-  bgBlack82: {
-    backgroundColor: "color-mix(in oklab, var(--color-black) 82%, transparent)",
-  },
-  p6: {
-    padding: "calc(4px * 6)",
-  },
-  maxW340px: {
-    maxWidth: "340px",
-  },
-  flexCol: {
-    flexDirection: "column",
-  },
-  gap35: {
-    gap: "calc(4px * 3.5)",
-  },
-  roundedLg: {
-    borderRadius: "calc(14px * var(--rf))",
-    cornerShape: "var(--cs)",
-  },
-  border: {
-    borderStyle: "solid",
-    borderWidth: "1px",
-  },
-  borderLine: {
-    borderColor: "var(--border)",
-  },
-  bgPanel: {
-    backgroundColor: "var(--bg-panel)",
-  },
-  px26px: {
-    paddingInline: "26px",
-  },
-  py7: {
-    paddingBlock: "calc(4px * 7)",
-  },
-  textCenter: {
-    textAlign: "center",
-  },
-  fontSemibold: {
-    fontWeight: "var(--font-weight-semibold)",
-  },
-  textFg: {
-    color: "var(--text)",
-  },
-  leading15: {
-    lineHeight: "1.5",
-  },
-  textDim: {
-    color: "var(--text-dim)",
-  },
-  mt15: {
-    marginTop: "calc(4px * 1.5)",
-  },
-  maxWFull: {
-    maxWidth: "100%",
-  },
-  truncate: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  fontMedium: {
-    fontWeight: "var(--font-weight-medium)",
-  },
-  leading14: {
-    lineHeight: "1.4",
-  },
-  opacity80: {
-    opacity: "80%",
-  },
-});
+import {
+  bootTransition,
+  resolvedRestartPhase,
+  type RestartPhase,
+} from "../lib/restart-boot";
 
 // Give foreground recovery enough time to probe and replace the stale PWA
 // socket before showing anything. Background time never counts toward this.
@@ -140,9 +48,7 @@ interface Props {
  *    answers again — that page state is suspect anyway.
  */
 export function RestartOverlay({ connected, addHandler }: Props) {
-  const [phase, setPhase] = useState<
-    "ok" | "reconnecting" | "restarting" | "crashed"
-  >("ok");
+  const [phase, setPhase] = useState<RestartPhase>("ok");
   const [backOnline, setBackOnline] = useState(false);
   // Who likely caused the restart: `by` on server_restarting, or `restartBy`
   // on the new server's hello.
@@ -167,7 +73,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       dismissToast(statusToast.current);
       statusToast.current = null;
     }
-    if (phaseRef.current === "restarting") setPhase("ok");
+    setPhase(resolvedRestartPhase);
   };
 
   // Adopt/compare a server-reported bootId. The first sighting is only a
@@ -356,70 +262,30 @@ export function RestartOverlay({ connected, addHandler }: Props) {
 
   return (
     <div
-      {...mergeStylexProps(
-        "backdrop-blur-[4px]",
-        sx.fixed,
-        sx.inset0,
-        sx.z10000,
-        sx.flex,
-        sx.itemsCenter,
-        sx.justifyCenter,
-        sx.bgBlack82,
-        sx.p6,
-      )}
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/82 p-6 backdrop-blur-[4px]"
       role="alertdialog"
       aria-live="assertive"
     >
-      <div
-        {...stylex.props(
-          sx.flex,
-          sx.maxW340px,
-          sx.flexCol,
-          sx.itemsCenter,
-          sx.gap35,
-          sx.roundedLg,
-          sx.border,
-          sx.borderLine,
-          sx.bgPanel,
-          sx.px26px,
-          sx.py7,
-          sx.textCenter,
-        )}
-      >
+      <div className="flex max-w-[340px] flex-col items-center gap-3.5 rounded-lg border border-line bg-panel px-[26px] py-7 text-center">
         <div
-          className={utilityClassName(
-            `size-[30px] rounded-full border-2 ${
-              backOnline
-                ? "border-green border-t-green"
-                : "animate-[spin_0.8s_linear_infinite] border-line-strong border-t-accent"
-            }`,
-          )}
+          className={`size-[30px] rounded-full border-2 ${
+            backOnline
+              ? "border-green border-t-green"
+              : "animate-[spin_0.8s_linear_infinite] border-line-strong border-t-accent"
+          }`}
         />
         {/* Deliberately not "is restarting": that's the calm pill's copy, and
             this state is the one that reloads your page. */}
-        <div
-          {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}
-        >
+        <div className="text-item-title font-semibold text-fg">
           {backOnline ? "Back online" : `${PRODUCT_NAME} isn't responding`}
         </div>
-        <div {...stylex.props(sx.leading15, sx.textDim, typography.label)}>
+        <div className="text-label leading-[1.5] text-dim">
           {backOnline
             ? "Refreshing…"
             : "The page will refresh automatically once the server is back."}
         </div>
         {!backOnline && restartBy && (
-          <div
-            {...stylex.props(
-              sx.mt15,
-              sx.maxWFull,
-              sx.truncate,
-              sx.fontMedium,
-              sx.leading14,
-              sx.textDim,
-              sx.opacity80,
-              typography.label,
-            )}
-          >
+          <div className="mt-1.5 max-w-full truncate text-label font-medium leading-[1.4] text-dim opacity-80">
             Triggered by {restartBy}
           </div>
         )}
