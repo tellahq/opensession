@@ -314,13 +314,14 @@ const semanticHooks = new Set([
   "ws-summary-pr-group",
   "ws-summary-review-group",
 ]);
+// oxfmt un-quotes keys that are valid identifiers, so accept both spellings.
 const compatibilityStyles = new Set(
   [
     ...readFileSync(
       join(FRONTEND, "styles/utility-compat.stylex.ts"),
       "utf8",
-    ).matchAll(/^\s*"([^"]+)":\s*(?:sx|typography)\./gm),
-  ].map((match) => match[1]),
+    ).matchAll(/^\s*(?:"([^"]+)"|([A-Za-z0-9_$-]+)):\s*(?:sx|typography)\./gm),
+  ].map((match) => match[1] ?? match[2]),
 );
 const isPermittedResidual = (token: string) =>
   looksResidual(token) || semanticHooks.has(token);
