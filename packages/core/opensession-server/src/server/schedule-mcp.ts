@@ -34,7 +34,8 @@ function text(s: string) {
 }
 
 function fmt(p: ScheduledPrompt): string {
-  const snippet = p.prompt.length > 80 ? `${p.prompt.slice(0, 77)}...` : p.prompt;
+  const snippet =
+    p.prompt.length > 80 ? `${p.prompt.slice(0, 77)}...` : p.prompt;
   return `- [${p.id}] at ${p.at}: ${snippet.replace(/\s+/g, " ")}`;
 }
 
@@ -84,12 +85,17 @@ export function createScheduleMcpServer(ctx: ScheduleToolContext) {
     tool(
       "cancel_scheduled_prompt",
       "Cancel a prompt scheduled for this session by id.",
-      { id: z.string().describe("The id from schedule_prompt or list_scheduled_prompts.") },
+      {
+        id: z
+          .string()
+          .describe("The id from schedule_prompt or list_scheduled_prompts."),
+      },
       async (args: { id: string }) => {
         const own = listScheduledPrompts(ctx.sessionId).some(
           (p) => p.id === args.id,
         );
-        if (!own) return text(`No scheduled prompt ${args.id} in this session.`);
+        if (!own)
+          return text(`No scheduled prompt ${args.id} in this session.`);
         const removed = await deleteScheduledPrompt(args.id);
         return text(
           removed ? `Cancelled ${args.id}.` : `${args.id} was already gone.`,
