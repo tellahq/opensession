@@ -1246,6 +1246,7 @@ ${createMentionsNote}`;
       openingPrompt,
       user,
       createdBy: sessionCreatedBy,
+      createdByLogin: parentSession?.createdByLogin,
       createdAt: sessionCreatedAt,
       mode: isScratch
         ? ("scratch" as const)
