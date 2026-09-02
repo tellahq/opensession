@@ -271,7 +271,7 @@ export class TranscriptViewStore {
     const current = this.orderedIds
       .map((id) => this.byId.get(id))
       .filter((entry): entry is TranscriptEntry => Boolean(entry));
-    this.replace(typeof updater === "function" ? updater(current) : updater);
+    this.replace(Array.isArray(updater) ? updater : updater(current));
   }
 
   private commit(immediate: boolean) {

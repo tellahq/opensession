@@ -58,6 +58,10 @@ import { SessionDraftIndicator } from "./session-tabs/SessionDraftIndicator";
 import { shouldShowTabStrip } from "../lib/split-tabs";
 import type { SessionTabsProps, ViewTab } from "../lib/session-tabs-types";
 
+interface SessionTabStyle extends React.CSSProperties {
+  "--tab-color"?: string;
+}
+
 /**
  * The tab strip is scoped to ONE Workspace: it shows the sibling sessions of the
  * currently-open session (every session sharing its `workspaceId`/workspace). It
@@ -549,6 +553,12 @@ export function SessionTabs({
                   {session.title}
                 </TabTitle>
               );
+            const style: SessionTabStyle = {};
+            if (hex) style["--tab-color"] = hex;
+            if (emptyVisual) {
+              style.overflow = "hidden";
+              style.transition = "none";
+            }
             return (
               <ReorderTabItem
                 key={key}
@@ -580,14 +590,7 @@ export function SessionTabs({
                           }),
                           emptyVisual && "desktop:pr-7",
                         )}
-                        style={
-                          {
-                            ...(hex ? { "--tab-color": hex } : {}),
-                            ...(emptyVisual
-                              ? { overflow: "hidden", transition: "none" }
-                              : {}),
-                          } as React.CSSProperties
-                        }
+                        style={style}
                         onClick={() => onSelect(session)}
                         title={session.title}
                       />

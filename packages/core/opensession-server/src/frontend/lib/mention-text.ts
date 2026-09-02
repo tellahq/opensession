@@ -20,8 +20,13 @@ export type MentionToken =
 
 const TOKEN_RE = /(@[A-Za-z][\w.-]*|https?:\/\/[^\s<>"')\]]+)/g;
 
+interface TrimmedMention {
+  name: string;
+  rest: string;
+}
+
 /** Trailing punctuation belongs to the sentence, not the name: "@Kent," */
-function trimTrailing(word: string): { name: string; rest: string } {
+function trimTrailing(word: string): TrimmedMention {
   const m = word.match(/^(.*?)([.,;:!?]*)$/);
   return { name: m?.[1] ?? word, rest: m?.[2] ?? "" };
 }

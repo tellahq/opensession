@@ -122,6 +122,14 @@ function resetPaneStyles(el: HTMLElement | null) {
   el.style.transform = "";
 }
 
+function handleMirroredMove(event: Event) {
+  if (event instanceof TouchEvent) onMove(event);
+}
+
+function handleMirroredEnd(event: Event) {
+  if (event instanceof TouchEvent) onEnd(event);
+}
+
 // Mirror the per-gesture listeners onto the node the touch started on, so a
 // touch orphaned by that node's removal still reports its moves and its end.
 // Both copies fire in the ordinary case (target phase, then document), which
@@ -131,16 +139,16 @@ function mirrorOn(target: EventTarget | null) {
   if (!target || target === document || target === window) return;
   mirrorTarget = target;
   const opts = { passive: false } as const;
-  target.addEventListener("touchmove", onMove as EventListener, opts);
-  target.addEventListener("touchend", onEnd as EventListener);
-  target.addEventListener("touchcancel", onEnd as EventListener);
+  target.addEventListener("touchmove", handleMirroredMove, opts);
+  target.addEventListener("touchend", handleMirroredEnd);
+  target.addEventListener("touchcancel", handleMirroredEnd);
 }
 
 function unmirror() {
   if (!mirrorTarget) return;
-  mirrorTarget.removeEventListener("touchmove", onMove as EventListener);
-  mirrorTarget.removeEventListener("touchend", onEnd as EventListener);
-  mirrorTarget.removeEventListener("touchcancel", onEnd as EventListener);
+  mirrorTarget.removeEventListener("touchmove", handleMirroredMove);
+  mirrorTarget.removeEventListener("touchend", handleMirroredEnd);
+  mirrorTarget.removeEventListener("touchcancel", handleMirroredEnd);
   mirrorTarget = null;
 }
 
