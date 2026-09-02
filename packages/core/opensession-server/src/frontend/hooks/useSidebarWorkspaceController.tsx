@@ -559,7 +559,7 @@ export function useSidebarWorkspaceController({
     wsPressTimer.current = null;
     wsPressOrigin.current = null;
   }
-  function wsRowTouchStart(row: WsRow, e: React.TouchEvent) {
+  function wsRowTouchStart(row: WsRow, e: React.TouchEvent<HTMLButtonElement>) {
     if (rowRenameEditing(row)) return;
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
@@ -575,7 +575,7 @@ export function useSidebarWorkspaceController({
       y: t.clientY,
       width: e.currentTarget.clientWidth,
     };
-    const source = e.currentTarget as HTMLButtonElement;
+    const source = e.currentTarget;
     wsPressTimer.current = setTimeout(() => {
       wsLongPressed.current = true;
       closeWsHover();
@@ -585,7 +585,7 @@ export function useSidebarWorkspaceController({
       setWsSheet({ row, source });
     }, LONG_PRESS_MS);
   }
-  function wsRowTouchMove(row: WsRow, e: React.TouchEvent) {
+  function wsRowTouchMove(row: WsRow, e: React.TouchEvent<HTMLButtonElement>) {
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
     const swipeO = wsSwipeOrigin.current;
@@ -607,7 +607,7 @@ export function useSidebarWorkspaceController({
         // re-rendered the entire sidebar on every touchmove, which
         // phones can't do at 60fps. React only hears about drag start
         // and side flips; touchend reconciles the committed state.
-        const btn = e.currentTarget as HTMLElement;
+        const btn = e.currentTarget;
         btn.style.setProperty("--swipe-x", `${offset}px`);
         btn.parentElement?.style.setProperty(
           "--swipe-action-w",
@@ -653,7 +653,11 @@ export function useSidebarWorkspaceController({
     // Pre-migration grouped rows have no workspace record to restore through.
     else if (mainSession) openSidebarSession(mainSession);
   }
-  function wsRowTouchEnd(row: WsRow, e: React.TouchEvent, review = false) {
+  function wsRowTouchEnd(
+    row: WsRow,
+    e: React.TouchEvent<HTMLButtonElement>,
+    review = false,
+  ) {
     const hadOrigin = wsPressOrigin.current !== null;
     const wasSwiping = wsSwiping.current;
     const rowWidth =
@@ -674,7 +678,7 @@ export function useSidebarWorkspaceController({
     // React never owned them, so a re-render with an undefined style prop
     // won't remove them. Clear here; the committed wsSwipe state (if any)
     // re-applies them through the style props on this same flush.
-    const rowEl = e.currentTarget as HTMLButtonElement;
+    const rowEl = e.currentTarget;
     rowEl.style.removeProperty("--swipe-x");
     rowEl.parentElement?.style.removeProperty("--swipe-action-w");
     if (rowRenameEditing(row)) return;

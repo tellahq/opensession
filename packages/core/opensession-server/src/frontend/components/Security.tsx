@@ -71,10 +71,7 @@ interface RecurringScan {
 type Tab = "scans" | "profiles";
 
 /** A scan's state as the settings row reads it: a dot and a word. */
-function scanStatus(status: SecurityScan["status"]): {
-  label: string;
-  dot: string;
-} {
+function scanStatus(status: SecurityScan["status"]) {
   if (status === "running") return { label: "Running", dot: "var(--yellow)" };
   if (status === "done") return { label: "Done", dot: "var(--green)" };
   if (status === "interactive")
@@ -197,7 +194,9 @@ export function Security({ onOpenSession }: Props) {
           <Segmented
             label="Security view"
             value={tab}
-            onValueChange={(next) => setTab(next as Tab)}
+            onValueChange={(next) =>
+              setTab(next === "profiles" ? "profiles" : "scans")
+            }
           >
             <SegmentedOption value="scans">
               Scans {scans.length}
@@ -587,7 +586,7 @@ function NewScanModal({
           </Field>
 
           <Field label="Repeats">
-            <OptionSelect
+            <OptionSelect<"none" | "daily" | "weekly">
               label="Repeats"
               value={canRecur ? recurrence : "none"}
               options={[
@@ -595,9 +594,7 @@ function NewScanModal({
                 { value: "daily", label: "Daily" },
                 { value: "weekly", label: "Weekly" },
               ]}
-              onChange={(next) =>
-                setRecurrence(next as "none" | "daily" | "weekly")
-              }
+              onChange={setRecurrence}
               disabled={!canRecur}
             />
             {!singleRepo && (

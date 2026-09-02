@@ -42,12 +42,13 @@ export function normalizeFragmentedReasoning(content: string): string {
 /** Providers may batch several status headings into one thinking block. */
 function boldOnlyHeadings(content: string): string[] | null {
   const blocks = content.trim().split(/\r?\n\s*\r?\n|\r?\n/);
-  const headings = blocks.map((block) =>
-    block.match(COMPLETE_BOLD_HEADING)?.[1]?.trim(),
-  );
-  return headings.length > 0 && headings.every(Boolean)
-    ? (headings as string[])
-    : null;
+  const headings: string[] = [];
+  for (const block of blocks) {
+    const heading = block.match(COMPLETE_BOLD_HEADING)?.[1]?.trim();
+    if (!heading) return null;
+    headings.push(heading);
+  }
+  return headings.length > 0 ? headings : null;
 }
 
 /** Older Pi transcript rows predate `isReasoning`. A single bold-only message
@@ -60,10 +61,7 @@ export function isLegacyReasoningHeading(content: string): boolean {
 /** Codex Desktop treats a leading `**…**` as summary chrome, not markdown in
  * the reasoning body. Split it out so the title stays regular-weight while any
  * real summary prose keeps its markdown structure. */
-export function reasoningDisplay(content: string): {
-  title: string;
-  body: string;
-} {
+export function reasoningDisplay(content: string) {
   const normalized = normalizeFragmentedReasoning(content);
   const headings = boldOnlyHeadings(normalized);
   if (headings) return { title: headings.join("\n"), body: "" };

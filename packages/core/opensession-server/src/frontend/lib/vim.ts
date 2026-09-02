@@ -330,7 +330,7 @@ export class VimEngine {
           this.clearPending();
           return this.result(t, caret);
         }
-        this.op = k as Operator;
+        this.op = k;
         return this.result(t, caret);
       }
     }

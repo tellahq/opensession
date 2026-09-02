@@ -329,7 +329,10 @@ export function VoiceInput({
     // The bar hides the field, so the caret must leave it too: a keystroke
     // into text nobody can see is an edit made blind, and the dictation is
     // about to append to that same draft.
-    const focused = document.activeElement as HTMLElement | null;
+    const focused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     returnFocusRef.current = editTargetRef?.current ?? focused;
     focused?.blur?.();
 

@@ -209,9 +209,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
     if (!hasSelection || showModal) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      const t = e.target as HTMLElement | null;
+      const t = e.target;
       if (
-        t &&
+        t instanceof HTMLElement &&
         (t.tagName === "INPUT" ||
           t.tagName === "TEXTAREA" ||
           t.isContentEditable)
@@ -1823,7 +1823,9 @@ function AutomationForm({
             Mode
             <Select
               value={mode}
-              onChange={(e) => setMode(e.target.value as "ask" | "code")}
+              onChange={(e) =>
+                setMode(e.target.value === "code" ? "code" : "ask")
+              }
             >
               <option value="ask">Ask · read-only on main</option>
               <option value="code">Code · fresh worktree per run</option>

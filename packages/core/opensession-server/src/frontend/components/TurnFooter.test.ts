@@ -6,11 +6,7 @@ import {
   turnTouchedFiles,
 } from "./TurnFooter";
 
-function edit(
-  id: string,
-  toolName: string,
-  toolInput: Record<string, unknown>,
-): TranscriptEntry {
+function edit<T>(id: string, toolName: string, toolInput: T): TranscriptEntry {
   return {
     id,
     type: "tool_use",

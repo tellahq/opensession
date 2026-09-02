@@ -163,8 +163,8 @@ export function markTransition(
 
 export function supportsHeroTransition(): boolean {
   return (
-    typeof (document as ViewTransitionDocument).startViewTransition ===
-      "function" &&
+    "startViewTransition" in document &&
+    document.startViewTransition instanceof Function &&
     !window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
 }
@@ -215,13 +215,13 @@ export function openLightbox(
 
 function extFromMime(mime: string): string {
   const sub = mime.split("/")[1]?.split(";")[0] || "";
-  const special: Record<string, string> = {
-    jpeg: "jpg",
-    "svg+xml": "svg",
-    quicktime: "mov",
-    "x-matroska": "mkv",
-  };
-  return special[sub] || sub || "bin";
+  const special = new Map<string, string>([
+    ["jpeg", "jpg"],
+    ["svg+xml", "svg"],
+    ["quicktime", "mov"],
+    ["x-matroska", "mkv"],
+  ]);
+  return special.get(sub) || sub || "bin";
 }
 
 export function suggestedMediaName(item: LightboxItem): string {

@@ -3,38 +3,26 @@ import React, { type ReactElement, type ReactNode } from "react";
 import { SIDEBAR_SWIPE_ROW, SIDEBAR_WS_ROW } from "../../lib/sidebar-classes";
 import type { WsRow } from "../../lib/sidebar-types";
 
-Object.assign(
-  ((globalThis as unknown as { window?: Record<string, unknown> }).window ??=
-    {}),
-  {
+Object.assign(globalThis, {
+  window: {
     addEventListener: () => {},
     removeEventListener: () => {},
     dispatchEvent: () => true,
     matchMedia: () => ({ matches: false }),
     setInterval: () => 0,
   },
-);
-Object.assign(
-  ((
-    globalThis as unknown as { localStorage?: Record<string, unknown> }
-  ).localStorage ??= {}),
-  {
+  localStorage: {
     getItem: () => null,
     setItem: () => {},
     removeItem: () => {},
   },
-);
-Object.assign(
-  ((
-    globalThis as unknown as { document?: Record<string, unknown> }
-  ).document ??= {}),
-  {
+  document: {
     documentElement: { dataset: {}, style: { colorScheme: "" } },
     querySelector: () => null,
     addEventListener: () => {},
     visibilityState: "visible",
   },
-);
+});
 
 const { WorkspaceDraftIndicator } = await import("./WorkspaceDraftIndicator");
 const { WorkspaceRow } = await import("./WorkspaceRow");

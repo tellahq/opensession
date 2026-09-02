@@ -10,7 +10,7 @@ type UUIDCrypto = Pick<Crypto, "getRandomValues"> &
   Partial<Pick<Crypto, "randomUUID">>;
 
 export function randomUUID(source: UUIDCrypto = globalThis.crypto): string {
-  if (typeof source.randomUUID === "function") return source.randomUUID();
+  if (source.randomUUID) return source.randomUUID();
 
   const bytes = source.getRandomValues(new Uint8Array(16));
   // UUIDv4 version and RFC 9562 variant bits.

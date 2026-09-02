@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { z } from "zod";
 import type {
   UnifiedSession,
   WSClientMessage,
@@ -87,18 +88,29 @@ const compactFmt = new Intl.NumberFormat("en", {
 });
 const fmtCompact = (n: number) => compactFmt.format(n);
 const HOME_STATS_CACHE_KEY = "opensession.homeStats.v2";
+const homeStatsBucketSchema = z.object({
+  sessions: z.number(),
+  turns: z.number(),
+  errors: z.number(),
+  durationMs: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+});
+const homeStatsSchema: z.ZodType<HomeStats> = z.object({
+  today: homeStatsBucketSchema,
+  week: homeStatsBucketSchema,
+  completeWeek: homeStatsBucketSchema,
+  priorWeek: homeStatsBucketSchema,
+});
 
 function readCachedHomeStats(): HomeStats | null {
   try {
-    const cached = JSON.parse(
-      localStorage.getItem(HOME_STATS_CACHE_KEY) || "null",
-    ) as Partial<HomeStats> | null;
-    return cached?.today &&
-      cached.week &&
-      cached.completeWeek &&
-      cached.priorWeek
-      ? (cached as HomeStats)
-      : null;
+    const parsed = homeStatsSchema.safeParse(
+      JSON.parse(localStorage.getItem(HOME_STATS_CACHE_KEY) || "null"),
+    );
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

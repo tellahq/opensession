@@ -68,7 +68,7 @@ function entry(
     content,
     timestamp: "2026-08-28T08:00:00Z",
     ...extra,
-  } as TranscriptEntry;
+  };
 }
 
 const think1 = entry("think-1", "assistant", "Look at the router first.", {

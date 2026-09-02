@@ -2,12 +2,17 @@ import type { AnsweredAskData } from "@tellahq/opensession-protocol/notices";
 
 export const ANSWER_OPTION_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
+interface AnsweredAskState {
+  selected: Set<string>;
+  typed: string[];
+}
+
 /** Resolve the legacy string answer back onto its offered choices. A single
  * option label can contain a comma, so only split when the question actually
  * allowed several selections. */
 export function answeredAskState(
   question: AnsweredAskData["questions"][number],
-): { selected: Set<string>; typed: string[] } {
+): AnsweredAskState {
   const options = question.options ?? [];
   const answer = question.answer.trim();
   if (!answer) return { selected: new Set(), typed: [] };

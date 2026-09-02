@@ -232,17 +232,18 @@ export function useSessionNameProjection({
   }, [displayText, projection, textareaRef]);
 
   function handleBeforeInput(e: React.FormEvent<HTMLTextAreaElement>) {
-    const native = e.nativeEvent as InputEvent;
     const el = e.currentTarget;
     beforeInput.current = {
       start: el.selectionStart,
       end: el.selectionEnd,
-      inputType: native.inputType || "",
+      inputType:
+        e.nativeEvent instanceof InputEvent ? e.nativeEvent.inputType : "",
     };
   }
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>): boolean {
-    const inputType = (e.nativeEvent as InputEvent).inputType;
+    const inputType =
+      e.nativeEvent instanceof InputEvent ? e.nativeEvent.inputType : "";
     const historyInput =
       inputType === "historyUndo" || inputType === "historyRedo";
     if (historyInput) {
@@ -284,17 +285,17 @@ export function useSessionNameProjection({
         end = Math.min(displayText.length, end + removed);
       editHint = { start, end };
     }
+    const options: SetDisplayTextOptions = {
+      editHint,
+      inputKind: historyInput ? "history" : "native",
+    };
+    if (before)
+      options.beforeSelection = { start: before.start, end: before.end };
     setDisplayText(
       e.target.value,
       e.target.selectionStart,
       e.target.selectionEnd,
-      {
-        editHint,
-        inputKind: historyInput ? "history" : "native",
-        ...(before
-          ? { beforeSelection: { start: before.start, end: before.end } }
-          : {}),
-      },
+      options,
     );
     if (
       inputType === "historyUndo" &&

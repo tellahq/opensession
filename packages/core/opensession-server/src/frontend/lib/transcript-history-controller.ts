@@ -50,25 +50,26 @@ export function historyPageRequest({
   limits: { page: number; whole: number };
 }): LoadHistoryMessage {
   if (sequence?.sessionId === sessionId) {
-    return {
+    const request: LoadHistoryMessage = {
       type: "load_history",
       sessionId,
-      ...(sequence.firstSeq !== null && sequence.firstSeq > 1
-        ? { beforeSeq: sequence.firstSeq }
-        : {}),
       limit: whole ? limits.whole : limits.page,
     };
+    if (sequence.firstSeq !== null && sequence.firstSeq > 1) {
+      request.beforeSeq = sequence.firstSeq;
+    }
+    return request;
   }
-  return {
+  const request: LoadHistoryMessage = {
     type: "load_history",
     sessionId,
-    ...(!whole && historyStart !== null && historyStart > 0
-      ? {
-          beforeOffset: historyStart,
-          beforeRev: cursor?.sessionId === sessionId ? cursor.rev : undefined,
-        }
-      : {}),
   };
+  if (!whole && historyStart !== null && historyStart > 0) {
+    request.beforeOffset = historyStart;
+    request.beforeRev =
+      cursor?.sessionId === sessionId ? cursor.rev : undefined;
+  }
+  return request;
 }
 
 export function transcriptSnapshotGrew(

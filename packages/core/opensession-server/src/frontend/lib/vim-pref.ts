@@ -2,9 +2,9 @@
 // makeUserPref instance — see lib/user-pref for the server-side ui-prefs
 // hydrate pattern; mounted composers flip live on the change event.
 
-import { makeUserPref } from "./user-pref";
+import * as UserPref from "./user-pref";
 
-const pref = makeUserPref<boolean>({
+const pref = UserPref.makeUserPref<boolean>({
   localKey: "opensession-vim-mode",
   prefKey: "composer-vim",
   changeEvent: "opensession-vim-mode-changed",

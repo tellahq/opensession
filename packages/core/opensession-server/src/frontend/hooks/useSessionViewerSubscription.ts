@@ -1,5 +1,6 @@
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import { useEffect, useEffectEvent } from "react";
+import { z } from "zod";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { withModelSwitches } from "../components/session-viewer/model-switches";
 import { switchDividerText } from "../components/session-viewer/model-labels";
@@ -53,6 +54,13 @@ type SetEntries = (
     | TranscriptEntry[]
     | ((previous: TranscriptEntry[]) => TranscriptEntry[]),
 ) => void;
+
+const queuedFileSchema = z.object({
+  name: z.string(),
+  type: z.string().catch("application/octet-stream"),
+  path: z.string().optional().catch(undefined),
+  dataUrl: z.string().optional().catch(undefined),
+});
 
 interface SubscriptionConnection {
   connected: boolean;
@@ -261,27 +269,25 @@ export function useSessionViewerSubscription({
           // back to legacy (e.g. the flag was turned off — the resume
           // falls back to a full legacy snapshot). Init frames are
           // authoritative for the mode.
-          const v2 = msg.v2 === true && typeof msg.lastSeq === "number";
+          const lastSeq = msg.lastSeq;
+          const v2 = msg.v2 === true && lastSeq !== undefined;
           const existingIndex = existingIndexForInit(v2);
           setIndexMode(v2);
           if (v2) {
             transcriptSeqRef.current = {
               sessionId: session.id,
-              lastSeq: msg.lastSeq!,
+              lastSeq,
               firstSeq:
-                typeof msg.firstSeq === "number" && msg.firstSeq > 0
+                msg.firstSeq !== undefined && msg.firstSeq > 0
                   ? msg.firstSeq
                   : null,
-              lastChangeSeq:
-                typeof msg.lastChangeSeq === "number"
-                  ? msg.lastChangeSeq
-                  : msg.lastSeq!,
+              lastChangeSeq: msg.lastChangeSeq ?? lastSeq,
             };
             // Seq mode ignores offset/rev cursors entirely.
             transcriptCursorRef.current = null;
           } else {
             transcriptSeqRef.current = null;
-            if (typeof msg.endOffset === "number" && msg.rev) {
+            if (msg.endOffset !== undefined && msg.rev) {
               transcriptCursorRef.current = {
                 sessionId: session.id,
                 rev: msg.rev,
@@ -320,7 +326,7 @@ export function useSessionViewerSubscription({
           // tail begins at). Each history page arrives as transcript_history
           // below. Seq mode pages with
           // beforeSeq instead, so the byte cursor stays untouched there.
-          if (!v2 && typeof msg.startOffset === "number") {
+          if (!v2 && msg.startOffset !== undefined) {
             historyStartRef.current = msg.startOffset;
           }
           break;
@@ -349,7 +355,7 @@ export function useSessionViewerSubscription({
           if (
             inSeqMode &&
             msg.v2 === true &&
-            typeof msg.firstSeq === "number" &&
+            msg.firstSeq !== undefined &&
             msg.firstSeq > 0
           ) {
             // Older-page cursor: earliest seq loaded so far (min).
@@ -357,7 +363,7 @@ export function useSessionViewerSubscription({
               seqState.firstSeq === null
                 ? msg.firstSeq
                 : Math.min(seqState.firstSeq, msg.firstSeq);
-          } else if (!inSeqMode && typeof msg.startOffset === "number") {
+          } else if (!inSeqMode && msg.startOffset !== undefined) {
             historyStartRef.current =
               historyStartRef.current === null
                 ? msg.startOffset
@@ -421,18 +427,18 @@ export function useSessionViewerSubscription({
             // fields (if any) are ignored while in this mode.
             if (
               msg.v2 === true &&
-              typeof msg.lastSeq === "number" &&
+              msg.lastSeq !== undefined &&
               msg.lastSeq > 0
             ) {
               seqState.lastSeq = Math.max(seqState.lastSeq, msg.lastSeq);
             }
-            if (typeof msg.lastChangeSeq === "number") {
+            if (msg.lastChangeSeq !== undefined) {
               seqState.lastChangeSeq = Math.max(
                 seqState.lastChangeSeq,
                 msg.lastChangeSeq,
               );
             }
-          } else if (typeof msg.endOffset === "number" && msg.rev) {
+          } else if (msg.endOffset !== undefined && msg.rev) {
             transcriptCursorRef.current = {
               sessionId: session.id,
               rev: msg.rev,
@@ -488,28 +494,8 @@ export function useSessionViewerSubscription({
           setImages((current) => [...current, ...(item.images ?? [])]);
           const restoredFiles = Array.isArray(item.files)
             ? item.files.flatMap((file) => {
-                if (
-                  !file ||
-                  typeof file !== "object" ||
-                  !("name" in file) ||
-                  typeof file.name !== "string"
-                )
-                  return [];
-                return [
-                  {
-                    name: file.name,
-                    type:
-                      "type" in file && typeof file.type === "string"
-                        ? file.type
-                        : "application/octet-stream",
-                    ...("path" in file && typeof file.path === "string"
-                      ? { path: file.path }
-                      : {}),
-                    ...("dataUrl" in file && typeof file.dataUrl === "string"
-                      ? { dataUrl: file.dataUrl }
-                      : {}),
-                  },
-                ];
+                const parsed = queuedFileSchema.safeParse(file);
+                return parsed.success ? [parsed.data] : [];
               })
             : [];
           setFiles((current) => [...current, ...restoredFiles]);

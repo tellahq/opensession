@@ -34,10 +34,20 @@ type RouteLocation = {
   readonly hash: string;
 };
 
+type RouteHistoryState = History["state"];
+
 type RouteHistory = {
-  readonly state: unknown;
-  pushState(data: unknown, unused: string, url?: string | URL | null): void;
-  replaceState(data: unknown, unused: string, url?: string | URL | null): void;
+  readonly state: RouteHistoryState;
+  pushState(
+    data: RouteHistoryState,
+    unused: string,
+    url?: string | URL | null,
+  ): void;
+  replaceState(
+    data: RouteHistoryState,
+    unused: string,
+    url?: string | URL | null,
+  ): void;
   go(delta?: number): void;
 };
 
@@ -62,10 +72,8 @@ type RouteSnapshot = {
 };
 
 function currentNavState(browser: AppRouteBrowser): NavState {
-  const state = browser.history.state as NavState;
-  return state && (typeof state.d === "number" || state.d === null)
-    ? state
-    : null;
+  const state = browser.history.state;
+  return state && (Number.isFinite(state.d) || state.d === null) ? state : null;
 }
 
 function entryDepth(browser: AppRouteBrowser): number | null {
@@ -76,9 +84,10 @@ function navState(
   depth: number | null,
   settingsReturn?: SettingsReturn,
 ): NavState {
-  return depth === null && !settingsReturn
-    ? null
-    : { d: depth, ...(settingsReturn ? { settingsReturn } : {}) };
+  if (depth === null && !settingsReturn) return null;
+  const state: NonNullable<NavState> = { d: depth };
+  if (settingsReturn) state.settingsReturn = settingsReturn;
+  return state;
 }
 
 /** Owns the logical route and the metadata carried by browser history entries. */

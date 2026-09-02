@@ -35,7 +35,7 @@ import { MOBILE_CONTROL_GLASS_EFFECTS } from "./app-header-classes";
  * authors every corner; there is no 8px step in the radius scale. */
 const PILL = "rounded-[calc(8px*var(--rf))]";
 /** Desktop tabs use the standard medium squircle; phones become round pills. */
-const TAB_SHAPE = "desktop:rounded-md desktop:[corner-shape:squircle]";
+const TAB_CORNERS = "desktop:rounded-md desktop:[corner-shape:squircle]";
 
 /* ── The strip ──────────────────────────────────────────────────────────── */
 
@@ -133,7 +133,7 @@ export const TAB_ITEM =
 
 /** Picked up: an inactive desktop tab has no surface of its own and would smear
  *  over every label it passes. It lifts into an opaque chip while dragging. */
-export const TAB_ITEM_DRAGGING = `${TAB_SHAPE} cursor-grabbing bg-panel smooth-shadow-ring-sm`;
+export const TAB_ITEM_DRAGGING = `${TAB_CORNERS} cursor-grabbing bg-panel smooth-shadow-ring-sm`;
 
 /**
  * Where the dragged tab will land. Reorder already opens the gap live, but an
@@ -163,7 +163,7 @@ export const TAB_ACTIONS = "ml-auto flex flex-none items-center gap-[3px]";
  */
 const TAB_BASE =
   "relative inline-flex max-w-[min(200px,100cqw)] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-  `${TAB_SHAPE} border-0 px-2.5 py-1.5 text-label shadow-none ` +
+  `${TAB_CORNERS} border-0 px-2.5 py-1.5 text-label shadow-none ` +
   "transition-[background-color,color] " +
   `phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ` +
   `phone:shadow-[var(--mobile-header-control-shadow)] ${MOBILE_CONTROL_GLASS_EFFECTS}`;
@@ -290,7 +290,7 @@ export const PANEL_TAB_DOT = "size-[7px] rounded-full";
  * Same tones the rule set, and the same ones lib/sidebar-hover gives these
  * states in the row hover cards.
  */
-export const PR_DOT_TONE: Record<string, string> = {
+export const PR_DOT_TONE = {
   OPEN: "bg-green",
   MERGED: "bg-purple",
   CLOSED: "bg-red",

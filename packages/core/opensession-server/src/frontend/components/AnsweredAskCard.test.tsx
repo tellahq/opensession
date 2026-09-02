@@ -3,20 +3,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AnsweredAskCard } from "./AnsweredAskCard";
 import { MessageBubble } from "./MessageBubble";
 
-Object.assign(
-  ((
-    globalThis as unknown as { localStorage?: Record<string, unknown> }
-  ).localStorage ??= {}),
-  {
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: {
     getItem: () => null,
     setItem: () => {},
     removeItem: () => {},
   },
-);
-Object.assign(
-  ((globalThis as unknown as { window?: Record<string, unknown> }).window ??=
-    {}),
-  {
+});
+Object.defineProperty(globalThis, "window", {
+  configurable: true,
+  value: {
     addEventListener: () => {},
     removeEventListener: () => {},
     matchMedia: () => ({
@@ -25,7 +22,7 @@ Object.assign(
       removeEventListener: () => {},
     }),
   },
-);
+});
 
 const record = {
   version: 1 as const,

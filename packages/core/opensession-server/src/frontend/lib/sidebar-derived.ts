@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { OpenPr } from "./api";
 import { buildReviewQueue, type ReviewQueueItem } from "./review-queue";
 import {
@@ -35,91 +36,43 @@ export interface SidebarPersonOption {
   label: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return value === null || typeof value === "string";
-}
+const supportThreadSchema = z.object({
+  id: z.string(),
+  title: z.string().nullable(),
+  previewText: z.string().nullable(),
+  status: z.string().nullable(),
+  statusChangedAt: z.string().nullable(),
+  createdAt: z.string().nullable(),
+  priority: z.number().nullable(),
+  labels: z
+    .array(
+      z.object({
+        id: z.string(),
+        typeId: z.string(),
+        name: z.string(),
+        icon: z.string().nullable(),
+      }),
+    )
+    .optional(),
+  customer: z.object({
+    name: z.string().nullable(),
+    email: z.string().nullable(),
+  }),
+  assignee: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      isBot: z.boolean(),
+    })
+    .nullable()
+    .optional(),
+});
 
 export function supportThreadFromFeedItem(
   item: FeedItem,
 ): SupportThread | null {
-  const meta = item.meta;
-  if (
-    !isRecord(meta) ||
-    typeof meta.id !== "string" ||
-    !isNullableString(meta.title) ||
-    !isNullableString(meta.previewText) ||
-    !isNullableString(meta.status) ||
-    !isNullableString(meta.statusChangedAt) ||
-    !isNullableString(meta.createdAt) ||
-    !(meta.priority === null || typeof meta.priority === "number") ||
-    !isRecord(meta.customer) ||
-    !isNullableString(meta.customer.name) ||
-    !isNullableString(meta.customer.email)
-  ) {
-    return null;
-  }
-
-  let labels: SupportThread["labels"];
-  if (meta.labels !== undefined) {
-    if (!Array.isArray(meta.labels)) return null;
-    labels = [];
-    for (const label of meta.labels) {
-      if (
-        !isRecord(label) ||
-        typeof label.id !== "string" ||
-        typeof label.typeId !== "string" ||
-        typeof label.name !== "string" ||
-        !isNullableString(label.icon)
-      ) {
-        return null;
-      }
-      labels.push({
-        id: label.id,
-        typeId: label.typeId,
-        name: label.name,
-        icon: label.icon,
-      });
-    }
-  }
-
-  let assignee: SupportThread["assignee"];
-  if (meta.assignee === null) {
-    assignee = null;
-  } else if (meta.assignee !== undefined) {
-    if (
-      !isRecord(meta.assignee) ||
-      typeof meta.assignee.id !== "string" ||
-      typeof meta.assignee.name !== "string" ||
-      typeof meta.assignee.isBot !== "boolean"
-    ) {
-      return null;
-    }
-    assignee = {
-      id: meta.assignee.id,
-      name: meta.assignee.name,
-      isBot: meta.assignee.isBot,
-    };
-  }
-
-  return {
-    id: meta.id,
-    title: meta.title,
-    previewText: meta.previewText,
-    status: meta.status,
-    statusChangedAt: meta.statusChangedAt,
-    createdAt: meta.createdAt,
-    priority: meta.priority,
-    customer: {
-      name: meta.customer.name,
-      email: meta.customer.email,
-    },
-    ...(labels === undefined ? {} : { labels }),
-    ...(assignee === undefined ? {} : { assignee }),
-  };
+  const result = supportThreadSchema.safeParse(item.meta);
+  return result.success ? result.data : null;
 }
 
 export function supportThreadsFromFeedItems(
@@ -239,8 +192,7 @@ export function buildAutomationGroups({
 }: BuildAutomationGroupsInput): Group[] {
   const sessionsByAutomation = new Map<string, UnifiedSession[]>();
   for (const session of sessions) {
-    const name =
-      typeof session.automation === "string" ? session.automation.trim() : "";
+    const name = (session.automation ?? "").trim();
     if (!name || nestedSubagentIds.has(session.id) || isClaimed(session)) {
       continue;
     }
@@ -383,6 +335,12 @@ interface DeriveSidebarPrRowsInput {
   search: string;
 }
 
+interface DerivedSidebarPrRows {
+  reviewQueueItems: ReviewQueueItem[];
+  workspaceCoveredPrUrls: Set<string>;
+  prRowItems: ReviewQueueItem[];
+}
+
 export function deriveSidebarPrRows({
   openPrs,
   sessions,
@@ -392,11 +350,7 @@ export function deriveSidebarPrRows({
   workspaceDataReady,
   filter,
   search,
-}: DeriveSidebarPrRowsInput): {
-  reviewQueueItems: ReviewQueueItem[];
-  workspaceCoveredPrUrls: Set<string>;
-  prRowItems: ReviewQueueItem[];
-} {
+}: DeriveSidebarPrRowsInput): DerivedSidebarPrRows {
   const reviewQueueItems = buildReviewQueue(
     openPrs,
     sessions,

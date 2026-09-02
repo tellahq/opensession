@@ -302,7 +302,7 @@ export function useTranscript({
           }
         : current,
     );
-    if (entries.length === 0 && typeof firstSeq === "number")
+    if (entries.length === 0 && firstSeq !== undefined)
       send({ type: "load_transcript_index", sessionId });
   };
 

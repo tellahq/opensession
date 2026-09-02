@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import { ASK_BAND } from "../lib/sidebar-workspaces";
-import type {
-  MineStatus,
-  PersonalBandPinnedEntry,
-  Props,
-  WsRow,
+import {
+  MINE_STATUS_META,
+  type MineStatus,
+  type PersonalBandPinnedEntry,
+  type Props,
+  type WsRow,
 } from "../lib/sidebar-types";
 import type { UnifiedSession } from "../lib/types";
 import {
@@ -251,13 +252,19 @@ export function useSidebarDnd({ onSetStatus }: UseSidebarDndOptions) {
         "[data-lane-drop]",
       ) ?? [];
     const rects: LaneDropRect[] = [];
-    for (const element of targets)
+    for (const element of targets) {
+      const gkey = element.dataset.laneDrop;
+      const lane = MINE_STATUS_META.find(
+        (status) => status.key === element.dataset.laneStatus,
+      )?.key;
+      if (!gkey || !lane) continue;
       rects.push({
-        gkey: element.dataset.laneDrop!,
-        lane: element.dataset.laneStatus as MineStatus,
+        gkey,
+        lane,
         repo: element.dataset.laneRepo || "",
         rect: element.getBoundingClientRect(),
       });
+    }
     laneDropRectsRef.current = rects;
   };
 

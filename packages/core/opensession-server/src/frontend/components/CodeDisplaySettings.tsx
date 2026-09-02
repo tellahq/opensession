@@ -20,9 +20,10 @@ export function DiffSourceSetting({
         label="Diff source"
         size="sm"
         value={value}
-        onValueChange={(next) =>
-          onValueChange(next as "pull-request" | "worktree")
-        }
+        onValueChange={(next) => {
+          if (next === "pull-request" || next === "worktree")
+            onValueChange(next);
+        }}
       >
         <SegmentedOption value="pull-request">Pull request</SegmentedOption>
         <SegmentedOption value="worktree">Worktree</SegmentedOption>
@@ -64,9 +65,10 @@ export function CodeOrganizationSettings({
             label="File list"
             size="sm"
             value={fileListMode}
-            onValueChange={(next) =>
-              changeFileListMode(next as "flat" | "tree" | "hidden")
-            }
+            onValueChange={(next) => {
+              if (next === "flat" || next === "tree" || next === "hidden")
+                changeFileListMode(next);
+            }}
           >
             <SegmentedOption value="flat">Flat</SegmentedOption>
             <SegmentedOption value="tree">Tree</SegmentedOption>
@@ -87,7 +89,9 @@ export function CodeOrganizationSettings({
           { value: "none", label: "No grouping" },
           { value: "ai", label: "Purpose" },
         ]}
-        onSelect={(next) => changeGrouping(next as "none" | "ai")}
+        onSelect={(next) => {
+          if (next === "none" || next === "ai") changeGrouping(next);
+        }}
       />
       <ValueRow
         label="Sort by"
@@ -97,9 +101,10 @@ export function CodeOrganizationSettings({
           { value: "changes", label: "Changed lines" },
           { value: "pull-request", label: defaultOrderLabel },
         ]}
-        onSelect={(next) =>
-          changeFileOrder(next as "path" | "changes" | "pull-request")
-        }
+        onSelect={(next) => {
+          if (next === "path" || next === "changes" || next === "pull-request")
+            changeFileOrder(next);
+        }}
         trailing={
           sortDirection === "asc" ? (
             <IconArrowUp size={15} className="shrink-0 text-dim" />
@@ -110,9 +115,11 @@ export function CodeOrganizationSettings({
         footer={
           <Menu.RadioGroup
             value={sortDirection}
-            onValueChange={(next) =>
-              changeSortDirection(String(next) as "asc" | "desc")
-            }
+            onValueChange={(next) => {
+              const direction = String(next);
+              if (direction === "asc" || direction === "desc")
+                changeSortDirection(direction);
+            }}
           >
             {(
               [
@@ -157,7 +164,9 @@ export function CodeDisplaySettings({
           label="Diff layout"
           size="sm"
           value={diffStyle}
-          onValueChange={(next) => changeDiffStyle(next as "unified" | "split")}
+          onValueChange={(next) => {
+            if (next === "unified" || next === "split") changeDiffStyle(next);
+          }}
         >
           <SegmentedOption value="split">Split</SegmentedOption>
           <SegmentedOption value="unified">Unified</SegmentedOption>
@@ -183,9 +192,10 @@ export function CodeDisplaySettings({
           label="Code theme"
           size="sm"
           value={codeTheme}
-          onValueChange={(next) =>
-            changeCodeTheme(next as "system" | "light" | "dark")
-          }
+          onValueChange={(next) => {
+            if (next === "system" || next === "light" || next === "dark")
+              changeCodeTheme(next);
+          }}
         >
           <SegmentedOption value="system">Match app</SegmentedOption>
           <SegmentedOption value="light">Light</SegmentedOption>

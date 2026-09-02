@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { OpenPr } from "./api";
 import { getDefaultRepoPref, setDefaultRepoPref } from "./default-repo-pref";
 import type { FileAttachment } from "./images";
@@ -84,6 +85,7 @@ export interface RepoOption {
 }
 
 const LAST_REPO_KEY = "opensession-new-session-repo";
+const SIDEBAR_FILTER_SCHEMA = z.object({ repo: z.string().optional() });
 
 /**
  * The repo a fresh palette starts on, for someone who hasn't set a preference.
@@ -112,10 +114,10 @@ export function migratedRepoPref(): string {
 // creating from a repo-filtered view lands on that repo.
 function filteredRepo(): string | null {
   try {
-    const v = JSON.parse(
-      localStorage.getItem("opensession-sidebar-filter") || "{}",
+    const parsed = SIDEBAR_FILTER_SCHEMA.safeParse(
+      JSON.parse(localStorage.getItem("opensession-sidebar-filter") || "{}"),
     );
-    return typeof v.repo === "string" ? v.repo : null;
+    return parsed.success ? (parsed.data.repo ?? null) : null;
   } catch {
     return null;
   }

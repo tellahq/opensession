@@ -2,9 +2,9 @@
 // instance — see lib/user-pref for the server-side ui-prefs hydrate pattern;
 // mounted surfaces flip live on the change event.
 
-import { makeUserPref } from "./user-pref";
+import * as userPref from "./user-pref";
 
-const pref = makeUserPref<boolean>({
+const pref = userPref.makeUserPref<boolean>({
   localKey: "opensession-desk-voice",
   prefKey: "desk-voice",
   changeEvent: "opensession-desk-voice-changed",

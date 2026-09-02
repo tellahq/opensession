@@ -29,7 +29,7 @@ function fmtTokens(n: number): string {
 }
 
 /** Fill-level color: neutral under 85%, red once the window is nearly full. */
-function fillTone(frac: number): { stroke: string; text: string } {
+function fillTone(frac: number) {
   if (frac >= 0.85) return { stroke: "stroke-red", text: "text-red" };
   return { stroke: "stroke-accent", text: "text-dim" };
 }

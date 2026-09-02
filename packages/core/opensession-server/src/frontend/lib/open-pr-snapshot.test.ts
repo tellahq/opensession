@@ -4,17 +4,19 @@ import { sameOpenPrSnapshot } from "./open-pr-snapshot";
 
 function pr(number: number, title = `PR ${number}`): OpenPr {
   return {
-    workspaceId: `ws-${number}`,
     repo: "tellahq/opensession",
     branch: `change-${number}`,
     url: `https://github.com/tellahq/opensession/pull/${number}`,
     number,
     title,
     isDraft: false,
+    reviewDecision: "",
     author: "jaap",
+    person: "jaap",
     createdAt: "2026-08-25T00:00:00.000Z",
     updatedAt: "2026-08-25T00:00:00.000Z",
-  } as unknown as OpenPr;
+    checks: { total: 1, passed: 1, failed: 0, pending: 0 },
+  };
 }
 
 describe("sameOpenPrSnapshot", () => {

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   useCallback,
   useEffect,
@@ -14,11 +15,15 @@ import type { ModelOption, ProviderAccountOption } from "../lib/api";
 import { repairPausedSession } from "../lib/api/session-safety";
 import type { FileAttachment } from "../lib/images";
 import type { Quote } from "../lib/quotes";
-import type { SlackSent } from "../components/ShippedChangeComposer";
+import type {
+  ShippedChangeComposerProps,
+  SlackSent,
+} from "../components/ShippedChangeComposer";
 import type {
   SessionSlackShare,
   TranscriptEntry,
   UnifiedSession,
+  WSClientMessage,
 } from "../lib/types";
 import { modelIsCodex } from "../components/session-viewer/model-labels";
 import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
@@ -100,6 +105,8 @@ interface ShippedPresentationActions {
   dismiss: () => void;
 }
 
+type ShippedChangeShare = ShippedChangeComposerProps & { prNumber: number };
+
 export function useShippedChangePresentation({
   identity,
   actions,
@@ -144,53 +151,47 @@ export function useShippedChangePresentation({
       ts: sentTs,
     };
   }, [shippedSentKey, sentChannelName, sentPermalink, sentAt, sentTs]);
-  const shippedChangeShare = useMemo(
-    () =>
-      mergedPr && !shareDismissed
-        ? {
-            prNumber: mergedPr.number!,
-            sessionId: session.id,
-            defaultMessage: suggestedShippedChangeMessage(
-              mergedPr.title || "an update",
-              session.walkthrough?.summary,
-            ),
-            screenshot: shippedScreenshot,
-            reconnectRequired,
-            status,
-            onShare: send,
-            onReconnectSlack: reconnect,
-            onCancel: dismiss,
-            nextMessage: latestAssistantMessage,
-            ...(shippedSent
-              ? {
-                  sent: {
-                    channelName: shippedSent.channelName,
-                    permalink: shippedSent.permalink,
-                    receiptKey: shippedSent.at,
-                  },
-                  ...(shippedSent.ts
-                    ? { onUndo: () => undo(shippedSent.at) }
-                    : {}),
-                }
-              : {}),
-          }
-        : undefined,
-    [
-      mergedPr,
+  const shippedChangeShare = useMemo(() => {
+    if (mergedPr?.number === undefined || shareDismissed) return undefined;
+    const share: ShippedChangeShare = {
+      prNumber: mergedPr.number,
+      sessionId: session.id,
+      defaultMessage: suggestedShippedChangeMessage(
+        mergedPr.title || "an update",
+        session.walkthrough?.summary,
+      ),
+      screenshot: shippedScreenshot,
       reconnectRequired,
-      shippedScreenshot,
-      session.id,
-      session.walkthrough?.summary,
-      send,
-      reconnect,
-      undo,
-      dismiss,
-      shareDismissed,
       status,
-      shippedSent,
-      latestAssistantMessage,
-    ],
-  );
+      onShare: send,
+      onReconnectSlack: reconnect,
+      onCancel: dismiss,
+      nextMessage: latestAssistantMessage,
+    };
+    if (shippedSent) {
+      share.sent = {
+        channelName: shippedSent.channelName,
+        permalink: shippedSent.permalink,
+        receiptKey: shippedSent.at,
+      };
+      if (shippedSent.ts) share.onUndo = () => undo(shippedSent.at);
+    }
+    return share;
+  }, [
+    mergedPr,
+    reconnectRequired,
+    shippedScreenshot,
+    session.id,
+    session.walkthrough?.summary,
+    send,
+    reconnect,
+    undo,
+    dismiss,
+    shareDismissed,
+    status,
+    shippedSent,
+    latestAssistantMessage,
+  ]);
   return { shippedSent, shippedChangeShare };
 }
 
@@ -212,6 +213,13 @@ interface ConversationActionIdentity {
   entries: TranscriptEntry[];
   queued: ReturnType<typeof useSessionRuntime>[0]["queued"];
 }
+
+type CreateSessionMessage = Extract<
+  WSClientMessage,
+  { type: "create_session" }
+>;
+
+type SessionFork = NonNullable<CreateSessionMessage["forkFrom"]>;
 
 interface ConversationActionRuntime {
   send: ReturnType<typeof useSessionSocket>["send"];
@@ -328,17 +336,17 @@ export function useSessionConversationActions({
       (entry) => entry.type === "assistant" || entry.type === "user",
     )?.id;
     const carriedImages = queued.flatMap((item) => item.images || []);
-    send({
+    const forkFrom: SessionFork = { sourceId: session.id };
+    const createMessage: CreateSessionMessage = {
       type: "create_session",
       branch: "",
       prompt: safetyContinuationPrompt(session.title, queued),
       user: getCurrentUser(),
-      forkFrom: {
-        sourceId: session.id,
-        ...(lastMessageId ? { messageId: lastMessageId } : {}),
-      },
-      ...(carriedImages.length ? { images: carriedImages } : {}),
-    });
+      forkFrom,
+    };
+    if (lastMessageId) forkFrom.messageId = lastMessageId;
+    if (carriedImages.length) createMessage.images = carriedImages;
+    send(createMessage);
   }, [entries, queued, send, session.id, session.title]);
   const repairSafetyPause = useCallback(async () => {
     await repairPausedSession(session.id);
@@ -506,6 +514,29 @@ export function useSessionDraftContext({
   };
 }
 
+const promptOutboxFileSchema = z.object({
+  name: z.string(),
+  type: z.string().optional(),
+  path: z.string().optional(),
+  dataUrl: z.string().optional(),
+});
+
+function parsePromptOutboxFiles(
+  files: PromptOutboxItem["files"],
+): FileAttachment[] | null {
+  const result = z.array(promptOutboxFileSchema).safeParse(files ?? []);
+  if (!result.success) return null;
+  return result.data.map((file) => {
+    const attachment: FileAttachment = {
+      name: file.name,
+      type: file.type ?? "application/octet-stream",
+    };
+    if (file.path !== undefined) attachment.path = file.path;
+    if (file.dataUrl !== undefined) attachment.dataUrl = file.dataUrl;
+    return attachment;
+  });
+}
+
 interface SendComposerOptions {
   setEffort: (effort: string) => void;
   setFastMode: (fast: boolean) => void;
@@ -569,11 +600,16 @@ export function useSessionSendController({
     discardSessionOutboxItem(item, message.runtime.setPending);
   }
   function editOutboxInComposer(item: PromptOutboxItem) {
+    const files = parsePromptOutboxFiles(item.files);
+    if (!files) {
+      toast("This queued message has invalid file attachments");
+      return;
+    }
     message.draft.setImages(item.images ?? []);
-    message.draft.setFiles((item.files ?? []) as FileAttachment[]);
+    message.draft.setFiles(files);
     message.draft.setContextSessions(item.contextSessions ?? []);
     if (item.effort) setEffort(item.effort);
-    if (typeof item.fastMode === "boolean") setFastMode(item.fastMode);
+    if (item.fastMode !== undefined) setFastMode(item.fastMode);
     setPrefill((current) => ({
       seq: (current?.seq ?? 0) + 1,
       text: item.content,

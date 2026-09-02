@@ -15,10 +15,7 @@ export interface McpConnection {
   allowedUsers?: string[];
 }
 
-export const TOKEN_CONNECT_URLS: Record<
-  string,
-  { url: string; label: string }
-> = {
+const TOKEN_CONNECT_URL_VALUES = {
   vercel: {
     url: "https://vercel.com/account/settings/tokens",
     label: "vercel.com/account/settings/tokens",
@@ -27,4 +24,8 @@ export const TOKEN_CONNECT_URLS: Record<
     url: "https://help.getvero.com/vero-ai/mcp-authentication",
     label: "Vero's MCP authentication guide",
   },
-};
+} satisfies Readonly<Record<string, { url: string; label: string }>>;
+
+export const TOKEN_CONNECT_URLS = Object.fromEntries(
+  Object.entries(TOKEN_CONNECT_URL_VALUES),
+);

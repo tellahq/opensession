@@ -41,16 +41,16 @@ const USER_CHANGE_EVENT = "opensession-user-changed";
 // in the new grid, so nobody's setting changes meaning: "messages" was the
 // work open with its tool calls folded, "expanded" both open, "collapsed" the
 // work away, "auto" the default.
-const LEGACY: Record<string, TurnActivityPrefs> = {
-  messages: { work: "open", tools: "folded" },
-  collapsed: { work: "folded", tools: "folded" },
-  auto: { work: "running", tools: "folded" },
-  expanded: { work: "open", tools: "open" },
-};
+const LEGACY = new Map<string, TurnActivityPrefs>([
+  ["messages", { work: "open", tools: "folded" }],
+  ["collapsed", { work: "folded", tools: "folded" }],
+  ["auto", { work: "running", tools: "folded" }],
+  ["expanded", { work: "open", tools: "open" }],
+]);
 
 function decodeWork(raw: string | null | undefined): TurnWorkPref | null {
   if (raw === "folded" || raw === "running" || raw === "open") return raw;
-  return (raw && LEGACY[raw]?.work) || null;
+  return (raw && LEGACY.get(raw)?.work) || null;
 }
 
 function decodeTools(raw: string | null | undefined): ToolCallsPref | null {
@@ -65,7 +65,7 @@ export function getTurnActivityPrefs(): TurnActivityPrefs {
     // from it, so the pair is right before the rewrite below has run.
     tools:
       decodeTools(localStorage.getItem(TOOLS_LOCAL)) ??
-      (rawWork ? LEGACY[rawWork]?.tools : undefined) ??
+      (rawWork ? LEGACY.get(rawWork)?.tools : undefined) ??
       DEFAULT_TOOLS,
   };
 }
@@ -86,7 +86,7 @@ function writePair(prefs: TurnActivityPrefs) {
 // other's legacy meaning through the fallback above.
 function migrateLegacyLocal() {
   const raw = localStorage.getItem(WORK_LOCAL);
-  const legacy = raw ? LEGACY[raw] : undefined;
+  const legacy = raw ? LEGACY.get(raw) : undefined;
   if (legacy) writePair(legacy);
 }
 
@@ -143,7 +143,7 @@ async function hydrate(user: string) {
     return; // offline/error: keep the local cache
   }
   if (writeStamp !== stampAtStart) return; // user changed it mid-fetch
-  const legacy = LEGACY[prefs[WORK_PREF]];
+  const legacy = LEGACY.get(prefs[WORK_PREF]);
   const serverWork = decodeWork(prefs[WORK_PREF]);
   const serverTools = decodeTools(prefs[TOOLS_PREF]) ?? legacy?.tools ?? null;
   const local = getTurnActivityPrefs();

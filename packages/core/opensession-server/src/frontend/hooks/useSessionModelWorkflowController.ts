@@ -86,11 +86,13 @@ export function useSessionModelWorkflowController(
     fetch(
       `${BASE_PATH}/api/sessions/${encodeURIComponent(session.id)}/workflows`,
     )
-      .then((r) => (r.ok ? r.json() : null))
+      .then<{ runs?: WorkflowRunSnapshot[] } | null>((r) =>
+        r.ok ? r.json() : null,
+      )
       .then((d) => {
         if (stale) return;
         if (Array.isArray(d?.runs)) {
-          const fetched = d.runs as WorkflowRunSnapshot[];
+          const fetched = d.runs;
           // WS upserts may have landed while the fetch was in flight — those
           // snapshots are newer than the seed, so keep them and only add
           // fetched runs we don't have yet (the panel re-sorts by startedAt).

@@ -19,8 +19,14 @@ export interface BrandLogo {
   evenOdd?: boolean;
 }
 
+function defineRegistry<Value>(
+  entries: Record<string, Value>,
+): Record<string, Value> {
+  return entries;
+}
+
 /** Brand tile colors, keyed by lowercased server/agent name. */
-export const BRANDS: Record<string, { bg: string; fg?: string }> = {
+export const BRANDS = defineRegistry<{ bg: string; fg?: string }>({
   slack: { bg: "#4a154b" },
   linear: { bg: "#5e6ad2" },
   plain: { bg: "#29df9a", fg: "#071c18" },
@@ -62,10 +68,10 @@ export const BRANDS: Record<string, { bg: string; fg?: string }> = {
   claude: { bg: "#d97757" },
   codex: { bg: "#000000" },
   pi: { bg: "#000000" },
-};
+});
 
 /** Pretty display names for the handful that don't title-case cleanly. */
-const DISPLAY_NAMES: Record<string, string> = {
+const DISPLAY_NAMES = defineRegistry<string>({
   xai: "xAI",
   moonshotai: "Moonshot AI",
   openrouter: "OpenRouter",
@@ -77,12 +83,12 @@ const DISPLAY_NAMES: Record<string, string> = {
   "grafana-poller": "Grafana Poller",
   incident: "incident.io",
   codestorage: "Code Storage",
-};
+});
 
-const BRAND_ALIASES: Record<string, string> = {
+const BRAND_ALIASES = defineRegistry<string>({
   moonshot: "moonshotai",
   grok: "xai",
-};
+});
 
 export function brandKey(name: string): string {
   const key = name.toLowerCase();
@@ -102,7 +108,7 @@ export function brandLogo(name: string): BrandLogo | undefined {
   return BRAND_LOGOS[key] || BRAND_LOGOS[key.split("-")[0]];
 }
 
-export const BRAND_LOGOS: Record<string, BrandLogo> = {
+export const BRAND_LOGOS = defineRegistry<BrandLogo>({
   plain: {
     viewBox: "0 0 24 24",
     paths: [
@@ -330,4 +336,4 @@ export const BRAND_LOGOS: Record<string, BrandLogo> = {
       "M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.218-.328.14a5.526 5.526 0 01-1.734-1.232c-.865-.834-1.647-1.755-2.623-2.469a11.72 11.72 0 00-.687-.456c-.985-.957.13-1.743.387-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.523.15 9.395 9.395 0 00-2.828-.156c-1.745.194-3.14.978-4.171 2.387C.523 8.815.2 10.55.598 12.373c.418 1.922 1.406 3.514 2.914 4.756 1.263 1.04 2.718 1.548 4.381 1.45.836-.048 1.881-.164 3.05-1.148.295.147.605.205 1.12.25.397.037.78-.02 1.078-.081.467-.099.435-.531.266-.61-1.37-.638-1.067-.379-1.343-.591 1.223-1.45 3.065-2.955 3.788-7.83.057-.387.007-.63 0-.945-.004-.191.039-.266.258-.288a4.605 4.605 0 001.799-.542c1.546-.836 2.168-2.208 2.316-3.866.02-.253-.004-.517-.27-.647zM11.578 20.22c-1.375-1.08-2.041-1.436-2.316-1.42-.258.015-.211.31-.156.5.059.19.137.32.246.485.075.11.13.273-.071.398-.442.274-1.212-.093-1.248-.11-.895-.528-1.644-1.226-2.172-2.177-.51-.916-.806-1.9-.856-2.95-.012-.253.062-.343.316-.39a4.16 4.16 0 011.372-.028c1.94.284 3.591 1.152 4.976 2.524.79.782 1.387 1.716 2.003 2.629.655.968 1.36 1.89 2.257 2.646.316.266.57.47.812.618-.73.082-1.949.1-3.163-.725zm.998-6.412c0-.207.167-.374.377-.374a.353.353 0 01.246.098.36.36 0 01.11.276.375.375 0 01-.376.373.375.375 0 01-.357-.373zm3.794 1.947c-.243.098-.487.183-.72.194a1.62 1.62 0 01-1.02-.32c-.352-.293-.605-.457-.71-.972a2.106 2.106 0 01.02-.75c.086-.393-.008-.645-.285-.874-.226-.187-.512-.238-.829-.238a.598.598 0 01-.27-.09.328.328 0 01-.164-.222c-.02-.113.063-.203.11-.293.152-.277.313-.437.633-.406.87.09 1.596.484 2.207 1.048.348.324.61.71.95 1.04.36.353.75.674 1.24.837.172.06.32.117.457.183-.414.066-1.098.078-1.62.293z",
     ],
   },
-};
+});

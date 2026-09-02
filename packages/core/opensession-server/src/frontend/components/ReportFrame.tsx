@@ -80,7 +80,12 @@ export function ReportFrame({
             link.removeAttribute("target");
         }
         doc.addEventListener("click", (clickEvent) => {
-          const link = (clickEvent.target as Element | null)?.closest?.("a");
+          const target = clickEvent.target;
+          const ElementOwner = doc.defaultView?.Element;
+          const link =
+            ElementOwner && target instanceof ElementOwner
+              ? target.closest("a")
+              : null;
           const prefill = link ? parseNewSessionLink(link.href) : null;
           if (prefill) {
             clickEvent.preventDefault();

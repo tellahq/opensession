@@ -4,17 +4,19 @@ import type { UnifiedSession } from "./types";
 
 const session = (
   over: Partial<UnifiedSession> & { id: string },
-): UnifiedSession =>
-  ({
-    claudeSessionId: null,
-    source: "opensession",
-    title: over.id,
-    lastActivity: "2026-08-01T00:00:00.000Z",
-    createdAt: "2026-08-01T00:00:00.000Z",
-    isRunning: false,
-    transcriptPath: "",
-    ...over,
-  }) as UnifiedSession;
+): UnifiedSession => ({
+  claudeSessionId: null,
+  source: "opensession",
+  branch: null,
+  worktreeDir: null,
+  startedBy: null,
+  title: over.id,
+  lastActivity: "2026-08-01T00:00:00.000Z",
+  createdAt: "2026-08-01T00:00:00.000Z",
+  isRunning: false,
+  transcriptPath: "",
+  ...over,
+});
 
 const WT = "/home/ubuntu/worktrees/tella-fusion-codex/rehome-setup-controls";
 

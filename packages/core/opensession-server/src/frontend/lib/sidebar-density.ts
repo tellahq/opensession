@@ -14,7 +14,7 @@
 // in the same settings card already follows them across devices.
 
 import { IconDensityCompact, IconDensityDefault } from "../components/icons";
-import { makeUserPref } from "./user-pref";
+import * as UserPref from "./user-pref";
 
 export type SidebarDensity = "default" | "compact";
 
@@ -35,7 +35,7 @@ export const DENSITY_OPTIONS: {
   { value: "compact", label: "Compact", Icon: IconDensityCompact },
 ];
 
-const pref = makeUserPref<SidebarDensity>({
+const pref = UserPref.makeUserPref<SidebarDensity>({
   localKey: "opensession-sidebar-density",
   prefKey: "sidebar-density",
   changeEvent: "opensession-sidebar-density-changed",

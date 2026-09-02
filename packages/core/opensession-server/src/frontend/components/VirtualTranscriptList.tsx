@@ -563,7 +563,8 @@ class TranscriptVirtualizer extends React.Component<
         const measured: Array<readonly [string, number]> = [];
         let width = 0;
         for (const entry of entries) {
-          const target = entry.target as HTMLElement;
+          const target = entry.target;
+          if (!(target instanceof HTMLElement)) continue;
           const entryKey = target.dataset.transcriptKey;
           const height =
             entry.borderBoxSize?.[0]?.blockSize ??

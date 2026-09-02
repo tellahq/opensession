@@ -90,7 +90,10 @@ function SharedCheckoutSetting() {
           aria-label={groupLabel}
           value={settings.mode}
           disabled={saving}
-          onValueChange={(mode) => void setMode(mode as SharedCheckoutMode)}
+          onValueChange={(mode) => {
+            if (mode !== "shared" && mode !== "worktree") return;
+            void setMode(mode);
+          }}
           className="[&>*+*]:relative [&>*+*]:before:pointer-events-none [&>*+*]:before:absolute [&>*+*]:before:inset-x-5 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-line [&>*+*]:before:content-['']"
         >
           <label className="flex min-h-11 cursor-pointer items-start gap-3 px-5 py-4 transition-[background-color] hover:bg-hover">

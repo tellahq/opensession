@@ -7,12 +7,12 @@
 // synchronous (an in-memory cache): the store is a lib/user-map instance,
 // which owns hydration and ordered per-key delta writes.
 import { fetchSnoozes, saveSnoozesApi } from "./api";
-import { makeUserMap } from "./user-map";
+import * as userMap from "./user-map";
 
 const CHANGE_EVENT = "opensession-snoozes-changed";
 export const SNOOZE_SOMEDAY = "someday";
 
-const store = makeUserMap<string>({
+const store = userMap.makeUserMap<string>({
   changeEvent: CHANGE_EVENT,
   fetchMap: fetchSnoozes,
   saveDelta: saveSnoozesApi,

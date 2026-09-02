@@ -22,9 +22,15 @@ function session(p: Partial<UnifiedSession>): UnifiedSession {
     id: "s",
     title: "t",
     archived: true,
+    source: "opensession",
+    branch: null,
+    worktreeDir: null,
+    startedBy: null,
+    createdAt: "",
     lastActivity: "",
+    isRunning: false,
     ...p,
-  } as UnifiedSession;
+  };
 }
 
 describe("session owner lens", () => {

@@ -164,7 +164,7 @@ export function WalkthroughCard({
     if (!isTall(key))
       return {
         className: "w-full",
-        style: { aspectRatio: String(ratio) } as React.CSSProperties,
+        style: { aspectRatio: String(ratio) },
       };
     return {
       className: cn(
@@ -176,7 +176,7 @@ export function WalkthroughCard({
       style: {
         height: "var(--tile-h)",
         width: `calc(var(--tile-h) * ${ratio})`,
-      } as React.CSSProperties,
+      },
     };
   };
 

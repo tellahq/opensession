@@ -9,16 +9,18 @@
  * the neutral mark rather than borrowing the calmest one. The scale is the
  * support lanes': red, yellow, blue, then neutral.
  */
-const URGENCY_DOT: Record<string, string> = {
-  critical: "var(--red)",
-  high: "var(--yellow)",
-  medium: "var(--blue)",
-  low: "var(--text-faint)",
-};
-
 /** The dot's fill, as a colour for an inline `background-color`. */
 export function reportUrgencyDot(urgency?: string): string {
-  return URGENCY_DOT[urgency || ""] || "var(--text-faint)";
+  switch (urgency) {
+    case "critical":
+      return "var(--red)";
+    case "high":
+      return "var(--yellow)";
+    case "medium":
+      return "var(--blue)";
+    default:
+      return "var(--text-faint)";
+  }
 }
 
 /**

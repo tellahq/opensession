@@ -8,17 +8,14 @@
 import { useEffect, useRef, useState } from "react";
 import { VimEngine, verticalCaretTarget, type VimMode } from "../lib/vim";
 
-export function useVimMode({
-  enabled,
-  textareaRef,
-  value,
-  onChange,
-}: {
-  enabled: boolean;
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
-  value: string;
-  onChange: (value: string) => void;
-}): {
+const VIM_ARROW_KEYS = new Map([
+  ["ArrowLeft", "h"],
+  ["ArrowRight", "l"],
+  ["ArrowUp", "k"],
+  ["ArrowDown", "j"],
+]);
+
+export interface VimModeController {
   mode: VimMode;
   /** Returns true when the key was consumed (caller must not process it further). */
   handleKeyDown: (e: React.KeyboardEvent) => boolean;
@@ -29,7 +26,19 @@ export function useVimMode({
    * indents), so the bar works in insert mode too.
    */
   injectKey: (key: string) => void;
-} {
+}
+
+export function useVimMode({
+  enabled,
+  textareaRef,
+  value,
+  onChange,
+}: {
+  enabled: boolean;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  value: string;
+  onChange: (value: string) => void;
+}): VimModeController {
   const engineRef = useRef<VimEngine | null>(null);
   const [mode, setMode] = useState<VimMode>("insert");
 
@@ -82,15 +91,9 @@ export function useVimMode({
     if (!el) return;
     // Outside insert mode, arrows behave as their vim motions so visual-mode
     // selections extend instead of collapsing.
-    const arrows: Record<string, string> = {
-      ArrowLeft: "h",
-      ArrowRight: "l",
-      ArrowUp: "k",
-      ArrowDown: "j",
-    };
     const mapped =
       engineRef.current && engineRef.current.mode !== "insert"
-        ? (arrows[key] ?? key)
+        ? (VIM_ARROW_KEYS.get(key) ?? key)
         : key;
     if (feed(mapped)) return;
     // Not consumed — insert-mode emulation of the key's native behavior.

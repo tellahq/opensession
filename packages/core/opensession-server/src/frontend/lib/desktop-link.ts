@@ -1,8 +1,10 @@
-type DesktopBridgeWindow = Window & {
-  os1?: {
-    desktop?: boolean;
-  };
-};
+declare global {
+  interface Navigator {
+    readonly userAgentData?: {
+      readonly platform?: string;
+    };
+  }
+}
 
 type DesktopLinkInput = {
   pathname: string;
@@ -47,21 +49,13 @@ export function desktopProtocolUrl(
 }
 
 export function desktopProtocolUrlFromBrowser(): string | null {
-  const desktopWindow = window as DesktopBridgeWindow;
   return desktopProtocolUrl({
     pathname: location.pathname,
     search: location.search,
     hash: location.hash,
-    platform:
-      (
-        navigator as Navigator & {
-          userAgentData?: { platform?: string };
-        }
-      ).userAgentData?.platform ||
-      navigator.platform ||
-      "",
+    platform: navigator.userAgentData?.platform || navigator.platform || "",
     maxTouchPoints: navigator.maxTouchPoints || 0,
-    desktop: desktopWindow.os1?.desktop === true,
+    desktop: window.os1?.desktop === true,
     standalone: matchMedia("(display-mode: standalone)").matches,
   });
 }

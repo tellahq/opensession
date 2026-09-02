@@ -116,6 +116,51 @@ type Result = {
   passed: boolean;
 };
 
+type MotionProgress = {
+  state?: string;
+  event?: number;
+};
+
+type ViewportAnchor = {
+  anchor: number;
+  bottom: number;
+};
+
+type RowPositions = Record<string, number>;
+
+type LayoutShift = {
+  input: boolean;
+  value: number;
+  sources: string[];
+};
+
+type MotionSnapshot = {
+  errors: string[];
+  shifts: LayoutShift[];
+  maxSampledJump: number;
+  maxContentJump: number;
+  maxFrameMs: number;
+  maxLongTaskMs: number;
+  longTaskCount: number;
+  longTasks: Result["longTasks"];
+  perf: {
+    counters?: {
+      stream_frames_received?: number;
+      stream_paints?: number;
+    };
+    metrics?: {
+      react_transcript_commit_ms?: { p95?: number };
+    };
+  } | null;
+  horizontalOverflow: number;
+  settledOverlap: number;
+  positions: RowPositions;
+  distanceFromBottom: number;
+  virtualCount: number;
+  mountedRows: number;
+  streamingRows: number;
+};
+
 const lease = await acquireCdpBrowser();
 const results: Result[] = [];
 try {
@@ -134,12 +179,12 @@ try {
       socket.onerror = () => reject(new Error("CDP connection failed"));
     });
     const apiRequests: string[] = [];
-    socket.addEventListener("message", (event) => {
-      const message = JSON.parse(String((event as MessageEvent).data));
+    socket.onmessage = (event) => {
+      const message = JSON.parse(String(event.data));
       if (message.method !== "Network.requestWillBeSent") return;
       const url = String(message.params?.request?.url ?? "");
       if (url.includes("/api/")) apiRequests.push(url);
-    });
+    };
     const send = cdpSender(socket);
     const startedAt = performance.now();
     try {
@@ -186,10 +231,7 @@ try {
 				}))()`,
           returnByValue: true,
         });
-        const progress = response.result.value as {
-          state?: string;
-          event?: number;
-        };
+        const progress: MotionProgress = response.result.value;
         state = String(progress.state ?? "");
         if (
           PROFILE === "motion" &&
@@ -230,14 +272,8 @@ try {
             expression: `(() => { const scroller = document.querySelector("[data-transcript-motion-scroller]"); const prompt = [...document.querySelectorAll(".msg-user")].at(-1); if (!scroller || !prompt) return null; const box = scroller.getBoundingClientRect(); return { anchor: prompt.getBoundingClientRect().top - box.top, bottom: Math.max(0, scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) }; })()`,
             returnByValue: true,
           });
-          const before = beforeResize.result.value as {
-            anchor: number;
-            bottom: number;
-          } | null;
-          const after = afterResize.result.value as {
-            anchor: number;
-            bottom: number;
-          } | null;
+          const before: ViewportAnchor | null = beforeResize.result.value;
+          const after: ViewportAnchor | null = afterResize.result.value;
           keyboardAnchorDrift =
             before && after
               ? Math.abs(after.anchor - before.anchor)
@@ -258,7 +294,7 @@ try {
           expression: `(() => { const root = document.querySelector("[data-virtual-transcript]"); return Object.fromEntries(root ? [...root.children].filter(node => node.matches("[data-index]")).map(node => [Number(node.dataset.index), node.getBoundingClientRect().top]) : []); })()`,
           returnByValue: true,
         });
-        const current = positions.result.value as Record<string, number>;
+        const current: RowPositions = positions.result.value;
         const drift = Math.max(
           0,
           ...Object.entries(current).map(([index, top]) =>
@@ -302,20 +338,17 @@ try {
         })()`,
         returnByValue: true,
       });
-      const value = snapshot.result.value;
+      const value: MotionSnapshot = snapshot.result.value;
       await Bun.sleep(50);
       const settledAgain = await send("Runtime.evaluate", {
         expression: `(() => { const root = document.querySelector("[data-virtual-transcript]"); return Object.fromEntries(root ? [...root.children].filter(node => node.matches("[data-index]")).map(node => [Number(node.dataset.index), node.getBoundingClientRect().top]) : []); })()`,
         returnByValue: true,
       });
-      const laterPositions = settledAgain.result.value as Record<
-        string,
-        number
-      >;
+      const laterPositions: RowPositions = settledAgain.result.value;
       const settledDrift = Math.max(
         0,
-        ...Object.entries(value.positions as Record<string, number>).map(
-          ([index, top]) => Math.abs((laterPositions[index] ?? top) - top),
+        ...Object.entries(value.positions).map(([index, top]) =>
+          Math.abs((laterPositions[index] ?? top) - top),
         ),
       );
       const resizeObserverWarnings = value.errors.filter((error: string) =>
@@ -324,13 +357,7 @@ try {
       const errors = value.errors.filter(
         (error: string) => !error.startsWith("ResizeObserver loop completed"),
       );
-      const shifts = (
-        value.shifts as Array<{
-          input: boolean;
-          value: number;
-          sources: string[];
-        }>
-      ).filter((shift) => !shift.input);
+      const shifts = value.shifts.filter((shift) => !shift.input);
       const cls = shifts.reduce(
         (total: number, shift: { value: number }) => total + shift.value,
         0,

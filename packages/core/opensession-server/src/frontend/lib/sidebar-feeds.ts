@@ -2,6 +2,7 @@
 // keeps startup synchronous; ui-prefs makes the choice follow the user across
 // devices. Feed ids are dynamic, so unknown ids are preserved.
 
+import { z } from "zod";
 import { getCurrentUser } from "../components/UserPicker";
 import { fetchUiPrefs, saveUiPrefsApi } from "./api";
 import { whenCurrentUserReady } from "./auth-ready";
@@ -15,27 +16,35 @@ function localKey(user: string): string {
   return `${LOCAL_KEY_PREFIX}${user.trim().toLowerCase() || "anonymous"}`;
 }
 
-export function normalizeHiddenSidebarFeeds(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return [
-    ...new Set(
-      value.filter(
-        (id): id is string => typeof id === "string" && id.length > 0,
-      ),
-    ),
-  ];
+const hiddenSidebarFeedIdSchema = z.string().min(1);
+const hiddenSidebarFeedsSchema = z.array(z.unknown()).transform((values) => {
+  const ids: string[] = [];
+  for (const value of values) {
+    const result = hiddenSidebarFeedIdSchema.safeParse(value);
+    if (result.success) ids.push(result.data);
+  }
+  return [...new Set(ids)];
+});
+
+export function normalizeHiddenSidebarFeeds(value: string[]): string[] {
+  return [...new Set(value)];
+}
+
+function parseHiddenSidebarFeeds(value: string): string[] | null {
+  try {
+    const result = hiddenSidebarFeedsSchema.safeParse(JSON.parse(value));
+    if (!result.success) return [];
+    return result.data;
+  } catch {
+    return null;
+  }
 }
 
 function readLocal(user: string): Set<string> {
-  try {
-    return new Set(
-      normalizeHiddenSidebarFeeds(
-        JSON.parse(localStorage.getItem(localKey(user)) || "[]"),
-      ),
-    );
-  } catch {
-    return new Set();
-  }
+  const hidden = parseHiddenSidebarFeeds(
+    localStorage.getItem(localKey(user)) || "[]",
+  );
+  return new Set(hidden ?? []);
 }
 
 function writeLocal(user: string, hidden: Set<string>) {
@@ -78,19 +87,16 @@ async function hydrate(user: string) {
   }
   if (writeStamp !== stampAtStart) return;
   const serverValue = prefs[PREF_KEY];
-  if (typeof serverValue === "string") {
-    try {
-      const serverHidden = new Set(
-        normalizeHiddenSidebarFeeds(JSON.parse(serverValue)),
-      );
-      if (
-        JSON.stringify([...serverHidden]) !==
-        JSON.stringify([...readLocal(user)])
-      ) {
-        writeLocal(user, serverHidden);
-        window.dispatchEvent(new Event(CHANGE_EVENT));
-      }
-    } catch {}
+  if (serverValue !== undefined) {
+    const parsed = parseHiddenSidebarFeeds(serverValue);
+    if (parsed === null) return;
+    const serverHidden = new Set(parsed);
+    if (
+      JSON.stringify([...serverHidden]) !== JSON.stringify([...readLocal(user)])
+    ) {
+      writeLocal(user, serverHidden);
+      window.dispatchEvent(new Event(CHANGE_EVENT));
+    }
   } else {
     const localHidden = readLocal(user);
     if (localHidden.size > 0) {
@@ -105,10 +111,7 @@ async function hydrate(user: string) {
 // this module outside a browser (a test that only wants a pure helper from a
 // module that re-exports from here) throws on `localStorage` at import time,
 // before any test has had a chance to install a shim.
-if (
-  typeof window !== "undefined" &&
-  typeof window.addEventListener === "function"
-) {
+if (typeof window !== "undefined") {
   whenCurrentUserReady((user) => void hydrate(user));
   window.addEventListener(USER_CHANGE_EVENT, () => {
     writeStamp++;
@@ -122,10 +125,7 @@ export function onSidebarFeedsChanged(handler: () => void): () => void {
   return () => window.removeEventListener(CHANGE_EVENT, handler);
 }
 
-if (
-  typeof window !== "undefined" &&
-  typeof window.addEventListener === "function"
-) {
+if (typeof window !== "undefined") {
   window.addEventListener("storage", (event) => {
     if (event.key?.startsWith(LOCAL_KEY_PREFIX)) {
       writeStamp++;

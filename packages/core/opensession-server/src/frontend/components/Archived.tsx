@@ -21,6 +21,7 @@ import {
 } from "../lib/archived-classes";
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { z } from "zod";
 import type { UnifiedSession } from "../lib/types";
 import { relativeTime, archiveSessionApi } from "../lib/api";
 import { useCurrentUser } from "./UserPicker";
@@ -61,6 +62,7 @@ interface Props {
 // Same key the sidebar persists its group/repo/sort choices under, so the
 // archived page opens with the repo filter the sidebar is already showing.
 const SIDEBAR_FILTER_KEY = "opensession-sidebar-filter";
+const sidebarFilterSchema = z.object({ repo: z.string().optional() });
 
 /** How many rows the list draws before asking for a narrower search. */
 const PAGE_SIZE = 200;
@@ -76,6 +78,14 @@ type RestoreSwipeOrigin = {
   y: number;
   allowRight: boolean;
 };
+
+interface RestoreActionStyle extends React.CSSProperties {
+  "--swipe-action-w": string;
+}
+
+interface RestoreRowStyle extends React.CSSProperties {
+  "--swipe-x": string;
+}
 
 /** Follow the finger 1:1, then add light resistance past the revealed action. */
 function restoreSwipeOffset(dx: number): number {
@@ -157,8 +167,10 @@ function sessionRepo(s: UnifiedSession): string {
 // so we inherit it as the archived page's starting repo.
 function sidebarRepo(): string {
   try {
-    const v = JSON.parse(localStorage.getItem(SIDEBAR_FILTER_KEY) || "{}");
-    return typeof v.repo === "string" ? v.repo : "all";
+    const parsed = sidebarFilterSchema.safeParse(
+      JSON.parse(localStorage.getItem(SIDEBAR_FILTER_KEY) || "{}"),
+    );
+    return parsed.success ? (parsed.data.repo ?? "all") : "all";
   } catch {
     return "all";
   }
@@ -473,7 +485,14 @@ export function Archived({
                 <Menu.GroupLabel>Reason</Menu.GroupLabel>
                 <Menu.RadioGroup
                   value={reason}
-                  onValueChange={(value) => setReason(value as ReasonFilter)}
+                  onValueChange={(value) => {
+                    if (
+                      value === "all" ||
+                      value === "auto" ||
+                      value === "manual"
+                    )
+                      setReason(value);
+                  }}
                 >
                   {(["all", "auto", "manual"] as const).map((value) => (
                     <Menu.RadioItem key={value} value={value} closeOnClick>
@@ -609,21 +628,24 @@ export function Archived({
                     const swipeOffset =
                       restoreSwipe?.id === s.id ? restoreSwipe.offset : 0;
                     const dragging = draggingRestoreId === s.id;
+                    const actionStyle: RestoreActionStyle | undefined =
+                      swipeOffset
+                        ? {
+                            "--swipe-action-w": `${Math.max(
+                              RESTORE_SWIPE_PX,
+                              Math.abs(swipeOffset),
+                            )}px`,
+                          }
+                        : undefined;
+                    const rowStyle: RestoreRowStyle | undefined = swipeOffset
+                      ? { "--swipe-x": `${swipeOffset}px` }
+                      : undefined;
                     return (
                       <li
                         key={s.id}
                         className={ARCHIVED_SWIPE_ROW}
                         data-swipe-row=""
-                        style={
-                          swipeOffset
-                            ? ({
-                                "--swipe-action-w": `${Math.max(
-                                  RESTORE_SWIPE_PX,
-                                  Math.abs(swipeOffset),
-                                )}px`,
-                              } as React.CSSProperties)
-                            : undefined
-                        }
+                        style={actionStyle}
                       >
                         <button
                           type="button"
@@ -648,13 +670,7 @@ export function Archived({
                                     "phone:transition-none phone:will-change-transform",
                                   swipeOffset && "phone:will-change-transform",
                                 )}
-                                style={
-                                  swipeOffset
-                                    ? ({
-                                        "--swipe-x": `${swipeOffset}px`,
-                                      } as React.CSSProperties)
-                                    : undefined
-                                }
+                                style={rowStyle}
                                 onTouchStart={(e) => restoreTouchStart(s.id, e)}
                                 onTouchMove={(e) => restoreTouchMove(s.id, e)}
                                 onTouchEnd={(e) => restoreTouchEnd(s.id, e)}

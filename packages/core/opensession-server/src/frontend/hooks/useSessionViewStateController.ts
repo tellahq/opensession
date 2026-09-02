@@ -34,7 +34,7 @@ import {
 } from "./useSessionComposerController";
 import { useSessionRuntime } from "./useSessionRuntime";
 import { useSessionRuntimeController } from "./useSessionRuntimeController";
-import { reviewLoopResult } from "../lib/review-loop";
+import { reviewLoopResult, type ReviewLoopResult } from "../lib/review-loop";
 import { useSidePanel } from "./useSidePanel";
 import { useSessionAssets } from "../components/AssetsPanel";
 import { useSessionReports } from "../components/SessionReportsPanel";
@@ -55,6 +55,10 @@ import type { LiveTurnStore } from "../lib/live-turn-store";
 import type { TranscriptViewStore } from "../lib/transcript-view-store";
 import type { SessionPrRef } from "../lib/types";
 import type { SessionViewerProps } from "../lib/session-viewer-bindings";
+
+type WorkspaceSummaryStyle = CSSProperties & {
+  "--ws-summary-step": string;
+};
 
 interface ViewStateIdentity {
   session: UnifiedSession;
@@ -265,14 +269,28 @@ export function useSessionViewStateController({
     ],
   );
   const reviewResultValue = reviewLoopResult(session);
-  const reviewResultKey = JSON.stringify(reviewResultValue ?? null);
-  const reviewResult = useMemo(
-    () =>
-      reviewResultKey === "null"
-        ? undefined
-        : (JSON.parse(reviewResultKey) as ReturnType<typeof reviewLoopResult>),
-    [reviewResultKey],
-  );
+  const reviewStatus = reviewResultValue?.status;
+  const reviewConfidence = reviewResultValue?.confidence;
+  const reviewChecksPassed = reviewResultValue?.checksPassed;
+  const reviewChecksFailed = reviewResultValue?.checksFailed;
+  const reviewBlocking = reviewResultValue?.blocking;
+  const reviewResult = useMemo(() => {
+    if (!reviewStatus) return undefined;
+    const result: ReviewLoopResult = { status: reviewStatus };
+    if (reviewConfidence !== undefined) result.confidence = reviewConfidence;
+    if (reviewChecksPassed !== undefined)
+      result.checksPassed = reviewChecksPassed;
+    if (reviewChecksFailed !== undefined)
+      result.checksFailed = reviewChecksFailed;
+    if (reviewBlocking !== undefined) result.blocking = reviewBlocking;
+    return result;
+  }, [
+    reviewBlocking,
+    reviewChecksFailed,
+    reviewChecksPassed,
+    reviewConfidence,
+    reviewStatus,
+  ]);
   const sidePanel = useSidePanel();
   const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
   const activePanelOpen = showReview ? reviewPanelOpen : sidePanel.open;
@@ -498,10 +516,8 @@ export function useSessionHeaderLayoutController(
     !isPhone &&
     hasRepoWork;
   const summaryStep = summaryVisible ? workspaceSummaryShift(headerW) : 0;
-  const summaryStepStyle =
-    summaryStep > 0
-      ? ({ "--ws-summary-step": `-${summaryStep}px` } as CSSProperties)
-      : undefined;
+  const summaryStepStyle: WorkspaceSummaryStyle | undefined =
+    summaryStep > 0 ? { "--ws-summary-step": `-${summaryStep}px` } : undefined;
   useEffect(() => {
     if (isPhone && !infoPageOpen) setPanelPage(null);
   }, [isPhone, infoPageOpen, setPanelPage]);

@@ -186,7 +186,7 @@ function parseFileDiffs(
 }
 
 /** Per-file +/- counts, summed from the parsed hunks. */
-function fileStats(file: FileDiffMetadata): { add: number; del: number } {
+function fileStats(file: FileDiffMetadata) {
   let add = 0;
   let del = 0;
   for (const h of file.hunks) {
@@ -517,13 +517,12 @@ export function CommentableDiff({ patch, options }: Props) {
       editFile.load(fd, "base"),
       editFile.load(fd, "new"),
     ]);
+    const newFile = { name: fd.name, contents: newText ?? "" };
+    if (oldText == null) return { oldFile: null, newFile };
     return {
-      oldFile:
-        oldText == null
-          ? null
-          : { name: fd.prevName || fd.name, contents: oldText },
-      newFile: { name: fd.name, contents: newText ?? "" },
-    } as FileDiffLoadedFiles;
+      oldFile: { name: fd.prevName || fd.name, contents: oldText },
+      newFile,
+    };
   };
 
   const {
@@ -663,13 +662,11 @@ export function CommentableDiff({ patch, options }: Props) {
     const dir = slash >= 0 ? file.name.slice(0, slash) : "";
     const base = slash >= 0 ? file.name.slice(slash + 1) : file.name;
     const fileUrl = fileActions?.url(file) ?? null;
-    const annotations = isDraftFile
+    const annotations: DiffLineAnnotation<Meta>[] = isDraftFile
       ? [
           ...pend,
           {
-            side: (draft!.range.side === "deletions"
-              ? "deletions"
-              : "additions") as "additions" | "deletions",
+            side: draft!.range.side === "deletions" ? "deletions" : "additions",
             lineNumber: Math.max(draft!.range.start, draft!.range.end),
             metadata: { kind: "draft" as const },
           },
@@ -1389,10 +1386,10 @@ const FileDiffRow = function FileDiffRow({
     // Line selection drives commenting; while editing, clicks place the
     // caret instead.
     enableLineSelection: !editing,
-    ...(loadDiffFiles ? { loadDiffFiles } : {}),
     onLineSelected: (range: SelectedLineRange | null) =>
       onSelect(fileIndex, file.name, range),
   };
+  if (loadDiffFiles) Object.assign(options, { loadDiffFiles });
 
   const fileDiff = (
     <FileDiff<Meta>

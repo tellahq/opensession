@@ -11,7 +11,7 @@ type FakeBrowser = {
   recent: string[];
   scheduledDelays: number[];
   storage: Map<string, string>;
-  emitPop(path: string, state?: unknown): void;
+  emitPop(path: string, state?: AppRouteBrowser["history"]["state"]): void;
   emitPush(url: string): void;
   runTimers(): void;
   setAutoPop(value: boolean): void;
@@ -69,7 +69,7 @@ function fakeBrowser({
       return entries[index]!.state;
     },
     pushState(
-      nextState: unknown,
+      nextState: AppRouteBrowser["history"]["state"],
       _unused: string,
       value?: string | URL | null,
     ) {
@@ -84,7 +84,7 @@ function fakeBrowser({
       index += 1;
     },
     replaceState(
-      nextState: unknown,
+      nextState: AppRouteBrowser["history"]["state"],
       _unused: string,
       value?: string | URL | null,
     ) {

@@ -80,8 +80,8 @@ test("the first workspace session receives its draft attachments", () => {
   const payload = source.slice(sendStart, sendEnd);
 
   expect(sendStart).toBeGreaterThan(-1);
-  expect(payload).toContain("...(images.length ? { images } : {})");
-  expect(payload).toContain("files: files.map");
+  expect(payload).toContain("if (images.length) message.images = images;");
+  expect(payload).toContain("message.files = files.map");
   expect(source).toContain("dropStagingAttachments(draftKey)");
 });
 

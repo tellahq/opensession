@@ -3,9 +3,9 @@
 // when this is off, so disabling the preference removes the extra rows instead
 // of turning implementation-detail workers into peers of their parent.
 
-import { makeUserPref } from "./user-pref";
+import * as userPref from "./user-pref";
 
-const pref = makeUserPref<boolean>({
+const pref = userPref.makeUserPref<boolean>({
   localKey: "opensession-sidebar-subagents",
   prefKey: "sidebar-subagents",
   changeEvent: "opensession-sidebar-subagents-changed",

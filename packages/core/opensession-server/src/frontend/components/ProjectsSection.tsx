@@ -1,5 +1,6 @@
 import { BASE_PATH } from "../lib/base";
 import React, { useCallback, useEffect, useState } from "react";
+import { z } from "zod";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
@@ -30,27 +31,37 @@ import { errorMessage } from "../lib/error-message";
 
 // ── mapping suggester ────────────────────────────────────────────────────────
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
+const jsonValueSchema = z.json();
+const jsonObjectSchema = z.record(z.string(), jsonValueSchema);
+const stringOrNumberSchema = z.union([z.string(), z.number()]);
+type JsonValue = z.infer<typeof jsonValueSchema>;
+type JsonObject = z.infer<typeof jsonObjectSchema>;
+
+function jsonObject(value: JsonValue): JsonObject | undefined {
+  const result = jsonObjectSchema.safeParse(value);
+  return result.success ? result.data : undefined;
 }
 
 function findItemsPath(
-  obj: unknown,
-): { path: string; sample: Record<string, unknown> } | null {
-  const queue: Array<{ node: unknown; path: string }> = [
-    { node: obj, path: "" },
+  value: JsonValue,
+): { path: string; sample: JsonObject } | null {
+  const queue: Array<{ node: JsonValue; path: string }> = [
+    { node: value, path: "" },
   ];
   let guard = 0;
   while (queue.length && guard++ < 500) {
     const { node, path } = queue.shift()!;
     if (Array.isArray(node)) {
-      if (isRecord(node[0])) return { path, sample: node[0] };
+      if (node.length === 0) continue;
+      const sample = jsonObject(node[0]);
+      if (sample) return { path, sample };
       continue;
     }
-    if (isRecord(node))
-      for (const [key, value] of Object.entries(node))
+    const object = jsonObject(node);
+    if (object)
+      for (const [key, child] of Object.entries(object))
         queue.push({
-          node: value,
+          node: child,
           path: path ? `${path}.${key}` : key,
         });
   }
@@ -58,13 +69,17 @@ function findItemsPath(
 }
 
 /** Keys of `sample` (one nesting level deep, dot-joined) whose value is a string. */
-function stringPaths(sample: Record<string, unknown>): string[] {
+function stringPaths(sample: JsonObject): string[] {
   const out: string[] = [];
-  for (const [k, v] of Object.entries(sample)) {
-    if (typeof v === "string" || typeof v === "number") out.push(k);
-    else if (isRecord(v))
-      for (const [k2, v2] of Object.entries(v))
-        if (typeof v2 === "string") out.push(`${k}.${k2}`);
+  for (const [key, value] of Object.entries(sample)) {
+    if (stringOrNumberSchema.safeParse(value).success) out.push(key);
+    else {
+      const object = jsonObject(value);
+      if (!object) continue;
+      for (const [nestedKey, nestedValue] of Object.entries(object))
+        if (z.string().safeParse(nestedValue).success)
+          out.push(`${key}.${nestedKey}`);
+    }
   }
   return out;
 }
@@ -77,16 +92,17 @@ function pick(paths: string[], patterns: RegExp[]): string {
   return "";
 }
 
-function valueAtPath(sample: Record<string, unknown>, path: string): unknown {
-  let value: unknown = sample;
+function valueAtPath(sample: JsonObject, path: string): JsonValue | undefined {
+  let value: JsonValue = sample;
   for (const segment of path.split(".")) {
-    if (!isRecord(value)) return undefined;
-    value = value[segment];
+    const object = jsonObject(value);
+    if (!object) return undefined;
+    value = object[segment];
   }
   return value;
 }
 
-function suggestMap(sample: Record<string, unknown>) {
+function suggestMap(sample: JsonObject) {
   const paths = stringPaths(sample);
   return {
     id: pick(paths, [/^id$/i, /Id$/, /^key$/i, /^slug$/i]),
@@ -109,15 +125,16 @@ function suggestMap(sample: Record<string, unknown>) {
 const inputCls = fieldClasses("md");
 const labelCls = "mb-1 mt-3 block text-meta font-semibold text-faint";
 
-function parseArgs(text: string): Record<string, unknown> {
-  let parsed: unknown;
+function parseArgs(text: string): JsonObject {
+  let parsed;
   try {
     parsed = JSON.parse(text || "{}");
   } catch {
     throw new Error("Args must be valid JSON");
   }
-  if (!isRecord(parsed)) throw new Error("Args must be a JSON object");
-  return parsed;
+  const result = jsonObjectSchema.safeParse(parsed);
+  if (!result.success) throw new Error("Args must be a JSON object");
+  return result.data;
 }
 
 export function ProjectsSection() {
@@ -351,7 +368,9 @@ function NewProjectModal({
         setBusy(null);
         return;
       }
-      const raw = body.result ?? JSON.parse(body.sample || "null");
+      const raw = jsonValueSchema.parse(
+        body.result ?? JSON.parse(body.sample || "null"),
+      );
       const found = findItemsPath(raw);
       if (!found) {
         setError(
@@ -384,35 +403,28 @@ function NewProjectModal({
         return;
       }
       const args = parseArgs(argsText);
-      const body = {
+      const mappedFields = Object.fromEntries(
+        Object.entries(map).filter(([, value]) => value),
+      );
+      const itemsBase = { server, tool, args, map: mappedFields };
+      const items = path ? { ...itemsBase, path } : itemsBase;
+      const bodyBase = {
         id,
         title: title.trim(),
         refKind: id,
         tileBg,
         mcpServers: [server],
-        items: {
-          server,
-          tool,
-          args,
-          ...(path ? { path } : {}),
-          map: Object.fromEntries(Object.entries(map).filter(([, v]) => v)),
-        },
-        ...(panelLabel && panelEmbed
-          ? {
-              panel: {
-                label: panelLabel,
-                embedUrlTemplate: panelEmbed,
-                ...(panelLinkLabel && panelLinkHref
-                  ? {
-                      links: [
-                        { label: panelLinkLabel, hrefTemplate: panelLinkHref },
-                      ],
-                    }
-                  : {}),
-              },
-            }
-          : {}),
+        items,
       };
+      const panelBase = { label: panelLabel, embedUrlTemplate: panelEmbed };
+      const panel =
+        panelLinkLabel && panelLinkHref
+          ? {
+              ...panelBase,
+              links: [{ label: panelLinkLabel, hrefTemplate: panelLinkHref }],
+            }
+          : panelBase;
+      const body = panelLabel && panelEmbed ? { ...bodyBase, panel } : bodyBase;
       const res = await fetch(`${BASE_PATH}/api/feeds`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

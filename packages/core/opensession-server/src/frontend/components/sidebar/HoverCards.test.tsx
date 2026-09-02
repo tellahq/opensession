@@ -8,28 +8,36 @@ import {
   WsPrStatusMark,
   WsStatusMark,
 } from "./HoverCards";
-import type { WorkspaceOverview } from "../../lib/api";
 import type { WsCardRow } from "../../lib/sidebar-hover";
 import type { UnifiedSession } from "../../lib/types";
 
 // A sibling test may already have installed a partial `window`. Fill in this
 // file's browser surface without replacing it.
-Object.assign(
-  ((globalThis as unknown as { window?: Record<string, unknown> }).window ??=
-    {}),
-  { addEventListener: () => {}, matchMedia: () => ({ matches: false }) },
-);
+const testWindow = Object.assign(globalThis.window ?? {}, {
+  addEventListener: () => {},
+  matchMedia: () => ({ matches: false }),
+});
+Object.defineProperty(globalThis, "window", {
+  configurable: true,
+  value: testWindow,
+});
 
 const AGO = new Date(Date.now() - 8 * 60_000).toISOString();
 
 function session(extra: Partial<UnifiedSession> = {}): UnifiedSession {
   return {
     id: "os-test",
+    source: "opensession",
+    branch: null,
+    worktreeDir: null,
+    startedBy: null,
     title: "Modernize UI design",
     repo: "opensession",
     lastActivity: AGO,
+    createdAt: AGO,
+    isRunning: false,
     ...extra,
-  } as unknown as UnifiedSession;
+  };
 }
 
 function row(sessions: UnifiedSession[]): WsCardRow {
@@ -170,11 +178,15 @@ describe("hover cards drop the repo and the idle timestamp", () => {
   test("message previews and callouts use the compact metadata size", () => {
     const preview = renderToStaticMarkup(
       <CardOverview
-        ov={
-          {
-            lastMessage: { content: "A compact latest message" },
-          } as WorkspaceOverview
-        }
+        ov={{
+          prompt: null,
+          lastMessage: {
+            content: "A compact latest message",
+            sessionId: "os-test",
+            at: AGO,
+          },
+          media: [],
+        }}
       />,
     );
     const callout = renderToStaticMarkup(

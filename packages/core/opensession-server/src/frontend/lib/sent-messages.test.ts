@@ -19,14 +19,15 @@ function tool(
   id: string,
   family: Presentation["family"],
   detail: Presentation["detail"],
-  toolInput?: unknown,
+  toolInput?: { command: string },
 ): TranscriptEntry {
-  return entry({
+  const transcriptEntry = entry({
     id,
     type: "tool_use",
     presentation: { canonical: "Tool", name: "Tool", family, detail },
-    ...(toolInput ? { toolInput } : {}),
   });
+  if (toolInput) transcriptEntry.toolInput = toolInput;
+  return transcriptEntry;
 }
 
 describe("collectSentMessages", () => {

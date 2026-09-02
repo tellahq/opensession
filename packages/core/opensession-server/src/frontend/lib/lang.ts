@@ -3,7 +3,9 @@
 // into the initial bundle. The shiki-backed renderer lives in
 // components/CodeHighlight.tsx and is lazy-loaded.
 
-const LANG_BY_EXT: Record<string, string> = {
+import { z } from "zod";
+
+const LANG_BY_EXT_VALUES = {
   res: "rescript",
   resi: "rescript",
   ts: "typescript",
@@ -31,30 +33,51 @@ const LANG_BY_EXT: Record<string, string> = {
   rs: "rust",
   rust: "rust", // ripgrep --type name
   swift: "swift",
-};
+} satisfies Readonly<Record<string, string>>;
 
-export { LANG_BY_EXT };
+export const LANG_BY_EXT = Object.fromEntries(
+  Object.entries(LANG_BY_EXT_VALUES),
+);
+const LANGUAGE_BY_EXTENSION = new Map(Object.entries(LANG_BY_EXT_VALUES));
+const FILE_PATH_SCHEMA = z.string();
+const EXTERNAL_VALUE_SCHEMA = z.unknown();
+const OPTIONAL_STRING_SCHEMA = z.unknown().transform((value) => {
+  const parsed = z.string().safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+});
+const GREP_LANGUAGE_INPUT_SCHEMA = z.object({
+  path: OPTIONAL_STRING_SCHEMA,
+  glob: OPTIONAL_STRING_SCHEMA,
+  include: OPTIONAL_STRING_SCHEMA,
+  type: OPTIONAL_STRING_SCHEMA,
+});
 
 /** Map a file path to a registered shiki lang, or null if we can't highlight it. */
-export function langForFile(filePath: unknown): string | null {
-  if (typeof filePath !== "string") return null;
-  const ext = filePath.split(".").pop()?.toLowerCase() || "";
-  return LANG_BY_EXT[ext] || null;
+export function langForFile(
+  filePath: z.input<typeof FILE_PATH_SCHEMA>,
+): string | null {
+  const parsed = FILE_PATH_SCHEMA.safeParse(filePath);
+  if (!parsed.success) return null;
+  const ext = parsed.data.split(".").pop()?.toLowerCase() || "";
+  return LANGUAGE_BY_EXTENSION.get(ext) ?? null;
 }
 
 /** Infer a lang from Grep input: a file path, a "*.res"-style glob, or a ripgrep type. */
-export function langForGrep(input: unknown): string | null {
-  if (!input || typeof input !== "object") return null;
-  const inp = input as Record<string, unknown>;
-  const fromPath = langForFile(inp.path);
+export function langForGrep(
+  input: z.input<typeof EXTERNAL_VALUE_SCHEMA>,
+): string | null {
+  const parsed = GREP_LANGUAGE_INPUT_SCHEMA.safeParse(input);
+  if (!parsed.success) return null;
+  const fromPath = parsed.data.path ? langForFile(parsed.data.path) : null;
   if (fromPath) return fromPath;
   // `glob` is the Claude-SDK key, `include` pi's — same "*.res" shape.
-  const glob = typeof inp.glob === "string" ? inp.glob : inp.include;
-  if (typeof glob === "string") {
+  const glob = parsed.data.glob ?? parsed.data.include;
+  if (glob) {
     const ext = glob.match(/\.(\w+)$/)?.[1]?.toLowerCase();
-    if (ext && LANG_BY_EXT[ext]) return LANG_BY_EXT[ext];
+    const language = ext ? LANGUAGE_BY_EXTENSION.get(ext) : undefined;
+    if (language) return language;
   }
-  if (typeof inp.type === "string" && LANG_BY_EXT[inp.type])
-    return LANG_BY_EXT[inp.type];
-  return null;
+  return parsed.data.type
+    ? (LANGUAGE_BY_EXTENSION.get(parsed.data.type) ?? null)
+    : null;
 }

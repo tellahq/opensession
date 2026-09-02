@@ -22,7 +22,7 @@ import {
   IconPeople,
   IconPlug,
   IconServer,
-  IconShapes,
+  "IconShapes" as IconModels,
   IconX,
 } from "../icons";
 
@@ -33,7 +33,7 @@ function SetupStepIcon({ id }: { id: SetupWidgetItem["id"] }) {
     case "github":
       return <IconConnections size={20} />;
     case "models":
-      return <IconShapes size={20} />;
+      return <IconModels size={20} />;
     case "repository":
       return <IconBranches size={20} />;
     case "domain":

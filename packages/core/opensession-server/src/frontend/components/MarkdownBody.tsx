@@ -180,14 +180,14 @@ export function MarkdownBody({
         const tpl = document.createElement("template");
         tpl.innerHTML = out;
         const shikiPre = tpl.content.firstElementChild;
-        if (shikiPre) {
+        if (shikiPre instanceof HTMLElement) {
           shikiPre.classList.add("md-code");
           // Shiki writes its theme's editor background inline, which beats
           // `.markdown pre`'s well: in light that's #ffffff, so a
           // highlighted fence read as a white card on the page while an
           // un-highlighted one read as sunk. (Dark hid it — #0d1117 against
           // #0c0c10.) The surface is the well's; keep only shiki's ink.
-          (shikiPre as HTMLElement).style.backgroundColor = "";
+          shikiPre.style.backgroundColor = "";
           pre.replaceWith(shikiPre);
         }
       }

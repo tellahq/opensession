@@ -115,6 +115,18 @@ export function buildSlackManifest(options: SlackManifestOptions) {
   const { publicBaseUrl, webhookBaseUrl, transport } = options;
   const appName = clampName(options.appName, 35);
   const socket = transport === "socket";
+  const eventSubscriptions = socket
+    ? { bot_events: SLACK_BOT_EVENTS }
+    : {
+        request_url: eventsUrl(webhookBaseUrl),
+        bot_events: SLACK_BOT_EVENTS,
+      };
+  const interactivity = socket
+    ? { is_enabled: true }
+    : {
+        is_enabled: true,
+        request_url: actionsUrl(webhookBaseUrl),
+      };
   return {
     display_information: {
       name: appName,
@@ -139,14 +151,8 @@ export function buildSlackManifest(options: SlackManifestOptions) {
       scopes: { bot: SLACK_BOT_SCOPES },
     },
     settings: {
-      event_subscriptions: {
-        ...(socket ? {} : { request_url: eventsUrl(webhookBaseUrl) }),
-        bot_events: SLACK_BOT_EVENTS,
-      },
-      interactivity: {
-        is_enabled: true,
-        ...(socket ? {} : { request_url: actionsUrl(webhookBaseUrl) }),
-      },
+      event_subscriptions: eventSubscriptions,
+      interactivity,
       socket_mode_enabled: socket,
       org_deploy_enabled: false,
       token_rotation_enabled: false,

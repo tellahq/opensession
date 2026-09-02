@@ -6,13 +6,17 @@ import { dropStagingAttachments } from "./attachments";
 import { unhideForSession } from "./hides";
 import type { FileAttachment } from "./images";
 import type { OptimisticPendingPrompt } from "./pending-reconcile";
-import { promptOutbox, type PromptOutboxItem } from "./prompt-outbox";
+import {
+  promptOutbox,
+  type PromptOutboxInput,
+  type PromptOutboxItem,
+} from "./prompt-outbox";
 import { withQuotes, type Quote } from "./quotes";
 import type { SessionRuntimeAction } from "./session-runtime";
 import type { QueueReceipt } from "./session-queue";
 import { measureSessionPerf } from "./session-performance";
 import type { TranscriptViewStore } from "./transcript-view-store";
-import type { UnifiedSession } from "./types";
+import type { UnifiedSession, WSClientMessage } from "./types";
 import { toast } from "../ui/toast";
 import type { SessionForkTarget } from "../hooks/useSessionComposerController";
 
@@ -125,20 +129,25 @@ export function sendSessionMessage(
   // message, keeping the real conversation history. App navigates into it on
   // session_created.
   if (!isolated && draft.forkFrom) {
-    send({
+    type CreateSessionMessage = Extract<
+      WSClientMessage,
+      { type: "create_session" }
+    >;
+    const forkFrom: NonNullable<CreateSessionMessage["forkFrom"]> = {
+      sourceId: identity.session.id,
+    };
+    if (draft.forkFrom.kind === "message")
+      forkFrom.messageId = draft.forkFrom.messageId;
+    const message: CreateSessionMessage = {
       type: "create_session",
       branch: "",
       prompt: text || "Continue from here.",
       user,
-      forkFrom: {
-        sourceId: identity.session.id,
-        ...(draft.forkFrom.kind === "message"
-          ? { messageId: draft.forkFrom.messageId }
-          : {}),
-      },
-      ...(images.length ? { images } : {}),
-      ...(files.length ? { files: filePayload } : {}),
-    });
+      forkFrom,
+    };
+    if (images.length) message.images = images;
+    if (files.length) message.files = filePayload;
+    send(message);
     draft.setForkFrom(null);
     dropStagingAttachments(draft.draftKey);
     draft.setImages([]);
@@ -173,7 +182,7 @@ export function sendSessionMessage(
       : undefined;
   let outboxItem: PromptOutboxItem;
   try {
-    outboxItem = promptOutbox.enqueue({
+    const input: PromptOutboxInput = {
       sessionId: identity.session.id,
       content: text,
       user,
@@ -182,12 +191,12 @@ export function sendSessionMessage(
       busyMode: runtime.isBusy ? (steerNow ? "steer" : "queue") : undefined,
       transcriptAfterEntryId,
       transcriptAfterSeq,
-      ...(images.length ? { images } : {}),
-      ...(files.length ? { files: filePayload } : {}),
-      ...(!isolated && draft.contextSessions.length
-        ? { contextSessions: draft.contextSessions }
-        : {}),
-    });
+    };
+    if (images.length) input.images = images;
+    if (files.length) input.files = filePayload;
+    if (!isolated && draft.contextSessions.length)
+      input.contextSessions = draft.contextSessions;
+    outboxItem = promptOutbox.enqueue(input);
   } catch (error) {
     toast(
       error instanceof Error
@@ -303,9 +312,9 @@ export function commitSessionQueueReorder(
   const next = pendingReorderRef.current;
   pendingReorderRef.current = null;
   if (!next) return;
-  const order = next
-    .map((item) => item.id)
-    .filter((id): id is string => typeof id === "string");
+  const order = next.flatMap((item) =>
+    item.id === undefined ? [] : [item.id],
+  );
   if (order.length > 1)
     send({ type: "reorder_queued_prompt", sessionId, order });
 }

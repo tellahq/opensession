@@ -1,17 +1,20 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { z } from "zod";
 import { BASE_PATH } from "../lib/base";
 import { msgSystemInline, msgSystemRow } from "../lib/msg-classes";
 import { Button } from "../ui/button";
 import { Skeleton, SkeletonBar } from "../ui/state";
 import { TranscriptLoadingStatus } from "./TranscriptLoadingStatus";
 
-interface SessionContextMetadata {
-  available: boolean;
-  exact?: boolean;
-  bytes?: number;
-  estimatedTokens?: number;
-  content?: string;
-}
+const sessionContextMetadataSchema = z.object({
+  available: z.boolean(),
+  exact: z.boolean().optional(),
+  bytes: z.number().optional(),
+  estimatedTokens: z.number().optional(),
+  content: z.string().optional(),
+});
+
+type SessionContextMetadata = z.infer<typeof sessionContextMetadataSchema>;
 
 function sizeLabel(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -57,8 +60,10 @@ export function SessionContextMessage({
       `${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/session-context`,
       { signal: controller.signal },
     )
-      .then((response) =>
-        response.ok ? response.json() : { available: false },
+      .then(async (response) =>
+        sessionContextMetadataSchema.parse(
+          response.ok ? await response.json() : { available: false },
+        ),
       )
       .then((value) => setMetadata(value))
       .catch(() => {
@@ -101,7 +106,7 @@ export function SessionContextMessage({
         `${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/session-context?content=1`,
       );
       if (!response.ok) throw new Error("context request failed");
-      const value = (await response.json()) as SessionContextMetadata;
+      const value = sessionContextMetadataSchema.parse(await response.json());
       setContent(value.content ?? "");
     })()
       .catch(() => {

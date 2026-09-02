@@ -4,6 +4,7 @@ import type { ImageRegion } from "../lib/image-region-comment";
 import {
   openLightbox,
   type ImageRegionAnnotation,
+  type LightboxItem,
 } from "../lib/media-lightbox";
 import { IconX } from "./icons";
 
@@ -58,42 +59,29 @@ export function ImageThumbs({
             className="focus-ring block cursor-zoom-in rounded-control leading-[0]"
             onClick={(event) =>
               openLightbox(
-                images.map((image, imageIndex) => ({
-                  kind: "image" as const,
-                  src: image,
-                  regionAnnotations: comments
-                    .filter((comment) => comment.imageIndex === imageIndex)
-                    .map(({ id, region, text }) => ({ id, region, text })),
-                  ...(onComment
-                    ? {
-                        onRegionComment: ({
-                          region,
-                          text,
-                          keepOpen,
-                          existing,
-                        }: {
-                          region: ImageRegion;
-                          text: string;
-                          keepOpen: boolean;
-                          existing?: ImageRegionAnnotation;
-                        }) =>
-                          onComment(
-                            imageIndex,
-                            region,
-                            text,
-                            keepOpen,
-                            existing,
-                          ),
-                      }
-                    : {}),
-                  ...(onDeleteComment
-                    ? {
-                        onDeleteRegionComment: (
-                          annotation: ImageRegionAnnotation,
-                        ) => onDeleteComment(imageIndex, annotation),
-                      }
-                    : {}),
-                })),
+                images.map((image, imageIndex) => {
+                  const item: LightboxItem = {
+                    kind: "image",
+                    src: image,
+                    regionAnnotations: comments
+                      .filter((comment) => comment.imageIndex === imageIndex)
+                      .map(({ id, region, text }) => ({ id, region, text })),
+                  };
+                  if (onComment) {
+                    item.onRegionComment = ({
+                      region,
+                      text,
+                      keepOpen,
+                      existing,
+                    }) =>
+                      onComment(imageIndex, region, text, keepOpen, existing);
+                  }
+                  if (onDeleteComment) {
+                    item.onDeleteRegionComment = (annotation) =>
+                      onDeleteComment(imageIndex, annotation);
+                  }
+                  return item;
+                }),
                 i,
                 event.currentTarget,
               )

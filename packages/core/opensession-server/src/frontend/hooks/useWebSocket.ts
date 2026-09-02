@@ -23,7 +23,7 @@ import {
 } from "../lib/ws-command-outbox";
 import { webSocketReconnectDelay } from "../lib/ws-reconnect";
 import { IGNORE_WS_MESSAGES, type SessionSocket } from "./useSessionSocket";
-import { makeSessionSocketRuntime } from "../lib/session-socket-runtime";
+import * as SessionSocketRuntime from "../lib/session-socket-runtime";
 
 // Liveness probe cadence. iOS/Safari kills backgrounded sockets without firing
 // onclose, leaving a half-open socket that reads as OPEN but delivers nothing —
@@ -56,6 +56,11 @@ const TYPING_IDLE_MS = 3_000;
  * split and the dismissed Desk overlay.
  */
 
+function parseServerMessage(data: string): WSServerMessage {
+  const message: WSServerMessage = JSON.parse(data);
+  return message;
+}
+
 function flushTypingOffSignal(
   typingRef: {
     current: { active: boolean; sessionId: string; lastSent: number };
@@ -80,7 +85,9 @@ function flushTypingOffSignal(
 
 export function useWebSocket(presenceActive = true) {
   const registry = use(RegistryContext);
-  const [runtime] = useState(() => makeSessionSocketRuntime({ registry }));
+  const [runtime] = useState(() =>
+    SessionSocketRuntime.makeSessionSocketRuntime({ registry }),
+  );
   const connected = useAtomValue(runtime.connectedAtom);
   const setConnected = runtime.setConnected;
   const wsRef = useRef<WebSocket | null>(null);
@@ -169,7 +176,7 @@ export function useWebSocket(presenceActive = true) {
             if ("requestId" in command && command.requestId)
               provisional.retireLegacy(command.requestId);
           } catch {
-            if ("requestId" in command && typeof command.requestId === "string")
+            if ("requestId" in command && command.requestId)
               negotiatingCommandsRef.current.set(command.requestId, command);
           }
         }
@@ -189,7 +196,7 @@ export function useWebSocket(presenceActive = true) {
       }
       const candidates = new Map<string, WSClientMessage>();
       for (const candidate of [...provisional.pending(), ...inMemory])
-        if ("requestId" in candidate && typeof candidate.requestId === "string")
+        if ("requestId" in candidate && candidate.requestId)
           candidates.set(candidate.requestId, candidate);
       for (const [requestId, candidate] of candidates) {
         if (existingIds.has(requestId)) {
@@ -237,12 +244,16 @@ export function useWebSocket(presenceActive = true) {
     ws.onmessage = (e) => {
       if (wsRef.current !== ws) return; // superseded socket, ignore stragglers
       aliveRef.current = true;
-      countSessionPerf(
-        "ws_bytes_received",
-        typeof e.data === "string" ? e.data.length : (e.data?.byteLength ?? 0),
-      );
+      const data = String(e.data);
+      const byteLength =
+        e.data instanceof Blob
+          ? 0
+          : e.data instanceof ArrayBuffer || ArrayBuffer.isView(e.data)
+            ? e.data.byteLength
+            : data.length;
+      countSessionPerf("ws_bytes_received", byteLength);
       try {
-        const msg = JSON.parse(e.data) as WSServerMessage;
+        const msg = parseServerMessage(data);
         if (!commandNegotiatedRef.current) {
           if (msg.type === "hello") {
             handoffPendingRef.current = false;
@@ -519,10 +530,7 @@ export function useWebSocket(presenceActive = true) {
   const send = useCallback(
     (msg: WSClientMessage) => {
       msg = withMutationRequestId(msg);
-      const mutationRequestId =
-        "requestId" in msg && typeof msg.requestId === "string"
-          ? msg.requestId
-          : undefined;
+      const mutationRequestId = "requestId" in msg ? msg.requestId : undefined;
       if (mutationRequestId && !commandNegotiatedRef.current) {
         const provisional = wsCommandOutboxForScope(localCommandScope());
         if (!provisional.put(msg))
@@ -546,16 +554,12 @@ export function useWebSocket(presenceActive = true) {
         );
       if (msg.type === "watch") {
         const cursor = feedCursorsRef.current.get(msg.sessionId);
-        msg = {
-          ...msg,
-          supportsFeed: true,
-          ...(cursor
-            ? {
-                sinceFeedSeq: cursor.feedSeq,
-                feedEpoch: cursor.feedEpoch,
-              }
-            : {}),
-        };
+        const watch = { ...msg, supportsFeed: true };
+        if (cursor) {
+          watch.sinceFeedSeq = cursor.feedSeq;
+          watch.feedEpoch = cursor.feedEpoch;
+        }
+        msg = watch;
       }
       const ws = wsRef.current;
       if (ws?.readyState === WebSocket.OPEN) {
@@ -575,7 +579,7 @@ export function useWebSocket(presenceActive = true) {
         return;
       }
       // Liveness pings are worthless once stale — never queue them.
-      if ((msg as { type?: string }).type === "ping") return;
+      if (msg.type === "ping") return;
       const box = outboxRef.current;
       box.push({ msg, at: Date.now() });
       // Keep only the most recent OUTBOX_MAX (drop oldest intent first).

@@ -58,8 +58,7 @@ export async function copySessionTranscript(
   // callers can tell "load failed" from "nothing to copy" and surface the right
   // toast.
   const build = async (): Promise<string> => {
-    const entries =
-      ((await fetchTranscript(session.id)) as TranscriptEntry[]) || [];
+    const entries = await fetchTranscript(session.id);
     const body = formatTranscript(entries, mode);
     if (!body) throw new Error("empty");
     return `# ${session.title}\n\n${body}\n`;
@@ -91,9 +90,9 @@ export async function copySessionTranscript(
   let text: string;
   try {
     text = await build();
-  } catch (e) {
+  } catch (error) {
     onToast(
-      (e as Error).message === "empty"
+      error instanceof Error && error.message === "empty"
         ? "Nothing to copy yet"
         : "Couldn't load the transcript",
     );

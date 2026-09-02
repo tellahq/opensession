@@ -204,7 +204,13 @@ function resultKey(result: PaletteResult): string {
   return `session:${result.session.id}`;
 }
 
-function FilterMenu({
+interface FilterOption<Value extends string> {
+  value: Value;
+  label: string;
+  icon?: React.ReactNode;
+}
+
+function FilterMenu<Value extends string>({
   label,
   value,
   options,
@@ -212,9 +218,9 @@ function FilterMenu({
   icon,
 }: {
   label: string;
-  value: string;
-  options: Array<{ value: string; label: string; icon?: React.ReactNode }>;
-  onChange: (value: string) => void;
+  value: Value;
+  options: ReadonlyArray<FilterOption<Value>>;
+  onChange: (value: Value) => void;
   icon: React.ReactNode;
 }) {
   const current = options.find((option) => option.value === value);
@@ -244,7 +250,12 @@ function FilterMenu({
       >
         <Menu.RadioGroup
           value={value}
-          onValueChange={(next) => onChange(String(next))}
+          onValueChange={(next) => {
+            const selected = options.find(
+              (option) => option.value === String(next),
+            );
+            if (selected) onChange(selected.value);
+          }}
         >
           {options.map((option) => (
             <Menu.RadioItem
@@ -390,7 +401,7 @@ export function SessionSearch({
         />
       ),
     })),
-  ];
+  ] satisfies ReadonlyArray<FilterOption<Status | "all">>;
   const hasSessionFilter =
     person !== "all" || repo !== "all" || status !== "all";
 
@@ -600,7 +611,7 @@ export function SessionSearch({
             label="Status"
             value={status}
             options={statusOptions}
-            onChange={(value) => setStatus(value as Status | "all")}
+            onChange={setStatus}
             icon={<IconStatusRing size={18} />}
           />
           {hasSessionFilter && (

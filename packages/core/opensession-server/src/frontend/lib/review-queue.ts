@@ -160,7 +160,7 @@ export function reviewAskerFor(
       request?.by &&
       !request.accepted &&
       reviewRequestTargetsPerson(request, me) &&
-      !prReviewCompletion(request, session as UnifiedSession)
+      !prReviewCompletion(request, session)
     )
       return { name: request.by, viaPr: false };
   }
@@ -178,7 +178,10 @@ export function reviewAskerFor(
 
 export function prReviewCompletion(
   request: NonNullable<UnifiedSession["reviewRequest"]>,
-  session: UnifiedSession,
+  session: Pick<
+    UnifiedSession,
+    "prUpdatedAt" | "prReviewedBy" | "prReviewRequested"
+  >,
 ): { by: string; at: string } | null {
   if (request.accepted || !session.prUpdatedAt) return null;
   const reviewers = [request.to, ...(request.recipients || [])];

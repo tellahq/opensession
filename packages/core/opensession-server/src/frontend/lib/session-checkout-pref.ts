@@ -7,7 +7,8 @@
 // have to be encoded into ui-prefs keys. `session-checkouts` is admitted as a
 // long value server-side for installations with many repositories.
 
-import { makeUserPref } from "./user-pref";
+import { z } from "zod";
+import * as userPref from "./user-pref";
 
 export type SessionCheckoutPref = "default" | "checkout" | "worktree";
 export type SessionCheckoutOverride = Exclude<SessionCheckoutPref, "default">;
@@ -17,32 +18,31 @@ export type SessionCheckoutPrefs = Partial<
 
 export const SESSION_CHECKOUT_DEFAULT_KEY = "*";
 
-function isOverride(value: unknown): value is SessionCheckoutOverride {
-  return value === "checkout" || value === "worktree";
-}
+const storedPrefsSchema = z.record(z.string(), z.unknown());
+const checkoutOverrideSchema = z.enum(["checkout", "worktree"]);
 
 function parse(value: string): SessionCheckoutPrefs {
   if (!value) return {};
   try {
-    const input: unknown = JSON.parse(value);
-    if (!input || typeof input !== "object" || Array.isArray(input)) return {};
-    return Object.fromEntries(
-      Object.entries(input).filter(
-        (entry): entry is [string, SessionCheckoutOverride] =>
-          !!entry[0] && isOverride(entry[1]),
-      ),
-    );
+    const stored = storedPrefsSchema.safeParse(JSON.parse(value));
+    if (!stored.success) return {};
+    const entries: Array<[string, SessionCheckoutOverride]> = [];
+    for (const [repo, candidate] of Object.entries(stored.data)) {
+      const override = checkoutOverrideSchema.safeParse(candidate);
+      if (repo && override.success) entries.push([repo, override.data]);
+    }
+    return Object.fromEntries(entries);
   } catch {
     return {};
   }
 }
 
-const pref = makeUserPref<string>({
+const pref = userPref.makeUserPref<string>({
   localKey: "opensession-session-checkouts",
   prefKey: "session-checkouts",
   changeEvent: "opensession-session-checkouts-changed",
   defaultValue: "",
-  decode: (value) => (typeof value === "string" ? value : null),
+  decode: (value) => value ?? null,
   encode: (value) => value,
 });
 

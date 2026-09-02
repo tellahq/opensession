@@ -19,15 +19,19 @@ async function drainFibers() {
   await Promise.resolve();
 }
 
+interface NullableRef<T> {
+  current: T | null;
+}
+
+function nullableRef<T>(current: T): NullableRef<T> {
+  return { current };
+}
+
 test("Strict Mode cleanup detaches an aborted request before restart", () => {
   const oldRequest = Promise.resolve();
   const controller = new AbortController();
-  const requestRef: { current: Promise<void> | null } = {
-    current: oldRequest,
-  };
-  const abortRef: { current: AbortController | null } = {
-    current: controller,
-  };
+  const requestRef = nullableRef(oldRequest);
+  const abortRef = nullableRef(controller);
 
   detachPendingRequest(requestRef, abortRef);
   expect(requestRef.current).toBeNull();

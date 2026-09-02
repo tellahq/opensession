@@ -535,24 +535,22 @@ export function WorkspacePane({
     // it came from. Ticket workspaces without a draft remain Ask, while repo-less
     // feed workspaces start in Scratch.
     const target = workspaceComposerTarget(workspace, q);
-    send({
+    const message: WSClientMessage = {
       type: "create_session",
       ...target,
       workspaceId: workspace.id,
       prompt: q,
       user: currentUser,
-      ...(model ? { model } : {}),
-      ...(images.length ? { images } : {}),
-      ...(files.length
-        ? {
-            files: files.map((file) =>
-              file.path
-                ? { name: file.name, path: file.path }
-                : { name: file.name, dataUrl: file.dataUrl },
-            ),
-          }
-        : {}),
-    });
+    };
+    if (model) message.model = model;
+    if (images.length) message.images = images;
+    if (files.length)
+      message.files = files.map((file) =>
+        file.path
+          ? { name: file.name, path: file.path }
+          : { name: file.name, dataUrl: file.dataUrl },
+      );
+    send(message);
     // App navigates into the session on session_created.
   }
 

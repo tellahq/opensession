@@ -7,7 +7,9 @@ import type {
 } from "../lib/new-session-prompt-types";
 
 function field(overrides: Partial<NewSessionPromptConfig> = {}) {
-  const handle: { current: NewSessionPromptHandle | null } = { current: null };
+  const handle = { current: null } satisfies {
+    current: NewSessionPromptHandle | null;
+  };
   const config: NewSessionPromptConfig = {
     initialText: "",
     repo: "opensession",

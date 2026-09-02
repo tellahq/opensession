@@ -1,10 +1,10 @@
 import type { TranscriptEntry } from "./types";
 import { isLegacyReasoningHeading } from "./reasoning-display";
-import { makeUserPref } from "./user-pref";
+import * as UserPrefs from "./user-pref";
 
 export type ThinkingMessagesPref = "none" | "latest" | "all";
 
-const pref = makeUserPref<ThinkingMessagesPref>({
+const pref = UserPrefs.makeUserPref<ThinkingMessagesPref>({
   localKey: "opensession-thinking-messages",
   prefKey: "thinking-messages",
   changeEvent: "opensession-thinking-messages-changed",

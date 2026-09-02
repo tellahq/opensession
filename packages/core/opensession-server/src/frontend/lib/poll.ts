@@ -1,21 +1,18 @@
-import { browserSignalStreams } from "./effect-browser-events";
-import { makeEffectLifecycle } from "./effect-lifecycle";
-
 /**
  * Polls after a delay while visible and refreshes immediately on foregrounding.
  * Background PWA windows and unfocused tabs avoid spending shared API budget.
  */
 export function pollWhileVisible(fn: () => void, ms: number): () => void {
-  const lifecycle = makeEffectLifecycle<"interval" | "visibility">();
   let active = true;
   const tick = () => {
     if (active && !document.hidden) fn();
   };
-  lifecycle.repeat("interval", ms, tick);
-  lifecycle.stream("visibility", browserSignalStreams.visibility(), tick);
+  const interval = window.setInterval(tick, ms);
+  document.addEventListener("visibilitychange", tick);
   return () => {
     active = false;
-    lifecycle.stop();
+    window.clearInterval(interval);
+    document.removeEventListener("visibilitychange", tick);
   };
 }
 

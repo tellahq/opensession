@@ -275,19 +275,24 @@ describe("session chip labels", () => {
       title: `Open session ${id}`,
       querySelector: () => label,
     };
-    const globals = globalThis as unknown as Record<string, unknown>;
-    const previousDocument = globals.document;
-    globals.document = {
-      querySelectorAll: () => [anchor],
-    };
+    const previousDocument = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "document",
+    );
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      writable: true,
+      value: { querySelectorAll: () => [anchor] },
+    });
     try {
       setSessionTitles([[id, "Fix the sidebar hover states"]]);
       expect(label.textContent).toBe("Fix the sidebar hover states");
       expect(anchor.dataset.sessionLabel).toBeUndefined();
       expect(anchor.title).toBe(`Open Fix the sidebar hover states (${id})`);
     } finally {
-      if (previousDocument === undefined) delete globals.document;
-      else globals.document = previousDocument;
+      if (previousDocument)
+        Object.defineProperty(globalThis, "document", previousDocument);
+      else Reflect.deleteProperty(globalThis, "document");
     }
   });
 

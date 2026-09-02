@@ -56,7 +56,7 @@ function WarmPreviewsPanel() {
     const t = setTimeout(() => {
       fetchWarmTemplates()
         .then((r) => alive && setRepos(r.repos))
-        .catch((_cause: unknown) => {
+        .catch(() => {
           // The last repo statuses remain valid and visible, so a failed
           // background refresh poll leaves that stale status in place.
         });

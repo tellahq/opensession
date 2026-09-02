@@ -65,11 +65,13 @@ const COMMON_PROVIDER_IDS = [
   "together",
 ];
 
-const PROVIDER_MODEL_DEFAULTS: Record<string, string> = {
-  cerebras: "gpt-oss-120b, gemma-4-31b, zai-glm-4.7",
-  wafer:
+const PROVIDER_MODEL_DEFAULTS = new Map([
+  ["cerebras", "gpt-oss-120b, gemma-4-31b, zai-glm-4.7"],
+  [
+    "wafer",
     "deepseek-v4-flash-0731-fast, glm-5.2, glm5.2-fast, glm-5.1, kimi-k3, kimi-k3-fast, kimi-k2.6",
-};
+  ],
+]);
 
 export function ModelProvidersPanel() {
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
@@ -366,7 +368,7 @@ function AddProviderForm({
             value={models}
             onChange={(e) => setModels(e.target.value)}
             placeholder={
-              PROVIDER_MODEL_DEFAULTS[cleanId] || "grok-4, grok-4-mini"
+              PROVIDER_MODEL_DEFAULTS.get(cleanId) || "grok-4, grok-4-mini"
             }
           />
         </SettingsField>

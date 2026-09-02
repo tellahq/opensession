@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { FilterState } from "./sidebar-filter";
 
 const store = new Map<string, string>();
-const globals = globalThis as unknown as {
-  localStorage: Pick<Storage, "getItem" | "setItem" | "removeItem">;
-};
-globals.localStorage = {
-  getItem: (key: string) => store.get(key) ?? null,
-  setItem: (key: string, value: string) => void store.set(key, value),
-  removeItem: (key: string) => void store.delete(key),
-};
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+  } satisfies Pick<Storage, "getItem" | "setItem" | "removeItem">,
+});
 
 const { rememberRepoCount } = await import("./repo-count");
 const {
@@ -21,7 +21,7 @@ const {
   readStoredFilter,
 } = await import("./sidebar-filter");
 
-function write(blob: Record<string, unknown>) {
+function write<StoredFilter extends object>(blob: StoredFilter) {
   store.set(FILTER_KEY, JSON.stringify(blob));
 }
 

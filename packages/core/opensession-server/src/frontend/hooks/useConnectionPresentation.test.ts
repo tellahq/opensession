@@ -5,15 +5,15 @@ import { CONNECTION_PRESENTATION_GRACE_MS } from "../lib/connection-presentation
 type Effect = () => void | (() => void);
 
 let effect: Effect | undefined;
-let updates: unknown[] = [];
+let updates: boolean[] = [];
 
 mock.module("react", () => ({
   useEffect: (nextEffect: Effect) => {
     effect = nextEffect;
   },
-  useState: (initial: unknown) => [
+  useState: (initial: boolean) => [
     initial,
-    (next: unknown) => updates.push(next),
+    (next: boolean) => updates.push(next),
   ],
 }));
 

@@ -68,8 +68,8 @@ export function onThemeChanged(handler: () => void): () => void {
 // `window` global without DOM methods, which must not break module import.
 if (
   typeof window !== "undefined" &&
-  typeof window.matchMedia === "function" &&
-  typeof window.addEventListener === "function"
+  window.matchMedia &&
+  window.addEventListener
 ) {
   window
     .matchMedia("(prefers-color-scheme: light)")

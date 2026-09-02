@@ -731,8 +731,8 @@ function IndexedTranscriptBlocks(props: Props) {
   const ranges = buildTranscriptRanges(transcriptIndex);
   const payloadById = new Map(entries.map((entry) => [entry.id, entry]));
   const indexedIds = new Set(ranges.flatMap((range) => range.entryIds));
-  const optimisticIds = new Set(
-    (props.optimisticEntries ?? []).map((entry) => entry.id),
+  const optimisticById = new Map(
+    (props.optimisticEntries ?? []).map((entry) => [entry.id, entry]),
   );
   let atoms: IndexedTimelineAtom[] = ranges.map((range) => ({
     kind: "range",
@@ -747,13 +747,13 @@ function IndexedTranscriptBlocks(props: Props) {
   );
   const tailRangeAtom = rangeAtoms[rangeAtoms.length - 1];
   for (const entry of entries) {
-    if (typeof entry.seq === "number" || indexedIds.has(entry.id)) continue;
+    if (entry.seq !== undefined || indexedIds.has(entry.id)) continue;
     const timestampMs = Date.parse(entry.timestamp) || 0;
-    if (optimisticIds.has(entry.id) && rangeAtoms.length > 0) {
+    const optimistic = optimisticById.get(entry.id);
+    if (optimistic && rangeAtoms.length > 0) {
       // Keep the prompt in the structural range that was current when it was
       // sent. Wall clocks are deliberately absent here: a browser clock ahead
       // of the server used to place later assistant/tool rows above the prompt.
-      const optimistic = entry as OptimisticTranscriptEntry;
       const anchorId = optimistic.optimisticAfterEntryId;
       const anchorSeq = optimistic.optimisticAfterSeq;
       const rangeAtom =
@@ -926,13 +926,13 @@ function IndexedTranscriptBlocks(props: Props) {
         const entry = payloadById.get(id);
         return entry ? [entry] : [];
       });
-      const optimisticRangeEntries = rangeEntries.filter(
-        (entry): entry is OptimisticTranscriptEntry =>
-          optimisticIds.has(entry.id),
-      );
+      const optimisticRangeEntries = rangeEntries.flatMap((entry) => {
+        const optimistic = optimisticById.get(entry.id);
+        return optimistic ? [optimistic] : [];
+      });
       const itemEntries = mergeOptimisticTranscriptEntries(
         orderTranscriptEntries(
-          rangeEntries.filter((entry) => !optimisticIds.has(entry.id)),
+          rangeEntries.filter((entry) => !optimisticById.has(entry.id)),
         ),
         optimisticRangeEntries,
       );

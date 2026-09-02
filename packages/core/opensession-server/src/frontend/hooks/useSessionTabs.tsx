@@ -782,14 +782,12 @@ export function useSessionTabs({
       // This sibling reuses an already-ready workspace. The disconnected pane
       // holds messages locally until the server has persisted the session.
       workspacePreparing: false,
-      ...(mode === "ask"
-        ? {
-            branch: null,
-            worktreeDir: null,
-            mode: "ask" as const,
-          }
-        : {}),
     };
+    if (mode === "ask") {
+      draft.branch = null;
+      draft.worktreeDir = null;
+      draft.mode = "ask";
+    }
     // Commit the local shell before changing the route. Without this boundary,
     // the route can render against the previous list and keep the old session's
     // conversation visible until the create response arrives.
@@ -875,23 +873,21 @@ export function useSessionTabs({
     const workspace = src.workspaceId
       ? workspaces.find((item) => item.id === src.workspaceId)
       : undefined;
-    openPrefilledSession({
-      ...(prompt ? { prompt } : {}),
+    const prefill: Parameters<typeof openPrefilledSession>[0] = {
       repo: src.repo || workspace?.repo,
-      ...(src.workspaceId
-        ? {
-            workspaceId: src.workspaceId,
-            modelWorkspaceId: src.workspaceId,
-          }
-        : {}),
-      // Sharing starts from the workspace's branch. Omitting the branch for
-      // a stack keeps NewSession on "New branch", which the create path
-      // resolves as a stacked worktree after the first prompt is sent.
-      ...(mode === "share" && (src.branch || workspace?.branch)
-        ? { branch: src.branch || workspace?.branch }
-        : {}),
-      ...(mode === "ask" ? { mode: "ask" as const } : {}),
-    });
+    };
+    if (prompt) prefill.prompt = prompt;
+    if (src.workspaceId) {
+      prefill.workspaceId = src.workspaceId;
+      prefill.modelWorkspaceId = src.workspaceId;
+    }
+    // Sharing starts from the workspace's branch. Omitting the branch for
+    // a stack keeps NewSession on "New branch", which the create path
+    // resolves as a stacked worktree after the first prompt is sent.
+    const branch = src.branch || workspace?.branch;
+    if (mode === "share" && branch) prefill.branch = branch;
+    if (mode === "ask") prefill.mode = "ask";
+    openPrefilledSession(prefill);
   }
 
   // Open a real sibling tab immediately. Its first prompt starts the engine, so
@@ -912,15 +908,16 @@ export function useSessionTabs({
     const openSessionlessWorkspaceComposer = () => {
       if (route.view !== "workspace") return;
       const workspace = workspaces.find((item) => item.id === route.id);
-      openPrefilledSession({
+      const prefill: Parameters<typeof openPrefilledSession>[0] = {
         workspaceId: route.id,
         repo: workspace?.repo,
         branch: workspace?.branch,
-        // Feed workspaces without a repo start in Scratch.
-        ...(workspace?.externalRefs?.length && !workspace.repo
-          ? { mode: "scratch" as const }
-          : {}),
-      });
+      };
+      // Feed workspaces without a repo start in Scratch.
+      if (workspace?.externalRefs?.length && !workspace.repo) {
+        prefill.mode = "scratch";
+      }
+      openPrefilledSession(prefill);
     };
 
     let src = newSessionSource(

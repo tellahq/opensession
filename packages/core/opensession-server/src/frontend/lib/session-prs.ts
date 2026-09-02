@@ -186,10 +186,14 @@ function pullRequests(session: UnifiedSession) {
  * always primary; when there is no such PR, a sole linked/discovered PR fills
  * that role instead of rendering as a one-item multi-PR stack.
  */
-export function sessionPrPresentation(prs?: SessionPrRef[]): {
+export interface SessionPrPresentation {
   primary?: SessionPrRef;
   additional: SessionPrRef[];
-} {
+}
+
+export function sessionPrPresentation(
+  prs?: SessionPrRef[],
+): SessionPrPresentation {
   const actual = (prs || []).filter((ref) => ref.number != null);
   const primary = actual.find((ref) => ref.source === "primary");
   if (primary)

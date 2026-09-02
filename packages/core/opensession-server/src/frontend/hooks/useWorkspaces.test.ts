@@ -29,7 +29,12 @@ function expectInOrder(source: string, needles: string[]) {
 }
 
 function workspace(id: string): Workspace {
-  return { id, name: `Workspace ${id}` } as Workspace;
+  return {
+    id,
+    name: `Workspace ${id}`,
+    createdBy: "Kent",
+    createdAt: "2026-07-16T13:00:00Z",
+  };
 }
 
 describe("workspace loading", () => {

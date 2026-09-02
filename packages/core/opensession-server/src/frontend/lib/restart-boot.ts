@@ -14,9 +14,9 @@ export function resolvedRestartPhase(phase: RestartPhase): RestartPhase {
  * the draining process, so only a change is completion evidence. */
 export function bootTransition(
   previous: string | null,
-  value: unknown,
+  value: string | null,
 ): BootTransition {
-  if (typeof value !== "string" || !value) return "invalid";
+  if (!value) return "invalid";
   if (!previous) return "initial";
   return value === previous ? "same" : "changed";
 }

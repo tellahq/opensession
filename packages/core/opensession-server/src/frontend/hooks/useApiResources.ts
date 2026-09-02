@@ -32,8 +32,8 @@ export type ApiResourceOptions<Data> = {
 };
 
 function useRevisionRevalidation(
-  revision: ApiResourceOptions<unknown>["revision"],
-  revalidate: () => Promise<unknown>,
+  revision: string | number | null | undefined,
+  revalidate: () => void,
 ) {
   const previous = useRef(revision);
   useEffect(() => {

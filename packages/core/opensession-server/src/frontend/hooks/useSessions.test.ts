@@ -64,7 +64,18 @@ describe("session feed socket ownership", () => {
 });
 
 function session(archived: boolean): UnifiedSession {
-  return { id: "session-1", archived } as UnifiedSession;
+  return {
+    id: "session-1",
+    source: "opensession",
+    branch: null,
+    worktreeDir: null,
+    startedBy: null,
+    title: "Session 1",
+    lastActivity: "2026-08-22T12:00:00Z",
+    createdAt: "2026-08-22T12:00:00Z",
+    isRunning: false,
+    archived,
+  };
 }
 
 describe("sidebarSessionsQuery", () => {

@@ -1,5 +1,16 @@
 import type { Workspace } from "./types";
 
+type WorkspaceComposerTarget = {
+  mode: "ask" | "code" | "scratch";
+  branch: string;
+  repo?: string;
+  fromPr?: true;
+};
+
+type WorkspaceDraftPatch = {
+  draft: Workspace["draft"] | null;
+};
+
 /** Fallback branch name when a parked draft did not save a branch choice. */
 export function fallbackBranchName(text: string): string {
   const slug = text
@@ -16,19 +27,15 @@ export function fallbackBranchName(text: string): string {
 export function workspaceComposerTarget(
   workspace: Pick<Workspace, "branch" | "draft" | "externalRefs" | "repo">,
   prompt: string,
-): {
-  mode: "ask" | "code" | "scratch";
-  branch: string;
-  repo?: string;
-  fromPr?: true;
-} {
+): WorkspaceComposerTarget {
   if (workspace.branch) {
-    return {
+    const target: WorkspaceComposerTarget = {
       mode: "code",
       branch: workspace.branch,
-      ...(workspace.repo ? { repo: workspace.repo } : {}),
       fromPr: true,
     };
+    if (workspace.repo) target.repo = workspace.repo;
+    return target;
   }
   if (workspace.draft && workspace.repo) {
     return {
@@ -39,11 +46,9 @@ export function workspaceComposerTarget(
   }
   if (workspace.externalRefs?.length && !workspace.repo)
     return { mode: "scratch", branch: "" };
-  return {
-    mode: "ask",
-    branch: "",
-    ...(workspace.repo ? { repo: workspace.repo } : {}),
-  };
+  const target: WorkspaceComposerTarget = { mode: "ask", branch: "" };
+  if (workspace.repo) target.repo = workspace.repo;
+  return target;
 }
 
 /**
@@ -55,14 +60,10 @@ export function workspaceDraftPatch(
   updatedAt: string,
   by?: string,
   autoName?: boolean,
-): { draft: Workspace["draft"] | null } {
+): WorkspaceDraftPatch {
   if (!text.trim()) return { draft: null };
-  return {
-    draft: {
-      text,
-      updatedAt,
-      ...(by !== undefined ? { by } : {}),
-      ...(autoName !== undefined ? { autoName } : {}),
-    },
-  };
+  const draft: NonNullable<Workspace["draft"]> = { text, updatedAt };
+  if (by !== undefined) draft.by = by;
+  if (autoName !== undefined) draft.autoName = autoName;
+  return { draft };
 }

@@ -145,7 +145,7 @@ function DeskVoiceApiKeyRow() {
       label: "Failed to load voice settings",
     })
       .then(setStatus)
-      .catch((error: unknown) =>
+      .catch((error) =>
         setError(errorMessage(error, "Failed to load voice settings")),
       );
   }, []);
@@ -254,7 +254,7 @@ function PersonalOutputStyleRow() {
         setError(null);
       })
       .catch(
-        (error: unknown) =>
+        (error) =>
           alive && setError(errorMessage(error, "Failed to load output style")),
       );
     return () => {
@@ -318,7 +318,7 @@ function PersonalPromptPanel() {
         setSavedPrompt(result.prompt);
       })
       .catch(
-        (error: unknown) =>
+        (error) =>
           alive && setError(errorMessage(error, "Failed to load your prompt")),
       );
     return () => {
@@ -541,14 +541,14 @@ export function PreferencesPanel() {
   useEffect(() => {
     fetchModels()
       .then((models) => setModelOptions(models.models))
-      .catch((error: unknown) =>
+      .catch((error) =>
         setModelOptionsError(errorMessage(error, "Failed to load models")),
       );
   }, []);
   useEffect(() => {
     fetchRepos()
       .then(setRepoOptions)
-      .catch((error: unknown) =>
+      .catch((error) =>
         setRepoOptionsError(errorMessage(error, "Failed to load repositories")),
       );
   }, []);

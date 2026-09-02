@@ -69,14 +69,15 @@ export function SpinOffMenu({
   }
 
   function openLinkedSession() {
-    onOpenNewSession({
+    const prefill: NewSessionPrefill = {
       // A reference, not a transcript: the new session reads this one through
       // the link when it needs to, instead of carrying a copy that goes stale.
       // The trailing space parks the caret clear of the chip.
       prompt: `${composerSessionRef(session)} `,
       mode: session.mode ?? "code",
-      ...(session.repo ? { repo: session.repo } : {}),
-    });
+    };
+    if (session.repo) prefill.repo = session.repo;
+    onOpenNewSession(prefill);
   }
 
   function start() {

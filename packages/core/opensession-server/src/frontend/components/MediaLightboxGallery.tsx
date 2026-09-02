@@ -253,12 +253,15 @@ export function MediaLightboxGallery({
     setCommentError(null);
     await (async () => {
       if (onRegionComment) {
-        await onRegionComment({
+        const request: Parameters<
+          NonNullable<LightboxItem["onRegionComment"]>
+        >[0] = {
           region: selection,
           text,
           keepOpen,
-          ...(editingAnnotation ? { existing: editingAnnotation } : {}),
-        });
+        };
+        if (editingAnnotation) request.existing = editingAnnotation;
+        await onRegionComment(request);
         const saved: ImageRegionAnnotation = {
           id: editingAnnotation?.id ?? `local-${Date.now()}`,
           region: selection,
@@ -456,7 +459,10 @@ export function MediaLightboxGallery({
   }, [selection, selectionRect]);
 
   useEffect(() => {
-    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     // Focus returns to whatever opened the viewer, but the ring only comes
     // back if it was there to begin with: a mouse click on a session image
     // focuses its wrapping <a> silently, and closing with Escape puts the
@@ -479,7 +485,7 @@ export function MediaLightboxGallery({
   // the modal (composer, session viewer shortcuts).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const target = e.target as HTMLElement | null;
+      const target = e.target instanceof HTMLElement ? e.target : null;
       const editingText = Boolean(
         target?.matches("input, textarea, [contenteditable='true']"),
       );
@@ -1059,7 +1065,10 @@ export function MediaLightboxGallery({
           // the padding beside the words puts the caret in them rather than
           // doing nothing. The buttons keep their own presses.
           onPointerDown={(event) => {
-            if ((event.target as HTMLElement).closest("button, textarea"))
+            if (
+              event.target instanceof HTMLElement &&
+              event.target.closest("button, textarea")
+            )
               return;
             event.preventDefault();
             commentInputRef.current?.focus({ preventScroll: true });

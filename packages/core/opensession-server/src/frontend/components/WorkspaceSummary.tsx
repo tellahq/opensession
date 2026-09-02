@@ -849,7 +849,7 @@ export function WorkspaceSummaryBody({
         { revalidate: false },
       );
     })()
-      .catch((error: unknown) => {
+      .catch((error) => {
         setReviewError(errorMessage(error, "Couldn't start the re-review"));
       })
       .finally(() => setReviewStarting(false));
@@ -872,7 +872,7 @@ export function WorkspaceSummaryBody({
         { revalidate: false },
       );
     })()
-      .catch((error: unknown) => {
+      .catch((error) => {
         setReviewError(errorMessage(error, "Couldn't cancel the review"));
       })
       .finally(async () => {
@@ -897,7 +897,7 @@ export function WorkspaceSummaryBody({
         go(() => onOpenSession(result.bksId!, result.session ?? null));
       }
     })()
-      .catch((error: unknown) => {
+      .catch((error) => {
         setFixError(errorMessage(error, "Couldn't start Auto-fix"));
       })
       .finally(async () => {
@@ -909,12 +909,18 @@ export function WorkspaceSummaryBody({
     if (reviewBusy) return;
     const previous = selectedReview;
     const next = name
-      ? {
-          to: name,
-          ...(recipients ? { recipients } : {}),
-          by: getCurrentUser(),
-          at: new Date().toISOString(),
-        }
+      ? recipients
+        ? {
+            to: name,
+            recipients,
+            by: getCurrentUser(),
+            at: new Date().toISOString(),
+          }
+        : {
+            to: name,
+            by: getCurrentUser(),
+            at: new Date().toISOString(),
+          }
       : null;
     setSelectedReview(next);
     setReviewError(null);
@@ -924,7 +930,7 @@ export function WorkspaceSummaryBody({
     const owner = (previous && reviewRequestSessionId) || session.id;
     onReviewChange?.(owner, next);
     setSessionReviewerApi(owner, name, getCurrentUser())
-      .catch((error: unknown) => {
+      .catch((error) => {
         setSelectedReview(previous);
         onReviewChange?.(owner, previous);
         setReviewError(errorMessage(error, "Failed to set reviewer"));

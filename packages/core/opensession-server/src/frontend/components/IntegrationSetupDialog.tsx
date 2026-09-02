@@ -91,6 +91,19 @@ type Guide = {
   note?: ReactNode;
 };
 
+type GithubSetupUpdate = {
+  oauthClientId?: string;
+  appSlug?: string;
+  installationOwner?: string;
+  oauthClientSecret?: string;
+  privateKey?: string;
+};
+
+type IntegrationSetupUpdate = {
+  enabled?: boolean;
+  env?: Record<string, string>;
+};
+
 function endpoint(publicBaseUrl: string, path: string): string {
   return `${publicBaseUrl.replace(/\/$/, "")}${path}`;
 }
@@ -516,31 +529,27 @@ export function IntegrationSetupDialog({
         restartRequired: boolean;
       } | null = null;
       if (githubDirty && github) {
+        const update: GithubSetupUpdate = {};
+        if (clientId.trim()) update.oauthClientId = clientId.trim();
+        else if (clientIdCleared) update.oauthClientId = "";
+        if (appSlug.trim() !== (github.appSlug ?? ""))
+          update.appSlug = appSlug.trim();
+        if (
+          installationOwner.trim() !==
+          (github.installationOwner ?? github.appOrg ?? "")
+        )
+          update.installationOwner = installationOwner.trim();
+        if (clientSecret.trim())
+          update.oauthClientSecret = clientSecret.replace(/\s+/g, "");
+        else if (clientSecretCleared) update.oauthClientSecret = "";
+        if (privateKey.trim()) update.privateKey = privateKey.trim();
+
         githubResult = await setupRequest<{
           github: SetupGithub;
           restartRequired: boolean;
         }>("/api/setup/github", {
           method: "PUT",
-          json: {
-            ...(clientId.trim()
-              ? { oauthClientId: clientId.trim() }
-              : clientIdCleared
-                ? { oauthClientId: "" }
-                : {}),
-            ...(appSlug.trim() !== (github.appSlug ?? "")
-              ? { appSlug: appSlug.trim() }
-              : {}),
-            ...(installationOwner.trim() !==
-            (github.installationOwner ?? github.appOrg ?? "")
-              ? { installationOwner: installationOwner.trim() }
-              : {}),
-            ...(clientSecret.trim()
-              ? { oauthClientSecret: clientSecret.replace(/\s+/g, "") }
-              : clientSecretCleared
-                ? { oauthClientSecret: "" }
-                : {}),
-            ...(privateKey.trim() ? { privateKey: privateKey.trim() } : {}),
-          },
+          json: update,
         });
       }
 
@@ -553,15 +562,15 @@ export function IntegrationSetupDialog({
         for (const name of typedKeys)
           env[name] = (typed[name] ?? "").replace(/\s+/g, "");
         for (const name of clearedKeys) env[name] = "";
+        const update: IntegrationSetupUpdate = {};
+        if (enabled !== integration.enabled) update.enabled = enabled;
+        if (Object.keys(env).length > 0) update.env = env;
         integrationResult = await setupRequest<{
           integration: SetupIntegration;
           restartRequired: boolean;
         }>(`/api/setup/integrations/${encodeURIComponent(integration.id)}`, {
           method: "PUT",
-          json: {
-            ...(enabled !== integration.enabled ? { enabled } : {}),
-            ...(Object.keys(env).length > 0 ? { env } : {}),
-          },
+          json: update,
         });
       }
 
@@ -706,9 +715,10 @@ export function IntegrationSetupDialog({
                   <Segmented
                     label="Slack event delivery"
                     value={transport}
-                    onValueChange={(next) =>
-                      pickTransport(next as SlackTransport)
-                    }
+                    onValueChange={(next) => {
+                      if (next === "socket" || next === "http")
+                        pickTransport(next);
+                    }}
                     className="ml-auto phone:ml-0 phone:w-full"
                   >
                     <SegmentedOption

@@ -126,9 +126,9 @@ export function pastedSessionId(pasted: string): string | undefined {
  */
 export function insertPastedSessionId(e: React.ClipboardEvent): boolean {
   const id = pastedSessionId(e.clipboardData?.getData("text/plain") ?? "");
-  if (!id) return false;
+  const el = e.currentTarget;
+  if (!id || !(el instanceof HTMLTextAreaElement)) return false;
   e.preventDefault();
-  const el = e.currentTarget as HTMLTextAreaElement;
   if (document.execCommand("insertText", false, id)) return true;
   el.setRangeText(id, el.selectionStart ?? 0, el.selectionEnd ?? 0, "end");
   el.dispatchEvent(

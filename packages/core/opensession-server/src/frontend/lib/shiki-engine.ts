@@ -5,6 +5,7 @@ import {
   type ShikiTransformer,
 } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import { z } from "zod";
 import bash from "@shikijs/langs/bash";
 import typescript from "@shikijs/langs/typescript";
 import tsx from "@shikijs/langs/tsx";
@@ -25,26 +26,39 @@ import githubLight from "@shikijs/themes/github-light-default";
 import rescriptGrammar from "./rescript.tmLanguage.json";
 import { LANG_BY_EXT } from "./lang";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+type GrammarRule = LanguageRegistration["patterns"][number];
 
-function languageRegistration(
-  grammar: unknown,
-  name: string,
-): LanguageRegistration {
-  if (
-    !isRecord(grammar) ||
-    typeof grammar.scopeName !== "string" ||
-    !Array.isArray(grammar.patterns) ||
-    !isRecord(grammar.repository)
-  ) {
-    throw new TypeError(`Invalid TextMate grammar for ${name}`);
-  }
-  return { ...grammar, name } as LanguageRegistration;
-}
+const grammarRuleSchema: z.ZodType<GrammarRule> = z.lazy(() =>
+  z.looseObject({
+    include: z.string().optional(),
+    name: z.string().optional(),
+    contentName: z.string().optional(),
+    match: z.union([z.string(), z.instanceof(RegExp)]).optional(),
+    captures: z.record(z.string(), grammarRuleSchema).optional(),
+    begin: z.union([z.string(), z.instanceof(RegExp)]).optional(),
+    beginCaptures: z.record(z.string(), grammarRuleSchema).optional(),
+    end: z.union([z.string(), z.instanceof(RegExp)]).optional(),
+    endCaptures: z.record(z.string(), grammarRuleSchema).optional(),
+    while: z.union([z.string(), z.instanceof(RegExp)]).optional(),
+    whileCaptures: z.record(z.string(), grammarRuleSchema).optional(),
+    patterns: z.array(grammarRuleSchema).optional(),
+    repository: z.record(z.string(), grammarRuleSchema).optional(),
+    applyEndPatternLast: z.boolean().optional(),
+  }),
+);
 
-const rescript = languageRegistration(rescriptGrammar, "rescript");
+const languageRegistrationSchema: z.ZodType<LanguageRegistration> =
+  z.looseObject({
+    name: z.string(),
+    scopeName: z.string(),
+    patterns: z.array(grammarRuleSchema),
+    repository: z.record(z.string(), grammarRuleSchema),
+  });
+
+const rescript = languageRegistrationSchema.parse({
+  ...rescriptGrammar,
+  name: "rescript",
+});
 let highlighterPromise: Promise<HighlighterCore> | null = null;
 
 function getHighlighter(): Promise<HighlighterCore> {

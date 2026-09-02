@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { fetchAudit } from "../../lib/api";
 import { BASE_PATH } from "../../lib/base";
 import { Input } from "../../ui/input";
@@ -8,15 +9,34 @@ import { EmptyState } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { Select } from "./shared";
 
+const auditEventSchema = z.looseObject({
+  tool_name: z.json().optional(),
+  action: z.json().optional(),
+  context: z.json().optional(),
+  decision: z.json().optional(),
+  account: z.json().optional(),
+  model: z.json().optional(),
+  ok: z.boolean().optional().catch(undefined),
+  error: z.json().optional(),
+  text_snippet: z.json().optional(),
+  time: z.json().optional(),
+  kind: z.json().optional(),
+  msg: z.json().optional(),
+  bks_session_id: z.string().optional().catch(undefined),
+  run_kind: z.json().optional(),
+});
+const auditEventsSchema = z.array(auditEventSchema);
+type AuditEvent = z.infer<typeof auditEventSchema>;
+
 /** Summarize one audit event for its row (the details live in the expand). */
-function auditSummary(e: Record<string, unknown>): string {
+function auditSummary(e: AuditEvent): string {
   const parts: string[] = [];
   if (e.tool_name) parts.push(String(e.tool_name));
   if (e.action) parts.push(`${e.context ? `${e.context}.` : ""}${e.action}`);
   if (e.decision) parts.push(`decision: ${e.decision}`);
   if (e.account) parts.push(`account: ${e.account}`);
   if (e.model) parts.push(String(e.model));
-  if (typeof e.ok === "boolean") parts.push(e.ok ? "ok" : "failed");
+  if (e.ok !== undefined) parts.push(e.ok ? "ok" : "failed");
   if (e.error) parts.push(`error: ${String(e.error).slice(0, 80)}`);
   if (e.text_snippet) parts.push(`“${String(e.text_snippet).slice(0, 100)}”`);
   return parts.join(" · ");
@@ -30,7 +50,7 @@ export function AuditPanel() {
   const [types, setTypes] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [all, setAll] = useState(false);
-  const [events, setEvents] = useState<Array<Record<string, unknown>>>([]);
+  const [events, setEvents] = useState<AuditEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,7 +71,7 @@ export function AuditPanel() {
             setDate(page.dates[0]);
             return; // effect re-runs with the date set
           }
-          setEvents(page.events || []);
+          setEvents(auditEventsSchema.parse(page.events || []));
           setTotal(page.total || 0);
           setTypes(page.types || []);
           setExpanded(null);
@@ -70,7 +90,7 @@ export function AuditPanel() {
       all,
       offset: events.length,
     });
-    setEvents([...events, ...(page.events || [])]);
+    setEvents([...events, ...auditEventsSchema.parse(page.events || [])]);
   }
 
   return (
@@ -121,8 +141,7 @@ export function AuditPanel() {
         {events.map((e, i) => {
           const time = String(e.time || "").slice(11, 19);
           const t = String(e.kind || e.msg || "event");
-          const sid =
-            typeof e.bks_session_id === "string" ? e.bks_session_id : "";
+          const sid = e.bks_session_id ?? "";
           return (
             <div key={i} className={expanded === i ? "bg-pressed" : ""}>
               <button

@@ -144,8 +144,7 @@ export function transcriptIndexEntryFromPayload(entry: {
   contentLength?: number;
   notice?: { kind?: string; title?: string };
 }): TranscriptIndexEntry | null {
-  if (typeof entry.seq !== "number" || typeof entry.changeSeq !== "number")
-    return null;
+  if (entry.seq === undefined || entry.changeSeq === undefined) return null;
   let role: TranscriptIndexRole;
   let reviewPrNumber: number | undefined;
   if (entry.notice?.kind === "review-handoff") {
@@ -165,13 +164,16 @@ export function transcriptIndexEntryFromPayload(entry: {
   } else {
     role = "system";
   }
-  return {
+  const indexedEntry: TranscriptIndexEntry = {
     id: entry.id,
     seq: entry.seq,
     changeSeq: entry.changeSeq,
     timestampMs: Date.parse(entry.timestamp) || 0,
     role,
     contentLength: entry.contentLength ?? entry.content.length,
-    ...(reviewPrNumber !== undefined ? { reviewPrNumber } : {}),
   };
+  if (reviewPrNumber !== undefined) {
+    indexedEntry.reviewPrNumber = reviewPrNumber;
+  }
+  return indexedEntry;
 }

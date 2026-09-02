@@ -273,13 +273,13 @@ export function ChipHoverCards({ sessions }: { sessions: UnifiedSession[] }) {
     // too. Keyboard focus still opens one (below).
     if (!pointerCanHover()) return;
     const onOver = (e: Event) => {
-      const node = e.target as HTMLElement | null;
-      if (!node?.closest) return;
-      if (node.closest(`[${CARD_ATTR}]`)) {
+      if (!(e.target instanceof Element)) return;
+      if (e.target.closest(`[${CARD_ATTR}]`)) {
         api.current.cancelTimers();
         return;
       }
-      const el = node.closest(CHIP_SELECTOR) as HTMLElement | null;
+      const closest = e.target.closest(CHIP_SELECTOR);
+      const el = closest instanceof HTMLElement ? closest : null;
       const target = el && chipTarget(el);
       if (!el || !target) {
         api.current.scheduleClose();
@@ -288,9 +288,9 @@ export function ChipHoverCards({ sessions }: { sessions: UnifiedSession[] }) {
       api.current.enter(el, target);
     };
     const onFocusIn = (e: FocusEvent) => {
-      const el = (e.target as HTMLElement | null)?.closest?.(
-        CHIP_SELECTOR,
-      ) as HTMLElement | null;
+      if (!(e.target instanceof Element)) return;
+      const closest = e.target.closest(CHIP_SELECTOR);
+      const el = closest instanceof HTMLElement ? closest : null;
       // Only a keyboard arrival: a click focuses the chip too, and it is
       // already opening what the card would have described.
       if (!el || !el.matches(":focus-visible")) return;
@@ -303,7 +303,7 @@ export function ChipHoverCards({ sessions }: { sessions: UnifiedSession[] }) {
     };
     // Following a chip navigates away from what the card describes.
     const onClick = (e: MouseEvent) => {
-      if ((e.target as HTMLElement | null)?.closest?.(CHIP_SELECTOR))
+      if (e.target instanceof Element && e.target.closest(CHIP_SELECTOR))
         api.current.close();
     };
     const onLeave = () => api.current.scheduleClose();

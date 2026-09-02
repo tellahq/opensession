@@ -9,15 +9,21 @@
 // in the engine half of the same question (lib/default-engine-pref) through
 // the rule in lib/new-session-model.
 
+import { z } from "zod";
 import { preferredNewSessionModel } from "./new-session-model";
-import { makeUserPref } from "./user-pref";
+import * as userPref from "./user-pref";
 
-const pref = makeUserPref<string>({
+const storedModelSchema = z.string();
+
+const pref = userPref.makeUserPref<string>({
   localKey: "opensession-default-model-pref",
   prefKey: "default-model",
   changeEvent: "opensession-default-model-pref-changed",
   defaultValue: "",
-  decode: (v) => (typeof v === "string" ? v : null),
+  decode: (value) => {
+    const result = storedModelSchema.safeParse(value);
+    return result.success ? result.data : null;
+  },
   encode: (v) => v,
 });
 

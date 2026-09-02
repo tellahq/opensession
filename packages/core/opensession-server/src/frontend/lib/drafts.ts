@@ -20,6 +20,7 @@
  * pencil clear here after you send the message on your phone). A key you have
  * typed into since is dirty: it stays, and gets pushed.
  */
+import { z } from "zod";
 import { fetchDrafts, saveDraftApi } from "./api";
 import { reconcileDrafts } from "./drafts-sync";
 import { getCurrentUser } from "../components/UserPicker";
@@ -51,6 +52,45 @@ const EMPTY: ComposerDraft = {
   files: [],
   pastedTexts: [],
 };
+
+const persistedFileSchema = z
+  .object({
+    name: z.string(),
+    type: z.string(),
+    path: z.string().optional(),
+    dataUrl: z.string().optional(),
+  })
+  .passthrough();
+const pastedTextSchema = z
+  .object({
+    id: z.string(),
+    text: z.string(),
+  })
+  .passthrough();
+const persistedDraftSchema = z.object({
+  text: z.string().catch(""),
+  images: z.array(z.string()).catch([]),
+  files: z.array(persistedFileSchema).catch([]),
+  pastedTexts: z.array(pastedTextSchema).catch([]),
+  syncedText: z.string().optional(),
+});
+const windowEventCapabilitiesSchema = z.object({
+  window: z.object({ addEventListener: z.function() }),
+});
+const persistenceLifecycleCapabilitiesSchema = z.object({
+  window: z.object({
+    addEventListener: z.function(),
+    setInterval: z.function(),
+  }),
+  document: z.object({ addEventListener: z.function() }),
+});
+const documentLifecycleCapabilitiesSchema = z.object({
+  document: z.object({
+    addEventListener: z.function().optional(),
+    visibilityState: z.string().optional(),
+  }),
+});
+
 const drafts = new Map<string, ComposerDraft>();
 /** Text last confirmed by the server. Persisted beside each local draft so a
  * reload can distinguish offline typing from text already sent elsewhere. */
@@ -61,6 +101,12 @@ const syncedText = new Map<string, string>();
 // per character; remote changes need an event so a mounted composer can adopt.
 const CHANGE_EVENT = "backstage-drafts-changed";
 
+declare global {
+  interface WindowEventMap {
+    "backstage-drafts-changed": CustomEvent<string | undefined>;
+  }
+}
+
 function emit(key?: string) {
   window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: key }));
 }
@@ -69,8 +115,8 @@ function emit(key?: string) {
  *  A key identifies a local change. An undefined key means several drafts may
  *  have changed during hydration and subscribers should re-read their scope. */
 export function onDraftsChanged(handler: (key?: string) => void): () => void {
-  const listener = (event: Event) =>
-    handler((event as CustomEvent<string | undefined>).detail);
+  const listener = (event: WindowEventMap[typeof CHANGE_EVENT]) =>
+    handler(event.detail);
   window.addEventListener(CHANGE_EVENT, listener);
   return () => window.removeEventListener(CHANGE_EVENT, listener);
 }
@@ -107,7 +153,7 @@ function persistNow(key: string) {
     const serialize = (draft: ComposerDraft) =>
       JSON.stringify({
         ...draft,
-        ...(syncedText.has(key) ? { syncedText: syncedText.get(key) } : {}),
+        syncedText: syncedText.get(key),
       });
     const json = serialize(d);
     if (json.length <= MAX_PERSIST_BYTES) {
@@ -145,13 +191,7 @@ function schedulePersist(key: string) {
 // can't eat the last keystrokes before a reload. Capability check, not just
 // `typeof window`: test runners can leave a bare `window` global without DOM
 // methods.
-if (
-  typeof window !== "undefined" &&
-  typeof window.addEventListener === "function" &&
-  typeof window.setInterval === "function" &&
-  typeof document !== "undefined" &&
-  typeof document.addEventListener === "function"
-) {
+if (persistenceLifecycleCapabilitiesSchema.safeParse(globalThis).success) {
   window.addEventListener("pagehide", () => {
     for (const key of [...timers.keys()]) {
       clearTimeout(timers.get(key));
@@ -167,23 +207,15 @@ export function loadDraft(key: string): ComposerDraft {
   try {
     const raw = sessionStorage.getItem(SS_PREFIX + key);
     if (raw) {
-      const parsed = JSON.parse(raw);
+      const parsed = persistedDraftSchema.parse(JSON.parse(raw));
       const d: ComposerDraft = {
-        text: typeof parsed?.text === "string" ? parsed.text : "",
-        images: Array.isArray(parsed?.images) ? parsed.images : [],
-        files: Array.isArray(parsed?.files) ? parsed.files : [],
-        pastedTexts: Array.isArray(parsed?.pastedTexts)
-          ? parsed.pastedTexts.filter(
-              (item: unknown): item is PastedTextAttachment =>
-                !!item &&
-                typeof item === "object" &&
-                typeof (item as PastedTextAttachment).id === "string" &&
-                typeof (item as PastedTextAttachment).text === "string",
-            )
-          : [],
+        text: parsed.text,
+        images: parsed.images,
+        files: parsed.files,
+        pastedTexts: parsed.pastedTexts,
       };
       drafts.set(key, d);
-      if (typeof parsed?.syncedText === "string") {
+      if (parsed.syncedText !== undefined) {
         syncedText.set(key, parsed.syncedText);
       }
       return d;
@@ -431,10 +463,7 @@ function rehydrateForCurrentUser(): void {
   void hydrate(getCurrentUser());
 }
 
-if (
-  typeof window !== "undefined" &&
-  typeof window.addEventListener === "function"
-) {
+if (windowEventCapabilitiesSchema.safeParse(globalThis).success) {
   whenCurrentUserReady((user) => void hydrate(user));
   window.addEventListener("opensession-user-changed", rehydrateForCurrentUser);
   window.addEventListener("storage", (event) => {
@@ -442,7 +471,7 @@ if (
       rehydrateForCurrentUser();
     }
   });
-  if (typeof document !== "undefined") {
+  if (documentLifecycleCapabilitiesSchema.safeParse(globalThis).success) {
     // Coming back to a tab that sat in the background: pick up what was typed
     // (or sent) on the other device while it was away.
     document.addEventListener?.("visibilitychange", () => {

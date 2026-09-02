@@ -10,11 +10,7 @@ import {
 export const REPOS_CHANGED_EVENT = "opensession:repos-changed";
 
 export function notifyReposChanged() {
-  if (
-    typeof window !== "undefined" &&
-    typeof window.dispatchEvent === "function"
-  )
-    window.dispatchEvent(new Event(REPOS_CHANGED_EVENT));
+  globalThis.window?.dispatchEvent(new Event(REPOS_CHANGED_EVENT));
 }
 
 export interface RepoInfo {
@@ -117,12 +113,12 @@ export async function uploadRepoIconApi(
     headers: { "Content-Type": "image/png" },
     body: png,
   });
-  const body = (await res.json().catch(() => null)) as {
+  const body: {
     error?: string;
     color?: string | null;
     hasIcon?: boolean;
     iconRev?: number | null;
-  } | null;
+  } | null = await res.json().catch(() => null);
   if (!res.ok) {
     throw new ApiError(
       body?.error || `Failed to upload the icon: ${res.status}`,
@@ -184,7 +180,7 @@ async function loadRepos(): Promise<RepoInfo[]> {
         repos?: RepoInfo[];
         newSessionRepo?: string;
       }>("/repos", { label: "Failed to load repositories" });
-      if (typeof data?.newSessionRepo === "string") {
+      if (data?.newSessionRepo !== undefined) {
         workspaceNewSessionRepo = data.newSessionRepo;
         workspaceRepoLive = true;
       }
@@ -227,14 +223,21 @@ export interface AttachedRepo {
   dir: string;
 }
 
+interface AttachRepoInput {
+  repo: string;
+  branch?: string;
+}
+
 export async function attachRepoApi(
   sessionId: string,
   repo: string,
   branch?: string,
 ): Promise<AttachedRepo[]> {
+  const requestBody: AttachRepoInput = { repo };
+  if (branch) requestBody.branch = branch;
   const body = await request<{ attachedRepos: AttachedRepo[] }>(
     `/sessions/${encodeURIComponent(sessionId)}/attach-repo`,
-    { method: "POST", body: { repo, ...(branch ? { branch } : {}) } },
+    { method: "POST", body: requestBody },
   );
   return body.attachedRepos;
 }

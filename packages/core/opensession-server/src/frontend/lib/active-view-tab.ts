@@ -29,16 +29,25 @@ type ActiveViewTabMap = Record<string, ActiveViewTab>;
 
 function read(): ActiveViewTabMap {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(KEY) || "{}");
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    return Object.fromEntries(
-      Object.entries(value).filter(
-        (entry): entry is [string, ActiveViewTab] =>
-          entry[1] === null ||
-          (typeof entry[1] === "string" &&
-            (VIEW_TABS as readonly string[]).includes(entry[1])),
-      ),
-    );
+    const value = JSON.parse(localStorage.getItem(KEY) || "{}");
+    if (!value || Array.isArray(value)) return {};
+    const tabs: Array<[string, ActiveViewTab]> = [];
+    for (const [workspaceId, tab] of Object.entries(value)) {
+      switch (tab) {
+        case null:
+        case "review":
+        case "conversation":
+        case "video":
+        case "staging":
+        case "assets":
+        case "preview":
+        case "terminal":
+        case "portal":
+        case "subagent":
+          tabs.push([workspaceId, tab]);
+      }
+    }
+    return Object.fromEntries(tabs);
   } catch {
     return {};
   }

@@ -8,6 +8,7 @@
 // looked at (other people's, automations you don't follow) don't all light up
 // as unread — the flag means "new since you last read it", not "never seen".
 
+import { z } from "zod";
 import { fetchReads, saveReadsApi } from "./api";
 import { getCurrentUser } from "../components/UserPicker";
 import { whenCurrentUserReady } from "./auth-ready";
@@ -35,11 +36,14 @@ function cap(map: ReadMap): ReadMap {
 
 function readStored(key: string): ReadMap {
   try {
-    const value = JSON.parse(localStorage.getItem(key) || "{}");
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const stored = z
+      .record(z.string(), z.unknown())
+      .safeParse(JSON.parse(localStorage.getItem(key) || "{}"));
+    if (!stored.success) return {};
     const reads: ReadMap = {};
-    for (const [id, mark] of Object.entries(value)) {
-      if (typeof mark === "string") reads[id] = mark;
+    for (const [id, value] of Object.entries(stored.data)) {
+      const mark = z.string().safeParse(value);
+      if (mark.success) reads[id] = mark.data;
     }
     return cap(reads);
   } catch {
@@ -104,7 +108,7 @@ export function mergeReadMaps(
   local: ReadMap,
   intents: ReadMap = {},
 ): ReadMap {
-  const merged: ReadMap = { ...server };
+  const merged = { ...server };
   for (const [id, mark] of Object.entries(local)) {
     if (
       !merged[id] ||
@@ -198,18 +202,15 @@ export function onReadsChanged(handler: () => void): () => void {
   };
 }
 
-if (
-  typeof window !== "undefined" &&
-  typeof window.addEventListener === "function"
-) {
+if (globalThis.window?.addEventListener) {
   whenCurrentUserReady((user) => void hydrate(user));
-  window.addEventListener(USER_CHANGE_EVENT, () => {
+  globalThis.window.addEventListener(USER_CHANGE_EVENT, () => {
     clearTimeout(hydrationRetry);
     hydratedFor = null;
     emit();
     void hydrate(getCurrentUser());
   });
-  window.addEventListener("storage", (event) => {
+  globalThis.window.addEventListener("storage", (event) => {
     if (event.key === "opensession-user" || event.key === "backstage-user") {
       clearTimeout(hydrationRetry);
       hydratedFor = null;

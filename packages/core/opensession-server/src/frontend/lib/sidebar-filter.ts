@@ -1,7 +1,8 @@
 import React from "react";
+import { z } from "zod";
 import { DEFAULT_REPO_ID } from "./brand";
 import type { Group } from "./sidebar-types";
-import type { UnifiedSession } from "./types";
+import type { FeedItem, UnifiedSession } from "./types";
 import { sessionRepoOr } from "./session-repo";
 import { onRepoCountChanged, repoCount } from "./repo-count";
 import { RepoTile } from "../components/RepoTile";
@@ -31,30 +32,43 @@ export const SUPPORT_PRIORITY_DOT: Record<number, string> = Object.fromEntries(
 // options derived from the items). Built-ins on every feed: "Linked session"
 // and (non-lane feeds) "Sort". Selections persist per browser, per feed.
 // This replaced plain's bespoke SupportFilterState menu.
-export type FeedFilterValues = Record<string, string>;
+const feedFilterValuesSchema = z.record(z.string(), z.string());
+const savedFeedFiltersSchema = z
+  .record(z.string(), feedFilterValuesSchema)
+  .catch({});
+export type FeedFilterValues = z.infer<typeof feedFilterValuesSchema>;
 export const FEED_FILTERS_KEY = "opensession-feed-filters";
 export function readFeedFilters(): Record<string, FeedFilterValues> {
   try {
-    const saved = JSON.parse(localStorage.getItem(FEED_FILTERS_KEY) || "{}");
-    return saved && typeof saved === "object" ? saved : {};
+    return savedFeedFiltersSchema.parse(
+      JSON.parse(localStorage.getItem(FEED_FILTERS_KEY) || "{}"),
+    );
   } catch {
     return {};
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+const feedMetadataSchema = z.json();
+const feedMetadataObjectSchema = z.record(z.string(), feedMetadataSchema);
+type FeedMetadataValue = z.infer<typeof feedMetadataSchema>;
+type FeedMetadataInput = FeedItem["meta"] | FeedMetadataValue;
 
 /** `a.b` getter over item meta / option objects. */
-export function dget(obj: unknown, path?: string): unknown {
-  if (!path) return obj;
-  let cur: unknown = obj;
-  for (const seg of path.split(".")) {
-    if (!isRecord(cur) || !(seg in cur)) return undefined;
-    cur = cur[seg];
+export function dget(
+  obj: FeedMetadataInput,
+  path?: string,
+): FeedMetadataValue | undefined {
+  const parsed = feedMetadataSchema.safeParse(obj);
+  if (!parsed.success) return undefined;
+  if (!path) return parsed.data;
+  let current = parsed.data;
+  for (const segment of path.split(".")) {
+    const record = feedMetadataObjectSchema.safeParse(current);
+    if (!record.success) return undefined;
+    current = record.data[segment];
+    if (current === undefined) return undefined;
   }
-  return cur;
+  return current;
 }
 
 export const EXPANDED_KEY = "opensession-sidebar-expanded";
@@ -221,15 +235,12 @@ export function onFilterChanged(handler: () => void): () => void {
 // Guarded because this module is reached from plain `bun test` runs (the pull
 // request list's row-merging test imports the component), where there is no
 // window to listen on and a module-scope call throws before the first test runs.
-if (
-  typeof window !== "undefined" &&
-  typeof window.addEventListener === "function"
-) {
-  window.addEventListener("storage", (event) => {
+if (globalThis.window?.addEventListener) {
+  globalThis.window.addEventListener("storage", (event) => {
     if (event.key !== FILTER_KEY) return;
     stored = null;
     current = null;
-    window.dispatchEvent(new Event(CHANGE_EVENT));
+    globalThis.window.dispatchEvent(new Event(CHANGE_EVENT));
   });
   // The project list landing (or a project being added) can change what
   // "auto" means, so the sidebar re-reads it.
@@ -237,7 +248,7 @@ if (
     if (stored?.byProject !== "auto") return;
     if (current?.byProject === defaultByProject()) return;
     current = null;
-    window.dispatchEvent(new Event(CHANGE_EVENT));
+    globalThis.window.dispatchEvent(new Event(CHANGE_EVENT));
   });
 }
 
@@ -290,13 +301,48 @@ interface StoredGrouping {
   byProject: StoredByProject;
 }
 
+const storedFilterInputSchema = z
+  .object({
+    v: z.number().optional(),
+    groupBy: z.string().optional(),
+    byProject: z.boolean().optional(),
+    sections: z.string().optional(),
+    lanes: z.string().optional(),
+    repo: z.string().optional(),
+    person: z.string().optional(),
+    sort: z.string().optional(),
+    prs: z.string().optional(),
+    autoCreated: z.string().optional(),
+    emptyProjects: z.string().optional(),
+  })
+  .catch({});
+type StoredFilterInput = z.infer<typeof storedFilterInputSchema>;
+
+function legacyGrouping(
+  groupBy: string | undefined,
+): StoredGrouping | undefined {
+  switch (groupBy) {
+    case "status":
+      return { groupBy: "status", byProject: false };
+    case "repo":
+      return { groupBy: "activity", byProject: true };
+    case "repo-status":
+      return { groupBy: "status", byProject: true };
+    case "repo-inbox":
+      return { groupBy: "activity", byProject: true };
+    case "inbox":
+      return { groupBy: "activity", byProject: false };
+    default:
+      return undefined;
+  }
+}
+
 /** Resolve every historical shape into the two independent v8 axes. */
-function storedGrouping(value: unknown): StoredGrouping {
-  const v = isRecord(value) ? value : {};
+function storedGrouping(v: StoredFilterInput): StoredGrouping {
   if (v.v === FILTER_VERSION) {
     return {
       groupBy: isGroupBy(v.groupBy) ? v.groupBy : "auto",
-      byProject: typeof v.byProject === "boolean" ? v.byProject : "auto",
+      byProject: v.byProject ?? "auto",
     };
   }
   if (v.v === 7) {
@@ -307,7 +353,7 @@ function storedGrouping(value: unknown): StoredGrouping {
           : isGroupBy(v.groupBy)
             ? v.groupBy
             : "auto",
-      byProject: typeof v.byProject === "boolean" ? v.byProject : "auto",
+      byProject: v.byProject ?? "auto",
     };
   }
   if (v.v === 6) {
@@ -336,14 +382,7 @@ function storedGrouping(value: unknown): StoredGrouping {
       v.groupBy === "repo" ? true : v.groupBy === "none" ? false : "auto";
     return { groupBy, byProject };
   }
-  const legacy: Record<string, StoredGrouping> = {
-    status: { groupBy: "status", byProject: false },
-    repo: { groupBy: "activity", byProject: true },
-    "repo-status": { groupBy: "status", byProject: true },
-    "repo-inbox": { groupBy: "activity", byProject: true },
-    inbox: { groupBy: "activity", byProject: false },
-  };
-  const mapped = typeof v.groupBy === "string" ? legacy[v.groupBy] : undefined;
+  const mapped = legacyGrouping(v.groupBy);
   if (!mapped) return { groupBy: "auto", byProject: "auto" };
   if (v.v === 3) return mapped;
   if (v.groupBy === "repo-status")
@@ -355,28 +394,28 @@ function storedGrouping(value: unknown): StoredGrouping {
 
 export function readStoredFilter(): StoredFilterState {
   try {
-    const parsed: unknown = JSON.parse(
-      localStorage.getItem(FILTER_KEY) || "{}",
-    );
-    const v = isRecord(parsed) ? parsed : {};
-    const grouping = storedGrouping(v);
+    const parsed = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");
+    const storedInput = storedFilterInputSchema.parse(parsed);
+    const grouping = storedGrouping(storedInput);
     return {
       groupBy: grouping.groupBy,
       byProject: grouping.byProject,
-      repo: typeof v.repo === "string" ? v.repo : "all",
+      repo: storedInput.repo ?? "all",
       // Legacy stored "all" behaved as "you" in the lanes — map it to "me"
       // so nobody's default flips to everyone.
       person:
-        typeof v.person === "string" && v.person && v.person !== "all"
-          ? v.person
+        storedInput.person && storedInput.person !== "all"
+          ? storedInput.person
           : "me",
-      sort: v.sort === "created" ? "created" : "updated",
+      sort: storedInput.sort === "created" ? "created" : "updated",
       // An absent value is the untouched preference, so new browsers hide PR
       // rows. Keep every explicit historical choice, including "default",
       // which is the persisted name for Mine + requested.
       prs:
-        v.prs === "default" || v.prs === "all" || v.prs === "none"
-          ? v.prs
+        storedInput.prs === "default" ||
+        storedInput.prs === "all" ||
+        storedInput.prs === "none"
+          ? storedInput.prs
           : "none",
       // v4's "show" was the default rather than a deliberate opt-in. Move
       // every older browser to the safer default; v5 was the version that
@@ -385,10 +424,12 @@ export function readStoredFilter(): StoredFilterState {
       // what keeps the next version bump from silently re-hiding the rows
       // of everyone who asked to see them.)
       autoCreated:
-        typeof v.v === "number" && v.v >= 5 && v.autoCreated === "show"
+        storedInput.v !== undefined &&
+        storedInput.v >= 5 &&
+        storedInput.autoCreated === "show"
           ? "show"
           : "hide",
-      emptyProjects: v.emptyProjects === "hide" ? "hide" : "show",
+      emptyProjects: storedInput.emptyProjects === "hide" ? "hide" : "show",
     };
   } catch {
     return {

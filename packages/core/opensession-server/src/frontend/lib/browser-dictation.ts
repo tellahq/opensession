@@ -57,10 +57,6 @@ declare global {
     SpeechRecognition?: SpeechRecognizerConstructor;
     webkitSpeechRecognition?: SpeechRecognizerConstructor;
     webkitAudioContext?: typeof AudioContext;
-    os1?: {
-      dictation?: DesktopDictationAPI;
-      [key: string]: unknown;
-    };
   }
 }
 
@@ -117,9 +113,7 @@ function startDesktopDictation(
   const id = randomUUID();
   let stopped = false;
   const unsubscribe = api.onText((payload) => {
-    if (payload.id === id && typeof payload.text === "string" && payload.text) {
-      onTranscript(payload.text);
-    }
+    if (payload.id === id && payload.text) onTranscript(payload.text);
   });
   const started = api
     .start(

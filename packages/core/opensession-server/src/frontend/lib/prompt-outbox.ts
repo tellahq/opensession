@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { deliverSessionPrompt, type PromptDelivery } from "./api/sessions";
 import { BASE } from "./api/request";
 import { randomUUID } from "./random-uuid";
@@ -34,6 +35,42 @@ export type PromptOutboxInput = Omit<
 >;
 
 type StoredOutbox = { version: 1; items: PromptOutboxItem[] };
+
+const promptOutboxItemSchema: z.ZodType<PromptOutboxItem> = z.looseObject({
+  clientId: z.string(),
+  sessionId: z.string(),
+  content: z.string(),
+  images: z.array(z.string()).optional(),
+  files: z.array(z.unknown()).optional(),
+  effort: z.string().optional(),
+  fastMode: z.boolean().optional(),
+  busyMode: z.enum(["queue", "steer"]).optional(),
+  contextSessions: z.array(z.string()).optional(),
+  user: z.string().optional(),
+  transcriptAfterEntryId: z.string().nullable().optional(),
+  transcriptAfterSeq: z.number().optional(),
+  state: z.enum(["pending", "sending", "failed"]),
+  attempts: z.number(),
+  createdAt: z.number(),
+  nextAttemptAt: z.union([
+    z.number(),
+    z.null().transform(() => Number.POSITIVE_INFINITY),
+  ]),
+  error: z.string().optional(),
+});
+
+const storedOutboxSchema = z.object({
+  version: z.literal(1),
+  items: z.array(z.unknown()),
+});
+
+const quotaErrorSchema = z.object({
+  name: z.string().optional(),
+  code: z.number().optional(),
+});
+
+const statusErrorSchema = z.object({ status: z.coerce.number() });
+
 type DeliveryObserver = (
   item: PromptOutboxItem,
   result: PromptDelivery,
@@ -74,7 +111,7 @@ export class PromptOutbox {
   private items: PromptOutboxItem[] = [];
   private listeners = new Set<Listener>();
   private observers = new Set<DeliveryObserver>();
-  private timer: number | undefined;
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly key: string;
   private readonly onStorage = (event: StorageEvent) => {
     if (event.key === this.key) {
@@ -285,7 +322,9 @@ export class PromptOutbox {
         const attempts = item.attempts + 1;
         const message =
           error instanceof Error ? error.message : "Prompt delivery failed";
-        const failed = !isRetryable(error);
+        const parsedStatus = statusErrorSchema.safeParse(error);
+        const failed =
+          parsedStatus.success && !isRetryableStatus(parsedStatus.data.status);
         try {
           this.replace(item.clientId, {
             ...item,
@@ -358,8 +397,12 @@ export class PromptOutbox {
         : localStorage.getItem(this.key));
     if (!raw) return;
     try {
-      const parsed = JSON.parse(raw) as StoredOutbox;
-      if (parsed.version !== 1 || !Array.isArray(parsed.items)) return;
+      const result = storedOutboxSchema.safeParse(JSON.parse(raw));
+      if (!result.success) return;
+      const parsedItems = result.data.items.flatMap((value) => {
+        const item = promptOutboxItemSchema.safeParse(value);
+        return item.success ? [item.data] : [];
+      });
       const sending = new Set(
         this.items
           .filter((item) => item.state === "sending")
@@ -367,8 +410,7 @@ export class PromptOutbox {
       );
       let resumed = false;
       const now = this.now();
-      this.items = parsed.items
-        .filter(isItem)
+      this.items = parsedItems
         .map((item) => {
           // The item state is the in-tab send lock. Keep it across reloads
           // triggered by another enqueue or a cross-tab storage event.
@@ -407,7 +449,15 @@ export class PromptOutbox {
       // The browser's own text here is a DOMException naming setItem and a
       // storage key, which reads like an attachment limit and names nothing
       // anyone can act on. Say what happened and what frees the space.
-      if (!isQuotaError(error)) throw error;
+      const quotaError = quotaErrorSchema.safeParse(error);
+      if (
+        !quotaError.success ||
+        (quotaError.data.name !== "QuotaExceededError" &&
+          quotaError.data.name !== "NS_ERROR_DOM_QUOTA_REACHED" &&
+          quotaError.data.code !== 22 &&
+          quotaError.data.code !== 1014)
+      )
+        throw error;
       throw new Error(
         "No room left to save this message for delivery. Discard a failed message to make space.",
       );
@@ -430,7 +480,7 @@ export class PromptOutbox {
     this.timer = setTimeout(
       () => void this.flush(),
       Math.max(0, next - this.now()),
-    ) as unknown as number;
+    );
   }
 
   private now(): number {
@@ -450,40 +500,6 @@ function retryDelay(attempt: number): number {
   );
 }
 
-/** A storage write refused for want of space. Chrome throws a DOMException named
- *  QuotaExceededError; Firefox and Safari have historically used other codes and
- *  names for the same condition, so match on any of them. */
-function isQuotaError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const { name, code } = error as { name?: unknown; code?: unknown };
-  return (
-    name === "QuotaExceededError" ||
-    name === "NS_ERROR_DOM_QUOTA_REACHED" ||
-    code === 22 ||
-    code === 1014
-  );
-}
-
-function isRetryable(error: unknown): boolean {
-  const status =
-    typeof error === "object" && error && "status" in error
-      ? Number((error as { status?: unknown }).status)
-      : NaN;
-  return (
-    !Number.isFinite(status) ||
-    status === 408 ||
-    status === 429 ||
-    status >= 500
-  );
-}
-
-function isItem(value: unknown): value is PromptOutboxItem {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    typeof (value as PromptOutboxItem).clientId === "string" &&
-    typeof (value as PromptOutboxItem).sessionId === "string" &&
-    typeof (value as PromptOutboxItem).content === "string" &&
-    ["pending", "sending", "failed"].includes((value as PromptOutboxItem).state)
-  );
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
 }

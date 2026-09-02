@@ -32,6 +32,7 @@ describe("Electron dictation", () => {
     const originalWindow = globalThis.window;
     const originalNavigator = globalThis.navigator;
     const originalCrypto = globalThis.crypto;
+    const originalMediaStream = globalThis.MediaStream;
     let processor:
       | {
           onaudioprocess:
@@ -79,6 +80,10 @@ describe("Electron dictation", () => {
       }
     }
 
+    Object.defineProperty(globalThis, "MediaStream", {
+      configurable: true,
+      value: class MediaStream {},
+    });
     Object.defineProperty(globalThis, "window", {
       configurable: true,
       value: {
@@ -99,8 +104,9 @@ describe("Electron dictation", () => {
     try {
       const dictation = startBrowserDictation((text) => {
         transcript = text;
-      }, {} as MediaStream);
+      }, new MediaStream());
       expect(dictation).not.toBeNull();
+      if (!dictation) throw new Error("Desktop dictation did not start");
       const processAudio = processor?.onaudioprocess;
       if (!processAudio) throw new Error("Audio processor was not connected");
       processAudio({
@@ -109,7 +115,7 @@ describe("Electron dictation", () => {
       await Promise.resolve();
       expect(transcript).toBe("Live result");
       expect([...pushed[0]]).toEqual([0.25, -0.5]);
-      expect(await dictation!.finish()).toBe("Native result");
+      expect(await dictation.finish()).toBe("Native result");
     } finally {
       Object.defineProperty(globalThis, "window", {
         configurable: true,
@@ -122,6 +128,10 @@ describe("Electron dictation", () => {
       Object.defineProperty(globalThis, "crypto", {
         configurable: true,
         value: originalCrypto,
+      });
+      Object.defineProperty(globalThis, "MediaStream", {
+        configurable: true,
+        value: originalMediaStream,
       });
     }
   });

@@ -25,7 +25,7 @@
  */
 
 /** Tag → the attributes it may keep. */
-const ALLOWED: Record<string, readonly string[]> = {
+const allowedEntries = {
   a: ["href", "title"],
   abbr: ["title"],
   b: [],
@@ -79,7 +79,10 @@ const ALLOWED: Record<string, readonly string[]> = {
   tr: [],
   ul: [],
   var: [],
-};
+} satisfies Record<string, readonly string[]>;
+const ALLOWED = new Map<string, readonly string[]>(
+  Object.entries(allowedEntries),
+);
 
 /** Tags with no closing tag — emitted self-closed, their end tag dropped. */
 const VOID_TAGS = new Set(["br", "hr", "img", "source"]);
@@ -135,7 +138,7 @@ function sanitizeTag(
   attrs: string,
   selfClosing: boolean,
 ): string {
-  const allowed = ALLOWED[tag];
+  const allowed = ALLOWED.get(tag);
   if (!allowed) return escapeText(raw);
   const isVoid = VOID_TAGS.has(tag);
   if (closing) return isVoid ? "" : `</${tag}>`;

@@ -10,6 +10,12 @@ import { TooltipProvider } from "./ui/tooltip";
 import { AppContent } from "./AppContent";
 import type { AppProps } from "./lib/app-types";
 
+declare global {
+  interface Window {
+    __OPENSESSION_DEMO__?: boolean;
+  }
+}
+
 // Order matters: base.css (tokens, reset, platform chrome) then legacy.css,
 // which is now empty and stays imported so the "never add here" contract keeps
 // a home. Utilities are linked after both, so they win source-order ties.
@@ -27,7 +33,7 @@ export function App(props: AppProps = {}) {
 // The marketing-site preview imports this component into its own fixture root.
 // Keep the ordinary SPA bootstrap intact for every production build, including
 // servers that still have this file configured as the bundle entry.
-const embeddedDemo = Boolean(Reflect.get(window, "__OPENSESSION_DEMO__"));
+const embeddedDemo = Boolean(window.__OPENSESSION_DEMO__);
 if (!embeddedDemo) {
   // The preview interstitial renders INSTEAD of the app (and outside UserGate —
   // it must work in cold-storage contexts like the iOS PWA's in-app browser).

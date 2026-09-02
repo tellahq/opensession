@@ -1207,9 +1207,9 @@ export function ProviderAccountsSection({
               label="Account view"
               size="sm"
               value={view}
-              onValueChange={(next) =>
-                setView(next as "providers" | "accounts")
-              }
+              onValueChange={(next) => {
+                if (next === "providers" || next === "accounts") setView(next);
+              }}
             >
               <SegmentedOption value="providers">Providers</SegmentedOption>
               <SegmentedOption value="accounts">All accounts</SegmentedOption>
@@ -1357,13 +1357,14 @@ function AddClaudeAccountForm({
     setSaving(true);
     setError(null);
     try {
+      const account = {
+        name: name.trim(),
+        token: token.replace(/\s+/g, ""),
+      };
+      const trimmedOwner = owner.trim();
       const added = await request<ClaudeAccountInfo>("/claude-accounts", {
         method: "POST",
-        body: {
-          name: name.trim(),
-          token: token.replace(/\s+/g, ""),
-          ...(owner.trim() ? { owner: owner.trim() } : {}),
-        },
+        body: trimmedOwner ? { ...account, owner: trimmedOwner } : account,
         label: "Could not add Anthropic account",
       });
       setAccount(added);
@@ -1694,14 +1695,14 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
     setSaving(true);
     setError(null);
     try {
+      const account =
+        kind === "api_key"
+          ? { name: name.trim(), kind, value: value.trim() }
+          : { kind, value: value.trim() };
+      const trimmedOwner = owner.trim();
       await request("/codex-accounts", {
         method: "POST",
-        body: {
-          ...(kind === "api_key" ? { name: name.trim() } : {}),
-          kind,
-          value: value.trim(),
-          ...(owner.trim() ? { owner: owner.trim() } : {}),
-        },
+        body: trimmedOwner ? { ...account, owner: trimmedOwner } : account,
         label: "Could not add OpenAI account",
       });
       setPendingDone(true);
@@ -1783,9 +1784,15 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
               items={KIND_ITEMS}
               value={kind}
               disabled={!!login || !!oauth}
-              onValueChange={(next) =>
-                setKind(next as "device" | "oauth" | "api_key" | "home")
-              }
+              onValueChange={(next) => {
+                if (
+                  next === "device" ||
+                  next === "oauth" ||
+                  next === "api_key" ||
+                  next === "home"
+                )
+                  setKind(next);
+              }}
             >
               <Select.Trigger aria-label="Kind" />
               <Select.Popup>

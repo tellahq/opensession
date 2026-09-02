@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { BASE_PATH } from "./base";
 import {
   registerGithubLogins,
@@ -29,6 +30,25 @@ export interface ReviewTeam {
   github: string;
   members: string[];
 }
+
+const personSchema = z.object({
+  name: z.string(),
+  fullName: z.string(),
+  github: z.string().optional(),
+  timezone: z.string().optional(),
+  image: z.string().optional(),
+});
+
+const reviewTeamSchema = z.object({
+  name: z.string(),
+  github: z.string(),
+  members: z.array(z.string()),
+});
+
+const peopleResponseSchema = z.object({
+  people: z.array(personSchema).optional(),
+  reviewTeams: z.array(reviewTeamSchema).optional(),
+});
 
 const CHANGE_EVENT = "opensession-people-changed";
 let people: Person[] = [];
@@ -62,35 +82,31 @@ export function ensurePeople(): Promise<void> {
   if (fetched) return Promise.resolve();
   if (inflight) return inflight;
   inflight = fetch(`${BASE_PATH}/api/people`)
-    .then((r) => (r.ok ? r.json() : null))
-    .then((body: { people?: Person[]; reviewTeams?: ReviewTeam[] } | null) => {
-      const list =
-        body?.people?.filter((p) => p && typeof p.name === "string") ?? [];
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const payload: unknown = await response.json();
+      return peopleResponseSchema.parse(payload);
+    })
+    .then((body) => {
+      const list = body?.people ?? [];
       people = list;
-      reviewTeams =
-        body?.reviewTeams?.filter(
-          (team) =>
-            team &&
-            typeof team.name === "string" &&
-            typeof team.github === "string" &&
-            Array.isArray(team.members),
-        ) ?? [];
+      reviewTeams = body?.reviewTeams ?? [];
       fetched = true;
       // The markdown renderer mints the @-mention chips, so it needs the
       // same roster: a name nobody on it stays prose.
       setKnownPeople(list);
       registerGithubLogins(
         Object.fromEntries(
-          list
-            .filter((p) => p.github)
-            .map((p) => [p.name.toLowerCase(), p.github as string]),
+          list.flatMap((person): [string, string][] =>
+            person.github ? [[person.name.toLowerCase(), person.github]] : [],
+          ),
         ),
       );
       registerProfileImages(
         Object.fromEntries(
-          list
-            .filter((p) => p.image)
-            .map((p) => [p.name.toLowerCase(), p.image as string]),
+          list.flatMap((person): [string, string][] =>
+            person.image ? [[person.name.toLowerCase(), person.image]] : [],
+          ),
         ),
       );
       window.dispatchEvent(new Event(CHANGE_EVENT));

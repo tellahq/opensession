@@ -41,18 +41,19 @@ function fillTemplate(template: string, id: string): string {
 export function refWebPanel(ref: ExternalRef): RefWebPanel | null {
   const feed = feedForRefKind(ref.kind);
   if (feed?.panel && (feed.panel.embedUrlTemplate || feed.panel.component)) {
-    return {
+    const panel: RefWebPanel = {
       label: feed.panel.label,
       refId: ref.id,
-      ...(feed.panel.component ? { component: feed.panel.component } : {}),
-      ...(feed.panel.embedUrlTemplate
-        ? { embedUrl: fillTemplate(feed.panel.embedUrlTemplate, ref.id) }
-        : {}),
       links: (feed.panel.links || []).map((l) => ({
         label: l.label,
         href: fillTemplate(l.hrefTemplate, ref.id),
       })),
     };
+    if (feed.panel.component) panel.component = feed.panel.component;
+    if (feed.panel.embedUrlTemplate) {
+      panel.embedUrl = fillTemplate(feed.panel.embedUrlTemplate, ref.id);
+    }
+    return panel;
   }
   return null;
 }

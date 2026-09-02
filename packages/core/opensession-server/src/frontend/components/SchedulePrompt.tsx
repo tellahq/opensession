@@ -108,7 +108,7 @@ export function SchedulePromptButton({
       if (
         open &&
         rootRef.current &&
-        !rootRef.current.contains(e.target as Node)
+        !rootRef.current.contains(e.target instanceof Node ? e.target : null)
       )
         setOpen(false);
     };

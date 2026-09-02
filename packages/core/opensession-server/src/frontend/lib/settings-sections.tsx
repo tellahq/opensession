@@ -1,4 +1,5 @@
 import React from "react";
+import * as IconLibrary from "../components/icons";
 import {
   IconArchive,
   IconArrowDown,
@@ -20,13 +21,14 @@ import {
   IconPlug,
   IconRocket,
   IconServer,
-  IconShapes,
   IconShieldCheck,
   IconSliders,
   IconTarget,
   IconUser,
 } from "../components/icons";
 import { SETTINGS_KEYWORDS } from "./settings-search";
+
+const IconProviders = IconLibrary["IconShapes"];
 
 // The Settings nav table, kept here rather than inside Settings.tsx so that it
 // is data anyone can read. It has two consumers now: the Settings surface
@@ -70,13 +72,15 @@ export const TOOL_SECTIONS = new Set<SettingsSectionKey>([
   "security",
 ]);
 
-export const SECTIONS: {
+interface SettingsSection {
   key: SettingsSectionKey;
   label: string;
   group: string;
-  icon: React.ReactElement;
+  icon: React.ReactElement<{ size?: number }>;
   adminOnly?: boolean;
-}[] = [
+}
+
+export const SECTIONS: SettingsSection[] = [
   {
     key: "myAccounts",
     label: "Account",
@@ -140,7 +144,7 @@ export const SECTIONS: {
     key: "providers",
     label: "Providers",
     group: "Organization",
-    icon: <IconShapes />,
+    icon: <IconProviders />,
   },
   {
     key: "sandboxes",
@@ -285,9 +289,7 @@ export function settingsPaletteActions(opts: {
     description: `Settings · ${section.group}`,
     category: "Navigate" as const,
     keywords: SETTINGS_KEYWORDS[section.key] ?? [],
-    icon: React.cloneElement(section.icon, { size: PALETTE_ICON_SIZE } as {
-      size: number;
-    }),
+    icon: React.cloneElement(section.icon, { size: PALETTE_ICON_SIZE }),
     section: section.key,
   }));
 }

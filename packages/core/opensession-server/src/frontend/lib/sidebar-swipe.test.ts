@@ -27,7 +27,9 @@ function target(
         value: editable.value ?? "",
       }
     : null;
-  return { closest: () => el } as unknown as EventTarget;
+  const eventTarget = new EventTarget();
+  Object.defineProperty(eventTarget, "closest", { value: () => el });
+  return eventTarget;
 }
 
 const nothing = target(null);

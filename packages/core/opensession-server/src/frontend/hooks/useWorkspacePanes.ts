@@ -365,14 +365,15 @@ export function useWorkspacePanes({
       // A deep link (or a fallback that landed here) whose workspace this
       // client already knows resolves without the round-trip, so the review
       // opens rather than the page spending the wait as a spinner.
+      const prIdentity = {
+        repo: route.repo,
+        number: route.number,
+        branch: route.branch,
+      };
       const known = findPrWorkspaceId(
         workspacesRef.current,
         sessionsRef.current,
-        {
-          repo: route.repo,
-          ...(route.number !== undefined ? { number: route.number } : {}),
-          ...(route.branch !== undefined ? { branch: route.branch } : {}),
-        },
+        prIdentity,
       );
       if (known) {
         requestReviewFocus(setReviewFocusPr, {
@@ -386,13 +387,7 @@ export function useWorkspacePanes({
           stale = true;
         };
       }
-      resolveWorkspaceApi({
-        pr: {
-          repo: route.repo,
-          ...(route.branch !== undefined ? { branch: route.branch } : {}),
-          ...(route.number !== undefined ? { number: route.number } : {}),
-        },
-      })
+      resolveWorkspaceApi({ pr: prIdentity })
         .then(({ workspaceId, pr }) => {
           // The workspace is the PR's home, not the PR itself: it holds
           // every PR its sessions opened. Say which one this link meant,
@@ -507,12 +502,11 @@ export function useWorkspacePanes({
     assetsOpen,
     terminalOpen,
     subagentLabel: subagentStack.at(-1)?.label ?? null,
-  }).map(({ icon, ...tab }) => ({
-    ...tab,
-    ...(icon === "globe"
-      ? { icon: createElement(IconGlobe, { size: 16 }) }
-      : {}),
-  }));
+  }).map(({ icon, ...tab }) =>
+    icon === "globe"
+      ? { ...tab, icon: createElement(IconGlobe, { size: 16 }) }
+      : tab,
+  );
 
   /**
    * The panes that keep rendering once a workspace has no session left: Review,
@@ -676,7 +670,7 @@ export function useWorkspacePanes({
         externalRef: {
           kind: feed.refKind,
           id: item.id,
-          ...(item.url ? { url: item.url } : {}),
+          url: item.url,
           title: item.title,
         },
         name: item.title,

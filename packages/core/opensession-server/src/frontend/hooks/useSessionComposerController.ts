@@ -226,8 +226,8 @@ export function useSessionPromptOutbox({
         sentAt: item.createdAt,
         transcriptAfterEntryId: item.transcriptAfterEntryId,
         transcriptAfterSeq: item.transcriptAfterSeq,
-        ...(item.images?.length ? { images: item.images } : {}),
       };
+      if (item.images?.length) deliveredPrompt.images = item.images;
       if (result.status === "started") {
         // Placement guessed from local running state can lose a turn-end race.
         // The server started a turn, so this is an optimistic transcript bubble,

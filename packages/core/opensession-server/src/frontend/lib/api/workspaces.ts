@@ -168,9 +168,11 @@ export async function resolveWorkspaceApi(
     | { externalRef: ExternalRef; name?: string },
   user?: string,
 ): Promise<ResolvedWorkspace> {
+  const body: typeof target & { user?: string } = { ...target };
+  if (user) body.user = user;
   return request<ResolvedWorkspace>("/workspaces/resolve", {
     method: "POST",
-    body: { ...target, ...(user ? { user } : {}) },
+    body,
     label: "Failed to resolve the workspace",
   });
 }

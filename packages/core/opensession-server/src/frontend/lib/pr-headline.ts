@@ -22,12 +22,14 @@ export interface PrHeadline {
   tone: "green" | "purple" | "red" | "yellow" | "muted";
 }
 
-export function summarizeChecks(pr: PrDetails | null): {
+interface CheckSummary {
   passed: number;
   failed: number;
   pending: number;
   total: number;
-} {
+}
+
+export function summarizeChecks(pr: PrDetails | null): CheckSummary {
   let passed = 0;
   let failed = 0;
   let pending = 0;

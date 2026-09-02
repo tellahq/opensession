@@ -45,9 +45,11 @@ function linearFromHex(hex: string): [number, number, number] {
           .map((c) => c + c)
           .join("")
       : h;
-  return [0, 2, 4].map((i) =>
-    srgbToLinear(parseInt(full.slice(i, i + 2), 16) / 255),
-  ) as [number, number, number];
+  return [
+    srgbToLinear(parseInt(full.slice(0, 2), 16) / 255),
+    srgbToLinear(parseInt(full.slice(2, 4), 16) / 255),
+    srgbToLinear(parseInt(full.slice(4, 6), 16) / 255),
+  ];
 }
 
 function oklabFromLinear(r: number, g: number, b: number) {
@@ -96,9 +98,10 @@ export function relativeLuminance(hex: string): number {
 
 /** WCAG contrast ratio, 1 to 21. */
 export function contrastRatio(a: string, b: string): number {
-  const [light, dark] = [relativeLuminance(a), relativeLuminance(b)].sort(
-    (x, y) => y - x,
-  ) as [number, number];
+  const aLuminance = relativeLuminance(a);
+  const bLuminance = relativeLuminance(b);
+  const light = Math.max(aLuminance, bLuminance);
+  const dark = Math.min(aLuminance, bLuminance);
   return (light + 0.05) / (dark + 0.05);
 }
 

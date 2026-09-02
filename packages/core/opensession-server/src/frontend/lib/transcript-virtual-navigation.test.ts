@@ -5,8 +5,8 @@ import {
 } from "./transcript-virtual-navigation";
 
 test("virtual transcript navigation is scoped to one scroll container", () => {
-  const first = {} as HTMLElement;
-  const second = {} as HTMLElement;
+  const first: HTMLElement = Object.create(null);
+  const second: HTMLElement = Object.create(null);
   const seen: string[] = [];
   const unregister = registerTranscriptVirtualNavigation(first, {
     scrollToEntry(entryId) {

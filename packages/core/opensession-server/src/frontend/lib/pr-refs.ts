@@ -38,7 +38,7 @@ export function osReviewText(review: OsReview): string {
           ? "commented"
           : "reviewed";
   return [
-    typeof review.confidence === "number" ? `${review.confidence}/5` : "",
+    review.confidence === undefined ? "" : `${review.confidence}/5`,
     verdict,
     review.blocking > 0 ? `${review.blocking} blocking` : "",
     review.stale ? "stale" : "",

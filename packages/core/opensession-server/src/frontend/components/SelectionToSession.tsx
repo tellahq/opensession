@@ -70,7 +70,8 @@ export function SelectionToSession({
   useEffect(() => {
     if (!sel) return;
     const onDown = (e: MouseEvent) => {
-      if (popRef.current && popRef.current.contains(e.target as Node)) return;
+      if (e.target instanceof Node && popRef.current?.contains(e.target))
+        return;
       dismiss();
     };
     const onKey = (e: KeyboardEvent) => {

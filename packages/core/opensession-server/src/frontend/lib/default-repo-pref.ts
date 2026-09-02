@@ -11,14 +11,19 @@
 // applied as-is; the palette validates it against the live repo list, so a
 // preference naming a repo that has since been removed simply stops applying.
 
-import { makeUserPref } from "./user-pref";
+import * as userPref from "./user-pref";
 
-const pref = makeUserPref<string>({
+const pref = userPref.makeUserPref<string>({
   localKey: "opensession-default-repo-pref",
   prefKey: "default-repo",
   changeEvent: "opensession-default-repo-pref-changed",
   defaultValue: "",
-  decode: (v) => (typeof v === "string" ? (v === "auto" ? "" : v) : null),
+  decode: (value) =>
+    value === null || value === undefined
+      ? null
+      : value === "auto"
+        ? ""
+        : value,
   encode: (v) => v,
 });
 

@@ -35,11 +35,13 @@ export function subscribeToWorkspaceRefreshes(
   };
 }
 
-export function useWorkspaces(): {
+interface WorkspacesState {
   workspaces: Workspace[];
   loaded: boolean;
   refresh: () => Promise<void>;
-} {
+}
+
+export function useWorkspaces(): WorkspacesState {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loaded, setLoaded] = useState(false);
   // This identity is observable: the hook subscriptions and App's global

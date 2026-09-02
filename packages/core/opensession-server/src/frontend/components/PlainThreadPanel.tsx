@@ -134,7 +134,7 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
           setThread(t);
           setError(null);
         })
-        .catch((error: unknown) => {
+        .catch((error) => {
           if (aliveRef.current) {
             // Record every failure so a later successful poll can clear it.
             // The error renders only when no valid thread is available.
@@ -248,12 +248,12 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 }
 
 /** Plain thread priorities, as Plain's own UI names them. */
-const PRIORITY_LABEL: Record<number, string> = {
-  0: "Urgent",
-  1: "High",
-  2: "Normal",
-  3: "Low",
-};
+const PRIORITY_LABELS = new Map([
+  [0, "Urgent"],
+  [1, "High"],
+  [2, "Normal"],
+  [3, "Low"],
+]);
 
 const SNOOZE_OPTIONS: { label: string; seconds: number }[] = [
   { label: "1 hour", seconds: 3_600 },
@@ -322,7 +322,7 @@ export function PlainThreadActions({
         setUsers(u);
         setUsersLoadError(null);
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         if (alive)
           setUsersLoadError(errorMessage(error, "Failed to load Plain users"));
       });
@@ -332,7 +332,7 @@ export function PlainThreadActions({
         setLabelTypes(lt);
         setLabelTypesLoadError(null);
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         if (alive)
           setLabelTypesLoadError(
             errorMessage(error, "Failed to load Plain labels"),
@@ -351,7 +351,7 @@ export function PlainThreadActions({
       await fn();
       onChanged();
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         setError(errorMessage(error, "Plain update failed"));
       })
       .finally(async () => {
@@ -519,7 +519,8 @@ export function PlainThreadActions({
                 title="Change priority in Plain"
               >
                 {thread.priority != null
-                  ? (PRIORITY_LABEL[thread.priority] ?? `P${thread.priority}`)
+                  ? (PRIORITY_LABELS.get(thread.priority) ??
+                    `P${thread.priority}`)
                   : "Priority"}
               </Button>
             }
@@ -532,7 +533,7 @@ export function PlainThreadActions({
                   run(() => setPlainThreadPriorityApi(threadId, p, currentUser))
                 }
               >
-                <span className="min-w-0 flex-1">{PRIORITY_LABEL[p]}</span>
+                <span className="min-w-0 flex-1">{PRIORITY_LABELS.get(p)}</span>
                 <MenuTick on={thread.priority === p} />
               </Menu.Item>
             ))}
@@ -823,7 +824,7 @@ export function PlainReplyBox({
       sentTimer.current = setTimeout(() => setSent(false), 3000);
       onSent?.();
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         setError(errorMessage(error, "Failed to send"));
       })
       .finally(async () => {
@@ -1129,11 +1130,7 @@ function PlainEntryText({ text }: { text: string }) {
  */
 const NOTE_VIA_PREFIX = /^\*\*(.+?) \(via [^)]+\):\*\*\s*/;
 
-function noteAuthor(entry: PlainTimelineEntry): {
-  name: string;
-  isAgent: boolean;
-  text: string;
-} {
+function noteAuthor(entry: PlainTimelineEntry) {
   const viaUs = entry.text.match(NOTE_VIA_PREFIX);
   if (viaUs)
     return {

@@ -77,14 +77,11 @@ export function OpenAssetPathsProvider({
  * there is no session overlay to host it, so the surface can leave the
  * affordance out entirely.
  */
-export function useOpenAsset(): {
-  available: boolean;
-  open: (path: string) => void;
-} {
+export function useOpenAsset() {
   const openInOverlay = useContext(OpenAssetContext);
   return {
     available: Boolean(openInOverlay),
-    open(path) {
+    open(path: string) {
       openInOverlay?.(path);
     },
   };

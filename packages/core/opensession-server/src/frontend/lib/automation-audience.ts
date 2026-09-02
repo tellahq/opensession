@@ -28,11 +28,7 @@ export const AGENT_PERSON_KEY = AGENT_NAME.trim().toLowerCase();
  * the agent's. The runs of a deleted automation stay in the band long after
  * the automation is gone, and no person is accountable for them.
  */
-export const HOUSE_AUTOMATION: {
-  owner?: string;
-  repo?: string;
-  workspaceRepo?: string;
-} = {};
+export const HOUSE_AUTOMATION = {};
 
 /**
  * Does this owner name the person the lens is on? One teammate reaches us as

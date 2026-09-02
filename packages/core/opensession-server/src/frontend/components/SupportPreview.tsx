@@ -118,7 +118,7 @@ export function SupportPreview({
         `${AGENT_NAME} didn't respond. Check your connection and try again.`,
       );
     }, 15_000);
-    send({
+    const message = {
       type: "create_session",
       mode: "ask",
       branch: "",
@@ -133,8 +133,8 @@ export function SupportPreview({
           80,
         ),
       },
-      ...(model ? { model } : {}),
-    });
+    } satisfies WSClientMessage;
+    send(model ? { ...message, model } : message);
     // App navigates into the session on session_created
   }
 

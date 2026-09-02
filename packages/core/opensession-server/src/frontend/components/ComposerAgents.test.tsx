@@ -4,11 +4,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { PlanItem } from "@tellahq/opensession-protocol/todo-plan";
 
 let statusOpen = false;
-(globalThis as { localStorage?: unknown }).localStorage = {
+const localStorageStub = {
   getItem: () => (statusOpen ? "1" : null),
   setItem: () => {},
   removeItem: () => {},
-};
+  clear: () => {},
+  key: () => null,
+  length: 0,
+} satisfies Storage;
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: localStorageStub,
+});
 
 const { ComposerAgents } = await import("./ComposerAgents");
 const { PlanChecklist } = await import("./PlanChecklist");

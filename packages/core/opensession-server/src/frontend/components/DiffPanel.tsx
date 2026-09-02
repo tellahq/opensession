@@ -224,7 +224,7 @@ export function DiffPanel({
       if (generation === flowGeneration.current)
         setFlow({ key: flowKey, data });
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         if (generation === flowGeneration.current)
           setFlowError(errorMessage(error, "Couldn't load code flow."));
       })

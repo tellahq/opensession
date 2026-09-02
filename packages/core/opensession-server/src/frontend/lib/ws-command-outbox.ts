@@ -1,16 +1,181 @@
+import { z } from "zod";
 import type { WSClientMessage } from "./types";
 
 // Keep the shipped v1 key stable. The value migrates from one aggregate array
 // to per-request records so tabs cannot overwrite each other's durable intent.
 const KEY_PREFIX = "opensession-ws-command-outbox:v1";
 const MAX_COMMAND_BYTES = 3 * 1024 * 1024;
-const utf8Bytes = (value: unknown) =>
-  new TextEncoder().encode(JSON.stringify(value)).length;
+const jsonValueSchema = z.json();
+const sessionMutationFields = {
+  sessionId: z.string(),
+  requestId: z.string(),
+};
+const mutationMessageSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("load_transcript_range"),
+      ...sessionMutationFields,
+      firstSeq: z.number(),
+      lastSeq: z.number(),
+      afterSeq: z.number().optional(),
+      epoch: z.number(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("answer_question"),
+      ...sessionMutationFields,
+      questionId: z.string(),
+      answers: z.record(z.string(), z.string()).nullable(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("prompt"),
+      ...sessionMutationFields,
+      content: z.string(),
+      user: z.string().optional(),
+      images: z.array(z.string()).optional(),
+      files: jsonValueSchema.optional(),
+      busyMode: z.enum(["queue", "steer"]).optional(),
+      effort: z.string().optional(),
+      fastMode: z.boolean().optional(),
+      contextSessions: z.array(z.string()).optional(),
+      contextChats: z.array(z.string()).optional(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("interrupt_prompt"),
+      ...sessionMutationFields,
+      content: z.string(),
+      user: z.string().optional(),
+      images: z.array(z.string()).optional(),
+      files: jsonValueSchema.optional(),
+      effort: z.string().optional(),
+      fastMode: z.boolean().optional(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("delete_queued_prompt"),
+      ...sessionMutationFields,
+      queueId: z.string().optional(),
+      queueIndex: z.number().optional(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("take_queued_prompt"),
+      ...sessionMutationFields,
+      queueId: z.string(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("take_steered_prompt"),
+      ...sessionMutationFields,
+      queueId: z.string(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("update_queued_prompt"),
+      ...sessionMutationFields,
+      queueId: z.string().optional(),
+      queueIndex: z.number().optional(),
+      content: z.string(),
+      images: z.array(z.string()).optional(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("steer_queued_prompt"),
+      ...sessionMutationFields,
+      queueId: z.string().optional(),
+      queueIndex: z.number().optional(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("interrupt_queued_prompt"),
+      ...sessionMutationFields,
+      queueId: z.string().optional(),
+      queueIndex: z.number().optional(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("reorder_queued_prompt"),
+      ...sessionMutationFields,
+      order: z.array(z.string()),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("cancel"),
+      requestId: z.string(),
+      sessionId: z.string().optional(),
+    })
+    .catchall(jsonValueSchema),
+  z
+    .object({
+      type: z.literal("create_session"),
+      requestId: z.string(),
+      clientSessionId: z.string().optional(),
+      branch: z.string(),
+      prompt: z.string(),
+      titlePrompt: z.string().optional(),
+      user: z.string(),
+      cloud: z.boolean().optional(),
+      mode: z.enum(["ask", "code", "scratch"]).optional(),
+      repo: z.string().optional(),
+      workspaceId: z.string().optional(),
+      createWorkspace: z.object({ name: z.string().optional() }).optional(),
+      worktreeMode: z.enum(["share", "stack", "ask"]).optional(),
+      checkoutMode: z.enum(["default", "checkout", "worktree"]).optional(),
+      model: z.string().optional(),
+      mcpServers: z.array(z.string()).optional(),
+      executor: z.enum(["box", "daytona", "modal"]).optional(),
+      sandbox: z.union([z.boolean(), z.string()]).optional(),
+      images: z.array(z.string()).optional(),
+      files: jsonValueSchema.optional(),
+      effort: z
+        .enum(["none", "low", "medium", "high", "xhigh", "max"])
+        .optional(),
+      fastMode: z.boolean().optional(),
+      accountId: z.string().optional(),
+      forkFrom: z
+        .object({ sourceId: z.string(), messageId: z.string().optional() })
+        .optional(),
+      fromPr: z.boolean().optional(),
+      plainThreadId: z.string().optional(),
+    })
+    .catchall(jsonValueSchema),
+]);
+const ackMessageSchema = z.object({
+  type: z.literal("command_ack"),
+  sessionId: z.string(),
+  requestId: z.string(),
+});
+const storedItemSchema = z.object({
+  message: mutationMessageSchema,
+  createdAt: z.number(),
+});
+const legacyStoredSchema = z.object({
+  version: z.literal(1),
+  items: z.array(storedItemSchema),
+});
+const retiredRecordSchema = z.object({ requestId: z.string() });
 
-type MutationMessage = WSClientMessage & { requestId: string };
-type AckMessage = Extract<WSClientMessage, { type: "command_ack" }>;
-type StoredItem = { message: MutationMessage; createdAt: number };
-type LegacyStored = { version: 1; items: StoredItem[] };
+type JsonValue = z.infer<typeof jsonValueSchema>;
+type MutationMessage = z.infer<typeof mutationMessageSchema>;
+type AckMessage = z.infer<typeof ackMessageSchema>;
+type StoredItem = z.infer<typeof storedItemSchema>;
+type LegacyStored = z.infer<typeof legacyStoredSchema>;
+
+const utf8Bytes = (value: StoredItem) =>
+  new TextEncoder().encode(JSON.stringify(value)).length;
 type StorageLike = Pick<
   Storage,
   "getItem" | "setItem" | "removeItem" | "key" | "length"
@@ -25,9 +190,7 @@ function storage(): StorageLike | undefined {
 }
 
 function requestId(message: WSClientMessage): string | undefined {
-  return "requestId" in message && typeof message.requestId === "string"
-    ? message.requestId
-    : undefined;
+  return "requestId" in message ? message.requestId : undefined;
 }
 
 export function shouldRetireCommandResult(result: {
@@ -59,8 +222,11 @@ export class WsCommandOutbox {
         throw new Error(`WebSocket command id ${id} was reused`);
       return true;
     }
+    const storedMessage = mutationMessageSchema.parse(
+      JSON.parse(JSON.stringify(message)),
+    );
     const item = {
-      message: message as MutationMessage,
+      message: storedMessage,
       createdAt: this.now(),
     };
     const currentBytes = this.allItems().reduce(
@@ -86,7 +252,7 @@ export class WsCommandOutbox {
       // pending() suppresses an item that already has an ack record, so a
       // failed cleanup cannot replay the mutation.
     }
-    return !!this.read<AckMessage>(this.ackKey(id));
+    return !!this.read(this.ackKey(id), ackMessageSchema);
   }
 
   /** Old servers have no receipt/ack protocol, so one successful send retires. */
@@ -108,7 +274,8 @@ export class WsCommandOutbox {
   }
 
   confirmAck(id: string): boolean {
-    if (!this.store || !this.read<AckMessage>(this.ackKey(id))) return false;
+    if (!this.store || !this.read(this.ackKey(id), ackMessageSchema))
+      return false;
     if (
       this.isLegacyId(id) &&
       !this.write(this.retiredKey(id), { requestId: id })
@@ -116,7 +283,7 @@ export class WsCommandOutbox {
       return false;
     try {
       this.store.removeItem(this.ackKey(id));
-      return !this.read<AckMessage>(this.ackKey(id));
+      return !this.read(this.ackKey(id), ackMessageSchema);
     } catch {
       return false;
     }
@@ -131,10 +298,10 @@ export class WsCommandOutbox {
   }
 
   pendingAcks(): AckMessage[] {
-    return this.records<AckMessage>(":ack:");
+    return this.records(":ack:", ackMessageSchema);
   }
 
-  stats(): { pending: number; acknowledgements: number; bytes: number } {
+  stats() {
     const items = this.allItems();
     return {
       pending: items.length,
@@ -190,7 +357,7 @@ export class WsCommandOutbox {
 
   private allItems(): StoredItem[] {
     const retired = new Set(
-      this.records<{ requestId: string }>(":retired:").map(
+      this.records(":retired:", retiredRecordSchema).map(
         (item) => item.requestId,
       ),
     );
@@ -200,7 +367,7 @@ export class WsCommandOutbox {
       if (id && !retired.has(id) && Number.isFinite(item.createdAt))
         byId.set(id, item);
     }
-    for (const item of this.records<StoredItem>(":item:")) {
+    for (const item of this.records(":item:", storedItemSchema)) {
       const id = requestId(item.message);
       if (id && !retired.has(id) && Number.isFinite(item.createdAt))
         byId.set(id, item);
@@ -209,7 +376,7 @@ export class WsCommandOutbox {
   }
 
   private legacy(): LegacyStored | undefined {
-    const value = this.read<LegacyStored>(this.keyPrefix);
+    const value = this.read(this.keyPrefix, legacyStoredSchema);
     return value?.version === 1 && Array.isArray(value.items)
       ? value
       : undefined;
@@ -220,10 +387,11 @@ export class WsCommandOutbox {
     const raw = this.store.getItem(this.keyPrefix);
     if (!raw) return;
     try {
-      const legacy = JSON.parse(raw) as LegacyStored;
-      if (legacy.version !== 1 || !Array.isArray(legacy.items)) return;
+      const result = legacyStoredSchema.safeParse(JSON.parse(raw));
+      if (!result.success) return;
+      const legacy = result.data;
       const retired = new Set(
-        this.records<{ requestId: string }>(":retired:").map(
+        this.records(":retired:", retiredRecordSchema).map(
           (item) => item.requestId,
         ),
       );
@@ -232,7 +400,7 @@ export class WsCommandOutbox {
         if (!id || retired.has(id) || !Number.isFinite(item?.createdAt))
           continue;
         if (!this.write(this.legacyKey(id), { requestId: id })) return;
-        if (!this.read<StoredItem>(this.itemKey(id)))
+        if (!this.read(this.itemKey(id), storedItemSchema))
           if (!this.write(this.itemKey(id), item)) return;
       }
       // A marker prevents rescanning while keeping the stable base key.
@@ -244,14 +412,17 @@ export class WsCommandOutbox {
     }
   }
 
-  private records<T>(kind: ":item:" | ":ack:" | ":retired:"): T[] {
+  private records<T>(
+    kind: ":item:" | ":ack:" | ":retired:",
+    schema: z.ZodType<T>,
+  ): T[] {
     if (!this.store) return [];
     const prefix = `${this.keyPrefix}${kind}`;
     const records: T[] = [];
     for (let index = 0; index < this.store.length; index++) {
       const key = this.store.key(index);
       if (!key?.startsWith(prefix)) continue;
-      const value = this.read<T>(key);
+      const value = this.read(key, schema);
       if (value) records.push(value);
     }
     return records;
@@ -266,7 +437,7 @@ export class WsCommandOutbox {
   }
 
   private isLegacyId(id: string): boolean {
-    if (this.read<{ requestId: string }>(this.legacyKey(id))) return true;
+    if (this.read(this.legacyKey(id), retiredRecordSchema)) return true;
     return (this.legacy()?.items ?? []).some(
       (item) => item.message.requestId === id,
     );
@@ -280,16 +451,18 @@ export class WsCommandOutbox {
     return `${this.keyPrefix}:retired:${id}`;
   }
 
-  private read<T>(key: string): T | undefined {
+  private read<T>(key: string, schema: z.ZodType<T>): T | undefined {
     try {
       const raw = this.store?.getItem(key);
-      return raw ? (JSON.parse(raw) as T) : undefined;
+      if (!raw) return undefined;
+      const result = schema.safeParse(JSON.parse(raw));
+      return result.success ? result.data : undefined;
     } catch {
       return undefined;
     }
   }
 
-  private write(key: string, value: unknown): boolean {
+  private write(key: string, value: JsonValue): boolean {
     if (!this.store) return false;
     try {
       this.store.setItem(key, JSON.stringify(value));

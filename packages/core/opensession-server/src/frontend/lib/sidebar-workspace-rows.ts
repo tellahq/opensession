@@ -19,7 +19,9 @@ interface BuildWorkspaceRowsInput {
   sort: SortBy;
   isClaimed: (session: UnifiedSession) => boolean;
   statusForSession: (session: UnifiedSession) => MineStatus;
-  pinnedLaneForSession: (session: UnifiedSession) => unknown;
+  pinnedLaneForSession: (
+    session: UnifiedSession,
+  ) => MineStatus | null | undefined;
   prLaneForSessions: (sessions: UnifiedSession[]) => MineStatus | null;
   mentionForSession: (sessionId: string) => { by?: string } | undefined;
 }

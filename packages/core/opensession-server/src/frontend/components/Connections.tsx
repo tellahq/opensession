@@ -66,25 +66,25 @@ const STATUS_META: Record<
   missing: { label: "Missing", dot: "var(--red)", bad: true },
 };
 
-const MCP_BLURBS: Record<string, string> = {
-  linear: "Issues and projects: read and update Linear",
-  plain: "Customer support threads from Plain",
-  sentry: "Errors and performance issues",
-  workos: "User & organization admin",
-  tinybird: "Analytics queries over product events",
-  stripe: "Billing, subscriptions & refunds",
-  amplitude: "Product analytics events",
-  grafana: "Dashboards, logs & metrics",
-  incident: "incident.io: incidents and on-call",
-  slack: "Post & read Slack messages",
-  ahrefs: "SEO, keywords & backlink data",
-  github: "Repos, issues & pull requests",
-  circle: "Community & support workspace",
-  "apple-build": "Credential-free Swift and unsigned iOS builds",
-  "apple-release": "Restricted ad-hoc and TestFlight release tools",
-  vercel: "Projects, deployments & logs",
-  vero: "Broadcasts and customer journeys",
-};
+const MCP_BLURBS = new Map<string, string>([
+  ["linear", "Issues and projects: read and update Linear"],
+  ["plain", "Customer support threads from Plain"],
+  ["sentry", "Errors and performance issues"],
+  ["workos", "User & organization admin"],
+  ["tinybird", "Analytics queries over product events"],
+  ["stripe", "Billing, subscriptions & refunds"],
+  ["amplitude", "Product analytics events"],
+  ["grafana", "Dashboards, logs & metrics"],
+  ["incident", "incident.io: incidents and on-call"],
+  ["slack", "Post & read Slack messages"],
+  ["ahrefs", "SEO, keywords & backlink data"],
+  ["github", "Repos, issues & pull requests"],
+  ["circle", "Community & support workspace"],
+  ["apple-build", "Credential-free Swift and unsigned iOS builds"],
+  ["apple-release", "Restricted ad-hoc and TestFlight release tools"],
+  ["vercel", "Projects, deployments & logs"],
+  ["vero", "Broadcasts and customer journeys"],
+]);
 
 function LockIcon({ size = 12 }: { size?: number }) {
   return (
@@ -388,7 +388,7 @@ export function Connections() {
                       ) : null}
                     </div>
                     <div className="truncate text-label text-dim">
-                      {MCP_BLURBS[s.name] || "MCP server"}
+                      {MCP_BLURBS.get(s.name) || "MCP server"}
                     </div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-meta text-faint">
                       <span className="rounded bg-active px-1.5 py-px">
@@ -573,21 +573,26 @@ function buildGithubAppCreateUrl(
     name,
     url: "http://localhost:3850",
     public: "false",
-    ...(webhookBaseUrl
-      ? {
-          webhook_url: `${webhookBaseUrl.replace(/\/$/, "")}/github/webhook`,
-          webhook_active: "true",
-        }
-      : {}),
-    // The canonical grant set — the same permissions the install tokens mint
-    // request, so the App is not born missing `issues` or `checks` (the drift
-    // this builder used to have: no issues, no checks).
-    ...GITHUB_APP_GRANT_PERMISSIONS,
-  }).toString();
+  });
+  if (webhookBaseUrl) {
+    params.set(
+      "webhook_url",
+      `${webhookBaseUrl.replace(/\/$/, "")}/github/webhook`,
+    );
+    params.set("webhook_active", "true");
+  }
+  // The canonical grant set is the same permissions the install tokens mint
+  // request, so the App is not born missing `issues` or `checks` (the drift
+  // this builder used to have: no issues, no checks).
+  for (const [permission, access] of Object.entries(
+    GITHUB_APP_GRANT_PERMISSIONS,
+  )) {
+    params.set(permission, access);
+  }
   const base = org.trim()
     ? `https://github.com/organizations/${encodeURIComponent(org.trim())}/settings/apps/new`
     : "https://github.com/settings/apps/new";
-  return `${base}?${params}`;
+  return `${base}?${params.toString()}`;
 }
 
 // GitHub derives the app slug from its name: lowercased, every run of
@@ -770,6 +775,7 @@ function GithubAppWizard({
                 size="sm"
                 value={appOwner}
                 onValueChange={(next) => {
+                  if (next !== "you" && next !== "org") return;
                   // Switching to a personal App drops the captured org owner,
                   // but sign-in is still enabled only after GitHub connects.
                   if (next === "you" && intentOrg) {
@@ -779,7 +785,7 @@ function GithubAppWizard({
                       return;
                     onClearIntent();
                   }
-                  setAppOwner(next as "you" | "org");
+                  setAppOwner(next);
                 }}
               >
                 <SegmentedOption value="you">You</SegmentedOption>

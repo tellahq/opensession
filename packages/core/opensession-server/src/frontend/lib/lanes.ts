@@ -11,7 +11,7 @@
 // cache): the store is a lib/user-map instance, which owns hydration and
 // ordered per-key delta writes.
 import { fetchLanes, saveLanesApi } from "./api";
-import { makeUserMap } from "./user-map";
+import * as UserMap from "./user-map";
 
 export type Lane =
   | "needsinput"
@@ -25,9 +25,29 @@ export type Lane =
 
 const CHANGE_EVENT = "opensession-lanes-changed";
 
-const store = makeUserMap<Lane>({
+function isLane(value: string): value is Lane {
+  return (
+    value === "needsinput" ||
+    value === "inprogress" ||
+    value === "review" ||
+    value === "merged" ||
+    value === "pending" ||
+    value === "mine"
+  );
+}
+
+async function fetchLaneMap(user: string): Promise<Record<string, Lane>> {
+  const response = await fetchLanes(user);
+  const lanes: Record<string, Lane> = {};
+  for (const [id, value] of Object.entries(response)) {
+    if (isLane(value)) lanes[id] = value;
+  }
+  return lanes;
+}
+
+const store = UserMap.makeUserMap<Lane>({
   changeEvent: CHANGE_EVENT,
-  fetchMap: (user) => fetchLanes(user) as Promise<Record<string, Lane>>,
+  fetchMap: fetchLaneMap,
   saveDelta: (user, delta) => saveLanesApi(user, delta),
 });
 

@@ -13,9 +13,9 @@
 // A makeUserPref instance, so the answer follows you across devices (see
 // lib/user-pref).
 
-import { makeUserPref } from "./user-pref";
+import * as UserPref from "./user-pref";
 
-const pref = makeUserPref<boolean>({
+const pref = UserPref.makeUserPref<boolean>({
   localKey: "opensession-live-typing",
   prefKey: "live-typing",
   changeEvent: "opensession-live-typing-changed",

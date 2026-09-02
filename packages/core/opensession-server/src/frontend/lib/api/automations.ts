@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { ApiError, BASE, request } from "./request";
 
 // ── Automations ──
@@ -24,6 +25,14 @@ export interface ModelOption {
 
 type ModelCatalog = { models: ModelOption[]; default: string };
 
+const suggestBranchResponseSchema = z.object({ branch: z.string().optional() });
+const transcribeResponseSchema = z
+  .object({
+    text: z.string().optional(),
+    error: z.string().optional(),
+  })
+  .nullable();
+
 /**
  * Ask the backend (a quick Haiku call) to suggest a branch name for a task
  * prompt. Returns null when the prompt is too thin or anything fails — callers
@@ -31,11 +40,13 @@ type ModelCatalog = { models: ModelOption[]; default: string };
  */
 export async function suggestBranch(prompt: string): Promise<string | null> {
   try {
-    const data = await request<{ branch?: unknown }>("/suggest-branch", {
-      method: "POST",
-      body: { prompt },
-    });
-    return typeof data?.branch === "string" ? data.branch : null;
+    const data = suggestBranchResponseSchema.parse(
+      await request<object>("/suggest-branch", {
+        method: "POST",
+        body: { prompt },
+      }),
+    );
+    return data.branch ?? null;
   } catch {
     return null;
   }
@@ -49,19 +60,14 @@ export async function transcribeClip(audio: Blob): Promise<string> {
     headers: { "Content-Type": audio.type || "audio/webm" },
     body: audio,
   });
-  const data = (await res.json().catch(() => null)) as {
-    text?: unknown;
-    error?: unknown;
-  } | null;
+  const parsed = transcribeResponseSchema.safeParse(
+    await res.json().catch(() => null),
+  );
+  const data = parsed.success ? parsed.data : null;
   if (!res.ok) {
-    throw new ApiError(
-      typeof data?.error === "string"
-        ? data.error
-        : `Transcribe: ${res.status}`,
-      res.status,
-    );
+    throw new ApiError(data?.error ?? `Transcribe: ${res.status}`, res.status);
   }
-  return typeof data?.text === "string" ? data.text : "";
+  return data?.text ?? "";
 }
 
 export async function fetchModels(workspaceId?: string): Promise<ModelCatalog> {
@@ -86,29 +92,35 @@ export interface ProviderAccountOption {
   kind?: string;
 }
 
-interface ProviderAccountRecord {
-  id: string;
-  name: string;
-  email?: unknown;
-  owner?: unknown;
-  usable?: unknown;
-  kind?: unknown;
-}
+const providerAccountRecordSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().optional(),
+  owner: z.string().optional(),
+  usable: z.boolean().optional(),
+  kind: z.string().optional(),
+});
+
+const providerAccountsResponseSchema = z.object({
+  accounts: z.array(providerAccountRecordSchema).optional(),
+});
 
 export async function fetchProviderAccounts(options?: {
   onPoolError?: (cause: unknown) => void;
 }): Promise<ProviderAccountOption[]> {
   const fetchPool = async (provider: "claude" | "codex", path: string) => {
     try {
-      const data = await request<{ accounts?: ProviderAccountRecord[] }>(path);
-      return (data?.accounts ?? []).map((account) => ({
+      const data = providerAccountsResponseSchema.parse(
+        await request<object>(path),
+      );
+      return (data.accounts ?? []).map((account) => ({
         id: account.id,
         name: account.name,
-        email: typeof account.email === "string" ? account.email : undefined,
+        email: account.email,
         provider,
-        owner: typeof account.owner === "string" ? account.owner : undefined,
+        owner: account.owner,
         usable: account.usable !== false,
-        kind: typeof account.kind === "string" ? account.kind : undefined,
+        kind: account.kind,
       }));
     } catch (cause: unknown) {
       options?.onPoolError?.(cause);
@@ -293,7 +305,6 @@ export async function draftAutomationApi(
 /** MCP server list + agent health, for pickers (Automations) and Settings. */
 export async function fetchConnections(): Promise<{
   mcpServers: Array<{ name: string; status: string; allowedUsers?: string[] }>;
-  agents: Record<string, unknown>;
   engines?: string[];
 }> {
   const res = await fetch(`${BASE}/connections`);

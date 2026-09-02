@@ -3,7 +3,9 @@
 // Keep more than the three rows the picker shows so unavailable models do not
 // leave gaps when a workspace exposes a smaller catalog.
 
-import { makeUserPref, type UserPref } from "./user-pref";
+import { z } from "zod";
+import * as userPref from "./user-pref";
+import type { UserPref } from "./user-pref";
 
 const LOCAL_KEY = "opensession-recent-models";
 const PREF_KEY = "recent-models";
@@ -11,20 +13,19 @@ const CHANGE_EVENT = "opensession-recent-models-changed";
 const EMPTY = "[]";
 export const RECENT_MODEL_LIMIT = 12;
 
+const recentModelsSchema = z.array(z.string().catch(""));
+
 export function decodeRecentModels(
   raw: string | null | undefined,
 ): string[] | null {
   if (raw == null) return null;
   try {
-    const value = JSON.parse(raw);
-    if (!Array.isArray(value)) return null;
-    return [
-      ...new Set(
-        value.filter(
-          (id): id is string => typeof id === "string" && id.length > 0,
-        ),
-      ),
-    ].slice(0, RECENT_MODEL_LIMIT);
+    const result = recentModelsSchema.safeParse(JSON.parse(raw));
+    if (!result.success) return null;
+    return [...new Set(result.data.filter((id) => id.length > 0))].slice(
+      0,
+      RECENT_MODEL_LIMIT,
+    );
   } catch {
     return null;
   }
@@ -42,7 +43,7 @@ let store: UserPref<string> | undefined;
 
 function prefStore(): UserPref<string> {
   if (!store) {
-    store = makeUserPref<string>({
+    store = userPref.makeUserPref<string>({
       localKey: LOCAL_KEY,
       prefKey: PREF_KEY,
       changeEvent: CHANGE_EVENT,

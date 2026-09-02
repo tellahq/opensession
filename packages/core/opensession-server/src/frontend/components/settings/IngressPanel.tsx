@@ -294,9 +294,11 @@ function PrivateAppSetup({
                   <Segmented
                     label="Private domain DNS provider"
                     value={provider}
-                    onValueChange={(value) =>
-                      onProviderChange(value as "cloudflare" | "vercel")
-                    }
+                    onValueChange={(value) => {
+                      if (value === "cloudflare" || value === "vercel") {
+                        onProviderChange(value);
+                      }
+                    }}
                     className="w-full"
                   >
                     <SegmentedOption
@@ -614,14 +616,15 @@ export function IngressPanel({
       loaded.current = true;
     } else {
       const saved = configuredIngressDrafts(next);
-      setDrafts((current) => ({
-        ...current,
-        ...(next.exposure ? { [next.exposure]: saved[next.exposure] } : {}),
-        ...(configuredAppDomain(next) && next.exposure !== "cloudflare"
-          ? { cloudflare: saved.cloudflare }
-          : {}),
-        ...(!customDraftTouched.current ? { custom: saved.custom } : {}),
-      }));
+      setDrafts((current) => {
+        const updated = { ...current };
+        if (next.exposure) updated[next.exposure] = saved[next.exposure];
+        if (configuredAppDomain(next) && next.exposure !== "cloudflare") {
+          updated.cloudflare = saved.cloudflare;
+        }
+        if (!customDraftTouched.current) updated.custom = saved.custom;
+        return updated;
+      });
     }
     if (selectConfigured) {
       setMethod(next.exposure || "custom");
@@ -655,7 +658,7 @@ export function IngressPanel({
     const timer = window.setInterval(() => {
       void fetchPublicIngress()
         .then((next) => applyFromEffect(next, false))
-        .catch((_cause: unknown) => {
+        .catch(() => {
           // The last ingress settings remain valid and visible, so this
           // background convergence poll is best-effort.
         });
@@ -666,7 +669,7 @@ export function IngressPanel({
   async function run(
     kind: "apply" | "test",
     work: () => Promise<PublicIngressSettings>,
-    message: string | ((next: PublicIngressSettings) => string),
+    message: (next: PublicIngressSettings) => string,
   ) {
     if (busy) return;
     setBusy(kind);
@@ -674,7 +677,7 @@ export function IngressPanel({
     await work()
       .then((next) => {
         apply(next);
-        toast(typeof message === "function" ? message(next) : message, {
+        toast(message(next), {
           variant: "success",
         });
         if (next.githubWebhook?.updated) {
@@ -695,7 +698,7 @@ export function IngressPanel({
   async function runPrivateApp(
     action: "setup" | "save",
     work: () => Promise<PublicIngressSettings & { restartRequired: boolean }>,
-    message: string | ((next: PublicIngressSettings) => string),
+    message: (next: PublicIngressSettings) => string,
   ) {
     if (busy || !settings) return;
     setBusy("app");
@@ -706,7 +709,7 @@ export function IngressPanel({
         apply(next);
         setPrivateApiToken("");
         if (next.restartRequired) setup.requireRestart();
-        const notice = typeof message === "function" ? message(next) : message;
+        const notice = message(next);
         toast(notice, {
           variant: next.app.domain.health === "ready" ? "success" : "default",
         });
@@ -765,13 +768,15 @@ export function IngressPanel({
     }
     await run(
       "apply",
-      () =>
-        configurePublicIngressCloudflare({
+      () => {
+        const input: Parameters<typeof configurePublicIngressCloudflare>[0] = {
           publicBaseUrl: url,
           tunnelId,
-          ...(tunnelToken ? { token: tunnelToken } : {}),
-        }),
-      "Cloudflare Tunnel started",
+        };
+        if (tunnelToken) input.token = tunnelToken;
+        return configurePublicIngressCloudflare(input);
+      },
+      () => "Cloudflare Tunnel started",
     );
   }
 
@@ -940,20 +945,25 @@ export function IngressPanel({
                         onSetup={() =>
                           void runPrivateApp(
                             "setup",
-                            () =>
-                              setupPrivateAppDomain({
+                            () => {
+                              const input: Parameters<
+                                typeof setupPrivateAppDomain
+                              >[0] = {
                                 domain: appDomain,
                                 provider: privateProvider,
-                                ...(certificateEmail
-                                  ? { email: certificateEmail }
-                                  : {}),
-                                ...(privateApiToken
-                                  ? { apiToken: privateApiToken }
-                                  : {}),
-                                ...(privateProvider === "vercel" && vercelTeamId
-                                  ? { teamId: vercelTeamId }
-                                  : {}),
-                              }),
+                              };
+                              if (certificateEmail)
+                                input.email = certificateEmail;
+                              if (privateApiToken)
+                                input.apiToken = privateApiToken;
+                              if (
+                                privateProvider === "vercel" &&
+                                vercelTeamId
+                              ) {
+                                input.teamId = vercelTeamId;
+                              }
+                              return setupPrivateAppDomain(input);
+                            },
                             (next) =>
                               next.app.domain.health === "ready"
                                 ? "Private app domain is ready"
@@ -965,7 +975,7 @@ export function IngressPanel({
                           void runPrivateApp(
                             "save",
                             () => savePrivateAppDomain(appDomain),
-                            "Private app domain saved",
+                            () => "Private app domain saved",
                           )
                         }
                       />
@@ -978,9 +988,11 @@ export function IngressPanel({
                           <Segmented
                             label="Public callback method"
                             value={method}
-                            onValueChange={(next) =>
-                              setMethod(next as IngressExposure)
-                            }
+                            onValueChange={(next) => {
+                              if (next === "custom" || next === "cloudflare") {
+                                setMethod(next);
+                              }
+                            }}
                             className="flex w-52 shrink-0 phone:w-full"
                           >
                             <SegmentedOption

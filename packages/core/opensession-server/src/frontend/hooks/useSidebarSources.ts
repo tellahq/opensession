@@ -17,6 +17,12 @@ import {
 } from "../lib/sidebar-filter";
 import type { FeedDescriptor, FeedItem, UnifiedSession } from "../lib/types";
 
+declare global {
+  interface WindowEventMap {
+    "opensession:pr-closed": CustomEvent<PrClosedDetail>;
+  }
+}
+
 export function useSidebarSources({
   sessions,
   hiddenFeeds,
@@ -76,9 +82,8 @@ export function useSidebarSources({
     };
   }, []);
   useEffect(() => {
-    const onClosed = (event: Event) => {
-      const { repo, branch, url } = (event as CustomEvent<PrClosedDetail>)
-        .detail;
+    const onClosed = (event: WindowEventMap[typeof PR_CLOSED_EVENT]) => {
+      const { repo, branch, url } = event.detail;
       if (url) {
         prCloseGeneration.current++;
         closedPrTombstones.current.set(url, prCloseGeneration.current);
@@ -144,13 +149,14 @@ export function useSidebarSources({
   const argFiltersFor = (
     feed: FeedDescriptor,
     all: Record<string, FeedFilterValues>,
-  ) =>
-    Object.fromEntries(
-      (feed.filters || [])
-        .filter((f) => f.mode !== "meta")
-        .map((f) => [f.key, (all[feed.id] || {})[f.key] || ""])
-        .filter(([, v]) => v),
-    ) as Record<string, string>;
+  ) => {
+    const values: FeedFilterValues = {};
+    for (const filter of feed.filters || []) {
+      const value = (all[feed.id] || {})[filter.key];
+      if (filter.mode !== "meta" && value) values[filter.key] = value;
+    }
+    return values;
+  };
   const setFeedFilter = (feed: FeedDescriptor, key: string, value: string) => {
     setFeedFiltersState((prev) => {
       const next = {

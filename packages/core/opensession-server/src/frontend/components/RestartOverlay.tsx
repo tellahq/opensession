@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { z } from "zod";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { dismissToast, toast } from "../ui/toast";
-import { fetchHealthStatus } from "../lib/health";
+import { fetchHealthStatus, type HealthStatus } from "../lib/health";
 import { CONNECTION_PRESENTATION_GRACE_MS } from "../lib/connection-presentation";
 import {
   bootTransition,
@@ -78,8 +79,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
   // baseline: a health request made after the announcement can still be
   // answered by the draining process, so it must not clear the notice. If the
   // announcement itself was lost, a changed bootId provides a fallback receipt.
-  const handleBootId = (id: unknown) => {
-    if (typeof id !== "string" || !id) return;
+  const handleBootId = (id: string) => {
     const transition = bootTransition(bootId.current, id);
     bootId.current = id;
     if (explicit.current) {
@@ -91,8 +91,10 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     }
   };
 
-  const handleHealth = (data: { bootId?: unknown }) =>
-    handleBootId(data.bootId);
+  const handleHealth = (data: HealthStatus) => {
+    const result = z.string().min(1).safeParse(data.bootId);
+    if (result.success) handleBootId(result.data);
+  };
 
   // Learn the current instance's bootId up front (also the fallback for
   // servers that don't send the hello frame yet).

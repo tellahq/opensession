@@ -42,11 +42,12 @@ const PRIMARY_MODEL_ID_SET = new Set<string>(PRIMARY_MODEL_IDS);
 
 /** Engine display names, keyed by ModelOption.provider — only used for the
  * legacy (no-engine-configured) grouping fallback below. */
-export const ENGINE_LABELS: Record<string, string> = {
+export const ENGINE_LABELS = {
   claude: "Claude",
   codex: "Codex",
   pi: "Pi",
 };
+const ENGINE_LABEL_BY_ID = new Map(Object.entries(ENGINE_LABELS));
 
 /** De-emphasized group name for the native Claude-SDK/Codex entries that stick
  * around as automation/fallback plumbing during the engine migration. */
@@ -164,7 +165,7 @@ export function shortModelLabel(id: string, models: ModelOption[]): string {
 }
 
 /** Friendly names for the upstream providers in the grouped main list. */
-const PROVIDER_LABELS: Record<string, string> = {
+const PROVIDER_LABELS = {
   dial: "The Dial",
   custom: "Custom",
   orchestrator: "The Orchestrator",
@@ -182,6 +183,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   cerebras: "Cerebras",
   wafer: "Wafer",
 };
+const PROVIDER_LABEL_BY_ID = new Map(Object.entries(PROVIDER_LABELS));
 
 /** Section order in the grouped main list; unlisted providers follow in
  * config order. */
@@ -241,10 +243,12 @@ const ENGINE_PROVIDERS = new Set(["pi"]);
  * the legacy group; Fable, Sol, and their current siblings remain ordinary
  * choices even against an older server that still returns native ids.
  */
-export function splitModelOptions(models: ModelOption[]): {
+type SplitModelOptions = {
   primary: ModelOption[];
   legacy: ModelOption[];
-} {
+};
+
+export function splitModelOptions(models: ModelOption[]): SplitModelOptions {
   const rank = (m: ModelOption) => {
     const i = MODEL_TAIL_ORDER.indexOf(m.id.split("/").pop() || "");
     return i === -1 ? MODEL_TAIL_ORDER.length : i;
@@ -546,7 +550,7 @@ export function ModelEffortSelect({
     const otherGroups = [...new Set(engines)]
       .map((engine) => ({
         engine,
-        label: ENGINE_LABELS[engine] || engine,
+        label: ENGINE_LABEL_BY_ID.get(engine) || engine,
         options: otherOptions.filter((o) => o.engine === engine),
       }))
       .filter((g) => g.options.length > 0);
@@ -568,7 +572,7 @@ export function ModelEffortSelect({
         group = {
           provider,
           label:
-            PROVIDER_LABELS[provider] ||
+            PROVIDER_LABEL_BY_ID.get(provider) ||
             provider.charAt(0).toUpperCase() + provider.slice(1),
           options: [],
         };

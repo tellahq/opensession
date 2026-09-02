@@ -1,14 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
+import { z } from "zod";
 import type { ShikiRequest } from "../lib/shiki-engine";
 import { TOOL_PRE, TOOL_PRE_CODE } from "../lib/tool-classes";
 
 const MAX_HIGHLIGHT_CHARS = 20_000;
 const CACHE_MAX = 300;
 const cache = new Map<string, string | null>();
-const pending = new Map<
-  number,
-  { resolve: (html: string | null) => void; reject: (error: unknown) => void }
->();
+type PendingHighlight = {
+  resolve: (html: string | null) => void;
+  fail: (message: string) => void;
+};
+const pending = new Map<number, PendingHighlight>();
+const workerResponseSchema = z.object({
+  id: z.number().int(),
+  html: z.string().nullable().optional(),
+  error: z.string().optional(),
+});
 let worker: Worker | null = null;
 let requestId = 0;
 
@@ -83,15 +90,18 @@ function getWorker(): Worker | null {
     );
     worker = new Worker(url, { type: "module", name: "session-shiki" });
     URL.revokeObjectURL(url);
-    worker.onmessage = ({ data }) => {
-      const job = pending.get(data.id);
+    worker.onmessage = (event) => {
+      const result = workerResponseSchema.safeParse(event.data);
+      if (!result.success) return;
+      const response = result.data;
+      const job = pending.get(response.id);
       if (!job) return;
-      pending.delete(data.id);
-      if (data.error) job.reject(new Error(data.error));
-      else job.resolve(data.html ?? null);
+      pending.delete(response.id);
+      if (response.error) job.fail(response.error);
+      else job.resolve(response.html ?? null);
     };
     worker.onerror = (error) => {
-      for (const job of pending.values()) job.reject(error);
+      for (const job of pending.values()) job.fail(error.message);
       pending.clear();
       worker?.terminate();
       worker = null;
@@ -111,7 +121,10 @@ async function highlight(request: ShikiRequest): Promise<string | null> {
   if (target) {
     html = await new Promise<string | null>((resolve, reject) => {
       const id = ++requestId;
-      pending.set(id, { resolve, reject });
+      pending.set(id, {
+        resolve,
+        fail: (message) => reject(new Error(message)),
+      });
       target.postMessage({ id, request });
     }).catch(async () => runShikiWorker(request));
   } else {

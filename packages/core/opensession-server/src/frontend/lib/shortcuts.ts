@@ -23,6 +23,7 @@
  * window, like the ones Base UI stops inside a dialog.
  */
 
+import { z } from "zod";
 import { isApple, isChromium } from "./platform";
 import {
   chordGlyphs,
@@ -32,7 +33,7 @@ import {
   normalizeChord,
   type Chord,
 } from "./shortcut-chord";
-import { makeUserPref } from "./user-pref";
+import * as UserPref from "./user-pref";
 
 export type { Chord } from "./shortcut-chord";
 
@@ -388,8 +389,38 @@ type OverrideMap = Record<string, Chord[]>;
 
 function canonicalJson(map: OverrideMap): string {
   const sorted: OverrideMap = {};
-  for (const key of Object.keys(map).sort()) sorted[key] = map[key] as Chord[];
+  const entries = Object.entries(map).sort(([a], [b]) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
+  for (const [key, chords] of entries) sorted[key] = chords;
   return JSON.stringify(sorted);
+}
+
+const overrideRecordSchema = z.record(z.string(), z.json());
+const overrideEntrySchema = z.string();
+
+function parseOverrides(raw: string): OverrideMap | null {
+  let result;
+  try {
+    result = overrideRecordSchema.safeParse(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+  if (!result.success) return null;
+
+  const out: OverrideMap = {};
+  for (const [id, value] of Object.entries(result.data)) {
+    if (!Array.isArray(value)) continue;
+    const chords: Chord[] = [];
+    for (const entry of value) {
+      const parsedEntry = overrideEntrySchema.safeParse(entry);
+      if (!parsedEntry.success) continue;
+      const chord = normalizeChord(parsedEntry.data, isApple);
+      if (chord && !chords.includes(chord)) chords.push(chord);
+    }
+    out[id] = chords;
+  }
+  return out;
 }
 
 /**
@@ -398,30 +429,12 @@ function canonicalJson(map: OverrideMap): string {
  * wrote, or opening settings on the old client would destroy them.
  */
 function decodeOverrides(raw: string | null | undefined): string | null {
-  if (typeof raw !== "string" || raw.length === 0) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-    return null;
-  const out: OverrideMap = {};
-  for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (!Array.isArray(value)) continue;
-    const chords: Chord[] = [];
-    for (const entry of value) {
-      if (typeof entry !== "string") continue;
-      const chord = normalizeChord(entry, isApple);
-      if (chord && !chords.includes(chord)) chords.push(chord);
-    }
-    out[id] = chords;
-  }
-  return canonicalJson(out);
+  if (!raw) return null;
+  const parsed = parseOverrides(raw);
+  return parsed ? canonicalJson(parsed) : null;
 }
 
-const pref = makeUserPref<string>({
+const pref = UserPref.makeUserPref<string>({
   localKey: "opensession-shortcuts",
   prefKey: "shortcuts",
   changeEvent: "opensession-shortcuts-changed",
@@ -440,11 +453,7 @@ function overrides(): OverrideMap {
   const raw = pref.get();
   if (raw !== cachedRaw) {
     cachedRaw = raw;
-    try {
-      cachedMap = JSON.parse(raw) as OverrideMap;
-    } catch {
-      cachedMap = {};
-    }
+    cachedMap = parseOverrides(raw) ?? {};
   }
   return cachedMap;
 }
@@ -474,7 +483,7 @@ export function commandsUsingChord(chord: Chord): ShortcutId[] {
  * propagate to the user's other devices.
  */
 export function setShortcutBindings(id: ShortcutId, chords: Chord[]): void {
-  const next: OverrideMap = { ...overrides() };
+  const next = { ...overrides() };
   const seen: Chord[] = [];
   for (const raw of chords) {
     const chord = normalizeChord(raw, isApple);
@@ -486,7 +495,7 @@ export function setShortcutBindings(id: ShortcutId, chords: Chord[]): void {
 
 /** Drop the override, returning the command to its default chords. */
 export function resetShortcutBindings(id: ShortcutId): void {
-  const next: OverrideMap = { ...overrides() };
+  const next = { ...overrides() };
   if (!Object.hasOwn(next, id)) return;
   delete next[id];
   pref.set(canonicalJson(next));
@@ -497,7 +506,8 @@ export function resetAllShortcuts(): void {
   const next: OverrideMap = {};
   // Unknown ids belong to a newer client; leave them be.
   for (const [id, chords] of Object.entries(overrides())) {
-    if (!COMMANDS_BY_ID.has(id as ShortcutId)) next[id] = chords;
+    if (!SHORTCUT_COMMANDS.some((command) => command.id === id))
+      next[id] = chords;
   }
   pref.set(canonicalJson(next));
 }
@@ -531,7 +541,7 @@ export function matchesShortcut(
   id: ShortcutId,
 ): boolean {
   if (recording) return false;
-  const native = "nativeEvent" in e ? (e.nativeEvent as KeyboardEvent) : e;
+  const native = "nativeEvent" in e ? e.nativeEvent : e;
   const chord = eventChord(native, isApple);
   if (!chord) return false;
   return shortcutBindings(id).includes(chord);
@@ -562,12 +572,14 @@ export function isBindable(chord: Chord): boolean {
 export function shortcutKeys(id: ShortcutId): string[][] {
   const bindings = shortcutBindings(id);
   const command = shortcutCommand(id);
+  const first = bindings[0];
   const ordered =
     command?.preferAliasOnChromium &&
     isChromium &&
     !isShortcutCustomized(id) &&
-    bindings.length > 1
-      ? [...bindings.slice(1), bindings[0] as Chord]
+    bindings.length > 1 &&
+    first
+      ? [...bindings.slice(1), first]
       : bindings;
   return ordered.map((chord) => chordGlyphs(chord, isApple));
 }

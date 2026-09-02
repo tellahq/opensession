@@ -1,5 +1,6 @@
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import { toolCommand } from "@tellahq/opensession-protocol/tool-presentation";
+import { z } from "zod";
 import type { TranscriptEntry } from "./types";
 
 /**
@@ -57,6 +58,8 @@ const OUTCOME_RANK: Record<SentOutcome["kind"], number> = {
   commit: 2,
   edit: 1,
 };
+
+const commandInputSchema = z.looseObject({});
 
 /** Collapse markdown into one readable run of prose. */
 function flatten(text: string): string {
@@ -164,11 +167,10 @@ export function collectSentMessages(entries: TranscriptEntry[]): SentMessage[] {
     // The input, not the presentation: that one is truncated to the 160
     // characters its row can show, and a `git commit` at the end of a long
     // script is exactly the case worth naming.
-    const input = entry.toolInput;
+    const input = commandInputSchema.safeParse(entry.toolInput);
     const command =
-      (input && typeof input === "object"
-        ? toolCommand(input as Record<string, unknown>)
-        : "") || (tool?.detail.kind === "command" ? tool.detail.command : "");
+      (input.success ? toolCommand(input.data) : "") ||
+      (tool?.detail.kind === "command" ? tool.detail.command : "");
     if (!command) return;
     const found = commandOutcome(command);
     if (
@@ -205,8 +207,8 @@ export function collectSentMessages(entries: TranscriptEntry[]): SentMessage[] {
       id: entry.id,
       preview,
       timestamp: entry.timestamp,
-      ...(entry.sender ? { sender: entry.sender } : {}),
     };
+    if (entry.sender) open.sender = entry.sender;
     sent.push(open);
   }
   closeTurn();

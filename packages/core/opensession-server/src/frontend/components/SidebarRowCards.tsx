@@ -382,7 +382,7 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 // Mirrors SUPPORT_PRIORITY_GROUPS in Sidebar.tsx (Plain priorities are ints
 // 0..3, unset buckets as Normal); kept local so the card file doesn't import
 // the sidebar that renders it.
-const PRIORITY_META: Record<number, { label: string; cls: string }> = {
+const PRIORITY_META = {
   0: { label: "Urgent", cls: "text-red" },
   1: { label: "High", cls: "text-yellow" },
   2: { label: "Normal", cls: "text-blue" },
@@ -400,7 +400,14 @@ export function SupportRowCard({
   session: UnifiedSession | null;
 }) {
   const customer = t.customer.name || t.customer.email || "Unknown";
-  const priority = PRIORITY_META[t.priority ?? 2] || PRIORITY_META[2];
+  const priority =
+    t.priority === 0
+      ? PRIORITY_META[0]
+      : t.priority === 1
+        ? PRIORITY_META[1]
+        : t.priority === 3
+          ? PRIORITY_META[3]
+          : PRIORITY_META[2];
   const preview = (t.previewText || "").replace(/\s+/g, " ").trim();
   const labels = t.labels || [];
   const stamp = t.statusChangedAt || t.createdAt;

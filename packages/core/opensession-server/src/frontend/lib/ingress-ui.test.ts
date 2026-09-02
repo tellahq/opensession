@@ -16,15 +16,37 @@ import {
 import type { PublicIngressSettings } from "./api/ingress";
 
 const settings = {
+  canManage: true,
   publicBaseUrl: "https://old.example.test",
   exposure: "custom",
+  health: "ready",
+  localUrl: "http://127.0.0.1:3860",
+  hostname: "old.example.test",
   app: {
     publicBaseUrl: "https://os.example.test",
     hostname: "os.example.test",
     tailnetIpv4: "100.64.0.10",
+    domain: {
+      health: "ready",
+      dnsProvider: "cloudflare",
+      credentialConfigured: true,
+      certificateEmailConfigured: true,
+      certificateExpiresAt: "2027-01-01T00:00:00.000Z",
+      legoInstalled: true,
+    },
   },
   server: { ipv4: ["203.0.113.10"], ipv6: ["2001:db8::10"] },
-} as PublicIngressSettings;
+  dns: { a: [], aaaa: [], suggested: [] },
+  cloudflare: {
+    installed: true,
+    tunnelId: "tunnel-1",
+    cnameTarget: "tunnel.example.test",
+    connectorTarget: "http://127.0.0.1:3860",
+    tokenConfigured: true,
+    connectorRunning: true,
+  },
+  custom: { caddyInstalled: true, generatedConfig: "" },
+} satisfies PublicIngressSettings;
 
 describe("public ingress form", () => {
   test("shows a newly started connector as pending rather than failed", () => {

@@ -229,8 +229,11 @@ export function CatchUpDeck({
     if (e.key === "Escape") return onExit();
     if (!card) return;
     // Don't hijack arrows while typing a reply.
-    const el = e.target as HTMLElement | null;
-    if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")) return;
+    if (
+      e.target instanceof HTMLTextAreaElement ||
+      e.target instanceof HTMLInputElement
+    )
+      return;
     if (e.key === "ArrowLeft") {
       e.preventDefault();
       act("archive");
@@ -657,15 +660,16 @@ function CatchUpComposer({
         ? { name: f.name, path: f.path }
         : { name: f.name, dataUrl: f.dataUrl },
     );
-    send({
+    const message: Extract<WSClientMessage, { type: "prompt" }> = {
       type: "prompt",
       sessionId: target.id,
       content: text,
       user: currentUser,
       effort,
-      ...(images.length ? { images } : {}),
-      ...(files.length ? { files: filePayload } : {}),
-    });
+    };
+    if (images.length > 0) message.images = images;
+    if (files.length > 0) message.files = filePayload;
+    send(message);
     setImages([]);
     setFiles([]);
     onReplied();

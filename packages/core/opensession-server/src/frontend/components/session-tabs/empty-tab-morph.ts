@@ -123,7 +123,8 @@ export function animateEmptyTabClose(button: HTMLButtonElement): void {
   const deltaX = -clippedLeft;
   const radius = clipRadius(tab);
   const surfaceColor = getComputedStyle(tab).backgroundColor;
-  const ghost = tab.cloneNode(true) as HTMLElement;
+  const ghost = tab.cloneNode(true);
+  if (!(ghost instanceof HTMLElement)) return;
   ghost.removeAttribute("role");
   ghost.removeAttribute("aria-selected");
   ghost.setAttribute("aria-hidden", "true");

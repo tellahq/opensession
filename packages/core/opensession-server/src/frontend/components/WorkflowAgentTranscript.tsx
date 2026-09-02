@@ -58,9 +58,7 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
         if (res.status === 404) setLoad({ kind: "none" });
         else if (!res.ok) throw new Error(`HTTP ${res.status}`);
         else {
-          const data = (await res.json()) as {
-            entries?: TranscriptEntry[];
-          } | null;
+          const data: { entries?: TranscriptEntry[] } | null = await res.json();
           if (cancelled) return;
           setLoad({ kind: "ready", entries: data?.entries ?? [] });
         }

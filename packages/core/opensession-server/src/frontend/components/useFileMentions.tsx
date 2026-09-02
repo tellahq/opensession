@@ -659,13 +659,11 @@ export function useFileMentions({
     "aria-autocomplete": "list",
     "aria-expanded": open,
     "aria-haspopup": "listbox",
-    ...(open
-      ? {
-          "aria-controls": popupId,
-          "aria-activedescendant": `${popupId}-option-${activeIdx}`,
-        }
-      : {}),
   };
+  if (open) {
+    inputProps["aria-controls"] = popupId;
+    inputProps["aria-activedescendant"] = `${popupId}-option-${activeIdx}`;
+  }
 
   return {
     inputWrapRef,

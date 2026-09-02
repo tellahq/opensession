@@ -9,13 +9,16 @@ function session(over: Partial<UnifiedSession>): UnifiedSession {
   return {
     id: "session",
     source: "opensession",
+    branch: null,
+    worktreeDir: null,
+    startedBy: null,
     title: "Session",
     createdAt: "2026-08-20T10:00:00.000Z",
     lastActivity: "2026-08-20T11:00:00.000Z",
     isRunning: false,
     workspaceId: "workspace",
     ...over,
-  } as UnifiedSession;
+  };
 }
 
 const READS = {

@@ -1,50 +1,5 @@
 import { expect, test, beforeEach, afterEach } from "bun:test";
 
-interface WindowStub {
-  addEventListener?: (type: string, handler: (event: unknown) => void) => void;
-  removeEventListener?: (
-    type: string,
-    handler: (event: unknown) => void,
-  ) => boolean | undefined;
-  dispatchEvent?: (event: { type: string }) => boolean;
-  setInterval?: () => number;
-}
-
-interface BrowserGlobals {
-  window?: WindowStub;
-  Event?: new (type: string) => { type: string };
-  document?: { visibilityState: string };
-  localStorage?: ReturnType<typeof memoryStorage>;
-  sessionStorage?: ReturnType<typeof memoryStorage>;
-}
-
-// These browser-facing stores need a small DOM/storage surface in Bun.
-const globals = globalThis as unknown as BrowserGlobals;
-globals.window ??= {};
-const win = globals.window;
-const handlers = new Map<string, Set<(event: unknown) => void>>();
-if (typeof win.addEventListener !== "function")
-  win.addEventListener = (type: string, handler: (event: unknown) => void) => {
-    if (!handlers.has(type)) handlers.set(type, new Set());
-    handlers.get(type)!.add(handler);
-  };
-if (typeof win.removeEventListener !== "function")
-  win.removeEventListener = (type: string, handler: (event: unknown) => void) =>
-    handlers.get(type)?.delete(handler);
-if (typeof win.dispatchEvent !== "function")
-  win.dispatchEvent = (event: { type: string }) => {
-    for (const handler of handlers.get(event.type) ?? []) handler(event);
-    return true;
-  };
-if (typeof win.setInterval !== "function") win.setInterval = () => 0;
-if (typeof globals.Event !== "function")
-  globals.Event = class {
-    type: string;
-    constructor(type: string) {
-      this.type = type;
-    }
-  };
-if (!globals.document) globals.document = { visibilityState: "hidden" };
 // The store reads the signed-in user and mirrors to sessionStorage on the way
 // through. Neither is what these tests are about, so give them the smallest
 // thing that behaves.
@@ -61,8 +16,53 @@ function memoryStorage() {
     },
   };
 }
-if (!globals.localStorage) globals.localStorage = memoryStorage();
-const sessionStorage = (globals.sessionStorage ??= memoryStorage());
+
+// These browser-facing stores need a small DOM/storage surface in Bun.
+if (!("window" in globalThis)) {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {},
+  });
+}
+const win = globalThis.window;
+const events = new EventTarget();
+if (!win.addEventListener) {
+  Object.defineProperty(win, "addEventListener", {
+    value: events.addEventListener.bind(events),
+  });
+}
+if (!win.removeEventListener) {
+  Object.defineProperty(win, "removeEventListener", {
+    value: events.removeEventListener.bind(events),
+  });
+}
+if (!win.dispatchEvent) {
+  Object.defineProperty(win, "dispatchEvent", {
+    value: events.dispatchEvent.bind(events),
+  });
+}
+if (!win.setInterval) {
+  Object.defineProperty(win, "setInterval", { value: () => 0 });
+}
+if (!("document" in globalThis)) {
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: { visibilityState: "hidden" },
+  });
+}
+if (!("localStorage" in globalThis)) {
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: memoryStorage(),
+  });
+}
+if (!("sessionStorage" in globalThis)) {
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: memoryStorage(),
+  });
+}
+const sessionStorage = globalThis.sessionStorage;
 
 const {
   attachToDraft,

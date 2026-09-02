@@ -512,7 +512,7 @@ function RepoTileButton({
   const [avatarOk, setAvatarOk] = useState(false);
   const fileInput = React.useRef<HTMLInputElement>(null);
 
-  async function run(work: () => Promise<unknown>) {
+  async function run<Result>(work: () => Promise<Result>) {
     if (busy) return;
     setBusy(true);
     setError(null);
@@ -893,7 +893,7 @@ function AddRepoPicker({
           label="Repository source"
           value={mode}
           onValueChange={(value) => {
-            setMode(value as AddRepoMode);
+            if (value === "remote" || value === "local") setMode(value);
             setError(null);
           }}
         >

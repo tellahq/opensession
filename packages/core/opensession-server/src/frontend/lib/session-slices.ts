@@ -87,10 +87,12 @@ export function mergeSessionSlices(
  * change didn't take (or was undone elsewhere) and holding the row any longer
  * would be inventing state.
  */
-export function settledOverrides(slices: SessionSlices): {
+type SettledOverrides = {
   archived: string[];
   unarchived: string[];
-} {
+};
+
+export function settledOverrides(slices: SessionSlices): SettledOverrides {
   const archived: string[] = [];
   const indexed = slices.archivedIndex
     ? new Set(slices.archivedIndex.map((s) => s.id))

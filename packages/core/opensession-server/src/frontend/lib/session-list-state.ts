@@ -173,7 +173,7 @@ export function reconcilePendingSessionPatches(
             session.reviewRequest,
             pending.values.reviewRequest,
           )
-        : session[key as keyof UnifiedSession] === value,
+        : Object.getOwnPropertyDescriptor(session, key)?.value === value,
     );
     if (acknowledged) {
       pendingPatches.delete(session.id);

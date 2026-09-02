@@ -22,15 +22,18 @@ import {
 // step and as the Workspace → Integrations settings page, so neither surface
 // has its own idea of what an integration card looks like.
 
-const INTEGRATION_DESCRIPTIONS: Record<string, string> = {
-  plain: "Support threads, internal notes, and triage webhooks.",
-  linear: "Assigned issues become scoped coding sessions.",
-  slack: "DMs, mentions, session channels, and interactive controls.",
-  stripe: "Dispute webhooks routed into scoped automations.",
-  grafana: "Loki failure signatures routed into investigation automations.",
-  github: "Respond to PR webhooks, mentions, labels, and review events.",
-  codestorage: "Git hosting with branch-based reviews and local signing keys.",
-};
+const INTEGRATION_DESCRIPTIONS = new Map([
+  ["plain", "Support threads, internal notes, and triage webhooks."],
+  ["linear", "Assigned issues become scoped coding sessions."],
+  ["slack", "DMs, mentions, session channels, and interactive controls."],
+  ["stripe", "Dispute webhooks routed into scoped automations."],
+  ["grafana", "Loki failure signatures routed into investigation automations."],
+  ["github", "Respond to PR webhooks, mentions, labels, and review events."],
+  [
+    "codestorage",
+    "Git hosting with branch-based reviews and local signing keys.",
+  ],
+]);
 
 function IntegrationCard({
   integration,
@@ -108,7 +111,7 @@ function IntegrationCard({
               <StateChip tone={state.tone} label={stateLabel} />
             </div>
             <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
-              {INTEGRATION_DESCRIPTIONS[integration.id] ??
+              {INTEGRATION_DESCRIPTIONS.get(integration.id) ??
                 `Connect ${integration.label} to Open Session.`}
             </p>
             {integration.enabled && integration.missingRequired.length > 0 && (

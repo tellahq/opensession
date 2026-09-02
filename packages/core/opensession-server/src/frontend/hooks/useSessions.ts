@@ -15,7 +15,7 @@ import {
   type LocalArchiveOverride,
 } from "../lib/session-slices";
 import { errorMessage } from "../lib/error-message";
-import { makeSessionListRuntime } from "../lib/session-list-runtime";
+import * as SessionListRuntime from "../lib/session-list-runtime";
 import {
   ARCHIVED_QUERY,
   LIVE_POLL_FALLBACK_MS,
@@ -54,7 +54,7 @@ export function useSessions({
   liveQuery?: string;
   socket?: Pick<SessionSocket, "addHandler"> & { connected: boolean };
 } = {}) {
-  const [runtime] = useState(() => makeSessionListRuntime());
+  const [runtime] = useState(() => SessionListRuntime.makeSessionListRuntime());
   const [live, setLive] = useState<UnifiedSession[]>([]);
   // When the live list last came back. Settles a local unarchive: a poll that
   // STARTED after the change and still doesn't list the session means the

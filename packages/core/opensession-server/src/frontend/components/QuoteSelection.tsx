@@ -138,7 +138,13 @@ export function QuoteSelection({
       if (event instanceof MouseEvent || event instanceof TouchEvent) {
         if (event instanceof MouseEvent && event.button !== 0) return;
         const container = containerRef.current;
-        if (!container || !container.contains(event.target as Node)) return;
+        const target = event.target;
+        if (
+          !container ||
+          !(target instanceof Node) ||
+          !container.contains(target)
+        )
+          return;
         if (event instanceof MouseEvent) {
           capture();
           return;

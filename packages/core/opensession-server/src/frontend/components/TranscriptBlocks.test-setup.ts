@@ -1,40 +1,41 @@
 // A sibling test may already have installed a partial `window`. Fill in this
 // file's browser surface without replacing it or depending on test order.
-Object.assign(
-  ((globalThis as unknown as { window?: Record<string, unknown> }).window ??=
-    {}),
-  {
-    addEventListener: () => {},
-    matchMedia: () => ({ matches: false }),
-  },
-);
-Object.assign(
-  ((
-    globalThis as unknown as { document?: Record<string, unknown> }
-  ).document ??= {}),
-  {
-    documentElement: { dataset: {}, style: {} },
-    querySelector: () => null,
-  },
-);
-Object.assign(
-  ((
-    globalThis as unknown as { localStorage?: Record<string, unknown> }
-  ).localStorage ??= {}),
-  {
-    getItem: () => null,
-    setItem: () => {},
-    removeItem: () => {},
-  },
-);
+const testWindow = Object.assign(globalThis.window ?? {}, {
+  addEventListener: () => {},
+  matchMedia: () => ({ matches: false }),
+});
+Object.defineProperty(globalThis, "window", {
+  configurable: true,
+  writable: true,
+  value: testWindow,
+});
+
+const testDocument = Object.assign(globalThis.document ?? {}, {
+  documentElement: { dataset: {}, style: {} },
+  querySelector: () => null,
+});
+Object.defineProperty(globalThis, "document", {
+  configurable: true,
+  writable: true,
+  value: testDocument,
+});
+
+const testLocalStorage = Object.assign(globalThis.localStorage ?? {}, {
+  getItem: (_key: string) => null,
+  setItem: (_key: string, _value: string) => {},
+  removeItem: (_key: string) => {},
+});
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  writable: true,
+  value: testLocalStorage,
+});
 
 let turnWork: string | null = null;
 let toolCalls: string | null = null;
 let thinkingMessages: string | null = null;
 
-(
-  globalThis.localStorage as { getItem: (key: string) => string | null }
-).getItem = (key) => {
+globalThis.localStorage.getItem = (key) => {
   if (key === "opensession-turn-activity") return turnWork;
   if (key === "opensession-tool-calls") return toolCalls;
   if (key === "opensession-thinking-messages") return thinkingMessages;

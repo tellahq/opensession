@@ -457,12 +457,12 @@ export const SESSION_DELETE_LABEL = "text-label text-dim";
  *  on. Both are composed in rather than overridden on top: two utilities for
  *  one property resolve by Tailwind's output order, not by the order they are
  *  written in. */
-const PILL_SHAPE =
+const PILL_CHROME =
   "inline-flex min-h-8 items-center rounded-[999px] pr-3.5 pl-2.5 " +
   "text-label font-semibold text-fg " +
   "[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm";
 
-const PILL_BASE = `${PILL_SHAPE} bg-popup-glass [backdrop-filter:var(--popup-blur)]`;
+const PILL_BASE = `${PILL_CHROME} bg-popup-glass [backdrop-filter:var(--popup-blur)]`;
 
 /**
  * The same pill, opaque — a lid rather than glass.
@@ -480,7 +480,7 @@ const PILL_BASE = `${PILL_SHAPE} bg-popup-glass [backdrop-filter:var(--popup-blu
  * Tailwind's output order, and `bg-popup` is emitted BEFORE `bg-popup-glass`,
  * so writing it after would silently lose.
  */
-const PILL_LID = `${PILL_SHAPE} bg-popup`;
+const PILL_LID = `${PILL_CHROME} bg-popup`;
 
 export const TRANSCRIPT_PILL = `${PILL_BASE} gap-1.5`;
 export const FLOATING_PILL = `${PILL_LID} gap-1.5`;

@@ -7,10 +7,10 @@
 // The pure key-matching helpers (isSendCombo, labels) live in lib/send-key —
 // this module owns only the stored preference.
 
-import { makeUserPref } from "./user-pref";
+import * as userPref from "./user-pref";
 import type { SendKeyPref } from "./send-key";
 
-const pref = makeUserPref<SendKeyPref>({
+const pref = userPref.makeUserPref<SendKeyPref>({
   localKey: "opensession-send-key",
   prefKey: "send-key",
   changeEvent: "opensession-send-key-changed",

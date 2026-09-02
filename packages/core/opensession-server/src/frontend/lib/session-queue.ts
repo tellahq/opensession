@@ -110,16 +110,19 @@ export function deriveSessionQueue({
     ...(settingUpWorkspace ? [] : fallbackPending),
   ];
   const optimisticTranscriptEntries = pendingBubbles.length
-    ? pendingBubbles.map<OptimisticTranscriptEntry>((item) => ({
-        id: item.id,
-        type: "user",
-        content: item.content,
-        timestamp: new Date(item.sentAt).toISOString(),
-        optimisticAfterEntryId: item.transcriptAfterEntryId,
-        optimisticAfterSeq: item.transcriptAfterSeq,
-        sender: item.user,
-        ...(item.images?.length ? { images: item.images } : {}),
-      }))
+    ? pendingBubbles.map<OptimisticTranscriptEntry>((item) => {
+        const entry: OptimisticTranscriptEntry = {
+          id: item.id,
+          type: "user",
+          content: item.content,
+          timestamp: new Date(item.sentAt).toISOString(),
+          optimisticAfterEntryId: item.transcriptAfterEntryId,
+          optimisticAfterSeq: item.transcriptAfterSeq,
+          sender: item.user,
+        };
+        if (item.images?.length) entry.images = item.images;
+        return entry;
+      })
     : NO_OPTIMISTIC_ENTRIES;
   const transcriptDeliveryIds = [
     ...pendingDeliveryIds,

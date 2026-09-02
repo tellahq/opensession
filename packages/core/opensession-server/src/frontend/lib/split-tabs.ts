@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 const KEY = "opensession-tab-splits";
 const CHANGE_EVENT = "opensession-tab-splits-changed";
 
@@ -23,17 +25,24 @@ export type TabSplit = {
 
 type SplitMap = Record<string, TabSplit>;
 
-/** The pre-groups shape: exactly one tab per side, folded into one combined tab. */
-type LegacySplit = { leftId: string; rightId: string; ratio: number };
+const tabSplitSchema = z
+  .object({
+    right: z.array(z.string().min(1)).min(1),
+    leftActive: z.string().optional(),
+    rightActive: z.string().optional(),
+    ratio: z.number(),
+  })
+  .refine((split) => new Set(split.right).size === split.right.length);
 
-function isLegacy(
-  value: Record<string, unknown>,
-): value is LegacySplit & Record<string, unknown> {
-  return typeof value.leftId === "string" && typeof value.rightId === "string";
-}
+/** The pre-groups shape: exactly one tab per side, folded into one combined tab. */
+const legacySplitSchema = z.object({
+  leftId: z.string(),
+  rightId: z.string(),
+  ratio: z.number(),
+});
 
 /** Legacy records read as a right bar holding the tab that was dragged out. */
-function migrate(value: LegacySplit): TabSplit {
+function migrate(value: z.infer<typeof legacySplitSchema>): TabSplit {
   return {
     right: [value.rightId],
     leftActive: value.leftId,
@@ -42,41 +51,24 @@ function migrate(value: LegacySplit): TabSplit {
   };
 }
 
-function validSplit(value: unknown): value is TabSplit {
-  if (!value || typeof value !== "object") return false;
-  const split = value as Partial<TabSplit>;
-  return (
-    Array.isArray(split.right) &&
-    split.right.length > 0 &&
-    split.right.every((id) => typeof id === "string" && !!id) &&
-    new Set(split.right).size === split.right.length &&
-    (split.leftActive === undefined || typeof split.leftActive === "string") &&
-    (split.rightActive === undefined ||
-      typeof split.rightActive === "string") &&
-    typeof split.ratio === "number" &&
-    Number.isFinite(split.ratio)
-  );
-}
-
-function normalize(value: unknown): TabSplit | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const split = isLegacy(record) ? migrate(record) : record;
-  return validSplit(split) ? split : null;
-}
-
-function read(): SplitMap {
+function read() {
   try {
-    const value = JSON.parse(localStorage.getItem(KEY) || "{}");
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    const out: SplitMap = {};
-    for (const [workspaceId, entry] of Object.entries(value)) {
-      const split = normalize(entry);
-      if (split) out[workspaceId] = split;
+    const entries = z
+      .record(z.string(), z.unknown())
+      .parse(JSON.parse(localStorage.getItem(KEY) || "{}"));
+    const splits: [string, TabSplit][] = [];
+    for (const [workspaceId, entry] of Object.entries(entries)) {
+      const legacy = legacySplitSchema.safeParse(entry);
+      if (legacy.success) {
+        splits.push([workspaceId, migrate(legacy.data)]);
+        continue;
+      }
+      const current = tabSplitSchema.safeParse(entry);
+      if (current.success) splits.push([workspaceId, current.data]);
     }
-    return out;
+    return Object.fromEntries(splits);
   } catch {
-    return {};
+    return Object.fromEntries([] satisfies [string, TabSplit][]);
   }
 }
 
@@ -110,7 +102,7 @@ export function getTabSplit(workspaceId: string): TabSplit | null {
 }
 
 export function saveTabSplit(workspaceId: string, split: TabSplit): void {
-  if (!workspaceId || !validSplit(split)) return;
+  if (!workspaceId || !tabSplitSchema.safeParse(split).success) return;
   const map = read();
   map[workspaceId] = { ...split, ratio: clampSplitRatio(split.ratio) };
   write(map);

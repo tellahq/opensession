@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { z } from "zod";
 import type { TranscriptEntry } from "../lib/types";
 import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
@@ -59,6 +60,7 @@ const EAGER_MD_CHARS = 6000;
 // Expanded content still renders as markdown up to this size; past it the
 // content is machine payload, not prose — a plain <pre> shows it instantly.
 const FULL_MD_CHARS = 32 * 1024;
+const sessionEntryResponseSchema = z.object({ content: z.string() });
 
 function sizeLabel(chars: number): string {
   return chars >= 1024 ? `${Math.round(chars / 1024)} KB` : `${chars} chars`;
@@ -117,8 +119,9 @@ export function ClampedBody({
           `${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/entry/${encodeURIComponent(entry.id)}`,
         );
         if (res.ok) {
-          const data = await res.json();
-          if (typeof data?.content === "string") setFetched(data.content);
+          const payload: unknown = await res.json();
+          const result = sessionEntryResponseSchema.safeParse(payload);
+          if (result.success) setFetched(result.data.content);
         }
       })()
         .catch(async () => {
@@ -290,7 +293,7 @@ function NoticeRow({
  * than a flex child, so a one-line notice stays centered.
  */
 function NoticeIcon({ icon }: { icon?: NoticeIconName }) {
-  const path = NOTICE_ICON_PATHS[icon ?? ""];
+  const path = icon ? NOTICE_ICON_PATHS.get(icon) : undefined;
   if (!path) return null;
   return (
     <svg
@@ -310,23 +313,25 @@ function NoticeIcon({ icon }: { icon?: NoticeIconName }) {
   );
 }
 
-const NOTICE_ICON_PATHS: Record<string, React.ReactNode> = {
-  merge: (
+const NOTICE_ICON_PATHS = new Map<NoticeIconName, React.ReactNode>([
+  [
+    "merge",
     <>
       <circle cx="18" cy="18" r="3" />
       <circle cx="6" cy="6" r="3" />
       <path d="M6 21V9a9 9 0 0 0 9 9" />
-    </>
-  ),
-  deploy: (
+    </>,
+  ],
+  [
+    "deploy",
     <>
       <circle cx="12" cy="12" r="9.5" />
       <path d="M12 16.5V8" />
       <path d="m8.2 11.8 3.8-3.8 3.8 3.8" />
-    </>
-  ),
-  done: <path d="M20 6 9 17l-5-5" />,
-};
+    </>,
+  ],
+  ["done", <path d="M20 6 9 17l-5-5" />],
+]);
 
 /** Triangle-alert glyph for a toned notice; inherits the pill's colour. */
 function NoticeGlyph() {

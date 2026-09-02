@@ -539,11 +539,9 @@ export function PrPanel({
             comment.startLine !== comment.endLine
               ? comment.startLine
               : undefined,
-          side: (comment.side === "deletions" ? "LEFT" : "RIGHT") as
-            | "LEFT"
-            | "RIGHT",
+          side: comment.side === "deletions" ? "LEFT" : "RIGHT",
         })),
-      };
+      } satisfies Parameters<typeof submitPrReviewApi>[1];
       const result = previewTarget
         ? await submitPrPreviewReviewApi(
             previewTarget.repo,
@@ -1306,11 +1304,11 @@ export function PrPanel({
             size="sm"
             value={codeView}
             onValueChange={(next) => {
-              const key = next as CodeView;
-              if (key === "flow" && codeView !== "flow" && codeFlowError) {
+              if (next !== "all" && next !== "guide" && next !== "flow") return;
+              if (next === "flow" && codeView !== "flow" && codeFlowError) {
                 resetCodeFlowError();
               }
-              setCodeView(key);
+              setCodeView(next);
             }}
           >
             <SegmentedOption value="all">Changes</SegmentedOption>

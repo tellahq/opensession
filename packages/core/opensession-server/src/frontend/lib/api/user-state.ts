@@ -1,5 +1,21 @@
+import { z } from "zod";
 import type { MapDelta } from "../user-map";
 import { request } from "./request";
+
+const stringMapSchema = z.record(z.string(), z.string());
+const remoteDraftMapSchema = z.record(
+  z.string(),
+  z.object({ text: z.string(), updatedAt: z.string() }),
+);
+const readsResponseSchema = z.object({ reads: stringMapSchema.optional() });
+const draftsResponseSchema = z.object({
+  drafts: remoteDraftMapSchema.optional(),
+});
+const prefsResponseSchema = z.object({ prefs: stringMapSchema.optional() });
+const lanesResponseSchema = z.object({ lanes: stringMapSchema.optional() });
+const snoozesResponseSchema = z.object({ snoozes: stringMapSchema.optional() });
+const hidesResponseSchema = z.object({ hides: stringMapSchema.optional() });
+const colorsResponseSchema = z.object({ colors: stringMapSchema.optional() });
 
 // ── Pins (per-user pinned tabs) ──
 
@@ -46,9 +62,10 @@ export async function clearMentionApi(
   user: string,
   sessionId?: string,
 ): Promise<void> {
+  const body = sessionId ? { user, sessionId } : { user };
   await request("/mentions/clear", {
     method: "POST",
-    body: { user, ...(sessionId ? { sessionId } : {}) },
+    body,
     label: "Failed to clear mention",
   });
 }
@@ -58,11 +75,12 @@ export async function clearMentionApi(
 export async function fetchReads(
   user: string,
 ): Promise<Record<string, string>> {
-  const body = await request<{ reads?: Record<string, string> }>(
+  const body = await request<unknown>(
     `/reads?user=${encodeURIComponent(user)}`,
     { label: "Failed to fetch reads" },
   );
-  return body?.reads && typeof body.reads === "object" ? body.reads : {};
+  const parsed = readsResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.reads ?? {}) : {};
 }
 
 export async function saveReadsApi(
@@ -86,11 +104,12 @@ export interface RemoteDraft {
 export async function fetchDrafts(
   user: string,
 ): Promise<Record<string, RemoteDraft>> {
-  const body = await request<{ drafts?: Record<string, RemoteDraft> }>(
+  const body = await request<unknown>(
     `/drafts?user=${encodeURIComponent(user)}`,
     { label: "Failed to fetch drafts" },
   );
-  return body?.drafts && typeof body.drafts === "object" ? body.drafts : {};
+  const parsed = draftsResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.drafts ?? {}) : {};
 }
 
 /** Store one session's draft (empty text deletes it). `applied` comes back
@@ -119,11 +138,12 @@ export async function saveDraftApi(
 export async function fetchUiPrefs(
   user: string,
 ): Promise<Record<string, string>> {
-  const body = await request<{ prefs?: Record<string, string> }>(
+  const body = await request<unknown>(
     `/ui-prefs?user=${encodeURIComponent(user)}`,
     { label: "Failed to fetch UI prefs" },
   );
-  return body?.prefs && typeof body.prefs === "object" ? body.prefs : {};
+  const parsed = prefsResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.prefs ?? {}) : {};
 }
 
 /** Merge a patch into the user's server-side prefs (null value deletes). */
@@ -132,12 +152,13 @@ export async function saveUiPrefsApi(
   prefs: Record<string, string | null>,
   expected?: Record<string, string | null>,
 ): Promise<Record<string, string>> {
-  const body = await request<{ prefs?: Record<string, string> }>("/ui-prefs", {
+  const body = await request<unknown>("/ui-prefs", {
     method: "PUT",
     body: { user, prefs, expected },
     label: "Failed to save UI prefs",
   });
-  return body?.prefs && typeof body.prefs === "object" ? body.prefs : {};
+  const parsed = prefsResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.prefs ?? {}) : {};
 }
 
 // ── The per-user maps (lanes, snoozes, hides, tab colors) ──
@@ -149,23 +170,25 @@ export async function saveUiPrefsApi(
 export async function fetchLanes(
   user: string,
 ): Promise<Record<string, string>> {
-  const body = await request<{ lanes?: Record<string, string> }>(
+  const body = await request<unknown>(
     `/lanes?user=${encodeURIComponent(user)}`,
     { label: "Failed to fetch lanes" },
   );
-  return body?.lanes && typeof body.lanes === "object" ? body.lanes : {};
+  const parsed = lanesResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.lanes ?? {}) : {};
 }
 
 export async function saveLanesApi(
   user: string,
   delta: MapDelta<string>,
 ): Promise<Record<string, string>> {
-  const body = await request<{ lanes?: Record<string, string> }>("/lanes", {
+  const body = await request<unknown>("/lanes", {
     method: "PUT",
     body: { user, ...delta },
     label: "Failed to save lanes",
   });
-  return body?.lanes && typeof body.lanes === "object" ? body.lanes : {};
+  const parsed = lanesResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.lanes ?? {}) : {};
 }
 
 // ── Snoozes (per-user workspace snoozes) ──
@@ -173,23 +196,25 @@ export async function saveLanesApi(
 export async function fetchSnoozes(
   user: string,
 ): Promise<Record<string, string>> {
-  const body = await request<{ snoozes?: Record<string, string> }>(
+  const body = await request<unknown>(
     `/snoozes?user=${encodeURIComponent(user)}`,
     { label: "Failed to fetch snoozes" },
   );
-  return body?.snoozes && typeof body.snoozes === "object" ? body.snoozes : {};
+  const parsed = snoozesResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.snoozes ?? {}) : {};
 }
 
 export async function saveSnoozesApi(
   user: string,
   delta: MapDelta<string>,
 ): Promise<Record<string, string>> {
-  const body = await request<{ snoozes?: Record<string, string> }>("/snoozes", {
+  const body = await request<unknown>("/snoozes", {
     method: "PUT",
     body: { user, ...delta },
     label: "Failed to save snoozes",
   });
-  return body?.snoozes && typeof body.snoozes === "object" ? body.snoozes : {};
+  const parsed = snoozesResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.snoozes ?? {}) : {};
 }
 
 // ── Hides (per-user sidebar hides) ──
@@ -197,23 +222,25 @@ export async function saveSnoozesApi(
 export async function fetchHides(
   user: string,
 ): Promise<Record<string, string>> {
-  const body = await request<{ hides?: Record<string, string> }>(
+  const body = await request<unknown>(
     `/hides?user=${encodeURIComponent(user)}`,
     { label: "Failed to fetch hides" },
   );
-  return body?.hides && typeof body.hides === "object" ? body.hides : {};
+  const parsed = hidesResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.hides ?? {}) : {};
 }
 
 export async function saveHidesApi(
   user: string,
   delta: MapDelta<string>,
 ): Promise<Record<string, string>> {
-  const body = await request<{ hides?: Record<string, string> }>("/hides", {
+  const body = await request<unknown>("/hides", {
     method: "PUT",
     body: { user, ...delta },
     label: "Failed to save hides",
   });
-  return body?.hides && typeof body.hides === "object" ? body.hides : {};
+  const parsed = hidesResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.hides ?? {}) : {};
 }
 
 // ── Tab colors (per-user session tab colors) ──
@@ -221,24 +248,23 @@ export async function saveHidesApi(
 export async function fetchTabColors(
   user: string,
 ): Promise<Record<string, string>> {
-  const body = await request<{ colors?: Record<string, string> }>(
+  const body = await request<unknown>(
     `/tab-colors?user=${encodeURIComponent(user)}`,
     { label: "Failed to fetch tab colors" },
   );
-  return body?.colors && typeof body.colors === "object" ? body.colors : {};
+  const parsed = colorsResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.colors ?? {}) : {};
 }
 
 export async function saveTabColorsApi(
   user: string,
   delta: MapDelta<string>,
 ): Promise<Record<string, string>> {
-  const body = await request<{ colors?: Record<string, string> }>(
-    "/tab-colors",
-    {
-      method: "PUT",
-      body: { user, ...delta },
-      label: "Failed to save tab colors",
-    },
-  );
-  return body?.colors && typeof body.colors === "object" ? body.colors : {};
+  const body = await request<unknown>("/tab-colors", {
+    method: "PUT",
+    body: { user, ...delta },
+    label: "Failed to save tab colors",
+  });
+  const parsed = colorsResponseSchema.safeParse(body);
+  return parsed.success ? (parsed.data.colors ?? {}) : {};
 }

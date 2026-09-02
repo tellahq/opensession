@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TranscriptEntry } from "../lib/types";
@@ -55,7 +56,9 @@ describe("TranscriptBlocks indexed ranges", () => {
   const indexRow = (
     seq: number,
     role: "user" | "assistant" | "tool_use" | "tool_result" | "review_handoff",
-    extra: Record<string, unknown> = {},
+    extra: Partial<
+      Pick<TranscriptIndexEntry, "timestampMs" | "reviewPrNumber">
+    > = {},
   ) => ({
     id: `indexed-${seq}`,
     seq,
@@ -259,28 +262,40 @@ describe("TranscriptBlocks indexed ranges", () => {
   test("keeps live tool frames inside their indexed work group", () => {
     setTurnPrefs(null);
     const at = (seq: number) => `2026-08-12T12:00:0${seq}Z`;
-    const tool = (seq: number, durable = true): TranscriptEntry => ({
-      id: `indexed-${seq}`,
-      type: "tool_use",
-      toolUseId: `call-${seq}`,
-      toolName: "bash",
-      toolInput: { command: `check ${seq}` },
-      content: "Using bash",
-      timestamp: at(seq),
-      ...(durable ? { seq, changeSeq: seq } : {}),
-    });
+    const tool = (seq: number, durable = true): TranscriptEntry => {
+      const entry: TranscriptEntry = {
+        id: `indexed-${seq}`,
+        type: "tool_use",
+        toolUseId: `call-${seq}`,
+        toolName: "bash",
+        toolInput: { command: `check ${seq}` },
+        content: "Using bash",
+        timestamp: at(seq),
+      };
+      if (durable) {
+        entry.seq = seq;
+        entry.changeSeq = seq;
+      }
+      return entry;
+    };
     const result = (
       seq: number,
       toolSeq: number,
       durable = true,
-    ): TranscriptEntry => ({
-      id: `indexed-${seq}`,
-      type: "tool_result",
-      toolUseId: `call-${toolSeq}`,
-      content: "ok",
-      timestamp: at(seq),
-      ...(durable ? { seq, changeSeq: seq } : {}),
-    });
+    ): TranscriptEntry => {
+      const entry: TranscriptEntry = {
+        id: `indexed-${seq}`,
+        type: "tool_result",
+        toolUseId: `call-${toolSeq}`,
+        content: "ok",
+        timestamp: at(seq),
+      };
+      if (durable) {
+        entry.seq = seq;
+        entry.changeSeq = seq;
+      }
+      return entry;
+    };
     const baseIndex = [
       indexRow(1, "user"),
       indexRow(2, "tool_use"),

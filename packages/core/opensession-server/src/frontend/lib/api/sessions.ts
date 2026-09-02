@@ -49,7 +49,7 @@ export async function fetchWorkspaceArchivedSessions(
     signal,
     query: `?archived=only&slim=1&workspace=${encodeURIComponent(workspaceId)}`,
   });
-  return snapshot.text ? (JSON.parse(snapshot.text) as UnifiedSession[]) : [];
+  return snapshot.text ? JSON.parse(snapshot.text) : [];
 }
 
 /**
@@ -70,7 +70,7 @@ export async function fetchSession(
   if (res.status === 404) return null;
   if (!res.ok)
     throw new ApiError(`Failed to load session: ${res.status}`, res.status);
-  return (await res.json()) as UnifiedSession;
+  return res.json();
 }
 
 export interface PromptDelivery {
@@ -97,11 +97,13 @@ export async function deliverSessionPrompt(
   },
 ): Promise<PromptDelivery> {
   const images = await preparePromptImages(body.images);
+  const requestBody = { ...body };
+  if (images) requestBody.images = images;
   return request<PromptDelivery>(
     `/sessions/${encodeURIComponent(sessionId)}/prompt`,
     {
       method: "POST",
-      body: { ...body, ...(images ? { images } : {}) },
+      body: requestBody,
       label: "Failed to deliver prompt",
     },
   );
@@ -362,6 +364,13 @@ export async function moveSessionToBranchApi(
   );
 }
 
+type NewSessionRequest = {
+  user: string;
+  mode?: "share" | "stack" | "ask";
+  clientSessionId?: string;
+  duplicate?: true;
+};
+
 /** Create an idle sibling tab. The first prompt starts its engine run. */
 export async function newSessionApi(
   sourceId: string,
@@ -370,16 +379,15 @@ export async function newSessionApi(
   clientSessionId?: string,
   duplicate = false,
 ): Promise<{ id: string; session: UnifiedSession | null }> {
+  const requestBody: NewSessionRequest = { user };
+  if (mode) requestBody.mode = mode;
+  if (clientSessionId) requestBody.clientSessionId = clientSessionId;
+  if (duplicate) requestBody.duplicate = true;
   const body = await request<{ id: string; session?: UnifiedSession }>(
     `/sessions/${encodeURIComponent(sourceId)}/new-session`,
     {
       method: "POST",
-      body: {
-        user,
-        ...(mode ? { mode } : {}),
-        ...(clientSessionId ? { clientSessionId } : {}),
-        ...(duplicate ? { duplicate: true } : {}),
-      },
+      body: requestBody,
     },
   );
   return { id: body.id, session: body.session || null };

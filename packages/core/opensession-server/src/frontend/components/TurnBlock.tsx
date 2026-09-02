@@ -792,10 +792,15 @@ function ReasoningMessage({
  * time, so dedupe by src: the strip is what the turn produced, not how many
  * times it wrote the file.
  */
+interface FeaturedTurnMedia {
+  images: string[];
+  videos: string[];
+}
+
 function featuredTurnMedia(
   items: TranscriptEntry[],
   toolResults: Map<string, TranscriptEntry>,
-): { images: string[]; videos: string[] } {
+): FeaturedTurnMedia {
   const images: string[] = [];
   const videos: string[] = [];
   const seen = new Set<string>();
@@ -838,10 +843,15 @@ function turnBlockPropsEqual(prev: Props, next: Props): boolean {
   return true;
 }
 
+interface BlockTiming {
+  duration: string | null;
+  completedAt: string;
+}
+
 function blockTiming(
   items: TranscriptEntry[],
   toolResults: Map<string, TranscriptEntry>,
-): { duration: string | null; completedAt: string } {
+): BlockTiming {
   if (items.length === 0) return { duration: null, completedAt: "" };
   const first = new Date(items[0].timestamp).getTime();
   const lastItem = items[items.length - 1];

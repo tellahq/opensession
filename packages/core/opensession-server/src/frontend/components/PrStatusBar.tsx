@@ -640,7 +640,7 @@ export function PrStatusBar({
           : "text-faint";
   const checksLabel = `${checksSummary.total} check${checksSummary.total === 1 ? "" : "s"}`;
 
-  async function run(name: string, fn: () => Promise<unknown>) {
+  async function run<Result>(name: string, fn: () => Promise<Result>) {
     if (busy) return;
     setBusy(name);
     setError(null);
@@ -648,7 +648,7 @@ export function PrStatusBar({
       await fn();
       await load();
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         setError(errorMessage(error, `${name} failed`));
       })
       .finally(async () => {

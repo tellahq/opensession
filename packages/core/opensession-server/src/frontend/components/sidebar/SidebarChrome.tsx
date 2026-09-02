@@ -192,7 +192,9 @@ export function SidebarChrome({
               the close control gets a full touch target. */}
               <div
                 className="flex min-w-0 flex-1 items-center gap-2 text-sm text-fg phone:text-base"
-                ref={titleRef as React.RefObject<HTMLDivElement | null>}
+                ref={(element) => {
+                  titleRef.current = element;
+                }}
               >
                 {filter.person === "everyone" ? (
                   <IconPeople
@@ -260,7 +262,9 @@ export function SidebarChrome({
                   "shrink-0 text-label font-semibold text-dim group-hover/wshead:text-fg",
                   isPhone && "hidden",
                 )}
-                ref={titleRef as React.RefObject<HTMLSpanElement | null>}
+                ref={(element) => {
+                  titleRef.current = element;
+                }}
               >
                 Workspaces
               </span>

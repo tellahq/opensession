@@ -46,10 +46,12 @@ export function subagentSuffix(subagent: readonly string[] = []): string {
  * when no `/subagent/` marker is present, so a session id that somehow carries a
  * slash still resolves the way it always did.
  */
-export function splitSessionRef(rest: string): {
+interface SessionRef {
   id: string;
   subagent: string[];
-} {
+}
+
+export function splitSessionRef(rest: string): SessionRef {
   const marker = "/subagent/";
   const at = rest.indexOf(marker);
   if (at === -1) return { id: decodeURIComponent(rest), subagent: [] };
@@ -102,7 +104,7 @@ export function composerSessionRef(session: {
  */
 export function canNativeShare(): boolean {
   return (
-    typeof navigator.share === "function" &&
+    navigator.share !== undefined &&
     !!window.matchMedia?.("(pointer: coarse)").matches
   );
 }
@@ -117,8 +119,8 @@ export function shareOrCopyLink(
   opts: { title?: string; onCopied?: () => void } = {},
 ): void {
   if (canNativeShare()) {
-    navigator.share({ url: link, title: opts.title }).catch((err) => {
-      if ((err as Error | undefined)?.name === "AbortError") return;
+    navigator.share({ url: link, title: opts.title }).catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       copyToClipboard(link, opts.onCopied);
     });
     return;

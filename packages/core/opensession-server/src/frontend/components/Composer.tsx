@@ -396,7 +396,7 @@ export function Composer({
    *  a draft it is about to write, so the question takes the text. */
   const sendBlockedFor = (draft: string) =>
     !!(
-      (typeof sendDisabled === "function"
+      (sendDisabled instanceof Function
         ? sendDisabled(composePastedText(draft, pastedTexts))
         : sendDisabled) || isStaging(activeStaging)
     );
@@ -555,7 +555,10 @@ export function Composer({
     // `mousedown` on non-interactive elements, so listen for `touchstart` too —
     // otherwise the menu gets stuck open on mobile.
     function onDown(e: Event) {
-      if (!(e.target as HTMLElement).closest(".composer-pop-wrap"))
+      if (
+        !(e.target instanceof Element) ||
+        !e.target.closest(".composer-pop-wrap")
+      )
         setMenu(null);
     }
     document.addEventListener("mousedown", onDown);
@@ -1212,12 +1215,12 @@ export function Composer({
   // Ask mode paints the box itself; note mode paints the `before:` layer over
   // it, so note wins for the message you are writing while ask keeps the
   // session's own colour underneath.
-  const surfaceStyle = {
-    ...(askMode
-      ? { backgroundColor: askSurface("var(--composer-surface)") }
-      : {}),
+  const surfaceStyle: React.CSSProperties & { "--composer-note-bg": string } = {
     "--composer-note-bg": noteSurface("var(--composer-surface)"),
-  } as React.CSSProperties;
+  };
+  if (askMode) {
+    surfaceStyle.backgroundColor = askSurface("var(--composer-surface)");
+  }
   const dictationSurfaceStyle: React.CSSProperties | undefined = noteMode
     ? { backgroundColor: noteSurface("var(--composer-surface)") }
     : askMode

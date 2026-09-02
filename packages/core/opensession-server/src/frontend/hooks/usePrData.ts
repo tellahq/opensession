@@ -153,7 +153,7 @@ export function usePrData({
         }
         commitDiff();
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         prSettled = true;
         prResult = null;
         if (isCurrent()) {
@@ -175,7 +175,7 @@ export function usePrData({
         if (isCurrent()) setDiffError(null);
         commitDiff();
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         diffSettled = true;
         diffResult = null;
         if (isCurrent()) {

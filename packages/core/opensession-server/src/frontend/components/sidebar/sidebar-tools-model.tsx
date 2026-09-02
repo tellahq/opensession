@@ -11,6 +11,7 @@ import {
   IconStack,
 } from "../icons";
 import type { SidebarToolsNavItem } from "./SidebarToolsNav";
+import type { SidebarMenuTool } from "./SidebarToolsMenu";
 import { cn } from "../../ui/cn";
 import type { NavigationActions } from "../../lib/navigation";
 import {
@@ -193,15 +194,18 @@ export function createSidebarToolsModel({
   // on, so it is a submenu of three states rather than a tick. No Plain feed
   // means no queue to place, so the row drops out entirely.
   const plainQueueExists = feeds.some((feed) => feed.id === PLAIN_ID);
-  const sidebarMenuTools = fittingTools
+  const sidebarMenuTools: SidebarMenuTool[] = fittingTools
     .filter((tool) => tool.id !== PLAIN_ID || plainQueueExists)
-    .map((tool) => ({
-      id: tool.id,
-      label: tool.label,
-      icon: tool.icon,
-      shown: !hiddenTools.has(tool.id),
-      ...(tool.id === PLAIN_ID ? { surface: supportSurface } : {}),
-    }));
+    .map((tool) => {
+      const menuTool: SidebarMenuTool = {
+        id: tool.id,
+        label: tool.label,
+        icon: tool.icon,
+        shown: !hiddenTools.has(tool.id),
+      };
+      if (tool.id === PLAIN_ID) menuTool.surface = supportSurface;
+      return menuTool;
+    });
   const sidebarMenuSources = feeds
     .filter((feed) => feed.id !== PLAIN_ID)
     .map((feed) => ({

@@ -2,13 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { isDeployment } from "./pr-status-derive";
 import type { PrCheck } from "./types";
 
-const check = (name: string, workflowName?: string): PrCheck =>
-  ({
-    name,
-    status: "COMPLETED",
-    conclusion: "SUCCESS",
-    workflowName,
-  }) as PrCheck;
+const check = (name: string, workflowName?: string): PrCheck => ({
+  name,
+  status: "COMPLETED",
+  conclusion: "SUCCESS",
+  workflowName,
+});
 
 describe("isDeployment", () => {
   test("matches Vercel's own status contexts", () => {

@@ -193,14 +193,26 @@ type MemoryTableRow = {
 
 const PAGE_SIZE = 20;
 
-const KIND_LABELS: Record<MemoryRecordKind, string> = {
-  preference: "Preference",
-  constraint: "Constraint",
-  decision: "Decision",
-  gotcha: "Gotcha",
-  reference: "Reference",
-  status: "Status",
-};
+const MEMORY_KIND_OPTIONS = [
+  { value: "preference", label: "Preference" },
+  { value: "constraint", label: "Constraint" },
+  { value: "decision", label: "Decision" },
+  { value: "gotcha", label: "Gotcha" },
+  { value: "reference", label: "Reference" },
+  { value: "status", label: "Status" },
+] satisfies Array<{ value: MemoryRecordKind; label: string }>;
+
+function memoryRecordKind(value: string): MemoryRecordKind {
+  return memoryKindOption(value)?.value ?? "decision";
+}
+
+function memoryKindOption(value: string) {
+  return MEMORY_KIND_OPTIONS.find((option) => option.value === value);
+}
+
+function memoryKindLabel(kind: MemoryRecordKind): string {
+  return memoryKindOption(kind)?.label ?? kind;
+}
 
 function entryKind(entry: MemoryRecordDto): MemoryRecordKind | "legacy" {
   return entry.kind || "legacy";
@@ -416,7 +428,7 @@ function MemoryRow({
             <div className="group/memory relative">
               <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 <Badge>
-                  {kind === "legacy" ? "Unclassified" : KIND_LABELS[kind]}
+                  {kind === "legacy" ? "Unclassified" : memoryKindLabel(kind)}
                 </Badge>
                 <Badge
                   tone={row.entry.tier === "pinned" ? "accent" : "neutral"}
@@ -739,12 +751,12 @@ function AddMemoryDialog({
               className="phone:min-h-11 phone:text-input-phone"
               value={kind}
               onChange={(event) =>
-                setKind(event.target.value as MemoryRecordKind)
+                setKind(memoryRecordKind(event.target.value))
               }
             >
-              {Object.entries(KIND_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
+              {MEMORY_KIND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </Select>
@@ -864,12 +876,12 @@ function MergeMemoryDialog({
               className="phone:min-h-11 phone:text-input-phone"
               value={kind}
               onChange={(event) =>
-                setKind(event.target.value as MemoryRecordKind)
+                setKind(memoryRecordKind(event.target.value))
               }
             >
-              {Object.entries(KIND_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
+              {MEMORY_KIND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </Select>
@@ -1126,10 +1138,7 @@ function CategoryPage({
                 value={kind}
                 options={[
                   { value: "", label: "All kinds" },
-                  ...Object.entries(KIND_LABELS).map(([value, label]) => ({
-                    value: value as MemoryRecordKind,
-                    label,
-                  })),
+                  ...MEMORY_KIND_OPTIONS,
                 ]}
                 onChange={(value) => {
                   setKind(value);

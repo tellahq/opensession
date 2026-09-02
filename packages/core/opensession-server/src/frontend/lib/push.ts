@@ -5,12 +5,18 @@
  * the app was opened over a secure origin (the ts.net HTTPS host).
  */
 
+import { z } from "zod";
 import { BASE_PATH } from "./base";
 import { PRODUCT_NAME, PUBLIC_BASE_URL } from "./brand";
 
 export type PushState = "unsupported" | "denied" | "off" | "on";
 
 const SW_URL = `${BASE_PATH}/sw.js`;
+const navigateMessageSchema = z.object({
+  type: z.literal("os1-navigate"),
+  url: z.string(),
+});
+const vapidKeySchema = z.object({ publicKey: z.string() });
 
 function supported(): boolean {
   return (
@@ -46,11 +52,10 @@ export function onPushNavigate(handler: (url: string) => void): () => void {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator))
     return () => {};
   const listener = (event: MessageEvent) => {
-    const data = event.data as { type?: string; url?: string } | null;
-    if (!data || data.type !== "os1-navigate" || typeof data.url !== "string")
-      return;
+    const result = navigateMessageSchema.safeParse(event.data);
+    if (!result.success) return;
     event.ports?.[0]?.postMessage({ ok: true });
-    handler(data.url);
+    handler(result.data.url);
   };
   navigator.serviceWorker.addEventListener("message", listener);
   // Messages posted before a listener exists are buffered until the page asks
@@ -71,11 +76,11 @@ export async function getPushState(): Promise<PushState> {
   }
 }
 
-function urlBase64ToUint8Array(base64: string): Uint8Array {
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = atob(b64);
-  const out = new Uint8Array(raw.length);
+  const out = new Uint8Array(new ArrayBuffer(raw.length));
   for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
   return out;
 }
@@ -101,13 +106,13 @@ export async function enablePush(user: string): Promise<void> {
   const keyRes = await fetch(`${BASE_PATH}/api/push/vapid-key`);
   if (!keyRes.ok)
     throw new Error("Couldn't fetch the push key from the server.");
-  const { publicKey } = await keyRes.json();
+  const { publicKey } = vapidKeySchema.parse(await keyRes.json());
 
   const sub =
     (await reg.pushManager.getSubscription()) ||
     (await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
     }));
 
   const res = await fetch(`${BASE_PATH}/api/push/subscribe`, {

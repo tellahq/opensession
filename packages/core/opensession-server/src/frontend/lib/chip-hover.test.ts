@@ -5,43 +5,55 @@ import type { UnifiedSession } from "./types";
 
 // The chips are HTML the markdown renderer wrote, so the only handle the card
 // has on them is their data attributes. A fake element is enough to pin that.
-const chip = (dataset: Record<string, string>) =>
-  ({ dataset }) as unknown as HTMLElement;
+Object.defineProperty(globalThis, "document", {
+  configurable: true,
+  value: {
+    createElement: () => ({ dataset: {} }),
+  },
+});
 
-const session = (over: Partial<UnifiedSession>): UnifiedSession =>
-  ({
-    id: "os-1",
-    title: "Give the PR chips a hover card",
-    createdAt: "2026-08-14T09:00:00.000Z",
-    lastActivity: "2026-08-14T10:00:00.000Z",
-    ...over,
-  }) as UnifiedSession;
+const chip = (dataset: Record<string, string>) => {
+  const element = document.createElement("span");
+  Object.assign(element.dataset, dataset);
+  return element;
+};
 
-const openPr = (over: Partial<OpenPr>): OpenPr =>
-  ({
-    repo: "opensession",
-    branch: "chip-hover-cards",
-    url: "https://github.com/tellahq/opensession/pull/128",
-    number: 128,
-    title: "Hover cards for transcript chips",
-    isDraft: false,
-    reviewDecision: "",
-    author: "kentdebruin",
-    person: "kent",
-    createdAt: "2026-08-14T08:00:00.000Z",
-    updatedAt: "2026-08-14T09:30:00.000Z",
-    checks: { total: 4, passed: 4, failed: 0, pending: 0 },
-    ...over,
-  }) as OpenPr;
+const session = (over: Partial<UnifiedSession>): UnifiedSession => ({
+  id: "os-1",
+  title: "Give the PR chips a hover card",
+  source: "opensession",
+  branch: "chip-hover-cards",
+  worktreeDir: null,
+  startedBy: "kent",
+  createdAt: "2026-08-14T09:00:00.000Z",
+  lastActivity: "2026-08-14T10:00:00.000Z",
+  isRunning: false,
+  ...over,
+});
 
-const recentPr = (over: Partial<RecentPr>): RecentPr =>
-  ({
-    ...openPr({}),
-    state: "MERGED",
-    additions: 120,
-    deletions: 24,
-    ...over,
-  }) as RecentPr;
+const openPr = (over: Partial<OpenPr>): OpenPr => ({
+  repo: "opensession",
+  branch: "chip-hover-cards",
+  url: "https://github.com/tellahq/opensession/pull/128",
+  number: 128,
+  title: "Hover cards for transcript chips",
+  isDraft: false,
+  reviewDecision: "",
+  author: "kentdebruin",
+  person: "kent",
+  createdAt: "2026-08-14T08:00:00.000Z",
+  updatedAt: "2026-08-14T09:30:00.000Z",
+  checks: { total: 4, passed: 4, failed: 0, pending: 0 },
+  ...over,
+});
+
+const recentPr = (over: Partial<RecentPr>): RecentPr => ({
+  ...openPr({}),
+  state: "MERGED",
+  additions: 120,
+  deletions: 24,
+  ...over,
+});
 
 describe("chipTarget", () => {
   test("reads a session chip", () => {

@@ -114,7 +114,7 @@ function ReviewLoopResultRow({
 }) {
   const facts = [
     `${rounds} ${rounds === 1 ? "round" : "rounds"}`,
-    typeof result.confidence === "number" ? `${result.confidence}/5` : null,
+    result.confidence !== undefined ? `${result.confidence}/5` : null,
     result.blocking ? `${result.blocking} blocking` : null,
     result.checksFailed
       ? `${result.checksFailed} ${result.checksFailed === 1 ? "check" : "checks"} failed`

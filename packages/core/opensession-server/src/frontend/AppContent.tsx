@@ -61,7 +61,11 @@ import { useNewSessionCreateStart } from "./hooks/useNewSessionCreateStart";
 import { useNewSessionPalette } from "./hooks/useNewSessionPalette";
 import { useNewTabMorphTimer } from "./hooks/useNewTabMorphTimer";
 import { useOnboarding } from "./hooks/useOnboarding";
-import { sidebarSessionsQuery, useSessions } from "./hooks/useSessions";
+import {
+  sidebarSessionsQuery,
+  type SidebarSessionsQueryOptions,
+  useSessions,
+} from "./hooks/useSessions";
 import { useSessionTabs } from "./hooks/useSessionTabs";
 import { useShortcutKeys } from "./hooks/useShortcutBindings";
 import { useWebSocket } from "./hooks/useWebSocket";
@@ -132,6 +136,13 @@ import { ToastHost, toast } from "./ui/toast";
 import { Tooltip } from "./ui/tooltip";
 import { TopBar, TopBarActions, TopBarTitle } from "./ui/top-bar";
 
+interface PendingInitialPrompt {
+  content: string;
+  user: string;
+  sentAt: number;
+  images?: string[];
+}
+
 export function AppContent({
   serviceWorker = true,
   initialTeamViewing = [],
@@ -158,14 +169,19 @@ export function AppContent({
     goBackRoute(currentSessionRef.current?.parentSessionId ?? undefined);
   const currentUser = useCurrentUser();
   const sidebarFilter = useSidebarFilter();
-  const liveSessionsQuery = sidebarSessionsQuery({
+  const liveSessionsQueryInput: SidebarSessionsQueryOptions = {
     user: currentUser,
     person: sidebarFilter.person,
     repo: sidebarFilter.repo,
     autoCreated: sidebarFilter.autoCreated,
-    ...(route.view === "session" ? { selectedSessionId: route.id } : {}),
-    ...(route.view === "workspace" ? { selectedWorkspaceId: route.id } : {}),
-  });
+  };
+  if (route.view === "session") {
+    liveSessionsQueryInput.selectedSessionId = route.id;
+  }
+  if (route.view === "workspace") {
+    liveSessionsQueryInput.selectedWorkspaceId = route.id;
+  }
+  const liveSessionsQuery = sidebarSessionsQuery(liveSessionsQueryInput);
   const mainSocket = useWebSocket();
   const { connected, send, setTyping, addHandler } = mainSocket;
   const {
@@ -198,10 +214,7 @@ export function AppContent({
   });
   const pendingCreateDraftRef = useRef<PendingCreateDraft | null>(null);
   const [pendingInitialPrompts, setPendingInitialPrompts] = useState<
-    Record<
-      string,
-      { content: string; user: string; sentAt: number; images?: string[] }
-    >
+    Record<string, PendingInitialPrompt>
   >({});
   // Transient toasts (e.g. "Link copied", "Archived · stopped the running
   // turn") route through the global toast store — stacked, animated, and
@@ -652,14 +665,15 @@ export function AppContent({
           );
         }
         if (draft?.prompt || draft?.images?.length) {
+          const initialPrompt: PendingInitialPrompt = {
+            content: draft.prompt,
+            user: draft.user,
+            sentAt: new Date(draft.startedAt).getTime(),
+          };
+          if (draft.images?.length) initialPrompt.images = draft.images;
           setPendingInitialPrompts((prev) => ({
             ...prev,
-            [msg.id]: {
-              content: draft.prompt,
-              user: draft.user,
-              sentAt: new Date(draft.startedAt).getTime(),
-              ...(draft.images?.length ? { images: draft.images } : {}),
-            },
+            [msg.id]: initialPrompt,
           }));
           window.setTimeout(() => {
             setPendingInitialPrompts((prev) => {
@@ -1039,14 +1053,15 @@ export function AppContent({
         return;
       }
       // Default the new session onto the workspace's branch when it has one.
-      openPrefilledSession({
+      const prefill: Parameters<typeof openPrefilledSession>[0] = {
         workspaceId: id,
         repo: workspace?.repo,
         branch: workspace?.branch,
-        ...(workspace?.externalRefs?.length && !workspace?.repo
-          ? { mode: "scratch" as const }
-          : {}),
-      });
+      };
+      if (workspace?.externalRefs?.length && !workspace.repo) {
+        prefill.mode = "scratch";
+      }
+      openPrefilledSession(prefill);
     }
   };
   const openNewSessionInRepo = (repo: string) => {

@@ -345,15 +345,24 @@ function RangeCalendar({
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
-    const step: Record<string, number> = {
-      ArrowLeft: -1,
-      ArrowRight: 1,
-      ArrowUp: -7,
-      ArrowDown: 7,
-    };
-    if (e.key in step) {
+    let dayStep: number | undefined;
+    switch (e.key) {
+      case "ArrowLeft":
+        dayStep = -1;
+        break;
+      case "ArrowRight":
+        dayStep = 1;
+        break;
+      case "ArrowUp":
+        dayStep = -7;
+        break;
+      case "ArrowDown":
+        dayStep = 7;
+        break;
+    }
+    if (dayStep !== undefined) {
       e.preventDefault();
-      moveTo(addDays(focused, step[e.key]));
+      moveTo(addDays(focused, dayStep));
       return;
     }
     if (e.key === "PageUp" || e.key === "PageDown") {

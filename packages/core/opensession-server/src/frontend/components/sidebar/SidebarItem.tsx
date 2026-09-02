@@ -73,6 +73,8 @@ import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
 import { UserAvatar } from "../UserAvatar";
 import React, { useEffect, useRef, useState } from "react";
 
+type SwipeRowStyle = React.CSSProperties & { "--swipe-action-w": string };
+
 /** The sidebar's selectable row — the shape every list family wears: session,
  *  workspace, PR, support, feed and archived rows. Migrated off the
  *  legacy row family, so the state that used to live in `-selected` /
@@ -376,22 +378,21 @@ export function SidebarItem({
       : swipeAction === "star" || visibleSwipeOffset > 0
         ? "star"
         : null;
+  const swipeRowStyle: SwipeRowStyle | undefined = visibleSwipeOffset
+    ? {
+        "--swipe-action-w": `${Math.max(
+          SWIPE_REVEAL_PX,
+          Math.abs(visibleSwipeOffset),
+        )}px`,
+      }
+    : undefined;
 
   return (
     <Popover.Root {...card.rootProps}>
       <div
         className={SIDEBAR_SWIPE_ROW}
         data-swipe-row=""
-        style={
-          visibleSwipeOffset
-            ? ({
-                "--swipe-action-w": `${Math.max(
-                  SWIPE_REVEAL_PX,
-                  Math.abs(visibleSwipeOffset),
-                )}px`,
-              } as React.CSSProperties)
-            : undefined
-        }
+        style={swipeRowStyle}
       >
         {isPhone && !canKeepInSidebar && (
           <button

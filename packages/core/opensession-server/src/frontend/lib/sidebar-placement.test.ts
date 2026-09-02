@@ -20,10 +20,16 @@ function session(
 ): UnifiedSession {
   return {
     id,
+    source: "opensession",
+    branch: null,
+    worktreeDir: null,
     startedBy: "Michiel",
+    title: id,
+    lastActivity: "2026-08-16T00:00:00Z",
+    createdAt: "2026-08-16T00:00:00Z",
     isRunning: false,
     ...overrides,
-  } as UnifiedSession;
+  };
 }
 
 function row(

@@ -50,9 +50,9 @@ describe("mark tile ramps", () => {
   const relativeLuminance = (hex: string) => {
     const channel = (c: number) =>
       c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-    const [r, g, b] = [1, 3, 5].map((i) =>
-      channel(parseInt(hex.slice(i, i + 2), 16) / 255),
-    ) as [number, number, number];
+    const r = channel(parseInt(hex.slice(1, 3), 16) / 255);
+    const g = channel(parseInt(hex.slice(3, 5), 16) / 255);
+    const b = channel(parseInt(hex.slice(5, 7), 16) / 255);
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
 

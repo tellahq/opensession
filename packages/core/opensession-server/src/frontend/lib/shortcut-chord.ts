@@ -96,14 +96,13 @@ export function eventChord(e: KeyboardEvent, apple: boolean): Chord | null {
  * one naming a modifier twice over.
  */
 export function normalizeChord(raw: string, apple: boolean): Chord | null {
-  if (typeof raw !== "string") return null;
   const tokens = raw
     .toLowerCase()
     .split("+")
     .map((t) => t.trim())
     .filter(Boolean);
   if (tokens.length === 0) return null;
-  const mods = new Set<string>();
+  const mods = new Set<(typeof MODIFIER_ORDER)[number]>();
   let key: string | null = null;
   for (const token of tokens) {
     if (token === "mod" || token === "meta" || token === "cmd") {
@@ -120,9 +119,9 @@ export function normalizeChord(raw: string, apple: boolean): Chord | null {
     }
   }
   if (!key) return null;
-  const parts = MODIFIER_ORDER.filter((m) => mods.has(m)) as string[];
-  parts.push(key);
-  return parts.join("+");
+  return [...MODIFIER_ORDER.filter((modifier) => mods.has(modifier)), key].join(
+    "+",
+  );
 }
 
 /** The modifier tokens a chord carries. */
@@ -154,47 +153,47 @@ export function isBindableChord(chord: Chord): boolean {
 }
 
 /** Keys whose glyph differs from their token. */
-const KEY_GLYPHS: Record<string, string> = {
-  arrowup: "↑",
-  arrowdown: "↓",
-  arrowleft: "←",
-  arrowright: "→",
-  enter: "↵",
-  escape: "Esc",
-  backspace: "⌫",
-  delete: "⌦",
-  tab: "⇥",
-  space: "Space",
-  pageup: "PgUp",
-  pagedown: "PgDn",
-  home: "Home",
-  end: "End",
-  ",": ",",
-  ".": ".",
-  "/": "/",
-  "\\": "\\",
-  "[": "[",
-  "]": "]",
-  "'": "'",
-  ";": ";",
-  "`": "`",
-  "-": "-",
-  "=": "=",
-};
+const KEY_GLYPHS = new Map([
+  ["arrowup", "↑"],
+  ["arrowdown", "↓"],
+  ["arrowleft", "←"],
+  ["arrowright", "→"],
+  ["enter", "↵"],
+  ["escape", "Esc"],
+  ["backspace", "⌫"],
+  ["delete", "⌦"],
+  ["tab", "⇥"],
+  ["space", "Space"],
+  ["pageup", "PgUp"],
+  ["pagedown", "PgDn"],
+  ["home", "Home"],
+  ["end", "End"],
+  [",", ","],
+  [".", "."],
+  ["/", "/"],
+  ["\\", "\\"],
+  ["[", "["],
+  ["]", "]"],
+  ["'", "'"],
+  [";", ";"],
+  ["`", "`"],
+  ["-", "-"],
+  ["=", "="],
+]);
 
-const APPLE_MODIFIER_GLYPHS: Record<string, string> = {
-  mod: "⌘",
-  ctrl: "⌃",
-  alt: "⌥",
-  shift: "⇧",
-};
+const APPLE_MODIFIER_GLYPHS = new Map([
+  ["mod", "⌘"],
+  ["ctrl", "⌃"],
+  ["alt", "⌥"],
+  ["shift", "⇧"],
+]);
 
-const PC_MODIFIER_GLYPHS: Record<string, string> = {
-  mod: "Ctrl",
-  ctrl: "Ctrl",
-  alt: "Alt",
-  shift: "Shift",
-};
+const PC_MODIFIER_GLYPHS = new Map([
+  ["mod", "Ctrl"],
+  ["ctrl", "Ctrl"],
+  ["alt", "Alt"],
+  ["shift", "Shift"],
+]);
 
 /**
  * A chord as the keycaps to render, one string per key: `["⌘", "⇧", "A"]` on
@@ -202,10 +201,12 @@ const PC_MODIFIER_GLYPHS: Record<string, string> = {
  */
 export function chordGlyphs(chord: Chord, apple: boolean): string[] {
   const modGlyphs = apple ? APPLE_MODIFIER_GLYPHS : PC_MODIFIER_GLYPHS;
-  const out = chordModifiers(chord).map((m) => modGlyphs[m] ?? m);
+  const out = chordModifiers(chord).map(
+    (modifier) => modGlyphs.get(modifier) ?? modifier,
+  );
   const key = chordKey(chord);
   out.push(
-    KEY_GLYPHS[key] ??
+    KEY_GLYPHS.get(key) ??
       (key.length === 1
         ? key.toUpperCase()
         : /^f\d+$/.test(key)

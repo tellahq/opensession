@@ -72,7 +72,7 @@ export function AddRepoDialog({
           label="Repository source"
           value={mode}
           onValueChange={(next) => {
-            setMode(next as typeof mode);
+            if (next === "clone" || next === "path") setMode(next);
             setError(null);
           }}
         >

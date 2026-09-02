@@ -136,7 +136,7 @@ export function PythonMark({ size }: MarkProps) {
 }
 
 /** Extension → mark. Anything absent falls back to the badge's letters. */
-export const LANG_MARKS: Record<string, (p: MarkProps) => React.ReactNode> = {
+export const LANG_MARKS = {
   res: ReScriptMark,
   resi: ReScriptMark,
   swift: SwiftMark,
@@ -148,6 +148,8 @@ export const LANG_MARKS: Record<string, (p: MarkProps) => React.ReactNode> = {
   rb: RubyMark,
   py: PythonMark,
 };
+
+const LANG_MARKS_BY_EXTENSION = new Map(Object.entries(LANG_MARKS));
 
 /**
  * The file's language mark: the brand glyph where one reads at this size, its
@@ -174,8 +176,8 @@ export function ExtBadge({
   className?: string;
 }) {
   const ext = fileExt(name);
-  const color = EXT_COLORS[ext] || "#6e7681";
-  const Glyph = LANG_MARKS[ext];
+  const color = EXT_COLORS_BY_EXTENSION.get(ext) || "#6e7681";
+  const Glyph = LANG_MARKS_BY_EXTENSION.get(ext);
   return (
     <span
       className={cn(
@@ -210,7 +212,7 @@ function extLabel(ext: string): string {
   return (ext.length <= 4 ? ext : ext.slice(0, 3)).toUpperCase();
 }
 
-const EXT_COLORS: Record<string, string> = {
+const EXT_COLORS = {
   ts: "#3178c6",
   tsx: "#3178c6",
   js: "#a38319",
@@ -242,3 +244,5 @@ const EXT_COLORS: Record<string, string> = {
   res: "#c93a3c",
   resi: "#c93a3c",
 };
+
+const EXT_COLORS_BY_EXTENSION = new Map(Object.entries(EXT_COLORS));

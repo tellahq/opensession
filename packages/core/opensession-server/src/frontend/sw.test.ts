@@ -3,7 +3,18 @@ import { readFileSync } from "node:fs";
 
 const workerSource = readFileSync(new URL("./sw.js", import.meta.url), "utf8");
 
-type WorkerListener = (event: Record<string, unknown>) => void;
+type WorkerEvent = {
+  waitUntil?: (task: Promise<unknown>) => void;
+  request?: { method: string; mode: string; url: string };
+  respondWith?: (response: Promise<Response>) => void;
+};
+
+type WorkerListener = (event: WorkerEvent) => void;
+type CacheInput = string | { url: string };
+
+function cacheUrl(input: CacheInput): string {
+  return input instanceof Object ? input.url : input;
+}
 
 function workerHarness(scopePath = "/", existingCacheNames: string[] = []) {
   const origin = "https://os.test";
@@ -18,20 +29,17 @@ function workerHarness(scopePath = "/", existingCacheNames: string[] = []) {
       added.push(input);
       entries.set(new URL(input, scope).href, new Response(`cached:${input}`));
     },
-    async match(input: string | { url: string }) {
-      const raw = typeof input === "string" ? input : input.url;
-      return entries.get(new URL(raw, scope).href)?.clone();
+    async match(input: CacheInput) {
+      return entries.get(new URL(cacheUrl(input), scope).href)?.clone();
     },
-    async put(input: string | { url: string }, response: Response) {
-      const raw = typeof input === "string" ? input : input.url;
-      entries.set(new URL(raw, scope).href, response.clone());
+    async put(input: CacheInput, response: Response) {
+      entries.set(new URL(cacheUrl(input), scope).href, response.clone());
     },
     async keys() {
       return [...entries.keys()].map((url) => ({ url }));
     },
-    async delete(input: string | { url: string }) {
-      const raw = typeof input === "string" ? input : input.url;
-      return entries.delete(new URL(raw, scope).href);
+    async delete(input: CacheInput) {
+      return entries.delete(new URL(cacheUrl(input), scope).href);
     },
   };
   const caches = {

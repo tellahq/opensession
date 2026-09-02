@@ -3,7 +3,7 @@
 // (an in-memory cache) so callers don't await: the store is a lib/user-map
 // instance, which owns hydration and ordered per-key delta writes.
 import { fetchTabColors, saveTabColorsApi } from "./api";
-import { makeUserMap } from "./user-map";
+import * as userMap from "./user-map";
 
 const CHANGE_EVENT = "opensession-tab-colors-changed";
 
@@ -22,7 +22,7 @@ export function colorHex(key: string | undefined): string | null {
   return TAB_COLORS.find((c) => c.key === key)?.hex ?? null;
 }
 
-const store = makeUserMap<string>({
+const store = userMap.makeUserMap<string>({
   changeEvent: CHANGE_EVENT,
   fetchMap: fetchTabColors,
   saveDelta: saveTabColorsApi,

@@ -48,12 +48,10 @@ export function useNewSessionPalette({
   const openPalette = (prompt?: string, mcpServers?: string[]) => {
     // The global action can borrow model combinations from the visible
     // workspace, but must not make that workspace the create destination.
-    setPalette({
-      open: true,
-      prompt,
-      ...(mcpServers?.length ? { mcpServers } : {}),
-      ...(modelWorkspaceId ? { modelWorkspaceId } : {}),
-    });
+    const next: NewSessionPaletteState = { open: true, prompt };
+    if (mcpServers?.length) next.mcpServers = mcpServers;
+    if (modelWorkspaceId) next.modelWorkspaceId = modelWorkspaceId;
+    setPalette(next);
   };
 
   const openPrefilledSession = (prefill: NewSessionPalettePrefill) => {

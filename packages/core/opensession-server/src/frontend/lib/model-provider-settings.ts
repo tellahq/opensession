@@ -28,12 +28,11 @@ export function modelProviderSettingsPayload({
   const cleanBaseURL = baseURL.trim();
   const cleanName = name.trim();
 
-  return {
-    ...(cleanApiKey ? { apiKey: cleanApiKey } : {}),
-    ...(cleanBaseURL ? { baseURL: cleanBaseURL } : {}),
-    ...(models.length ? { models } : {}),
-    ...(custom ? { api: "openai-completions" } : {}),
-    ...(cleanName ? { name: cleanName } : {}),
-    discoverModels,
-  };
+  const payload: ModelProviderSettingsPayload = { discoverModels };
+  if (cleanApiKey) payload.apiKey = cleanApiKey;
+  if (cleanBaseURL) payload.baseURL = cleanBaseURL;
+  if (models.length) payload.models = models;
+  if (custom) payload.api = "openai-completions";
+  if (cleanName) payload.name = cleanName;
+  return payload;
 }
