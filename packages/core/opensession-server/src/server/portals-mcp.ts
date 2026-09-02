@@ -143,9 +143,9 @@ async function startPortalForContext(
 
 function isTellaEditorPath(path: string): boolean {
   const normalized = normalizePortalPath(path);
-  return normalized
-    ? /^\/video\/[^/?#]+\/edit(?:[/?#]|$)/.test(normalized)
-    : false;
+  if (!normalized) return false;
+  const pathname = new URL(normalized, "https://preview.invalid").pathname;
+  return /^\/video\/[^/]+\/edit(?:\/|$)/.test(pathname);
 }
 
 export function createPortalsMcpServer(ctx: PortalsMcpContext) {

@@ -202,6 +202,22 @@ describe("Portals MCP staging routes", () => {
     });
   });
 
+  test("rejects generic routes that canonicalize to a Tella editor", async () => {
+    const { calls, runtime, verificationCalls } = await harness();
+    const response = await runtime.callExact(
+      "opensession-portals_set_portal_path",
+      { path: "/other/../video/vid_invented/edit" },
+      { toolCallId: "canonical-editor" },
+    );
+
+    expect(verificationCalls).toEqual([]);
+    expect(calls).toEqual([]);
+    expect(response.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("set_editor_preview_path"),
+    });
+  });
+
   test("keeps ordinary web routes outside the exclusive editor flow", async () => {
     const { calls, runtime, verificationCalls } = await harness();
     const response = await runtime.callExact(
