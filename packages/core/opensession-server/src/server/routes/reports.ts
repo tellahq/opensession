@@ -52,6 +52,7 @@ export async function handleReportsRoutes(
         reportId,
         tasks,
         user: requestUser(ctx, body?.user),
+        createdByLogin: ctx.authUser?.login,
       });
       return Response.json({ sessions });
     } catch (error) {
