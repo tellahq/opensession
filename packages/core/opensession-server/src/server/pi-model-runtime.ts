@@ -286,6 +286,63 @@ export const PI_PASSTHROUGH_BLOCK_REASON =
  *  discarded, billed digest turn. Ported from rynfar/meridian#860. */
 export const PI_SDK_MAX_TURNS = 1;
 
+type EarlyStopTracker = ReturnType<typeof createEarlyStopTracker>;
+
+/** SDK-internal tools that really execute inside the SDK (Meridian's
+ *  INTERNAL_TOOLS). Never forward these to pi. */
+const SDK_INTERNAL_TOOLS = new Set(["ToolSearch"]);
+
+/** Forward the tool calls the tracker refuses to count. Meridian only treats
+ *  `mcp__oc__*` names as client-forwarded, so a call the model mangled
+ *  (`mcp__ocuser__bash`, seen live on Fable 5.1) is answered by the SDK with
+ *  "No such tool available" without running PreToolUse, never settles the
+ *  visible turn, and with maxTurns=1 the query ends with nothing captured:
+ *  the run fails "Reached maximum number of turns (1)". Claude Code's own
+ *  loop would hand the model that error and let it retry; capturing the call
+ *  does the same here, because pi answers an unknown name with its own
+ *  "Tool X not found" result. Call after noteAssistantMessage. Returns how
+ *  many calls were added. */
+export function captureUnforwardedToolUses(
+  tracker: EarlyStopTracker,
+  message: unknown,
+  captured: CapturedToolUse[],
+): number {
+  const m = message as {
+    type?: unknown;
+    uuid?: unknown;
+    message?: { content?: unknown };
+  } | null;
+  const content = m?.message?.content;
+  if (m?.type !== "assistant" || !Array.isArray(content)) return 0;
+  let added = 0;
+  for (const block of content) {
+    const b = block as {
+      type?: unknown;
+      id?: unknown;
+      name?: unknown;
+      input?: unknown;
+    } | null;
+    if (b?.type !== "tool_use") continue;
+    if (typeof b.id !== "string" || !b.id) continue;
+    if (typeof b.name !== "string" || SDK_INTERNAL_TOOLS.has(b.name)) continue;
+    if (tracker.expected.has(b.id)) continue;
+    if (captured.some((c) => c.id === b.id)) continue;
+    tracker.expected.add(b.id);
+    if (typeof m.uuid === "string" && m.uuid) {
+      tracker.toolCallAssistantUuid = m.uuid;
+    }
+    captured.push({
+      id: b.id,
+      name: b.name.startsWith(PASSTHROUGH_PREFIX)
+        ? b.name.slice(PASSTHROUGH_PREFIX.length)
+        : b.name,
+      input: (b.input as Record<string, unknown> | undefined) ?? {},
+    });
+    added++;
+  }
+  return added;
+}
+
 /** Recover the two usable outcomes from the SDK's capped terminal result. */
 export function recoverCappedSdkStopReason(
   subtype: unknown,
@@ -1321,6 +1378,7 @@ async function* runSdkAttempt(
           if (!checkpoint && earlyStop.resolved.size === 0) {
             const expectedBefore = earlyStop.expected.size;
             noteAssistantMessage(earlyStop, m);
+            captureUnforwardedToolUses(earlyStop, m, captured);
             assistantAddedForwardedCall =
               earlyStop.expected.size > expectedBefore;
           }

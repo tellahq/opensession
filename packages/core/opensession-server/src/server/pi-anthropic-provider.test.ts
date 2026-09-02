@@ -57,6 +57,8 @@ import {
   noteUserContent,
   shouldEarlyStop,
 } from "./meridian-passthrough";
+import * as passthrough from "./meridian-passthrough";
+import { captureUnforwardedToolUses } from "./pi-model-runtime";
 import {
   admitBridgeRequest,
   ensureAnthropicBridgeCwd,
@@ -1178,5 +1180,67 @@ describe("pickBridgeAccount pool mode (no designation — picks like pi)", () =>
     });
     expect((moved as any).id).not.toBe("pool-sticky-a");
     expect("error" in moved).toBe(false);
+  });
+});
+
+describe("captureUnforwardedToolUses", () => {
+  test("a mangled tool name is forwarded to pi instead of ending the query empty", () => {
+    const tracker = passthrough.createEarlyStopTracker();
+    const captured: Parameters<typeof captureUnforwardedToolUses>[2] = [];
+    const message = {
+      type: "assistant",
+      uuid: "asst-1",
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            id: "t-mangled",
+            name: "mcp__ocuser__bash",
+            input: { command: "ls" },
+          },
+          { type: "tool_use", id: "t-internal", name: "ToolSearch", input: {} },
+        ],
+      },
+    };
+    passthrough.noteAssistantMessage(tracker, message);
+    // Meridian refuses the foreign mcp__ name outright.
+    expect(tracker.expected.size).toBe(0);
+    expect(captureUnforwardedToolUses(tracker, message, captured)).toBe(1);
+    expect(captured).toEqual([
+      { id: "t-mangled", name: "mcp__ocuser__bash", input: { command: "ls" } },
+    ]);
+    expect(tracker.toolCallAssistantUuid).toBe("asst-1");
+    // The SDK's "No such tool available" result now settles the turn, so the
+    // provider hands the call to pi (which answers "Tool X not found").
+    passthrough.noteUserContent(tracker, [
+      {
+        type: "tool_result",
+        tool_use_id: "t-mangled",
+        is_error: true,
+        content: "No such tool available: mcp__ocuser__bash",
+      },
+    ]);
+    expect(passthrough.shouldEarlyStop(tracker)).toBe(true);
+    expect(passthrough.settledToolCallAssistantUuid(tracker)).toBe("asst-1");
+  });
+
+  test("passthrough names stay with the PreToolUse hook", () => {
+    const tracker = passthrough.createEarlyStopTracker();
+    const captured: Parameters<typeof captureUnforwardedToolUses>[2] = [];
+    const message = {
+      type: "assistant",
+      uuid: "asst-2",
+      message: {
+        content: [
+          { type: "tool_use", id: "t-ok", name: "mcp__oc__bash", input: {} },
+        ],
+      },
+    };
+    passthrough.noteAssistantMessage(tracker, message);
+    expect(tracker.expected.has("t-ok")).toBe(true);
+    expect(captureUnforwardedToolUses(tracker, message, captured)).toBe(0);
+    expect(captured).toEqual([]);
+    // Idempotent on a replayed envelope.
+    expect(captureUnforwardedToolUses(tracker, message, captured)).toBe(0);
   });
 });
