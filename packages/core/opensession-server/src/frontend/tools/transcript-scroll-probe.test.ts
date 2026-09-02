@@ -130,7 +130,11 @@ describe("reader displacement", () => {
 
   test("orders a write against frames by sequence, not timestamp", () => {
     // Sampled in the same timestamp as the frame, but after it.
-    const frames = [frame(0, 1000, 40), frame(16, 1000, 40), frame(32, 1128, 40)];
+    const frames = [
+      frame(0, 1000, 40),
+      frame(16, 1000, 40),
+      frame(32, 1128, 40),
+    ];
     const writes = [write(16, 1000, 1128, { seq: 16.5 })];
     expect(findReaderDisplacements(window({ frames, writes }))).toEqual([]);
   });

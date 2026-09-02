@@ -468,6 +468,7 @@ describe("single session ownership", () => {
     expect(wiring).toContain("patchCreationSetupPlan(bksId, createIdentity");
     expect(wiring).toContain("createPlan.resolved");
     expect(wiring).toContain("actorCreationSetupPlan(bksId, createIdentity)");
+    expect(wiring).toContain("createdByLogin: parentSession?.createdByLogin");
     expect(wiring).not.toContain("updateCreatePlan(");
     expect(wiring).toContain("await requestCreationWorkspace({");
     expect(wiring.match(/await requestCreationCredential\(\{/g)?.length).toBe(
