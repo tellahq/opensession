@@ -54,7 +54,7 @@ import { isStopMessage, cancelSession } from "./cancel";
 import { pollForVercelPreview } from "./github-reviews";
 import {
   gitIdentityFor,
-  githubLoginFor,
+  githubLoginForTrustedSlackId,
   slackIdToFirstName,
 } from "../../server/shared/user-mappings";
 import { oneShot } from "../../server/one-shot";
@@ -947,7 +947,7 @@ export async function processMessage(
         }),
         "opensession-sessions": createSessionsMcpServer({
           createdBy: userName || msg.userId,
-          createdByLogin: githubLoginFor(msg.userId) || undefined,
+          createdByLogin: githubLoginForTrustedSlackId(msg.userId) || undefined,
           isAdmin,
           currentSessionId: `slack-${sessionKey}`,
         }),

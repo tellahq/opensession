@@ -483,7 +483,7 @@ describe("single session ownership", () => {
       "createdByLogin: input.createdByLogin",
     );
     expect(read("../agents/slack/handlers.ts")).toContain(
-      "createdByLogin: githubLoginFor(msg.userId) || undefined",
+      "createdByLogin: githubLoginForTrustedSlackId(msg.userId) || undefined",
     );
     expect(wiring).not.toContain("updateCreatePlan(");
     expect(wiring).toContain("await requestCreationWorkspace({");

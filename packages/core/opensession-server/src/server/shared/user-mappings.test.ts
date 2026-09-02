@@ -6,6 +6,7 @@ import {
   deriveIdentityTables,
   gitIdentityEnv,
   labelIdentity,
+  githubLoginForTrustedSlackId,
   githubLoginToPersonKeyFromTeam,
   isTrustedGithubLogin,
   isTrustedUser,
@@ -106,6 +107,12 @@ describe("commit attribution", () => {
     expect(isTrustedUser("alice@work.example")).toBe(true);
     expect(isTrustedUser("ali")).toBe(false); // aliases are not authentication evidence
     expect(isTrustedUser("mallory")).toBe(false);
+  });
+
+  test("trusted Slack login lookup uses only the exact roster entry", () => {
+    expect(githubLoginForTrustedSlackId("U_ALICE")).toBe("alice");
+    expect(githubLoginForTrustedSlackId("U_SYSTEM")).toBeNull();
+    expect(githubLoginForTrustedSlackId("alice")).toBeNull();
   });
 
   test("the prompt's sender wins", () => {
