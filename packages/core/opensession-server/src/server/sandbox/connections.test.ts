@@ -132,7 +132,7 @@ describe("workspace sandbox connections", () => {
     const path = process.env.OPENSESSION_SANDBOX_CONFIG!;
     const raw = JSON.parse(readFileSync(path, "utf-8"));
     raw.connections[0].qualification.adapterSignature =
-      "daytona:connection-v1:old-runner-pin+node@24.18.1+workspace-runtime-v7";
+      "daytona:connection-v2:old-runner-pin+node@24.18.1+workspace-runtime-v7";
     writeFileSync(path, JSON.stringify(raw));
 
     expect(sandboxConnectionReady("daytona")).toBe(true);

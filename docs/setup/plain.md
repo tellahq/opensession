@@ -140,7 +140,9 @@ Scope the automation deliberately:
   `workos`, `tinybird`, `linear`, `sentry`, and `stripe`; remove servers you do
   not use. `[]` means no external MCP servers. For an ordinary unsandboxed
   automation, omitting the field preserves the legacy behavior of exposing all
-  configured servers; sandbox automations require an explicit allowlist.
+  configured servers. Sandbox automations run in fresh disposable Daytona
+  Executors and require a qualified provider, a pinned subscription account,
+  and an explicit allowlist.
 - **Denied writes** are stripped before the model sees its tools. The policy in
   `packages/core/opensession-server/src/server/automation-denied-tools.ts`
   blocks Plain customer replies and thread-state changes, plus WorkOS identity

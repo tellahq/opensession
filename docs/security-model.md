@@ -67,6 +67,16 @@ configuration for the run.
   open a GitHub PR; trusted `github-*` code workflows have a separate,
   repository-scoped credential path. Every other scope still applies: MCP
   allowlist, denied writes, IMDS blocking, and the explicit environment.
+- A sandboxed automation runs in a fresh disposable Daytona Executor. Open
+  Session admits it only after Daytona has passed qualification, including a
+  live domain-allowlist check. The provider applies that allowlist before
+  runner bootstrap, repository setup hooks, private workspace seeds, or model
+  credentials enter the guest. Each run requires one hard-pinned Anthropic or
+  OpenAI subscription account, no fallback model, no nested CLI credentials,
+  and an explicit MCP allowlist. The launcher adds only the callback, clone,
+  runner bootstrap, model API, configured MCP, and operator-approved domains.
+  It probes one allowed and one blocked destination before continuing, and
+  strictly deletes the Executor after the run. There is no host fallback.
 - When adding an automation, scope it: pick ask mode unless it must write, and
   name only the MCP servers it uses.
 - A code automation's `prReviewer` is preserved and added to its instructions,

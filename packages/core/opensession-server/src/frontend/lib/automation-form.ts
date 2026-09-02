@@ -5,6 +5,16 @@ export const FIELD_LABEL =
 /** .automation-form-row */
 export const FORM_ROW = "flex gap-3.5 phone:flex-col";
 
+export function sandboxProviderLabel(id: string): string {
+  if (id === "docker") return "Docker";
+  if (id === "daytona") return "Daytona";
+  if (id === "e2b") return "E2B";
+  if (id === "box") return "Box";
+  if (id === "modal") return "Modal";
+  if (id === "lambda-microvm") return "AWS Lambda MicroVM";
+  return id;
+}
+
 export function uniqueFlowId(prefix: string, used: string[]): string {
   let candidate = prefix;
   let index = 2;

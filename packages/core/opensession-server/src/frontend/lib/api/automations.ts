@@ -334,6 +334,12 @@ export interface SandboxStatusInfo {
   canManage?: boolean;
   /** Absent on a pre-upgrade server = no client-side combo warnings. */
   modelFamilies?: SandboxModelFamilyInfo[];
+  /** Disposable automation Executor availability. */
+  automation?: {
+    provider: "daytona";
+    available: boolean;
+    reason?: string;
+  };
 }
 
 export type SandboxConnectionState =
