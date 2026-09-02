@@ -23,6 +23,15 @@ type ElementProps = {
   ref?: unknown;
 };
 
+function elementChildren(
+  children: React.ReactNode,
+): ReactElement<ElementProps>[] {
+  return React.Children.toArray(children).filter(
+    (child): child is ReactElement<ElementProps> =>
+      React.isValidElement<ElementProps>(child),
+  );
+}
+
 describe("AppShell", () => {
   test("keeps pane chrome, content, and the right-panel slot in shell order", () => {
     const paneRef = (_node: HTMLElement | null) => {};
@@ -31,14 +40,15 @@ describe("AppShell", () => {
       paneRef,
       rightPanelRef,
       children: <section data-testid="pane-child" />,
-    }) as ReactElement<ElementProps>;
+    });
+    if (!React.isValidElement<ElementProps>(tree)) {
+      throw new Error("AppShell did not return a React element");
+    }
 
     expect(tree.type).toBe("div");
     expect(tree.props.className).toBe(WORKSPACE_SHELL);
 
-    const shellChildren = React.Children.toArray(
-      tree.props.children,
-    ) as ReactElement<ElementProps>[];
+    const shellChildren = elementChildren(tree.props.children);
     expect(shellChildren).toHaveLength(2);
     const [main, rightPanel] = shellChildren;
     expect(main.type).toBe("main");
@@ -48,9 +58,7 @@ describe("AppShell", () => {
     expect(rightPanel.props.className).toBe(RIGHT_PANEL_SLOT);
     expect(rightPanel.props.ref).toBe(rightPanelRef);
 
-    const paneChildren = React.Children.toArray(
-      main.props.children,
-    ) as ReactElement<ElementProps>[];
+    const paneChildren = elementChildren(main.props.children);
     expect(paneChildren).toHaveLength(3);
     const [titleBar, dragHandle, child] = paneChildren;
     expect(titleBar.type).toBe(TitleBarStub);

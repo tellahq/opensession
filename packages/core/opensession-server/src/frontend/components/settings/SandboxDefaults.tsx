@@ -41,7 +41,7 @@ function SandboxDefaultRow({
   useEffect(() => {
     fetchSandboxStatus(user)
       .then(setStatus)
-      .catch((error: unknown) =>
+      .catch((error) =>
         setLoadError(
           errorMessage(error, "Failed to load available sandbox providers"),
         ),
@@ -108,13 +108,13 @@ function SandboxDefaultRow({
         current ? { ...current, defaults: response.defaults } : current,
       );
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         toast(errorMessage(error, "Failed to save sandbox default"), {
           variant: "error",
         });
         fetchSandboxStatus(user)
           .then(setStatus)
-          .catch((_refreshError: unknown) => {
+          .catch(() => {
             // The save error is already visible and the pre-save status remains valid.
           });
       })

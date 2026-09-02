@@ -1,6 +1,10 @@
 import { dget, type FeedFilterValues } from "./sidebar-filter";
 import type { FeedDescriptor, FeedItem, UnifiedSession } from "./types";
 
+function isString(value: unknown): value is string {
+  return value === String(value);
+}
+
 interface SidebarFeedFilterOptions {
   feed: FeedDescriptor;
   items: FeedItem[];
@@ -27,10 +31,7 @@ export function filterSidebarFeedItems({
         item.title,
         item.preview,
         ...(feed.searchMeta || []).map((path) => dget(item.meta, path)),
-      ].some(
-        (value) =>
-          typeof value === "string" && value.toLowerCase().includes(query),
-      ),
+      ].some((value) => isString(value) && value.toLowerCase().includes(query)),
     );
   for (const spec of feed.filters || []) {
     if (spec.mode !== "meta") continue;

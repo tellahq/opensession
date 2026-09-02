@@ -68,6 +68,11 @@ export interface WorkspaceRowSwipe {
   dragSide: SwipeAction | null;
 }
 
+type WorkspaceSwipeStyle = React.CSSProperties & {
+  "--swipe-action-w"?: string;
+  "--swipe-x"?: string;
+};
+
 interface WorkspaceRowEvents {
   onActivate: React.MouseEventHandler<HTMLButtonElement>;
   onMouseEnter: React.MouseEventHandler<HTMLButtonElement>;
@@ -224,21 +229,23 @@ export function WorkspaceRow({
   // have no project, and they sit above the bands rather than in one), so
   // their rows carry a full status mark instead of the plain dot.
   const noSectionHeading = !hasSectionHeading;
+  const swipeActionStyle: WorkspaceSwipeStyle | undefined = swipeOffset
+    ? {
+        "--swipe-action-w": `${Math.max(
+          SWIPE_REVEAL_PX,
+          Math.abs(swipeOffset),
+        )}px`,
+      }
+    : undefined;
+  const swipeRowStyle: WorkspaceSwipeStyle | undefined = swipeOffset
+    ? { "--swipe-x": `${swipeOffset}px` }
+    : undefined;
 
   return (
     <div
       className={SIDEBAR_SWIPE_ROW}
       data-swipe-row=""
-      style={
-        swipeOffset
-          ? ({
-              "--swipe-action-w": `${Math.max(
-                SWIPE_REVEAL_PX,
-                Math.abs(swipeOffset),
-              )}px`,
-            } as React.CSSProperties)
-          : undefined
-      }
+      style={swipeActionStyle}
     >
       {isPhone && row.sessions.length > 0 && (
         <button
@@ -342,11 +349,7 @@ export function WorkspaceRow({
         data-finished-unread={
           shouldEmphasizeUnread(row.unread, row.running) || undefined
         }
-        style={
-          swipeOffset
-            ? ({ "--swipe-x": `${swipeOffset}px` } as React.CSSProperties)
-            : undefined
-        }
+        style={swipeRowStyle}
         onClick={events.onActivate}
         onMouseEnter={events.onMouseEnter}
         onMouseLeave={events.onMouseLeave}
