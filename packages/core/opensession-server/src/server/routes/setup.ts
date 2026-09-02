@@ -439,13 +439,23 @@ export async function handleSetupRoutes(
       return Response.json({ error: "Nothing to change" }, { status: 400 });
     }
 
-    const { applyEnvFileEdits, readEnvFileValues } =
+    const { EnvFileWriteError, applyEnvFileEdits, readEnvFileValues } =
       await import("../env-file-edit");
     const { rawConfig, persistRawConfig, withConfigMutationLock } =
       await import("../config-mutation");
 
     return withConfigMutationLock(async () => {
-      applyEnvFileEdits(edits);
+      try {
+        applyEnvFileEdits(edits);
+      } catch (error) {
+        // A misplaced env file is an install problem, not a request problem.
+        // Name the path and the fix instead of leaking a raw fs error as 500.
+        if (error instanceof EnvFileWriteError) {
+          console.error(`[setup] ${error.message}`);
+          return Response.json({ error: error.message }, { status: 500 });
+        }
+        throw error;
+      }
       if (enabled !== undefined) {
         const config = rawConfig();
         const integrations =

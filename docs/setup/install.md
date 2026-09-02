@@ -344,6 +344,16 @@ set +a
 opensession start --foreground
 ```
 
+Settings writes integration credentials, `ENABLE_*` flags, and ingress origins
+back into this file. Each write copies the current file to `.bak-<n>` and then
+replaces it through an atomic rename, both created beside it, so the service
+user must own the directory, not just the file. `OPENSESSION_ENV_FILE` moves
+the file, but keep it somewhere the service user can write. Do not put it in
+`/etc/opensession`: that directory holds the root-only executor and session
+kernel credentials, every install and deploy resets it to `root:root 0700`,
+and `service install --system` and `deploy/deploy.sh` refuse an env file the
+service user cannot edit.
+
 The server settings are optional, but an enabled integration needs the
 credentials its setup page marks as required. Common operator-facing variables:
 
@@ -573,7 +583,9 @@ Unit choices worth knowing (comments in the file itself):
 - `ExecStart` uses the stable installed shim for compiled releases and Bun for
   source installs.
 - The gateway's `EnvironmentFile=<your home>/.opensession.env` loads your
-  secrets. It is optional in user scope and required in system scope.
+  secrets. It is optional in user scope and required in system scope. Its
+  directory must be writable by the service user so Settings can edit it; see
+  [section 4](#4-secrets-opensessionenv).
 - System scope loads separate executor and session-kernel credentials. User
   scope keeps its session-kernel token under `~/.opensession/` and disables the
   executor and detached runs.

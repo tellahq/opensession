@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -12,7 +13,9 @@ import { join } from "path";
 import {
   applyEnvEdits,
   applyEnvFileEdits,
+  EnvFileWriteError,
   envFilePath,
+  envFileWriteRequirement,
   prepareEnvFileEdits,
   readEnvFileValues,
   validateEnvValue,
@@ -158,6 +161,37 @@ describe("applyEnvFileEdits (disk)", () => {
   test("envFilePath honors the OPENSESSION_ENV_FILE override", () => {
     expect(envFilePath()).toBe(file);
   });
+
+  // Root ignores directory modes, so the read-only setup below cannot fail
+  // there. Issue #282: a system-scope install with the env file inside
+  // root-only /etc/opensession 500s on every Settings save.
+  test.skipIf(process.getuid?.() === 0)(
+    "explains the directory requirement when the env file's directory is read-only",
+    () => {
+      writeFileSync(file, "SLACK_BOT_TOKEN=old\n");
+      chmodSync(root, 0o555);
+      try {
+        let caught: unknown;
+        try {
+          prepareEnvFileEdits({ SLACK_BOT_TOKEN: "new" }).commit();
+        } catch (error) {
+          caught = error;
+        }
+        expect(caught).toBeInstanceOf(EnvFileWriteError);
+        const error = caught as EnvFileWriteError;
+        expect(error.path).toBe(file);
+        expect(error.message).toBe(envFileWriteRequirement(file));
+        expect(error.message).toContain(root);
+        expect(error.message).toContain("OPENSESSION_ENV_FILE");
+        expect((error.cause as { code?: string }).code).toBe("EACCES");
+        // Nothing was touched: no stray backup, original content intact.
+        expect(existsSync(`${file}.bak-1`)).toBe(false);
+        expect(readFileSync(file, "utf-8")).toBe("SLACK_BOT_TOKEN=old\n");
+      } finally {
+        chmodSync(root, 0o755);
+      }
+    },
+  );
 });
 
 describe("validateEnvValue", () => {

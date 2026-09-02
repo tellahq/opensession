@@ -110,6 +110,18 @@ describe("executor deployment", () => {
     expect(helper).toContain('set -- "$systemd_run"');
   });
 
+  test("refuses an env file the service user cannot edit", async () => {
+    // Issue #282: the gateway edits the env file through sibling backup and
+    // temp files, so a root-only directory breaks Settings after a deploy
+    // that looked healthy.
+    const deploy = await Bun.file(resolve(import.meta.dir, "deploy.sh")).text();
+    expect(deploy).toContain('run_as_service_user test -w "$RUN_HOST_ENV_DIR"');
+    expect(deploy).toContain(
+      'run_as_service_user test -w "$RUN_HOST_ENV_FILE"',
+    );
+    expect(deploy).toContain("is not writable by $SERVICE_USER");
+  });
+
   test("credential installation rejects link redirection", async () => {
     const installer = await Bun.file(
       resolve(repoRoot, "deploy/install-executor-credential.sh"),

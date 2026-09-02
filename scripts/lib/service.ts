@@ -26,7 +26,14 @@
  * server in the foreground.
  */
 
-import { chmodSync, existsSync, mkdirSync, readFileSync } from "fs";
+import {
+  accessSync,
+  chmodSync,
+  constants as fsConstants,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+} from "fs";
 import { userInfo } from "os";
 import { dirname, join } from "path";
 import {
@@ -108,6 +115,35 @@ function envFileValue(name: string): string | undefined {
     return raw.slice(1, -1);
   }
   return raw;
+}
+
+/**
+ * Why the service user cannot edit `path` from Settings, or undefined when it
+ * can. The server writes the env file through a `.bak-<n>` copy and an atomic
+ * `.tmp.*` rename, both created beside the file, so the directory must be
+ * writable and traversable; write access on the file alone is not enough. A
+ * system-scope install pointed at root-only `/etc/opensession` (the credential
+ * and run-host directory, reset to 0700 on every install) fails this check.
+ */
+export function envFileWriteProblem(
+  path: string,
+  access: (target: string, mode: number) => void = accessSync,
+): string | undefined {
+  const dir = dirname(path);
+  const { W_OK, X_OK } = fsConstants;
+  try {
+    access(dir, W_OK | X_OK);
+  } catch {
+    return `${dir} is not writable by this user; Settings edits ${path} through backups and atomic writes created beside it`;
+  }
+  if (existsSync(path)) {
+    try {
+      access(path, W_OK);
+    } catch {
+      return `${path} is not writable by this user`;
+    }
+  }
+  return undefined;
 }
 
 function defaultStatePath(base: string): string {
@@ -900,6 +936,20 @@ export async function install(
           await Bun.sleep(500);
         }
       } else {
+        const envProblem = envFileWriteProblem(ENV_PATH);
+        if (envProblem) {
+          fail(
+            "service installation blocked: the gateway cannot edit its env file",
+            envProblem,
+          );
+          info(
+            "move the file to a directory the service user owns (for example ~/.opensession.env),",
+          );
+          info(
+            "set OPENSESSION_ENV_FILE to that path, and rerun the same installation command",
+          );
+          return false;
+        }
         const executorUnit = await renderExecutorUnit();
         await Bun.write(STAGED_UNIT_PATH, unit);
         if (sourceIngress) {

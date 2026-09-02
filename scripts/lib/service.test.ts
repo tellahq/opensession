@@ -16,6 +16,7 @@ import { describe, expect, test } from "bun:test";
 import { platform } from "os";
 import {
   bootstrapLaunchAgent,
+  envFileWriteProblem,
   LAUNCHD_LABEL,
   LAUNCHD_LAUNCHER,
   metadataInstallBlockGuidance,
@@ -107,6 +108,41 @@ describe("cloud metadata install refusal", () => {
     );
     expect(guidance).toContain("OPENSESSION_ALLOW_IMDS=1");
     expect(guidance).toContain("explicitly skip this safety check");
+  });
+});
+
+describe("env file write check", () => {
+  // Issue #282: pointing OPENSESSION_ENV_FILE into root-only /etc/opensession
+  // installs fine and then 500s on every Settings save. The check runs before
+  // any sudo step so the operator sees the problem at install time.
+  const denied = (paths: Set<string>) => (target: string, _mode: number) => {
+    if (paths.has(target)) {
+      throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+    }
+  };
+
+  test("refuses a directory the service user cannot write", () => {
+    const problem = envFileWriteProblem(
+      "/etc/opensession/opensession.env",
+      denied(new Set(["/etc/opensession"])),
+    );
+    expect(problem).toContain("/etc/opensession is not writable");
+    expect(problem).toContain("/etc/opensession/opensession.env");
+    expect(problem).toContain("backups and atomic writes");
+  });
+
+  test("refuses an existing env file the service user cannot write", () => {
+    const problem = envFileWriteProblem(ENV_PATH, denied(new Set([ENV_PATH])));
+    // ENV_PATH may not exist on the test host; then only the directory counts.
+    if (problem !== undefined) {
+      expect(problem).toBe(`${ENV_PATH} is not writable by this user`);
+    }
+  });
+
+  test("accepts a writable directory", () => {
+    expect(
+      envFileWriteProblem("/tmp/does-not-matter/opensession.env", () => {}),
+    ).toBeUndefined();
   });
 });
 
