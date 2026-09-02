@@ -23,7 +23,9 @@ const NEUTRAL = "bg-active text-dim";
 const TONE = {
   slack: "bg-[var(--chip-slack-bg)] text-[var(--chip-slack-fg)]",
   linear: "bg-[var(--chip-linear-bg)] text-[var(--chip-linear-fg)]",
-  ask: "bg-[var(--chip-ask-bg)] text-[var(--chip-ask-fg)]",
+  // Green is what ask means across the product (the composer's Ask toggle,
+  // the ask band in the sidebar), so the chip says it in the same colour.
+  ask: "bg-green-soft text-green",
   cli: NEUTRAL,
 };
 

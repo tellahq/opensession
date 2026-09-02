@@ -6,6 +6,7 @@ import {
   deriveIdentityTables,
   gitIdentityEnv,
   labelIdentity,
+  githubLoginForTrustedSlackId,
   githubLoginToPersonKeyFromTeam,
   isTrustedGithubLogin,
   isTrustedUser,
@@ -106,6 +107,22 @@ describe("commit attribution", () => {
     expect(isTrustedUser("alice@work.example")).toBe(true);
     expect(isTrustedUser("ali")).toBe(false); // aliases are not authentication evidence
     expect(isTrustedUser("mallory")).toBe(false);
+  });
+
+  test("trusted Slack login lookup uses one exact roster entry", () => {
+    expect(githubLoginForTrustedSlackId("U_ALICE")).toBe("alice");
+    expect(githubLoginForTrustedSlackId("U_SYSTEM")).toBeNull();
+    expect(githubLoginForTrustedSlackId("alice")).toBeNull();
+
+    const restoreDuplicate = __setIdentitiesForTest([
+      ...TEAM,
+      { name: "Mallory", slackId: "U_ALICE", github: "mallory" },
+    ]);
+    try {
+      expect(githubLoginForTrustedSlackId("U_ALICE")).toBeNull();
+    } finally {
+      restoreDuplicate();
+    }
   });
 
   test("the prompt's sender wins", () => {

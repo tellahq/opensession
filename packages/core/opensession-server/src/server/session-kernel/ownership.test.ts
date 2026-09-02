@@ -521,6 +521,9 @@ describe("single session ownership", () => {
     expect(read("report-sessions.ts")).toContain(
       "createdByLogin: input.createdByLogin",
     );
+    expect(read("../agents/slack/handlers.ts")).toContain(
+      "createdByLogin: githubLoginForTrustedSlackId(msg.userId) || undefined",
+    );
     expect(wiring).not.toContain("updateCreatePlan(");
     expect(wiring).toContain("await requestCreationWorkspace({");
     // Both adapters materialize through the one actor-backed materializer, so

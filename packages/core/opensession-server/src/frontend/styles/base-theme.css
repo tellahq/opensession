@@ -346,7 +346,9 @@
   --code-well-line: rgba(255, 255, 255, 0.06);
   --code-well-ink: #b6bcc8;
   --code-well-gutter: #565d6b;
-  /* Source chips — one tinted pill per session origin (slack / linear / ask).
+  /* Source chips — one tinted pill per session origin (slack / linear). Ask
+	   takes the app's own green (--green) instead of a token here: green is what
+	   ask means everywhere else in the product.
 	   Tokens rather than a rule per source because the theme is the only thing
 	   about them that moves: these are light-on-dark, and light needs the same
 	   hue re-toned dark-on-light to stay legible. A token re-resolves under
@@ -357,8 +359,6 @@
   --chip-slack-fg: #d9a8db;
   --chip-linear-bg: rgba(94, 106, 210, 0.25);
   --chip-linear-fg: #9da6ee;
-  --chip-ask-bg: rgba(210, 153, 34, 0.18);
-  --chip-ask-fg: #e3b341;
   --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
   /* The web keeps desktop's compact metrics, while a phone promotes every role
@@ -642,8 +642,6 @@ html[data-theme="light"] {
   --chip-slack-fg: #8a2b8c;
   --chip-linear-bg: rgba(94, 106, 210, 0.14);
   --chip-linear-fg: #4650c0;
-  --chip-ask-bg: rgba(210, 153, 34, 0.16);
-  --chip-ask-fg: #9a6700;
 }
 
 /* Glass is an enhancement, never the thing holding the text up: without a

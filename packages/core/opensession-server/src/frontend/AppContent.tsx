@@ -1604,7 +1604,6 @@ export function AppContent({
                       onSelect={(s) => navigate({ view: "session", id: s.id })}
                       onChanged={refresh}
                       topbarActionsEl={topbarActionsEl}
-                      mobileActionsEl={headerActionsEl}
                     />
                   ) : route.view === "supporttinder" ? (
                     <SupportTinder
