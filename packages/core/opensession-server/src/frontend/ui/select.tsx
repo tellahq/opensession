@@ -343,7 +343,9 @@ export function OptionSelect<T extends string>({
       items={options}
       value={value}
       disabled={disabled}
-      onValueChange={(next) => onChange(next as T)}
+      onValueChange={(next) => {
+        if (next !== null) onChange(next);
+      }}
     >
       <Select.Trigger
         ref={triggerRef}
