@@ -6,6 +6,7 @@ import { cn } from "../ui/cn";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { fieldClasses } from "../ui/input";
 import { IconCopy } from "./icons";
+import { z } from "zod";
 
 // Shared vocabulary for the Settings → Setup page (Setup.tsx) and its section
 // siblings (SetupTeam.tsx, SetupRepos.tsx): the /api/setup/* response shapes,
@@ -122,40 +123,39 @@ export interface BrowseRepo {
 /** Same-origin JSON fetch against the setup API: prefixes BASE_PATH, encodes
  * an optional `json` body, and surfaces the backend's `{error}` message (or a
  * plain status line) as a thrown Error. */
+const setupErrorSchema = z.object({ error: z.string() });
+
 export async function setupRequest<T = unknown>(
   path: string,
   init?: RequestInit & { json?: unknown },
 ): Promise<T> {
   const { json, ...rest } = init ?? {};
-  const res = await fetch(`${BASE_PATH}${path}`, {
-    ...rest,
-    ...(json !== undefined
-      ? {
-          headers: {
-            "Content-Type": "application/json",
-            ...(rest.headers as Record<string, string> | undefined),
-          },
-          body: JSON.stringify(json),
-        }
-      : {}),
-  });
-  let body: unknown = null;
-  await (async () => {
-    body = await res.json();
-  })().catch(async () => {});
-  const responseError =
-    typeof body === "object" &&
-    body !== null &&
-    "error" in body &&
-    typeof body.error === "string"
-      ? body.error
-      : null;
-  if (!res.ok)
-    throw new Error(responseError || `Request failed (${res.status})`);
-  return body as T;
+  const request: RequestInit = { ...rest };
+  if (json !== undefined) {
+    const headers = new Headers({ "Content-Type": "application/json" });
+    new Headers(rest.headers).forEach((value, key) => headers.set(key, value));
+    request.headers = headers;
+    request.body = JSON.stringify(json);
+  }
+  const res = await fetch(`${BASE_PATH}${path}`, request);
+  const body = await res.json().catch(() => null);
+  const parsedError = setupErrorSchema.safeParse(body);
+  if (!res.ok) {
+    throw new Error(
+      parsedError.success && parsedError.data.error
+        ? parsedError.data.error
+        : `Request failed (${res.status})`,
+    );
+  }
+  return body;
 }
 
 export type ChipTone = "on" | "warn" | "off";
+
+export interface ChipState {
+  tone: ChipTone;
+  label: string;
+}
 
 const CHIP_DOTS: Record<ChipTone, string> = {
   on: "var(--green)",
@@ -180,10 +180,7 @@ export type SetupStepId =
   | "members"
   | "review";
 
-export function integrationState(i: SetupIntegration): {
-  tone: ChipTone;
-  label: string;
-} {
+export function integrationState(i: SetupIntegration): ChipState {
   if (i.enabled && i.missingRequired.length === 0)
     return { tone: "on", label: "On" };
   if (i.enabled)
@@ -191,10 +188,7 @@ export function integrationState(i: SetupIntegration): {
   return { tone: "off", label: "Off" };
 }
 
-export function githubAuthState(g: SetupGithub): {
-  tone: ChipTone;
-  label: string;
-} {
+export function githubAuthState(g: SetupGithub): ChipState {
   if (!g.appCredentialConfigured)
     return { tone: "warn", label: "Missing App credential" };
   if (!g.appSlug) return { tone: "warn", label: "Missing App slug" };
@@ -213,10 +207,7 @@ export function githubAuthState(g: SetupGithub): {
  *  The chip label is the whole answer a row gives. A sentence under every
  *  repo restated the same mechanism once per row, so the footer says it once
  *  and the label carries the state. */
-export function repoLifecycleState(repo: SetupRepo): {
-  tone: ChipTone;
-  label: string;
-} {
+export function repoLifecycleState(repo: SetupRepo): ChipState {
   const { setup, start, previewCommand } = repo.lifecycle;
   if (start) return { tone: "on", label: setup ? "Ready" : "Boots previews" };
   if (previewCommand) return { tone: "on", label: "Instance preview" };
